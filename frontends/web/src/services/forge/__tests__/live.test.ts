@@ -23,7 +23,6 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import {
   DeployConvergenceSchema,
   DeployDriftSchema,
-  DeployEnvironmentKind,
   DeployEnvironmentLifetime,
   DeployEnvironmentSchema,
   DeployHoldKind,
@@ -62,6 +61,11 @@ import {
   type LiveEnv,
   type LiveProvenance,
 } from "../live";
+
+// The placement fields each kind is derived from (environmentKind.ts).
+type Placement = Pick<MessageInitShape<typeof DeployEnvironmentSchema>, "lifetime" | "secretPosture" | "hostedSlot">;
+const PERSISTENT: Placement = { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true };
+const SELF_MANAGED: Placement = { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY };
 
 /**
  * A plain LiveEnv, for the copy helpers that take one rather than a wire
@@ -215,51 +219,15 @@ describe("shortCommit", () => {
 // ── Kinds ───────────────────────────────────────────────────────────────────
 
 describe("kinds", () => {
-  it("maps SELF_MANAGED and calls it 'Your cluster'", () => {
-    const env = toLiveEnv(
-      create(DeployLiveEnvironmentSchema, {
-        environment: create(DeployEnvironmentSchema, {
-          id: "cp-prod",
-          name: "prod",
-          project: "hounders",
-          kind: DeployEnvironmentKind.SELF_MANAGED,
-        }),
-      })
-    );
-    expect(env?.kind).toBe("self_managed");
-    expect(liveKindLabel("self_managed")).toBe("Your cluster");
-  });
-
-  it("maps an unrecognised kind to unknown, never to persistent", () => {
-    // Folding it into persistent would offer cloud language — rollouts,
-    // platform deployments — for an environment that may have neither.
-    const env = toLiveEnv(
-      create(DeployLiveEnvironmentSchema, {
-        environment: create(DeployEnvironmentSchema, {
-          id: "cp-x",
-          name: "x",
-          project: "hounders",
-          kind: 99 as DeployEnvironmentKind,
-        }),
-      })
-    );
-    expect(env?.kind).toBe("unknown");
-  });
-
-  // DeployEnvironment.kind is deprecated and leaves the wire with
-  // control-plane#3095; every server since #1349 also sends lifetime,
-  // secret_posture and hosted_slot, which the kind is derived from instead.
+  // control-plane#3095 removed DeployEnvironment.kind; every server since
+  // #1349 sends lifetime, secret_posture and hosted_slot, which the kind is
+  // derived from.
   const live = (fields: MessageInitShape<typeof DeployEnvironmentSchema>) =>
     toLiveEnv(create(DeployLiveEnvironmentSchema, { environment: create(DeployEnvironmentSchema, { id: "e", name: "prod", project: "hounders", ...fields }) }));
 
-  it("prefers a recognised kind over the placement fields, so today's server reads as it always did", () => {
-    const env = live({
-      kind: DeployEnvironmentKind.SELF_MANAGED,
-      lifetime: DeployEnvironmentLifetime.PERSISTENT,
-      secretPosture: DeploySecretPosture.WRITE_ONLY,
-      hostedSlot: true,
-    });
-    expect(env?.kind).toBe("self_managed");
+  it("maps a write-only environment with no hosted slot to self_managed and calls it 'Your cluster'", () => {
+    expect(live(SELF_MANAGED)?.kind).toBe("self_managed");
+    expect(liveKindLabel("self_managed")).toBe("Your cluster");
   });
 
   it.each([
@@ -267,11 +235,13 @@ describe("kinds", () => {
     ["preview", { lifetime: DeployEnvironmentLifetime.PREVIEW, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true }],
     ["persistent", { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true }],
     ["self_managed", { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY }],
-  ] as const)("derives %s from the placement fields when kind is absent", (want, fields) => {
+  ] as const)("derives %s from the placement fields", (want, fields) => {
     expect(live(fields)?.kind).toBe(want);
   });
 
-  it("reads an environment with neither kind nor placement fields as unknown", () => {
+  it("reads an environment with no placement fields as unknown, never as persistent", () => {
+    // Folding it into persistent would offer cloud language — rollouts,
+    // platform deployments — for an environment that may have neither.
     expect(live({})?.kind).toBe("unknown");
     expect(live({ hostedSlot: true })?.kind).toBe("unknown");
   });
@@ -306,7 +276,7 @@ describe("kinds", () => {
           id: "cp-prod",
           name: "prod",
           project: "hounders",
-          kind: DeployEnvironmentKind.SELF_MANAGED,
+          ...SELF_MANAGED,
         }),
         phase: DeployRolloutPhase.SUCCEEDED,
       })
@@ -321,7 +291,7 @@ describe("kinds", () => {
           id: "cp-prod",
           name: "prod",
           project: "hounders",
-          kind: DeployEnvironmentKind.PERSISTENT,
+          ...PERSISTENT,
         }),
         phase: DeployRolloutPhase.DEGRADED,
       })
@@ -426,7 +396,7 @@ describe("the states that are not errors", () => {
           id: "cp-prod",
           name: "prod",
           project: "hounders",
-          kind: DeployEnvironmentKind.PERSISTENT,
+          ...PERSISTENT,
           declaredBy: provenanceMsg({ branch: "feat-x", commit: "def5678aa", dirty: true }),
         }),
         // The roster carries no release: the promotion names its version and
@@ -458,7 +428,7 @@ describe("the states that are not errors", () => {
           id: "cp-staging",
           name: "staging",
           project: "hounders",
-          kind: DeployEnvironmentKind.SELF_MANAGED,
+          ...SELF_MANAGED,
           declaredBy: provenanceMsg({ branch: "feat-x", commit: "def5678" }),
           declaredAt: timestampFromDate(new Date("2026-10-02T09:00:00Z")),
         }),
@@ -480,7 +450,7 @@ describe("the states that are not errors", () => {
           id: "cp-new",
           name: "new",
           project: "hounders",
-          kind: DeployEnvironmentKind.PERSISTENT,
+          ...PERSISTENT,
         }),
       })
     );
@@ -507,7 +477,7 @@ describe("the states that are not errors", () => {
           id: "cp-prod",
           name: "prod",
           project: "hounders",
-          kind: DeployEnvironmentKind.PERSISTENT,
+          ...PERSISTENT,
         }),
         currentPromotion: create(DeployPromotionSchema, { id: "p", releaseVersion: "v1" }),
       })
@@ -522,7 +492,7 @@ describe("the states that are not errors", () => {
           id: "cp-prod",
           name: "prod",
           project: "hounders",
-          kind: DeployEnvironmentKind.PERSISTENT,
+          ...PERSISTENT,
         }),
         currentPromotion: create(DeployPromotionSchema, {
           id: "promo-1",
@@ -548,7 +518,7 @@ describe("the states that are not errors", () => {
  */
 describe("observed convergence", () => {
   function liveMsg(args: {
-    kind?: DeployEnvironmentKind;
+    placement?: Placement;
     promotion?: boolean;
     drift?: { state: string; detail?: string; observedAt?: Date };
     phase?: DeployRolloutPhase;
@@ -558,7 +528,7 @@ describe("observed convergence", () => {
         id: "cp-prod",
         name: "prod",
         project: "hounders",
-        kind: args.kind ?? DeployEnvironmentKind.PERSISTENT,
+        ...(args.placement ?? PERSISTENT),
       }),
       currentPromotion:
         args.promotion === false
@@ -635,14 +605,14 @@ describe("observed convergence", () => {
   it("derives the same answer for an environment on the customer's own cluster", () => {
     const hosted = toLiveEnv(
       liveMsg({
-        kind: DeployEnvironmentKind.PERSISTENT,
+        placement: PERSISTENT,
         drift: { state: "in_sync" },
         phase: DeployRolloutPhase.SUCCEEDED,
       })
     );
     const own = toLiveEnv(
       liveMsg({
-        kind: DeployEnvironmentKind.SELF_MANAGED,
+        placement: SELF_MANAGED,
         drift: { state: "in_sync" },
         phase: DeployRolloutPhase.SUCCEEDED,
       })
@@ -673,7 +643,7 @@ describe("a queued deploy", () => {
         id: "cp-prod",
         name: "prod",
         project: "hounders",
-        kind: DeployEnvironmentKind.PERSISTENT,
+        ...PERSISTENT,
         holds:
           args.holds === false
             ? []

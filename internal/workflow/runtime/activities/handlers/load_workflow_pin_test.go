@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -69,7 +70,7 @@ func TestLoadWorkflowActivity_PinnedRunLoadsTheCatalogItStartedWith(t *testing.T
 		State: db.ChatStateIdle, ActiveDaemonID: &cicd,
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	activity := NewLoadWorkflowActivity(repo)
+	activity := NewLoadWorkflowActivity(repo, workspaceRowsOf(repo))
 
 	root, err := activity.Execute(ctx, LoadWorkflowInput{ChatID: chatID, WorkflowName: "release"})
 	require.NoError(t, err)

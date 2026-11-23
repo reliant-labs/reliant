@@ -42,7 +42,7 @@ func (s *Service) AddProviderAPIKey(
 		return nil, svcerr.Wrap(svcerr.WithReason(svcerr.InvalidArgument(msg), keyvalidate.Reason(msg)))
 	}
 
-	acct, created, err := s.deps.Store.UpsertProviderAccount(ctx, core.AccountUpsert{
+	acct, created, err := s.deps.Accounts.UpsertProviderAccount(ctx, core.AccountUpsert{
 		UserID:      userID,
 		Provider:    provider,
 		AuthKind:    core.AuthKindAPIKey,
@@ -54,7 +54,7 @@ func (s *Service) AddProviderAPIKey(
 		return nil, svcerr.Wrap(err)
 	}
 	if label != "" {
-		if acct, err = s.deps.Store.PatchProviderAccount(ctx, userID, acct.ID, core.AccountPatch{Label: &label}); err != nil {
+		if acct, err = s.deps.Accounts.PatchProviderAccount(ctx, userID, acct.ID, core.AccountPatch{Label: &label}); err != nil {
 			return nil, wrapAccountErr(err)
 		}
 	}
@@ -62,14 +62,14 @@ func (s *Service) AddProviderAPIKey(
 	s.wakeChats(ctx, userID, "a "+provider+" API key was added")
 
 	total := 0
-	if all, err := s.deps.Store.ListProviderAccounts(ctx, userID); err == nil {
+	if all, err := s.deps.Accounts.ListProviderAccounts(ctx, userID); err == nil {
 		total = len(all)
 	}
 	client := analytics.ForUser(ctx, userID)
 	client.TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{Provider: provider, Action: "connected", AuthMethod: "api_key"})
 	client.TrackAPIKeyConfigured(analytics.APIKeyConfiguredMetrics{Provider: provider, AuthMethod: "api_key", IsFirstKey: total <= 1, TotalProviders: total})
 
-	limits, err := s.deps.Store.ListAccountLimits(ctx, userID)
+	limits, err := s.deps.Accounts.ListAccountLimits(ctx, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

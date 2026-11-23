@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
@@ -21,7 +23,7 @@ func TestProjectConfigColumnReads(t *testing.T) {
 	workflows := `[{"relative_path":".reliant/workflows/a.yaml","yaml_content":"name: a"}]`
 	presets := `[{"name":"p","yaml_content":"name: p"}]`
 	skills := `[{"name":"big"}]`
-	if err := repo.UpsertProjectConfigRecord(ctx, &ProjectConfigRecord{
+	if err := store.UpsertProjectConfigRecord(ctx, repo.ORM(), &ProjectConfigRecord{
 		ProjectID:            "test-project",
 		DaemonID:             "daemon-1",
 		ProjectWorkflowsJSON: &workflows,
@@ -41,7 +43,7 @@ func TestProjectConfigColumnReads(t *testing.T) {
 	}
 
 	// A record whose column was never synced reads as nil, not "".
-	if err := repo.UpsertProjectConfigRecord(ctx, &ProjectConfigRecord{
+	if err := store.UpsertProjectConfigRecord(ctx, repo.ORM(), &ProjectConfigRecord{
 		ProjectID: "test-project", DaemonID: "daemon-1", ProjectSkillsJSON: &skills,
 	}); err != nil {
 		t.Fatalf("upsert: %v", err)

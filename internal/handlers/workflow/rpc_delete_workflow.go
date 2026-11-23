@@ -36,7 +36,7 @@ func (s *Service) DeleteWorkflow(
 	slug := generateSlug(name)
 
 	// Check if workflow exists
-	existing, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
+	existing, err := s.deps.Drafts.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check workflow"))
 	}
@@ -58,7 +58,7 @@ func (s *Service) DeleteWorkflow(
 				return fmt.Errorf("delete automation %q: %w", t.Name, err)
 			}
 		}
-		return s.deps.Repo.DeleteWorkflowDraftBySlug(ctx, userID, slug)
+		return s.deps.Drafts.DeleteWorkflowDraftBySlug(ctx, userID, slug)
 	})
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete workflow"))

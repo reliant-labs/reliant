@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	mcp "github.com/reliant-labs/reliant/internal/handlers/mcp"
 )
 
@@ -105,13 +106,13 @@ func TestInstallServer_ActivityMatchesPersistedOutcome(t *testing.T) {
 			stored := string(storedJSON)
 			writes, upserts, bundles, starts := 0, 0, 0, 0
 			store := ownedProjectRepo(t, stored)
-			store.GetProjectConfigRecordFunc = func(_ context.Context, id string) (*db.ProjectConfigRecord, error) {
+			store.GetProjectConfigRecordFunc = func(_ context.Context, id string) (*core.ProjectConfigRecord, error) {
 				stateMu.Lock()
 				defer stateMu.Unlock()
 				copy := stored
-				return &db.ProjectConfigRecord{ProjectID: id, MCPConfigs: &copy}, nil
+				return &core.ProjectConfigRecord{ProjectID: id, MCPConfigs: &copy}, nil
 			}
-			store.UpsertProjectConfigRecordFunc = func(_ context.Context, record *db.ProjectConfigRecord) error {
+			store.UpsertProjectConfigRecordFunc = func(_ context.Context, record *core.ProjectConfigRecord) error {
 				stateMu.Lock()
 				defer stateMu.Unlock()
 				upserts++
@@ -139,7 +140,7 @@ func TestInstallServer_ActivityMatchesPersistedOutcome(t *testing.T) {
 					}
 					daemonJSON = req.Content
 					return []byte(`{"success":true}`), nil
-				case "mcp.install_bundle":
+				case "mcp.install_skill_bundle":
 					bundles++
 					if tt.bundleTransportFail {
 						return nil, errors.New("bundle transport failed: " + secret)

@@ -2094,9 +2094,9 @@ ipcMain.handle("update-privacy-settings", async (event, settings) => {
  * accelerators match what the user actually configured — see
  * updateMenuAccelerators for why hardcoding them here is a bug.
  */
-ipcMain.handle("shortcuts:update", async (_event, bindings) => {
+ipcMain.handle("shortcuts:update", async (_event, bindings, aliases) => {
   try {
-    updateMenuAccelerators(bindings);
+    updateMenuAccelerators(bindings, aliases);
     return { success: true };
   } catch (error) {
     log.error("[IPC] Failed to apply shortcut bindings to menu:", error);
@@ -3540,10 +3540,10 @@ exit 0
  */
 let menuAccelerators = defaultAccelerators();
 
-/** Apply renderer-supplied bindings and rebuild the menu. */
-function updateMenuAccelerators(bindings) {
+/** Apply renderer-supplied bindings (and desktop aliases) and rebuild the menu. */
+function updateMenuAccelerators(bindings, aliases) {
   if (!bindings || typeof bindings !== "object") return;
-  menuAccelerators = resolveMenuAccelerators(bindings);
+  menuAccelerators = resolveMenuAccelerators(bindings, aliases);
   createApplicationMenu();
 }
 

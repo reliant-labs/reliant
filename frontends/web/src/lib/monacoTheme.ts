@@ -254,8 +254,6 @@ export function configureMonacoDiagnostics(monaco: Monaco): void {
  * This theme adapts to the app's light/dark mode using CSS variables
  */
 export function configureMonacoTheme(monaco: Monaco): void {
-  const isDarkMode = document.documentElement.classList.contains("dark");
-
   // Configure diagnostics globally
   configureMonacoDiagnostics(monaco);
 
@@ -303,40 +301,6 @@ export function configureMonacoTheme(monaco: Monaco): void {
       "editorLineNumber.activeForeground": "#0b216f",
       "editor.selectionBackground": "#add6ff",
       "editor.inactiveSelectionBackground": "#e5ebf1",
-      "editorWidget.background": getCSSVar('--popover'),
-      "editorWidget.border": getCSSVar('--border'),
-      "editorSuggestWidget.background": getCSSVar('--popover'),
-      "editorSuggestWidget.border": getCSSVar('--border'),
-      "editorHoverWidget.background": getCSSVar('--popover'),
-      "editorHoverWidget.border": getCSSVar('--border'),
-      "input.background": getCSSVar('--input'),
-      "input.border": getCSSVar('--border'),
-      "dropdown.background": getCSSVar('--background'),
-      "dropdown.border": getCSSVar('--border'),
-      // Diff editor colors - use theme colors, no borders
-      // Use semantic success (green) for insertions so they stay green across color schemes.
-      "diffEditor.insertedTextBackground": getCSSVarWithAlpha('--success', 0.22),
-      "diffEditor.removedTextBackground": getCSSVarWithAlpha('--destructive', 0.2),
-      "diffEditor.insertedLineBackground": getCSSVarWithAlpha('--success', 0.16),
-      "diffEditor.removedLineBackground": getCSSVarWithAlpha('--destructive', 0.15),
-      "diffEditor.border": "#00000000",
-      "diffEditor.insertedTextBorder": "#00000000",
-      "diffEditor.removedTextBorder": "#00000000",
-      "diffEditor.unchangedCodeBackground": "#00000000",
-    },
-  });
-
-  // Also define 'reliant' as an alias to the current mode for backwards compatibility
-  monaco.editor.defineTheme("reliant", {
-    base: isDarkMode ? "vs-dark" : "vs",
-    inherit: true,
-    rules: [...(isDarkMode ? CEL_DARK_TOKEN_RULES : CEL_LIGHT_TOKEN_RULES)],
-    colors: {
-      "editor.lineHighlightBackground": isDarkMode ? "#2a2d2e" : "#f3f3f3",
-      "editorLineNumber.foreground": isDarkMode ? "#858585" : "#237893",
-      "editorLineNumber.activeForeground": isDarkMode ? "#c6c6c6" : "#0b216f",
-      "editor.selectionBackground": isDarkMode ? "#264f78" : "#add6ff",
-      "editor.inactiveSelectionBackground": isDarkMode ? "#1a3a52" : "#e5ebf1",
       "editorWidget.background": getCSSVar('--popover'),
       "editorWidget.border": getCSSVar('--border'),
       "editorSuggestWidget.background": getCSSVar('--popover'),

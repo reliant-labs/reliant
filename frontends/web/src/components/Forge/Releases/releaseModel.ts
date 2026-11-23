@@ -326,7 +326,7 @@ export const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
 };
 
 /** The release detail page's tabs, in order (its URL's `tab`). */
-export const RELEASE_TABS = ["changes", "rollout", "checks", "artifacts", "health"] as const;
+export const RELEASE_TABS = ["changes", "rollout", "checks", "tests", "artifacts", "health"] as const;
 export type ReleaseTab = (typeof RELEASE_TABS)[number];
 
 export interface RowFilter {

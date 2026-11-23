@@ -6,12 +6,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -56,7 +59,7 @@ func (e *triggerTestEnv) saveWorkflow(t *testing.T, slug, yaml string) {
 	existing, err := e.repo.GetWorkflowDraftBySlug(context.Background(), e.userID, slug)
 	require.NoError(t, err)
 	if existing != nil {
-		require.NoError(t, e.repo.UpdateWorkflowDraftDefinition(context.Background(), existing.ID, slug, slug, yaml, db.WorkflowDraftStatusComplete))
+		require.NoError(t, workflowdraftstest.New(t, e.repo).UpdateWorkflowDraftDefinition(context.Background(), existing.ID, slug, slug, yaml, db.WorkflowDraftStatusComplete))
 		return
 	}
 	require.NoError(t, e.repo.CreateWorkflowDraft(context.Background(), &db.WorkflowDraft{

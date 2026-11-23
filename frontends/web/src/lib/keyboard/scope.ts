@@ -60,6 +60,9 @@ export const OFF_WORKSPACE: Readonly<Record<string, OffWorkspace>> = {
   onOpenWorkflows: "here",
   onOpenProject: "here",
   onSwitchProject: "here",
+  // The left nav is the one shell's, on every page of it (Layout/shell).
+  onToggleSidebar: "here",
+  onFocusLeftSidebar: "here",
   // Passthrough entries that only exist to claim a chord inside an editing
   // context (Monaco's own find, native selection). Nothing to do anywhere.
   onEditorFind: "here",
@@ -93,7 +96,6 @@ export const OFF_WORKSPACE: Readonly<Record<string, OffWorkspace>> = {
   onReopenLastClosedFile: "workspace",
   onFocusTranscript: "workspace",
   onFocusTerminal: "workspace",
-  onFocusLeftSidebar: "workspace",
   onFocusRightSidebar: "workspace",
   onFocusFileEditor: "workspace",
   onNextRightSidebarTab: "workspace",
@@ -108,7 +110,6 @@ export const OFF_WORKSPACE: Readonly<Record<string, OffWorkspace>> = {
   onClearTerminal: "workspace",
   onToggleTerminal: { reveal: "onFocusTerminal" },
   onToggleFileBrowser: { reveal: "onFocusRightSidebar" },
-  onToggleSidebar: { reveal: "onFocusLeftSidebar" },
 
   // ── Close this page ──────────────────────────────────────────────────────
   // Settings, the Inbox and the Workflows area sit over the workspace the way

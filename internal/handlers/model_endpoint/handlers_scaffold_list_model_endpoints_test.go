@@ -10,7 +10,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 
-	"github.com/reliant-labs/reliant/internal/db"
+	core "github.com/reliant-labs/reliant/internal/db/core"
 	model_endpoint "github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
 )
 
@@ -23,8 +23,8 @@ func TestListModelEndpoints_Generated(t *testing.T) {
 	// The caller has no endpoints. The harness's auto-stub refuses an
 	// unprogrammed call, so the one listing this rpc makes is programmed.
 	svc := model_endpoint.NewTestModelEndpoint(t, model_endpoint.WithModelEndpointDeps(model_endpoint.Deps{
-		Repo: &model_endpoint.StubRepo{
-			ListModelEndpointsFunc: func(context.Context, string) ([]*db.ModelEndpoint, error) { return nil, nil },
+		Endpoints: &model_endpoint.StubEndpoints{
+			ListModelEndpointsFunc: func(context.Context, string) ([]*core.ModelEndpoint, error) { return nil, nil },
 		},
 	}), model_endpoint.WithPlaceholderDeps())
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListModelEndpointsRequest, pb.ListModelEndpointsResponse]{
@@ -56,8 +56,8 @@ func TestListModelEndpoints_ReportsCredentialStore(t *testing.T) {
 	t.Parallel()
 
 	svc := model_endpoint.NewTestModelEndpoint(t, model_endpoint.WithModelEndpointDeps(model_endpoint.Deps{
-		Repo: &model_endpoint.StubRepo{
-			ListModelEndpointsFunc: func(context.Context, string) ([]*db.ModelEndpoint, error) { return nil, nil },
+		Endpoints: &model_endpoint.StubEndpoints{
+			ListModelEndpointsFunc: func(context.Context, string) ([]*core.ModelEndpoint, error) { return nil, nil },
 		},
 		Credentials: &model_endpoint.StubCredentials{},
 	}), model_endpoint.WithPlaceholderDeps())

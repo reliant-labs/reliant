@@ -11,6 +11,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -23,7 +24,7 @@ type fundedCall struct {
 func (e *env) recordFunded(user string, c fundedCall) {
 	e.t.Helper()
 	e.seq++
-	_, err := e.repo.RecordLLMCallUsage(context.Background(), db.LLMCallUsage{
+	_, err := llmusagetest.New(e.t, e.repo).RecordLLMCallUsage(context.Background(), db.LLMCallUsage{
 		ID: fmt.Sprintf("funded-%d", e.seq), UserID: user, OrgID: c.org, ChatID: "chat", Provider: "anthropic", Model: "claude-opus",
 		AuthMode: store.LLMAuthModeBYOK, Purpose: store.LLMPurposeChat, InputTokens: c.in, Outcome: store.LLMOutcomeSuccess,
 		Attempt: 1, CreatedAt: c.at, AccountID: c.account, Funding: c.funding, FundingOrgID: c.fundingOrg,
@@ -81,7 +82,7 @@ func TestGetLLMUsage_ByFundingBeforeRetentionIsNotRecorded(t *testing.T) {
 	e.recordFunded("alice", fundedCall{org: "org-a", funding: "org_key", fundingOrg: "org-a", account: "acct-acme", at: old, in: 7})
 	e.recordFunded("alice", fundedCall{org: "org-a", funding: "org_key", fundingOrg: "org-a", account: "acct-acme", at: day(28), in: 100})
 	// The retention job deletes the old call's row; its day stays in the rollup.
-	_, err := e.repo.PruneLLMCallUsage(context.Background(), now)
+	_, err := llmusagetest.New(e.t, e.repo).PruneLLMCallUsage(context.Background(), now)
 	require.NoError(t, err)
 
 	resp := e.mustGet("alice", &pb.GetLLMUsageRequest{StartDate: old.Format("2006-01-02"), EndDate: "2026-10-30", GroupBy: pb.LLMUsageGroupBy_LLM_USAGE_GROUP_BY_FUNDING})

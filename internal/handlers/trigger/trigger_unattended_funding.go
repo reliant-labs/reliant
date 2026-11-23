@@ -9,6 +9,7 @@ import (
 
 	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -33,7 +34,9 @@ const ReasonOrgOnlyAutomation = "org_only_automation"
 //   - ANY over org_only, or on a new trigger, is a loosening. It is allowed
 //     in an org this read shows is solo, or when the org's policy admits
 //     members' own accounts for automations (policyAdmitsPersonalAutomations);
-//     otherwise it is refused with ReasonOrgOnlyAutomation.
+//     otherwise it is refused with ReasonOrgOnlyAutomation. Once allowed, it
+//     needs a person (requireFundingPerson), except an ANY on a new trigger
+//     in an org this read shows is solo, which is that trigger's default.
 func (s *Service) unattendedFundingFor(ctx context.Context, ownerID string, orgID *string, chosen reliantv1.UnattendedFunding, existing *core.Trigger) (core.UnattendedFunding, error) {
 	if orgID == nil || *orgID == "" {
 		return "", nil
@@ -61,13 +64,42 @@ func (s *Service) unattendedFundingFor(ctx context.Context, ownerID string, orgI
 	if err != nil {
 		return "", err
 	}
-	if (!known || n >= 2) && !policyAdmitsPersonalAutomations(ctx, *orgID) {
+	solo := known && n < 2
+	if !solo && !policyAdmitsPersonalAutomations(ctx, *orgID) {
 		return "", svcerr.WithReason(svcerr.FailedPrecondition(
 			"automations in this organization run on its own AI accounts only; "+
 				"an organization with other members cannot let an automation spend its owner's personal accounts"),
 			ReasonOrgOnlyAutomation)
 	}
+	// A new trigger in an org this read shows is solo is stamped any by
+	// default, so asking for it widens nothing.
+	if existing == nil && solo {
+		return core.UnattendedFundingAny, nil
+	}
+	if err := requireFundingPerson(ctx); err != nil {
+		return "", err
+	}
 	return core.UnattendedFundingAny, nil
+}
+
+// requireFundingPerson refuses a widening of a trigger's stamp — org_only to
+// any, or a new trigger asking for any where its default would not be — made
+// with a credential an agent or a script can hold (auth.RequirePerson's
+// rule): letting an automation spend its owner's personal AI accounts is that
+// person's decision. An agent shell holds the owner's CLI login, so policy
+// and org shape alone would let it move an automation onto the owner's own
+// subscription. Tightening, and naming the stamp a trigger already has, need
+// no person, so tokens and agents keep every other write.
+func requireFundingPerson(ctx context.Context) error {
+	err := auth.RequirePerson(ctx, "let an automation spend your own AI accounts")
+	if err == nil {
+		return nil
+	}
+	return svcerr.WithCause(svcerr.WithReason(svcerr.PermissionDenied(
+		"letting an automation spend its owner's own AI accounts needs a person signed in to the Reliant app; "+
+			"this request was made with a credential an agent or a script can hold (such as the CLI login), "+
+			"so turn it on in the app (Workflows, open the workflow, its trigger, AI accounts)"),
+		auth.ReasonPersonRequired), err)
 }
 
 // liveMembers is how many live members orgID has, asked of control-plane now

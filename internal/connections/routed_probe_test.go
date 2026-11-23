@@ -11,8 +11,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/connections"
+	ormstore "github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/connections"
 )
 
 // texterManifest is a pasted-credential integration whose events route by
@@ -89,7 +92,7 @@ func texterEnv(t *testing.T) (*env, *fakeTexter) {
 	e.tokens = connections.NewTokenSource(e.store, e.vault, providers, doer)
 	e.broker = connections.NewBroker(e.store, e.vault, providers, doer, "https://reliant.example").WithAppOrigins([]string{testAppOrigin})
 	e.svc = connections.NewService(e.store, e.vault, providers, e.tokens, e.broker, doer)
-	e.resolver = connections.NewResolver(e.repo, e.store, e.tokens)
+	e.resolver = connections.NewResolver(connections.ResolverDeps{Owners: e.repo, Runs: ormstore.NewWorkflowExtStore(e.repo.ORM()), Store: e.store, Tokens: e.tokens})
 	return e, f
 }
 

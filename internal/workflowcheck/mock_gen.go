@@ -73,7 +73,7 @@ func (m *MockService) SyncOnce(ctx context.Context) (int, error) {
 var _ Service = (*MockService)(nil)
 
 // forge:section MockStore
-// forge:hash=c757f55021a51272c8e0338914306516e1b7307204ec9392a6e71a57518b4ed3
+// forge:hash=378195f67068d4b2312c80cc14a74b573b4b5748469dca17054cc281e891de74
 
 // MockStore is a test mock for the Store interface.
 //
@@ -83,7 +83,7 @@ var _ Service = (*MockService)(nil)
 // "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
-	CreateWorkflowCheckRunFunc       func(context.Context, *core.WorkflowCheckRun) (bool, error)
+	InsertWorkflowCheckRunFunc       func(context.Context, *core.WorkflowCheckRun) (bool, error)
 	MarkWorkflowCheckRunsStartedFunc func(context.Context, string, time.Time) error
 	RecordWorkflowCheckRunsEndedFunc func(context.Context, string, core.WorkflowCheckEnding, time.Time) error
 	ClaimWorkflowCheckRunsFunc       func(context.Context, string, time.Time, time.Time, int) ([]*core.WorkflowCheckRun, error)
@@ -92,13 +92,13 @@ type MockStore struct {
 	SaveWorkflowCheckRunSyncFunc     func(context.Context, *core.WorkflowCheckRun) error
 }
 
-// CreateWorkflowCheckRun records the call and delegates to CreateWorkflowCheckRunFunc when set.
-func (m *MockStore) CreateWorkflowCheckRun(ctx context.Context, row *core.WorkflowCheckRun) (bool, error) {
-	m.Recorder.Record("CreateWorkflowCheckRun", ctx, row)
-	if m.CreateWorkflowCheckRunFunc != nil {
-		return m.CreateWorkflowCheckRunFunc(ctx, row)
+// InsertWorkflowCheckRun records the call and delegates to InsertWorkflowCheckRunFunc when set.
+func (m *MockStore) InsertWorkflowCheckRun(ctx context.Context, row *core.WorkflowCheckRun) (bool, error) {
+	m.Recorder.Record("InsertWorkflowCheckRun", ctx, row)
+	if m.InsertWorkflowCheckRunFunc != nil {
+		return m.InsertWorkflowCheckRunFunc(ctx, row)
 	}
-	return false, contractkit.MockNotSet("MockStore", "CreateWorkflowCheckRun")
+	return false, contractkit.MockNotSet("MockStore", "InsertWorkflowCheckRun")
 }
 
 // MarkWorkflowCheckRunsStarted records the call and delegates to MarkWorkflowCheckRunsStartedFunc when set.

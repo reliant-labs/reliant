@@ -45,6 +45,9 @@ type ValueCheck struct {
 	Scope map[string]any
 	// Values are the picked values.
 	Values []string
+	// OrgID is the org the automation belongs to, "" for none. It only
+	// attributes the check's integration calls in telemetry.
+	OrgID string
 }
 
 // ValueCheckResult is what the checker could determine.
@@ -101,6 +104,9 @@ func (s *Service) checkReachability(
 			ActingIdentity: row.ActingIdentity.OrOwner(),
 			Scope:          scopeValues(input, row.Params),
 			Values:         values,
+		}
+		if row.OrgID != nil {
+			check.OrgID = *row.OrgID
 		}
 		res, err := s.deps.Options.CheckValues(ctx, check)
 		if err != nil {

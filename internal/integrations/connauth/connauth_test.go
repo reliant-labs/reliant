@@ -17,12 +17,16 @@ import (
 	"testing"
 	"time"
 
+	ormstore "github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/crypto"
+
 	"github.com/reliant-labs/reliant/internal/connections"
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -56,10 +60,10 @@ func newEnv(t *testing.T) *env {
 	v := vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(func(string) string { return "" }))
 	require.NoError(t, err)
-	store := repo.Connections()
+	store := db.TestConnections(t, repo)
 	tokens := connections.NewTokenSource(store, v, providers, nil)
 	broker := connections.NewBroker(store, v, providers, nil, "https://reliant.example")
-	resolver := connections.NewResolver(repo, store, tokens)
+	resolver := connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: ormstore.NewWorkflowExtStore(repo.ORM()), Store: store, Tokens: tokens})
 	return &env{t: t, repo: repo, svc: connections.NewService(store, v, providers, tokens, broker, nil), resolver: resolver, source: connauth.New(connauth.Deps{Resolver: resolver})}
 }
 
@@ -345,7 +349,7 @@ func TestForTriggerRefusesAnotherUsersConnection(t *testing.T) {
 func TestForTriggerNeedsReauthIsTyped(t *testing.T) {
 	e := newEnv(t)
 	pat := e.githubPAT("alice")
-	require.NoError(t, e.repo.Connections().WithSecretsLock(context.Background(), "alice", pat, func(tx *db.SecretsTx) error {
+	require.NoError(t, db.TestConnections(e.t, e.repo).WithSecretsLock(context.Background(), "alice", pat, func(tx *connectionvault.SecretsTx) error {
 		return tx.MarkStatus(context.Background(), core.ConnectionStatusNeedsReauth, "invalid_grant")
 	}))
 	trigger := e.trigger("alice", "github", &pat)

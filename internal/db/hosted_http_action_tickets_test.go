@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,14 +29,14 @@ func ticketFixture(t *testing.T) (*Repo, core.HostedHTTPActionTicket) {
 func TestHostedHTTPActionTicketDurableSingleUse(t *testing.T) {
 	repo, ticket := ticketFixture(t)
 	ctx := context.Background()
-	ok, err := repo.CreateHostedHTTPActionTicket(ctx, ticket)
+	ok, err := store.CreateHostedHTTPActionTicket(ctx, repo.ORM(), ticket)
 	require.NoError(t, err)
 	require.True(t, ok)
 	// Foreign grant/digest denials cannot burn the legitimate claim.
-	got, err := repo.RedeemHostedHTTPActionTicket(ctx, ticket.ID, "foreign", ticket.RequestSHA256)
+	got, err := store.RedeemHostedHTTPActionTicket(ctx, repo.ORM(), ticket.ID, "foreign", ticket.RequestSHA256)
 	require.NoError(t, err)
 	require.Nil(t, got)
-	got, err = repo.RedeemHostedHTTPActionTicket(ctx, ticket.ID, ticket.GrantID, strings.Repeat("b", 64))
+	got, err = store.RedeemHostedHTTPActionTicket(ctx, repo.ORM(), ticket.ID, ticket.GrantID, strings.Repeat("b", 64))
 	require.NoError(t, err)
 	require.Nil(t, got)
 	// A different Repo (API replica) sees the same durable ticket. Every racer
@@ -48,7 +49,7 @@ func TestHostedHTTPActionTicketDurableSingleUse(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			got, err := replica.RedeemHostedHTTPActionTicket(ctx, ticket.ID, ticket.GrantID, ticket.RequestSHA256)
+			got, err := store.RedeemHostedHTTPActionTicket(ctx, replica.ORM(), ticket.ID, ticket.GrantID, ticket.RequestSHA256)
 			require.NoError(t, err)
 			if got != nil {
 				success.Add(1)
@@ -64,7 +65,7 @@ func TestHostedHTTPActionTicketDurableSingleUse(t *testing.T) {
 	require.EqualValues(t, 1, success.Load())
 	// A Temporal retry must not mint again even after consumption.
 	ticket.ID = uuid.NewString()
-	ok, err = repo.CreateHostedHTTPActionTicket(ctx, ticket)
+	ok, err = store.CreateHostedHTTPActionTicket(ctx, repo.ORM(), ticket)
 	require.NoError(t, err)
 	require.False(t, ok)
 }
@@ -86,7 +87,7 @@ func TestHostedHTTPActionTicketCurrentAuthority(t *testing.T) {
 				_, err := repo.ORM().Bun().NewRaw("UPDATE workflows SET owner_user_id=NULL WHERE id=?", ticket.WorkflowID).Exec(ctx)
 				require.NoError(t, err)
 			}
-			ok, err := repo.CreateHostedHTTPActionTicket(ctx, ticket)
+			ok, err := store.CreateHostedHTTPActionTicket(ctx, repo.ORM(), ticket)
 			require.NoError(t, err)
 			if kind == "inactive-at-issue" || kind == "expired-issue" || kind == "too-long" || kind == "legacy-owner" {
 				require.False(t, ok)
@@ -106,7 +107,7 @@ func TestHostedHTTPActionTicketCurrentAuthority(t *testing.T) {
 				_, err = repo.ORM().Bun().NewRaw("UPDATE hosted_http_action_tickets SET created_at=CURRENT_TIMESTAMP-INTERVAL '1 minute',expires_at=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE id=?", ticket.ID).Exec(ctx)
 			}
 			require.NoError(t, err)
-			got, err := repo.RedeemHostedHTTPActionTicket(ctx, ticket.ID, ticket.GrantID, ticket.RequestSHA256)
+			got, err := store.RedeemHostedHTTPActionTicket(ctx, repo.ORM(), ticket.ID, ticket.GrantID, ticket.RequestSHA256)
 			require.NoError(t, err)
 			require.Nil(t, got)
 		})
@@ -119,18 +120,18 @@ func TestHostedHTTPActionTicketWithoutGrant(t *testing.T) {
 	repo, ticket := ticketFixture(t)
 	ticket.GrantID = ""
 	ctx := context.Background()
-	ok, err := repo.CreateHostedHTTPActionTicket(ctx, ticket)
+	ok, err := store.CreateHostedHTTPActionTicket(ctx, repo.ORM(), ticket)
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	got, err := repo.RedeemHostedHTTPActionTicket(ctx, ticket.ID, "approved-grant", ticket.RequestSHA256)
+	got, err := store.RedeemHostedHTTPActionTicket(ctx, repo.ORM(), ticket.ID, "approved-grant", ticket.RequestSHA256)
 	require.NoError(t, err)
 	require.Nil(t, got, "a grant id cannot redeem a grant-less ticket")
-	got, err = repo.RedeemHostedHTTPActionTicket(ctx, ticket.ID, "", strings.Repeat("b", 64))
+	got, err = store.RedeemHostedHTTPActionTicket(ctx, repo.ORM(), ticket.ID, "", strings.Repeat("b", 64))
 	require.NoError(t, err)
 	require.Nil(t, got, "a different request digest cannot redeem it")
 
-	got, err = repo.RedeemHostedHTTPActionTicket(ctx, ticket.ID, "", ticket.RequestSHA256)
+	got, err = store.RedeemHostedHTTPActionTicket(ctx, repo.ORM(), ticket.ID, "", ticket.RequestSHA256)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	require.Equal(t, "test-user", got.OwnerUserID)
@@ -138,7 +139,7 @@ func TestHostedHTTPActionTicketWithoutGrant(t *testing.T) {
 	require.Equal(t, ticket.NodeID, got.NodeID)
 	require.Empty(t, got.GrantID)
 
-	again, err := repo.RedeemHostedHTTPActionTicket(ctx, ticket.ID, "", ticket.RequestSHA256)
+	again, err := store.RedeemHostedHTTPActionTicket(ctx, repo.ORM(), ticket.ID, "", ticket.RequestSHA256)
 	require.NoError(t, err)
 	require.Nil(t, again, "one use")
 }

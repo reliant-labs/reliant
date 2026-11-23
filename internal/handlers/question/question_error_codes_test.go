@@ -54,6 +54,7 @@ func TestQuestionRPCs_RepositoryFailureCodes(t *testing.T) {
 			t.Parallel()
 			svc := question.NewTestQuestion(t, question.WithQuestionDeps(question.Deps{Repo: &question.MockRepository{
 				GetChatRowFunc: ownRow,
+			}, Questions: &question.MockQuestions{
 				ListAnswerablePendingQuestionsByChatFunc: func(context.Context, string) ([]*db.Question, error) {
 					return nil, tc.err
 				},

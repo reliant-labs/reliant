@@ -101,7 +101,7 @@ func (s *Service) previewAutomationEvent(ctx context.Context, msg *reliantv1.Pre
 		// a person claimed by its body (or by preview metadata).
 		replay.Sender = &core.TriggerSender{Kind: core.TriggerSenderKindWebhook, ID: trigger.ID, DisplayName: trigger.Name, Verified: true}
 	}
-	spec, err := triggers.PreviewEvent(ctx, s.deps.Repo, triggers.LaunchWorkflows{Repo: s.deps.Repo}, machinepool.Catalogs{R: s.deps.Repo}, trigger, &core.TriggerEvent{
+	spec, err := triggers.PreviewEvent(ctx, s.deps.Repo, triggers.LaunchWorkflows{Repo: s.deps.Repo}, machinepool.Catalogs{R: s.deps.Pools}, trigger, &core.TriggerEvent{
 		Kind: core.TriggerEventKind(trigger.Kind), Payload: replay.Payload, OccurredAt: replay.OccurredAt, Sender: replay.Sender,
 	})
 	if err != nil {

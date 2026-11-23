@@ -172,7 +172,7 @@ describe("ComputeStep — a coupon covered the machine", () => {
     asEntitled();
     renderStep();
 
-    expect(screen.getByText(/choose your machine/i)).toBeInTheDocument();
+    expect(screen.getByText(/choose your agent sandbox/i)).toBeInTheDocument();
     // ^-anchored: the footer's "Continue with M" also names the size.
     expect(screen.getByRole("button", { name: /^M / })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^L / })).toBeInTheDocument();

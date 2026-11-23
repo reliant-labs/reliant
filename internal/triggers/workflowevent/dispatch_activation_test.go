@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,7 +42,7 @@ func (f *fixture) saveDeclaringWorkflow(slug, yaml string) {
 	f.t.Helper()
 	ctx := context.Background()
 	if existing, err := f.repo.GetWorkflowDraftBySlug(ctx, f.userID, slug); err == nil && existing != nil {
-		require.NoError(f.t, f.repo.UpdateWorkflowDraftDefinition(ctx, existing.ID, slug, slug, yaml, db.WorkflowDraftStatusComplete))
+		require.NoError(f.t, workflowdraftstest.New(f.t, f.repo).UpdateWorkflowDraftDefinition(ctx, existing.ID, slug, slug, yaml, db.WorkflowDraftStatusComplete))
 		return
 	}
 	now := time.Now().UTC()

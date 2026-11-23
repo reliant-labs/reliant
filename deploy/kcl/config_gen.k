@@ -25,7 +25,7 @@ schema ApiServerConfigOrgs:
     provider_workspace_seats_enabled: bool = False
 
 # forge:section schema ApiServerConfig
-# forge:hash=1826459b0fcead8d101230c6e3d63b4a09a049c8d9309fe2f1903abb6f0f7cdb
+# forge:hash=599b1d7493a09f80fe785c3abf7211322a2a8967ad22944b4f3e1136402267e8
 schema ApiServerConfig:
     # JWT public key PEM for token validation
     jwt_public_key: str = ""
@@ -103,6 +103,8 @@ schema ApiServerConfig:
     authorization_server: str = ""
     # Comma-separated OAuth issuers whose tokens the connector endpoint accepts
     mcp_oauth_issuers: str = ""
+    # Comma-separated OAuth scopes the connector endpoints advertise (default openid)
+    mcp_oauth_scopes: str = ""
     # Largest attachment accepted, in bytes
     max_upload_size: int = 10485760
     # Worktree auto-archive: dry-run, on or off
@@ -222,7 +224,7 @@ apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str
         "apiServerConfigEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _sensitive]}, which is not a `sensitive` field of ApiServerConfig. Sensitive fields: ${sorted([_k for _k in _sensitive])}. Add `sensitive: true` to the field's (forge.v1.config) annotation in its config proto, or drop the name from this workload's config_secrets."
     {
         # forge:section apiServerConfigEnvMap values (root)
-        # forge:hash=d9628aabf335a3d970b061383cb054c539596f182b8f979f9f767067428ff668
+        # forge:hash=a346fe940ccde50de518d80658a27c2a2c91aa6dff78780b97bbf73949cff472
         "JWT_PUBLIC_KEY" = c.jwt_public_key
         "JWT_PUBLIC_KEY_FILE" = c.jwt_public_key_file
         "RELIANT_JWKS_URL" = c.jwks_url
@@ -256,6 +258,7 @@ apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str
         "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM" = "true" if c.require_email_verified_claim else "false"
         "RELIANT_AUTHORIZATION_SERVER" = c.authorization_server
         "MCP_OAUTH_ISSUERS" = c.mcp_oauth_issuers
+        "MCP_OAUTH_SCOPES" = c.mcp_oauth_scopes
         "MAX_UPLOAD_SIZE" = str(c.max_upload_size)
         "RELIANT_WORKTREE_AUTO_ARCHIVE" = c.worktree_auto_archive
         "RELIANT_WORKTREE_LANDED_IDLE" = c.worktree_landed_idle
@@ -280,6 +283,65 @@ apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str
 
         # forge:section apiServerConfigEnvMap values (end)
         # forge:hash=32b348156db484a6bfc9026984d82fa5308a88b0f1b77cb5e31845597dd30b46
+    } | {_k: _sensitive[_k] for _k in _sensitive if _k in config_secrets}
+}
+
+# forge:section schema AuthConfig
+# forge:hash=31d9c378ef94bc2150952d05175f7b224922d77d99dcdc41aabdce6848a48c35
+schema AuthConfig:
+    # Daemon type the platform declares: managed (an operator-created workspace pod) or self_hosted
+    daemon_type: str = ""
+
+# forge:section env-map authConfigEnvMap
+# forge:hash=ebd1172b3a0469dfe57018fbbf284a571d25fffbc2289b39016779b9033c63fb
+# Every ENV_VAR AuthConfig declares `sensitive: true` for. Used by forge's
+# host-mode config probe, which resolves the whole config for `forge env up`
+# and the parity report. A WORKLOAD must not use it: naming every
+# credential is the broadcast that put one feature's secretKeyRef on
+# every pod. Declare what a workload reads in its `config_secrets` instead.
+AUTH_CONFIG_SENSITIVE_ENV: [str] = [
+    # forge:section AUTH_CONFIG_SENSITIVE_ENV (end)
+    # forge:hash=f06f18c2c2cac579bf7202816487e279899a25637c1952ce1d95468928ecbfc8
+]
+
+# Every ENV_VAR AuthConfig declares BOTH `sensitive: true` and
+# `optional: true` for. The secret pre-flight skips these: a declared
+# secret with no value is an error by default, and this is the author
+# stating that THIS one's absence is intended (a tier's off-switch, a
+# credential only some environments own).
+AUTH_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
+    # forge:section AUTH_CONFIG_OPTIONAL_SECRET_ENV (end)
+    # forge:hash=4591a9bb55f8a56b4ce9fb1d3aca7fd3cb1964ef7b2cb12a40264fa5dd9a31d9
+]
+
+# authConfigEnvMap projects a typed AuthConfig into a workload's env MAP (fw.Workload.env):
+# one entry per field that declares an env_var, keyed by ENV_VAR name — a
+# string for an ordinary field, a forge.SecretRef for a sensitive one.
+#
+# Non-sensitive fields are projected for EVERY caller: they are inline
+# values, so they carry no credential and no start-time dependency.
+# Sensitive fields are projected ONLY when `config_secrets` NAMES them, so a
+# workload's manifest carries the secretKeyRefs it declared and no others.
+# A pod whose secretKeyRef names a missing key does not start — it stalls
+# in CreateContainerConfigError with no application log — so a credential
+# broadcast to workloads that never read it turns one feature's missing
+# secret into a whole namespace outage.
+#
+#     env = authConfigEnvMap(cfg, config_secrets) | {EXTRA = "value"}
+authConfigEnvMap = lambda c: AuthConfig, config_secrets: [str] -> {str: str | forge.SecretRef} {
+    _sensitive: {str: forge.SecretRef} = {
+        # forge:section authConfigEnvMap secrets (end)
+        # forge:hash=4273b9fa10c580704688f4a326054de4968b845b2778a15d1261afce7486ed7a
+    }
+    assert all _n in config_secrets { _n in _sensitive }, \
+        "authConfigEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _sensitive]}, which is not a `sensitive` field of AuthConfig. Sensitive fields: ${sorted([_k for _k in _sensitive])}. Add `sensitive: true` to the field's (forge.v1.config) annotation in its config proto, or drop the name from this workload's config_secrets."
+    {
+        # forge:section authConfigEnvMap values (root)
+        # forge:hash=caa28408fbf0ccc55ef935987a7fdd372ead3360a95100a86d5155ebc48a800d
+        "RELIANT_DAEMON_TYPE" = c.daemon_type
+
+        # forge:section authConfigEnvMap values (end)
+        # forge:hash=f71a2fdf3db3cd2e704bdf4ba12b9f2ed7a68d062316d9b27a0bfbb2a51775ab
     } | {_k: _sensitive[_k] for _k in _sensitive if _k in config_secrets}
 }
 
@@ -592,7 +654,7 @@ schema DaemonConfigInstance:
     workspace: str = ""
 
 # forge:section schema DaemonConfig
-# forge:hash=407c5fc8b7989b6d8afc333d726c72fbd981cc32b27ee70ca3c32d044cb63f90
+# forge:hash=4be5cf857d4f32a35c78fd3f27f82862de8d40f7977a63619b8050a0b23b05d8
 schema DaemonConfig:
     # Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port)
     gateway_url: str = ""
@@ -650,6 +712,8 @@ schema DaemonConfig:
     egress_host_max_concurrent: int = 0
     # Comma-separated key=value durable labels this machine declares (merged into its labels on every connect)
     labels: str = ""
+    # Install new signed releases of reliant at quiet moments, restarting in place (a self-owned install only; off by default)
+    auto_update: bool = False
     # instance config block (DaemonInstanceConfig). Set its fields as `instance.<field> = ...`.
     instance: DaemonConfigInstance = DaemonConfigInstance {}
 
@@ -709,7 +773,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_INSTANCE_WORKSPACE" = c.instance.workspace
 
         # forge:section daemonConfigEnvMap values (root)
-        # forge:hash=e1503c791c4a49dc99efec72ced4e5791633de13befdf747221ecd9f217c8b2f
+        # forge:hash=2408933b35dc915dfb6f50b70dbb9c72852c4e6fca18129611777a763c89a9d2
         "DAEMON_GRPC_URL" = c.gateway_url
         "TOOLS_DAEMON_PORT" = str(c.gateway_port)
         "DAEMON_TLS_MODE" = c.tls_mode
@@ -738,6 +802,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_DAEMON_EGRESS_USER_MAX_CONCURRENT" = str(c.egress_user_max_concurrent)
         "RELIANT_DAEMON_EGRESS_HOST_MAX_CONCURRENT" = str(c.egress_host_max_concurrent)
         "RELIANT_DAEMON_LABELS" = c.labels
+        "RELIANT_DAEMON_AUTO_UPDATE" = "true" if c.auto_update else "false"
 
         # forge:section daemonConfigEnvMap values (end)
         # forge:hash=06d93ea6019c14e6397469374bab99b5c2725f7353c6e9a894aa0b0ce1f5d421
@@ -1313,7 +1378,7 @@ schema ServerProcessConfigTLS:
     disable: bool = False
 
 # forge:section schema ServerProcessConfigIntegrations
-# forge:hash=7644f1b773c4baa9ac4536761bbf92fc69fc50a4fc6a1ce3b37380a94349bfcf
+# forge:hash=6f7cc9b91c60afbd9b6b18b4c1a1ff6f06d5ef16301abcf41bbe310084043f7a
 # ServerProcessConfigIntegrations is the integrations block (IntegrationsConfig) — author its values in config.k as `integrations.<field> = ...`.
 schema ServerProcessConfigIntegrations:
     # Externally reachable base URL of this deployment
@@ -1338,6 +1403,8 @@ schema ServerProcessConfigIntegrations:
     # Integration OAuth client secrets, RELIANT_OAUTH_<ID>_CLIENT_SECRET
     # Env family RELIANT_OAUTH_<KEY>_CLIENT_SECRET: one entry per KEY.
     oauth_client_secrets: {str: ConfigSecretRef} = {}
+    # Comma-separated owner/name repositories whose pull requests are recorded (none records none)
+    pr_record_repositories: str = ""
 
     check:
         all _k in oauth_client_ids { regex.match(_k, r"^[A-Za-z0-9_]+$") }, "oauth_client_ids: ${[_k for _k in oauth_client_ids if not regex.match(_k, r'^[A-Za-z0-9_]+$')]} cannot be a KEY of RELIANT_OAUTH_<KEY>_CLIENT_ID — a KEY is letters, digits and underscores"
@@ -1652,11 +1719,12 @@ serverProcessConfigEnvMap = lambda c: ServerProcessConfig, config_secrets: [str]
         "STREAMING_DRIVER" = c.streaming_driver
 
         # forge:section serverProcessConfigEnvMap values integrations
-        # forge:hash=8e8b94d43be9c42877c6dda239171cd0e5cc6a857e1f92a6a5b28c0077aee669
+        # forge:hash=c96e7dfd9606537893457cd2de54b13e39de29fff3e5328dce9ed890786c5a89
         "PUBLIC_URL" = c.integrations.public_url
         "RELIANT_GITHUB_APP_SLUG" = c.integrations.github_app_slug
         "RELIANT_GITHUB_BOT_USER_ID" = str(c.integrations.github_bot_user_id)
         "RELIANT_GITHUB_BOT_LOGIN" = c.integrations.github_bot_login
+        "RELIANT_PR_RECORD_REPOSITORIES" = c.integrations.pr_record_repositories
 
         # forge:section serverProcessConfigEnvMap values observability
         # forge:hash=0175c8880463f2a668166a58eaa3f5d43f19d5002b2ed1216e1dc4a44513ea2a
@@ -1915,7 +1983,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=a45ec2e5fee747cfde0a877dc5e25e9d0b27abefd36565d1e4addcd70420ce08
+# forge:hash=d82173bd4542c6a89110c981194f724ecd0a6f42f4e22d795c6677905754ee51
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -1923,6 +1991,8 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 schema ReliantProcess:
     # Every `reliant` process: the binary-wide root config.
     reliant_config?: ReliantConfig
+    # Every process at or below `reliant auth`, `reliant update`.
+    auth_config?: AuthConfig
     # Every process at or below `reliant auth`, `reliant chat`, `reliant daemon`, `reliant github`, `reliant integrations`, `reliant machine`, `reliant mcp`, `reliant models`, `reliant preview`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`, `reliant worktree`.
     cli_config?: CLIConfig
     # Every process at or below `reliant server`, `reliant db migrate`, `reliant db vault`.
@@ -1976,16 +2046,17 @@ reliantProcessEnvMap = lambda p: ReliantProcess, argv: [str], config_secrets: [s
     _path = _rest[:_flags[0]] if _flags else _rest
     _cmd = "api_server_config" if _path[:2] == ["server", "api"] else "daemon_config" if _path[:2] == ["daemon", "start"] else "daemon_status_config" if _path[:2] == ["daemon", "status"] else "daemon_stop_config" if _path[:2] == ["daemon", "stop"] else "daemon_logs_config" if _path[:2] == ["daemon", "logs"] else "daemon_register_config" if _path[:2] == ["daemon", "register"] else "gateway_config" if _path[:2] == ["server", "gateway"] else "worker_config" if _path[:2] == ["server", "worker"] else "preview_url_config" if _path[:1] == ["preview-url"] else ""
     _root_sensitive: [str] = RELIANT_CONFIG_SENSITIVE_ENV
+    _in_auth_config = any _p in [["auth"], ["update"]] { _path[:len(_p)] == _p }
     _in_cli_config = any _p in [["auth"], ["chat"], ["daemon"], ["github"], ["integrations"], ["machine"], ["mcp"], ["models"], ["preview"], ["project"], ["providers"], ["trigger"], ["workflow"], ["worktree"]] { _path[:len(_p)] == _p }
     _in_database_config = any _p in [["server"], ["db", "migrate"], ["db", "vault"]] { _path[:len(_p)] == _p }
     _in_server_process_config = any _p in [["server"]] { _path[:len(_p)] == _p }
     _in_vault_maintenance_config = any _p in [["db", "vault"]] { _path[:len(_p)] == _p }
-    _sub_sensitive: [str] = [] + (C_L_I_CONFIG_SENSITIVE_ENV if _in_cli_config else []) + (DATABASE_CONFIG_SENSITIVE_ENV if _in_database_config else []) + (SERVER_PROCESS_CONFIG_SENSITIVE_ENV if _in_server_process_config else []) + (VAULT_MAINTENANCE_CONFIG_SENSITIVE_ENV if _in_vault_maintenance_config else [])
+    _sub_sensitive: [str] = [] + (AUTH_CONFIG_SENSITIVE_ENV if _in_auth_config else []) + (C_L_I_CONFIG_SENSITIVE_ENV if _in_cli_config else []) + (DATABASE_CONFIG_SENSITIVE_ENV if _in_database_config else []) + (SERVER_PROCESS_CONFIG_SENSITIVE_ENV if _in_server_process_config else []) + (VAULT_MAINTENANCE_CONFIG_SENSITIVE_ENV if _in_vault_maintenance_config else [])
     _cmd_sensitive: [str] = API_SERVER_CONFIG_SENSITIVE_ENV if _cmd == "api_server_config" else DAEMON_CONFIG_SENSITIVE_ENV if _cmd == "daemon_config" else DAEMON_STATUS_CONFIG_SENSITIVE_ENV if _cmd == "daemon_status_config" else DAEMON_STOP_CONFIG_SENSITIVE_ENV if _cmd == "daemon_stop_config" else DAEMON_LOGS_CONFIG_SENSITIVE_ENV if _cmd == "daemon_logs_config" else DAEMON_REGISTER_CONFIG_SENSITIVE_ENV if _cmd == "daemon_register_config" else GATEWAY_CONFIG_SENSITIVE_ENV if _cmd == "gateway_config" else WORKER_CONFIG_SENSITIVE_ENV if _cmd == "worker_config" else PREVIEW_U_R_L_CONFIG_SENSITIVE_ENV if _cmd == "preview_url_config" else []
     assert all _n in config_secrets { _n in _root_sensitive or _n in _sub_sensitive or _n in _cmd_sensitive }, \
         "reliantProcessEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _root_sensitive and _n not in _sub_sensitive and _n not in _cmd_sensitive]}, which is not a `sensitive` field of the config(s) a `reliant` process running ${_path} loads. Sensitive fields: ${sorted(_root_sensitive + _sub_sensitive + _cmd_sensitive)}."
     _root_env = reliantConfigEnvMap((p.reliant_config if p.reliant_config not in [None, Undefined] else ReliantConfig {}), [_n for _n in config_secrets if _n in _root_sensitive])
-    _sub_env = {} | (cLIConfigEnvMap((p.cli_config if p.cli_config not in [None, Undefined] else CLIConfig {}), [_n for _n in config_secrets if _n in C_L_I_CONFIG_SENSITIVE_ENV]) if _in_cli_config else {}) | (databaseConfigEnvMap((p.database_config if p.database_config not in [None, Undefined] else DatabaseConfig {}), [_n for _n in config_secrets if _n in DATABASE_CONFIG_SENSITIVE_ENV]) if _in_database_config else {}) | (serverProcessConfigEnvMap((p.server_process_config if p.server_process_config not in [None, Undefined] else ServerProcessConfig {}), [_n for _n in config_secrets if _n in SERVER_PROCESS_CONFIG_SENSITIVE_ENV]) if _in_server_process_config else {}) | (vaultMaintenanceConfigEnvMap((p.vault_maintenance_config if p.vault_maintenance_config not in [None, Undefined] else VaultMaintenanceConfig {}), [_n for _n in config_secrets if _n in VAULT_MAINTENANCE_CONFIG_SENSITIVE_ENV]) if _in_vault_maintenance_config else {})
+    _sub_env = {} | (authConfigEnvMap((p.auth_config if p.auth_config not in [None, Undefined] else AuthConfig {}), [_n for _n in config_secrets if _n in AUTH_CONFIG_SENSITIVE_ENV]) if _in_auth_config else {}) | (cLIConfigEnvMap((p.cli_config if p.cli_config not in [None, Undefined] else CLIConfig {}), [_n for _n in config_secrets if _n in C_L_I_CONFIG_SENSITIVE_ENV]) if _in_cli_config else {}) | (databaseConfigEnvMap((p.database_config if p.database_config not in [None, Undefined] else DatabaseConfig {}), [_n for _n in config_secrets if _n in DATABASE_CONFIG_SENSITIVE_ENV]) if _in_database_config else {}) | (serverProcessConfigEnvMap((p.server_process_config if p.server_process_config not in [None, Undefined] else ServerProcessConfig {}), [_n for _n in config_secrets if _n in SERVER_PROCESS_CONFIG_SENSITIVE_ENV]) if _in_server_process_config else {}) | (vaultMaintenanceConfigEnvMap((p.vault_maintenance_config if p.vault_maintenance_config not in [None, Undefined] else VaultMaintenanceConfig {}), [_n for _n in config_secrets if _n in VAULT_MAINTENANCE_CONFIG_SENSITIVE_ENV]) if _in_vault_maintenance_config else {})
     _cmd_env = apiServerConfigEnvMap((p.api_server_config if p.api_server_config not in [None, Undefined] else ApiServerConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "api_server_config" else daemonConfigEnvMap((p.daemon_config if p.daemon_config not in [None, Undefined] else DaemonConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_config" else daemonStatusConfigEnvMap((p.daemon_status_config if p.daemon_status_config not in [None, Undefined] else DaemonStatusConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_status_config" else daemonStopConfigEnvMap((p.daemon_stop_config if p.daemon_stop_config not in [None, Undefined] else DaemonStopConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_stop_config" else daemonLogsConfigEnvMap((p.daemon_logs_config if p.daemon_logs_config not in [None, Undefined] else DaemonLogsConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_logs_config" else daemonRegisterConfigEnvMap((p.daemon_register_config if p.daemon_register_config not in [None, Undefined] else DaemonRegisterConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "daemon_register_config" else gatewayConfigEnvMap((p.gateway_config if p.gateway_config not in [None, Undefined] else GatewayConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "gateway_config" else workerConfigEnvMap((p.worker_config if p.worker_config not in [None, Undefined] else WorkerConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "worker_config" else previewURLConfigEnvMap((p.preview_url_config if p.preview_url_config not in [None, Undefined] else PreviewURLConfig {}), [_n for _n in config_secrets if _n in _cmd_sensitive]) if _cmd == "preview_url_config" else {}
     _root_env | _sub_env | _cmd_env
 }
@@ -2023,7 +2094,7 @@ schema RootFamily:
 ROOTS: {str: Root} = {
     "api" = Root {
         args = ["server", "api"]
-        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "RELIANT_MACHINE_ORG_CLEANUP", "JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_FILE", "RELIANT_JWKS_URL", "SUPABASE_JWT_ISSUER", "SUPABASE_JWT_AUDIENCE", "JWT_ISSUER", "JWT_AUDIENCE", "JWT_JWKS_URL", "JWT_SIGNING_METHOD", "JWT_ROLES_CLAIM", "JWT_JWKS_SNAPSHOT_FILE", "JWT_JWKS_SNAPSHOT_MAX_AGE", "OIDC_CLIENT_ID", "OIDC_REDIRECT_URI", "OIDC_SCOPES", "IDP_LOGIN_URI", "IDP_BASE", "IDP_HOST", "IDP_BROKER_TOKEN_FILE", "TRUSTED_PROXY_HOPS", "AUTH_SELF_SIGNUP", "HANDOFF_REDIRECTS", "ALLOWED_EMAIL_DOMAINS", "RELIANT_DISABLE_FORGE_API", "GRPC_PORT", "HEALTH_PORT", "PPROF_PORT", "BIND_ADDRESS", "CORS_ALLOWED_ORIGINS", "AUTH_MODE", "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM", "RELIANT_AUTHORIZATION_SERVER", "MCP_OAUTH_ISSUERS", "MAX_UPLOAD_SIZE", "RELIANT_WORKTREE_AUTO_ARCHIVE", "RELIANT_WORKTREE_LANDED_IDLE", "RELIANT_WORKTREE_RECLAIM_QUIET", "RELIANT_WORKTREE_RECLAIM_GRACE", "RELIANT_WORKTREE_LIVE_SHED_IDLE", "RELIANT_AUTH_URL", "RELIANT_AUTH_KEY", "RELIANT_PAYLOAD_BLOB_GC_HORIZON", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_ORGS_CONNECTIONS_ENABLED", "RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED", "RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED", "RELIANT_ORGS_PROJECT_MOVES_ENABLED", "RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "TLS_CERT_FILE", "TLS_KEY_FILE", "DISABLE_TLS", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS", "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS", "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS", "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES", "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP", "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS", "RELIANT_MIN_WEB_VERSION", "RELIANT_WEB_UPGRADE_URL", "RELIANT_WEB_UPGRADE_COMMAND", "RELIANT_MIN_DESKTOP_VERSION", "RELIANT_DESKTOP_UPGRADE_URL", "RELIANT_DESKTOP_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_VERSION", "RELIANT_DAEMON_UPGRADE_URL", "RELIANT_DAEMON_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX", "RELIANT_MIN_CLI_VERSION", "RELIANT_CLI_UPGRADE_URL", "RELIANT_CLI_UPGRADE_COMMAND", "RELIANT_MIN_SDK_GO_VERSION", "RELIANT_SDK_GO_UPGRADE_URL", "RELIANT_SDK_GO_UPGRADE_COMMAND", "RELIANT_MIN_SDK_TS_VERSION", "RELIANT_SDK_TS_UPGRADE_URL", "RELIANT_SDK_TS_UPGRADE_COMMAND", "RELIANT_CLIENT_VERSION_ENFORCE", "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED", "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED"]
+        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "RELIANT_MACHINE_ORG_CLEANUP", "JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_FILE", "RELIANT_JWKS_URL", "SUPABASE_JWT_ISSUER", "SUPABASE_JWT_AUDIENCE", "JWT_ISSUER", "JWT_AUDIENCE", "JWT_JWKS_URL", "JWT_SIGNING_METHOD", "JWT_ROLES_CLAIM", "JWT_JWKS_SNAPSHOT_FILE", "JWT_JWKS_SNAPSHOT_MAX_AGE", "OIDC_CLIENT_ID", "OIDC_REDIRECT_URI", "OIDC_SCOPES", "IDP_LOGIN_URI", "IDP_BASE", "IDP_HOST", "IDP_BROKER_TOKEN_FILE", "TRUSTED_PROXY_HOPS", "AUTH_SELF_SIGNUP", "HANDOFF_REDIRECTS", "ALLOWED_EMAIL_DOMAINS", "RELIANT_DISABLE_FORGE_API", "GRPC_PORT", "HEALTH_PORT", "PPROF_PORT", "BIND_ADDRESS", "CORS_ALLOWED_ORIGINS", "AUTH_MODE", "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM", "RELIANT_AUTHORIZATION_SERVER", "MCP_OAUTH_ISSUERS", "MCP_OAUTH_SCOPES", "MAX_UPLOAD_SIZE", "RELIANT_WORKTREE_AUTO_ARCHIVE", "RELIANT_WORKTREE_LANDED_IDLE", "RELIANT_WORKTREE_RECLAIM_QUIET", "RELIANT_WORKTREE_RECLAIM_GRACE", "RELIANT_WORKTREE_LIVE_SHED_IDLE", "RELIANT_AUTH_URL", "RELIANT_AUTH_KEY", "RELIANT_PAYLOAD_BLOB_GC_HORIZON", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_ORGS_CONNECTIONS_ENABLED", "RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED", "RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED", "RELIANT_ORGS_PROJECT_MOVES_ENABLED", "RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "TLS_CERT_FILE", "TLS_KEY_FILE", "DISABLE_TLS", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "RELIANT_PR_RECORD_REPOSITORIES", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS", "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS", "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS", "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES", "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP", "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS", "RELIANT_MIN_WEB_VERSION", "RELIANT_WEB_UPGRADE_URL", "RELIANT_WEB_UPGRADE_COMMAND", "RELIANT_MIN_DESKTOP_VERSION", "RELIANT_DESKTOP_UPGRADE_URL", "RELIANT_DESKTOP_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_VERSION", "RELIANT_DAEMON_UPGRADE_URL", "RELIANT_DAEMON_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX", "RELIANT_MIN_CLI_VERSION", "RELIANT_CLI_UPGRADE_URL", "RELIANT_CLI_UPGRADE_COMMAND", "RELIANT_MIN_SDK_GO_VERSION", "RELIANT_SDK_GO_UPGRADE_URL", "RELIANT_SDK_GO_UPGRADE_COMMAND", "RELIANT_MIN_SDK_TS_VERSION", "RELIANT_SDK_TS_UPGRADE_URL", "RELIANT_SDK_TS_UPGRADE_COMMAND", "RELIANT_CLIENT_VERSION_ENFORCE", "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED", "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED"]
         secrets = ["JWT_JWKS_SNAPSHOT", "IDP_BROKER_TOKEN", "IDP_LOGIN_POLICY", "AUTH_API_KEY", "AUTH_DEV_JWT_SECRET", "DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD", "RELIANT_VAULT_KEY", "RELIANT_SLACK_SIGNING_SECRET", "RELIANT_GITHUB_WEBHOOK_SECRET", "RELIANT_TEST_INTEGRATION_SECRET"]
         required_secrets = ["DATABASE_URL", "NATS_URL"]
         families = [RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_ID"}, RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_SECRET", sensitive = True}]
@@ -2036,7 +2107,7 @@ ROOTS: {str: Root} = {
     }
     "worker" = Root {
         args = ["server", "worker"]
-        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "RELIANT_MACHINE_ORG_CLEANUP", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS", "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS", "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS", "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES", "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP", "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS", "RELIANT_WORKER_HOSTED_ACTIONS_URL", "RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE", "HEALTH_PORT", "PPROF_PORT", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS", "RELIANT_WORKER_WORKFLOW_TASK_POLLERS", "RELIANT_WORKER_EGRESS_REPLICAS", "RELIANT_WORKER_EGRESS_USER_PER_MINUTE", "RELIANT_WORKER_EGRESS_USER_BURST", "RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL", "RELIANT_WORKER_CHAT_UPDATE_RETENTION", "RELIANT_WORKER_STEP_EXECUTION_RETENTION", "RELIANT_WORKER_LEDGER_RETENTION_START_DELAY"]
+        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "RELIANT_MACHINE_ORG_CLEANUP", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "RELIANT_PR_RECORD_REPOSITORIES", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS", "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS", "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS", "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES", "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP", "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS", "RELIANT_WORKER_HOSTED_ACTIONS_URL", "RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE", "HEALTH_PORT", "PPROF_PORT", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS", "RELIANT_WORKER_WORKFLOW_TASK_POLLERS", "RELIANT_WORKER_EGRESS_REPLICAS", "RELIANT_WORKER_EGRESS_USER_PER_MINUTE", "RELIANT_WORKER_EGRESS_USER_BURST", "RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL", "RELIANT_WORKER_CHAT_UPDATE_RETENTION", "RELIANT_WORKER_STEP_EXECUTION_RETENTION", "RELIANT_WORKER_LEDGER_RETENTION_START_DELAY"]
         secrets = ["DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD", "RELIANT_VAULT_KEY", "RELIANT_SLACK_SIGNING_SECRET", "RELIANT_GITHUB_WEBHOOK_SECRET", "RELIANT_TEST_INTEGRATION_SECRET"]
         required_secrets = ["DATABASE_URL", "NATS_URL"]
         families = [RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_ID"}, RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_SECRET", sensitive = True}]

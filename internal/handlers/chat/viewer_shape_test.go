@@ -13,6 +13,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
@@ -27,7 +28,7 @@ func TestViewerReadsAreReadOnlyAndRedacted(t *testing.T) {
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
 	router := &wakeRecordingRouter{Recorder: &toolexectest.Recorder{}}
-	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: f.Membership, Router: router}))
+	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Orgs: f.Membership, Router: router}))
 	require.NoError(t, repo.UpdateChatUnread(f.Owner, f.ChatID, true, "test"))
 	before, err := repo.GetChatRow(context.Background(), f.ChatID)
 	require.NoError(t, err)
@@ -93,7 +94,7 @@ func TestUnsharedChatInASharedProjectIsPrivate(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: f.Membership}))
+	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Orgs: f.Membership}))
 	_, err := svc.GetChat(f.Viewer, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: f.PrivateChatID}))
 	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	_, err = svc.ListMessages(f.Viewer, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.PrivateChatID}))
@@ -108,7 +109,7 @@ func TestViewerExpandsStubInputsButNeverResults(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: f.Membership}))
+	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Orgs: f.Membership}))
 
 	stub, err := svc.ListMessages(f.Viewer, connect.NewRequest(&reliantv1.ListMessagesRequest{
 		ChatId: f.ChatID, ToolBodies: reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB.Enum(),
@@ -157,7 +158,7 @@ func TestViewerNeverReadsAHiddenMessage(t *testing.T) {
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
 	hidden := f.Hidden
-	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: f.Membership}))
+	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Orgs: f.Membership}))
 
 	for _, mode := range []*reliantv1.ToolBodyMode{nil, reliantv1.ToolBodyMode_TOOL_BODY_MODE_FULL.Enum(), reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB.Enum()} {
 		got, err := svc.ListMessages(f.Viewer, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.ChatID, ToolBodies: mode}))
@@ -186,7 +187,7 @@ func TestViewerScrollBackCarriesNoErrors(t *testing.T) {
 	f := viewertest.New(t, repo)
 	require.NoError(t, repo.CreateChatUpdate(context.Background(), f.ChatID, db.UpdateTypeError, "err-1",
 		`{"update_type":"error","id":"err-1","error_message":"exit 1: SECRET=hunter2","thread":"`+f.Transcript.ThreadID+`"}`))
-	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: f.Membership}))
+	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Orgs: f.Membership}))
 	before := int64(1 << 40)
 	got, err := svc.ListMessages(f.Viewer, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.ChatID, BeforeSeq: &before}))
 	require.NoError(t, err)

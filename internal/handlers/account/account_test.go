@@ -29,11 +29,10 @@ func deleteReq(confirmEmail string) *connect.Request[reliantv1.DeleteAccountRequ
 // server-side, so a client that skips its own dialog cannot delete by
 // accident. Nothing must be deleted on a mismatch.
 func TestDeleteAccount_ConfirmEmailMismatch(t *testing.T) {
-	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
-	_ = repo
 
-	svc := newLocalOnlyAccountService(t, rawDB)
+	svc := newLocalOnlyAccountService(t, repo)
 
 	_, err := svc.DeleteAccount(accountAuthedCtx("u1", "owner@example.com"), deleteReq("someone@else.com"))
 	if err == nil {
@@ -48,10 +47,10 @@ func TestDeleteAccount_ConfirmEmailMismatch(t *testing.T) {
 // their address with different capitalisation, or whose paste carries a
 // trailing space, must not be blocked from an action they clearly intended.
 func TestDeleteAccount_ConfirmEmailIsCaseAndSpaceInsensitive(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
-	svc := newLocalOnlyAccountService(t, rawDB)
+	svc := newLocalOnlyAccountService(t, repo)
 
 	resp, err := svc.DeleteAccount(
 		accountAuthedCtx("u-case", "Owner@Example.com"),
@@ -68,10 +67,10 @@ func TestDeleteAccount_ConfirmEmailIsCaseAndSpaceInsensitive(t *testing.T) {
 // anonymous user has no email claim to type. Requiring one would strand
 // exactly the half-upgraded accounts this feature exists to rescue.
 func TestDeleteAccount_AnonymousSessionNeedsNoConfirmation(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
-	svc := newLocalOnlyAccountService(t, rawDB)
+	svc := newLocalOnlyAccountService(t, repo)
 
 	if _, err := svc.DeleteAccount(accountAuthedCtx("anon-user", ""), deleteReq("")); err != nil {
 		t.Fatalf("DeleteAccount rejected an anonymous session: %v", err)
@@ -80,10 +79,10 @@ func TestDeleteAccount_AnonymousSessionNeedsNoConfirmation(t *testing.T) {
 
 // TestDeleteAccount_RequiresAuth: no identity, no deletion.
 func TestDeleteAccount_RequiresAuth(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
-	svc := newLocalOnlyAccountService(t, rawDB)
+	svc := newLocalOnlyAccountService(t, repo)
 
 	_, err := svc.DeleteAccount(context.Background(), deleteReq("owner@example.com"))
 	if err == nil {
@@ -98,10 +97,10 @@ func TestDeleteAccount_RequiresAuth(t *testing.T) {
 // state what survives. An empty list here would let the UI imply a
 // completeness the RPC does not deliver.
 func TestPreviewAccountDeletion_ReportsScopeBoundary(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
-	svc := newLocalOnlyAccountService(t, rawDB)
+	svc := newLocalOnlyAccountService(t, repo)
 
 	resp, err := svc.PreviewAccountDeletion(
 		accountAuthedCtx("u-preview", "owner@example.com"),

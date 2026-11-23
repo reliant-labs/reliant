@@ -30,7 +30,7 @@ func (s *Service) ListProjectOrgMoves(
 		}
 		f = core.ProjectOrgMoveFilters{OrgID: org, Limit: limit, Offset: offset}
 	}
-	moves, err := s.deps.Repo.ListProjectOrgMoves(ctx, f)
+	moves, err := s.deps.Ledger.ListProjectOrgMoves(ctx, f)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list project moves"))
 	}

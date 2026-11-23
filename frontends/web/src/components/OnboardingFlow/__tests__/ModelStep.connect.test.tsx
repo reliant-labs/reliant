@@ -51,9 +51,9 @@ vi.mock("@/hooks", () => ({
   useOAuthAvailability: () => ({ available: true, loading: false, recheck: vi.fn() }),
 }));
 vi.mock("@/lib/analytics", () => ({ trackEvent: vi.fn() }));
-vi.mock("@/hooks/provider-account-queries", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/hooks/provider-account-queries")>()),
-  addProviderApiKey: mocks.updateProvider,
+vi.mock("@/hooks/provider-account-service-hooks_gen", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/provider-account-service-hooks_gen")>()),
+  useAddProviderAPIKey: () => ({ mutateAsync: mocks.updateProvider, isPending: false }),
 }));
 vi.mock("@/hooks/settings-service-hooks_gen", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/settings-service-hooks_gen")>()),
@@ -148,7 +148,7 @@ describe("ModelStep connect", () => {
 
     await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1));
     expect(mocks.validateProviderAPIKey).toHaveBeenCalledWith({ provider: "anthropic", apiKey: "sk-ant-test-key" });
-    expect(mocks.updateProvider).toHaveBeenCalledWith("anthropic", "sk-ant-test-key");
+    expect(mocks.updateProvider).toHaveBeenCalledWith({ provider: "anthropic", apiKey: "sk-ant-test-key" });
     expect(updatePlan).toHaveBeenCalledTimes(1);
   });
 });

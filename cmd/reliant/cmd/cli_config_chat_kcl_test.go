@@ -3,7 +3,6 @@ package cmd
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/kcleval"
@@ -12,12 +11,12 @@ import (
 )
 
 // TestChatLoadsCLIConfigThroughKCL pins `reliant chat` as one of CLIConfig's
-// subtrees on the path a workload takes, as TestProvidersLoadsCLIConfigThroughKCL
-// does for providers: deploy/kcl's reliantProcessEnvMap (generated from
-// cli_config.proto) projects the CLI connection into a `reliant chat`
-// process's env, and refuses one declared without cli_config. Dropping chat
-// from the subtrees fails both. The Cobra side is
-// TestChatCommandsDialTheServer.
+// subtrees on the path a workload takes, as
+// TestProvidersLoadsCLIConfigThroughKCL does for providers: deploy/kcl's
+// reliantProcessEnvMap (generated from cli_config.proto) projects the CLI
+// connection into a `reliant chat` process's env, and projects CLIConfig's
+// defaults into one declared without cli_config. Dropping chat from the
+// subtrees fails both. The Cobra side is TestChatCommandsDialTheServer.
 func TestChatLoadsCLIConfigThroughKCL(t *testing.T) {
 	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",
 		testkit.Inputs("deploy/kcl/**"))
@@ -28,9 +27,13 @@ func TestChatLoadsCLIConfigThroughKCL(t *testing.T) {
 	require.Equal(t, "https://api.example.test", env["RELIANT_SERVER_URL"], "chat's env carries CLIConfig: %v", env)
 	require.Equal(t, "https://gateway.example.test", env["RELIANT_GATEWAY_URL"])
 
-	var refused map[string]any
-	err := kcleval.Select(context.Background(), "deploy/kcl/testdata/cli_config_chat_missing.k", "missing_cli_config", &refused, project)
-	require.Error(t, err, "a chat workload with no cli_config must be refused")
-	require.True(t, strings.Contains(err.Error(), "reliant chat") && strings.Contains(err.Error(), "cli_config"),
-		"the refusal names the command and the missing config: %v", err)
+	// No cli_config: CLIConfig has no required field, so it projects as its
+	// defaults (forge #2659), exactly as an explicit `CLIConfig {}` does, and
+	// still carries the CLI connection.
+	const missing = "deploy/kcl/testdata/cli_config_chat_missing.k"
+	var unset, defaults map[string]any
+	require.NoError(t, kcleval.Select(context.Background(), missing, "missing_cli_config", &unset, project))
+	require.NoError(t, kcleval.Select(context.Background(), missing, "default_cli_config", &defaults, project))
+	require.Equal(t, defaults, unset, "a chat workload with no cli_config gets CLIConfig's defaults")
+	require.NotEmpty(t, unset["RELIANT_SERVER_URL"], "the default projection carries the CLI connection: %v", unset)
 }

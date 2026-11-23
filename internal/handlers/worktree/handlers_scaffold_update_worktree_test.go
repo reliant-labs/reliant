@@ -24,7 +24,7 @@ func TestUpdateWorktree_Generated(t *testing.T) {
 		written = w
 		return nil
 	}
-	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: store}))
+	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.WithReadRoles(worktree.Deps{Repo: store})))
 	renamed := "renamed"
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.UpdateWorktreeRequest, pb.UpdateWorktreeResponse]{

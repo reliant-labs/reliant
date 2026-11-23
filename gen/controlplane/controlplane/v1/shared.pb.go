@@ -2104,17 +2104,13 @@ func (x *DaemonPricing) GetActivationHoldReason() string {
 type DaemonSizePrice struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Size  string                 `protobuf:"bytes,1,opt,name=size,proto3" json:"size,omitempty"`
-	// Deprecated integer multiplier cannot represent exact cost-weight fractions.
-	//
-	// Deprecated: Marked as deprecated in controlplane/v1/shared.proto.
-	Multiplier int64 `protobuf:"varint,2,opt,name=multiplier,proto3" json:"multiplier,omitempty"`
 	// Exact rational num/den; not retail-price credit or a runtime billing multiplier.
 	CostWeight string `protobuf:"bytes,5,opt,name=cost_weight,json=costWeight,proto3" json:"cost_weight,omitempty"`
 	RouteId    string `protobuf:"bytes,6,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
 	// Canonical exact rational cents per running hour (num/den).
 	ExactHourlyPriceCents string `protobuf:"bytes,7,opt,name=exact_hourly_price_cents,json=exactHourlyPriceCents,proto3" json:"exact_hourly_price_cents,omitempty"`
 	// Overage price per wall-clock hour at this size, in cents, as an exact
-	// decimal string: multiplier × the small hourly price.
+	// decimal string: cost_weight × the small hourly price.
 	HourlyPriceCents string `protobuf:"bytes,3,opt,name=hourly_price_cents,json=hourlyPriceCents,proto3" json:"hourly_price_cents,omitempty"`
 	// The disk a new machine of this size is provisioned with, in GiB: ONE disk,
 	// used for anything. A plan of this size includes this much storage.
@@ -2160,14 +2156,6 @@ func (x *DaemonSizePrice) GetSize() string {
 	return ""
 }
 
-// Deprecated: Marked as deprecated in controlplane/v1/shared.proto.
-func (x *DaemonSizePrice) GetMultiplier() int64 {
-	if x != nil {
-		return x.Multiplier
-	}
-	return 0
-}
-
 func (x *DaemonSizePrice) GetCostWeight() string {
 	if x != nil {
 		return x.CostWeight
@@ -2204,14 +2192,12 @@ func (x *DaemonSizePrice) GetStorageGib() int64 {
 }
 
 type Plan struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	ProductId     string                 `protobuf:"bytes,2,opt,name=product_id,json=productId,proto3" json:"product_id,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Tier          PlanTier               `protobuf:"varint,4,opt,name=tier,proto3,enum=controlplane.v1.PlanTier" json:"tier,omitempty"`
-	StripePriceId string                 `protobuf:"bytes,5,opt,name=stripe_price_id,json=stripePriceId,proto3" json:"stripe_price_id,omitempty"`
-	// Deprecated: Marked as deprecated in controlplane/v1/shared.proto.
-	Limits           string                 `protobuf:"bytes,6,opt,name=limits,proto3" json:"limits,omitempty"` // Deprecated: use structured_limits instead
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Id               string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ProductId        string                 `protobuf:"bytes,2,opt,name=product_id,json=productId,proto3" json:"product_id,omitempty"`
+	Name             string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Tier             PlanTier               `protobuf:"varint,4,opt,name=tier,proto3,enum=controlplane.v1.PlanTier" json:"tier,omitempty"`
+	StripePriceId    string                 `protobuf:"bytes,5,opt,name=stripe_price_id,json=stripePriceId,proto3" json:"stripe_price_id,omitempty"`
 	CreatedAt        *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	StructuredLimits *PlanLimits            `protobuf:"bytes,8,opt,name=structured_limits,json=structuredLimits,proto3" json:"structured_limits,omitempty"` // 9 previously reserved for stripe_slot_price_id (removed with compute slots)
 	// Monthly price in cents, from the plan catalog. This is THE price a
@@ -2293,14 +2279,6 @@ func (x *Plan) GetTier() PlanTier {
 func (x *Plan) GetStripePriceId() string {
 	if x != nil {
 		return x.StripePriceId
-	}
-	return ""
-}
-
-// Deprecated: Marked as deprecated in controlplane/v1/shared.proto.
-func (x *Plan) GetLimits() string {
-	if x != nil {
-		return x.Limits
 	}
 	return ""
 }
@@ -4311,34 +4289,31 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x1bstorage_cents_per_gib_month\x18\x04 \x01(\tR\x17storageCentsPerGibMonth\x12'\n" +
 	"\x0fpricing_version\x18\x05 \x01(\tR\x0epricingVersion\x12)\n" +
 	"\x10activation_ready\x18\x06 \x01(\bR\x0factivationReady\x124\n" +
-	"\x16activation_hold_reason\x18\a \x01(\tR\x14activationHoldReasonJ\x04\b\x02\x10\x03R\"suspended_disk_cents_per_gib_month\"\x8d\x02\n" +
+	"\x16activation_hold_reason\x18\a \x01(\tR\x14activationHoldReasonJ\x04\b\x02\x10\x03R\"suspended_disk_cents_per_gib_month\"\xfb\x01\n" +
 	"\x0fDaemonSizePrice\x12\x12\n" +
-	"\x04size\x18\x01 \x01(\tR\x04size\x12\"\n" +
-	"\n" +
-	"multiplier\x18\x02 \x01(\x03B\x02\x18\x01R\n" +
-	"multiplier\x12\x1f\n" +
+	"\x04size\x18\x01 \x01(\tR\x04size\x12\x1f\n" +
 	"\vcost_weight\x18\x05 \x01(\tR\n" +
 	"costWeight\x12\x19\n" +
 	"\broute_id\x18\x06 \x01(\tR\arouteId\x127\n" +
 	"\x18exact_hourly_price_cents\x18\a \x01(\tR\x15exactHourlyPriceCents\x12,\n" +
 	"\x12hourly_price_cents\x18\x03 \x01(\tR\x10hourlyPriceCents\x12\x1f\n" +
 	"\vstorage_gib\x18\x04 \x01(\x03R\n" +
-	"storageGib\"\x87\x03\n" +
+	"storageGibJ\x04\b\x02\x10\x03R\n" +
+	"multiplier\"\xf9\x02\n" +
 	"\x04Plan\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
 	"product_id\x18\x02 \x01(\tR\tproductId\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12-\n" +
 	"\x04tier\x18\x04 \x01(\x0e2\x19.controlplane.v1.PlanTierR\x04tier\x12&\n" +
-	"\x0fstripe_price_id\x18\x05 \x01(\tR\rstripePriceId\x12\x1a\n" +
-	"\x06limits\x18\x06 \x01(\tB\x02\x18\x01R\x06limits\x129\n" +
+	"\x0fstripe_price_id\x18\x05 \x01(\tR\rstripePriceId\x129\n" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12H\n" +
 	"\x11structured_limits\x18\b \x01(\v2\x1b.controlplane.v1.PlanLimitsR\x10structuredLimits\x12\x1f\n" +
 	"\vprice_cents\x18\n" +
 	" \x01(\x03R\n" +
 	"priceCents\x12#\n" +
-	"\rdisplay_order\x18\v \x01(\x05R\fdisplayOrder\"\xa6\x05\n" +
+	"\rdisplay_order\x18\v \x01(\x05R\fdisplayOrderJ\x04\b\x06\x10\aR\x06limits\"\xa6\x05\n" +
 	"\fSubscription\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
 	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\x17\n" +

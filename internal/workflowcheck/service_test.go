@@ -31,7 +31,7 @@ func newFakeStore() *fakeStore {
 	return &fakeStore{rows: map[string]*core.WorkflowCheckRun{}, obs: map[string]*core.WorkflowCheckObservation{}, chats: map[string]string{}}
 }
 
-func (s *fakeStore) CreateWorkflowCheckRun(_ context.Context, row *core.WorkflowCheckRun) (bool, error) {
+func (s *fakeStore) InsertWorkflowCheckRun(_ context.Context, row *core.WorkflowCheckRun) (bool, error) {
 	for _, r := range s.rows {
 		if r.TriggerEventID == row.TriggerEventID && r.Name == row.Name {
 			return false, nil

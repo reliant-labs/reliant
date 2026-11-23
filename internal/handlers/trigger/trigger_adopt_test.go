@@ -149,7 +149,7 @@ func TestAdoptAs_EveryCredentialBearingReferenceIsClearedOrReResolved(t *testing
 			check: func(t *testing.T, e *adoptEnv, old, adopted *core.Trigger, _ *reliantv1.AcceptTriggerOfferResponse, _ string) {
 				require.NotNil(t, adopted.ConnectionID)
 				assert.NotEqual(t, *old.ConnectionID, *adopted.ConnectionID, "the departed owner's connection is never kept")
-				conn, err := e.repo.Connections().GetConnection(context.Background(), e.bobID, *adopted.ConnectionID)
+				conn, err := db.TestConnections(t, e.repo).GetConnection(context.Background(), e.bobID, *adopted.ConnectionID)
 				require.NoError(t, err)
 				assert.Equal(t, e.bobID, conn.UserID, "it listens through the adopter's own connection")
 			},

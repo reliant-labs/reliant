@@ -38,7 +38,7 @@ func (s *Service) RotateOrgProviderAPIKey(
 		return nil, err
 	}
 	owner := core.OrgAccountOwner(orgID)
-	acct, err := s.deps.Store.RotateOrgAPIKey(ctx, orgID, cur.ID, core.OrgAPIKey{
+	acct, err := s.deps.OrgAccounts.RotateOrgAPIKey(ctx, orgID, cur.ID, core.OrgAPIKey{
 		IdentityKey: core.APIKeyIdentityKey(owner.Key(), cur.Provider, apiKey),
 		KeyHint:     core.KeyHint(apiKey),
 		Secret:      apiKey,

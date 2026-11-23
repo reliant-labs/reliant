@@ -38,7 +38,7 @@
 //
 // Create a new threads.Service with a repository:
 //
-//	svc := threads.NewService(repo)
+//	svc := threads.New(threads.Deps{Repo: repo})
 //
 // Create a root thread:
 //

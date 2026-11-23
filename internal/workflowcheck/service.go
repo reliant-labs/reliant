@@ -126,7 +126,7 @@ func (s *service) Open(ctx context.Context, f Firing) error {
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
-	if _, err := s.store.CreateWorkflowCheckRun(ctx, row); err != nil {
+	if _, err := s.store.InsertWorkflowCheckRun(ctx, row); err != nil {
 		return fmt.Errorf("record check %q for event %s: %w", spec.Name, f.Event.ID, err)
 	}
 	return nil

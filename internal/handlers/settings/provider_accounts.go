@@ -55,6 +55,7 @@ func unidentified(provider string) string { return core.PlaceholderIdentityKey("
 // connectAccount stores a completed sign-in as a provider account.
 func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, error) {
 	repo := s.deps.Repo
+	accounts := s.deps.Accounts
 	if in.upsert.IdentityKey == "" {
 		in.upsert.IdentityKey = unidentified(in.provider)
 	}
@@ -62,13 +63,13 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 
 	var target *core.ProviderAccount
 	if in.targetID != "" {
-		accounts, err := repo.ListProviderAccounts(ctx, in.userID)
+		existing, err := accounts.ListProviderAccounts(ctx, in.userID)
 		if err != nil {
 			return signInResult{}, svcerr.WrapOr(err, svcerr.Internal("failed to read accounts"))
 		}
-		for i := range accounts {
-			if accounts[i].ID == in.targetID {
-				target = &accounts[i]
+		for i := range existing {
+			if existing[i].ID == in.targetID {
+				target = &existing[i]
 			}
 		}
 		if target == nil || target.Provider != in.provider {
@@ -81,12 +82,12 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 		}
 	}
 
-	acct, created, err := repo.UpsertProviderAccount(ctx, in.upsert)
+	acct, created, err := accounts.UpsertProviderAccount(ctx, in.upsert)
 	if err != nil {
 		return signInResult{}, svcerr.WrapOr(err, svcerr.Internal(fmt.Sprintf("failed to save %s credentials", providerName(in.provider))))
 	}
 	if created && in.label != "" && acct.Label == "" && acct.Email == "" {
-		if acct, err = repo.PatchProviderAccount(ctx, in.userID, acct.ID, core.AccountPatch{Label: &in.label}); err != nil {
+		if acct, err = accounts.PatchProviderAccount(ctx, in.userID, acct.ID, core.AccountPatch{Label: &in.label}); err != nil {
 			logging.WarnContext(ctx, "Failed to label new provider account", "provider", in.provider, "error", err)
 		}
 	}
@@ -108,7 +109,7 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 	}
 
 	if providerusage.UsageAPIEnabled(in.provider) {
-		if err := repo.ScheduleUsagePoll(ctx, acct.ID, time.Now(), 0, ""); err != nil {
+		if err := accounts.ScheduleUsagePoll(ctx, acct.ID, time.Now(), 0, ""); err != nil {
 			logging.WarnContext(ctx, "Failed to schedule usage poll for new account", "provider", in.provider, "error", err)
 		}
 	}
@@ -123,7 +124,7 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 	// chats blocked on a provider go on now rather than at their resets.
 	s.wakeChats(ctx, in.userID, "a "+in.provider+" sign-in")
 
-	limits, _ := repo.ListAccountLimits(ctx, in.userID)
+	limits, _ := accounts.ListAccountLimits(ctx, in.userID)
 	var l *core.LimitState
 	if v, ok := limits[acct.ID]; ok {
 		l = &v

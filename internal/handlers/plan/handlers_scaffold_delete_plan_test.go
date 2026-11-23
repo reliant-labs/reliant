@@ -17,12 +17,12 @@ func TestDeletePlan_Generated(t *testing.T) {
 	t.Parallel()
 
 	var deleted string
-	repo := newPlanRepo()
-	repo.DeletePlanFunc = func(_ context.Context, id string) error {
+	repo := newPlanMocks()
+	repo.Plans.RemovePlanFunc = func(_ context.Context, id string) error {
 		deleted = id
 		return nil
 	}
-	svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: repo}))
+	svc := plan.NewTestPlan(t, plan.WithPlanDeps(repo.Deps()))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeletePlanRequest, pb.DeletePlanResponse]{
 		{

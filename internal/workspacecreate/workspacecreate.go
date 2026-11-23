@@ -125,15 +125,12 @@ type Request struct {
 	// the machine the checkouts live on.
 	OwnerDaemonID string
 	// IdempotencyKey, when set, is stored on the row (see
-	// db.Repo.GetWorktreeByIdempotencyKey; the caller checks it).
+	// store.GetWorktreeByIdempotencyKey; the caller checks it).
 	IdempotencyKey *string
 	// WorkspaceID, when set, is the workspace directory name under the
 	// worktrees root (see worktreepath.WorkspaceDirName). Adopt needs it up
 	// front because it moves a checkout into the directory before Finish.
 	WorkspaceID string
-	// Now is the clock a pending checkout teardown's grace is judged by
-	// (checkoutteardown.Query); nil is time.Now.
-	Now func() time.Time
 	// Existing lists repos whose checkout already exists (an adopted
 	// worktree). Finish makes no checkout for them and records their branch
 	// and base. Setting it also puts Finish in adopt mode for the OTHER repos:
@@ -225,19 +222,17 @@ type TeardownPendingError struct {
 	Project  string
 	Teardown *db.CheckoutTeardown
 	// Cause is why it is still pending: the op is running, the machine did
-	// not answer, or (*checkoutteardown.LegacyPendingError) it is too old to
+	// not answer, or (checkoutteardown.ErrMachineOutdated) it is too old to
 	// say. Nil when it is simply still running.
 	Cause error
 }
 
 func (e *TeardownPendingError) Error() string {
 	what := fmt.Sprintf("a %s of %q's checkout on this machine", e.Teardown.Kind, e.Project)
-	var legacy *checkoutteardown.LegacyPendingError
 	switch {
-	case errors.As(e.Cause, &legacy):
+	case errors.Is(e.Cause, checkoutteardown.ErrMachineOutdated):
 		return fmt.Sprintf("%s was sent to a machine whose Reliant is too old to confirm it finished; "+
-			"workspaces can be created there again after %s, or as soon as the machine is updated",
-			what, legacy.Until.UTC().Format("15:04 MST"))
+			"update Reliant on that machine, then create the workspace", what)
 	case e.Cause != nil:
 		return fmt.Sprintf("%s has not been confirmed finished, and the machine could not say how it ended; try again once it is online", what)
 	default:
@@ -256,11 +251,7 @@ func settleTeardown(ctx context.Context, store Store, m Machine, req Request, op
 	if m == nil {
 		return &TeardownPendingError{Project: req.Project.Name, Teardown: op, Cause: errors.New("no machine to ask")}
 	}
-	now := time.Now
-	if req.Now != nil {
-		now = req.Now
-	}
-	settled, err := checkoutteardown.Query(ctx, store, m, op, now())
+	settled, err := checkoutteardown.Query(ctx, store, m, op)
 	if err != nil {
 		logging.WarnContext(ctx, "workspace create: a checkout teardown is unsettled", "teardown", op.ID, "kind", op.Kind, "error", err)
 		return &TeardownPendingError{Project: req.Project.Name, Teardown: op, Cause: err}
@@ -320,6 +311,9 @@ func claimName(ctx context.Context, store Store, projectID, name, branch string)
 // (with no path) so the failure stays visible. A failed copy_files does not
 // fail the workspace. The returned error is the reason for FAILED.
 func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Worktree) error {
+	// Every command below, the rollback's included, waits out a machine
+	// refusing it while it finalizes another workspace's recovery.
+	m = recoveryPatientMachine{m}
 	project, repos := req.Project, req.Repos
 	checkout := req.Checkout
 	workspaceID := req.WorkspaceID

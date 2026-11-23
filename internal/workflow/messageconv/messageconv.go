@@ -113,10 +113,7 @@ func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageCo
 			// preview so it can save the original without recreating it.
 			if image, ok := part.(message.BinaryContent); ok && role == message.User &&
 				block.Content != nil && strings.HasPrefix(image.MIMEType, "image/") && len(image.Data) > 0 {
-				parts = append(parts, message.TextContent{Text: fmt.Sprintf(
-					"[Attached image (attachment_id=%s). To copy the original file into the workspace, use save_attachment with this attachment_id.]",
-					*block.Content,
-				)})
+				parts = append(parts, message.TextContent{Text: userImageReference(*block.Content, image.MIMEType)})
 			}
 			parts = append(parts, part)
 		}
@@ -153,6 +150,21 @@ func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageCo
 	return msg
 }
 
+// userImageReference is the text a user's attached image replays with.
+//
+// It names the stored type because a model that only SEES the image cannot
+// tell a PNG from a JPEG, and picks the file extension from that guess. And it
+// says a sub-agent cannot see the image, because the usual failure is not this
+// agent's save but a delegated one: the agent that is told to "use the image
+// the user sent" starts with only its prompt, so the id has to travel in it.
+func userImageReference(attachmentID, mimeType string) string {
+	return fmt.Sprintf(
+		"[Attached image (attachment_id=%s, %s). To copy the original file into the workspace, use save_attachment "+
+			"with this attachment_id and a file extension that matches %s. A sub-agent cannot see this image: "+
+			"to delegate work on it, pass the attachment_id in the sub-agent's prompt, or save the file first and pass its path.]",
+		attachmentID, mimeType, mimeType)
+}
+
 // foldToolResultMedia attaches an IMAGE or DOCUMENT block of a tool message to
 // the tool result before it, reporting whether the block was consumed.
 //
@@ -173,8 +185,9 @@ func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageCo
 // before it is left to ContentBlockToPart, as any other message's block is.
 // A block whose attachment cannot be loaded is not dropped silently: the
 // result gains a note naming the attachment, so the model knows media is
-// missing and can ask for it again. Generated video is consumed without a
-// note: it is for the user, never the model, and the result's text names it.
+// missing and can ask for it again. Generated video and a presented image
+// (attachment.TypeDisplay) are consumed without a note: they are for the
+// user, never the model, and the result's text names them.
 func foldToolResultMedia(ctx context.Context, chatID string, block *db.MessageContentBlock, parts []message.ContentPart, repo AttachmentReader) bool {
 	if block.BlockType != reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE &&
 		block.BlockType != reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT {
@@ -199,8 +212,10 @@ func foldToolResultMedia(ctx context.Context, chatID string, block *db.MessageCo
 		parts[last] = result
 		return true
 	}
-	// Generated video is for the user, never the model (see ContentBlockToPart).
-	if strings.HasPrefix(attachment.MimeType, "video/") {
+	// Generated video and presented images are for the user, never the
+	// model (see ContentBlockToPart). The result's text already tells the
+	// model what the user was shown.
+	if userOnlyMedia(attachment) {
 		return true
 	}
 	result.BinaryParts = append(result.BinaryParts, message.BinaryContent{
@@ -239,7 +254,8 @@ func ContentBlockToPart(ctx context.Context, chatID string, block *db.MessageCon
 			}
 			// Generated video is for the user, never the model: no chat model
 			// we route accepts it, and the bytes would bloat every replay.
-			if strings.HasPrefix(attachment.MimeType, "video/") {
+			// A presented image is the same: it was shown to a person.
+			if userOnlyMedia(attachment) {
 				return nil
 			}
 			return message.BinaryContent{
@@ -265,7 +281,8 @@ func ContentBlockToPart(ctx context.Context, chatID string, block *db.MessageCon
 			return message.TextContent{
 				Text: fmt.Sprintf(
 					"[Attached document: %s (attachment_id=%s). Use the read_attachment tool with this "+
-						"attachment_id to read it. For PDFs, pass a pages range (e.g. pages=\"1-5\").]",
+						"attachment_id to read it. For PDFs, pass a pages range (e.g. pages=\"1-5\"). "+
+						"To copy the file into the workspace, use save_attachment with this attachment_id.]",
 					attachment.FileName, attachmentID),
 			}
 		}
@@ -358,7 +375,18 @@ func LoadAttachment(ctx context.Context, chatID string, attachmentID string, rep
 		FileName: att.Filename,
 		MimeType: att.MimeType,
 		Content:  att.Content,
+		Type:     att.AttachmentType,
 	}, nil
+}
+
+// userOnlyMedia reports whether an attachment is shown to the user and never
+// replayed to a model: a generated video (by MIME, which predates its type),
+// or an image a tool presented to the user (attachment.TypeDisplay). A
+// presented image may be far larger than a model accepts, and replaying it
+// would charge its tokens on every later turn for a picture the model never
+// asked to see.
+func userOnlyMedia(att *message.Attachment) bool {
+	return strings.HasPrefix(att.MimeType, "video/") || attachutil.AttachmentType(att.Type).IsDisplay()
 }
 
 // LoadFileReference loads a file reference and returns its text content.

@@ -22,7 +22,7 @@ const EnsureProjectForAppPath = "/internal/projects/ensure-for-app"
 const ensureProjectFieldMax = 512
 
 // EnsureProjectForAppStore finds or creates the org's project for an app.
-// *db.Repo is one.
+// store.ProjectAppEnsureExtStore is one.
 type EnsureProjectForAppStore interface {
 	EnsureProjectForApp(ctx context.Context, in db.EnsureProjectForAppInput) (db.EnsureProjectForAppResult, error)
 }
@@ -53,7 +53,7 @@ type ensureProjectForAppResponse struct {
 // that gives a deployed forge app a project in the org it was deployed into:
 // the org's live project that is a checkout of the app's remote, whoever owns
 // it, else a new remote-only one owned by the deploying user
-// (db.Repo.EnsureProjectForApp). The app is recorded on the project's repo
+// (store.EnsureProjectForApp). The app is recorded on the project's repo
 // (repo_forge_apps) either way.
 //
 // It accepts only the short-lived internal-service JWT (the one

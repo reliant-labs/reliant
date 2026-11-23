@@ -13,8 +13,10 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/usage"
+	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -36,8 +38,9 @@ func newEnv(t *testing.T) *env {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	return &env{t: t, repo: repo, svc: usage.NewTestUsage(t, usage.WithUsageDeps(usage.Deps{
-		Store: repo,
-		Now:   func() time.Time { return now },
+		Store:    repo,
+		Accounts: accountNames(t, repo),
+		Now:      func() time.Time { return now },
 	}))}
 }
 
@@ -72,7 +75,7 @@ func (e *env) record(c call) {
 	if c.outcome == "" {
 		c.outcome = store.LLMOutcomeSuccess
 	}
-	_, err := e.repo.RecordLLMCallUsage(context.Background(), db.LLMCallUsage{
+	_, err := llmusagetest.New(e.t, e.repo).RecordLLMCallUsage(context.Background(), db.LLMCallUsage{
 		ID: fmt.Sprintf("act-%d", e.seq), UserID: c.user, ChatID: "chat", Provider: c.provider, Model: c.model,
 		AuthMode: c.mode, Purpose: c.purpose, InputTokens: c.in, OutputTokens: c.out, CacheReadTokens: c.cacheR, CacheWriteTokens: c.cacheW,
 		Outcome: c.outcome, ErrorClass: c.errClass, LatencyMs: c.latency, Attempt: 1, CreatedAt: c.at,
@@ -338,7 +341,7 @@ func TestGetLLMUsage_DetailBoundaryAtMidnight(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	at := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
-	svc := usage.NewTestUsage(t, usage.WithUsageDeps(usage.Deps{Store: repo, Now: func() time.Time { return at }}))
+	svc := usage.NewTestUsage(t, usage.WithUsageDeps(usage.Deps{Store: repo, Accounts: accountNames(t, repo), Now: func() time.Time { return at }}))
 	resp, err := svc.GetLLMUsage(as("u"), connect.NewRequest(&pb.GetLLMUsageRequest{StartDate: "2026-08-01", EndDate: "2026-08-01"}))
 	require.NoError(t, err)
 	assert.Equal(t, "2026-08-01", resp.Msg.DetailAvailableFrom)
@@ -397,7 +400,7 @@ func TestGetLLMUsage_PurposeSurvivesPerCallRetention(t *testing.T) {
 	e := newEnv(t)
 	e.record(call{user: "u", at: time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC), in: 40, purpose: store.LLMPurposeChat})
 	e.record(call{user: "u", at: time.Date(2026, 6, 1, 12, 5, 0, 0, time.UTC), in: 9000, purpose: store.LLMPurposeCompaction})
-	pruned, err := e.repo.PruneLLMCallUsage(context.Background(), now)
+	pruned, err := llmusagetest.New(e.t, e.repo).PruneLLMCallUsage(context.Background(), now)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, pruned, "the per-call rows are gone")
 
@@ -413,7 +416,7 @@ func TestGetLLMUsage_CountsEveryAttemptOfARetriedRequest(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	rec := func(attempt int32, outcome, class string, in int64) {
-		_, err := e.repo.RecordLLMCallUsage(context.Background(), db.LLMCallUsage{
+		_, err := llmusagetest.New(e.t, e.repo).RecordLLMCallUsage(context.Background(), db.LLMCallUsage{
 			ID: "wf/run/act/chat/1", UserID: "u", ChatID: "c", Provider: "anthropic", Model: "m", AuthMode: store.LLMAuthModeBYOK,
 			Purpose: store.LLMPurposeChat, InputTokens: in, Outcome: outcome, ErrorClass: class, LatencyMs: 100,
 			Attempt: attempt, CreatedAt: day(28),
@@ -428,4 +431,12 @@ func TestGetLLMUsage_CountsEveryAttemptOfARetriedRequest(t *testing.T) {
 	assert.EqualValues(t, 2, r.Totals.Calls)
 	assert.EqualValues(t, 1, r.Totals.ErrorCalls)
 	assert.EqualValues(t, 1200, r.Totals.InputTokens, "the failed attempt's tokens are not lost")
+}
+
+// accountNames is the real provider-account store over repo's database, as composition wires it.
+func accountNames(t *testing.T, repo *db.Repo) provideraccounts.Service {
+	t.Helper()
+	svc, err := provideraccounts.New(provideraccounts.Deps{DB: repo.ORM(), Sealer: db.NewTestVault(t, repo)})
+	require.NoError(t, err)
+	return svc
 }

@@ -27,10 +27,12 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
 import { RepoMetaProvider } from "@/services/forge/RepoMetaContext";
+import { VulnerabilityApiProvider } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
 
 import { ConsolePreviewShell } from "../../Console/ConsolePreviewShell";
 import { withSearch } from "../../Console/paths";
 import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
+import { fixtureVulnerabilityApi } from "../../Security/fixtures";
 import { OverviewHome, type HostedByEnv, type OverviewSearch } from "../OverviewHome";
 import { WorkloadDetail, type WorkloadActions, type WorkloadDetailSearch } from "../WorkloadDetail";
 import { actionsUnavailableReason } from "../WorkloadPages";
@@ -126,6 +128,8 @@ export default function WorkloadsPreview() {
     unavailableReason: actionsUnavailableReason(kind, workloadEnv.name),
   };
   const repoMeta = useMemo(() => createRepoMetaFixture(active.id === "no-default-branch" ? null : "main"), [active]);
+  // The Overview's Vulnerabilities card: the Security fixtures' findings.
+  const vulnApi = useMemo(() => fixtureVulnerabilityApi("findings"), []);
 
   return (
     <ConsolePreviewShell
@@ -159,6 +163,7 @@ export default function WorkloadsPreview() {
       <QueryClientProvider client={queryClient}>
         <ObservabilityApiProvider api={obsApi}>
           <ReleasesApiProvider api={releasesApi}>
+            <VulnerabilityApiProvider api={vulnApi}>
             <RepoMetaProvider api={repoMeta}>
             {search.workload ? (
               <WorkloadDetail
@@ -203,6 +208,7 @@ export default function WorkloadsPreview() {
               />
             )}
             </RepoMetaProvider>
+            </VulnerabilityApiProvider>
           </ReleasesApiProvider>
         </ObservabilityApiProvider>
       </QueryClientProvider>

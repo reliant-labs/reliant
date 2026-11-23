@@ -57,7 +57,7 @@ func TestRunStep_UnknownCredentialsFailsTheStepWithoutRunningTheCommand(t *testi
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 	mock := &mockRunExecutor{responses: []mockRunResponse{{exitCode: 0}}}
-	activity := NewExecuteRunStepActivity(repo, nil, mock)
+	activity := NewExecuteRunStepActivity(repo, workspaceRowsOf(repo), nil, mock)
 
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)

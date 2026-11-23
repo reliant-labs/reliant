@@ -90,7 +90,7 @@ func TestActivityWrapper_HeartbeatsThroughAWaitLongerThanTheHeartbeatTimeout(t *
 
 	t.Run("wrapped, as ExecuteTools is registered", func(t *testing.T) {
 		t.Parallel()
-		registry := NewActivityRegistry(&wrapperTestRepo{})
+		registry := NewActivityRegistry(ActivityRegistryDeps{Store: &wrapperTestRepo{}, Workflows: &wrapperTestRepo{}})
 		out, err := run(t, wrapActivity(registry, executeToolsActivityName, blocked, lifecycle.AgentWork, true))
 		require.NoError(t, err, "a wait longer than the heartbeat timeout must not time the attempt out")
 		assert.Equal(t, "reconnected", out)

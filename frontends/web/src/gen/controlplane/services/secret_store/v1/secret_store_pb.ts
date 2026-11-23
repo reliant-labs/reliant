@@ -867,7 +867,7 @@ export enum SecretAuthorKind {
   UNSPECIFIED = 0,
 
   /**
-   * A person: the console, or `forge secret set` with a personal token.
+   * A person: the console, or `forge env secret set` with a personal token.
    *
    * @generated from enum value: SECRET_AUTHOR_KIND_USER = 1;
    */
