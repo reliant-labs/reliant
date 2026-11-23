@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/crypto"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/connections"
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
@@ -222,7 +223,7 @@ type env struct {
 	repo      *db.Repo
 	raw       *sql.DB
 	vault     vault.Service
-	store     db.ConnectionStore
+	store     connectionvault.Service
 	gh        *fakeGitHub
 	providers *connections.Registry
 	tokens    *connections.TokenSource
@@ -251,7 +252,7 @@ func newEnv(t *testing.T) *env {
 	require.NoError(t, err)
 	doer := redirectingDoer{target: gh.srv}
 
-	store := repo.Connections()
+	store := db.TestConnections(t, repo)
 	tokens := connections.NewTokenSource(store, v, providers, doer)
 	broker := connections.NewBroker(store, v, providers, doer, "https://reliant.example").WithAppOrigins([]string{testAppOrigin})
 	svc := connections.NewService(store, v, providers, tokens, broker, doer)

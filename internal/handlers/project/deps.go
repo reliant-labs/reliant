@@ -61,18 +61,6 @@ type Repository interface {
 	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
 	TouchProject(ctx context.Context, id string, userID string) error
 	DeleteProject(ctx context.Context, id string, userID string) error
-	// A deletion with a restore window (project_delete.go): schedule it
-	// (hiding the project and pausing its triggers), cancel it, purge at
-	// once, and list what the caller may restore.
-	// Each takes the project as the caller's authority was decided on, and
-	// refuses (store.ErrOrgChanged) a project that moved org since.
-	ScheduleProjectDeletion(ctx context.Context, id, by string, deleteAfter time.Time, decided core.ProjectDecision) (core.ProjectDeletion, error)
-	RestoreProject(ctx context.Context, id string, decided core.ProjectDecision) ([]string, error)
-	// An immediate purge is claimed in the request and its batches run after
-	// it returns (rpc_purge_project_now.go).
-	ClaimProjectPurgeNow(ctx context.Context, id string, decided core.ProjectDecision) error
-	PurgeClaimedProject(ctx context.Context, id, owner string) ([]string, error)
-	ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope, includePurging bool) ([]*core.Project, error)
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
 	// RecordObservedProjectDaemonInScope records a checkout the platform
 	// made or found, only while the project is in the machine's scope
@@ -115,6 +103,21 @@ type Repository interface {
 	CreateSetting(ctx context.Context, setting *db.Setting) error
 	GetSetting(ctx context.Context, userID string, projectID *string, key string) (*db.Setting, error)
 	UpdateSetting(ctx context.Context, setting *db.Setting) error
+}
+
+// ProjectPurges is a project's deletion with a restore window
+// (project_delete.go): schedule it (hiding the project and pausing its
+// triggers), cancel it, purge at once, and list what the caller may restore.
+// Each takes the project as the caller's authority was decided on, and
+// refuses (store.ErrOrgChanged) a project that moved org since. An immediate
+// purge is claimed in the request and its batches run after it returns
+// (rpc_purge_project_now.go). projectpurge.Service satisfies it.
+type ProjectPurges interface {
+	ScheduleProjectDeletion(ctx context.Context, id, by string, deleteAfter time.Time, decided core.ProjectDecision) (core.ProjectDeletion, error)
+	RestoreProject(ctx context.Context, id string, decided core.ProjectDecision) ([]string, error)
+	ClaimProjectPurgeNow(ctx context.Context, id string, decided core.ProjectDecision) error
+	PurgeClaimedProject(ctx context.Context, id, owner string) ([]string, error)
+	ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope, includePurging bool) ([]*core.Project, error)
 }
 
 // MoveLedger is a project move's ledger and preview reads. A move is recorded

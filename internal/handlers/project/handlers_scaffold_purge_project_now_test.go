@@ -23,15 +23,16 @@ func TestPurgeProjectNow_Generated(t *testing.T) {
 
 	store := ownedProjectRepo(t)
 	var claimed, purged []string
-	store.ClaimProjectPurgeNowFunc = func(_ context.Context, id string, decided core.ProjectDecision) error {
+	purges := &project.MockProjectPurges{}
+	purges.ClaimProjectPurgeNowFunc = func(_ context.Context, id string, decided core.ProjectDecision) error {
 		claimed = append(claimed, id+" by "+decided.OwnerUserID)
 		return nil
 	}
-	store.PurgeClaimedProjectFunc = func(_ context.Context, id, owner string) ([]string, error) {
+	purges.PurgeClaimedProjectFunc = func(_ context.Context, id, owner string) ([]string, error) {
 		purged = append(purged, id+" by "+owner)
 		return nil, nil
 	}
-	svc := newService(t, store, nil)
+	svc := newServicePurges(t, store, purges)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.PurgeProjectNowRequest, pb.PurgeProjectNowResponse]{
 		{

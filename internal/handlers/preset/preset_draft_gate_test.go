@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +43,7 @@ nodes:
 		Status: db.WorkflowDraftStatusDraft, CreatedAt: now, UpdatedAt: now, Version: 1,
 	}))
 
-	svc := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+	svc := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
 	_, err := svc.loadWorkflow(ctx, "gate-draft", projectID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "is a draft")

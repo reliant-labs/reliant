@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/projectpurge"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -199,7 +200,7 @@ func TestListChats_ReadsTheMainWorkspacesProjectsInOneQuery(t *testing.T) {
 	doomed, doomedMain := newInvariantTestProject(t, ctx, repo, true)
 	doomedProject, err := repo.GetProject(ctx, doomed)
 	require.NoError(t, err)
-	_, err = repo.ScheduleProjectDeletion(ctx, doomed, "test-user", time.Now().Add(time.Hour), doomedProject.Decision())
+	_, err = projectpurge.New(projectpurge.Deps{DB: repo.ORM()}).ScheduleProjectDeletion(ctx, doomed, "test-user", time.Now().Add(time.Hour), doomedProject.Decision())
 	require.NoError(t, err)
 
 	resp, err := svc.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{}))

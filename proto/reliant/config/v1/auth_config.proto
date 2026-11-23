@@ -21,12 +21,8 @@ message AuthConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
     subtrees: [
-      {
-        path: ["auth"]
-      },
-      {
-        path: ["update"]
-      }
+      {path: ["auth"]},
+      {path: ["update"]}
     ]
   };
 

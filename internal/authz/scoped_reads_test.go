@@ -73,7 +73,6 @@ var userScopedReads = map[string]string{
 	// "Recently deleted": ProjectService decides each row again with
 	// authz.ProjectDelete (its owner, a live member; or an admin of its org,
 	// asked fresh, once the owner left).
-	"ListDeletedProjects":         readCallersFilter,
 	"ListUnlaunchedTriggerEvents": readCallersFilter,
 	// The inbox passes each incident through authz.Visible (itemReads.incident:
 	// its chat and its project) before showing it.
@@ -95,6 +94,9 @@ var userScopedReads = map[string]string{
 	// project (as ListWorktrees), and only the caller's chats bound to it.
 	"RecentTriggerFirings": readParentAuthorized,
 
+	// The caller's own connection, metadata only (the ciphertext is internal/credentials/connectionvault's
+	// alone): the trigger paths resolve an activation's owner and its connection through it.
+	"GetConnection":               readPersonal,
 	"GetIntegrationAccessSubject": readPersonal,
 	// Whether the caller's own grants reach a repository: PullRequestRecordService's gate.
 	"HasFreshIntegrationAccess":   readPersonal,
