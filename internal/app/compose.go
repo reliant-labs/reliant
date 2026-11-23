@@ -1170,11 +1170,12 @@ func (g *Graph) newChat() (*chat.Service, error) {
 // anything, so mounting it adds surface without adding behavior.
 func (g *Graph) newRun() (*run.Service, error) {
 	return run.New(run.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Chats:  g.Chat(),
-		Orgs:   g.OrgResolver(),
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Repo:      g.Database(),
+		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
+		Chats:     g.Chat(),
+		Orgs:      g.OrgResolver(),
 	})
 }
 
@@ -1561,11 +1562,12 @@ func (g *Graph) newToken() (*token.Service, error) {
 // newToolCall constructs the tool_call handler (internal/handlers/tool_call).
 func (g *Graph) newToolCall() (*tool_call.Service, error) {
 	return tool_call.New(tool_call.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Temporal: g.TemporalClient().Client,
-		Router:   g.APIDaemonRouter().NATSDaemonRouter,
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Repo:      g.Database(),
+		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
+		Temporal:  g.TemporalClient().Client,
+		Router:    g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 

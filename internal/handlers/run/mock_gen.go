@@ -76,7 +76,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=f036554083d1f4c0bf8710eab4792bf8eb2693bdbd466724a3bb1382ccd41279
+// forge:hash=c7cf5ebb299d0968954bb1e379ea0215d1ff1a2580feb482df4779288f35516c
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -88,7 +88,6 @@ type MockRepository struct {
 	contractkit.Recorder
 	AssignUnassignedOrgFunc         func(context.Context, string, string) error
 	ListRunNodeExecutionsFunc       func(context.Context, string, int) ([]*db.StepExecution, error)
-	GetWorkflowFunc                 func(context.Context, string) (*db.Workflow, error)
 	GetChatFunc                     func(context.Context, string) (*db.Chat, error)
 	GetChatRowFunc                  func(context.Context, string) (*db.ChatRow, error)
 	ListProjectsFunc                func(context.Context, db.ProjectFilters) ([]*db.Project, error)
@@ -115,15 +114,6 @@ func (m *MockRepository) ListRunNodeExecutions(ctx context.Context, workflowID s
 		return m.ListRunNodeExecutionsFunc(ctx, workflowID, limit)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListRunNodeExecutions")
-}
-
-// GetWorkflow records the call and delegates to GetWorkflowFunc when set.
-func (m *MockRepository) GetWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
-	m.Recorder.Record("GetWorkflow", ctx, id)
-	if m.GetWorkflowFunc != nil {
-		return m.GetWorkflowFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetWorkflow")
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
@@ -200,6 +190,32 @@ func (m *MockRepository) LastRunPerWorkflow(ctx context.Context, f db.RunListFil
 
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockWorkflowLoader
+// forge:hash=27de9052bc714bd51848a573063fd6021638e3ab686dcdb35a3c160c957c4b7a
+
+// MockWorkflowLoader is a test mock for the WorkflowLoader interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockWorkflowLoader.<Method>Func not set" error.
+type MockWorkflowLoader struct {
+	contractkit.Recorder
+	LoadWorkflowFunc func(context.Context, string) (*db.Workflow, error)
+}
+
+// LoadWorkflow records the call and delegates to LoadWorkflowFunc when set.
+func (m *MockWorkflowLoader) LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
+	m.Recorder.Record("LoadWorkflow", ctx, id)
+	if m.LoadWorkflowFunc != nil {
+		return m.LoadWorkflowFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowLoader", "LoadWorkflow")
+}
+
+// Compile-time check.
+var _ WorkflowLoader = (*MockWorkflowLoader)(nil)
 
 // forge:section MockChat
 // forge:hash=6d18c19317b2f41ae2a7cfcb578b9df01464d37e2df3e2e88cf244a0c8da4a4a

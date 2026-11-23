@@ -29,7 +29,6 @@ type Repository interface {
 	// their default org (the lazy backfill, orgs.ListScope).
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
-	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
@@ -38,6 +37,12 @@ type Repository interface {
 	ListRuns(ctx context.Context, f db.RunListFilters) ([]*db.RunListItem, bool, error)
 	ListUnlaunchedTriggerEvents(ctx context.Context, f db.RunListFilters) ([]*db.UnlaunchedTriggerEvent, bool, error)
 	LastRunPerWorkflow(ctx context.Context, f db.RunListFilters) ([]*db.RunListItem, error)
+}
+
+// WorkflowLoader reads one workflow row by id. store.WorkflowExtStore
+// satisfies it.
+type WorkflowLoader interface {
+	LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 }
 
 // Chat is the slice of the chat service a run is controlled through. The

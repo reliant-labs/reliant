@@ -17,13 +17,18 @@ type Repository interface {
 	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	GetMessage(ctx context.Context, id string) (*db.Message, error)
 	GetContentBlockByToolCallID(ctx context.Context, toolCallID string) (*db.MessageContentBlock, error)
-	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	CancelStoppedSpawn(ctx context.Context, workflowID string) (bool, error)
 	GetToolCall(ctx context.Context, id string) (*db.ToolCall, error)
 	ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*db.ToolCall, error)
 	UpsertToolCall(ctx context.Context, call *db.ToolCall) error
 	EmitToolCallCancelledUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 	EmitToolCallBackgroundedUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
+}
+
+// WorkflowLoader reads one workflow row by id. store.WorkflowExtStore
+// satisfies it.
+type WorkflowLoader interface {
+	LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 }
 
 // ExecutionSignaler reaches the daemon running one tool execution, addressed

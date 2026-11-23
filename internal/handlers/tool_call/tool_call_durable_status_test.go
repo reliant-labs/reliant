@@ -6,6 +6,9 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -13,8 +16,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // Cancelling or backgrounding a tool call is a user action taken from the UI.
@@ -29,7 +30,7 @@ func TestCancelToolCall_PersistsCancelledStatus(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	f := dbtest.SeedToolCall(t, ctx, repo, `{"command":"sleep 600"}`)
 
-	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: &toolexectest.Recorder{}}))
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Router: &toolexectest.Recorder{}}))
 	resp, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 		ToolCallId: f.ToolCallID,
 	}))
@@ -59,7 +60,7 @@ func TestConvertToBackground_PersistsBackgroundedStatus(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	f := dbtest.SeedToolCall(t, ctx, repo, `{"command":"npm run dev"}`)
 
-	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: &toolexectest.Recorder{}}))
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Router: &toolexectest.Recorder{}}))
 	resp, err := svc.ConvertToBackground(ctx, connect.NewRequest(&reliantv1.ConvertToBackgroundRequest{
 		ToolCallId: f.ToolCallID,
 	}))
@@ -96,7 +97,7 @@ func TestCancelToolCall_PreservesExistingExecutionFields(t *testing.T) {
 		UpdatedAt:   startedAt,
 	}))
 
-	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: &toolexectest.Recorder{}}))
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Router: &toolexectest.Recorder{}}))
 	_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 		ToolCallId: f.ToolCallID,
 	}))
@@ -122,7 +123,7 @@ func TestCancelToolCall_IsIdempotent(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	f := dbtest.SeedToolCall(t, ctx, repo, `{"command":"sleep 600"}`)
 
-	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: &toolexectest.Recorder{}}))
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Router: &toolexectest.Recorder{}}))
 	for i := 0; i < 3; i++ {
 		_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
 			ToolCallId: f.ToolCallID,

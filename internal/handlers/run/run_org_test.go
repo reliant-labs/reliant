@@ -41,12 +41,14 @@ func TestListRuns_SessionAndParentHonourTheOrg(t *testing.T) {
 			return &db.ChatRow{ID: "c-1", UserID: "test-user", OrgID: &acme}, nil
 		},
 		GetChatFunc:            func(context.Context, string) (*db.Chat, error) { return chat, nil },
-		GetWorkflowFunc:        func(context.Context, string) (*db.Workflow, error) { return runs[0], nil },
 		ListRootWorkflowsFunc:  func(context.Context, string) ([]*db.Workflow, error) { return runs, nil },
 		ListChildWorkflowsFunc: func(context.Context, string) ([]*db.Workflow, error) { return runs, nil },
 	}
 	resolver := orgs.New(orgSource{})
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Orgs: resolver}))
+	workflows := &run.MockWorkflowLoader{
+		LoadWorkflowFunc: func(context.Context, string) (*db.Workflow, error) { return runs[0], nil },
+	}
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Workflows: workflows, Orgs: resolver}))
 	// A request through a listener carries the membership authz decides with.
 	ctx := authz.WithMembership(run.AuthedContext(t), resolver)
 	str := func(s string) *string { return &s }

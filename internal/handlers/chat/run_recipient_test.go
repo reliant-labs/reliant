@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
+	"github.com/reliant-labs/reliant/internal/store"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
@@ -226,10 +227,11 @@ func TestSignalRun_RoutesToTheRunsRunningAgent(t *testing.T) {
 	review := addNodeThread(t, ctx, repo, fx.chatID, "review")
 	temporal := &agentLoopTemporal{}
 	runs, err := run.New(run.Deps{
-		Logger: slog.Default(),
-		Config: &typedconfig.Config{},
-		Repo:   repo,
-		Chats:  routedService(repo, temporal),
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Repo:      repo,
+		Workflows: store.NewWorkflowExtStore(repo.ORM()),
+		Chats:     routedService(repo, temporal),
 	})
 	require.NoError(t, err)
 	signal := func(thread, content string) (*connect.Response[reliantv1.SignalRunResponse], error) {
