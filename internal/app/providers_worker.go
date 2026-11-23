@@ -876,8 +876,8 @@ func (d disabledHostedActions) ExecuteAction(context.Context, string, string, st
 //forge:root-only worker
 func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	creds := d.Credentials.Source
-	hostedActions := HostedActions(slog.Default(), d.DB, d.ControlPlane, d.Worker)
-	secretResolver := SecretResolver(slog.Default(), d.DB, d.ControlPlane, d.Worker)
+	hostedActions := HostedActions(slog.Default(), store.NewHostedHttpActionTicketExtStore(d.DB.ORM()), d.ControlPlane, d.Worker)
+	secretResolver := SecretResolver(slog.Default(), store.NewHostedHttpActionTicketExtStore(d.DB.ORM()), d.ControlPlane, d.Worker)
 	// Stop nudges reach this worker's activities over NATS (stopnudge). If
 	// the subscription cannot be made, stops still arrive on the regular
 	// heartbeat, one throttle window later: degrade, never refuse to run.

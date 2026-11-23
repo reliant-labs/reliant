@@ -57381,9 +57381,7 @@
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/pull_request_record.Store",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
