@@ -213,6 +213,7 @@ func personGatedServer(t *testing.T, fake *fakeRegistry, p *fat.Principal, write
 	t.Helper()
 	registry, err := daemon_registry.New(daemon_registry.Deps{
 		Logger: slog.New(slog.DiscardHandler), Config: &config.Config{},
+		Mirror: &daemon_registry.MockMirror{},
 		Repo: &daemon_registry.MockRepository{
 			GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
 				return &db.Daemon{ID: id, UserID: "u"}, nil

@@ -26,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
+	"github.com/reliant-labs/reliant/internal/daemonmirror"
 
 	"github.com/nats-io/nats.go/jetstream"
 
@@ -271,6 +272,7 @@ func (g *Graph) newStateDerivation() (*StateDerivation, error) {
 		NATS:        g.NATSConn(),
 		ToolsDaemon: g.ToolsDaemon(),
 		DB:          g.Database(),
+		Mirror:      g.Daemonmirror(),
 	})
 }
 
@@ -592,6 +594,7 @@ func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 		Config:           g.Cfg,
 		Backoff:          g.Providerbackoff(),
 		ChangeController: g.ChangeController(),
+		Mirror:           g.Daemonmirror(),
 	})
 }
 
@@ -1226,6 +1229,7 @@ func (g *Graph) newDaemonRegistry() (*daemon_registry.Service, error) {
 		Config:       g.Cfg,
 		Repo:         g.Database(),
 		Pools:        store.NewMachinePoolExtStore(g.Database().ORM()),
+		Mirror:       g.Daemonmirror(),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		IdleTimeouts: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 		Names:        hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
@@ -1723,6 +1727,24 @@ func (g *Graph) newLlmusage() (llmusage.Service, error) {
 		return nil, err
 	}
 	return llmusage.NewServiceWithForgeMiddleware(svc), nil
+}
+
+// newDaemonmirror constructs the daemonmirror package (internal/daemonmirror):
+// the registry replica of the control plane's daemon set.
+func (g *Graph) newDaemonmirror() (daemonmirror.Service, error) {
+	o := g.Database().ORM()
+	svc, err := daemonmirror.New(daemonmirror.Deps{
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Daemons:   daemonmirror.NewStores(o),
+		Tx:        g.Database(),
+		Lifecycle: g.Database(),
+		Updates:   g.Database(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return daemonmirror.NewServiceWithForgeMiddleware(svc), nil
 }
 
 // newSeatmatch constructs the seatmatch package (internal/seatmatch).
