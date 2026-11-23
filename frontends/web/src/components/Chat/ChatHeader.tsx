@@ -287,7 +287,9 @@ export function ChatHeader({
           title={title}
           className={cn(
             "min-w-0 truncate rounded-md px-1 text-ui font-medium text-foreground transition-colors",
-            inAppBar && "min-w-[8rem]",
+            // In the bar the title is what gives way on a narrow window (it
+            // truncates, its tooltip has the rest); the controls after it never do.
+            inAppBar && "min-w-[3rem] xl:min-w-[8rem]",
             !(isNewChat || isViewer) && "cursor-text hover:text-foreground/80",
           )}
         >
@@ -560,8 +562,10 @@ function ChildRunsLink({ chatId }: { chatId: string }) {
           className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Bot className="size-4" aria-hidden="true" />
-          {label}
-          <ChevronDown className="size-3.5 shrink-0 opacity-70" aria-hidden="true" />
+          {/* Narrower than xl it shares the app bar with the chat title: the count alone. */}
+          {count}
+          <span className="hidden xl:inline">{label.slice(count.length)}</span>
+          <ChevronDown className="hidden size-3.5 shrink-0 opacity-70 xl:block" aria-hidden="true" />
         </button>
       )}
     />
