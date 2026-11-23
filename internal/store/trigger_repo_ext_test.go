@@ -192,8 +192,8 @@ func TestTriggerQueries(t *testing.T) {
 	if string(creds.TokenHash) != "hash" || string(creds.SecretSealed) != "sealed" {
 		t.Fatalf("credentials = %+v", creds)
 	}
-	if err := env.Repo.SetTriggerWebhookSecret(ctx, "trg-b", nil); err != nil {
-		t.Fatalf("Repo.SetTriggerWebhookSecret(nil): %v", err)
+	if err := store.NewTriggerExtStore(env.ORM).SetTriggerWebhookSecret(ctx, "trg-b", nil); err != nil {
+		t.Fatalf("TriggerExtStore.SetTriggerWebhookSecret(nil): %v", err)
 	}
 	if err := store.SetTriggerWebhookSecret(ctx, env.ORM, "trg-b", nil); err != nil {
 		t.Fatalf("SetTriggerWebhookSecret(nil): %v", err)

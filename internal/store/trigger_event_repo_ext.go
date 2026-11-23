@@ -550,6 +550,9 @@ func InboxTriggerFiringsSQL() (recentOutcomes, sinceLastSuccess string) {
 // (newest first, with their runs), keyed by trigger id. A trigger with no
 // firings has no entry; triggers belonging to other users never appear.
 func RecentTriggerFirings(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, errors.New("user ID cannot be empty")
+	}
 	return triggerFiringsByTrigger(ctx, db, "list recent trigger firings", recentTriggerFiringsFullSQL, userID, triggerIDs, perTrigger)
 }
 

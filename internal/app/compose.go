@@ -1197,6 +1197,8 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
+		Firings:        store.NewTriggerEventExtStore(g.Database().ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(g.Database().ORM()),
 		Pools:          store.NewMachinePoolExtStore(g.Database().ORM()),
 		Syncer:         syncer,

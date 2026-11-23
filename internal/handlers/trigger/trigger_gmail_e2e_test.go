@@ -151,7 +151,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue)
 	syncer, fires := TemporalBackend(temporalClient, triggers.NewStores(repo), taskQueue, registry.IsPolled)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{
-		Repo: repo, Projects: projectaccesstest.For(repo), Syncer: syncer, Fires: fires,
+		Repo: repo, Firings: extstore.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: extstore.NewTriggerExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: syncer, Fires: fires,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: "https://reliant.example"}, Catalog: registry, Intake: intake,
 	}))
 

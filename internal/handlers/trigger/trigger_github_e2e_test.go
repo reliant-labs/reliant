@@ -156,10 +156,10 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo),
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Projects: projectaccesstest.For(repo),
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake,
 		Access: map[string]IntegrationAccess{"github": e2eGitHubAccess{refresher}},
-	}))
+	})))
 
 	// --- two users, one project each ---------------------------------------
 	now := time.Now().UTC()

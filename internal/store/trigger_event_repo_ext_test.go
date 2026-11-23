@@ -381,17 +381,17 @@ func TestTriggerFiringQueries(t *testing.T) {
 		if err != nil {
 			t.Fatalf("RecentTriggerFirings(%d): %v", per, err)
 		}
-		twin, err := env.Repo.RecentTriggerFirings(ctx, storetest.SeedUserID, triggerIDs, per)
+		viaExt, err := store.NewTriggerEventExtStore(env.ORM).RecentTriggerFirings(ctx, storetest.SeedUserID, triggerIDs, per)
 		if err != nil {
-			t.Fatalf("Repo.RecentTriggerFirings(%d): %v", per, err)
+			t.Fatalf("TriggerEventExtStore.RecentTriggerFirings(%d): %v", per, err)
 		}
-		sameValue(t, "RecentTriggerFirings", port, twin)
+		sameValue(t, "RecentTriggerFirings", port, viaExt)
 
 		port, err = store.FiringsSinceLastSuccess(ctx, env.ORM, storetest.SeedUserID, triggerIDs, per)
 		if err != nil {
 			t.Fatalf("FiringsSinceLastSuccess(%d): %v", per, err)
 		}
-		twin, err = env.Repo.FiringsSinceLastSuccess(ctx, storetest.SeedUserID, triggerIDs, per)
+		twin, err := env.Repo.FiringsSinceLastSuccess(ctx, storetest.SeedUserID, triggerIDs, per)
 		if err != nil {
 			t.Fatalf("Repo.FiringsSinceLastSuccess(%d): %v", per, err)
 		}

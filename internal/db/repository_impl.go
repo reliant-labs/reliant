@@ -3148,15 +3148,6 @@ func (r *Repo) ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, ma
 	return store.ClaimRunEvents(ctx, r.ORM(), now, leaseUntil, max)
 }
 
-// RecentTriggerFirings returns each trigger's newest perTrigger firings in
-// one query. Used to compute health and last_event for a list of triggers.
-func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.RecentTriggerFirings(ctx, r.ORM(), userID, triggerIDs, perTrigger)
-}
-
 // FiringsSinceLastSuccess returns each trigger's firings since its newest
 // success, newest first, capped at perTrigger: the current failure episode.
 // The events carry no body (payload, sender, origin): an episode is counted.
@@ -3188,13 +3179,6 @@ func (r *Repo) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash [
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
 	return store.SetTriggerWebhookTokenHash(ctx, r.ORM(), id, hash)
-}
-
-func (r *Repo) SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.SetTriggerWebhookSecret(ctx, r.ORM(), id, sealed)
 }
 
 func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {

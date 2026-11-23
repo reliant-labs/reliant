@@ -483,19 +483,21 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		return nil, fmt.Errorf("trigger service: %w", err)
 	}
 	svc, err := trigger.New(trigger.Deps{
-		OrgGitHubApps: apps,
-		Logger:        d.Logger,
-		Config:        d.Config,
-		Repo:          repo,
-		OrgMoves:      store.NewProjectOrgMoveExtStore(repo.ORM()),
-		Pools:         store.NewMachinePoolExtStore(repo.ORM()),
-		Syncer:        syncer,
-		Fires:         fires,
-		ControlPlane:  hostedControlPlane(d.ControlPlane),
-		Access:        access,
-		Integrations:  d.Integrations.Config,
-		Sealer:        d.Vault,
-		Catalog:       d.Pollers,
+		OrgGitHubApps:  apps,
+		Logger:         d.Logger,
+		Config:         d.Config,
+		Repo:           repo,
+		Firings:        store.NewTriggerEventExtStore(repo.ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()),
+		OrgMoves:       store.NewProjectOrgMoveExtStore(repo.ORM()),
+		Pools:          store.NewMachinePoolExtStore(repo.ORM()),
+		Syncer:         syncer,
+		Fires:          fires,
+		ControlPlane:   hostedControlPlane(d.ControlPlane),
+		Access:         access,
+		Integrations:   d.Integrations.Config,
+		Sealer:         d.Vault,
+		Catalog:        d.Pollers,
 		Intake: triggers.NewIntake(triggers.NewStores(repo), temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).

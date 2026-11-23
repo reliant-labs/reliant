@@ -405,7 +405,7 @@ func (s *Service) applyActivationUpdate(ctx context.Context, step *enableStep, r
 			if err := s.restoreActivation(ctx, &prev); err != nil {
 				return err
 			}
-			return s.deps.Repo.SetTriggerWebhookSecret(ctx, prev.ID, prevSecret)
+			return s.deps.WebhookSecrets.SetTriggerWebhookSecret(ctx, prev.ID, prevSecret)
 		}
 	}
 	resp, err := s.UpdateTrigger(ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{Id: prev.ID, Trigger: def}))
