@@ -6,12 +6,14 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -71,7 +73,7 @@ func TestForkOrphanedWorkflow(t *testing.T) {
 	}
 	orphan, livs := saved(cora), saved("liv")
 	adasProject := project("ada")
-	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
 	fork := func(ctx context.Context, id, projectID string) (*reliantv1.ForkOrphanedWorkflowResponse, error) {
 		resp, err := svc.ForkOrphanedWorkflow(ctx, connect.NewRequest(&reliantv1.ForkOrphanedWorkflowRequest{WorkflowId: id, ProjectId: projectID}))
 		if err != nil {

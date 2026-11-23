@@ -167,7 +167,16 @@ func withTeardowns(store *project.MockRepository) map[string]*db.CheckoutTeardow
 // nil builds it without a daemon router.
 func newService(t *testing.T, store project.Repository, router project.Router) *project.Service {
 	t.Helper()
-	return project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Router: router}))
+	return newServicePurges(t, store, &project.MockProjectPurges{}, router)
+}
+
+func newServicePurges(t *testing.T, store project.Repository, purges project.ProjectPurges, router ...project.Router) *project.Service {
+	t.Helper()
+	var r project.Router
+	if len(router) > 0 {
+		r = router[0]
+	}
+	return project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Purges: purges, Router: r}))
 }
 
 // onDaemon is a store where ownedProject is cloned at /clone on daemon d-1,

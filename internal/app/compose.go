@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/nats-io/nats.go/jetstream"
+
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
@@ -30,6 +31,7 @@ import (
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
@@ -102,6 +104,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/privacy"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/projectpurge"
 	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/runs"
@@ -117,6 +120,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflowcheck"
+	"github.com/reliant-labs/reliant/internal/workflowdrafts"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 )
 
@@ -478,6 +482,12 @@ func (g *Graph) newProviderAccounts() (provideraccounts.Service, error) {
 	})
 }
 
+func (g *Graph) newConnectionVault() (connectionvault.Service, error) {
+	return NewConnectionVault(ConnectionVaultDeps{
+		DB: g.Database(),
+	})
+}
+
 func (g *Graph) newOrgAccounts() (orgaccounts.Service, error) {
 	return NewOrgAccounts(OrgAccountsDeps{
 		DB:    g.Database(),
@@ -509,17 +519,19 @@ func (g *Graph) newWorkerDaemonRouter() (*WorkerDaemonRouter, error) {
 
 func (g *Graph) newWorkerIntegrationCredentials() (*WorkerIntegrationCredentials, error) {
 	return NewWorkerIntegrationCredentials(WorkerIntegrationCredentialsDeps{
-		Vault:        g.Vault(),
-		Integrations: g.IntegrationSettings(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		DB:           g.Database(),
+		ConnectionVault: g.ConnectionVault(),
+		Vault:           g.Vault(),
+		Integrations:    g.IntegrationSettings(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		DB:              g.Database(),
 	})
 }
 
 func (g *Graph) newWorkerCatalogSearch() (*WorkerCatalogSearch, error) {
 	return NewWorkerCatalogSearch(WorkerCatalogSearchDeps{
-		Credentials: g.WorkerIntegrationCredentials(),
-		DB:          g.Database(),
+		ConnectionVault: g.ConnectionVault(),
+		Credentials:     g.WorkerIntegrationCredentials(),
+		DB:              g.Database(),
 	})
 }
 
@@ -584,32 +596,34 @@ func (g *Graph) newAgentRuns() (*agentruns.Runs, error) {
 
 func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 	return NewWorkerTrigger(WorkerTriggerDeps{
-		Logger:       g.Log,
-		Config:       g.Cfg,
-		Temporal:     g.TemporalClient(),
-		Vault:        g.Vault(),
-		Pollers:      g.TriggerPollers(),
-		Integrations: g.IntegrationSettings(),
-		DB:           g.Database(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		ConnectionVault: g.ConnectionVault(),
+		Logger:          g.Log,
+		Config:          g.Cfg,
+		Temporal:        g.TemporalClient(),
+		Vault:           g.Vault(),
+		Pollers:         g.TriggerPollers(),
+		Integrations:    g.IntegrationSettings(),
+		DB:              g.Database(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
 	})
 }
 
 func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 	return NewWorkerToolsFactory(WorkerToolsFactoryDeps{
-		Network:       g.ServerProcessConfig.GetNetwork(),
-		Temporal:      g.TemporalClient(),
-		AgentRuns:     g.AgentRuns(),
-		Triggers:      g.WorkerTrigger(),
-		Credentials:   g.WorkerIntegrationCredentials(),
-		WriteLedger:   g.WriteLedger(),
-		CatalogSearch: g.WorkerCatalogSearch(),
-		Router:        g.WorkerDaemonRouter(),
-		DB:            g.Database(),
-		Membership:    g.OrgResolver(),
-		Logger:        g.Log,
-		Config:        g.Cfg,
-		Backoff:       g.Providerbackoff(),
+		ConnectionVault: g.ConnectionVault(),
+		Network:         g.ServerProcessConfig.GetNetwork(),
+		Temporal:        g.TemporalClient(),
+		AgentRuns:       g.AgentRuns(),
+		Triggers:        g.WorkerTrigger(),
+		Credentials:     g.WorkerIntegrationCredentials(),
+		WriteLedger:     g.WriteLedger(),
+		CatalogSearch:   g.WorkerCatalogSearch(),
+		Router:          g.WorkerDaemonRouter(),
+		DB:              g.Database(),
+		Membership:      g.OrgResolver(),
+		Logger:          g.Log,
+		Config:          g.Cfg,
+		Backoff:         g.Providerbackoff(),
 	})
 }
 
@@ -638,6 +652,7 @@ func (g *Graph) newAccountRecorder() (*AccountRecorder, error) {
 
 func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 	return NewTemporalWorker(TemporalWorkerDeps{
+		ConnectionVault:  g.ConnectionVault(),
 		ProviderAccounts: g.ProviderAccounts(),
 		OrgAccounts:      g.OrgAccounts(),
 		Temporal:         g.TemporalClient(),
@@ -677,7 +692,8 @@ func (g *Graph) newWorkflowEventRelay() (*workflowevent.Relay, error) {
 
 func (g *Graph) newTriggerDeliveryRelay() (*TriggerDeliveryRelay, error) {
 	return NewTriggerDeliveryRelay(TriggerDeliveryRelayDeps{
-		DB: g.Database(), Temporal: g.TemporalClient(), Integrations: g.IntegrationSettings(),
+		ConnectionVault: g.ConnectionVault(),
+		DB:              g.Database(), Temporal: g.TemporalClient(), Integrations: g.IntegrationSettings(),
 		Membership: g.OrgResolver(), Policies: g.OrgPolicyResolver(),
 	})
 }
@@ -699,7 +715,7 @@ func (g *Graph) newWriteLedgerPrune() (*WriteLedgerPrune, error) {
 }
 
 func (g *Graph) newProjectPurge() (*ProjectPurge, error) {
-	return NewProjectPurge(ProjectPurgeDeps{DB: g.Database()})
+	return NewProjectPurge(ProjectPurgeDeps{Purges: projectpurge.NewInstrumented(projectpurge.Deps{DB: g.Database().ORM()})})
 }
 
 func (g *Graph) newLedgerRetention() (*LedgerRetention, error) {
@@ -805,11 +821,12 @@ func (g *Graph) newAPIToolsFactory() (*tools.ToolsFactory, error) {
 
 func (g *Graph) newAPIConnections() (*APIConnections, error) {
 	return NewAPIConnections(APIConnectionsDeps{
-		Vault:        g.Vault(),
-		Integrations: g.IntegrationSettings(),
-		AppOrigins:   g.ApiServerConfig.GetCorsAllowedOrigins(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		DB:           g.Database(),
+		ConnectionVault: g.ConnectionVault(),
+		Vault:           g.Vault(),
+		Integrations:    g.IntegrationSettings(),
+		AppOrigins:      g.ApiServerConfig.GetCorsAllowedOrigins(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		DB:              g.Database(),
 		// Off until every replica and the rollback target read org
 		// connections (org-sharing.md §9, D13).
 		OrgConnections: APIOrgConnections(g.ApiServerConfig),
@@ -818,16 +835,18 @@ func (g *Graph) newAPIConnections() (*APIConnections, error) {
 
 func (g *Graph) newAPICatalogSearch() (*APICatalogSearch, error) {
 	return NewAPICatalogSearch(APICatalogSearchDeps{
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		DB:           g.Database(),
+		ConnectionVault: g.ConnectionVault(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		DB:              g.Database(),
 	})
 }
 
 func (g *Graph) newInputOptions() (inputoptions.Service, error) {
 	return NewInputOptions(InputOptionsDeps{
-		Connections:  g.APIConnections(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		DB:           g.Database(),
+		ConnectionVault: g.ConnectionVault(),
+		Connections:     g.APIConnections(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		DB:              g.Database(),
 	})
 }
 
@@ -839,19 +858,21 @@ func (g *Graph) newConnectorGrants() (connectorgrant.Store, error) {
 
 func (g *Graph) newGitHubAccess() (*ghaccess.Refresher, error) {
 	return NewGitHubAccess(GitHubAccessDeps{
-		Vault:        g.Vault(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		Integrations: g.IntegrationSettings(),
-		DB:           g.Database(),
+		ConnectionVault: g.ConnectionVault(),
+		Vault:           g.Vault(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		Integrations:    g.IntegrationSettings(),
+		DB:              g.Database(),
 	})
 }
 
 func (g *Graph) newTriggerSenders() (TriggerSenders, error) {
 	return NewTriggerSenders(TriggerSendersDeps{
-		Vault:        g.Vault(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		Integrations: g.IntegrationSettings(),
-		DB:           g.Database(),
+		ConnectionVault: g.ConnectionVault(),
+		Vault:           g.Vault(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		Integrations:    g.IntegrationSettings(),
+		DB:              g.Database(),
 	})
 }
 
@@ -1368,6 +1389,7 @@ func (g *Graph) newPreset() (*preset.Service, error) {
 		Logger:   g.Log,
 		Config:   g.Cfg,
 		Repo:     g.Database(),
+		Drafts:   g.Workflowdrafts(),
 	})
 }
 
@@ -1378,6 +1400,7 @@ func (g *Graph) newProject() (*project.Service, error) {
 	o := g.Database().ORM()
 	return project.New(project.Deps{
 		Projects:     projectaccess.NewFromORM(g.Database().ORM()),
+		Purges:       projectpurge.NewInstrumented(projectpurge.Deps{DB: o}),
 		Logger:       g.Log,
 		Config:       g.Cfg,
 		Repo:         g.Database(),
@@ -1460,6 +1483,7 @@ func (g *Graph) newScenario() (*scenario.Service, error) {
 		Logger:   g.Log,
 		Config:   g.Cfg,
 		Repo:     g.Database(),
+		Drafts:   g.Workflowdrafts(),
 		Router:   g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
@@ -1548,6 +1572,23 @@ func (g *Graph) newToolCall() (*tool_call.Service, error) {
 	})
 }
 
+// newWorkflowdrafts constructs the workflowdrafts package
+// (internal/workflowdrafts): the one writer of saved workflows, which reads
+// them scoped to what a caller may see. The Repo is its transaction runner,
+// org locker and user-update publisher, so each write runs in the Repo's
+// retry ladder, as it did on the facade.
+func (g *Graph) newWorkflowdrafts() (workflowdrafts.Service, error) {
+	repo := g.Database()
+	return workflowdrafts.NewInstrumented(workflowdrafts.Deps{
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Tx:      repo,
+		Locks:   repo,
+		Updates: repo,
+		Drafts:  store.NewWorkflowDraftExtStore(repo.ORM()),
+	})
+}
+
 // newWorkflow constructs the workflow handler (internal/handlers/workflow).
 // The trigger handler stops the schedules of automations deleted with a
 // workflow.
@@ -1558,6 +1599,7 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 		Config:      g.Cfg,
 		Repo:        g.Database(),
 		Pools:       store.NewMachinePoolExtStore(g.Database().ORM()),
+		Drafts:      g.Workflowdrafts(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		Automations: g.Trigger(),
 		Orgs:        g.OrgResolver(),
@@ -1754,7 +1796,7 @@ func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
 // coverage report names it. Without a control plane, or without a way to
 // read GitHub as the viewer, every read is NOT_YET_AVAILABLE.
 func (g *Graph) newCoverageSource() (*coverage_source.Service, error) {
-	blobs, err := CoverageSourceBlobs(g.Database(), g.Vault(), g.ServerProcessConfig.GetControlPlane(), g.IntegrationSettings())
+	blobs, err := CoverageSourceBlobs(g.Database(), g.ConnectionVault(), g.Vault(), g.ServerProcessConfig.GetControlPlane(), g.IntegrationSettings())
 	if err != nil {
 		return nil, err
 	}

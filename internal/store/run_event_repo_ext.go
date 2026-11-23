@@ -28,6 +28,14 @@ import (
 // not add a second. created reports whether this call wrote the row. A zero
 // CreatedAt is stamped now.
 func InsertRunEvent(ctx context.Context, db orm.Context, ev *core.RunEvent) (created bool, err error) {
+	if ev == nil {
+		return false, fmt.Errorf("run event cannot be nil")
+	}
+	if ev.DedupeKey == "" {
+		// An empty key would collide every transition with every other one,
+		// and the second real event would silently read as a retry.
+		return false, fmt.Errorf("run event dedupe key cannot be empty")
+	}
 	payload, err := runEventPayload(ev.Payload)
 	if err != nil {
 		return false, fmt.Errorf("marshal run event payload: %w", err)
@@ -64,6 +72,9 @@ func InsertRunEvent(ctx context.Context, db orm.Context, ev *core.RunEvent) (cre
 
 // LoadRunEvent reads one event by id; a miss is core.ErrRunEventNotFound.
 func LoadRunEvent(ctx context.Context, db orm.Context, id string) (*core.RunEvent, error) {
+	if id == "" {
+		return nil, fmt.Errorf("run event ID cannot be empty")
+	}
 	row, err := GetRunEventByID(ctx, db, id)
 	if err != nil {
 		if svcerr.IsNotFound(err) {
@@ -92,6 +103,9 @@ func LoadRunEventByDedupe(ctx context.Context, db orm.Context, dedupeKey string)
 // the kind. The emitter asks before writing an outbox row, so users without
 // workflow-event triggers never pay for one.
 func HasEnabledTriggerOfKind(ctx context.Context, db orm.Context, userID string, kind core.TriggerKind) (bool, error) {
+	if userID == "" {
+		return false, fmt.Errorf("user ID cannot be empty")
+	}
 	has, err := db.Bun().NewSelect().Model((*Trigger)(nil)).
 		Where("user_id = ?", userID).
 		Where("kind = ?", string(kind)).
@@ -108,6 +122,9 @@ func HasEnabledTriggerOfKind(ctx context.Context, db orm.Context, userID string,
 // approval and question creations in one chat. A missing chat is
 // core.ErrChatNotFound.
 func LockChatForRunEvent(ctx context.Context, db orm.Context, chatID string) error {
+	if chatID == "" {
+		return fmt.Errorf("chat ID cannot be empty")
+	}
 	var id string
 	err := db.Bun().NewSelect().Model((*Chat)(nil)).
 		Column("id").
@@ -137,6 +154,9 @@ SELECT (
 // CountOtherPendingBlockers counts the chat's pending approvals and
 // questions other than excludeID.
 func CountOtherPendingBlockers(ctx context.Context, db orm.Context, chatID, excludeID string) (int, error) {
+	if chatID == "" {
+		return 0, fmt.Errorf("chat ID cannot be empty")
+	}
 	var n int
 	if err := db.Bun().NewRaw(otherPendingBlockersSQL, chatID, excludeID).Scan(ctx, &n); err != nil {
 		return 0, fmt.Errorf("failed to count pending blockers: %w", err)
@@ -187,6 +207,9 @@ func ClaimRunEvents(ctx context.Context, db orm.Context, now, leaseUntil time.Ti
 // MarkRunEventDispatched records that the event's dispatch has started. It
 // writes one column and reads nothing back; a missing event is a no-op.
 func MarkRunEventDispatched(ctx context.Context, db orm.Context, id string, at time.Time) error {
+	if id == "" {
+		return fmt.Errorf("run event ID cannot be empty")
+	}
 	return ignoreNotFound(UpdateRunEventMasked(ctx, db,
 		&RunEvent{ID: id, DispatchedAt: &at}, []string{RunEventFieldDispatchedAt}, crud.NoReadBack()))
 }

@@ -39,7 +39,13 @@ type Repository interface {
 	ListVisibilityOverrides(ctx context.Context, userID string, itemType int32) (map[string]bool, error)
 	ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]string, error)
 
-	// The workflows a preset applies to.
-	workflowsource.Store
-	workflowcatalog.Reads
+	// The project's synced workflows a preset applies to.
+	workflowsource.ProjectStore
+}
+
+// Drafts is the caller's saved workflows a preset applies to, each read
+// scoped to what the caller may see. workflowdrafts.Service satisfies it.
+type Drafts interface {
+	workflowcatalog.DraftLister
+	workflowsource.DraftReads
 }

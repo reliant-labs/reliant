@@ -27,6 +27,8 @@ type Deps struct {
 	// Projects reads a project the caller may write (owner and org decided
 	// together: projectaccess).
 	Projects projectaccess.Service
+	// Drafts reads the caller's saved workflows a preset applies to.
+	Drafts Drafts
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -43,6 +45,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("preset: Deps.Projects is required")
+	}
+	if d.Drafts == nil {
+		return fmt.Errorf("preset: Deps.Drafts is required")
 	}
 	return nil
 }

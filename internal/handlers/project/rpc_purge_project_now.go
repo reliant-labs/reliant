@@ -12,9 +12,9 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/projectpurge"
 )
 
 // PurgeProjectNow deletes a project at once and for good, scheduled for
@@ -52,7 +52,7 @@ func (s *Service) PurgeProjectNow(
 		}
 	}
 	decided := project.Decision()
-	if err := s.deps.Repo.ClaimProjectPurgeNow(ctx, project.ID, decided); err != nil {
+	if err := s.deps.Purges.ClaimProjectPurgeNow(ctx, project.ID, decided); err != nil {
 		if svcerr.IsNotFound(err) {
 			return nil, core.ErrProjectNotFound
 		}
@@ -67,9 +67,9 @@ func (s *Service) PurgeProjectNow(
 }
 
 // purgeNowBudget bounds an immediate purge's detached batches. It is shorter
-// than the claim's lease (db.ProjectPurgeLease), so the purge worker, which
+// than the claim's lease (projectpurge.Lease), so the purge worker, which
 // retakes a claim only once the lease has passed, never runs beside them.
-const purgeNowBudget = db.ProjectPurgeLease - 10*time.Minute
+const purgeNowBudget = projectpurge.Lease - 10*time.Minute
 
 // startPurge runs the batches of the purge PurgeProjectNow claimed, detached
 // from the request: auth values and tracing carry over, cancellation does
@@ -84,10 +84,10 @@ func (s *Service) startPurge(ctx context.Context, projectID, owner string) {
 	go func() {
 		defer s.purges.Done()
 		defer cancel()
-		triggers, err := s.deps.Repo.PurgeClaimedProject(bg, projectID, owner)
+		triggers, err := s.deps.Purges.PurgeClaimedProject(bg, projectID, owner)
 		if err != nil {
 			logging.WarnContext(bg, "[project] an immediate purge stopped part way; the project stays hidden, and the purge worker finishes it once its claim's lease has passed",
-				"project_id", projectID, "lease", db.ProjectPurgeLease, "error", err)
+				"project_id", projectID, "lease", projectpurge.Lease, "error", err)
 			return
 		}
 		s.convergeTriggerSchedules(bg, triggers)

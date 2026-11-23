@@ -111,7 +111,7 @@ func TestDeliveryInboxReplayCannotWidenSignedTwilioRoutes(t *testing.T) {
 	} {
 		if _, exists := secrets.tokens[tc.connection]; !exists {
 			account := twAccountA // same account and live route, different credential
-			require.NoError(t, f.Repo.Connections().CreateConnection(ctx, &core.Connection{
+			require.NoError(t, db.TestConnections(t, f.Repo).CreateConnection(ctx, &core.Connection{
 				ID: tc.connection, OwnerKind: core.ConnectionOwnerUser, UserID: tc.owner,
 				IntegrationID: TwilioProviderID, AuthKind: core.ConnectionAuthBasic, Name: tc.connection,
 				Status: core.ConnectionStatusActive, ExternalAccountID: &account,

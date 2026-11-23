@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -65,7 +66,7 @@ func bigSkillsJSON() *string {
 func TestScenarioRPCs_ReadOnlyTheScenariosColumn(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	spy := &wholeConfigRowReads{Repo: repo}
-	service := NewTestScenario(t, WithScenarioDeps(Deps{Repo: spy, Projects: projectaccesstest.For(spy)}))
+	service := NewTestScenario(t, WithScenarioDeps(Deps{Repo: spy, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(spy)}))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()

@@ -26,7 +26,7 @@ func (s *Service) SetWorkflowVisibility(
 	userID := auth.MustGetUserID(ctx)
 
 	// Get the workflow draft by slug
-	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Msg.Slug)
+	draft, err := s.deps.Drafts.GetWorkflowDraftBySlug(ctx, userID, req.Msg.Slug)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
 	}
@@ -35,7 +35,7 @@ func (s *Service) SetWorkflowVisibility(
 	}
 
 	// Update hidden status
-	updatedDraft, err := s.deps.Repo.SetWorkflowDraftHidden(ctx, draft.ID, req.Msg.IsHidden)
+	updatedDraft, err := s.deps.Drafts.SetWorkflowDraftHidden(ctx, draft.ID, req.Msg.IsHidden)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update workflow visibility"))
 	}
