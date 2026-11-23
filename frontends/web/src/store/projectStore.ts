@@ -160,14 +160,16 @@ function ownChatOfUrl(): Chat | null {
  * the open chat, go to that project's chats first — a push, so Back returns
  * to the chat. The URL wins over every project selection, so selecting from
  * the chat's page would leave its chat (and its project) on screen. Call it
- * before the selection. Returns whether it left one.
+ * before the selection. Resolves true only after reaching that project's
+ * chats; a rejected or blocked navigation leaves the chat's context intact.
  */
-export function leaveChatPageFor(projectId: string): boolean {
+export async function leaveChatPageFor(projectId: string): Promise<boolean> {
   try {
     const router = getRouter();
     if (!router || !routeOwnsChat()) return false;
-    router.navigate({ to: projectChatsPath(projectId), search: preserveSearch });
-    return true;
+    const destination = projectChatsPath(projectId);
+    await router.navigate({ to: destination, search: preserveSearch });
+    return router.state.location.pathname === destination;
   } catch (err) {
     logger.warn("[ProjectStore] Failed to leave the chat's page", err);
     return false;

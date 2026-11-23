@@ -38,7 +38,7 @@ export function useOpenProjectListener() {
         projectId: existingProject.id,
         name: existingProject.name
       });
-      leaveChatPageFor(existingProject.id);
+      await leaveChatPageFor(existingProject.id);
       await selectProject(existingProject);
     } else {
       // Create a new project with name derived from path
@@ -57,7 +57,7 @@ export function useOpenProjectListener() {
         });
         // createProject sets currentProject, except over a chat's page,
         // whose chat the URL keeps: leave it for the new project's.
-        if (leaveChatPageFor(created.id)) await selectProject(created);
+        if (await leaveChatPageFor(created.id)) await selectProject(created);
       } catch (error) {
         logger.error('[useOpenProjectListener] Failed to create project', error);
       }

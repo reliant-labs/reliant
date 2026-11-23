@@ -431,7 +431,7 @@ function App() {
       const next = projects[nextIndex];
       if (next && next.id !== filter) {
         // From a chat's page, its chats: the URL's chat wins over a selection.
-        leaveChatPageFor(next.id);
+        await leaveChatPageFor(next.id);
         await useProjectStore.getState().setProjectFilter(next.id);
       }
     },

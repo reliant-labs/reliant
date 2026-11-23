@@ -26,10 +26,8 @@ export function SwitchProjectDialog({ open, onClose }: { open: boolean; onClose:
     }
     const id = selection.row.key;
     // From a chat's page, leave it first: the URL's chat wins over a selection.
-    leaveChatPageFor(id);
-    void useProjectStore
-      .getState()
-      .setProjectFilter(id)
+    void leaveChatPageFor(id)
+      .then(() => useProjectStore.getState().setProjectFilter(id))
       .then(() => navigate({ to: projectChatsPath(id) }));
   };
   return <ProjectSelectorDialog open={open} onClose={onClose} mode="navigate" selectedKey={filterId ?? currentId} onSelect={onSelect} label="Switch project" />;

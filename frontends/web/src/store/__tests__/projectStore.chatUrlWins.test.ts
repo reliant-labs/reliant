@@ -62,7 +62,6 @@ function makeRouter(initialEntry: string): AnyRouter {
 
 let router: AnyRouter;
 const location = () => `${router.state.location.pathname}${router.state.location.searchStr ?? ""}`;
-const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 beforeEach(async () => {
   restoreLastWorktree.mockClear();
@@ -90,7 +89,6 @@ describe("a background project selection over a chat URL", () => {
   it("never leaves the chat for the new-chat view of the selected project", async () => {
     // Project B has no remembered chat: the old switch went to /new?project=proj-b.
     await useProjectStore.getState().selectProject(projectB);
-    await settle();
 
     expect(location()).toBe(`/c/${urlChat.id}`);
     expect(useChatStore.getState().activeChatId).toBe(urlChat.id);
@@ -101,7 +99,6 @@ describe("a background project selection over a chat URL", () => {
     useWorkspaceStateStore.getState().setActiveChatId(projectB.id, null, rememberedChat.id);
 
     await useProjectStore.getState().selectProject(projectB);
-    await settle();
 
     expect(location()).toBe(`/c/${urlChat.id}`);
     expect(useChatStore.getState().activeChatId).toBe(urlChat.id);
@@ -115,7 +112,6 @@ describe("the other background callers over a chat URL", () => {
     useWorkspaceStateStore.getState().setActiveChatId(projectB.id, null, rememberedChat.id);
 
     await useProjectStore.getState().setProjectFilter(projectB.id);
-    await settle();
 
     expect(location()).toBe(`/c/${urlChat.id}`);
     expect(useChatStore.getState().activeChatId).toBe(urlChat.id);
@@ -130,7 +126,6 @@ describe("the other background callers over a chat URL", () => {
     useProjectStore.setState({ currentProject: oldOrgProject });
 
     await useProjectStore.getState().followActiveOrg("org-new");
-    await settle();
 
     expect(location()).toBe(`/c/${urlChat.id}`);
     expect(useChatStore.getState().activeChatId).toBe(urlChat.id);
@@ -142,10 +137,37 @@ describe("a person choosing another project from the chat's page", () => {
   it("leaves the chat's page for that project's chats (a push)", async () => {
     const { leaveChatPageFor } = await import("../projectStore");
 
-    expect(leaveChatPageFor(projectB.id)).toBe(true);
-    await settle();
+    expect(await leaveChatPageFor(projectB.id)).toBe(true);
 
     expect(router.state.location.pathname).toBe(`/project/${projectB.id}`);
+  });
+
+  it("waits for navigation and reports an asynchronous failure without changing context", async () => {
+    const { leaveChatPageFor } = await import("../projectStore");
+    let rejectNavigation!: (error: Error) => void;
+    const navigate = vi.spyOn(router, "navigate").mockImplementationOnce(() => new Promise<void>((_, reject) => {
+      rejectNavigation = reject;
+    }));
+    const settled = vi.fn();
+    const leaving = leaveChatPageFor(projectB.id).then((result) => {
+      settled(result);
+      return result;
+    });
+    expect(navigate).toHaveBeenCalled();
+    expect(settled).not.toHaveBeenCalled();
+    rejectNavigation(new Error("route loading failed"));
+    expect(await leaving).toBe(false);
+    expect(location()).toBe(`/c/${urlChat.id}`);
+    expect(useProjectStore.getState().currentProject?.id).toBe(projectA.id);
+    navigate.mockRestore();
+  });
+
+  it("does not report success when a blocked navigation resolves without leaving", async () => {
+    const { leaveChatPageFor } = await import("../projectStore");
+    const navigate = vi.spyOn(router, "navigate").mockResolvedValueOnce(undefined);
+    expect(await leaveChatPageFor(projectB.id)).toBe(false);
+    expect(location()).toBe(`/c/${urlChat.id}`);
+    navigate.mockRestore();
   });
 });
 
@@ -155,7 +177,6 @@ describe("a direct link to a chat, with another project last used", () => {
     useWorkspaceStateStore.getState().setActiveChatId(projectB.id, null, rememberedChat.id);
 
     await useProjectStore.getState().restoreLastProject();
-    await settle();
 
     expect(location()).toBe(`/c/${urlChat.id}`);
     expect(useChatStore.getState().activeChatId).toBe(urlChat.id);
@@ -169,7 +190,6 @@ describe("a direct link to a chat, with another project last used", () => {
     useWorkspaceStateStore.getState().setActiveChatId(projectB.id, null, rememberedChat.id);
 
     await useProjectStore.getState().restoreLastProject();
-    await settle();
 
     expect(location()).toBe(`/c/${urlChat.id}`);
     expect(useChatStore.getState().activeChatId).toBe(urlChat.id);

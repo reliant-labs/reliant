@@ -14,7 +14,7 @@ type ProjectStore = ReturnType<typeof Real.useProjectStore.getState>;
 export type Project = Real.Project;
 
 // The demo has no project pages to navigate to or chat page to leave.
-export const leaveChatPageFor: typeof Real.leaveChatPageFor = () => false;
+export const leaveChatPageFor: typeof Real.leaveChatPageFor = async () => false;
 
 const none = async (): Promise<never> => {
   throw new Error("Reliant projects are not part of the forge demo.");
