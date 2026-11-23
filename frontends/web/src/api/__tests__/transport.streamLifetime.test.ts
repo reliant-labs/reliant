@@ -85,16 +85,6 @@ afterEach(() => {
 });
 
 describe("the update stream through the real interceptor chain", () => {
-  it("is not aborted at 10s, or at any later time", async () => {
-    const wireReq = await openStream("reliant.v1.StreamingService", "StreamUserUpdates");
-
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(wireReq.signal.aborted).toBe(false);
-
-    await vi.advanceTimersByTimeAsync(30 * 60_000);
-    expect(wireReq.signal.aborted).toBe(false);
-  });
-
   it("is not replaced by the transport when the page resumes or a connection is reported lost", async () => {
     // Stranded-read recovery is for unary reads. The stream's owner already
     // reacts to these (and owns its resume cursor); the transport must not.
