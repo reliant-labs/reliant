@@ -208,13 +208,13 @@ func checkExecutors() error {
 // vault key with the api-server: the worker is the only process that reads
 // secrets, and the only one besides the api-server that writes them (on
 // refresh).
-func newWorkerConnectionResolver(repo *db.Repo, store connectionvault.Service, keys vault.Service, clients connections.OAuthClients) (*connections.Resolver, error) {
+func newWorkerConnectionResolver(repo *db.Repo, vaultStore connectionvault.Service, keys vault.Service, clients connections.OAuthClients) (*connections.Resolver, error) {
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), clients)
 	if err != nil {
 		return nil, fmt.Errorf("connections: %w", err)
 	}
-	tokens := connections.NewTokenSource(store, keys, providers, nil)
-	return connections.NewResolver(repo, store, tokens), nil
+	tokens := connections.NewTokenSource(vaultStore, keys, providers, nil)
+	return connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: store.NewWorkflowExtStore(repo.ORM()), Store: vaultStore, Tokens: tokens}), nil
 }
 
 // newWorkerIntegrationCredentials is the credential source integration
