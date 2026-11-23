@@ -51,10 +51,16 @@ import { create } from "@bufbuild/protobuf";
 import { ConsoleLayout } from "../Console/ConsoleLayout";
 import { DashboardPage, DashboardsPage } from "../Observability/Dashboards/DashboardsPages";
 import { ActivityPage } from "../Console/ActivityPage";
+import { ServicePage, ServicesPage } from "../Services/ServicesPages";
+import { ProjectUsagePage } from "../Usage/ProjectUsagePage";
+import { AnalyticsPage } from "../Analytics/AnalyticsPage";
+import { EventsMetricsPage } from "../Analytics/EventsMetricsPage";
+import { SpeedInsightsPage } from "../Analytics/SpeedInsightsPage";
 import { ObservabilityViewPage } from "../Console/ConsolePages";
 import { SecretsPage } from "../Console/SecretsPage";
 import { DataPage } from "../Data/DataPage";
-import { UsersPage } from "../Users/UsersPage";
+import { ObsOverviewPage } from "../Observability/ObsOverview/ObsOverviewPage";
+import { AuthPage } from "../Users/AuthPage";
 import { ExperimentPage, ExperimentsPage } from "../Experiments/ExperimentsPage";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
 import { StoragePage } from "../Storage/StoragePage";
@@ -62,6 +68,12 @@ import { fixtureVulnerabilityApi, type VulnScenario } from "../Security/fixtures
 import { SbomsPage } from "../Security/SbomsPage";
 import { VulnerabilitiesPage } from "../Security/VulnerabilitiesPage";
 import { VulnerabilityPage } from "../Security/VulnerabilityPage";
+import { TestsOverviewPage } from "../Tests/TestsOverviewPage";
+import { TestsFlakyPage } from "../Tests/TestsFlakyPage";
+import { TestsFlakyTestPage } from "../Tests/TestsFlakyTestPage";
+import { TestsCoveragePage } from "../Tests/TestsPlaceholderPages";
+import { TestsRunPage } from "../Tests/TestsRunPage";
+import { TestsRunsPage } from "../Tests/TestsRunsPage";
 import { OverviewPage, WorkloadPage } from "../Workloads/WorkloadPages";
 import {
   ForgeLandingRoute,
@@ -444,19 +456,32 @@ function buildRouter(path: string) {
     releases: ReleasesPage,
     release: ReleasePage,
     observabilityView: ObservabilityViewPage,
+    obsOverview: ObsOverviewPage,
     dashboards: DashboardsPage,
     dashboard: DashboardPage,
     storage: StoragePage,
     data: DataPage,
-    users: UsersPage,
+    auth: AuthPage,
     vulnerabilities: VulnerabilitiesPage,
     vulnerability: VulnerabilityPage,
     sboms: SbomsPage,
+    tests: TestsOverviewPage,
+    testsCoverage: TestsCoveragePage,
+    testsRuns: TestsRunsPage,
+    testsRun: TestsRunPage,
+    testsFlaky: TestsFlakyPage,
+    testsFlakyTest: TestsFlakyTestPage,
     environments: EnvironmentsPage,
     environment: ForgeEnvPage,
     secrets: SecretsPage,
     domains: ForgeDomainsPage,
     activity: ActivityPage,
+    services: ServicesPage,
+    service: ServicePage,
+    usage: ProjectUsagePage,
+    events: EventsMetricsPage,
+    analytics: AnalyticsPage,
+    speedInsights: SpeedInsightsPage,
     experiments: ExperimentsPage,
     experiment: ExperimentPage,
     orgLayout: OrgConsoleLayout,

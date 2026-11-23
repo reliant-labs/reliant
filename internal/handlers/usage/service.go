@@ -12,6 +12,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -21,8 +22,12 @@ type Store interface {
 	// ListLLMUsageDetail is the per-call breakdown (funding and account
 	// included) of the days whose individual calls are still kept.
 	ListLLMUsageDetail(ctx context.Context, userID string, from, to time.Time) ([]*db.LLMUsageDetail, error)
-	// ProviderAccountNames labels an account breakdown.
-	ProviderAccountNames(ctx context.Context, ids []string) (map[string]db.ProviderAccountName, error)
+}
+
+// AccountNames names the provider accounts a usage response groups by; provideraccounts.Service
+// satisfies it.
+type AccountNames interface {
+	ProviderAccountNames(ctx context.Context, ids []string) (map[string]core.ProviderAccountName, error)
 }
 
 // Deps holds dependencies for the usage service. Composition
@@ -34,6 +39,8 @@ type Deps struct {
 	Config *config.Config
 	// Store holds the daily LLM usage rollup.
 	Store Store
+	// Accounts labels an account breakdown.
+	Accounts AccountNames
 	// Now reports the current time; time.Now when nil.
 	// forge:optional-dep
 	Now func() time.Time
@@ -50,6 +57,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Store == nil {
 		return fmt.Errorf("usage: Deps.Store is required")
+	}
+	if d.Accounts == nil {
+		return fmt.Errorf("usage: Deps.Accounts is required")
 	}
 	return nil
 }

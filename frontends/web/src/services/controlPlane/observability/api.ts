@@ -24,7 +24,6 @@
  */
 
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
-import { Code, ConnectError } from "@connectrpc/connect";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
@@ -583,8 +582,7 @@ export async function getServiceSignals(req: GetServiceSignalsRequest, options: 
 
 // ── Usage and billing ────────────────────────────────────────────────────────
 
-// The legacy ObservabilityService enum has the same numbers, so either reads here.
-function quotaState(state: ObservabilityQuotaState | number): QuotaState {
+function quotaState(state: ObservabilityQuotaState): QuotaState {
   switch (state) {
     case ObservabilityQuotaState.OK:
       return "ok";
@@ -597,32 +595,17 @@ function quotaState(state: ObservabilityQuotaState | number): QuotaState {
   }
 }
 
-/**
- * GetObservabilityUsage from ObservabilityBillingService, or, against a control
- * plane that predates that service (it answers Unimplemented), from
- * ObservabilityService's retired copy, which every older release serves. The
- * two responses carry the same fields this module reads. Keep the fallback
- * until the replacement's oldest supported release is past it.
- */
-async function fetchObservabilityUsage(orgId: string) {
-  try {
-    return await getControlPlaneClient(ObservabilityBillingService).getObservabilityUsage({ orgId });
-  } catch (err) {
-    if (!(err instanceof ConnectError && err.code === Code.Unimplemented)) throw err;
-    return await client().getObservabilityUsage({ orgId });
-  }
-}
-
 const USAGE_SIGNALS: readonly UsageSignal[] = ["logs", "traces", "metrics", "profiles"];
 
 /**
  * The org's month-to-date usage. Org-scoped (not environment-scoped): the allowance is per org.
  * Served by ObservabilityBillingService (a Postgres read, same admission as the
- * observability reads), not ObservabilityService, whose copy of this rpc is retired.
- * It spends no ClickHouse read slot, so it bypasses obsClient's read queue.
+ * observability reads). ObservabilityService's copy of this rpc was removed in
+ * control-plane#3095. It spends no ClickHouse read slot, so it bypasses
+ * obsClient's read queue.
  */
 export async function getObservabilityUsage(orgId: string): Promise<ObservabilityUsage> {
-  const res = await fetchObservabilityUsage(orgId);
+  const res = await getControlPlaneClient(ObservabilityBillingService).getObservabilityUsage({ orgId });
   const signal = (value: string): UsageSignal =>
     (USAGE_SIGNALS as readonly string[]).includes(value) ? (value as UsageSignal) : "logs";
   return {
@@ -768,7 +751,7 @@ function mapPod(p: WireWorkloadPod): WorkloadPod {
   };
 }
 
-/** Why a declared spec is not recorded; "unknown" from a control plane that predates the reason. */
+/** Why a declared spec is not recorded; "unknown" when no reason is given. */
 function specGapOf(gap: WireDeclaredSpecGap): DeclaredSpecGap {
   switch (gap) {
     case WireDeclaredSpecGap.PENDING:

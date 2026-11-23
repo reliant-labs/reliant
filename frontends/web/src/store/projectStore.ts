@@ -23,7 +23,7 @@ import { useChatNavigationStore } from "./chatNavigationStore";
 import { trackEvent } from "../lib/analytics";
 import { restoreLastWorktree } from "../hooks/worktree-actions";
 import { openChatInWorkspace, beginWorkspaceOpen } from "../lib/openChatInWorkspace";
-import { homePath, projectPath } from "@/lib/paths";
+import { homePath, projectChatsPath } from "@/lib/paths";
 import { navigateToChatUrl, navigateToNewChatUrl, pathOwnsChat, routeOwnsChat } from "@/lib/chatRoute";
 import { orgFreePath } from "@/lib/paths/org";
 
@@ -55,7 +55,12 @@ type RouterLike = {
 // OnboardingWizard read no step and rendered nothing. The tour appeared to
 // "sometimes not trigger", with no error anywhere, purely on whether the
 // restore landed after the handoff.
-const preserveSearch = (prev: Record<string, unknown>) => prev;
+// A filter of several projects (`?projects=`, hooks/useChatProjectFilter)
+// ends wherever this one is set: one project, or all of them.
+const preserveSearch = (prev: Record<string, unknown>) => {
+  const { projects: _projects, ...rest } = prev;
+  return rest;
+};
 function getRouter(): RouterLike | null {
   const r = (globalThis as { __RELIANT_ROUTER?: RouterLike }).__RELIANT_ROUTER;
   return r ?? null;
@@ -72,7 +77,7 @@ export function syncProjectFilterUrl(projectId: string | null) {
     // Both org-less: an org page is matched as its org-less twin.
     const currentPath = orgFreePath(router.state.location.pathname);
     if (projectId) {
-      const targetPrefix = orgFreePath(projectPath(projectId));
+      const targetPrefix = orgFreePath(projectChatsPath(projectId));
       if (currentPath === targetPrefix || currentPath.startsWith(`${targetPrefix}/`)) {
         return;
       }
@@ -119,7 +124,7 @@ export function syncProjectFilterUrl(projectId: string | null) {
         return;
       }
       router.navigate({
-        to: projectPath(projectId),
+        to: projectChatsPath(projectId),
         search: preserveSearch,
       });
     } else {

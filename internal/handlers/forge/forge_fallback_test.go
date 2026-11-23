@@ -3,10 +3,11 @@ package forge
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -34,8 +35,9 @@ const (
 )
 
 // errNotConnected is what a pinned command to a machine with no NATS responder
-// fails with.
-var errNotConnected = errors.New("daemon command forge.topology failed: unavailable: no daemon connected for user")
+// fails with (toolexec's errDaemonNotConnected, wrapped by the router).
+var errNotConnected = fmt.Errorf("daemon command %q failed: %w", "forge.topology",
+	svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser))
 
 type fallbackProject struct {
 	id        string
@@ -72,14 +74,7 @@ func fallbackRepo(projects ...fallbackProject) *MockRepository {
 	for _, p := range projects {
 		byID[p.id] = p
 	}
-	return &MockRepository{
-		GetProjectWithUserCheckFunc: func(_ context.Context, id, _ string) (*db.Project, error) {
-			p, ok := byID[id]
-			if !ok {
-				return nil, svcerr.NotFound("project not found")
-			}
-			return row(p), nil
-		},
+	return projectaccesstest.Bound(&MockRepository{
 		SetProjectForgeNameFunc: func(context.Context, string, string, string) (bool, error) { return false, nil },
 		ListProjectsFunc: func(_ context.Context, filters db.ProjectFilters) ([]*db.Project, error) {
 			if filters.UserID != "test-user" {
@@ -107,7 +102,13 @@ func fallbackRepo(projects ...fallbackProject) *MockRepository {
 			}
 			return &db.Daemon{ID: id, UserID: owner}, nil
 		},
-	}
+	}, func(_ context.Context, id, _ string) (*db.Project, error) {
+		p, ok := byID[id]
+		if !ok {
+			return nil, svcerr.NotFound("project not found")
+		}
+		return row(p), nil
+	})
 }
 
 func asleep(ids ...string) map[string]error {

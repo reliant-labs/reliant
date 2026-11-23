@@ -8,7 +8,8 @@
  *            sha, checks, when) and the two actions, each naming its
  *            environment: "Roll back prod to this…" (only when prod runs a
  *            newer release) and "Promote…".
- *   tabs     Changes · Rollout · Checks · Artifacts · Health (ReleaseTabs).
+ *   tabs     Changes · Rollout · Checks · Tests · Artifacts · Health
+ *            (ReleaseTabs; Tests is the Tests product's, Tests/surfaces).
  *   rail     the promotion timeline across environments, the details (branch,
  *            commit, forge version, bundle, lead time) and the way to its
  *            history.
@@ -51,11 +52,13 @@ import {
 import { previousReleaseOf } from "../Promote/rollback";
 import type { PromoteControl } from "./ReleasesList";
 import { useReleaseData } from "./useReleaseData";
+import { ReleaseTestsTab, releaseTestsHrefs } from "../Tests/surfaces/ReleaseTestsTab";
 
 const TAB_LABELS: Record<ReleaseTab, string> = {
   changes: "Changes",
   rollout: "Rollout",
   checks: "Checks",
+  tests: "Tests",
   artifacts: "Artifacts",
   health: "Health",
 };
@@ -93,6 +96,7 @@ export function ReleaseDetail({
   search,
   onSearch,
   listHref,
+  releaseHref,
   activityHref,
   promote,
 }: ReleaseDetailProps) {
@@ -279,6 +283,7 @@ export function ReleaseDetail({
           )}
           {tab === "rollout" && <RolloutTab env={target?.env ?? null} promotion={target?.promotion ?? null} />}
           {tab === "checks" && <ChecksTab entries={checkEntries} />}
+          {tab === "tests" && <ReleaseTestsTab project={project} version={version} gitCommit={record.gitCommit} hrefs={releaseTestsHrefs(project, releaseHref)} />}
           {tab === "artifacts" && <ArtifactsTab release={record} env={target?.env ?? null} promotion={target?.promotion ?? null} />}
           {tab === "health" && <HealthTab project={project} env={target?.env ?? null} promotion={target?.promotion ?? null} />}
         </div>

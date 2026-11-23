@@ -31,6 +31,7 @@ import { RunsHeadline } from "./RunsHeadline";
 import { DEFAULT_RUN_RANGE } from "./runFilterState";
 import { clearRunFilters, hasActiveRunFilters } from "./runFilterState";
 import { workflowLibraryPath } from "@/lib/paths";
+import { ProjectEmptyCtaRow } from "@/components/EmptyState/ProjectEmptyCta";
 
 export function RunsPage() {
   return <RunsView />;
@@ -187,6 +188,8 @@ function NoRuns() {
           Make one run by itself
         </Button>
       </div>
+      {/* The project shell's other ways in (U6d): an agent deploys with forge, or Move to Forge brings an app over. */}
+      <ProjectEmptyCtaRow learn="workflows" className="mt-3 justify-center" testId="runs-empty-cta" />
     </div>
   );
 }

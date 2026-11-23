@@ -1,7 +1,7 @@
 import { reportError, reportFailure } from '@/lib/errorReporting'
 import { completeCodexOAuth, type SignInOutcome } from '@/hooks/settings-queries'
-import { startOAuthViaDaemon, startOAuthViaLocalServer } from '@/lib/oauth-local'
-import { startOAuthViaDesktop, supportsLocalProviderOAuth } from '@/lib/oauth-desktop'
+import { startOAuthViaLocalServer } from '@/lib/oauth-local'
+import { startOAuthViaDesktop } from '@/lib/oauth-desktop'
 import { isAbort } from '@/lib/oauth-abort'
 import {
   InsecureContextError,
@@ -105,17 +105,12 @@ export async function runCodexOAuthFlow(options: CodexOAuthOptions = {}): Promis
   const authorizeURLTemplate = url.toString().replace(encodeURIComponent('{redirect_uri}'), '{redirect_uri}')
 
   try {
-    // Desktop runs the callback receiver ITSELF (see lib/oauth-desktop.ts).
-    // It used to delegate to the daemon over one RPC held open across the
-    // user's browser round trip, which failed at ~15s and took the listener
-    // down with it. The daemon RPC remains only as the fallback for builds
-    // whose main process predates the local receiver.
+    // Desktop runs the callback receiver ITSELF (see lib/oauth-desktop.ts);
+    // a browser uses `reliant auth serve` on localhost.
     const isElectron = !!window.electronAPI
 
     const oauthResp = isElectron
-      ? supportsLocalProviderOAuth()
-        ? await startOAuthViaDesktop(authorizeURLTemplate, options.signal)
-        : await startOAuthViaDaemon(authorizeURLTemplate, options.signal)
+      ? await startOAuthViaDesktop(authorizeURLTemplate, options.signal)
       : await startOAuthViaLocalServer(authorizeURLTemplate, options.signal)
 
     // Validate state

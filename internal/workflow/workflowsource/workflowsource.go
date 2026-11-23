@@ -43,11 +43,27 @@ type MachineStore interface {
 	GetProjectMachinePresetsJSON(ctx context.Context, projectID, daemonID string) (presets *string, synced bool, err error)
 }
 
+// DraftReads is the caller's own workflows, as the workflow drafts package
+// answers them (each already scoped to what the caller may see).
+type DraftReads interface {
+	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
+}
+
 // Store is every repository read resolution makes.
 type Store interface {
 	ProjectStore
-	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
+	DraftReads
+}
+
+type composedStore struct {
+	ProjectStore
+	DraftReads
+}
+
+// NewStore is the Store made of a project's synced workflows and a user's own.
+func NewStore(projects ProjectStore, drafts DraftReads) Store {
+	return composedStore{ProjectStore: projects, DraftReads: drafts}
 }
 
 // StoreError is a failure to READ a workflow, as opposed to one that is

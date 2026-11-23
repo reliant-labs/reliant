@@ -31,6 +31,15 @@ var defaultRebuildable = []string{
 	"node_modules", "dist", "bin", ".gocache", ".next", ".next-prod", ".turbo",
 	"coverage", "coverage.out", "*.tsbuildinfo", "next-env.d.ts",
 	"test-results", "playwright-report", "__pycache__", ".DS_Store",
+	// A second Playwright config's outputDir and HTML report (reliant's
+	// visual suite: frontends/web/playwright.visual.config.ts). Playwright
+	// empties its outputDir at the start of every run and rewrites the
+	// report, and the baselines live in the tracked __screenshots__/, so
+	// both are one run's output. Holding them kept every workspace that had
+	// run the visual suite (2026-11-22: 6 of 37 finished workspaces on one
+	// machine). "playwright-report-*" is a name only Playwright writes;
+	// test-results-* is not, so only the visual suite's is named.
+	"playwright-report-*", "test-results-visual",
 	"kcl.mod.lock", "go.work", "go.work.sum",
 	".forge/generating-build", ".forge/forge.lock", ".forge/render",
 	".forge/logs", ".forge/workspace-base.tag",

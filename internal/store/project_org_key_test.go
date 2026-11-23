@@ -8,18 +8,16 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 )
 
-// A project is keyed per (org, user, path) and (org, user, remote_url). This
-// release keeps the old per-user keys too; under the next release's schema
-// (the per-user keys relaxed) the same folder, or repository, may be a
-// project in two orgs, but not twice in one, and rows with no org yet are one
-// bucket of their own, unique among themselves as every row was before orgs.
-// The scoped lookups — this release's readers — pick each org's own.
+// A project is unique per (org, user, path) and (org, user, remote_url): the
+// same folder, or repository, may be a project in two orgs, but not twice in
+// one, and rows with no org yet are one bucket of their own, unique among
+// themselves as every row was before orgs. The scoped lookups pick each
+// org's own.
 func TestProjectKeys_ArePerOrg(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
@@ -35,16 +33,6 @@ func TestProjectKeys_ArePerOrg(t *testing.T) {
 	if err := create(project("p-acme", "/home/workspace/projects/props", orgp("acme"), &remote)); err != nil {
 		t.Fatalf("acme's project: %v", err)
 	}
-	// This release keeps the per-user keys, so the release before it never
-	// meets two orgs' projects at one path during a rollout or a rollback.
-	if err := create(project("p-globex", "/home/workspace/projects/props", orgp("globex"), &remote)); orm.ConstraintName(err) != "projects_user_id_path_key" {
-		t.Fatalf("the same path in another org, under this release's keys: %v; want the per-user key to refuse it", err)
-	}
-
-	// The next release relaxes them; this release's readers must already
-	// handle what it allows. From here on, its schema.
-	db.RelaxProjectKeysForTest(t, env.Repo)
-
 	// The same path and repository in two orgs: both are projects.
 	if err := create(project("p-globex", "/home/workspace/projects/props", orgp("globex"), &remote)); err != nil {
 		t.Fatalf("the same path and repository in another org must be creatable: %v", err)
@@ -74,18 +62,18 @@ func TestProjectKeys_ArePerOrg(t *testing.T) {
 
 	// A lookup in one org finds that org's project; with no scope, the
 	// oldest of them, deterministically.
-	got, err := env.Repo.GetProjectByPathAndUserInScope(ctx, "/home/workspace/projects/props", user, &core.OrgScope{OrgID: "globex"})
+	got, err := store.GetProjectByPathAndUserInScope(ctx, env.Repo.ORM(), "/home/workspace/projects/props", user, &core.OrgScope{OrgID: "globex"})
 	if err != nil || got.ID != "p-globex" {
 		t.Fatalf("in globex: %v, %v; want p-globex", got, err)
 	}
-	got, err = env.Repo.GetProjectByRemoteURLAndUserInScope(ctx, remote, user, &core.OrgScope{OrgID: "acme"})
+	got, err = store.GetProjectByRemoteURLAndUserInScope(ctx, env.Repo.ORM(), remote, user, &core.OrgScope{OrgID: "acme"})
 	if err != nil || got.ID != "p-acme" {
 		t.Fatalf("acme's repository: %v, %v; want p-acme", got, err)
 	}
-	if _, err := env.Repo.GetProjectByPathAndUserInScope(ctx, "/home/workspace/projects/props", user, &core.OrgScope{OrgID: "initech"}); err == nil {
+	if _, err := store.GetProjectByPathAndUserInScope(ctx, env.Repo.ORM(), "/home/workspace/projects/props", user, &core.OrgScope{OrgID: "initech"}); err == nil {
 		t.Fatal("found a project in an org that has none at the path")
 	}
-	got, err = env.Repo.GetProjectByPathAndUserInScope(ctx, "/home/workspace/projects/props", user, &core.OrgScope{OrgID: "initech", IncludeUnassigned: true})
+	got, err = store.GetProjectByPathAndUserInScope(ctx, env.Repo.ORM(), "/home/workspace/projects/props", user, &core.OrgScope{OrgID: "initech", IncludeUnassigned: true})
 	if err != nil || got.ID != "p-none" {
 		t.Fatalf("the default org's scope includes the unassigned row: %v, %v; want p-none", got, err)
 	}
@@ -100,7 +88,6 @@ func TestAssignUnassignedOrg_SkipsAProjectTheDefaultOrgAlreadyHolds(t *testing.T
 	at := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
 	user := storetest.SeedUserID
 	remote := "https://github.com/acme/props.git"
-	db.RelaxProjectKeysForTest(t, env.Repo) // two rows at one path, in two buckets: the next release's schema
 	for _, p := range []*core.Project{
 		{ID: "p-home", UserID: user, Name: "props", Path: "/srv/props", OrgID: orgp("home"), RemoteURL: &remote},
 		{ID: "p-dup-path", UserID: user, Name: "props", Path: "/srv/props"},

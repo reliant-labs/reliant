@@ -10,8 +10,24 @@ import (
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/planning"
 	"github.com/reliant-labs/reliant/internal/store"
 )
+
+// testPlanning is the planning service over repo's database (planningtest
+// imports db, so a db test builds it itself).
+func testPlanning(t *testing.T, repo *Repo) planning.Service {
+	t.Helper()
+	svc, err := planning.NewInstrumented(planning.Deps{
+		Plans:        store.NewPlanExtStore(repo.ORM()),
+		Tasks:        store.NewTaskExtStore(repo.ORM()),
+		Dependencies: store.NewTaskDependencyExtStore(repo.ORM()),
+	})
+	if err != nil {
+		t.Fatalf("planning.New: %v", err)
+	}
+	return svc
+}
 
 // createTestPlan inserts a plan into the test DB and returns it.
 func createTestPlan(t *testing.T, repo *Repo, chatID string) *Plan {
@@ -141,7 +157,7 @@ func TestPlanCRUD(t *testing.T) {
 		desc := "Updated description"
 		plan.Title = "Updated Title"
 		plan.Description = &desc
-		if err := repo.UpdatePlan(ctx, plan); err != nil {
+		if err := testPlanning(t, repo).UpdatePlan(ctx, plan); err != nil {
 			t.Fatalf("UpdatePlan: %v", err)
 		}
 
@@ -177,7 +193,7 @@ func TestPlanCRUD(t *testing.T) {
 	t.Run("delete plan", func(t *testing.T) {
 		plan := createTestPlan(t, repo, chatID)
 
-		if err := repo.DeletePlan(ctx, plan.ID); err != nil {
+		if err := store.RemovePlan(ctx, repo.ORM(), plan.ID); err != nil {
 			t.Fatalf("DeletePlan: %v", err)
 		}
 
@@ -309,7 +325,7 @@ func TestTaskCRUD(t *testing.T) {
 		task.Title = "Updated"
 		task.Description = &desc
 		task.Status = int32(reliantv1.TaskStatus_TASK_STATUS_IN_PROGRESS)
-		if err := repo.UpdateTask(ctx, task); err != nil {
+		if err := testPlanning(t, repo).UpdateTask(ctx, task); err != nil {
 			t.Fatalf("UpdateTask: %v", err)
 		}
 
@@ -397,7 +413,7 @@ func TestTaskCRUD(t *testing.T) {
 			t.Fatalf("CreateTask: %v", err)
 		}
 
-		if err := repo.DeleteTask(ctx, task.ID); err != nil {
+		if err := store.RemoveTask(ctx, repo.ORM(), task.ID); err != nil {
 			t.Fatalf("DeleteTask: %v", err)
 		}
 
@@ -445,7 +461,7 @@ func TestTaskDependencies(t *testing.T) {
 			DependencyType: core.DependencyTypeBlocks,
 			CreatedAt:      time.Now(),
 		}
-		if err := repo.CreateTaskDependency(ctx, dep); err != nil {
+		if err := testPlanning(t, repo).CreateTaskDependency(ctx, dep); err != nil {
 			t.Fatalf("CreateTaskDependency: %v", err)
 		}
 
@@ -476,7 +492,7 @@ func TestTaskDependencies(t *testing.T) {
 				DependencyType: depType,
 				CreatedAt:      time.Now(),
 			}
-			if err := repo.CreateTaskDependency(ctx, dep); err != nil {
+			if err := testPlanning(t, repo).CreateTaskDependency(ctx, dep); err != nil {
 				t.Errorf("CreateTaskDependency type %q: %v", depType, err)
 			}
 		}
@@ -491,7 +507,7 @@ func TestTaskDependencies(t *testing.T) {
 			DependencyType: core.DependencyTypeBlocks,
 			CreatedAt:      time.Now(),
 		}
-		if err := repo.CreateTaskDependency(ctx, dep); err == nil {
+		if err := testPlanning(t, repo).CreateTaskDependency(ctx, dep); err == nil {
 			t.Error("expected error for self dependency")
 		}
 	})
@@ -506,7 +522,7 @@ func TestTaskDependencies(t *testing.T) {
 			{ID: uuid.New().String(), FromTaskID: taskA.ID, ToTaskID: taskB.ID, DependencyType: core.DependencyTypeBlocks, CreatedAt: time.Now()},
 			{ID: uuid.New().String(), FromTaskID: taskA.ID, ToTaskID: taskC.ID, DependencyType: core.DependencyTypeRelated, CreatedAt: time.Now()},
 		} {
-			if err := repo.CreateTaskDependency(ctx, d); err != nil {
+			if err := testPlanning(t, repo).CreateTaskDependency(ctx, d); err != nil {
 				t.Fatalf("CreateTaskDependency: %v", err)
 			}
 		}
@@ -539,7 +555,7 @@ func TestTaskDependencies(t *testing.T) {
 			{ID: uuid.New().String(), FromTaskID: taskA.ID, ToTaskID: taskC.ID, DependencyType: core.DependencyTypeBlocks, CreatedAt: time.Now()},
 			{ID: uuid.New().String(), FromTaskID: taskB.ID, ToTaskID: taskC.ID, DependencyType: core.DependencyTypeBlocks, CreatedAt: time.Now()},
 		} {
-			if err := repo.CreateTaskDependency(ctx, d); err != nil {
+			if err := testPlanning(t, repo).CreateTaskDependency(ctx, d); err != nil {
 				t.Fatalf("CreateTaskDependency: %v", err)
 			}
 		}
@@ -570,12 +586,12 @@ func TestTaskDependencies(t *testing.T) {
 			{ID: uuid.New().String(), FromTaskID: a.ID, ToTaskID: c.ID, DependencyType: core.DependencyTypeRelated, CreatedAt: time.Now()},
 		}
 		for _, d := range deps {
-			if err := repo.CreateTaskDependency(ctx, d); err != nil {
+			if err := testPlanning(t, repo).CreateTaskDependency(ctx, d); err != nil {
 				t.Fatalf("CreateTaskDependency: %v", err)
 			}
 		}
 
-		planDeps, err := repo.ListDependenciesByPlan(ctx, newPlan.ID)
+		planDeps, err := testPlanning(t, repo).ListDependenciesByPlan(ctx, newPlan.ID)
 		if err != nil {
 			t.Fatalf("ListDependenciesByPlan: %v", err)
 		}
@@ -595,11 +611,11 @@ func TestTaskDependencies(t *testing.T) {
 			DependencyType: core.DependencyTypeRelated,
 			CreatedAt:      time.Now(),
 		}
-		if err := repo.CreateTaskDependency(ctx, dep); err != nil {
+		if err := testPlanning(t, repo).CreateTaskDependency(ctx, dep); err != nil {
 			t.Fatalf("CreateTaskDependency: %v", err)
 		}
 
-		if err := repo.DeleteTaskDependencyByPair(ctx, taskA.ID, taskB.ID, core.DependencyTypeRelated); err != nil {
+		if err := testPlanning(t, repo).DeleteTaskDependencyByPair(ctx, taskA.ID, taskB.ID, core.DependencyTypeRelated); err != nil {
 			t.Fatalf("DeleteTaskDependencyByPair: %v", err)
 		}
 
@@ -620,7 +636,7 @@ func TestTaskDependencies(t *testing.T) {
 			DependencyType: core.DependencyTypeBlocks,
 			CreatedAt:      time.Now(),
 		}
-		if err := repo.CreateTaskDependency(ctx, dep1); err != nil {
+		if err := testPlanning(t, repo).CreateTaskDependency(ctx, dep1); err != nil {
 			t.Fatalf("first CreateTaskDependency: %v", err)
 		}
 
@@ -631,7 +647,7 @@ func TestTaskDependencies(t *testing.T) {
 			DependencyType: core.DependencyTypeBlocks,
 			CreatedAt:      time.Now(),
 		}
-		if err := repo.CreateTaskDependency(ctx, dep2); err == nil {
+		if err := testPlanning(t, repo).CreateTaskDependency(ctx, dep2); err == nil {
 			t.Error("expected unique constraint violation for duplicate from-to-type")
 		}
 
@@ -643,7 +659,7 @@ func TestTaskDependencies(t *testing.T) {
 			DependencyType: core.DependencyTypeRelated,
 			CreatedAt:      time.Now(),
 		}
-		if err := repo.CreateTaskDependency(ctx, dep3); err != nil {
+		if err := testPlanning(t, repo).CreateTaskDependency(ctx, dep3); err != nil {
 			t.Errorf("different type should be allowed: %v", err)
 		}
 	})
@@ -662,12 +678,12 @@ func TestTaskDependencies(t *testing.T) {
 			ID: uuid.New().String(), FromTaskID: a.ID, ToTaskID: b.ID,
 			DependencyType: core.DependencyTypeBlocks, CreatedAt: time.Now(),
 		}
-		if err := repo.CreateTaskDependency(ctx, dep); err != nil {
+		if err := testPlanning(t, repo).CreateTaskDependency(ctx, dep); err != nil {
 			t.Fatalf("CreateTaskDependency: %v", err)
 		}
 
 		// Delete task A — should cascade to the dependency
-		if err := repo.DeleteTask(ctx, a.ID); err != nil {
+		if err := store.RemoveTask(ctx, repo.ORM(), a.ID); err != nil {
 			t.Fatalf("DeleteTask: %v", err)
 		}
 
@@ -710,7 +726,7 @@ func TestReadyTaskComputation(t *testing.T) {
 			ID: uuid.New().String(), FromTaskID: from.ID, ToTaskID: to.ID,
 			DependencyType: core.DependencyTypeBlocks, CreatedAt: time.Now(),
 		}
-		if err := repo.CreateTaskDependency(ctx, dep); err != nil {
+		if err := testPlanning(t, repo).CreateTaskDependency(ctx, dep); err != nil {
 			t.Fatalf("CreateTaskDependency: %v", err)
 		}
 	}
@@ -722,7 +738,7 @@ func TestReadyTaskComputation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListTasksByPlan: %v", err)
 		}
-		allDeps, err := repo.ListDependenciesByPlan(ctx, planID)
+		allDeps, err := testPlanning(t, repo).ListDependenciesByPlan(ctx, planID)
 		if err != nil {
 			t.Fatalf("ListDependenciesByPlan: %v", err)
 		}
@@ -810,7 +826,7 @@ func TestReadyTaskComputation(t *testing.T) {
 			ID: uuid.New().String(), FromTaskID: a.ID, ToTaskID: b.ID,
 			DependencyType: core.DependencyTypeBlocks, CreatedAt: time.Now(),
 		}
-		if err := repo.CreateTaskDependency(ctx, dep); err != nil {
+		if err := testPlanning(t, repo).CreateTaskDependency(ctx, dep); err != nil {
 			t.Fatalf("CreateTaskDependency: %v", err)
 		}
 
@@ -834,7 +850,7 @@ func TestReadyTaskComputation(t *testing.T) {
 			{ID: uuid.New().String(), FromTaskID: a.ID, ToTaskID: b.ID, DependencyType: core.DependencyTypeBlocks, CreatedAt: time.Now()},
 			{ID: uuid.New().String(), FromTaskID: b.ID, ToTaskID: c.ID, DependencyType: core.DependencyTypeBlocks, CreatedAt: time.Now()},
 		} {
-			if err := repo.CreateTaskDependency(ctx, d); err != nil {
+			if err := testPlanning(t, repo).CreateTaskDependency(ctx, d); err != nil {
 				t.Fatalf("CreateTaskDependency: %v", err)
 			}
 		}
@@ -846,7 +862,7 @@ func TestReadyTaskComputation(t *testing.T) {
 
 		// Complete A -> B becomes ready
 		a.Status = int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED)
-		if err := repo.UpdateTask(ctx, a); err != nil {
+		if err := testPlanning(t, repo).UpdateTask(ctx, a); err != nil {
 			t.Fatalf("UpdateTask: %v", err)
 		}
 		ready = computeReady(newPlan.ID)
@@ -856,7 +872,7 @@ func TestReadyTaskComputation(t *testing.T) {
 
 		// Complete B -> C becomes ready
 		b.Status = int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED)
-		if err := repo.UpdateTask(ctx, b); err != nil {
+		if err := testPlanning(t, repo).UpdateTask(ctx, b); err != nil {
 			t.Fatalf("UpdateTask: %v", err)
 		}
 		ready = computeReady(newPlan.ID)
@@ -884,7 +900,7 @@ func TestReadyTaskComputation(t *testing.T) {
 			{ID: uuid.New().String(), FromTaskID: b.ID, ToTaskID: d.ID, DependencyType: core.DependencyTypeBlocks, CreatedAt: time.Now()},
 			{ID: uuid.New().String(), FromTaskID: c.ID, ToTaskID: d.ID, DependencyType: core.DependencyTypeBlocks, CreatedAt: time.Now()},
 		} {
-			if err := repo.CreateTaskDependency(ctx, dep); err != nil {
+			if err := testPlanning(t, repo).CreateTaskDependency(ctx, dep); err != nil {
 				t.Fatalf("CreateTaskDependency: %v", err)
 			}
 		}
@@ -897,7 +913,7 @@ func TestReadyTaskComputation(t *testing.T) {
 
 		// Complete A -> B and C ready, D still blocked
 		a.Status = int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED)
-		if err := repo.UpdateTask(ctx, a); err != nil {
+		if err := testPlanning(t, repo).UpdateTask(ctx, a); err != nil {
 			t.Fatalf("UpdateTask: %v", err)
 		}
 		ready = computeReady(newPlan.ID)
@@ -911,7 +927,7 @@ func TestReadyTaskComputation(t *testing.T) {
 
 		// Complete B only -> D still blocked (C not done)
 		b.Status = int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED)
-		if err := repo.UpdateTask(ctx, b); err != nil {
+		if err := testPlanning(t, repo).UpdateTask(ctx, b); err != nil {
 			t.Fatalf("UpdateTask: %v", err)
 		}
 		ready = computeReady(newPlan.ID)
@@ -928,7 +944,7 @@ func TestReadyTaskComputation(t *testing.T) {
 
 		// Complete C -> D now ready
 		c.Status = int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED)
-		if err := repo.UpdateTask(ctx, c); err != nil {
+		if err := testPlanning(t, repo).UpdateTask(ctx, c); err != nil {
 			t.Fatalf("UpdateTask: %v", err)
 		}
 		ready = computeReady(newPlan.ID)
@@ -951,7 +967,7 @@ func TestReadyTaskComputation(t *testing.T) {
 			ID: uuid.New().String(), FromTaskID: a.ID, ToTaskID: b.ID,
 			DependencyType: core.DependencyTypeRelated, CreatedAt: time.Now(),
 		}
-		if err := repo.CreateTaskDependency(ctx, dep); err != nil {
+		if err := testPlanning(t, repo).CreateTaskDependency(ctx, dep); err != nil {
 			t.Fatalf("CreateTaskDependency: %v", err)
 		}
 
@@ -976,7 +992,7 @@ func TestReadyTaskComputation(t *testing.T) {
 			ID: uuid.New().String(), FromTaskID: a.ID, ToTaskID: b.ID,
 			DependencyType: core.DependencyTypeParallelWith, CreatedAt: time.Now(),
 		}
-		if err := repo.CreateTaskDependency(ctx, dep); err != nil {
+		if err := testPlanning(t, repo).CreateTaskDependency(ctx, dep); err != nil {
 			t.Fatalf("CreateTaskDependency: %v", err)
 		}
 
@@ -1008,7 +1024,7 @@ func TestGetTaskByPosition(t *testing.T) {
 		taskIDs = append(taskIDs, task.ID)
 	}
 
-	got, err := repo.GetTaskByPosition(ctx, plan.ID, 1)
+	got, err := testPlanning(t, repo).GetTaskByPosition(ctx, plan.ID, 1)
 	if err != nil {
 		t.Fatalf("GetTaskByPosition: %v", err)
 	}
@@ -1016,7 +1032,7 @@ func TestGetTaskByPosition(t *testing.T) {
 		t.Errorf("expected task at position 1, got %q", got.ID)
 	}
 
-	_, err = repo.GetTaskByPosition(ctx, plan.ID, 99)
+	_, err = testPlanning(t, repo).GetTaskByPosition(ctx, plan.ID, 99)
 	if err == nil {
 		t.Error("expected error for out-of-range position")
 	}
@@ -1052,7 +1068,7 @@ func TestTaskStats(t *testing.T) {
 		}
 	}
 
-	stats, err := repo.GetTaskStatsByPlan(ctx, plan.ID)
+	stats, err := testPlanning(t, repo).GetTaskStatsByPlan(ctx, plan.ID)
 	if err != nil {
 		t.Fatalf("GetTaskStatsByPlan: %v", err)
 	}

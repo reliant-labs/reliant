@@ -11,6 +11,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A box started with `reliant daemon start --label pool=pipeline` joins the
@@ -45,7 +46,7 @@ func TestConnectDaemonMergesDeclaredMachineLabels(t *testing.T) {
 
 	// The owner adds a label in the app; a reconnect declaring a changed
 	// value sets that key and leaves the owner's label alone.
-	ok, err := repo.SetDaemonLabels(ctx, "user-A", box, map[string]string{"pool": "pipeline", "gate": "yes", "team": "ci"})
+	ok, err := store.SetDaemonLabels(ctx, repo.ORM(), "user-A", box, map[string]string{"pool": "pipeline", "gate": "yes", "team": "ci"})
 	require.NoError(t, err)
 	require.True(t, ok)
 	_, err = connectRegistering(t, svc, "user-A", box, labelledRegister(box, map[string]string{"pool": "gate"}))
@@ -113,7 +114,7 @@ func TestConnectDaemonSkipsADeclaredMergePastTheLabelLimit(t *testing.T) {
 	for i := 0; i < 32; i++ {
 		full[fmt.Sprintf("k%d", i)] = "v"
 	}
-	ok, err := repo.SetDaemonLabels(context.Background(), "user-A", box, full)
+	ok, err := store.SetDaemonLabels(context.Background(), repo.ORM(), "user-A", box, full)
 	require.NoError(t, err)
 	require.True(t, ok)
 

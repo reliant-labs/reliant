@@ -18,28 +18,43 @@ import { createTestQueryClient } from "@/test/renderWithQuery";
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
 import { RepoMetaProvider, type RepoMetaApi } from "@/services/forge/RepoMetaContext";
+import { VulnerabilityApiProvider, type VulnerabilityApi } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
 
 import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
+import { fixtureVulnerabilityApi } from "../../Security/fixtures";
 import { OverviewHome, type HostedByEnv, type OverviewRollback, type OverviewSearch } from "../OverviewHome";
 import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch } from "../WorkloadDetail";
 import type { StripEnv } from "../workloadModel";
 import { FIXTURE_DOMAINS, FIXTURE_HOSTED, STRIP_ENVS, WORKLOADS_PROJECT, createRepoMetaFixture, createWorkloadsFixtureApi, fixtureHostedObservation } from "../__fixtures__/workloadFixtures";
 
-export function WorkloadsProviders({ obs, repoMeta = createRepoMetaFixture(), children }: { obs: ObservabilityApi; repoMeta?: RepoMetaApi; children: ReactElement }) {
+export function WorkloadsProviders({
+  obs,
+  repoMeta = createRepoMetaFixture(),
+  vulns = fixtureVulnerabilityApi("findings"),
+  children,
+}: {
+  obs: ObservabilityApi;
+  repoMeta?: RepoMetaApi;
+  /** The Overview's Vulnerabilities card's reads. */
+  vulns?: VulnerabilityApi;
+  children: ReactElement;
+}) {
   return (
     <QueryClientProvider client={createTestQueryClient()}>
       <ObservabilityApiProvider api={obs}>
         <ReleasesApiProvider api={createReleasesFixtureApi()}>
-          <RepoMetaProvider api={repoMeta}>{children}</RepoMetaProvider>
+          <VulnerabilityApiProvider api={vulns}>
+            <RepoMetaProvider api={repoMeta}>{children}</RepoMetaProvider>
+          </VulnerabilityApiProvider>
         </ReleasesApiProvider>
       </ObservabilityApiProvider>
     </QueryClientProvider>
   );
 }
 
-function wrap(obs: ObservabilityApi, ui: ReactElement, repoMeta?: RepoMetaApi): RenderResult {
+function wrap(obs: ObservabilityApi, ui: ReactElement, repoMeta?: RepoMetaApi, vulns?: VulnerabilityApi): RenderResult {
   return render(
-    <WorkloadsProviders obs={obs} repoMeta={repoMeta}>
+    <WorkloadsProviders obs={obs} repoMeta={repoMeta} vulns={vulns}>
       {ui}
     </WorkloadsProviders>
   );
@@ -59,6 +74,7 @@ export function renderOverview({
   domains = { availability: "available", domains: FIXTURE_DOMAINS, detail: "" },
   rollback,
   envsUnread,
+  vulns,
 }: {
   env?: string;
   envs?: StripEnv[];
@@ -69,6 +85,7 @@ export function renderOverview({
   domains?: DomainsState;
   rollback?: OverviewRollback;
   envsUnread?: ComponentProps<typeof OverviewHome>["envsUnread"];
+  vulns?: VulnerabilityApi;
 } = {}): Harness<OverviewSearch> & { navigateTo: ReturnType<typeof vi.fn> } {
   let latest = search;
   const navigateTo = vi.fn();
@@ -104,7 +121,7 @@ export function renderOverview({
       />
     );
   }
-  return { ...wrap(obs, <Stateful />), current: () => latest, navigateTo };
+  return { ...wrap(obs, <Stateful />, undefined, vulns), current: () => latest, navigateTo };
 }
 
 export function renderWorkload(

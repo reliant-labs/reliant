@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,7 +23,7 @@ func TestRecordFirstAppSessionIsTrueExactlyOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			first, err := repo.RecordFirstAppSession(ctx, "user-first-session")
+			first, err := store.RecordFirstAppSession(ctx, repo.ORM(), "user-first-session")
 			require.NoError(t, err)
 			if first {
 				firsts.Add(1)
@@ -32,13 +33,13 @@ func TestRecordFirstAppSessionIsTrueExactlyOnce(t *testing.T) {
 	wg.Wait()
 	require.Equal(t, int32(1), firsts.Load())
 
-	first, err := repo.RecordFirstAppSession(ctx, "user-first-session")
+	first, err := store.RecordFirstAppSession(ctx, repo.ORM(), "user-first-session")
 	require.NoError(t, err)
 	require.False(t, first)
-	first, err = repo.RecordFirstAppSession(ctx, "another-user")
+	first, err = store.RecordFirstAppSession(ctx, repo.ORM(), "another-user")
 	require.NoError(t, err)
 	require.True(t, first)
 
-	_, err = repo.RecordFirstAppSession(ctx, "")
+	_, err = store.RecordFirstAppSession(ctx, repo.ORM(), "")
 	require.Error(t, err)
 }

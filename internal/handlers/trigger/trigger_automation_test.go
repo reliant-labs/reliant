@@ -12,6 +12,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/automationcred"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -25,7 +26,7 @@ func (e *triggerTestEnv) createNamed(t *testing.T, name string) string {
 }
 
 func (e *triggerTestEnv) stored(t *testing.T) (string, error) {
-	return e.repo.GetAutomationToken(e.ctx, e.userID, e.daemonID)
+	return e.tokens.GetAutomationToken(e.ctx, e.userID, e.daemonID)
 }
 
 func TestTriggerCreateMintsDaemonBoundResumeToken(t *testing.T) {
@@ -44,7 +45,7 @@ func TestTriggerCreateMintsDaemonBoundResumeToken(t *testing.T) {
 	assert.Equal(t, "rlat_resume_"+env.daemonID, got)
 
 	// Never visible as a provider credential.
-	all, err := env.repo.ListProviderAccounts(env.ctx, env.userID)
+	all, err := db.TestAccounts(t, env.repo).ListProviderAccounts(env.ctx, env.userID)
 	require.NoError(t, err)
 	assert.Empty(t, all)
 }

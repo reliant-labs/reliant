@@ -33,6 +33,7 @@ import Modal from "@/components/forge-ui/modal";
 import { driverDisplayName } from "@/hooks/catalog-models";
 import { useOrgProviderAccounts } from "@/hooks/org-provider-account-queries";
 import {
+  personalFundingAnswer,
   usePersonalFundingPrompt,
   usePersonalFundingQuestion,
   useResolvePersonalFunding,
@@ -90,7 +91,7 @@ function FundingDialog({ question, onClose }: { question: FundingQuestion; onClo
   const orgName = orgs.data?.orgs.find((o) => o.id === question.orgId)?.name ?? "Your organization";
   const { models } = useModels();
   const orgAccounts = useOrgProviderAccounts(question.reason === "unserved" ? question.orgId : undefined);
-  const resolve = useResolvePersonalFunding(question.chatId);
+  const resolve = useResolvePersonalFunding(question.chatId, question.orgId);
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const rememberId = useId();
@@ -105,7 +106,7 @@ function FundingDialog({ question, onClose }: { question: FundingQuestion; onClo
   const answer = async (choice: FundingChoice) => {
     setError(null);
     try {
-      await resolve.mutateAsync({ choice, remember, orgId: question.orgId });
+      await resolve.mutateAsync(personalFundingAnswer(question.chatId, choice, remember));
       onClose();
       if (choice === "use_personal") toast.success(`Continuing on your own account.${remember ? ` Chats in ${orgName} won't ask again.` : ""}`);
     } catch {

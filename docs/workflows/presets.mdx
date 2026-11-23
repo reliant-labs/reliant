@@ -87,12 +87,12 @@ Reliant includes fifteen built-in presets. They are available immediately withou
 | `planner` | flagship | `view`, `tag:shell`, `code_context`, `create_plan` | Turns research into step-by-step implementation plans. Produces plans, not code. |
 | `implementer` | moderate | `tag:coding:default`, `prove_test` | Implements well-specified changes by following detailed instructions. |
 | `code_reviewer` | flagship | `tag:shell`, `tag:web`, `view`, `code_context` | Code review orchestrator. Spawns reviewers and produces a unified report; does not modify code. |
-| `tester` | moderate | `view`, `write`, `edit`, `tag:shell`, `code_context`, `prove_test` | Builds test harnesses and writes unit, integration and end-to-end tests. |
+| `tester` | moderate | `view`, `write`, `save_attachment`, `edit`, `tag:shell`, `code_context`, `prove_test` | Builds test harnesses and writes unit, integration and end-to-end tests. |
 | `debug` | flagship | `view`, `tag:shell`, `code_context` | Debugging orchestrator. Coordinates research and testing to isolate a bug without fixing it. |
-| `refactor` | moderate | `view`, `edit`, `write`, `find_replace`, `move_code`, `tag:shell`, `code_context` | Systematic structural improvement: assess, verify tests, transform incrementally. |
+| `refactor` | moderate | `view`, `edit`, `write`, `save_attachment`, `find_replace`, `move_code`, `tag:shell`, `code_context` | Systematic structural improvement: assess, verify tests, transform incrementally. |
 | `git` | fast | `tag:shell`, `view` | Commits, branching and version control. Loads the conflict-resolver skill for hard merges. |
-| `documentation` | moderate | `view`, `write`, `edit`, `tag:shell`, `fetch` | Narrative-driven technical writing. |
-| `ux` | flagship | `fetch`, `view`, `write`, `edit`, `tag:shell`, planning tools, `component_library`, browser tools | UI design and implementation, with a browser to check the result. |
+| `documentation` | moderate | `view`, `write`, `save_attachment`, `edit`, `tag:shell`, `fetch` | Narrative-driven technical writing. |
+| `ux` | flagship | `fetch`, `view`, `write`, `save_attachment`, `edit`, `tag:shell`, planning tools, `component_library`, browser tools | UI design and implementation, with a browser to check the result. |
 | `forge` | flagship | `tag:coding:default`, `ask_user`, `tag:web`, browser tools | General-purpose agent for Forge app generation, able to spawn all the others. |
 | `forge_implementer` | moderate | `tag:coding:default`, `component_library`, `prove_test` | Implements one seam of a Forge app, with the component library preloaded. Has no browser, by design. |
 | `migrate` | flagship | `tag:coding:default` | Guides the move from Claude Code, Cursor, Codex or Windsurf. Used by [Import](/guides/import). |

@@ -99,6 +99,38 @@ export async function listChats(
   };
 }
 
+/**
+ * The sidebar's chat list of several projects (the chat filter): ListChats'
+ * `project_ids`, the union of those projects, as long as the all-projects
+ * list. The server applies the union before its limit (#3008), so the page
+ * is the chosen projects' most recent chats. No fallback for a server
+ * without the field: the web ships with one that has it. The narrowing below
+ * only guarantees the list never shows a chat of a project not chosen.
+ */
+export async function listChatsOfProjects(
+  projectIds: readonly string[],
+  options: { signal?: AbortSignal; orgId?: string | null } = {},
+): Promise<{
+  chats: Chat[];
+  lastUserUpdateSequence: number;
+  mainWorktrees: WorktreeSummary[];
+}> {
+  const chosen = new Set(projectIds);
+  const response = await client.listChats(
+    {
+      projectIds: [...projectIds],
+      ...(options.orgId ? { orgId: options.orgId } : {}),
+      limit: ALL_PROJECTS_CHAT_LIMIT,
+    },
+    { signal: options.signal },
+  );
+  return {
+    chats: response.chats.map(convertProtoChat).filter((chat) => chosen.has(chat.projectId)),
+    lastUserUpdateSequence: Number(response.lastUserUpdateSequence),
+    mainWorktrees: response.mainWorktrees.filter((w) => chosen.has(w.projectId)),
+  };
+}
+
 /** How many chats the all-projects list asks for: the most recently active. */
 export const ALL_PROJECTS_CHAT_LIMIT = 300;
 
@@ -126,6 +158,7 @@ export async function startChat(request: StartChatRequest & { builder_test?: boo
     selectedPresets: request.selectedPresets || {},
     builderTest: request.builder_test || undefined,
     clientMessageId: request.client_message_id,
+    appName: request.app_name || undefined,
   });
   return chatOf(response);
 }
@@ -223,16 +256,6 @@ export async function resumeChat(chatId: string): Promise<{
     needs_recovery: response.needsRecovery,
     recovery_type: response.recoveryType,
   };
-}
-
-/**
- * "Retry now" on a run held until a provider's usage limit resets. Resolves to
- * whether a waiting run was woken. `useModel` ("<model>@<driver>") answers the
- * wait with a cross-provider fallback instead, until the original reset.
- */
-export async function retryUsageLimitWait(chatId: string, useModel?: string): Promise<boolean> {
-  const response = await client.retryUsageLimitWait({ chatId, useModel });
-  return response.woken;
 }
 
 /** Dismiss a chat's unread state. */

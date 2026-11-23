@@ -13,18 +13,21 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+
+	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/nomachine"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/temporal"
 )
 
 // ============================================================================
@@ -52,6 +55,12 @@ type ExecuteRunStepInput struct {
 	// starts in. A relative one is relative to the run's checkout; empty is
 	// the checkout itself.
 	WorkDir string `json:"work_dir,omitempty"`
+	// NodePath is the node's path in the run (loop and sub-workflow
+	// prefixes included), for the step key's attribution.
+	NodePath string `json:"node_path,omitempty"`
+	// LLMGateway is the node's `llm_gateway`: run the command with a step
+	// key minted for it (run_step_llm_gateway.go). Never the key itself.
+	LLMGateway *RunStepLLMGateway `json:"llm_gateway,omitempty"`
 	// SaveMessage delegates the run node's save_message to the ActivityWrapper
 	// (see types.SaveMessageRequest). The handler never reads it.
 	SaveMessage *activitytypes.SaveMessageRequest `json:"save_message,omitempty" reliant:"-"`
@@ -72,6 +81,9 @@ type ExecuteRunStepOutput struct {
 	WorktreeID   string `json:"worktree_id"`        // worktree ID if used
 	WorktreePath string `json:"worktree_path"`      // worktree path if used
 	LogFile      string `json:"log_file,omitempty"` // absolute path to log file if written
+	// LLMGateway is the step key the command ran with, when the node sets
+	// llm_gateway (nodes.<id>.llm_gateway): never the key itself.
+	LLMGateway *RunStepLLMGatewayOutput `json:"llm_gateway,omitempty"`
 }
 
 // ============================================================================
@@ -82,6 +94,7 @@ type ExecuteRunStepOutput struct {
 // This activity executes shell commands via the daemon's shell tool.
 type ExecuteRunStepActivity struct {
 	repo         ExecuteRunStepStore
+	rows         WorkspaceRows
 	toolExecutor toolexec.ToolExecutor
 	runExecutor  RunExecutor // optional override for testing
 	// machines reports whether the run's machine is attached while a command
@@ -94,6 +107,9 @@ type ExecuteRunStepActivity struct {
 	// router resolves a run node's machine named by name, type or labels to
 	// the machine whose checkout the command runs in (WithDaemonRouter).
 	router toolexec.DaemonRouter
+	// stepKeys mints and revokes a run node's LLM gateway step key
+	// (WithStepKeys). nil: a node with llm_gateway is refused.
+	stepKeys StepKeyIssuer
 }
 
 // WithDaemonRouter lets a run node that names its machine by name, type or
@@ -120,9 +136,10 @@ func (a *ExecuteRunStepActivity) WithMachineObserver(observer MachineObserver) *
 // NewExecuteRunStepActivity creates a new ExecuteRunStepActivity.
 // toolExecutor routes commands through the daemon. runExecutor is an optional
 // testing override; if non-nil it is used instead of toolExecutor.
-func NewExecuteRunStepActivity(repo ExecuteRunStepStore, toolExecutor toolexec.ToolExecutor, runExecutor RunExecutor) *ExecuteRunStepActivity {
+func NewExecuteRunStepActivity(repo ExecuteRunStepStore, rows WorkspaceRows, toolExecutor toolexec.ToolExecutor, runExecutor RunExecutor) *ExecuteRunStepActivity {
 	return &ExecuteRunStepActivity{
 		repo:         repo,
+		rows:         rows,
 		toolExecutor: toolExecutor,
 		runExecutor:  runExecutor,
 	}
@@ -213,6 +230,11 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 			})
 	}
 
+	// Revoke only when the command is known to have ended or never started.
+	// An uncertain outcome leaves the bounded key live for reattachment.
+	stepKey := a.stepKeyScope(input, requestID, retry)
+	defer stepKey.release(ctx)
+
 	// Set default timeout if not provided (5 minutes)
 	timeout := input.Timeout
 	if timeout == 0 {
@@ -220,7 +242,7 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 	}
 
 	// Resolve execution context from chat -> project -> worktree
-	execCtx, err := resolveRunExecutorContext(ctx, a.repo, input.ChatID)
+	execCtx, err := resolveRunExecutorContext(ctx, a.repo, a.rows, input.ChatID)
 	if err != nil {
 		// A retry resolves where its command ran the way the attempt that
 		// sent it did. Anything that stops it here, or at any of the checks
@@ -282,6 +304,22 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 			Duration: time.Since(startTime).Milliseconds()}, nil
 	}
 
+	// llm_gateway: the machine must apply step keys, and the key is minted
+	// for it, before anything is sent. A refusal is the step's verdict; the
+	// command never runs without its key. A retry mints nothing: it only
+	// reattaches to the command its first attempt sent.
+	var stepEnv *daemon.StepEnv
+	if stepKey != nil && !retry {
+		env, refusal := stepKey.prepare(ctx, a, &execCtx, timeout)
+		if refusal != "" {
+			logging.WarnContext(ctx, "[RunStep] llm_gateway refused; the command was not run",
+				"chat_id", input.ChatID, "step_id", input.StepID, "refusal", refusal)
+			return ExecuteRunStepOutput{Stderr: refusal, Output: refusal, ExitCode: -1,
+				Duration: time.Since(startTime).Milliseconds(), LLMGateway: stepKey.finish(ctx)}, nil
+		}
+		stepEnv = env
+	}
+
 	// Determine working directory: the run's checkout, where its log file is
 	// resolved, and the directory the command starts in, the node's work_dir
 	// when it names one (relative to the checkout).
@@ -313,16 +351,26 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 		wait = defaultMachineWait()
 	}
 	var result CommandResult
+	// reattached: the verdict is that of a command reattached to — by a
+	// retry, or by this attempt after its transport dropped.
+	reattached := retry
+	execSpanCtx, execSpan := telemetry.StartRunExec(ctx, telemetry.RunExecStart{Command: input.Command, Attempt: attempt,
+		Credentials: credentials, InWorktree: worktreePath != ""})
+	// Once dispatch is possible, a returned wait is not proof of termination.
+	// Keep the key until a definitive verdict arrives (including on retries).
+	stepKey.keep()
 	if retry {
 		reattacher, ok := executor.(RunReattacher)
 		if !ok {
+			execSpan.End(telemetry.RunExecEnd{Outcome: telemetry.RunOutcomeRetryRefused})
 			return refuse()
 		}
 		var attached bool
-		result, attached, err = reattacher.ReattachCommand(ctx, requestID, timeout)
+		result, attached, err = reattacher.ReattachCommand(execSpanCtx, requestID, timeout)
 		if !attached {
 			activity.GetLogger(ctx).Info("[RunStep] retry found no command to reattach to; refusing to run it again",
 				"chat_id", input.ChatID, "step_id", input.StepID, "attempt", attempt, "request_id", requestID)
+			execSpan.End(telemetry.RunExecEnd{Outcome: telemetry.RunOutcomeRetryRefused})
 			return refuse()
 		}
 		activity.GetLogger(ctx).Info("[RunStep] retry reattached to the command the previous attempt started",
@@ -330,11 +378,24 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 			"exit_code", result.ExitCode, "error", err)
 	} else {
 		observe := a.observeMachine(execCtx)
-		result, err = executeUntilDelivered(withRunRequestID(ctx, requestID), executor, wait, observe, input.Command, commandDir, timeout)
-		result, err = reattachAfterTransportDrop(ctx, executor, input, requestID, timeout, result, err)
+		result, err = executeUntilDelivered(withRunStepEnv(withRunRequestID(execSpanCtx, requestID), stepEnv), executor, wait, observe, input.Command, commandDir, timeout)
+		result, reattached, err = reattachAfterTransportDrop(execSpanCtx, executor, input, requestID, timeout, result, err)
+	}
+	execSpan.End(runExecEnd(ctx, result, err, reattached))
+	// Interrupted/timeout results and failed waits may leave a remote process
+	// alive. Only a normal command verdict or proof of non-dispatch permits
+	// revocation. Otherwise reattachment (or the key's TTL) owns cleanup.
+	var unavailable *machineUnavailableError
+	var transportFailure *toolexec.TransportError
+	if (err == nil && !result.Interrupted && result.ExitCode != -1) ||
+		errors.As(err, &unavailable) ||
+		(errors.As(err, &transportFailure) && transportFailure.NotDispatched) {
+		stepKey.commandEnded()
 	}
 	a.stopCommandIfCancelled(ctx, execCtx, input, requestID)
-	stdout, stderr, exitCode, interrupted := result.Stdout, result.Stderr, result.ExitCode, result.Interrupted
+	// The machine redacted the key already; this is the worker's own guard,
+	// before anything is kept, logged or written.
+	stdout, stderr, exitCode, interrupted := stepKey.redact(result.Stdout), stepKey.redact(result.Stderr), result.ExitCode, result.Interrupted
 	if err == nil && foreign && exitCode != 0 && !interrupted {
 		stderr = foreignWorkspaceRunNote(ctx, a.repo, worktreePath, execCtx.WorktreeDaemonID, foreignMachine) + stderr
 	}
@@ -380,6 +441,9 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 					"request_id", requestID,
 					"cause", context.Cause(ctx),
 				)
+				// The command keeps running on its machine with its key; the
+				// retry reattaches to it and revokes the key at its end.
+				stepKey.keep()
 				return ExecuteRunStepOutput{}, runStepReleased(transportErr)
 			}
 			activity.GetLogger(ctx).Warn("[RunStep] no result came back from the machine",
@@ -408,6 +472,9 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 
 	duration := time.Since(startTime).Milliseconds()
 	combinedOutput := outputBuilder.String()
+	// A confirmed verdict revokes before the log-file write. An uncertain
+	// result leaves the key live and spend unknown until reattachment/expiry.
+	llmGateway := stepKey.finish(ctx)
 
 	// Write log file if configured (daemon-side via executor)
 	var logFilePath string
@@ -465,6 +532,7 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 		WorktreeID:   worktreeID,
 		WorktreePath: worktreePath,
 		LogFile:      logFilePath,
+		LLMGateway:   llmGateway,
 	}
 
 	// Write run_output to chat_updates for UI display
@@ -624,30 +692,31 @@ const (
 // reattachAfterTransportDrop is the first half of that: given what
 // executeUntilDelivered returned, it waits for the command's own verdict when
 // the command may have run, no result came back, and this attempt is still
-// live. Anything else is returned unchanged.
-func reattachAfterTransportDrop(ctx context.Context, executor RunExecutor, input ExecuteRunStepInput, requestID string, timeoutMs int, result CommandResult, err error) (CommandResult, error) {
+// live. Anything else is returned unchanged. reattached reports that the
+// returned verdict is the reattached command's.
+func reattachAfterTransportDrop(ctx context.Context, executor RunExecutor, input ExecuteRunStepInput, requestID string, timeoutMs int, result CommandResult, err error) (_ CommandResult, reattached bool, _ error) {
 	var transportErr *toolexec.TransportError
 	if err == nil || !errors.As(err, &transportErr) || transportErr.NotDispatched || ctx.Err() != nil || requestID == "" {
-		return result, err
+		return result, false, err
 	}
 	reattacher, ok := executor.(RunReattacher)
 	if !ok {
-		return result, err
+		return result, false, err
 	}
 	logger := activity.GetLogger(ctx)
 	logger.Info("[RunStep] no result came back; asking the machine about the command it was sent",
 		"chat_id", input.ChatID, "step_id", input.StepID, "request_id", requestID,
 		"code", transportErr.Code, "detail", transportErr.Detail)
-	reattached, attached, reattachErr := reattacher.ReattachCommand(ctx, requestID, timeoutMs)
+	reattachedResult, attached, reattachErr := reattacher.ReattachCommand(ctx, requestID, timeoutMs)
 	if !attached {
 		logger.Info("[RunStep] the machine cannot vouch for the command; its outcome is unknown",
 			"chat_id", input.ChatID, "step_id", input.StepID, "request_id", requestID)
-		return result, err
+		return result, false, err
 	}
 	logger.Info("[RunStep] reattached to the command after the transport dropped",
 		"chat_id", input.ChatID, "step_id", input.StepID, "request_id", requestID,
-		"exit_code", reattached.ExitCode, "error", reattachErr)
-	return reattached, reattachErr
+		"exit_code", reattachedResult.ExitCode, "error", reattachErr)
+	return reattachedResult, true, reattachErr
 }
 
 // attemptReleased reports whether ctx ended because this attempt was let go —

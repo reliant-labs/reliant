@@ -3,25 +3,30 @@ package db
 
 import (
 	"context"
-	"encoding/json"
+	"database/sql"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/planning"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"github.com/reliant-labs/reliant/internal/workflowdrafts"
 )
 
 // ==================== Chats ====================
@@ -97,12 +102,6 @@ func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID strin
 // or an empty string when it is unused.
 func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {
 	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
-}
-
-// ListChatsForWorktree lists userID's chats bound to worktreeID, archived ones
-// included, most recently active first, at most limit.
-func (r *Repo) ListChatsForWorktree(ctx context.Context, userID, worktreeID string, limit int) ([]WorktreeChat, error) {
-	return store.ListChatsForWorktree(ctx, r.ORM(), userID, worktreeID, limit)
 }
 
 // ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a run going
@@ -520,7 +519,7 @@ func (r *Repo) saveMessageToThread(ctx context.Context, chatID, thread string, r
 			DisplayStyle: displayStyle,
 		}
 		if attributed {
-			updateData.Sender = NewMessageSenderPayload(origin.ThreadID, r.SenderTitle(txCtx, origin.ThreadID), origin.Kind, origin.Subject)
+			updateData.Sender = NewMessageSenderPayload(origin.ThreadID, r.senderTitle(txCtx, origin.ThreadID), origin.Kind, origin.Subject)
 		}
 
 		updateDataJSON, err := updateData.Marshal()
@@ -600,23 +599,6 @@ func (r *Repo) ListMessages(ctx context.Context, chatID string, opts MessageList
 	}
 
 	return store.ListMessages(ctx, r.ORM(), chatID, opts)
-}
-
-// ListRecentTranscriptSiblingMessages returns, ascending, the newest
-// `limit` messages with seq >= fromSeq on threads other than mainThreadID
-// that are not spawn threads, bounded in SQL. The chat snapshot reads its
-// sibling rows through this: node and fork threads render inline in the
-// transcript, while a spawn renders as a tool-call card that fetches its
-// own thread (ListMessages with thread_id) when expanded.
-func (r *Repo) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*Message, error) {
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	if mainThreadID == "" {
-		return nil, fmt.Errorf("main thread ID cannot be empty")
-	}
-
-	return store.ListRecentTranscriptSiblingMessages(ctx, r.ORM(), chatID, mainThreadID, fromSeq, limit)
 }
 
 // CountMessagesInChat returns the true message count for a chat, read from
@@ -917,11 +899,6 @@ func (r *Repo) GetApproval(ctx context.Context, id string) (*Approval, error) {
 	return store.GetApproval(ctx, r.ORM(), id)
 }
 
-// GetApprovalByEntityID retrieves an approval by its entity_id
-func (r *Repo) GetApprovalByEntityID(ctx context.Context, entityID string) (*Approval, error) {
-	return store.GetApprovalByEntityID(ctx, r.ORM(), entityID)
-}
-
 // ListPendingApprovalsByChat retrieves all pending approvals for a chat
 func (r *Repo) ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*Approval, error) {
 	return store.ListPendingApprovalsByChat(ctx, r.ORM(), chatID)
@@ -1010,58 +987,8 @@ func (r *Repo) GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, user
 	return store.GetProjectByRemoteURLAndUser(ctx, r.ORM(), remoteURL, userID)
 }
 
-// GetProjectByPathAndUserInScope is the user's project at path in scope (an
-// org, with its unassigned rows when it is the user's default); nil scope is
-// every org's. Projects are unique per (org, user, path).
-func (r *Repo) GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*Project, error) {
-	if path == "" {
-		return nil, fmt.Errorf("project path cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.GetProjectByPathAndUserInScope(ctx, r.ORM(), path, userID, scope)
-}
-
-// GetProjectByRemoteURLAndUserInScope is the user's project cloned from
-// remoteURL in scope; nil scope is every org's. Projects are unique per (org,
-// user, remote_url).
-func (r *Repo) GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*Project, error) {
-	if remoteURL == "" {
-		return nil, fmt.Errorf("remote URL cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.GetProjectByRemoteURLAndUserInScope(ctx, r.ORM(), remoteURL, userID, scope)
-}
-
 func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error) {
-	if id == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-
-	// The store read filters on the owner; authz confirms the row it returns,
-	// as GetChatRowWithUserCheck does.
-	project, err := store.GetProjectWithUserCheck(ctx, r.ORM(), id, userID)
-	if err != nil {
-		return nil, err
-	}
-	switch denial := authz.WriteProjectDenial(ctx, userID, project); {
-	case denial == nil:
-		return project, nil
-	case errors.Is(denial, authz.ErrDenied):
-		return nil, core.ErrProjectNotFound
-	default:
-		// Still NotFound to every caller, with why as the withheld cause:
-		// the launcher tells a creator who left the project's org
-		// (authz.ErrNotOrgMember) from a membership outage, which must not
-		// be mistaken for an answer.
-		return nil, svcerr.WithCause(core.ErrProjectNotFound, denial)
-	}
+	return projectaccess.NewFromORM(r.ORM()).GetProjectWithUserCheck(ctx, id, userID)
 }
 
 // AssignUnassignedOrg gives userID's projects and chats that have no org yet
@@ -1218,14 +1145,6 @@ func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonI
 	})
 }
 
-// ResolveQueuedProjectDaemon applies the outcome the daemon reported.
-func (r *Repo) ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error {
-	if requestID == "" {
-		return fmt.Errorf("request ID cannot be empty")
-	}
-	return store.ResolveQueuedProjectDaemon(ctx, r.ORM(), requestID, installErr)
-}
-
 // MarkProjectDaemonInstalledInScope settles the machine's clone of the
 // project as installed, from evidence the machine gave (its filesystem
 // announcement, or a directory at the row's own path for a clone whose outcome
@@ -1283,15 +1202,6 @@ func (r *Repo) lockProjectInScope(ctx context.Context, projectID string, scope *
 		return false, err
 	}
 	return scope.Includes(org), nil
-}
-
-// StartQueuedProjectDaemonClones starts the stuck-clone clock of the
-// daemon's clones queued while it was away, now that it has connected.
-func (r *Repo) StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-	return store.StartQueuedProjectDaemonClones(ctx, r.ORM(), daemonID)
 }
 
 // FailProjectDaemonInstallInScope settles the machine's clone of the project
@@ -1369,13 +1279,6 @@ func (r *Repo) ListProjectDaemonsForProject(ctx context.Context, projectID strin
 // projects.
 func (r *Repo) ListProjectDaemonsForProjects(ctx context.Context, projectIDs []string) ([]*core.ProjectDaemon, error) {
 	return store.ListProjectDaemonsForProjects(ctx, r.ORM(), projectIDs)
-}
-
-func (r *Repo) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
-	if daemonID == "" {
-		return nil, fmt.Errorf("daemon ID cannot be empty")
-	}
-	return store.ListProjectDaemonsForDaemon(ctx, r.ORM(), daemonID)
 }
 
 func (r *Repo) DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error {
@@ -1530,111 +1433,6 @@ func (r *Repo) UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment
 	return nil
 }
 
-// RenewDaemonAttachment renews the lease of a stream the caller is holding
-// RIGHT NOW — the gateway calls it on every heartbeat its receive loop reads
-// — re-creating the row if it is gone, and reports whether it had to.
-//
-// Re-creating it is the point. The lease used to be renewed with an UPDATE,
-// which matches nothing once the row is gone, so a lease lost while its stream
-// lived stayed lost for the rest of the session: the TTL reaper
-// (daemonstate.AttachmentTTL) expiring it during a 15-minute inbound stall, or
-// a connect-time upsert that never landed. Prod 2026-10-11: a daemon serving
-// terminal commands for six hours read DISCONNECTED to every chat because its
-// lease was reaped at 12:11 and nothing could write it back short of a
-// reconnect. Routing does not read the lease, which is why the machine kept
-// working while every chat said it was gone.
-//
-// The row only moves forward. last_stream_activity and attached_at each keep
-// the later of the stored and renewed values, so an out-of-order renewal is a
-// no-op, and a renewal from a session NEWER than the row's (its own connect
-// upsert never replaced an older session's row) adopts the row: that older
-// session's release (ReleaseDaemonAttachment, attached_at <= its own) can then
-// no longer delete the lease the live session is renewing. Memory telemetry
-// and detected ports are left alone — they belong to the registered session,
-// and the gateway rewrites them on its next heartbeat.
-//
-// The insert is fenced on the daemons row still belonging to the user, the
-// same ownership rule UpsertDaemonAttachment enforces: a daemon the control
-// plane deleted while its stream was up is not resurrected by a heartbeat, and
-// another user's lease is never touched. Either refusal leaves nothing of the
-// caller's to renew, so it is not an error: created is false.
-//
-// created reports that the row was inserted: the lease was missing while its
-// stream was live, and every reader had been reporting the daemon detached.
-func (r *Repo) RenewDaemonAttachment(ctx context.Context, att *DaemonAttachment) (created bool, err error) {
-	if att == nil || att.DaemonID == "" || att.UserID == "" || att.Source == "" {
-		return false, fmt.Errorf("renewing daemon attachment requires daemon_id, user_id and source")
-	}
-	// A renewal names its session (attached_at). Defaulting it would make a
-	// renewal look like a newer session and adopt — and so outlive — a lease
-	// its real session can then no longer release.
-	if att.AttachedAt.IsZero() || att.LastStreamActivity.IsZero() {
-		return false, fmt.Errorf("renewing daemon attachment requires attached_at and last_stream_activity")
-	}
-	created, err = store.RenewDaemonAttachment(ctx, r.ORM(), att)
-	if err != nil {
-		return false, fmt.Errorf("renewing daemon attachment: %w", err)
-	}
-	return created, nil
-}
-
-// UpdateDaemonAttachmentMemory records the workspace memory telemetry carried
-// by a daemon heartbeat on the attachment (liveness) record. A no-op when the
-// attachment row doesn't exist — telemetry is only meaningful for a live
-// stream. It deliberately does NOT touch last_stream_activity; the lease
-// renewal stays with RenewDaemonAttachment.
-func (r *Repo) UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-	if err := store.SetDaemonAttachmentMemory(ctx, r.ORM(), daemonID, usedBytes, limitBytes, pressure); err != nil {
-		return fmt.Errorf("updating daemon attachment memory: %w", err)
-	}
-	return nil
-}
-
-// UpdateDaemonAttachmentPorts records the heartbeat-reported detected
-// listener ports on the attachment (liveness) record. Mirrors
-// UpdateDaemonAttachmentMemory: a no-op when the attachment row doesn't
-// exist, and it deliberately does NOT touch last_stream_activity — the lease
-// renewal stays with RenewDaemonAttachment.
-func (r *Repo) UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-	if err := store.SetDaemonAttachmentPorts(ctx, r.ORM(), daemonID, ports); err != nil {
-		return fmt.Errorf("updating daemon attachment ports: %w", err)
-	}
-	return nil
-}
-
-// UpdateDaemonAttachmentHealth records the machine health a daemon heartbeat
-// reported on the attachment (liveness) record. Mirrors
-// UpdateDaemonAttachmentMemory: a no-op when the attachment row doesn't exist,
-// and it does NOT touch last_stream_activity.
-func (r *Repo) UpdateDaemonAttachmentHealth(ctx context.Context, daemonID string, health MachineHealth) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-	if err := store.SetDaemonAttachmentHealth(ctx, r.ORM(), daemonID, health); err != nil {
-		return fmt.Errorf("updating daemon attachment health: %w", err)
-	}
-	return nil
-}
-
-// SetDaemonLocalModels stores the daemon's last-published local model
-// inventory (protojson of reliant.v1.LocalModelInventory). The value replaces
-// the previous one wholesale: the daemon always publishes its complete view.
-func (r *Repo) SetDaemonLocalModels(ctx context.Context, daemonID string, inventoryJSON string) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-	if err := store.SetDaemonLocalModels(ctx, r.ORM(), daemonID, inventoryJSON); err != nil {
-		return fmt.Errorf("updating daemon local models: %w", err)
-	}
-	return nil
-}
-
 // ListDaemonLocalModels returns the stored local model inventory of every
 // daemon the user owns that has published one, keyed by daemon ID. Liveness is
 // NOT considered here; callers gate on the daemon being online before offering
@@ -1659,35 +1457,24 @@ func (r *Repo) GetSettingValue(ctx context.Context, userID, key string) (string,
 	return setting.Value, true
 }
 
-// TryAdvisoryLock takes a session-level advisory lock on a dedicated
-// connection, so exactly one replica at a time holds it. The lock dies with the
-// connection, so a crashed holder never strands it.
+// TryAdvisoryLock takes dblock's session-level lock on key from the session
+// pool (SessionPool).
 //
-// Session-level locks need a connection that stays the same backend for the
-// whole session. That holds on direct Postgres and with session-pooled
-// pgbouncer; it does NOT hold behind transaction-pooling pgbouncer, where the
-// lock can be taken on one backend and released (or silently re-entered by
-// another replica) on another. So the connection comes from sessionPool: the
-// DatabaseConfig.DirectURL pool when the main pool is transaction-pooled.
+// Only worktreesweep still reaches it through the repository, as its Store's
+// leader election; every other job takes its lock from a dblock.Locker. It goes
+// when the sweeper takes a Locker of its own.
 func (r *Repo) TryAdvisoryLock(ctx context.Context, key int64) (func(), bool, error) {
-	conn, err := r.sessionPool().Conn(ctx)
+	locker, err := dblock.NewInstrumented(dblock.Deps{Sessions: r.sessionPool()})
 	if err != nil {
 		return nil, false, err
 	}
-	var got bool
-	if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, key).Scan(&got); err != nil {
-		_ = conn.Close()
-		return nil, false, err
-	}
-	if !got {
-		_ = conn.Close()
-		return func() {}, false, nil
-	}
-	return func() {
-		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, key)
-		_ = conn.Close()
-	}, true, nil
+	return locker.TryLock(ctx, dblock.Key(key))
 }
+
+// SessionPool is the pool a caller that needs a Postgres session to itself
+// takes its connection from: DatabaseConfig.DirectURL's pool when the main pool
+// is transaction-pooled, the main pool otherwise.
+func (r *Repo) SessionPool() *sql.DB { return r.sessionPool() }
 
 // SetDaemonStorageState stores the daemon's last-reported disk state, replacing
 // the previous value.
@@ -1725,42 +1512,6 @@ func (r *Repo) ListDaemonStorageState(ctx context.Context, userID string) (map[s
 		return nil, fmt.Errorf("listing daemon storage state for user %s: %w", userID, err)
 	}
 	return states, nil
-}
-
-// ReleaseDaemonAttachment deletes the lease a stream session created when
-// that session ends: the row for daemonID whose attached_at is at or before
-// the session's own attachedAt.
-//
-// The bound is what keeps a stale teardown from deleting a newer session's
-// lease. A daemon id is held by one stream at a time, but not by one PROCESS:
-// a daemon that loses its gateway reconnects to another replica, while the old
-// replica may only notice its half of the stream died a sweep later — and an
-// unconditional delete by daemon_id then removed the lease the NEW session had
-// just written. Rows older than the session (one its connect-time upsert
-// failed to replace) are released with it; rows newer than it are not its to
-// delete.
-//
-// attached_at comes from the clock of the gateway that wrote it. One daemon's
-// sessions are strictly sequential (a session ends before the daemon redials),
-// so ordering them only needs the replicas' clocks to agree to within one
-// reconnect.
-//
-// The released lease's last_stream_activity moves onto daemons.last_seen_at in
-// the same statement: deleting the lease is otherwise the moment the registry
-// forgets the daemon was ever there, and a tool call deciding whether to wait
-// for a daemon that just dropped (DaemonLastSeenAt) needs exactly that fact.
-// It only moves forward, so a stale session's release cannot rewind it.
-func (r *Repo) ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-	if attachedAt.IsZero() {
-		return fmt.Errorf("releasing daemon attachment %s requires the session's attached_at", daemonID)
-	}
-	if err := store.ReleaseDaemonAttachment(ctx, r.ORM(), daemonID, attachedAt); err != nil {
-		return fmt.Errorf("releasing daemon attachment: %w", err)
-	}
-	return nil
 }
 
 // DaemonLastSeenAt reports the last time a gateway heard from the user's
@@ -1852,38 +1603,11 @@ func (r *Repo) ListAttachedDaemonIDsForUser(ctx context.Context, userID string, 
 	return store.ListAttachedDaemonIDsForUser(ctx, r.ORM(), userID, time.Now().UTC().Add(-staleThreshold))
 }
 
-func (r *Repo) UpsertProjectConfigRecord(ctx context.Context, record *ProjectConfigRecord) error {
-	if record == nil {
-		return fmt.Errorf("project config record cannot be nil")
-	}
-	if record.ID == "" {
-		record.ID = uuid.New().String()
-	}
-	if record.ProjectID == "" {
-		return fmt.Errorf("project ID cannot be empty")
-	}
-	if record.DaemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-
-	return store.UpsertProjectConfigRecord(ctx, r.ORM(), record)
-}
-
-// GetProjectConfigRecord reads the project's whole config record, or
-// svcerr.NotFound. A caller that needs one part of it reads that
-// column instead (see store.GetProjectConfigRecord).
-func (r *Repo) GetProjectConfigRecord(ctx context.Context, projectID string) (*ProjectConfigRecord, error) {
-	if projectID == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
-	}
-	return store.GetProjectConfigRecord(ctx, r.ORM(), projectID)
-}
-
 // GetProjectWorkflowsJSON reads one column of the project config record: the
 // synced .reliant/workflows. It returns svcerr.NotFound when the
 // project has no record. Prefer it (and GetProjectPresetsJSON) to
-// GetProjectConfigRecord whenever that column is all a caller needs: the full
-// row carries every indexed skill body and can run to tens of MB.
+// store.GetProjectConfigRecord whenever that column is all a caller needs: the
+// full row carries every indexed skill body and can run to tens of MB.
 func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
@@ -1899,16 +1623,6 @@ func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*st
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
 	return store.GetProjectPresetsJSON(ctx, r.ORM(), projectID)
-}
-
-// GetProjectMCPConfigsJSON reads one column of the project config record: the
-// stored scoped MCP configs. It returns svcerr.NotFound when the
-// project has no record.
-func (r *Repo) GetProjectMCPConfigsJSON(ctx context.Context, projectID string) (*string, error) {
-	if projectID == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
-	}
-	return store.GetProjectMCPConfigsJSON(ctx, r.ORM(), projectID)
 }
 
 func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
@@ -1950,17 +1664,6 @@ func (r *Repo) GetWorktree(ctx context.Context, id string) (*Worktree, error) {
 		return nil, fmt.Errorf("worktree ID cannot be empty")
 	}
 	return store.GetWorktree(ctx, r.ORM(), id)
-}
-
-// GetWorktreeByIdempotencyKey returns a prior create's worktree for this
-// key, or (nil, nil) when there is none.
-func (r *Repo) GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*Worktree, error) {
-	// An empty key means the caller opted out of idempotency, not that it is
-	// asking about the rows that happen to have no key.
-	if projectID == "" || key == "" {
-		return nil, nil
-	}
-	return store.GetWorktreeByIdempotencyKey(ctx, r.ORM(), projectID, key)
 }
 
 // GetLiveWorktreeByName returns the project's unarchived worktree called
@@ -2025,17 +1728,6 @@ func (r *Repo) UpdateWorktreeCleanupMetadata(ctx context.Context, id string, met
 	return store.SetWorktreeCleanupMetadata(ctx, r.ORM(), id, metadata)
 }
 
-func (r *Repo) ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error) {
-	return store.ListWorktreesForReclaim(ctx, r.ORM())
-}
-
-func (r *Repo) ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]core.WorktreePath, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListLiveWorktreePathsForUser(ctx, r.ORM(), userID)
-}
-
 // MergeWorktreeCleanupMetadata is a read-modify-write of one row's
 // cleanup_metadata under SELECT ... FOR UPDATE.
 func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *CleanupMetadata, archived bool) bool) error {
@@ -2045,34 +1737,15 @@ func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn f
 	return store.MergeWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
 }
 
-// MergeUnownedWorktreeCleanupMetadata merges cleanup metadata into an
-// archived row that still has no machine on record.
-func (r *Repo) MergeUnownedWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *CleanupMetadata) bool) (bool, error) {
-	if id == "" {
-		return false, fmt.Errorf("worktree ID cannot be empty")
-	}
-	return store.MergeUnownedWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
-}
-
+// AdoptWorktreeDaemon records the daemon that found a workspace's directory.
+//
+// Deprecated: use store.WorktreeExtStore.AdoptWorktreeDaemon; the sweep reads
+// it there, and only a test of the activities still calls this.
 func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error) {
 	if id == "" || daemonID == "" {
 		return "", fmt.Errorf("worktree and daemon IDs cannot be empty")
 	}
 	return store.AdoptWorktreeDaemon(ctx, r.ORM(), id, daemonID)
-}
-
-func (r *Repo) ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListHeldWorktreesForUser(ctx, r.ORM(), userID)
-}
-
-func (r *Repo) DeleteWorktree(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("worktree ID cannot be empty")
-	}
-	return store.RemoveWorktree(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ArchiveWorktree(ctx context.Context, id string) error {
@@ -2159,6 +1832,12 @@ func (r *Repo) ListRepoForgeAppsByProject(ctx context.Context, projectID string)
 	return store.ListRepoForgeAppsByProject(ctx, r.ORM(), projectID)
 }
 
+// ListReposHoldingForgeApp returns the repos of projectIDs in which a forge
+// app named name is recorded (repo_forge_apps), ordered by project and path.
+func (r *Repo) ListReposHoldingForgeApp(ctx context.Context, name string, projectIDs []string) ([]*core.Repo, error) {
+	return store.ListReposHoldingForgeApp(ctx, r.ORM(), name, projectIDs)
+}
+
 // ListReposByProjects returns the repos of every project in projectIDs, by
 // project and relative path: one read for a list of projects.
 func (r *Repo) ListReposByProjects(ctx context.Context, projectIDs []string) ([]*core.Repo, error) {
@@ -2238,28 +1917,8 @@ func (r *Repo) DeleteSetting(ctx context.Context, id string) error {
 
 // ==================== Settings Helper Methods ====================
 
-func (r *Repo) getBoolOrDefault(ctx context.Context, userID string, projectID *string, key string, defaultVal bool) (bool, error) {
-	setting, err := r.GetSetting(ctx, userID, projectID, key)
-	if err != nil {
-		// If setting not found, return default
-		if svcerr.IsNotFound(err) {
-			return defaultVal, nil
-		}
-		return false, err
-	}
-	val, err := strconv.ParseBool(setting.Value)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse bool value: %w", err)
-	}
-	return val, nil
-}
-
 func (r *Repo) SetString(ctx context.Context, userID string, projectID *string, key, value string) error {
 	return r.upsertSetting(ctx, userID, projectID, key, value, "string")
-}
-
-func (r *Repo) setBool(ctx context.Context, userID string, projectID *string, key string, value bool) error {
-	return r.upsertSetting(ctx, userID, projectID, key, strconv.FormatBool(value), "bool")
 }
 
 func (r *Repo) upsertSetting(ctx context.Context, userID string, projectID *string, key, value, valueType string) error {
@@ -2286,27 +1945,6 @@ func (r *Repo) upsertSetting(ctx context.Context, userID string, projectID *stri
 	setting.Value = value
 	setting.ValueType = valueType
 	return r.UpdateSetting(ctx, setting)
-}
-
-func (r *Repo) GetAutomationToken(ctx context.Context, userID, daemonID string) (string, error) {
-	if userID == "" || daemonID == "" {
-		return "", fmt.Errorf("user_id and daemon_id cannot be empty")
-	}
-	return r.apiKeys.GetAutomationToken(ctx, userID, daemonID)
-}
-
-func (r *Repo) SetAutomationToken(ctx context.Context, userID, daemonID, token string) error {
-	if userID == "" || daemonID == "" {
-		return fmt.Errorf("user_id and daemon_id cannot be empty")
-	}
-	return r.apiKeys.SetAutomationToken(ctx, userID, daemonID, token)
-}
-
-func (r *Repo) DeleteAutomationToken(ctx context.Context, userID, daemonID string) error {
-	if userID == "" || daemonID == "" {
-		return fmt.Errorf("user_id and daemon_id cannot be empty")
-	}
-	return r.apiKeys.DeleteAutomationToken(ctx, userID, daemonID)
 }
 
 // ==================== Visibility Methods ====================
@@ -2369,38 +2007,12 @@ func (r *Repo) GetPlan(ctx context.Context, id string) (*Plan, error) {
 	return store.GetPlan(ctx, r.ORM(), id)
 }
 
-func (r *Repo) GetPlanByThreadID(ctx context.Context, threadID string) (*Plan, error) {
-	if threadID == "" {
-		return nil, fmt.Errorf("thread ID cannot be empty")
-	}
-
-	return store.GetPlanByThreadID(ctx, r.ORM(), threadID)
-}
-
 func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 
 	return store.ListPlansByChatID(ctx, r.ORM(), chatID)
-}
-
-func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
-	if plan == nil {
-		return fmt.Errorf("plan cannot be nil")
-	}
-	if plan.ID == "" {
-		return fmt.Errorf("plan ID cannot be empty")
-	}
-
-	return store.ReplacePlan(ctx, r.ORM(), plan)
-}
-
-func (r *Repo) DeletePlan(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("plan ID cannot be empty")
-	}
-	return store.RemovePlan(ctx, r.ORM(), id)
 }
 
 // ==================== Tasks ====================
@@ -2427,22 +2039,6 @@ func (r *Repo) GetTask(ctx context.Context, id string) (*Task, error) {
 	return store.GetTask(ctx, r.ORM(), id)
 }
 
-func (r *Repo) GetTaskByPosition(ctx context.Context, planID string, position int) (*Task, error) {
-	if planID == "" {
-		return nil, fmt.Errorf("plan ID cannot be empty")
-	}
-
-	// Get all tasks and return the one at the position
-	tasks, err := r.ListTasksByPlan(ctx, planID)
-	if err != nil {
-		return nil, err
-	}
-	if position < 0 || position >= len(tasks) {
-		return nil, fmt.Errorf("position %d out of range", position)
-	}
-	return tasks[position], nil
-}
-
 func (r *Repo) ListTasksByPlan(ctx context.Context, planID string) ([]*Task, error) {
 	if planID == "" {
 		return nil, fmt.Errorf("plan ID cannot be empty")
@@ -2451,87 +2047,111 @@ func (r *Repo) ListTasksByPlan(ctx context.Context, planID string) ([]*Task, err
 	return store.ListTasksByPlan(ctx, r.ORM(), planID)
 }
 
-func (r *Repo) GetTaskStatsByPlan(ctx context.Context, planID string) (*TaskStats, error) {
-	if planID == "" {
-		return nil, fmt.Errorf("plan ID cannot be empty")
-	}
+// ==================== Task Dependencies ====================
 
-	tasks, err := r.ListTasksByPlan(ctx, planID)
+// ==================== Planning (deprecated forwarders) ====================
+//
+// The plan, task and dependency calls of the agent planning tools live in
+// internal/planning. These stay as forwarding wrappers so code that calls them
+// through the Repo keeps compiling within v1.
+
+func (r *Repo) planning() (planning.Service, error) {
+	r.planningOnce.Do(func() {
+		r.planningSvc, r.planningErr = planning.NewInstrumented(planning.Deps{
+			Plans:        store.NewPlanExtStore(r.ORM()),
+			Tasks:        store.NewTaskExtStore(r.ORM()),
+			Dependencies: store.NewTaskDependencyExtStore(r.ORM()),
+		})
+	})
+	return r.planningSvc, r.planningErr
+}
+
+// GetPlanByThreadID returns the plan a thread works on.
+//
+// Deprecated: use planning.Service.GetPlanByThreadID.
+func (r *Repo) GetPlanByThreadID(ctx context.Context, threadID string) (*Plan, error) {
+	svc, err := r.planning()
 	if err != nil {
 		return nil, err
 	}
-
-	stats := &TaskStats{
-		Total: len(tasks),
-	}
-
-	for _, task := range tasks {
-		switch TaskStatus(task.Status) {
-		case TaskStatusPending:
-			stats.Pending++
-		case TaskStatusInProgress:
-			stats.InProgress++
-		case TaskStatusCompleted:
-			stats.Completed++
-		case TaskStatusFailed:
-			stats.Failed++
-		case TaskStatusBlocked:
-			stats.Blocked++
-		case TaskStatusCancelled:
-			stats.Cancelled++
-		case TaskStatusSkipped:
-			stats.Skipped++
-		}
-	}
-
-	return stats, nil
+	return svc.GetPlanByThreadID(ctx, threadID)
 }
 
+// UpdatePlan rewrites a plan row.
+//
+// Deprecated: use planning.Service.UpdatePlan.
+func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
+	svc, err := r.planning()
+	if err != nil {
+		return err
+	}
+	return svc.UpdatePlan(ctx, plan)
+}
+
+// GetTaskByPosition returns the plan's task at a 0-indexed position.
+//
+// Deprecated: use planning.Service.GetTaskByPosition.
+func (r *Repo) GetTaskByPosition(ctx context.Context, planID string, position int) (*Task, error) {
+	svc, err := r.planning()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetTaskByPosition(ctx, planID, position)
+}
+
+// GetTaskStatsByPlan counts the plan's tasks by status.
+//
+// Deprecated: use planning.Service.GetTaskStatsByPlan.
+func (r *Repo) GetTaskStatsByPlan(ctx context.Context, planID string) (*TaskStats, error) {
+	svc, err := r.planning()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetTaskStatsByPlan(ctx, planID)
+}
+
+// UpdateTask rewrites a task row.
+//
+// Deprecated: use planning.Service.UpdateTask.
 func (r *Repo) UpdateTask(ctx context.Context, task *Task) error {
-	if task == nil {
-		return fmt.Errorf("task cannot be nil")
+	svc, err := r.planning()
+	if err != nil {
+		return err
 	}
-	if task.ID == "" {
-		return fmt.Errorf("task ID cannot be empty")
-	}
-
-	return store.ReplaceTask(ctx, r.ORM(), task)
+	return svc.UpdateTask(ctx, task)
 }
 
-func (r *Repo) DeleteTask(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("task ID cannot be empty")
-	}
-	return store.RemoveTask(ctx, r.ORM(), id)
-}
-
-// ==================== Task Dependencies ====================
-
+// CreateTaskDependency links two tasks.
+//
+// Deprecated: use planning.Service.CreateTaskDependency.
 func (r *Repo) CreateTaskDependency(ctx context.Context, dep *TaskDependency) error {
-	if dep == nil {
-		return fmt.Errorf("dependency cannot be nil")
+	svc, err := r.planning()
+	if err != nil {
+		return err
 	}
-	if dep.FromTaskID == "" || dep.ToTaskID == "" {
-		return fmt.Errorf("from_task_id and to_task_id are required")
-	}
-	if dep.FromTaskID == dep.ToTaskID {
-		return fmt.Errorf("a task cannot depend on itself")
-	}
-	return store.InsertTaskDependency(ctx, r.ORM(), dep)
+	return svc.CreateTaskDependency(ctx, dep)
 }
 
+// ListDependenciesByPlan lists every dependency among the plan's tasks.
+//
+// Deprecated: use planning.Service.ListDependenciesByPlan.
 func (r *Repo) ListDependenciesByPlan(ctx context.Context, planID string) ([]*TaskDependency, error) {
-	if planID == "" {
-		return nil, fmt.Errorf("plan ID cannot be empty")
+	svc, err := r.planning()
+	if err != nil {
+		return nil, err
 	}
-	return store.ListDependenciesByPlan(ctx, r.ORM(), planID)
+	return svc.ListDependenciesByPlan(ctx, planID)
 }
 
+// DeleteTaskDependencyByPair removes the dependency of one type between two tasks.
+//
+// Deprecated: use planning.Service.DeleteTaskDependencyByPair.
 func (r *Repo) DeleteTaskDependencyByPair(ctx context.Context, fromTaskID, toTaskID string, depType int32) error {
-	if fromTaskID == "" || toTaskID == "" || depType == 0 {
-		return fmt.Errorf("from_task_id, to_task_id, and dependency_type are required")
+	svc, err := r.planning()
+	if err != nil {
+		return err
 	}
-	return store.DeleteTaskDependencyByPair(ctx, r.ORM(), fromTaskID, toTaskID, depType)
+	return svc.DeleteTaskDependencyByPair(ctx, fromTaskID, toTaskID, depType)
 }
 
 // ==================== Background Processes ====================
@@ -2564,10 +2184,6 @@ func (r *Repo) GetAttachment(ctx context.Context, id string) (*Attachment, error
 
 func (r *Repo) GetAttachmentsByIDs(ctx context.Context, ids []string) ([]*Attachment, error) {
 	return store.GetAttachmentsByIDs(ctx, r.ORM(), ids)
-}
-
-func (r *Repo) DeleteAttachment(ctx context.Context, id string) error {
-	return store.RemoveAttachment(ctx, r.ORM(), id)
 }
 
 // ==================== Context Usage ====================
@@ -2852,13 +2468,6 @@ func (r *Repo) ListRootWorkflows(ctx context.Context, chatID string) ([]*Workflo
 	return store.ListRootWorkflows(ctx, r.ORM(), chatID)
 }
 
-func (r *Repo) GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]WorkflowStatus, error) {
-	if len(chatIDs) == 0 {
-		return make(map[string]WorkflowStatus), nil
-	}
-	return store.RootWorkflowStatusForChats(ctx, r.ORM(), chatIDs)
-}
-
 // workflowStatusWrite is the transaction a workflow status write runs in when
 // its caller has none. READ COMMITTED is enough: each write is ONE UPDATE of
 // one row by id — a CAS keeps its expected status in the UPDATE's own WHERE,
@@ -3014,34 +2623,8 @@ func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status Workf
 	})
 }
 
-// SetWorkflowOutcome records the run's verdict — the outcome declared by the
-// terminal node it reached. Distinct from UpdateWorkflowStatus: status is the
-// Temporal-owned lifecycle and gets reconciled back from Temporal, so it cannot
-// carry "the work did not pass". No chat-activity emit: the outcome does not
-// change whether the chat is busy, only what the finished run means.
-func (r *Repo) SetWorkflowOutcome(ctx context.Context, id string, outcome string) error {
-	return store.SetWorkflowOutcome(ctx, r.ORM(), id, outcome)
-}
-
-// SetWorkflowRunOutcome records how the run ended (core.Workflow.RunOutcome).
-func (r *Repo) SetWorkflowRunOutcome(ctx context.Context, id string, outcome string) error {
-	return store.SetWorkflowRunOutcome(ctx, r.ORM(), id, outcome)
-}
-
 // HandledNodeFailure is a node of an ended run whose last attempt failed.
 type HandledNodeFailure = store.HandledNodeFailure
-
-// FirstHandledNodeFailure returns a node of the run, or of a run under it,
-// whose last attempt in run runID (since since, for an attempt that names no
-// run) failed, or nil (store.FirstHandledNodeFailure).
-func (r *Repo) FirstHandledNodeFailure(ctx context.Context, workflowID, runID string, since time.Time) (*HandledNodeFailure, error) {
-	return store.FirstHandledNodeFailure(ctx, r.ORM(), workflowID, runID, since)
-}
-
-// SetWorkflowFailureDetail records why a run failed, on the run.
-func (r *Repo) SetWorkflowFailureDetail(ctx context.Context, id, detail string) error {
-	return store.SetWorkflowFailureDetail(ctx, r.ORM(), id, detail)
-}
 
 // EnsureWorkflowRunning is a lightweight idempotent check: if the workflow
 // is not already Running, transition it to Running and emit an activity event.
@@ -3230,18 +2813,6 @@ func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core
 	return store.ListTriggersForUser(ctx, r.ORM(), f)
 }
 
-func (r *Repo) ListAllTriggers(ctx context.Context) ([]*core.Trigger, error) {
-	return store.ListAllTriggers(ctx, r.ORM())
-}
-
-// LockTrigger row-locks the trigger until the surrounding transaction ends.
-func (r *Repo) LockTrigger(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.LockTrigger(ctx, r.ORM(), id)
-}
-
 // UpdateTrigger is UpdateTriggerInOrg with no org reads: a write back of a
 // row as it was (restoreActivation).
 func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
@@ -3399,17 +2970,6 @@ func (r *Repo) ListTriggerChanges(ctx context.Context, userID, triggerID string)
 	return store.TriggerChanges(ctx, r.ORM(), userID, triggerID)
 }
 
-func (r *Repo) SetTriggerProjection(ctx context.Context, id string, p core.TriggerProjection) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.SetTriggerProjection(ctx, r.ORM(), id, p)
-}
-
-func (r *Repo) ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.Trigger, error) {
-	return store.ListAllWorkflowTriggerActivations(ctx, r.ORM())
-}
-
 // CreateTriggerEvent records one firing. The insert is ON CONFLICT
 // (kind, dedupe_key) DO NOTHING, so created=false means a firing for that
 // key already existed and nothing was written. That constraint is what
@@ -3451,43 +3011,11 @@ func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEvent
 	return store.GetTriggerEventByChat(ctx, r.ORM(), kind, chatID)
 }
 
-// CountLiveLaunchedRuns counts the user's chats launched by this kind of
-// event whose root run is still live (pending, active or paused).
-func (r *Repo) CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error) {
-	if userID == "" {
-		return 0, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.CountLiveLaunchedRuns(ctx, r.ORM(), userID, kind)
-}
-
 func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
 	}
 	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
-}
-
-// SetLaunchEventRunFailureDetail records why the launch run failed.
-func (r *Repo) SetLaunchEventRunFailureDetail(ctx context.Context, chatID, detail string) error {
-	return store.SetLaunchEventRunFailureDetail(ctx, r.ORM(), chatID, detail)
-}
-
-// SetLaunchEventRunStatus records how the run a trigger fired ended, on
-// the chat's launch event (core.TriggerEvent.RunStatus).
-func (r *Repo) SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error {
-	if chatID == "" {
-		return fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.SetLaunchEventRunStatus(ctx, r.ORM(), chatID, status)
-}
-
-// SetLaunchEventRunOutcome records how the run a trigger fired ended for its
-// health, on the chat's launch event (core.TriggerEvent.RunOutcome).
-func (r *Repo) SetLaunchEventRunOutcome(ctx context.Context, chatID, outcome string) error {
-	if chatID == "" {
-		return fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.SetLaunchEventRunOutcome(ctx, r.ORM(), chatID, outcome)
 }
 
 func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
@@ -3509,36 +3037,6 @@ func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters
 	return store.ListTriggerEventsPage(ctx, r.ORM(), f)
 }
 
-// ListInboxPending, ListDismissedInboxItemIDs, DismissInboxItems and
-// RestoreInboxItems back the Inbox. Each is scoped by an explicit user id.
-func (r *Repo) ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListInboxPending(ctx, r.ORM(), userID)
-}
-
-func (r *Repo) ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListDismissedInboxItemIDs(ctx, r.ORM(), userID, itemIDs)
-}
-
-func (r *Repo) DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error {
-	if userID == "" {
-		return fmt.Errorf("user ID cannot be empty")
-	}
-	return store.DismissInboxItems(ctx, r.ORM(), userID, itemIDs, at)
-}
-
-func (r *Repo) RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error {
-	if userID == "" {
-		return fmt.Errorf("user ID cannot be empty")
-	}
-	return store.RestoreInboxItems(ctx, r.ORM(), userID, itemIDs)
-}
-
 // CreateRunEvent inserts the event, doing nothing when its DedupeKey
 // already exists. created=false means the transition was already recorded.
 func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error) {
@@ -3551,14 +3049,6 @@ func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, err
 		return false, fmt.Errorf("run event dedupe key cannot be empty")
 	}
 	return store.InsertRunEvent(ctx, r.ORM(), ev)
-}
-
-// GetRunEvent returns ErrRunEventNotFound on a miss.
-func (r *Repo) GetRunEvent(ctx context.Context, id string) (*core.RunEvent, error) {
-	if id == "" {
-		return nil, fmt.Errorf("run event ID cannot be empty")
-	}
-	return store.LoadRunEvent(ctx, r.ORM(), id)
 }
 
 // HasEnabledTriggerOfKind reports whether the user owns an enabled trigger
@@ -3588,43 +3078,14 @@ func (r *Repo) CountOtherPendingBlockers(ctx context.Context, chatID, excludeID 
 }
 
 // ClaimRunEvents leases up to max undispatched events until leaseUntil.
+//
+// Deprecated: use store.RunEventExtStore.ClaimRunEvents; the relay reads it
+// there, and only tests still call this.
 func (r *Repo) ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, max int) ([]*core.RunEvent, error) {
 	if max <= 0 {
 		return nil, nil
 	}
 	return store.ClaimRunEvents(ctx, r.ORM(), now, leaseUntil, max)
-}
-
-// MarkRunEventDispatched records that the event's dispatch has started.
-func (r *Repo) MarkRunEventDispatched(ctx context.Context, id string, at time.Time) error {
-	if id == "" {
-		return fmt.Errorf("run event ID cannot be empty")
-	}
-	return store.MarkRunEventDispatched(ctx, r.ORM(), id, at)
-}
-
-// DeleteDispatchedRunEventsBefore prunes dispatched events older than
-// cutoff, returning how many were removed.
-func (r *Repo) DeleteDispatchedRunEventsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
-	return store.DeleteDispatchedRunEventsBefore(ctx, r.ORM(), cutoff)
-}
-
-// RecentTriggerFirings returns each trigger's newest perTrigger firings in
-// one query. Used to compute health and last_event for a list of triggers.
-func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.RecentTriggerFirings(ctx, r.ORM(), userID, triggerIDs, perTrigger)
-}
-
-// RecentTriggerOutcomes is RecentTriggerFirings without the events' bodies
-// (payload, sender, origin), for health that is judged but never shown.
-func (r *Repo) RecentTriggerOutcomes(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.RecentTriggerOutcomes(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
 // FiringsSinceLastSuccess returns each trigger's firings since its newest
@@ -3641,9 +3102,6 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 // Attention-managed actors are excluded before the success boundary and cap;
 // callers needing diagnostic health continue to use the unfiltered reads.
 func (r *Repo) FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
 	return store.FiringsSinceLastUnmanagedSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
@@ -3663,13 +3121,6 @@ func (r *Repo) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash [
 	return store.SetTriggerWebhookTokenHash(ctx, r.ORM(), id, hash)
 }
 
-func (r *Repo) SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.SetTriggerWebhookSecret(ctx, r.ORM(), id, sealed)
-}
-
 func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {
 	if id == "" {
 		return nil, core.ErrTriggerNotFound
@@ -3677,28 +3128,8 @@ func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*co
 	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
 }
 
-func (r *Repo) ListIntegrationTriggers(ctx context.Context, integration string) ([]*core.IntegrationTriggerRoute, error) {
-	return store.ListIntegrationTriggers(ctx, r.ORM(), integration)
-}
-
-func (r *Repo) ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error) {
-	return store.ListStalePendingTriggerEvents(ctx, r.ORM(), olderThan, limit)
-}
-
-func (r *Repo) ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) (int64, error) {
-	return store.ExpirePendingTriggerCapacityEvents(ctx, r.ORM(), recordedBefore, detail, limit)
-}
-
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
-}
-
-func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, def *core.TriggerEventDefinition) (bool, error) {
-	return store.SettlePendingTriggerEvent(ctx, r.ORM(), id, outcome, detail, def)
-}
-
-func (r *Repo) GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error) {
-	return store.GetTriggerRegistration(ctx, r.ORM(), triggerID)
 }
 
 func (r *Repo) ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error) {
@@ -3706,13 +3137,6 @@ func (r *Repo) ListTriggerRegistrations(ctx context.Context, userID string, trig
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 	return store.ListTriggerRegistrationsForUser(ctx, r.ORM(), userID, triggerIDs)
-}
-
-func (r *Repo) UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error {
-	if reg == nil || reg.TriggerID == "" {
-		return fmt.Errorf("trigger registration needs a trigger ID")
-	}
-	return store.UpsertTriggerRegistration(ctx, r.ORM(), reg)
 }
 
 // ==================== Step Executions ====================
@@ -3740,20 +3164,10 @@ func (r *Repo) ListRunNodeExecutions(ctx context.Context, workflowID string, lim
 	return store.ListRunNodeExecutions(ctx, r.ORM(), workflowID, limit)
 }
 
-// MarkDeclaredFailureNode records that a run's top-level node declared the
-// run's outcome: failure (store.MarkDeclaredFailureNode).
-func (r *Repo) MarkDeclaredFailureNode(ctx context.Context, workflowID, nodeID string) (bool, error) {
-	return store.MarkDeclaredFailureNode(ctx, r.ORM(), workflowID, nodeID)
-}
-
 // ListStepExecutionRecordsForChat returns full step rows (inputs, output,
 // error), newest first, optionally scoped to one node and what ran inside it.
 func (r *Repo) ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*StepExecution, error) {
 	return store.ListStepExecutionRecordsForChat(ctx, r.ORM(), chatID, nodePath, limit)
-}
-
-func (r *Repo) GetStepExecutionsByWorkflow(ctx context.Context, workflowID string) ([]*StepExecution, error) {
-	return store.ListWorkflowStepExecutions(ctx, r.ORM(), workflowID)
 }
 
 func (r *Repo) ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error) {
@@ -3763,13 +3177,6 @@ func (r *Repo) ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus)
 // ==================== Workflow Checkpoints ====================
 // Position truth for resume-at-position: last top-level node entered (and
 // loop iteration for loop nodes) per workflow ID.
-
-func (r *Repo) UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *WorkflowCheckpoint) error {
-	if checkpoint == nil {
-		return fmt.Errorf("checkpoint cannot be nil")
-	}
-	return store.SaveWorkflowCheckpoint(ctx, r.ORM(), checkpoint)
-}
 
 // GetWorkflowCheckpoint returns the recorded position for a workflow ID, or
 // (nil, nil) when no checkpoint exists.
@@ -4028,398 +3435,114 @@ func (r *Repo) SetCompactionSummaryMessage(ctx context.Context, cwID, messageID 
 }
 
 // ==================== Workflow Drafts ==
-// User-owned workflows available across all projects
+// User-owned workflows available across all projects. Every write and every
+// scoped read lives in internal/workflowdrafts; the methods below are the few
+// that code outside this package's migration still calls through the Repo.
 
 // ErrWorkflowSlugTaken reports that the owner already has a workflow with the
-// slug. It is deliberately not retryable: the conflict is permanent, not a race.
-var ErrWorkflowSlugTaken = svcerr.AlreadyExists("workflow slug already taken")
+// slug (workflowdrafts.ErrSlugTaken).
+var ErrWorkflowSlugTaken = workflowdrafts.ErrSlugTaken
 
-// runWorkflowDraftTx: each draft write is one single-row write plus the
-// user_updates insert, which allocates from the per-user counter row and so
-// needs READ COMMITTED (see CreateUserUpdate). Under SERIALIZABLE it would
-// abort against any concurrent update for the same user. The Repository's
-// ladder still re-runs it on the failures it retries.
-func (r *Repo) runWorkflowDraftTx(ctx context.Context, f func(txCtx context.Context) error) error {
-	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), f)
-}
+// ErrWorkflowDraftVersionConflict reports that a draft was written since the
+// version the caller read (workflowdrafts.ErrVersionConflict).
+var ErrWorkflowDraftVersionConflict = workflowdrafts.ErrVersionConflict
 
-// mapWorkflowSlugConflict turns a unique violation on workflow_drafts into
-// ErrWorkflowSlugTaken. The PgError is not wrapped (%w) so isRetryableError
-// does not see 23505 and walk the retry ladder for a permanent conflict.
-func mapWorkflowSlugConflict(err error, slug string) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "workflow_drafts_user_id_slug_key" {
-		return fmt.Errorf("%w: %q", ErrWorkflowSlugTaken, slug)
-	}
-	return err
+// WorkflowDraftsBySlug is one user's drafts of a set of slugs
+// (workflowdrafts.DraftsBySlug).
+type WorkflowDraftsBySlug = workflowdrafts.DraftsBySlug
+
+// workflowDrafts is the drafts package over this Repo's database and
+// transactions: the Repo is its TxRunner, OrgLocks and UserUpdates.
+func (r *Repo) workflowDrafts() (workflowdrafts.Service, error) {
+	r.draftsOnce.Do(func() {
+		r.drafts, r.draftsErr = workflowdrafts.NewInstrumented(workflowdrafts.Deps{
+			Tx:      r,
+			Locks:   r,
+			Updates: r,
+			Drafts:  store.NewWorkflowDraftExtStore(r.ORM()),
+		})
+	})
+	return r.drafts, r.draftsErr
 }
 
 func (r *Repo) CreateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) error {
-	if draft == nil {
-		return fmt.Errorf("draft cannot be nil")
-	}
-	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		// Every draft write takes its owner's org lock first, so inserts
-		// and upserts of one user's slugs serialize (store/org_lock.go).
-		if err := store.LockUserOrgs(txCtx, r.ORM(), draft.UserID); err != nil {
-			return err
-		}
-		if err := store.InsertWorkflowDraft(txCtx, r.ORM(), draft); err != nil {
-			return mapWorkflowSlugConflict(err, draft.Slug)
-		}
-		return r.publishWorkflowDraftUpdatedByID(txCtx, draft.ID)
-	})
-}
-
-func (r *Repo) UpsertWorkflowDraft(ctx context.Context, draft *WorkflowDraft) (*WorkflowDraft, error) {
-	if draft == nil {
-		return nil, fmt.Errorf("draft cannot be nil")
-	}
-	var saved *WorkflowDraft
-	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		// Under the owner's org lock nothing stamps or inserts this user's
-		// drafts; the slug's row is locked and decided on as it is now. A
-		// denied draft's slug is taken: the upsert never overwrites it.
-		if err := store.LockUserOrgs(txCtx, r.ORM(), draft.UserID); err != nil {
-			return err
-		}
-		existing, err := store.LockWorkflowDraftBySlug(txCtx, r.ORM(), draft.UserID, draft.Slug)
-		if err != nil {
-			return err
-		}
-		over := ""
-		if existing != nil {
-			if !authz.CanWriteWorkflow(txCtx, draft.UserID, existing) {
-				return fmt.Errorf("%w: %q", ErrWorkflowSlugTaken, draft.Slug)
-			}
-			over = existing.ID
-		}
-		row, err := store.UpsertWorkflowDraftBySlug(txCtx, r.ORM(), draft, over)
-		if err != nil {
-			return mapWorkflowSlugConflict(err, draft.Slug)
-		}
-		saved = row
-		return r.publishWorkflowDraftUpdated(txCtx, row, false)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return saved, nil
-}
-
-// publishWorkflowDraftUpdated announces a draft write to the owner's open
-// editors. Every draft writer funnels through the Repo methods that call this,
-// so no tool or RPC can forget. It must run inside the write's transaction: a
-// rolled-back write then never announces itself. deleted marks the draft's
-// removal (data_json {"deleted": true}); the version is then the last one.
-func (r *Repo) publishWorkflowDraftUpdated(ctx context.Context, draft *WorkflowDraft, deleted bool) error {
-	if draft == nil {
-		return nil
-	}
-	payload := map[string]any{
-		"draft_id": draft.ID,
-		"slug":     draft.Slug,
-		"version":  draft.Version,
-	}
-	if deleted {
-		payload["deleted"] = true
-	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal workflow draft update: %w", err)
-	}
-	return r.CreateUserUpdate(ctx, &UserUpdate{
-		UserID:     draft.UserID,
-		UpdateType: UserUpdateWorkflowDraftUpdated,
-		EntityType: EntityTypeWorkflowDraft,
-		EntityID:   draft.ID,
-		Data:       data,
-	})
-}
-
-func (r *Repo) publishWorkflowDraftUpdatedByID(ctx context.Context, id string) error {
-	row, err := store.LoadWorkflowDraft(ctx, r.ORM(), id)
+	svc, err := r.workflowDrafts()
 	if err != nil {
 		return err
 	}
-	return r.publishWorkflowDraftUpdated(ctx, row, false)
-}
-
-func (r *Repo) GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft, error) {
-	row, err := store.LoadWorkflowDraft(ctx, r.ORM(), id)
-	if err != nil {
-		if svcerr.IsNotFound(err) {
-			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("workflow draft"), id)
-		}
-		return nil, err
-	}
-	return row, nil
-}
-
-// visibleWorkflowDraft confirms a draft an owner-filtered read returned
-// through authz: a draft of an org its owner has left reads as no draft, so
-// no lookup by slug or name (the handlers', the tools', the launch path's)
-// can reach what the lookup by id refuses.
-func visibleWorkflowDraft(ctx context.Context, userID string, draft *WorkflowDraft, err error) (*WorkflowDraft, error) {
-	if err != nil || draft == nil {
-		return draft, err
-	}
-	if !authz.CanReadWorkflow(ctx, userID, draft) {
-		return nil, nil
-	}
-	return draft, nil
-}
-
-// lockWritableDraft takes the draft's owner's org lock, then its row, and
-// decides on the locked row: it may be written only while its owner may
-// still change it (authz.CanWriteWorkflow). Saved workflows are owner-only,
-// so every caller of a by-id write has already shown it is the owner; this
-// is the decision made again where no backfill can stamp the row under it.
-// A denied draft is NotFound, as a missing one.
-func (r *Repo) lockWritableDraft(ctx context.Context, id string) (*WorkflowDraft, error) {
-	owner, err := store.WorkflowDraftOwner(ctx, r.ORM(), id)
-	if err != nil {
-		return nil, err
-	}
-	if err := store.LockUserOrgs(ctx, r.ORM(), owner); err != nil {
-		return nil, err
-	}
-	row, err := store.LockWorkflowDraft(ctx, r.ORM(), id)
-	if err != nil {
-		return nil, err
-	}
-	if !authz.CanWriteWorkflow(ctx, owner, row) {
-		return nil, svcerr.NotFound("workflow draft")
-	}
-	return row, nil
-}
-
-func (r *Repo) GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
-	draft, err := store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug)
-	return visibleWorkflowDraft(ctx, userID, draft, err)
-}
-
-func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) (*WorkflowDraft, error) {
-	draft, err := store.FindWorkflowDraftByName(ctx, r.ORM(), userID, name)
-	return visibleWorkflowDraft(ctx, userID, draft, err)
-}
-
-// GetUsableWorkflowBySlug returns the runnable (complete, visible) workflow
-// with this slug, or (nil, nil) when there is none. A visible DRAFT with the
-// slug is reported as *WorkflowDraftNotRunnableError rather than hidden behind
-// "not found": the workflow exists, and the fix is to mark it complete.
-func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
-	usable, err := store.FindUsableWorkflowBySlug(ctx, r.ORM(), userID, slug)
-	if err != nil {
-		return nil, err
-	}
-	if usable != nil {
-		// A runnable draft the caller may no longer see is no workflow:
-		// nil, nil, the same as a slug nobody has.
-		return visibleWorkflowDraft(ctx, userID, usable, nil)
-	}
-	draft, err := r.GetWorkflowDraftBySlug(ctx, userID, slug)
-	if err != nil {
-		return nil, err
-	}
-	return nil, notRunnableWorkflow(slug, draft)
-}
-
-// notRunnableWorkflow is GetUsableWorkflowBySlug's answer when no usable
-// workflow has the slug and draft (visible to the caller, or nil) does: a
-// visible draft that is not complete is reported, anything else is nothing.
-func notRunnableWorkflow(slug string, draft *WorkflowDraft) error {
-	if draft != nil && !draft.IsHidden && draft.Status != WorkflowDraftStatusComplete {
-		return &WorkflowDraftNotRunnableError{Slug: slug}
-	}
-	return nil
-}
-
-// WorkflowDraftsBySlug is one user's drafts of a set of slugs, read in one
-// query (GetWorkflowDraftsBySlugs). For each slug it was read for, it gives
-// exactly what GetWorkflowDraftBySlug and GetUsableWorkflowBySlug give, so a
-// reader that resolves many workflows (ListInbox: 32 lookups a call in prod,
-// trace ed2301a0…) asks once instead of twice per name.
-type WorkflowDraftsBySlug struct {
-	userID string
-	bySlug map[string]*WorkflowDraft
-}
-
-// GetWorkflowDraftsBySlugs reads userID's drafts of slugs in one query.
-func (r *Repo) GetWorkflowDraftsBySlugs(ctx context.Context, userID string, slugs []string) (*WorkflowDraftsBySlug, error) {
-	rows, err := store.ListWorkflowDraftsBySlugs(ctx, r.ORM(), userID, slugs)
-	if err != nil {
-		return nil, err
-	}
-	out := &WorkflowDraftsBySlug{userID: userID, bySlug: make(map[string]*WorkflowDraft, len(rows))}
-	for _, row := range rows {
-		out.bySlug[row.Slug] = row
-	}
-	return out, nil
-}
-
-// Draft is GetWorkflowDraftBySlug's answer for slug, which must be one of the
-// slugs b was read for.
-func (b *WorkflowDraftsBySlug) Draft(ctx context.Context, slug string) (*WorkflowDraft, error) {
-	return visibleWorkflowDraft(ctx, b.userID, b.bySlug[slug], nil)
-}
-
-// Usable is GetUsableWorkflowBySlug's answer for slug, which must be one of
-// the slugs b was read for. The usable row is the slug's one row when it is
-// complete and not hidden (store.FindUsableWorkflowBySlug's predicate).
-func (b *WorkflowDraftsBySlug) Usable(ctx context.Context, slug string) (*WorkflowDraft, error) {
-	row := b.bySlug[slug]
-	if row != nil && row.Status == WorkflowDraftStatusComplete && !row.IsHidden {
-		return visibleWorkflowDraft(ctx, b.userID, row, nil)
-	}
-	draft, err := b.Draft(ctx, slug)
-	if err != nil {
-		return nil, err
-	}
-	return nil, notRunnableWorkflow(slug, draft)
-}
-
-// ListWorkflowDraftsByUser is the drafts userID owns and may still see: a
-// draft of an org they have left is not listed (authz decides each row).
-func (r *Repo) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error) {
-	drafts, err := store.ListUserWorkflowDrafts(ctx, r.ORM(), userID)
-	if err != nil {
-		return nil, err
-	}
-	return authz.Visible(ctx, userID, drafts, authz.CanReadWorkflow), nil
+	return svc.CreateWorkflowDraft(ctx, draft)
 }
 
 func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) error {
-	if draft == nil {
-		return fmt.Errorf("draft cannot be nil")
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return err
 	}
-	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if _, err := r.lockWritableDraft(txCtx, draft.ID); err != nil {
-			return err
-		}
-		if err := store.ReplaceWorkflowDraft(txCtx, r.ORM(), draft); err != nil {
-			return mapWorkflowSlugConflict(err, draft.Slug)
-		}
-		return r.publishWorkflowDraftUpdatedByID(txCtx, draft.ID)
-	})
+	return svc.UpdateWorkflowDraft(ctx, draft)
+}
+
+func (r *Repo) GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft, error) {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetWorkflowDraft(ctx, id)
+}
+
+func (r *Repo) GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetWorkflowDraftBySlug(ctx, userID, slug)
+}
+
+func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetUsableWorkflowBySlug(ctx, userID, slug)
+}
+
+func (r *Repo) GetWorkflowDraftsBySlugs(ctx context.Context, userID string, slugs []string) (*WorkflowDraftsBySlug, error) {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetWorkflowDraftsBySlugs(ctx, userID, slugs)
+}
+
+func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) (*WorkflowDraft, error) {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return nil, err
+	}
+	return svc.GetWorkflowDraftByName(ctx, userID, name)
+}
+
+func (r *Repo) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error) {
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return nil, err
+	}
+	return svc.ListWorkflowDraftsByUser(ctx, userID)
 }
 
 func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error {
-	return r.updateWorkflowDraftDefinition(ctx, id, nil, name, slug, definition, status)
+	svc, err := r.workflowDrafts()
+	if err != nil {
+		return err
+	}
+	return svc.UpdateWorkflowDraftDefinition(ctx, id, name, slug, definition, status)
 }
 
-// ErrWorkflowDraftVersionConflict reports that a draft was written since the
-// version the caller read: its write was computed from content that is no
-// longer current, so it was not applied.
-var ErrWorkflowDraftVersionConflict = svcerr.Aborted("workflow draft changed since it was read")
-
-// UpdateWorkflowDraftDefinitionAtVersion is UpdateWorkflowDraftDefinition
-// applied only while the draft is still at version: a compare-and-swap under
-// the draft's row lock. A draft written since returns
-// ErrWorkflowDraftVersionConflict and is left as it is, so two edits computed
-// from the same read cannot both report success while one is lost.
 func (r *Repo) UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name string, slug string, definition string, status WorkflowDraftStatus) error {
-	return r.updateWorkflowDraftDefinition(ctx, id, &version, name, slug, definition, status)
-}
-
-func (r *Repo) updateWorkflowDraftDefinition(ctx context.Context, id string, version *int64, name string, slug string, definition string, status WorkflowDraftStatus) error {
-	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		row, err := r.lockWritableDraft(txCtx, id)
-		if err != nil {
-			return err
-		}
-		if version != nil && row.Version != *version {
-			return ErrWorkflowDraftVersionConflict
-		}
-		if err := store.SetWorkflowDraftDefinition(txCtx, r.ORM(), id, name, slug, definition, status); err != nil {
-			return mapWorkflowSlugConflict(err, slug)
-		}
-		return r.publishWorkflowDraftUpdatedByID(txCtx, id)
-	})
-}
-
-func (r *Repo) SetWorkflowDraftStatus(ctx context.Context, id string, status WorkflowDraftStatus) (*WorkflowDraft, error) {
-	var saved *WorkflowDraft
-	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if _, err := r.lockWritableDraft(txCtx, id); err != nil {
-			return err
-		}
-		row, err := store.SetWorkflowDraftStatus(txCtx, r.ORM(), id, status)
-		if err != nil {
-			return err
-		}
-		saved = row
-		return r.publishWorkflowDraftUpdated(txCtx, row, false)
-	})
+	svc, err := r.workflowDrafts()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return saved, nil
-}
-
-func (r *Repo) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*WorkflowDraft, error) {
-	var saved *WorkflowDraft
-	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if _, err := r.lockWritableDraft(txCtx, id); err != nil {
-			return err
-		}
-		row, err := store.SetWorkflowDraftHidden(txCtx, r.ORM(), id, isHidden)
-		if err != nil {
-			return err
-		}
-		saved = row
-		return r.publishWorkflowDraftUpdated(txCtx, row, false)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return saved, nil
-}
-
-func (r *Repo) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error {
-	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		// Under the owner's org lock, the slug's row is locked and decided
-		// on as it is now. A denied draft is deleted like a missing one: not
-		// at all.
-		if err := store.LockUserOrgs(txCtx, r.ORM(), userID); err != nil {
-			return err
-		}
-		existing, err := store.LockWorkflowDraftBySlug(txCtx, r.ORM(), userID, slug)
-		if err != nil || existing == nil || !authz.CanWriteWorkflow(txCtx, userID, existing) {
-			return err
-		}
-		deleted, err := store.RemoveWorkflowDraft(txCtx, r.ORM(), existing.ID)
-		if svcerr.IsNotFound(err) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		return r.publishWorkflowDraftUpdated(txCtx, deleted, true)
-	})
-}
-
-func (r *Repo) WorkflowSlugExists(ctx context.Context, userID, slug string) (bool, error) {
-	return store.WorkflowSlugExists(ctx, r.ORM(), userID, slug)
-}
-
-func (r *Repo) UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*WorkflowDraft, error) {
-	var saved *WorkflowDraft
-	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if _, err := r.lockWritableDraft(txCtx, draftID); err != nil {
-			return err
-		}
-		row, err := store.SetWorkflowDraftForkedFrom(txCtx, r.ORM(), draftID, forkedFrom)
-		if err != nil {
-			return err
-		}
-		saved = row
-		return r.publishWorkflowDraftUpdated(txCtx, row, false)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return saved, nil
+	return svc.UpdateWorkflowDraftDefinitionAtVersion(ctx, id, version, name, slug, definition, status)
 }
 
 // ==================== Preset Repository ====================
@@ -4465,19 +3588,8 @@ func (r *Repo) GetWorkflowScenario(ctx context.Context, id string) (*WorkflowSce
 	return store.FindWorkflowScenario(ctx, r.ORM(), id)
 }
 
-func (r *Repo) GetWorkflowScenarioByName(ctx context.Context, workflowDraftID string, name string) (*WorkflowScenario, error) {
-	return store.FindWorkflowScenarioByName(ctx, r.ORM(), workflowDraftID, name)
-}
-
 func (r *Repo) ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID string) ([]*WorkflowScenario, error) {
 	return store.ListDraftWorkflowScenarios(ctx, r.ORM(), workflowDraftID)
-}
-
-func (r *Repo) UpdateWorkflowScenario(ctx context.Context, scenario *WorkflowScenario) error {
-	if scenario == nil {
-		return fmt.Errorf("scenario cannot be nil")
-	}
-	return store.ReplaceWorkflowScenario(ctx, r.ORM(), scenario)
 }
 
 func (r *Repo) UpdateWorkflowScenarioResult(ctx context.Context, id string, status string, result string) error {
@@ -4525,10 +3637,6 @@ func (r *Repo) GetQuestionByID(ctx context.Context, id string) (*Question, error
 	return store.GetQuestion(ctx, r.ORM(), id)
 }
 
-func (r *Repo) GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, iteration int) ([]*Question, error) {
-	return store.ListQuestionsByWorkflowStepIteration(ctx, r.ORM(), workflowID, stepID, iteration)
-}
-
 func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
 	if id == "" {
 		return fmt.Errorf("question ID cannot be empty")
@@ -4551,53 +3659,4 @@ func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *str
 // generateID generates a new UUID string
 func generateID() string {
 	return uuid.New().String()
-}
-
-// EnableCredentialSealing gives the api_keys and provider_accounts stores
-// their vault; without one, automation tokens and provider credentials cannot
-// be read or written. Call once at boot, before serving.
-func (r *Repo) EnableCredentialSealing(sealer CredentialSealer) {
-	r.apiKeys.SetSealer(sealer)
-	r.accounts.SetSealer(sealer)
-}
-
-// ListUserIDsWithProviderAccount returns every user holding an account for provider, without
-// opening (decrypting) any of them.
-func (r *Repo) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
-	return r.accounts.ListUserIDsWithProviderAccount(ctx, provider)
-}
-
-// HasNoOrgAccountPauses reports whether any trigger is paused for want of an org account
-// (store.HasNoOrgAccountPauses).
-func (r *Repo) HasNoOrgAccountPauses(ctx context.Context) (bool, error) {
-	return store.HasNoOrgAccountPauses(ctx, r.ORM())
-}
-
-// ListNoOrgAccountPauses returns the triggers paused for want of an org account that userID owns
-// or that belong to one of adminOrgIDs (store.ListNoOrgAccountPauses).
-func (r *Repo) ListNoOrgAccountPauses(ctx context.Context, userID string, adminOrgIDs []string) ([]*core.Trigger, error) {
-	return store.ListNoOrgAccountPauses(ctx, r.ORM(), userID, adminOrgIDs)
-}
-
-// ClaimDuePauseNotices claims the no-org-account pauses whose email is still owed and due,
-// moving each one's next attempt lease on (store.ClaimDuePauseNotices).
-func (r *Repo) ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error) {
-	return store.ClaimDuePauseNotices(ctx, r.ORM(), limit, lease)
-}
-
-// RefusePauseNotice records that a no-org-account pause's email was refused for good
-// (store.RefusePauseNotice).
-func (r *Repo) RefusePauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
-	return store.RefusePauseNotice(ctx, r.ORM(), triggerID, pausedAt)
-}
-
-// ConfirmPauseNotice records that a no-org-account pause's email was delivered (store.ConfirmPauseNotice).
-func (r *Repo) ConfirmPauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
-	return store.ConfirmPauseNotice(ctx, r.ORM(), triggerID, pausedAt)
-}
-
-// ListPersonallyFundedTriggers returns userID's org triggers whose runs may spend their own
-// accounts (store.ListPersonallyFundedTriggers).
-func (r *Repo) ListPersonallyFundedTriggers(ctx context.Context, userID string) ([]*core.Trigger, error) {
-	return store.ListPersonallyFundedTriggers(ctx, r.ORM(), userID)
 }

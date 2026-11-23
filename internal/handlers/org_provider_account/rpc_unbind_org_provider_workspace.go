@@ -29,7 +29,7 @@ func (s *Service) UnbindOrgProviderWorkspace(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.deps.Store.UnbindOrgProviderWorkspace(ctx, orgID, provider, external); err != nil {
+	if err := s.deps.OrgAccounts.UnbindOrgProviderWorkspace(ctx, orgID, provider, external); err != nil {
 		return nil, svcerr.Wrap(err)
 	}
 	s.deps.Logger.InfoContext(ctx, "org provider workspace unbound", "org_id", orgID, "provider", provider, "user_id", userID)

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 )
 
 // The driver announces a provider retry before it sleeps; this is the wiring
@@ -23,7 +24,7 @@ func TestProcessStreamEvent_RetryWaitWritesAndClearsTheBackoffMarker(t *testing.
 	defer h.Cleanup()
 	ctx := context.Background()
 
-	a := &CallLLMActivity{repo: h.Repo()}
+	a := &CallLLMActivity{repo: h.Repo(), backoff: providerbackofftest.New(t, h.Repo())}
 	state := &streamProcessingState{blockStates: NewBlockStreamState()}
 
 	require.NoError(t, a.processStreamEvent(ctx, "chat-1", "thread-1", llm.DriverEvent{
@@ -34,7 +35,7 @@ func TestProcessStreamEvent_RetryWaitWritesAndClearsTheBackoffMarker(t *testing.
 		},
 	}, state))
 
-	marks, err := h.Repo().ProviderBackoffByChat(ctx, "chat-1")
+	marks, err := providerbackofftest.New(t, h.Repo()).ProviderBackoffByChat(ctx, "chat-1")
 	require.NoError(t, err)
 	b := marks["thread-1"]
 	require.True(t, b.Waiting(), "a retrying thread must be marked as parked, not left looking like it is working")
@@ -50,7 +51,7 @@ func TestProcessStreamEvent_RetryWaitWritesAndClearsTheBackoffMarker(t *testing.
 		Type: llm.EventContentDelta, Content: "hello",
 	}, state))
 
-	marks, err = h.Repo().ProviderBackoffByChat(ctx, "chat-1")
+	marks, err = providerbackofftest.New(t, h.Repo()).ProviderBackoffByChat(ctx, "chat-1")
 	require.NoError(t, err)
 	b = marks["thread-1"]
 	require.False(t, b.Waiting(), "the marker outlived the wait: a working thread would report as parked")

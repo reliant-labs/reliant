@@ -9,10 +9,16 @@
  *   left         the health KPIs (one card of four figures) and what needs
  *                attention, each item with the release it followed and the
  *                way back.
- *   rail         what changed: recent releases, then who uses the app (the
+ *   rail         what changed: recent releases, the tests (the project
+ *                shell's landing: Tests/surfaces/OverviewTests.tsx, which
+ *                also adds the Tests rows to "Needs attention"); then the
+ *                app's code (the `about` slot: the Code card,
+ *                Console/AppCodeCard.tsx); then who uses the app (the
  *                Users card: accounts, and active, new and returning users
  *                over 7 days, read from the generated Overview dashboard's
- *                Users panels; hidden until there are users to show). It is
+ *                Users panels; hidden until there are users to show), then
+ *                the known vulnerabilities of what each environment runs (the
+ *                Vulnerabilities card, Security/VulnerabilitiesCard.tsx). It is
  *                kept as a column of its own rather than folded into the left.
  *   below        Services (long-running workloads, one tight row each:
  *                health, ready, release, requests, CPU and memory against
@@ -96,11 +102,15 @@ import {
 } from "./workloadModel";
 import { SkeletonRows } from "./workloadParts";
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
+import { OverviewAnalyticsBox } from "./landing/OverviewAnalyticsBox";
+import { OverviewServicesStrip } from "./landing/OverviewServicesStrip";
 import { JobTimeline } from "./JobTimeline";
 import { ServiceCards } from "./ServiceCards";
 import { UsersCard } from "./UsersCard";
+import { VulnerabilitiesCard } from "../Security/VulnerabilitiesCard";
 import { filterRows, overviewRows, rowKindsOf, ROW_KIND_LABEL } from "./overviewRows";
 import { PartialNote, StaleNote, keepsStaleResult } from "./tileState";
+import { OverviewTestsCard, TestsAttentionRows } from "../Tests/surfaces/OverviewTests";
 
 export interface OverviewSearch {
   q?: string;
@@ -161,6 +171,30 @@ export interface OverviewHomeProps {
   domains?: DomainsState;
   /** The Domains screen: where "Add a domain" lands. */
   domainsHref?: string;
+  /**
+   * The project shell's summary Overview (U6b round 3, prototype): the full
+   * services table, frontends, signal tiles and job runs move to Services,
+   * and the Overview keeps a compact strip of the services linking there.
+   */
+  summary?: OverviewSummaryLinks;
+  /** The project's chats (U6c, the merged landing): waiting on the person, then the latest. In the rail, above the releases. */
+  chats?: ReactNode;
+  /**
+   * The app's code (Console/AppCodeCard.tsx, U13): where it lives and which of
+   * the person's projects hold it. A card in the rail under the recent
+   * releases, and under the getting-started block before anything is deployed.
+   */
+  about?: ReactNode;
+}
+
+export interface OverviewSummaryLinks {
+  services: string;
+  service: (name: string, env: string) => string;
+  /** The database's home (Data), scoped to its environment. */
+  data?: (env: string) => string;
+  /** Analytics, and its Events & metrics tab: the Analytics box's links (U6e). */
+  analytics?: string;
+  events?: string;
 }
 
 export type HostedByEnv = ReadonlyMap<string, ReadonlyMap<string, ForgeHostedWorkload>>;
@@ -184,6 +218,9 @@ export function OverviewHome({
   hostedLoading = false,
   domains,
   domainsHref = "",
+  summary,
+  chats,
+  about,
 }: OverviewHomeProps) {
   const range = search.range ?? OVERVIEW_RANGE;
   const org = useObservabilityOrg();
@@ -321,6 +358,7 @@ export function OverviewHome({
       <div className="space-y-4" data-testid="overview" data-state={unread ? "unread" : "empty"}>
         {header}
         {deploys}
+        {chats}
         {envsUnread ? (
           <DeployStatusUnread state={envsUnread} testId="overview-unread" />
         ) : (
@@ -344,12 +382,77 @@ export function OverviewHome({
             </p>
           </GettingStarted>
         )}
+        {about && (
+          <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-2" data-testid="overview-about">
+            {about}
+          </div>
+        )}
       </div>
     );
   }
 
   const filtered = !!(search.q || search.status || search.kind);
   const windowWords = RANGE_LABELS[range].toLowerCase();
+
+  // THE PROJECT SHELL'S LANDING (U6e, owner: "better separation of
+  // sections"): the headline signals, then one card per question — what needs
+  // you, what runs (a compact strip; the full live view is Services), your
+  // chats, what shipped, who uses it. The full tables below are the
+  // standalone console's.
+  if (summary) {
+    return (
+      <div className="space-y-6" data-testid="overview" data-layout="landing" data-state={loading ? "loading" : workloadsFailed ? "error" : "ready"}>
+        {header}
+        {deploys}
+        <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={workloadsFailed} scopedHref={hrefs.scoped} />
+        {unrecorded ? (
+          <p className="text-ui text-ink-muted" data-testid="overview-unrecorded-env">
+            Reliant has no record of <span className="font-medium text-ink">{env}</span>, so nothing it runs is reported here. Once it is deployed through Reliant, its
+            services and their health appear on this page.
+          </p>
+        ) : (
+          <HealthStrip scope={kpiScope} range={range} environments={environments} envId={scopedEnv?.id ?? null} alertsHref={hrefs.alerts} />
+        )}
+        <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="min-w-0 space-y-6">
+            {!unrecorded && (
+              <LandingCard testId="overview-card-attention">
+                <NeedsAttention
+                  items={attention}
+                  loading={loading}
+                  failed={workloadsFailed}
+                  where={where}
+                  showEnv={all}
+                  hrefOf={(item) => (item.workload ? hrefs.workload(item.workload, item.envName) : hrefs.alerts)}
+                  navigateTo={navigateTo}
+                  envs={envs}
+                  releaseHref={hrefs.release}
+                  rollback={rollback}
+                  tests={<TestsAttentionRows project={project} />}
+                />
+              </LandingCard>
+            )}
+            <LandingCard testId="overview-card-services">
+              {notSetUp ? <ObsNotSetUp subject={project} topic="overview" env={all ? undefined : env} /> : <OverviewServicesStrip app={project} env={env} range={range} links={summary} />}
+            </LandingCard>
+            {chats && <LandingCard testId="overview-card-chats">{chats}</LandingCard>}
+          </div>
+          <aside className="min-w-0 space-y-6" aria-label="Releases and analytics" data-testid="overview-rail">
+            <LandingCard testId="overview-card-releases">
+              <RecentReleases project={project} envs={envs} hrefs={hrefs} />
+            </LandingCard>
+            <OverviewTestsCard project={project} frame={(card) => <LandingCard testId="overview-card-tests">{card}</LandingCard>} />
+            {about && <LandingCard testId="overview-card-code">{about}</LandingCard>}
+            {summary.analytics && (
+              <LandingCard testId="overview-card-analytics">
+                <OverviewAnalyticsBox scope={kpiScope} analyticsHref={summary.analytics} eventsHref={summary.events ?? summary.analytics} />
+              </LandingCard>
+            )}
+          </aside>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10" data-testid="overview" data-state={loading ? "loading" : workloadsFailed ? "error" : "ready"}>
@@ -382,10 +485,15 @@ export function OverviewHome({
             </>
           )}
         </div>
-        {/* What changed, then who uses the app. */}
+        {/* The project's chats, what changed, then who uses the app, then what it runs that is known to be vulnerable. */}
         <aside className="min-w-0 space-y-10" aria-label="Recent changes" data-testid="overview-rail">
+          {chats}
           <RecentReleases project={project} envs={envs} hrefs={hrefs} />
+          {about}
           {!unrecorded && !extras.led && <UsersCard scope={kpiScope} project={project} range={range} usersHref={hrefs.users} dashboardHref={hrefs.dashboard} />}
+          {!unrecorded && (
+            <VulnerabilitiesCard project={project} envName={all ? null : env} href={withSearch(consolePath(project, { kind: "vulnerabilities" }), { env })} />
+          )}
         </aside>
       </div>
 
@@ -482,7 +590,7 @@ export function OverviewHome({
         </section>
       )}
 
-      {!unrecorded && (
+      {!summary && !unrecorded && (
         <FrontendsPanel
           scope={env}
           envs={envs}
@@ -493,7 +601,7 @@ export function OverviewHome({
         />
       )}
 
-      {!unrecorded && !notSetUp && (
+      {!summary && !unrecorded && !notSetUp && (
         // Each tile reads, loads, fails and retries on its own (SignalTiles).
         <div className="grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 lg:grid-cols-2" data-testid="overview-signals">
           <TracesTile
@@ -506,7 +614,7 @@ export function OverviewHome({
         </div>
       )}
 
-      {!notSetUp && (
+      {!summary && !notSetUp && (
         <div>
           <Section title="Job runs" meta={`Every run of each job, ${windowWords}`} testId="overview-jobs">
             {workloadsFailed ? (
@@ -738,6 +846,15 @@ function EnvCell({
   );
 }
 
+/** One block of the landing: a card, so each section reads as its own (U6e). */
+function LandingCard({ testId, children }: { testId: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-border bg-surface px-5 py-4" data-testid={testId}>
+      {children}
+    </div>
+  );
+}
+
 // ── Needs attention ─────────────────────────────────────────────────────────
 
 function NeedsAttention({
@@ -751,6 +868,7 @@ function NeedsAttention({
   envs,
   releaseHref,
   rollback,
+  tests,
 }: {
   items: AttentionItem[];
   loading: boolean;
@@ -762,6 +880,8 @@ function NeedsAttention({
   envs: StripEnv[];
   releaseHref: OverviewHrefs["release"];
   rollback?: OverviewRollback;
+  /** The Tests rows (Tests/surfaces): the default branch's, whatever the scope. */
+  tests?: ReactNode;
 }) {
   return (
     <Section title="Needs attention" testId="overview-attention">
@@ -867,6 +987,7 @@ function NeedsAttention({
         </div>
         </>
       )}
+      {tests}
     </Section>
   );
 }

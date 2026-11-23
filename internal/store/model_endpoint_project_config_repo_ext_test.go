@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
@@ -28,7 +29,7 @@ func TestModelEndpointQueries(t *testing.T) {
 	if direct.CreatedAt.IsZero() || direct.UpdatedAt.IsZero() {
 		t.Fatalf("InsertModelEndpoint stamps = {%v, %v}, want both set", direct.CreatedAt, direct.UpdatedAt)
 	}
-	twin, err := env.Repo.GetModelEndpoint(ctx, owner, "me-direct")
+	twin, err := store.GetModelEndpoint(ctx, env.ORM, owner, "me-direct")
 	if err != nil {
 		t.Fatalf("Repo.GetModelEndpoint: %v", err)
 	}
@@ -36,7 +37,7 @@ func TestModelEndpointQueries(t *testing.T) {
 		t.Fatalf("Repo.GetModelEndpoint = %+v, want the store's write with the empty defaults", twin)
 	}
 
-	if err := env.Repo.CreateModelEndpoint(ctx, &core.ModelEndpoint{
+	if err := store.InsertModelEndpoint(ctx, env.ORM, &core.ModelEndpoint{
 		ID: "me-daemon", UserID: owner, Name: "a-daemon", BaseURL: "http://localhost:11434", Route: core.ModelEndpointRouteViaDaemon,
 		DaemonID: strp("daemon-1"), CredentialConnectionID: strp("conn-1"), HeaderNames: []string{"X-Org", "X-Team"},
 		ModelsJSON: `[{"id":"llama"}]`, ProbeJSON: `{"ok":true}`,
@@ -67,7 +68,7 @@ func TestModelEndpointQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListModelEndpoints: %v", err)
 	}
-	twinListed, err := env.Repo.ListModelEndpoints(ctx, owner)
+	twinListed, err := store.ListModelEndpoints(ctx, env.ORM, owner)
 	if err != nil {
 		t.Fatalf("Repo.ListModelEndpoints: %v", err)
 	}
@@ -85,7 +86,7 @@ func TestModelEndpointQueries(t *testing.T) {
 	if err := store.ReplaceModelEndpoint(ctx, env.ORM, replace); err != nil {
 		t.Fatalf("ReplaceModelEndpoint: %v", err)
 	}
-	twin, err = env.Repo.GetModelEndpoint(ctx, owner, "me-direct")
+	twin, err = store.GetModelEndpoint(ctx, env.ORM, owner, "me-direct")
 	if err != nil || twin.Name != "c-direct" || twin.BaseURL != "https://llm.example/v2" || len(twin.HeaderNames) != 1 || twin.ModelsJSON != `[{"id":"m"}]` ||
 		!twin.UpdatedAt.After(before) || !sameInstant(twin.UpdatedAt, replace.UpdatedAt) || !sameInstant(twin.CreatedAt, direct.CreatedAt) {
 		t.Fatalf("Repo.GetModelEndpoint after ReplaceModelEndpoint = %+v, %v", twin, err)
@@ -96,7 +97,7 @@ func TestModelEndpointQueries(t *testing.T) {
 	if err := store.ReplaceModelEndpoint(ctx, env.ORM, &core.ModelEndpoint{ID: "me-direct", UserID: owner, Name: "a-daemon", BaseURL: "x", Route: core.ModelEndpointRouteDirect}); !errors.Is(err, core.ErrModelEndpointNameTaken) {
 		t.Fatalf("ReplaceModelEndpoint(taken name) err = %v, want ErrModelEndpointNameTaken", err)
 	}
-	if err := env.Repo.UpdateModelEndpoint(ctx, &core.ModelEndpoint{ID: "me-daemon", UserID: owner, Name: "a-daemon", BaseURL: "http://localhost:1", Route: core.ModelEndpointRouteDirect}); err != nil {
+	if err := store.ReplaceModelEndpoint(ctx, env.ORM, &core.ModelEndpoint{ID: "me-daemon", UserID: owner, Name: "a-daemon", BaseURL: "http://localhost:1", Route: core.ModelEndpointRouteDirect}); err != nil {
 		t.Fatalf("Repo.UpdateModelEndpoint: %v", err)
 	}
 	got, err = store.GetModelEndpoint(ctx, env.ORM, owner, "me-daemon")
@@ -114,7 +115,7 @@ func TestModelEndpointQueries(t *testing.T) {
 	if err := store.SetModelEndpointProbe(ctx, env.ORM, other, "me-direct", `{"stolen":true}`); err != nil {
 		t.Fatalf("SetModelEndpointProbe(another user) = %v, want nil", err)
 	}
-	probed, err := env.Repo.GetModelEndpoint(ctx, owner, "me-direct")
+	probed, err := store.GetModelEndpoint(ctx, env.ORM, owner, "me-direct")
 	if err != nil || probed.ProbeJSON != `{"latency_ms":12}` || !probed.UpdatedAt.Equal(twin.UpdatedAt) || probed.Name != "c-direct" {
 		t.Fatalf("Repo.GetModelEndpoint after SetModelEndpointProbe = %+v, %v; want only probe_json changed", probed, err)
 	}
@@ -128,7 +129,7 @@ func TestModelEndpointQueries(t *testing.T) {
 	if err := store.RemoveModelEndpoint(ctx, env.ORM, owner, "me-direct"); !errors.Is(err, core.ErrModelEndpointNotFound) {
 		t.Fatalf("RemoveModelEndpoint(again) err = %v, want ErrModelEndpointNotFound", err)
 	}
-	if _, err := env.Repo.GetModelEndpoint(ctx, owner, "me-direct"); !errors.Is(err, core.ErrModelEndpointNotFound) {
+	if _, err := store.GetModelEndpoint(ctx, env.ORM, owner, "me-direct"); !errors.Is(err, core.ErrModelEndpointNotFound) {
 		t.Fatalf("Repo.GetModelEndpoint after RemoveModelEndpoint err = %v", err)
 	}
 }
@@ -163,23 +164,19 @@ func TestProjectConfigQueries(t *testing.T) {
 	if err := store.UpsertProjectConfigRecord(ctx, env.ORM, rec); err != nil {
 		t.Fatalf("UpsertProjectConfigRecord: %v", err)
 	}
-	twin, err := env.Repo.GetProjectConfigRecord(ctx, project)
+	twin, err := store.GetProjectConfigRecord(ctx, env.ORM, project)
 	if err != nil {
-		t.Fatalf("Repo.GetProjectConfigRecord: %v", err)
+		t.Fatalf("GetProjectConfigRecord: %v", err)
 	}
 	if twin.ID != "pc-1" || twin.DaemonID != "daemon-1" || *twin.UserConfigYAML != "user: 1" || twin.LocalConfigYAML != nil || *twin.RuntimeType != "kata" ||
 		!twin.PushedAt.Equal(pushed) || twin.CreatedAt.IsZero() || *twin.ProjectSkillsJSON != `[{"skill":"big"}]` {
-		t.Fatalf("Repo.GetProjectConfigRecord = %+v, want the store's write", twin)
+		t.Fatalf("GetProjectConfigRecord = %+v, want the write", twin)
 	}
 	firstCreated := twin.CreatedAt
 
 	v1, err := store.GetProjectConfigVersion(ctx, env.ORM, project)
 	if err != nil {
 		t.Fatalf("GetProjectConfigVersion: %v", err)
-	}
-	twinV1, err := env.Repo.GetProjectConfigVersion(ctx, project)
-	if err != nil || twinV1 != v1 {
-		t.Fatalf("Repo.GetProjectConfigVersion = %q, %v; want the store's %q", twinV1, err, v1)
 	}
 	at, err := store.GetProjectConfigPushedAt(ctx, env.ORM, project)
 	if err != nil || !at.Equal(pushed) {
@@ -206,14 +203,10 @@ func TestProjectConfigQueries(t *testing.T) {
 			t.Fatalf("project config column %s = %v, %v; want %s", name, got, err, want)
 		}
 	}
-	if tw, err := env.Repo.GetProjectWorkflowsJSON(ctx, project); err != nil || *tw != `[{"name":"wf"}]` {
-		t.Fatalf("Repo.GetProjectWorkflowsJSON = %v, %v", tw, err)
-	}
-
-	// The Repository rewrites the record: every column but id and created_at
+	// A second upsert rewrites the record: every column but id and created_at
 	// is replaced, a NULL included, and the version token moves.
-	if err := env.Repo.UpsertProjectConfigRecord(ctx, &core.ProjectConfigRecord{ID: "pc-ignored", ProjectID: project, DaemonID: "daemon-2", LocalConfigYAML: strp("local: 1")}); err != nil {
-		t.Fatalf("Repo.UpsertProjectConfigRecord: %v", err)
+	if err := store.UpsertProjectConfigRecord(ctx, env.ORM, &core.ProjectConfigRecord{ID: "pc-ignored", ProjectID: project, DaemonID: "daemon-2", LocalConfigYAML: strp("local: 1")}); err != nil {
+		t.Fatalf("UpsertProjectConfigRecord: %v", err)
 	}
 	got, err := store.GetProjectConfigRecord(ctx, env.ORM, project)
 	if err != nil {
@@ -221,7 +214,7 @@ func TestProjectConfigQueries(t *testing.T) {
 	}
 	if got.ID != "pc-1" || got.DaemonID != "daemon-2" || got.UserConfigYAML != nil || *got.LocalConfigYAML != "local: 1" || got.ProjectWorkflowsJSON != nil ||
 		got.RuntimeType != nil || !got.CreatedAt.Equal(firstCreated) || !got.PushedAt.After(pushed) {
-		t.Fatalf("GetProjectConfigRecord after the Repository's upsert = %+v", got)
+		t.Fatalf("GetProjectConfigRecord after the second upsert = %+v", got)
 	}
 	if wf, err := store.GetProjectWorkflowsJSON(ctx, env.ORM, project); err != nil || wf != nil {
 		t.Fatalf("GetProjectWorkflowsJSON after the column was cleared = %v, %v; want (nil, nil)", wf, err)

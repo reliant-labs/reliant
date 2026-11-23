@@ -12,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	project "github.com/reliant-labs/reliant/internal/handlers/project"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 )
 
 func TestListProjectDaemonsForDaemon_Generated(t *testing.T) {
@@ -19,13 +20,14 @@ func TestListProjectDaemonsForDaemon_Generated(t *testing.T) {
 
 	// d-1 holds the caller's p-1 and another user's p-2.
 	store := ownedProjectRepo(t)
-	store.ListProjectDaemonsForDaemonFunc = func(_ context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
+	installs := &project.MockDaemonInstalls{}
+	installs.ListProjectDaemonsForDaemonFunc = func(_ context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
 		return []*core.ProjectDaemon{
 			{ProjectID: "p-1", DaemonID: daemonID, Path: "/work"},
 			{ProjectID: "p-2", DaemonID: daemonID, Path: "/theirs"},
 		}, nil
 	}
-	svc := newService(t, store, nil)
+	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Installs: installs}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListProjectDaemonsForDaemonRequest, pb.ListProjectDaemonsForDaemonResponse]{
 		{

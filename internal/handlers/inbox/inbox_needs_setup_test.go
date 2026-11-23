@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,7 +39,7 @@ func (f *inboxFixture) saveReviewWorkflow(t *testing.T, yaml string) {
 	existing, err := f.repo.GetWorkflowDraftBySlug(f.ctx, f.userID, "review")
 	require.NoError(t, err)
 	if existing != nil {
-		require.NoError(t, f.repo.UpdateWorkflowDraftDefinition(f.ctx, existing.ID, "review", "review", yaml, db.WorkflowDraftStatusComplete))
+		require.NoError(t, workflowdraftstest.New(t, f.repo).UpdateWorkflowDraftDefinition(f.ctx, existing.ID, "review", "review", yaml, db.WorkflowDraftStatusComplete))
 		return
 	}
 	require.NoError(t, f.repo.CreateWorkflowDraft(f.ctx, &db.WorkflowDraft{

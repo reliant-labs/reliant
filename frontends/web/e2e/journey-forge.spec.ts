@@ -167,12 +167,13 @@ test.describe('the forge journey in the forge shell', () => {
     await atStep(page, 1, 11, 'What is Forge?');
   });
 
-  test('?journey=workflows offers Reliant and runs no journey here', async ({ page }) => {
+  test('?journey=workflows points at the Workflows area and runs no journey here', async ({ page }) => {
     await mockForgeShellSignedOut(page);
     await page.goto('/forge/demo?shell=forge&journey=workflows', { waitUntil: 'domcontentloaded' });
     const offer = page.getByTestId('forge-workflows-offer');
     await expect(offer).toBeVisible(LOADED);
-    await expect(offer.getByRole('link', { name: 'Open Reliant' })).toHaveAttribute('href', `${RELIANT_ORIGIN}/?journey=workflows`);
+    // One shell: the Workflows area is this app's own page, never another origin.
+    await expect(offer.getByRole('link', { name: 'Open Workflows' })).toHaveAttribute('href', '/workflows/library');
     await expect(page.getByTestId('tour-controls')).toHaveCount(0);
 
     // ?tour=workflows is not a journey in this shell either.

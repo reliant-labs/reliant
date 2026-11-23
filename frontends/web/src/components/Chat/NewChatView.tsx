@@ -75,6 +75,13 @@ import { PendingFirstMessage } from "./PendingFirstMessage";
 import { useCurrentWorktree, useCachedWorktrees, getCachedWorktree } from "../../hooks/worktree-queries";
 import { useNewChatMachineStore } from "../../store/newChatMachineStore";
 import { patchNewChatUrl } from "../../lib/chatRoute";
+import { newChatAppFor, useNewChatAppStore } from "../../store/newChatAppStore";
+import { NewChatAppTag } from "../Projects/ChatAppTag";
+import {
+  OPEN_CREATE_WORKTREE_EVENT,
+  clearCreateWorktreeRequest,
+  createWorktreeRequested,
+} from "../Onboarding/checklistRequests";
 
 // Text handed back after a failed start goes through the composer's prefill.
 // Its ids count up from here, so they can never equal a host's prefill id
@@ -106,6 +113,12 @@ interface NewChatViewProps {
    * thing already, like the workflow editor's.
    */
   showProjectChip?: boolean;
+  /**
+   * Show, and send, the app the chat is about when a screen started it from
+   * one (newChatAppStore): the app console's "Start a chat here", Ask
+   * Reliant. Off for a host whose chat is about something else already.
+   */
+  showAppTag?: boolean;
 }
 
 export function NewChatView({
@@ -117,6 +130,7 @@ export function NewChatView({
   heading,
   welcomePanel,
   showProjectChip = false,
+  showAppTag = false,
 }: NewChatViewProps) {
   const [isCreating, setIsCreating] = useState(false);
   // The message being sent while StartChat is in flight (PendingFirstMessage).
@@ -210,6 +224,9 @@ export function NewChatView({
     if (!keep) setMachineChoice(null);
   }
   const requestedMachine = useNewChatMachineStore((state) => state.pending);
+  // The app this chat starts from, for this project only (newChatAppStore).
+  const appTag = useNewChatAppStore((state) => state.tag);
+  const appName = showAppTag ? newChatAppFor(appTag, currentProject?.id) : undefined;
   // A branch workspace is a checkout on one machine, so selecting one selects
   // its machine (lib/workspaceMachine.ts); the server refuses anything else.
   const machineIds = new Set(daemons.map((d) => d.daemonId));
@@ -400,7 +417,9 @@ export function NewChatView({
         .startChat(chatWorktreeId, content, attachmentIds, workflowParams, workflow, undefined, {
           daemonId,
           noMachine: startNoMachine,
-        });
+        }, { appName });
+      // The tag was for this chat; the next new chat is about no app.
+      if (appName) useNewChatAppStore.getState().clear();
 
       trackEvent('chat_created', {
         has_attachments: Boolean(attachmentIds?.length),
@@ -444,12 +463,22 @@ export function NewChatView({
     }
   };
 
-  // Listen for checklist-triggered worktree creation
+  // The Setup Guide's "Create a workspace": a request made while this view is
+  // mounted arrives as the event; one made from another page is waiting when
+  // the guide brings the person here, until the modal closes (checklistRequests.ts).
   useEffect(() => {
-    const handler = () => setShowCreateWorktreeModal(true);
-    window.addEventListener("open-create-worktree-modal", handler);
-    return () => window.removeEventListener("open-create-worktree-modal", handler);
+    const handler = () => {
+      clearCreateWorktreeRequest();
+      setShowCreateWorktreeModal(true);
+    };
+    window.addEventListener(OPEN_CREATE_WORKTREE_EVENT, handler);
+    if (createWorktreeRequested()) setShowCreateWorktreeModal(true);
+    return () => window.removeEventListener(OPEN_CREATE_WORKTREE_EVENT, handler);
   }, []);
+  const closeCreateWorktreeModal = () => {
+    clearCreateWorktreeRequest();
+    setShowCreateWorktreeModal(false);
+  };
 
   const handleWorktreeCreated = async (worktreeId: string) => {
     setShowWorkspaceDropdown(false);
@@ -580,6 +609,14 @@ export function NewChatView({
                     }
                     installs={installRows}
                   />
+                )}
+
+                {/* The app the chat is about, when it was started from one. */}
+                {appName && (
+                  <NewChatAppTag name={appName} disabled={isCreating} onRemove={() => {
+                      useNewChatAppStore.getState().clear();
+                      patchNewChatUrl({ app: undefined });
+                    }} />
                 )}
 
                 {canPickMachine && (
@@ -839,7 +876,7 @@ export function NewChatView({
         <>
           <CreateWorktreeModal
             isOpen={showCreateWorktreeModal}
-            onClose={() => setShowCreateWorktreeModal(false)}
+            onClose={closeCreateWorktreeModal}
             onWorktreeCreated={handleWorktreeCreated}
             projectId={currentProject.id}
             daemonId={workspaceMachineId}

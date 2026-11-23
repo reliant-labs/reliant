@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
+
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A compaction summary replaces the turns before it for LLM context, but those
@@ -40,7 +42,7 @@ func TestDisplayCrossesCompactionIntoInheritedHistory(t *testing.T) {
 	h.addMessageWithID("bm-1", branchChat, branchThread.ID, branchCW.ID, 0, 1)
 	h.addMessageWithID("bm-2", branchChat, branchThread.ID, branchCW.ID, 1, 2)
 
-	svc := NewService(h.repo)
+	svc := New(Deps{Repo: h.repo, Messages: store.NewMessageExtStore(h.repo.ORM()), Senders: store.NewThreadExtStore(h.repo.ORM())})
 
 	before, err := svc.LoadDisplayMessages(ctx, branchThread.ID)
 	if err != nil {
@@ -135,7 +137,7 @@ func TestDisplayCrossingCompactionKeepsParentWindowMessages(t *testing.T) {
 	cw2 := h.compact(thread.ID, summary2.ID)
 	add("new-a", cw2.ID, 1)
 
-	svc := NewService(h.repo)
+	svc := New(Deps{Repo: h.repo, Messages: store.NewMessageExtStore(h.repo.ORM()), Senders: store.NewThreadExtStore(h.repo.ORM())})
 
 	display, err := svc.LoadDisplayMessages(ctx, thread.ID)
 	if err != nil {
@@ -208,7 +210,7 @@ func TestCountDisplayMessagesMatchesDisplayLoad(t *testing.T) {
 	cw2 := h.compact(thread.ID, summary2.ID)
 	add("c-new-a", cw2.ID, 1)
 
-	svc := NewService(h.repo)
+	svc := New(Deps{Repo: h.repo, Messages: store.NewMessageExtStore(h.repo.ORM()), Senders: store.NewThreadExtStore(h.repo.ORM())})
 
 	display, err := svc.LoadDisplayMessages(ctx, thread.ID)
 	if err != nil {
@@ -256,7 +258,7 @@ func TestCountDisplayMessagesForkAcrossCompaction(t *testing.T) {
 		"fork-count-branch-thread", branchChat, parentThread.ID, parentOrdinal, compactedCW.ID)
 	h.addMessageWithID("fc-b-1", branchChat, branchThread.ID, branchCW.ID, 0, 1)
 
-	svc := NewService(h.repo)
+	svc := New(Deps{Repo: h.repo, Messages: store.NewMessageExtStore(h.repo.ORM()), Senders: store.NewThreadExtStore(h.repo.ORM())})
 
 	display, err := svc.LoadDisplayMessages(ctx, branchThread.ID)
 	if err != nil {

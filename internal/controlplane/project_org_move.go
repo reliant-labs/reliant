@@ -34,8 +34,9 @@ const (
 	ReasonMoveNotPrepared             = "move_not_prepared"
 )
 
-// ErrProjectOrgMoveUnsupported is a control plane without the service, or an
-// adapter with no internal-service identity to call it with.
+// ErrProjectOrgMoveUnsupported is a control plane without the service (a
+// deployment where project moves are not configured answers Unimplemented),
+// or an adapter with no internal-service identity to call it with.
 var ErrProjectOrgMoveUnsupported = errors.New("controlplane: moving a project between organizations is not available")
 
 // ProjectOrgMoveStep names one move in control-plane's rpcs.
@@ -135,7 +136,6 @@ type ProjectOrgMovePreview struct {
 
 // PreviewProjectOrgMove reads what control-plane holds that the move would
 // touch. It checks q.ActorUserID's authority as PrepareProjectOrgMove does.
-// A control plane that predates the rpc is ErrProjectOrgMoveUnsupported.
 func (c *client) PreviewProjectOrgMove(ctx context.Context, q ProjectOrgMovePreviewQuery) (*ProjectOrgMovePreview, error) {
 	in := map[string]any{
 		"projectId": q.ProjectID, "fromOrgId": q.FromOrgID, "toOrgId": q.ToOrgID,

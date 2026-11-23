@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -98,7 +99,7 @@ func (s *Service) findPriorSend(ctx context.Context, chat *db.Chat, id, userCont
 		return nil, nil
 	}
 
-	msg, err := s.deps.Repo.FindMessage(ctx, id)
+	msg, err := s.deps.Messages.FindMessage(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("check for an earlier send: %w", err)
 	}
@@ -113,10 +114,11 @@ func (s *Service) findPriorSend(ctx context.Context, chat *db.Chat, id, userCont
 		if !same {
 			return nil, launch.ErrClientMessageReused
 		}
-		latest, err := s.deps.Repo.IsLatestTurnInThread(ctx, msg.ThreadID, msg.ID)
+		turn, err := s.deps.Messages.LatestTurnInThread(ctx, msg.ThreadID)
 		if err != nil {
 			return nil, fmt.Errorf("check whether the earlier send was answered: %w", err)
 		}
+		latest := turn != nil && turn.ID == msg.ID
 		return &priorSend{history: msg, settled: !latest}, nil
 	}
 
@@ -281,7 +283,7 @@ var errSendAlreadySaved = errors.New("send already saved")
 // message queued to a running thread (the thread's next turn drains that into
 // history, so it must not be saved a second time).
 func (s *Service) savedSendID(ctx context.Context, chatID, id string) (string, error) {
-	msg, err := s.deps.Repo.FindMessage(ctx, id)
+	msg, err := s.deps.Messages.FindMessage(ctx, id)
 	if err != nil {
 		return "", fmt.Errorf("check for an earlier send: %w", err)
 	}

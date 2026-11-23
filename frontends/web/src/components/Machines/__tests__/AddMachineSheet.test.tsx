@@ -181,6 +181,6 @@ describe("AddMachineSheet", () => {
     await act(async () => {
       await user.click(screen.getByRole("button", { name: "Approve my laptop" }));
     });
-    expect(onReady).toHaveBeenCalledWith({ daemonId: "d-self", name: "Your machine" });
+    expect(onReady).toHaveBeenCalledWith({ daemonId: "d-self", name: "Your sandbox" });
   });
 });

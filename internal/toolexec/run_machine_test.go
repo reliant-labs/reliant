@@ -117,6 +117,7 @@ func TestWorktreeTool_RunsGitOnTheRunsMachine(t *testing.T) {
 	executor := NewRemoteExecutor(router)
 	executor.SetServerExecutor(NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:       database,
+		Placement:  database,
 		RunMachine: NewRunMachine(router),
 	})))
 

@@ -32,7 +32,10 @@
 import { useCallback, useMemo, useState } from "react";
 import { Globe, Plus } from "lucide-react";
 
-import EmptyState from "@/components/forge-ui/empty_state";
+import { ProjectEmptyCta } from "@/components/EmptyState/ProjectEmptyCta";
+import { DeployWithAgentButton } from "@/components/Forge/Observability/AskReliant/AskReliant";
+
+import Button from "@/components/forge-ui/button";
 import PageHeader from "@/components/forge-ui/page_header";
 import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
 import {
@@ -60,9 +63,10 @@ import { AddDomainDialog, type DomainTargetEnv } from "./AddDomainDialog";
 import { DomainDetail } from "./DomainDetail";
 import { DomainStateBadge } from "./DomainStateBadge";
 import { useObsReadOnly } from "../Observability/obsReadOnly";
+import { learnUrl } from "@/lib/learnLinks";
 
 /** Where the tenant-facing explanation of all this lives. */
-export const CUSTOM_DOMAINS_DOCS_URL = "https://docs.reliantlabs.io/features/custom-domains";
+export const CUSTOM_DOMAINS_DOCS_URL = learnUrl("domains");
 
 export function ForgeDomainsPage() {
   // Domains are the ORGANIZATION's, so the top-bar environment scope does not
@@ -215,13 +219,22 @@ export function ForgeDomainsPage() {
       {isLoading && domains.length === 0 ? (
         <p className="text-sm text-ink-muted">Loading domains…</p>
       ) : domains.length === 0 ? (
-        <EmptyState
-          icon={<Globe className="h-7 w-7" aria-hidden="true" />}
+        <ProjectEmptyCta
+          testId="domains-empty"
+          icon={<Globe />}
           title="No custom domains yet"
-          description="Your organization holds no domains. Add one to serve this project on a hostname you own instead of the generated one."
-          actionLabel={lock.readOnly ? undefined : "Add domain"}
-          onAction={() => setAddOpen(true)}
-        />
+          action={
+            lock.readOnly ? undefined : (
+              <Button variant="primary" size="md" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setAddOpen(true)}>
+                Add domain
+              </Button>
+            )
+          }
+          deploy={<DeployWithAgentButton env={null} />}
+          learn="domains"
+        >
+          <p>Your organization holds no domains. Add one to serve this project on a hostname you own instead of the generated one.</p>
+        </ProjectEmptyCta>
       ) : (
         <ul className="flex flex-col gap-2" aria-label="Custom domains">
           {domains.map((domain) => {

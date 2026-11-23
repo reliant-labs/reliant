@@ -45,12 +45,17 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/planningtest"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
@@ -200,7 +205,7 @@ func requireStack(t *testing.T) *Stack {
 			stackErr = fmt.Errorf("init model registry: %w", err)
 			return
 		}
-		drivers.InitializeAPIKeyProvider(repo)
+		drivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 
 		stack = &Stack{Repo: repo, Temporal: tc}
 	})
@@ -333,7 +338,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		LastActive: now,
 	}), "create story project's main worktree")
 
-	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: s.Repo})
+	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: s.Repo, Planning: planningtest.New(t, s.Repo)})
 
 	executor := cfg.toolExecutor
 	if executor == nil {
@@ -354,9 +359,8 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// The launcher a trigger fire launches through, built the way the worker
 	// builds it (internal/app NewRunLauncher). nil prober: triggers never ask for a
 	// greenfield probe.
-	pause := workflow.NewPauseService(s.Temporal, s.Repo)
-	triggerLauncher := launch.NewLauncher(s.Repo, threads.NewService(s.Repo), s.Temporal,
-		runs.NewService(s.Repo, s.Temporal, pause), taskQueue)
+	pause := workflow.NewPauseService(workflow.PauseServiceDeps{Temporal: s.Temporal, Store: s.Repo, Workflows: store.NewWorkflowExtStore(s.Repo.ORM())})
+	triggerLauncher := launch.New(launch.Deps{Store: s.Repo, Workflows: store.NewWorkflowExtStore(s.Repo.ORM()), Worktrees: store.NewWorktreeExtStore(s.Repo.ORM()), ProjectRows: store.NewProjectExtStore(s.Repo.ORM()), Projects: projectaccess.NewFromORM(s.Repo.ORM()), Selections: store.NewChatSelectionExtStore(s.Repo.ORM()), Threads: threads.New(threads.Deps{Repo: s.Repo, Messages: store.NewMessageExtStore(s.Repo.ORM()), Senders: store.NewThreadExtStore(s.Repo.ORM())}), Temporal: s.Temporal, Runs: runs.New(runs.Deps{Repo: s.Repo, Workflows: store.NewWorkflowExtStore(s.Repo.ORM()), Questions: store.NewQuestionExtStore(s.Repo.ORM()), Temporal: s.Temporal, Pause: pause}), TaskQueue: launch.TaskQueue(taskQueue)})
 
 	progress := &atomic.Int64{}
 	temporalWorker, _, err := workersetup.NewWorker(&workersetup.Config{
@@ -370,7 +374,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		ToolExecutor:    executor,
 		DaemonRouter:    nil, // hermetic: no daemon transport; worktree ops unavailable
 		MCPBinder:       mcpBinder,
-		ConfigProvider:  config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(s.Repo)),
+		ConfigProvider:  config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(configadapter.NewORMRecordReader(s.Repo.ORM()))),
 		DriverResolver:  resolver,
 		TaskQueueSuffix: taskQueueSuffix,
 		TriggerLauncher: triggerLauncher,
@@ -400,35 +404,47 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// No Router: these stories run without a daemon, so there is no tool to
 	// cancel on interrupt and no machine to wake for an attended turn.
 	chatSvc, err := chat.New(chat.Deps{
-		Logger:   slog.Default(),
-		Config:   &typedconfig.Config{},
-		Repo:     s.Repo,
-		Temporal: s.Temporal,
-		Pause:    pause,
+		Logger:     slog.Default(),
+		Config:     &typedconfig.Config{},
+		Repo:       s.Repo,
+		Backoff:    providerbackofftest.New(t, s.Repo),
+		Questions:  store.NewQuestionExtStore(s.Repo.ORM()),
+		Spawns:     store.NewToolCallExtStore(s.Repo.ORM()),
+		Selections: store.NewChatSelectionExtStore(s.Repo.ORM()),
+		Messages:   store.NewMessageExtStore(s.Repo.ORM()),
+		ToolBlocks: store.NewMessageContentBlockExtStore(s.Repo.ORM()),
+		Senders:    store.NewThreadExtStore(s.Repo.ORM()),
+		Temporal:   s.Temporal,
+		Pause:      pause,
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
-		Logger:   slog.Default(),
-		Config:   &typedconfig.Config{},
-		Repo:     s.Repo,
-		Signals:  pause,
-		Messages: chatSvc,
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Repo:      s.Repo,
+		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
+		Signals:   pause,
+		Messages:  chatSvc,
 	})
 	require.NoError(t, err, "question service")
 	approvalSvc, err := approval.New(approval.Deps{
 		Logger:  slog.Default(),
 		Config:  &typedconfig.Config{},
 		Repo:    s.Repo,
+		Chats:   store.NewChatExtStore(s.Repo.ORM()),
 		Signals: pause,
 	})
 	require.NoError(t, err, "approval service")
-	triggerSyncer, triggerFires := trigger.TemporalBackend(s.Temporal, s.Repo, taskQueue, nil)
+	triggerSyncer, triggerFires := trigger.TemporalBackend(s.Temporal, triggers.NewStores(s.Repo), taskQueue, nil)
 	triggerSvc, err := trigger.New(trigger.Deps{
-		Logger: slog.Default(),
-		Config: &typedconfig.Config{},
-		Repo:   s.Repo,
-		Syncer: triggerSyncer,
-		Fires:  triggerFires,
+		Logger:   slog.Default(),
+		Config:   &typedconfig.Config{},
+		Repo:     s.Repo,
+		Projects: projectaccess.NewFromORM(s.Repo.ORM()),
+		OrgMoves: store.NewProjectOrgMoveExtStore(s.Repo.ORM()),
+		Pools:    store.NewMachinePoolExtStore(s.Repo.ORM()),
+		Syncer:   triggerSyncer,
+		Fires:    triggerFires,
 	})
 	require.NoError(t, err, "trigger service")
 
@@ -806,7 +822,7 @@ func (h *Harness) WaitPendingQuestion(chatID string) *db.Question {
 // NewestPendingQuestion returns the chat's newest pending question, or nil.
 func (h *Harness) NewestPendingQuestion(chatID string) (*db.Question, error) {
 	// Oldest first: the newest pending question is the last.
-	pending, err := h.Stack.Repo.ListPendingQuestionsByChat(h.Ctx, chatID)
+	pending, err := store.NewQuestionExtStore(h.Stack.Repo.ORM()).ListPendingQuestionsByChat(h.Ctx, chatID)
 	if err != nil || len(pending) == 0 {
 		return nil, err
 	}

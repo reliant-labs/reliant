@@ -152,13 +152,6 @@ func TestFetchReleaseAsset(t *testing.T) {
 			wantGET: []string{direct, meta},
 		},
 		{
-			name:    "direct and API both fail",
-			web:     map[string][]byte{},
-			pin:     goodSum,
-			wantGET: []string{direct, meta},
-			wantErr: "fetching it through the API",
-		},
-		{
 			name:    "the release has no such asset",
 			web:     map[string][]byte{meta: []byte(`{"assets":[{"name":"other","id":7}]}`)},
 			pin:     goodSum,

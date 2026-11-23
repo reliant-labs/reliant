@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"go.temporal.io/sdk/activity"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -16,7 +18,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
 )
 
 // errDrainBatchTaken signals that another writer claimed part of this drain's
@@ -49,11 +50,11 @@ type DrainAgentMessagesOutput = types.DrainAgentMessagesOutput
 // keeps history always consistent at the point this activity runs.
 type DrainAgentMessagesActivity struct {
 	repo    DrainAgentMessagesStore
-	threads *threads.Service
+	threads MessageSaver
 }
 
 // NewDrainAgentMessagesActivity creates a new DrainAgentMessagesActivity.
-func NewDrainAgentMessagesActivity(repo DrainAgentMessagesStore, threadsSvc *threads.Service) *DrainAgentMessagesActivity {
+func NewDrainAgentMessagesActivity(repo DrainAgentMessagesStore, threadsSvc MessageSaver) *DrainAgentMessagesActivity {
 	return &DrainAgentMessagesActivity{repo: repo, threads: threadsSvc}
 }
 
@@ -96,8 +97,31 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 	// inside each SaveMessage joins this one rather than opening its own —
 	// partial delivery (envelope written, bodies lost, rows still queued) is
 	// not a state any reader has to cope with.
+	//
+	// READ COMMITTED, because every invariant this transaction keeps is held
+	// by a lock or a single statement, not by SERIALIZABLE's proof:
+	//   - ownership of the batch is the claim below, one conditional UPDATE
+	//     (status = 1 only, RETURNING the ids it moved): a concurrent claimer,
+	//     "Send now" or cancel holds the row lock, and on release this
+	//     statement re-checks status = 1 against the row's latest version, so
+	//     exactly one writer takes each row;
+	//   - the message rows and their chat_updates are SaveMessageAtomic's own
+	//     single-statement write, designed to run READ COMMITTED (its seq
+	//     allocation is self-healing on 23505, which the attempt budget below
+	//     retries);
+	//   - the delivered_message_id backfill touches only rows this transaction
+	//     already claimed.
+	// SERIALIZABLE turned that READ COMMITTED message write SERIALIZABLE
+	// (RunTx is re-entrant, so the inner one joins this one), and drains on
+	// several threads of one chat at once — an orchestrator's sub-agents all
+	// reaching a turn — then aborted one another with SQLSTATE 40001 "could
+	// not serialize access due to concurrent update" on the per-chat rows
+	// every message write updates, until one ran out of attempts and its
+	// queued messages missed the turn (prod 53e2370c, "failed to save mailbox
+	// envelope"; TestDrainAgentMessages_ConcurrentDrainsInOneChatDoNotConflict).
 	var envelopeMessageID string
-	err = a.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	drainTx := orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)
+	err = a.repo.RunTx(ctx, drainTx, func(txCtx context.Context) error {
 		// Claim the rows BEFORE writing anything they would produce.
 		//
 		// The list above is a plain read outside this transaction, so two drains
@@ -262,7 +286,7 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 		// in the strip; emitting before would clear the strip against a
 		// transcript that has not shown them yet. Rolling back is safe --
 		// the rows stay queued and the next boundary re-drains them.
-		if err := a.repo.EmitAgentMessagesDrainedUpdate(txCtx, input.ChatID, db.AgentMessagesDrainedUpdate{
+		if err := db.EmitAgentMessagesDrainedUpdate(txCtx, a.repo, input.ChatID, db.AgentMessagesDrainedUpdate{
 			Thread:     input.Thread,
 			MessageIDs: ids,
 		}); err != nil {

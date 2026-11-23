@@ -25,7 +25,7 @@ func (s *Service) SetProjectVisibility(
 		return nil, err
 	}
 	ctx = authz.WithViewerReads(ctx)
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.GetProjectId())
+	project, err := s.deps.Projects.GetProject(ctx, req.Msg.GetProjectId())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
@@ -35,13 +35,13 @@ func (s *Service) SetProjectVisibility(
 	}
 	changed := false
 	if authz.ProjectVisibility(project) != to {
-		if changed, err = s.deps.Repo.ApplyShareChange(ctx, change); err != nil {
+		if changed, err = s.applyShareChange(ctx, change); err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to change who can read the project"))
 		}
 	}
 	resp := &pb.SetProjectVisibilityResponse{Changed: changed}
 	// One decision shapes it (authz.ReadProjectAccess).
-	if after, err := s.deps.Repo.GetProject(ctx, project.ID); err == nil {
+	if after, err := s.deps.Projects.GetProject(ctx, project.ID); err == nil {
 		if access, denied := authz.ReadProjectAccess(ctx, userID, after); denied == nil {
 			resp.Project = projectproto.Project(after)
 			if access.Viewer() {

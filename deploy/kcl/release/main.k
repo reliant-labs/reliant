@@ -36,16 +36,23 @@ own image already goes.
 
 THE VERSION STAMP. A release build stamps internal/version from
 scripts/release-identity.sh, which KCL cannot run, so the values are render
-options: each becomes one of the Dockerfile's build args, exactly as
-build-images.yml passes them. Unset, each takes the Dockerfile's own ARG
-default, the value a plain `docker build .` stamps:
+options: each becomes one of the Dockerfile's build args. Unset, each takes
+the Dockerfile's own ARG default, the value a plain `docker build .` stamps:
 
-    forge env build release --target reliant-image --docker \\
+    forge env build release --target reliant-image --release <v> \\
       -D stamp_version="$(bash scripts/release-identity.sh --commit HEAD)" \\
       -D stamp_commit="$(git rev-parse HEAD)" \\
-      -D stamp_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \\
       -D stamp_branch="$(git rev-parse --abbrev-ref HEAD)" \\
       -D stamp_commit_time="$(bash scripts/release-identity.sh --commit-time --commit HEAD)"
+
+Every stamp is a function of the commit, never of the clock: BUILD_DATE
+(internal/version.Date, what `reliant version` prints as "built") is the
+commit time as RFC 3339 UTC, derived from stamp_commit_time, so it agrees with
+the build number and with SOURCE_DATE_EPOCH. That is what lets a second
+release of an unchanged commit reuse the first one's image (the image's
+`inputs`, in workloads.k): forge keys the reuse on the build args, so a
+wall-clock date would rebuild on every cut. stamp_date still overrides it, but
+any value that differs per build defeats the reuse.
 
 Given the same five values, the binary is byte for byte the one a plain
 `docker build --build-arg ...` of the same tree compiles, and on a shared
@@ -62,12 +69,14 @@ import ..dev_sign_in as dsi
 
 # ── The version stamp (render options) ──────────────────────────────────────
 # Defaults are the Dockerfile's ARG defaults.
+_commit_time = option("stamp_commit_time", type="str", default="0", help="internal/version.CommitTime: release-identity.sh --commit-time (0 = unordered); also sets internal/version.Date")
+_date = option("stamp_date", type="str", default="", help="internal/version.Date override, RFC 3339 UTC (default: the commit time, from stamp_commit_time; a per-build value defeats image reuse)")
 _stamp = {
     VERSION = option("stamp_version", type="str", default="dev", help="internal/version.Version: scripts/release-identity.sh's output (default: the Dockerfile's \"dev\")")
     COMMIT = option("stamp_commit", type="str", default="unknown", help="internal/version.Commit: the full commit sha")
-    BUILD_DATE = option("stamp_date", type="str", default="unknown", help="internal/version.Date: the build time, RFC 3339 UTC")
+    BUILD_DATE = _date or wl.commit_date(_commit_time)
     BRANCH = option("stamp_branch", type="str", default="unknown", help="internal/version.Branch: the ref the build is from")
-    COMMIT_TIME = option("stamp_commit_time", type="str", default="0", help="internal/version.CommitTime: release-identity.sh --commit-time (0 = unordered)")
+    COMMIT_TIME = _commit_time
 }
 
 # ── The artifacts ───────────────────────────────────────────────────────────

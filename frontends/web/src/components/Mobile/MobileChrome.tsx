@@ -257,6 +257,9 @@ export function MobileEmptyState({
  * Primary action button sized for a thumb.
  *
  * 48px explicit, for the same root-font-size reason as `MobileBackButton`.
+ * `no-color`: most call sites are links, and the global `a:not(.no-color)`
+ * colour (index.css) beats `text-primary-foreground`, leaving the label blue
+ * on blue.
  */
 export const MOBILE_PRIMARY_ACTION =
-  "flex min-h-[48px] items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground active:opacity-80 disabled:opacity-60";
+  "no-color flex min-h-[48px] items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground active:opacity-80 disabled:opacity-60";

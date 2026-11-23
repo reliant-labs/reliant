@@ -127,7 +127,7 @@ func newRootDrainEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, turns
 		activity.RegisterOptions{Name: "SaveMessage"},
 	)
 
-	registry := NewActivityRegistry(&wrapperTestRepo{})
+	registry := NewActivityRegistry(ActivityRegistryDeps{Store: &wrapperTestRepo{}, Workflows: &wrapperTestRepo{}})
 	registry.SetMessageWriter(messageWriterFunc(func(_ context.Context, rtx types.RuntimeContext, args *reliantv1.SaveMessageNodeArgs, _ string, _ int32) (*reliantv1.SaveMessageOutput, error) {
 		record(args, rtx.Thread)
 		return &reliantv1.SaveMessageOutput{MessageId: "msg-save"}, nil

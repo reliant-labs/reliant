@@ -1,7 +1,8 @@
 /**
  * Chat fixtures: models, a sidebar's worth of chats (two projects, branched
  * chats, a long branch name, running / needs-input / failed / unread /
- * automation rows, an untitled chat), one short chat, and THE fixture chat
+ * automation rows, an untitled chat; two started from the shopfront app,
+ * so they carry its tag), one short chat, and THE fixture chat
  * (`CHAT_IDS.long`) that every chat surface and every chat restyle PR reads.
  * Ported from the November review's fixtures-chat-sidebars/20-chat-sidebars.js.
  *
@@ -76,13 +77,15 @@ const chat = (o: Chat & { ago: number }): Chat => {
 
 const CHATS = [
   chat({ id: CHAT_IDS.long, title: 'Refactor cart totals and fix multi-quantity discounts', activity: 'CHAT_ACTIVITY_RUNNING',
-    workflowState: 'WORKFLOW_STATE_ACTIVE', workflowStopReason: undefined, ago: 5000, workflowName: 'builtin://get-it-right' }),
+    workflowState: 'WORKFLOW_STATE_ACTIVE', workflowStopReason: undefined, ago: 5000, workflowName: 'builtin://get-it-right',
+    appName: 'shopfront' }),
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-00000000000b', title: 'Add rate limiting to /checkout', worktreeId: WORKTREES.rate.id, worktree: WORKTREES.rate,
     activity: 'CHAT_ACTIVITY_AWAITING_INPUT', workflowState: 'WORKFLOW_STATE_ACTIVE', ago: 2 * MIN }),
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-00000000000c', title: 'Load-test the limiter (spawned from rate limiting)', worktreeId: WORKTREES.rate.id,
     worktree: WORKTREES.rate, unread: true, ago: 40 * MIN }),
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-00000000000d', title: 'Retry Stripe webhooks with idempotency keys', worktreeId: WORKTREES.pay.id,
-    worktree: WORKTREES.pay, activity: 'CHAT_ACTIVITY_ERROR', workflowStopReason: 'WORKFLOW_STOP_REASON_FAILED', ago: 3 * HOUR }),
+    worktree: WORKTREES.pay, activity: 'CHAT_ACTIVITY_ERROR', workflowStopReason: 'WORKFLOW_STOP_REASON_FAILED', ago: 3 * HOUR,
+    appName: 'shopfront' }),
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-00000000000e', title: 'Nightly: triage failing CI', launchKind: 'trigger.schedule', triggerId: 'trg-nightly', ago: 7 * HOUR }),
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-00000000000f', title: 'Migrate order confirmation emails from inline HTML strings to MJML templates with snapshot tests', ago: 26 * HOUR }),
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-000000000010', title: '', ago: 3 * DAY }),

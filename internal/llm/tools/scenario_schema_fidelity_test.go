@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
-	"github.com/stretchr/testify/require"
 )
 
 // The scenario tools used to parse stored YAML into a private mirror of

@@ -118,11 +118,13 @@ export function OnboardingPage() {
             because onboarding suppresses the app Header and renders above
             every other surface — without it, a user whose setup cannot
             complete has no route to settings and no way to sign out. */}
-        <div className="relative flex items-center justify-between gap-4 border-b border-white/10 bg-white/[0.035] px-6 py-4">
+        {/* On a phone the row stacks: side by side, the escape hatch refused to
+            shrink and pushed Sign out past the card's clipped edge. */}
+        <div className="relative flex flex-col gap-3 border-b border-white/10 bg-white/[0.035] px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div className="flex-1">
             <ProgressBar steps={progressSteps} currentStepIndex={currentIndex} />
           </div>
-          <OnboardingEscapeHatch className="flex-shrink-0" />
+          <OnboardingEscapeHatch className="sm:flex-shrink-0" />
         </div>
 
         {/* Step content */}

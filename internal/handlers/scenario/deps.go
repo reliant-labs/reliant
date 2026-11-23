@@ -15,21 +15,32 @@ import (
 // workflows a scenario runs.
 type Repository interface {
 	GetProject(ctx context.Context, id string) (*db.Project, error)
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
-	GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error)
 	GetWorkflowScenario(ctx context.Context, id string) (*db.WorkflowScenario, error)
 	ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID string) ([]*db.WorkflowScenario, error)
 	CreateWorkflowScenario(ctx context.Context, scenario *db.WorkflowScenario) error
 	UpdateWorkflowScenarioResult(ctx context.Context, id string, status string, result string) error
 	DeleteWorkflowScenario(ctx context.Context, id string) error
 
-	GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
-	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
 	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
 
 	// Installs is each machine's checkout of the project and who owns each
 	// machine (projectcheckout.Resolve).
 	daemonplacement.Installs
+}
+
+// Drafts is the caller's saved workflows, each read scoped to what the caller
+// may see. workflowdrafts.Service satisfies it.
+type Drafts interface {
+	GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
+	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
+}
+
+// ProjectConfigs reads the synced project scenarios column of a project's
+// config record, and nothing else from it. It returns svcerr.NotFound when the
+// project has no record. store.ProjectConfigExtStore satisfies it.
+type ProjectConfigs interface {
+	GetProjectScenariosJSON(ctx context.Context, projectID string) (*string, error)
 }
 
 // Sender runs a command on the machine holding a project's checkout.

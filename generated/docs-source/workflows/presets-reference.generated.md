@@ -20,7 +20,7 @@ For usage information and examples, see the [Presets Guide](/docs/workflows/pres
 |--------|-------|-------|-------------|
 | `code_reviewer` | `tags:flagship` | `tag:shell`, `tag:web`, `view`, `code_context` | Code review orchestrator that spawns specialized reviewers for comprehensive ... |
 | `debug` | `tags:flagship` | `view`, `tag:shell`, `code_context` | Debugging orchestrator that coordinates research and testing to isolate bugs ... |
-| `documentation` | `tags:moderate` | `view`, `write`, `edit`, `tag:shell`, `fetch` | Documentation specialist creating comprehensive, narrative-driven technical d... |
+| `documentation` | `tags:moderate` | `view` (+5 more) | Documentation specialist creating comprehensive, narrative-driven technical d... |
 | `forge` | `tags:flagship` | `tag:coding:default` (+13 more) | Balanced general-purpose agent for Forge app generation workflows with full t... |
 | `forge_implementer` | `tags:moderate` | `tag:coding:default` (+2 more) | Implementation specialist for a single seam of a Forge app — same tier as `... |
 | `general` | `tags:flagship` | `tag:coding:default` (+2 more) | Balanced general-purpose agent with full tool access including file modificat... |
@@ -28,10 +28,10 @@ For usage information and examples, see the [Presets Guide](/docs/workflows/pres
 | `implementer` | `tags:moderate` | `tag:coding:default`, `prove_test` | Implementation specialist for well-specified code changes — follows detaile... |
 | `migrate` | `tags:flagship` | `tag:coding:default` | Guided migration assistant for moving from Claude Code, Cursor, Codex, or Win... |
 | `planner` | `tags:flagship` | `view`, `tag:shell`, `code_context`, `create_plan` | Strategic planner who orchestrates research and synthesizes actionable implem... |
-| `refactor` | `tags:moderate` | `view` (+6 more) | Code refactoring specialist who reorganizes and improves code structure while... |
+| `refactor` | `tags:moderate` | `view` (+7 more) | Code refactoring specialist who reorganizes and improves code structure while... |
 | `researcher` | `tags:flagship` | `tag:shell`, `tag:web`, `view`, `code_context` | Research and analysis specialist conducting comprehensive investigations of t... |
-| `tester` | `tags:moderate` | `view` (+5 more) | Testing specialist who creates test harnesses, writes comprehensive tests, an... |
-| `ux` | `tags:flagship` | `fetch` (+19 more) | User experience specialist focused on improving UI/UX design, accessibility, ... |
+| `tester` | `tags:moderate` | `view` (+6 more) | Testing specialist who creates test harnesses, writes comprehensive tests, an... |
+| `ux` | `tags:flagship` | `fetch` (+20 more) | User experience specialist focused on improving UI/UX design, accessibility, ... |
 | `workflow_builder` | `tags:flagship` | `tag:workflow` (+4 more) | Specialized assistant for building and modifying Reliant workflows |
 
 ## Preset Details
@@ -70,7 +70,7 @@ Documentation specialist creating comprehensive, narrative-driven technical docu
 |-----------|-------|
 | **Model** | `tags:moderate` |
 | **Tag** | `agent` |
-| **Tools** | `view`, `write`, `edit`, `tag:shell`, `fetch` |
+| **Tools** | `view`, `write`, `save_attachment`, `edit`, `tag:shell`, `fetch` |
 | **Spawn Presets** | `researcher` |
 
 ---
@@ -173,7 +173,7 @@ Code refactoring specialist who reorganizes and improves code structure while pr
 |-----------|-------|
 | **Model** | `tags:moderate` |
 | **Tag** | `agent` |
-| **Tools** | `view`, `edit`, `write`, `find_replace`, `move_code`, `tag:shell`, `code_context` |
+| **Tools** | `view`, `edit`, `write`, `save_attachment`, `find_replace`, `move_code`, `tag:shell`, `code_context` |
 | **Spawn Presets** | `researcher` |
 
 ---
@@ -198,7 +198,7 @@ Testing specialist who creates test harnesses, writes comprehensive tests, and i
 |-----------|-------|
 | **Model** | `tags:moderate` |
 | **Tag** | `agent` |
-| **Tools** | `view`, `write`, `edit`, `tag:shell`, `code_context`, `prove_test` |
+| **Tools** | `view`, `write`, `save_attachment`, `edit`, `tag:shell`, `code_context`, `prove_test` |
 | **Spawn Presets** | `researcher` |
 
 ---
@@ -211,7 +211,7 @@ User experience specialist focused on improving UI/UX design, accessibility, and
 |-----------|-------|
 | **Model** | `tags:flagship` |
 | **Tag** | `agent` |
-| **Tools** | `fetch`, `view`, `write`, `edit`, `tag:shell`, `get_plan`, `list_tasks`, `update_task`, `component_library`, `mcp__chrome-devtools__take_screenshot`, `mcp__chrome-devtools__take_snapshot`, `mcp__chrome-devtools__new_page`, `mcp__chrome-devtools__navigate_page`, `mcp__chrome-devtools__select_page`, `mcp__chrome-devtools__list_pages`, `mcp__chrome-devtools__list_console_messages`, `mcp__chrome-devtools__click`, `mcp__chrome-devtools__fill`, `mcp__chrome-devtools__press_key`, `mcp__chrome-devtools__evaluate_script` |
+| **Tools** | `fetch`, `view`, `write`, `save_attachment`, `edit`, `tag:shell`, `get_plan`, `list_tasks`, `update_task`, `component_library`, `mcp__chrome-devtools__take_screenshot`, `mcp__chrome-devtools__take_snapshot`, `mcp__chrome-devtools__new_page`, `mcp__chrome-devtools__navigate_page`, `mcp__chrome-devtools__select_page`, `mcp__chrome-devtools__list_pages`, `mcp__chrome-devtools__list_console_messages`, `mcp__chrome-devtools__click`, `mcp__chrome-devtools__fill`, `mcp__chrome-devtools__press_key`, `mcp__chrome-devtools__evaluate_script` |
 | **Spawn Presets** | `researcher`, `implementer`, `ux`, `general` |
 
 ---

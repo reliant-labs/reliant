@@ -352,9 +352,16 @@ func machineOf(m Model) string {
 
 // RepoDirectory reads inventories from the database; a daemon is online iff it
 // holds a fresh attachment lease (the same rule the daemon registry uses).
-type RepoDirectory struct{ src Source }
+type RepoDirectory struct {
+	src       Source
+	endpoints EndpointSource
+}
 
-func NewRepoDirectory(src Source) *RepoDirectory { return &RepoDirectory{src: src} }
+// NewRepoDirectory reads inventories from src and, when endpoints is not nil,
+// the user's configured model endpoints too.
+func NewRepoDirectory(src Source, endpoints EndpointSource) *RepoDirectory {
+	return &RepoDirectory{src: src, endpoints: endpoints}
+}
 
 func (r *RepoDirectory) LocalDaemons(ctx context.Context, userID string) ([]DaemonInventory, error) {
 	if r == nil || r.src == nil {

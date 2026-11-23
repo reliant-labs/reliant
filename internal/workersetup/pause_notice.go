@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -17,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // An automation paused for want of an org account (core.TriggerPausedNoOrgAccount;
@@ -28,10 +30,10 @@ import (
 // so a pause whose email has not gone out is still owed one, and the worker's
 // sweep starts its workflow again whenever none is running.
 //
-// The notice kind is newer than the service: a control plane that predates it
-// cannot send it, and a release of reliant may reach production first. That
-// is not a refusal: the workflow waits, with backoff, and asks again, so the
-// email goes out once the control plane is upgraded (pauseNoticeUpgradeWaits).
+// A control plane that cannot send it (no OrgNotifyInternalService configured
+// on its deployment) is not a refusal: the workflow waits, with backoff, and
+// asks again, so the email goes out once the control plane can send it
+// (pauseNoticeUpgradeWaits).
 
 // OrgAutomationNoOrgAccountNoticeWorkflowName, NotifyOrgAutomationNoOrgAccountActivityName
 // and ConfirmPauseNoticeActivityName are the registered names. Never rename
@@ -60,9 +62,8 @@ var pauseNoticeUpgradeWaits = func() []time.Duration {
 
 // PauseNoticeAnswer is what one ask of the control plane came to.
 type PauseNoticeAnswer struct {
-	// Unsupported: the control plane cannot send this notice (it predates the
-	// kind, or has no OrgNotifyInternalService). Nothing was delivered; ask
-	// again later.
+	// Unsupported: the control plane cannot send this notice (it has no
+	// OrgNotifyInternalService). Nothing was delivered; ask again later.
 	Unsupported bool
 }
 
@@ -150,14 +151,9 @@ func (a pauseNotices) Notify(ctx context.Context, n controlplane.OrgAutomationNo
 	return PauseNoticeAnswer{}, err
 }
 
-// noticeKindUnknown is how a control plane that predates a notice kind answers
-// it: the request's oneof arrives empty (protojson drops the unknown field),
-// so NotifyOrgAdmins says no notice was given. reliant always sends one.
-const noticeKindUnknown = "a notice is required"
-
 // cannotSendNoticeKind reports whether err says the control plane cannot send
 // this kind of notice at all (yet), rather than refusing this one: it has no
-// OrgNotifyInternalService, the rpc is unimplemented, or it predates the kind.
+// OrgNotifyInternalService, or the rpc is unimplemented.
 func cannotSendNoticeKind(err error) bool {
 	if errors.Is(err, controlplane.ErrOrgNotifyUnsupported) {
 		return true
@@ -166,7 +162,7 @@ func cannotSendNoticeKind(err error) bool {
 	if !errors.As(err, &refused) {
 		return false
 	}
-	return refused.Code == "unimplemented" || (refused.Code == "invalid_argument" && refused.Message == noticeKindUnknown)
+	return refused.Code == "unimplemented"
 }
 
 // Confirm records that n's pause was notified. A pause resumed or re-paused
@@ -199,10 +195,36 @@ func pauseNoticeWorkflowID(n controlplane.OrgAutomationNoOrgAccountNotice) strin
 }
 
 // PauseNoticeStore is what a pause's notice is started from: the pause read
-// back, and what the sweep lists. *db.Repo satisfies it.
+// back, and what the sweep lists. pauseStores satisfies it.
 type PauseNoticeStore interface {
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 	ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error)
+}
+
+// pauseTriggerReads is the one trigger read a pause's notice makes: the pause
+// read back. The repository facade serves it (other areas share it).
+type pauseTriggerReads interface {
+	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
+}
+
+// pauseStores is the production store of a pause's notice: the trigger read
+// joined with the generated TriggerNoticesExtStore, which owns the claim,
+// confirm and refuse writes. Both parts are required by the constructor, so a
+// worker cannot be handed half of it.
+type pauseStores struct {
+	pauseTriggerReads
+	store.TriggerNoticesExtStore
+}
+
+var _ PauseNoticeStore = pauseStores{}
+var _ pauseNoticeConfirmer = pauseStores{}
+
+// newPauseStores joins reads with the notice store over db.
+func newPauseStores(reads pauseTriggerReads, db orm.Context) pauseStores {
+	if reads == nil {
+		panic("workersetup: newPauseStores requires the trigger read")
+	}
+	return pauseStores{pauseTriggerReads: reads, TriggerNoticesExtStore: store.NewTriggerNoticesExtStore(db)}
 }
 
 // pauseNotice is the notice of t's current pause, nil when t is not paused for

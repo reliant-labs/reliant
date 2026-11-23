@@ -19,7 +19,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=5f2f097212863ed67071bdf5015fe6c0d7a734aa424a910d0e5e5be3181ae15c
+// forge:hash=dcdcdc54cb243072291a8904a85c0411090f6a1b36b6d181e5e41759cb2b32b1
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -29,23 +29,15 @@ import (
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	GetSettingFunc                      func(context.Context, string, *string, string) (*db.Setting, error)
-	ListSettingsFunc                    func(context.Context, string, *string) ([]*db.Setting, error)
-	CreateSettingFunc                   func(context.Context, *db.Setting) error
-	UpdateSettingFunc                   func(context.Context, *db.Setting) error
-	DeleteSettingFunc                   func(context.Context, string) error
-	GetPrivacySettingsFunc              func(context.Context, string) (bool, bool, error)
-	SetPrivacySettingsFunc              func(context.Context, string, bool, bool) error
-	ListVisibilityOverridesFunc         func(context.Context, string, int32) (map[string]bool, error)
-	SetVisibilityOverrideFunc           func(context.Context, string, int32, string, bool) error
-	ListHiddenItemDefaultsFunc          func(context.Context, int32) ([]string, error)
-	ListProviderAccountsFunc            func(context.Context, string) ([]core.ProviderAccount, error)
-	UpsertProviderAccountFunc           func(context.Context, core.AccountUpsert) (core.ProviderAccount, bool, error)
-	PatchProviderAccountFunc            func(context.Context, string, string, core.AccountPatch) (core.ProviderAccount, error)
-	ListAccountLimitsFunc               func(context.Context, string) (map[string]core.LimitState, error)
-	ScheduleUsagePollFunc               func(context.Context, string, time.Time, int, string) error
-	EmitUserRefetchFunc                 func(context.Context, string, db.RefetchType, db.RefetchOpts) error
-	ListProviderAccountsWithSecretsFunc func(context.Context, string) ([]core.AccountWithSecrets, error)
+	GetSettingFunc              func(context.Context, string, *string, string) (*db.Setting, error)
+	ListSettingsFunc            func(context.Context, string, *string) ([]*db.Setting, error)
+	CreateSettingFunc           func(context.Context, *db.Setting) error
+	UpdateSettingFunc           func(context.Context, *db.Setting) error
+	DeleteSettingFunc           func(context.Context, string) error
+	ListVisibilityOverridesFunc func(context.Context, string, int32) (map[string]bool, error)
+	SetVisibilityOverrideFunc   func(context.Context, string, int32, string, bool) error
+	ListHiddenItemDefaultsFunc  func(context.Context, int32) ([]string, error)
+	EmitUserRefetchFunc         func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 }
 
 // GetSetting records the call and delegates to GetSettingFunc when set.
@@ -93,24 +85,6 @@ func (m *MockRepository) DeleteSetting(ctx context.Context, id string) error {
 	return contractkit.MockNotSet("MockRepository", "DeleteSetting")
 }
 
-// GetPrivacySettings records the call and delegates to GetPrivacySettingsFunc when set.
-func (m *MockRepository) GetPrivacySettings(ctx context.Context, userID string) (bool, bool, error) {
-	m.Recorder.Record("GetPrivacySettings", ctx, userID)
-	if m.GetPrivacySettingsFunc != nil {
-		return m.GetPrivacySettingsFunc(ctx, userID)
-	}
-	return false, false, contractkit.MockNotSet("MockRepository", "GetPrivacySettings")
-}
-
-// SetPrivacySettings records the call and delegates to SetPrivacySettingsFunc when set.
-func (m *MockRepository) SetPrivacySettings(ctx context.Context, userID string, analyticsEnabled bool, crashReportingEnabled bool) error {
-	m.Recorder.Record("SetPrivacySettings", ctx, userID, analyticsEnabled, crashReportingEnabled)
-	if m.SetPrivacySettingsFunc != nil {
-		return m.SetPrivacySettingsFunc(ctx, userID, analyticsEnabled, crashReportingEnabled)
-	}
-	return contractkit.MockNotSet("MockRepository", "SetPrivacySettings")
-}
-
 // ListVisibilityOverrides records the call and delegates to ListVisibilityOverridesFunc when set.
 func (m *MockRepository) ListVisibilityOverrides(ctx context.Context, userID string, itemType int32) (map[string]bool, error) {
 	m.Recorder.Record("ListVisibilityOverrides", ctx, userID, itemType)
@@ -138,51 +112,6 @@ func (m *MockRepository) ListHiddenItemDefaults(ctx context.Context, itemType in
 	return nil, contractkit.MockNotSet("MockRepository", "ListHiddenItemDefaults")
 }
 
-// ListProviderAccounts records the call and delegates to ListProviderAccountsFunc when set.
-func (m *MockRepository) ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error) {
-	m.Recorder.Record("ListProviderAccounts", ctx, userID)
-	if m.ListProviderAccountsFunc != nil {
-		return m.ListProviderAccountsFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListProviderAccounts")
-}
-
-// UpsertProviderAccount records the call and delegates to UpsertProviderAccountFunc when set.
-func (m *MockRepository) UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error) {
-	m.Recorder.Record("UpsertProviderAccount", ctx, u)
-	if m.UpsertProviderAccountFunc != nil {
-		return m.UpsertProviderAccountFunc(ctx, u)
-	}
-	return *new(core.ProviderAccount), false, contractkit.MockNotSet("MockRepository", "UpsertProviderAccount")
-}
-
-// PatchProviderAccount records the call and delegates to PatchProviderAccountFunc when set.
-func (m *MockRepository) PatchProviderAccount(ctx context.Context, userID string, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
-	m.Recorder.Record("PatchProviderAccount", ctx, userID, accountID, p)
-	if m.PatchProviderAccountFunc != nil {
-		return m.PatchProviderAccountFunc(ctx, userID, accountID, p)
-	}
-	return *new(core.ProviderAccount), contractkit.MockNotSet("MockRepository", "PatchProviderAccount")
-}
-
-// ListAccountLimits records the call and delegates to ListAccountLimitsFunc when set.
-func (m *MockRepository) ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error) {
-	m.Recorder.Record("ListAccountLimits", ctx, userID)
-	if m.ListAccountLimitsFunc != nil {
-		return m.ListAccountLimitsFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListAccountLimits")
-}
-
-// ScheduleUsagePoll records the call and delegates to ScheduleUsagePollFunc when set.
-func (m *MockRepository) ScheduleUsagePoll(ctx context.Context, accountID string, next time.Time, failures int, errText string) error {
-	m.Recorder.Record("ScheduleUsagePoll", ctx, accountID, next, failures, errText)
-	if m.ScheduleUsagePollFunc != nil {
-		return m.ScheduleUsagePollFunc(ctx, accountID, next, failures, errText)
-	}
-	return contractkit.MockNotSet("MockRepository", "ScheduleUsagePoll")
-}
-
 // EmitUserRefetch records the call and delegates to EmitUserRefetchFunc when set.
 func (m *MockRepository) EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error {
 	m.Recorder.Record("EmitUserRefetch", ctx, userID, refetchType, opts)
@@ -192,17 +121,120 @@ func (m *MockRepository) EmitUserRefetch(ctx context.Context, userID string, ref
 	return contractkit.MockNotSet("MockRepository", "EmitUserRefetch")
 }
 
+// Compile-time check.
+var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockAccounts
+// forge:hash=bf329270a667c0f2b560d32105ef2b9fd43b2c6d6450b6e58176fcb2f95f58ae
+
+// MockAccounts is a test mock for the Accounts interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockAccounts.<Method>Func not set" error.
+type MockAccounts struct {
+	contractkit.Recorder
+	ListProviderAccountsFunc            func(context.Context, string) ([]core.ProviderAccount, error)
+	UpsertProviderAccountFunc           func(context.Context, core.AccountUpsert) (core.ProviderAccount, bool, error)
+	PatchProviderAccountFunc            func(context.Context, string, string, core.AccountPatch) (core.ProviderAccount, error)
+	ListAccountLimitsFunc               func(context.Context, string) (map[string]core.LimitState, error)
+	ScheduleUsagePollFunc               func(context.Context, string, time.Time, int, string) error
+	ListProviderAccountsWithSecretsFunc func(context.Context, string) ([]core.AccountWithSecrets, error)
+}
+
+// ListProviderAccounts records the call and delegates to ListProviderAccountsFunc when set.
+func (m *MockAccounts) ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error) {
+	m.Recorder.Record("ListProviderAccounts", ctx, userID)
+	if m.ListProviderAccountsFunc != nil {
+		return m.ListProviderAccountsFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockAccounts", "ListProviderAccounts")
+}
+
+// UpsertProviderAccount records the call and delegates to UpsertProviderAccountFunc when set.
+func (m *MockAccounts) UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error) {
+	m.Recorder.Record("UpsertProviderAccount", ctx, u)
+	if m.UpsertProviderAccountFunc != nil {
+		return m.UpsertProviderAccountFunc(ctx, u)
+	}
+	return *new(core.ProviderAccount), false, contractkit.MockNotSet("MockAccounts", "UpsertProviderAccount")
+}
+
+// PatchProviderAccount records the call and delegates to PatchProviderAccountFunc when set.
+func (m *MockAccounts) PatchProviderAccount(ctx context.Context, userID string, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
+	m.Recorder.Record("PatchProviderAccount", ctx, userID, accountID, p)
+	if m.PatchProviderAccountFunc != nil {
+		return m.PatchProviderAccountFunc(ctx, userID, accountID, p)
+	}
+	return *new(core.ProviderAccount), contractkit.MockNotSet("MockAccounts", "PatchProviderAccount")
+}
+
+// ListAccountLimits records the call and delegates to ListAccountLimitsFunc when set.
+func (m *MockAccounts) ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error) {
+	m.Recorder.Record("ListAccountLimits", ctx, userID)
+	if m.ListAccountLimitsFunc != nil {
+		return m.ListAccountLimitsFunc(ctx, userID)
+	}
+	return nil, contractkit.MockNotSet("MockAccounts", "ListAccountLimits")
+}
+
+// ScheduleUsagePoll records the call and delegates to ScheduleUsagePollFunc when set.
+func (m *MockAccounts) ScheduleUsagePoll(ctx context.Context, accountID string, next time.Time, failures int, errText string) error {
+	m.Recorder.Record("ScheduleUsagePoll", ctx, accountID, next, failures, errText)
+	if m.ScheduleUsagePollFunc != nil {
+		return m.ScheduleUsagePollFunc(ctx, accountID, next, failures, errText)
+	}
+	return contractkit.MockNotSet("MockAccounts", "ScheduleUsagePoll")
+}
+
 // ListProviderAccountsWithSecrets records the call and delegates to ListProviderAccountsWithSecretsFunc when set.
-func (m *MockRepository) ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error) {
+func (m *MockAccounts) ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error) {
 	m.Recorder.Record("ListProviderAccountsWithSecrets", ctx, userID)
 	if m.ListProviderAccountsWithSecretsFunc != nil {
 		return m.ListProviderAccountsWithSecretsFunc(ctx, userID)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListProviderAccountsWithSecrets")
+	return nil, contractkit.MockNotSet("MockAccounts", "ListProviderAccountsWithSecrets")
 }
 
 // Compile-time check.
-var _ Repository = (*MockRepository)(nil)
+var _ Accounts = (*MockAccounts)(nil)
+
+// forge:section MockPrivacy
+// forge:hash=4a182af88f5c93149da51f41645be70bb50e2733e393233589d6e97dcb05de97
+
+// MockPrivacy is a test mock for the Privacy interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockPrivacy.<Method>Func not set" error.
+type MockPrivacy struct {
+	contractkit.Recorder
+	GetPrivacySettingsFunc func(context.Context, string) (bool, bool, error)
+	SetPrivacySettingsFunc func(context.Context, string, bool, bool) error
+}
+
+// GetPrivacySettings records the call and delegates to GetPrivacySettingsFunc when set.
+func (m *MockPrivacy) GetPrivacySettings(ctx context.Context, userID string) (bool, bool, error) {
+	m.Recorder.Record("GetPrivacySettings", ctx, userID)
+	if m.GetPrivacySettingsFunc != nil {
+		return m.GetPrivacySettingsFunc(ctx, userID)
+	}
+	return false, false, contractkit.MockNotSet("MockPrivacy", "GetPrivacySettings")
+}
+
+// SetPrivacySettings records the call and delegates to SetPrivacySettingsFunc when set.
+func (m *MockPrivacy) SetPrivacySettings(ctx context.Context, userID string, analyticsEnabled bool, crashReportingEnabled bool) error {
+	m.Recorder.Record("SetPrivacySettings", ctx, userID, analyticsEnabled, crashReportingEnabled)
+	if m.SetPrivacySettingsFunc != nil {
+		return m.SetPrivacySettingsFunc(ctx, userID, analyticsEnabled, crashReportingEnabled)
+	}
+	return contractkit.MockNotSet("MockPrivacy", "SetPrivacySettings")
+}
+
+// Compile-time check.
+var _ Privacy = (*MockPrivacy)(nil)
 
 // forge:section MockChatWaker
 // forge:hash=7d9e9d108e99a08029386032b15ff15ed5d9349ea5786948f16232a8fdac5747

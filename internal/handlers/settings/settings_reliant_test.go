@@ -77,7 +77,7 @@ func TestSettingsService_SyncReliantProvider_RotationComesFromControlPlane(t *te
 
 	userID := "test-user"
 	auth.SetUserJWT(userID, "test-jwt-token")
-	_, _, err := repo.UpsertProviderAccount(context.Background(), core.AccountUpsert{
+	_, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(context.Background(), core.AccountUpsert{
 		UserID: userID, Provider: "reliant", AuthKind: core.AuthKindManaged, IdentityKey: core.ManagedIdentityKey,
 		Secrets: core.AccountSecrets{Secret: "rlat_previous0000000000000000000000000"},
 	})

@@ -102,8 +102,14 @@ func GetRepoByProjectAndPath(ctx context.Context, db orm.Context, projectID, rel
 	return repoToCore(rows[0]), nil
 }
 
-// ListReposByProject returns the project's repos ordered by relative path.
+// ListReposByProject returns the project's repos ordered by relative path. An
+// empty projectID is an error, never a read: the id is the whole scope of this
+// list, so the guard stays here for every caller, not in a wrapper that a
+// caller holding the generated store would skip.
 func ListReposByProject(ctx context.Context, db orm.Context, projectID string) ([]*core.Repo, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
 	rows, err := ListRepo(ctx, db,
 		orm.WhereEq(RepoFieldProjectID, projectID),
 		orm.WithOrderBy(RepoFieldRelativePath, orm.Asc))

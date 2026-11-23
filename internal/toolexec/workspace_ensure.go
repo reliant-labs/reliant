@@ -151,7 +151,7 @@ type WorkspaceNotice struct {
 	// capture it took when it reclaimed the idle workspace's disk
 	// (worktreereclaim: uncommitted changes, staged state, untracked files),
 	// and what it could not. Empty: the checkouts were rebuilt from the
-	// branch alone. Older daemons never set it.
+	// branch alone.
 	RestoredWork string    `json:"restored_work,omitempty"`
 	At           time.Time `json:"at"`
 }

@@ -4,13 +4,17 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/threads"
+
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type capturedDriverOptions struct {
@@ -76,14 +80,7 @@ func TestCallLLMActivity_ReconcilesThinkingLevelForInjectedResolvers(t *testing.
 			h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 			captured := &capturedDriverOptions{}
-			activityInstance := NewCallLLMActivity(
-				h.Repo(),
-				nil,
-				nil,
-				&staticConfigProvider{},
-				asInjectedResolver(captureDriverOptionsResolver(captured)),
-				nil,
-			)
+			activityInstance := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: asInjectedResolver(captureDriverOptionsResolver(captured)), MCPBinder: nil})
 
 			input := callLLMInput(chat.ID, chat.ID, tt.modelID)
 			input.Node.GetCallLlm().ThinkingLevel = &reliantv1.CelString{

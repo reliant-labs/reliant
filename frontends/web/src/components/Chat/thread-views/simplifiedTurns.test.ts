@@ -560,10 +560,11 @@ describe("buildSimplifiedTimeline", () => {
 });
 
 describe("isSurfacedMediaTool", () => {
-  it("surfaces only the generation tools' media", () => {
+  it("surfaces only the generation and presentation tools' media", () => {
     expect(isSurfacedMediaTool("generate_image")).toBe(true);
     expect(isSurfacedMediaTool("generate_video")).toBe(true);
     expect(isSurfacedMediaTool("mcp__reliant__generate_image")).toBe(true);
+    expect(isSurfacedMediaTool("present_image")).toBe(true);
     expect(isSurfacedMediaTool("mcp__chrome-devtools__take_screenshot")).toBe(false);
     expect(isSurfacedMediaTool("view")).toBe(false);
   });

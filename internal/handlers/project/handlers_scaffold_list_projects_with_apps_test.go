@@ -10,6 +10,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -36,7 +38,12 @@ func TestListProjectsWithApps_Generated(t *testing.T) {
 		ListReposByProjectsFunc:           func(context.Context, []string) ([]*core.Repo, error) { return nil, nil },
 		ListRepoForgeAppsByProjectsFunc:   func(context.Context, []string) ([]core.RepoForgeApp, error) { return nil, nil },
 		ListProjectDaemonsForProjectsFunc: func(context.Context, []string) ([]*core.ProjectDaemon, error) { return nil, nil },
-	}}))
+	}, Projects: projectaccesstest.For(&project.MockRepository{
+		ListProjectsFunc:                  func(context.Context, db.ProjectFilters) ([]*db.Project, error) { return nil, nil },
+		ListReposByProjectsFunc:           func(context.Context, []string) ([]*core.Repo, error) { return nil, nil },
+		ListRepoForgeAppsByProjectsFunc:   func(context.Context, []string) ([]core.RepoForgeApp, error) { return nil, nil },
+		ListProjectDaemonsForProjectsFunc: func(context.Context, []string) ([]*core.ProjectDaemon, error) { return nil, nil },
+	})}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListProjectsWithAppsRequest, pb.ListProjectsWithAppsResponse]{
 		{

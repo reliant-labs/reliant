@@ -5,6 +5,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 )
@@ -21,7 +22,7 @@ func (s *Service) ListProjectDaemonsForDaemon(
 		return nil, svcerr.InvalidArgument("daemon_id is required")
 	}
 
-	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, req.Msg.DaemonId)
+	rows, err := s.deps.Installs.ListProjectDaemonsForDaemon(ctx, req.Msg.DaemonId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list project_daemons"))
 	}
@@ -31,7 +32,7 @@ func (s *Service) ListProjectDaemonsForDaemon(
 	out := make([]*reliantv1.ProjectDaemon, 0, len(rows))
 	names := s.newMachineNames()
 	for _, pd := range rows {
-		if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, pd.ProjectID, userID); err != nil {
+		if _, err := s.deps.Projects.GetProjectWithUserCheck(ctx, pd.ProjectID, userID); err != nil {
 			continue
 		}
 		out = append(out, names.proto(ctx, pd))
