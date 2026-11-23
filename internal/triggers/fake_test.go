@@ -19,6 +19,7 @@ import (
 
 // fakeRepo is enough of Repo to drive the fire path without a database.
 type fakeRepo struct {
+	idleCapacity
 	mu sync.Mutex
 
 	triggers map[string]*core.Trigger

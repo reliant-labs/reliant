@@ -1206,7 +1206,7 @@ type TriggerRedriverDeps struct {
 //
 //forge:root-only api
 func NewTriggerRedriver(d TriggerRedriverDeps) (*TriggerRedriver, error) {
-	return &TriggerRedriver{triggers.NewRedriver(d.DB, d.Temporal.Client, v2workflow.SharedTaskQueue)}, nil
+	return &TriggerRedriver{triggers.NewRedriver(triggers.NewStores(d.DB), d.Temporal.Client, v2workflow.SharedTaskQueue)}, nil
 }
 
 // Run redrives until ctx ends.

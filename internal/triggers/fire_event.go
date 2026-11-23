@@ -74,7 +74,7 @@ func TriggerEventFireWorkflow(ctx workflow.Context, input EventFireInput) (*Fire
 // EventFirer launches recorded inbound events. It is the FireTriggerEvent
 // activity.
 type EventFirer struct {
-	repo      EventRepo
+	repo      EventFireRepo
 	launcher  Launcher
 	workflows WorkflowResolver
 	capacity  capacityDescriptions
@@ -115,7 +115,8 @@ func (f *EventFirer) WithPlacer(p Placer) *EventFirer {
 }
 
 // NewEventFirer builds the inbound fire activity's receiver.
-func NewEventFirer(repo EventRepo, launcher Launcher) *EventFirer {
+func NewEventFirer(repo EventFireRepo, launcher Launcher) *EventFirer {
+	requireCapacity("NewEventFirer", repo)
 	return &EventFirer{repo: repo, launcher: launcher, now: time.Now}
 }
 
@@ -266,7 +267,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		capacityAdmission(ctx, policy, ev, func() triggerspec.Scope {
 			return ActivationScope(ctx, f.repo, trigger, decl, FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root())
 		})
-		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, ev, limits, &spec); err != nil {
+		if err := prepareCapacity(ctx, f.repo, f.repo, f.capacity, trigger, ev, limits, &spec); err != nil {
 			if capacitySettled(err) {
 				return f.settle(ctx, ev, def, core.TriggerEventSkipped, err.Error(), nil)
 			}
@@ -277,12 +278,8 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		}
 	}
 	if ev.CapacityOrder != nil && ev.Outcome == core.TriggerEventLaunched && spec.RecordExecution == nil {
-		if repo, ok := f.repo.(capacityRepository); ok {
-			spec.RecordExecution = repo.BindTriggerCapacityExecution
-			spec.PrepareExecution = repo.PrepareTriggerCapacityExecution
-		} else {
-			return nil, errors.New("admitted retry storage unavailable")
-		}
+		spec.RecordExecution = f.repo.BindTriggerCapacityExecution
+		spec.PrepareExecution = f.repo.PrepareTriggerCapacityExecution
 	}
 	res, launchErr := launchOnPool(ctx, f.pools, f.launcher, trigger, launch.Event{
 		Kind:       ev.Kind,

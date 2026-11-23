@@ -390,27 +390,24 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
 		}
 	}
-	if cfg.TriggerLauncher != nil {
+	if cfg.TriggerLauncher != nil && cfg.Database != nil {
 		// Places pool-bound triggers' runs on a member (internal/machinepool).
-		var poolStore machinepool.Store
-		if cfg.Database != nil {
-			poolStore = store.NewMachinePoolExtStore(cfg.Database.ORM())
-		}
+		poolStore := store.NewMachinePoolExtStore(cfg.Database.ORM())
 		pools := machinepool.NewPlacer(poolStore)
 		if w, ok := cfg.DaemonRouter.(toolexec.RunWaker); ok {
 			pools = pools.WithWaker(poolMemberWaker{w: w})
 		}
 		pause := triggerAutoPause(cfg)
 		w.RegisterActivityWithOptions(
-			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).Fire,
+			triggers.NewFirer(triggers.NewStores(cfg.Database), cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).Fire,
 			activity.RegisterOptions{Name: triggers.FireActivityName},
 		)
 		w.RegisterActivityWithOptions(
-			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).WithChecks(checks).Fire,
+			triggers.NewEventFirer(triggers.NewStores(cfg.Database), cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).WithChecks(checks).Fire,
 			activity.RegisterOptions{Name: triggers.EventFireActivityName},
 		)
 	} else {
-		logging.Warn("no trigger launcher configured; this worker will not execute scheduled fires")
+		logging.Warn("no trigger launcher and database configured; this worker will not execute scheduled fires")
 	}
 
 	// A rejected org key's email to the org's owners and admins: always

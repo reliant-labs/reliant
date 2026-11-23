@@ -44,7 +44,7 @@ func TestCapacityInFlightStartHoldsSlotWhenRootLeavesPending(t *testing.T) {
 			starter := &absentStarter{&describedStarter{flakyStarter: f.starter, descriptions: map[string]*workflowservice.DescribeWorkflowExecutionResponse{}}}
 			launcher := launch.New(launch.Deps{Store: f.repo, Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 			resolver := capacityResolver{wf: &reliantv1.Workflow{Concurrency: &reliantv1.WorkflowConcurrency{MaxRunning: 1}}}
-			f.firer = NewFirer(f.repo, launcher).WithWorkflows(resolver).WithCapacityDescriptions(starter)
+			f.firer = NewFirer(NewStores(f.repo), launcher).WithWorkflows(resolver).WithCapacityDescriptions(starter)
 			scope := store.TriggerCapacityScope{UserID: f.trigger.UserID, ProjectID: f.trigger.ProjectID, WorkflowRef: workflowref.RefKey(f.trigger.Workflow)}
 
 			done := make(chan struct{})
@@ -52,7 +52,7 @@ func TestCapacityInFlightStartHoldsSlotWhenRootLeavesPending(t *testing.T) {
 				defer close(done)
 				_, _ = f.firer.Fire(ctx, f.fireAt(2))
 			})
-			occupied, err := f.repo.ListTriggerCapacityExecutions(ctx, scope)
+			occupied, err := NewCapacityStores(f.repo.ORM()).ListTriggerCapacityExecutions(ctx, scope)
 			require.NoError(t, err)
 			require.Len(t, occupied, 1)
 			held := occupied[0]
@@ -67,15 +67,15 @@ func TestCapacityInFlightStartHoldsSlotWhenRootLeavesPending(t *testing.T) {
 			}
 
 			// The fresh database attempt must hold before any external Describe can authorize release.
-			require.NoError(t, reconcileCapacityExecution(ctx, f.repo, starter, held))
-			after, err := f.repo.ListTriggerCapacityExecutions(ctx, scope)
+			require.NoError(t, reconcileCapacityExecution(ctx, NewCapacityStores(f.repo.ORM()), starter, held))
+			after, err := NewCapacityStores(f.repo.ORM()).ListTriggerCapacityExecutions(ctx, scope)
 			require.NoError(t, err)
 			require.Len(t, after, 1, "an in-flight start holds its slot however its root left PENDING")
 
 			// Temporal now accepts the held start; the run it admitted must be counted.
 			admit()
 			<-done
-			bound, err := f.repo.ListTriggerCapacityExecutions(ctx, scope)
+			bound, err := NewCapacityStores(f.repo.ORM()).ListTriggerCapacityExecutions(ctx, scope)
 			require.NoError(t, err)
 			require.Len(t, bound, 1)
 			require.NotEmpty(t, bound[0].FirstRunID, "the accepted start is bound to its slot")

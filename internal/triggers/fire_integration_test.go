@@ -184,7 +184,7 @@ func newFireFixture(t *testing.T, mutate func(*core.Trigger, *core.ScheduleConfi
 
 	starter := &flakyStarter{}
 	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
-	return &fireFixture{repo: repo, starter: starter, firer: NewFirer(repo, launcher), trigger: trigger}
+	return &fireFixture{repo: repo, starter: starter, firer: NewFirer(NewStores(repo), launcher), trigger: trigger}
 }
 
 func (f *fireFixture) fireAt(day int) FireRequest {

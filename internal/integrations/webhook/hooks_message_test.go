@@ -67,7 +67,7 @@ func TestInlineWebhookBodyReachesMessageWithoutCredentialsOrTenantOverride(t *te
 }
 
 type messageEventRepo struct {
-	triggers.EventRepo
+	triggers.EventFireRepo
 	*fakeStore
 	event *core.TriggerEvent
 }
