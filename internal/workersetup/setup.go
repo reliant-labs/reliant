@@ -382,35 +382,32 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	if cfg.TriggerPollers != nil {
 		if repo := cfg.Database; repo != nil {
 			poller := triggers.NewTriggerPoller(
-				triggerPollRepo{Repo: repo, connections: cfg.Connections},
+				triggerPollRepo{Stores: triggers.NewStores(repo), connections: cfg.Connections},
 				cfg.TriggerPollers,
-				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}),
+				triggers.NewIntake(triggers.NewStores(repo), cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}),
 				cfg.TriggerCredentials,
 			).WithAutoPause(triggerAutoPause(cfg)).WithDeliveryInbox(cfg.TriggerPollInbox)
 			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
 		}
 	}
-	if cfg.TriggerLauncher != nil {
+	if cfg.TriggerLauncher != nil && cfg.Database != nil {
 		// Places pool-bound triggers' runs on a member (internal/machinepool).
-		var poolStore machinepool.Store
-		if cfg.Database != nil {
-			poolStore = store.NewMachinePoolExtStore(cfg.Database.ORM())
-		}
+		poolStore := store.NewMachinePoolExtStore(cfg.Database.ORM())
 		pools := machinepool.NewPlacer(poolStore)
 		if w, ok := cfg.DaemonRouter.(toolexec.RunWaker); ok {
 			pools = pools.WithWaker(poolMemberWaker{w: w})
 		}
 		pause := triggerAutoPause(cfg)
 		w.RegisterActivityWithOptions(
-			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).Fire,
+			triggers.NewFirer(triggers.NewStores(cfg.Database), cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).Fire,
 			activity.RegisterOptions{Name: triggers.FireActivityName},
 		)
 		w.RegisterActivityWithOptions(
-			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).WithChecks(checks).Fire,
+			triggers.NewEventFirer(triggers.NewStores(cfg.Database), cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).WithChecks(checks).Fire,
 			activity.RegisterOptions{Name: triggers.EventFireActivityName},
 		)
 	} else {
-		logging.Warn("no trigger launcher configured; this worker will not execute scheduled fires")
+		logging.Warn("no trigger launcher and database configured; this worker will not execute scheduled fires")
 	}
 
 	// A rejected org key's email to the org's owners and admins: always
@@ -474,11 +471,9 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// Rejected org keys whose notice never started (a Temporal outage at the
 	// rejection), and paused automations whose email was never delivered, are
 	// started here, where the notices' workflows run.
-	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil && cfg.Database != nil {
+	if sweeps := noticeSweeps(cfg, orgKeyNoticeQueueFor(cfg)); len(sweeps) > 0 {
 		out.background = append(out.background, func(ctx context.Context) {
-			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval,
-				func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.OrgAccounts, q) },
-				func(ctx context.Context) { sweepPauseNotices(ctx, cfg.Database, q) })
+			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval, sweeps...)
 		})
 	}
 	return out, registry, nil
@@ -643,7 +638,7 @@ type TriggerConnections interface {
 }
 
 type triggerPollRepo struct {
-	*db.Repo
+	triggers.Stores
 	connections TriggerConnections
 }
 

@@ -98,7 +98,7 @@ func TestMachinePoolQueries(t *testing.T) {
 	}{{"mp-live-1", scope, false}, {"mp-live-2", other, false}, {"mp-done", scope, true}} {
 		ev := &core.TriggerEvent{ID: "cap-" + c.chat, UserID: storetest.SeedUserID, Kind: core.TriggerEventKindSchedule,
 			DedupeKey: "cap-" + c.chat, OccurredAt: now, CreatedAt: now, Outcome: core.TriggerEventPending}
-		if err := env.Repo.EnqueueTriggerCapacity(ctx, ev, c.scope); err != nil {
+		if err := store.EnqueueTriggerCapacity(ctx, env.ORM, ev, c.scope); err != nil {
 			t.Fatalf("EnqueueTriggerCapacity %d: %v", i, err)
 		}
 		if _, err := env.ORM.Bun().NewRaw(`UPDATE trigger_events SET outcome = 'launched', chat_id = ?0, capacity_released = ?1 WHERE id = ?2`,

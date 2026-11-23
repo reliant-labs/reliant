@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -23,14 +24,14 @@ func TestProjectConfigPushedAtAndScenariosColumn(t *testing.T) {
 	if _, err := store.GetProjectConfigPushedAt(ctx, repo.ORM(), "test-project"); !svcerr.IsNotFound(err) {
 		t.Fatalf("no record: pushed_at err = %v; want svcerr.NotFound", err)
 	}
-	if _, err := repo.GetProjectScenariosJSON(ctx, "test-project"); !svcerr.IsNotFound(err) {
+	if _, err := store.GetProjectScenariosJSON(ctx, repo.ORM(), "test-project"); !svcerr.IsNotFound(err) {
 		t.Fatalf("no record: scenarios err = %v; want svcerr.NotFound", err)
 	}
 
 	pushedAt := time.UnixMilli(1_700_000_123_456).UTC()
 	scenarios := `[{"workflow_slug":"wf","name":"s1","yaml_content":"name: s1"}]`
 	skills := `[{"name":"big"}]`
-	if err := repo.UpsertProjectConfigRecord(ctx, &ProjectConfigRecord{
+	if err := store.UpsertProjectConfigRecord(ctx, repo.ORM(), &ProjectConfigRecord{
 		ProjectID: "test-project", DaemonID: "daemon-1", PushedAt: pushedAt,
 		ProjectScenariosJSON: &scenarios, ProjectSkillsJSON: &skills,
 	}); err != nil {
@@ -41,7 +42,7 @@ func TestProjectConfigPushedAtAndScenariosColumn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProjectConfigPushedAt: %v", err)
 	}
-	record, err := repo.GetProjectConfigRecord(ctx, "test-project")
+	record, err := store.GetProjectConfigRecord(ctx, repo.ORM(), "test-project")
 	if err != nil {
 		t.Fatalf("GetProjectConfigRecord: %v", err)
 	}
@@ -49,18 +50,18 @@ func TestProjectConfigPushedAtAndScenariosColumn(t *testing.T) {
 		t.Fatalf("pushed_at = %v; record has %v; wrote %v", gotPushedAt, record.PushedAt, pushedAt)
 	}
 
-	gotScenarios, err := repo.GetProjectScenariosJSON(ctx, "test-project")
+	gotScenarios, err := store.GetProjectScenariosJSON(ctx, repo.ORM(), "test-project")
 	if err != nil || gotScenarios == nil || *gotScenarios != scenarios {
 		t.Fatalf("GetProjectScenariosJSON = %v, %v; want %q", gotScenarios, err, scenarios)
 	}
 
 	// A record whose scenarios were never synced reads as nil, not "".
-	if err := repo.UpsertProjectConfigRecord(ctx, &ProjectConfigRecord{
+	if err := store.UpsertProjectConfigRecord(ctx, repo.ORM(), &ProjectConfigRecord{
 		ProjectID: "test-project", DaemonID: "daemon-1", PushedAt: pushedAt, ProjectSkillsJSON: &skills,
 	}); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
-	if got, err := repo.GetProjectScenariosJSON(ctx, "test-project"); err != nil || got != nil {
+	if got, err := store.GetProjectScenariosJSON(ctx, repo.ORM(), "test-project"); err != nil || got != nil {
 		t.Fatalf("unsynced scenarios = %v, %v; want nil, nil", got, err)
 	}
 }

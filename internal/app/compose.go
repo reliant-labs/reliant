@@ -25,6 +25,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
+	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
@@ -1050,15 +1051,24 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 }
 
 // newAccount constructs the account handler (internal/handlers/account). Its
-// purge runs on the raw *sql.DB: an ordered multi-statement transaction across
-// every user-owned table, which the per-entity Repository surface cannot
-// express. The control plane is wired only when this deployment HAS one:
-// self-hosted reliant has no platform account to delete.
+// purge is an ordered multi-statement transaction across every user-owned
+// table, with each credential package deleting its own rows inside it. The
+// control plane is wired only when this deployment HAS one: self-hosted
+// reliant has no platform account to delete.
 func (g *Graph) newAccount() (*account.Service, error) {
+	purger, err := accountpurge.New(accountpurge.Deps{
+		DB:          g.Database().ORM(),
+		Automation:  g.AutomationTokens(),
+		Accounts:    g.ProviderAccounts(),
+		Connections: g.ConnectionVault(),
+	})
+	if err != nil {
+		return nil, err
+	}
 	return account.New(account.Deps{
 		Logger:       g.Log,
 		Config:       g.Cfg,
-		SQL:          g.Database().DB.SQLDB(),
+		Purger:       purger,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 	})
 }
@@ -1175,7 +1185,7 @@ func (g *Graph) newRun() (*run.Service, error) {
 // inbound receivers.
 func (g *Graph) newTrigger() (*trigger.Service, error) {
 	in := g.TriggerInbound()
-	syncer, fires := trigger.TemporalBackend(g.TemporalClient().Client, g.Database(), v2workflow.SharedTaskQueue, in.Registry.IsPolled)
+	syncer, fires := trigger.TemporalBackend(g.TemporalClient().Client, triggers.NewStores(g.Database()), v2workflow.SharedTaskQueue, in.Registry.IsPolled)
 	// An org's linked GitHub App installations, from control-plane: nil when
 	// self-hosted, which refuses binding a trigger to one.
 	apps, err := gitTokens(g.ServerProcessConfig.GetControlPlane())
@@ -1291,11 +1301,12 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 // newMCP constructs the mcp handler (internal/handlers/mcp).
 func (g *Graph) newMCP() (*mcp.Service, error) {
 	return mcp.New(mcp.Deps{
-		Projects: projectaccess.NewFromORM(g.Database().ORM()),
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Router:   g.APIDaemonRouter().NATSDaemonRouter,
+		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
+		ProjectConfigs: store.NewProjectConfigExtStore(g.Database().ORM()),
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Repo:           g.Database(),
+		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 
@@ -1387,18 +1398,19 @@ func (g *Graph) newPreset() (*preset.Service, error) {
 func (g *Graph) newProject() (*project.Service, error) {
 	o := g.Database().ORM()
 	return project.New(project.Deps{
-		Projects:     projectaccess.NewFromORM(g.Database().ORM()),
-		Purges:       projectpurge.NewInstrumented(projectpurge.Deps{DB: o}),
-		Logger:       g.Log,
-		Config:       g.Cfg,
-		Repo:         g.Database(),
-		Lookups:      store.NewProjectExtStore(o),
-		Installs:     store.NewProjectDaemonExtStore(o),
-		Detachments:  store.NewProjectDaemonDetachmentExtStore(o),
-		Ledger:       store.NewProjectOrgMoveExtStore(o),
-		Shared:       store.NewShareEventExtStore(o),
-		Router:       g.APIDaemonRouter().NATSDaemonRouter,
-		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
+		Purges:         projectpurge.NewInstrumented(projectpurge.Deps{DB: o}),
+		ProjectConfigs: store.NewProjectConfigExtStore(o),
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Repo:           g.Database(),
+		Lookups:        store.NewProjectExtStore(o),
+		Installs:       store.NewProjectDaemonExtStore(o),
+		Detachments:    store.NewProjectDaemonDetachmentExtStore(o),
+		Ledger:         store.NewProjectOrgMoveExtStore(o),
+		Shared:         store.NewShareEventExtStore(o),
+		Router:         g.APIDaemonRouter().NATSDaemonRouter,
+		ControlPlane:   hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 		// The Projects list reads the org's hosted apps as the caller; nil
 		// self-hosted, where it lists them as unavailable.
 		Apps: projectHostedApps(g.ServerProcessConfig.GetControlPlane()),
@@ -1466,12 +1478,13 @@ func (g *Graph) newRepo() (*repo.Service, error) {
 // newScenario constructs the scenario handler (internal/handlers/scenario).
 func (g *Graph) newScenario() (*scenario.Service, error) {
 	return scenario.New(scenario.Deps{
-		Projects: projectaccess.NewFromORM(g.Database().ORM()),
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Drafts:   g.Workflowdrafts(),
-		Router:   g.APIDaemonRouter().NATSDaemonRouter,
+		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Repo:           g.Database(),
+		Drafts:         g.Workflowdrafts(),
+		ProjectConfigs: store.NewProjectConfigExtStore(g.Database().ORM()),
+		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
 
@@ -1596,10 +1609,11 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 // newUsage constructs the usage handler (internal/handlers/usage).
 func (g *Graph) newUsage() (*usage.Service, error) {
 	return usage.New(usage.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Store:  g.Database(),
-		Now:    nil, // optional — no provider
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Store:    g.Database(),
+		Accounts: g.ProviderAccounts(),
+		Now:      nil, // optional — no provider
 	})
 }
 
@@ -1741,11 +1755,12 @@ func (g *Graph) newSeatmatch() (seatmatch.Service, error) {
 // through control-plane (OrgUsageListPrices; nil shows no estimates).
 func (g *Graph) newOrgUsage() (*org_usage.Service, error) {
 	return org_usage.New(org_usage.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Store:  g.Database(),
-		Prices: OrgUsageListPrices(g.ServerProcessConfig.GetControlPlane()),
-		Now:    nil, // optional — no provider
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Store:    g.Database(),
+		Accounts: g.ProviderAccounts(),
+		Prices:   OrgUsageListPrices(g.ServerProcessConfig.GetControlPlane()),
+		Now:      nil, // optional — no provider
 	})
 }
 

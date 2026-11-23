@@ -159,9 +159,11 @@ func registerNodeTypeActivities() {
 // This function registers activity instances with their runtime dependencies.
 func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	var workflowRuns handlers.WorkflowRuns
+	var toolCalls handlers.ToolCalls
 	var questionsByStep handlers.QuestionsByStep
 	if deps.Repo != nil {
 		workflowRuns = handlers.NewWorkflowRuns(deps.Repo.ORM())
+		toolCalls = handlers.NewToolCalls(deps.Repo.ORM())
 		questionsByStep = store.NewQuestionExtStore(deps.Repo.ORM())
 	}
 
@@ -184,7 +186,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	if deps.Repo != nil {
 		stoppedAgents = store.NewToolCallExtStore(deps.Repo.ORM())
 	}
-	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: deps.Repo, Spawns: spawnTree, Threads: deps.Threads, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderBackoff(deps.ProviderBackoff))
+	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: deps.Repo, Spawns: spawnTree, Threads: deps.Threads, ToolResults: toolCalls, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderBackoff(deps.ProviderBackoff))
 
 	// ========================================================================
 	// TOOL EXECUTION ACTIVITIES
@@ -194,11 +196,9 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// provider CallLLM offered them from (cached per config version on the
 	// worker), not by re-reading the whole config row per call.
 	var reviver handlers.WorktreeReviver
-	var toolResults handlers.ToolCallResults
 	var approvalsLookup handlers.ApprovalLookup
 	var capacitySlots handlers.TriggerCapacitySlotStore
 	if deps.Repo != nil {
-		toolResults = store.NewToolCallResultExtStore(deps.Repo.ORM())
 		approvalsLookup = store.NewApprovalExtStore(deps.Repo.ORM())
 		capacitySlots = handlers.NewTriggerCapacitySlots(deps.Repo.ORM())
 	}
@@ -209,15 +209,15 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	if deps.Repo != nil {
 		runFunding = handlers.NewRunFundingStore(deps.Repo.ORM(), deps.Repo)
 	}
-	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor).WithToolCallResults(toolResults).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
-	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor).WithToolCallResults(toolResults).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, toolCalls, deps.ToolExecutor).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, toolCalls, deps.ToolExecutor).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
 	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger).WithHostedExecutor(deps.HostedActions).WithSecretResolver(deps.SecretResolver))
 
 	// ========================================================================
 	// CONTEXT MANAGEMENT ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewCompactActivity(handlers.CompactDeps{Store: deps.Repo, Threads: deps.Threads, DriverResolver: deps.DriverResolver}).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
+	v2.RegisterActivity(registry, handlers.NewCompactActivity(handlers.CompactDeps{Store: deps.Repo, Threads: deps.Threads, ToolResults: toolCalls, DriverResolver: deps.DriverResolver}).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
 	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderPreferences(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewDraftAutomationActivity(deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderPreferences(deps.Repo))
 

@@ -114,7 +114,7 @@ func (m *MockOrgResolver) LiveMembersFresh(ctx context.Context, userID string, o
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=a092a3511f29ca25bc6ed0fbb7ded593af47d3f38f584b956749a60f83176e49
+// forge:hash=5382b739a0222752b12f1d1f86ddffe31830bb70c61da7f1c7e8887149eafa09
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -124,6 +124,8 @@ var _ OrgResolver = (*MockOrgResolver)(nil)
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
+	GetConnectionFunc                  func(context.Context, string, string) (*core.Connection, error)
+	GetIntegrationAccessSubjectFunc    func(context.Context, string, string, time.Time) (string, error)
 	AssignUnassignedOrgFunc            func(context.Context, string, string) error
 	RunTxFunc                          func(context.Context, orm.TxPolicy, func(context.Context) error) error
 	LockActivationDependenciesFunc     func(context.Context, string, string) error
@@ -159,6 +161,24 @@ type MockRepository struct {
 	GetDaemonFunc                      func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc   func(context.Context, string) ([]*core.ProjectDaemon, error)
 	ListTriggersFunc                   func(context.Context, core.TriggerFilters) ([]*core.Trigger, error)
+}
+
+// GetConnection records the call and delegates to GetConnectionFunc when set.
+func (m *MockRepository) GetConnection(ctx context.Context, userID string, id string) (*core.Connection, error) {
+	m.Recorder.Record("GetConnection", ctx, userID, id)
+	if m.GetConnectionFunc != nil {
+		return m.GetConnectionFunc(ctx, userID, id)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "GetConnection")
+}
+
+// GetIntegrationAccessSubject records the call and delegates to GetIntegrationAccessSubjectFunc when set.
+func (m *MockRepository) GetIntegrationAccessSubject(ctx context.Context, userID string, integrationID string, freshAfter time.Time) (string, error) {
+	m.Recorder.Record("GetIntegrationAccessSubject", ctx, userID, integrationID, freshAfter)
+	if m.GetIntegrationAccessSubjectFunc != nil {
+		return m.GetIntegrationAccessSubjectFunc(ctx, userID, integrationID, freshAfter)
+	}
+	return "", contractkit.MockNotSet("MockRepository", "GetIntegrationAccessSubject")
 }
 
 // AssignUnassignedOrg records the call and delegates to AssignUnassignedOrgFunc when set.

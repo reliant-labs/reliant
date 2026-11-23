@@ -86,7 +86,7 @@ func TestDiscoveryThatLosesTheCreateRace_RecordsItsCheckoutAndStoresTheSnapshot(
 		machines = append(machines, r.DaemonID)
 	}
 	assert.ElementsMatch(t, []string{winner, loser}, machines, "the machine that lost the create holds the project too")
-	record, synced, err := repo.GetProjectMachineConfigRecord(ctx, winnerID, loser)
+	record, synced, err := store.GetProjectMachineConfigRecord(ctx, repo.ORM(), winnerID, loser)
 	require.NoError(t, err)
 	require.True(t, synced, "the losing machine's snapshot was dropped until a reconnect")
 	assert.Equal(t, "from the loser", *record.UserConfigYAML)

@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/require"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // The API server's environment is Reliant's, never the user's. A ${VAR} in a
@@ -81,7 +82,7 @@ func TestMCPService_ReferencesReachStoreResponsesAndDaemonUnresolved(t *testing.
 	router := &recordingDaemonRouter{fakeMCPDaemonRouter: newFakeMCPDaemonRouter(manager)}
 	svc := newMCPService(t, base.deps.Repo, router)
 
-	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.ProjectConfigs.UpsertProjectConfigRecord(ctx, &core.ProjectConfigRecord{
 		ProjectID: projectID,
 		DaemonID:  "daemon-test",
 		PushedAt:  time.Now().UTC(),
@@ -126,7 +127,7 @@ func TestMCPService_ReferencesReachStoreResponsesAndDaemonUnresolved(t *testing.
 	require.Len(t, list.Msg.Servers, 2)
 	responses = append(responses, list.Msg)
 
-	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
+	record, err := svc.deps.ProjectConfigs.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
 	require.NotNil(t, record.MCPConfigs)
 
@@ -166,7 +167,7 @@ func TestMCPService_InstallServerStoresHomeReferenceVerbatim(t *testing.T) {
 	t.Setenv("HOME", serverHome)
 	ctx, svc, manager, projectID := setupMCPServiceToggleTest(t)
 	manager.startErr = nil
-	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.ProjectConfigs.UpsertProjectConfigRecord(ctx, &core.ProjectConfigRecord{
 		ProjectID: projectID,
 		DaemonID:  "daemon-test",
 		PushedAt:  time.Now().UTC(),
@@ -182,7 +183,7 @@ func TestMCPService_InstallServerStoresHomeReferenceVerbatim(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Success, resp.Msg.Message)
 
-	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
+	record, err := svc.deps.ProjectConfigs.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
 	require.NotNil(t, record.MCPConfigs)
 	require.NotContains(t, *record.MCPConfigs, serverHome, "the stored row carries the server's HOME")

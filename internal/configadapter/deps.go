@@ -6,12 +6,12 @@ package configadapter
 import (
 	"context"
 
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // ConfigRecordReader is the stored project config record NewRepoConfigStore
-// adapts to config.StoredConfigStore.
+// adapts to config.StoredConfigStore. NewORMRecordReader is the database's.
 type ConfigRecordReader interface {
-	GetProjectConfigRecord(ctx context.Context, projectID string) (*db.ProjectConfigRecord, error)
-	GetProjectMachineConfigRecord(ctx context.Context, projectID, daemonID string) (*db.ProjectConfigRecord, bool, error)
+	GetProjectConfigRecord(ctx context.Context, projectID string) (*core.ProjectConfigRecord, error)
+	GetProjectMachineConfigRecord(ctx context.Context, projectID, daemonID string) (*core.ProjectConfigRecord, bool, error)
 }
