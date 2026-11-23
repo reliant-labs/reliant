@@ -3680,20 +3680,3 @@ func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *str
 func generateID() string {
 	return uuid.New().String()
 }
-
-// ClaimDuePauseNotices claims the no-org-account pauses whose email is still owed and due,
-// moving each one's next attempt lease on (store.ClaimDuePauseNotices).
-func (r *Repo) ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error) {
-	return store.ClaimDuePauseNotices(ctx, r.ORM(), limit, lease)
-}
-
-// RefusePauseNotice records that a no-org-account pause's email was refused for good
-// (store.RefusePauseNotice).
-func (r *Repo) RefusePauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
-	return store.RefusePauseNotice(ctx, r.ORM(), triggerID, pausedAt)
-}
-
-// ConfirmPauseNotice records that a no-org-account pause's email was delivered (store.ConfirmPauseNotice).
-func (r *Repo) ConfirmPauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
-	return store.ConfirmPauseNotice(ctx, r.ORM(), triggerID, pausedAt)
-}
