@@ -100,7 +100,7 @@ func TestExecuteTools_OfflineResultGetsWaitHintOnlyWhenOffered(t *testing.T) {
 		executor.SetResult(id, result)
 
 		var output ExecuteToolsOutput
-		require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), toolCallsOf(f.h.Repo()), executor).Execute, ExecuteToolsInput{
+		require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), toolCallsOf(f.h.Repo()), executor).Execute, ExecuteToolsInput{
 			ChatID:       f.chatID,
 			Thread:       f.chatID,
 			Capabilities: caps,

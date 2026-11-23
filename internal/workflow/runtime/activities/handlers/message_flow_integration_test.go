@@ -329,7 +329,7 @@ func TestMessageFlowIntegration(t *testing.T) {
 			},
 		}
 
-		executeActivity := NewExecuteToolsActivity(repo, toolCallsOf(repo), mockExecutor)
+		executeActivity := NewExecuteToolsActivity(repo, workspaceRowsOf(repo), toolCallsOf(repo), mockExecutor)
 		env.RegisterActivity(executeActivity.Execute)
 
 		// Use tool_calls from SaveMessage output
@@ -694,7 +694,7 @@ func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
 			},
 		}
 
-		executeActivity := NewExecuteToolsActivity(repo, toolCallsOf(repo), mockExecutor)
+		executeActivity := NewExecuteToolsActivity(repo, workspaceRowsOf(repo), toolCallsOf(repo), mockExecutor)
 		env.RegisterActivity(executeActivity.Execute)
 
 		executeInput := ExecuteToolsInput{
