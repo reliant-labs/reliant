@@ -18,8 +18,10 @@
 // search box off the provider's rate limit. It holds the action's raw items,
 // so a different acting identity or page projects from the same call.
 //
-// Built by hand, by internal/app's NewInputOptions provider
-// (providers_api.go): never a node compose.go constructs from Deps.
+// Built by internal/app's NewInputOptions provider (providers_api.go): its
+// Types are the builtin catalog (catalogindex.Builtin, fallible, not a node)
+// and its Credentials resolve through the api's APIConnections tokens, so
+// neither Deps field is a graph type forge can fill.
 //
 //forge:provided
 package inputoptions

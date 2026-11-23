@@ -29,6 +29,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/retry"
@@ -105,9 +107,10 @@ type KeepFilesSetting interface {
 }
 
 // Store is what the sweep needs from the database. store.WorktreeExtStore
-// answers the worktree-row reads (ListWorktreesForReclaim,
+// answers the worktree-row reads (GetWorktree, ListWorktreesForReclaim,
 // ListLiveWorktreePathsForUser, AdoptWorktreeDaemon, and StorageStore's
-// ListHeldWorktreesForUser and MergeUnownedWorktreeCleanupMetadata); the rest
+// ListHeldWorktreesForUser and MergeUnownedWorktreeCleanupMetadata),
+// store.RepoExtStore ListReposByProject; the rest
 // are reads other areas make too, which the repository facade still answers.
 type Store interface {
 	ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error)
@@ -1564,9 +1567,10 @@ func ptrString(p *string) string {
 	return *p
 }
 
-// facade is the sweep's reads that only the repository facade answers.
+// facade is the sweep's reads that only the repository facade answers, and
+// the ORM handle NewStores builds the repos role over.
 type facade interface {
-	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
+	ORM() *orm.Client
 	UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *core.CleanupMetadata) error
 	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
 	TryAdvisoryLock(ctx context.Context, key int64) (release func(), ok bool, err error)
@@ -1574,14 +1578,21 @@ type facade interface {
 }
 
 // Stores is the sweep's Store (and StorageStore): the worktree rows through
-// store.WorktreeExtStore, and the reads other areas share through the
-// repository facade (*db.Repo).
+// store.WorktreeExtStore, a project's repos through store.RepoExtStore, and
+// the reads other areas share through the repository facade (*db.Repo).
 type Stores struct {
 	facade
 	store.WorktreeExtStore
+	repos store.RepoExtStore
 }
 
-// NewStores joins the repository facade's shared reads with the worktree rows.
+// NewStores joins the repository facade's shared reads with the worktree rows
+// and the repos role over the facade's ORM.
 func NewStores(shared facade, rows store.WorktreeExtStore) Stores {
-	return Stores{facade: shared, WorktreeExtStore: rows}
+	return Stores{facade: shared, WorktreeExtStore: rows, repos: store.NewRepoExtStore(shared.ORM())}
+}
+
+// ListReposByProject is the project's nested repos (store.RepoExtStore).
+func (s Stores) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
+	return s.repos.ListReposByProject(ctx, projectID)
 }

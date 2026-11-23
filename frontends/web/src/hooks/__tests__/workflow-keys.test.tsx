@@ -47,8 +47,9 @@ import {
   useWorkflowDefinitionQuery,
   useWorkflows,
   validateWorkflow,
+  workflowWriteRefresh,
 } from "../workflow-queries";
-import { workflowServiceKeys } from "../workflow-service-hooks_gen";
+import { useDeleteWorkflow, workflowServiceKeys } from "../workflow-service-hooks_gen";
 
 function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
@@ -160,6 +161,25 @@ describe("WorkflowService keys", () => {
 
     await act(() => deleteWorkflow("p1", "helper"));
 
+    await waitFor(() => expect(names(library.result.current.data?.workflows)).toEqual(["builtin://agent"]));
+    expect(queryClient.getQueryState(triggersKey)?.isInvalidated).toBe(true);
+  });
+
+  it("the generated delete hook with workflowWriteRefresh settles after the refetch and invalidates the automations", async () => {
+    const triggersKey = triggerServiceKeys.listTriggers({ projectId: "p1" });
+    queryClient.setQueryData(triggersKey, { triggers: [] });
+    const library = renderHook(() => useWorkflowLibrary("p1"), { wrapper });
+    await waitFor(() => expect(names(library.result.current.data?.workflows)).toEqual(["builtin://agent", "helper"]));
+
+    const del = renderHook(() => useDeleteWorkflow(workflowWriteRefresh({ triggers: true })), { wrapper });
+    await act(() => del.result.current.mutateAsync({ projectId: "p1", name: "helper" }));
+
+    // In the cache when the delete settles (workflowWriteRefresh awaits the refetch)...
+    const cached = queryClient.getQueryData<{ workflows: Row[] }>(
+      workflowServiceKeys.listWorkflows({ projectId: "p1", includeHidden: true }),
+    );
+    expect(names(cached?.workflows)).toEqual(["builtin://agent"]);
+    // ...and on screen.
     await waitFor(() => expect(names(library.result.current.data?.workflows)).toEqual(["builtin://agent"]));
     expect(queryClient.getQueryState(triggersKey)?.isInvalidated).toBe(true);
   });

@@ -30,7 +30,7 @@ func TestRunStep_StartsTheCommandInTheNodesWorkDir(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			executor := &mockRunExecutor{responses: []mockRunResponse{{stdout: "ok"}}}
-			act := NewExecuteRunStepActivity(f.h.Repo(), nil, executor)
+			act := NewExecuteRunStepActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), nil, executor)
 			env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 			env.RegisterActivity(act.Execute)
 			_, err := env.ExecuteActivity(act.Execute, ExecuteRunStepInput{

@@ -63,7 +63,7 @@ func setupTestApprovalServiceWithMockClient(t *testing.T) (*Service, *db.Repo, *
 
 	repo := db.NewTestRepo(t)
 	mockClient := &mockTemporalSignalClient{}
-	pauseService := workflowpkg.NewPauseService(mockClient, repo)
+	pauseService := workflowpkg.NewPauseService(workflowpkg.PauseServiceDeps{Temporal: mockClient, Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM())})
 	service := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Signals: pauseService}))
 	return service, repo, mockClient
 }

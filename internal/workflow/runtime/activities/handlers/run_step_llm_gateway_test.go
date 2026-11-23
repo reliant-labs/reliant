@@ -106,7 +106,7 @@ func gatewayChat(t *testing.T, capable bool) (*db.Repo, string) {
 
 // gatewayAct is a run step over repo, keys and machine.
 func gatewayAct(repo *db.Repo, keys StepKeyIssuer, machine RunExecutor) *ExecuteRunStepActivity {
-	act := NewExecuteRunStepActivity(repo, nil, machine)
+	act := NewExecuteRunStepActivity(repo, workspaceRowsOf(repo), nil, machine)
 	if keys != nil {
 		act = act.WithStepKeys(keys)
 	}

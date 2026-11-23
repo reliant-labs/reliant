@@ -49,7 +49,7 @@ const worktreeLookupLimit = 1000
 // persist, or an error for the handler to map.
 func (l *Launcher) ResolveChatWorktreeID(ctx context.Context, projectID string, requested *string) (*string, error) {
 	if requested != nil && *requested != "" {
-		worktree, err := l.repo.GetWorktree(ctx, *requested)
+		worktree, err := l.worktrees.GetWorktree(ctx, *requested)
 		if err != nil && !errors.Is(err, core.ErrWorktreeNotFound) {
 			return nil, &InternalError{Reason: "failed to load worktree", Err: err}
 		}
@@ -126,7 +126,7 @@ func (l *Launcher) GetEffectiveWorkingPath(ctx context.Context, chat *db.Chat) s
 func (l *Launcher) GetEffectiveCheckout(ctx context.Context, chat *db.Chat) Checkout {
 	// First try to get worktree path if the chat has one
 	if chat.WorktreeID != nil && *chat.WorktreeID != "" {
-		if worktree, err := l.repo.GetWorktree(ctx, *chat.WorktreeID); err == nil && worktree != nil {
+		if worktree, err := l.worktrees.GetWorktree(ctx, *chat.WorktreeID); err == nil && worktree != nil {
 			// The main worktree row mirrors projects.path: it is the main
 			// checkout, resolved on the chat's machine below.
 			if !worktree.IsMain {
@@ -146,7 +146,7 @@ func (l *Launcher) GetEffectiveCheckout(ctx context.Context, chat *db.Chat) Chec
 	if chat.ProjectID == "" || chat.NoMachine {
 		return Checkout{}
 	}
-	project, err := l.repo.GetProject(ctx, chat.ProjectID)
+	project, err := l.projectRows.GetProject(ctx, chat.ProjectID)
 	if err != nil || project == nil {
 		return Checkout{}
 	}

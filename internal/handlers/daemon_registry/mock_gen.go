@@ -20,7 +20,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=1ba7d97e19602f8d72739cb4a09078e02711c33c02c8ccb2181dde85334b4da2
+// forge:hash=70d2273540eefde296ba71f3e2c5b0be5d4999b4319bb67b93b58251ea1af02c
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -36,7 +36,6 @@ type MockRepository struct {
 	ListDaemonLocalModelsFunc             func(context.Context, string) (map[string]string, error)
 	ListDaemonStorageStateFunc            func(context.Context, string) (map[string]string, error)
 	SetDefaultDaemonFunc                  func(context.Context, string, string) error
-	UpsertDaemonIdentityFunc              func(context.Context, db.DaemonIdentity) (bool, error)
 }
 
 // GetDaemon records the call and delegates to GetDaemonFunc when set.
@@ -91,15 +90,6 @@ func (m *MockRepository) SetDefaultDaemon(ctx context.Context, userID string, da
 		return m.SetDefaultDaemonFunc(ctx, userID, daemonID)
 	}
 	return contractkit.MockNotSet("MockRepository", "SetDefaultDaemon")
-}
-
-// UpsertDaemonIdentity records the call and delegates to UpsertDaemonIdentityFunc when set.
-func (m *MockRepository) UpsertDaemonIdentity(ctx context.Context, id db.DaemonIdentity) (bool, error) {
-	m.Recorder.Record("UpsertDaemonIdentity", ctx, id)
-	if m.UpsertDaemonIdentityFunc != nil {
-		return m.UpsertDaemonIdentityFunc(ctx, id)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "UpsertDaemonIdentity")
 }
 
 // Compile-time check.
@@ -170,6 +160,32 @@ func (m *MockPools) ListMachinePoolMembers(ctx context.Context, pool *core.Machi
 
 // Compile-time check.
 var _ Pools = (*MockPools)(nil)
+
+// forge:section MockMirror
+// forge:hash=d89145264ab636838de3e7bbb30a2a60e384cdfb467a8d29bc308b8173da3e59
+
+// MockMirror is a test mock for the Mirror interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockMirror.<Method>Func not set" error.
+type MockMirror struct {
+	contractkit.Recorder
+	UpsertDaemonIdentityFunc func(context.Context, core.DaemonIdentity) (bool, error)
+}
+
+// UpsertDaemonIdentity records the call and delegates to UpsertDaemonIdentityFunc when set.
+func (m *MockMirror) UpsertDaemonIdentity(ctx context.Context, id core.DaemonIdentity) (bool, error) {
+	m.Recorder.Record("UpsertDaemonIdentity", ctx, id)
+	if m.UpsertDaemonIdentityFunc != nil {
+		return m.UpsertDaemonIdentityFunc(ctx, id)
+	}
+	return false, contractkit.MockNotSet("MockMirror", "UpsertDaemonIdentity")
+}
+
+// Compile-time check.
+var _ Mirror = (*MockMirror)(nil)
 
 // forge:section MockMachineNames
 // forge:hash=a078b2e25c969ec6891b3df00c21422e9cb31e1e53fa9b3ee3de7f723f48d06f

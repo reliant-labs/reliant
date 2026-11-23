@@ -42,10 +42,10 @@ func WithMessageOrigin(ctx context.Context, origin MessageOrigin) context.Contex
 	return context.WithValue(ctx, messageOriginKey{}, origin)
 }
 
-// SenderTitle is store.SenderTitlesByThreadIDs for one thread, nil when it resolves to none.
+// senderTitle is store.SenderTitlesByThreadIDs for one thread, nil when it resolves to none.
 // Best-effort: an untitled sender degrades a card's heading, never the
 // transcript, so a failed lookup is no title rather than an error.
-func (r *Repo) SenderTitle(ctx context.Context, threadID string) *string {
+func (r *Repo) senderTitle(ctx context.Context, threadID string) *string {
 	titles, err := store.SenderTitlesByThreadIDs(ctx, r.ORM(), []string{threadID})
 	if err != nil {
 		return nil

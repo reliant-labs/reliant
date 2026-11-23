@@ -3,6 +3,8 @@ package repo
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -16,6 +18,6 @@ func TestRepoServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestRepo(t, WithRepoDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+	svc := NewTestRepo(t, WithRepoDeps(Deps{Repo: repo, Repos: store.NewRepoExtStore(repo.ORM()), Projects: projectaccesstest.For(repo)}))
 	viewertest.RunService(t, f, svc, "reliant.v1.RepoService", nil)
 }

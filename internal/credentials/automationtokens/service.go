@@ -12,7 +12,7 @@
 // Built by hand, by internal/app's NewAutomationTokens provider (providers.go):
 // never a node compose.go constructs from Deps.
 //
-//forge:provided
+// (exp)
 package automationtokens
 
 import (

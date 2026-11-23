@@ -110,7 +110,7 @@ nodes:
 		LastActive: now,
 	}))
 
-	activity := NewLoadWorkflowActivity(repo)
+	activity := NewLoadWorkflowActivity(repo, workspaceRowsOf(repo))
 	output, err := activity.Execute(ctx, LoadWorkflowInput{
 		ChatID:       chatID,
 		WorkflowName: "get-it-right",
@@ -180,7 +180,7 @@ nodes:
 		LastActive: now,
 	}))
 
-	activity := NewLoadWorkflowActivity(repo)
+	activity := NewLoadWorkflowActivity(repo, workspaceRowsOf(repo))
 
 	// Looking up by the YAML name should work even though slug differs
 	output, err := activity.Execute(ctx, LoadWorkflowInput{

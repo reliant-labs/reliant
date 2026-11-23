@@ -236,7 +236,7 @@ func newGrantsWorker(t *testing.T, env *testsuite.TestWorkflowEnvironment, repo 
 
 	deps := &Activities{
 		Repo:           repo,
-		Threads:        threads.New(threads.Deps{Repo: repo}),
+		Threads:        threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}),
 		ToolsFactory:   tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo}),
 		ToolExecutor:   executor,
 		ConfigProvider: emptyConfigProvider{},
@@ -244,7 +244,7 @@ func newGrantsWorker(t *testing.T, env *testsuite.TestWorkflowEnvironment, repo 
 			return model, nil
 		},
 	}
-	registry := v2.NewActivityRegistry(repo)
+	registry := v2.NewActivityRegistry(v2.ActivityRegistryDeps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM())})
 	RegisterAll(registry, deps)
 
 	stubbed := map[string]bool{"ActivityLoadWorkflow": true, "WorkflowStatus": true, "CallLLM": callLLMTurns > 0}

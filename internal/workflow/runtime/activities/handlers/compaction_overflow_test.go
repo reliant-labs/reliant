@@ -125,7 +125,7 @@ func TestGenerateCompactionSummary_RecoversFromContextOverflow(t *testing.T) {
 	t.Parallel()
 
 	driver := &overflowingSummarizer{refusals: 1, err: errors.New(prodOverflowError)}
-	compact := NewCompactActivity(nil, nil, driver.resolver())
+	compact := NewCompactActivity(CompactDeps{DriverResolver: driver.resolver()})
 
 	summary, err := compact.generateCompactionSummary(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, "", "", types.FailoverPolicy{}, longConversation(), nil)
 	require.NoError(t, err, "a summarizer that refuses the history as too long must not fail the compaction")
@@ -143,7 +143,7 @@ func TestGenerateCompactionSummary_GivesUpAfterBoundedRetries(t *testing.T) {
 	t.Parallel()
 
 	driver := &overflowingSummarizer{refusals: 100, err: errors.New(prodOverflowError)}
-	compact := NewCompactActivity(nil, nil, driver.resolver())
+	compact := NewCompactActivity(CompactDeps{DriverResolver: driver.resolver()})
 
 	_, err := compact.generateCompactionSummary(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, "", "", types.FailoverPolicy{}, longConversation(), nil)
 	require.Error(t, err)
@@ -157,7 +157,7 @@ func TestGenerateCompactionSummary_DoesNotRetryOtherFailures(t *testing.T) {
 	t.Parallel()
 
 	driver := &overflowingSummarizer{refusals: 100, err: errors.New("400 Bad Request: invalid model")}
-	compact := NewCompactActivity(nil, nil, driver.resolver())
+	compact := NewCompactActivity(CompactDeps{DriverResolver: driver.resolver()})
 
 	_, err := compact.generateCompactionSummary(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, "", "", types.FailoverPolicy{}, longConversation(), nil)
 	require.Error(t, err)

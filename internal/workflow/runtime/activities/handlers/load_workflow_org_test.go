@@ -17,7 +17,7 @@ import (
 // none.
 func TestLoadWorkflowActivity_ReportsTheRunScopesOrg(t *testing.T) {
 	t.Parallel()
-	activity := NewLoadWorkflowActivity(nil)
+	activity := NewLoadWorkflowActivity(nil, nil)
 
 	scoped := telemetry.WithRunScope(context.Background(), telemetry.RunScope{ChatID: "chat-1", OrgID: "org-1"})
 	out, err := activity.Execute(scoped, LoadWorkflowInput{WorkflowName: "builtin://agent"})

@@ -17,6 +17,8 @@ import (
 // All thread creation, forking, compaction, and interruption should go through this service.
 type Service struct {
 	repo             Repository
+	messages         Messages
+	senders          Senders
 	temporalSignaler TemporalSignaler
 	toolCanceler     ToolCanceler
 }
@@ -24,7 +26,7 @@ type Service struct {
 // New builds a Service from deps. Deps.Repo is required; the signaler and the
 // tool canceler are only needed by InterruptThread and the pause path.
 func New(deps Deps) *Service {
-	return &Service{repo: deps.Repo, temporalSignaler: deps.Signaler, toolCanceler: deps.ToolCanceler}
+	return &Service{repo: deps.Repo, messages: deps.Messages, senders: deps.Senders, temporalSignaler: deps.Signaler, toolCanceler: deps.ToolCanceler}
 }
 
 // CreateThreadOpts contains options for creating a new root thread.

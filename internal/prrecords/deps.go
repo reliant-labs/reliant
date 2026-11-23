@@ -7,7 +7,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// Store is where records are kept. *db.Repo satisfies it.
+// Store is where records are kept. store.PrRecordExtStore satisfies it.
 type Store interface {
 	ApplyPRRecordChange(ctx context.Context, c core.PRRecordChange) (bool, error)
 }

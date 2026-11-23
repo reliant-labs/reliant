@@ -90,16 +90,11 @@ var userScopedReads = map[string]string{
 	"ListTriggerRegistrations":         readParentAuthorized,
 	"ListUserPresetsByProject":         readParentAuthorized,
 	"ListWorktrees":                    readParentAuthorized,
-	// The worktree tool's get: a worktree it found by name in the run's own
-	// project (as ListWorktrees), and only the caller's chats bound to it.
-	"RecentTriggerFirings": readParentAuthorized,
-
 	// The caller's own connection, metadata only (the ciphertext is internal/credentials/connectionvault's
 	// alone): the trigger paths resolve an activation's owner and its connection through it.
 	"GetConnection":               readPersonal,
 	"GetIntegrationAccessSubject": readPersonal,
 	// Whether the caller's own grants reach a repository: PullRequestRecordService's gate.
-	"HasFreshIntegrationAccess":   readPersonal,
 	"GetLatestUserUpdateSequence": readPersonal,
 	"GetPresetBySlug":             readPersonal,
 	"GetSetting":                  readPersonal,

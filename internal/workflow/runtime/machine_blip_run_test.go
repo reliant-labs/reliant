@@ -164,7 +164,7 @@ func (s *MachineBlipRunSuite) TestUnattended_MachineUnavailableSurvivesTheActivi
 			"failed to execute command: machine e164d47d no longer exists (daemon not found); the command never ran (last error: permission denied)",
 			types.RunStepMachineUnavailableErrType, nil)
 	}
-	env.RegisterActivityWithOptions(wrapActivity(NewActivityRegistry(&wrapperTestRepo{}), "ExecuteRunStep", gate, lifecycle.AgentWork, false),
+	env.RegisterActivityWithOptions(wrapActivity(NewActivityRegistry(ActivityRegistryDeps{Store: &wrapperTestRepo{}, Workflows: &wrapperTestRepo{}}), "ExecuteRunStep", gate, lifecycle.AgentWork, false),
 		activity.RegisterOptions{Name: "ExecuteRunStep"})
 
 	env.ExecuteWorkflow(DynamicWorkflow, input)

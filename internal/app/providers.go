@@ -39,9 +39,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/certs"
-	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
-	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
-	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
@@ -55,6 +52,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/privacy"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
@@ -459,7 +457,7 @@ func NewProcessRuntime(d ProcessRuntimeDeps) (*ProcessRuntime, error) {
 	// LLM drivers resolve per-user keys from the database.
 	drivers.InitializeAPIKeyProvider(d.ProviderAccounts, repo)
 	healer := drivers.InstallReliantKeyHealer(d.ProviderAccounts, repo, cp.URL, cp.InternalServiceSecret, d.ControlPlane.GetManagedKeysPerOrg())
-	analytics.Start(AnalyticsSettings(d.Analytics), d.Privacy, repo)
+	analytics.Start(AnalyticsSettings(d.Analytics), d.Privacy, store.NewUserAppSessionExtStore(repo.ORM()))
 	return &ProcessRuntime{KeyHealer: healer}, nil
 }
 
@@ -658,58 +656,6 @@ func NewVault(d VaultDeps) (vault.Service, error) {
 	return db.BootVault(d.Ctx, d.DB, ControlPlaneEndpoint(d.ControlPlane).Hosted(), d.DataDir, d.Integrations.VaultKey)
 }
 
-// AutomationTokensDeps is the database the delegated automation tokens live in and
-// the vault that seals them.
-type AutomationTokensDeps struct {
-	DB    *db.Repo
-	Vault vault.Service
-}
-
-// NewAutomationTokens is the only path to the api_keys table: the api-server's
-// trigger handler stores a minted daemon:resume token through it and the worker's
-// router reads it back.
-func NewAutomationTokens(d AutomationTokensDeps) (automationtokens.Service, error) {
-	return automationtokens.NewInstrumented(automationtokens.Deps{DB: d.DB.ORM(), Sealer: d.Vault})
-}
-
-// ProviderAccountsDeps is the database provider accounts live in and the vault that
-// seals their secrets.
-type ProviderAccountsDeps struct {
-	DB    *db.Repo
-	Vault vault.Service
-}
-
-// NewProviderAccounts is the only path to the provider_accounts table for accounts, their
-// limit state and thread assignments. Handlers, the router, the usage poller and the
-// drivers take the narrow slice of it each reads.
-func NewProviderAccounts(d ProviderAccountsDeps) (provideraccounts.Service, error) {
-	return provideraccounts.NewInstrumented(provideraccounts.Deps{DB: d.DB.ORM(), Sealer: d.Vault})
-}
-
-// ConnectionVaultDeps is the database the connections and their ciphertext live in.
-type ConnectionVaultDeps struct {
-	DB *db.Repo
-}
-
-// NewConnectionVault is the only path to the connections tables and connection_secrets: it stores
-// and returns ciphertext only; internal/connections seals and opens it.
-func NewConnectionVault(d ConnectionVaultDeps) (connectionvault.Service, error) {
-	return connectionvault.NewInstrumented(connectionvault.Deps{DB: d.DB.ORM()})
-}
-
-// OrgAccountsDeps is the database an organization's provider credentials live in and the vault
-// that seals a rotated key.
-type OrgAccountsDeps struct {
-	DB    *db.Repo
-	Vault vault.Service
-}
-
-// NewOrgAccounts is the only path to an organization's own accounts, their grants, seats and
-// workspace bindings, the rejected-key notices and the gone-org purge.
-func NewOrgAccounts(d OrgAccountsDeps) (orgaccounts.Service, error) {
-	return orgaccounts.NewInstrumented(orgaccounts.Deps{DB: d.DB.ORM(), Sealer: d.Vault})
-}
-
 // PauseServiceDeps is what pauses and resumes runs.
 type PauseServiceDeps struct {
 	Temporal *TemporalClient
@@ -718,7 +664,7 @@ type PauseServiceDeps struct {
 
 // NewPauseService pauses and resumes runs through their workflows.
 func NewPauseService(d PauseServiceDeps) (*v2workflow.PauseService, error) {
-	ps := v2workflow.NewPauseService(d.Temporal.Client, d.DB)
+	ps := v2workflow.NewPauseService(v2workflow.PauseServiceDeps{Temporal: d.Temporal.Client, Store: d.DB, Workflows: store.NewWorkflowExtStore(d.DB.ORM())})
 	ps.SetNamespace(d.Temporal.Namespace)
 	return ps, nil
 }

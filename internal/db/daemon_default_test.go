@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/daemonmirror/daemonmirrortest"
 )
 
 // defaultDaemonIDs returns the user's daemons that carry is_default, read
@@ -86,7 +87,7 @@ func TestSetDefaultDaemon_OnePerUserOwnedOnlyAndClearedWithTheMachine(t *testing
 	if err := repo.SetDefaultDaemon(ctx, userID, "default-a"); err != nil {
 		t.Fatalf("SetDefaultDaemon a again: %v", err)
 	}
-	if _, _, err := repo.RemoveDaemon(ctx, "default-a"); err != nil {
+	if _, _, err := daemonmirrortest.New(t, repo).RemoveDaemon(ctx, "default-a"); err != nil {
 		t.Fatalf("RemoveDaemon: %v", err)
 	}
 	if got := defaultDaemonIDs(t, repo, userID); len(got) != 0 {
@@ -151,7 +152,7 @@ func TestSetDefaultDaemon_ClearForgetsTheRememberedDefault(t *testing.T) {
 // as the registry snapshot and the machine's next connect do.
 func recreate(t *testing.T, repo *Repo, id, userID string) {
 	t.Helper()
-	if _, _, err := repo.RemoveDaemon(context.Background(), id); err != nil {
+	if _, _, err := daemonmirrortest.New(t, repo).RemoveDaemon(context.Background(), id); err != nil {
 		t.Fatalf("RemoveDaemon(%s): %v", id, err)
 	}
 	seedLifecycleDaemon(t, repo, id, userID)
@@ -178,7 +179,7 @@ func TestDefaultDaemon_SurvivesTheRegistryRecreatingItsRow(t *testing.T) {
 		t.Fatalf("SetDefaultDaemon: %v", err)
 	}
 
-	if _, _, err := repo.RemoveDaemon(ctx, "recreated-a"); err != nil {
+	if _, _, err := daemonmirrortest.New(t, repo).RemoveDaemon(ctx, "recreated-a"); err != nil {
 		t.Fatalf("RemoveDaemon: %v", err)
 	}
 	if got := defaultDaemonIDs(t, repo, userID); len(got) != 0 {
@@ -300,7 +301,7 @@ func TestDefaultDaemon_PreviousReleaseWritesStayInStep(t *testing.T) {
 	if err := repo.SetDefaultDaemon(ctx, userID, "mixed-a"); err != nil {
 		t.Fatalf("SetDefaultDaemon a again: %v", err)
 	}
-	if _, _, err := repo.RemoveDaemon(ctx, "mixed-a"); err != nil {
+	if _, _, err := daemonmirrortest.New(t, repo).RemoveDaemon(ctx, "mixed-a"); err != nil {
 		t.Fatalf("RemoveDaemon a: %v", err)
 	}
 	previousReleaseSetDefault(t, rawDB, userID, "")

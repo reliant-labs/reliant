@@ -519,7 +519,7 @@ func (r *Repo) saveMessageToThread(ctx context.Context, chatID, thread string, r
 			DisplayStyle: displayStyle,
 		}
 		if attributed {
-			updateData.Sender = NewMessageSenderPayload(origin.ThreadID, r.SenderTitle(txCtx, origin.ThreadID), origin.Kind, origin.Subject)
+			updateData.Sender = NewMessageSenderPayload(origin.ThreadID, r.senderTitle(txCtx, origin.ThreadID), origin.Kind, origin.Subject)
 		}
 
 		updateDataJSON, err := updateData.Marshal()
@@ -3088,15 +3088,6 @@ func (r *Repo) ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, ma
 	return store.ClaimRunEvents(ctx, r.ORM(), now, leaseUntil, max)
 }
 
-// RecentTriggerFirings returns each trigger's newest perTrigger firings in
-// one query. Used to compute health and last_event for a list of triggers.
-func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.RecentTriggerFirings(ctx, r.ORM(), userID, triggerIDs, perTrigger)
-}
-
 // FiringsSinceLastSuccess returns each trigger's firings since its newest
 // success, newest first, capped at perTrigger: the current failure episode.
 // The events carry no body (payload, sender, origin): an episode is counted.
@@ -3130,22 +3121,11 @@ func (r *Repo) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash [
 	return store.SetTriggerWebhookTokenHash(ctx, r.ORM(), id, hash)
 }
 
-func (r *Repo) SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.SetTriggerWebhookSecret(ctx, r.ORM(), id, sealed)
-}
-
 func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {
 	if id == "" {
 		return nil, core.ErrTriggerNotFound
 	}
 	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
-}
-
-func (r *Repo) ListIntegrationTriggers(ctx context.Context, integration string) ([]*core.IntegrationTriggerRoute, error) {
-	return store.ListIntegrationTriggers(ctx, r.ORM(), integration)
 }
 
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
@@ -3679,21 +3659,4 @@ func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *str
 // generateID generates a new UUID string
 func generateID() string {
 	return uuid.New().String()
-}
-
-// ClaimDuePauseNotices claims the no-org-account pauses whose email is still owed and due,
-// moving each one's next attempt lease on (store.ClaimDuePauseNotices).
-func (r *Repo) ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error) {
-	return store.ClaimDuePauseNotices(ctx, r.ORM(), limit, lease)
-}
-
-// RefusePauseNotice records that a no-org-account pause's email was refused for good
-// (store.RefusePauseNotice).
-func (r *Repo) RefusePauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
-	return store.RefusePauseNotice(ctx, r.ORM(), triggerID, pausedAt)
-}
-
-// ConfirmPauseNotice records that a no-org-account pause's email was delivered (store.ConfirmPauseNotice).
-func (r *Repo) ConfirmPauseNotice(ctx context.Context, triggerID string, pausedAt time.Time) error {
-	return store.ConfirmPauseNotice(ctx, r.ORM(), triggerID, pausedAt)
 }
