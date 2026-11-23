@@ -374,7 +374,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		ToolExecutor:    executor,
 		DaemonRouter:    nil, // hermetic: no daemon transport; worktree ops unavailable
 		MCPBinder:       mcpBinder,
-		ConfigProvider:  config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(s.Repo)),
+		ConfigProvider:  config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(configadapter.NewORMRecordReader(s.Repo.ORM()))),
 		DriverResolver:  resolver,
 		TaskQueueSuffix: taskQueueSuffix,
 		TriggerLauncher: triggerLauncher,
