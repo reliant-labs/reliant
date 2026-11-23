@@ -152,6 +152,62 @@ describe("ShortcutRegistry.resolve", () => {
   });
 });
 
+describe("ShortcutRegistry aliases", () => {
+  it("fires a shortcut from its binding and from each alias", () => {
+    const registry = new ShortcutRegistry([
+      shortcut({ id: "newChat", binding: "meta+alt+N", aliases: ["meta+T"] }),
+    ]);
+
+    expect(registry.resolve("meta+alt+N", ["global"]).shortcut?.id).toBe("newChat");
+    expect(registry.resolve("meta+T", ["global"]).shortcut?.id).toBe("newChat");
+    // Delivery by id still sees the binding, not an alias.
+    expect(registry.get("newChat")?.binding).toBe("meta+alt+N");
+  });
+
+  it("accepts a sequence alias under a shared prefix", () => {
+    const registry = new ShortcutRegistry([
+      shortcut({ id: "packages", binding: "meta+K S", aliases: ["meta+K N"] }),
+    ]);
+
+    expect(registry.resolve("meta+K", ["global"]).kind).toBe("sequence-prefix");
+    expect(registry.resolve("N", ["global"], "meta+K").shortcut?.id).toBe("packages");
+  });
+
+  it("yields to another shortcut's binding on the same chord, in any context", () => {
+    // A user who remaps Toggle Terminal onto Cmd+T gets Cmd+T.
+    const registry = new ShortcutRegistry([
+      shortcut({ id: "newChat", binding: "meta+alt+N", aliases: ["meta+T"] }),
+      shortcut({ id: "toggleTerminal", binding: "meta+T", context: "monaco" }),
+    ]);
+
+    expect(registry.resolve("meta+T", ["global"]).kind).toBe("none");
+    expect(registry.resolve("meta+T", ["monaco", "global"]).shortcut?.id).toBe(
+      "toggleTerminal",
+    );
+    expect(registry.findConflicts()).toEqual([]);
+  });
+
+  it("never swallows a sequence's opening chord, nor hides behind a binding on its own", () => {
+    const registry = new ShortcutRegistry([
+      shortcut({ id: "a", binding: "meta+J X", aliases: ["meta+J"] }),
+      shortcut({ id: "b", binding: "meta+L" }),
+      shortcut({ id: "c", binding: "meta+alt+C", aliases: ["meta+L C"] }),
+    ]);
+
+    expect(registry.resolve("meta+J", ["global"]).kind).toBe("sequence-prefix");
+    expect(registry.resolve("meta+L", ["global"]).shortcut?.id).toBe("b");
+  });
+
+  it("reports two aliases on one chord in one context as a conflict", () => {
+    const registry = new ShortcutRegistry([
+      shortcut({ id: "a", binding: "meta+alt+A", aliases: ["meta+T"] }),
+      shortcut({ id: "b", binding: "meta+alt+B", aliases: ["meta+T"] }),
+    ]);
+
+    expect(registry.findConflicts().map((c) => c.binding)).toEqual(["meta+T"]);
+  });
+});
+
 describe("isBareKey", () => {
   it("treats unmodified and shift-only chords as typing", () => {
     expect(isBareKey("G")).toBe(true);

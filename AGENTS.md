@@ -21,7 +21,7 @@ forge obs endpoints dev               # p50/p95/p99 and error rate per RPC, with
 forge obs check <env> --wait --json   # after a deploy: proves the release good, or names what regressed
 ```
 
-`forge skill list` is the catalog. `forge project libraries <pkg>` prints a forge library's whole API: never search the filesystem for forge's source. `forge project capabilities` lists every verb; `forge project benefits` lists what this project gets without setup. A skill that disagrees with this project is a forge bug: trust the project and report it (below).
+`forge skill list` is the catalog. `forge project libraries <pkg>` prints a forge library's whole API: never search the filesystem for forge's source. `forge project capabilities` lists every verb; `forge project benefits` lists what this project gets without setup. `forge why` gives the reasons behind them. A skill that disagrees with this project is a forge bug: trust the project and report it (below).
 
 ## Critical rules
 
@@ -68,7 +68,7 @@ The `*Service` methods ARE the handlers; they reach `internal/db/` and other col
 ## Proto and schema rules
 
 - An rpc is CRUD only when unary and named exactly `Create<E>`/`Get<E>`/`Update<E>`/`Delete<E>`/`List<Es>` for an entity (a table AND a message). Everything else is custom and yours. A CRUD-named rpc that does more (`CreateTask` also wires dependencies) gets `// forge:custom` above it; never rename one to dodge detection (`proto`).
-- Behavior comes from real columns: `created_at`+`updated_at` ⇒ managed timestamps, `deleted_at` ⇒ soft delete. The old proto entity annotations are retired and ignored: delete leftovers. Fields clients must not write: `db/write-policy`.
+- Behavior comes from real columns: `created_at`+`updated_at` ⇒ managed timestamps, `deleted_at` ⇒ soft delete. The old proto entity annotations are removed (a proto carrying one no longer compiles): delete leftovers. Fields clients must not write: `db/write-policy`.
 - List filter fields **must** be `optional` (otherwise they silently no-op); one service per `.proto` file; shared messages in `proto/shared/v1/types.proto`, never service-to-service imports. `forge lint --conventions` enforces these.
 
 ## The scaffolded frontend is starter code
@@ -77,7 +77,7 @@ The dashboard's entity tiles, the sidebar nav, the sign-in screen and every gene
 
 ## Shipping
 
-`forge env deploy <env>` ships to Reliant hosting (staging/prod are already bound to it; `deploy`), then `forge obs check <env> --wait --json` proves it. One hosted static site per person is free, counted across environments (each env's site is one); anything beyond it needs billing, and until then `env deploy` exits 7 and prints the billing link: give the user that link, don't retry. Never ask for `forge login` under Reliant. Not signed in at all? `--claimable` deploys with no signup and prints a claim link for the user (`deploy/hosting`).
+`forge env deploy <env>` ships an env to wherever its `deploy/kcl/<env>/main.k` binds it (`deploy`), then `forge obs check <env> --wait --json` proves it. This project's envs are `demo`, `desktop`, `dev`, `release`. Names don't establish where an env runs, so never assume one is hosted: its `main.k` declares the bindings, and `forge env render <env>` resolves them (`forge.OnHosted` is Reliant hosting). A new env on hosting is `forge env new <name> --from <env> --bind <workload>=hosted` (`deploy/hosting`). One hosted static site per person is free, counted across environments (each env's site is one); anything beyond it needs billing, and until then `env deploy` exits 7 and prints the billing link: give the user that link, don't retry. Never ask for `forge login` under Reliant. Not signed in at all? `--claimable` deploys with no signup and prints a claim link for the user (`deploy/hosting`).
 
 ## When forge itself is wrong — FIX IT
 

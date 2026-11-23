@@ -97,4 +97,11 @@ message IntegrationsConfig {
     optional: true
     description: "Integration OAuth client secrets, RELIANT_OAUTH_<ID>_CLIENT_SECRET"
   }];
+
+  // The owner/name GitHub repositories whose pull requests are mirrored into
+  // PR records (dev-docs/pr-records.md, §9 D1). Unset: none are.
+  repeated string pr_record_repositories = 11 [(forge.v1.config) = {
+    env_var: "RELIANT_PR_RECORD_REPOSITORIES"
+    description: "Comma-separated owner/name repositories whose pull requests are recorded (none records none)"
+  }];
 }

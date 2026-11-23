@@ -118,11 +118,6 @@ func TestTriggerQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAllTriggers: %v", err)
 	}
-	twinAll, err := env.Repo.ListAllTriggers(ctx)
-	if err != nil {
-		t.Fatalf("Repo.ListAllTriggers: %v", err)
-	}
-	sameValue(t, "ListAllTriggers", all, twinAll)
 	if g := ids(all); !reflect.DeepEqual(g, []string{"trg-c", "trg-b", "trg-a"}) {
 		t.Fatalf("ListAllTriggers = %v, want newest first", g)
 	}
@@ -192,8 +187,8 @@ func TestTriggerQueries(t *testing.T) {
 	if string(creds.TokenHash) != "hash" || string(creds.SecretSealed) != "sealed" {
 		t.Fatalf("credentials = %+v", creds)
 	}
-	if err := env.Repo.SetTriggerWebhookSecret(ctx, "trg-b", nil); err != nil {
-		t.Fatalf("Repo.SetTriggerWebhookSecret(nil): %v", err)
+	if err := store.NewTriggerExtStore(env.ORM).SetTriggerWebhookSecret(ctx, "trg-b", nil); err != nil {
+		t.Fatalf("TriggerExtStore.SetTriggerWebhookSecret(nil): %v", err)
 	}
 	if err := store.SetTriggerWebhookSecret(ctx, env.ORM, "trg-b", nil); err != nil {
 		t.Fatalf("SetTriggerWebhookSecret(nil): %v", err)
@@ -233,8 +228,8 @@ func TestTriggerQueries(t *testing.T) {
 	if err := store.SetTriggerProjection(ctx, env.ORM, "trg-act", core.TriggerProjection{Config: json.RawMessage(`{"cron":["0 * * * *"]}`), Filter: "trigger.ok"}); err != nil {
 		t.Fatalf("SetTriggerProjection: %v", err)
 	}
-	if err := env.Repo.SetTriggerProjection(ctx, "trg-act2", core.TriggerProjection{}); err != nil {
-		t.Fatalf("Repo.SetTriggerProjection: %v", err)
+	if err := store.SetTriggerProjection(ctx, env.ORM, "trg-act2", core.TriggerProjection{}); err != nil {
+		t.Fatalf("SetTriggerProjection(empty): %v", err)
 	}
 	if twin, _ := env.Repo.GetTrigger(ctx, "trg-act"); twin.Filter != "trigger.ok" || string(twin.Config) != `{"cron": ["0 * * * *"]}` || !twin.UpdatedAt.After(act.UpdatedAt) {
 		t.Fatalf("after SetTriggerProjection = %+v (config %s)", twin, twin.Config)
@@ -246,11 +241,6 @@ func TestTriggerQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListAllWorkflowTriggerActivations: %v", err)
 	}
-	twinActs, err := env.Repo.ListAllWorkflowTriggerActivations(ctx)
-	if err != nil {
-		t.Fatalf("Repo.ListAllWorkflowTriggerActivations: %v", err)
-	}
-	sameValue(t, "ListAllWorkflowTriggerActivations", acts, twinActs)
 	if g := ids(acts); !reflect.DeepEqual(g, []string{"trg-act", "trg-act2"}) {
 		t.Fatalf("ListAllWorkflowTriggerActivations = %v", g)
 	}
@@ -291,11 +281,6 @@ func TestTriggerQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListIntegrationTriggers: %v", err)
 	}
-	twinRoutes, err := env.Repo.ListIntegrationTriggers(ctx, "github")
-	if err != nil {
-		t.Fatalf("Repo.ListIntegrationTriggers: %v", err)
-	}
-	sameValue(t, "ListIntegrationTriggers", routes, twinRoutes)
 	if len(routes) != 2 || routes[0].Trigger.ID != "trg-int-live" || routes[0].ConnectionAccount != "acct-1" || routes[0].ConnectionStatus != "active" ||
 		routes[1].Trigger.ID != "trg-int-reauth" || routes[1].ConnectionAccount != "" || routes[1].ConnectionStatus != "needs_reauth" {
 		t.Fatalf("ListIntegrationTriggers(github) = %+v, want live and reauth through the owner's connections", routes)
@@ -342,7 +327,7 @@ func TestTriggerRegistrationQueries(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertTriggerRegistration: %v", err)
 	}
-	twin, err := env.Repo.GetTriggerRegistration(ctx, "trg-reg-a")
+	twin, err := store.GetTriggerRegistration(ctx, env.ORM, "trg-reg-a")
 	if err != nil {
 		t.Fatalf("Repo.GetTriggerRegistration: %v", err)
 	}
@@ -361,7 +346,7 @@ func TestTriggerRegistrationQueries(t *testing.T) {
 		t.Fatalf("backdate status_since: %v", err)
 	}
 	gap := base.Add(2 * time.Minute)
-	if err := env.Repo.UpsertTriggerRegistration(ctx, &core.TriggerRegistration{
+	if err := store.UpsertTriggerRegistration(ctx, env.ORM, &core.TriggerRegistration{
 		TriggerID: "trg-reg-a", Provider: "gmail", Cursor: "c2", Status: core.TriggerRegistrationActive, LastGapAt: &gap, LastGapDetail: "rebaselined",
 	}); err != nil {
 		t.Fatalf("Repo.UpsertTriggerRegistration(same status): %v", err)
@@ -375,13 +360,13 @@ func TestTriggerRegistrationQueries(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertTriggerRegistration(new status): %v", err)
 	}
-	twin, _ = env.Repo.GetTriggerRegistration(ctx, "trg-reg-a")
+	twin, _ = store.GetTriggerRegistration(ctx, env.ORM, "trg-reg-a")
 	if twin.StatusSince.Equal(old) || twin.Status != core.TriggerRegistrationNeedsReauth || twin.StatusDetail != "token revoked" {
 		t.Fatalf("after a status change = %+v, want status_since moved", twin)
 	}
 
 	for _, id := range []string{"trg-reg-b", "trg-reg-foreign"} {
-		if err := env.Repo.UpsertTriggerRegistration(ctx, &core.TriggerRegistration{TriggerID: id, Provider: "github", RegistrationID: "hook-" + id}); err != nil {
+		if err := store.UpsertTriggerRegistration(ctx, env.ORM, &core.TriggerRegistration{TriggerID: id, Provider: "github", RegistrationID: "hook-" + id}); err != nil {
 			t.Fatalf("Repo.UpsertTriggerRegistration(%s): %v", id, err)
 		}
 	}
@@ -433,7 +418,7 @@ func TestListAccessRoutedTriggers(t *testing.T) {
 	routed("trg-acc-foreign-conn", strp("conn-foreign"), true, "github")
 	routed("trg-acc-off", nil, false, "github")
 	routed("trg-acc-slack", nil, true, "slack")
-	if err := env.Repo.ReplaceIntegrationAccess(ctx, storetest.SeedUserID, "github", "11", now, []core.IntegrationAccessGrant{
+	if err := store.ReplaceIntegrationAccess(ctx, env.Repo.ORM(), storetest.SeedUserID, "github", "11", now, []core.IntegrationAccessGrant{
 		{AccountKey: "100", ResourceKey: "1"},
 	}); err != nil {
 		t.Fatalf("ReplaceIntegrationAccess: %v", err)
@@ -453,11 +438,6 @@ func TestListAccessRoutedTriggers(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListAccessRoutedTriggers(%s/%s): %v", c.account, c.resource, err)
 		}
-		twin, err := env.Repo.ListAccessRoutedTriggers(ctx, "github", c.account, c.resource, c.fresh)
-		if err != nil {
-			t.Fatalf("Repo.ListAccessRoutedTriggers(%s/%s): %v", c.account, c.resource, err)
-		}
-		sameValue(t, "ListAccessRoutedTriggers", port, twin)
 		var got []string
 		for _, tr := range port {
 			got = append(got, tr.ID)

@@ -7,11 +7,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/authz"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // createResolverDraft inserts a draft owned by "test-user", with unique
@@ -131,11 +134,11 @@ func TestWorkflowTools_RequireID(t *testing.T) {
 		"edit_workflow":       NewEditWorkflowTool(repo),
 		"write_workflow":      NewWriteWorkflowTool(repo),
 		ListScenariosToolName: NewListScenariosTool(repo),
-		"view_scenario":       NewViewScenarioTool(repo),
-		"edit_scenario":       NewEditScenarioTool(repo),
-		"write_scenario":      NewWriteScenarioTool(repo, nil),
-		"delete_scenario":     NewDeleteScenarioTool(repo),
-		"run_scenario":        NewRunScenarioTool(repo, nil),
+		"view_scenario":       NewViewScenarioTool(repo, store.NewWorkflowScenarioExtStore(repo.ORM())),
+		"edit_scenario":       NewEditScenarioTool(repo, store.NewWorkflowScenarioExtStore(repo.ORM())),
+		"write_scenario":      NewWriteScenarioTool(repo, store.NewWorkflowScenarioExtStore(repo.ORM()), nil),
+		"delete_scenario":     NewDeleteScenarioTool(repo, store.NewWorkflowScenarioExtStore(repo.ORM())),
+		"run_scenario":        NewRunScenarioTool(repo, store.NewWorkflowScenarioExtStore(repo.ORM()), nil),
 	}
 	require.Len(t, tools, 9)
 	extra := map[string]string{
@@ -239,12 +242,12 @@ func TestCreateWorkflow_DuplicateSlugIsClearToolError(t *testing.T) {
 	input, _ := json.Marshal(CreateWorkflowParams{Content: &content})
 	call := ToolCall{ID: "c", Name: "create_workflow", Input: string(input)}
 
-	first, err := NewCreateWorkflowTool(repo).Run(ctx, call)
+	first, err := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM())).Run(ctx, call)
 	require.NoError(t, err)
 	require.False(t, first.IsError, first.Content)
 
 	retries := db.RecordRetryBackoffs(repo)
-	second, err := NewCreateWorkflowTool(repo).Run(ctx, call)
+	second, err := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM())).Run(ctx, call)
 	require.NoError(t, err)
 	require.True(t, second.IsError)
 	assert.Contains(t, second.Content, name)
@@ -267,7 +270,7 @@ func TestCreateWorkflow_ReturnedIDWorksWithoutChatBinding(t *testing.T) {
 	name := "unbound-" + uuid.New().String()[:8]
 	content := "name: " + name + "\ndescription: before\nentry: [run]\nnodes:\n  - id: run\n    type: run\n    command: echo hi\n"
 	createInput, _ := json.Marshal(CreateWorkflowParams{Content: &content})
-	resp, err := NewCreateWorkflowTool(repo).Run(ctx, ToolCall{ID: "c", Name: "create_workflow", Input: string(createInput)})
+	resp, err := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM())).Run(ctx, ToolCall{ID: "c", Name: "create_workflow", Input: string(createInput)})
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
 	var created CreateWorkflowResult

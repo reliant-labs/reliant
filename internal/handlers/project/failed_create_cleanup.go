@@ -30,8 +30,15 @@ func (s *Service) startFailedCreateCleanup(userID, daemonID string) {
 		defer s.failedCreateCleanups.Delete(daemonID)
 		ctx, cancel := context.WithTimeout(context.Background(), failedCreateCleanupTimeout)
 		defer cancel()
-		workspacecreate.RemoveFailedCreatesOn(ctx, s.deps.Repo, pinnedMachine{s: s, userID: userID, daemonID: daemonID}, daemonID)
+		workspacecreate.RemoveFailedCreatesOn(ctx, failedCreateStore{s.deps.Repo, s.deps.Installs}, pinnedMachine{s: s, userID: userID, daemonID: daemonID}, daemonID)
 	}()
+}
+
+// failedCreateStore joins the repository and the machine's checkout rows into
+// the workspacecreate.FailedCreateStore the cleanup reads.
+type failedCreateStore struct {
+	workspacecreate.FailedCreateRepo
+	DaemonInstalls
 }
 
 // pinnedMachine is a workspacecreate.Machine that sends to one named daemon:

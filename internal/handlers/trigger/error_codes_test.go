@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -36,7 +38,7 @@ func TestTriggerStoreErrorCodes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			repo := &MockRepository{GetTriggerFunc: func(context.Context, string) (*core.Trigger, error) { return nil, tc.err }}
-			svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo}), WithPlaceholderDeps())
+			svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}), WithPlaceholderDeps())
 			_, err := svc.GetTrigger(AuthedContext(t), connect.NewRequest(&reliantv1.GetTriggerRequest{Id: "t-1"}))
 			require.Error(t, err)
 			assert.Equal(t, tc.code, svcerr.Code(err))
@@ -64,7 +66,7 @@ func TestTriggerErrorsOnTheWire(t *testing.T) {
 		}
 		return nil, errors.New("dsn=postgres://u:secret@h")
 	}}
-	_, client := NewTestTriggerServer(t, WithTriggerDeps(Deps{Repo: repo}), WithPlaceholderDeps())
+	_, client := NewTestTriggerServer(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}), WithPlaceholderDeps())
 	for _, id := range []string{"theirs", "missing"} {
 		_, err := client.GetTrigger(context.Background(), connect.NewRequest(&reliantv1.GetTriggerRequest{Id: id}))
 		require.Error(t, err)

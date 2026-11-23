@@ -1831,7 +1831,19 @@ func layoutScenarios(layout *workflowref.Layout, source, dir, onlyFile string) (
 	if source == "builtin" {
 		where = "the builtin workflows"
 	}
-	if problems := layout.ScenarioProblems(); len(problems) > 0 {
+	problems := layout.ScenarioProblems()
+	if onlyFile != "" {
+		// One named workflow: a scenario directory that belongs to no
+		// workflow is not this one's (a retired workflow left its
+		// scenarios behind), so it is reported, not a reason to run
+		// nothing. A misplaced file may be this workflow's, and still
+		// refuses: running without it would pass without testing it.
+		problems = append([]error(nil), layout.Misplaced...)
+		for _, orphan := range layout.OrphanScenarioDirs() {
+			fmt.Fprintf(os.Stderr, "Warning: %s (in %s; not run)\n", orphan, where)
+		}
+	}
+	if len(problems) > 0 {
 		msgs := make([]string, len(problems))
 		for i, p := range problems {
 			msgs[i] = "  - " + p.Error()

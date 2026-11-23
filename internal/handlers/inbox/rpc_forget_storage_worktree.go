@@ -26,7 +26,7 @@ func (s *Service) ForgetStorageWorktree(
 	if req.Msg.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
-	err := worktreesweep.Forget(ctx, s.deps.Repo, userID, req.Msg.WorktreeId)
+	err := worktreesweep.Forget(ctx, s.deps.Storage, userID, req.Msg.WorktreeId)
 	switch {
 	case errors.Is(err, worktreesweep.ErrNotHeld):
 		return nil, svcerr.NotFound("held workspace")

@@ -1140,6 +1140,20 @@ export function isGenerateVideoTool(toolName: string): boolean {
   return baseName === 'generate_video';
 }
 
+/** present_image: the agent showing the user an image file from the machine. */
+export function isPresentImageTool(toolName: string): boolean {
+  const lower = toolName.toLowerCase();
+  const baseName = lower.startsWith('mcp__') ? lower.split('__').pop() || lower : lower;
+  return baseName === 'present_image';
+}
+
+/** The caption a present_image call asked for, if any. */
+export function presentImageCaption(input: unknown): string | undefined {
+  if (typeof input !== 'object' || input === null) return undefined;
+  const caption = (input as { caption?: unknown }).caption;
+  return typeof caption === 'string' && caption.trim() !== '' ? caption.trim() : undefined;
+}
+
 /**
  * request_machine: a chat with no machine asking the user to connect one
  * (research/NO_MACHINE_CHATS.md §3). Rendered as an inline card with the

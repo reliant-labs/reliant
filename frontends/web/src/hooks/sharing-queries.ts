@@ -17,10 +17,12 @@ import { ResourceVisibility } from "@/gen/reliant/v1/common_pb";
 import { OrgUpdateType, type OrgUpdate } from "@/gen/reliant/v1/streaming_pb";
 import { chatKeys, patchChatCaches } from "@/hooks/chat-queries";
 import { leaveSharedChat } from "@/store/openChat";
+import { projectServiceKeys } from "@/hooks/project-service-hooks_gen";
 import {
   sharingServiceKeys,
   useListSharedChats,
   useSetChatVisibility,
+  useSetProjectVisibility,
 } from "@/hooks/sharing-service-hooks_gen";
 import { useMembers } from "@/components/Settings/cloud/members/useMembers";
 import { memberNamesBySubject } from "@/services/controlPlane/members";
@@ -29,16 +31,24 @@ import { hasControlPlane } from "@/services/controlPlane/config";
 /** How long a burst of feed rows may wait before the list is re-read. */
 export const ORG_FEED_REFRESH_DEBOUNCE_MS = 250;
 
-/** The chats other members shared with `orgId`, most recently active first. */
-export function useSharedChats(orgId: string | null) {
+/**
+ * The chats other members shared with `orgId`, most recently active first;
+ * with `projectIds`, only those projects' (the chat list's project filter:
+ * ListSharedChats' `project_ids`, their union, applied by the server before
+ * its page limit). No fallback for a server without the field: the web ships
+ * with one that has it. The narrowing only guarantees the list never shows a
+ * chat of a project not chosen.
+ */
+export function useSharedChats(orgId: string | null, projectIds: readonly string[] = []) {
+  const ids = [...projectIds].sort();
   return useListSharedChats(
-    { orgId: orgId ?? undefined },
+    { orgId: orgId ?? undefined, ...(ids.length > 0 ? { projectIds: ids } : {}) },
     {
       enabled: hasControlPlane && !!orgId,
       // The org feed keeps it current; a refocus re-reads it in case the
       // feed was down (the server answers a fresh open with no replay).
       refetchOnWindowFocus: true,
-      select: (res) => res.chats,
+      select: (res) => (ids.length > 0 ? res.chats.filter((chat) => ids.includes(chat.projectId)) : res.chats),
     },
   );
 }
@@ -130,5 +140,26 @@ export function useSetChatShared() {
     ...mutation,
     share: (chatId: string) => mutation.mutateAsync({ chatId, visibility: ResourceVisibility.ORG }),
     unshare: (chatId: string) => mutation.mutateAsync({ chatId, visibility: ResourceVisibility.PRIVATE }),
+  };
+}
+
+/**
+ * Share a project with its org, or make it private: the owner's toggle on the
+ * project's Settings tab, and an org admin's "make private". On success every
+ * shared list is re-read, and so is every project read (the catalog the
+ * project page reads included: projectServiceKeys.all), so the page shows the
+ * new state.
+ */
+export function useSetProjectShared() {
+  const mutation = useSetProjectVisibility({
+    invalidate: (client) => {
+      void client.invalidateQueries({ queryKey: sharingServiceKeys.all });
+      void client.invalidateQueries({ queryKey: projectServiceKeys.all });
+    },
+  });
+  return {
+    ...mutation,
+    share: (projectId: string) => mutation.mutateAsync({ projectId, visibility: ResourceVisibility.ORG }),
+    unshare: (projectId: string) => mutation.mutateAsync({ projectId, visibility: ResourceVisibility.PRIVATE }),
   };
 }

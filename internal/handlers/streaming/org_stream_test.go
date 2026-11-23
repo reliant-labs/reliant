@@ -55,7 +55,7 @@ func newOrgFeedService(t *testing.T) (*viewertest.Fixture, reliantv1connect.Stre
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, Orgs: f.Membership}))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, Orgs: f.Membership})))
 	svc.heartbeatInterval = time.Hour
 	svc.orgFeedPollInterval = 10 * time.Millisecond
 	return f, sharedStreams(t, svc, f.Membership)
@@ -102,7 +102,7 @@ func TestStreamOrgUpdates_FollowsAndReplaysAnOrgsShares(t *testing.T) {
 	assert.EqualValues(t, 2, working.GetActivity())
 	assert.Equal(t, renamed.GetSequenceNumber()+1, working.GetSequenceNumber(), "the config change wrote no row")
 
-	changed, err := f.Repo.ApplyShareChange(ctx, core.ShareChange{
+	changed, err := applyShareChange(ctx, f.Repo, core.ShareChange{
 		Kind: core.ShareKindChat, ResourceID: f.ChatID, OrgID: viewertest.OrgID, OwnerUserID: f.OwnerID,
 		ActorUserID: f.OwnerID, Action: core.ShareActionUnshare, At: time.Now(),
 	})
@@ -217,7 +217,7 @@ func TestStreamOrgUpdates_EndsWhenMembershipIsNotConfirmed(t *testing.T) {
 			t.Cleanup(cleanup)
 			f := viewertest.New(t, repo)
 			m := &flippableFeedMembership{Resolver: f.Membership, afterMember: tc.member, afterOK: tc.ok, afterErr: tc.err}
-			svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, Orgs: m}))
+			svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, Orgs: m})))
 			svc.heartbeatInterval = time.Hour
 			svc.orgFeedPollInterval = 10 * time.Millisecond
 			svc.reauthorizeInterval = 10 * time.Millisecond
@@ -254,7 +254,7 @@ func TestStreamOrgUpdates_OpenRefusesUnconfirmedMembership(t *testing.T) {
 	f := viewertest.New(t, repo)
 	m := &flippableFeedMembership{Resolver: f.Membership, afterMember: true, afterOK: false}
 	m.flipped.Store(true)
-	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, Orgs: m}))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, Orgs: m})))
 	client := sharedStreams(t, svc, f.Membership)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)

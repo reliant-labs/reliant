@@ -116,7 +116,8 @@ export function ShareChatDialog({ chatId, open, onClose }: ShareChatDialogProps)
   );
 }
 
-function DisclosureList({ title, items, kind }: { title: string; items: readonly string[]; kind: "sees" | "hidden" }) {
+/** One column of a share dialog's disclosure: what members see, or do not. */
+export function DisclosureList({ title, items, kind }: { title: string; items: readonly string[]; kind: "sees" | "hidden" }) {
   const Icon = kind === "sees" ? Check : X;
   return (
     <div className="rounded-md border border-border/60 bg-background p-3">

@@ -24,7 +24,7 @@ func (s *Service) ListMachinePools(
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
 	}
-	pools, err := s.deps.Repo.ListMachinePoolsForUser(ctx, userID)
+	pools, err := s.deps.Pools.ListMachinePoolsForUser(ctx, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list machine pools"))
 	}
@@ -43,7 +43,7 @@ func (s *Service) ListMachinePools(
 // project: state and live runs are project-independent; the per-project
 // catalog check is placement's, at launch.
 func (s *Service) poolToProto(ctx context.Context, p *core.MachinePool) (*pb.MachinePool, error) {
-	rows, err := s.deps.Repo.ListMachinePoolMembers(ctx, p, "")
+	rows, err := s.deps.Pools.ListMachinePoolMembers(ctx, p, "")
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list the pool's members"))
 	}

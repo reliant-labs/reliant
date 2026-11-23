@@ -266,12 +266,27 @@ func TestReaper_DisabledDoesNothing(t *testing.T) {
 	if h.tick() {
 		t.Fatal("a disabled routine must not run a pass, even under pressure")
 	}
+	// Disabled, RunReaper runs only the daemon's clean-up of its own GOTMPDIR
+	// roots (runReaperOff) until cancelled: never a reaper pass.
+	if err := os.MkdirAll(filepath.Join(h.w.env.Getenv("TMPDIR"), commandGoTmpBasePrefix+itoa(os.Getuid())), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	scanned := make(chan struct{})
+	var once sync.Once
+	h.w.trim.procs = func() (procSnapshot, error) { once.Do(func() { close(scanned) }); return procSnapshot{}, nil }
+	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { h.w.RunReaper(context.Background()); close(done) }()
+	go func() { h.w.RunReaper(ctx); close(done) }()
+	select {
+	case <-scanned:
+	case <-time.After(30 * time.Second):
+		t.Fatal("RunReaper with the reaper disabled never ran the pass over the daemon's own GOTMPDIR roots")
+	}
+	cancel()
 	select {
 	case <-done:
 	case <-time.After(30 * time.Second):
-		t.Fatal("RunReaper must return at once when disabled")
+		t.Fatal("RunReaper did not stop on cancel")
 	}
 	if h.runs() != 0 {
 		t.Fatalf("runs = %d, want 0", h.runs())

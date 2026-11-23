@@ -57,18 +57,22 @@ type Options struct {
 	Logger     *slog.Logger
 }
 
+// maxLastError bounds the error text kept on a refresh row.
+const maxLastError = 500
+
 // Refresher re-reads users' GitHub access.
 type Refresher struct {
-	store  Store
-	tokens TokenSource
-	base   string
-	client *http.Client
-	logger *slog.Logger
-	now    func() time.Time
+	grants    Grants
+	refreshes Refreshes
+	tokens    TokenSource
+	base      string
+	client    *http.Client
+	logger    *slog.Logger
+	now       func() time.Time
 }
 
 // New builds a Refresher.
-func New(store Store, tokens TokenSource, opts Options) *Refresher {
+func New(grants Grants, refreshes Refreshes, tokens TokenSource, opts Options) *Refresher {
 	base := strings.TrimSuffix(strings.TrimSpace(opts.APIBaseURL), "/")
 	if base == "" {
 		base = DefaultAPIBaseURL
@@ -81,7 +85,7 @@ func New(store Store, tokens TokenSource, opts Options) *Refresher {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	return &Refresher{store: store, tokens: tokens, base: base, client: client, logger: logger, now: time.Now}
+	return &Refresher{grants: grants, refreshes: refreshes, tokens: tokens, base: base, client: client, logger: logger, now: time.Now}
 }
 
 // Refresh re-reads userID's access and replaces their grants with it.
@@ -94,13 +98,13 @@ func (r *Refresher) Refresh(ctx context.Context, userID string) error {
 	grants, subject, err := r.read(ctx, userID)
 	if err != nil {
 		if IsPermanent(err) {
-			if clearErr := r.store.ReplaceIntegrationAccess(ctx, userID, IntegrationID, "", at, nil); clearErr != nil {
+			if clearErr := r.grants.ReplaceIntegrationAccess(ctx, userID, IntegrationID, "", at, nil); clearErr != nil {
 				return errors.Join(err, fmt.Errorf("clear access: %w", clearErr))
 			}
 		}
 		return err
 	}
-	if err := r.store.ReplaceIntegrationAccess(ctx, userID, IntegrationID, subject, at, grants); err != nil {
+	if err := r.grants.ReplaceIntegrationAccess(ctx, userID, IntegrationID, subject, at, grants); err != nil {
 		return fmt.Errorf("ghaccess: record access: %w", err)
 	}
 	return nil
@@ -110,7 +114,7 @@ func (r *Refresher) Refresh(ctx context.Context, userID string) error {
 // refresh is due and whose lease this replica wins, then prunes grants
 // nobody has refreshed in a day.
 func (r *Refresher) RefreshDue(ctx context.Context) {
-	owners, err := r.store.ListIntegrationTriggerOwners(ctx, IntegrationID)
+	owners, err := r.refreshes.ListIntegrationTriggerOwners(ctx, IntegrationID)
 	if err != nil {
 		r.logger.WarnContext(ctx, "listing GitHub trigger owners failed", "error", err)
 		return
@@ -120,7 +124,7 @@ func (r *Refresher) RefreshDue(ctx context.Context) {
 			return
 		}
 		now := r.now().UTC()
-		ok, err := r.store.ClaimIntegrationAccessRefresh(ctx, userID, IntegrationID, now, now.Add(leaseFor), now.Add(-RefreshInterval))
+		ok, err := r.refreshes.ClaimIntegrationAccessRefresh(ctx, userID, IntegrationID, now, now.Add(leaseFor), now.Add(-RefreshInterval))
 		if err != nil {
 			r.logger.WarnContext(ctx, "claiming a GitHub access refresh failed", "user_id", userID, "error", err)
 			continue
@@ -132,13 +136,26 @@ func (r *Refresher) RefreshDue(ctx context.Context) {
 		if refreshErr != nil {
 			r.logger.WarnContext(ctx, "GitHub access refresh failed", "user_id", userID, "permanent", IsPermanent(refreshErr), "error", refreshErr)
 		}
-		if err := r.store.FinishIntegrationAccessRefresh(context.WithoutCancel(ctx), userID, IntegrationID, r.now().UTC(), refreshErr); err != nil {
+		if err := r.finish(ctx, userID, refreshErr); err != nil {
 			r.logger.WarnContext(ctx, "recording a GitHub access refresh failed", "user_id", userID, "error", err)
 		}
 	}
-	if _, err := r.store.PruneIntegrationAccess(ctx, r.now().Add(-pruneAfter)); err != nil {
+	if _, err := r.grants.PruneIntegrationAccess(ctx, r.now().Add(-pruneAfter)); err != nil {
 		r.logger.WarnContext(ctx, "pruning stale GitHub access failed", "error", err)
 	}
+}
+
+// finish releases the lease and records the outcome: refreshed_at moves only
+// on success, and the stored error is cut to maxLastError bytes.
+func (r *Refresher) finish(ctx context.Context, userID string, refreshErr error) error {
+	lastError := ""
+	if refreshErr != nil {
+		lastError = refreshErr.Error()
+		if len(lastError) > maxLastError {
+			lastError = lastError[:maxLastError]
+		}
+	}
+	return r.refreshes.FinishIntegrationAccessRefresh(context.WithoutCancel(ctx), userID, IntegrationID, r.now().UTC(), refreshErr == nil, lastError)
 }
 
 // Run refreshes due users every minute until ctx is done. Every api-server

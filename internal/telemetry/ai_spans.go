@@ -3,11 +3,9 @@ package telemetry
 
 import (
 	"context"
-	"errors"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -39,11 +37,20 @@ func aiTracer() trace.Tracer {
 // StartNodeSpan opens the span for one execution of the workflow node ctx's
 // run scope names (RunScope.NodeID): "workflow.node <id>". The returned ctx
 // carries it; end it with EndAISpan.
+//
+// It carries the scope's SpanAttributes and the chat as gen_ai.conversation.id
+// too, so a per-chat read keyed on the conversation finds the node itself, not
+// only its children. Not GenAIAttributes: a node is not an agent, so it names
+// no gen_ai.agent.*.
 func StartNodeSpan(ctx context.Context) (context.Context, trace.Span) {
 	scope := RunScopeFromContext(ctx)
+	attrs := scope.SpanAttributes()
+	if scope.ChatID != "" {
+		attrs = append(attrs, attribute.String(AttrGenAIConversationID, scope.ChatID))
+	}
 	return aiTracer().Start(ctx, SpanNameNode+" "+scope.NodeID,
 		trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(scope.SpanAttributes()...))
+		trace.WithAttributes(attrs...))
 }
 
 // AgentTurn is the span of one agent turn: "invoke_agent <agent>", the turn's
@@ -78,12 +85,19 @@ func (t *AgentTurn) TraceParent() string {
 	return TraceParentOf(t.span.SpanContext())
 }
 
-// End records err, if any, and ends the span.
+// End records err's class, if any, and ends the span (EndAISpan).
 func (t *AgentTurn) End(err error) {
+	t.EndAs(err, "")
+}
+
+// EndAs is End with err's class named by the caller (a value of the
+// error.type vocabulary, ai_error_type.go): the turn's provider failure, which
+// internal/llm can classify and this package cannot. "" is ErrorTypeOf(err).
+func (t *AgentTurn) EndAs(err error, errType string) {
 	if t == nil {
 		return
 	}
-	EndAISpan(t.span, err)
+	EndAISpanAs(t.span, err, errType)
 }
 
 // ToolCall is the span of one tool call: "execute_tool <tool>".
@@ -137,24 +151,28 @@ func (c *ToolCall) End(toolError bool, err error) {
 		return
 	}
 	if toolError && err == nil {
-		c.span.SetAttributes(attribute.String(AttrErrorType, "tool_error"))
+		c.span.SetAttributes(attribute.String(AttrErrorType, ErrorTypeToolError))
 	}
 	EndAISpan(c.span, err)
 }
 
-// EndAISpan records err on span, if any, and ends it. A cancellation is the
-// caller hanging up (the user pressed stop, a newer turn superseded this one),
-// not a failure: it is error.type=canceled and sets no error status, as the
-// gen_ai span does.
+// EndAISpan records err's class on span, if any, and ends it: error.type and
+// an error status described by the same code (SetAISpanError), never the
+// error's text. A cancellation is the caller hanging up (the user pressed
+// stop, a newer turn superseded this one), not a failure: it is
+// error.type=canceled and sets no error status, as the gen_ai span does.
+//
+// The text is not lost: the code that returned err logs it (an activity's
+// failure is logged by the Temporal worker with the run's ids), and the span's
+// trace and run ids join the two.
 func EndAISpan(span trace.Span, err error) {
-	if err != nil {
-		span.RecordError(err)
-		if errors.Is(err, context.Canceled) {
-			span.SetAttributes(attribute.String(AttrErrorType, ErrorTypeCanceled))
-		} else {
-			span.SetStatus(codes.Error, err.Error())
-		}
-	}
+	EndAISpanAs(span, err, "")
+}
+
+// EndAISpanAs is EndAISpan with err's class named by the caller; "" is
+// ErrorTypeOf(err).
+func EndAISpanAs(span trace.Span, err error, errType string) {
+	SetAISpanError(span, err, errType)
 	span.End()
 }
 

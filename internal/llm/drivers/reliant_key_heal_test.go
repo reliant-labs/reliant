@@ -33,12 +33,12 @@ func newHealFixture(t *testing.T, minter *fakeMinter) (*db.Repo, *ReliantKeyHeal
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	return repo, NewReliantKeyHealer(repo, minter)
+	return repo, NewReliantKeyHealer(db.TestAccounts(t, repo), repo, minter)
 }
 
 func storedReliantKey(t *testing.T, repo *db.Repo, user string) string {
 	t.Helper()
-	accounts, err := repo.ListProviderAccountsWithSecrets(context.Background(), user)
+	accounts, err := db.TestAccounts(t, repo).ListProviderAccountsWithSecrets(context.Background(), user)
 	require.NoError(t, err)
 	for _, a := range accounts {
 		if a.Provider == "reliant" {
@@ -156,7 +156,7 @@ func TestBuildAvailableDrivers_HealsLegacyKeyOnRead(t *testing.T) {
 	ctx := context.Background()
 	db.SeedProviderAccount(t, repo, "u1", "reliant", legacyKey)
 
-	available, err := BuildAvailableDrivers(ctx, repo, PersonalScope("u1"))
+	available, err := BuildAvailableDrivers(ctx, db.TestAccounts(t, repo), PersonalScope("u1"))
 	require.NoError(t, err)
 	cfg, ok := available.Drivers["reliant"]
 	require.True(t, ok, "legacy key must be healed and the driver registered")

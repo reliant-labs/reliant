@@ -2,9 +2,10 @@
  * Browser-reserved chords.
  *
  * Two jobs: the shortcut settings warn a user who rebinds onto a chord the
- * browser takes first, and bindings.test.ts refuses a web default the browser
- * would never deliver. Electron users are unaffected and can bind whatever
- * they like.
+ * browser takes first, and bindings.test.ts refuses a default the browser
+ * would never deliver — defaults are the same in the desktop app and a tab, so
+ * a hard chord survives only as a desktop alias. Electron users are otherwise
+ * unaffected and can bind whatever they like.
  *
  * Three tiers, because they fail differently:
  *   HARD     — the page never receives the event. Overriding is impossible, so

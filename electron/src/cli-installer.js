@@ -69,6 +69,20 @@ function getEmbeddedBinaryPath() {
   return fs.existsSync(binaryPath) ? binaryPath : null;
 }
 
+/**
+ * The owner `reliant update` reads from `<binary>.managed-by` beside a copy of
+ * the CLI (forge pkg/selfupdate's Detect): this app updates the copy, on every
+ * version, so the copy must never replace itself. A symlink needs no marker:
+ * it resolves into the app bundle, which Detect already refuses. Held equal to
+ * internal/cliupdate's OwnerDesktopApp by TestDesktopCopiesNameTheirOwner.
+ */
+const MANAGED_BY_OWNER = "reliant-desktop";
+
+/** Writes `<target>.managed-by` naming this app as the copy's owner. */
+function writeManagedByMarker(target) {
+  fs.writeFileSync(`${target}.managed-by`, `${MANAGED_BY_OWNER}\n`, "utf8");
+}
+
 /** Path of the marker file we write after a successful install for this version. */
 function markerPath() {
   return path.join(app.getPath("userData"), "cli-installed.json");
@@ -389,6 +403,7 @@ async function installSilently() {
         fs.mkdirSync(userBinDir, { recursive: true });
       }
       fs.copyFileSync(source, target);
+      writeManagedByMarker(target);
     } catch (err) {
       log.warn("[CLIInstaller] Failed to copy CLI on Windows:", err.message);
       return { success: false, error: err.message };

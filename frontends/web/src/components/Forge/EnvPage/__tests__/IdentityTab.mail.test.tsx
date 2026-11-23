@@ -101,7 +101,7 @@ function renderTab(api: IdentityApi) {
   return render(
     <QueryClientProvider client={createTestQueryClient()}>
       <IdentityApiProvider api={api}>
-        <IdentityTab envName="staging" lifecycle="deployed" live={LIVE} liveLoading={false} envNameById={() => undefined} />
+        <IdentityTab envName="staging" lifecycle="deployed" live={LIVE} liveLoading={false} />
       </IdentityApiProvider>
     </QueryClientProvider>
   );
@@ -269,7 +269,7 @@ describe("IdentityTab with smtp", () => {
   });
 });
 
-describe("IdentityTab against a server that predates mail_delivery", () => {
+describe("IdentityTab when the server cannot say how mail is delivered", () => {
   it("claims neither, and keeps offering email", async () => {
     renderTab(fakeApi({ getStatus: vi.fn(async () => status({ mailDelivery: "unknown" })) }));
     const alice = await screen.findByTestId("identity-user-u-alice");

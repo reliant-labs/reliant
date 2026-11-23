@@ -4,9 +4,10 @@ package tools
 import (
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
 // These cover the interaction between loadable_tools and the other gates. The

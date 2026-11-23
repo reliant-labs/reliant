@@ -8,10 +8,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 	"github.com/reliant-labs/reliant/internal/rctx"
-	"github.com/stretchr/testify/require"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func TestExpandAgentIDPrefix(t *testing.T) {
@@ -48,7 +51,7 @@ func TestExpandAgentIDPrefix(t *testing.T) {
 func TestLatestSpawnPerAgent_KeepsOneEntryPerAgent(t *testing.T) {
 	t.Parallel()
 	a, b := "agent-a", "agent-b"
-	children := []*db.SpawnChild{
+	children := []*core.SpawnChild{
 		{ToolCallID: "1", ChildThreadID: &a},
 		{ToolCallID: "2", ChildThreadID: &b},
 		{ToolCallID: "3"}, // child not landed yet
@@ -75,18 +78,18 @@ func TestSpawnTools_AcceptAnUnambiguousAgentIDPrefix(t *testing.T) {
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
-	resp, meta := runSpawnStatus(t, NewSpawnStatusTool(repo), rc, SpawnStatusParams{AgentID: childID[:8]})
+	resp, meta := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Tree: store.NewToolCallExtStore(repo.ORM())}), rc, SpawnStatusParams{AgentID: childID[:8]})
 	require.False(t, resp.IsError, "response: %+v", resp)
 	require.Equal(t, childID, meta.AgentID)
 
-	sendResolved, err := resolveSpawnAgentID(rc, repo, parentID, childID[:8])
+	sendResolved, err := resolveSpawnAgentID(rc, store.NewToolCallExtStore(repo.ORM()), parentID, childID[:8])
 	require.NoError(t, err)
 	require.Equal(t, childID, sendResolved)
 
 	// A prefix of an agent the caller does not own resolves to nothing, so
 	// the tool's own refusal still applies.
 	_, otherChild, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
-	resp, _ = runSpawnStatus(t, NewSpawnStatusTool(repo), rc, SpawnStatusParams{AgentID: otherChild[:8]})
+	resp, _ = runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Tree: store.NewToolCallExtStore(repo.ORM())}), rc, SpawnStatusParams{AgentID: otherChild[:8]})
 	require.True(t, resp.IsError)
 	require.Contains(t, resp.Content, "not a sub-agent spawned from this thread")
 }
@@ -113,7 +116,7 @@ func TestSpawnStatus_Listing_RunningFirstDedupedAndFilterable(t *testing.T) {
 		RequestedAt: resumedAt, CompletedAt: &resumedAt, CreatedAt: resumedAt, UpdatedAt: resumedAt,
 	}))
 
-	tool := NewSpawnStatusTool(repo)
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp, meta := runSpawnStatus(t, tool, rc, SpawnStatusParams{})

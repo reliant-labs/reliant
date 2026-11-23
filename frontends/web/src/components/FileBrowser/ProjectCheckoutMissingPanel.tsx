@@ -14,7 +14,7 @@ type NamedMachine = Parameters<typeof machineDisplayName>[0];
 
 /**
  * The names of the user's other machines that have the project
- * (`availableDaemonIds`, empty from a server that predates it). An id the
+ * (`availableDaemonIds`, empty when none has it). An id the
  * machine list does not know yet is left out rather than shown raw.
  */
 function machinesThatHaveIt(missing: ProjectCheckoutMissing, daemons: NamedMachine[]): string[] {

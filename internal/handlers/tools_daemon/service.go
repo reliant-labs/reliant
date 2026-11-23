@@ -37,6 +37,25 @@ type Deps struct {
 	// their attachment leases, the projects and project configs they
 	// report (deps.go).
 	Repo Repository
+	// Attachments is the lease each connected daemon holds and what its
+	// heartbeats record on it (Attachments, deps.go). Without it no lease is
+	// written, renewed or released: the in-memory routing alone.
+	// forge:optional-dep
+	Attachments Attachments
+	// LocalModels stores the inventory a daemon publishes (LocalModels,
+	// deps.go). Without it inventories are not stored.
+	// forge:optional-dep
+	LocalModels LocalModels
+	// Projects resolves the project a machine reports by its path or remote
+	// (ProjectLookups, deps.go).
+	Projects ProjectLookups
+	// Installs is the machine's checkout rows (ProjectDaemons, deps.go).
+	Installs ProjectDaemons
+	// Checkouts is the machine's checkout lock and detachments
+	// (store.ProjectDaemonDetachmentExtStore).
+	Checkouts MachineCheckouts
+	// Pools holds the machine pools and the durable labels a daemon declares.
+	Pools MachinePools
 	// UserUpdateHub forwards daemon heartbeats, list changes and local-model
 	// inventories to the owner's web clients as ephemeral user updates.
 	// Without it they are not published.
@@ -105,6 +124,18 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("tools_daemon: Deps.Repo is required")
+	}
+	if d.Checkouts == nil {
+		return fmt.Errorf("tools_daemon: Deps.Checkouts is required")
+	}
+	if d.Projects == nil {
+		return fmt.Errorf("tools_daemon: Deps.Projects is required")
+	}
+	if d.Installs == nil {
+		return fmt.Errorf("tools_daemon: Deps.Installs is required")
+	}
+	if d.Pools == nil {
+		return fmt.Errorf("tools_daemon: Deps.Pools is required")
 	}
 	return nil
 }

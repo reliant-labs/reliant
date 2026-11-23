@@ -8,9 +8,10 @@
  *              signed-out visitor is taken straight to it rather than to
  *              sign-in; a signed-in one starts it on arrival, or after
  *              signing in when they came in through the sign-in page.
- *   workflows  is offered as a link to Reliant: that journey's `shells`
- *              exclude forge (Onboarding/journeys/workflows.tsx), so it never
- *              runs on the forge brand.
+ *   workflows  is offered as a link to the Workflows area, in this app (one
+ *              shell). The tour itself runs only in the Reliant tour shell
+ *              (Onboarding/journeys/workflows.tsx `shells`): it seeds its
+ *              example into a project a forge visitor may not have.
  *
  * The decision is split from ForgeLandingJourney so the auth guard
  * (AuthGuard, on the forge brand) can make the same call: it must hold its
@@ -56,7 +57,8 @@ export type LandingJourneyAction =
   /** Forget it: a tour is already open, or the forge journey is switched off. */
   | "drop"
   | "start-forge"
-  | "offer-reliant";
+  /** Point at the Workflows area: the workflows tour does not run on the forge brand. */
+  | "offer-workflows";
 
 export interface LandingJourneyInputs {
   held: JourneyId | undefined;
@@ -73,7 +75,7 @@ export interface LandingJourneyInputs {
 /** What to do with the held journey here and now. Pure. */
 export function landingJourneyAction({ held, tourOpen, forgeAvailable, onDemo, guarded, auth }: LandingJourneyInputs): LandingJourneyAction {
   if (!held) return "none";
-  if (held === "workflows") return "offer-reliant";
+  if (held === "workflows") return "offer-workflows";
   if (tourOpen || !forgeAvailable) return "drop";
   if (onDemo) return "start-forge";
   if (!guarded) return "wait";

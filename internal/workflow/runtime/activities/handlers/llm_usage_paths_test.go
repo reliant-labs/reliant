@@ -27,8 +27,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
+	"github.com/reliant-labs/reliant/internal/threads"
 )
 
 // pathDriver answers every request with a fixed reply and token split, as a
@@ -216,7 +219,7 @@ func TestCompaction_RequestReachesTheLedgerPerAttempt(t *testing.T) {
 	saveTurn(t, svc, chatID, thread, "call_1", 20_000, 80_000)
 
 	driver := newPathDriver("claude", true)
-	compact := NewCompactActivity(h.Repo(), driver.resolver())
+	compact := NewCompactActivity(CompactDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()}).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 	input := CompactInput{ChatID: chatID, Thread: thread}.V3()
 	input.Node.GetCompact().Force = &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}}
 	runRetried(t, "Compact", compact.Execute, input)
@@ -247,7 +250,7 @@ func TestTitle_RequestReachesTheLedgerPerAttempt(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-title-ledger", project.ID, project.UserID)
 
 	driver := newPathDriver("openai", true)
-	title := NewGenerateTitleActivity(h.Repo(), driver.resolver())
+	title := NewGenerateTitleActivity(h.Repo(), driver.resolver()).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 	runRetried(t, "GenerateTitle", title.Execute, GenerateTitleInput{ChatID: chat.ID, FirstMessage: "how do I debug a workflow?"})
 	require.Equal(t, 2, driver.requests)
 
@@ -269,7 +272,7 @@ func TestDraftAutomation_RequestReachesTheLedgerPerAttempt(t *testing.T) {
 	defer h.Cleanup()
 
 	driver := newPathDriver("reliant", true)
-	draft := NewDraftAutomationActivity(driver.resolver()).WithUsageRecorder(h.Repo())
+	draft := NewDraftAutomationActivity(driver.resolver()).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 	runRetried(t, "DraftAutomation", draft.Execute, DraftAutomationInput{UserID: "user-draft-ledger", Description: "every weekday at 9 summarise failed CI"})
 	require.Equal(t, 2, driver.requests)
 
@@ -299,8 +302,8 @@ func TestUsageMeter_RequestsInOneActivityAreDistinctAndNeverCollideWithChatTurns
 
 	// Three requests in one activity: two compaction attempts and a title.
 	exec := func(ctx context.Context, _ string) (string, error) {
-		compaction := newUsageMeter(h.Repo(), project.UserID, chat.ID, "compaction")
-		title := newUsageMeter(h.Repo(), project.UserID, chat.ID, "title")
+		compaction := newUsageMeter(llmusagetest.New(t, h.Repo()), project.UserID, chat.ID, "compaction")
+		title := newUsageMeter(llmusagetest.New(t, h.Repo()), project.UserID, chat.ID, "title")
 		for range 2 {
 			if _, err := compaction.streamAndAccumulate(ctx, resolved, nil, nil, nil); err != nil {
 				return "", err
@@ -352,7 +355,7 @@ func TestUsageMeter_FailureIsRecordedAsClassOnly(t *testing.T) {
 	driver := newPathDriver("gemini", true)
 	resolved := &resolvedLLMCall{Driver: driver, Model: models.Model{ID: "mock-model"}}
 	exec := func(ctx context.Context, _ string) (string, error) {
-		_, err := newUsageMeter(h.Repo(), project.UserID, chat.ID, "title").streamAndAccumulate(ctx, resolved, nil, nil, nil)
+		_, err := newUsageMeter(llmusagetest.New(t, h.Repo()), project.UserID, chat.ID, "title").streamAndAccumulate(ctx, resolved, nil, nil, nil)
 		return "", err
 	}
 	var suite temporaltest.WorkflowTestSuite
@@ -415,7 +418,9 @@ func TestModelRequestsGoThroughTheUsageLedger(t *testing.T) {
 		rel = filepath.ToSlash(rel)
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", "node_modules", "frontends", "electron", "docs", "research", "proto-vendor":
+			// .forge: per-checkout state; a recorded test run adds a
+			// directory there that would key this test's cache entry.
+			case ".git", ".forge", "node_modules", "frontends", "electron", "docs", "research", "proto-vendor":
 				return filepath.SkipDir
 			}
 			return nil
@@ -498,7 +503,7 @@ func TestUsageMeter_AFailedStreamKeepsTheUsageItReported(t *testing.T) {
 			driver := newPathDriverShaped("anthropic", true, shape)
 			resolved := &resolvedLLMCall{Driver: driver, Model: models.Model{ID: "mock-model"}}
 			exec := func(ctx context.Context, _ string) (string, error) {
-				resp, err := newUsageMeter(h.Repo(), project.UserID, chat.ID, "compaction").streamAndAccumulate(ctx, resolved, nil, nil, nil)
+				resp, err := newUsageMeter(llmusagetest.New(t, h.Repo()), project.UserID, chat.ID, "compaction").streamAndAccumulate(ctx, resolved, nil, nil, nil)
 				assert.Nil(t, resp, "callers still get no response with an error")
 				return "", err
 			}
@@ -563,7 +568,7 @@ func TestBackgroundRequests_FailedAttemptKeepsItsUsage(t *testing.T) {
 		driver := newPathDriverShaped("claude", true, failUsageThenError)
 		input := CompactInput{ChatID: chatID, Thread: thread}.V3()
 		input.Node.GetCompact().Force = &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}}
-		runRetried(t, "Compact", NewCompactActivity(h.Repo(), driver.resolver()).Execute, input)
+		runRetried(t, "Compact", NewCompactActivity(CompactDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()}).WithUsageRecorder(llmusagetest.New(t, h.Repo())).Execute, input)
 		check(t, h, "compaction")
 	})
 	t.Run("title", func(t *testing.T) {
@@ -573,7 +578,7 @@ func TestBackgroundRequests_FailedAttemptKeepsItsUsage(t *testing.T) {
 		project := h.CreateTestProject(context.Background(), "proj-title-billed", "user-title-billed")
 		chat := h.CreateTestChat(context.Background(), "chat-title-billed", project.ID, project.UserID)
 		driver := newPathDriverShaped("openai", true, failErrorThenUsage)
-		runRetried(t, "GenerateTitle", NewGenerateTitleActivity(h.Repo(), driver.resolver()).Execute,
+		runRetried(t, "GenerateTitle", NewGenerateTitleActivity(h.Repo(), driver.resolver()).WithUsageRecorder(llmusagetest.New(t, h.Repo())).Execute,
 			GenerateTitleInput{ChatID: chat.ID, FirstMessage: "how do I debug a workflow?"})
 		check(t, h, "title")
 	})
@@ -582,7 +587,7 @@ func TestBackgroundRequests_FailedAttemptKeepsItsUsage(t *testing.T) {
 		h := NewIdempotencyTestHelper(t)
 		defer h.Cleanup()
 		driver := newPathDriverShaped("reliant", true, failUsageThenError)
-		draft := NewDraftAutomationActivity(driver.resolver()).WithUsageRecorder(h.Repo())
+		draft := NewDraftAutomationActivity(driver.resolver()).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 		runRetried(t, "DraftAutomation", draft.Execute, DraftAutomationInput{UserID: "user-draft-billed", Description: "every weekday at 9 summarise failed CI"})
 		check(t, h, "draft_automation")
 	})
@@ -644,7 +649,7 @@ func TestUsageMeter_ContextEndedRequestsAreRecordedAsWhatCutThem(t *testing.T) {
 			exec := func(actCtx context.Context, _ string) (string, error) {
 				cut, cancel := tc.cut(actCtx)
 				defer cancel()
-				_, err := newUsageMeter(h.Repo(), project.UserID, chat.ID, "title").streamAndAccumulate(cut, resolved, nil, nil, nil)
+				_, err := newUsageMeter(llmusagetest.New(t, h.Repo()), project.UserID, chat.ID, "title").streamAndAccumulate(cut, resolved, nil, nil, nil)
 				return "", err
 			}
 			var suite temporaltest.WorkflowTestSuite

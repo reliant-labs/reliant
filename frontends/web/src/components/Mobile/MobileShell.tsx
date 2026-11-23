@@ -72,9 +72,10 @@ import { useProjectStore } from "../../store/projectStore";
 import { useProjects } from "../../hooks/project-queries";
 import { useChatStore } from "../../store/chatStore";
 import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
+import { navDrawerHeld } from "../Layout/sidebar/navDrawerHold";
 import { onboardingPath } from "@/lib/paths";
 import { isForgeShell } from "@/lib/shell";
-import { forgeBrandHomeTarget, routeRequiresOnboarding } from "@/components/OnboardingFlow/onboardingGate";
+import { homeTarget, routeRequiresOnboarding } from "@/components/OnboardingFlow/onboardingGate";
 
 export function MobileShell() {
   const navigate = useNavigate();
@@ -88,7 +89,9 @@ export function MobileShell() {
     !isUserLoading &&
     (!currentUser || !currentUser.onboardingCompleted) &&
     routeRequiresOnboarding(pathname);
-  const notOnboardedHome = forgeBrandHomeTarget(pathname, isForgeShell());
+  // The phone keeps its home rule (homeTarget): on the forge brand the chat
+  // list sends a person who has not onboarded to their apps.
+  const notOnboardedHome = homeTarget(pathname, "onboard", { forgeBrand: isForgeShell() });
 
   // Same gate the desktop shell applies (see ModernApp), on the same routes:
   // the chats (onboardingGate.ts). A user without a completed setup has no
@@ -141,6 +144,12 @@ export function MobileShell() {
 
   const isDrawerOpen = useMobileDrawerStore((s) => s.isOpen);
   const closeDrawer = useMobileDrawerStore((s) => s.close);
+  // A drill into Agents (or out of Observability) from the shell's drawer lands
+  // on the phone's own screens: open this drawer on the area's rows, so the
+  // nav the person was using stays on screen (U6e; Layout/sidebar/navDrawerHold).
+  useEffect(() => {
+    if (navDrawerHeld()) useMobileDrawerStore.getState().open();
+  }, []);
 
   if (isUserLoading || needsOnboarding) {
     return (

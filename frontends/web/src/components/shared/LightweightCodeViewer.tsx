@@ -1,6 +1,16 @@
 import { Highlight } from 'prism-react-renderer';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { reliantDarkTheme, reliantLightTheme } from '../../lib/prismTheme';
+
+/**
+ * One line's tone: its name (the row's `data-tone`, what tests and readers of
+ * the DOM see) and the class that paints it. The caller owns the vocabulary
+ * (coverage: covered, uncovered, partial), so the viewer stays generic.
+ */
+export interface CodeLineTone {
+  name: string;
+  className: string;
+}
 
 interface LightweightCodeViewerProps {
   content: string;
@@ -11,6 +21,10 @@ interface LightweightCodeViewerProps {
   showLineNumbers?: boolean;
   noBorder?: boolean; // Remove border when used inside a parent with its own border
   wordWrap?: boolean; // Enable word wrapping for long lines
+  /** A line's tone, by its 1-based number; undefined leaves it plain. Lighter than Monaco decorations. */
+  lineTone?: (lineNumber: number) => CodeLineTone | undefined;
+  /** Cells drawn before a line's number, by its 1-based number (coverage: hits per lane, a changed mark). */
+  gutter?: (lineNumber: number) => ReactNode;
 }
 
 /**
@@ -33,6 +47,8 @@ export function LightweightCodeViewer({
   showLineNumbers = true,
   noBorder = false,
   wordWrap = false,
+  lineTone,
+  gutter,
 }: LightweightCodeViewerProps) {
   const [isDark, setIsDark] = useState(
     document.documentElement.classList.contains('dark')
@@ -133,15 +149,22 @@ export function LightweightCodeViewer({
               color: isDark ? '#D4D4D4' : '#000000',
             }}
           >
-            {tokens.map((line, i) => (
+            {tokens.map((line, i) => {
+              const tone = lineTone?.(i + 1);
+              const lineProps = getLineProps({ line });
+              return (
               <div
                 key={i}
-                {...getLineProps({ line })}
+                {...lineProps}
+                className={tone ? `${lineProps.className ?? ''} ${tone.className}` : lineProps.className}
+                data-line={lineTone || gutter ? i + 1 : undefined}
+                data-tone={tone?.name}
                 style={{
                   display: 'flex',
                   minHeight: '16px',
                 }}
               >
+                {gutter && <span style={{ display: 'inline-flex', flexShrink: 0, userSelect: 'none' }}>{gutter(i + 1)}</span>}
                 {showLineNumbers ? (
                   <span
                     style={{
@@ -173,7 +196,8 @@ export function LightweightCodeViewer({
                   ))}
                 </span>
               </div>
-            ))}
+              );
+            })}
           </pre>
         )}
       </Highlight>

@@ -75,6 +75,18 @@ const loadFactor = Math.min(6, Math.max(1, Math.ceil(os.loadavg()[0] / cores)));
 const testTimeout = intEnv("VITEST_TIMEOUT_MS") ?? 5_000 * loadFactor;
 const asyncUtilTimeout = intEnv("VITEST_ASYNC_UTIL_TIMEOUT_MS") ?? Math.round(testTimeout / 2);
 
+// The record directory of the `forge test capture` lane running Vitest, if one
+// is: the release gate's `task test:web` (lane frontend) and the merge gate's
+// web step (lane affected-web, scripts/test-capture.sh). Then, and only then,
+// Vitest writes its results there as JSON (vitest.json) and measures v8
+// coverage into the same directory (coverage-final.json), which
+// `forge test report` merges with the Go lanes. A bare `npm test` is
+// unchanged. FORGE_TEST_COVERAGE=off records results only: the merge gate's
+// choice, since coverage cost the selected files +45% wall time
+// (tools/test-affected's webSteps), so only the release gate's full lane
+// measures it.
+const testLaneDir = process.env.FORGE_TEST_LANE_DIR;
+
 // Vitest pools. Most files run in `vmThreads`: each file gets a fresh VM
 // context in a reused worker instead of a fresh jsdom environment in a fresh
 // process, which halves the suite (full run at 8 workers, paired: 812s on
@@ -471,6 +483,26 @@ const appConfig: ViteUserConfig = {
     // ~1 GiB per worker (8.6 GiB on 8, 4 GiB on 4) for ~2x the forks speed;
     // maxWorkers (above) holds the sum to half the host's memory.
     vmMemoryLimit: VM_MEMORY_LIMIT,
+    ...(testLaneDir
+      ? {
+          // Naming reporters replaces Vitest's defaults, so the GitHub
+          // Actions annotations it adds by itself are named here too.
+          reporters: process.env.GITHUB_ACTIONS ? ["default", "json", "github-actions"] : ["default", "json"],
+          outputFile: { json: path.join(testLaneDir, "vitest.json") },
+          coverage: {
+            enabled: process.env.FORGE_TEST_COVERAGE !== "off",
+            provider: "v8" as const,
+            // Istanbul JSON (coverage-final.json): statement blocks, the
+            // granularity the Go lanes record. An lcov.info beside it would
+            // be a second, line-granular copy of the same files, which
+            // `forge test report` refuses to merge with it.
+            reporter: ["json"],
+            reportsDirectory: testLaneDir,
+            // The lane directory is capture's; Vitest must not empty it.
+            clean: false,
+          },
+        }
+      : {}),
     // Two projects over this config, split by pool (see FORKS_POOL_FILES).
     // Each owns its include and exclude: `extends` concatenates lists, so a
     // root include would put every file in both projects.

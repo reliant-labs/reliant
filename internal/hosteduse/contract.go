@@ -3,6 +3,11 @@
 // hosted secret. The controller receives only an opaque ticket and redeems it
 // through the API; caller-supplied ownership is never accepted.
 //
+// Built by internal/app's worker providers (providers_worker.go): two
+// instances from one Deps (New = action executor, NewResolver = secret
+// resolver), and a bad hosted_actions_url degrades the feature instead of
+// failing startup.
+//
 //forge:provided
 package hosteduse
 

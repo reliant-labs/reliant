@@ -40,12 +40,13 @@ LIMITS: an agent-started run may start further runs, but only 3 levels deep, and
 )
 
 type startRunTool struct {
-	repo    startRunStore
-	starter RunStarter
+	repo     startRunStore
+	launched LaunchedRunCounter
+	starter  RunStarter
 }
 
-func NewStartRunTool(repo startRunStore, starter RunStarter) Tool {
-	return NewToolWrapper[StartRunParams, ToolResponse](&startRunTool{repo: repo, starter: starter})
+func NewStartRunTool(repo startRunStore, launched LaunchedRunCounter, starter RunStarter) Tool {
+	return NewToolWrapper[StartRunParams, ToolResponse](&startRunTool{repo: repo, launched: launched, starter: starter})
 }
 
 func (s *startRunTool) Name() string        { return StartRunToolName }
@@ -68,7 +69,7 @@ func (s *startRunTool) Execute(rctx *rctx.ToolContext, params StartRunParams) (T
 	if errResp != nil {
 		return *errResp, nil
 	}
-	if s.starter == nil {
+	if s.starter == nil || s.launched == nil {
 		return NewTextErrorResponse("Starting a run is not available in this runtime."), nil
 	}
 	if strings.TrimSpace(params.Workflow) == "" {
@@ -119,7 +120,10 @@ func (s *startRunTool) Execute(rctx *rctx.ToolContext, params StartRunParams) (T
 	// The count and the launch are not one transaction, so concurrent starts
 	// can overshoot the cap by the number racing. That is acceptable for a
 	// cost guard; it is not a security boundary.
-	live, err := s.repo.CountLiveLaunchedRuns(rctx.Context, caller.userID, core.TriggerEventKindAgentStartRun)
+	if caller.userID == "" {
+		return NewTextErrorResponse("Could not count live agent-started runs: user ID cannot be empty"), nil
+	}
+	live, err := s.launched.CountLiveLaunchedRuns(rctx.Context, caller.userID, core.TriggerEventKindAgentStartRun)
 	if err != nil {
 		return NewTextErrorResponse("Could not count live agent-started runs: " + err.Error()), nil
 	}

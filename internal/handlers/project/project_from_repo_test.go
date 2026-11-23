@@ -12,8 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -27,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
+	"github.com/reliant-labs/reliant/internal/store"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -64,11 +68,11 @@ var _ CloneDispatcher = (*cloneStubControlPlane)(nil)
 func newFromRepoService(t *testing.T, cp *cloneStubControlPlane) (*Service, *db.Repo, func()) {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
-	svc := NewTestProject(t, WithProjectDeps(Deps{
-		Repo:         repo,
+	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{
+		Repo: repo, Projects: projectaccesstest.For(repo),
 		Router:       &createProjectRowRouter{resolveID: "daemon-abc"},
 		ControlPlane: cp,
-	}))
+	})))
 	return svc, repo, cleanup
 }
 
@@ -364,12 +368,18 @@ func TestCreateProjectFromRepo_FailedQueuedCloneIsMarkedFailed(t *testing.T) {
 // daemon gateway (tools_daemon) over ConnectDaemon and returns the stream
 // once the gateway has acknowledged the registration, for the test to send
 // what a daemon sends.
-func dialToolsDaemon(t *testing.T, repo tools_daemon.Repository, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
+func dialToolsDaemon(t *testing.T, repo *db.Repo, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
 	t.Helper()
 	gateway, err := tools_daemon.New(tools_daemon.Deps{
-		Logger: slog.New(slog.DiscardHandler),
-		Config: &typedconfig.Config{},
-		Repo:   repo,
+		Logger:      slog.New(slog.DiscardHandler),
+		Config:      &typedconfig.Config{},
+		Repo:        repo,
+		Projects:    store.NewProjectExtStore(repo.ORM()),
+		Installs:    store.NewProjectDaemonExtStore(repo.ORM()),
+		Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()),
+		LocalModels: store.NewDaemonExtStore(repo.ORM()),
+		Checkouts:   store.NewProjectDaemonDetachmentExtStore(repo.ORM()),
+		Pools:       poolsOfRepo(repo),
 	})
 	require.NoError(t, err)
 	t.Cleanup(gateway.Close)
@@ -444,4 +454,8 @@ func TestRepoNameFromCloneURL(t *testing.T) {
 	} {
 		assert.Equal(t, want, repoNameFromCloneURL(url), "clone url %q", url)
 	}
+}
+
+func poolsOfRepo(repo tools_daemon.Repository) tools_daemon.MachinePools {
+	return store.NewMachinePoolExtStore(repo.(interface{ ORM() *orm.Client }).ORM())
 }

@@ -6,9 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // ListSpawnChildren must carry the workflow row id next to the thread id.
@@ -63,7 +66,7 @@ func TestListSpawnChildren_CarriesWorkflowIDDistinctFromThreadForResumedSpawn(t 
 		}))
 	}
 
-	children, err := repo.ListSpawnChildren(ctx, parentThreadID)
+	children, err := store.NewToolCallExtStore(repo.ORM()).ListSpawnChildren(ctx, parentThreadID)
 	require.NoError(t, err)
 	require.Len(t, children, 2, "one row per resumption")
 

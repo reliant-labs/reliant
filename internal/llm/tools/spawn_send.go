@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
@@ -75,11 +76,13 @@ type AgentMessageNotifier interface {
 
 type spawnSendTool struct {
 	repo     spawnSendStore
+	tree     SpawnTree
 	notifier AgentMessageNotifier
 }
 
-func NewSpawnSendTool(repo spawnSendStore, notifier AgentMessageNotifier) Tool {
-	return NewToolWrapper[SpawnSendParams, ToolResponse](&spawnSendTool{repo: repo, notifier: notifier})
+// NewSpawnSendTool builds the spawn_send tool.
+func NewSpawnSendTool(deps SpawnSendDeps) Tool {
+	return NewToolWrapper[SpawnSendParams, ToolResponse](&spawnSendTool{repo: deps.Store, tree: deps.Tree, notifier: deps.Notifier})
 }
 
 func (s *spawnSendTool) Name() string {
@@ -95,7 +98,7 @@ func (s *spawnSendTool) RequiresPermission(params SpawnSendParams) (bool, error)
 }
 
 func (s *spawnSendTool) Execute(rctx *rctx.ToolContext, params SpawnSendParams) (ToolResponse, error) {
-	if s.repo == nil {
+	if s.repo == nil || s.tree == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 	threadID := rctx.Thread
@@ -124,7 +127,7 @@ func (s *spawnSendTool) Execute(rctx *rctx.ToolContext, params SpawnSendParams) 
 		}
 		params.AgentID = parentID
 	}
-	resolved, err := resolveSpawnAgentID(rctx, s.repo, threadID, params.AgentID, parentID)
+	resolved, err := resolveSpawnAgentID(rctx, s.tree, threadID, params.AgentID, parentID)
 	if err != nil {
 		return NewTextErrorResponse(err.Error()), nil
 	}
@@ -133,12 +136,12 @@ func (s *spawnSendTool) Execute(rctx *rctx.ToolContext, params SpawnSendParams) 
 		return NewTextErrorResponse("agent_id cannot be this thread itself"), nil
 	}
 
-	relationship, err := spawnSendRelationship(rctx, s.repo, threadID, params.AgentID)
+	relationship, err := spawnSendRelationship(rctx, s.tree, s.repo, threadID, params.AgentID)
 	if err != nil {
 		return NewTextErrorResponse(err.Error()), nil
 	}
 	if relationship == spawnRelationshipNone {
-		if inherited := findInheritedSpawnChild(rctx, s.repo, threadID, params.AgentID); inherited != nil {
+		if inherited := findInheritedSpawnChild(rctx, s.tree, threadID, params.AgentID); inherited != nil {
 			return NewTextErrorResponse(inheritedSpawnRefusal("message", inherited, params.AgentID)), nil
 		}
 		return NewTextErrorResponse(fmt.Sprintf(
@@ -241,8 +244,8 @@ const (
 // child of callerThreadID, or callerThreadID's own parent. Any other
 // relationship (sibling, cousin, unrelated) is rejected — v1 is parent<->child
 // only per spec.
-func spawnSendRelationship(rctx *rctx.ToolContext, repo spawnRelationStore, callerThreadID, targetThreadID string) (spawnRelationship, error) {
-	children, err := repo.ListSpawnChildren(rctx.Context, callerThreadID)
+func spawnSendRelationship(rctx *rctx.ToolContext, tree spawnChildLister, repo spawnRelationStore, callerThreadID, targetThreadID string) (spawnRelationship, error) {
+	children, err := tree.ListSpawnChildren(rctx.Context, callerThreadID)
 	if err != nil {
 		return spawnRelationshipNone, fmt.Errorf("failed to verify agent relationship: %w", err)
 	}

@@ -196,8 +196,14 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
 
   // Prefetch global data ONCE after auth is ready
   // Using ref to prevent any possibility of double-prefetch
-  // Not in the forge shell (lib/shell.ts): the prefetch, the onboarding
-  // checklist, the tour and the API-key check are all Reliant's.
+  // Not on the forge brand (lib/shell.ts), even though both hosts mount the
+  // one shell (U6): this chain ends in checkApiKeys, which opens the API-key
+  // setup modal for anyone with no provider key once the checklist's welcome
+  // has been shown — and a forge signup with no machine has none, came to
+  // deploy, and must not be met with a modal about LLM keys. The tour state is
+  // the forge brand's own too (localStorage, bootForgeTour), not the settings
+  // rows loaded here. Make the brands behave alike only once that modal waits
+  // for a chat (the daemonless home's "Set up chats", U6 PR3).
   useEffect(() => {
     if (isForgeShell()) return;
     if (initialized && !loading && user && hasPrefetched.current !== user.id) {

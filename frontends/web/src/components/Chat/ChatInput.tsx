@@ -61,7 +61,6 @@ import {
   patchChatCaches,
   refetchChatSelection,
 } from "../../hooks/chat-queries";
-import { clearLegacyChatParams, peekLegacyChatParams } from "../../lib/legacyChatParams";
 import { pushChatParams } from "../../lib/chatSelection";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { answerQuestion, usePendingQuestions } from "../../hooks/question-queries";
@@ -391,9 +390,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     // read the whole composer as an edit.
     const [adoptedFor, setAdoptedFor] = useState<string | null>(null);
     const adoptedKeyRef = useRef<string | null>(null);
-    // A chat the server holds no selection for, seeded from what an older build
-    // kept in this browser; its local copy is deleted once the server has it.
-    const legacyPendingRef = useRef<string | null>(null);
     const selectionQuery = useChatSelection(chatId);
     const selection = chatId ? selectionQuery.data : undefined;
     const selectionRef = useRef(selection);
@@ -934,18 +930,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       // The draft is what this session showed. On open it is only the first
       // paint; the server's copy replaces it.
       const local = opened ? {} : workflowParamsRef.current;
-      let adopted = adoptServerParams(local, opened ? {} : syncedRef.current, serverFlat);
-
-      // A chat the server has no selection for may hold one an older build kept
-      // in this browser. It becomes the chat's selection on the next push, and
-      // is forgotten once the server has it.
-      if (opened && selection === null) {
-        const legacy = peekLegacyChatParams(chatId);
-        if (legacy) {
-          adopted = { params: legacy, synced: {} };
-          legacyPendingRef.current = chatId;
-        }
-      }
+      const adopted = adoptServerParams(local, opened ? {} : syncedRef.current, serverFlat);
       adoptedKeyRef.current = key;
 
       commitSynced(adopted.synced);
@@ -990,10 +975,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         logger.info("[ChatInput] Syncing workflow params", { chatId });
         const result = await pushChatParams(chatId, sentFrom, syncedRef.current, groupNamesRef.current);
         if (!result) return;
-        if (legacyPendingRef.current === chatId) {
-          clearLegacyChatParams(chatId);
-          legacyPendingRef.current = null;
-        }
         commitSynced(applyParamPatch(syncedRef.current, result.pushed));
         // The server's copy is the truth: it may have moved a model off a
         // provider that cannot serve it. Adopt that, keeping any edit made

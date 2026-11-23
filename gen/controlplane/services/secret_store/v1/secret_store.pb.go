@@ -33,7 +33,7 @@ type SecretAuthorKind int32
 
 const (
 	SecretAuthorKind_SECRET_AUTHOR_KIND_UNSPECIFIED SecretAuthorKind = 0
-	// A person: the console, or `forge secret set` with a personal token.
+	// A person: the console, or `forge env secret set` with a personal token.
 	SecretAuthorKind_SECRET_AUTHOR_KIND_USER SecretAuthorKind = 1
 	// An org automation token, with no person behind it.
 	SecretAuthorKind_SECRET_AUTHOR_KIND_TOKEN SecretAuthorKind = 2

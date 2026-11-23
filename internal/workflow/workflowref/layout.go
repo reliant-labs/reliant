@@ -69,10 +69,13 @@ func IsYAML(p string) bool {
 }
 
 // Discovery bounds apply to workflows and scenarios together, per source.
+// A source past one is not synced at all, so they sit well above what a real
+// project holds: control-plane crossed 1024 entries (its scenarios) on
+// 2026-11-21, and every machine kept firing its last catalog for hours.
 const (
 	MaxWorkflowFileBytes     = 1 << 20
-	MaxWorkflowLayoutBytes   = 8 << 20
-	MaxWorkflowLayoutEntries = 1024
+	MaxWorkflowLayoutBytes   = 32 << 20
+	MaxWorkflowLayoutEntries = 8192
 	MaxWorkflowLayoutDepth   = 4
 )
 
@@ -355,7 +358,15 @@ func (l *Layout) slugForFileStem(fileStem string) string {
 // workflow (a directory named for a file rather than a name:, a typo, a
 // workflow that was renamed).
 func (l *Layout) ScenarioProblems() []error {
-	problems := append([]error(nil), l.Misplaced...)
+	return append(append([]error(nil), l.Misplaced...), l.OrphanScenarioDirs()...)
+}
+
+// OrphanScenarioDirs is the part of ScenarioProblems that names scenario
+// directories belonging to no workflow. Unlike a Misplaced file, an orphan
+// directory is never the scenarios of any workflow the layout holds, so a
+// caller working on one named workflow can report it without refusing.
+func (l *Layout) OrphanScenarioDirs() []error {
+	var problems []error
 	reported := map[string]bool{}
 	for _, s := range l.Scenarios {
 		if reported[s.WorkflowSlug] {

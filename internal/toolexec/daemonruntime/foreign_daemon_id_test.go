@@ -83,13 +83,6 @@ func serveGateway(t *testing.T, gw reliantv1connect.ToolsDaemonServiceHandler) s
 	return srv.URL
 }
 
-// legacyForeignRefusal is exactly what the gateway answered before it tagged
-// the refusal with a reason — what production was returning when a laptop
-// wedged on another account's saved id.
-func legacyForeignRefusal() error {
-	return connect.NewError(connect.CodePermissionDenied, errors.New("daemon id is owned by another user"))
-}
-
 // taggedForeignRefusal is the refusal with its machine-readable reason.
 func taggedForeignRefusal() error {
 	err := connect.NewError(connect.CodePermissionDenied, errors.New("daemon id is owned by another user"))
@@ -145,8 +138,7 @@ func runUntilDone(t *testing.T, client *daemonClient) error {
 // with this account's own id.
 func TestForeignSavedDaemonIDIsSetAsideAndReRegistered(t *testing.T) {
 	for name, refusal := range map[string]func() error{
-		"gateway tags the refusal with a reason":     taggedForeignRefusal,
-		"gateway predates the reason (prod 2026-10)": legacyForeignRefusal,
+		"gateway tags the refusal with a reason": taggedForeignRefusal,
 	} {
 		t.Run(name, func(t *testing.T) {
 			dataDir := t.TempDir()

@@ -6,9 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // inheritanceFixture builds conversations and spawns row by row, the way the
@@ -80,7 +83,7 @@ func (f *inheritanceFixture) branch(parentThreadID, forkAt string) (chatID strin
 	return chatID
 }
 
-func inheritedIDs(children []*InheritedSpawnChild) map[string]string {
+func inheritedIDs(children []*core.InheritedSpawnChild) map[string]string {
 	ids := map[string]string{}
 	for _, c := range children {
 		if c.ChildThreadID != nil {
@@ -124,7 +127,7 @@ func TestListInheritedSpawnChildren_FollowsBranchChainUpToEachForkPoint(t *testi
 	afterBranchMsg := f.message(origin, origin, 120)
 	afterBranch := f.spawn(origin, origin, afterBranchMsg)
 
-	inherited, err := repo.ListInheritedSpawnChildren(f.ctx, branch)
+	inherited, err := store.NewToolCallExtStore(repo.ORM()).ListInheritedSpawnChildren(f.ctx, branch)
 	require.NoError(t, err)
 	got := inheritedIDs(inherited)
 	require.Len(t, got, 7, "all seven pre-branch spawns are in the branch's transcript")
@@ -142,7 +145,7 @@ func TestListInheritedSpawnChildren_FollowsBranchChainUpToEachForkPoint(t *testi
 	grandchildBranch := f.branch(branch, branchOwnMsg)
 	branchAfterFork := f.spawn(branch, branch, branchLaterMsg)
 
-	chain, err := repo.ListInheritedSpawnChildren(f.ctx, grandchildBranch)
+	chain, err := store.NewToolCallExtStore(repo.ORM()).ListInheritedSpawnChildren(f.ctx, grandchildBranch)
 	require.NoError(t, err)
 	chainIDs := inheritedIDs(chain)
 	require.Equal(t, branch, chainIDs[branchOwn], "the nearest ancestor's spawn is owned by that ancestor")
@@ -154,7 +157,7 @@ func TestListInheritedSpawnChildren_FollowsBranchChainUpToEachForkPoint(t *testi
 	require.Equal(t, branch, chain[0].SourceThreadID, "nearest ancestor first")
 
 	// The original is not a branch and inherits nothing.
-	none, err := repo.ListInheritedSpawnChildren(f.ctx, origin)
+	none, err := store.NewToolCallExtStore(repo.ORM()).ListInheritedSpawnChildren(f.ctx, origin)
 	require.NoError(t, err)
 	require.Empty(t, none)
 }
@@ -177,7 +180,7 @@ func TestListInheritedSpawnChildren_SameChatForkIsNotABranch(t *testing.T) {
 	forkModeChild := uuid.New().String()
 	f.thread(&Thread{ID: forkModeChild, ChatID: chat, ParentThreadID: &chat, ForkAtMessageID: &spawnMsg, Origin: core.ThreadOriginFork})
 
-	inherited, err := repo.ListInheritedSpawnChildren(f.ctx, forkModeChild)
+	inherited, err := store.NewToolCallExtStore(repo.ORM()).ListInheritedSpawnChildren(f.ctx, forkModeChild)
 	require.NoError(t, err)
 	require.Empty(t, inherited, "a same-chat fork (a fork-mode spawn) inherits no siblings")
 }

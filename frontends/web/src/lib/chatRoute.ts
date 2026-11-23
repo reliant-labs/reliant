@@ -121,7 +121,7 @@ function chatViewQuery(r: RouterLike): string {
 }
 
 /**
- * Show the new-chat view with its draft context in the URL (`/new?project=&machine=&ws=`).
+ * Show the new-chat view with its draft context in the URL (`/new?project=&machine=&ws=&app=`).
  * A push from anywhere else; a replace when the new-chat view is already on
  * screen (the project chip, the machine picker), so Back leaves it.
  */
@@ -140,7 +140,7 @@ let appliedNewChatShown: Promise<boolean> = Promise.resolve(true);
 
 /** A stable key for a new-chat draft context, to compare with the one applied. */
 export function newChatTargetKey(search: NewChatSearch): string {
-  return JSON.stringify([search.project ?? null, search.machine ?? null, search.ws ?? null]);
+  return JSON.stringify([search.project ?? null, search.machine ?? null, search.ws ?? null, search.app ?? null]);
 }
 
 /** Record `search` as the applied draft context; `shown` settles once the view shows it (default: it already does). */

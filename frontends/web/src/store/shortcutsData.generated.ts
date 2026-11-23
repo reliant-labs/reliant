@@ -39,10 +39,11 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     name: 'New Chat',
     description: 'Create a new chat tab',
     category: 'File & Window Management',
-    defaultBinding: 'Cmd+T',
+    defaultBinding: 'Cmd+Alt+N',
     defaultWebBinding: 'Cmd+Alt+N',
     context: 'global',
-    handler: 'onNewChat'
+    handler: 'onNewChat',
+    desktopAliases: ['Cmd+T']
   },
   openProject: {
     id: 'openProject',
@@ -50,7 +51,7 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     description: 'Add a project by cloning a repository or opening a folder',
     category: 'File & Window Management',
     defaultBinding: 'Cmd+O',
-    defaultWebBinding: 'Cmd+K O',
+    defaultWebBinding: 'Cmd+O',
     context: 'global',
     handler: 'onOpenProject'
   },
@@ -59,10 +60,11 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     name: 'Close Tab',
     description: 'Close active file viewer tab or window',
     category: 'File & Window Management',
-    defaultBinding: 'Cmd+W',
+    defaultBinding: 'Cmd+K X',
     defaultWebBinding: 'Cmd+K X',
     context: 'global',
-    handler: 'onCloseTab'
+    handler: 'onCloseTab',
+    desktopAliases: ['Cmd+W']
   },
   openWorkflows: {
     id: 'openWorkflows',
@@ -80,7 +82,7 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     description: 'Open file by name (fuzzy search)',
     category: 'Search & Navigation',
     defaultBinding: 'Cmd+P',
-    defaultWebBinding: 'Cmd+K P',
+    defaultWebBinding: 'Cmd+P',
     context: 'global',
     handler: 'onQuickFileOpen'
   },
@@ -152,7 +154,7 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     description: 'Move the cursor to the chat composer',
     category: 'Focus',
     defaultBinding: 'Cmd+L',
-    defaultWebBinding: 'Cmd+K L',
+    defaultWebBinding: 'Cmd+L',
     context: 'global',
     handler: 'onFocusChat'
   },
@@ -162,7 +164,7 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     description: 'Add the selected code to the chat composer',
     category: 'Chat Control',
     defaultBinding: 'Cmd+L',
-    defaultWebBinding: 'Cmd+K L',
+    defaultWebBinding: 'Cmd+L',
     context: 'monaco',
     handler: 'onAddSelectionToChat'
   },
@@ -379,20 +381,22 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     name: 'Next File Tab',
     description: 'Switch to the next open file tab',
     category: 'File Navigation',
-    defaultBinding: 'Cmd+Shift+]',
+    defaultBinding: 'Cmd+K ]',
     defaultWebBinding: 'Cmd+K ]',
     context: 'global',
-    handler: 'onNextFileTab'
+    handler: 'onNextFileTab',
+    desktopAliases: ['Cmd+Shift+]']
   },
   prevFileTab: {
     id: 'prevFileTab',
     name: 'Previous File Tab',
     description: 'Switch to the previous open file tab',
     category: 'File Navigation',
-    defaultBinding: 'Cmd+Shift+[',
+    defaultBinding: 'Cmd+K [',
     defaultWebBinding: 'Cmd+K [',
     context: 'global',
-    handler: 'onPrevFileTab'
+    handler: 'onPrevFileTab',
+    desktopAliases: ['Cmd+Shift+[']
   },
   focusFileEditor: {
     id: 'focusFileEditor',
@@ -409,10 +413,11 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     name: 'Reopen Last Closed File',
     description: 'Reopen the most recently closed file',
     category: 'File Navigation',
-    defaultBinding: 'Cmd+Shift+T',
+    defaultBinding: 'Cmd+K Z',
     defaultWebBinding: 'Cmd+K Z',
     context: 'global',
-    handler: 'onReopenLastClosedFile'
+    handler: 'onReopenLastClosedFile',
+    desktopAliases: ['Cmd+Shift+T']
   },
   cutFile: {
     id: 'cutFile',
@@ -529,10 +534,11 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     name: 'Package Commands',
     description: 'Show package commands and running processes',
     category: 'Panel Navigation',
-    defaultBinding: 'Cmd+K N',
+    defaultBinding: 'Cmd+K S',
     defaultWebBinding: 'Cmd+K S',
     context: 'global',
-    handler: 'onRunPackageCommand'
+    handler: 'onRunPackageCommand',
+    desktopAliases: ['Cmd+K N']
   },
   toggleSettings: {
     id: 'toggleSettings',

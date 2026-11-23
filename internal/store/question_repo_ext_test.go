@@ -69,12 +69,8 @@ func TestQuestionQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListQuestionsByWorkflowStepIteration: %v", err)
 	}
-	twinByStep, err := env.Repo.GetQuestionsByWorkflowStepIteration(ctx, "wf-q", "ask", 2)
-	if err != nil {
-		t.Fatalf("Repo.GetQuestionsByWorkflowStepIteration: %v", err)
-	}
-	if !reflect.DeepEqual(convQuestionIDs(byStep), convQuestionIDs(twinByStep)) || len(byStep) != 3 {
-		t.Fatalf("ListQuestionsByWorkflowStepIteration = %v, Repo = %v; want q-1, q-3, q-x", convQuestionIDs(byStep), convQuestionIDs(twinByStep))
+	if len(byStep) != 3 {
+		t.Fatalf("ListQuestionsByWorkflowStepIteration = %v; want q-1, q-3, q-x", convQuestionIDs(byStep))
 	}
 
 	// Resolve, then the per-chat reads: the history keeps every question,
@@ -94,27 +90,23 @@ func TestQuestionQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListQuestionsByChat: %v", err)
 	}
-	twinHistory, err := env.Repo.ListQuestionsByChat(ctx, "q-chat")
-	if err != nil {
-		t.Fatalf("Repo.ListQuestionsByChat: %v", err)
+	if !reflect.DeepEqual(convQuestionIDs(history), []string{"q-1", "q-2", "q-3"}) {
+		t.Fatalf("ListQuestionsByChat = %v", convQuestionIDs(history))
 	}
-	if !reflect.DeepEqual(convQuestionIDs(history), []string{"q-1", "q-2", "q-3"}) || len(twinHistory) != len(history) {
-		t.Fatalf("ListQuestionsByChat = %v, Repo = %v", convQuestionIDs(history), convQuestionIDs(twinHistory))
-	}
-	for i := range history {
-		requireSameQuestion(t, "ListQuestionsByChat", history[i], twinHistory[i])
+	if _, err := store.ListQuestionsByChat(ctx, env.ORM, ""); err == nil {
+		t.Fatal("ListQuestionsByChat with no chat must fail closed")
 	}
 
 	pending, err := store.ListPendingQuestionsByChat(ctx, env.ORM, "q-chat")
 	if err != nil {
 		t.Fatalf("ListPendingQuestionsByChat: %v", err)
 	}
-	byThread, err := env.Repo.PendingQuestionsByThread(ctx, "q-chat")
+	byThread, err := store.PendingQuestionsByThread(ctx, env.ORM, "q-chat")
 	if err != nil {
-		t.Fatalf("Repo.PendingQuestionsByThread: %v", err)
+		t.Fatalf("PendingQuestionsByThread: %v", err)
 	}
 	if !reflect.DeepEqual(convQuestionIDs(pending), []string{"q-1", "q-2"}) || len(byThread) != 2 || byThread["thread-a"].ID != "q-1" || byThread["thread-b"].ID != "q-2" {
-		t.Fatalf("ListPendingQuestionsByChat = %v, Repo.PendingQuestionsByThread = %v", convQuestionIDs(pending), byThread)
+		t.Fatalf("ListPendingQuestionsByChat = %v, PendingQuestionsByThread = %v", convQuestionIDs(pending), byThread)
 	}
 }
 

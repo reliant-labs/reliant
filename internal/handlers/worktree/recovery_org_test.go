@@ -31,14 +31,16 @@ func (recoveryMembers) DefaultOrg(context.Context, string) (string, error) { ret
 func TestListWorktreeRecoveries_LeavesOutAnOrgTheCallerMayNotRead(t *testing.T) {
 	org := func(s string) *string { return &s }
 	projectOrgs := map[string]*string{"p-acme": org("acme"), "p-home": org("home")}
-	repo := &MockRepository{
-		ListWorktreeRecoveriesFunc: func(context.Context, string, string) ([]*db.WorktreeRecovery, error) {
-			return []*db.WorktreeRecovery{
+	recoveries := &MockRecoveries{
+		ListWorktreeRecoveriesFunc: func(context.Context, string, string) ([]*core.WorktreeRecovery, error) {
+			return []*core.WorktreeRecovery{
 				{ID: "acme", ProjectID: "p-acme"},
 				{ID: "home", ProjectID: "p-home"},
 				{ID: "gone", ProjectID: "p-gone"},
 			}, nil
 		},
+	}
+	projects := &MockProjectReader{
 		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) {
 			if id == "p-gone" {
 				return nil, core.ErrProjectNotFound
@@ -46,7 +48,7 @@ func TestListWorktreeRecoveries_LeavesOutAnOrgTheCallerMayNotRead(t *testing.T) 
 			return &db.Project{ID: id, UserID: "test-user", OrgID: projectOrgs[id]}, nil
 		},
 	}
-	svc := NewTestWorktree(t, WithWorktreeDeps(Deps{Repo: repo}))
+	svc := NewTestWorktree(t, WithWorktreeDeps(WithReadRoles(Deps{Repo: &MockRepository{}, ProjectRows: projects, Recoveries: recoveries})))
 	ids := func(ctx context.Context) []string {
 		t.Helper()
 		resp, err := svc.ListWorktreeRecoveries(ctx, connect.NewRequest(&reliantv1.ListWorktreeRecoveriesRequest{}))

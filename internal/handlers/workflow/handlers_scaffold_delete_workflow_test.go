@@ -21,10 +21,10 @@ func TestDeleteWorkflow_Generated(t *testing.T) {
 
 	slug := workflowref.Slug("My Flow")
 	store := draftsRepo(callerDraft(t, slug))
-	store.DeleteWorkflowDraftBySlugFunc = func(context.Context, string, string) error { return nil }
+	store.Drafts.DeleteWorkflowDraftBySlugFunc = func(context.Context, string, string) error { return nil }
 	store.ListTriggersFunc = func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return nil, nil }
 	store.RunTxFunc = func(ctx context.Context, _ orm.TxPolicy, f func(context.Context) error) error { return f(ctx) }
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: store}))
+	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(store.deps()))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteWorkflowRequest, pb.DeleteWorkflowResponse]{
 		{
@@ -53,7 +53,7 @@ func TestDeleteWorkflow_Generated(t *testing.T) {
 				if !resp.Msg.GetSuccess() {
 					t.Fatalf("success = false, want true")
 				}
-				calls := store.Calls("DeleteWorkflowDraftBySlug")
+				calls := store.Drafts.Calls("DeleteWorkflowDraftBySlug")
 				if len(calls) != 1 || calls[0].Args[1] != "test-user" || calls[0].Args[2] != slug {
 					t.Fatalf("deletes = %v, want one of test-user's %q", calls, slug)
 				}

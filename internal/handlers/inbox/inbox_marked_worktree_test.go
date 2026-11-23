@@ -17,8 +17,10 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 )
@@ -79,11 +81,11 @@ func markedFixtureSweeper(t *testing.T) (*inboxFixture, *unmarkSender, string, *
 		ID: id, Name: "fix-login", Path: "/home/u/.reliant/worktrees/proj/fix-login", Branch: "feat/x", BaseBranch: "main",
 		ProjectID: f.project(), DaemonID: &daemonID, Status: 1, CreatedAt: now.Add(-48 * time.Hour), UpdatedAt: now, LastActive: now.Add(-48 * time.Hour),
 	}))
-	ok, err := f.repo.MarkWorktreeForReclaim(f.ctx, id, "m-1", now, nil, db.ArchivedBecauseLanded)
+	ok, err := store.MarkWorktreeForReclaim(f.ctx, f.repo.ORM(), id, "m-1", now, nil, core.ArchivedBecauseLanded)
 	require.NoError(t, err)
 	require.True(t, ok)
 	sender := &unmarkSender{mark: "m-1"}
-	sweeper := worktreesweep.New(f.repo, sender).WithAutoArchive(worktreesweep.AutoArchiveOn, f.repo, nil).WithReclaimMarks(f.repo, 0, 0)
+	sweeper := worktreesweep.New(realStorage(f.repo), sender).WithAutoArchive(worktreesweep.AutoArchiveOn, autoArchiveOf(f.repo), nil).WithReclaimMarks(store.NewWorktreeExtStore(f.repo.ORM()), 0, 0)
 	f.withSweeper(t, sweeper)
 	return f, sender, id, sweeper
 }
@@ -104,7 +106,7 @@ func TestListInbox_MarkedWorktreeIsAnItem(t *testing.T) {
 	assert.Equal(t, "fix-login", m.Name)
 	assert.Equal(t, "m-1", m.MarkId)
 	assert.Equal(t, "MacBook", m.DaemonName)
-	assert.Equal(t, db.ArchivedBecauseLanded, m.Reason)
+	assert.Equal(t, core.ArchivedBecauseLanded, m.Reason)
 	assert.False(t, m.Approved)
 	markedAt, err := time.Parse(time.RFC3339, m.MarkedAt)
 	require.NoError(t, err)
@@ -158,7 +160,7 @@ func TestReclaimMarkedWorktreeNow(t *testing.T) {
 	wt, err := f.repo.GetWorktree(f.ctx, id)
 	require.NoError(t, err)
 	require.NotNil(t, wt.DeletedAt, "reclaimed at once")
-	assert.Equal(t, db.ArchivedBecauseLanded, wt.CleanupMetadata.ArchivedBecause)
+	assert.Equal(t, core.ArchivedBecauseLanded, wt.CleanupMetadata.ArchivedBecause)
 	assert.Empty(t, f.markedItems(t), "no longer a marked live worktree")
 }
 
@@ -181,7 +183,7 @@ func TestReclaimMarkedWorktreeNow_StillKeepsAWorktreeWhoseTombstoneIsGone(t *tes
 // org-scoped inbox only under that project's org.
 func TestListInbox_MarkedWorktreeFollowsItsProjectsScope(t *testing.T) {
 	f, _, _, sweeper := markedFixtureSweeper(t)
-	f.inbox = NewTestInbox(t, WithInboxDeps(Deps{Repo: f.repo, Sweeper: sweeper, Orgs: orgs.New(acmeAndHome{})}))
+	f.inbox = NewTestInbox(t, withDeps(Deps{Repo: f.repo, Recoveries: store.NewWorktreeRecoveryExtStore(f.repo.ORM()), Marks: store.NewWorktreeExtStore(f.repo.ORM()), Sweeper: sweeper, Orgs: orgs.New(acmeAndHome{})}))
 	ctx := authz.WithMembership(f.ctx, memberOf{"home": true, "acme": true})
 	_, err := f.repo.ORM().Bun().NewRaw(`UPDATE projects SET org_id = 'acme' WHERE id = ?`, f.project()).Exec(ctx)
 	require.NoError(t, err)
@@ -204,4 +206,19 @@ func TestListInbox_MarkedWorktreeFollowsItsProjectsScope(t *testing.T) {
 	n, others := marked(&reliantv1.ListInboxRequest{ProjectId: ptr.Of("p-elsewhere")})
 	assert.Equal(t, 0, n, "another project")
 	assert.Equal(t, int32(1), others, "counted among the other projects")
+}
+
+// autoArchiveOf is the sweep's auto-archive store over repo's database: the
+// worktree queries and the chat lookup, as the composition root wires them.
+func autoArchiveOf(repo *db.Repo) worktreesweep.AutoArchiveStore {
+	return autoArchive{WorktreeExtStore: store.NewWorktreeExtStore(repo.ORM()), chats: store.NewChatExtStore(repo.ORM())}
+}
+
+type autoArchive struct {
+	store.WorktreeExtStore
+	chats store.ChatExtStore
+}
+
+func (a autoArchive) GetLiveChatIDForWorktree(ctx context.Context, id string) (string, error) {
+	return a.chats.GetLiveChatIDForWorktree(ctx, id)
 }

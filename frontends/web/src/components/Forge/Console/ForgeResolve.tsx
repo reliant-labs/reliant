@@ -42,7 +42,7 @@ import { fetchProjects, useProject } from "@/hooks/project-queries";
 
 import { ForgeProjectPicker } from "../ForgeProjectPicker";
 import { isForgeShell } from "@/lib/shell";
-import { appsPath } from "@/lib/paths";
+import { projectsHref } from "@/lib/paths";
 
 export interface ForgeResolveProps {
   /** A Reliant project id, from the URL. */
@@ -67,7 +67,7 @@ export function ForgeResolve(props: ForgeResolveProps) {
  */
 function ForgeShellResolve({ forgeProject, target }: ForgeResolveProps) {
   const named = forgeProject?.trim() || undefined;
-  return <Redirect href={named ? target(named) : appsPath()} />;
+  return <Redirect href={named ? target(named) : projectsHref("apps")} />;
 }
 
 function ReliantResolve({ project, forgeProject, target }: ForgeResolveProps) {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
@@ -125,7 +126,7 @@ func (s *Service) handleFileSystemChanged(ctx context.Context, conn *daemonConne
 			"error", err, "daemonID", conn.daemonID, "path", projectPath)
 		return nil
 	}
-	project, err := s.deps.Repo.GetProjectByPathAndUserInScope(ctx, projectPath, conn.userID, scope)
+	project, err := s.deps.Projects.GetProjectByPathAndUserInScope(ctx, projectPath, conn.userID, scope)
 	if err != nil {
 		return nil // project might not exist yet, that's fine
 	}
@@ -268,7 +269,7 @@ func (s *Service) handleDaemonCommandFailed(ctx context.Context, conn *daemonCon
 	// already failed. Best-effort: the notification below is what the client
 	// actually reacts to, and must be written either way.
 	if msg.CommandType == "git.clone" && msg.RequestId != "" {
-		if err := s.deps.Repo.ResolveQueuedProjectDaemon(ctx, msg.RequestId, cloneFailureReason(msg.ErrorMessage)); err != nil {
+		if err := s.deps.Installs.ResolveQueuedProjectDaemon(ctx, msg.RequestId, cloneFailureReason(msg.ErrorMessage)); err != nil {
 			logging.WarnContext(ctx, "could not mark queued clone failed",
 				"error", err, "request_id", msg.RequestId)
 		}
@@ -477,7 +478,7 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 	if strings.TrimSpace(conn.daemonID) == "" {
 		err = resolve(ctx)
 	} else {
-		err = s.deps.Repo.WithMachineCheckoutsLocked(ctx, conn.daemonID, resolve)
+		err = s.deps.Checkouts.WithMachineCheckoutsLocked(ctx, conn.daemonID, resolve)
 	}
 	var lost *lostProjectCreateError
 	if errors.As(err, &lost) {
@@ -490,7 +491,7 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 		if scopeErr != nil {
 			return nil, fmt.Errorf("failed to create discovered project %s: %w", path, lost.err)
 		}
-		project, err = s.deps.Repo.GetProjectByPathAndUserInScope(ctx, path, conn.userID, scope)
+		project, err = s.deps.Projects.GetProjectByPathAndUserInScope(ctx, path, conn.userID, scope)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create discovered project %s: %w", path, lost.err)
 		}
@@ -588,7 +589,7 @@ func (s *Service) resolveProjectForPath(ctx context.Context, conn *daemonConnect
 		return nil, false, errProjectDetached
 	}
 
-	project, err := s.deps.Repo.GetProjectByPathAndUserInScope(ctx, path, conn.userID, scope)
+	project, err := s.deps.Projects.GetProjectByPathAndUserInScope(ctx, path, conn.userID, scope)
 	if err == nil && project != nil && detached.project(project.ID) {
 		// Found by its creation path, but the user detached it from this
 		// machine (at another path, or this one).
@@ -636,7 +637,7 @@ func (s *Service) resolveProjectForPath(ctx context.Context, conn *daemonConnect
 	}
 	// Read back scoped for the same reason the first lookup is: an unscoped
 	// read-back can hand us a DIFFERENT user's row for this path.
-	project, err = s.deps.Repo.GetProjectByPathAndUserInScope(ctx, path, conn.userID, scope)
+	project, err = s.deps.Projects.GetProjectByPathAndUserInScope(ctx, path, conn.userID, scope)
 	if err != nil {
 		return nil, false, err
 	}
@@ -666,7 +667,7 @@ func (s *Service) detachedProjects(ctx context.Context, daemonID string) (machin
 	if strings.TrimSpace(daemonID) == "" {
 		return out, nil
 	}
-	rows, err := s.deps.Repo.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
+	rows, err := s.deps.Checkouts.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
 	if err != nil {
 		return out, err
 	}
@@ -708,7 +709,7 @@ func (s *Service) machineHoldsProject(ctx context.Context, conn *daemonConnectio
 	if strings.TrimSpace(conn.daemonID) == "" {
 		return false, nil
 	}
-	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, conn.daemonID)
+	rows, err := s.deps.Installs.ListProjectDaemonsForDaemon(ctx, conn.daemonID)
 	if err != nil {
 		return false, err
 	}
@@ -728,7 +729,7 @@ func (s *Service) machineCheckoutAt(ctx context.Context, conn *daemonConnection,
 	if strings.TrimSpace(conn.daemonID) == "" {
 		return nil, nil
 	}
-	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, conn.daemonID)
+	rows, err := s.deps.Installs.ListProjectDaemonsForDaemon(ctx, conn.daemonID)
 	if err != nil {
 		return nil, err
 	}

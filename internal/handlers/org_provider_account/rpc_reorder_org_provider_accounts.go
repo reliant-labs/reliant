@@ -29,10 +29,10 @@ func (s *Service) ReorderOrgProviderAccounts(
 		return nil, err
 	}
 	owner := core.OrgAccountOwner(orgID)
-	if err := s.deps.Store.ReorderOwnedProviderAccounts(ctx, owner, provider, req.Msg.GetAccountIds()); err != nil {
+	if err := s.deps.Accounts.ReorderOwnedProviderAccounts(ctx, owner, provider, req.Msg.GetAccountIds()); err != nil {
 		return nil, svcerr.Wrap(err)
 	}
-	accounts, err := s.deps.Store.ListOwnedProviderAccounts(ctx, owner)
+	accounts, err := s.deps.Accounts.ListOwnedProviderAccounts(ctx, owner)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

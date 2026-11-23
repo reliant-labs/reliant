@@ -17,7 +17,7 @@
  * optional fields. A row opens the advisory's own page.
  */
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import Button from "@/components/forge-ui/button";
@@ -32,6 +32,7 @@ import type { EnvVulnSummary, Finding, MinSeverity, SbomSource, VulnSummary } fr
 import { useForgeConsole } from "../Console/consoleContext";
 import { formatAgo, formatWhen } from "../Observability/format";
 import { ObsLoadingRows, StateFrame } from "../Observability/ObsStates";
+import { PatchActions } from "./PatchActions";
 import { SecurityFrame, useSecurityScope, type SecurityScope } from "./securityScope";
 import { ScanStateNote, VulnError, VulnNoneKnown, VulnNotScannedYet } from "./VulnStates";
 import {
@@ -52,12 +53,15 @@ import {
   type ReleaseTrust,
   type VulnSearch,
 } from "./vulnModel";
+import { patchPlan, type VulnPatchAccess } from "./vulnPatchModel";
+import { useVulnPatchAccess } from "./vulnPatchRuntime";
 
 const SUBTITLE = "Known vulnerabilities in what each environment runs, from the SBOMs of its releases.";
 
 export function VulnerabilitiesPage() {
-  const { href } = useForgeConsole();
+  const { href, forgeProject, projectId } = useForgeConsole();
   const resolved = useSecurityScope("vulnerability findings");
+  const patchAccess = useVulnPatchAccess(forgeProject, projectId);
   const raw = useSearch({ strict: false }) as Record<string, unknown>;
   const search = useMemo(() => pickVulnSearch(raw), [raw]);
   const navigate = useNavigate();
@@ -82,6 +86,7 @@ export function VulnerabilitiesPage() {
           onSearch={onSearch}
           advisoryHref={(id) => href({ kind: "vulnerability", advisory: id })}
           sbomsHref={(release) => href({ kind: "sboms" }, release ? { release } : {})}
+          patch={{ access: patchAccess }}
         />
       )}
     </SecurityFrame>
@@ -94,10 +99,12 @@ export interface VulnerabilitiesViewProps {
   onSearch: (next: VulnSearch) => void;
   advisoryHref: (advisoryId: string) => string;
   sbomsHref: (release?: string) => string;
+  /** Offer Patch and Patch with agent on a selection of findings; absent, the table is not selectable. */
+  patch?: { access: VulnPatchAccess };
 }
 
 /** The page below its header, free of the console: what tests and the preview render. */
-export function VulnerabilitiesView({ scope, search, onSearch, advisoryHref, sbomsHref }: VulnerabilitiesViewProps) {
+export function VulnerabilitiesView({ scope, search, onSearch, advisoryHref, sbomsHref, patch }: VulnerabilitiesViewProps) {
   const summary = useVulnerabilitySummary(scope.project, scope.environmentId);
 
   if (summary.isLoading) {
@@ -110,10 +117,10 @@ export function VulnerabilitiesView({ scope, search, onSearch, advisoryHref, sbo
   if (summary.error || !summary.data) {
     return <VulnError error={summary.error} subject="this project's vulnerabilities" onRetry={() => void summary.refetch()} retrying={summary.isFetching} />;
   }
-  return <Findings scope={scope} summary={summary.data} search={search} onSearch={onSearch} advisoryHref={advisoryHref} sbomsHref={sbomsHref} />;
+  return <Findings scope={scope} summary={summary.data} search={search} onSearch={onSearch} advisoryHref={advisoryHref} sbomsHref={sbomsHref} patch={patch} />;
 }
 
-function Findings({ scope, summary, search, onSearch, advisoryHref, sbomsHref }: VulnerabilitiesViewProps & { summary: VulnSummary }) {
+function Findings({ scope, summary, search, onSearch, advisoryHref, sbomsHref, patch }: VulnerabilitiesViewProps & { summary: VulnSummary }) {
   const envs = summary.environments;
   const deployed = deployedEnvs(envs);
   const trust = scopeTrust(envs, summary.database?.stale ?? false);
@@ -216,6 +223,7 @@ function Findings({ scope, summary, search, onSearch, advisoryHref, sbomsHref }:
       ) : (
         <FindingsTable
           rows={rows}
+          patch={patch ? { access: patch.access, env: scope.environmentId ? (envName.get(scope.environmentId) ?? null) : null } : undefined}
           envName={envName}
           sourceOf={sourceOf}
           advisoryHref={advisoryHref}
@@ -316,8 +324,25 @@ function rowKey(f: Finding): string {
   return `${f.advisory.id}|${f.package.purl || `${f.package.name}@${f.package.version}`}`;
 }
 
+/**
+ * Bumped whenever the rows stop being the previous rows plus more (a refetch
+ * that reordered or dropped one): DataTable's selection is by position, so a
+ * selection must not outlive the rows it was made on. "Load more" only
+ * appends, and keeps it.
+ */
+function useRowsGeneration(keys: readonly string[]): number {
+  const [seen, setSeen] = useState({ keys, generation: 0 });
+  const same = seen.keys.length === keys.length && seen.keys.every((key, i) => key === keys[i]);
+  if (same) return seen.generation;
+  const appended = keys.length > seen.keys.length && seen.keys.every((key, i) => key === keys[i]);
+  const next = { keys, generation: appended ? seen.generation : seen.generation + 1 };
+  setSeen(next);
+  return next.generation;
+}
+
 function FindingsTable({
   rows,
+  patch,
   envName,
   sourceOf,
   advisoryHref,
@@ -326,6 +351,8 @@ function FindingsTable({
   onLoadMore,
 }: {
   rows: Finding[];
+  /** `env`: the scope's environment name, null for every environment. */
+  patch?: { access: VulnPatchAccess; env: string | null };
   envName: Map<string, string>;
   sourceOf: Map<string, SbomSource>;
   advisoryHref: (id: string) => string;
@@ -334,6 +361,13 @@ function FindingsTable({
   onLoadMore: () => void;
 }) {
   const now = Date.now();
+  const generation = useRowsGeneration(useMemo(() => rows.map(rowKey), [rows]));
+  const [selection, setSelection] = useState<{ generation: number; findings: Finding[] }>({ generation: 0, findings: [] });
+  const selected = selection.generation === generation ? selection.findings : [];
+  const plan = patchPlan(
+    patch?.env ?? null,
+    selected.map((finding) => ({ advisoryId: finding.advisory.id, fixState: finding.fixState }))
+  );
   const columns: DataTableColumn<Row>[] = [
     {
       key: "severity",
@@ -444,7 +478,15 @@ function FindingsTable({
   ];
   return (
     <Card padding="none" className="overflow-hidden" data-testid="vuln-list">
+      {patch && (
+        <div className="border-b border-border/60 px-4 py-2.5">
+          <PatchActions access={patch.access} plan={plan} />
+        </div>
+      )}
       <DataTable<Row>
+        key={generation}
+        selectable={!!patch}
+        onSelectionChange={(chosen) => setSelection({ generation, findings: chosen.map((row) => row.finding) })}
         flush
         stacked
         ariaLabel="Vulnerabilities in scope"

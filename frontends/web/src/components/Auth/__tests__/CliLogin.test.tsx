@@ -210,6 +210,123 @@ describe("CliLogin", () => {
     });
   });
 
+  describe("a third-party MCP client", () => {
+    const RESOURCE = "https://api.example.test/mcp";
+    // The query names the client "Totally Reliant": the page must never show it.
+    const MCP_QUERY =
+      "?response_type=code&client_id=mcp_abc&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback" +
+      "&state=st&code_challenge=abc&code_challenge_method=S256&scope=openid" +
+      `&resource=${encodeURIComponent(RESOURCE)}&client_name=Totally%20Reliant`;
+
+    const setSearch = (search: string) =>
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: {
+          search,
+          get href() {
+            return href;
+          },
+          set href(v: string) {
+            href = v;
+          },
+        },
+      });
+
+    // Routes the client lookup and the approval to separate answers.
+    const controlPlane = (client: () => Response) =>
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("https://admin.example.test/oauth/client?")) return client();
+        return new Response(JSON.stringify({ redirect_to: "https://claude.ai/api/mcp/auth_callback?code=c1&state=st" }), {
+          status: 200,
+        });
+      });
+
+    beforeEach(() => {
+      setSearch(MCP_QUERY);
+      getSession.mockResolvedValue({ data: { session: { access_token: "jwt-1", user: { email: "a@example.test" } } } });
+    });
+
+    it("shows the control plane's name for the client, marked unverified, with the resource and what it may do", async () => {
+      const fetchMock = controlPlane(
+        () => new Response(JSON.stringify({ client_id: "mcp_abc", client_name: "Claude", third_party: true }), { status: 200 }),
+      );
+      renderWithQuery(<CliLogin />);
+
+      expect((await screen.findByTestId("mcp-consent-client")).textContent).toBe("Claude");
+      expect(screen.getByTestId("mcp-consent-unverified").textContent).toMatch(/Unverified app/);
+      expect(screen.getByTestId("mcp-consent-unverified").textContent).toMatch(/registered itself automatically/);
+      expect(screen.getByTestId("mcp-consent-resource").textContent).toBe(RESOURCE);
+      expect(screen.getByTestId("mcp-consent-scopes").textContent).toContain(
+        "Act as you on your Reliant MCP connectors",
+      );
+      expect(screen.getByText("claude.ai")).toBeTruthy();
+      expect(document.body.textContent).not.toContain("Totally Reliant");
+      expect(fetchMock.mock.calls[0][0]).toBe("https://admin.example.test/oauth/client?client_id=mcp_abc");
+
+      const approve = screen.getByRole("button", { name: "Approve" });
+      await waitFor(() => expect(approve).toBeEnabled());
+      await userEvent.click(approve);
+      await waitFor(() => expect(href).toBe("https://claude.ai/api/mcp/auth_callback?code=c1&state=st"));
+      const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+      expect(url).toBe("https://admin.example.test/oauth/approve");
+      expect(JSON.parse(init.body as string)).toEqual({ query: MCP_QUERY, approved: true, org_id: "org-a" });
+    });
+
+    it("says Reliant Forge, not workspace connectors, when the resource is the Reliant Forge connector", async () => {
+      const forge = "https://api.example.test/forge/mcp";
+      setSearch(MCP_QUERY.replace(encodeURIComponent(RESOURCE), encodeURIComponent(forge)));
+      controlPlane(
+        () => new Response(JSON.stringify({ client_id: "mcp_abc", client_name: "Claude", third_party: true }), { status: 200 }),
+      );
+      renderWithQuery(<CliLogin />);
+
+      expect((await screen.findByTestId("mcp-consent-resource")).textContent).toBe(forge);
+      const scopes = screen.getByTestId("mcp-consent-scopes").textContent ?? "";
+      expect(scopes).toContain("Act as you in Reliant Forge: monitoring, releases and environments");
+      expect(scopes).not.toContain("MCP connectors");
+      expect(document.body.textContent).not.toContain("Which workspace it may use");
+    });
+
+    it.each([
+      ["the control plane does not know it", () => new Response("{}", { status: 404 })],
+      [
+        "the control plane says it is not third-party",
+        () => new Response(JSON.stringify({ client_id: "mcp_abc", client_name: "Claude", third_party: false }), { status: 200 }),
+      ],
+      [
+        "the answer names another client",
+        () => new Response(JSON.stringify({ client_id: "mcp_zzz", client_name: "Claude", third_party: true }), { status: 200 }),
+      ],
+      ["the lookup fails", () => new Response("not json", { status: 500 })],
+    ])("offers no approval when %s", async (_why, answer) => {
+      const fetchMock = controlPlane(answer);
+      renderWithQuery(<CliLogin />);
+
+      expect((await screen.findByTestId("cli-login-error")).textContent).toMatch(/cannot identify/);
+      expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+      expect(document.body.textContent).not.toContain("Totally Reliant");
+      expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith("/oauth/approve"))).toBe(false);
+    });
+
+    it("refuses a request with no client at all", async () => {
+      setSearch(MCP_QUERY.replace("client_id=mcp_abc", "client_id="));
+      const fetchMock = controlPlane(() => new Response("{}", { status: 404 }));
+      renderWithQuery(<CliLogin />);
+      expect((await screen.findByTestId("cli-login-error")).textContent).toMatch(/cannot identify/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("never looks up Reliant's own CLIs", async () => {
+      setSearch(QUERY);
+      const fetchMock = controlPlane(() => new Response("{}", { status: 404 }));
+      renderWithQuery(<CliLogin />);
+      expect(await screen.findByRole("button", { name: "Approve" })).toBeTruthy();
+      expect(screen.queryByTestId("mcp-consent")).toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
   it("shows a person with one org that org in a sentence, not a choice", async () => {
     getSession.mockResolvedValue({ data: { session: { access_token: "jwt-1", user: { email: "a@example.test" } } } });
     renderWithQuery(<CliLogin />);

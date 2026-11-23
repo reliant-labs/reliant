@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -99,7 +101,7 @@ func TestGetStoppedSpawnAgent(t *testing.T) {
 	spawnRun("agent-refailed", "agent-refailed", root, "tc-f1", root, Completed(), now.Add(-time.Minute), "")
 	spawnRun("wf-agent-refailed-2", "agent-refailed", root, "tc-f2", root, Failed(), now, `{"agent_id":"agent-refailed","prompt":"again"}`)
 
-	agents, listErr := repo.ListStoppedSpawnAgents(ctx, chatID)
+	agents, listErr := store.NewToolCallExtStore(repo.ORM()).ListStoppedSpawnAgents(ctx, chatID)
 	if listErr != nil {
 		t.Fatal(listErr)
 	}
@@ -115,14 +117,14 @@ func TestGetStoppedSpawnAgent(t *testing.T) {
 		t.Fatalf("expected stopped root and nested agents, got %d", len(agents))
 	}
 
-	got, err := repo.GetStoppedSpawnAgent(ctx, chatID, "agent-a")
+	got, err := store.NewToolCallExtStore(repo.ORM()).GetStoppedSpawnAgent(ctx, chatID, "agent-a")
 	if err != nil {
 		t.Fatalf("GetStoppedSpawnAgent(agent-a): %v", err)
 	}
-	want := StoppedSpawnAgent{
+	want := core.StoppedSpawnAgent{
 		ToolCallID: "tc-a", ParentThreadID: root, ChildThreadID: "agent-a", ChildWorkflowID: "agent-a",
 		IssuingWorkflowID: root, SpawnDepth: 1, WorktreePath: "/worktrees/agent-wt", Resumes: 3,
-		LastFailure: FailureReportDigest("report"),
+		LastFailure: core.FailureReportDigest("report"),
 	}
 	if got == nil {
 		t.Fatalf("stopped top-level agent not found; want %+v", want)
@@ -137,7 +139,7 @@ func TestGetStoppedSpawnAgent(t *testing.T) {
 		t.Fatalf("stopped top-level agent:\n got %+v\nwant %+v", got, want)
 	}
 
-	got, err = repo.GetStoppedSpawnAgent(ctx, chatID, "agent-b")
+	got, err = store.NewToolCallExtStore(repo.ORM()).GetStoppedSpawnAgent(ctx, chatID, "agent-b")
 	if err != nil || got == nil {
 		t.Fatalf("GetStoppedSpawnAgent(agent-b) = %+v, %v; want the nested stopped agent", got, err)
 	}
@@ -145,7 +147,7 @@ func TestGetStoppedSpawnAgent(t *testing.T) {
 		t.Errorf("nested stopped agent wrong: %+v", got)
 	}
 
-	got, err = repo.GetStoppedSpawnAgent(ctx, chatID, "agent-refailed")
+	got, err = store.NewToolCallExtStore(repo.ORM()).GetStoppedSpawnAgent(ctx, chatID, "agent-refailed")
 	if err != nil || got == nil {
 		t.Fatalf("GetStoppedSpawnAgent(agent-refailed) = %+v, %v; want its newest run", got, err)
 	}
@@ -154,7 +156,7 @@ func TestGetStoppedSpawnAgent(t *testing.T) {
 	}
 
 	for _, thread := range []string{"agent-done", "agent-cancelled", "agent-resumed", root, "no-such-thread"} {
-		got, err := repo.GetStoppedSpawnAgent(ctx, chatID, thread)
+		got, err := store.NewToolCallExtStore(repo.ORM()).GetStoppedSpawnAgent(ctx, chatID, thread)
 		if err != nil {
 			t.Fatalf("GetStoppedSpawnAgent(%s): %v", thread, err)
 		}
@@ -164,7 +166,7 @@ func TestGetStoppedSpawnAgent(t *testing.T) {
 	}
 
 	// Another chat cannot reach this chat's agent.
-	got, err = repo.GetStoppedSpawnAgent(ctx, "another-chat", "agent-a")
+	got, err = store.NewToolCallExtStore(repo.ORM()).GetStoppedSpawnAgent(ctx, "another-chat", "agent-a")
 	if err != nil || got != nil {
 		t.Errorf("an agent is only found in its own chat: got %+v, %v", got, err)
 	}

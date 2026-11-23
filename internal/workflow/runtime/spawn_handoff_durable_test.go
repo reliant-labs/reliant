@@ -7,15 +7,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 type fakeLiveSpawnLister struct {
-	rows []*db.LiveBackgroundSpawn
+	rows []*core.LiveBackgroundSpawn
 	root string
 }
 
-func (f *fakeLiveSpawnLister) ListLiveBackgroundSpawns(_ context.Context, rootWorkflowID string) ([]*db.LiveBackgroundSpawn, error) {
+func (f *fakeLiveSpawnLister) ListLiveBackgroundSpawns(_ context.Context, rootWorkflowID string) ([]*core.LiveBackgroundSpawn, error) {
 	f.root = rootWorkflowID
 	return f.rows, nil
 }
@@ -25,7 +25,7 @@ func (f *fakeLiveSpawnLister) ListLiveBackgroundSpawns(_ context.Context, rootWo
 // from the backgrounded tool_calls rows instead, preset and title included.
 func TestResumableSpawnsFromDurableState(t *testing.T) {
 	t.Parallel()
-	lister := &fakeLiveSpawnLister{rows: []*db.LiveBackgroundSpawn{
+	lister := &fakeLiveSpawnLister{rows: []*core.LiveBackgroundSpawn{
 		{ToolCallID: "tc-1", ParentThreadID: "root", ChildThreadID: "child-1", ChildWorkflowID: "child-1",
 			IssuingWorkflowID: "root", Depth: 0,
 			ToolInput: []byte(`{"preset":"researcher","prompt":"look","title":"Research"}`)},
@@ -78,11 +78,11 @@ func TestFreshRestart_RelaunchesDurableSpawn(t *testing.T) {
 }
 
 type fakeStoppedSpawnReader struct {
-	agents map[string]*db.StoppedSpawnAgent
+	agents map[string]*core.StoppedSpawnAgent
 	err    error
 }
 
-func (f *fakeStoppedSpawnReader) GetStoppedSpawnAgent(_ context.Context, _, threadID string) (*db.StoppedSpawnAgent, error) {
+func (f *fakeStoppedSpawnReader) GetStoppedSpawnAgent(_ context.Context, _, threadID string) (*core.StoppedSpawnAgent, error) {
 	return f.agents[threadID], f.err
 }
 
@@ -92,7 +92,7 @@ func (f *fakeStoppedSpawnReader) GetStoppedSpawnAgent(_ context.Context, _, thre
 // used — so its next report does not collide with an earlier one.
 func TestStoppedSpawnFromDurableState(t *testing.T) {
 	t.Parallel()
-	reader := &fakeStoppedSpawnReader{agents: map[string]*db.StoppedSpawnAgent{
+	reader := &fakeStoppedSpawnReader{agents: map[string]*core.StoppedSpawnAgent{
 		"agent-1": {
 			ToolCallID: "tc-1", ParentThreadID: "lead", ChildThreadID: "agent-1", ChildWorkflowID: "wf-agent-1",
 			IssuingWorkflowID: "wf-lead", SpawnDepth: 2, WorktreePath: "/wt/agent-1", Resumes: 3,

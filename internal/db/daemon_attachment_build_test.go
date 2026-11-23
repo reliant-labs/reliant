@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The build a daemon registers with lives on its attachment lease: written by
@@ -51,7 +53,7 @@ func TestDaemonAttachmentBuildLifecycle(t *testing.T) {
 
 	// A heartbeat renewal finds the row and leaves the build alone, even when
 	// the renewing session's copy differs.
-	_, err = repo.RenewDaemonAttachment(ctx, &DaemonAttachment{
+	_, err = store.RenewDaemonAttachment(ctx, repo.ORM(), &DaemonAttachment{
 		DaemonID: daemonID, UserID: userID, Source: DaemonAttachmentSourceInbound, AttachedAt: now,
 		LastStreamActivity: now.Add(time.Second), Build: DaemonBuild{Version: "other"},
 	})
@@ -74,7 +76,7 @@ func TestDaemonAttachmentBuildLifecycle(t *testing.T) {
 	// A renewal that has to re-create a reaped row writes the build it carries.
 	_, err = rawDB.Exec(`DELETE FROM daemon_attachment WHERE daemon_id = $1`, daemonID)
 	require.NoError(t, err)
-	created, err := repo.RenewDaemonAttachment(ctx, &DaemonAttachment{
+	created, err := store.RenewDaemonAttachment(ctx, repo.ORM(), &DaemonAttachment{
 		DaemonID: daemonID, UserID: userID, Source: DaemonAttachmentSourceInbound,
 		AttachedAt: now, LastStreamActivity: now, Build: first,
 	})

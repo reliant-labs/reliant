@@ -17,11 +17,11 @@ func (s *Service) ListPlanTasks(
 ) (*connect.Response[reliantv1.ListPlanTasksResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.planBelongsToUser(ctx, req.Msg.PlanId, userID); err != nil {
+	if _, _, err := s.writablePlan(ctx, userID, req.Msg.PlanId); err != nil {
 		return nil, err
 	}
 
-	tasks, err := s.deps.Repo.ListTasksByPlan(ctx, req.Msg.PlanId)
+	tasks, err := s.deps.Tasks.ListTasksByPlan(ctx, req.Msg.PlanId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list tasks"))
 	}

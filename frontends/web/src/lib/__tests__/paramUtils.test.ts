@@ -12,7 +12,6 @@ import {
   paramValuesEqual,
   currentThinkingLevel,
   unsyncedParams,
-  repairLegacyPresetSelections,
   repairLegacyWorkflowParams,
   threadParamsAcceptChanges,
   withThinkingLevel,
@@ -427,23 +426,5 @@ describe("repairLegacyWorkflowParams", () => {
   it("leaves real group keys alone", () => {
     const params = { "Agent A.model": { id: "x" }, "default.mode": "plan" };
     expect(repairLegacyWorkflowParams(params)).toEqual({ "Agent A.model": { id: "x" }, mode: "plan" });
-  });
-});
-
-describe("repairLegacyPresetSelections", () => {
-  it("moves the legacy default target to the workflow target", () => {
-    expect(repairLegacyPresetSelections({ default: "fast-preset" })).toEqual({ "": "fast-preset" });
-  });
-
-  it("keeps an existing workflow-level selection", () => {
-    expect(repairLegacyPresetSelections({ default: "old", "": "new", Agent: "a" })).toEqual({
-      "": "new",
-      Agent: "a",
-    });
-  });
-
-  it("returns the same object when there is no legacy target", () => {
-    const selections = { "": "p" };
-    expect(repairLegacyPresetSelections(selections)).toBe(selections);
   });
 });

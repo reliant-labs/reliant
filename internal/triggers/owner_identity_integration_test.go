@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The production shape: the real repository, an activation with NO
@@ -32,7 +33,7 @@ func TestOwnerGatedFilterAgainstTheRealRepository(t *testing.T) {
 	f.trigger.ConnectionID = nil
 	require.NoError(t, f.repo.UpdateTrigger(ctx, f.trigger))
 
-	intake := NewIntake(f.repo, &recordingStarter{}, "q").
+	intake := NewIntake(NewStores(f.repo), &recordingStarter{}, "q").
 		WithWorkflows(fakeWorkflows{yaml: map[string]string{"triage": trustedWorkflow}})
 	n := 0
 	accept := func(senderID string, verified bool) *AcceptResult {
@@ -54,7 +55,7 @@ func TestOwnerGatedFilterAgainstTheRealRepository(t *testing.T) {
 	assert.Contains(t, res.Detail, "owner has no linked GitHub identity")
 
 	// The refresher records who the owner is on GitHub (GET /user).
-	require.NoError(t, f.repo.ReplaceIntegrationAccess(ctx, f.trigger.UserID, "github", ownerGitHubID, time.Now(),
+	require.NoError(t, store.ReplaceIntegrationAccess(ctx, f.repo.ORM(), f.trigger.UserID, "github", ownerGitHubID, time.Now(),
 		[]core.IntegrationAccessGrant{{AccountKey: "100", ResourceKey: "1"}}))
 
 	assert.Equal(t, core.TriggerEventPending, accept(ownerGitHubID, true).Outcome, "the owner passes with no connection")
@@ -65,7 +66,7 @@ func TestOwnerGatedFilterAgainstTheRealRepository(t *testing.T) {
 
 	// The identity is read at every event: when the owner's token goes away the
 	// grants and the identity are cleared together, and the owner stops matching.
-	require.NoError(t, f.repo.ReplaceIntegrationAccess(ctx, f.trigger.UserID, "github", "", time.Now().Add(time.Minute), nil))
+	require.NoError(t, store.ReplaceIntegrationAccess(ctx, f.repo.ORM(), f.trigger.UserID, "github", "", time.Now().Add(time.Minute), nil))
 	res = accept(ownerGitHubID, true)
 	assert.Equal(t, core.TriggerEventSkipped, res.Outcome)
 	assert.Contains(t, res.Detail, "owner has no linked GitHub identity")

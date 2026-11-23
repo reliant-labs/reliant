@@ -44,7 +44,16 @@ const ROWS: Record<string, Row> = {
   homePath: { build: () => paths.homePath(), url: "/", template: "/" },
   // Always the org form: a way into one of the person's orgs by name (the org routes are always mounted).
   orgHomePath: { build: () => paths.orgHomePath("acme"), url: "/o/acme", template: "/o/$org", params: { org: "acme" } },
-  projectPath: { build: () => paths.projectPath("p-1"), url: "/project/p-1", template: "/project/$projectId", params: { projectId: "p-1" } },
+  projectChatsPath: { build: () => paths.projectChatsPath("p-1"), url: "/project/p-1", template: "/project/$projectId", params: { projectId: "p-1" } },
+  projectsPath: { build: () => paths.projectsPath(), url: "/projects", template: "/projects" },
+  projectPath: { build: () => paths.projectPath("p-1"), url: "/projects/p-1", template: "/projects/$projectId", params: { projectId: "p-1" } },
+  "projectPath(tab)": {
+    build: () => paths.projectPath("p-1", "settings"),
+    url: "/projects/p-1/settings",
+    template: "/projects/$projectId/settings",
+    params: { projectId: "p-1" },
+  },
+  appPath: { build: () => paths.appPath("shop"), url: "/forge/p/shop", template: "/forge/p/$project", params: { project: "shop" } },
   // New in U5 (R1–R3): no URL before them, so their org-less form is the one they were born with.
   chatPath: { build: () => paths.chatPath("c-1"), url: "/c/c-1", template: "/c/$chatId", params: { chatId: "c-1" } },
   threadPath: {
@@ -55,9 +64,9 @@ const ROWS: Record<string, Row> = {
   },
   newChatPath: { build: () => paths.newChatPath(), url: "/new", template: "/new" },
   inboxPath: { build: () => paths.inboxPath(), url: "/inbox", template: "/inbox" },
-  appsPath: { build: () => paths.appsPath(), url: "/apps", template: "/apps" },
-  sitesPath: { build: () => paths.sitesPath(), url: "/sites", template: "/sites" },
   usagePath: { build: () => paths.usagePath(), url: "/usage", template: "/usage" },
+  usageBillingPath: { build: () => paths.usageBillingPath(), url: "/usage", template: "/usage" },
+  connectorsPath: { build: () => paths.connectorsPath(), url: "/connectors", template: "/connectors" },
   forgeLandingPath: { build: () => paths.forgeLandingPath(), url: "/forge", template: "/forge" },
   forgeDemoPath: { build: () => paths.forgeDemoPath(), url: "/forge/demo", template: "/forge/demo" },
   workflowsPath: { build: () => paths.workflowsPath(), url: "/workflows", template: "/workflows" },
@@ -90,6 +99,12 @@ const ROWS: Record<string, Row> = {
     url: "/settings/org-ai-accounts",
     template: "/settings/$section",
     params: { section: "org-ai-accounts" },
+  },
+  sandboxesPath: {
+    build: () => paths.sandboxesPath(),
+    url: "/settings/machines",
+    template: "/settings/$section",
+    params: { section: "machines" },
   },
   machineSettingsPath: {
     build: () => paths.machineSettingsPath("d-1"),
@@ -184,14 +199,18 @@ const ROWS: Record<string, Row> = {
  */
 const ORG_URLS: Record<string, string> = {
   homePath: "/o/acme",
-  projectPath: "/o/acme/project/p-1",
+  projectChatsPath: "/o/acme/project/p-1",
+  projectsPath: "/o/acme/projects",
+  projectPath: "/o/acme/projects/p-1",
+  "projectPath(tab)": "/o/acme/projects/p-1/settings",
+  appPath: "/o/acme/apps/shop",
   chatPath: "/o/acme/c/c-1",
   threadPath: "/o/acme/c/c-1/t/t-1",
   newChatPath: "/o/acme/new",
   inboxPath: "/o/acme/inbox",
-  appsPath: "/o/acme/apps",
-  sitesPath: "/o/acme/sites",
   usagePath: "/o/acme/usage",
+  usageBillingPath: "/o/acme/usage",
+  connectorsPath: "/o/acme/connectors",
   forgeLandingPath: "/o/acme/forge",
   workflowsPath: "/o/acme/workflows",
   workflowLibraryPath: "/o/acme/workflows/library",
@@ -210,7 +229,9 @@ const ORG_URLS: Record<string, string> = {
 
 /** Builders that take an id, with the template the old call sites passed it to. */
 const ID_BUILDERS: [string, (id: string) => string, string, string][] = [
-  ["projectPath", paths.projectPath, "/project/$projectId", "projectId"],
+  ["projectChatsPath", paths.projectChatsPath, "/project/$projectId", "projectId"],
+  ["projectPath", (id) => paths.projectPath(id), "/projects/$projectId", "projectId"],
+  ["appPath", (id) => paths.appPath(id), "/forge/p/$project", "project"],
   ["chatPath", paths.chatPath, "/c/$chatId", "chatId"],
   ["threadPath(thread)", (id) => paths.threadPath("c-1", id), "/c/c-1/t/$threadId", "threadId"],
   ["threadPath(chat)", (id) => paths.threadPath(id, "t-1"), "/c/$chatId/t/t-1", "chatId"],
@@ -270,6 +291,17 @@ describe("lib/paths", () => {
 
   it("names only rows that exist in the org table", () => {
     expect(Object.keys(ORG_URLS).filter((name) => !(name in ROWS))).toEqual([]);
+  });
+
+  it("narrows Projects to its apps or its sites, the way the router writes the search", () => {
+    expect(paths.projectsHref()).toBe("/projects");
+    expect(paths.projectsHref("apps")).toBe(hrefOf({ to: "/projects", search: { show: "apps" } } as never));
+    expect(paths.projectsHref("sites")).toBe("/projects?show=sites");
+  });
+
+  it("opens Connectors on a tab, Integrations by default", () => {
+    expect(paths.connectorsPath("integrations")).toBe("/connectors");
+    expect(paths.connectorsPath("mcp")).toBe(hrefOf({ to: "/connectors", search: { tab: "mcp" } } as never));
   });
 
   it("joins a search the way the router writes one", () => {
@@ -367,8 +399,8 @@ describe("the org segment", () => {
 
     it("builds the org form on the forge host too, which mounts the same tree (U6)", () => {
       resetShellForTests("forge");
-      expect(paths.appsPath()).toBe("/o/acme/apps");
-      expect(paths.sitesPath()).toBe("/o/acme/sites");
+      expect(paths.projectsHref("apps")).toBe("/o/acme/projects?show=apps");
+      expect(paths.projectsHref("sites")).toBe("/o/acme/projects?show=sites");
       expect(consoleBase("shop")).toBe("/o/acme/apps/shop");
     });
 
@@ -397,6 +429,10 @@ describe("the org segment", () => {
     ["/o/acme", "/o/side"],
     ["/o/acme/inbox", "/o/side/inbox"],
     ["/o/acme/project/p-1", "/o/side"],
+    ["/o/acme/projects", "/o/side/projects"],
+    ["/o/acme/projects/p-1", "/o/side/projects"],
+    ["/o/acme/projects/p-1/settings", "/o/side/projects"],
+    ["/o/acme/projects/new", "/o/side/projects/new"],
     ["/o/acme/c/c-1", "/o/side"],
     ["/o/acme/c/c-1/t/t-1", "/o/side"],
     ["/o/acme/new", "/o/side/new"],

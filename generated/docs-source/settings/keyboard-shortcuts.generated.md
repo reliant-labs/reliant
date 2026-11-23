@@ -14,19 +14,23 @@ weight: 60
 
 Reliant includes keyboard shortcuts for common actions. All shortcuts can be customized in Settings → Keyboard Shortcuts.
 
-Some shortcuts differ between the desktop app and the browser. Browsers reserve
-chords like `Cmd+T` and `Cmd+W` for their own tabs and windows and will not
-release them to a web page, so those actions use a different chord on the web —
-usually a `Cmd+K` sequence. Where the **Browser** column is blank the shortcut
-is the same on both.
+The shortcuts are the same in the desktop app and in a browser tab. `Cmd` is
+`Ctrl` on Windows and Linux.
+
+Where a browser has its own use for a chord that a web page may take, like
+`Cmd+P` (print) or `Cmd+L` (the address bar), Reliant takes it. Chords a
+browser never releases to a web page, like `Cmd+T` and `Cmd+W`, are not
+used; those actions have a chord that works everywhere — often a `Cmd+K`
+sequence — and the desktop app also keeps the familiar chord, listed under
+**Also in the desktop app**.
 
 A `Cmd+K` sequence's second key can be typed with `Cmd` released or still held.
 
 ## Focus
 
-| Desktop | Browser | Action |
-|---------|---------|--------|
-| `Cmd+L` | `Cmd+K L` | Focus Chat Input |
+| Shortcut | Also in the desktop app | Action |
+|----------|-------------------------|--------|
+| `Cmd+L` |  | Focus Chat Input |
 | `Cmd+K A` |  | Focus Chat List |
 | `Cmd+K C` |  | Focus Conversation |
 | `Cmd+K E` |  | Focus File Editor |
@@ -36,29 +40,29 @@ A `Cmd+K` sequence's second key can be typed with `Cmd` released or still held.
 
 ## File & Window Management
 
-| Desktop | Browser | Action |
-|---------|---------|--------|
-| `Cmd+O` | `Cmd+K O` | Add Project |
-| `Cmd+W` | `Cmd+K X` | Close Tab |
-| `Cmd+T` | `Cmd+Alt+N` | New Chat |
+| Shortcut | Also in the desktop app | Action |
+|----------|-------------------------|--------|
+| `Cmd+O` |  | Add Project |
+| `Cmd+K X` | `Cmd+W` | Close Tab |
+| `Cmd+Alt+N` | `Cmd+T` | New Chat |
 | `Cmd+Shift+K` |  | Open Workflow Builder |
 
 ## Search & Navigation
 
-| Desktop | Browser | Action |
-|---------|---------|--------|
+| Shortcut | Also in the desktop app | Action |
+|----------|-------------------------|--------|
 | `Cmd+Shift+P` |  | Command Palette |
 | `Cmd+Shift+H` |  | Find and Replace |
 | `Cmd+F` |  | Find in File |
 | `Cmd+Shift+F` |  | Find in Files |
-| `Cmd+F` | desktop app only | Find in Page |
-| `Cmd+P` | `Cmd+K P` | Quick File Open |
+| `Cmd+F` (desktop app only) |  | Find in Page |
+| `Cmd+P` |  | Quick File Open |
 | `Cmd+F` |  | Search Chats |
 
 ## Chat Navigation
 
-| Desktop | Browser | Action |
-|---------|---------|--------|
+| Shortcut | Also in the desktop app | Action |
+|----------|-------------------------|--------|
 | `Cmd+Shift+Down` |  | Extend Selection Down |
 | `Cmd+Shift+Down` |  | Extend Selection Down (Composer) |
 | `Cmd+Shift+Up` |  | Extend Selection Up |
@@ -71,33 +75,33 @@ A `Cmd+K` sequence's second key can be typed with `Cmd` released or still held.
 
 ## Project Navigation
 
-| Desktop | Browser | Action |
-|---------|---------|--------|
+| Shortcut | Also in the desktop app | Action |
+|----------|-------------------------|--------|
 | `Cmd+K Right` |  | Next Project |
 | `Cmd+K Left` |  | Previous Project |
 | `Cmd+Shift+E` |  | Switch Project |
 
 ## File Navigation
 
-| Desktop | Browser | Action |
-|---------|---------|--------|
+| Shortcut | Also in the desktop app | Action |
+|----------|-------------------------|--------|
 | `Cmd+C` |  | Copy File |
 | `Cmd+X` |  | Cut File |
-| `Cmd+Shift+]` | `Cmd+K ]` | Next File Tab |
+| `Cmd+K ]` | `Cmd+Shift+]` | Next File Tab |
 | `Cmd+V` |  | Paste File |
-| `Cmd+Shift+[` | `Cmd+K [` | Previous File Tab |
-| `Cmd+Shift+T` | `Cmd+K Z` | Reopen Last Closed File |
+| `Cmd+K [` | `Cmd+Shift+[` | Previous File Tab |
+| `Cmd+K Z` | `Cmd+Shift+T` | Reopen Last Closed File |
 
 ## Panel Navigation
 
-| Desktop | Browser | Action |
-|---------|---------|--------|
+| Shortcut | Also in the desktop app | Action |
+|----------|-------------------------|--------|
 | `Cmd+Shift+Left` |  | Extend Selection Left |
 | `Cmd+Shift+Left` |  | Extend Selection Left (Composer) |
 | `Cmd+Shift+Right` |  | Extend Selection Right |
 | `Cmd+Shift+Right` |  | Extend Selection Right (Composer) |
 | `Cmd+Shift+Right` |  | Next Right Sidebar Tab |
-| `Cmd+K N` | `Cmd+K S` | Package Commands |
+| `Cmd+K S` | `Cmd+K N` | Package Commands |
 | `Cmd+Shift+Left` |  | Previous Right Sidebar Tab |
 | `Cmd+K V` |  | Show Browser |
 | `Cmd+K G` |  | Show Changes |
@@ -107,8 +111,8 @@ A `Cmd+K` sequence's second key can be typed with `Cmd` released or still held.
 
 ## Interface
 
-| Desktop | Browser | Action |
-|---------|---------|--------|
+| Shortcut | Also in the desktop app | Action |
+|----------|-------------------------|--------|
 | `Escape` |  | Close Modal |
 | `Cmd+Alt+B` |  | Toggle Chat Sidebar |
 | `Cmd+B` |  | Toggle Right Sidebar |
@@ -116,17 +120,17 @@ A `Cmd+K` sequence's second key can be typed with `Cmd` released or still held.
 
 ## Terminal
 
-| Desktop | Browser | Action |
-|---------|---------|--------|
+| Shortcut | Also in the desktop app | Action |
+|----------|-------------------------|--------|
 | `Cmd+Shift+L` |  | Clear Terminal |
 | `Cmd+Shift+J` |  | New Terminal |
 | `Cmd+J` |  | Toggle Terminal |
 
 ## Chat Control
 
-| Desktop | Browser | Action |
-|---------|---------|--------|
-| `Cmd+L` | `Cmd+K L` | Add Selection to Chat |
+| Shortcut | Also in the desktop app | Action |
+|----------|-------------------------|--------|
+| `Cmd+L` |  | Add Selection to Chat |
 | `Cmd+Enter` |  | Approve Tool Requests |
 | `Escape` |  | Dismiss Slash Menu |
 | `Cmd+Enter` |  | Insert Newline |
@@ -135,8 +139,8 @@ A `Cmd+K` sequence's second key can be typed with `Cmd` released or still held.
 
 ## Parameters
 
-| Desktop | Browser | Action |
-|---------|---------|--------|
+| Shortcut | Also in the desktop app | Action |
+|----------|-------------------------|--------|
 | `Cmd+K M` |  | Change Model |
 | `Cmd+K H` |  | Change Thinking Level |
 | `Cmd+K Y` |  | Change Workflow |
@@ -144,8 +148,8 @@ A `Cmd+K` sequence's second key can be typed with `Cmd` released or still held.
 
 ## Workflow Builder
 
-| Desktop | Browser | Action |
-|---------|---------|--------|
+| Shortcut | Also in the desktop app | Action |
+|----------|-------------------------|--------|
 | `Cmd+I` |  | Add Step |
 | `Cmd+Shift+L` |  | Connect Selected Steps |
 

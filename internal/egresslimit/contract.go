@@ -33,7 +33,7 @@
 // result the model can read ("rate limited, retry after Ns") and the
 // conversation continues.
 //
-//forge:not-a-component: built by internal/app's NewRemoteExecutor provider (providers_worker.go) — never a node of the composition graph
+//forge:not-a-component: built inline twice, with different limits: by internal/app's NewRemoteExecutor provider on the worker (providers_worker.go) and by internal/toolexec/daemonruntime on the daemon; no component takes it in Deps
 package egresslimit
 
 import (

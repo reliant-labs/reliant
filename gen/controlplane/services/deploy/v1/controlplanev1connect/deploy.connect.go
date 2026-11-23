@@ -77,6 +77,21 @@ const (
 	// DeployServiceGetManagedDatabaseProcedure is the fully-qualified name of the DeployService's
 	// GetManagedDatabase RPC.
 	DeployServiceGetManagedDatabaseProcedure = "/controlplane.v1.DeployService/GetManagedDatabase"
+	// DeployServiceBeginAppStepUpProcedure is the fully-qualified name of the DeployService's
+	// BeginAppStepUp RPC.
+	DeployServiceBeginAppStepUpProcedure = "/controlplane.v1.DeployService/BeginAppStepUp"
+	// DeployServiceCompleteAppStepUpProcedure is the fully-qualified name of the DeployService's
+	// CompleteAppStepUp RPC.
+	DeployServiceCompleteAppStepUpProcedure = "/controlplane.v1.DeployService/CompleteAppStepUp"
+	// DeployServiceScheduleAppDeletionProcedure is the fully-qualified name of the DeployService's
+	// ScheduleAppDeletion RPC.
+	DeployServiceScheduleAppDeletionProcedure = "/controlplane.v1.DeployService/ScheduleAppDeletion"
+	// DeployServiceCancelAppDeletionProcedure is the fully-qualified name of the DeployService's
+	// CancelAppDeletion RPC.
+	DeployServiceCancelAppDeletionProcedure = "/controlplane.v1.DeployService/CancelAppDeletion"
+	// DeployServiceGetAppDeletionProcedure is the fully-qualified name of the DeployService's
+	// GetAppDeletion RPC.
+	DeployServiceGetAppDeletionProcedure = "/controlplane.v1.DeployService/GetAppDeletion"
 	// DeployServiceEnsureEnvironmentProcedure is the fully-qualified name of the DeployService's
 	// EnsureEnvironment RPC.
 	DeployServiceEnsureEnvironmentProcedure = "/controlplane.v1.DeployService/EnsureEnvironment"
@@ -258,6 +273,27 @@ type DeployServiceClient interface {
 	// caller's org, so another org's database is NotFound, never readable.
 	// forge:custom
 	GetManagedDatabase(context.Context, *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error)
+	// BeginAppStepUp starts a step-up re-authentication for ONE app: the server
+	// emails a one-time code to the caller's verified account address. Nothing
+	// changes until CompleteAppStepUp. Required before ScheduleAppDeletion and
+	// CancelAppDeletion. Owner or admin, signed in as a person.
+	BeginAppStepUp(context.Context, *connect.Request[v1.BeginAppStepUpRequest]) (*connect.Response[v1.BeginAppStepUpResponse], error)
+	// CompleteAppStepUp redeems the code. On success the caller may schedule or
+	// cancel the app's deletion until `valid_until`; the grant belongs to the
+	// caller, to this app, and to nothing else.
+	CompleteAppStepUp(context.Context, *connect.Request[v1.CompleteAppStepUpRequest]) (*connect.Response[v1.CompleteAppStepUpResponse], error)
+	// ScheduleAppDeletion schedules the app's deletion and stops it. Idempotent:
+	// scheduling a scheduled app keeps its date and stops anything started since.
+	ScheduleAppDeletion(context.Context, *connect.Request[v1.ScheduleAppDeletionRequest]) (*connect.Response[v1.ScheduleAppDeletionResponse], error)
+	// CancelAppDeletion clears a scheduled deletion, and nothing else: the
+	// app's environments stay stopped until someone starts them
+	// (SetEnvironmentRunState), because restarting them automatically would
+	// surprise whoever stopped one on purpose. Refused once the purge has
+	// begun. Cancelling an app with nothing scheduled changes nothing.
+	CancelAppDeletion(context.Context, *connect.Request[v1.CancelAppDeletionRequest]) (*connect.Response[v1.CancelAppDeletionResponse], error)
+	// GetAppDeletion reports the app's scheduled deletion, if any. MEMBER
+	// (machine: deploy:read).
+	GetAppDeletion(context.Context, *connect.Request[v1.GetAppDeletionRequest]) (*connect.Response[v1.GetAppDeletionResponse], error)
 	// EnsureEnvironment makes an environment with this NAME exist in the
 	// caller's org and returns it: created when absent, returned unchanged when
 	// present. It is what `forge env deploy` calls for an env that declares
@@ -763,6 +799,36 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		beginAppStepUp: connect.NewClient[v1.BeginAppStepUpRequest, v1.BeginAppStepUpResponse](
+			httpClient,
+			baseURL+DeployServiceBeginAppStepUpProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("BeginAppStepUp")),
+			connect.WithClientOptions(opts...),
+		),
+		completeAppStepUp: connect.NewClient[v1.CompleteAppStepUpRequest, v1.CompleteAppStepUpResponse](
+			httpClient,
+			baseURL+DeployServiceCompleteAppStepUpProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("CompleteAppStepUp")),
+			connect.WithClientOptions(opts...),
+		),
+		scheduleAppDeletion: connect.NewClient[v1.ScheduleAppDeletionRequest, v1.ScheduleAppDeletionResponse](
+			httpClient,
+			baseURL+DeployServiceScheduleAppDeletionProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ScheduleAppDeletion")),
+			connect.WithClientOptions(opts...),
+		),
+		cancelAppDeletion: connect.NewClient[v1.CancelAppDeletionRequest, v1.CancelAppDeletionResponse](
+			httpClient,
+			baseURL+DeployServiceCancelAppDeletionProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("CancelAppDeletion")),
+			connect.WithClientOptions(opts...),
+		),
+		getAppDeletion: connect.NewClient[v1.GetAppDeletionRequest, v1.GetAppDeletionResponse](
+			httpClient,
+			baseURL+DeployServiceGetAppDeletionProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetAppDeletion")),
+			connect.WithClientOptions(opts...),
+		),
 		ensureEnvironment: connect.NewClient[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse](
 			httpClient,
 			baseURL+DeployServiceEnsureEnvironmentProcedure,
@@ -1046,6 +1112,11 @@ type deployServiceClient struct {
 	deleteRetainedDatabase       *connect.Client[v1.DeleteRetainedDatabaseRequest, v1.DeleteRetainedDatabaseResponse]
 	setRetainedDatabaseRetention *connect.Client[v1.SetRetainedDatabaseRetentionRequest, v1.SetRetainedDatabaseRetentionResponse]
 	getManagedDatabase           *connect.Client[v1.GetManagedDatabaseRequest, v1.GetManagedDatabaseResponse]
+	beginAppStepUp               *connect.Client[v1.BeginAppStepUpRequest, v1.BeginAppStepUpResponse]
+	completeAppStepUp            *connect.Client[v1.CompleteAppStepUpRequest, v1.CompleteAppStepUpResponse]
+	scheduleAppDeletion          *connect.Client[v1.ScheduleAppDeletionRequest, v1.ScheduleAppDeletionResponse]
+	cancelAppDeletion            *connect.Client[v1.CancelAppDeletionRequest, v1.CancelAppDeletionResponse]
+	getAppDeletion               *connect.Client[v1.GetAppDeletionRequest, v1.GetAppDeletionResponse]
 	ensureEnvironment            *connect.Client[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse]
 	createDeployment             *connect.Client[v1.CreateDeploymentRequest, v1.CreateDeploymentResponse]
 	getDeployment                *connect.Client[v1.GetDeploymentRequest, v1.GetDeploymentResponse]
@@ -1160,6 +1231,31 @@ func (c *deployServiceClient) SetRetainedDatabaseRetention(ctx context.Context, 
 // GetManagedDatabase calls controlplane.v1.DeployService.GetManagedDatabase.
 func (c *deployServiceClient) GetManagedDatabase(ctx context.Context, req *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error) {
 	return c.getManagedDatabase.CallUnary(ctx, req)
+}
+
+// BeginAppStepUp calls controlplane.v1.DeployService.BeginAppStepUp.
+func (c *deployServiceClient) BeginAppStepUp(ctx context.Context, req *connect.Request[v1.BeginAppStepUpRequest]) (*connect.Response[v1.BeginAppStepUpResponse], error) {
+	return c.beginAppStepUp.CallUnary(ctx, req)
+}
+
+// CompleteAppStepUp calls controlplane.v1.DeployService.CompleteAppStepUp.
+func (c *deployServiceClient) CompleteAppStepUp(ctx context.Context, req *connect.Request[v1.CompleteAppStepUpRequest]) (*connect.Response[v1.CompleteAppStepUpResponse], error) {
+	return c.completeAppStepUp.CallUnary(ctx, req)
+}
+
+// ScheduleAppDeletion calls controlplane.v1.DeployService.ScheduleAppDeletion.
+func (c *deployServiceClient) ScheduleAppDeletion(ctx context.Context, req *connect.Request[v1.ScheduleAppDeletionRequest]) (*connect.Response[v1.ScheduleAppDeletionResponse], error) {
+	return c.scheduleAppDeletion.CallUnary(ctx, req)
+}
+
+// CancelAppDeletion calls controlplane.v1.DeployService.CancelAppDeletion.
+func (c *deployServiceClient) CancelAppDeletion(ctx context.Context, req *connect.Request[v1.CancelAppDeletionRequest]) (*connect.Response[v1.CancelAppDeletionResponse], error) {
+	return c.cancelAppDeletion.CallUnary(ctx, req)
+}
+
+// GetAppDeletion calls controlplane.v1.DeployService.GetAppDeletion.
+func (c *deployServiceClient) GetAppDeletion(ctx context.Context, req *connect.Request[v1.GetAppDeletionRequest]) (*connect.Response[v1.GetAppDeletionResponse], error) {
+	return c.getAppDeletion.CallUnary(ctx, req)
 }
 
 // EnsureEnvironment calls controlplane.v1.DeployService.EnsureEnvironment.
@@ -1437,6 +1533,27 @@ type DeployServiceHandler interface {
 	// caller's org, so another org's database is NotFound, never readable.
 	// forge:custom
 	GetManagedDatabase(context.Context, *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error)
+	// BeginAppStepUp starts a step-up re-authentication for ONE app: the server
+	// emails a one-time code to the caller's verified account address. Nothing
+	// changes until CompleteAppStepUp. Required before ScheduleAppDeletion and
+	// CancelAppDeletion. Owner or admin, signed in as a person.
+	BeginAppStepUp(context.Context, *connect.Request[v1.BeginAppStepUpRequest]) (*connect.Response[v1.BeginAppStepUpResponse], error)
+	// CompleteAppStepUp redeems the code. On success the caller may schedule or
+	// cancel the app's deletion until `valid_until`; the grant belongs to the
+	// caller, to this app, and to nothing else.
+	CompleteAppStepUp(context.Context, *connect.Request[v1.CompleteAppStepUpRequest]) (*connect.Response[v1.CompleteAppStepUpResponse], error)
+	// ScheduleAppDeletion schedules the app's deletion and stops it. Idempotent:
+	// scheduling a scheduled app keeps its date and stops anything started since.
+	ScheduleAppDeletion(context.Context, *connect.Request[v1.ScheduleAppDeletionRequest]) (*connect.Response[v1.ScheduleAppDeletionResponse], error)
+	// CancelAppDeletion clears a scheduled deletion, and nothing else: the
+	// app's environments stay stopped until someone starts them
+	// (SetEnvironmentRunState), because restarting them automatically would
+	// surprise whoever stopped one on purpose. Refused once the purge has
+	// begun. Cancelling an app with nothing scheduled changes nothing.
+	CancelAppDeletion(context.Context, *connect.Request[v1.CancelAppDeletionRequest]) (*connect.Response[v1.CancelAppDeletionResponse], error)
+	// GetAppDeletion reports the app's scheduled deletion, if any. MEMBER
+	// (machine: deploy:read).
+	GetAppDeletion(context.Context, *connect.Request[v1.GetAppDeletionRequest]) (*connect.Response[v1.GetAppDeletionResponse], error)
 	// EnsureEnvironment makes an environment with this NAME exist in the
 	// caller's org and returns it: created when absent, returned unchanged when
 	// present. It is what `forge env deploy` calls for an env that declares
@@ -1938,6 +2055,36 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceBeginAppStepUpHandler := connect.NewUnaryHandler(
+		DeployServiceBeginAppStepUpProcedure,
+		svc.BeginAppStepUp,
+		connect.WithSchema(deployServiceMethods.ByName("BeginAppStepUp")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceCompleteAppStepUpHandler := connect.NewUnaryHandler(
+		DeployServiceCompleteAppStepUpProcedure,
+		svc.CompleteAppStepUp,
+		connect.WithSchema(deployServiceMethods.ByName("CompleteAppStepUp")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceScheduleAppDeletionHandler := connect.NewUnaryHandler(
+		DeployServiceScheduleAppDeletionProcedure,
+		svc.ScheduleAppDeletion,
+		connect.WithSchema(deployServiceMethods.ByName("ScheduleAppDeletion")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceCancelAppDeletionHandler := connect.NewUnaryHandler(
+		DeployServiceCancelAppDeletionProcedure,
+		svc.CancelAppDeletion,
+		connect.WithSchema(deployServiceMethods.ByName("CancelAppDeletion")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceGetAppDeletionHandler := connect.NewUnaryHandler(
+		DeployServiceGetAppDeletionProcedure,
+		svc.GetAppDeletion,
+		connect.WithSchema(deployServiceMethods.ByName("GetAppDeletion")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceEnsureEnvironmentHandler := connect.NewUnaryHandler(
 		DeployServiceEnsureEnvironmentProcedure,
 		svc.EnsureEnvironment,
@@ -2232,6 +2379,16 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceSetRetainedDatabaseRetentionHandler.ServeHTTP(w, r)
 		case DeployServiceGetManagedDatabaseProcedure:
 			deployServiceGetManagedDatabaseHandler.ServeHTTP(w, r)
+		case DeployServiceBeginAppStepUpProcedure:
+			deployServiceBeginAppStepUpHandler.ServeHTTP(w, r)
+		case DeployServiceCompleteAppStepUpProcedure:
+			deployServiceCompleteAppStepUpHandler.ServeHTTP(w, r)
+		case DeployServiceScheduleAppDeletionProcedure:
+			deployServiceScheduleAppDeletionHandler.ServeHTTP(w, r)
+		case DeployServiceCancelAppDeletionProcedure:
+			deployServiceCancelAppDeletionHandler.ServeHTTP(w, r)
+		case DeployServiceGetAppDeletionProcedure:
+			deployServiceGetAppDeletionHandler.ServeHTTP(w, r)
 		case DeployServiceEnsureEnvironmentProcedure:
 			deployServiceEnsureEnvironmentHandler.ServeHTTP(w, r)
 		case DeployServiceCreateDeploymentProcedure:
@@ -2383,6 +2540,26 @@ func (UnimplementedDeployServiceHandler) SetRetainedDatabaseRetention(context.Co
 
 func (UnimplementedDeployServiceHandler) GetManagedDatabase(context.Context, *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetManagedDatabase is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) BeginAppStepUp(context.Context, *connect.Request[v1.BeginAppStepUpRequest]) (*connect.Response[v1.BeginAppStepUpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.BeginAppStepUp is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) CompleteAppStepUp(context.Context, *connect.Request[v1.CompleteAppStepUpRequest]) (*connect.Response[v1.CompleteAppStepUpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.CompleteAppStepUp is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) ScheduleAppDeletion(context.Context, *connect.Request[v1.ScheduleAppDeletionRequest]) (*connect.Response[v1.ScheduleAppDeletionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ScheduleAppDeletion is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) CancelAppDeletion(context.Context, *connect.Request[v1.CancelAppDeletionRequest]) (*connect.Response[v1.CancelAppDeletionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.CancelAppDeletion is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) GetAppDeletion(context.Context, *connect.Request[v1.GetAppDeletionRequest]) (*connect.Response[v1.GetAppDeletionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetAppDeletion is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) EnsureEnvironment(context.Context, *connect.Request[v1.EnsureDeployEnvironmentRequest]) (*connect.Response[v1.EnsureDeployEnvironmentResponse], error) {

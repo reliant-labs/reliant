@@ -88,7 +88,7 @@ describe("DaemonWaitState with several blocked surfaces", () => {
     // ...but only one explains it and offers the exits.
     expect(screen.getAllByText(STUCK.detail!)).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: /Try again/ })).toHaveLength(1);
-    expect(screen.getAllByRole("button", { name: /Manage machines/ })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /Manage sandboxes/ })).toHaveLength(1);
     expect(within(screen.getByTestId("chat")).getByRole("button", { name: /Try again/ })).toBeTruthy();
     // One announcement, not three.
     expect(screen.getAllByRole("status")).toHaveLength(1);
