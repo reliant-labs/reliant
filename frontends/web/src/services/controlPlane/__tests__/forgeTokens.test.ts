@@ -53,7 +53,10 @@ function forgeScopeCatalog(): string[] {
     .filter((sql) => /ADD CONSTRAINT access_tokens_scopes CHECK/.test(sql))
     .at(-1);
   if (!newest) throw new Error(`no access_tokens_scopes CHECK under ${MIGRATIONS}`);
-  const list = /scopes <@ ARRAY\[([\s\S]*?)\]/.exec(newest)?.[1] ?? "";
+  // Strip SQL comments first: a migration's header may quote the predicate
+  // ("scopes <@ ARRAY[40 scopes]"), which would otherwise match before the DDL.
+  const ddl = newest.replace(/--.*$/gm, "");
+  const list = /scopes <@ ARRAY\[([\s\S]*?)\]/.exec(ddl)?.[1] ?? "";
   return [...list.matchAll(/'([^']+)'/g)].map((m) => m[1]);
 }
 const CREATED = new Date("2026-10-01T00:00:00Z");
@@ -277,18 +280,22 @@ describe("what the token UI tells a person", () => {
     expect(offered).toContain("sourcemaps:write");
   });
 
-  it("offers every scope of forge's catalog except the three that must be bound to a resource", () => {
+  it("offers every scope of forge's catalog except those bound to a resource or issued only to an OAuth client", () => {
     // forge pkg/accesstoken/scope.go AllScopes, as this repo vendors it: the
     // access_tokens CHECK, which internal/db/access_tokens_scopes_forge_test.go
     // and `forge lint --closed-sets` hold equal to AllScopes. A scope forge
-    // adds fails this test until it is offered here or listed as binding-only.
+    // adds fails this test until it is offered here or listed as not mintable.
     const catalog = forgeScopeCatalog();
     const bindingOnly = ["proxy:port", "mcp:connector", "daemon:resume"];
+    // accesstoken.OAuthClientScopes: an authorization server issues these to
+    // an MCP client, each as a token's only scope; a person never mints one.
+    const oauthClientOnly = ["mcp:oauth", "mcp:forge"];
+    const notMintable = [...bindingOnly, ...oauthClientOnly];
     const offered = FORGE_TOKEN_SCOPES.map((s) => s.scope);
 
     expect(catalog).toEqual(expect.arrayContaining(["vuln:read", "tests:read", "tests:write", "changes:write", "changes:launch"]));
     expect(new Set(offered).size).toBe(offered.length);
-    expect([...offered].sort()).toEqual(catalog.filter((s) => !bindingOnly.includes(s)).sort());
+    expect([...offered].sort()).toEqual(catalog.filter((s) => !notMintable.includes(s)).sort());
   });
 
   it("mints tests:write and sourcemaps:write as org tokens only, and never vuln:read or tests:read", () => {

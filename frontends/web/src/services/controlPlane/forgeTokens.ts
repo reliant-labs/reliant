@@ -41,7 +41,9 @@ export interface ForgeTokenScopeGroup {
  * AllScopes) minus the three that only mean something bound to one resource
  * this page does not bind: proxy:port (one port), mcp:connector (one
  * connector grant) and daemon:resume (one daemon). The server refuses those
- * unbound, so offering them would only offer an error.
+ * unbound, so offering them would only offer an error. It also omits
+ * mcp:oauth and mcp:forge (accesstoken.OAuthClientScopes), which an
+ * authorization server issues to an MCP client and a person never mints.
  *
  * The org permissions (deploy, secret, domain, vuln:read, tests, changes,
  * data access, identity, billing, administration, obs:write) are granted per
