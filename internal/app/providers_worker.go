@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
+	"github.com/reliant-labs/reliant/internal/connectionproposer"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
@@ -600,13 +601,15 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		ActivationManager:  d.Triggers.Service,
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
-		MachineController: newMachineController(newMachineRegistry(repo.ORM()), store.NewMachinePoolExtStore(repo.ORM()), d.Router, registry),
+		MachineController: newMachineController(repo, d.Router, registry),
 		// list_changes / get_change / manage_change run Forge Changes as the
 		// user, through the control plane's ChangesService.
 		ChangeController: newChangeController(store.NewProjectExtStore(repo.ORM()), d.Router),
 		// propose_connection raises its card and reads back the connection
 		// the person made (metadata only, never the credential).
-		ConnectionProposer: newConnectionProposer(repo, d.ConnectionVault, d.Membership),
+		ConnectionProposer: connectionproposer.New(connectionproposer.Deps{
+			Approvals: store.NewApprovalExtStore(repo.ORM()), Connections: d.ConnectionVault, Roles: d.Membership,
+		}),
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
 		// source the action node uses: saved connections, plus GitHub tokens
