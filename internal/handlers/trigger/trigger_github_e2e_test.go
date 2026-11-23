@@ -148,7 +148,7 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 	refresher := ghaccess.New(store.NewIntegrationEventAccessExtStore(repo.ORM()), store.NewIntegrationAccessRefreshExtStore(repo.ORM()), userTokens{alice: "tok-alice", bob: "tok-bob"},
 		ghaccess.Options{APIBaseURL: ghServer.URL, HTTPClient: ghServer.Client()})
 
-	intake := triggers.NewIntake(repo, temporalClient, taskQueue)
+	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue)
 	const publicURL = "https://hooks.example.com"
 	inbound := webhook.NewInbound(repo, intake, registry, nil, publicURL)
 	mux := http.NewServeMux()

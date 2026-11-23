@@ -197,7 +197,7 @@ func (f *fireFixture) fireAt(day int) FireRequest {
 
 func (f *fireFixture) rootStatus(t *testing.T, chatID string) core.WorkflowStatus {
 	t.Helper()
-	statuses, err := f.repo.GetRootWorkflowStatusForChats(context.Background(), []string{chatID})
+	statuses, err := NewStores(f.repo).RootWorkflowStatusForChats(context.Background(), []string{chatID})
 	require.NoError(t, err)
 	return statuses[chatID]
 }

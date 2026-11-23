@@ -64,7 +64,7 @@ func TestInboundTriggersFireEndToEnd(t *testing.T) {
 	provider := webhook.NewTestProvider("e2e-secret")
 	registry := webhook.NewRegistry()
 	require.NoError(t, registry.Register(provider))
-	intake := triggers.NewIntake(repo, temporalClient, taskQueue)
+	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue)
 	const publicURL = "https://hooks.example.com"
 	inbound := webhook.NewInbound(repo, intake, registry, nil, publicURL)
 	mux := http.NewServeMux()

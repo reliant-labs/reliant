@@ -83,7 +83,7 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 	defer w.Stop()
 
 	// The real service, over the real schedule and workflow clients.
-	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
+	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, triggers.NewStores(repo), taskQueue)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend}))
 
 	userID := uuid.NewString()
@@ -246,7 +246,7 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 	require.NoError(t, w.Start())
 	defer w.Stop()
 
-	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
+	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, triggers.NewStores(repo), taskQueue)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend}))
 
 	userID := uuid.NewString()
@@ -335,7 +335,7 @@ func TestManualFireEndToEnd(t *testing.T) {
 	require.NoError(t, w.Start())
 	defer w.Stop()
 
-	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
+	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, triggers.NewStores(repo), taskQueue)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend}))
 
 	userID := uuid.NewString()

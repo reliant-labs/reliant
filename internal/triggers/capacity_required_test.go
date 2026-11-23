@@ -36,3 +36,22 @@ func TestConstructionFailsWithoutACapacityStore(t *testing.T) {
 	require.PanicsWithValue(t, "triggers: NewRedriver requires a CapacityStore", func() { NewRedriver(nil, nil, "") })
 	require.PanicsWithValue(t, "triggers: NewStores requires a repository", func() { NewStores(nil) })
 }
+
+// The owner, receipt and root-status reads are required roles too: a store
+// that lacks them is rejected by the compiler, not skipped at run time. The
+// bare facade cannot be an Intake or Poll store any more, because the
+// generated reads moved off it.
+func TestRequiredRolesRejectTheBareFacade(t *testing.T) {
+	var facade any = (*db.Repo)(nil)
+	for name, role := range map[string]func(any) bool{
+		"IntakeRepo":    func(v any) bool { _, ok := v.(IntakeRepo); return ok },
+		"PollRepo":      func(v any) bool { _, ok := v.(PollRepo); return ok },
+		"FireRepo":      func(v any) bool { _, ok := v.(FireRepo); return ok },
+		"EventFireRepo": func(v any) bool { _, ok := v.(EventFireRepo); return ok },
+	} {
+		require.False(t, role(facade), "*db.Repo must not satisfy %s on its own", name)
+	}
+	var _ OwnerSource = (*db.Repo)(nil)
+	var _ IntakeRepo = Stores{}
+	var _ PollRepo = Stores{}
+}

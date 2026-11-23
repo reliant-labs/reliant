@@ -67,7 +67,7 @@ func newScenario(t *testing.T, workflow string) *scenario {
 	workflows := launchableDeclarations{fakeWorkflows: fakeWorkflows{yaml: map[string]string{scenarioWorkflow: workflow}}}
 	enricher := NewOriginEnricher(writeledger.NewLedger(store.NewIntegrationWriteExtStore(f.repo.ORM())), f.repo, "reliant-labs")
 	starter := &recordingStarter{}
-	intake := NewIntake(f.repo, starter, "").WithWorkflows(workflows).WithEnrichers(enricher)
+	intake := NewIntake(NewStores(f.repo), starter, "").WithWorkflows(workflows).WithEnrichers(enricher)
 	firer := NewEventFirer(NewStores(f.repo), launcher).WithWorkflows(workflows)
 
 	require.NoError(t, f.repo.UpdateTrigger(ctx, f.trigger))

@@ -2505,13 +2505,6 @@ func (r *Repo) ListRootWorkflows(ctx context.Context, chatID string) ([]*Workflo
 	return store.ListRootWorkflows(ctx, r.ORM(), chatID)
 }
 
-func (r *Repo) GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]WorkflowStatus, error) {
-	if len(chatIDs) == 0 {
-		return make(map[string]WorkflowStatus), nil
-	}
-	return store.RootWorkflowStatusForChats(ctx, r.ORM(), chatIDs)
-}
-
 // workflowStatusWrite is the transaction a workflow status write runs in when
 // its caller has none. READ COMMITTED is enough: each write is ONE UPDATE of
 // one row by id — a CAS keeps its expected status in the UPDATE's own WHERE,
@@ -3215,20 +3208,8 @@ func (r *Repo) ListIntegrationTriggers(ctx context.Context, integration string) 
 	return store.ListIntegrationTriggers(ctx, r.ORM(), integration)
 }
 
-func (r *Repo) ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error) {
-	return store.ListStalePendingTriggerEvents(ctx, r.ORM(), olderThan, limit)
-}
-
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
-}
-
-func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, def *core.TriggerEventDefinition) (bool, error) {
-	return store.SettlePendingTriggerEvent(ctx, r.ORM(), id, outcome, detail, def)
-}
-
-func (r *Repo) GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error) {
-	return store.GetTriggerRegistration(ctx, r.ORM(), triggerID)
 }
 
 func (r *Repo) ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error) {
@@ -3236,13 +3217,6 @@ func (r *Repo) ListTriggerRegistrations(ctx context.Context, userID string, trig
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 	return store.ListTriggerRegistrationsForUser(ctx, r.ORM(), userID, triggerIDs)
-}
-
-func (r *Repo) UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error {
-	if reg == nil || reg.TriggerID == "" {
-		return fmt.Errorf("trigger registration needs a trigger ID")
-	}
-	return store.UpsertTriggerRegistration(ctx, r.ORM(), reg)
 }
 
 // ==================== Step Executions ====================

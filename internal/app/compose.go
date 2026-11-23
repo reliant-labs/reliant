@@ -1185,7 +1185,7 @@ func (g *Graph) newRun() (*run.Service, error) {
 // inbound receivers.
 func (g *Graph) newTrigger() (*trigger.Service, error) {
 	in := g.TriggerInbound()
-	syncer, fires := trigger.TemporalBackend(g.TemporalClient().Client, g.Database(), v2workflow.SharedTaskQueue, in.Registry.IsPolled)
+	syncer, fires := trigger.TemporalBackend(g.TemporalClient().Client, triggers.NewStores(g.Database()), v2workflow.SharedTaskQueue, in.Registry.IsPolled)
 	// An org's linked GitHub App installations, from control-plane: nil when
 	// self-hosted, which refuses binding a trigger to one.
 	apps, err := gitTokens(g.ServerProcessConfig.GetControlPlane())
