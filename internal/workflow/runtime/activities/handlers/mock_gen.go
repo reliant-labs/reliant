@@ -22,7 +22,7 @@ import (
 )
 
 // forge:section MockWorkflowLoader
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockWorkflowLoader is a test mock for the WorkflowLoader interface.
 //
@@ -47,8 +47,64 @@ func (m *MockWorkflowLoader) LoadWorkflow(ctx context.Context, id string) (*core
 // Compile-time check.
 var _ WorkflowLoader = (*MockWorkflowLoader)(nil)
 
+// forge:section MockWorkspaceRows
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
+
+// MockWorkspaceRows is a test mock for the WorkspaceRows interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockWorkspaceRows.<Method>Func not set" error.
+type MockWorkspaceRows struct {
+	contractkit.Recorder
+	GetProjectFunc         func(context.Context, string) (*db.Project, error)
+	ListReposByProjectFunc func(context.Context, string) ([]*core.Repo, error)
+	GetDaemonFunc          func(context.Context, string) (*db.Daemon, error)
+	GetWorktreeFunc        func(context.Context, string) (*db.Worktree, error)
+}
+
+// GetProject records the call and delegates to GetProjectFunc when set.
+func (m *MockWorkspaceRows) GetProject(ctx context.Context, id string) (*db.Project, error) {
+	m.Recorder.Record("GetProject", ctx, id)
+	if m.GetProjectFunc != nil {
+		return m.GetProjectFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockWorkspaceRows", "GetProject")
+}
+
+// ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
+func (m *MockWorkspaceRows) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
+	m.Recorder.Record("ListReposByProject", ctx, projectID)
+	if m.ListReposByProjectFunc != nil {
+		return m.ListReposByProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockWorkspaceRows", "ListReposByProject")
+}
+
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockWorkspaceRows) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockWorkspaceRows", "GetDaemon")
+}
+
+// GetWorktree records the call and delegates to GetWorktreeFunc when set.
+func (m *MockWorkspaceRows) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
+	m.Recorder.Record("GetWorktree", ctx, id)
+	if m.GetWorktreeFunc != nil {
+		return m.GetWorktreeFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockWorkspaceRows", "GetWorktree")
+}
+
+// Compile-time check.
+var _ WorkspaceRows = (*MockWorkspaceRows)(nil)
+
 // forge:section MockRunOwnerReader
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockRunOwnerReader is a test mock for the RunOwnerReader interface.
 //
@@ -74,7 +130,7 @@ func (m *MockRunOwnerReader) GetChat(ctx context.Context, id string) (*db.Chat, 
 var _ RunOwnerReader = (*MockRunOwnerReader)(nil)
 
 // forge:section MockWorkflowRuns
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockWorkflowRuns is a test mock for the WorkflowRuns interface.
 //
@@ -130,7 +186,7 @@ func (m *MockWorkflowRuns) LoadWorkflow(ctx context.Context, id string) (*core.W
 var _ WorkflowRuns = (*MockWorkflowRuns)(nil)
 
 // forge:section MockQuestionsByStep
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockQuestionsByStep is a test mock for the QuestionsByStep interface.
 //
@@ -156,7 +212,7 @@ func (m *MockQuestionsByStep) ListQuestionsByWorkflowStepIteration(ctx context.C
 var _ QuestionsByStep = (*MockQuestionsByStep)(nil)
 
 // forge:section MockWorktreeOwnerReader
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockWorktreeOwnerReader is a test mock for the WorktreeOwnerReader interface.
 //
@@ -182,7 +238,7 @@ func (m *MockWorktreeOwnerReader) GetWorktree(ctx context.Context, id string) (*
 var _ WorktreeOwnerReader = (*MockWorktreeOwnerReader)(nil)
 
 // forge:section MockThreadWorktreeReader
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockThreadWorktreeReader is a test mock for the ThreadWorktreeReader interface.
 //
@@ -208,7 +264,7 @@ func (m *MockThreadWorktreeReader) GetThread(ctx context.Context, id string) (*d
 var _ ThreadWorktreeReader = (*MockThreadWorktreeReader)(nil)
 
 // forge:section MockBindingDescriber
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockBindingDescriber is a test mock for the BindingDescriber interface.
 //
@@ -234,7 +290,7 @@ func (m *MockBindingDescriber) GetWorktree(ctx context.Context, id string) (*db.
 var _ BindingDescriber = (*MockBindingDescriber)(nil)
 
 // forge:section MockRunExecutorContextStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockRunExecutorContextStore is a test mock for the RunExecutorContextStore interface.
 //
@@ -245,8 +301,6 @@ var _ BindingDescriber = (*MockBindingDescriber)(nil)
 type MockRunExecutorContextStore struct {
 	contractkit.Recorder
 	GetChatFunc                      func(context.Context, string) (*db.Chat, error)
-	GetProjectFunc                   func(context.Context, string) (*db.Project, error)
-	GetWorktreeFunc                  func(context.Context, string) (*db.Worktree, error)
 	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
 }
@@ -258,24 +312,6 @@ func (m *MockRunExecutorContextStore) GetChat(ctx context.Context, id string) (*
 		return m.GetChatFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRunExecutorContextStore", "GetChat")
-}
-
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockRunExecutorContextStore) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRunExecutorContextStore", "GetProject")
-}
-
-// GetWorktree records the call and delegates to GetWorktreeFunc when set.
-func (m *MockRunExecutorContextStore) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
-	m.Recorder.Record("GetWorktree", ctx, id)
-	if m.GetWorktreeFunc != nil {
-		return m.GetWorktreeFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRunExecutorContextStore", "GetWorktree")
 }
 
 // GetDaemon records the call and delegates to GetDaemonFunc when set.
@@ -300,7 +336,7 @@ func (m *MockRunExecutorContextStore) ListProjectDaemonsForProject(ctx context.C
 var _ RunExecutorContextStore = (*MockRunExecutorContextStore)(nil)
 
 // forge:section MockToolResultRecoveryStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockToolResultRecoveryStore is a test mock for the ToolResultRecoveryStore interface.
 //
@@ -326,7 +362,7 @@ func (m *MockToolResultRecoveryStore) FindToolCallResultForMessage(ctx context.C
 var _ ToolResultRecoveryStore = (*MockToolResultRecoveryStore)(nil)
 
 // forge:section MockMessageRepairStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockMessageRepairStore is a test mock for the MessageRepairStore interface.
 //
@@ -382,7 +418,7 @@ func (m *MockMessageRepairStore) GetAttachment(ctx context.Context, id string) (
 var _ MessageRepairStore = (*MockMessageRepairStore)(nil)
 
 // forge:section MockLLMHistoryStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockLLMHistoryStore is a test mock for the LLMHistoryStore interface.
 //
@@ -798,7 +834,7 @@ func (m *MockLLMHistoryStore) ListContentBlocksForMessages(ctx context.Context, 
 var _ LLMHistoryStore = (*MockLLMHistoryStore)(nil)
 
 // forge:section MockToolCalls
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockToolCalls is a test mock for the ToolCalls interface.
 //
@@ -854,7 +890,7 @@ func (m *MockToolCalls) FindToolCallResultForMessage(ctx context.Context, toolCa
 var _ ToolCalls = (*MockToolCalls)(nil)
 
 // forge:section MockWorkflowErrorWriter
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockWorkflowErrorWriter is a test mock for the WorkflowErrorWriter interface.
 //
@@ -880,7 +916,7 @@ func (m *MockWorkflowErrorWriter) CreateChatUpdate(ctx context.Context, chatID s
 var _ WorkflowErrorWriter = (*MockWorkflowErrorWriter)(nil)
 
 // forge:section MockTransitionMessageWriter
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockTransitionMessageWriter is a test mock for the TransitionMessageWriter interface.
 //
@@ -906,7 +942,7 @@ func (m *MockTransitionMessageWriter) SaveMessageToThread(ctx context.Context, c
 var _ TransitionMessageWriter = (*MockTransitionMessageWriter)(nil)
 
 // forge:section MockChatTransitioner
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockChatTransitioner is a test mock for the ChatTransitioner interface.
 //
@@ -918,8 +954,6 @@ type MockChatTransitioner struct {
 	contractkit.Recorder
 	GetChatFunc                        func(context.Context, string) (*db.Chat, error)
 	UpdateChatFunc                     func(context.Context, *db.Chat) error
-	GetProjectFunc                     func(context.Context, string) (*db.Project, error)
-	GetWorktreeFunc                    func(context.Context, string) (*db.Worktree, error)
 	GetProjectPresetsJSONFunc          func(context.Context, string) (*string, error)
 	GetProjectWorkflowsJSONFunc        func(context.Context, string) (*string, error)
 	GetUsableWorkflowBySlugFunc        func(context.Context, string, string) (*db.WorkflowDraft, error)
@@ -928,6 +962,8 @@ type MockChatTransitioner struct {
 	GetProjectMachinePresetsJSONFunc   func(context.Context, string, string) (*string, bool, error)
 	GetPinnedProjectCatalogFunc        func(context.Context, string) (*db.PinnedCatalog, bool, error)
 	PinProjectCatalogFunc              func(context.Context, db.CatalogPinScope) (string, error)
+	GetProjectFunc                     func(context.Context, string) (*db.Project, error)
+	GetWorktreeFunc                    func(context.Context, string) (*db.Worktree, error)
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
@@ -946,24 +982,6 @@ func (m *MockChatTransitioner) UpdateChat(ctx context.Context, chat *db.Chat) er
 		return m.UpdateChatFunc(ctx, chat)
 	}
 	return contractkit.MockNotSet("MockChatTransitioner", "UpdateChat")
-}
-
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockChatTransitioner) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockChatTransitioner", "GetProject")
-}
-
-// GetWorktree records the call and delegates to GetWorktreeFunc when set.
-func (m *MockChatTransitioner) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
-	m.Recorder.Record("GetWorktree", ctx, id)
-	if m.GetWorktreeFunc != nil {
-		return m.GetWorktreeFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockChatTransitioner", "GetWorktree")
 }
 
 // GetProjectPresetsJSON records the call and delegates to GetProjectPresetsJSONFunc when set.
@@ -1038,11 +1056,29 @@ func (m *MockChatTransitioner) PinProjectCatalog(ctx context.Context, scope db.C
 	return "", contractkit.MockNotSet("MockChatTransitioner", "PinProjectCatalog")
 }
 
+// GetProject records the call and delegates to GetProjectFunc when set.
+func (m *MockChatTransitioner) GetProject(ctx context.Context, id string) (*db.Project, error) {
+	m.Recorder.Record("GetProject", ctx, id)
+	if m.GetProjectFunc != nil {
+		return m.GetProjectFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockChatTransitioner", "GetProject")
+}
+
+// GetWorktree records the call and delegates to GetWorktreeFunc when set.
+func (m *MockChatTransitioner) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
+	m.Recorder.Record("GetWorktree", ctx, id)
+	if m.GetWorktreeFunc != nil {
+		return m.GetWorktreeFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockChatTransitioner", "GetWorktree")
+}
+
 // Compile-time check.
 var _ ChatTransitioner = (*MockChatTransitioner)(nil)
 
 // forge:section MockApprovalCreateStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockApprovalCreateStore is a test mock for the ApprovalCreateStore interface.
 //
@@ -1148,7 +1184,7 @@ func (m *MockApprovalCreateStore) CountOtherPendingBlockers(ctx context.Context,
 var _ ApprovalCreateStore = (*MockApprovalCreateStore)(nil)
 
 // forge:section MockApprovalLookup
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockApprovalLookup is a test mock for the ApprovalLookup interface.
 //
@@ -1174,7 +1210,7 @@ func (m *MockApprovalLookup) GetApprovalByEntityID(ctx context.Context, entityID
 var _ ApprovalLookup = (*MockApprovalLookup)(nil)
 
 // forge:section MockToolCallResults
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockToolCallResults is a test mock for the ToolCallResults interface.
 //
@@ -1200,7 +1236,7 @@ func (m *MockToolCallResults) FindToolCallResult(ctx context.Context, toolCallID
 var _ ToolCallResults = (*MockToolCallResults)(nil)
 
 // forge:section MockApprovalResolveStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockApprovalResolveStore is a test mock for the ApprovalResolveStore interface.
 //
@@ -1226,7 +1262,7 @@ func (m *MockApprovalResolveStore) ResolvePendingApproval(ctx context.Context, i
 var _ ApprovalResolveStore = (*MockApprovalResolveStore)(nil)
 
 // forge:section MockCallLLMStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockCallLLMStore is a test mock for the CallLLMStore interface.
 //
@@ -1872,7 +1908,7 @@ func (m *MockCallLLMStore) ListContentBlocksForMessages(ctx context.Context, mes
 var _ CallLLMStore = (*MockCallLLMStore)(nil)
 
 // forge:section MockToolResultFinder
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockToolResultFinder is a test mock for the ToolResultFinder interface.
 //
@@ -1898,7 +1934,7 @@ func (m *MockToolResultFinder) FindToolBlock(ctx context.Context, toolCallID str
 var _ ToolResultFinder = (*MockToolResultFinder)(nil)
 
 // forge:section MockCleanupStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockCleanupStore is a test mock for the CleanupStore interface.
 //
@@ -2034,7 +2070,7 @@ func (m *MockCleanupStore) UpsertToolCall(ctx context.Context, call *core.ToolCa
 var _ CleanupStore = (*MockCleanupStore)(nil)
 
 // forge:section MockCompactStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockCompactStore is a test mock for the CompactStore interface.
 //
@@ -2500,7 +2536,7 @@ func (m *MockCompactStore) ListContentBlocksForMessages(ctx context.Context, mes
 var _ CompactStore = (*MockCompactStore)(nil)
 
 // forge:section MockCreateWorkflowWithThreadStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockCreateWorkflowWithThreadStore is a test mock for the CreateWorkflowWithThreadStore interface.
 //
@@ -2566,7 +2602,7 @@ func (m *MockCreateWorkflowWithThreadStore) CreateChatUpdate(ctx context.Context
 var _ CreateWorkflowWithThreadStore = (*MockCreateWorkflowWithThreadStore)(nil)
 
 // forge:section MockCreateWorktreeStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockCreateWorktreeStore is a test mock for the CreateWorktreeStore interface.
 //
@@ -2577,11 +2613,10 @@ var _ CreateWorkflowWithThreadStore = (*MockCreateWorkflowWithThreadStore)(nil)
 type MockCreateWorktreeStore struct {
 	contractkit.Recorder
 	GetChatFunc                      func(context.Context, string) (*db.Chat, error)
-	GetProjectFunc                   func(context.Context, string) (*db.Project, error)
-	ListReposByProjectFunc           func(context.Context, string) ([]*core.Repo, error)
 	EmitUserRefetchFunc              func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 	GetRepoByProjectAndPathFunc      func(context.Context, string, string) (*core.Repo, error)
 	CreateRepoFunc                   func(context.Context, *core.Repo) error
+	ListReposByProjectFunc           func(context.Context, string) ([]*core.Repo, error)
 	UpdateProjectFunc                func(context.Context, *db.Project, string) error
 	CreateWorktreeFunc               func(context.Context, *db.Worktree) error
 	UpdateWorktreeFunc               func(context.Context, *db.Worktree) error
@@ -2591,7 +2626,6 @@ type MockCreateWorktreeStore struct {
 	SettleCheckoutTeardownFunc       func(context.Context, string, string, string) (*db.CheckoutTeardown, error)
 	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
-	GetWorktreeFunc                  func(context.Context, string) (*db.Worktree, error)
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
@@ -2601,24 +2635,6 @@ func (m *MockCreateWorktreeStore) GetChat(ctx context.Context, id string) (*db.C
 		return m.GetChatFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockCreateWorktreeStore", "GetChat")
-}
-
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockCreateWorktreeStore) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockCreateWorktreeStore", "GetProject")
-}
-
-// ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
-func (m *MockCreateWorktreeStore) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
-	m.Recorder.Record("ListReposByProject", ctx, projectID)
-	if m.ListReposByProjectFunc != nil {
-		return m.ListReposByProjectFunc(ctx, projectID)
-	}
-	return nil, contractkit.MockNotSet("MockCreateWorktreeStore", "ListReposByProject")
 }
 
 // EmitUserRefetch records the call and delegates to EmitUserRefetchFunc when set.
@@ -2646,6 +2662,15 @@ func (m *MockCreateWorktreeStore) CreateRepo(ctx context.Context, repo *core.Rep
 		return m.CreateRepoFunc(ctx, repo)
 	}
 	return contractkit.MockNotSet("MockCreateWorktreeStore", "CreateRepo")
+}
+
+// ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
+func (m *MockCreateWorktreeStore) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
+	m.Recorder.Record("ListReposByProject", ctx, projectID)
+	if m.ListReposByProjectFunc != nil {
+		return m.ListReposByProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockCreateWorktreeStore", "ListReposByProject")
 }
 
 // UpdateProject records the call and delegates to UpdateProjectFunc when set.
@@ -2729,20 +2754,11 @@ func (m *MockCreateWorktreeStore) ListProjectDaemonsForProject(ctx context.Conte
 	return nil, contractkit.MockNotSet("MockCreateWorktreeStore", "ListProjectDaemonsForProject")
 }
 
-// GetWorktree records the call and delegates to GetWorktreeFunc when set.
-func (m *MockCreateWorktreeStore) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
-	m.Recorder.Record("GetWorktree", ctx, id)
-	if m.GetWorktreeFunc != nil {
-		return m.GetWorktreeFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockCreateWorktreeStore", "GetWorktree")
-}
-
 // Compile-time check.
 var _ CreateWorktreeStore = (*MockCreateWorktreeStore)(nil)
 
 // forge:section MockDeleteWorktreeStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockDeleteWorktreeStore is a test mock for the DeleteWorktreeStore interface.
 //
@@ -2753,9 +2769,7 @@ var _ CreateWorktreeStore = (*MockCreateWorktreeStore)(nil)
 type MockDeleteWorktreeStore struct {
 	contractkit.Recorder
 	GetChatFunc                      func(context.Context, string) (*db.Chat, error)
-	GetProjectFunc                   func(context.Context, string) (*db.Project, error)
 	ListWorktreesFunc                func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
-	ListReposByProjectFunc           func(context.Context, string) ([]*core.Repo, error)
 	ArchiveWorktreeFunc              func(context.Context, string) error
 	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
@@ -2770,15 +2784,6 @@ func (m *MockDeleteWorktreeStore) GetChat(ctx context.Context, id string) (*db.C
 	return nil, contractkit.MockNotSet("MockDeleteWorktreeStore", "GetChat")
 }
 
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockDeleteWorktreeStore) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockDeleteWorktreeStore", "GetProject")
-}
-
 // ListWorktrees records the call and delegates to ListWorktreesFunc when set.
 func (m *MockDeleteWorktreeStore) ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error) {
 	m.Recorder.Record("ListWorktrees", ctx, filters)
@@ -2786,15 +2791,6 @@ func (m *MockDeleteWorktreeStore) ListWorktrees(ctx context.Context, filters db.
 		return m.ListWorktreesFunc(ctx, filters)
 	}
 	return nil, contractkit.MockNotSet("MockDeleteWorktreeStore", "ListWorktrees")
-}
-
-// ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
-func (m *MockDeleteWorktreeStore) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
-	m.Recorder.Record("ListReposByProject", ctx, projectID)
-	if m.ListReposByProjectFunc != nil {
-		return m.ListReposByProjectFunc(ctx, projectID)
-	}
-	return nil, contractkit.MockNotSet("MockDeleteWorktreeStore", "ListReposByProject")
 }
 
 // ArchiveWorktree records the call and delegates to ArchiveWorktreeFunc when set.
@@ -2828,7 +2824,7 @@ func (m *MockDeleteWorktreeStore) ListProjectDaemonsForProject(ctx context.Conte
 var _ DeleteWorktreeStore = (*MockDeleteWorktreeStore)(nil)
 
 // forge:section MockDrainAgentMessagesStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockDrainAgentMessagesStore is a test mock for the DrainAgentMessagesStore interface.
 //
@@ -2904,7 +2900,7 @@ func (m *MockDrainAgentMessagesStore) CreateChatUpdate(ctx context.Context, chat
 var _ DrainAgentMessagesStore = (*MockDrainAgentMessagesStore)(nil)
 
 // forge:section MockEmitStreamFinalizedStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockEmitStreamFinalizedStore is a test mock for the EmitStreamFinalizedStore interface.
 //
@@ -2930,7 +2926,7 @@ func (m *MockEmitStreamFinalizedStore) CreateChatUpdate(ctx context.Context, cha
 var _ EmitStreamFinalizedStore = (*MockEmitStreamFinalizedStore)(nil)
 
 // forge:section MockEmitToolCallStatusStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockEmitToolCallStatusStore is a test mock for the EmitToolCallStatusStore interface.
 //
@@ -2996,7 +2992,7 @@ func (m *MockEmitToolCallStatusStore) UpsertToolCall(ctx context.Context, call *
 var _ EmitToolCallStatusStore = (*MockEmitToolCallStatusStore)(nil)
 
 // forge:section MockEnqueueAgentMessageStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockEnqueueAgentMessageStore is a test mock for the EnqueueAgentMessageStore interface.
 //
@@ -3032,7 +3028,7 @@ func (m *MockEnqueueAgentMessageStore) EnqueueSpawnReport(ctx context.Context, m
 var _ EnqueueAgentMessageStore = (*MockEnqueueAgentMessageStore)(nil)
 
 // forge:section MockExecuteRunStepStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockExecuteRunStepStore is a test mock for the ExecuteRunStepStore interface.
 //
@@ -3043,10 +3039,8 @@ var _ EnqueueAgentMessageStore = (*MockEnqueueAgentMessageStore)(nil)
 type MockExecuteRunStepStore struct {
 	contractkit.Recorder
 	CreateChatUpdateFunc             func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
-	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	GetChatFunc                      func(context.Context, string) (*db.Chat, error)
-	GetProjectFunc                   func(context.Context, string) (*db.Project, error)
-	GetWorktreeFunc                  func(context.Context, string) (*db.Worktree, error)
+	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
 }
 
@@ -3059,15 +3053,6 @@ func (m *MockExecuteRunStepStore) CreateChatUpdate(ctx context.Context, chatID s
 	return contractkit.MockNotSet("MockExecuteRunStepStore", "CreateChatUpdate")
 }
 
-// GetDaemon records the call and delegates to GetDaemonFunc when set.
-func (m *MockExecuteRunStepStore) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
-	m.Recorder.Record("GetDaemon", ctx, id)
-	if m.GetDaemonFunc != nil {
-		return m.GetDaemonFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockExecuteRunStepStore", "GetDaemon")
-}
-
 // GetChat records the call and delegates to GetChatFunc when set.
 func (m *MockExecuteRunStepStore) GetChat(ctx context.Context, id string) (*db.Chat, error) {
 	m.Recorder.Record("GetChat", ctx, id)
@@ -3077,22 +3062,13 @@ func (m *MockExecuteRunStepStore) GetChat(ctx context.Context, id string) (*db.C
 	return nil, contractkit.MockNotSet("MockExecuteRunStepStore", "GetChat")
 }
 
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockExecuteRunStepStore) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockExecuteRunStepStore) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
 	}
-	return nil, contractkit.MockNotSet("MockExecuteRunStepStore", "GetProject")
-}
-
-// GetWorktree records the call and delegates to GetWorktreeFunc when set.
-func (m *MockExecuteRunStepStore) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
-	m.Recorder.Record("GetWorktree", ctx, id)
-	if m.GetWorktreeFunc != nil {
-		return m.GetWorktreeFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockExecuteRunStepStore", "GetWorktree")
+	return nil, contractkit.MockNotSet("MockExecuteRunStepStore", "GetDaemon")
 }
 
 // ListProjectDaemonsForProject records the call and delegates to ListProjectDaemonsForProjectFunc when set.
@@ -3108,7 +3084,7 @@ func (m *MockExecuteRunStepStore) ListProjectDaemonsForProject(ctx context.Conte
 var _ ExecuteRunStepStore = (*MockExecuteRunStepStore)(nil)
 
 // forge:section MockWorktreeReviver
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockWorktreeReviver is a test mock for the WorktreeReviver interface.
 //
@@ -3134,7 +3110,7 @@ func (m *MockWorktreeReviver) ReviveArchivedWorktree(ctx context.Context, id str
 var _ WorktreeReviver = (*MockWorktreeReviver)(nil)
 
 // forge:section MockExecuteToolsStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockExecuteToolsStore is a test mock for the ExecuteToolsStore interface.
 //
@@ -3146,9 +3122,6 @@ type MockExecuteToolsStore struct {
 	contractkit.Recorder
 	RunTxFunc                             func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 	GetChatFunc                           func(context.Context, string) (*db.Chat, error)
-	GetProjectFunc                        func(context.Context, string) (*db.Project, error)
-	GetWorktreeFunc                       func(context.Context, string) (*db.Worktree, error)
-	ListReposByProjectFunc                func(context.Context, string) ([]*core.Repo, error)
 	GetContextUsageFunc                   func(context.Context, string, string) (*db.ContextUsage, error)
 	SetChatDaemonBlockedFunc              func(context.Context, string, bool) error
 	CreateAttachmentFunc                  func(context.Context, *db.Attachment) error
@@ -3185,33 +3158,6 @@ func (m *MockExecuteToolsStore) GetChat(ctx context.Context, id string) (*db.Cha
 		return m.GetChatFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "GetChat")
-}
-
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockExecuteToolsStore) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "GetProject")
-}
-
-// GetWorktree records the call and delegates to GetWorktreeFunc when set.
-func (m *MockExecuteToolsStore) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
-	m.Recorder.Record("GetWorktree", ctx, id)
-	if m.GetWorktreeFunc != nil {
-		return m.GetWorktreeFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "GetWorktree")
-}
-
-// ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
-func (m *MockExecuteToolsStore) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
-	m.Recorder.Record("ListReposByProject", ctx, projectID)
-	if m.ListReposByProjectFunc != nil {
-		return m.ListReposByProjectFunc(ctx, projectID)
-	}
-	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "ListReposByProject")
 }
 
 // GetContextUsage records the call and delegates to GetContextUsageFunc when set.
@@ -3380,7 +3326,7 @@ func (m *MockExecuteToolsStore) GetTrigger(ctx context.Context, id string) (*cor
 var _ ExecuteToolsStore = (*MockExecuteToolsStore)(nil)
 
 // forge:section MockRunFundingStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockRunFundingStore is a test mock for the RunFundingStore interface.
 //
@@ -3416,7 +3362,7 @@ func (m *MockRunFundingStore) ChatFundingOrder(ctx context.Context, chatID strin
 var _ RunFundingStore = (*MockRunFundingStore)(nil)
 
 // forge:section MockGenerateTitleStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockGenerateTitleStore is a test mock for the GenerateTitleStore interface.
 //
@@ -3502,7 +3448,7 @@ func (m *MockGenerateTitleStore) GetTrigger(ctx context.Context, id string) (*co
 var _ GenerateTitleStore = (*MockGenerateTitleStore)(nil)
 
 // forge:section MockGitPublishStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockGitPublishStore is a test mock for the GitPublishStore interface.
 //
@@ -3512,9 +3458,7 @@ var _ GenerateTitleStore = (*MockGenerateTitleStore)(nil)
 // "MockGitPublishStore.<Method>Func not set" error.
 type MockGitPublishStore struct {
 	contractkit.Recorder
-	GetChatFunc     func(context.Context, string) (*db.Chat, error)
-	GetDaemonFunc   func(context.Context, string) (*db.Daemon, error)
-	GetWorktreeFunc func(context.Context, string) (*db.Worktree, error)
+	GetChatFunc func(context.Context, string) (*db.Chat, error)
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
@@ -3526,29 +3470,11 @@ func (m *MockGitPublishStore) GetChat(ctx context.Context, id string) (*db.Chat,
 	return nil, contractkit.MockNotSet("MockGitPublishStore", "GetChat")
 }
 
-// GetDaemon records the call and delegates to GetDaemonFunc when set.
-func (m *MockGitPublishStore) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
-	m.Recorder.Record("GetDaemon", ctx, id)
-	if m.GetDaemonFunc != nil {
-		return m.GetDaemonFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockGitPublishStore", "GetDaemon")
-}
-
-// GetWorktree records the call and delegates to GetWorktreeFunc when set.
-func (m *MockGitPublishStore) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
-	m.Recorder.Record("GetWorktree", ctx, id)
-	if m.GetWorktreeFunc != nil {
-		return m.GetWorktreeFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockGitPublishStore", "GetWorktree")
-}
-
 // Compile-time check.
 var _ GitPublishStore = (*MockGitPublishStore)(nil)
 
 // forge:section MockLoadPresetParamsStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockLoadPresetParamsStore is a test mock for the LoadPresetParamsStore interface.
 //
@@ -3614,7 +3540,7 @@ func (m *MockLoadPresetParamsStore) GetPinnedProjectCatalog(ctx context.Context,
 var _ LoadPresetParamsStore = (*MockLoadPresetParamsStore)(nil)
 
 // forge:section MockLoadWorkflowStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockLoadWorkflowStore is a test mock for the LoadWorkflowStore interface.
 //
@@ -3625,8 +3551,6 @@ var _ LoadPresetParamsStore = (*MockLoadPresetParamsStore)(nil)
 type MockLoadWorkflowStore struct {
 	contractkit.Recorder
 	GetChatFunc                        func(context.Context, string) (*db.Chat, error)
-	GetProjectFunc                     func(context.Context, string) (*db.Project, error)
-	GetWorktreeFunc                    func(context.Context, string) (*db.Worktree, error)
 	GetProjectPresetsJSONFunc          func(context.Context, string) (*string, error)
 	GetProjectWorkflowsJSONFunc        func(context.Context, string) (*string, error)
 	GetUsableWorkflowBySlugFunc        func(context.Context, string, string) (*db.WorkflowDraft, error)
@@ -3644,24 +3568,6 @@ func (m *MockLoadWorkflowStore) GetChat(ctx context.Context, id string) (*db.Cha
 		return m.GetChatFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockLoadWorkflowStore", "GetChat")
-}
-
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockLoadWorkflowStore) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockLoadWorkflowStore", "GetProject")
-}
-
-// GetWorktree records the call and delegates to GetWorktreeFunc when set.
-func (m *MockLoadWorkflowStore) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
-	m.Recorder.Record("GetWorktree", ctx, id)
-	if m.GetWorktreeFunc != nil {
-		return m.GetWorktreeFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockLoadWorkflowStore", "GetWorktree")
 }
 
 // GetProjectPresetsJSON records the call and delegates to GetProjectPresetsJSONFunc when set.
@@ -3739,8 +3645,44 @@ func (m *MockLoadWorkflowStore) PinProjectCatalog(ctx context.Context, scope db.
 // Compile-time check.
 var _ LoadWorkflowStore = (*MockLoadWorkflowStore)(nil)
 
+// forge:section MockProjectWorktreeReader
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
+
+// MockProjectWorktreeReader is a test mock for the ProjectWorktreeReader interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProjectWorktreeReader.<Method>Func not set" error.
+type MockProjectWorktreeReader struct {
+	contractkit.Recorder
+	GetProjectFunc  func(context.Context, string) (*db.Project, error)
+	GetWorktreeFunc func(context.Context, string) (*db.Worktree, error)
+}
+
+// GetProject records the call and delegates to GetProjectFunc when set.
+func (m *MockProjectWorktreeReader) GetProject(ctx context.Context, id string) (*db.Project, error) {
+	m.Recorder.Record("GetProject", ctx, id)
+	if m.GetProjectFunc != nil {
+		return m.GetProjectFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockProjectWorktreeReader", "GetProject")
+}
+
+// GetWorktree records the call and delegates to GetWorktreeFunc when set.
+func (m *MockProjectWorktreeReader) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
+	m.Recorder.Record("GetWorktree", ctx, id)
+	if m.GetWorktreeFunc != nil {
+		return m.GetWorktreeFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockProjectWorktreeReader", "GetWorktree")
+}
+
+// Compile-time check.
+var _ ProjectWorktreeReader = (*MockProjectWorktreeReader)(nil)
+
 // forge:section MockMachineResumeWakeStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockMachineResumeWakeStore is a test mock for the MachineResumeWakeStore interface.
 //
@@ -3751,8 +3693,6 @@ var _ LoadWorkflowStore = (*MockLoadWorkflowStore)(nil)
 type MockMachineResumeWakeStore struct {
 	contractkit.Recorder
 	GetChatFunc                 func(context.Context, string) (*db.Chat, error)
-	GetWorktreeFunc             func(context.Context, string) (*db.Worktree, error)
-	GetProjectFunc              func(context.Context, string) (*db.Project, error)
 	GetTriggerEventByChatIDFunc func(context.Context, string) (*core.TriggerEvent, error)
 	SetChatDaemonBlockedFunc    func(context.Context, string, bool) error
 }
@@ -3764,24 +3704,6 @@ func (m *MockMachineResumeWakeStore) GetChat(ctx context.Context, id string) (*d
 		return m.GetChatFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockMachineResumeWakeStore", "GetChat")
-}
-
-// GetWorktree records the call and delegates to GetWorktreeFunc when set.
-func (m *MockMachineResumeWakeStore) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
-	m.Recorder.Record("GetWorktree", ctx, id)
-	if m.GetWorktreeFunc != nil {
-		return m.GetWorktreeFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockMachineResumeWakeStore", "GetWorktree")
-}
-
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockMachineResumeWakeStore) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockMachineResumeWakeStore", "GetProject")
 }
 
 // GetTriggerEventByChatID records the call and delegates to GetTriggerEventByChatIDFunc when set.
@@ -3806,7 +3728,7 @@ func (m *MockMachineResumeWakeStore) SetChatDaemonBlocked(ctx context.Context, c
 var _ MachineResumeWakeStore = (*MockMachineResumeWakeStore)(nil)
 
 // forge:section MockPreflightDaemonCheckStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockPreflightDaemonCheckStore is a test mock for the PreflightDaemonCheckStore interface.
 //
@@ -3817,8 +3739,6 @@ var _ MachineResumeWakeStore = (*MockMachineResumeWakeStore)(nil)
 type MockPreflightDaemonCheckStore struct {
 	contractkit.Recorder
 	GetChatFunc                 func(context.Context, string) (*db.Chat, error)
-	GetWorktreeFunc             func(context.Context, string) (*db.Worktree, error)
-	GetProjectFunc              func(context.Context, string) (*db.Project, error)
 	GetTriggerEventByChatIDFunc func(context.Context, string) (*core.TriggerEvent, error)
 	QueueChatForMachineFunc     func(context.Context, string, *db.QueuedMachine) (bool, error)
 	SetChatQueuedForMachineFunc func(context.Context, string, bool) (bool, error)
@@ -3832,24 +3752,6 @@ func (m *MockPreflightDaemonCheckStore) GetChat(ctx context.Context, id string) 
 		return m.GetChatFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockPreflightDaemonCheckStore", "GetChat")
-}
-
-// GetWorktree records the call and delegates to GetWorktreeFunc when set.
-func (m *MockPreflightDaemonCheckStore) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
-	m.Recorder.Record("GetWorktree", ctx, id)
-	if m.GetWorktreeFunc != nil {
-		return m.GetWorktreeFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockPreflightDaemonCheckStore", "GetWorktree")
-}
-
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockPreflightDaemonCheckStore) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockPreflightDaemonCheckStore", "GetProject")
 }
 
 // GetTriggerEventByChatID records the call and delegates to GetTriggerEventByChatIDFunc when set.
@@ -3892,7 +3794,7 @@ func (m *MockPreflightDaemonCheckStore) SetChatDaemonBlocked(ctx context.Context
 var _ PreflightDaemonCheckStore = (*MockPreflightDaemonCheckStore)(nil)
 
 // forge:section MockQuestionCreateStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockQuestionCreateStore is a test mock for the QuestionCreateStore interface.
 //
@@ -4008,7 +3910,7 @@ func (m *MockQuestionCreateStore) CountOtherPendingBlockers(ctx context.Context,
 var _ QuestionCreateStore = (*MockQuestionCreateStore)(nil)
 
 // forge:section MockQuestionResolveStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockQuestionResolveStore is a test mock for the QuestionResolveStore interface.
 //
@@ -4054,7 +3956,7 @@ func (m *MockQuestionResolveStore) EmitQuestionUpdate(ctx context.Context, chatI
 var _ QuestionResolveStore = (*MockQuestionResolveStore)(nil)
 
 // forge:section MockSaveMessageStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockSaveMessageStore is a test mock for the SaveMessageStore interface.
 //
@@ -4080,7 +3982,7 @@ func (m *MockSaveMessageStore) CreateAttachment(ctx context.Context, attachment 
 var _ SaveMessageStore = (*MockSaveMessageStore)(nil)
 
 // forge:section MockThreadStatusStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockThreadStatusStore is a test mock for the ThreadStatusStore interface.
 //
@@ -4126,7 +4028,7 @@ func (m *MockThreadStatusStore) CreateChatUpdate(ctx context.Context, chatID str
 var _ ThreadStatusStore = (*MockThreadStatusStore)(nil)
 
 // forge:section MockUsageLimitWaitStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockUsageLimitWaitStore is a test mock for the UsageLimitWaitStore interface.
 //
@@ -4532,7 +4434,7 @@ func (m *MockUsageLimitWaitStore) RunTx(p0 context.Context, policy orm.TxPolicy,
 var _ UsageLimitWaitStore = (*MockUsageLimitWaitStore)(nil)
 
 // forge:section MockProviderBackoffMarkers
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockProviderBackoffMarkers is a test mock for the ProviderBackoffMarkers interface.
 //
@@ -4588,7 +4490,7 @@ func (m *MockProviderBackoffMarkers) ClearUsageLimitWait(ctx context.Context, ch
 var _ ProviderBackoffMarkers = (*MockProviderBackoffMarkers)(nil)
 
 // forge:section MockTriggerCapacitySlotStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockTriggerCapacitySlotStore is a test mock for the TriggerCapacitySlotStore interface.
 //
@@ -4624,7 +4526,7 @@ func (m *MockTriggerCapacitySlotStore) ResumeTriggerCapacity(ctx context.Context
 var _ TriggerCapacitySlotStore = (*MockTriggerCapacitySlotStore)(nil)
 
 // forge:section MockValidateThreadOwnershipStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockValidateThreadOwnershipStore is a test mock for the ValidateThreadOwnershipStore interface.
 //
@@ -4650,7 +4552,7 @@ func (m *MockValidateThreadOwnershipStore) GetThread(ctx context.Context, id str
 var _ ValidateThreadOwnershipStore = (*MockValidateThreadOwnershipStore)(nil)
 
 // forge:section MockWorkflowCheckpointStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockWorkflowCheckpointStore is a test mock for the WorkflowCheckpointStore interface.
 //
@@ -4676,7 +4578,7 @@ func (m *MockWorkflowCheckpointStore) SaveWorkflowCheckpoint(ctx context.Context
 var _ WorkflowCheckpointStore = (*MockWorkflowCheckpointStore)(nil)
 
 // forge:section MockRunRecords
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockRunRecords is a test mock for the RunRecords interface.
 //
@@ -4782,7 +4684,7 @@ func (m *MockRunRecords) SetChatRunID(ctx context.Context, chatID string, workfl
 var _ RunRecords = (*MockRunRecords)(nil)
 
 // forge:section MockAttentionRecorder
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockAttentionRecorder is a test mock for the AttentionRecorder interface.
 //
@@ -4808,7 +4710,7 @@ func (m *MockAttentionRecorder) ApplyAttentionUpdate(ctx context.Context, update
 var _ AttentionRecorder = (*MockAttentionRecorder)(nil)
 
 // forge:section MockWorkflowStatusStore
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockWorkflowStatusStore is a test mock for the WorkflowStatusStore interface.
 //
@@ -4875,8 +4777,6 @@ type MockWorkflowStatusStore struct {
 	LockChatForRunEventFunc                                  func(context.Context, string) error
 	CountOtherPendingBlockersFunc                            func(context.Context, string, string) (int, error)
 	UpdateChatFunc                                           func(context.Context, *db.Chat) error
-	GetProjectFunc                                           func(context.Context, string) (*db.Project, error)
-	GetWorktreeFunc                                          func(context.Context, string) (*db.Worktree, error)
 	GetProjectPresetsJSONFunc                                func(context.Context, string) (*string, error)
 	GetProjectWorkflowsJSONFunc                              func(context.Context, string) (*string, error)
 	GetUsableWorkflowBySlugFunc                              func(context.Context, string, string) (*db.WorkflowDraft, error)
@@ -4885,6 +4785,8 @@ type MockWorkflowStatusStore struct {
 	GetProjectMachinePresetsJSONFunc                         func(context.Context, string, string) (*string, bool, error)
 	GetPinnedProjectCatalogFunc                              func(context.Context, string) (*db.PinnedCatalog, bool, error)
 	PinProjectCatalogFunc                                    func(context.Context, db.CatalogPinScope) (string, error)
+	GetProjectFunc                                           func(context.Context, string) (*db.Project, error)
+	GetWorktreeFunc                                          func(context.Context, string) (*db.Worktree, error)
 	SaveMessageToThreadFunc                                  func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
 }
 
@@ -5401,24 +5303,6 @@ func (m *MockWorkflowStatusStore) UpdateChat(ctx context.Context, chat *db.Chat)
 	return contractkit.MockNotSet("MockWorkflowStatusStore", "UpdateChat")
 }
 
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockWorkflowStatusStore) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "GetProject")
-}
-
-// GetWorktree records the call and delegates to GetWorktreeFunc when set.
-func (m *MockWorkflowStatusStore) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
-	m.Recorder.Record("GetWorktree", ctx, id)
-	if m.GetWorktreeFunc != nil {
-		return m.GetWorktreeFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "GetWorktree")
-}
-
 // GetProjectPresetsJSON records the call and delegates to GetProjectPresetsJSONFunc when set.
 func (m *MockWorkflowStatusStore) GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error) {
 	m.Recorder.Record("GetProjectPresetsJSON", ctx, projectID)
@@ -5491,6 +5375,24 @@ func (m *MockWorkflowStatusStore) PinProjectCatalog(ctx context.Context, scope d
 	return "", contractkit.MockNotSet("MockWorkflowStatusStore", "PinProjectCatalog")
 }
 
+// GetProject records the call and delegates to GetProjectFunc when set.
+func (m *MockWorkflowStatusStore) GetProject(ctx context.Context, id string) (*db.Project, error) {
+	m.Recorder.Record("GetProject", ctx, id)
+	if m.GetProjectFunc != nil {
+		return m.GetProjectFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "GetProject")
+}
+
+// GetWorktree records the call and delegates to GetWorktreeFunc when set.
+func (m *MockWorkflowStatusStore) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
+	m.Recorder.Record("GetWorktree", ctx, id)
+	if m.GetWorktreeFunc != nil {
+		return m.GetWorktreeFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "GetWorktree")
+}
+
 // SaveMessageToThread records the call and delegates to SaveMessageToThreadFunc when set.
 func (m *MockWorkflowStatusStore) SaveMessageToThread(ctx context.Context, chatID string, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32) (*db.Message, error) {
 	m.Recorder.Record("SaveMessageToThread", ctx, chatID, thread, role, content, workflowID, attachmentIDs, displayStyle)
@@ -5504,7 +5406,7 @@ func (m *MockWorkflowStatusStore) SaveMessageToThread(ctx context.Context, chatI
 var _ WorkflowStatusStore = (*MockWorkflowStatusStore)(nil)
 
 // forge:section MockMessageSaver
-// forge:hash=f3aec4b05cfea37db9233c6acbb5687ca55a92448fae82ccf06aef7feb9ffa2e
+// forge:hash=b534d61c4ad341189ecc65c66ad2220cf4c6b96f40fe734ee9d013947b014b73
 
 // MockMessageSaver is a test mock for the MessageSaver interface.
 //

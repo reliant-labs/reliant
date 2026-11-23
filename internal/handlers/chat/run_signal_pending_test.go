@@ -57,10 +57,12 @@ func TestSignalRunOnPendingRunIsNotDelivered(t *testing.T) {
 
 	chats := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}, threads: threadsSvc}
 	runs, err := run.New(run.Deps{
-		Logger: slog.Default(),
-		Config: &typedconfig.Config{},
-		Repo:   repo,
-		Chats:  chats,
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Repo:      repo,
+		ChatRows:  store.NewChatExtStore(repo.ORM()),
+		ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()),
+		Chats:     chats,
 	})
 	require.NoError(t, err)
 

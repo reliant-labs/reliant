@@ -68,7 +68,7 @@ nodes:
 		State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 
-	activity := NewLoadWorkflowActivity(repo)
+	activity := NewLoadWorkflowActivity(repo, workspaceRowsOf(repo))
 
 	t.Run("the ref itself", func(t *testing.T) {
 		out, err := activity.Execute(ctx, LoadWorkflowInput{ChatID: chatID, WorkflowName: "project://blog-content-pipeline"})
