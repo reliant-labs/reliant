@@ -37,17 +37,6 @@ type Repository interface {
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 
-	GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftByName(ctx context.Context, userID, name string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
-	CreateWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) error
-	UpdateWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) error
-	UpsertWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) (*db.WorkflowDraft, error)
-	UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*db.WorkflowDraft, error)
-	SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*db.WorkflowDraft, error)
-	SetWorkflowDraftStatus(ctx context.Context, id string, status db.WorkflowDraftStatus) (*db.WorkflowDraft, error)
-	DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error
-
 	// What deleting a workflow does to the automations that run it.
 	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
 	DeleteTrigger(ctx context.Context, id string) error
@@ -56,8 +45,6 @@ type Repository interface {
 	ListVisibilityOverrides(ctx context.Context, userID string, itemType int32) (map[string]bool, error)
 	ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]string, error)
 
-	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*db.WorkflowDraft, error)
-	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
 	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
 
 	// Installs is each machine's checkout of the project and who owns each
@@ -71,6 +58,24 @@ type Pools interface {
 	// GetMachinePoolByName is core.ErrMachinePoolNotFound when the user has
 	// no such pool.
 	GetMachinePoolByName(ctx context.Context, userID, name string) (*core.MachinePool, error)
+}
+
+// Drafts is the caller's saved workflows: every read scoped to what the caller
+// may see, every write under the owner's org lock. workflowdrafts.Service
+// satisfies it.
+type Drafts interface {
+	GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftByName(ctx context.Context, userID, name string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
+	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
+	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*db.WorkflowDraft, error)
+	CreateWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) error
+	UpdateWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) error
+	UpsertWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) (*db.WorkflowDraft, error)
+	UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*db.WorkflowDraft, error)
+	SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*db.WorkflowDraft, error)
+	SetWorkflowDraftStatus(ctx context.Context, id string, status db.WorkflowDraftStatus) (*db.WorkflowDraft, error)
+	DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error
 }
 
 // Sender sends one request/response command to the machine holding a

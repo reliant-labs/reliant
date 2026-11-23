@@ -54,7 +54,7 @@ func TestRelay_HandsEachEventToItsDispatchWorkflowOnce(t *testing.T) {
 	require.NoError(t, err)
 
 	starter := &recordingStarter{}
-	relay := NewRelay(f.repo, starter, "test-queue")
+	relay := NewRelay(store.NewRunEventExtStore(f.repo.ORM()), starter, "test-queue")
 
 	handed, err := relay.RelayOnce(ctx)
 	require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestRelay_AFailedStartLeavesTheEventForALaterPass(t *testing.T) {
 	require.NoError(t, err)
 
 	starter := &recordingStarter{down: true}
-	relay := NewRelay(f.repo, starter, "test-queue")
+	relay := NewRelay(store.NewRunEventExtStore(f.repo.ORM()), starter, "test-queue")
 	relay.Lease = time.Millisecond
 	clock := time.Now()
 	relay.now = func() time.Time { return clock }
@@ -101,7 +101,7 @@ func TestRelay_AlreadyStartedIsSuccess(t *testing.T) {
 	require.NoError(t, err)
 
 	starter := &recordingStarter{started: map[string]bool{DispatchWorkflowID(created.ID): true}}
-	relay := NewRelay(f.repo, starter, "test-queue")
+	relay := NewRelay(store.NewRunEventExtStore(f.repo.ORM()), starter, "test-queue")
 	handed, err := relay.RelayOnce(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 1, handed)

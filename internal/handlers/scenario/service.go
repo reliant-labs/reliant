@@ -29,6 +29,8 @@ type Deps struct {
 	// Projects reads a project the caller may write (owner and org decided
 	// together: projectaccess).
 	Projects projectaccess.Service
+	// Drafts reads the caller's saved workflows the scenarios belong to.
+	Drafts Drafts
 	// Router writes an uploaded scenario file onto the caller's machine
 	// (UploadScenario). The API server always has one; without it
 	// UploadScenario answers Unavailable.
@@ -50,6 +52,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("scenario: Deps.Projects is required")
+	}
+	if d.Drafts == nil {
+		return fmt.Errorf("scenario: Deps.Drafts is required")
 	}
 	return nil
 }

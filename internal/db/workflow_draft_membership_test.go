@@ -39,14 +39,14 @@ func TestWorkflowDrafts_RemovedMemberReachesNoneByAlternateKey(t *testing.T) {
 	got, err := repo.GetWorkflowDraftBySlug(ctx, userID, left.Slug)
 	require.NoError(t, err)
 	require.Nil(t, got, "by slug")
-	got, err = repo.GetWorkflowDraftByName(ctx, userID, left.Name)
+	got, err = testDrafts(t, repo).GetWorkflowDraftByName(ctx, userID, left.Name)
 	require.NoError(t, err)
 	require.Nil(t, got, "by name")
 	got, err = repo.GetUsableWorkflowBySlug(ctx, userID, left.Slug)
 	require.NoError(t, err)
 	require.Nil(t, got, "runnable by slug")
 
-	listed, err := repo.ListWorkflowDraftsByUser(ctx, userID)
+	listed, err := testDrafts(t, repo).ListWorkflowDraftsByUser(ctx, userID)
 	require.NoError(t, err)
 	ids := make([]string, 0, len(listed))
 	for _, d := range listed {
@@ -58,7 +58,7 @@ func TestWorkflowDrafts_RemovedMemberReachesNoneByAlternateKey(t *testing.T) {
 		got, err := repo.GetWorkflowDraftBySlug(ctx, userID, d.Slug)
 		require.NoError(t, err)
 		require.NotNil(t, got, "a visible draft by slug: %s", d.Name)
-		got, err = repo.GetWorkflowDraftByName(ctx, userID, d.Name)
+		got, err = testDrafts(t, repo).GetWorkflowDraftByName(ctx, userID, d.Name)
 		require.NoError(t, err)
 		require.NotNil(t, got, "a visible draft by name: %s", d.Name)
 	}
@@ -67,9 +67,9 @@ func TestWorkflowDrafts_RemovedMemberReachesNoneByAlternateKey(t *testing.T) {
 	overwrite.ID = uuid.NewString()
 	overwrite.OrgID = nil
 	overwrite.Definition = "name: hijacked\n"
-	_, err = repo.UpsertWorkflowDraft(ctx, &overwrite)
+	_, err = testDrafts(t, repo).UpsertWorkflowDraft(ctx, &overwrite)
 	require.ErrorIs(t, err, ErrWorkflowSlugTaken, "an upsert onto a denied draft's slug")
-	require.NoError(t, repo.DeleteWorkflowDraftBySlug(ctx, userID, left.Slug))
+	require.NoError(t, testDrafts(t, repo).DeleteWorkflowDraftBySlug(ctx, userID, left.Slug))
 
 	kept, err := repo.GetWorkflowDraft(ctx, left.ID)
 	require.NoError(t, err, "the denied draft survives the delete")

@@ -82,7 +82,7 @@ func TestUploadScenario_Generated(t *testing.T) {
 	}, svc.UploadScenario)
 
 	t.Run("without a daemon router the upload is unavailable", func(t *testing.T) {
-		svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Projects: projectaccesstest.For(newScenarioRepo(&fixture{}))}))
+		svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Drafts: newScenarioDrafts(), Projects: projectaccesstest.For(newScenarioRepo(&fixture{}))}))
 		_, err := svc.UploadScenario(scenario.AuthedContext(t), upload(func(*pb.UploadScenarioRequest) {}))
 		require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 	})

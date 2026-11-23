@@ -158,7 +158,7 @@ func (c workflowCheck) summary() string {
 // checked before the run fails placing it.
 func (s *Service) validateWorkflowDefinition(ctx context.Context, userID string, definition []byte) workflowCheck {
 	check := validateWorkflowDefinitionWith(definition, func(self *reliantv1.Workflow) v2.WorkflowLoader {
-		return workflowsource.DraftLoader(ctx, s.deps.Repo, userID, self)
+		return workflowsource.DraftLoader(ctx, workflowsource.NewStore(s.deps.Repo, s.deps.Drafts), userID, self)
 	})
 	checkMachinePools(check, s.poolLookup(ctx, userID))
 	return check

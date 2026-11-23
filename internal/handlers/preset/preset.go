@@ -178,7 +178,7 @@ func (s *Service) loadPresetByNameFromDB(ctx context.Context, projectID, name st
 // complete workflows, then the project's synced workflows by name:.
 // No filesystem access — the API server may run in the cloud without disk access.
 func (s *Service) loadWorkflow(ctx context.Context, workflowRef, projectID string) (*reliantv1.Workflow, error) {
-	resolved, err := workflowsource.Resolve(ctx, s.deps.Repo, workflowsource.Options{
+	resolved, err := workflowsource.Resolve(ctx, workflowsource.NewStore(s.deps.Repo, s.deps.Drafts), workflowsource.Options{
 		UserID: auth.MustGetUserID(ctx), ProjectID: projectID,
 	}, workflowRef)
 	if err != nil {

@@ -48,7 +48,7 @@ func (s *Service) ExportWorkflow(
 
 	// Look up user's workflow in database
 	userID := auth.MustGetUserID(ctx)
-	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Msg.Slug)
+	draft, err := s.deps.Drafts.GetWorkflowDraftBySlug(ctx, userID, req.Msg.Slug)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to look up workflow"))
 	}
