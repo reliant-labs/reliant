@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/accountpurge"
+	"github.com/reliant-labs/reliant/internal/accountpurge/purgetest"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -173,13 +173,14 @@ func countRows(t *testing.T, rawDB *sql.DB, table, userID string) int {
 // Before the ordered sequence in purgeSteps existed, this failed at the
 // `chats` delete with a foreign-key violation on messages_thread_id_fkey.
 func TestPurge_RemovesEverythingForUser(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
 	defer cleanup()
 
 	const userID = "user-under-test"
 	seedUser(t, rawDB, userID)
 
-	total, err := accountpurge.Purge(context.Background(), rawDB, userID)
+	total, err := purger.Purge(context.Background(), userID)
 	if err != nil {
 		t.Fatalf("Purge: %v", err)
 	}
@@ -218,7 +219,8 @@ var credentialTables = []string{
 // It asserts per-table rather than in aggregate so a failure names the exact
 // provider that was missed.
 func TestPurge_RemovesEveryProviderCredential(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
 	defer cleanup()
 
 	const userID = "user-credentials"
@@ -232,7 +234,7 @@ func TestPurge_RemovesEveryProviderCredential(t *testing.T) {
 		}
 	}
 
-	if _, err := accountpurge.Purge(context.Background(), rawDB, userID); err != nil {
+	if _, err := purger.Purge(context.Background(), userID); err != nil {
 		t.Fatalf("Purge: %v", err)
 	}
 
@@ -253,7 +255,8 @@ func TestPurge_RemovesEveryProviderCredential(t *testing.T) {
 func TestPreview_DetectsEachProviderCredentialAlone(t *testing.T) {
 	for _, table := range credentialTables {
 		t.Run(table, func(t *testing.T) {
-			_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+			repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+			purger := purgetest.New(t, repo)
 			defer cleanup()
 
 			const userID = "user-single-credential"
@@ -270,7 +273,7 @@ func TestPreview_DetectsEachProviderCredentialAlone(t *testing.T) {
 				}
 			}
 
-			counts, err := accountpurge.Preview(context.Background(), rawDB, userID)
+			counts, err := purger.Preview(context.Background(), userID)
 			if err != nil {
 				t.Fatalf("Preview: %v", err)
 			}
@@ -312,7 +315,8 @@ func TestNaiveDeleteFails(t *testing.T) {
 // TestPurge_LeavesOtherUsersIntact guards the blast radius. Every statement is
 // user-scoped, so a second account seeded identically must be untouched.
 func TestPurge_LeavesOtherUsersIntact(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
 	defer cleanup()
 
 	const victim = "user-deleted"
@@ -320,7 +324,7 @@ func TestPurge_LeavesOtherUsersIntact(t *testing.T) {
 	seedUser(t, rawDB, victim)
 	seedUser(t, rawDB, bystander)
 
-	if _, err := accountpurge.Purge(context.Background(), rawDB, victim); err != nil {
+	if _, err := purger.Purge(context.Background(), victim); err != nil {
 		t.Fatalf("Purge: %v", err)
 	}
 
@@ -340,13 +344,14 @@ func TestPurge_LeavesOtherUsersIntact(t *testing.T) {
 // TestPreview_ReportsCountsWithoutDeleting checks the dialog's numbers are
 // real and that asking the question changes nothing.
 func TestPreview_ReportsCountsWithoutDeleting(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
 	defer cleanup()
 
 	const userID = "user-preview"
 	seedUser(t, rawDB, userID)
 
-	counts, err := accountpurge.Preview(context.Background(), rawDB, userID)
+	counts, err := purger.Preview(context.Background(), userID)
 	if err != nil {
 		t.Fatalf("Preview: %v", err)
 	}
@@ -374,10 +379,11 @@ func TestPreview_ReportsCountsWithoutDeleting(t *testing.T) {
 // TestPurge_EmptyUserIDRejected: a missing auth context must be a loud error,
 // never a silent "deleted 0 rows" success.
 func TestPurge_EmptyUserIDRejected(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
 	defer cleanup()
 
-	if _, err := accountpurge.Purge(context.Background(), rawDB, ""); err == nil {
+	if _, err := purger.Purge(context.Background(), ""); err == nil {
 		t.Fatal("Purge(\"\") returned nil error, want a rejection")
 	}
 }
@@ -385,16 +391,17 @@ func TestPurge_EmptyUserIDRejected(t *testing.T) {
 // TestPurge_IsIdempotent: a retry after a successful delete must succeed and
 // report nothing, so a client that resends is not shown an error.
 func TestPurge_IsIdempotent(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
 	defer cleanup()
 
 	const userID = "user-twice"
 	seedUser(t, rawDB, userID)
 
-	if _, err := accountpurge.Purge(context.Background(), rawDB, userID); err != nil {
+	if _, err := purger.Purge(context.Background(), userID); err != nil {
 		t.Fatalf("first Purge: %v", err)
 	}
-	second, err := accountpurge.Purge(context.Background(), rawDB, userID)
+	second, err := purger.Purge(context.Background(), userID)
 	if err != nil {
 		t.Fatalf("second Purge: %v", err)
 	}
@@ -408,7 +415,8 @@ func TestPurge_IsIdempotent(t *testing.T) {
 // crypto-shredding step: it makes any sealed copy that survives elsewhere
 // (a backup) unreadable.
 func TestPurge_RemovesConnectionsAndShredsVaultKey(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
 	defer cleanup()
 	ctx := context.Background()
 	const userID, otherID = "user-under-test", "bystander"
@@ -425,7 +433,7 @@ func TestPurge_RemovesConnectionsAndShredsVaultKey(t *testing.T) {
 			VALUES ($1,$2,'\x01','github','\x01', now())`, []byte("h-"+u), u)
 	}
 
-	if _, err := accountpurge.Purge(ctx, rawDB, userID); err != nil {
+	if _, err := purger.Purge(ctx, userID); err != nil {
 		t.Fatalf("Purge: %v", err)
 	}
 	for _, q := range []string{
@@ -457,7 +465,8 @@ func TestPurge_RemovesConnectionsAndShredsVaultKey(t *testing.T) {
 // only: deleting that admin's account must not delete the org's connection,
 // its secrets (sealed under the org's tenant) or the org's vault key.
 func TestPurge_KeepsTheOrgConnectionsAnAdminCreated(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
 	defer cleanup()
 	ctx := context.Background()
 	const admin = "org-admin"
@@ -470,7 +479,7 @@ func TestPurge_KeepsTheOrgConnectionsAnAdminCreated(t *testing.T) {
 	mustExec(t, rawDB, `INSERT INTO connection_secrets (connection_id, field, vault_key_id, ciphertext)
 		VALUES ('conn-personal','api_key','vk-user','\x02'), ('conn-org','api_key','vk-org','\x02')`)
 
-	if _, err := accountpurge.Purge(ctx, rawDB, admin); err != nil {
+	if _, err := purger.Purge(ctx, admin); err != nil {
 		t.Fatalf("Purge: %v", err)
 	}
 	var personal, org, orgSecrets, orgKey int
@@ -495,7 +504,8 @@ func TestPurge_KeepsTheOrgConnectionsAnAdminCreated(t *testing.T) {
 // org's key, its grants to others and its limit state
 // (control-plane docs/design/org-provider-accounts.md §3.1, §6).
 func TestPurge_KeepsTheOrgProviderAccountsAnAdminCreated(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
 	defer cleanup()
 	ctx := context.Background()
 	const admin = "org-admin"
@@ -509,7 +519,7 @@ func TestPurge_KeepsTheOrgProviderAccountsAnAdminCreated(t *testing.T) {
 		VALUES ('acct-org', 'org-1', $1, $1), ('acct-org', 'org-1', 'member-2', $1)`, admin)
 	mustExec(t, rawDB, `INSERT INTO provider_account_limits (account_id, user_id, observed_at) VALUES ('acct-org', 'org:org-1', '2026-11-13T00:00:00Z')`)
 
-	if _, err := accountpurge.Purge(ctx, rawDB, admin); err != nil {
+	if _, err := purger.Purge(ctx, admin); err != nil {
 		t.Fatalf("Purge: %v", err)
 	}
 	var personal, org, adminGrant, otherGrant, orgLimits int
@@ -544,6 +554,7 @@ func mustExec(t *testing.T, d *sql.DB, q string, args ...any) {
 // first is deleted by the purge, a write that lands after is refused.
 func TestPurge_AnInFlightModelCallCannotRecreateUsage(t *testing.T) {
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
 	defer cleanup()
 	ctx := context.Background()
 
@@ -567,7 +578,7 @@ func TestPurge_AnInFlightModelCallCannotRecreateUsage(t *testing.T) {
 		}()
 	}
 	close(start)
-	if _, err := accountpurge.Purge(ctx, rawDB, userID); err != nil {
+	if _, err := purger.Purge(ctx, userID); err != nil {
 		t.Fatalf("Purge: %v", err)
 	}
 	wg.Wait()

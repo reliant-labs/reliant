@@ -36,6 +36,13 @@ type Drafts interface {
 	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
 }
 
+// ProjectConfigs reads the synced project scenarios column of a project's
+// config record, and nothing else from it. It returns svcerr.NotFound when the
+// project has no record. store.ProjectConfigExtStore satisfies it.
+type ProjectConfigs interface {
+	GetProjectScenariosJSON(ctx context.Context, projectID string) (*string, error)
+}
+
 // Sender runs a command on the machine holding a project's checkout.
 // *toolexec.NATSDaemonRouter implements it.
 type Sender interface {

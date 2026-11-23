@@ -19,6 +19,7 @@ import (
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // setupTestPresetService creates a database and preset service for testing.
@@ -59,7 +60,7 @@ func insertStoredPresets(t *testing.T, repo *db.Repo, projectID string, presets 
 	presetsStr := string(presetsJSON)
 	now := time.Now().UTC()
 
-	err = repo.UpsertProjectConfigRecord(context.Background(), &db.ProjectConfigRecord{
+	err = store.UpsertProjectConfigRecord(context.Background(), repo.ORM(), &db.ProjectConfigRecord{
 		ID:                 uuid.New().String(),
 		ProjectID:          projectID,
 		DaemonID:           "test-daemon",

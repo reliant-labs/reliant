@@ -263,6 +263,21 @@ describe("CliLogin", () => {
       expect(JSON.parse(init.body as string)).toEqual({ query: MCP_QUERY, approved: true, org_id: "org-a" });
     });
 
+    it("says Reliant Forge, not workspace connectors, when the resource is the Reliant Forge connector", async () => {
+      const forge = "https://api.example.test/forge/mcp";
+      setSearch(MCP_QUERY.replace(encodeURIComponent(RESOURCE), encodeURIComponent(forge)));
+      controlPlane(
+        () => new Response(JSON.stringify({ client_id: "mcp_abc", client_name: "Claude", third_party: true }), { status: 200 }),
+      );
+      renderWithQuery(<CliLogin />);
+
+      expect((await screen.findByTestId("mcp-consent-resource")).textContent).toBe(forge);
+      const scopes = screen.getByTestId("mcp-consent-scopes").textContent ?? "";
+      expect(scopes).toContain("Act as you in Reliant Forge: monitoring, releases and environments");
+      expect(scopes).not.toContain("MCP connectors");
+      expect(document.body.textContent).not.toContain("Which workspace it may use");
+    });
+
     it.each([
       ["the control plane does not know it", () => new Response("{}", { status: 404 })],
       [

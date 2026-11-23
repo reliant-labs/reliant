@@ -11,6 +11,7 @@ import (
 
 type capacityRedriveRepo struct {
 	EventRepo
+	idleCapacity
 	events  []*core.TriggerEvent
 	settled []string
 }

@@ -219,7 +219,7 @@ func TestCompaction_RequestReachesTheLedgerPerAttempt(t *testing.T) {
 	saveTurn(t, svc, chatID, thread, "call_1", 20_000, 80_000)
 
 	driver := newPathDriver("claude", true)
-	compact := NewCompactActivity(CompactDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()}).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
+	compact := NewCompactActivity(CompactDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()}).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 	input := CompactInput{ChatID: chatID, Thread: thread}.V3()
 	input.Node.GetCompact().Force = &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}}
 	runRetried(t, "Compact", compact.Execute, input)
@@ -568,7 +568,7 @@ func TestBackgroundRequests_FailedAttemptKeepsItsUsage(t *testing.T) {
 		driver := newPathDriverShaped("claude", true, failUsageThenError)
 		input := CompactInput{ChatID: chatID, Thread: thread}.V3()
 		input.Node.GetCompact().Force = &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}}
-		runRetried(t, "Compact", NewCompactActivity(CompactDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()}).WithUsageRecorder(llmusagetest.New(t, h.Repo())).Execute, input)
+		runRetried(t, "Compact", NewCompactActivity(CompactDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()}).WithUsageRecorder(llmusagetest.New(t, h.Repo())).Execute, input)
 		check(t, h, "compaction")
 	})
 	t.Run("title", func(t *testing.T) {

@@ -20,7 +20,7 @@ import (
 // call_llm's own calls are (llmCallSpec.scope): the chat's org, and whether a
 // person is behind the run (org-provider-accounts.md §4.1, §11.1).
 func TestExecuteToolsRunScopeIsTheChatsRun(t *testing.T) {
-	a := NewExecuteToolsActivity(nil, nil)
+	a := NewExecuteToolsActivity(nil, nil, nil)
 	ctx := context.Background()
 	scopeOf := func(chat *db.Chat) drivers.Scope { s, _ := a.runScope(ctx, chat)(); return s }
 

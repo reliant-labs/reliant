@@ -290,7 +290,7 @@ func DeclarationIn(wf *reliantv1.Workflow, t *core.Trigger) (*Declaration, error
 // NEEDS_SETUP (see SetupIssues) rather than reading as empty.
 // An ad hoc trigger (decl nil) has no declared inputs; its params are as
 // stored.
-func ActivationScope(ctx context.Context, repo any, t *core.Trigger, decl *Declaration, root map[string]any) triggerspec.Scope {
+func ActivationScope(ctx context.Context, repo OwnerSource, t *core.Trigger, decl *Declaration, root map[string]any) triggerspec.Scope {
 	params := t.Params
 	if decl != nil {
 		params = decl.activationParams(t.Params)
@@ -298,26 +298,7 @@ func ActivationScope(ctx context.Context, repo any, t *core.Trigger, decl *Decla
 	return triggerspec.Scope{Trigger: root, Activation: triggerspec.ActivationRoot(t.ID, OwnerOf(ctx, repo, t), params)}
 }
 
-// connectionReader and accessSubjectReader are what resolving an activation's
-// owner needs of the store. Every repository the fire and intake paths run on
-// (*db.Repo) has them (see ownerSource); a narrower fake that has neither
-// simply yields an owner with no GitHub id.
-type connectionReader interface {
-	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
-}
-
-type accessSubjectReader interface {
-	GetIntegrationAccessSubject(ctx context.Context, userID, integrationID string, freshAfter time.Time) (string, error)
-}
-
-// ownerSource is the production repository's side of owner resolution; the
-// assertion keeps a refactor of *db.Repo from silently emptying every owner.
-type ownerSource interface {
-	connectionReader
-	accessSubjectReader
-}
-
-var _ ownerSource = (*db.Repo)(nil)
+var _ OwnerSource = (*db.Repo)(nil)
 
 // OwnerOf is who t's runs are for, as trigger.activation.owner. It is the one
 // place every trigger path (intake filter, origin filter, dedupe, fire,
@@ -346,20 +327,19 @@ var _ ownerSource = (*db.Repo)(nil)
 //
 // It is empty when neither source yields an id, and a failure to find the id
 // must never widen who a filter admits: "" equals no verified sender's id.
-func OwnerOf(ctx context.Context, repo any, t *core.Trigger) triggerspec.Owner {
+func OwnerOf(ctx context.Context, repo OwnerSource, t *core.Trigger) triggerspec.Owner {
 	owner := triggerspec.Owner{UserID: t.UserID}
-	if t.UserID == "" {
+	if t.UserID == "" || repo == nil {
+		// No source is an explicit nil, never a store that lacks the reads
+		// (OwnerSource is a required type): the owner has no GitHub id, which
+		// an owner.github_id filter reads as nobody.
 		return owner
 	}
 	if t.ConnectionID != nil && *t.ConnectionID != "" {
 		owner.GitHubID = connectionSenderID(ctx, repo, t)
 		return owner
 	}
-	reader, ok := repo.(accessSubjectReader)
-	if !ok {
-		return owner
-	}
-	id, err := reader.GetIntegrationAccessSubject(ctx, t.UserID, "github", time.Now().Add(-core.IntegrationAccessFreshness))
+	id, err := repo.GetIntegrationAccessSubject(ctx, t.UserID, "github", time.Now().Add(-core.IntegrationAccessFreshness))
 	if err != nil {
 		logging.WarnContext(ctx, "could not read the owner's linked GitHub identity; treating it as unknown",
 			"trigger_id", t.ID, "user_id", t.UserID, "error", err)
@@ -372,12 +352,8 @@ func OwnerOf(ctx context.Context, repo any, t *core.Trigger) triggerspec.Owner {
 // connectionSenderID is the GitHub user id of the connection t listens
 // through, or "" when it is not the owner's GitHub connection or cannot be
 // read.
-func connectionSenderID(ctx context.Context, repo any, t *core.Trigger) string {
-	reader, ok := repo.(connectionReader)
-	if !ok {
-		return ""
-	}
-	conn, err := reader.GetConnection(ctx, t.UserID, *t.ConnectionID)
+func connectionSenderID(ctx context.Context, repo OwnerSource, t *core.Trigger) string {
+	conn, err := repo.GetConnection(ctx, t.UserID, *t.ConnectionID)
 	if err != nil || conn == nil || !authz.CanAccessPersonal(t.UserID, conn.UserID) || conn.IntegrationID != "github" || conn.SenderID == nil {
 		return ""
 	}

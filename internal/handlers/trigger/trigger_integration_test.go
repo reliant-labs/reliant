@@ -70,7 +70,7 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow,
 		workflow.RegisterOptions{Name: triggers.FireWorkflowName})
-	w.RegisterActivityWithOptions(triggers.NewFirer(repo, launcher).Fire,
+	w.RegisterActivityWithOptions(triggers.NewFirer(triggers.NewStores(repo), launcher).Fire,
 		activity.RegisterOptions{Name: triggers.FireActivityName})
 	// A stand-in for the agent: the real DynamicWorkflow needs the whole
 	// activity registry, and what this test is proving is that the run was
@@ -83,7 +83,7 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 	defer w.Stop()
 
 	// The real service, over the real schedule and workflow clients.
-	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
+	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, triggers.NewStores(repo), taskQueue)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend}))
 
 	userID := uuid.NewString()
@@ -237,7 +237,7 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow,
 		workflow.RegisterOptions{Name: triggers.FireWorkflowName})
-	w.RegisterActivityWithOptions(triggers.NewFirer(repo, launcher).Fire,
+	w.RegisterActivityWithOptions(triggers.NewFirer(triggers.NewStores(repo), launcher).Fire,
 		activity.RegisterOptions{Name: triggers.FireActivityName})
 	w.RegisterWorkflowWithOptions(
 		func(ctx workflow.Context, _ any) error { return nil },
@@ -246,7 +246,7 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 	require.NoError(t, w.Start())
 	defer w.Stop()
 
-	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
+	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, triggers.NewStores(repo), taskQueue)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend}))
 
 	userID := uuid.NewString()
@@ -326,7 +326,7 @@ func TestManualFireEndToEnd(t *testing.T) {
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow,
 		workflow.RegisterOptions{Name: triggers.FireWorkflowName})
-	w.RegisterActivityWithOptions(triggers.NewFirer(repo, launcher).Fire,
+	w.RegisterActivityWithOptions(triggers.NewFirer(triggers.NewStores(repo), launcher).Fire,
 		activity.RegisterOptions{Name: triggers.FireActivityName})
 	w.RegisterWorkflowWithOptions(
 		func(ctx workflow.Context, _ any) error { return nil },
@@ -335,7 +335,7 @@ func TestManualFireEndToEnd(t *testing.T) {
 	require.NoError(t, w.Start())
 	defer w.Stop()
 
-	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
+	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, triggers.NewStores(repo), taskQueue)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend}))
 
 	userID := uuid.NewString()

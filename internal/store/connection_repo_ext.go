@@ -523,6 +523,26 @@ func accessExpiry(t *time.Time) any {
 	return *t
 }
 
+// DeleteUserConnections hard-deletes the person's PERSONAL connections, soft-deleted ones included,
+// and returns how many; their secrets cascade. An org connection's user_id is the admin who made it
+// (attribution): it is the org's, sealed under the org's tenant, and is never deleted here.
+func DeleteUserConnections(ctx context.Context, db orm.Context, userID string) (int64, error) {
+	res, err := db.Bun().NewDelete().Model((*Connection)(nil)).ForceDelete().
+		Where("? = ?", bun.Ident(ConnectionFieldUserID), userID).
+		Where("? = ?", bun.Ident(ConnectionFieldOwnerKind), core.ConnectionOwnerUser).Exec(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// UserHasConnection reports whether the person has a live personal connection.
+func UserHasConnection(ctx context.Context, db orm.Context, userID string) (bool, error) {
+	return db.Bun().NewSelect().Model((*Connection)(nil)).
+		Where("? = ?", bun.Ident(ConnectionFieldUserID), userID).
+		Where("? = ?", bun.Ident(ConnectionFieldOwnerKind), core.ConnectionOwnerUser).Exists(ctx)
+}
+
 // ConnectionExtra carries fields on Connection that are NOT columns — computed
 // values, transient state, anything derived rather than stored. Connection is
 // embedded on ConnectionExtra (see connection_orm.go), so a field added here is a field on

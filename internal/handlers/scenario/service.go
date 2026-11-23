@@ -21,16 +21,15 @@ type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
-	// Repo stores the caller's scenarios and reads the workflows and
-	// project-synced scenarios they run against. A project's synced
-	// scenarios come from db.Repo.GetProjectScenariosJSON, which is not on
-	// Repository; storedProjectScenarios reaches it by assertion.
+	// Repo stores the caller's scenarios and reads the workflows they run against.
 	Repo Repository
 	// Projects reads a project the caller may write (owner and org decided
 	// together: projectaccess).
 	Projects projectaccess.Service
 	// Drafts reads the caller's saved workflows the scenarios belong to.
 	Drafts Drafts
+	// ProjectConfigs reads a project's synced scenarios.
+	ProjectConfigs ProjectConfigs
 	// Router writes an uploaded scenario file onto the caller's machine
 	// (UploadScenario). The API server always has one; without it
 	// UploadScenario answers Unavailable.
@@ -49,6 +48,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("scenario: Deps.Repo is required")
+	}
+	if d.ProjectConfigs == nil {
+		return fmt.Errorf("scenario: Deps.ProjectConfigs is required")
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("scenario: Deps.Projects is required")

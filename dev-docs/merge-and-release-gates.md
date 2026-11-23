@@ -210,6 +210,15 @@ The phases:
      test and typecheck phases.
    - **migsafety** is `forge lint --migration-safety`, and runs only when a
      migration changed.
+   - **closedsets** is `forge lint --closed-sets`, and runs when a migration,
+     `go.mod` or `forge.yaml` changed. A CHECK declared `forge:closed-set`
+     (access_tokens' scopes) must list exactly the set the pinned forge carries;
+     a pin bump that grows it needs a widening migration
+     (`task db:migration NAME="<name> --closed-set <constraint>"`). It is its own
+     phase, not a lane of the scoped lint, because a pin bump changes only root
+     files and has no directory to scope to. Without it, the forge bump that
+     added `mcp:oauth` and `mcp:forge` merged and the release gate's DB test
+     failed (#3382).
    - **migorder** is `go run ./tools/test-affected migration-order`, and runs
      only when a migration changed. It fetches `origin/main` and fails a
      migration versioned at or below main's newest, which golang-migrate would
@@ -238,7 +247,7 @@ The gate fails closed on a phase that never completed. Every phase records
 itself in `$MG_LOGDIR/expected` before it launches and leaves a `<phase>.row`
 only when it finishes. The last step, `go run ./tools/test-affected gate-verify`,
 compares what the plan **obliges** (build, test, plus `generate`, `docs`,
-`migorder`, `typecheck`, `demo`, `migsafety`, `lint`, `golangci` as the plan, the diff and
+`migorder`, `typecheck`, `demo`, `migsafety`, `closedsets`, `lint`, `golangci` as the plan, the diff and
 the tier select them) and what the gate **started** against the rows. A phase with no row
 (queued for a slot and cut off, cancelled, timed out, its tool missing) fails
 the gate and is named: `FAILED: docs never completed (no result row; ...)`.

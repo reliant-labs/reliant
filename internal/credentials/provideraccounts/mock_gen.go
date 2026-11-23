@@ -17,7 +17,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=0d4e11a91a0fa6482869bea1882a97402df9b6247615072a19ba40ee5fc78117
+// forge:hash=c549f5b6fa4cd7e8a6fabea1a083bcf21f74d8cf500109cc065c385640099e5a
 
 // MockService is a test mock for the Service interface.
 //
@@ -58,6 +58,9 @@ type MockService struct {
 	ListOwnedAccountLimitsFunc               func(context.Context, core.AccountOwner) (map[string]core.LimitState, error)
 	ListMemberAccountGrantsFunc              func(context.Context, string, string) (map[string]time.Time, error)
 	ClearOtherThreadAssignmentsFunc          func(context.Context, string, string, string) error
+	PurgeUserFunc                            func(context.Context, string) (int64, error)
+	UserHasCredentialsFunc                   func(context.Context, string) (bool, error)
+	ProviderAccountNamesFunc                 func(context.Context, []string) (map[string]core.ProviderAccountName, error)
 }
 
 // ListProviderAccounts records the call and delegates to ListProviderAccountsFunc when set.
@@ -337,6 +340,33 @@ func (m *MockService) ClearOtherThreadAssignments(ctx context.Context, userID st
 		return m.ClearOtherThreadAssignmentsFunc(ctx, userID, threadID, provider)
 	}
 	return contractkit.MockNotSet("MockService", "ClearOtherThreadAssignments")
+}
+
+// PurgeUser records the call and delegates to PurgeUserFunc when set.
+func (m *MockService) PurgeUser(ctx context.Context, userID string) (int64, error) {
+	m.Recorder.Record("PurgeUser", ctx, userID)
+	if m.PurgeUserFunc != nil {
+		return m.PurgeUserFunc(ctx, userID)
+	}
+	return 0, contractkit.MockNotSet("MockService", "PurgeUser")
+}
+
+// UserHasCredentials records the call and delegates to UserHasCredentialsFunc when set.
+func (m *MockService) UserHasCredentials(ctx context.Context, userID string) (bool, error) {
+	m.Recorder.Record("UserHasCredentials", ctx, userID)
+	if m.UserHasCredentialsFunc != nil {
+		return m.UserHasCredentialsFunc(ctx, userID)
+	}
+	return false, contractkit.MockNotSet("MockService", "UserHasCredentials")
+}
+
+// ProviderAccountNames records the call and delegates to ProviderAccountNamesFunc when set.
+func (m *MockService) ProviderAccountNames(ctx context.Context, ids []string) (map[string]core.ProviderAccountName, error) {
+	m.Recorder.Record("ProviderAccountNames", ctx, ids)
+	if m.ProviderAccountNamesFunc != nil {
+		return m.ProviderAccountNamesFunc(ctx, ids)
+	}
+	return nil, contractkit.MockNotSet("MockService", "ProviderAccountNames")
 }
 
 // Compile-time check.

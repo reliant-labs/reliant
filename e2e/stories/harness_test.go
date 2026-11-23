@@ -56,6 +56,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
@@ -374,7 +375,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		ToolExecutor:    executor,
 		DaemonRouter:    nil, // hermetic: no daemon transport; worktree ops unavailable
 		MCPBinder:       mcpBinder,
-		ConfigProvider:  config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(s.Repo)),
+		ConfigProvider:  config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(configadapter.NewORMRecordReader(s.Repo.ORM()))),
 		DriverResolver:  resolver,
 		TaskQueueSuffix: taskQueueSuffix,
 		TriggerLauncher: triggerLauncher,
@@ -437,7 +438,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Signals: pause,
 	})
 	require.NoError(t, err, "approval service")
-	triggerSyncer, triggerFires := trigger.TemporalBackend(s.Temporal, s.Repo, taskQueue, nil)
+	triggerSyncer, triggerFires := trigger.TemporalBackend(s.Temporal, triggers.NewStores(s.Repo), taskQueue, nil)
 	triggerSvc, err := trigger.New(trigger.Deps{
 		Logger:   slog.Default(),
 		Config:   &typedconfig.Config{},

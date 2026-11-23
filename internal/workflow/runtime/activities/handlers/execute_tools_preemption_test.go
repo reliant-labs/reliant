@@ -80,8 +80,8 @@ func (e *waitingExecutor) wasArmed(toolCallID string) bool {
 // make every preempted wait here cost a second of nothing.
 const testPreemptionPoll = 50 * time.Millisecond
 
-func newPreemptionTestActivity(store ExecuteToolsStore, executor toolexec.ToolExecutor) *ExecuteToolsActivity {
-	a := NewExecuteToolsActivity(store, executor).WithToolCallResults(testToolCallResults(store))
+func newPreemptionTestActivity(store ExecuteToolsStore, toolCalls ToolCalls, executor toolexec.ToolExecutor) *ExecuteToolsActivity {
+	a := NewExecuteToolsActivity(store, toolCalls, executor)
 	a.preemptionPoll = testPreemptionPoll
 	return a
 }
@@ -89,7 +89,7 @@ func newPreemptionTestActivity(store ExecuteToolsStore, executor toolexec.ToolEx
 func (f *durableStatusFixture) runBatch(t *testing.T, executor toolexec.ToolExecutor, calls ...message.ToolCall) *ExecuteToolsOutput {
 	t.Helper()
 	var output ExecuteToolsOutput
-	err := f.h.ExecuteActivity(newPreemptionTestActivity(f.h.Repo(), executor).Execute, ExecuteToolsInput{
+	err := f.h.ExecuteActivity(newPreemptionTestActivity(f.h.Repo(), toolCallsOf(f.h.Repo()), executor).Execute, ExecuteToolsInput{
 		ChatID:    f.chatID,
 		Thread:    f.chatID,
 		ToolCalls: calls,
@@ -262,7 +262,7 @@ func TestPreemption_OneMessageEndsEveryWaitInTheBatch(t *testing.T) {
 
 			start := time.Now()
 			var output ExecuteToolsOutput
-			err := f.h.ExecuteActivity(newPreemptionTestActivity(store, executor).Execute, ExecuteToolsInput{
+			err := f.h.ExecuteActivity(newPreemptionTestActivity(store, toolCallsOf(f.h.Repo()), executor).Execute, ExecuteToolsInput{
 				ChatID: f.chatID, Thread: f.chatID, ToolCalls: []message.ToolCall{first, second},
 			}, &output)
 			require.NoError(t, err)

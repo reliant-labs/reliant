@@ -307,8 +307,8 @@ type StoredConfigProviderDeps struct {
 // checks the record's version, so a daemon push is seen immediately on every
 // worker replica.
 func NewStoredConfigProvider(d StoredConfigProviderDeps) (*reliantconfig.StoredConfigProvider, error) {
-	repo := d.DB
-	return reliantconfig.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(repo), repo, reliantconfig.DefaultParsedConfigCacheBytes), nil
+	o := d.DB.ORM()
+	return reliantconfig.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(configadapter.NewORMRecordReader(o)), store.NewProjectConfigExtStore(o), reliantconfig.DefaultParsedConfigCacheBytes), nil
 }
 
 // RunLifecycleDeps is what runs are recorded in and driven through.
@@ -470,7 +470,7 @@ type WorkerTriggerDeps struct {
 //forge:root-only worker
 func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
-	syncer, fires := trigger.TemporalBackend(temporalClient, repo, v2workflow.SharedTaskQueue, d.Pollers.IsPolled)
+	syncer, fires := trigger.TemporalBackend(temporalClient, triggers.NewStores(repo), v2workflow.SharedTaskQueue, d.Pollers.IsPolled)
 	githubAccess, err := wireGitHubAccess(repo, d.ConnectionVault, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
 	if err != nil {
 		return nil, fmt.Errorf("trigger service: %w", err)
@@ -499,7 +499,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Integrations:  d.Integrations.Config,
 		Sealer:        d.Vault,
 		Catalog:       d.Pollers,
-		Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
+		Intake: triggers.NewIntake(triggers.NewStores(repo), temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
 			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
@@ -966,7 +966,7 @@ type TriggerDeliveryRelay struct {
 //forge:root-only worker
 func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay, error) {
 	repo := d.DB
-	intake := triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
+	intake := triggers.NewIntake(triggers.NewStores(repo), d.Temporal.Client, v2workflow.SharedTaskQueue).
 		WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 		WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
 		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug))

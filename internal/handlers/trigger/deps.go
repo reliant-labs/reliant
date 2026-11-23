@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
 // OrgMoveResumer turns a trigger a project move paused back on
@@ -47,6 +48,7 @@ type OrgResolver interface {
 }
 
 type Repository interface {
+	triggers.OwnerSource
 	// AssignUnassignedOrg stamps the caller's rows that have no org with
 	// their default org (the lazy backfill, orgs.ListScope).
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
