@@ -854,7 +854,7 @@ func wireTriggerAlerting(repo *db.Repo, cfg *configv1.ControlPlaneConfig, public
 	if err != nil {
 		return nil, err
 	}
-	return triggers.NewAlerting(triggers.AlertingDeps{Receivers: receivers, Store: repo, Locker: locker, PublicURL: publicURL}), nil
+	return triggers.NewAlerting(triggers.AlertingDeps{Receivers: receivers, Store: triggers.NewStores(repo), Locker: locker, PublicURL: publicURL}), nil
 }
 
 // TriggerInboundDeps is what the inbound receivers record events in, start
@@ -1181,7 +1181,7 @@ type TriggerReconcilerDeps struct {
 //forge:root-only api
 func NewTriggerReconciler(d TriggerReconcilerDeps) (*TriggerReconciler, error) {
 	repo := d.DB
-	return &TriggerReconciler{triggers.NewReconciler(repo, triggers.LaunchWorkflows{Repo: repo}, d.Syncer).WithAlerting(d.Alerting)}, nil
+	return &TriggerReconciler{triggers.NewReconciler(triggers.NewStores(repo), triggers.LaunchWorkflows{Repo: repo}, d.Syncer).WithAlerting(d.Alerting)}, nil
 }
 
 // Run reconciles until ctx ends.
