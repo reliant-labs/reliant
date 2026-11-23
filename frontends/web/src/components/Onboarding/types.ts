@@ -230,6 +230,15 @@ export interface Journey {
   /** Where Finish lands, per shell. Default: Reliant's chat (and nothing in the forge shell). */
   finish?: (shell: TourShell) => RouteTarget | null;
   /**
+   * Finish, Exit tour, and Back on the first step return to the page the
+   * journey was started from (the picker, a menu), instead of `finish`'s
+   * target, in the shells this says. For a journey that walks pages that are
+   * not the person's own (the forge journey's sample app): leaving it puts
+   * them back where they were. Without a recorded start (a `?tour=` link
+   * opened cold), `finish` applies. Default: never.
+   */
+  returnToStart?: (shell: TourShell) => boolean;
+  /**
    * How to reach this journey from a shell it doesn't run in: the end card's
    * "Try the other journey" becomes this link — an app path opens in place
    * (the forge brand → the Workflows area), a URL in a new tab (the public

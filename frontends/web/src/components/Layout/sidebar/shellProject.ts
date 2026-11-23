@@ -43,6 +43,7 @@ import { useProjectStore } from "@/store/projectStore";
 
 import { useSelectorCatalog } from "../../Projects/ProjectSelector";
 import { consolePageOf, type ConsolePage } from "../../Forge/Console/paths";
+import { isSampleApp, SAMPLE_APP, SAMPLE_APP_LABEL } from "../../Forge/Sample/sampleApp";
 
 /** A project by id, or an app with no code here by name. */
 export type ShellProjectRef = { kind: "project"; id: string } | { kind: "app"; name: string };
@@ -149,6 +150,15 @@ export function sectionInAnotherApp(page: ConsolePage): ConsolePage {
 }
 
 // ── The last pick ───────────────────────────────────────────────────────────
+
+/**
+ * Whether a route's project may become the last pick: any but the forge
+ * tour's sample app (Forge/Sample/sampleApp.ts), so leaving the tour leaves
+ * no sample in the nav, on a reload or in another tab.
+ */
+export function remembersPick(key: string): boolean {
+  return key !== refKey({ kind: "app", name: SAMPLE_APP });
+}
 
 /** The last pick's value for "All projects". */
 export const ALL_PROJECTS_PICK = "__all__";
@@ -304,7 +314,7 @@ export function useShellProject(pathname: string, search: Record<string, unknown
     if (!ref) return { ...base, key: null, name: null, projectId: null, app: consoleApp, deployed: !!consoleApp, row: undefined };
     const key = row ? row.key : refKey(ref);
     const projectId = row ? (row.kind === "project" ? row.project.id : null) : ref.kind === "project" ? ref.id : null;
-    const name = row ? row.name : ref.kind === "app" ? ref.name : null;
+    const name = row ? row.name : ref.kind === "app" ? (isSampleApp(ref.name) ? SAMPLE_APP_LABEL : ref.name) : null;
     // The console on screen always has its sections, whatever the catalog says.
     const app = consoleApp ?? sectionsAppOf(row) ?? (ref.kind === "app" ? ref.name : null);
     const deployed = !!deployedAppOf(row) || (!!consoleApp && !row);
@@ -315,8 +325,9 @@ export function useShellProject(pathname: string, search: Record<string, unknown
 
   // In one-project mode a route that names a project becomes the last pick;
   // in a choice of several only an explicit one does (and ends the choice).
+  // The tour's sample app never does (remembersPick).
   useEffect(() => {
-    if (!routeRefKey || !resolved.key) return;
+    if (!routeRefKey || !resolved.key || !remembersPick(resolved.key)) return;
     if (mode === "one" ? resolved.key !== lastPick : explicit) setLastPick(resolved.key);
   }, [routeRefKey, resolved.key, lastPick, setLastPick, mode, explicit]);
 

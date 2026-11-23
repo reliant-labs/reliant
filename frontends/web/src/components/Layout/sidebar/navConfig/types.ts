@@ -85,6 +85,12 @@ interface NavItemBase {
   available?: (ctx: NavCtx) => boolean;
   /** The row's test id, when it is not `nav-<id>` (ids tests and tours already name). */
   testId?: string;
+  /**
+   * The item's tour anchor (`data-tour`, Onboarding/JOURNEYS.md "Anchors"):
+   * on a group, its whole block (the row and, open, its rows). Set only on
+   * the items a journey points at; tourAnchors.test pins each one.
+   */
+  tour?: string;
 }
 
 export interface NavRow extends NavItemBase {

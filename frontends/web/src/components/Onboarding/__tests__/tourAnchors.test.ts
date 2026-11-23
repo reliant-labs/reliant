@@ -13,7 +13,9 @@
  * object key (`{ "data-testid": … }`) or, for test ids, a component's `testId`
  * prop, literally or as a template whose fixed prefix the value starts with
  * (`data-testid={`obs-issue-${id}`}`). A selector string naming the anchor
- * (`"[data-tour='x']"`) does not count.
+ * (`"[data-tour='x']"`) does not count. The shell nav is data
+ * (Layout/sidebar/navConfig): there an item's `tour: "x"` is its `data-tour`,
+ * which NavRenderer renders.
  * Data attributes (`data-trace-id`, `data-span-id`, …) are fixture values,
  * not anchors, and are not checked here (forgeJourney.test.tsx pins those).
  */
@@ -54,14 +56,20 @@ const SETTERS: Record<string, RegExp> = Object.fromEntries(
   }),
 );
 
+/** The nav config's items name their `data-tour` as `tour: "x"` (NavItemBase.tour), and NavRenderer renders it. */
+const NAV_CONFIG = join("components", "Layout", "sidebar", "navConfig");
+const NAV_TOUR = new RegExp(`(?<![\\w-])tour\\s*:\\s*(${VALUE})`, "g");
+
 /** For each anchor attribute, every value a non-test source line sets it to. */
 const SET_VALUES: Record<string, string[]> = (() => {
   const values: Record<string, string[]> = Object.fromEntries(ANCHOR_ATTRS.map((a) => [a, []]));
   for (const file of sourceFiles(SRC)) {
+    const navConfig = file.includes(NAV_CONFIG);
     for (const line of readFileSync(file, "utf8").split("\n")) {
       // A comment naming an anchor does not render it.
       if (/^\s*(\*|\/\/|\/\*|\{\/\*)/.test(line)) continue;
       for (const attr of ANCHOR_ATTRS) for (const m of line.matchAll(SETTERS[attr])) values[attr].push(m[1]);
+      if (navConfig) for (const m of line.matchAll(NAV_TOUR)) values["data-tour"].push(m[1]);
     }
   }
   return values;
@@ -123,6 +131,8 @@ describe("tour anchors", () => {
     const where = new Set(ANCHORS.map((a) => a.where.split(" ")[0]));
     expect(where).toContain("wf-outro-layout");
     expect(where).toContain("fg-console");
+    // The forge journey's shell steps, over the shell nav's anchors.
+    for (const id of ["fg-nav", "fg-deployments", "fg-tests", "fg-security", "fg-configure"]) expect(where).toContain(id);
     expect(where).toContain("tip");
     expect(ANCHORS.length).toBeGreaterThan(20);
   });

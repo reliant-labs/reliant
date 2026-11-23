@@ -1,7 +1,8 @@
 /**
  * The forge journey's content (journeys/forge.tsx, journeys-spec.md §3): its
- * eleven steps in Reliant and the forge shell, the demo host's own short cut
- * of ten (DEMO_TOUR=short) or every step (full), the compact controls, each
+ * fourteen steps on the sample app in the signed-in shell, eleven on the
+ * `/forge/demo` panel (signed out), the demo host's own short cut of ten
+ * (DEMO_TOUR=short) or every non-shell step (full), the compact controls, each
  * step's required action against the URL or signal the spec names
  * (watchAdvance, against a fake router), and the copy that differs per shell.
  */
@@ -15,7 +16,7 @@ import { resetShellForTests } from "@/lib/shell";
 import { DEMO_INSIDE_SPAN_IDS, DEMO_INVENTORY_SPAN_ID, DEMO_ISSUE_ID, DEMO_TRACE_ID, forgeJourney } from "../journeys/forge";
 import { activeJourneySteps, presentStep } from "../journeys/registry";
 import { tourEvents } from "../tourEvents";
-import { setTourShell } from "../tourShell";
+import { setReliantTourHooks, setTourShell } from "../tourShell";
 import type { JourneyStep, RouteTarget } from "../types";
 
 const step = (id: string): JourneyStep => {
@@ -59,7 +60,16 @@ function watchStep(id: string, entry: Record<string, unknown>, pathname?: string
 
 const openSearch = (id: string) => (step(id).route?.open as RouteTarget).search ?? {};
 
+/** Someone signed in: the tour walks the sample app inside the shell (catalog.ts installs this in the app). */
+function signIn() {
+  setReliantTourHooks({ landOnChat: async () => undefined, afterTour: async () => undefined, inAppShell: () => true });
+}
+
+/** The steps about the shell's own nav and pages: nowhere else. */
+const SHELL_ONLY = ["fg-nav", "fg-deployments", "fg-tests", "fg-security", "fg-configure"];
+
 afterEach(() => {
+  setReliantTourHooks(null);
   setTourShell(null);
   resetShellForTests();
   setRuntimeConfig({});
@@ -78,11 +88,27 @@ const ELEVEN = [
   "fg-ask",
   "fg-done",
 ];
+const FOURTEEN = [
+  "fg-intro",
+  "fg-nav",
+  "fg-instrumented",
+  "fg-deployments",
+  "fg-trace",
+  "fg-hops",
+  "fg-logs",
+  "fg-issue",
+  "fg-oncall",
+  "fg-ask",
+  "fg-tests",
+  "fg-security",
+  "fg-configure",
+  "fg-done",
+];
 const active = () => activeJourneySteps("forge").map((s) => s.id);
 
 describe("the forge journey", () => {
-  it("is eleven steps in Reliant and the forge shell, with the compact controls (v4)", () => {
-    expect(forgeJourney.version).toBe(4);
+  it("is eleven steps on the /forge/demo panel, signed out on either app host, with the compact controls (v5)", () => {
+    expect(forgeJourney.version).toBe(5);
     expect(forgeJourney.controls).toBe("callout");
     resetShellForTests("reliant");
     expect(active()).toEqual(ELEVEN);
@@ -103,12 +129,15 @@ describe("the forge journey", () => {
     const cuts: [string, () => void, number][] = [
       ["reliant", () => resetShellForTests("reliant"), 11],
       ["forge", () => resetShellForTests("forge"), 11],
+      ["reliant signed in", () => (resetShellForTests("reliant"), signIn()), 14],
+      ["forge signed in", () => (resetShellForTests("forge"), signIn()), 14],
       ["demo short", () => resetShellForTests("demo"), 10],
       ["demo full", () => (resetShellForTests("demo"), setRuntimeConfig({ DEMO_TOUR: "full" })), 15],
     ];
     expect(step("fg-instrumented").isAvailable).toBeUndefined();
     for (const [name, enter, total] of cuts) {
       setRuntimeConfig({});
+      setReliantTourHooks(null);
       enter();
       expect(active(), name).toContain("fg-instrumented");
       expect(active(), name).toHaveLength(total);
@@ -120,10 +149,12 @@ describe("the forge journey", () => {
     expect(step("fg-agent").isAvailable?.()).toBe(false);
   });
 
-  it("is every step on the demo host with DEMO_TOUR=full", () => {
+  it("is every step but the shell's on the demo host with DEMO_TOUR=full", () => {
     resetShellForTests("demo");
     setRuntimeConfig({ DEMO_TOUR: "full" });
-    expect(active()).toEqual(forgeJourney.steps.map((s) => s.id));
+    // A signed-in session on the demo host changes nothing: it has no shell.
+    signIn();
+    expect(active()).toEqual(forgeJourney.steps.map((s) => s.id).filter((id) => !SHELL_ONLY.includes(id)));
     expect(active()).toEqual([
       "fg-intro",
       "fg-console",
@@ -163,8 +194,8 @@ describe("the forge journey", () => {
     expect(screen.getByText(/Once the app is deployed, the agent can inspect/)).toBeInTheDocument();
   });
 
-  it("lives on the demo console, every step but the cards", () => {
-    for (const s of forgeJourney.steps.filter((candidate) => !["fg-done", "fg-agent"].includes(candidate.id))) {
+  it("lives on the demo console, signed out, every step but the cards and the shell's", () => {
+    for (const s of forgeJourney.steps.filter((candidate) => ![...SHELL_ONLY, "fg-done", "fg-agent"].includes(candidate.id))) {
       expect(s.route?.path, s.id).toBe("/forge/demo");
       expect((s.route?.open as RouteTarget).to, s.id).toBe("/forge/demo");
     }
@@ -179,7 +210,8 @@ describe("the forge journey", () => {
     expect(built.targets).toBeUndefined();
     expect(built.card).toEqual({ wide: true, modal: true });
     expect(conditionsOf(built)).toEqual([]);
-    for (const s of forgeJourney.steps.filter((candidate) => candidate.route)) {
+    // The shell's own steps open console pages, which have no `section`.
+    for (const s of forgeJourney.steps.filter((candidate) => candidate.route && !SHELL_ONLY.includes(candidate.id))) {
       const search = openSearch(s.id);
       expect("section" in search && search.section === undefined, s.id).toBe(true);
     }
@@ -202,7 +234,70 @@ describe("the forge journey", () => {
   });
 
   it("asks only for Next on the explaining steps", () => {
-    for (const id of ["fg-intro", "fg-console", "fg-built", "fg-instrumented", "fg-inside", "fg-graph", "fg-oncall", "fg-agent", "fg-done"]) expect(conditionsOf(step(id)), id).toEqual([]);
+    for (const id of ["fg-intro", "fg-console", "fg-built", "fg-instrumented", "fg-inside", "fg-graph", "fg-oncall", "fg-agent", "fg-done", ...SHELL_ONLY]) expect(conditionsOf(step(id)), id).toEqual([]);
+  });
+
+  describe("signed in, in the shell", () => {
+    it("is fourteen steps on either app host: the app's sections in the nav, then one request, then the rest of the nav", () => {
+      for (const host of ["reliant", "forge"] as const) {
+        resetShellForTests(host);
+        signIn();
+        expect(active(), host).toEqual(FOURTEEN);
+      }
+    });
+
+    it("walks the sample app's console pages, never a person's own app", () => {
+      resetShellForTests("reliant");
+      signIn();
+      for (const id of ["fg-intro", "fg-nav", "fg-instrumented"]) {
+        expect(step(id).route?.path, id).toBe("/forge/p/sample_shop");
+        expect((step(id).route?.open as RouteTarget).to, id).toBe("/forge/p/sample_shop");
+      }
+      for (const [id, page] of [["fg-trace", "traces"], ["fg-hops", "traces"], ["fg-logs", "traces"], ["fg-issue", "errors"], ["fg-ask", "errors"], ["fg-oncall", "alerts"]] as const) {
+        expect(step(id).route?.path, id).toBe("/forge/p/sample_shop/observability");
+        expect((step(id).route?.open as RouteTarget).to, id).toBe(`/forge/p/sample_shop/observability/${page}`);
+      }
+      for (const [id, path] of [
+        ["fg-deployments", "/forge/p/sample_shop/releases"],
+        ["fg-tests", "/forge/p/sample_shop/tests"],
+        ["fg-security", "/forge/p/sample_shop/security/vulnerabilities"],
+        ["fg-configure", "/forge/p/sample_shop/secrets"],
+      ] as const) {
+        expect(step(id).route?.path, id).toBe(path);
+        expect((step(id).route?.open as RouteTarget).to, id).toBe(path);
+      }
+    });
+
+    it("spotlights the shell nav's own anchors: the main nav, then each section's group", () => {
+      expect(step("fg-nav").target).toBe("[data-tour='forge-console-nav']");
+      expect(step("fg-deployments").target).toBe("[data-tour='nav-deployments']");
+      expect(step("fg-tests").target).toBe("[data-tour='nav-tests']");
+      expect(step("fg-security").target).toBe("[data-tour='nav-security']");
+      expect(step("fg-configure").target).toBe("[data-tour='nav-configure']");
+      for (const id of SHELL_ONLY) expect(step(id).tooltipPosition, id).toBe("right");
+    });
+
+    it("returns to where it started when it ends, only in the shell", () => {
+      resetShellForTests("reliant");
+      expect(forgeJourney.returnToStart?.("reliant")).toBe(false);
+      signIn();
+      expect(forgeJourney.returnToStart?.("reliant")).toBe(true);
+      resetShellForTests("demo");
+      expect(forgeJourney.returnToStart?.("forge")).toBe(false);
+    });
+
+    it("says what an agent does on the deployment and test steps, with the shell's CLI", () => {
+      setTourShell("forge");
+      for (const [id, command] of [
+        ["fg-deployments", /forge env deploy prod <release>/],
+        ["fg-tests", /forge lint/],
+      ] as const) {
+        const { unmount } = render(<>{presentStep(step(id)).description}</>);
+        expect(screen.getByText(command), id).toBeInTheDocument();
+        expect(screen.queryByText(/reliant forge/), id).toBeNull();
+        unmount();
+      }
+    });
   });
 
   describe("on the demo host", () => {

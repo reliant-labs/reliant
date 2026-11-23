@@ -11,6 +11,7 @@ import { getIsDev } from './lib/constants'
 import { createWorkflowsAreaRoutes } from './workflowsAreaRoutes'
 import { retainTourParam } from './components/Onboarding/tourParam'
 import { createForgeDemoRedirectRoute, createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
+import { ForgeDemoEntry } from './components/Forge/Sample/ForgeDemoEntry'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { forgeConsolePages } from './forgeConsolePages'
 import { createRetiredPageRoutes } from './legacyRedirectRoutes'
@@ -995,7 +996,8 @@ const orgOrgScopedRoutes = createOrgScopedRoutes(() => orgAppLayoutRoute, () => 
 // the landing page's `?journey=forge` takes a signed-out visitor straight to
 // it (ForgeShell/ForgeLandingJourney). `/demo`, a landing link's short form,
 // points at it.
-const forgeDemoRoute = createForgeDemoRoute(() => rootRoute)
+// Signed in, `/forge/demo` opens the sample app in the shell instead (ForgeDemoEntry), where the forge journey walks it.
+const forgeDemoRoute = createForgeDemoRoute(() => rootRoute, ForgeDemoEntry)
 const forgeDemoRedirectRoute = createForgeDemoRedirectRoute(() => rootRoute)
 
 const onboardingRoute = createRoute({

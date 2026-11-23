@@ -1,14 +1,19 @@
 import { expect, test, type Page, type Request, type Route } from '@playwright/test';
 
+import { mockAppsBackend } from './appsMocks';
 
-// The forge journey ("Explore a forge app", Onboarding/journeys/forge.tsx) on
-// the demo console (/forge/demo, fixture data), walked end to end in the
-// shells it runs in (the public demo host's own cut is at the bottom):
+
+// The forge journey ("Explore a forge app", Onboarding/journeys/forge.tsx),
+// walked in the shells it runs in (the public demo host's own cut is at the
+// bottom):
 //
 //   Reliant      the shell picked by hostname (no ?shell override), signed in
-//                (appsMocks.ts), the demo under Reliant's authenticated layout;
-//   forge        ?shell=forge (lib/shell.ts), signed OUT: the demo is public
-//                there, and the landing page's ?journey= starts the journey.
+//                (appsMocks.ts): the sample app INSIDE the shell
+//                (/forge/p/sample_shop), on the shell's own nav, and back to
+//                where it started when it ends;
+//   forge        ?shell=forge (lib/shell.ts), signed OUT: the /forge/demo
+//                panel is public there, and the landing page's ?journey=
+//                starts the journey.
 //
 // Steps 1-10 are driven the way a visitor drives them: each required action
 // is the real click on the console (open the trace, its logs, the flamegraph,
@@ -180,6 +185,97 @@ test.describe('the forge journey in the forge shell', () => {
     await page.goto('/forge/demo?tour=workflows:wf-new', { waitUntil: 'domcontentloaded' });
     await expect(page.locator("[data-tour='forge-console']")).toBeVisible(LOADED);
     await expect(page.getByTestId('tour-controls')).toHaveCount(0);
+  });
+});
+
+// Signed in: the sample app in the shell. Its pages' DATA comes from the
+// sample's data seam (demo-di/design.md, still to land), so this walks what
+// does not depend on it: the route of every step, the shell nav's anchors,
+// and the way back. Each data step's spotlight is waited out (its card shows
+// anyway after ~3s, with Next enabled).
+test.describe('the forge journey in Reliant, signed in', () => {
+  const SAMPLE = '/forge/p/sample_shop';
+  const T = 14;
+
+  test('walks the sample app in the shell, by the nav, and Finish returns to where it started', async ({ page }) => {
+    test.setTimeout(120_000);
+    await mockAppsBackend(page);
+    await page.goto('/projects?tour=pick:menu', { waitUntil: 'domcontentloaded' });
+    await page.getByTestId('journey-card-forge').click(LOADED);
+    await page.getByTestId('journey-picker').getByRole('button', { name: /start/i }).click();
+
+    await expect.poll(() => new URL(page.url()).pathname, LOADED).toBe(SAMPLE);
+    await expect.poll(() => new URL(page.url()).searchParams.get('tour')).toBe('forge:fg-intro');
+    await atStep(page, 1, T, 'What is Forge?');
+    await next(page);
+
+    // The shell's own nav, with the sample app open: not a frame of its own.
+    await atStep(page, 2, T, "A Forge app's console");
+    await expect(page.locator("[data-tour='forge-console-nav']")).toBeVisible();
+    await expect(page.locator("[data-tour='forge-console']")).toHaveCount(0);
+    await next(page);
+
+    await atStep(page, 3, T, 'Monitoring from the start');
+    await next(page);
+
+    await atStep(page, 4, T, 'Releases, built once');
+    await expect(page).toHaveURL(new RegExp(`${SAMPLE}/releases`));
+    await expect(page.locator("[data-tour='nav-deployments']")).toBeVisible();
+    await expect(page.locator("[data-tour='nav-deployments'] [data-testid='nav-releases']")).toHaveAttribute('aria-current', 'page');
+
+    // The Observability stops, by Next (their actions need the sample's data): one request, its error, the handoff.
+    for (const [n, title] of [
+      [5, 'One request, end to end'],
+      [6, 'Across services'],
+      [7, 'What that request logged'],
+      [8, 'Errors, grouped by release'],
+      [9, 'How an agent gets called'],
+      [10, 'Hand it to an agent'],
+    ] as const) {
+      await next(page);
+      await atStep(page, n, T, title);
+      await expect(page).toHaveURL(new RegExp(`${SAMPLE}/observability/`));
+    }
+
+    for (const [n, title, path, anchor] of [
+      [11, "The app's tests", 'tests', 'nav-tests'],
+      [12, 'What each release ships', 'security/vulnerabilities', 'nav-security'],
+      [13, 'Secrets, domains and costs', 'secrets', 'nav-configure'],
+    ] as const) {
+      await next(page);
+      await atStep(page, n, T, title);
+      await expect(page).toHaveURL(new RegExp(`${SAMPLE}/${path}`));
+      await expect(page.locator(`[data-tour='${anchor}']`)).toBeVisible();
+    }
+
+    await next(page);
+    await atStep(page, 14, T, 'Try it on your app');
+    await next(page);
+
+    // Back where the picker was opened, with the tour closed and no sample left behind.
+    await expect(page).toHaveURL(/\/projects(\?|$)/, LOADED);
+    expect(new URL(page.url()).searchParams.get('tour')).toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem('shell.currentProject'))).not.toBe('app:sample_shop');
+  });
+
+  test('Exit tour returns to where it started', async ({ page }) => {
+    await mockAppsBackend(page);
+    await page.goto('/projects?tour=pick:menu', { waitUntil: 'domcontentloaded' });
+    await page.getByTestId('journey-card-forge').click(LOADED);
+    await page.getByTestId('journey-picker').getByRole('button', { name: /start/i }).click();
+    await atStep(page, 1, T, 'What is Forge?');
+    await next(page);
+    await atStep(page, 2, T, "A Forge app's console");
+    await page.getByTestId('tour-exit').click();
+    await expect(page).toHaveURL(/\/projects(\?|$)/, LOADED);
+  });
+
+  test('an old /forge/demo link opens the page it names on the sample app', async ({ page }) => {
+    await mockAppsBackend(page);
+    await page.goto('/forge/demo?view=traces&tour=forge:fg-trace', { waitUntil: 'domcontentloaded' });
+    await expect.poll(() => new URL(page.url()).pathname, LOADED).toBe(`${SAMPLE}/observability/traces`);
+    expect(new URL(page.url()).searchParams.get('tour')).toBe('forge:fg-trace');
+    await atStep(page, 5, T, 'One request, end to end');
   });
 });
 

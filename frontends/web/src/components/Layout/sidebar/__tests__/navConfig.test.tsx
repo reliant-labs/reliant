@@ -287,3 +287,25 @@ describe("accordions", () => {
     expect(configure()).toHaveAttribute("aria-expanded", "true");
   });
 });
+
+describe("the nav's tour anchors", () => {
+  it("anchors Overview and the app's section groups by data-tour (the forge journey's shell steps)", () => {
+    const unregister = registerConsoleNavEntry({ id: "advisories", label: "Advisories", segment: "advisories", after: "more-tools", group: "security" });
+    try {
+      const href = consolePath("shopfront", { kind: "secrets" });
+      const console = { project: "shopfront", page: { kind: "secrets" as const }, env: "prod", envs: [] };
+      const { container } = render(<NavRenderer config={hybridNav} ctx={ctxAt(href, { console })} slots={{}} onNavigate={vi.fn()} />);
+      const anchors = [...container.querySelectorAll("[data-tour]")].map((el) => el.getAttribute("data-tour"));
+      for (const id of ["forge-console-nav", "nav-overview", "nav-observability", "nav-deployments", "nav-tests", "nav-security", "nav-configure"]) {
+        expect(anchors, id).toContain(id);
+      }
+      // A group's anchor holds the group: its row, and its rows while open (Configure, on Secrets).
+      const configure = container.querySelector("[data-tour='nav-configure']")!;
+      expect(configure.querySelector("[data-testid='nav-configure']")).not.toBeNull();
+      expect(configure.querySelector("[data-testid='nav-secrets']")).not.toBeNull();
+      expect(container.querySelector("[data-tour='nav-overview'] [data-testid='sidebar-home-button']")).not.toBeNull();
+    } finally {
+      unregister();
+    }
+  });
+});

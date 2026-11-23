@@ -38,6 +38,7 @@ function testsRow(view: TestsView): NavRow {
 export const testsGroup: NavGroup = {
   kind: "group",
   id: "tests",
+  tour: "nav-tests",
   label: "Tests",
   icon: <FlaskConical className="size-4" aria-hidden="true" />,
   available: hasApp,

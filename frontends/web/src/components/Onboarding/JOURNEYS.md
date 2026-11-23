@@ -52,6 +52,7 @@ export const workflowsJourney: Journey = {
   steps: [ /* JourneyStep[] */ ],
   outro: [ /* JourneyStep[], walked after steps; see "Outro" */ ],
   finish: (shell) => shell === "reliant" ? { to: "/forge" } : null, // where Finish lands; default: Reliant's chat
+  returnToStart: (shell) => true,   // Finish, Exit tour and Back off step 1 return to where the journey was started; see "Leaving"
   elsewhere: { label: "Try AI workflows", href: () => workflowLibraryPath() }, // where it runs: an app path opens in place, a URL in a new tab
   isAvailable: () => true,          // e.g. a feature flag
   reshowAfterVersionBump: true,     // default true
@@ -110,6 +111,14 @@ last step). There is no bottom nav bar and no generic Skip step.
 - **Finish** goes to `finish(shell)`, or to the default landing.
 - **Try the other journey** starts the other journey. If the other journey
   doesn't run in this shell, it becomes the other journey's `elsewhere` link.
+
+**Leaving.** A journey that walks pages which are not the person's own (the
+forge journey's sample app) sets `returnToStart`. Starting it (the picker, a
+menu, Try the other journey) records the page it was started from, less
+`?tour=`, in the journey context (`startedFrom`), unless that page is one of
+the journey's own. Finish, Exit tour and Back on the first step go back there
+and clear it. With nothing recorded (a `?tour=` link opened cold), `finish`
+applies.
 
 ## A step (`JourneyStep`)
 
@@ -358,26 +367,44 @@ Home** (`/forge/demo?section=home`), free to explore:
   is open.
 
 The forge journey runs its own cut there, chosen with `isAvailable`
-(`lib/demoTour.ts`, runtime config `DEMO_TOUR`):
+(`lib/demoTour.ts`, runtime config `DEMO_TOUR`).
 
-| Step | Reliant / forge shell | demo, `short` (default) | demo, `full` |
-|---|---|---|---|
-| fg-intro (what forge is, Install forge) | ✓ | ✓ | ✓ |
-| fg-console | ✓ | | ✓ |
-| fg-instrumented | ✓ | ✓ | ✓ |
-| fg-trace | ✓ | ✓ | ✓ |
-| fg-hops (between services) | ✓ | ✓ | ✓ |
-| fg-inside (inside a service) | | ✓ | ✓ |
-| fg-logs | ✓ | ✓ | ✓ |
-| fg-profile | ✓ | | ✓ |
-| fg-graph | | | ✓ |
-| fg-issue | ✓ | ✓ | ✓ |
-| fg-oncall | ✓ | | ✓ |
-| fg-agent (what a coding agent reads) | | | ✓ |
-| fg-ask | ✓ | ✓ | ✓ |
-| fg-built (the recorded forge run, a wide modal card, `card: { wide, modal }`) | | ✓ | ✓ |
-| fg-done | ✓ | ✓ | ✓ |
-| **steps** | 11 | 10 | 15 |
+**Signed in, on either app host, it walks the sample app inside the shell**
+(`/forge/p/sample_shop/…`, `Forge/Sample/sampleApp.ts`): the shell's real nav
+and console pages, so the tour teaches the UI a person's own app gets. Its
+nav steps spotlight the nav's own anchors (`tour: "nav-<section>"` on the nav
+config's items, which NavRenderer renders as `data-tour`). The name
+`sample_shop` cannot be a real forge app (names are `[a-z][a-z0-9-]*`), the
+shell never remembers it as the last pick (`shellProject.ts`
+`remembersPick`), and leaving the tour returns to where it started
+(`returnToStart`). A signed-in `/forge/demo` link opens the page it names
+there (`Forge/Sample/ForgeDemoEntry.tsx`). Signed out (the forge brand's public
+demo) it walks the `/forge/demo` panel. Where the sample's data comes from in
+the signed-in app is the data seam's (demo-di/design.md).
+
+| Step | shell, signed in | `/forge/demo` panel, signed out | demo, `short` (default) | demo, `full` |
+|---|---|---|---|---|
+| fg-intro (what forge is, Install forge) | ✓ | ✓ | ✓ | ✓ |
+| fg-console (the console frame's nav) | | ✓ | | ✓ |
+| fg-nav (the shell's nav, the app's sections) | ✓ | | | |
+| fg-instrumented | ✓ | ✓ | ✓ | ✓ |
+| fg-deployments (Deployments ▾, on Releases) | ✓ | | | |
+| fg-trace | ✓ | ✓ | ✓ | ✓ |
+| fg-hops (between services) | ✓ | ✓ | ✓ | ✓ |
+| fg-inside (inside a service) | | | ✓ | ✓ |
+| fg-logs | ✓ | ✓ | ✓ | ✓ |
+| fg-profile | | ✓ | | ✓ |
+| fg-graph | | | | ✓ |
+| fg-issue | ✓ | ✓ | ✓ | ✓ |
+| fg-oncall | ✓ | ✓ | | ✓ |
+| fg-agent (what a coding agent reads) | | | | ✓ |
+| fg-ask | ✓ | ✓ | ✓ | ✓ |
+| fg-tests (Tests ▾) | ✓ | | | |
+| fg-security (Security ▾) | ✓ | | | |
+| fg-configure (Configure ▾, on Secrets) | ✓ | | | |
+| fg-built (the recorded forge run, a wide modal card, `card: { wide, modal }`) | | | ✓ | ✓ |
+| fg-done | ✓ | ✓ | ✓ | ✓ |
+| **steps** | 14 | 11 | 10 | 15 |
 
 fg-built is the demo's last step before the end card. It does not replace
 fg-instrumented, which runs in every cut; the short cut leaves out fg-agent

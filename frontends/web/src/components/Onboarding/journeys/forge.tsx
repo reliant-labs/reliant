@@ -16,13 +16,24 @@
  * (`showNext`): it moves to the next stop, whose route opens what the action
  * would have, so a visitor who cannot find the target is never stuck.
  *
+ * Where it walks (`stop`):
+ *  - signed in, on either app host: the sample app INSIDE the shell
+ *    (`/forge/p/sample_shop/…`, Forge/Sample/sampleApp.ts), on the shell's own
+ *    nav and console pages, so the tour teaches the UI people use. Leaving it
+ *    (Finish, Exit tour, Back off the first step) returns to the page it was
+ *    started from (`returnToStart`), and no sample is left in the nav;
+ *  - the public demo host: shop's console pages (`/forge/p/shop/…`);
+ *  - signed out on the forge brand (its public demo): the `/forge/demo` panel.
+ *
  * Cuts (isAvailable; lib/demoTour.ts, runtime config DEMO_TOUR):
  *  - the public demo host, `short` (default), 10 steps: intro, instrumented,
  *    trace, hops, inside, logs, issue, ask, built (the recorded forge run, a
  *    dialog), done;
- *  - the demo host, `full`: every step;
- *  - Reliant and the forge shell, 11 steps: no fg-inside, fg-graph,
- *    fg-agent or fg-built.
+ *  - the demo host, `full`: every step but the shell's;
+ *  - the shell, 14 steps: intro, nav, instrumented, deployments, trace, hops,
+ *    logs, issue, oncall, ask, tests, security, configure, done;
+ *  - the `/forge/demo` panel, 11 steps: no fg-inside, fg-graph, fg-agent,
+ *    fg-built or the shell's steps.
  *
  * Nothing here needs a daemon, a chat or a signed-in user: every target is
  * sample data, every required action is a URL change or a tour signal, and
@@ -41,10 +52,12 @@ import { trackEvent } from "../../../lib/analytics";
 import { isDemoShell } from "../../../lib/shell";
 import { notOnShortDemo, onDemo, onDemoFull } from "../../../lib/demoTour";
 import { DemoCta } from "../../Forge/Demo/DemoCta";
+import { SAMPLE_APP } from "../../Forge/Sample/sampleApp";
+import { getReliantTourHooks } from "../tourShell";
 import type { Journey, JourneyRoute, RouteTarget } from "../types";
 import { TourCommands } from "./TourCommand";
 import { projectsPath, workflowDetailPath } from "@/lib/paths";
-import { consoleBase } from "@/components/Forge/Console/paths";
+import { consoleBase, consolePath, type ConsolePage } from "@/components/Forge/Console/paths";
 
 /** The CreateOrder trace the tour opens (FIXTURE_TRACE_ID): two failed payment calls, then the worker. */
 export const DEMO_TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -72,25 +85,50 @@ function demo(search: Record<string, unknown>): JourneyRoute {
 }
 
 /**
- * The sample app's console on the demo host ("shop", the fixtures'
- * FIXTURE_PROJECT): there the tour walks the console's own pages, the ones a
- * visitor explores, instead of the /forge/demo panel the other shells keep.
+ * Whether the tour walks the sample app inside the signed-in shell: on an app
+ * host (not the demo), with someone signed in (catalog.ts `inAppShell`).
  */
-const SHOP_CONSOLE = consoleBase("shop");
+export function inAppShell(): boolean {
+  return !isDemoShell() && (getReliantTourHooks()?.inAppShell?.() ?? false);
+}
+
+/** Only in the signed-in shell: the steps about its own nav and pages. */
+const onlyInShell = () => inAppShell();
+
+/** The `/forge/demo` panel's and the demo host's steps the shell leaves out (its nav step replaces fg-console). */
+const notInShell = () => !inAppShell();
+
 type StopView = "overview" | "traces" | "errors" | "graph" | "alerts";
 
 /**
- * A step's page: on the demo host, the sample app's console page for `view`
- * (an Observability view's path covers the views a step moves on to, logs and
- * profiles); elsewhere the demo console's (`demo`). Read when the step is, so
- * the shell is known by then.
+ * The console a step walks: shop's on the demo host (the fixtures'
+ * FIXTURE_PROJECT), the sample app's in the shell, or none (the panel).
+ */
+function walkedApp(): string | null {
+  if (isDemoShell()) return "shop";
+  return inAppShell() ? SAMPLE_APP : null;
+}
+
+/**
+ * A step's page: the walked app's console page for `view` (an Observability
+ * view's path covers the views a step moves on to, logs and profiles), or the
+ * demo console's (`demo`). Read when the step is, so the shell and the
+ * session are known by then.
  */
 function stop({ view, ...search }: { view: StopView } & Record<string, unknown>): JourneyRoute {
-  if (!isDemoShell()) return demo({ view, ...search });
+  const app = walkedApp();
+  if (!app) return demo({ view, ...search });
+  const base = consoleBase(app);
   const label = "Open the sample app";
   const message = "This step is on the sample app's console.";
-  if (view === "overview") return { path: SHOP_CONSOLE, open: { to: SHOP_CONSOLE, search }, label, message };
-  return { path: `${SHOP_CONSOLE}/observability`, open: { to: `${SHOP_CONSOLE}/observability/${view}`, search }, label, message };
+  if (view === "overview") return { path: base, open: { to: base, search }, label, message };
+  return { path: `${base}/observability`, open: { to: `${base}/observability/${view}`, search }, label, message };
+}
+
+/** A shell step's page: one of the sample app's console pages. */
+function samplePage(page: ConsolePage): JourneyRoute {
+  const path = consolePath(SAMPLE_APP, page);
+  return { path, open: { to: path, search: CLOSED }, label: "Open the sample app", message: "This step is on the sample app's console." };
 }
 
 /** On a page of `view`: the demo console's `?view=`, or the console's own path. */
@@ -227,10 +265,50 @@ function Issue({ cli }: { cli: string }) {
   );
 }
 
+function Deployments({ cli }: { cli: string }) {
+  return (
+    <>
+      <p>
+        Deployments holds what the app runs and how it got there: its services, every release, and each environment. Forge builds a
+        release once and promotes the same build from staging to prod, so prod runs exactly what staging ran. Promote and roll back are
+        on each release.
+      </p>
+      <AgentLine>
+        Your agent runs <code>{cli} env deploy prod &lt;release&gt;</code>, then <code>{cli} obs check prod --wait</code> to prove the release
+        healthy.
+      </AgentLine>
+    </>
+  );
+}
+
+function Tests({ cli }: { cli: string }) {
+  return (
+    <>
+      <p>
+        Tests shows the app&apos;s own test suite, commit by commit: coverage, pass rate, and the tests that fail only some of the time.
+        Each recorded run is kept, so a flaky test is found before it holds up a release.
+      </p>
+      <AgentLine>
+        Your agent iterates on <code>task test:short</code>; <code>{cli} lint</code> catches whole classes of bugs before a test runs.
+      </AgentLine>
+    </>
+  );
+}
+
+const SECURITY_COPY =
+  "Every release Forge builds carries a software bill of materials (SBOM), and Security scans it: which known vulnerabilities each environment runs, and in which packages. A finding can go to an agent to patch on its own branch.";
+
+const CONFIGURE_COPY =
+  "Configure holds the rest of the app's settings: its secrets, kept out of git; its custom domains, with HTTPS; what its hosting costs this month; and an activity log of every change.";
+
+const SHELL_NAV_COPY =
+  "Every Forge app gets these sections in the left nav: its Overview, Observability, Deployments, Tests, Security and Configure. This is shop, a sample app with an api, a worker and an inventory service in dev, staging and prod. Its data is made up, and nothing you do here touches your own apps.";
+
 export const forgeJourney: Journey = {
   id: "forge",
-  // v4: on the demo host, the tour walks the sample app's own console pages (v3: the short tour with the "What is forge?" intro).
-  version: 4,
+  // v5: signed in, the tour walks the sample app inside the shell, its nav and its pages, and leaving it returns to
+  // where it started (v4: on the demo host, the sample app's own console pages; v3: the short tour's intro).
+  version: 5,
   title: "Explore a Forge app",
   description:
     "Walk through a running app's console: one request across three services, its logs and its error, and how an agent gets the problem.",
@@ -238,6 +316,8 @@ export const forgeJourney: Journey = {
   // The person's apps (Projects, narrowed to them), on either brand; signed out, sign-in comes first.
   // The demo: nowhere to go, so the visitor stays on the console with the tour closed.
   finish: () => (isDemoShell() ? null : { to: projectsPath(), search: { show: "apps" } }),
+  // In the shell the tour walks a sample, not the person's app: leaving it goes back to where they were.
+  returnToStart: () => inAppShell(),
   steps: [
     {
       id: "fg-intro",
@@ -252,15 +332,27 @@ export const forgeJourney: Journey = {
       title: "A Forge app's console",
       description:
         "Every Forge project gets this console: environments, releases, domains, secrets and observability, in one place. shop has an api, a worker and an inventory service in dev, staging and prod. The data here is made up.",
-      // The console's sections: in the one shell, the open app's rows in the left nav (Layout/sidebar/AppsNavSection);
-      // in the demo's own frame, forge-ui SidebarLayout's one <aside> inside ConsoleShell (its id is generated).
+      // The console's sections in its own frame: forge-ui SidebarLayout's one <aside> inside ConsoleShell (its id is
+      // generated), on the /forge/demo panel and the demo host. The shell's nav is fg-nav's.
       target: "[data-tour='forge-console-nav'], [data-tour='forge-console'] aside",
       tooltipPosition: "right",
       get route() {
         return stop({ view: "overview", ...CLOSED });
       },
       // The demo host's short tour leaves it out: the console is there to explore, with a tip per view.
-      isAvailable: notOnShortDemo,
+      isAvailable: () => notInShell() && notOnShortDemo(),
+    },
+    {
+      id: "fg-nav",
+      title: "A Forge app's console",
+      description: SHELL_NAV_COPY,
+      // The shell's main nav (NavRenderer's `nav-top`): with an app open, its rows are the app's sections.
+      target: "[data-tour='forge-console-nav']",
+      tooltipPosition: "right",
+      get route() {
+        return stop({ view: "overview", ...CLOSED });
+      },
+      isAvailable: onlyInShell,
     },
     {
       id: "fg-instrumented",
@@ -274,6 +366,19 @@ export const forgeJourney: Journey = {
       },
       // No isAvailable on purpose: in every cut, the demo's included (owner, 2026-11-06). fg-built, at the end,
       // does not replace it; the short demo makes room by leaving out fg-agent.
+    },
+    {
+      id: "fg-deployments",
+      title: "Releases, built once",
+      description: <Deployments cli="reliant forge" />,
+      copyByShell: { forge: { description: <Deployments cli="forge" /> } },
+      // The nav's Deployments group, open on the Releases page beside it.
+      target: "[data-tour='nav-deployments']",
+      tooltipPosition: "right",
+      get route() {
+        return samplePage({ kind: "releases" });
+      },
+      isAvailable: onlyInShell,
     },
     {
       id: "fg-trace",
@@ -371,8 +476,9 @@ export const forgeJourney: Journey = {
       actionHint: "Click Flamegraph",
       autoAdvance: true,
       signal: "flamegraph_opened",
-      // The demo host's short tour leaves it out (DEMO_TOUR); the Profiles tip covers it.
-      isAvailable: notOnShortDemo,
+      // The demo host's short tour leaves it out (DEMO_TOUR); the Profiles tip covers it. So does the shell's,
+      // which spends its stops on the app's other sections.
+      isAvailable: () => notInShell() && notOnShortDemo(),
     },
     {
       id: "fg-graph",
@@ -481,6 +587,40 @@ export const forgeJourney: Journey = {
       autoAdvance: false,
       actionHint: "Click Ask an agent",
       signal: "ask_agent_opened",
+    },
+    {
+      id: "fg-tests",
+      title: "The app's tests",
+      description: <Tests cli="reliant forge" />,
+      copyByShell: { forge: { description: <Tests cli="forge" /> } },
+      target: "[data-tour='nav-tests']",
+      tooltipPosition: "right",
+      get route() {
+        return samplePage({ kind: "tests" });
+      },
+      isAvailable: onlyInShell,
+    },
+    {
+      id: "fg-security",
+      title: "What each release ships",
+      description: SECURITY_COPY,
+      target: "[data-tour='nav-security']",
+      tooltipPosition: "right",
+      get route() {
+        return samplePage({ kind: "vulnerabilities" });
+      },
+      isAvailable: onlyInShell,
+    },
+    {
+      id: "fg-configure",
+      title: "Secrets, domains and costs",
+      description: CONFIGURE_COPY,
+      target: "[data-tour='nav-configure']",
+      tooltipPosition: "right",
+      get route() {
+        return samplePage({ kind: "secrets" });
+      },
+      isAvailable: onlyInShell,
     },
     {
       id: "fg-built",

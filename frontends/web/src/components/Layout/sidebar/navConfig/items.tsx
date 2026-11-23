@@ -78,6 +78,7 @@ export const overview: NavRow = {
   kind: "row",
   id: "overview",
   testId: "sidebar-home-button",
+  tour: "nav-overview",
   label: "Overview",
   icon: icon(LayoutDashboard),
   href: (ctx) => {
@@ -124,6 +125,7 @@ export const previews: NavRow = {
 export const deploymentsGroup: NavGroup = {
   kind: "group",
   id: "deployments",
+  tour: "nav-deployments",
   label: "Deployments",
   icon: icon(Rocket),
   available: hasApp,
@@ -157,6 +159,7 @@ export const projectUsage = consoleRow("project-usage", "Usage", { kind: "usage"
 export const configureGroup: NavGroup = {
   kind: "group",
   id: "configure",
+  tour: "nav-configure",
   label: "Configure",
   icon: icon(Wrench),
   available: hasApp,
@@ -177,6 +180,7 @@ const securityRows = (ctx: NavCtx): NavRow[] => registeredRows(ctx, "security");
 export const securityGroup: NavGroup = {
   kind: "group",
   id: "security",
+  tour: "nav-security",
   label: "Security",
   icon: icon(ShieldCheck),
   available: (ctx) => hasApp(ctx) && securityRows(ctx).length > 0,
@@ -307,6 +311,7 @@ export const isObservabilityRoute = (ctx: NavCtx): boolean =>
 export const observabilityArea: NavArea = {
   kind: "area",
   id: "observability",
+  tour: "nav-observability",
   label: "Observability",
   icon: icon(Gauge),
   match: isObservabilityRoute,

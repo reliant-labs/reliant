@@ -133,6 +133,13 @@ export interface ReliantTourHooks {
   landOnChat: (navigate: (options: never) => Promise<void>) => Promise<void>;
   /** After a tour ends or the picker is dismissed from onboarding. */
   afterTour: () => Promise<void>;
+  /**
+   * Someone is signed in, so the signed-in shell (its nav, its console
+   * pages) is what a step's page renders in. The forge journey walks the
+   * sample app there; signed out (the forge brand's public demo) it walks
+   * the `/forge/demo` panel. Optional: absent, signed out.
+   */
+  inAppShell?: () => boolean;
 }
 
 let reliantHooks: ReliantTourHooks | null = null;
