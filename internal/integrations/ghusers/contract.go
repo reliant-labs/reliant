@@ -19,8 +19,11 @@
 //	GET /users/{login}        a login to its user
 //	GET /user/{account_id}    an id to its user's current login
 //
-// Built by hand, by internal/app's trigger-sender wiring (wireGitHubSenders,
-// providers_api.go): never a node compose.go constructs from Deps.
+// Built by internal/app's trigger-sender wiring (providers_api.go) only when a
+// GitHub webhook secret is set, over the TokenSource gitHubTokenSource
+// selects (delegated when hosted, a saved connection when self-hosted), and
+// reached only through the TriggerSenders map adapter (gitHubSenders), never
+// by its own type.
 //
 //forge:provided
 package ghusers

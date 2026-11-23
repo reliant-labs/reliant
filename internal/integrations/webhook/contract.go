@@ -19,8 +19,10 @@
 // See Provider. Every payload is untrusted: bodies are size-capped and
 // secret-bearing headers never reach the stored event.
 //
-// Built by hand, by internal/app's NewTriggerInbound provider
-// (providers_api.go): never a node compose.go constructs from Deps.
+// A multi-constructor library with no Deps/New (NewInbound, NewRelay,
+// NewRegistry, the providers): the api builds its *Inbound through a builder
+// chain in internal/app's NewTriggerInbound (providers_api.go), and the worker
+// builds its own NewRelay, so the two roots hold different objects.
 //
 //forge:provided
 package webhook

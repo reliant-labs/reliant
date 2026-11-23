@@ -20,6 +20,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
@@ -504,12 +505,6 @@ func (g *Graph) newWorkerCatalogSearch() (*WorkerCatalogSearch, error) {
 	})
 }
 
-func (g *Graph) newWriteLedger() (writeledger.Service, error) {
-	return NewWriteLedger(WriteLedgerDeps{
-		DB: g.Database(),
-	})
-}
-
 func (g *Graph) newStoredConfigProvider() (*reliantconfig.StoredConfigProvider, error) {
 	return NewStoredConfigProvider(StoredConfigProviderDeps{
 		DB: g.Database(),
@@ -585,7 +580,7 @@ func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 		AgentRuns:        g.AgentRuns(),
 		Triggers:         g.WorkerTrigger(),
 		Credentials:      g.WorkerIntegrationCredentials(),
-		WriteLedger:      g.WriteLedger(),
+		WriteLedger:      g.IntegrationsWriteledger(),
 		CatalogSearch:    g.WorkerCatalogSearch(),
 		Router:           g.WorkerDaemonRouter(),
 		DB:               g.Database(),
@@ -634,7 +629,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		ConfigProvider:   g.StoredConfigProvider(),
 		Launcher:         g.RunLauncher(),
 		Credentials:      g.WorkerIntegrationCredentials(),
-		WriteLedger:      g.WriteLedger(),
+		WriteLedger:      g.IntegrationsWriteledger(),
 		Pollers:          g.TriggerPollers(),
 		ControlPlane:     g.ServerProcessConfig.GetControlPlane(),
 		Network:          g.ServerProcessConfig.GetNetwork(),
@@ -680,7 +675,7 @@ func (g *Graph) newAccountUsagePoller() (*accountlimits.Poller, error) {
 
 func (g *Graph) newWriteLedgerPrune() (*WriteLedgerPrune, error) {
 	return NewWriteLedgerPrune(WriteLedgerPruneDeps{
-		Ledger: g.WriteLedger(),
+		Ledger: g.IntegrationsWriteledger(),
 		DB:     g.Database(),
 	})
 }
@@ -1835,6 +1830,23 @@ func (g *Graph) newPullRequestRecord() (*pull_request_record.Service, error) {
 		Config: g.Cfg,
 		Store:  store.NewPrRecordExtStore(g.Database().ORM()),
 		Now:    nil, // optional — no provider
+	})
+}
+
+// newIntegrationsWriteledger constructs the integrations/writeledger package (internal/integrations/writeledger).
+func (g *Graph) newIntegrationsWriteledger() (writeledger.Service, error) {
+	return writeledger.NewServiceWithForgeMiddleware(writeledger.New(writeledger.Deps{
+		Store:     g.WriteLedgerStore(),
+		Runs:      g.Database(),
+		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
+		Now:       time.Now, // framework clock
+	})), nil
+}
+
+// newWriteLedgerStore constructs the WriteLedgerStore provider (NewWriteLedgerStore, internal/app/providers_worker.go).
+func (g *Graph) newWriteLedgerStore() (writeledger.Store, error) {
+	return NewWriteLedgerStore(WriteLedgerStoreDeps{
+		DB: g.Database(),
 	})
 }
 
