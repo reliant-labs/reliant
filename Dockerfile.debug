@@ -60,7 +60,9 @@ COPY . .
 # line and inspect every variable. No -ldflags=-s -w (keep the symbol table).
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
-    CGO_ENABLED=0 GOARCH=${TARGETARCH} go build -gcflags=all="-N -l" -o /reliant ./cmd/reliant/
+    CGO_ENABLED=0 GOARCH=${TARGETARCH} go build -gcflags=all="-N -l" \
+      -ldflags "-X github.com/reliant-labs/forge/pkg/selfupdate.managedBy=reliant-workspace-image" \
+      -o /reliant ./cmd/reliant/
 
 # ── Runtime ──────────────────────────────────────────────────────────────────
 FROM us-docker.pkg.dev/reliant-nonprod-490701/dockerhub/library/debian@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df

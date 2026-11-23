@@ -74,6 +74,8 @@ export interface SidebarProjectPrefsView {
   setPinned: (projectId: string, on: boolean) => void;
   setHidden: (projectId: string, on: boolean) => void;
   setShowAll: (on: boolean) => void;
+  /** Remember the chat list's project filter ([] for every project). */
+  setFilter: (projectIds: readonly string[]) => void;
 }
 
 /**
@@ -161,6 +163,7 @@ export function useSidebarProjectPrefs(): SidebarProjectPrefsView {
       setPinned: (projectId, on) => change({ kind: "pin", projectId, on }),
       setHidden: (projectId, on) => change({ kind: "hide", projectId, on }),
       setShowAll: (on) => change({ kind: "showAll", on }),
+      setFilter: (projectIds) => change({ kind: "filter", projectIds }),
     }),
     [prefs, writable, q.isError, q.data, refetch, change],
   );

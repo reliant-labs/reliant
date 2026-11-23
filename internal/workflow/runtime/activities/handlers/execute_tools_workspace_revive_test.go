@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/osutil"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -29,7 +30,7 @@ import (
 func (f *workspaceRecoveryFixture) archiveUnderTheChat(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
-	ok, err := f.h.Repo().ArchiveLandedWorktree(ctx, f.worktreeID, time.Now().Add(time.Hour))
+	ok, err := store.ArchiveLandedWorktree(ctx, f.h.Repo().ORM(), f.worktreeID, time.Now().Add(time.Hour))
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.NoError(t, f.h.Repo().MergeWorktreeCleanupMetadata(ctx, f.worktreeID, func(m *db.CleanupMetadata, _ bool) bool {
@@ -128,7 +129,7 @@ func TestExecuteTools_WholeIdleRetirementRevivesWithDurableFence(t *testing.T) {
 	f := setupWorkspaceRecoveryFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
-	ok, err := f.h.Repo().ArchiveRecoverableIdleWorktree(ctx, f.worktreeID, time.Now().Add(time.Hour))
+	ok, err := store.ArchiveRecoverableIdleWorktree(ctx, f.h.Repo().ORM(), f.worktreeID, time.Now().Add(time.Hour))
 	require.NoError(t, err)
 	require.True(t, ok)
 	executor := recreatingDaemon(t)

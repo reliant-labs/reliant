@@ -69,6 +69,7 @@ var machineBoundTools = map[string]string{
 	ToolFindReplace:      "edits the user's files through the daemon client",
 	ToolMoveCode:         "edits the user's files through the daemon client",
 	ToolSaveAttachment:   "its only job is writing a file to the user's disk",
+	ToolPresentImage:     "reads the user's files through the daemon client",
 	ToolComponentLibrary: "installs components into the user's checkout",
 	ToolWorktree:         "creates and deletes git worktrees on disk",
 	ToolWaitForMachine:   "waits for the run's machine; a run with no machine has none to wait for",

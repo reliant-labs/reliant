@@ -58,7 +58,7 @@ func (s *Service) AttachProjectToDaemon(
 		defaultBranch = &branch
 	}
 
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+	project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}

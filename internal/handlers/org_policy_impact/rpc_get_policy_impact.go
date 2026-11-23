@@ -120,7 +120,7 @@ func (s *Service) GetPolicyImpact(
 // launched, deleted since or not, that nobody adopted, and an agent-started
 // run whose lineage root is one.
 func (s *Service) unattended(ctx context.Context, chatID string) (bool, error) {
-	chat, err := s.deps.Store.GetChat(ctx, chatID)
+	chat, err := s.deps.Chats.GetChat(ctx, chatID)
 	if err != nil {
 		return false, err
 	}

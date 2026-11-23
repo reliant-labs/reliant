@@ -6,6 +6,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -60,6 +62,8 @@ func TestPreviewProjectOrgMove_Generated(t *testing.T) {
 			}
 			return nil, svcerr.ErrNotFound
 		},
+	}
+	storeLedger := &project.MockMoveLedger{
 		ProjectOrgMoveBlockersFunc: func(context.Context, string) (*core.ProjectOrgMoveBlockers, error) {
 			return &core.ProjectOrgMoveBlockers{
 				Chats:      []core.ProjectOrgMoveBlockedChat{{ChatID: "c-1", Title: "release v2", Activity: int32(pb.ChatActivity_CHAT_ACTIVITY_AWAITING_INPUT)}},
@@ -75,7 +79,7 @@ func TestPreviewProjectOrgMove_Generated(t *testing.T) {
 			}, nil
 		},
 	}
-	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store}))
+	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Ledger: storeLedger}))
 	person := func(m authz.Membership) context.Context {
 		return authz.WithCredentialKind(authz.WithMembership(project.AuthedContext(t), m), authz.CredentialKindPerson)
 	}
@@ -175,7 +179,7 @@ func TestPreviewProjectOrgMove_RefusalReasons(t *testing.T) {
 	store := &project.MockRepository{
 		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) { return projects[id], nil },
 	}
-	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store}))
+	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store)}))
 	person := authz.WithCredentialKind(authz.WithMembership(project.AuthedContext(t), moveOrgs{}), authz.CredentialKindPerson)
 	software := authz.WithCredentialKind(authz.WithMembership(project.AuthedContext(t), moveOrgs{}), authz.CredentialKindSoftware)
 	for _, tc := range []struct {

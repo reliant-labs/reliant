@@ -166,7 +166,7 @@ export function completeActionOf(err: unknown): CompleteAction | null {
 
 /**
  * The two sites a claimable_free_site_choice_required refusal names, or null
- * when the error is not that refusal or carries no detail (an older server).
+ * when the error is not that refusal or carries no detail.
  */
 export function freeSiteConflictOf(err: unknown): FreeSiteConflict | null {
   if (!(err instanceof ConnectError) || !hasErrorReason(err, "claimable_free_site_choice_required")) return null;

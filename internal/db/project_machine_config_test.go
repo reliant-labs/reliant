@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // pushConfig pushes a machine's whole snapshot: its skills, repo memories and
@@ -45,7 +46,7 @@ func TestSyncProjectConfigSnapshot_AnotherMachineCannotEraseSkills(t *testing.T)
 	p.pushConfig(t, p.cicdID, 2000, []config.StoredSkill{root},
 		`{}`, `{"project":"{\"mcpServers\":{\"cicd-only\":{\"command\":\"y\"}}}"}`)
 
-	record, err := p.repo.GetProjectConfigRecord(ctx, p.projectID)
+	record, err := store.GetProjectConfigRecord(ctx, p.repo.ORM(), p.projectID)
 	require.NoError(t, err)
 	skills, err := config.ParseStoredSkills(record.ProjectSkillsJSON)
 	require.NoError(t, err)
@@ -55,7 +56,7 @@ func TestSyncProjectConfigSnapshot_AnotherMachineCannotEraseSkills(t *testing.T)
 	assert.Equal(t, "cp memory", memories["control-plane"])
 	assert.Equal(t, "from "+p.cicdID, *record.UserConfigYAML, "single-valued parts are the last pusher's")
 
-	cicd, synced, err := p.repo.GetProjectMachineConfigRecord(ctx, p.projectID, p.cicdID)
+	cicd, synced, err := store.GetProjectMachineConfigRecord(ctx, p.repo.ORM(), p.projectID, p.cicdID)
 	require.NoError(t, err)
 	require.True(t, synced)
 	cicdSkills, err := config.ParseStoredSkills(cicd.ProjectSkillsJSON)
@@ -63,20 +64,20 @@ func TestSyncProjectConfigSnapshot_AnotherMachineCannotEraseSkills(t *testing.T)
 	require.Len(t, cicdSkills, 1, "a run on cicd sees cicd's skills")
 	assert.Contains(t, *cicd.MCPConfigs, "cicd-only")
 
-	def, synced, err := p.repo.GetProjectMachineConfigRecord(ctx, p.projectID, p.defaultID)
+	def, synced, err := store.GetProjectMachineConfigRecord(ctx, p.repo.ORM(), p.projectID, p.defaultID)
 	require.NoError(t, err)
 	require.True(t, synced)
 	assert.Contains(t, *def.MCPConfigs, "default-only", "a run on default reads default's MCP, not the last pusher's")
 	assert.Equal(t, "from "+p.defaultID, *def.UserConfigYAML)
 
-	_, synced, err = p.repo.GetProjectMachineConfigRecord(ctx, p.projectID, uuid.NewString())
+	_, synced, err = store.GetProjectMachineConfigRecord(ctx, p.repo.ORM(), p.projectID, uuid.NewString())
 	require.NoError(t, err)
 	assert.False(t, synced, "a machine that never synced the project")
 
 	// An older snapshot from default (a stale clock) still refreshes the
 	// union and its own row, without replacing the newer record.
 	p.pushConfig(t, p.defaultID, 1500, []config.StoredSkill{root}, `{}`, `{}`)
-	record, err = p.repo.GetProjectConfigRecord(ctx, p.projectID)
+	record, err = store.GetProjectConfigRecord(ctx, p.repo.ORM(), p.projectID)
 	require.NoError(t, err)
 	skills, err = config.ParseStoredSkills(record.ProjectSkillsJSON)
 	require.NoError(t, err)
@@ -93,7 +94,7 @@ func TestStoredConfigProvider_ReadsTheRunsMachine(t *testing.T) {
 	p.pushConfig(t, p.defaultID, 1000, []config.StoredSkill{release}, `{}`, `{}`)
 	p.pushConfig(t, p.cicdID, 2000, nil, `{}`, `{}`)
 
-	provider := config.NewCachedStoredConfigProvider(machineRecordStore{p.repo}, p.repo, 0)
+	provider := config.NewCachedStoredConfigProvider(machineRecordStore{p.repo}, store.NewProjectConfigExtStore(p.repo.ORM()), 0)
 	skillsOn := func(daemonID string) int {
 		cfg, err := provider.GetProjectConfig(ctx, config.ProjectRef{ProjectID: p.projectID, DaemonID: daemonID})
 		require.NoError(t, err)
@@ -110,7 +111,7 @@ func TestStoredConfigProvider_ReadsTheRunsMachine(t *testing.T) {
 type machineRecordStore struct{ repo *Repo }
 
 func (s machineRecordStore) GetProjectConfigRecord(ctx context.Context, projectID string) (*config.StoredProjectConfigRecord, error) {
-	r, err := s.repo.GetProjectConfigRecord(ctx, projectID)
+	r, err := store.GetProjectConfigRecord(ctx, s.repo.ORM(), projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +119,7 @@ func (s machineRecordStore) GetProjectConfigRecord(ctx context.Context, projectI
 }
 
 func (s machineRecordStore) GetProjectMachineConfigRecord(ctx context.Context, projectID, daemonID string) (*config.StoredProjectConfigRecord, bool, error) {
-	r, synced, err := s.repo.GetProjectMachineConfigRecord(ctx, projectID, daemonID)
+	r, synced, err := store.GetProjectMachineConfigRecord(ctx, s.repo.ORM(), projectID, daemonID)
 	if err != nil || !synced {
 		return nil, false, err
 	}

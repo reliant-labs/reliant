@@ -14,6 +14,13 @@ import { useProjectStore, type Project } from "@/store/projectStore";
 
 const openNewChat = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("@/store/openChat", () => ({ openNewChat }));
+// The selector reads the catalog; with none, it lists the seeded projects (its fallback).
+vi.mock("@/hooks/project-catalog-queries", () => ({
+  useProjectCatalog: () => ({ catalog: undefined, isLoading: false, error: new Error("no catalog here"), refetch: () => {} }),
+}));
+vi.mock("@/hooks/sidebar-project-queries", () => ({
+  useSidebarProjectPrefs: () => ({ prefs: { pinned: new Set(), hidden: new Set(), showAll: false } }),
+}));
 vi.mock("../../forge-ui/tooltip", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -49,21 +56,21 @@ describe("NewChatProjectChip", () => {
   it("moves the new chat to another project", async () => {
     renderChip();
     await userEvent.click(screen.getByTestId("new-chat-project-chip"));
-    await userEvent.click(await screen.findByTestId("new-chat-project-p-beta"));
+    await userEvent.click(await screen.findByTestId("project-selector-row-p-beta"));
     expect(openNewChat).toHaveBeenCalledWith({ projectId: "p-beta" });
   });
 
   it("does nothing when the same project is picked", async () => {
     renderChip();
     await userEvent.click(screen.getByTestId("new-chat-project-chip"));
-    await userEvent.click(await screen.findByTestId("new-chat-project-p-alpha"));
+    await userEvent.click(await screen.findByTestId("project-selector-row-p-alpha"));
     expect(openNewChat).not.toHaveBeenCalled();
   });
 
-  it("offers Add project", async () => {
+  it("offers New project", async () => {
     renderChip();
     await userEvent.click(screen.getByTestId("new-chat-project-chip"));
-    await userEvent.click(await screen.findByTestId("new-chat-project-add"));
+    await userEvent.click(await screen.findByTestId("project-selector-new-project"));
     expect(useAddProjectDialogStore.getState().isOpen).toBe(true);
   });
 });

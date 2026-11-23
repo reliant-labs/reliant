@@ -128,7 +128,7 @@ func TestSaveMessageCondition_AuditingAgentThroughWrapper(t *testing.T) {
 			env := suite.NewTestActivityEnvironment()
 			env.SetDataConverter(rtemporal.NewFlexibleDataConverter())
 			writer := &recordingMessageWriter{}
-			registry := NewActivityRegistry(&wrapperTestRepo{})
+			registry := NewActivityRegistry(ActivityRegistryDeps{Store: &wrapperTestRepo{}, Workflows: &wrapperTestRepo{}})
 			registry.SetMessageWriter(writer)
 			registerWrapped(env, registry, "ExecuteTools",
 				func(context.Context, types.ActivityInput) (*reliantv1.ExecuteToolsOutput, error) {

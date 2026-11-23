@@ -18,11 +18,11 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Store is the slice of the repository this service uses; *db.Repo satisfies it.
-type Store interface {
+// Accounts is the person's provider accounts and, for the account a chat of an org is using,
+// the org's. credentials/provideraccounts.Service satisfies it; the secrets stay inside it.
+type Accounts interface {
 	ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error)
 	ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error)
-	// An org's own accounts, for the account a chat of that org is using (GetChatProviderAccount).
 	ListOwnedProviderAccounts(ctx context.Context, owner core.AccountOwner) ([]core.ProviderAccount, error)
 	ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error)
 	ListMemberAccountGrants(ctx context.Context, orgID, userID string) (map[string]time.Time, error)
@@ -30,17 +30,23 @@ type Store interface {
 	PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
 	ReorderProviderAccounts(ctx context.Context, userID, provider string, orderedIDs []string) error
 	DeleteProviderAccount(ctx context.Context, userID, accountID string) error
-	GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*db.ChatRow, error)
-	GetRootThread(ctx context.Context, chatID string) (*db.Thread, error)
 	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
 	LatestServingAccount(ctx context.Context, threadID string) (string, error)
+}
+
+// Store is the slice of the repository this service uses; *db.Repo satisfies it.
+type Store interface {
+	GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*db.ChatRow, error)
+	GetRootThread(ctx context.Context, chatID string) (*db.Thread, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
-	// A chat's question before it moves from its org's accounts to the
-	// person's own, and the person's per-org preference (org-provider-accounts §10).
-	GetChatPersonalFunding(ctx context.Context, chatID string) (*core.PersonalFunding, error)
-	AnswerPersonalFunding(ctx context.Context, chatID, userID, state string, now time.Time) (*core.PersonalFunding, error)
 	GetSettingValue(ctx context.Context, userID, key string) (string, bool)
 	SetString(ctx context.Context, userID string, projectID *string, key, value string) error
+}
+
+// PersonalFunding is the chat's question and the person's answer to it.
+type PersonalFunding interface {
+	GetChatPersonalFunding(ctx context.Context, chatID string) (*core.PersonalFunding, error)
+	AnswerChatPersonalFunding(ctx context.Context, chatID, userID, state string, now time.Time) (*core.PersonalFunding, error)
 }
 
 // Deps holds dependencies for the provider_account service. The rpc methods on *Service are
@@ -48,8 +54,14 @@ type Store interface {
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
-	// Store holds accounts, their limit state and thread assignments.
+	// Store holds the chat and settings reads and the refetch a write pushes.
 	Store Store
+	// Accounts holds accounts, their limit state and thread assignments
+	// (credentials/provideraccounts).
+	Accounts Accounts
+	// Funding holds a chat's question before it moves from its org's accounts
+	// to the person's own (org-provider-accounts §10); store.ChatPersonalFundingExtStore.
+	Funding PersonalFunding
 	// ValidateKey checks a pasted API key against its provider before it is stored
 	// (keyvalidate.Validate in production). ok=false carries a message for the user.
 	ValidateKey func(ctx context.Context, provider models.Family, apiKey string) (ok bool, message string)
@@ -86,6 +98,12 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Config == nil {
 		return fmt.Errorf("provider_account: Deps.Config is required")
+	}
+	if d.Funding == nil {
+		return fmt.Errorf("provider_account: Deps.Funding is required")
+	}
+	if d.Accounts == nil {
+		return fmt.Errorf("provider_account: Deps.Accounts is required")
 	}
 	if d.Store == nil {
 		return fmt.Errorf("provider_account: Deps.Store is required")

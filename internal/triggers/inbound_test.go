@@ -2,6 +2,8 @@
 package triggers
 
 import (
+	"go.temporal.io/api/workflowservice/v1"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -32,6 +34,11 @@ type recordedStart struct {
 	ID       string
 	Workflow any
 	Input    any
+}
+
+// DescribeWorkflowExecution makes the starter a RedriveStarter: no execution is known.
+func (s *recordingStarter) DescribeWorkflowExecution(context.Context, string, string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	return &workflowservice.DescribeWorkflowExecutionResponse{}, nil
 }
 
 func (s *recordingStarter) ExecuteWorkflow(_ context.Context, options client.StartWorkflowOptions, workflow any, args ...any) (client.WorkflowRun, error) {

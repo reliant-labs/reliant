@@ -89,18 +89,18 @@ describe("a project's standard built-in dashboards", () => {
     const user = userEvent.setup();
     renderList();
     // Service health is every service at once: the Services hub opens on it.
-    const services = await screen.findByTestId("dashboards-hub-services");
+    const services = await screen.findByTestId("dashboards-card-services");
     expect(within(services).getByRole("link", { name: "Services" })).toHaveAttribute("href", "/d/builtin/service-red");
-    expect(screen.getByTestId("dashboards-hub-services-tabs")).toHaveTextContent("All services · api · orders");
+    expect(screen.getByTestId("dashboards-card-services-tabs")).toHaveAttribute("title", expect.stringContaining("All services · api · orders"));
     // With no forge Users, Product and Acquisition, Product usage is the product hub.
-    expect(within(screen.getByTestId("dashboards-hub-product")).getByRole("link", { name: "Product analytics" })).toHaveAttribute("href", "/d/builtin/usage");
+    expect(within(screen.getByTestId("dashboards-card-product")).getByRole("link", { name: "Product analytics" })).toHaveAttribute("href", "/d/builtin/usage");
     // The release carries overview and releases: its own versions replace the built-ins.
     expect(screen.queryAllByRole("link").map((a) => a.getAttribute("href"))).not.toContain("/d/builtin/overview");
     expect(screen.queryAllByRole("link").map((a) => a.getAttribute("href"))).not.toContain("/d/builtin/releases");
     // Found by name, it says where it comes from, and asks no billing permission (not an organization view).
     await user.type(screen.getByTestId("dashboards-search"), "service health");
-    const row = within(screen.getByTestId("dashboards-results")).getByRole("link", { name: /Service health/ }).closest("li")!;
-    expect(within(row).getByTestId("dashboards-row-source")).toHaveTextContent("built-in");
+    const row = within(screen.getByTestId("dashboards-gallery")).getByRole("link", { name: /Service health/ }).closest("li")!;
+    expect(row).toHaveTextContent("Built-in");
     expect(row).not.toHaveTextContent("cost-read permission");
   });
 
@@ -116,13 +116,13 @@ describe("a project's standard built-in dashboards", () => {
   it("star like any dashboard", async () => {
     const user = userEvent.setup();
     const { onCall } = renderList();
-    await screen.findByTestId("dashboards-hubs");
+    await screen.findByTestId("dashboards-gallery");
     await user.type(screen.getByTestId("dashboards-search"), "service health");
-    const row = within(screen.getByTestId("dashboards-results")).getByRole("link", { name: /Service health/ }).closest("li")!;
+    const row = within(screen.getByTestId("dashboards-gallery")).getByRole("link", { name: /Service health/ }).closest("li")!;
     await user.click(within(row).getByRole("button", { name: /star/i }));
     await waitFor(() => expect(calls(onCall, "StarDashboard")).toHaveLength(1));
     expect(calls(onCall, "StarDashboard")[0]).toMatchObject({ ref: { kind: "builtin", projectId: FIXTURE_PROJECT, key: "service-red" } });
-    expect(await screen.findByTestId("dashboards-starred")).toHaveTextContent("Service health");
+    await waitFor(() => expect(within(screen.getByTestId("dashboards-card-service-red")).getByRole("button", { name: /Unstar/ })).toHaveAttribute("aria-pressed", "true"));
   });
 
   it("open over the project's data, read-only, with Save as copy and no history", async () => {

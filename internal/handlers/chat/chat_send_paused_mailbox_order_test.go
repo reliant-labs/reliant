@@ -11,6 +11,9 @@ import (
 	"github.com/google/uuid"
 	"go.temporal.io/api/enums/v1"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -18,9 +21,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/store"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -36,7 +38,7 @@ import (
 // environment because Execute reads activity.GetLogger.
 func drainThreadMailbox(t *testing.T, repo *db.Repo, chatID, threadID string) {
 	t.Helper()
-	drain := handlers.NewDrainAgentMessagesActivity(repo, threads.NewService(repo))
+	drain := handlers.NewDrainAgentMessagesActivity(repo, threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}))
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(drain.Execute)
 	_, err := env.ExecuteActivity(drain.Execute, handlers.DrainAgentMessagesInput{ChatID: chatID, Thread: threadID})
@@ -61,8 +63,8 @@ func newPausedSendService(repo *db.Repo, pause runs.PauseController) (*Service, 
 		exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}}
 	return &Service{
-		deps: Deps{Repo: repo, Temporal: temporal},
-		runs: runs.NewService(repo, temporal, pause),
+		deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal},
+		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
 	}, temporal
 }
 

@@ -25,17 +25,18 @@ const (
 
 // machineRepo is testUser's machine testDaemon, last reporting proposals,
 // connected or not.
-func machineRepo(t *testing.T, connected bool, proposals ...*pb.WorktreeReclaimProposal) *StubRepo {
+func machineRepo(t *testing.T, connected bool, proposals ...*pb.WorktreeReclaimProposal) *machineStub {
 	t.Helper()
 	stored, err := diskwatch.Encode(&pb.DiskReport{
 		Volumes:         []*pb.DiskVolume{{Label: "home", TotalBytes: 100 << 30, FreeBytes: 80 << 30}},
 		WorktreeReclaim: &pb.WorktreeReclaimProposals{Mode: "on", Total: int32(len(proposals)), Proposals: proposals},
 	})
 	require.NoError(t, err)
-	return &StubRepo{
+	return &machineStub{StubDaemons: &StubDaemons{
 		GetDaemonFunc: func(_ context.Context, id string) (*core.Daemon, error) {
 			return &core.Daemon{ID: id, UserID: testUser}, nil
 		},
+	}, StubRepo: &StubRepo{
 		GetDaemonStorageStateFunc: func(context.Context, string) (string, error) { return stored, nil },
 		ListAttachedDaemonIDsForUserFunc: func(context.Context, string, time.Duration) ([]string, error) {
 			if connected {
@@ -43,7 +44,14 @@ func machineRepo(t *testing.T, connected bool, proposals ...*pb.WorktreeReclaimP
 			}
 			return nil, nil
 		},
-	}
+	}}
+}
+
+// machineStub is a machine's record (Deps.Daemons) and its stored report
+// (Deps.Repo).
+type machineStub struct {
+	*StubRepo
+	*StubDaemons
 }
 
 // echoSender records what reached the daemon and answers each decision with
@@ -80,9 +88,9 @@ func (e *echoSender) SendDaemonCommandToDaemon(_ context.Context, userID, daemon
 	return json.Marshal(out)
 }
 
-func decide(t *testing.T, repo Repository, sender Sender, userID string, decisions ...*pb.WorktreeReclaimDecision) (*pb.DecideWorktreeReclaimResponse, error) {
+func decide(t *testing.T, repo *machineStub, sender Sender, userID string, decisions ...*pb.WorktreeReclaimDecision) (*pb.DecideWorktreeReclaimResponse, error) {
 	t.Helper()
-	svc := NewTestWorktreeReclaim(t, WithWorktreeReclaimDeps(Deps{Repo: repo, Sender: sender}))
+	svc := NewTestWorktreeReclaim(t, WithWorktreeReclaimDeps(Deps{Repo: repo.StubRepo, Daemons: repo.StubDaemons, Sender: sender}))
 	ctx := auth.WithUser(context.Background(), userID, "user", userID+"@example.com")
 	resp, err := svc.DecideWorktreeReclaim(ctx, connect.NewRequest(&pb.DecideWorktreeReclaimRequest{DaemonId: testDaemon, Decisions: decisions}))
 	if err != nil {

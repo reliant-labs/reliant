@@ -7,7 +7,7 @@ import { logger } from "@/lib/logger";
 import type { Project } from "@/store/projectStore";
 import { isCloudCompute } from "./types";
 import type { LaunchPlan } from "./types";
-import { homePath, projectPath } from "@/lib/paths";
+import { homePath, projectChatsPath } from "@/lib/paths";
 
 const DEFAULT_PROJECT_NAME = "my-project";
 const CLOUD_DEFAULT_PROJECT_PATH = `/home/workspace/projects/${DEFAULT_PROJECT_NAME}`;
@@ -127,7 +127,7 @@ export function chatRouteAfterTour(
   projectId: string | undefined,
 ): { to: string; search: { tour: undefined } } {
   if (projectId) {
-    return { to: projectPath(projectId), search: { tour: undefined } };
+    return { to: projectChatsPath(projectId), search: { tour: undefined } };
   }
   return { to: homePath(), search: { tour: undefined } };
 }

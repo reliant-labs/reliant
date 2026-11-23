@@ -39,5 +39,5 @@ func (a *WorkflowStatusActivity) recordAttention(ctx context.Context, input Work
 	default:
 		return core.AttentionResult{}, nil
 	}
-	return a.repo.ApplyAttentionUpdate(ctx, update)
+	return a.attention.ApplyAttentionUpdate(ctx, update)
 }

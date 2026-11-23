@@ -47,7 +47,7 @@ func (s *Service) GetFileMetadata(
 	if err := s.sendCommand(ctx, userID, scope.target, "fs.stat", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
-	if err := scope.requireViewerGuard(ctx, resolvedPath, cmdResp.ViewerGuarded); err != nil {
+	if err := requireViewerGuard(cmdResp.ViewerGuarded); err != nil {
 		return nil, err
 	}
 

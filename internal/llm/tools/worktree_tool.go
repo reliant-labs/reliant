@@ -154,14 +154,19 @@ const worktreeSettleTimeout = 2 * time.Minute
 
 type worktreeTool struct {
 	repo    worktreeStore
+	records worktreeRecords
+	chats   WorktreeChatLister
 	machine RunMachine
 	settler WorktreeSettler
 }
 
 const WorktreeToolName = "worktree"
 
-func NewWorktreeTool(repo worktreeStore, machine RunMachine, settler WorktreeSettler) Tool {
-	tool := &worktreeTool{repo: repo, machine: machine, settler: settler}
+// NewWorktreeTool builds the worktree tool. records reads the chat's project
+// and the worktree rows it archives; nil, like a nil repo, reports that the
+// database is not available here.
+func NewWorktreeTool(repo worktreeStore, records worktreeRecords, chats WorktreeChatLister, machine RunMachine, settler WorktreeSettler) Tool {
+	tool := &worktreeTool{repo: repo, records: records, chats: chats, machine: machine, settler: settler}
 	return NewToolWrapper(tool)
 }
 
@@ -639,7 +644,10 @@ func (w *worktreeTool) settleArchived(ctx context.Context, userID string, rc *rc
 		return
 	}
 	projectPath := rc.Project.Checkout
-	archived, err := w.repo.GetWorktree(ctx, row.ID)
+	if w.records == nil {
+		return
+	}
+	archived, err := w.records.GetWorktree(ctx, row.ID)
 	if err != nil || archived == nil {
 		return
 	}
@@ -723,13 +731,13 @@ func (w *worktreeTool) runMachine(ctx context.Context) (*workspaceMachine, error
 // creating machine's and is never used; the checkout on the run's machine is
 // rc.Project.Checkout.
 func (w *worktreeTool) project(ctx context.Context, rc *rctx.ToolContext) (*db.Project, error) {
-	if w.repo == nil {
+	if w.repo == nil || w.records == nil {
 		return nil, errors.New("database not available")
 	}
 	if rc == nil || rc.Project == nil || rc.Project.ID == "" {
 		return nil, errors.New("this chat has no project")
 	}
-	project, err := w.repo.GetProject(ctx, rc.Project.ID)
+	project, err := w.records.GetProject(ctx, rc.Project.ID)
 	if err != nil {
 		return nil, fmt.Errorf("load the chat's project: %w", err)
 	}
@@ -804,7 +812,10 @@ func (w *worktreeTool) chatsIn(ctx context.Context, worktreeID string) ([]Worktr
 	if !ok || userID == "" {
 		return nil, errors.New("the calling user is unknown")
 	}
-	rows, err := w.repo.ListChatsForWorktree(ctx, userID, worktreeID, worktreeGetChats)
+	if w.chats == nil {
+		return nil, errors.New("chats are not available in this runtime")
+	}
+	rows, err := w.chats.ListChatsForWorktree(ctx, userID, worktreeID, worktreeGetChats)
 	if err != nil {
 		return nil, fmt.Errorf("look up chats bound to the worktree: %w", err)
 	}

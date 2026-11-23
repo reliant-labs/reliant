@@ -261,18 +261,17 @@ func handleGitPull(ctx context.Context, payload []byte) ([]byte, error) {
 
 type gitRemoveRequest struct {
 	Path string `json:"path"`
-	// OpID, when set, runs the remove as a durable operation acknowledged by
-	// this id (checkout_teardown.go). An older server sends none.
-	OpID string `json:"op_id,omitempty"`
+	// OpID runs the remove as a durable operation acknowledged by this id
+	// (checkout_teardown.go). Required.
+	OpID string `json:"op_id"`
 }
 
 type gitRemoveResponse struct {
 	Success bool   `json:"success"`
 	Removed bool   `json:"removed"`
 	Error   string `json:"error,omitempty"`
-	// OpID and OpState acknowledge an op_id request: OpState is the op's
-	// state (done, failed, running, interrupted, fenced). Their presence is
-	// how the server knows this daemon acknowledges teardowns.
+	// OpID and OpState acknowledge the request's op_id: OpState is the op's
+	// state (done, failed, running, interrupted, fenced).
 	OpID    string `json:"op_id,omitempty"`
 	OpState string `json:"op_state,omitempty"`
 }
@@ -282,15 +281,8 @@ func handleGitRemove(ctx context.Context, payload []byte) ([]byte, error) {
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-	if req.Path == "" {
-		return nil, fmt.Errorf("path is required")
-	}
-	if req.OpID == "" {
-		removed, err := removeCheckout(req.Path)
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(gitRemoveResponse{Success: true, Removed: removed})
+	if req.Path == "" || req.OpID == "" {
+		return nil, fmt.Errorf("path and op_id are required")
 	}
 	j, err := currentTeardownJournal()
 	if err != nil {
@@ -348,16 +340,16 @@ type gitRecloneRequest struct {
 	Repo string `json:"repo"`
 	// Branch is the branch to check out (default "main").
 	Branch string `json:"branch,omitempty"`
-	// OpID, when set, runs the reclone as a durable operation acknowledged by
-	// this id (checkout_teardown.go). An older server sends none.
-	OpID string `json:"op_id,omitempty"`
+	// OpID runs the reclone as a durable operation acknowledged by this id
+	// (checkout_teardown.go). Required.
+	OpID string `json:"op_id"`
 }
 
 type gitRecloneResponse struct {
 	Success bool   `json:"success"`
 	Path    string `json:"path,omitempty"`
 	Error   string `json:"error,omitempty"`
-	// OpID and OpState acknowledge an op_id request (see gitRemoveResponse).
+	// OpID and OpState acknowledge the request's op_id (see gitRemoveResponse).
 	OpID    string `json:"op_id,omitempty"`
 	OpState string `json:"op_state,omitempty"`
 }
@@ -367,18 +359,12 @@ func handleGitReclone(ctx context.Context, payload []byte) ([]byte, error) {
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-	if req.Path == "" || req.Repo == "" {
-		return nil, fmt.Errorf("path and repo are required")
+	if req.Path == "" || req.Repo == "" || req.OpID == "" {
+		return nil, fmt.Errorf("path, repo and op_id are required")
 	}
 	branch := req.Branch
 	if branch == "" {
 		branch = "main"
-	}
-	if req.OpID == "" {
-		if err := recloneCheckout(ctx, req.Repo, branch, req.Path); err != nil {
-			return nil, err
-		}
-		return json.Marshal(gitRecloneResponse{Success: true, Path: req.Path})
 	}
 	j, err := currentTeardownJournal()
 	if err != nil {

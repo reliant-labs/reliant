@@ -32,14 +32,14 @@ type inboxFixture struct {
 func newInboxFixture(t *testing.T) *inboxFixture {
 	t.Helper()
 	f := newRunListFixture(t)
-	return &inboxFixture{runListFixture: f, inbox: NewTestInbox(t, WithInboxDeps(Deps{Repo: f.repo}))}
+	return &inboxFixture{runListFixture: f, inbox: NewTestInbox(t, WithInboxDeps(mockDeps(f.repo)))}
 }
 
 // withSweeper rebuilds the fixture's service with the storage clean-up
 // enabled.
 func (f *inboxFixture) withSweeper(t *testing.T, sweeper Sweeper) {
 	t.Helper()
-	f.inbox = NewTestInbox(t, WithInboxDeps(Deps{Repo: f.repo, Sweeper: sweeper}))
+	f.inbox = NewTestInbox(t, withDeps(Deps{Repo: f.repo, Sweeper: sweeper}))
 }
 
 // otherUser returns a context and project for a second, unrelated user in the

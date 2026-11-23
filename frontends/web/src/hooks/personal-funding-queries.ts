@@ -8,7 +8,7 @@
  * reads the question and answers it.
  */
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { create } from "zustand";
 
 import {
@@ -22,8 +22,8 @@ import { useAuthStore } from "../store/authStore";
 import { rememberOrgFundingLocally } from "./org-funding-queries";
 import {
   providerAccountServiceKeys,
-  providerAccountServiceMutations,
   useGetPersonalFundingQuestion,
+  useResolvePersonalFundingChoice,
 } from "./provider-account-service-hooks_gen";
 
 export type FundingReason = "limited" | "unusable" | "unserved";
@@ -88,21 +88,30 @@ export function usePersonalFundingQuestion(chatId: string | undefined, waiting: 
 
 export type FundingChoice = "use_personal" | "keep_waiting";
 
-/** Answer the chat's question; `remember` also sets the person's preference for the org. */
-export function useResolvePersonalFunding(chatId: string) {
+/** The ResolvePersonalFundingChoice request that answers the chat's question with `choice`. */
+export function personalFundingAnswer(chatId: string, choice: FundingChoice, remember: boolean) {
+  return {
+    chatId,
+    choice:
+      choice === "use_personal"
+        ? ResolvePersonalFundingChoiceRequest_Choice.USE_PERSONAL
+        : ResolvePersonalFundingChoiceRequest_Choice.KEEP_WAITING,
+    remember,
+  };
+}
+
+/**
+ * Answer the chat's question (send personalFundingAnswer's request); a
+ * `remember`ed answer also sets the person's preference for `orgId`.
+ */
+export function useResolvePersonalFunding(chatId: string, orgId: string) {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ choice, remember }: { choice: FundingChoice; remember: boolean; orgId: string }) =>
-      providerAccountServiceMutations(qc).resolvePersonalFundingChoice({
-        chatId,
-        choice:
-          choice === "use_personal"
-            ? ResolvePersonalFundingChoiceRequest_Choice.USE_PERSONAL
-            : ResolvePersonalFundingChoiceRequest_Choice.KEEP_WAITING,
-        remember,
-      }),
-    onSuccess: (_res, { choice, remember, orgId }) => {
-      if (remember && orgId) rememberOrgFundingLocally(qc, orgId, choice === "use_personal" ? "use_personal" : "wait");
+  return useResolvePersonalFundingChoice({
+    onSuccess: (_res, { choice, remember }) => {
+      if (remember && orgId) {
+        const usePersonal = choice === ResolvePersonalFundingChoiceRequest_Choice.USE_PERSONAL;
+        rememberOrgFundingLocally(qc, orgId, usePersonal ? "use_personal" : "wait");
+      }
       void qc.invalidateQueries({ queryKey: providerAccountServiceKeys.getPersonalFundingQuestion({ chatId }) });
     },
   });

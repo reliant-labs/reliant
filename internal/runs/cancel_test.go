@@ -11,10 +11,11 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/converter"
 
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
 // cancellingTemporal is a Temporal client that can cancel cooperatively. Each
@@ -108,7 +109,7 @@ func cancelFixture(t *testing.T) (*fakeRepo, *cancellingTemporal, *Service, *fak
 	repo, temporal, pause, _ := fixture(t)
 	repo.workflow = &db.Workflow{ID: "wf-1", Status: db.Active()}
 	c := &cancellingTemporal{fakeTemporal: temporal}
-	svc := NewService(repo, c, pause)
+	svc := New(Deps{Repo: repo, Workflows: repo, Questions: repo, Temporal: c, Pause: pause, Waits: repo})
 	clock := &fakeClock{t: clockEpoch}
 	svc.cancelGrace, svc.cancelSettle, svc.cancelPoll = testGrace, testSettle, testPoll
 	svc.now, svc.sleep = clock.now, clock.sleep

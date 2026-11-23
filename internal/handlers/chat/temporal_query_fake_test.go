@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
@@ -37,7 +39,7 @@ func fakeQueryResponse(req *client.QueryWorkflowWithOptionsRequest, closed bool,
 // and param edit leaves of what the chat's run was given.
 func seedSelection(t *testing.T, ctx context.Context, repo *db.Repo, chatID, userID, workflowName string, params map[string]any) {
 	t.Helper()
-	_, err := chatselection.NewInstrumented(repo).Merge(ctx, chatID, userID, workflowName, params, 0)
+	_, err := chatselection.NewInstrumented(chatselection.Deps{Store: store.NewChatSelectionExtStore(repo.ORM())}).Merge(ctx, chatID, userID, workflowName, params, 0)
 	require.NoError(t, err)
 }
 

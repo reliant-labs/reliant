@@ -33,6 +33,7 @@ echo 'package main // v0' >"$R/cmd/app/main.go"
 cat >"$T/bin/go" <<EOF
 #!/bin/sh
 [ "\$1" = build ] || { echo "fake go: unexpected \$*" >&2; exit 2; }
+echo "\$*" >"$T/argv"
 while [ "\$1" != -o ]; do shift; done
 target=\$2
 mkdir "$T/inbuild" 2>/dev/null || echo "build \$\$ began while another ran" >>"$T/overlap"
@@ -184,6 +185,17 @@ await "a caller after a killed lock holder to finish" test -e "$T/rc.g"
 [ "$(cat "$T/rc.g" 2>/dev/null)" = 0 ] || { FAIL "the caller after a killed holder exited $(cat "$T/rc.g" 2>/dev/null)"; cat "$T/out.g"; }
 [ "$(cat "$R/tmp/g/app" 2>/dev/null)" = "binary 4" ] || FAIL "the caller after a killed holder got '$(cat "$R/tmp/g/app" 2>/dev/null)'"
 ok "a lock holder killed mid-build does not wedge the next caller"
+
+# Flags after the output path reach go build, before -o: the air configs
+# pass $FORGE_GO_BUILD_FLAGS there (forge env up's cover build). Without
+# any, the build is the plain one.
+[ "$(cat "$T/argv")" = "build -trimpath -buildvcs=false -o $T/air/cmd_app/bin ./cmd/app" ] ||
+  FAIL "a caller with no flags ran: go $(cat "$T/argv")"
+(cd "$R" && sh scripts/air-build.sh ./cmd/app tmp/h/app -cover -covermode=atomic -coverpkg=example.com/app/...) >"$T/out" 2>&1 ||
+  { FAIL "a caller with build flags failed"; cat "$T/out"; }
+[ "$(cat "$T/argv")" = "build -trimpath -buildvcs=false -cover -covermode=atomic -coverpkg=example.com/app/... -o $T/air/cmd_app/bin ./cmd/app" ] ||
+  FAIL "build flags did not reach go build: go $(cat "$T/argv")"
+ok "flags after the output path reach go build"
 
 rc=0
 (cd "$R" && sh scripts/air-build.sh) >/dev/null 2>&1 || rc=$?

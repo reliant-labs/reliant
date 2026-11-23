@@ -14,6 +14,6 @@ func TestPlanServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestPlan(t, WithPlanDeps(Deps{Repo: repo}))
+	svc := NewTestPlan(t, WithPlanDeps(RealDeps(repo)))
 	viewertest.RunService(t, f, svc, "reliant.v1.PlanService", nil)
 }

@@ -11,14 +11,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // waitFakeRouter is a DaemonRouter whose liveness and wake outcome the test
@@ -124,7 +125,7 @@ func newWaitFixture(t *testing.T, noMachine bool, router toolexec.DaemonRouter) 
 	require.NoError(t, base.CreateChat(ctx, &db.Chat{ID: chatID, UserID: "u1", Title: "t", ProjectID: projectID,
 		State: db.ChatStateIdle, NoMachine: noMachine, CreatedAt: time.Now(), UpdatedAt: time.Now()}))
 	repo := &markerRepo{Repo: base}
-	a := NewPreflightDaemonCheckActivity(repo, toolexec.NewRemoteExecutor(router))
+	a := NewPreflightDaemonCheckActivity(repo, workspaceRowsOf(repo), toolexec.NewRemoteExecutor(router))
 	a.pollInterval = 10 * time.Millisecond
 	return a, repo, chatID
 }

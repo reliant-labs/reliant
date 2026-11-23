@@ -20,9 +20,11 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/reliant-labs/forge/pkg/observe/temporalotel"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -39,6 +41,13 @@ import (
 // runs with.
 func recordRunSpans(t *testing.T) (*tracetest.SpanRecorder, []interceptor.WorkerInterceptor) {
 	t.Helper()
+	return recordRunSpansOwnedBy(t, nil)
+}
+
+// recordRunSpansOwnedBy is recordRunSpans with the run-scope interceptor
+// answering each chat's owner from owners, as the worker's does.
+func recordRunSpansOwnedBy(t *testing.T, owners *telemetry.ChatOwnerCache) (*tracetest.SpanRecorder, []interceptor.WorkerInterceptor) {
+	t.Helper()
 	rec := tracetest.NewSpanRecorder()
 	prevTP, prevProp := otel.GetTracerProvider(), otel.GetTextMapPropagator()
 	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(rec)))
@@ -49,7 +58,7 @@ func recordRunSpans(t *testing.T) (*tracetest.SpanRecorder, []interceptor.Worker
 	})
 	tracing, err := temporalotel.NewInterceptor(temporalotel.Options{})
 	require.NoError(t, err)
-	return rec, []interceptor.WorkerInterceptor{tracing, observability.NewRunScopeWorkerInterceptor(nil)}
+	return rec, []interceptor.WorkerInterceptor{tracing, observability.NewRunScopeWorkerInterceptor(owners)}
 }
 
 func spanAttrs(s sdktrace.ReadOnlySpan) map[attribute.Key]string {
@@ -217,16 +226,16 @@ func TestRunTelemetry_CheckpointCarriesTheRunIDToARestart(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.Background()
-	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &core.WorkflowCheckpoint{
+	require.NoError(t, store.SaveWorkflowCheckpoint(ctx, repo.ORM(), &core.WorkflowCheckpoint{
 		WorkflowID: "wf-run-id", ChatID: "chat-run-id", NodeID: "agent_loop", RunID: "run-interrupted",
 	}))
-	resume := ResumeInputFromDurableState(ctx, repo, "chat-run-id", "wf-run-id")
+	resume := ResumeInputFromDurableState(ctx, withSpawnTree(repo), "chat-run-id", "wf-run-id")
 	assert.Equal(t, "run-interrupted", resume.RunID)
 
-	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &core.WorkflowCheckpoint{
+	require.NoError(t, store.SaveWorkflowCheckpoint(ctx, repo.ORM(), &core.WorkflowCheckpoint{
 		WorkflowID: "wf-run-id", ChatID: "chat-run-id", NodeID: "agent_loop", LoopIteration: 2, RunID: "run-interrupted",
 	}))
-	assert.Equal(t, "run-interrupted", ResumeInputFromDurableState(ctx, repo, "chat-run-id", "wf-run-id").RunID,
+	assert.Equal(t, "run-interrupted", ResumeInputFromDurableState(ctx, withSpawnTree(repo), "chat-run-id", "wf-run-id").RunID,
 		"a later position of the same run keeps naming it")
 }
 
@@ -245,7 +254,10 @@ func TestRunTelemetry_CheckpointCarriesTheRunIDToARestart(t *testing.T) {
 // The activities are the harness's stubs; inside them the spans are opened
 // with the helpers the real CallLLM and ExecuteTools use.
 func TestRunTelemetry_SpanTree(t *testing.T) {
-	rec, interceptors := recordRunSpans(t)
+	owners := telemetry.NewChatOwnerOrgCache(func(context.Context, string) (telemetry.ChatOwner, error) {
+		return telemetry.ChatOwner{UserID: "user-tree", OrgID: "org-tree"}, nil
+	}, 0, 10)
+	rec, interceptors := recordRunSpansOwnedBy(t, owners)
 	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	env.SetWorkerOptions(temporaltest.WorkerOptions(worker.Options{Interceptors: interceptors}))
@@ -292,14 +304,21 @@ func TestRunTelemetry_SpanTree(t *testing.T) {
 	require.NotEmpty(t, runID)
 	assert.Equal(t, telemetry.GenAIOpInvokeWorkflow, rootAttrs[telemetry.AttrGenAIOperationName])
 	assert.Equal(t, "agent", rootAttrs[telemetry.AttrAIWorkflowName])
+	// The run's own span names its org, which the workflow learns from its
+	// definition load (nameRunOrg): tenant export drops a span without one.
+	assert.Equal(t, "org-tree", rootAttrs[telemetry.AttrOrgID], "the run span carries org.id")
 	traceID := root.SpanContext().TraceID()
 
-	// Every node span names its run, the save_message the workflow writes
-	// itself included.
+	// Every node span names its run, its org and its chat as the
+	// conversation, the save_message the workflow writes itself included.
 	nodes := spansNamed(spans, "workflow.node ")
 	require.NotEmpty(t, nodes)
 	for _, node := range nodes {
-		assert.NotEmpty(t, spanAttrs(node)[telemetry.AttrAIRunID], node.Name())
+		na := spanAttrs(node)
+		assert.NotEmpty(t, na[telemetry.AttrAIRunID], node.Name())
+		assert.Equal(t, "org-tree", na[telemetry.AttrOrgID], node.Name())
+		assert.Equal(t, "chat-tree", na[telemetry.AttrGenAIConversationID], node.Name())
+		assert.Equal(t, "chat-tree", na[telemetry.AttrChatID], node.Name())
 	}
 
 	var parentTurns, childTurns []sdktrace.ReadOnlySpan
@@ -366,4 +385,45 @@ func TestRunTelemetry_SpanTree(t *testing.T) {
 	assert.Equal(t, "general", ca[telemetry.AttrGenAIAgentName])
 	assert.Equal(t, "spawn", ca[telemetry.AttrAIWorkflowTrigger])
 	assert.NotEqual(t, spanAttrs(parentTurns[0])[telemetry.AttrGenAIAgentID], ca[telemetry.AttrGenAIAgentID], "the sub-agent is its own agent: its thread")
+}
+
+// A run a trigger launched is the root of its own trace (launch.runTraceContext)
+// and links its workflow span to the span that fired it, so two orgs' runs of
+// one fanned-out event are two traces that each point back at that event. A
+// run with no firing span — a person's start — links nothing.
+func TestRunTelemetry_TriggeredRunLinksToItsFiringSpan(t *testing.T) {
+	rec, interceptors := recordRunSpans(t)
+	_, firing := otel.Tracer("test").Start(context.Background(), "trigger.fire integration")
+	firing.End()
+	traceParent := telemetry.TraceParentOf(firing.SpanContext())
+
+	for _, input := range []WorkflowInput{
+		{ChatID: "chat-org-a", WorkflowName: "agent", ExecContext: &ExecutionContext{Thread: "a"},
+			Trigger: &TriggerInfo{Kind: string(core.TriggerEventKindIntegration), EventID: "evt-a", TraceParent: traceParent}},
+		{ChatID: "chat-org-b", WorkflowName: "agent", ExecContext: &ExecutionContext{Thread: "b"},
+			Trigger: &TriggerInfo{Kind: string(core.TriggerEventKindIntegration), EventID: "evt-b", TraceParent: traceParent}},
+		{ChatID: "chat-manual", WorkflowName: "agent", ExecContext: &ExecutionContext{Thread: "m"},
+			Trigger: &TriggerInfo{Kind: string(core.TriggerEventKindChatStart)}},
+	} {
+		env := (&temporaltest.WorkflowTestSuite{}).NewTestWorkflowEnvironment()
+		env.SetWorkerOptions(temporaltest.WorkerOptions(worker.Options{Interceptors: interceptors}))
+		env.RegisterWorkflow(startRunTelemetryWorkflow)
+		env.ExecuteWorkflow(startRunTelemetryWorkflow, input)
+		require.NoError(t, env.GetWorkflowError())
+	}
+
+	runs := map[string]sdktrace.ReadOnlySpan{}
+	for _, s := range spansNamed(rec.Ended(), "RunWorkflow:") {
+		runs[spanAttrs(s)[telemetry.AttrGenAIConversationID]] = s
+	}
+	require.Len(t, runs, 3)
+	for _, chat := range []string{"chat-org-a", "chat-org-b"} {
+		links := runs[chat].Links()
+		require.Len(t, links, 1, "%s links to its firing span", chat)
+		assert.Equal(t, firing.SpanContext().TraceID(), links[0].SpanContext.TraceID(), chat)
+		assert.Equal(t, firing.SpanContext().SpanID(), links[0].SpanContext.SpanID(), chat)
+		assert.NotEqual(t, firing.SpanContext().TraceID(), runs[chat].SpanContext().TraceID(), "%s is not in the firing trace", chat)
+	}
+	assert.NotEqual(t, runs["chat-org-a"].SpanContext().TraceID(), runs["chat-org-b"].SpanContext().TraceID())
+	assert.Empty(t, runs["chat-manual"].Links(), "a person's start links nothing")
 }

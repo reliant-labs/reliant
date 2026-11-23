@@ -47,7 +47,7 @@ func (s *Service) ListRuns(
 		return connect.NewResponse(filterRunsToProto(children, req.Msg)), nil
 
 	case req.Msg.GetSessionId() != "":
-		chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.GetSessionId())
+		chat, err := s.deps.ChatRows.GetChatRow(ctx, req.Msg.GetSessionId())
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get session"))
 		}

@@ -58,7 +58,7 @@ describe("memberNamesBySubject", () => {
     expect(names.has("cp-1")).toBe(false);
   });
 
-  it("names nobody from a control plane that predates externalId", () => {
+  it("names nobody who has no externalId", () => {
     const roster = [{ userId: "cp-1", externalId: "", name: "Dana", email: "d@acme.test" }];
     expect(memberNamesBySubject(roster).size).toBe(0);
   });

@@ -353,3 +353,87 @@ func TestStoreScopeGuardSelfCheck(t *testing.T) {
 		})
 	}
 }
+
+// ─── only internal/credentials/** reaches the sealed credential tables ─────
+//
+// api_keys, provider_accounts, connection_secrets and the *_auth_token tables
+// hold sealed credentials. The first guard keeps handlers/** and llm/tools/**
+// out of them; this one keeps EVERY other package out too, so the credential
+// packages under internal/credentials are the only path to them: they alone seal
+// on write, open on read, and scope each statement to an owner.
+//
+// Outside internal/store itself (whose files hold the statements), a non-test,
+// non-generated file may not name a sealed store identifier or write SQL against
+// a sealed table. sealedPathAllowlist is the code that has not moved yet; an
+// entry is deleted in the wave that moves its file, and one that no longer
+// matches a violation fails the test, so the list only shrinks.
+
+// credentialDirs are the packages that own the sealed tables.
+var credentialDirs = []string{"internal/credentials"}
+
+// sealedScanSkip are the trees the sealed guard does not read.
+var sealedScanSkip = []string{
+	"internal/store", "internal/credentials", "gen", "sdk", "node_modules", "frontends", "electron", "docs", "dev-docs", "web",
+}
+
+// sealedPathAllowlist maps a repo-relative file to why it may still touch a sealed
+// table.
+var sealedPathAllowlist = map[string]string{}
+
+func sealedFinding(t *testing.T, repo string, ids storeIdents) map[string][]scopeFinding {
+	t.Helper()
+	fset := token.NewFileSet()
+	out := map[string][]scopeFinding{}
+	err := filepath.WalkDir(repo, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(repo, path)
+		rel = filepath.ToSlash(rel)
+		if d.IsDir() {
+			if strings.HasPrefix(d.Name(), ".") && rel != "." || d.Name() == "testdata" {
+				return filepath.SkipDir
+			}
+			for _, skip := range sealedScanSkip {
+				if rel == skip {
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+		name := d.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || strings.HasSuffix(name, "_gen.go") {
+			return nil
+		}
+		for _, f := range scanStoreScope(fset, parseScopeFile(t, fset, path), rel, ids, nil, map[string]bool{}) {
+			if strings.HasPrefix(f.rule, "sealed:") {
+				out[rel] = append(out[rel], f)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk %s: %v", repo, err)
+	}
+	return out
+}
+
+func TestOnlyCredentialPackagesReachSealedTables(t *testing.T) {
+	t.Parallel()
+	repo := root(t)
+	ids := loadStoreIdents(t, repo)
+	found := sealedFinding(t, repo, ids)
+	for file, fs := range found {
+		if _, ok := sealedPathAllowlist[file]; ok {
+			continue
+		}
+		for _, f := range fs {
+			t.Errorf("%s: %s: only %s may touch a sealed credential table", f.pos, f.rule, strings.Join(credentialDirs, ", "))
+		}
+	}
+	for file := range sealedPathAllowlist {
+		if len(found[file]) == 0 {
+			t.Errorf("sealedPathAllowlist lists %s, which no longer touches a sealed table: remove the entry", file)
+		}
+	}
+}

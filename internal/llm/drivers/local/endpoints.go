@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/localprobe"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/netguard"
@@ -60,7 +60,7 @@ type CustomEndpoint struct {
 	ID                     string
 	Name                   string
 	BaseURL                string
-	Route                  string // db.ModelEndpointRoute*
+	Route                  string // core.ModelEndpointRoute*
 	CredentialConnectionID string
 	Params                 ModelParams
 }
@@ -197,7 +197,7 @@ func SynthesizeEndpoint(cfg EndpointConfig) []Model {
 
 	machine := cfg.Name
 	online := cfg.Online
-	if cfg.Route == db.ModelEndpointRouteDirect {
+	if cfg.Route == core.ModelEndpointRouteDirect {
 		// Nothing can be known about a remote server's liveness short of
 		// calling it; a failed request says so precisely.
 		online = true
@@ -251,7 +251,7 @@ func SynthesizeEndpoint(cfg EndpointConfig) []Model {
 			params.ExtraBody = extra
 		}
 		relayID := ""
-		if cfg.Route == db.ModelEndpointRouteViaDaemon {
+		if cfg.Route == core.ModelEndpointRouteViaDaemon {
 			relayID = RelayEndpointID(cfg.BaseURL)
 		}
 		out = append(out, Model{
@@ -285,11 +285,10 @@ func (r *RepoDirectory) ConfiguredEndpoints(ctx context.Context, userID string) 
 	if r == nil || r.src == nil {
 		return nil, errors.New("local model directory has no data source")
 	}
-	es, ok := r.src.(EndpointSource)
-	if !ok {
+	if r.endpoints == nil {
 		return nil, nil
 	}
-	rows, err := es.ListModelEndpoints(ctx, userID)
+	rows, err := r.endpoints.ListModelEndpoints(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("listing model endpoints: %w", err)
 	}
@@ -301,7 +300,7 @@ func (r *RepoDirectory) ConfiguredEndpoints(ctx context.Context, userID string) 
 	hostnames := map[string]string{}
 	needDaemons := false
 	for _, row := range rows {
-		needDaemons = needDaemons || row.Route == db.ModelEndpointRouteViaDaemon
+		needDaemons = needDaemons || row.Route == core.ModelEndpointRouteViaDaemon
 	}
 	if needDaemons {
 		attachments, err := r.src.ListFreshDaemonAttachmentsForUser(ctx, userID, onlineStaleThreshold)

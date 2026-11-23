@@ -32,7 +32,7 @@ func landedEnv(t *testing.T, mode AutoArchiveMode, answer func(w worktreereclaim
 		}
 	}
 	sender := &scriptSender{seen: map[string]worktreereclaim.Worktree{}, answer: answer}
-	s := New(store, sender).WithAutoArchive(mode, store, nil)
+	s := New(store, sender).WithAutoArchive(mode, store, nil).WithUseStore(store)
 	return store, sender, s
 }
 
@@ -55,6 +55,32 @@ func TestLanded_AQuietLandedWorktreeIsArchivedAndItsChatStaysLive(t *testing.T) 
 	require.NotNil(t, meta)
 	assert.Equal(t, core.ArchivedBecauseLanded, meta.ArchivedBecause)
 	assert.NotNil(t, meta.LandedAt)
+}
+
+// A live row the daemon refuses as neither landed nor recoverable carries the
+// daemon's reason on the row, and loses it once an answer no longer gives one.
+func TestLanded_WhyALiveRowIsNotReclaimableIsRecorded(t *testing.T) {
+	t.Parallel()
+	why := "unreachable_history: control-plane: its own history reaches 1 commit tip(s) on no branch, remote or tag"
+	store, _, s := landedEnv(t, AutoArchiveOn, func(w worktreereclaim.Worktree) worktreereclaim.Result {
+		return worktreereclaim.Result{ID: w.ID, Outcome: worktreereclaim.OutcomeLocked, NotReclaimable: why}
+	})
+	store.activity["wt"] = quietFor(48 * time.Hour)
+
+	require.NoError(t, s.Sweep(context.Background()))
+	assert.Empty(t, store.archived)
+	meta := store.rows["wt"].Worktree.CleanupMetadata
+	require.NotNil(t, meta)
+	assert.Equal(t, why, meta.NotReclaimable)
+
+	// A daemon that predates the field answers without it: the stale reason goes.
+	store2, _, s2 := landedEnv(t, AutoArchiveOn, func(w worktreereclaim.Worktree) worktreereclaim.Result {
+		return worktreereclaim.Result{ID: w.ID, Outcome: worktreereclaim.OutcomeLocked}
+	})
+	store2.activity["wt"] = quietFor(48 * time.Hour)
+	store2.rows["wt"].Worktree.CleanupMetadata = &core.CleanupMetadata{NotReclaimable: why}
+	require.NoError(t, s2.Sweep(context.Background()))
+	assert.Empty(t, store2.rows["wt"].Worktree.CleanupMetadata.NotReclaimable)
 }
 
 func TestLanded_NotQuietLongEnoughWaits(t *testing.T) {

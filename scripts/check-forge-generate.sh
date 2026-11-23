@@ -23,8 +23,8 @@
 # ── Which forge ──────────────────────────────────────────────────────────
 #
 # Exactly forge.yaml's forge_version, found by scripts/forge.sh (a forge on PATH
-# that is the pin, `reliant forge`, or `go run .../cmd/forge@<version>`, which
-# the Go build cache keeps linked after the first run). FORGE=<binary> uses a
+# that is the pin, `reliant forge`, or `go install .../cmd/forge@<version>`,
+# built once into the user cache). FORGE=<binary> uses a
 # prebuilt one instead (CI caches it), and is refused unless it reports that
 # same version. go.mod must require the same forge, or the forge that lints
 # and the forge that generates are two different programs.

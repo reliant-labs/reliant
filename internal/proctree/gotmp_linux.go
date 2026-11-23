@@ -26,9 +26,11 @@ import (
 // <temp dir>/reliant-gotmp-<uid>/gotmp-<daemon pid>-<n>, and the daemon removes
 // it when the command's cgroup proves its processes are all gone: ownership is
 // a fact, not a guess from an mtime. One without a cgroup, or one the command
-// left processes running in, stays; the storage reaper removes it once no
-// live process holds it, which every one of its processes does in its
-// environment (internal/diskwatch, gowork.go).
+// left processes running in, stays; the daemon's go_work_dirs pass removes it
+// once no live process holds it, which every one of its processes does in its
+// environment (internal/diskwatch, gowork.go). That pass runs every 10
+// minutes whatever RELIANT_STORAGE_REAPER says, so a daemon without cgroup
+// delegation does not leak one root per command.
 //
 // Only GOTMPDIR. TMPDIR is left alone: a file an agent makes with mktemp in
 // one command is routinely read by its next one, and removing it with the
@@ -73,9 +75,14 @@ func (t *Tree) prepareGoTmp(cmd *exec.Cmd) {
 // Only a cgroup proves that. A descendant can leave the command's process
 // group or session (setsid) and keep compiling in the GOTMPDIR it inherited,
 // so an empty process group proves nothing; a command with no cgroup keeps
-// its root, and the storage reaper removes it once no live process has it in
-// its environment (internal/diskwatch, gowork.go). A cgroup cannot be left
-// that way.
+// its root, and the daemon's go_work_dirs pass removes it once no live
+// process has it in its environment (internal/diskwatch, gowork.go). A cgroup
+// cannot be left that way.
+//
+// Not even a root that is empty when its command ends goes here without a
+// cgroup: an escaped descendant that has not started its build yet would
+// find its GOTMPDIR gone and fail ("go: creating work dir: … no such file").
+// An empty root costs an inode; the pass removes it on its /proc proof.
 func (t *Tree) releaseGoTmp() {
 	dir := t.goTmp
 	if dir == "" || t.dir == "" || !cgroupProvenEmpty(t.dir) {

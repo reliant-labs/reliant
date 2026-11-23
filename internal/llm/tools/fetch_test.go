@@ -16,9 +16,10 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/netguard"
 
-	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
 func TestFetchTool(t *testing.T) {

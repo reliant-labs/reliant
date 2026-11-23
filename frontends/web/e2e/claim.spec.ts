@@ -28,6 +28,9 @@ function collectErrors(page: Page): string[] {
   return errors;
 }
 
+/** The claimed site's row on Projects: an org app with no code here (claimMocks.ts). */
+const claimedRow = (page: Page) => page.locator('[data-testid="projects-row"][data-row-key="app:storefront"]');
+
 async function arrive(page: Page, options: ClaimMockOptions = {}, hash = CLAIM_FRAGMENT) {
   const mock = await mockClaimBackend(page, options);
   await page.goto(`/claim${hash}`);
@@ -163,7 +166,7 @@ for (const viewport of [{ name: 'desktop', size: { width: 1280, height: 800 } },
 }
 
 test.describe('the whole new-human flow', () => {
-  test('claim → upgrade with an email → CompleteClaim → /apps with the app highlighted', async ({ page }) => {
+  test('claim → upgrade with an email → CompleteClaim → the apps with the app highlighted', async ({ page }) => {
     const errors = collectErrors(page);
     const mock = await arrive(page);
 
@@ -187,17 +190,17 @@ test.describe('the whole new-human flow', () => {
     await page.getByLabel(/Verification code/i).fill('123456');
     await page.getByRole('button', { name: /verify and continue/i }).click();
 
-    // 4. Back on /claim as the upgraded user, CompleteClaim runs and /apps opens.
-    await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+    // 4. Back on /claim as the upgraded user, CompleteClaim runs and the apps (Projects) open.
+    await expect(page).toHaveURL(/\/projects\?show=apps/, LOADED);
     expect(mock.calls.map((c) => c.rpc)).toEqual(['GetClaim', 'OpenClaimSession', 'CompleteClaim']);
     expect(mock.calls[2].body).toEqual({ claimToken: CLAIM_TOKEN });
 
-    const row = page.getByTestId('app-row-storefront');
+    const row = claimedRow(page);
     await expect(row).toBeVisible(LOADED);
     await expect(row).toHaveAttribute('data-highlighted', 'true');
     await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
-    // The highlight is shown once: the param is dropped from the URL.
-    await expect(page).toHaveURL(/\/apps$/);
+    // The highlight is shown once: the params are dropped from the URL.
+    await expect(page).toHaveURL(/\/projects\?show=apps$/);
 
     // 5. The token never reached a URL or a header; GoTrue saw the upgrade.
     expect(mock.urls.filter((u) => u.includes(CLAIM_TOKEN))).toEqual([]);
@@ -260,12 +263,12 @@ test.describe('the whole new-human flow', () => {
     await expect(page).toHaveURL(/\/upgrade/, LOADED);
     await upgradeWithEmail(page);
 
-    await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+    await expect(page).toHaveURL(/\/projects\?show=apps/, LOADED);
     expect(mock.calls.map((c) => c.rpc)).toEqual(['GetClaim', 'OpenClaimSession', 'CompleteClaim', 'CompleteClaim']);
     await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
   });
 
-  test('an existing user claims into their account: CompleteClaim as themselves, then /apps with the app highlighted', async ({ page }) => {
+  test('an existing user claims into their account: CompleteClaim as themselves, then the apps with the app highlighted', async ({ page }) => {
     const errors = collectErrors(page);
     const mock = await arrive(page, {
       signedInAs: { id: 'real-user', email: 'me@example.com', anonymous: false },
@@ -274,11 +277,12 @@ test.describe('the whole new-human flow', () => {
 
     await page.getByTestId('claim-into-account-button').click({ timeout: 20_000 });
 
-    await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+    await expect(page).toHaveURL(/\/projects\?show=apps/, LOADED);
     // No session was released, nothing was signed out, and the account was never upgraded.
     expect(mock.calls.map((c) => c.rpc)).toEqual(['GetClaim', 'GetClaimFreeSite', 'CompleteClaim']);
     expect(mock.gotrue.some((g) => g.includes('/logout'))).toBe(false);
     await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
+    await expect(claimedRow(page)).toHaveAttribute('data-highlighted', 'true', LOADED);
     expect(errors).toEqual([]);
   });
 
@@ -299,7 +303,7 @@ test.describe('the whole new-human flow', () => {
     await expect(page.getByTestId('claim-finish-declined')).toBeVisible(LOADED);
     await shot(page, 'complete-declined');
     await page.getByRole('button', { name: /try again/i }).click();
-    await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+    await expect(page).toHaveURL(/\/projects\?show=apps/, LOADED);
     expect(mock.calls.filter((c) => c.rpc === 'CompleteClaim')).toHaveLength(2);
   });
 });
@@ -341,14 +345,14 @@ for (const viewport of [{ name: 'desktop', size: { width: 1280, height: 800 } },
       expect(errors).toEqual([]);
     });
 
-    test('1. keep the new site live: claims with that choice and lands on /apps saying what was paused', async ({ page }) => {
+    test('1. keep the new site live: claims with that choice and lands on the apps saying what was paused', async ({ page }) => {
       const mock = await arriveWithConflict(page);
       await openChoice(page);
       await page.getByTestId('free-site-option-claimed').check();
       await shot(page, 'free-site-picked-new');
       await page.getByTestId('free-site-continue').click();
 
-      await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+      await expect(page).toHaveURL(/\/projects\?show=apps/, LOADED);
       expect(mock.choices).toEqual(['FREE_SITE_CHOICE_CLAIMED']);
       await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
       await expect(page.getByTestId('apps-claimed-paused')).toContainText(/you chose free hosting for the site you claimed/i);
@@ -362,7 +366,7 @@ for (const viewport of [{ name: 'desktop', size: { width: 1280, height: 800 } },
       await page.getByTestId('free-site-option-existing').check();
       await page.getByTestId('free-site-continue').click();
 
-      await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+      await expect(page).toHaveURL(/\/projects\?show=apps/, LOADED);
       expect(mock.choices).toEqual(['FREE_SITE_CHOICE_EXISTING']);
       await expect(page.getByTestId('apps-claimed-paused')).toContainText(/you kept free hosting where it was/i);
       await shot(page, 'apps-after-keep-existing');
@@ -399,8 +403,10 @@ for (const viewport of [{ name: 'desktop', size: { width: 1280, height: 800 } },
       if (!phone) await page.goto('/claim');
       await expect(page.getByTestId('claim-site')).toBeVisible(LOADED);
       await page.getByTestId('claim-into-account-button').click();
-      await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+      await expect(page).toHaveURL(/\/projects\?show=apps/, LOADED);
       expect(mock.choices).toEqual(['']);
+      // Nothing was paused, so the banner names none.
+      await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
       await expect(page.getByTestId('apps-claimed-paused')).toHaveCount(0);
     });
 
@@ -430,7 +436,7 @@ for (const viewport of [{ name: 'desktop', size: { width: 1280, height: 800 } },
       await expect.poll(() => mock.calls.filter((c) => c.rpc === 'GetClaim').length).toBeGreaterThanOrEqual(2);
       await page.getByTestId('free-site-option-existing').check();
       await page.getByTestId('free-site-continue').click();
-      await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+      await expect(page).toHaveURL(/\/projects\?show=apps/, LOADED);
       expect(mock.choices).toEqual(['', 'FREE_SITE_CHOICE_EXISTING']);
     });
   });
@@ -483,7 +489,7 @@ test.describe('the free-site choice, by keyboard', () => {
     await page.keyboard.press('Space');
     await page.getByTestId('free-site-continue').focus();
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+    await expect(page).toHaveURL(/\/projects\?show=apps/, LOADED);
     expect(mock.choices).toEqual(['FREE_SITE_CHOICE_EXISTING']);
   });
 });
@@ -492,8 +498,30 @@ test.describe('no free site in use', () => {
   test('no dialog: an existing user with no other site claims straight through', async ({ page }) => {
     const mock = await arrive(page, { signedInAs: SIGNED_IN, completeClaimPath: 'membership' });
     await page.getByTestId('claim-into-account-button').click({ timeout: 20_000 });
-    await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+    await expect(page).toHaveURL(/\/projects\?show=apps/, LOADED);
     expect(mock.choices).toEqual(['']);
     await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+});
+
+// ── what the landing says ─────────────────────────────────────────────────
+
+test.describe('the claim landing on Projects', () => {
+  // The one shell (#3191) moved the landing from /apps to Projects, which
+  // lost this banner until reliant#3258 (components/Apps/ClaimedBanner.tsx).
+  test('says the app is yours now and which free site was paused, highlights its row, then drops the params', async ({ page }) => {
+    const mock = await arriveWithConflict(page);
+    await openChoice(page);
+    await page.getByTestId('free-site-option-claimed').check();
+    await page.getByTestId('free-site-continue').click();
+    await expect(page).toHaveURL(/\/projects\?show=apps/, LOADED);
+    expect(mock.choices).toEqual(['FREE_SITE_CHOICE_CLAIMED']);
+
+    await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
+    await expect(page.getByTestId('apps-claimed-paused')).toContainText(/you chose free hosting for the site you claimed/i);
+    await expect(page.getByTestId('apps-claimed-paused')).toContainText(/review billing/i);
+    await expect(claimedRow(page)).toHaveAttribute('data-highlighted', 'true');
+    // Shown once: the params leave the URL.
+    await expect(page).toHaveURL(/\/projects\?show=apps$/);
   });
 });

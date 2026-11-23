@@ -77,6 +77,7 @@ withhold BackgroundService        # daemon-facing wiring
 withhold CatalogService           # not part of the first public surface
 withhold ConnectionService        # not part of the first public surface
 withhold ConnectorService         # not part of the first public surface
+withhold CoverageSourceService    # the Tests pages read a covered file's source as a person (their own GitHub token); person-only
 withhold DaemonService            # daemon-facing wiring
 withhold DaemonRegistryService    # daemon-facing wiring
 withhold FileSystemService        # daemon-facing wiring

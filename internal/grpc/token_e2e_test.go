@@ -22,6 +22,7 @@ import (
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"connectrpc.com/connect"
 	"github.com/golang-jwt/jwt/v5"
@@ -340,7 +341,7 @@ func serveGateway(t *testing.T, authority tokenauthority.Authority) string {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	gateway, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &config.Config{}, Repo: repo})
+	gateway, err := tools_daemon.New(tools_daemon.Deps{Logger: slog.Default(), Config: &config.Config{}, Projects: store.NewProjectExtStore(repo.ORM()), Installs: store.NewProjectDaemonExtStore(repo.ORM()), Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()), LocalModels: store.NewDaemonExtStore(repo.ORM()), Repo: repo, Checkouts: store.NewProjectDaemonDetachmentExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM())})
 	require.NoError(t, err)
 	return serveDaemonListener(t, newTestDaemonListener(t, authority, gateway))
 }

@@ -1696,15 +1696,6 @@
   background-color: rgba(148, 163, 184, 0.06);
 }
 
-/* Legacy diff line styles - keep for backwards compatibility */
-.diff-line--added {
-  background-color: rgba(16, 185, 129, 0.15);
-}
-
-.diff-line--removed {
-  background-color: rgba(239, 68, 68, 0.15);
-}
-
 /* XTerm padding fixes */
 .xterm .xterm-screen {
   margin-bottom: 20px !important;

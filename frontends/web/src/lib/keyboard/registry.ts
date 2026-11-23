@@ -16,6 +16,11 @@ export interface ResolvedShortcut {
   handler: string;
   /** Canonical binding string, possibly multi-chord. */
   binding: string;
+  /**
+   * More canonical bindings that fire the same shortcut — the desktop app's
+   * aliases. Each yields to any shortcut's `binding` that claims its chord.
+   */
+  aliases?: readonly string[];
   context: string;
   /** Fire even when a text-entry surface has focus. */
   allowInInput?: boolean;
@@ -53,16 +58,37 @@ export class ShortcutRegistry {
     this.byId.clear();
     this.sequencePrefixes.clear();
 
+    const index = (binding: string, shortcut: ResolvedShortcut) => {
+      const existing = this.byBinding.get(binding);
+      if (existing) existing.push(shortcut);
+      else this.byBinding.set(binding, [shortcut]);
+
+      if (isSequence(binding)) {
+        this.sequencePrefixes.add(sequencePrefix(binding));
+      }
+    };
+
     for (const shortcut of shortcuts) {
       this.byId.set(shortcut.id, shortcut);
-      if (!shortcut.binding) continue;
+      if (shortcut.binding) index(shortcut.binding, shortcut);
+    }
 
-      const existing = this.byBinding.get(shortcut.binding);
-      if (existing) existing.push(shortcut);
-      else this.byBinding.set(shortcut.binding, [shortcut]);
-
-      if (isSequence(shortcut.binding)) {
-        this.sequencePrefixes.add(sequencePrefix(shortcut.binding));
+    // Aliases second, and only into chords no binding claims — in any
+    // context, as a binding or as a sequence's opening chord. An alias is a
+    // courtesy to old muscle memory; a binding is what someone chose, so a
+    // user who remaps Toggle Terminal onto Cmd+T gets Cmd+T, and New Chat's
+    // Cmd+T alias steps aside rather than shadowing it.
+    const bound = new Set(this.byBinding.keys());
+    const prefixes = new Set(this.sequencePrefixes);
+    for (const shortcut of shortcuts) {
+      for (const alias of shortcut.aliases ?? []) {
+        if (!alias || bound.has(alias)) continue;
+        // A sequence alias must not hide behind a binding on its prefix, and a
+        // chord alias must not swallow a sequence's opening chord.
+        if (isSequence(alias) ? bound.has(sequencePrefix(alias)) : prefixes.has(alias)) {
+          continue;
+        }
+        index(alias, shortcut);
       }
     }
 

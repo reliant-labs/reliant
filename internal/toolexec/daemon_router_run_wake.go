@@ -36,14 +36,16 @@ import (
 // Declared here, at the consumer; controlplane.Service implements it.
 //
 // resumed reports whether this call started the wake (false: already up or on
-// its way). An error wrapping ErrRunResumeUnsupported means the control plane
-// predates the door, and the caller may fall back to the owner's token.
+// its way). An error wrapping ErrRunResumeUnsupported means the door is not
+// available — a deployment whose control plane has no machine lifecycle
+// configured answers Unimplemented, and a process with no internal-service
+// identity cannot call it — and the caller may fall back to the owner's token.
 type RunResumer interface {
 	ResumeDaemonForRun(ctx context.Context, userID, daemonID string) (resumed bool, err error)
 }
 
-// ErrRunResumeUnsupported: the control plane has no run-resume door (an older
-// release). WakeForRun then wakes with the owner's token, as EnsureAwake does.
+// ErrRunResumeUnsupported: the run-resume door is not available here (see
+// RunResumer). WakeForRun then wakes with the owner's token, as EnsureAwake does.
 var ErrRunResumeUnsupported = errors.New("control plane does not support waking a machine for a resuming run")
 
 // WithRunResumer lets WakeForRun wake a run owner's machine with the worker's
@@ -168,7 +170,7 @@ func (r *NATSDaemonRouter) WakeForRun(ctx context.Context, userID string, select
 
 // resumeForRun asks the control plane to wake daemonID for a resuming run:
 // through the run-resume door when this process has one, else — no door
-// configured, or a control plane that predates it — with the owner's token,
+// configured, or not available on this deployment — with the owner's token,
 // exactly as EnsureAwake would.
 func (r *NATSDaemonRouter) resumeForRun(ctx context.Context, userID string, selector *DaemonSelector, daemonID string) (bool, error) {
 	if r.runResumer != nil {
@@ -176,7 +178,7 @@ func (r *NATSDaemonRouter) resumeForRun(ctx context.Context, userID string, sele
 		if !errors.Is(err, ErrRunResumeUnsupported) {
 			return resumed, err
 		}
-		logging.InfoContext(ctx, "[DaemonRouter] control plane has no run-resume door; waking with the owner's token",
+		logging.InfoContext(ctx, "[DaemonRouter] the run-resume door is not available; waking with the owner's token",
 			"user_id", userID, "daemon_id", daemonID)
 	}
 	if r.resumer == nil {
