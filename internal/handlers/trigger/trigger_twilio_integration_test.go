@@ -99,7 +99,7 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(func(string) string { return "" }))
 	require.NoError(t, err)
 	doer := twilioDoer{target: twilio}
-	store := repo.Connections()
+	store := db.TestConnections(t, repo)
 	tokens := connections.NewTokenSource(store, sealer, providers, doer)
 	broker := connections.NewBroker(store, sealer, providers, doer, "https://reliant.example")
 	conns := connections.NewService(store, sealer, providers, tokens, broker, doer)

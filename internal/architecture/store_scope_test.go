@@ -379,8 +379,7 @@ var sealedScanSkip = []string{
 // sealedPathAllowlist maps a repo-relative file to why it may still touch a sealed
 // table.
 var sealedPathAllowlist = map[string]string{
-	"internal/accountpurge/accountpurge.go": "deletes a purged account's rows in its own transaction; moves with the credentials purge in the connection wave",
-	"internal/db/connections.go":            "the connection store and its secrets lock; moves to internal/credentials/connectionvault",
+	"internal/accountpurge/accountpurge.go": "a purged account's credential rows are deleted last in the account purge's own ordered transaction; it moves behind a purge method on each credential package in the account-purge wave",
 	"internal/db/llm_usage.go":              "reads an account's provider, label and kind (no secret) for the usage views; moves to provideraccounts when handlers/usage and org_usage take it, with their own wave",
 }
 

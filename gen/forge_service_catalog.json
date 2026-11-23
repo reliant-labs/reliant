@@ -28,6 +28,7 @@
         "ChatUpdateHeadsBackfill",
         "ChatUpdateHub",
         "Connection",
+        "ConnectionVault",
         "Connector",
         "ConnectorGrants",
         "CoverageSource",
@@ -112,6 +113,7 @@
         "Vault",
         "Workflow",
         "WorkflowReconciler",
+        "Workflowdrafts",
         "Worktree",
         "WorktreeReclaim",
         "WorktreeSweep",
@@ -497,6 +499,7 @@
         "AgentRuns",
         "AutomationTokens",
         "ChatUpdateHub",
+        "ConnectionVault",
         "DBRepo",
         "Database",
         "DebugServer",
@@ -54000,6 +54003,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "ConnectionVault",
+      "name": "ConnectionVault",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "source": {
+        "path": "internal/app/providers.go",
+        "symbol": "NewConnectionVault"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "Connector",
       "name": "Connector",
       "kind": "component",
@@ -55528,6 +55543,43 @@
       "implementation_candidates": []
     },
     {
+      "id": "Workflowdrafts",
+      "name": "Workflowdrafts",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/workflowdrafts.Service",
+      "source": {
+        "path": "internal/workflowdrafts/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/workflowdrafts.MockService",
+          "source": {
+            "path": "internal/workflowdrafts/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/workflowdrafts.forgeMiddlewareService",
+          "source": {
+            "path": "internal/workflowdrafts/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/workflowdrafts.service",
+          "source": {
+            "path": "internal/workflowdrafts/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "Worktree",
       "name": "Worktree",
       "kind": "component",
@@ -55601,6 +55653,32 @@
     }
   ],
   "bindings": [
+    {
+      "consumer": "APICatalogSearch",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "APIConnections",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
+      ],
+      "resolution": "composition_expression"
+    },
     {
       "consumer": "APIConnections",
       "field": "Vault",
@@ -56295,6 +56373,19 @@
     },
     {
       "consumer": "GitHubAccess",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "GitHubAccess",
       "field": "Vault",
       "interface": "github.com/reliant-labs/reliant/internal/vault.Service",
       "methods": [],
@@ -56469,6 +56560,19 @@
       ],
       "providers": [
         "WorktreeSweep"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "InputOptions",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
       ],
       "resolution": "composition_expression"
     },
@@ -56926,6 +57030,20 @@
     },
     {
       "consumer": "Preset",
+      "field": "Drafts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/preset.Drafts",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Workflowdrafts"
+      ],
+      "providers": [
+        "Workflowdrafts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Preset",
       "field": "Projects",
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
@@ -57089,6 +57207,15 @@
     },
     {
       "consumer": "Project",
+      "field": "Purges",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.ProjectPurges",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.Repository",
       "methods": [],
@@ -57135,6 +57262,17 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "ProjectPurge",
+      "field": "Purges",
+      "interface": "github.com/reliant-labs/reliant/internal/projectpurge.Service",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "ProviderAccount",
@@ -57439,6 +57577,20 @@
       ],
       "providers": [
         "Providerbackoff"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Scenario",
+      "field": "Drafts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/scenario.Drafts",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Workflowdrafts"
+      ],
+      "providers": [
+        "Workflowdrafts"
       ],
       "resolution": "composition_expression"
     },
@@ -57885,6 +58037,19 @@
     },
     {
       "consumer": "TemporalWorker",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "TemporalWorker",
       "field": "OrgAccounts",
       "interface": "github.com/reliant-labs/reliant/internal/credentials/orgaccounts.Service",
       "methods": [],
@@ -58315,6 +58480,19 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "TriggerDeliveryRelay",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "TriggerInbound",
       "field": "Vault",
       "interface": "github.com/reliant-labs/reliant/internal/vault.Service",
@@ -58324,6 +58502,19 @@
       ],
       "providers": [
         "Vault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "TriggerSenders",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
       ],
       "resolution": "composition_expression"
     },
@@ -58376,6 +58567,19 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "WorkerCatalogSearch",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "WorkerChat",
       "field": "Backoff",
       "interface": "github.com/reliant-labs/reliant/internal/providerbackoff.Service",
@@ -58399,6 +58603,19 @@
       ],
       "providers": [
         "AutomationTokens"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerIntegrationCredentials",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
       ],
       "resolution": "composition_expression"
     },
@@ -58431,6 +58648,19 @@
     },
     {
       "consumer": "WorkerToolsFactory",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerToolsFactory",
       "field": "WriteLedger",
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
       "methods": [],
@@ -58439,6 +58669,19 @@
       ],
       "providers": [
         "WriteLedger"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerTrigger",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "ConnectionVault"
+      ],
+      "providers": [
+        "ConnectionVault"
       ],
       "resolution": "composition_expression"
     },
@@ -58466,6 +58709,19 @@
       ],
       "providers": [
         "Trigger"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Workflow",
+      "field": "Drafts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/workflow.Drafts",
+      "methods": [],
+      "candidates": [
+        "Workflowdrafts"
+      ],
+      "providers": [
+        "Workflowdrafts"
       ],
       "resolution": "composition_expression"
     },
@@ -58545,6 +58801,48 @@
         "QueuedDeliverer"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Workflowdrafts",
+      "field": "Drafts",
+      "interface": "github.com/reliant-labs/reliant/internal/workflowdrafts.Drafts",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Workflowdrafts",
+      "field": "Locks",
+      "interface": "github.com/reliant-labs/reliant/internal/workflowdrafts.OrgLocks",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Workflowdrafts",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/workflowdrafts.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Workflowdrafts",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/workflowdrafts.UserUpdates",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Worktree",
@@ -58865,6 +59163,14 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Project.Purges",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Project.Shared",
       "source": {
         "path": "internal/handlers/project/service.go",
@@ -59053,6 +59359,38 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewVault"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Workflowdrafts.Drafts",
+      "source": {
+        "path": "internal/workflowdrafts/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Workflowdrafts.Locks",
+      "source": {
+        "path": "internal/workflowdrafts/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Workflowdrafts.Tx",
+      "source": {
+        "path": "internal/workflowdrafts/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Workflowdrafts.Updates",
+      "source": {
+        "path": "internal/workflowdrafts/service.go",
+        "symbol": "New"
       }
     },
     {

@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/vault"
+	"github.com/reliant-labs/reliant/internal/workflowdrafts"
 )
 
 const (
@@ -144,6 +145,10 @@ type Repo struct {
 	backoffOnce sync.Once
 	backoffSvc  providerbackoff.Service
 	backoffErr  error
+	// drafts is the workflow-draft package over this Repo, built on first use.
+	draftsOnce sync.Once
+	drafts     workflowdrafts.Service
+	draftsErr  error
 }
 
 // backoffBeforeRetry sleeps calculateBackoff(attempt) before RunTx retries.

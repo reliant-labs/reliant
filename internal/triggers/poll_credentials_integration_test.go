@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/connections"
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -86,7 +87,7 @@ func (te *tokenEndpoint) Do(req *http.Request) (*http.Response, error) {
 
 type pollCredEnv struct {
 	repo   *db.Repo
-	store  db.ConnectionStore
+	store  connectionvault.Service
 	vault  vault.Service
 	tokens *tokenEndpoint
 	poller *credPoller
@@ -111,7 +112,7 @@ func newPollCredEnv(t *testing.T) *pollCredEnv {
 	}))
 	require.NoError(t, err)
 	te := newTokenEndpoint(t)
-	store := repo.Connections()
+	store := db.TestConnections(t, repo)
 	source := connauth.New(connauth.Deps{Resolver: connections.NewResolver(repo, store, connections.NewTokenSource(store, v, providers, te))})
 	poller := &credPoller{}
 	tp := NewTriggerPoller(
@@ -126,7 +127,7 @@ func newPollCredEnv(t *testing.T) *pollCredEnv {
 // pollRepoOver adds the owner-scoped connection read, as the worker does.
 type pollRepoOver struct {
 	*db.Repo
-	conns db.ConnectionStore
+	conns connectionvault.Service
 }
 
 func (r pollRepoOver) GetConnection(ctx context.Context, userID, id string) (*core.Connection, error) {

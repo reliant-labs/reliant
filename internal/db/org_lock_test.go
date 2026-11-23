@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/authz"
 )
@@ -44,11 +45,11 @@ func TestWorkflowDrafts_WritesDecideOnTheRowUnderTheOrgLock(t *testing.T) {
 	overwrite := *upserted
 	overwrite.ID = uuid.NewString()
 	overwrite.Definition = "name: overwritten\n"
-	_, err := repo.UpsertWorkflowDraft(ctx, &overwrite)
+	_, err := testDrafts(t, repo).UpsertWorkflowDraft(ctx, &overwrite)
 	require.ErrorIs(t, err, ErrWorkflowSlugTaken, "an upsert over a draft stamped into a left org")
 	require.Equal(t, upserted.Definition, stored(upserted.ID).Definition)
 
-	require.NoError(t, repo.DeleteWorkflowDraftBySlug(ctx, userID, deleted.Slug))
+	require.NoError(t, testDrafts(t, repo).DeleteWorkflowDraftBySlug(ctx, userID, deleted.Slug))
 	require.NotNil(t, stored(deleted.ID), "a delete of a draft stamped into a left org deletes nothing")
 
 	// A slug free when the caller checked it: another write inserts acme's
@@ -59,12 +60,12 @@ func TestWorkflowDrafts_WritesDecideOnTheRowUnderTheOrgLock(t *testing.T) {
 	require.NoError(t, repo.CreateWorkflowDraft(context.Background(), intervening))
 	fresh := newDraftForTest(userID)
 	fresh.Slug, fresh.Definition = intervening.Slug, "name: mine\n"
-	_, err = repo.UpsertWorkflowDraft(ctx, fresh)
+	_, err = testDrafts(t, repo).UpsertWorkflowDraft(ctx, fresh)
 	require.ErrorIs(t, err, ErrWorkflowSlugTaken, "an upsert into a slug a denied draft took")
 	require.Equal(t, intervening.Definition, stored(intervening.ID).Definition)
 
 	// Each by-id write decides on the locked row too.
-	_, err = repo.SetWorkflowDraftHidden(ctx, upserted.ID, true)
+	_, err = testDrafts(t, repo).SetWorkflowDraftHidden(ctx, upserted.ID, true)
 	require.Error(t, err, "hide a draft stamped into a left org")
 	require.False(t, stored(upserted.ID).IsHidden)
 }

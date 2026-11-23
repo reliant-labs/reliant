@@ -122,7 +122,7 @@ func TestAccessRoutingHonoursANamedConnection(t *testing.T) {
 		ID: uuid.NewString(), OwnerKind: core.ConnectionOwnerUser, UserID: "alice", IntegrationID: "github",
 		AuthKind: "oauth2", Name: "gh", Status: core.ConnectionStatusActive, CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.Connections().CreateConnection(ctx, conn, nil,
+	require.NoError(t, TestConnections(t, repo).CreateConnection(ctx, conn, nil,
 		core.ConnectionEvent{ConnectionID: conn.ID, UserID: "alice", Kind: core.ConnectionEventCreated, Actor: "user:alice"}))
 	withConn := accessTrigger(t, repo, "alice", "github", true, &conn.ID)
 	delegated := accessTrigger(t, repo, "alice", "github", true, nil)

@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/projectpurge"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
@@ -62,7 +63,7 @@ func TestAChatOfADeletedProjectIsHiddenFromASavedIDUntilRestored(t *testing.T) {
 
 	org := viewertest.OrgID
 	decided := core.ProjectDecision{OwnerUserID: f.OwnerID, OrgID: &org}
-	_, err := repo.ScheduleProjectDeletion(context.Background(), f.ProjectID, f.OwnerID,
+	_, err := projectpurge.New(projectpurge.Deps{DB: repo.ORM()}).ScheduleProjectDeletion(context.Background(), f.ProjectID, f.OwnerID,
 		time.Date(2026, time.January, 12, 12, 0, 0, 0, time.UTC), decided)
 	require.NoError(t, err)
 
@@ -81,7 +82,7 @@ func TestAChatOfADeletedProjectIsHiddenFromASavedIDUntilRestored(t *testing.T) {
 	require.NoError(t, err, "the store's unauthorized read, which the purge relies on, still sees the chat")
 	assert.True(t, row.ProjectDeleted)
 
-	_, err = repo.RestoreProject(context.Background(), f.ProjectID, decided)
+	_, err = projectpurge.New(projectpurge.Deps{DB: repo.ORM()}).RestoreProject(context.Background(), f.ProjectID, decided)
 	require.NoError(t, err)
 	for name, call := range map[string]func(context.Context) error{"transcript": transcript, "chat": getChat, "mark unread": markUnread, "rename": rename, "bare row": bareRow} {
 		require.NoError(t, call(f.Owner), "owner %s after the restore", name)

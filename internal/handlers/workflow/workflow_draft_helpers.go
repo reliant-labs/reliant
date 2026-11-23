@@ -57,14 +57,14 @@ func (s *Service) workflowSlugTaken(ctx context.Context, userID, projectID, slug
 	if _, err := builtin.BuiltinWorkflowsFS.ReadFile(slug + ".yaml"); err == nil {
 		return true, nil
 	}
-	bySlug, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
+	bySlug, err := s.deps.Drafts.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
 		return false, svcerr.WrapOr(err, svcerr.Internal("failed to check existing workflow"))
 	}
 	if bySlug != nil {
 		return true, nil
 	}
-	byName, err := s.deps.Repo.GetWorkflowDraftByName(ctx, userID, slug)
+	byName, err := s.deps.Drafts.GetWorkflowDraftByName(ctx, userID, slug)
 	if err != nil {
 		return false, svcerr.WrapOr(err, svcerr.Internal("failed to check existing workflow name"))
 	}

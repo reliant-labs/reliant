@@ -40,6 +40,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/certs"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -683,6 +684,17 @@ type ProviderAccountsDeps struct {
 // drivers take the narrow slice of it each reads.
 func NewProviderAccounts(d ProviderAccountsDeps) (provideraccounts.Service, error) {
 	return provideraccounts.NewInstrumented(provideraccounts.Deps{DB: d.DB.ORM(), Sealer: d.Vault})
+}
+
+// ConnectionVaultDeps is the database the connections and their ciphertext live in.
+type ConnectionVaultDeps struct {
+	DB *db.Repo
+}
+
+// NewConnectionVault is the only path to the connections tables and connection_secrets: it stores
+// and returns ciphertext only; internal/connections seals and opens it.
+func NewConnectionVault(d ConnectionVaultDeps) (connectionvault.Service, error) {
+	return connectionvault.NewInstrumented(connectionvault.Deps{DB: d.DB.ORM()})
 }
 
 // OrgAccountsDeps is the database an organization's provider credentials live in and the vault

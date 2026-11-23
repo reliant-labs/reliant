@@ -165,7 +165,7 @@ func (m *MockDaemonInstalls) ListProjectDaemonsForDaemon(ctx context.Context, da
 var _ DaemonInstalls = (*MockDaemonInstalls)(nil)
 
 // forge:section MockRepository
-// forge:hash=77a57b2773b97b9910895afa1791436c38bd5b5a2898ba35efaf7007a01cbe5a
+// forge:hash=da91491e5ebf2d5161b429ea503b31e461f4e1ffb3b837b3ac90a71b256956cf
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -185,11 +185,6 @@ type MockRepository struct {
 	SetProjectForgeNameFunc                func(context.Context, string, string, string) (bool, error)
 	TouchProjectFunc                       func(context.Context, string, string) error
 	DeleteProjectFunc                      func(context.Context, string, string) error
-	ScheduleProjectDeletionFunc            func(context.Context, string, string, time.Time, core.ProjectDecision) (core.ProjectDeletion, error)
-	RestoreProjectFunc                     func(context.Context, string, core.ProjectDecision) ([]string, error)
-	ClaimProjectPurgeNowFunc               func(context.Context, string, core.ProjectDecision) error
-	PurgeClaimedProjectFunc                func(context.Context, string, string) ([]string, error)
-	ListDeletedProjectsFunc                func(context.Context, string, *core.OrgScope, bool) ([]*core.Project, error)
 	UpsertProjectDaemonFunc                func(context.Context, string, string, string, *string) error
 	RecordObservedProjectDaemonInScopeFunc func(context.Context, string, string, string, *string, *core.OrgScope) (bool, error)
 	UpsertQueuedProjectDaemonFunc          func(context.Context, string, string, string, *string, string) error
@@ -303,51 +298,6 @@ func (m *MockRepository) DeleteProject(ctx context.Context, id string, userID st
 		return m.DeleteProjectFunc(ctx, id, userID)
 	}
 	return contractkit.MockNotSet("MockRepository", "DeleteProject")
-}
-
-// ScheduleProjectDeletion records the call and delegates to ScheduleProjectDeletionFunc when set.
-func (m *MockRepository) ScheduleProjectDeletion(ctx context.Context, id string, by string, deleteAfter time.Time, decided core.ProjectDecision) (core.ProjectDeletion, error) {
-	m.Recorder.Record("ScheduleProjectDeletion", ctx, id, by, deleteAfter, decided)
-	if m.ScheduleProjectDeletionFunc != nil {
-		return m.ScheduleProjectDeletionFunc(ctx, id, by, deleteAfter, decided)
-	}
-	return *new(core.ProjectDeletion), contractkit.MockNotSet("MockRepository", "ScheduleProjectDeletion")
-}
-
-// RestoreProject records the call and delegates to RestoreProjectFunc when set.
-func (m *MockRepository) RestoreProject(ctx context.Context, id string, decided core.ProjectDecision) ([]string, error) {
-	m.Recorder.Record("RestoreProject", ctx, id, decided)
-	if m.RestoreProjectFunc != nil {
-		return m.RestoreProjectFunc(ctx, id, decided)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "RestoreProject")
-}
-
-// ClaimProjectPurgeNow records the call and delegates to ClaimProjectPurgeNowFunc when set.
-func (m *MockRepository) ClaimProjectPurgeNow(ctx context.Context, id string, decided core.ProjectDecision) error {
-	m.Recorder.Record("ClaimProjectPurgeNow", ctx, id, decided)
-	if m.ClaimProjectPurgeNowFunc != nil {
-		return m.ClaimProjectPurgeNowFunc(ctx, id, decided)
-	}
-	return contractkit.MockNotSet("MockRepository", "ClaimProjectPurgeNow")
-}
-
-// PurgeClaimedProject records the call and delegates to PurgeClaimedProjectFunc when set.
-func (m *MockRepository) PurgeClaimedProject(ctx context.Context, id string, owner string) ([]string, error) {
-	m.Recorder.Record("PurgeClaimedProject", ctx, id, owner)
-	if m.PurgeClaimedProjectFunc != nil {
-		return m.PurgeClaimedProjectFunc(ctx, id, owner)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "PurgeClaimedProject")
-}
-
-// ListDeletedProjects records the call and delegates to ListDeletedProjectsFunc when set.
-func (m *MockRepository) ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope, includePurging bool) ([]*core.Project, error) {
-	m.Recorder.Record("ListDeletedProjects", ctx, userID, org, includePurging)
-	if m.ListDeletedProjectsFunc != nil {
-		return m.ListDeletedProjectsFunc(ctx, userID, org, includePurging)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListDeletedProjects")
 }
 
 // UpsertProjectDaemon records the call and delegates to UpsertProjectDaemonFunc when set.
@@ -559,6 +509,72 @@ func (m *MockRepository) UpdateSetting(ctx context.Context, setting *db.Setting)
 
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockProjectPurges
+// forge:hash=0153f78e9f45d88bdc8ac44486ac9fba1d2cbb27d5f962258f169c46d08937ff
+
+// MockProjectPurges is a test mock for the ProjectPurges interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProjectPurges.<Method>Func not set" error.
+type MockProjectPurges struct {
+	contractkit.Recorder
+	ScheduleProjectDeletionFunc func(context.Context, string, string, time.Time, core.ProjectDecision) (core.ProjectDeletion, error)
+	RestoreProjectFunc          func(context.Context, string, core.ProjectDecision) ([]string, error)
+	ClaimProjectPurgeNowFunc    func(context.Context, string, core.ProjectDecision) error
+	PurgeClaimedProjectFunc     func(context.Context, string, string) ([]string, error)
+	ListDeletedProjectsFunc     func(context.Context, string, *core.OrgScope, bool) ([]*core.Project, error)
+}
+
+// ScheduleProjectDeletion records the call and delegates to ScheduleProjectDeletionFunc when set.
+func (m *MockProjectPurges) ScheduleProjectDeletion(ctx context.Context, id string, by string, deleteAfter time.Time, decided core.ProjectDecision) (core.ProjectDeletion, error) {
+	m.Recorder.Record("ScheduleProjectDeletion", ctx, id, by, deleteAfter, decided)
+	if m.ScheduleProjectDeletionFunc != nil {
+		return m.ScheduleProjectDeletionFunc(ctx, id, by, deleteAfter, decided)
+	}
+	return *new(core.ProjectDeletion), contractkit.MockNotSet("MockProjectPurges", "ScheduleProjectDeletion")
+}
+
+// RestoreProject records the call and delegates to RestoreProjectFunc when set.
+func (m *MockProjectPurges) RestoreProject(ctx context.Context, id string, decided core.ProjectDecision) ([]string, error) {
+	m.Recorder.Record("RestoreProject", ctx, id, decided)
+	if m.RestoreProjectFunc != nil {
+		return m.RestoreProjectFunc(ctx, id, decided)
+	}
+	return nil, contractkit.MockNotSet("MockProjectPurges", "RestoreProject")
+}
+
+// ClaimProjectPurgeNow records the call and delegates to ClaimProjectPurgeNowFunc when set.
+func (m *MockProjectPurges) ClaimProjectPurgeNow(ctx context.Context, id string, decided core.ProjectDecision) error {
+	m.Recorder.Record("ClaimProjectPurgeNow", ctx, id, decided)
+	if m.ClaimProjectPurgeNowFunc != nil {
+		return m.ClaimProjectPurgeNowFunc(ctx, id, decided)
+	}
+	return contractkit.MockNotSet("MockProjectPurges", "ClaimProjectPurgeNow")
+}
+
+// PurgeClaimedProject records the call and delegates to PurgeClaimedProjectFunc when set.
+func (m *MockProjectPurges) PurgeClaimedProject(ctx context.Context, id string, owner string) ([]string, error) {
+	m.Recorder.Record("PurgeClaimedProject", ctx, id, owner)
+	if m.PurgeClaimedProjectFunc != nil {
+		return m.PurgeClaimedProjectFunc(ctx, id, owner)
+	}
+	return nil, contractkit.MockNotSet("MockProjectPurges", "PurgeClaimedProject")
+}
+
+// ListDeletedProjects records the call and delegates to ListDeletedProjectsFunc when set.
+func (m *MockProjectPurges) ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope, includePurging bool) ([]*core.Project, error) {
+	m.Recorder.Record("ListDeletedProjects", ctx, userID, org, includePurging)
+	if m.ListDeletedProjectsFunc != nil {
+		return m.ListDeletedProjectsFunc(ctx, userID, org, includePurging)
+	}
+	return nil, contractkit.MockNotSet("MockProjectPurges", "ListDeletedProjects")
+}
+
+// Compile-time check.
+var _ ProjectPurges = (*MockProjectPurges)(nil)
 
 // forge:section MockMoveLedger
 // forge:hash=f8016713816e585dc78448b1194818d11ce8c3048ff5f86912ca9ef7b4d4090b

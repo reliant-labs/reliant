@@ -91,7 +91,7 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	doer := slackDoer{target: slack}
-	store := repo.Connections()
+	store := db.TestConnections(t, repo)
 	tokens := connections.NewTokenSource(store, sealer, providers, doer)
 	broker := connections.NewBroker(store, sealer, providers, doer, "https://reliant.example")
 	conns := connections.NewService(store, sealer, providers, tokens, broker, doer)

@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/reliant-labs/forge/pkg/pgtest"
 	forgedb "github.com/reliant-labs/reliant/db"
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -366,4 +367,15 @@ func TestOrgAccounts(tb testing.TB, repo *Repo) orgaccounts.Service {
 		tb.Fatalf("org accounts: %v", err)
 	}
 	return org
+}
+
+// TestConnections is the connection store over repo's database: what a test uses to read and
+// write connections now that the facade does not.
+func TestConnections(tb testing.TB, repo *Repo) connectionvault.Service {
+	tb.Helper()
+	conns, err := connectionvault.NewInstrumented(connectionvault.Deps{DB: repo.ORM()})
+	if err != nil {
+		tb.Fatalf("connection vault: %v", err)
+	}
+	return conns
 }

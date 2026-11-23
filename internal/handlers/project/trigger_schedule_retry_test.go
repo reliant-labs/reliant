@@ -89,7 +89,7 @@ func (s *temporalSchedules) failing(fail func(call int) bool) {
 func retryingService(t *testing.T, f *deleteAuthFixture, temporal *temporalSchedules, attempts int) (*Service, context.Context) {
 	t.Helper()
 	m := orgs.New(f.members)
-	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: f.repo, Projects: projectaccesstest.For(f.repo), Orgs: m, Schedules: temporal, Now: func() time.Time { return deleteNow }})))
+	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: f.repo, Projects: projectaccesstest.For(f.repo), Purges: f.purges, Orgs: m, Schedules: temporal, Now: func() time.Time { return deleteNow }})))
 	svc.SetScheduleRetry(0, 0, attempts)
 	return svc, as(m, f.owner, auth.CredentialSession, "")
 }

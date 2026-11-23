@@ -306,10 +306,6 @@ type connectionReader interface {
 	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
 }
 
-type connectionStoreProvider interface {
-	Connections() db.ConnectionStore
-}
-
 type accessSubjectReader interface {
 	GetIntegrationAccessSubject(ctx context.Context, userID, integrationID string, freshAfter time.Time) (string, error)
 }
@@ -317,7 +313,7 @@ type accessSubjectReader interface {
 // ownerSource is the production repository's side of owner resolution; the
 // assertion keeps a refactor of *db.Repo from silently emptying every owner.
 type ownerSource interface {
-	connectionStoreProvider
+	connectionReader
 	accessSubjectReader
 }
 
@@ -377,13 +373,8 @@ func OwnerOf(ctx context.Context, repo any, t *core.Trigger) triggerspec.Owner {
 // through, or "" when it is not the owner's GitHub connection or cannot be
 // read.
 func connectionSenderID(ctx context.Context, repo any, t *core.Trigger) string {
-	var reader connectionReader
-	switch r := repo.(type) {
-	case connectionReader:
-		reader = r
-	case connectionStoreProvider:
-		reader = r.Connections()
-	default:
+	reader, ok := repo.(connectionReader)
+	if !ok {
 		return ""
 	}
 	conn, err := reader.GetConnection(ctx, t.UserID, *t.ConnectionID)
