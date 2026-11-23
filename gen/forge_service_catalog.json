@@ -56020,6 +56020,19 @@
     },
     {
       "consumer": "Chat",
+      "field": "ProjectRows",
+      "interface": "github.com/reliant-labs/reliant/internal/launch.ProjectReader",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Questions",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Questions",
       "methods": [],
@@ -56106,6 +56119,30 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.ToolBlocks",
       "methods": [],
       "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "Workflows",
+      "interface": "github.com/reliant-labs/reliant/internal/launch.WorkflowLoader",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "Worktrees",
+      "interface": "github.com/reliant-labs/reliant/internal/launch.WorktreeReader",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],

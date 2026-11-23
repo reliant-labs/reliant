@@ -323,7 +323,7 @@ type RunLifecycleDeps struct {
 // NewRunLifecycle is the run service: it records runs and drives their
 // workflows.
 func NewRunLifecycle(d RunLifecycleDeps) (*runs.Service, error) {
-	return runs.New(runs.Deps{Repo: d.DB, Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause, Waits: d.Backoff}), nil
+	return runs.New(runs.Deps{Repo: d.DB, Workflows: store.NewWorkflowExtStore(d.DB.ORM()), Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause, Waits: d.Backoff}), nil
 }
 
 // RunLauncherDeps is what a launch creates and starts.
@@ -341,14 +341,17 @@ type RunLauncherDeps struct {
 func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
 	pinner := daemonplacement.NewPinner(d.DB, d.Router.NATSDaemonRouter)
 	return launch.New(launch.Deps{
-		Store:      d.DB,
-		Projects:   projectaccess.NewFromORM(d.DB.ORM()),
-		Selections: store.NewChatSelectionExtStore(d.DB.ORM()),
-		Threads:    threads.New(threads.Deps{Repo: d.DB}),
-		Temporal:   d.Temporal.Client,
-		Runs:       d.Runs,
-		TaskQueue:  v2workflow.SharedTaskQueue,
-		Pinner:     pinner,
+		Store:       d.DB,
+		Workflows:   store.NewWorkflowExtStore(d.DB.ORM()),
+		Worktrees:   store.NewWorktreeExtStore(d.DB.ORM()),
+		ProjectRows: store.NewProjectExtStore(d.DB.ORM()),
+		Projects:    projectaccess.NewFromORM(d.DB.ORM()),
+		Selections:  store.NewChatSelectionExtStore(d.DB.ORM()),
+		Threads:     threads.New(threads.Deps{Repo: d.DB}),
+		Temporal:    d.Temporal.Client,
+		Runs:        d.Runs,
+		TaskQueue:   v2workflow.SharedTaskQueue,
+		Pinner:      pinner,
 	}), nil
 }
 
@@ -375,6 +378,9 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Logger:      d.Logger,
 		Config:      d.Config,
 		Repo:        d.DB,
+		Workflows:   store.NewWorkflowExtStore(d.DB.ORM()),
+		Worktrees:   store.NewWorktreeExtStore(d.DB.ORM()),
+		ProjectRows: store.NewProjectExtStore(d.DB.ORM()),
 		Questions:   store.NewQuestionExtStore(d.DB.ORM()),
 		Spawns:      store.NewToolCallExtStore(d.DB.ORM()),
 		Selections:  store.NewChatSelectionExtStore(d.DB.ORM()),

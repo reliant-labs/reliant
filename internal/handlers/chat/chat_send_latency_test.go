@@ -71,11 +71,14 @@ func TestSendMessage_DoesNotWaitOnASlowParamsQuery(t *testing.T) {
 	}}
 	service := &Service{
 		deps: Deps{
-			Repo:      repo,
-			Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+			Repo:        repo,
+			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
+			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
+			ProjectRows: store.NewProjectExtStore(repo.ORM()),
+			Questions:   store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
 			Temporal: temporal,
 		},
-		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
+		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
 	// A backstop, so a regression fails instead of hanging the package.
@@ -159,11 +162,14 @@ func TestSendMessage_DoesNotReadTheWholeProjectConfigRow(t *testing.T) {
 			}
 			service := &Service{
 				deps: Deps{
-					Repo:      repo,
-					Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+					Repo:        repo,
+					Workflows:   store.NewWorkflowExtStore(repo.ORM()),
+					Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
+					ProjectRows: store.NewProjectExtStore(repo.ORM()),
+					Questions:   store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
 					Temporal: temporal,
 				},
-				runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
+				runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
 			}
 
 			req := sendMessageRequest(t, fx.chatID, "next step")
