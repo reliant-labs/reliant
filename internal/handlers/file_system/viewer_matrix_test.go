@@ -3,6 +3,7 @@ package file_system
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
@@ -14,6 +15,6 @@ func TestFileSystemServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestFileSystem(t, WithFileSystemDeps(Deps{Repo: repo}))
+	svc := NewTestFileSystem(t, WithFileSystemDeps(Deps{Repo: repo, Placement: daemonplacement.NewRecords(repo.ORM())}))
 	viewertest.RunService(t, f, svc, "reliant.v1.FileSystemService", nil)
 }

@@ -1,6 +1,7 @@
 // forge:deps — consumer-declared interfaces for this package's Deps.
 // The interfaces below are this package's own declarations of what it
-// needs from its Deps; mock_gen.go mocks them. *db.Repo satisfies Repository.
+// needs from its Deps; mock_gen.go mocks them. *db.Repo satisfies Repository;
+// daemonplacement.Records satisfies Placement.
 package file_system
 
 import (
@@ -10,12 +11,20 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// Repository is the slice of *db.Repo the filesystem handlers use.
+// Repository is the slice of *db.Repo the filesystem handlers use: the chat
+// a request names. With Placement it resolves a request's workspace
+// (filepreview.ResolveBasePath) and its machine (daemonplacement).
 type Repository interface {
-	// GetChat, GetWorktree and GetProject resolve a request's workspace
-	// (filepreview.ResolveBasePath) and its machine (daemonplacement); the
-	// main checkout is that machine's project_daemons row (projectcheckout).
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+}
+
+// Placement reads the workspace, project and machine rows a request is placed
+// by (daemonplacement.Records in production). It checks no owner: every
+// handler checks the returned row against the caller.
+type Placement interface {
+	// GetWorktree and GetProject resolve a request's workspace and check it
+	// is the caller's; the main checkout is that machine's project_daemons
+	// row (projectcheckout).
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	// ListProjectDaemonsForProject reads a missing checkout's clone records.

@@ -5,6 +5,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
@@ -16,6 +17,6 @@ func TestPackageCommandsServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+	svc := NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Repo: repo, Placement: daemonplacement.NewRecords(repo.ORM()), Projects: projectaccesstest.For(repo)}))
 	viewertest.RunService(t, f, svc, "reliant.v1.PackageCommandsService", nil)
 }

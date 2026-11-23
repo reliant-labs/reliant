@@ -2199,7 +2199,7 @@ func (m *MocklistRunsStore) GetChat(ctx context.Context, id string) (*db.Chat, e
 var _ listRunsStore = (*MocklistRunsStore)(nil)
 
 // forge:section MockgetRunStore
-// forge:hash=36f24b4dd4ac955edcca8c50d9c6777fc5ff5aab88f474c90abad6658b2c93b0
+// forge:hash=29340210a34456b06cf225c346d619b29348fbdd8adb02ce07732cef0481de2e
 
 // MockgetRunStore is a test mock for the getRunStore interface.
 //
@@ -2253,7 +2253,6 @@ type MockgetRunStore struct {
 	SeedSeqCounterForForkFunc                                func(context.Context, string, string) error
 	RunTxFunc                                                func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 	ListRunNodeExecutionsFunc                                func(context.Context, string, int) ([]*db.StepExecution, error)
-	GetWorkflowFunc                                          func(context.Context, string) (*db.Workflow, error)
 	GetChatFunc                                              func(context.Context, string) (*db.Chat, error)
 }
 
@@ -2653,15 +2652,6 @@ func (m *MockgetRunStore) ListRunNodeExecutions(ctx context.Context, workflowID 
 	return nil, contractkit.MockNotSet("MockgetRunStore", "ListRunNodeExecutions")
 }
 
-// GetWorkflow records the call and delegates to GetWorkflowFunc when set.
-func (m *MockgetRunStore) GetWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
-	m.Recorder.Record("GetWorkflow", ctx, id)
-	if m.GetWorkflowFunc != nil {
-		return m.GetWorkflowFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockgetRunStore", "GetWorkflow")
-}
-
 // GetChat records the call and delegates to GetChatFunc when set.
 func (m *MockgetRunStore) GetChat(ctx context.Context, id string) (*db.Chat, error) {
 	m.Recorder.Record("GetChat", ctx, id)
@@ -2674,8 +2664,142 @@ func (m *MockgetRunStore) GetChat(ctx context.Context, id string) (*db.Chat, err
 // Compile-time check.
 var _ getRunStore = (*MockgetRunStore)(nil)
 
+// forge:section MockRunWorkflows
+// forge:hash=af9248c0cc63ae0690d3d0e4e0718d1c7adac1eaca953b9767ec817803ca4016
+
+// MockRunWorkflows is a test mock for the RunWorkflows interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockRunWorkflows.<Method>Func not set" error.
+type MockRunWorkflows struct {
+	contractkit.Recorder
+	LoadWorkflowFunc func(context.Context, string) (*db.Workflow, error)
+}
+
+// LoadWorkflow records the call and delegates to LoadWorkflowFunc when set.
+func (m *MockRunWorkflows) LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
+	m.Recorder.Record("LoadWorkflow", ctx, id)
+	if m.LoadWorkflowFunc != nil {
+		return m.LoadWorkflowFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockRunWorkflows", "LoadWorkflow")
+}
+
+// Compile-time check.
+var _ RunWorkflows = (*MockRunWorkflows)(nil)
+
+// forge:section MockPlacementRecords
+// forge:hash=3ba21f9c7767857aec27ebde12a4f242b684c5e5a7ec9af1e3c1a57faa1cd254
+
+// MockPlacementRecords is a test mock for the PlacementRecords interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockPlacementRecords.<Method>Func not set" error.
+type MockPlacementRecords struct {
+	contractkit.Recorder
+	GetWorktreeFunc func(context.Context, string) (*db.Worktree, error)
+	GetProjectFunc  func(context.Context, string) (*db.Project, error)
+	GetDaemonFunc   func(context.Context, string) (*db.Daemon, error)
+}
+
+// GetWorktree records the call and delegates to GetWorktreeFunc when set.
+func (m *MockPlacementRecords) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
+	m.Recorder.Record("GetWorktree", ctx, id)
+	if m.GetWorktreeFunc != nil {
+		return m.GetWorktreeFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockPlacementRecords", "GetWorktree")
+}
+
+// GetProject records the call and delegates to GetProjectFunc when set.
+func (m *MockPlacementRecords) GetProject(ctx context.Context, id string) (*db.Project, error) {
+	m.Recorder.Record("GetProject", ctx, id)
+	if m.GetProjectFunc != nil {
+		return m.GetProjectFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockPlacementRecords", "GetProject")
+}
+
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockPlacementRecords) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockPlacementRecords", "GetDaemon")
+}
+
+// Compile-time check.
+var _ PlacementRecords = (*MockPlacementRecords)(nil)
+
+// forge:section MockbugReportMachines
+// forge:hash=7ac6c3d1f839eef0a417b45cc5c4010ccc657fb9fa0a45b1efacdee0baa53e1b
+
+// MockbugReportMachines is a test mock for the bugReportMachines interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockbugReportMachines.<Method>Func not set" error.
+type MockbugReportMachines struct {
+	contractkit.Recorder
+	GetDaemonFunc func(context.Context, string) (*db.Daemon, error)
+}
+
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockbugReportMachines) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockbugReportMachines", "GetDaemon")
+}
+
+// Compile-time check.
+var _ bugReportMachines = (*MockbugReportMachines)(nil)
+
+// forge:section MockworktreeRecords
+// forge:hash=4b443f460928c0ad22619a9de97cdab2a34026313d78a31fed47e35f1887e5f8
+
+// MockworktreeRecords is a test mock for the worktreeRecords interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockworktreeRecords.<Method>Func not set" error.
+type MockworktreeRecords struct {
+	contractkit.Recorder
+	GetWorktreeFunc func(context.Context, string) (*db.Worktree, error)
+	GetProjectFunc  func(context.Context, string) (*db.Project, error)
+}
+
+// GetWorktree records the call and delegates to GetWorktreeFunc when set.
+func (m *MockworktreeRecords) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
+	m.Recorder.Record("GetWorktree", ctx, id)
+	if m.GetWorktreeFunc != nil {
+		return m.GetWorktreeFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockworktreeRecords", "GetWorktree")
+}
+
+// GetProject records the call and delegates to GetProjectFunc when set.
+func (m *MockworktreeRecords) GetProject(ctx context.Context, id string) (*db.Project, error) {
+	m.Recorder.Record("GetProject", ctx, id)
+	if m.GetProjectFunc != nil {
+		return m.GetProjectFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockworktreeRecords", "GetProject")
+}
+
+// Compile-time check.
+var _ worktreeRecords = (*MockworktreeRecords)(nil)
+
 // forge:section MockbugReportLookup
-// forge:hash=8cf55e6345018ee950b0ec291e95f3a925a8cd266e3811c51308437464763b7c
+// forge:hash=95e5a41a82e0821bceb9883fb79cff332e492e74dad433ea119a09c47a7d45e7
 
 // MockbugReportLookup is a test mock for the bugReportLookup interface.
 //
@@ -2687,7 +2811,6 @@ type MockbugReportLookup struct {
 	contractkit.Recorder
 	GetChatFunc                           func(context.Context, string) (*db.Chat, error)
 	GetLatestMessageInThreadFunc          func(context.Context, string) (*db.Message, error)
-	GetDaemonFunc                         func(context.Context, string) (*db.Daemon, error)
 	ListDaemonsByUserIDFunc               func(context.Context, string) ([]*db.Daemon, error)
 	ListFreshDaemonAttachmentsForUserFunc func(context.Context, string, time.Duration) ([]*db.DaemonAttachment, error)
 }
@@ -2708,15 +2831,6 @@ func (m *MockbugReportLookup) GetLatestMessageInThread(ctx context.Context, thre
 		return m.GetLatestMessageInThreadFunc(ctx, threadID)
 	}
 	return nil, contractkit.MockNotSet("MockbugReportLookup", "GetLatestMessageInThread")
-}
-
-// GetDaemon records the call and delegates to GetDaemonFunc when set.
-func (m *MockbugReportLookup) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
-	m.Recorder.Record("GetDaemon", ctx, id)
-	if m.GetDaemonFunc != nil {
-		return m.GetDaemonFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockbugReportLookup", "GetDaemon")
 }
 
 // ListDaemonsByUserID records the call and delegates to ListDaemonsByUserIDFunc when set.
@@ -3391,7 +3505,7 @@ func (m *MockrunScenarioStore) GetChat(ctx context.Context, id string) (*db.Chat
 var _ runScenarioStore = (*MockrunScenarioStore)(nil)
 
 // forge:section MockworktreeStore
-// forge:hash=e9c63573c29739275f38799d1c8ab9e79397bb99d29fb632bd1f23fd4d2d325f
+// forge:hash=c0333279691b8eda66b21d00a82060f0dbd9404ebc79ad03eae905b772808c16
 
 // MockworktreeStore is a test mock for the worktreeStore interface.
 //
@@ -3411,11 +3525,9 @@ type MockworktreeStore struct {
 	CreateRepoFunc               func(context.Context, *core.Repo) error
 	ListReposByProjectFunc       func(context.Context, string) ([]*core.Repo, error)
 	UpdateProjectFunc            func(context.Context, *db.Project, string) error
-	GetProjectFunc               func(context.Context, string) (*db.Project, error)
 	EmitUserRefetchFunc          func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 	GetLiveChatIDForWorktreeFunc func(context.Context, string) (string, error)
 	ListWorktreesFunc            func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
-	GetWorktreeFunc              func(context.Context, string) (*db.Worktree, error)
 }
 
 // CreateWorktree records the call and delegates to CreateWorktreeFunc when set.
@@ -3508,15 +3620,6 @@ func (m *MockworktreeStore) UpdateProject(ctx context.Context, project *db.Proje
 	return contractkit.MockNotSet("MockworktreeStore", "UpdateProject")
 }
 
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockworktreeStore) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockworktreeStore", "GetProject")
-}
-
 // EmitUserRefetch records the call and delegates to EmitUserRefetchFunc when set.
 func (m *MockworktreeStore) EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error {
 	m.Recorder.Record("EmitUserRefetch", ctx, userID, refetchType, opts)
@@ -3542,15 +3645,6 @@ func (m *MockworktreeStore) ListWorktrees(ctx context.Context, filters db.Worktr
 		return m.ListWorktreesFunc(ctx, filters)
 	}
 	return nil, contractkit.MockNotSet("MockworktreeStore", "ListWorktrees")
-}
-
-// GetWorktree records the call and delegates to GetWorktreeFunc when set.
-func (m *MockworktreeStore) GetWorktree(ctx context.Context, id string) (*db.Worktree, error) {
-	m.Recorder.Record("GetWorktree", ctx, id)
-	if m.GetWorktreeFunc != nil {
-		return m.GetWorktreeFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockworktreeStore", "GetWorktree")
 }
 
 // Compile-time check.

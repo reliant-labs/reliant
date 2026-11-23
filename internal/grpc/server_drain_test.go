@@ -40,6 +40,10 @@ const drainTestAPIKey = "drain-test-api-key"
 // embedded store, which is how a test of this size says "not expected here".
 type drainTestRoutesStore struct{ APIHTTPRoutesStore }
 
+// drainTestPlacement stands in for the terminal websocket's placement reads,
+// which nothing in these tests reaches either.
+type drainTestPlacement struct{ TerminalPlacement }
+
 // drainTestAuthority stands in for the token authority, which nothing in
 // these tests reaches: the API-key credential is checked by the auth
 // interceptor's own validator.
