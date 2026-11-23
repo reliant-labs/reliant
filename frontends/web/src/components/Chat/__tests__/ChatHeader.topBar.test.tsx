@@ -135,3 +135,37 @@ describe("ChatHeader says nothing the bar says", () => {
     expect(within(slot).getByText("billing-api")).toBeInTheDocument();
   });
 });
+
+describe("ChatHeader's scrolled-away prompt slot", () => {
+  function withWidth(wide: boolean) {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({ matches: wide && query === "(min-width: 1536px)", addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+    );
+  }
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("is offered to the timeline in a wide bar", () => {
+    withWidth(true);
+    const ref = vi.fn();
+    render(
+      <SurfaceProvider surface="desktop">
+        <ChatHeader chatId="chat-1" pinnedPromptSlotRef={ref} />
+      </SurfaceProvider>,
+    );
+    expect(ref).toHaveBeenCalledWith(within(slot).getByTestId("chat-pinned-prompt-slot"));
+  });
+
+  it("is not mounted in a narrower bar, so the timeline keeps the prompt in its own strip", () => {
+    withWidth(false);
+    const ref = vi.fn();
+    render(
+      <SurfaceProvider surface="desktop">
+        <ChatHeader chatId="chat-1" pinnedPromptSlotRef={ref} />
+      </SurfaceProvider>,
+    );
+    expect(screen.queryByTestId("chat-pinned-prompt-slot")).not.toBeInTheDocument();
+    // Its first render precedes claiming the bar (its own row, briefly); settled, the timeline holds no slot.
+    expect(ref.mock.calls.at(-1)?.[0]).toBeNull();
+  });
+});

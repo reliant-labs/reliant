@@ -61,6 +61,7 @@ import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
 import { machineDisplayName } from "@/lib/machineName";
 import { useProjectStore } from "../../store/projectStore";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 interface ChatHeaderProps {
   chatId: string | null;
@@ -128,6 +129,11 @@ export function ChatHeader({
     return () => useTopBarSlot.getState().release(token);
   }, []);
   const inAppBar = slotEl !== null && slotOwner === slotToken.current;
+  // In the app bar the scrolled-away prompt has room only from 2xl. Narrower,
+  // the slot is not mounted at all, so the timeline shows the prompt in its
+  // own strip instead of portalling it into a hidden element.
+  const wideBar = useMediaQuery("(min-width: 1536px)");
+  const showPromptSlot = !!pinnedPromptSlotRef && (!inAppBar || wideBar);
   const { dragRegionStyle, noDragRegionStyle } = useTitleBarChrome();
   // The app tag only when it says something the bar's project name does not.
   const projectName = useProjectStore((state) => state.currentProject?.name);
@@ -323,10 +329,10 @@ export function ChatHeader({
       <div className="min-w-2 flex-1 self-stretch" style={inAppBar ? dragRegionStyle : undefined} />
 
       {/* The prompt scrolled out of view: the timeline renders it here. */}
-      {pinnedPromptSlotRef && (
+      {showPromptSlot && (
         <div
           ref={pinnedPromptSlotRef}
-          className={cn("min-w-0 max-w-[40%] shrink justify-end", inAppBar ? "hidden 2xl:flex 2xl:max-w-[30%]" : "flex")}
+          className={cn("flex min-w-0 shrink justify-end", inAppBar ? "max-w-[30%]" : "max-w-[40%]")}
           data-testid="chat-pinned-prompt-slot"
         />
       )}
