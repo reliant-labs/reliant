@@ -55,3 +55,15 @@ func TestRequiredRolesRejectTheBareFacade(t *testing.T) {
 	var _ IntakeRepo = Stores{}
 	var _ PollRepo = Stores{}
 }
+
+// The projection, alerting and syncer stores are typed roles, and the
+// production Stores satisfies each; the facade alone no longer can.
+func TestProjectionAndAlertingRolesNeedTheGeneratedStore(t *testing.T) {
+	var facade any = (*db.Repo)(nil)
+	_, projection := facade.(ProjectionStore)
+	_, alerting := facade.(AlertingStore)
+	require.False(t, projection || alerting, "*db.Repo must not satisfy ProjectionStore or AlertingStore on its own")
+	var _ ProjectionStore = Stores{}
+	var _ AlertingStore = Stores{}
+	var _ Repo = Stores{}
+}

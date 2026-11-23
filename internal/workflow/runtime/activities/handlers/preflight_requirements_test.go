@@ -73,8 +73,8 @@ func (f *fakeConnections) Credential(_ context.Context, req httpaction.Credentia
 	return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: req.IntegrationID + " is not connected."}
 }
 
-func newRequirementsActivity(store RunExecutorContextStore, m *fakeProbeMachine, conns *fakeConnections) *PreflightRequirementsActivity {
-	a := NewPreflightRequirementsActivity(store, nil, conns)
+func newRequirementsActivity(store requirementsStore, m *fakeProbeMachine, conns *fakeConnections) *PreflightRequirementsActivity {
+	a := NewPreflightRequirementsActivity(store, store, nil, conns)
 	a.machine = func(ec RunExecutorContext) requirements.Machine { m.where = ec; return m }
 	return a
 }

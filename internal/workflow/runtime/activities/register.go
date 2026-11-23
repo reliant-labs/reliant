@@ -162,7 +162,9 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	var workflowRuns handlers.WorkflowRuns
 	var toolCalls handlers.ToolCalls
 	var questionsByStep handlers.QuestionsByStep
+	var workspaceRows handlers.WorkspaceRows
 	if deps.Repo != nil {
+		workspaceRows = handlers.NewWorkspaceRows(deps.Repo.ORM())
 		workflowRuns = handlers.NewWorkflowRuns(deps.Repo.ORM())
 		toolCalls = handlers.NewToolCalls(deps.Repo.ORM())
 		questionsByStep = store.NewQuestionExtStore(deps.Repo.ORM())
@@ -223,8 +225,8 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	if deps.Repo != nil {
 		runFunding = handlers.NewRunFundingStore(deps.Repo.ORM(), deps.Repo)
 	}
-	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(handlers.ExecuteToolsDeps{Store: deps.Repo, ToolExecutor: deps.ToolExecutor, ToolCalls: toolCalls, Preemption: mailboxStore.preempt}).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
-	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(handlers.ExecuteToolsDeps{Store: deps.Repo, ToolExecutor: deps.ToolExecutor, ToolCalls: toolCalls, Preemption: mailboxStore.preempt}).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(handlers.ExecuteToolsDeps{Store: deps.Repo, Rows: workspaceRows, ToolExecutor: deps.ToolExecutor, ToolCalls: toolCalls, Preemption: mailboxStore.preempt}).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(handlers.ExecuteToolsDeps{Store: deps.Repo, Rows: workspaceRows, ToolExecutor: deps.ToolExecutor, ToolCalls: toolCalls, Preemption: mailboxStore.preempt}).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
 	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger).WithHostedExecutor(deps.HostedActions).WithSecretResolver(deps.SecretResolver))
 
 	// ========================================================================
@@ -245,7 +247,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	}
 
 	v2.RegisterActivity(registry, handlers.NewApprovalCreateActivity(handlers.ApprovalCreateDeps{Repo: deps.Repo, Approvals: approvalsLookup}))
-	v2.RegisterActivity(registry, handlers.NewAutomationApprovalActivity(deps.ToolsFactory).WithExecutionStore(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewAutomationApprovalActivity(deps.ToolsFactory).WithExecutionStore(deps.Repo, workspaceRows))
 	v2.RegisterActivity(registry, handlers.NewApprovalResolveActivity(approvals))
 
 	// ========================================================================
@@ -259,7 +261,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// RUN STEP ACTIVITIES
 	// ========================================================================
 
-	runStep := handlers.NewExecuteRunStepActivity(deps.Repo, deps.ToolExecutor, deps.RunExecutor).WithDaemonRouter(deps.DaemonRouter)
+	runStep := handlers.NewExecuteRunStepActivity(deps.Repo, workspaceRows, deps.ToolExecutor, deps.RunExecutor).WithDaemonRouter(deps.DaemonRouter)
 	if deps.StepKeys != nil {
 		runStep = runStep.WithStepKeys(deps.StepKeys)
 	}
@@ -274,9 +276,9 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// WORKTREE ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewCreateWorktreeActivity(deps.Repo, deps.DaemonRouter))
-	v2.RegisterActivity(registry, handlers.NewGitPublishActivity(deps.Repo, deps.DaemonRouter, deps.Connections).WithLedger(deps.WriteLedger))
-	v2.RegisterActivity(registry, handlers.NewDeleteWorktreeActivity(deps.Repo, deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewCreateWorktreeActivity(deps.Repo, workspaceRows, deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewGitPublishActivity(deps.Repo, workspaceRows, deps.DaemonRouter, deps.Connections).WithLedger(deps.WriteLedger))
+	v2.RegisterActivity(registry, handlers.NewDeleteWorktreeActivity(deps.Repo, workspaceRows, deps.DaemonRouter))
 
 	// ========================================================================
 	// WORKFLOW MANAGEMENT ACTIVITIES
@@ -290,10 +292,10 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 		attention = handlers.NewAttentionRecorder(deps.Repo.ORM())
 		checkpoints = store.NewWorkflowCheckpointExtStore(deps.Repo.ORM())
 	}
-	v2.RegisterActivity(registry, handlers.NewLoadWorkflowActivity(deps.Repo))
-	v2.RegisterActivity(registry, handlers.NewPreflightDaemonCheckActivity(deps.Repo, deps.ToolExecutor))
-	v2.RegisterActivity(registry, handlers.NewPreflightRequirementsActivity(deps.Repo, deps.ToolExecutor, deps.Connections).WithDaemonRouter(deps.DaemonRouter))
-	v2.RegisterActivity(registry, handlers.NewMachineResumeWakeActivity(deps.Repo, deps.ToolExecutor))
+	v2.RegisterActivity(registry, handlers.NewLoadWorkflowActivity(deps.Repo, workspaceRows))
+	v2.RegisterActivity(registry, handlers.NewPreflightDaemonCheckActivity(deps.Repo, workspaceRows, deps.ToolExecutor))
+	v2.RegisterActivity(registry, handlers.NewPreflightRequirementsActivity(deps.Repo, workspaceRows, deps.ToolExecutor, deps.Connections).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewMachineResumeWakeActivity(deps.Repo, workspaceRows, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewGreenfieldProbeActivity(deps.Repo, deps.DaemonRouter))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(handlers.WorkflowStatusDeps{Repo: deps.Repo, Runs: runRecords, Workflows: workflowRuns, Attention: attention}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewThreadStatusActivity(handlers.ThreadStatusDeps{Store: deps.Repo, Mailbox: mailboxStore.resolver}))

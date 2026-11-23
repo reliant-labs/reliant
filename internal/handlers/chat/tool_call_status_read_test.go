@@ -52,6 +52,7 @@ func TestGetMessage_PopulatesDurableToolCallStatus(t *testing.T) {
 		Logger:  slog.Default(),
 		Config:  &typedconfig.Config{},
 		Repo:    repo,
+		Chats:   store.NewChatExtStore(repo.ORM()),
 		Senders: store.NewThreadExtStore(repo.ORM()),
 	})
 	require.NoError(t, err)

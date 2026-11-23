@@ -51,11 +51,12 @@ type LoadWorkflowOutput struct {
 // LoadWorkflowActivity loads a workflow definition from the filesystem
 type LoadWorkflowActivity struct {
 	repo LoadWorkflowStore
+	rows ProjectWorktreeReader
 }
 
 // NewLoadWorkflowActivity creates a new LoadWorkflow activity
-func NewLoadWorkflowActivity(repo LoadWorkflowStore) *LoadWorkflowActivity {
-	return &LoadWorkflowActivity{repo: repo}
+func NewLoadWorkflowActivity(repo LoadWorkflowStore, rows ProjectWorktreeReader) *LoadWorkflowActivity {
+	return &LoadWorkflowActivity{repo: repo, rows: rows}
 }
 
 // Name returns the activity name

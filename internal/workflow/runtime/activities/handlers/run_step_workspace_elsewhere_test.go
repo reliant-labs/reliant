@@ -41,7 +41,7 @@ func TestRunStep_SelectorAwayFromTheBranchWorkspaceExplainsTheFailure(t *testing
 	run := func(t *testing.T, selector string, workDir string, resp mockRunResponse) ExecuteRunStepOutput {
 		t.Helper()
 		executor := &mockRunExecutor{responses: []mockRunResponse{resp}}
-		act := NewExecuteRunStepActivity(f.h.Repo(), nil, executor)
+		act := NewExecuteRunStepActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), nil, executor)
 		env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 		env.RegisterActivity(act.Execute)
 		val, err := env.ExecuteActivity(act.Execute, ExecuteRunStepInput{
