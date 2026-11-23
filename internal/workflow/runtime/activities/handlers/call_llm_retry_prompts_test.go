@@ -104,7 +104,7 @@ func TestCallLLM_RetryAfterDroppedConnection_SendsIdenticalPrompts(t *testing.T)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	driver := &flakyConnectionDriver{}
-	callLLM := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+	callLLM := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
 	}, MCPBinder: nil})
 

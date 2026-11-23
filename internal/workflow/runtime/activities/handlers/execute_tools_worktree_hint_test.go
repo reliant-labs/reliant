@@ -154,7 +154,7 @@ func TestExecuteTools_GitWorktreeAddRunsWithASuggestion(t *testing.T) {
 	repo := h.Repo()
 	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(repo), repo, cfgpkg.DefaultParsedConfigCacheBytes)
 	executor := &shellOutputExecutor{echo: "Preparing worktree (new branch 'x')\n"}
-	activity := NewExecuteToolsActivity(h.Repo(), executor).WithToolCallResults(testToolCallResults(h.Repo())).WithConfigProvider(provider)
+	activity := NewExecuteToolsActivity(h.Repo(), toolCallsOf(h.Repo()), executor).WithConfigProvider(provider)
 
 	run := func(command string) *message.ToolResult {
 		t.Helper()

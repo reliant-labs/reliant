@@ -91,7 +91,7 @@ func TestExecuteTools_ReconnectWaitShowsWaitingForDaemon(t *testing.T) {
 	defer f.h.Cleanup()
 	ctx := context.Background()
 	f.h.CreateTestWorkflow(ctx, f.chatID, f.chatID)
-	a := NewExecuteToolsActivity(f.h.Repo(), newMockToolExecutor()).WithToolCallResults(testToolCallResults(f.h.Repo()))
+	a := NewExecuteToolsActivity(f.h.Repo(), toolCallsOf(f.h.Repo()), newMockToolExecutor())
 	observe := a.daemonWaitObserver(ctx, f.chatID)
 	require.NotNil(t, observe)
 

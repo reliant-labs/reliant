@@ -104,16 +104,18 @@ type RunExecutorContextStore interface {
 	daemonplacement.Installs
 }
 
-// ToolResultRecoveryStore is what recoverPersistedToolResults reads.
+// ToolResultRecoveryStore is what recoverPersistedToolResults reads: the result
+// of the call a given assistant message carries. store.ToolCallResultExtStore
+// satisfies it.
 type ToolResultRecoveryStore interface {
-	GetToolCallResultForMessage(ctx context.Context, toolCallID string, messageID string) (*db.ToolCallResult, error)
+	FindToolCallResultForMessage(ctx context.Context, toolCallID string, messageID string) (*core.ToolCallResult, error)
 }
 
 // MessageRepairStore is what ConvertAndRepairMessages reads: messageconv's
-// conversion, then the persisted tool results the repair recovers.
+// conversion. The persisted tool results the repair recovers come from a
+// ToolResultRecoveryStore beside it.
 type MessageRepairStore interface {
 	messageconv.Store
-	ToolResultRecoveryStore
 }
 
 // LLMHistoryStore is what LoadMessagesForLLM reads: the thread's current
@@ -121,6 +123,30 @@ type MessageRepairStore interface {
 type LLMHistoryStore interface {
 	threads.Repository
 	MessageRepairStore
+}
+
+// ToolCalls is the tool-call records the tool-execution path reads and
+// writes: a call by id (nil when none), the result recorded for it, and the
+// result write. Each takes the transaction the ctx carries. NewToolCalls
+// builds it over the generated ext stores.
+type ToolCalls interface {
+	FindToolCall(ctx context.Context, id string) (*core.ToolCall, error)
+	FindToolCallResult(ctx context.Context, toolCallID string) (*core.ToolCallResult, error)
+	UpsertToolCallResult(ctx context.Context, chatID string, result *core.ToolCallResult) error
+	ToolResultRecoveryStore
+}
+
+type toolCalls struct {
+	store.ToolCallExtStore
+	store.ToolCallResultExtStore
+}
+
+// NewToolCalls is the ToolCalls over the generated ext stores of db.
+func NewToolCalls(db orm.Context) ToolCalls {
+	return toolCalls{
+		ToolCallExtStore:       store.NewToolCallExtStore(db),
+		ToolCallResultExtStore: store.NewToolCallResultExtStore(db),
+	}
 }
 
 // WorkflowErrorWriter is what WriteWorkflowError writes, and all the
@@ -360,8 +386,6 @@ type ExecuteToolsStore interface {
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	GetContextUsage(ctx context.Context, chatID string, thread string) (*db.ContextUsage, error)
-	GetToolCall(ctx context.Context, id string) (*db.ToolCall, error)
-	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 	// CreateAttachment is persistToolMedia's: a tool result's images and PDFs
 	// reach the model as attachment rows.

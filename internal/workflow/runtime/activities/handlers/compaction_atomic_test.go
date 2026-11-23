@@ -79,7 +79,7 @@ func TestCompactionAtomicSeams_WholeUnitSurvives(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			history, unit := atomicSeamHistory(kind)
 			d := &fitSummarizer{limit: 9000}
-			compact := NewCompactActivity(nil, d.resolver())
+			compact := NewCompactActivity(nil, nil, d.resolver())
 			summary, err := compact.generateCompactionSummary(context.Background(), &db.Chat{ID: "chat", UserID: "user"}, "thread", "", types.FailoverPolicy{}, history, nil)
 			require.NoError(t, err)
 			require.Greater(t, d.refused, 2)
@@ -115,17 +115,17 @@ func TestCompactionAtomicSeams_SaveReloadThenSecondCompaction(t *testing.T) {
 			}
 			// Get the production projection too: result names may be normalized during
 			// persistence. The whole atomic interval must survive, not just markers.
-			before, err := LoadMessagesForLLM(ctx, h.Repo(), chatID, thread, nil)
+			before, err := LoadMessagesForLLM(ctx, h.Repo(), toolCallsOf(h.Repo()), chatID, thread, nil)
 			require.NoError(t, err)
 			unitText := compactionTranscript(before[2 : 2+len(unit)])
 			input := CompactInput{ChatID: chatID, Thread: thread}.V3()
 			input.Node.GetCompact().Force = &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}}
 			for pass := range 2 {
 				d := &fitSummarizer{limit: 9000}
-				compact := NewCompactActivity(h.Repo(), d.resolver())
+				compact := NewCompactActivity(h.Repo(), toolCallsOf(h.Repo()), d.resolver())
 				var out CompactOutput
 				require.NoError(t, h.ExecuteActivity(compact.Execute, input, &out))
-				after, err := LoadMessagesForLLM(ctx, h.Repo(), chatID, thread, nil)
+				after, err := LoadMessagesForLLM(ctx, h.Repo(), toolCallsOf(h.Repo()), chatID, thread, nil)
 				require.NoError(t, err)
 				assert.Contains(t, compactionTranscript(after), unitText, fmt.Sprintf("%s pass %d", kind, pass))
 				if pass == 0 {

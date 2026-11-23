@@ -65,6 +65,7 @@ type GenerateTitleOutput struct {
 type CompactActivity struct {
 	repo           CompactStore
 	threads        *threads.Service
+	toolResults    ToolResultRecoveryStore
 	driverResolver drivers.DriverResolver
 	// skips reports windows the activity declined to compact (see
 	// compaction_guard.go). Process-wide, so a window is reported once no
@@ -92,9 +93,10 @@ func (a *CompactActivity) WithAccountRouting(r *AccountRouting) *CompactActivity
 }
 
 // NewCompactActivity creates a new CompactActivity
-func NewCompactActivity(repo CompactStore, resolver drivers.DriverResolver) *CompactActivity {
+func NewCompactActivity(repo CompactStore, toolResults ToolResultRecoveryStore, resolver drivers.DriverResolver) *CompactActivity {
 	return &CompactActivity{
 		repo:           repo,
+		toolResults:    toolResults,
 		threads:        threads.New(threads.Deps{Repo: repo}),
 		driverResolver: resolver,
 		skips:          compactionSkips,
@@ -143,7 +145,7 @@ func (a *CompactActivity) Execute(ctx context.Context, input ActivityInput) (Com
 	}
 
 	// Load conversation history (handles branching, DB repair, and in-memory repair)
-	currentContextMessages, err := LoadMessagesForLLM(ctx, a.repo, rtx.ChatID, thread, nil)
+	currentContextMessages, err := LoadMessagesForLLM(ctx, a.repo, a.toolResults, rtx.ChatID, thread, nil)
 	if err != nil {
 		return CompactOutput{}, fmt.Errorf("failed to load conversation history: %w", err)
 	}

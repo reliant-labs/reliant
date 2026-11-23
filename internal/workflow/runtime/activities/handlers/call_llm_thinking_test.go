@@ -79,7 +79,7 @@ func TestCallLLMActivity_ReconcilesThinkingLevelForInjectedResolvers(t *testing.
 			h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 			captured := &capturedDriverOptions{}
-			activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: asInjectedResolver(captureDriverOptionsResolver(captured)), MCPBinder: nil})
+			activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: asInjectedResolver(captureDriverOptionsResolver(captured)), MCPBinder: nil})
 
 			input := callLLMInput(chat.ID, chat.ID, tt.modelID)
 			input.Node.GetCallLlm().ThinkingLevel = &reliantv1.CelString{

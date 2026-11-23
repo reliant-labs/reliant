@@ -144,7 +144,7 @@ func TestAccountRouting_RealWiring_FailsOverToTheSecondAccountWithANotice(t *tes
 
 	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
-	activity := handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: repo, Spawns: store.NewToolCallExtStore(repo.ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: emptyConfig{}, DriverResolver: nil, MCPBinder: nil}).WithAccountRouting(routing)
+	activity := handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: repo, Spawns: store.NewToolCallExtStore(repo.ORM()), ToolResults: handlers.NewToolCalls(repo.ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: emptyConfig{}, DriverResolver: nil, MCPBinder: nil}).WithAccountRouting(routing)
 	env.RegisterActivity(activity.Execute)
 	input := types.ActivityInput{
 		Runtime: types.RuntimeContext{ChatID: chatID, Thread: chatID},

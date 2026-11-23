@@ -72,7 +72,7 @@ func runCallLLMWithFilter(t *testing.T, preloaded []string, rtxSelector *activit
 		return mockDriver, nil
 	}
 	binder := &recordingBinder{}
-	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &recordingProjectResolver{}, DriverResolver: driverResolver, MCPBinder: binder})
+	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &recordingProjectResolver{}, DriverResolver: driverResolver, MCPBinder: binder})
 
 	input := ActivityInput{
 		Runtime: RuntimeContext{ChatID: chat.ID, Thread: chat.ID, DaemonSelector: rtxSelector},

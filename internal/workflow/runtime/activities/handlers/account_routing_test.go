@@ -482,7 +482,7 @@ func TestCompaction_FollowsTheChatsFallbackPolicy(t *testing.T) {
 	env := newRoutingEnv(t)
 	env.store.bench("a", time.Now().Add(2*time.Hour), "five_hour")
 	chat := &db.Chat{ID: "chat-1", UserID: "u1"}
-	activity := NewCompactActivity(nil, nil).WithAccountRouting(env.routing)
+	activity := NewCompactActivity(nil, nil, nil).WithAccountRouting(env.routing)
 
 	failure := func(t *testing.T, policy types.FailoverPolicy) *types.UsageLimitFailure {
 		t.Helper()
