@@ -10,7 +10,7 @@
 import { useNavigate } from "@tanstack/react-router";
 
 import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
-import { useProjectStore } from "@/store/projectStore";
+import { leaveChatPageFor, useProjectStore } from "@/store/projectStore";
 import { appPath, projectChatsPath } from "@/lib/paths";
 
 import { ProjectSelectorDialog, type ProjectSelection } from "./ProjectSelector";
@@ -25,6 +25,8 @@ export function SwitchProjectDialog({ open, onClose }: { open: boolean; onClose:
       return;
     }
     const id = selection.row.key;
+    // From a chat's page, leave it first: the URL's chat wins over a selection.
+    leaveChatPageFor(id);
     void useProjectStore
       .getState()
       .setProjectFilter(id)

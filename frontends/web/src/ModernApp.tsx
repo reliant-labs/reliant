@@ -18,7 +18,7 @@ import {
 import { ChatInterface } from "./components/Chat/ChatInterface";
 import { TabbedViewerPanel } from "./components/Layout/TabbedViewerPanel";
 import { useViewerStore } from "./store/viewerStore";
-import { mostRecentProject, useProjectStore } from "./store/projectStore";
+import { leaveChatPageFor, mostRecentProject, useProjectStore } from "./store/projectStore";
 import { ProjectFilterRouteSync, useRouteProjectId } from "./components/Layout/ProjectFilterRouteSync";
 import { fetchProjects, getCachedProjects, useProjects } from "./hooks/project-queries";
 import { useFileDeletionStore } from "./store/fileDeletionStore";
@@ -430,6 +430,8 @@ function App() {
           : (index + direction + projects.length) % projects.length;
       const next = projects[nextIndex];
       if (next && next.id !== filter) {
+        // From a chat's page, its chats: the URL's chat wins over a selection.
+        leaveChatPageFor(next.id);
         await useProjectStore.getState().setProjectFilter(next.id);
       }
     },
