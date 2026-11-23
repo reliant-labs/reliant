@@ -471,11 +471,9 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// Rejected org keys whose notice never started (a Temporal outage at the
 	// rejection), and paused automations whose email was never delivered, are
 	// started here, where the notices' workflows run.
-	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil && cfg.Database != nil {
+	if sweeps := noticeSweeps(cfg, orgKeyNoticeQueueFor(cfg)); len(sweeps) > 0 {
 		out.background = append(out.background, func(ctx context.Context) {
-			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval,
-				func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.OrgAccounts, q) },
-				func(ctx context.Context) { sweepPauseNotices(ctx, cfg.Database, q) })
+			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval, sweeps...)
 		})
 	}
 	return out, registry, nil
