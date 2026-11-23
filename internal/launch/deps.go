@@ -27,6 +27,12 @@ type TaskQueue string
 type Deps struct {
 	// Store is everything a launch reads and writes in the database.
 	Store Store
+	// Workflows reads the root workflow row a launch starts.
+	Workflows WorkflowLoader
+	// Worktrees reads the worktree a chat runs in.
+	Worktrees WorktreeReader
+	// ProjectRows reads the project row of an already-authorized chat.
+	ProjectRows ProjectReader
 	// Projects reads the project a launch runs in, only when its owner may
 	// write it (owner and org decided together: projectaccess).
 	Projects projectaccess.Service
@@ -48,6 +54,25 @@ type Deps struct {
 	// pins nothing: the chat runs wherever default resolution points on each
 	// call.
 	Pinner ChatPinner
+}
+
+// WorkflowLoader reads a launch's root workflow row by id; inside the launch
+// transaction it joins it (the ctx carries the tx). store.WorkflowExtStore
+// satisfies it.
+type WorkflowLoader interface {
+	LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error)
+}
+
+// WorktreeReader reads the worktree a chat runs in by id.
+// store.WorktreeExtStore satisfies it.
+type WorktreeReader interface {
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+}
+
+// ProjectReader reads a project row by id, with no owner check: the chat it
+// is read for was already authorized. store.ProjectExtStore satisfies it.
+type ProjectReader interface {
+	GetProject(ctx context.Context, id string) (*db.Project, error)
 }
 
 // ChatWriter creates and updates the chat a launch materializes.
@@ -79,7 +104,6 @@ type TriggerEventStore interface {
 
 // WorkflowStore is the root workflow row a launch starts.
 type WorkflowStore interface {
-	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus db.WorkflowStatus) (bool, error)
 	UpdateWorkflowName(ctx context.Context, id string, workflowName string) error
 	// MarkWorkflowStartFailed records a failed Temporal start on a PENDING
@@ -138,8 +162,6 @@ type WorkflowResolver interface {
 // chat's main checkout is its machine's, never projects.path.
 type ProjectLookup interface {
 	daemonplacement.Installs
-	GetProject(ctx context.Context, id string) (*db.Project, error)
-	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
 	GetSetting(ctx context.Context, userID string, projectID *string, key string) (*db.Setting, error)
 }

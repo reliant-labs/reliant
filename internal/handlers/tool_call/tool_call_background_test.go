@@ -10,6 +10,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -17,7 +19,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
-	"github.com/stretchr/testify/require"
 )
 
 func seedRunningToolCall(t *testing.T, repo *db.Repo, ctx context.Context) (chatID, toolCallID string) {
@@ -68,7 +69,7 @@ func TestConvertToBackground_SendsRequestToDaemon(t *testing.T) {
 	_, toolCallID := seedRunningToolCall(t, repo, ctx)
 
 	router := &toolexectest.Recorder{}
-	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Router: router}))
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Chats: store.NewChatExtStore(repo.ORM()), Router: router}))
 
 	resp, err := svc.ConvertToBackground(ctx, connect.NewRequest(&reliantv1.ConvertToBackgroundRequest{
 		ToolCallId: toolCallID,
@@ -94,7 +95,7 @@ func TestConvertToBackground_DaemonUnreachable_DoesNotClaimSuccess(t *testing.T)
 	_, toolCallID := seedRunningToolCall(t, repo, ctx)
 
 	router := &toolexectest.Recorder{BackgroundErr: errors.New("daemon offline")}
-	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Router: router}))
+	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Chats: store.NewChatExtStore(repo.ORM()), Router: router}))
 
 	_, err := svc.ConvertToBackground(ctx, connect.NewRequest(&reliantv1.ConvertToBackgroundRequest{
 		ToolCallId: toolCallID,
