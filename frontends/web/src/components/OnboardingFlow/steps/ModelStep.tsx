@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
 import {
   CheckCircle2,
   ExternalLink,
@@ -9,7 +8,8 @@ import {
   Loader2,
   XCircle,
 } from "lucide-react";
-import { addProviderApiKey } from "@/hooks/provider-account-queries";
+import { addProviderApiKeyRefresh } from "@/hooks/provider-account-queries";
+import { useAddProviderAPIKey } from "@/hooks/provider-account-service-hooks_gen";
 import { useValidateProviderAPIKey } from "@/hooks/settings-service-hooks_gen";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
@@ -246,10 +246,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
 
   const validateKeyMutation = useValidateProviderAPIKey();
 
-  const saveKeyMutation = useMutation({
-    mutationFn: ({ providerId, key }: { providerId: string; key: string }) =>
-      addProviderApiKey(providerId, key),
-  });
+  const saveKeyMutation = useAddProviderAPIKey(addProviderApiKeyRefresh);
 
   const saving = saveKeyMutation.isPending;
 
@@ -483,8 +480,8 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
       }
 
       await saveKeyMutation.mutateAsync({
-        providerId: selectedProvider,
-        key: apiKey.trim(),
+        provider: selectedProvider,
+        apiKey: apiKey.trim(),
       });
 
       // TODO: Remove once ApiKeySetupModal is event-driven

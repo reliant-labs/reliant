@@ -8,20 +8,16 @@
  * come from its repository, so no one project's list covers another's.
  *
  * The list is the generated ListWorkflows entry with includeHidden (the chat
- * pickers read the one without it). Each action is a workflow-queries write,
- * which refetches every mounted workflow read before it resolves, so this
- * list and the composer's picker never disagree.
+ * pickers read the one without it). Each action is the generated
+ * WorkflowService write hook (workflow-service-hooks_gen) with
+ * workflowWriteRefresh(), which refetches every mounted workflow read before
+ * it settles, so this list and the composer's picker never disagree.
  */
 
 import { useMemo } from "react";
-import { useMutation, useQueries, type UseQueryResult } from "@tanstack/react-query";
+import { useQueries, type UseQueryResult } from "@tanstack/react-query";
 
 import {
-  copyWorkflow,
-  createWorkflowDraft,
-  deleteWorkflow,
-  importWorkflow,
-  setWorkflowVisibility,
   useWorkflowList,
   workflowListFromProto,
   workflowListRequest,
@@ -90,37 +86,4 @@ function combineLibraries(projectIds: readonly string[]) {
       refetch: () => results.forEach((r) => void r.refetch()),
     };
   };
-}
-
-export function useDeleteWorkflow(projectId: string) {
-  return useMutation({
-    mutationFn: (filename: string) => deleteWorkflow(projectId, filename),
-  });
-}
-
-export function useCopyWorkflow(projectId: string) {
-  return useMutation({
-    mutationFn: (sourceName: string) => copyWorkflow(projectId, sourceName),
-  });
-}
-
-export function useSetWorkflowVisibility(projectId: string) {
-  return useMutation({
-    mutationFn: ({ filename, hidden }: { filename: string; hidden: boolean }) =>
-      setWorkflowVisibility(projectId, filename, hidden),
-  });
-}
-
-/** "New workflow": one draft per call, so callers run it only on a user action. */
-export function useCreateWorkflowDraft(projectId: string) {
-  return useMutation({
-    mutationFn: (opts: { title: string; template?: string }) => createWorkflowDraft(projectId, opts),
-  });
-}
-
-export function useImportWorkflow(projectId: string) {
-  return useMutation({
-    mutationFn: ({ yaml, overwrite }: { yaml: string; overwrite: boolean }) =>
-      importWorkflow(projectId, yaml, overwrite),
-  });
 }
