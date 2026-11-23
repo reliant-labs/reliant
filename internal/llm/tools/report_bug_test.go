@@ -97,12 +97,20 @@ type reportBugHarness struct {
 	clock   time.Time
 }
 
-func newReportBugHarness(lookup bugReportLookup) *reportBugHarness {
+func newReportBugHarness(lookup interface {
+	bugReportLookup
+	bugReportMachines
+}) *reportBugHarness {
 	h := &reportBugHarness{
 		capture: &recordingCapture{},
 		clock:   time.Date(2026, 10, 9, 19, 30, 0, 0, time.UTC),
 	}
-	h.tool = newReportBugTool(lookup, h.capture.capture, newBugReportLimiter(30*time.Minute, 3), func() time.Time { return h.clock })
+	var lk bugReportLookup
+	var machines bugReportMachines
+	if lookup != nil {
+		lk, machines = lookup, lookup
+	}
+	h.tool = newReportBugTool(lk, machines, h.capture.capture, newBugReportLimiter(30*time.Minute, 3), func() time.Time { return h.clock })
 	return h
 }
 
@@ -368,7 +376,7 @@ func TestReportBug_FilesAnIssueEventThroughTheProcessLogger(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	t.Cleanup(func() { slog.SetDefault(previous) })
 
-	tool := newReportBugTool(nil, func(ctx context.Context, report telemetry.BugReport) string {
+	tool := newReportBugTool(nil, nil, func(ctx context.Context, report telemetry.BugReport) string {
 		return telemetry.FileBugReport(ctx, nil, report)
 	}, newBugReportLimiter(30*time.Minute, 3), time.Now)
 	input := validBugReportInput("Workspace volume detached")

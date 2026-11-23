@@ -1,8 +1,9 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file
 // Service implementation; canonical pattern in `forge skill load service-layer`.
 //
-// Built by internal/app's NewWorkerToolsFactory through newToolPlanning,
-// which supplies the plan, task and dependency stores from the worker's repo.
+// forge:provided because its plan, task and dependency stores are not graph
+// nodes: internal/app's NewWorkerToolsFactory builds it through newToolPlanning
+// over the worker repo's stores, and db.Repo builds it for its facade.
 //
 //forge:provided
 package planning

@@ -14,7 +14,7 @@
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
 //
-//forge:lint-disable-next-line forge-exclude-contract-outbound-io: the package IS the JetStream publisher; adapter conversion deferred (reliant is not forge-generated); tracked in H-RELIANT-CI-lint follow-ups
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: the package IS the JetStream publisher, an outbound I/O adapter the gateway calls per connect/disconnect event
 //forge:exclude-contract: publishes daemon connect/disconnect lifecycle events to JetStream
 package daemonevents
 

@@ -236,7 +236,7 @@ func newGrantsWorker(t *testing.T, env *testsuite.TestWorkflowEnvironment, repo 
 
 	deps := &Activities{
 		Repo:           repo,
-		Threads:        threads.New(threads.Deps{Repo: repo}),
+		Threads:        threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}),
 		ToolsFactory:   tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo}),
 		ToolExecutor:   executor,
 		ConfigProvider: emptyConfigProvider{},

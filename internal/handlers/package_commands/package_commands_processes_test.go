@@ -215,7 +215,7 @@ func (r *processesRepo) ListProjectDaemonsForProject(_ context.Context, projectI
 
 func newProcessesService(t *testing.T, router *machineRouter, repo *processesRepo) *Service {
 	t.Helper()
-	return NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: repo, Projects: projectaccesstest.For(repo)}))
+	return NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: repo, Placement: repo, Projects: projectaccesstest.For(repo)}))
 }
 
 func runBuild(svc *Service, worktreeID string) (*connect.Response[reliantv1.RunPackageCommandResponse], error) {
@@ -299,7 +299,7 @@ func TestRunCommand_MainCheckoutRunsWhereTheProjectIsInstalled(t *testing.T) {
 	repo.installs = map[string][]*core.ProjectDaemon{"p1": {{ProjectID: "p1", DaemonID: "daemon-b", InstallState: core.ProjectInstallInstalled}}}
 	repo.worktree("wt-main", "p1", "")
 	repo.worktrees["wt-main"].IsMain = true
-	svc := NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: repo, Projects: projectaccesstest.For(repo)}))
+	svc := NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: repo, Placement: repo, Projects: projectaccesstest.For(repo)}))
 
 	resp, err := runBuild(svc, "wt-main")
 	require.NoError(t, err)
@@ -328,7 +328,7 @@ func TestRunCommand_MainCheckoutBesideAChatRunsOnTheChatsMachine(t *testing.T) {
 		"chat-b":     {ID: "chat-b", UserID: "test-user", ProjectID: "p1", ActiveDaemonID: &pinned},
 		"chat-other": {ID: "chat-other", UserID: "someone-else", ProjectID: "p1", ActiveDaemonID: &pinned},
 	}
-	svc := NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: repo, Projects: projectaccesstest.For(repo)}))
+	svc := NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: repo, Placement: repo, Projects: projectaccesstest.For(repo)}))
 
 	resp, err := svc.RunCommand(authedCtx(), connect.NewRequest(&reliantv1.RunPackageCommandRequest{
 		WorktreeId: ptr.Of("wt-main"), ChatId: ptr.Of("chat-b"), CommandName: "build", PackageType: reliantv1.PackageType_PACKAGE_TYPE_NPM,
@@ -361,7 +361,7 @@ func TestRunCommand_InstallLookupFailureDispatchesNothing(t *testing.T) {
 	repo.machine("daemon-a", "test-user")
 	repo.worktree("wt-main", "p1", "")
 	repo.worktrees["wt-main"].IsMain = true
-	svc := NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: failingInstallsRepo{repo}, Projects: projectaccesstest.For(failingInstallsRepo{repo})}))
+	svc := NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: failingInstallsRepo{repo}, Placement: failingInstallsRepo{repo}, Projects: projectaccesstest.For(failingInstallsRepo{repo})}))
 
 	_, err := runBuild(svc, "wt-main")
 	require.Error(t, err)
@@ -543,7 +543,7 @@ func TestListProcesses_EverywhereProbesMachinesConcurrently(t *testing.T) {
 		inner.listed[m] = []*daemon.ProcessInfo{{ID: "on-" + m, Status: "running", StartTime: now, WorktreeID: "wt-" + m}}
 	}
 	router := &probeBarrierRouter{machineRouter: inner, arrived: make(chan struct{}, len(machines)), release: make(chan struct{}), want: len(machines)}
-	svc := NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: repo, Projects: projectaccesstest.For(repo)}))
+	svc := NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: repo, Placement: repo, Projects: projectaccesstest.For(repo)}))
 
 	resp, err := svc.ListProcesses(authedCtx(), connect.NewRequest(&reliantv1.ListPackageProcessesRequest{}))
 	require.NoError(t, err)

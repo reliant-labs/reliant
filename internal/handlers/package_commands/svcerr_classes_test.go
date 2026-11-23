@@ -35,10 +35,10 @@ func TestPackageCommands_StoreFailuresOnTheWire(t *testing.T) {
 		{"opaque", errors.New("dial tcp: dsn=postgres://u:secret@h"), connect.CodeInternal},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			repo := projectaccesstest.Bound(&package_commands.MockRepository{
+			repo := projectaccesstest.Bound(&package_commands.MockRepository{}, func(context.Context, string, string) (*db.Project, error) { return nil, tc.err })
+			_, client := package_commands.NewTestPackageCommandsServer(t, package_commands.WithPackageCommandsDeps(package_commands.Deps{Repo: repo, Placement: &package_commands.MockPlacement{
 				GetWorktreeFunc: func(context.Context, string) (*db.Worktree, error) { return nil, tc.err },
-			}, func(context.Context, string, string) (*db.Project, error) { return nil, tc.err })
-			_, client := package_commands.NewTestPackageCommandsServer(t, package_commands.WithPackageCommandsDeps(package_commands.Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+			}, Projects: projectaccesstest.For(repo)}))
 			_, err := client.GetCommandFavorites(context.Background(), connect.NewRequest(&pb.GetCommandFavoritesRequest{ProjectId: "p1"}))
 			assertWire(t, err, tc.want)
 			_, err = client.SetCommandFavorite(context.Background(), connect.NewRequest(&pb.SetCommandFavoriteRequest{ProjectId: "p1", CommandKey: "npm:test", IsFavorite: true}))

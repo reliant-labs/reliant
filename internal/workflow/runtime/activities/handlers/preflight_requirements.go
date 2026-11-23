@@ -10,13 +10,14 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
+	"go.temporal.io/sdk/temporal"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/requirements"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/temporal"
 )
 
 // PreflightRequirementsInput is the run's declared `requires:` and who the run
@@ -54,6 +55,7 @@ const preflightProbeTimeout = 3 * time.Minute
 // an ordinary error the activity's retry policy owns.
 type PreflightRequirementsActivity struct {
 	repo        RunExecutorContextStore
+	rows        ProjectWorktreeReader
 	executor    toolexec.ToolExecutor
 	credentials httpaction.CredentialSource
 	// machine overrides the daemon-backed probe runner; tests set it.
@@ -71,8 +73,8 @@ func (a *PreflightRequirementsActivity) WithDaemonRouter(router toolexec.DaemonR
 
 // NewPreflightRequirementsActivity builds the activity. credentials may be nil
 // (a worker with no connections), which fails any required integration.
-func NewPreflightRequirementsActivity(repo RunExecutorContextStore, executor toolexec.ToolExecutor, credentials httpaction.CredentialSource) *PreflightRequirementsActivity {
-	return &PreflightRequirementsActivity{repo: repo, executor: executor, credentials: credentials}
+func NewPreflightRequirementsActivity(repo RunExecutorContextStore, rows ProjectWorktreeReader, executor toolexec.ToolExecutor, credentials httpaction.CredentialSource) *PreflightRequirementsActivity {
+	return &PreflightRequirementsActivity{repo: repo, rows: rows, executor: executor, credentials: credentials}
 }
 
 func (a *PreflightRequirementsActivity) Name() string        { return "PreflightRequirements" }
@@ -92,7 +94,7 @@ func (a *PreflightRequirementsActivity) Execute(ctx context.Context, input Prefl
 
 	var machine requirements.Machine
 	if requirements.NeedsMachine(req) {
-		execCtx, err := resolveRunExecutorContext(ctx, a.repo, input.ChatID)
+		execCtx, err := resolveRunExecutorContext(ctx, a.repo, a.rows, input.ChatID)
 		if err != nil {
 			return PreflightRequirementsOutput{}, fmt.Errorf("resolve the run's machine: %w", err)
 		}

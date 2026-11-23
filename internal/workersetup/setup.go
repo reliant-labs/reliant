@@ -271,7 +271,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 
 	// Create threads service
-	threadsService := threads.New(threads.Deps{Repo: cfg.Database})
+	threadsService := threads.New(threads.Deps{Repo: cfg.Database, Messages: store.NewMessageExtStore(cfg.Database.ORM()), Senders: store.NewThreadExtStore(cfg.Database.ORM())})
 
 	// Create activity dependencies
 	activityDeps := v2activities.NewActivities(
@@ -433,7 +433,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 	pauses := pauseNotices{admins: pauseAdmins}
 	if cfg.Database != nil {
-		pauses.store = cfg.Database
+		pauses.store = newPauseStores(cfg.Database, cfg.Database.ORM())
 	}
 	w.RegisterActivityWithOptions(pauses.Notify, activity.RegisterOptions{
 		Name: NotifyOrgAutomationNoOrgAccountActivityName,
@@ -603,7 +603,7 @@ func triggerAutoPause(cfg *Config) *triggers.AutoPause {
 	pause := triggers.NewAutoPause(cfg.Database, schedules)
 	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil {
 		// A pause for want of an org account emails the org's admins.
-		pause = pause.WithNoOrgAccountPause(noOrgAccountPauseNotifier(cfg.Database, q))
+		pause = pause.WithNoOrgAccountPause(noOrgAccountPauseNotifier(newPauseStores(cfg.Database, cfg.Database.ORM()), q))
 	}
 	return pause
 }

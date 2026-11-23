@@ -31,11 +31,3 @@ func (r *Repo) RevokeIntegrationAccess(ctx context.Context, integrationID string
 	}
 	return n, nil
 }
-
-// ListAccessRoutedTriggers lists the enabled integration triggers an event
-// about (account, resource) reaches: those whose owner holds a grant for it
-// refreshed at or after freshAfter, and whose named connection (if any) is
-// the owner's and active.
-func (r *Repo) ListAccessRoutedTriggers(ctx context.Context, integration, account, resource string, freshAfter time.Time) ([]*core.Trigger, error) {
-	return store.ListAccessRoutedTriggers(ctx, r.ORM(), integration, account, resource, freshAfter)
-}

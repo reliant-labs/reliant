@@ -62,7 +62,7 @@ func TestSkillToolReadsTheSkillsOfTheMachineTheCallRunsOn(t *testing.T) {
 
 	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(configadapter.NewORMRecordReader(repo.ORM())), store.NewProjectConfigExtStore(repo.ORM()), cfgpkg.DefaultParsedConfigCacheBytes)
 	router := toolexec.NewNATSDaemonRouter(nil, toolexec.WithDatabase(repo))
-	activity := NewExecuteToolsActivity(repo, toolCallsOf(repo), serverToolExecutor(repo)).WithConfigProvider(provider).WithDaemonRouter(router)
+	activity := NewExecuteToolsActivity(repo, workspaceRowsOf(repo), toolCallsOf(repo), serverToolExecutor(repo)).WithConfigProvider(provider).WithDaemonRouter(router)
 	load := func(thread string, selector *activitytypes.DaemonSelector) string {
 		t.Helper()
 		callID := "call-" + uuid.NewString()

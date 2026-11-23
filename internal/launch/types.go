@@ -19,9 +19,10 @@
 //
 // See research/TRIGGERS.md.
 //
-// Built by hand, by internal/app's NewRunLauncher provider
-// (providers_worker.go) and the chat handler: never a node compose.go
-// constructs from Deps.
+// forge:provided because there are two configurations of one type: the
+// worker's NewRunLauncher provider (providers_worker.go) pins through its
+// Router, and the chat handler builds its own with its chat pinner and its own
+// runs. A single graph node could not be both.
 //
 //forge:provided
 //forge:lint-disable-next-line forge-exclude-contract-multi-impl: the store roles here are consumer-declared seams (db.Repo, request memo, trigger batch stores and test fakes satisfy them), not alternative Services; a contract.go would add nothing

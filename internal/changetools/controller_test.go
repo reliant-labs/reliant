@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package app
+package changetools
 
 import (
 	"context"
@@ -55,9 +55,9 @@ func changesServer(t *testing.T, handle func(method string, body map[string]any,
 	return srv, &got
 }
 
-func testChangeController(srv *httptest.Server, envs *fakeChangeEnvs) *changeController {
+func testChangeController(srv *httptest.Server, envs *fakeChangeEnvs) *Controller {
 	org, forgeName := "org-1", "shop"
-	return &changeController{
+	return &Controller{
 		projects: fakeChangeProjects{project: &db.Project{OrgID: &org, ForgeProjectName: &forgeName}},
 		envs:     envs,
 		rpc:      &changesHTTP{client: srv.Client(), baseURL: srv.URL},
@@ -130,7 +130,7 @@ func TestChangeControllerBlocksExposureWithoutAgentCredentials(t *testing.T) {
 		t.Run(action, func(t *testing.T) {
 			// Nil collaborators ensure rejection happens before session lookup,
 			// environment resolution or any RPC, even with human approval input.
-			c := &changeController{}
+			c := &Controller{}
 			_, err := c.ApplyChange(context.Background(), "owner", tools.ChangeOp{
 				Action: action, ChangeID: "chg-1", ExpectedRevision: 9,
 				PercentBP: 10000, Everyone: true, StepUpCode: "123456",
@@ -145,7 +145,7 @@ func TestChangeControllerBlocksExposureWithoutAgentCredentials(t *testing.T) {
 }
 
 func TestChangeControllerNeedsALiveSession(t *testing.T) {
-	c := &changeController{session: func(string) (string, bool) { return "", false }}
+	c := &Controller{session: func(string) (string, bool) { return "", false }}
 	_, err := c.ListChanges(context.Background(), "owner", "proj", tools.ChangeFilter{})
 	require.ErrorContains(t, err, "no live sign-in")
 }
