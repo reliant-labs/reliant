@@ -12,7 +12,7 @@
 // HTTP: a POST per JSON-RPC request or notification, and a DELETE to end the
 // session.
 //
-//forge:not-a-component: nothing builds it yet: it is the server role's MCP client for a curated integration backed by a vendor's hosted MCP (research/INTEGRATIONS.md, research/TOOL_PLACEMENT.md §4.2), and its first caller constructs it per catalog entry and credentials
+//forge:not-a-component: dead code, kept on purpose: staged for the vendor-hosted-MCP integration (research/INTEGRATIONS.md, research/TOOL_PLACEMENT.md §4.2); no package imports it, and its last meaningful change was 2026-10-06 (#575). Its first caller would construct it per catalog entry and credentials
 package serverclient
 
 import (

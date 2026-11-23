@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
-//forge:not-a-component: the process-wide pinned-forge source of internal/skills/catalog and internal/toolexec/daemonruntime (Default) — never a node of the composition graph
+//forge:not-a-component: a process-global singleton (Default) read through package variables by internal/skills/catalog and the daemon's internal/toolexec/daemonruntime; no component takes it in Deps
 package forgepin
 
 import (

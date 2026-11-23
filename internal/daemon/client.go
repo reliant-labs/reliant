@@ -3,7 +3,7 @@
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
 //
-//forge:lint-disable-next-line forge-exclude-contract-multi-impl: daemon.Client is the long-standing local/remote strategy seam every tool executor takes; moving it into contract.go is a cross-package refactor with no generated payoff in a non-forge repo; tracked in H-RELIANT-CI-lint follow-ups
+//forge:lint-disable-next-line forge-exclude-contract-multi-impl: daemon.Client is the long-standing local/remote strategy seam every tool executor takes; each executor is handed one implementation per call, so it is a multi-impl interface consumed per call, not a single component
 //forge:exclude-contract: the daemon command/filesystem client (local in-process vs remote over the gateway)
 package daemon
 
