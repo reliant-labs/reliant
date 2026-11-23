@@ -31,6 +31,9 @@ type Deps struct {
 	// Senders titles the senders of the messages a snapshot assembles
 	// (store.ThreadExtStore satisfies it).
 	Senders Senders
+	// Projects reads the org of the project a user update is about
+	// (store.ProjectExtStore satisfies it).
+	Projects Projects
 	// Heads, UserLog, OrgFeed and Siblings are the update and message reads
 	// that have left the Repository (deps.go).
 	Heads    Heads

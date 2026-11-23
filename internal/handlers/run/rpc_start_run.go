@@ -133,7 +133,7 @@ func (s *Service) startWithNewSession(
 		return nil, err
 	}
 
-	run, err := s.deps.Repo.GetWorkflow(ctx, resp.Msg.WorkflowId)
+	run, err := s.deps.Workflows.LoadWorkflow(ctx, resp.Msg.WorkflowId)
 	if err != nil || run == nil {
 		return nil, svcerr.WithCause(errRunNotReadBack, err)
 	}
@@ -176,7 +176,7 @@ func (s *Service) respondWithSessionRun(
 	if err != nil || chat == nil || chat.WorkflowID == nil || *chat.WorkflowID == "" {
 		return nil, svcerr.WithCause(errRunNotReadBack, err)
 	}
-	run, err := s.deps.Repo.GetWorkflow(ctx, *chat.WorkflowID)
+	run, err := s.deps.Workflows.LoadWorkflow(ctx, *chat.WorkflowID)
 	if err != nil || run == nil {
 		return nil, svcerr.WithCause(errRunNotReadBack, err)
 	}

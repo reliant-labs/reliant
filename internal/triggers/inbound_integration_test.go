@@ -32,7 +32,7 @@ func newWebhookFixture(t *testing.T, filter string) (*fireFixture, *EventFirer, 
 	// newFireFixture stored a schedule config; a webhook trigger has none.
 	f.trigger.Config = json.RawMessage(`{}`)
 	require.NoError(t, f.repo.UpdateTrigger(context.Background(), f.trigger))
-	launcher := launch.New(launch.Deps{Store: f.repo, Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo}), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
+	launcher := launch.New(launch.Deps{Store: f.repo, Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Worktrees: store.NewWorktreeExtStore(f.repo.ORM()), ProjectRows: store.NewProjectExtStore(f.repo.ORM()), Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo}), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	starter := &recordingStarter{}
 	return f, NewEventFirer(NewStores(f.repo), launcher), NewIntake(NewStores(f.repo), starter, "test-queue"), starter
 }
@@ -97,7 +97,7 @@ func TestInboundLaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *testi
 			f.trigger.Config = json.RawMessage(`{}`)
 			require.NoError(t, f.repo.UpdateTrigger(ctx, f.trigger))
 			runs := &recordingStarter{}
-			firer := NewEventFirer(NewStores(f.repo), launch.New(launch.Deps{Store: f.repo, Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo}), Temporal: runs, Runs: noopRunRecorder{}, TaskQueue: "test-queue"}))
+			firer := NewEventFirer(NewStores(f.repo), launch.New(launch.Deps{Store: f.repo, Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Worktrees: store.NewWorktreeExtStore(f.repo.ORM()), ProjectRows: store.NewProjectExtStore(f.repo.ORM()), Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo}), Temporal: runs, Runs: noopRunRecorder{}, TaskQueue: "test-queue"}))
 			fires := &recordingStarter{}
 			intake := NewIntake(NewStores(f.repo), fires, "test-queue")
 

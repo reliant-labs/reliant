@@ -102,7 +102,7 @@ func TestReconcileKeepsInstallationOnlyRouting(t *testing.T) {
 	assert.Equal(t, "100", installationIn(t, got.Config), "the binding survives the rewrite")
 
 	routed := func(account, resource string) []string {
-		ts, err := repo.ListAccessRoutedTriggers(ctx, "github", account, resource, now.Add(-time.Minute))
+		ts, err := store.ListAccessRoutedTriggers(ctx, repo.ORM(), "github", account, resource, now.Add(-time.Minute))
 		require.NoError(t, err)
 		ids := []string{}
 		for _, tr := range ts {
