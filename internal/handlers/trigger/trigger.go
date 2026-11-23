@@ -31,21 +31,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
 )
 
-// triggerConnections is the slice of the connection store an integration
-// trigger's write path reads.
-type triggerConnections interface {
-	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
-	DefaultConnection(ctx context.Context, userID, integrationID string) (*core.Connection, error)
-}
-
-// connections returns the connection reader, when the repository has one.
-func (s *Service) connections() triggerConnections {
-	if repo, ok := s.deps.Repo.(triggerConnections); ok {
-		return repo
-	}
-	return nil
-}
-
 // syncs reports whether a trigger is converged onto a Temporal Schedule:
 // every schedule trigger, and integration triggers (whose syncer decides
 // whether their integration is polled). A webhook or workflow-event trigger
@@ -451,7 +436,7 @@ func (s *Service) render(ctx context.Context, t *core.Trigger) *reliantv1.Trigge
 	if fresh, err := s.deps.Repo.GetTrigger(ctx, t.ID); err == nil {
 		t = fresh
 	}
-	recent, err := s.deps.Repo.RecentTriggerFirings(ctx, t.UserID, []string{t.ID}, triggers.HealthWindow)
+	recent, err := s.deps.Firings.RecentTriggerFirings(ctx, t.UserID, []string{t.ID}, triggers.HealthWindow)
 	if err != nil {
 		logging.WarnContext(ctx, "could not resolve a trigger's recent firings", "trigger_id", t.ID, "error", err)
 	}

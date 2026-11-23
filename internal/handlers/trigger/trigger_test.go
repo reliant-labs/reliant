@@ -147,7 +147,7 @@ func setupTriggerTest(t *testing.T) *triggerTestEnv {
 
 	tokens, err := automationtokens.New(automationtokens.Deps{DB: repo.ORM(), Sealer: db.NewTestVault(t, repo)})
 	require.NoError(t, err)
-	deps := Deps{Repo: repo, Owners: realOwners(t, repo), Pools: store.NewMachinePoolExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend, AutomationKeys: tokens}
+	deps := Deps{Repo: repo, Owners: realOwners(t, repo), Firings: store.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend, AutomationKeys: tokens}
 	return &triggerTestEnv{
 		tokens:    tokens,
 		svc:       NewTestTrigger(t, WithTriggerDeps(deps)),
@@ -356,7 +356,7 @@ func TestCreateTriggerWithoutABackendIsUnavailable(t *testing.T) {
 	t.Parallel()
 
 	env := setupTriggerTest(t)
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: env.repo, Projects: projectaccesstest.For(env.repo)}))
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(env.repo, Deps{Repo: env.repo, Projects: projectaccesstest.For(env.repo)})))
 
 	_, err := svc.CreateTrigger(env.ctx,
 		connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))

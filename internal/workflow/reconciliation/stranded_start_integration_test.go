@@ -136,7 +136,7 @@ func TestReconcilerRecoversAFireStuckPending(t *testing.T) {
 	require.Equal(t, string(core.TriggerEventSkipped), skipped.Outcome,
 		"inside the bound the stuck fire reads as a start in flight: %+v", skipped)
 
-	reconciler := New(Deps{Store: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
+	reconciler := New(Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Daemons: store.NewDaemonExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
 
 	// Inside the bound the reconciler leaves it alone: it may yet start.
 	_, _ = reconciler.ReconcileRunningWorkflows(ctx)

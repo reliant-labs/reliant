@@ -1,22 +1,26 @@
-// Copyright (c) 2025 Reliant Labs
-package db
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Service implementation; canonical pattern in `forge skill load service-layer`.
+package daemonmirror
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // The daemons table is a read replica of the control plane's daemon set for
 // everything except liveness (daemon_attachment, which this service owns).
 // The control plane is the authority on which machines EXIST, what they are
-// called, and what lifecycle phase they are in; this file holds the three
+// called, and what lifecycle phase they are in; this package holds the three
 // writes that keep the replica honest about that:
 //
 //   - UpsertDaemonIdentity: a machine exists (fast path, from an
@@ -31,8 +35,39 @@ import (
 // and a new one was invisible for the minutes it took to boot
 // (MACHINE_LIST_BUGS_2026-10-07).
 
-// DaemonIdentity is what the control plane knows about a daemon's existence.
-type DaemonIdentity = core.DaemonIdentity
+// txPolicy is the level both removals and the snapshot run at: READ COMMITTED
+// with the default attempts, as the facade's RunTx call did.
+var txPolicy = orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)
+
+// Deps holds dependencies for the daemonmirror package.
+type Deps struct {
+	Logger *slog.Logger
+	Config *config.Config
+
+	// Daemons holds the registry rows and what is bound to them.
+	Daemons Daemons
+	// Tx opens the transaction a removal or a snapshot runs in.
+	Tx TxRunner
+	// Lifecycle applies a control-plane lifecycle event to a registry row.
+	Lifecycle Lifecycle
+	// Updates tells the owner's open clients a chat they had open changed.
+	Updates UserUpdates
+}
+
+//forge:contract
+type service struct {
+	deps Deps
+}
+
+// New creates a new daemonmirror service instance.
+//
+// forge:constructor
+func New(deps Deps) (Service, error) {
+	if deps.Daemons == nil || deps.Tx == nil || deps.Lifecycle == nil || deps.Updates == nil {
+		return nil, errors.New("daemonmirror: Deps.Daemons, Tx, Lifecycle and Updates are required")
+	}
+	return &service{deps: deps}, nil
+}
 
 // RegistrySnapshotApply is one owner's authoritative daemon set, as applied by
 // ApplyDaemonRegistrySnapshot.
@@ -56,8 +91,8 @@ type RegistrySnapshotApply struct {
 // RegistrySnapshotDaemon is one daemon in a RegistrySnapshotApply. Lifecycle
 // is nil for daemons with none to mirror (every self-hosted daemon).
 type RegistrySnapshotDaemon struct {
-	Identity  DaemonIdentity
-	Lifecycle *DaemonLifecycleUpdate
+	Identity  core.DaemonIdentity
+	Lifecycle *core.DaemonLifecycleUpdate
 }
 
 // RegistrySnapshotResult reports what a snapshot changed, so the caller can
@@ -87,9 +122,9 @@ func (r RegistrySnapshotResult) Changed() bool {
 //   - daemon_type is filled only when the row has none.
 //
 // The conflict update is conditional, so an unchanged daemon costs a no-op
-// rather than a write — the snapshot re-asserts every daemon on every sweep,
+// rather than a write: the snapshot re-asserts every daemon on every sweep,
 // and rewriting updated_at each time would reorder the list for nothing.
-func (r *Repo) UpsertDaemonIdentity(ctx context.Context, id DaemonIdentity) (bool, error) {
+func (s *service) UpsertDaemonIdentity(ctx context.Context, id core.DaemonIdentity) (bool, error) {
 	if id.DaemonID == "" {
 		return false, fmt.Errorf("daemon ID cannot be empty")
 	}
@@ -98,7 +133,7 @@ func (r *Repo) UpsertDaemonIdentity(ctx context.Context, id DaemonIdentity) (boo
 	}
 	if strings.EqualFold(strings.TrimSpace(id.Name), id.DaemonID) {
 		// The control plane names a self-hosted machine that connected with
-		// neither a name nor a hostname by its own id — a placeholder that
+		// neither a name nor a hostname by its own id: a placeholder that
 		// keeps its per-owner unique name index satisfied, not a name anyone
 		// chose. Recorded here, it was every sentence's name for the machine
 		// ("reliant-labs isn't on \"46e3682b-…\""). No name is written
@@ -111,7 +146,7 @@ func (r *Repo) UpsertDaemonIdentity(ctx context.Context, id DaemonIdentity) (boo
 	if createdAt.IsZero() {
 		createdAt = now
 	}
-	wrote, err := store.UpsertDaemonIdentity(ctx, r.ORM(), id, createdAt, now)
+	wrote, err := s.deps.Daemons.UpsertDaemonIdentity(ctx, id, createdAt, now)
 	if err != nil {
 		return false, fmt.Errorf("failed to upsert daemon identity %s: %w", id.DaemonID, err)
 	}
@@ -120,24 +155,24 @@ func (r *Repo) UpsertDaemonIdentity(ctx context.Context, id DaemonIdentity) (boo
 
 // RemoveDaemon deletes a daemon's registry row and its attachment lease, and
 // returns the owner the row belonged to so the caller can tell that owner's
-// clients. removed is false when there was no row — removal is idempotent,
+// clients. removed is false when there was no row: removal is idempotent,
 // and a removed event for a daemon this registry never heard of is normal.
 //
 // The attachment goes too: a lease for a daemon that does not exist is
 // meaningless, and a stale one would keep the reap loop as its only cleanup.
 // Connector grants go with the row through their ON DELETE CASCADE, which is
-// right — a grant to a machine that no longer exists grants nothing. Every
+// right: a grant to a machine that no longer exists grants nothing. Every
 // other binding to the machine is released in the same transaction
 // (releaseDaemonBindings).
-func (r *Repo) RemoveDaemon(ctx context.Context, daemonID string) (string, bool, error) {
+func (s *service) RemoveDaemon(ctx context.Context, daemonID string) (string, bool, error) {
 	if daemonID == "" {
 		return "", false, fmt.Errorf("daemon ID cannot be empty")
 	}
 	var userID string
 	var removed bool
-	err := r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
+	err := s.deps.Tx.RunTx(ctx, txPolicy, func(txCtx context.Context) error {
 		var err error
-		userID, removed, err = r.removeDaemon(txCtx, daemonID)
+		userID, removed, err = s.removeDaemon(txCtx, daemonID)
 		return err
 	})
 	if err != nil {
@@ -147,14 +182,14 @@ func (r *Repo) RemoveDaemon(ctx context.Context, daemonID string) (string, bool,
 }
 
 // removeDaemon deletes the row and its lease and releases its bindings. ctx
-// must carry the caller's transaction (RunTx), so the release commits or rolls
-// back with the removal.
-func (r *Repo) removeDaemon(ctx context.Context, daemonID string) (string, bool, error) {
-	userID, removed, err := store.DeleteDaemonRow(ctx, r.ORM(), daemonID)
+// must carry the caller's transaction, so the release commits or rolls back
+// with the removal.
+func (s *service) removeDaemon(ctx context.Context, daemonID string) (string, bool, error) {
+	userID, removed, err := s.deps.Daemons.DeleteDaemonRow(ctx, daemonID)
 	if err != nil || !removed {
 		return "", false, err
 	}
-	if err := r.releaseDaemonBindings(ctx, daemonID); err != nil {
+	if err := s.releaseDaemonBindings(ctx, daemonID); err != nil {
 		return "", false, err
 	}
 	return userID, true, nil
@@ -174,19 +209,19 @@ func (r *Repo) removeDaemon(ctx context.Context, daemonID string) (string, bool,
 // only install was on it. Released, each is re-learned from live evidence:
 // the chat falls to its worktree's owner, else default resolution (exactly as
 // a chat that never had a pin), a workspace is adopted by the machine that
-// finds its directory (worktreesweep → AdoptWorktreeDaemon), and an install
+// finds its directory (worktreesweep -> AdoptWorktreeDaemon), and an install
 // is re-recorded by the machine that has the checkout when it connects
 // (reconcileProjectDaemons).
 //
 // Clearing a pin never sets no_machine: a chat on a machine stays on one.
 // Open clients hear of the unpinned chat through the same
 // chat_config_changed update SetChatDaemon sends.
-func (r *Repo) releaseDaemonBindings(ctx context.Context, daemonID string) error {
-	chats, err := store.UnpinChatsFromDaemon(ctx, r.ORM(), daemonID)
+func (s *service) releaseDaemonBindings(ctx context.Context, daemonID string) error {
+	chats, err := s.deps.Daemons.UnpinChatsFromDaemon(ctx, daemonID)
 	if err != nil {
 		return err
 	}
-	if err := store.ReleaseDaemonFromWorkspaces(ctx, r.ORM(), daemonID); err != nil {
+	if err := s.deps.Daemons.ReleaseDaemonFromWorkspaces(ctx, daemonID); err != nil {
 		return err
 	}
 
@@ -195,17 +230,17 @@ func (r *Repo) releaseDaemonBindings(ctx context.Context, daemonID string) error
 		if err != nil {
 			return err
 		}
-		update := &UserUpdate{
+		update := &core.UserUpdate{
 			UserID:     c.UserID,
 			ProjectID:  &c.ProjectID,
 			ChatID:     &c.ID,
 			WorktreeID: c.WorktreeID,
-			UpdateType: UserUpdateChatConfigChanged,
-			EntityType: EntityTypeChat,
+			UpdateType: userUpdateChatConfigChanged,
+			EntityType: entityTypeChat,
 			EntityID:   c.ID,
 			Data:       data,
 		}
-		if err := r.CreateUserUpdate(ctx, update); err != nil {
+		if err := s.deps.Updates.CreateUserUpdate(ctx, update); err != nil {
 			return fmt.Errorf("announcing chat %s unpinned from removed daemon %s: %w", c.ID, daemonID, err)
 		}
 	}
@@ -218,7 +253,7 @@ func (r *Repo) releaseDaemonBindings(ctx context.Context, daemonID string) error
 //  1. every daemon in the set gets its identity upserted (created if missing),
 //     and its lifecycle applied through the same newest-wins guard as a
 //     lifecycle event;
-//  2. every row of this owner NOT in the set is removed — unless it was
+//  2. every row of this owner NOT in the set is removed, unless it was
 //     created after KeepCreatedAfter or holds an attachment lease fresher than
 //     KeepAttachedSince. Those two guards are what make "absent from the
 //     control plane's set" safe to act on: the control plane hears about a
@@ -227,14 +262,14 @@ func (r *Repo) releaseDaemonBindings(ctx context.Context, daemonID string) error
 //
 // Scoped to one owner throughout. Rows of other owners are never read or
 // written, so a snapshot can only ever affect the user it names.
-func (r *Repo) ApplyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySnapshotApply) (RegistrySnapshotResult, error) {
+func (s *service) ApplyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySnapshotApply) (RegistrySnapshotResult, error) {
 	if snap.UserID == "" {
 		return RegistrySnapshotResult{}, fmt.Errorf("snapshot user ID cannot be empty")
 	}
 	var result RegistrySnapshotResult
-	err := r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
+	err := s.deps.Tx.RunTx(ctx, txPolicy, func(txCtx context.Context) error {
 		var err error
-		result, err = r.applyDaemonRegistrySnapshot(txCtx, snap)
+		result, err = s.applyDaemonRegistrySnapshot(txCtx, snap)
 		return err
 	})
 	if err != nil {
@@ -246,7 +281,7 @@ func (r *Repo) ApplyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySna
 // applyDaemonRegistrySnapshot is one attempt at the snapshot, inside the
 // transaction ctx carries. It builds its result from scratch, so a retried
 // attempt reports only what the committed one did.
-func (r *Repo) applyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySnapshotApply) (RegistrySnapshotResult, error) {
+func (s *service) applyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySnapshotApply) (RegistrySnapshotResult, error) {
 	var result RegistrySnapshotResult
 	keep := make([]string, 0, len(snap.Daemons))
 	for _, d := range snap.Daemons {
@@ -254,14 +289,14 @@ func (r *Repo) applyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySna
 		ident.UserID = snap.UserID
 		keep = append(keep, ident.DaemonID)
 
-		wrote, err := r.UpsertDaemonIdentity(ctx, ident)
+		wrote, err := s.UpsertDaemonIdentity(ctx, ident)
 		if err != nil {
 			return RegistrySnapshotResult{}, err
 		}
 		if d.Lifecycle != nil {
 			lc := *d.Lifecycle
 			lc.DaemonID = ident.DaemonID
-			applied, err := r.ApplyDaemonLifecycle(ctx, lc)
+			applied, err := s.deps.Lifecycle.ApplyDaemonLifecycle(ctx, lc)
 			if err != nil {
 				return RegistrySnapshotResult{}, err
 			}
@@ -272,12 +307,12 @@ func (r *Repo) applyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySna
 		}
 	}
 
-	stale, err := store.LockDaemonsAbsentFromSnapshot(ctx, r.ORM(), snap.UserID, keep, snap.KeepCreatedAfter, snap.KeepAttachedSince)
+	stale, err := s.deps.Daemons.LockDaemonsAbsentFromSnapshot(ctx, snap.UserID, keep, snap.KeepCreatedAfter, snap.KeepAttachedSince)
 	if err != nil {
 		return RegistrySnapshotResult{}, err
 	}
 	for _, id := range stale {
-		if _, removed, err := r.removeDaemon(ctx, id); err != nil {
+		if _, removed, err := s.removeDaemon(ctx, id); err != nil {
 			return RegistrySnapshotResult{}, err
 		} else if removed {
 			result.Removed = append(result.Removed, id)

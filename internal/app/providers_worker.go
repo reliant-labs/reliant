@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
+	"github.com/reliant-labs/reliant/internal/daemonmirror"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
@@ -283,16 +284,17 @@ func newWorkerCatalogSearch(conns catalogindex.ConnectionLister, creds httpactio
 	return catalogindex.NewService(idx, conns, delegated), nil
 }
 
-// WriteLedgerDeps is where integration writes are recorded.
-type WriteLedgerDeps struct {
+// WriteLedgerStoreDeps is where integration writes are recorded.
+type WriteLedgerStoreDeps struct {
 	DB *db.Repo
 }
 
-// NewWriteLedger records every mutating integration call, from the action
-// node or an agent tool, before it is made, so the event it causes can be
-// attributed.
-func NewWriteLedger(d WriteLedgerDeps) (writeledger.Service, error) {
-	return writeledger.NewInstrumented(writeledger.Deps{Store: newWriteLedger(d.DB), Runs: d.DB, Workflows: store.NewWorkflowExtStore(d.DB.ORM())}), nil
+// NewWriteLedgerStore is the integration_writes table the write ledger
+// (writeledger.Service, which compose.go builds) records every mutating
+// integration call in, from the action node or an agent tool, before it is
+// made, so the event it causes can be attributed.
+func NewWriteLedgerStore(d WriteLedgerStoreDeps) (writeledger.Store, error) {
+	return newWriteLedger(d.DB), nil
 }
 
 // newWriteLedger is the integration write ledger over repo's database.
@@ -499,21 +501,23 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		return nil, fmt.Errorf("trigger service: %w", err)
 	}
 	svc, err := trigger.New(trigger.Deps{
-		OrgGitHubApps: apps,
-		Logger:        d.Logger,
-		Config:        d.Config,
-		Repo:          repo,
-		Owners:        d.Owners,
-		Projects:      projectaccess.NewFromORM(repo.ORM()),
-		OrgMoves:      store.NewProjectOrgMoveExtStore(repo.ORM()),
-		Pools:         store.NewMachinePoolExtStore(repo.ORM()),
-		Syncer:        syncer,
-		Fires:         fires,
-		ControlPlane:  hostedControlPlane(d.ControlPlane),
-		Access:        access,
-		Integrations:  d.Integrations.Config,
-		Sealer:        d.Vault,
-		Catalog:       d.Pollers,
+		OrgGitHubApps:  apps,
+		Logger:         d.Logger,
+		Config:         d.Config,
+		Repo:           repo,
+		Firings:        store.NewTriggerEventExtStore(repo.ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()),
+		Owners:         d.Owners,
+		Projects:       projectaccess.NewFromORM(repo.ORM()),
+		OrgMoves:       store.NewProjectOrgMoveExtStore(repo.ORM()),
+		Pools:          store.NewMachinePoolExtStore(repo.ORM()),
+		Syncer:         syncer,
+		Fires:          fires,
+		ControlPlane:   hostedControlPlane(d.ControlPlane),
+		Access:         access,
+		Integrations:   d.Integrations.Config,
+		Sealer:         d.Vault,
+		Catalog:        d.Pollers,
 		Intake: triggers.NewIntake(triggers.NewStores(repo), temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
@@ -543,6 +547,7 @@ type WorkerToolsFactoryDeps struct {
 	WriteLedger     writeledger.Service
 	CatalogSearch   *WorkerCatalogSearch
 	Router          *WorkerDaemonRouter
+	Mirror          daemonmirror.Service
 	// Membership names a person's org role for propose_connection, which
 	// offers an org-wide connection only to an org owner or admin.
 	Membership *orgs.Resolver
@@ -584,7 +589,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 	// The registry service is a library here, not a mount: the label and
 	// pool tools call its rpcs in-process, as the run's owner. Its
 	// IdleTimeouts is the worker's control plane (nil when self-hosted).
-	registryDeps := daemon_registry.Deps{Logger: d.Logger, Config: d.Config, Repo: repo, Pools: store.NewMachinePoolExtStore(repo.ORM())}
+	registryDeps := daemon_registry.Deps{Logger: d.Logger, Config: d.Config, Repo: repo, Pools: store.NewMachinePoolExtStore(repo.ORM()), Mirror: d.Mirror}
 	if d.Router != nil && d.Router.ControlPlane != nil {
 		registryDeps.IdleTimeouts = d.Router.ControlPlane
 	}

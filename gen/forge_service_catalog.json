@@ -39,6 +39,7 @@
         "DaemonEventsConsumer",
         "DaemonRegistry",
         "DaemonStatePublisher",
+        "Daemonmirror",
         "Database",
         "FileSystem",
         "Forge",
@@ -456,6 +457,7 @@
         "DaemonListener",
         "DaemonRoutes",
         "DaemonStatePublisher",
+        "Daemonmirror",
         "Database",
         "DisconnectSubscriber",
         "FlowHealth",
@@ -507,9 +509,11 @@
         "CredentialsOrgaccounts",
         "CredentialsProvideraccounts",
         "DBRepo",
+        "Daemonmirror",
         "Database",
         "DebugServer",
         "IntegrationSettings",
+        "IntegrationsWriteledger",
         "LedgerRetention",
         "NATSConn",
         "OrgPolicyResolver",
@@ -547,8 +551,8 @@
         "WorkerTrigger",
         "WorkflowCheckSyncer",
         "WorkflowEventRelay",
-        "WriteLedger",
-        "WriteLedgerPrune"
+        "WriteLedgerPrune",
+        "WriteLedgerStore"
       ],
       "serves": [],
       "clients": [],
@@ -50351,6 +50355,11 @@
               "name": "repos",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "cli_login",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.WorkflowTrigger": [
@@ -54326,6 +54335,43 @@
       "implementation_candidates": []
     },
     {
+      "id": "Daemonmirror",
+      "name": "Daemonmirror",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/daemonmirror.Service",
+      "source": {
+        "path": "internal/daemonmirror/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/daemonmirror.MockService",
+          "source": {
+            "path": "internal/daemonmirror/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/daemonmirror.forgeMiddlewareService",
+          "source": {
+            "path": "internal/daemonmirror/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/daemonmirror.service",
+          "source": {
+            "path": "internal/daemonmirror/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "Database",
       "name": "Database",
       "kind": "provider",
@@ -54468,6 +54514,43 @@
       },
       "methods": [],
       "implementation_candidates": []
+    },
+    {
+      "id": "IntegrationsWriteledger",
+      "name": "IntegrationsWriteledger",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
+      "source": {
+        "path": "internal/integrations/writeledger/recorder.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/integrations/writeledger.MockService",
+          "source": {
+            "path": "internal/integrations/writeledger/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/integrations/writeledger.Recorder",
+          "source": {
+            "path": "internal/integrations/writeledger/recorder.go",
+            "symbol": "Recorder"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/integrations/writeledger.forgeMiddlewareService",
+          "source": {
+            "path": "internal/integrations/writeledger/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        }
+      ]
     },
     {
       "id": "JetStream",
@@ -55825,18 +55908,6 @@
       "implementation_candidates": []
     },
     {
-      "id": "WriteLedger",
-      "name": "WriteLedger",
-      "kind": "provider",
-      "type": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
-      "source": {
-        "path": "internal/app/providers_worker.go",
-        "symbol": "NewWriteLedger"
-      },
-      "methods": [],
-      "implementation_candidates": []
-    },
-    {
       "id": "WriteLedgerPrune",
       "name": "WriteLedgerPrune",
       "kind": "provider",
@@ -55844,6 +55915,18 @@
       "source": {
         "path": "internal/app/providers_worker.go",
         "symbol": "NewWriteLedgerPrune"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "WriteLedgerStore",
+      "name": "WriteLedgerStore",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Store",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewWriteLedgerStore"
       },
       "methods": [],
       "implementation_candidates": []
@@ -56565,6 +56648,19 @@
     },
     {
       "consumer": "DaemonRegistry",
+      "field": "Mirror",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.Mirror",
+      "methods": [],
+      "candidates": [
+        "Daemonmirror"
+      ],
+      "providers": [
+        "Daemonmirror"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "DaemonRegistry",
       "field": "Names",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.MachineNames",
       "methods": [],
@@ -56607,6 +56703,54 @@
       ],
       "providers": [
         "APIDaemonRouter"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Daemonmirror",
+      "field": "Daemons",
+      "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.Daemons",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Daemonmirror",
+      "field": "Lifecycle",
+      "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.Lifecycle",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Daemonmirror",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Daemonmirror",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.UserUpdates",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -56893,6 +57037,43 @@
       ],
       "providers": [
         "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "IntegrationsWriteledger",
+      "field": "Runs",
+      "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.RunLookup",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "IntegrationsWriteledger",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Store",
+      "methods": [],
+      "candidates": [
+        "WriteLedgerStore"
+      ],
+      "providers": [
+        "WriteLedgerStore"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "IntegrationsWriteledger",
+      "field": "Workflows",
+      "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.WorkflowLoader",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -58252,6 +58433,19 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "StateDerivation",
+      "field": "Mirror",
+      "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.Service",
+      "methods": [],
+      "candidates": [
+        "Daemonmirror"
+      ],
+      "providers": [
+        "Daemonmirror"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "Streaming",
       "field": "ChatUpdates",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.ChatUpdateSubscriber",
@@ -58546,10 +58740,10 @@
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
       "methods": [],
       "candidates": [
-        "WriteLedger"
+        "IntegrationsWriteledger"
       ],
       "providers": [
-        "WriteLedger"
+        "IntegrationsWriteledger"
       ],
       "resolution": "composition_expression"
     },
@@ -58859,6 +59053,17 @@
     },
     {
       "consumer": "Trigger",
+      "field": "Firings",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Firings",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
       "field": "Intake",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.EventIntake",
       "methods": [],
@@ -58982,6 +59187,17 @@
       ],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Trigger",
+      "field": "WebhookSecrets",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.WebhookSecrets",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "TriggerDeliveryRelay",
@@ -59238,14 +59454,27 @@
     },
     {
       "consumer": "WorkerToolsFactory",
+      "field": "Mirror",
+      "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.Service",
+      "methods": [],
+      "candidates": [
+        "Daemonmirror"
+      ],
+      "providers": [
+        "Daemonmirror"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerToolsFactory",
       "field": "WriteLedger",
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
       "methods": [],
       "candidates": [
-        "WriteLedger"
+        "IntegrationsWriteledger"
       ],
       "providers": [
-        "WriteLedger"
+        "IntegrationsWriteledger"
       ],
       "resolution": "composition_expression"
     },
@@ -59616,10 +59845,10 @@
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
       "methods": [],
       "candidates": [
-        "WriteLedger"
+        "IntegrationsWriteledger"
       ],
       "providers": [
-        "WriteLedger"
+        "IntegrationsWriteledger"
       ],
       "resolution": "composition_expression"
     }
@@ -59687,6 +59916,14 @@
       "component": "DaemonRegistry.Names",
       "source": {
         "path": "internal/handlers/daemon_registry/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Daemonmirror.Daemons",
+      "source": {
+        "path": "internal/daemonmirror/service.go",
         "symbol": "New"
       }
     },

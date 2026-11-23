@@ -56,6 +56,11 @@ type Owners interface {
 
 type Repository interface {
 	triggers.OwnerSource
+	// DefaultConnection is the owner's default login for an integration: an
+	// integration trigger's write path reads it, so a repository without it
+	// does not compile (it used to be asserted at run time, and a repository
+	// without it made every integration trigger answer Unavailable).
+	DefaultConnection(ctx context.Context, userID, integrationID string) (*core.Connection, error)
 	// AssignUnassignedOrg stamps the caller's rows that have no org with
 	// their default org (the lazy backfill, orgs.ListScope).
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
@@ -74,12 +79,10 @@ type Repository interface {
 	UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
-	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
 	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error
 	GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error)
 
 	// Firings, the feed and the integration registrations a trigger holds.
-	RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
 	ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
@@ -96,6 +99,18 @@ type Repository interface {
 // Pools reads the machine pool a pool-bound trigger names, and its members
 // (each gets the trigger's automation grant). store.MachinePoolExtStore
 // satisfies it; machinepool.MemberReader is the part AgreedCatalog reads.
+// Firings reads each trigger's recent firings for the list and detail views.
+// store.TriggerEventExtStore satisfies it.
+type Firings interface {
+	RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
+}
+
+// WebhookSecrets stores a webhook trigger's sealed HMAC secret; nil clears it.
+// store.TriggerExtStore satisfies it.
+type WebhookSecrets interface {
+	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
+}
+
 type Pools interface {
 	machinepool.MemberReader
 	// GetMachinePoolByName resolves the pool an agent names by name

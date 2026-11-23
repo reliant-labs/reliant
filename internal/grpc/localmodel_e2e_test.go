@@ -98,6 +98,7 @@ func e2eAPI(t *testing.T, repo *db.Repo, router toolexec.DaemonRouter) (reliantv
 		Config: &typedconfig.Config{},
 		Repo:   repo,
 		Pools:  store.NewMachinePoolExtStore(repo.ORM()),
+		Mirror: &daemon_registry.MockMirror{},
 		Router: router,
 	})
 	require.NoError(t, err)

@@ -37,6 +37,11 @@ type Deps struct {
 	Repo Repository
 	// Owners re-owns an orphaned trigger (deps.go).
 	Owners Owners
+	// Firings reads each trigger's recent firings; WebhookSecrets stores a
+	// webhook trigger's sealed secret (the generated TriggerEventExtStore and
+	// TriggerExtStore).
+	Firings        Firings
+	WebhookSecrets WebhookSecrets
 	// Projects reads a project the caller may write (owner and org decided
 	// together: projectaccess).
 	Projects projectaccess.Service
@@ -203,6 +208,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.ControlPlane != nil && d.AutomationKeys == nil {
 		return fmt.Errorf("trigger: Deps.AutomationKeys is required with Deps.ControlPlane")
+	}
+	if d.Firings == nil || d.WebhookSecrets == nil {
+		return fmt.Errorf("trigger: Deps.Firings and Deps.WebhookSecrets are required")
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("trigger: Deps.Projects is required")

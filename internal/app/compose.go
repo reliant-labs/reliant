@@ -20,12 +20,14 @@ package app
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
 	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
+	"github.com/reliant-labs/reliant/internal/daemonmirror"
 
 	"github.com/nats-io/nats.go/jetstream"
 
@@ -272,6 +274,7 @@ func (g *Graph) newStateDerivation() (*StateDerivation, error) {
 		NATS:        g.NATSConn(),
 		ToolsDaemon: g.ToolsDaemon(),
 		DB:          g.Database(),
+		Mirror:      g.Daemonmirror(),
 	})
 }
 
@@ -503,12 +506,6 @@ func (g *Graph) newWorkerCatalogSearch() (*WorkerCatalogSearch, error) {
 	})
 }
 
-func (g *Graph) newWriteLedger() (writeledger.Service, error) {
-	return NewWriteLedger(WriteLedgerDeps{
-		DB: g.Database(),
-	})
-}
-
 func (g *Graph) newStoredConfigProvider() (*reliantconfig.StoredConfigProvider, error) {
 	return NewStoredConfigProvider(StoredConfigProviderDeps{
 		DB: g.Database(),
@@ -585,7 +582,7 @@ func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 		AgentRuns:        g.AgentRuns(),
 		Triggers:         g.WorkerTrigger(),
 		Credentials:      g.WorkerIntegrationCredentials(),
-		WriteLedger:      g.WriteLedger(),
+		WriteLedger:      g.IntegrationsWriteledger(),
 		CatalogSearch:    g.WorkerCatalogSearch(),
 		Router:           g.WorkerDaemonRouter(),
 		DB:               g.Database(),
@@ -594,6 +591,7 @@ func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 		Config:           g.Cfg,
 		Backoff:          g.Providerbackoff(),
 		ChangeController: g.ChangeController(),
+		Mirror:           g.Daemonmirror(),
 	})
 }
 
@@ -633,7 +631,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		ConfigProvider:   g.StoredConfigProvider(),
 		Launcher:         g.RunLauncher(),
 		Credentials:      g.WorkerIntegrationCredentials(),
-		WriteLedger:      g.WriteLedger(),
+		WriteLedger:      g.IntegrationsWriteledger(),
 		Pollers:          g.TriggerPollers(),
 		ControlPlane:     g.ServerProcessConfig.GetControlPlane(),
 		Network:          g.ServerProcessConfig.GetNetwork(),
@@ -679,7 +677,7 @@ func (g *Graph) newAccountUsagePoller() (*accountlimits.Poller, error) {
 
 func (g *Graph) newWriteLedgerPrune() (*WriteLedgerPrune, error) {
 	return NewWriteLedgerPrune(WriteLedgerPruneDeps{
-		Ledger: g.WriteLedger(),
+		Ledger: g.IntegrationsWriteledger(),
 		DB:     g.Database(),
 	})
 }
@@ -1182,6 +1180,8 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Config:         g.Cfg,
 		Repo:           g.Database(),
 		Owners:         g.Triggerowner(),
+		Firings:        store.NewTriggerEventExtStore(g.Database().ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(g.Database().ORM()),
 		Pools:          store.NewMachinePoolExtStore(g.Database().ORM()),
 		Syncer:         syncer,
@@ -1227,6 +1227,7 @@ func (g *Graph) newDaemonRegistry() (*daemon_registry.Service, error) {
 		Config:       g.Cfg,
 		Repo:         g.Database(),
 		Pools:        store.NewMachinePoolExtStore(g.Database().ORM()),
+		Mirror:       g.Daemonmirror(),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		IdleTimeouts: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 		Names:        hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
@@ -1728,6 +1729,24 @@ func (g *Graph) newLlmusage() (llmusage.Service, error) {
 	return llmusage.NewServiceWithForgeMiddleware(svc), nil
 }
 
+// newDaemonmirror constructs the daemonmirror package (internal/daemonmirror):
+// the registry replica of the control plane's daemon set.
+func (g *Graph) newDaemonmirror() (daemonmirror.Service, error) {
+	o := g.Database().ORM()
+	svc, err := daemonmirror.New(daemonmirror.Deps{
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Daemons:   daemonmirror.NewStores(o),
+		Tx:        g.Database(),
+		Lifecycle: g.Database(),
+		Updates:   g.Database(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return daemonmirror.NewServiceWithForgeMiddleware(svc), nil
+}
+
 // newSeatmatch constructs the seatmatch package (internal/seatmatch).
 func (g *Graph) newSeatmatch() (seatmatch.Service, error) {
 	svc, err := seatmatch.New(seatmatch.Deps{
@@ -1837,6 +1856,23 @@ func (g *Graph) newPullRequestRecord() (*pull_request_record.Service, error) {
 		Config: g.Cfg,
 		Store:  store.NewPrRecordExtStore(g.Database().ORM()),
 		Now:    nil, // optional — no provider
+	})
+}
+
+// newIntegrationsWriteledger constructs the integrations/writeledger package (internal/integrations/writeledger).
+func (g *Graph) newIntegrationsWriteledger() (writeledger.Service, error) {
+	return writeledger.NewServiceWithForgeMiddleware(writeledger.New(writeledger.Deps{
+		Store:     g.WriteLedgerStore(),
+		Runs:      g.Database(),
+		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
+		Now:       time.Now, // framework clock
+	})), nil
+}
+
+// newWriteLedgerStore constructs the WriteLedgerStore provider (NewWriteLedgerStore, internal/app/providers_worker.go).
+func (g *Graph) newWriteLedgerStore() (writeledger.Store, error) {
+	return NewWriteLedgerStore(WriteLedgerStoreDeps{
+		DB: g.Database(),
 	})
 }
 

@@ -15,6 +15,8 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatselection"
+	"github.com/reliant-labs/reliant/internal/daemonmirror"
+	"github.com/reliant-labs/reliant/internal/daemonmirror/daemonmirrortest"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
@@ -103,11 +105,11 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 			})
 		}},
 		{"Repo.RemoveDaemon", readCommitted, func(ctx context.Context) error {
-			_, _, err := p.Repo.RemoveDaemon(ctx, "daemon-none")
+			_, _, err := daemonmirrortest.New(t, p.Repo).RemoveDaemon(ctx, "daemon-none")
 			return err
 		}},
 		{"Repo.ApplyDaemonRegistrySnapshot", readCommitted, func(ctx context.Context) error {
-			_, err := p.Repo.ApplyDaemonRegistrySnapshot(ctx, db.RegistrySnapshotApply{UserID: storetest.SeedUserID})
+			_, err := daemonmirrortest.New(t, p.Repo).ApplyDaemonRegistrySnapshot(ctx, daemonmirror.RegistrySnapshotApply{UserID: storetest.SeedUserID})
 			return err
 		}},
 		{"Repo.CreateWorkflowDraft", readCommitted, func(ctx context.Context) error {

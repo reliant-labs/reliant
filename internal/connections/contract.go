@@ -14,9 +14,11 @@
 // request (one implementation per auth placement). `forge generate` writes a
 // mock of each into mock_gen.go.
 //
-// Built by hand, by internal/app's NewAPIConnections and worker connection
-// providers (providers_api.go, providers_worker.go): never a node compose.go
-// constructs from Deps.
+// No Deps/New: four interdependent positional constructors (TokenSource,
+// Broker, Service, OAuthHTTP) that internal/app's NewAPIConnections
+// (providers_api.go) bundles into *APIConnections, and a TokenSource each of
+// the worker, gitHubTokenSource and the api builds separately: distinct
+// instances per root and use, never one node.
 //
 //forge:provided
 package connections
