@@ -54,7 +54,7 @@ func (s *Service) startInSession(
 	userID string,
 	msg *reliantv1.StartRunRequest,
 ) (*connect.Response[reliantv1.StartRunResponse], error) {
-	chat, err := s.deps.Repo.GetChat(ctx, msg.SessionId)
+	chat, err := s.deps.ChatViews.GetChat(ctx, msg.SessionId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get session"))
 	}
@@ -172,7 +172,7 @@ func (s *Service) respondWithSessionRun(
 	ctx context.Context,
 	sessionID string,
 ) (*connect.Response[reliantv1.StartRunResponse], error) {
-	chat, err := s.deps.Repo.GetChat(ctx, sessionID)
+	chat, err := s.deps.ChatViews.GetChat(ctx, sessionID)
 	if err != nil || chat == nil || chat.WorkflowID == nil || *chat.WorkflowID == "" {
 		return nil, svcerr.WithCause(errRunNotReadBack, err)
 	}

@@ -26,10 +26,9 @@ func TestBatchApprove_Generated(t *testing.T) {
 			}
 			return nil, nil // the store answers a missing approval with (nil, nil)
 		},
-		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
-			return &db.ChatRow{ID: id, UserID: "someone-else"}, nil
-		},
-	}}))
+	}, Chats: &approval.MockChats{GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
+		return &db.ChatRow{ID: id, UserID: "someone-else"}, nil
+	}}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.BatchApproveRequest, pb.BatchApproveResponse]{
 		{

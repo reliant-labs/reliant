@@ -46,7 +46,7 @@ func (s *Service) ConvertToBackground(
 	chatID := msg.ChatID
 
 	// Get the chat and verify ownership
-	chat, err := s.deps.Repo.GetChatRow(ctx, chatID)
+	chat, err := s.deps.Chats.GetChatRow(ctx, chatID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

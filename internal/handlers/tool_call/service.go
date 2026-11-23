@@ -23,6 +23,8 @@ type Deps struct {
 	// Repo reads the tool call, its message and chat, and records the
 	// cancelled / backgrounded transition.
 	Repo Repository
+	// Chats reads the chat the tool call belongs to (store.ChatExtStore).
+	Chats Chats
 	// Temporal signals a spawn's root workflow to stop the spawn. Without it
 	// a spawn cannot be cancelled, and CancelToolCall reports Unavailable.
 	// forge:optional-dep
@@ -45,6 +47,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("tool_call: Deps.Repo is required")
+	}
+	if d.Chats == nil {
+		return fmt.Errorf("tool_call: Deps.Chats is required")
 	}
 	return nil
 }

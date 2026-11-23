@@ -408,10 +408,12 @@ type WorkerRunDeps struct {
 //forge:root-only worker
 func NewWorkerRun(d WorkerRunDeps) (*WorkerRun, error) {
 	svc, err := run.New(run.Deps{
-		Logger: d.Logger,
-		Config: d.Config,
-		Repo:   d.DB,
-		Chats:  d.Chats.Service,
+		Logger:    d.Logger,
+		Config:    d.Config,
+		Repo:      d.DB,
+		ChatRows:  store.NewChatExtStore(d.DB.ORM()),
+		ChatViews: store.NewChatsWithActivityExtStore(d.DB.ORM()),
+		Chats:     d.Chats.Service,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("run service: %w", err)

@@ -11,6 +11,20 @@ import (
 	run "github.com/reliant-labs/reliant/internal/handlers/run"
 )
 
+// emptyChatRows and emptyChatViews answer a session as the store does for a
+// missing row: core.ErrChatNotFound.
+func emptyChatRows() *run.MockChatRows {
+	return &run.MockChatRows{GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
+		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+	}}
+}
+
+func emptyChatViews() *run.MockChatViews {
+	return &run.MockChatViews{GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
+		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+	}}
+}
+
 // emptyRunRepo is a repository holding no run, session or project, answering
 // each lookup as the store does for a missing row: a run or a session is
 // NotFound, and the caller has no projects.
@@ -18,12 +32,6 @@ func emptyRunRepo() *run.MockRepository {
 	return &run.MockRepository{
 		GetWorkflowFunc: func(_ context.Context, id string) (*db.Workflow, error) {
 			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("workflow"), id)
-		},
-		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
-			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
-		},
-		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
-			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 		},
 		ListProjectsFunc: func(context.Context, db.ProjectFilters) ([]*db.Project, error) {
 			return nil, nil
