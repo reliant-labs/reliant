@@ -426,7 +426,7 @@ func (f *Firer) previousRunBlocks(ctx context.Context, triggerID string) (string
 		return "", nil
 	}
 
-	statuses, err := f.repo.GetRootWorkflowStatusForChats(ctx, []string{*prev.ChatID})
+	statuses, err := f.repo.RootWorkflowStatusForChats(ctx, []string{*prev.ChatID})
 	if err != nil {
 		return "", fmt.Errorf("load root workflow status for chat %s: %w", *prev.ChatID, err)
 	}

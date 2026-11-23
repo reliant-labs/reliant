@@ -148,8 +148,8 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	poller, err := gmail.New(gmail.Deps{BaseURL: gm.GetConnection().GetBaseUrl(), Runner: google.runner()})
 	require.NoError(t, err)
 	require.NoError(t, registry.RegisterPoller(gmail.ID, poller))
-	intake := triggers.NewIntake(repo, temporalClient, taskQueue)
-	syncer, fires := TemporalBackend(temporalClient, repo, taskQueue, registry.IsPolled)
+	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue)
+	syncer, fires := TemporalBackend(temporalClient, triggers.NewStores(repo), taskQueue, registry.IsPolled)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{
 		Repo: repo, Projects: projectaccesstest.For(repo), Syncer: syncer, Fires: fires,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: "https://reliant.example"}, Catalog: registry, Intake: intake,
@@ -160,7 +160,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerPollWorkflow, workflow.RegisterOptions{Name: triggers.PollWorkflowName})
 	w.RegisterActivityWithOptions(
-		triggers.NewTriggerPoller(gmailPollRepo{Repo: repo, conns: store}, registry, intake, source).Poll,
+		triggers.NewTriggerPoller(gmailPollRepo{Stores: triggers.NewStores(repo), conns: store}, registry, intake, source).Poll,
 		activity.RegisterOptions{Name: triggers.PollActivityName})
 	w.RegisterWorkflowWithOptions(triggers.TriggerEventFireWorkflow, workflow.RegisterOptions{Name: triggers.EventFireWorkflowName})
 	w.RegisterActivityWithOptions(triggers.NewEventFirer(triggers.NewStores(repo), launcher).Fire, activity.RegisterOptions{Name: triggers.EventFireActivityName})
@@ -328,7 +328,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 
 // gmailPollRepo adds the owner-scoped connection read, as the worker does.
 type gmailPollRepo struct {
-	*db.Repo
+	triggers.Stores
 	conns connectionvault.Service
 }
 

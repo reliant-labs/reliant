@@ -66,3 +66,16 @@ type idleCapacity struct{ unwiredCapacity }
 func (idleCapacity) ListTriggerCapacityExecutionBatch(context.Context, int) ([]store.TriggerCapacityExecution, error) {
 	return nil, nil
 }
+
+var errReceiptUnwired = errors.New("test: receipt store not wired")
+
+// unwiredReceipts is a ReceiptStore whose every method fails loudly; a fake
+// that never takes a delivery receipt embeds it to satisfy IntakeRepo.
+type unwiredReceipts struct{}
+
+func (unwiredReceipts) TriggerDeliveryEvent(context.Context, string, string, string) (*core.TriggerEvent, error) {
+	return nil, errReceiptUnwired
+}
+func (unwiredReceipts) RecordDeliveryTriggerEvent(context.Context, string, string, *core.TriggerEvent) (*core.TriggerEvent, bool, error) {
+	return nil, false, errReceiptUnwired
+}

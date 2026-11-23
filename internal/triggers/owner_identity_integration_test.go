@@ -33,7 +33,7 @@ func TestOwnerGatedFilterAgainstTheRealRepository(t *testing.T) {
 	f.trigger.ConnectionID = nil
 	require.NoError(t, f.repo.UpdateTrigger(ctx, f.trigger))
 
-	intake := NewIntake(f.repo, &recordingStarter{}, "q").
+	intake := NewIntake(NewStores(f.repo), &recordingStarter{}, "q").
 		WithWorkflows(fakeWorkflows{yaml: map[string]string{"triage": trustedWorkflow}})
 	n := 0
 	accept := func(senderID string, verified bool) *AcceptResult {

@@ -882,7 +882,7 @@ type TriggerInboundDeps struct {
 func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 	repo := d.DB
 	in := webhook.NewInbound(repo,
-		triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
+		triggers.NewIntake(triggers.NewStores(repo), d.Temporal.Client, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
 			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
@@ -1129,7 +1129,7 @@ type ScheduleSyncerDeps struct {
 //
 //forge:root-only api
 func NewScheduleSyncer(d ScheduleSyncerDeps) (*triggers.Syncer, error) {
-	return triggers.NewSyncer(d.Temporal.Client.ScheduleClient(), d.DB, v2workflow.SharedTaskQueue).
+	return triggers.NewSyncer(d.Temporal.Client.ScheduleClient(), triggers.NewStores(d.DB), v2workflow.SharedTaskQueue).
 		WithPolledIntegrations(d.Pollers.IsPolled), nil
 }
 

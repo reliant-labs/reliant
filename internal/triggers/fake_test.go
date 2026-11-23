@@ -20,6 +20,7 @@ import (
 // fakeRepo is enough of Repo to drive the fire path without a database.
 type fakeRepo struct {
 	idleCapacity
+	unwiredReceipts
 	mu sync.Mutex
 
 	triggers map[string]*core.Trigger
@@ -142,7 +143,7 @@ func (r *fakeRepo) GetLatestTriggerEvent(_ context.Context, triggerID string, ou
 	return latest, nil
 }
 
-func (r *fakeRepo) GetRootWorkflowStatusForChats(_ context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error) {
+func (r *fakeRepo) RootWorkflowStatusForChats(_ context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := make(map[string]core.WorkflowStatus, len(chatIDs))

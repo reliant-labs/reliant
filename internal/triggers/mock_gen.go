@@ -21,8 +21,206 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
+// forge:section MockOwnerSource
+// forge:hash=bf74788d0f757ccd09dab39cd1f7d96c57dd39ae1224cd47bde4dbce41e57ea1
+
+// MockOwnerSource is a test mock for the OwnerSource interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockOwnerSource.<Method>Func not set" error.
+type MockOwnerSource struct {
+	contractkit.Recorder
+	GetConnectionFunc               func(context.Context, string, string) (*core.Connection, error)
+	GetIntegrationAccessSubjectFunc func(context.Context, string, string, time.Time) (string, error)
+}
+
+// GetConnection records the call and delegates to GetConnectionFunc when set.
+func (m *MockOwnerSource) GetConnection(ctx context.Context, userID string, id string) (*core.Connection, error) {
+	m.Recorder.Record("GetConnection", ctx, userID, id)
+	if m.GetConnectionFunc != nil {
+		return m.GetConnectionFunc(ctx, userID, id)
+	}
+	return nil, contractkit.MockNotSet("MockOwnerSource", "GetConnection")
+}
+
+// GetIntegrationAccessSubject records the call and delegates to GetIntegrationAccessSubjectFunc when set.
+func (m *MockOwnerSource) GetIntegrationAccessSubject(ctx context.Context, userID string, integrationID string, freshAfter time.Time) (string, error) {
+	m.Recorder.Record("GetIntegrationAccessSubject", ctx, userID, integrationID, freshAfter)
+	if m.GetIntegrationAccessSubjectFunc != nil {
+		return m.GetIntegrationAccessSubjectFunc(ctx, userID, integrationID, freshAfter)
+	}
+	return "", contractkit.MockNotSet("MockOwnerSource", "GetIntegrationAccessSubject")
+}
+
+// Compile-time check.
+var _ OwnerSource = (*MockOwnerSource)(nil)
+
+// forge:section MockReceiptStore
+// forge:hash=e7956a62ed378aaae639dc1624cb6ece4672b9af0f99feda7c0b53b799d9aabf
+
+// MockReceiptStore is a test mock for the ReceiptStore interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockReceiptStore.<Method>Func not set" error.
+type MockReceiptStore struct {
+	contractkit.Recorder
+	TriggerDeliveryEventFunc       func(context.Context, string, string, string) (*core.TriggerEvent, error)
+	RecordDeliveryTriggerEventFunc func(context.Context, string, string, *core.TriggerEvent) (*core.TriggerEvent, bool, error)
+}
+
+// TriggerDeliveryEvent records the call and delegates to TriggerDeliveryEventFunc when set.
+func (m *MockReceiptStore) TriggerDeliveryEvent(ctx context.Context, id string, triggerID string, userID string) (*core.TriggerEvent, error) {
+	m.Recorder.Record("TriggerDeliveryEvent", ctx, id, triggerID, userID)
+	if m.TriggerDeliveryEventFunc != nil {
+		return m.TriggerDeliveryEventFunc(ctx, id, triggerID, userID)
+	}
+	return nil, contractkit.MockNotSet("MockReceiptStore", "TriggerDeliveryEvent")
+}
+
+// RecordDeliveryTriggerEvent records the call and delegates to RecordDeliveryTriggerEventFunc when set.
+func (m *MockReceiptStore) RecordDeliveryTriggerEvent(ctx context.Context, id string, token string, event *core.TriggerEvent) (*core.TriggerEvent, bool, error) {
+	m.Recorder.Record("RecordDeliveryTriggerEvent", ctx, id, token, event)
+	if m.RecordDeliveryTriggerEventFunc != nil {
+		return m.RecordDeliveryTriggerEventFunc(ctx, id, token, event)
+	}
+	return nil, false, contractkit.MockNotSet("MockReceiptStore", "RecordDeliveryTriggerEvent")
+}
+
+// Compile-time check.
+var _ ReceiptStore = (*MockReceiptStore)(nil)
+
+// forge:section MockIntakeRepo
+// forge:hash=d34523a9ed1ab40409a725788f7872aaae5ac9d1b242405b5f8b9fa304fd401e
+
+// MockIntakeRepo is a test mock for the IntakeRepo interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockIntakeRepo.<Method>Func not set" error.
+type MockIntakeRepo struct {
+	contractkit.Recorder
+	GetTriggerFunc                    func(context.Context, string) (*core.Trigger, error)
+	GetDaemonFunc                     func(context.Context, string) (*db.Daemon, error)
+	CreateTriggerEventFunc            func(context.Context, *core.TriggerEvent) (bool, error)
+	GetTriggerEventByDedupeFunc       func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
+	GetLatestTriggerEventFunc         func(context.Context, string, *core.TriggerEventOutcome) (*core.TriggerEvent, error)
+	SettlePendingTriggerEventFunc     func(context.Context, string, core.TriggerEventOutcome, string, *core.TriggerEventDefinition) (bool, error)
+	ListStalePendingTriggerEventsFunc func(context.Context, time.Time, int) ([]*core.TriggerEvent, error)
+	GetConnectionFunc                 func(context.Context, string, string) (*core.Connection, error)
+	GetIntegrationAccessSubjectFunc   func(context.Context, string, string, time.Time) (string, error)
+	TriggerDeliveryEventFunc          func(context.Context, string, string, string) (*core.TriggerEvent, error)
+	RecordDeliveryTriggerEventFunc    func(context.Context, string, string, *core.TriggerEvent) (*core.TriggerEvent, bool, error)
+}
+
+// GetTrigger records the call and delegates to GetTriggerFunc when set.
+func (m *MockIntakeRepo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
+	m.Recorder.Record("GetTrigger", ctx, id)
+	if m.GetTriggerFunc != nil {
+		return m.GetTriggerFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockIntakeRepo", "GetTrigger")
+}
+
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockIntakeRepo) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockIntakeRepo", "GetDaemon")
+}
+
+// CreateTriggerEvent records the call and delegates to CreateTriggerEventFunc when set.
+func (m *MockIntakeRepo) CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (bool, error) {
+	m.Recorder.Record("CreateTriggerEvent", ctx, ev)
+	if m.CreateTriggerEventFunc != nil {
+		return m.CreateTriggerEventFunc(ctx, ev)
+	}
+	return false, contractkit.MockNotSet("MockIntakeRepo", "CreateTriggerEvent")
+}
+
+// GetTriggerEventByDedupe records the call and delegates to GetTriggerEventByDedupeFunc when set.
+func (m *MockIntakeRepo) GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error) {
+	m.Recorder.Record("GetTriggerEventByDedupe", ctx, kind, dedupeKey)
+	if m.GetTriggerEventByDedupeFunc != nil {
+		return m.GetTriggerEventByDedupeFunc(ctx, kind, dedupeKey)
+	}
+	return nil, contractkit.MockNotSet("MockIntakeRepo", "GetTriggerEventByDedupe")
+}
+
+// GetLatestTriggerEvent records the call and delegates to GetLatestTriggerEventFunc when set.
+func (m *MockIntakeRepo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
+	m.Recorder.Record("GetLatestTriggerEvent", ctx, triggerID, outcome)
+	if m.GetLatestTriggerEventFunc != nil {
+		return m.GetLatestTriggerEventFunc(ctx, triggerID, outcome)
+	}
+	return nil, contractkit.MockNotSet("MockIntakeRepo", "GetLatestTriggerEvent")
+}
+
+// SettlePendingTriggerEvent records the call and delegates to SettlePendingTriggerEventFunc when set.
+func (m *MockIntakeRepo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, def *core.TriggerEventDefinition) (bool, error) {
+	m.Recorder.Record("SettlePendingTriggerEvent", ctx, id, outcome, detail, def)
+	if m.SettlePendingTriggerEventFunc != nil {
+		return m.SettlePendingTriggerEventFunc(ctx, id, outcome, detail, def)
+	}
+	return false, contractkit.MockNotSet("MockIntakeRepo", "SettlePendingTriggerEvent")
+}
+
+// ListStalePendingTriggerEvents records the call and delegates to ListStalePendingTriggerEventsFunc when set.
+func (m *MockIntakeRepo) ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error) {
+	m.Recorder.Record("ListStalePendingTriggerEvents", ctx, olderThan, limit)
+	if m.ListStalePendingTriggerEventsFunc != nil {
+		return m.ListStalePendingTriggerEventsFunc(ctx, olderThan, limit)
+	}
+	return nil, contractkit.MockNotSet("MockIntakeRepo", "ListStalePendingTriggerEvents")
+}
+
+// GetConnection records the call and delegates to GetConnectionFunc when set.
+func (m *MockIntakeRepo) GetConnection(ctx context.Context, userID string, id string) (*core.Connection, error) {
+	m.Recorder.Record("GetConnection", ctx, userID, id)
+	if m.GetConnectionFunc != nil {
+		return m.GetConnectionFunc(ctx, userID, id)
+	}
+	return nil, contractkit.MockNotSet("MockIntakeRepo", "GetConnection")
+}
+
+// GetIntegrationAccessSubject records the call and delegates to GetIntegrationAccessSubjectFunc when set.
+func (m *MockIntakeRepo) GetIntegrationAccessSubject(ctx context.Context, userID string, integrationID string, freshAfter time.Time) (string, error) {
+	m.Recorder.Record("GetIntegrationAccessSubject", ctx, userID, integrationID, freshAfter)
+	if m.GetIntegrationAccessSubjectFunc != nil {
+		return m.GetIntegrationAccessSubjectFunc(ctx, userID, integrationID, freshAfter)
+	}
+	return "", contractkit.MockNotSet("MockIntakeRepo", "GetIntegrationAccessSubject")
+}
+
+// TriggerDeliveryEvent records the call and delegates to TriggerDeliveryEventFunc when set.
+func (m *MockIntakeRepo) TriggerDeliveryEvent(ctx context.Context, id string, triggerID string, userID string) (*core.TriggerEvent, error) {
+	m.Recorder.Record("TriggerDeliveryEvent", ctx, id, triggerID, userID)
+	if m.TriggerDeliveryEventFunc != nil {
+		return m.TriggerDeliveryEventFunc(ctx, id, triggerID, userID)
+	}
+	return nil, contractkit.MockNotSet("MockIntakeRepo", "TriggerDeliveryEvent")
+}
+
+// RecordDeliveryTriggerEvent records the call and delegates to RecordDeliveryTriggerEventFunc when set.
+func (m *MockIntakeRepo) RecordDeliveryTriggerEvent(ctx context.Context, id string, token string, event *core.TriggerEvent) (*core.TriggerEvent, bool, error) {
+	m.Recorder.Record("RecordDeliveryTriggerEvent", ctx, id, token, event)
+	if m.RecordDeliveryTriggerEventFunc != nil {
+		return m.RecordDeliveryTriggerEventFunc(ctx, id, token, event)
+	}
+	return nil, false, contractkit.MockNotSet("MockIntakeRepo", "RecordDeliveryTriggerEvent")
+}
+
+// Compile-time check.
+var _ IntakeRepo = (*MockIntakeRepo)(nil)
+
 // forge:section MockRepo
-// forge:hash=6e2dbe45fc3267f257001b4fa378b2d5f6749057b5aadaade8f3be8b88188d64
+// forge:hash=143c4b39150b1b06bc5224d2626926f51e71d57018534e792fd035ac230278a6
 
 // MockRepo is a test mock for the Repo interface.
 //
@@ -32,17 +230,19 @@ import (
 // "MockRepo.<Method>Func not set" error.
 type MockRepo struct {
 	contractkit.Recorder
-	GetTriggerFunc                    func(context.Context, string) (*core.Trigger, error)
-	ListAllTriggersFunc               func(context.Context) ([]*core.Trigger, error)
-	LockTriggerFunc                   func(context.Context, string) error
-	CreateTriggerEventFunc            func(context.Context, *core.TriggerEvent) (bool, error)
-	GetTriggerEventByDedupeFunc       func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
-	GetLatestTriggerEventFunc         func(context.Context, string, *core.TriggerEventOutcome) (*core.TriggerEvent, error)
-	SettlePendingTriggerEventFunc     func(context.Context, string, core.TriggerEventOutcome, string, *core.TriggerEventDefinition) (bool, error)
-	GetDaemonFunc                     func(context.Context, string) (*db.Daemon, error)
-	GetRootWorkflowStatusForChatsFunc func(context.Context, []string) (map[string]core.WorkflowStatus, error)
-	ListRootWorkflowsFunc             func(context.Context, string) ([]*core.Workflow, error)
-	AbandonFailedWorkflowStartFunc    func(context.Context, string) (bool, error)
+	GetTriggerFunc                  func(context.Context, string) (*core.Trigger, error)
+	ListAllTriggersFunc             func(context.Context) ([]*core.Trigger, error)
+	LockTriggerFunc                 func(context.Context, string) error
+	CreateTriggerEventFunc          func(context.Context, *core.TriggerEvent) (bool, error)
+	GetTriggerEventByDedupeFunc     func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
+	GetLatestTriggerEventFunc       func(context.Context, string, *core.TriggerEventOutcome) (*core.TriggerEvent, error)
+	SettlePendingTriggerEventFunc   func(context.Context, string, core.TriggerEventOutcome, string, *core.TriggerEventDefinition) (bool, error)
+	GetDaemonFunc                   func(context.Context, string) (*db.Daemon, error)
+	RootWorkflowStatusForChatsFunc  func(context.Context, []string) (map[string]core.WorkflowStatus, error)
+	ListRootWorkflowsFunc           func(context.Context, string) ([]*core.Workflow, error)
+	AbandonFailedWorkflowStartFunc  func(context.Context, string) (bool, error)
+	GetConnectionFunc               func(context.Context, string, string) (*core.Connection, error)
+	GetIntegrationAccessSubjectFunc func(context.Context, string, string, time.Time) (string, error)
 }
 
 // GetTrigger records the call and delegates to GetTriggerFunc when set.
@@ -117,13 +317,13 @@ func (m *MockRepo) GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	return nil, contractkit.MockNotSet("MockRepo", "GetDaemon")
 }
 
-// GetRootWorkflowStatusForChats records the call and delegates to GetRootWorkflowStatusForChatsFunc when set.
-func (m *MockRepo) GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error) {
-	m.Recorder.Record("GetRootWorkflowStatusForChats", ctx, chatIDs)
-	if m.GetRootWorkflowStatusForChatsFunc != nil {
-		return m.GetRootWorkflowStatusForChatsFunc(ctx, chatIDs)
+// RootWorkflowStatusForChats records the call and delegates to RootWorkflowStatusForChatsFunc when set.
+func (m *MockRepo) RootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error) {
+	m.Recorder.Record("RootWorkflowStatusForChats", ctx, chatIDs)
+	if m.RootWorkflowStatusForChatsFunc != nil {
+		return m.RootWorkflowStatusForChatsFunc(ctx, chatIDs)
 	}
-	return nil, contractkit.MockNotSet("MockRepo", "GetRootWorkflowStatusForChats")
+	return nil, contractkit.MockNotSet("MockRepo", "RootWorkflowStatusForChats")
 }
 
 // ListRootWorkflows records the call and delegates to ListRootWorkflowsFunc when set.
@@ -144,11 +344,29 @@ func (m *MockRepo) AbandonFailedWorkflowStart(ctx context.Context, id string) (b
 	return false, contractkit.MockNotSet("MockRepo", "AbandonFailedWorkflowStart")
 }
 
+// GetConnection records the call and delegates to GetConnectionFunc when set.
+func (m *MockRepo) GetConnection(ctx context.Context, userID string, id string) (*core.Connection, error) {
+	m.Recorder.Record("GetConnection", ctx, userID, id)
+	if m.GetConnectionFunc != nil {
+		return m.GetConnectionFunc(ctx, userID, id)
+	}
+	return nil, contractkit.MockNotSet("MockRepo", "GetConnection")
+}
+
+// GetIntegrationAccessSubject records the call and delegates to GetIntegrationAccessSubjectFunc when set.
+func (m *MockRepo) GetIntegrationAccessSubject(ctx context.Context, userID string, integrationID string, freshAfter time.Time) (string, error) {
+	m.Recorder.Record("GetIntegrationAccessSubject", ctx, userID, integrationID, freshAfter)
+	if m.GetIntegrationAccessSubjectFunc != nil {
+		return m.GetIntegrationAccessSubjectFunc(ctx, userID, integrationID, freshAfter)
+	}
+	return "", contractkit.MockNotSet("MockRepo", "GetIntegrationAccessSubject")
+}
+
 // Compile-time check.
 var _ Repo = (*MockRepo)(nil)
 
 // forge:section MockEventRepo
-// forge:hash=0906e5666d1d9e0618e5a94f0134af95107f34f888e15ab882dd1cb399edf05c
+// forge:hash=3c7d551f046fcf966ae82d17c3cad3c9a6d4482945c7b8f4d2eed4018641ac9b
 
 // MockEventRepo is a test mock for the EventRepo interface.
 //
@@ -165,6 +383,8 @@ type MockEventRepo struct {
 	GetLatestTriggerEventFunc         func(context.Context, string, *core.TriggerEventOutcome) (*core.TriggerEvent, error)
 	SettlePendingTriggerEventFunc     func(context.Context, string, core.TriggerEventOutcome, string, *core.TriggerEventDefinition) (bool, error)
 	ListStalePendingTriggerEventsFunc func(context.Context, time.Time, int) ([]*core.TriggerEvent, error)
+	GetConnectionFunc                 func(context.Context, string, string) (*core.Connection, error)
+	GetIntegrationAccessSubjectFunc   func(context.Context, string, string, time.Time) (string, error)
 }
 
 // GetTrigger records the call and delegates to GetTriggerFunc when set.
@@ -228,6 +448,24 @@ func (m *MockEventRepo) ListStalePendingTriggerEvents(ctx context.Context, older
 		return m.ListStalePendingTriggerEventsFunc(ctx, olderThan, limit)
 	}
 	return nil, contractkit.MockNotSet("MockEventRepo", "ListStalePendingTriggerEvents")
+}
+
+// GetConnection records the call and delegates to GetConnectionFunc when set.
+func (m *MockEventRepo) GetConnection(ctx context.Context, userID string, id string) (*core.Connection, error) {
+	m.Recorder.Record("GetConnection", ctx, userID, id)
+	if m.GetConnectionFunc != nil {
+		return m.GetConnectionFunc(ctx, userID, id)
+	}
+	return nil, contractkit.MockNotSet("MockEventRepo", "GetConnection")
+}
+
+// GetIntegrationAccessSubject records the call and delegates to GetIntegrationAccessSubjectFunc when set.
+func (m *MockEventRepo) GetIntegrationAccessSubject(ctx context.Context, userID string, integrationID string, freshAfter time.Time) (string, error) {
+	m.Recorder.Record("GetIntegrationAccessSubject", ctx, userID, integrationID, freshAfter)
+	if m.GetIntegrationAccessSubjectFunc != nil {
+		return m.GetIntegrationAccessSubjectFunc(ctx, userID, integrationID, freshAfter)
+	}
+	return "", contractkit.MockNotSet("MockEventRepo", "GetIntegrationAccessSubject")
 }
 
 // Compile-time check.
@@ -368,7 +606,7 @@ func (m *MockWorkflowStarter) ExecuteWorkflow(ctx context.Context, options clien
 var _ WorkflowStarter = (*MockWorkflowStarter)(nil)
 
 // forge:section MockPollRepo
-// forge:hash=4700bbda71e251edd03f27248858e5341b074d4b737bde8ce8f39172f7ba9852
+// forge:hash=553b189436e453441444f1754310cadd74f64618ce7d0c2e31a97ecde883371d
 
 // MockPollRepo is a test mock for the PollRepo interface.
 //
@@ -380,7 +618,6 @@ type MockPollRepo struct {
 	contractkit.Recorder
 	GetTriggerRegistrationFunc        func(context.Context, string) (*core.TriggerRegistration, error)
 	UpsertTriggerRegistrationFunc     func(context.Context, *core.TriggerRegistration) error
-	GetConnectionFunc                 func(context.Context, string, string) (*core.Connection, error)
 	GetTriggerFunc                    func(context.Context, string) (*core.Trigger, error)
 	GetDaemonFunc                     func(context.Context, string) (*db.Daemon, error)
 	CreateTriggerEventFunc            func(context.Context, *core.TriggerEvent) (bool, error)
@@ -388,6 +625,8 @@ type MockPollRepo struct {
 	GetLatestTriggerEventFunc         func(context.Context, string, *core.TriggerEventOutcome) (*core.TriggerEvent, error)
 	SettlePendingTriggerEventFunc     func(context.Context, string, core.TriggerEventOutcome, string, *core.TriggerEventDefinition) (bool, error)
 	ListStalePendingTriggerEventsFunc func(context.Context, time.Time, int) ([]*core.TriggerEvent, error)
+	GetConnectionFunc                 func(context.Context, string, string) (*core.Connection, error)
+	GetIntegrationAccessSubjectFunc   func(context.Context, string, string, time.Time) (string, error)
 }
 
 // GetTriggerRegistration records the call and delegates to GetTriggerRegistrationFunc when set.
@@ -406,15 +645,6 @@ func (m *MockPollRepo) UpsertTriggerRegistration(ctx context.Context, reg *core.
 		return m.UpsertTriggerRegistrationFunc(ctx, reg)
 	}
 	return contractkit.MockNotSet("MockPollRepo", "UpsertTriggerRegistration")
-}
-
-// GetConnection records the call and delegates to GetConnectionFunc when set.
-func (m *MockPollRepo) GetConnection(ctx context.Context, userID string, id string) (*core.Connection, error) {
-	m.Recorder.Record("GetConnection", ctx, userID, id)
-	if m.GetConnectionFunc != nil {
-		return m.GetConnectionFunc(ctx, userID, id)
-	}
-	return nil, contractkit.MockNotSet("MockPollRepo", "GetConnection")
 }
 
 // GetTrigger records the call and delegates to GetTriggerFunc when set.
@@ -480,11 +710,29 @@ func (m *MockPollRepo) ListStalePendingTriggerEvents(ctx context.Context, olderT
 	return nil, contractkit.MockNotSet("MockPollRepo", "ListStalePendingTriggerEvents")
 }
 
+// GetConnection records the call and delegates to GetConnectionFunc when set.
+func (m *MockPollRepo) GetConnection(ctx context.Context, userID string, id string) (*core.Connection, error) {
+	m.Recorder.Record("GetConnection", ctx, userID, id)
+	if m.GetConnectionFunc != nil {
+		return m.GetConnectionFunc(ctx, userID, id)
+	}
+	return nil, contractkit.MockNotSet("MockPollRepo", "GetConnection")
+}
+
+// GetIntegrationAccessSubject records the call and delegates to GetIntegrationAccessSubjectFunc when set.
+func (m *MockPollRepo) GetIntegrationAccessSubject(ctx context.Context, userID string, integrationID string, freshAfter time.Time) (string, error) {
+	m.Recorder.Record("GetIntegrationAccessSubject", ctx, userID, integrationID, freshAfter)
+	if m.GetIntegrationAccessSubjectFunc != nil {
+		return m.GetIntegrationAccessSubjectFunc(ctx, userID, integrationID, freshAfter)
+	}
+	return "", contractkit.MockNotSet("MockPollRepo", "GetIntegrationAccessSubject")
+}
+
 // Compile-time check.
 var _ PollRepo = (*MockPollRepo)(nil)
 
 // forge:section MockFireRepo
-// forge:hash=fa944b50429db8108db12f914a4f9a35a37b258ccdbc8bbfe7aa6dcd83e095ed
+// forge:hash=bb860505b1a203718dd11d2e44ecf1ff5f375ffdf27ff269068194864599d803
 
 // MockFireRepo is a test mock for the FireRepo interface.
 //
@@ -502,9 +750,11 @@ type MockFireRepo struct {
 	GetLatestTriggerEventFunc                 func(context.Context, string, *core.TriggerEventOutcome) (*core.TriggerEvent, error)
 	SettlePendingTriggerEventFunc             func(context.Context, string, core.TriggerEventOutcome, string, *core.TriggerEventDefinition) (bool, error)
 	GetDaemonFunc                             func(context.Context, string) (*db.Daemon, error)
-	GetRootWorkflowStatusForChatsFunc         func(context.Context, []string) (map[string]core.WorkflowStatus, error)
+	RootWorkflowStatusForChatsFunc            func(context.Context, []string) (map[string]core.WorkflowStatus, error)
 	ListRootWorkflowsFunc                     func(context.Context, string) ([]*core.Workflow, error)
 	AbandonFailedWorkflowStartFunc            func(context.Context, string) (bool, error)
+	GetConnectionFunc                         func(context.Context, string, string) (*core.Connection, error)
+	GetIntegrationAccessSubjectFunc           func(context.Context, string, string, time.Time) (string, error)
 	EnqueueTriggerCapacityFunc                func(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) error
 	CanLaunchTriggerCapacityFunc              func(context.Context, string, store.TriggerCapacityScope, store.TriggerCapacityLimits) (bool, error)
 	NextAdmissibleTriggerCapacityEventFunc    func(context.Context, store.TriggerCapacityScope, store.TriggerCapacityLimits) (*core.TriggerEvent, error)
@@ -592,13 +842,13 @@ func (m *MockFireRepo) GetDaemon(ctx context.Context, id string) (*db.Daemon, er
 	return nil, contractkit.MockNotSet("MockFireRepo", "GetDaemon")
 }
 
-// GetRootWorkflowStatusForChats records the call and delegates to GetRootWorkflowStatusForChatsFunc when set.
-func (m *MockFireRepo) GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error) {
-	m.Recorder.Record("GetRootWorkflowStatusForChats", ctx, chatIDs)
-	if m.GetRootWorkflowStatusForChatsFunc != nil {
-		return m.GetRootWorkflowStatusForChatsFunc(ctx, chatIDs)
+// RootWorkflowStatusForChats records the call and delegates to RootWorkflowStatusForChatsFunc when set.
+func (m *MockFireRepo) RootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error) {
+	m.Recorder.Record("RootWorkflowStatusForChats", ctx, chatIDs)
+	if m.RootWorkflowStatusForChatsFunc != nil {
+		return m.RootWorkflowStatusForChatsFunc(ctx, chatIDs)
 	}
-	return nil, contractkit.MockNotSet("MockFireRepo", "GetRootWorkflowStatusForChats")
+	return nil, contractkit.MockNotSet("MockFireRepo", "RootWorkflowStatusForChats")
 }
 
 // ListRootWorkflows records the call and delegates to ListRootWorkflowsFunc when set.
@@ -617,6 +867,24 @@ func (m *MockFireRepo) AbandonFailedWorkflowStart(ctx context.Context, id string
 		return m.AbandonFailedWorkflowStartFunc(ctx, id)
 	}
 	return false, contractkit.MockNotSet("MockFireRepo", "AbandonFailedWorkflowStart")
+}
+
+// GetConnection records the call and delegates to GetConnectionFunc when set.
+func (m *MockFireRepo) GetConnection(ctx context.Context, userID string, id string) (*core.Connection, error) {
+	m.Recorder.Record("GetConnection", ctx, userID, id)
+	if m.GetConnectionFunc != nil {
+		return m.GetConnectionFunc(ctx, userID, id)
+	}
+	return nil, contractkit.MockNotSet("MockFireRepo", "GetConnection")
+}
+
+// GetIntegrationAccessSubject records the call and delegates to GetIntegrationAccessSubjectFunc when set.
+func (m *MockFireRepo) GetIntegrationAccessSubject(ctx context.Context, userID string, integrationID string, freshAfter time.Time) (string, error) {
+	m.Recorder.Record("GetIntegrationAccessSubject", ctx, userID, integrationID, freshAfter)
+	if m.GetIntegrationAccessSubjectFunc != nil {
+		return m.GetIntegrationAccessSubjectFunc(ctx, userID, integrationID, freshAfter)
+	}
+	return "", contractkit.MockNotSet("MockFireRepo", "GetIntegrationAccessSubject")
 }
 
 // EnqueueTriggerCapacity records the call and delegates to EnqueueTriggerCapacityFunc when set.
@@ -740,7 +1008,7 @@ func (m *MockFireRepo) ExpirePendingTriggerCapacityEvents(ctx context.Context, r
 var _ FireRepo = (*MockFireRepo)(nil)
 
 // forge:section MockEventFireRepo
-// forge:hash=0290ff691dad106baa2589e5f7ab31a3069efe16ffd13dfcb450fa1d6662b568
+// forge:hash=e030f2e9a5de3c930f7c483d422a7e7d2bf2e189509e7c9dec041db6df1f8c6b
 
 // MockEventFireRepo is a test mock for the EventFireRepo interface.
 //
@@ -757,6 +1025,8 @@ type MockEventFireRepo struct {
 	GetLatestTriggerEventFunc                 func(context.Context, string, *core.TriggerEventOutcome) (*core.TriggerEvent, error)
 	SettlePendingTriggerEventFunc             func(context.Context, string, core.TriggerEventOutcome, string, *core.TriggerEventDefinition) (bool, error)
 	ListStalePendingTriggerEventsFunc         func(context.Context, time.Time, int) ([]*core.TriggerEvent, error)
+	GetConnectionFunc                         func(context.Context, string, string) (*core.Connection, error)
+	GetIntegrationAccessSubjectFunc           func(context.Context, string, string, time.Time) (string, error)
 	EnqueueTriggerCapacityFunc                func(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) error
 	CanLaunchTriggerCapacityFunc              func(context.Context, string, store.TriggerCapacityScope, store.TriggerCapacityLimits) (bool, error)
 	NextAdmissibleTriggerCapacityEventFunc    func(context.Context, store.TriggerCapacityScope, store.TriggerCapacityLimits) (*core.TriggerEvent, error)
@@ -833,6 +1103,24 @@ func (m *MockEventFireRepo) ListStalePendingTriggerEvents(ctx context.Context, o
 		return m.ListStalePendingTriggerEventsFunc(ctx, olderThan, limit)
 	}
 	return nil, contractkit.MockNotSet("MockEventFireRepo", "ListStalePendingTriggerEvents")
+}
+
+// GetConnection records the call and delegates to GetConnectionFunc when set.
+func (m *MockEventFireRepo) GetConnection(ctx context.Context, userID string, id string) (*core.Connection, error) {
+	m.Recorder.Record("GetConnection", ctx, userID, id)
+	if m.GetConnectionFunc != nil {
+		return m.GetConnectionFunc(ctx, userID, id)
+	}
+	return nil, contractkit.MockNotSet("MockEventFireRepo", "GetConnection")
+}
+
+// GetIntegrationAccessSubject records the call and delegates to GetIntegrationAccessSubjectFunc when set.
+func (m *MockEventFireRepo) GetIntegrationAccessSubject(ctx context.Context, userID string, integrationID string, freshAfter time.Time) (string, error) {
+	m.Recorder.Record("GetIntegrationAccessSubject", ctx, userID, integrationID, freshAfter)
+	if m.GetIntegrationAccessSubjectFunc != nil {
+		return m.GetIntegrationAccessSubjectFunc(ctx, userID, integrationID, freshAfter)
+	}
+	return "", contractkit.MockNotSet("MockEventFireRepo", "GetIntegrationAccessSubject")
 }
 
 // EnqueueTriggerCapacity records the call and delegates to EnqueueTriggerCapacityFunc when set.

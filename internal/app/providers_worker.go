@@ -467,7 +467,7 @@ type WorkerTriggerDeps struct {
 //forge:root-only worker
 func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
-	syncer, fires := trigger.TemporalBackend(temporalClient, repo, v2workflow.SharedTaskQueue, d.Pollers.IsPolled)
+	syncer, fires := trigger.TemporalBackend(temporalClient, triggers.NewStores(repo), v2workflow.SharedTaskQueue, d.Pollers.IsPolled)
 	githubAccess, err := wireGitHubAccess(repo, d.ConnectionVault, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
 	if err != nil {
 		return nil, fmt.Errorf("trigger service: %w", err)
@@ -496,7 +496,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Integrations:  d.Integrations.Config,
 		Sealer:        d.Vault,
 		Catalog:       d.Pollers,
-		Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
+		Intake: triggers.NewIntake(triggers.NewStores(repo), temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
 			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
@@ -963,7 +963,7 @@ type TriggerDeliveryRelay struct {
 //forge:root-only worker
 func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay, error) {
 	repo := d.DB
-	intake := triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
+	intake := triggers.NewIntake(triggers.NewStores(repo), d.Temporal.Client, v2workflow.SharedTaskQueue).
 		WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 		WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
 		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug))

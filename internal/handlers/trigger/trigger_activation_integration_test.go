@@ -101,7 +101,7 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 	provider := webhook.NewTestProvider("e2e-secret")
 	registry := webhook.NewRegistry()
 	require.NoError(t, registry.Register(provider))
-	intake := triggers.NewIntake(repo, temporalClient, taskQueue).WithWorkflows(declarations)
+	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue).WithWorkflows(declarations)
 	const publicURL = "https://hooks.example.com"
 	inbound := webhook.NewInbound(repo, intake, registry, nil, publicURL)
 	mux := http.NewServeMux()
@@ -109,7 +109,7 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, repo, taskQueue)
+	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, triggers.NewStores(repo), taskQueue)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake,
 	}))

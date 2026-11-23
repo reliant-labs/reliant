@@ -219,7 +219,7 @@ func TestInboundEventAgainstABrokenDefinitionIsRefused(t *testing.T) {
 	p.push(t, 2000, broken)
 
 	starter := &recordingStarter{}
-	intake := NewIntake(p.repo, starter, "").WithWorkflows(p.workflows())
+	intake := NewIntake(NewStores(p.repo), starter, "").WithWorkflows(p.workflows())
 	res, err := intake.Accept(p.ctx, p.webhook, InboundEvent{
 		Kind: core.TriggerEventKindWebhook, DedupeKey: p.webhook.ID + ":d1",
 		Payload: map[string]any{"ref": "refs/heads/main"},

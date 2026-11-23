@@ -382,9 +382,9 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	if cfg.TriggerPollers != nil {
 		if repo := cfg.Database; repo != nil {
 			poller := triggers.NewTriggerPoller(
-				triggerPollRepo{Repo: repo, connections: cfg.Connections},
+				triggerPollRepo{Stores: triggers.NewStores(repo), connections: cfg.Connections},
 				cfg.TriggerPollers,
-				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}),
+				triggers.NewIntake(triggers.NewStores(repo), cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}),
 				cfg.TriggerCredentials,
 			).WithAutoPause(triggerAutoPause(cfg)).WithDeliveryInbox(cfg.TriggerPollInbox)
 			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
@@ -640,7 +640,7 @@ type TriggerConnections interface {
 }
 
 type triggerPollRepo struct {
-	*db.Repo
+	triggers.Stores
 	connections TriggerConnections
 }
 

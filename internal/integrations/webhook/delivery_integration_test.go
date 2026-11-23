@@ -61,7 +61,7 @@ func newReceiptFixture(t *testing.T) *receiptFixture {
 	f := &receiptFixture{Env: storetest.New(t), now: time.Now().UTC().Truncate(time.Millisecond),
 		starts: &receiptStarts{ids: map[string]int{}}, mux: http.NewServeMux()}
 	f.catalog = &receiptCatalog{Repo: f.Repo}
-	f.intake = triggers.NewIntake(f.Repo, f.starts, "test-queue").WithWorkflows(triggers.LaunchWorkflows{Repo: f.catalog})
+	f.intake = triggers.NewIntake(triggers.NewStores(f.Repo), f.starts, "test-queue").WithWorkflows(triggers.LaunchWorkflows{Repo: f.catalog})
 	f.relay = NewRelay(f.Repo, f.intake, db.TestConnections(t, f.Repo), nil)
 	f.relay.now = func() time.Time { return f.now }
 	registry := NewRegistry()

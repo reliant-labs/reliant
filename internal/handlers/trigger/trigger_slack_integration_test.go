@@ -110,7 +110,7 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 	const signingSecret = "slack-signing-secret-e2e"
 	registry, err := webhook.RegistryFor(webhook.RegistryConfig{SlackSigningSecret: signingSecret})
 	require.NoError(t, err)
-	intake := triggers.NewIntake(repo, temporalClient, taskQueue)
+	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue)
 	const publicURL = "https://hooks.example.com"
 	inbound := webhook.NewInbound(repo, intake, registry, nil, publicURL)
 	mux := http.NewServeMux()
