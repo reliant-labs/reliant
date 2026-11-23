@@ -5,8 +5,9 @@
 // DEKs seal the values. Ciphertext and wrapped DEKs live in reliant Postgres.
 // See research/CONNECTIONS_VAULT.md.
 //
-// Built by hand, by internal/app's NewVault provider (providers.go, through
-// db.BootVault): never a node compose.go constructs from Deps.
+// Built by internal/app's NewVault provider through vault.Boot: the KEK comes
+// from RELIANT_VAULT_KEY or a generated key file under the data dir, so
+// construction is a boot step, not New(Deps).
 //
 //forge:provided
 package vault

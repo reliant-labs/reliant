@@ -112,16 +112,16 @@ func TestGetRunReportsWhyARunFailedBeforeItsFirstNode(t *testing.T) {
 		return &db.Chat{ID: id, UserID: "owner", WorkflowID: &root,
 			RootStatus: db.WorkflowStatus{State: db.WorkflowStateStopped, StopReason: db.StopReasonFailed}}, nil
 	}
-	repo.GetWorkflowFunc = func(_ context.Context, id string) (*db.Workflow, error) {
+	workflows := &MockRunWorkflows{LoadWorkflowFunc: func(_ context.Context, id string) (*db.Workflow, error) {
 		require.Equal(t, root, id)
 		return &db.Workflow{ID: id, FailureDetail: &reason}, nil
-	}
+	}}
 	repo.GetLatestContextWindowFunc = func(context.Context, string) (*db.ContextWindow, error) {
 		return nil, svcerr.NotFound("context window")
 	}
 	repo.ListRunNodeExecutionsFunc = func(context.Context, string, int) ([]*db.StepExecution, error) { return nil, nil }
 
-	resp, err := (&getRunTool{repo: repo, threads: threads.New(threads.Deps{Repo: repo})}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
+	resp, err := (&getRunTool{repo: repo, workflows: workflows, threads: threads.New(threads.Deps{Repo: repo})}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
 	require.Contains(t, resp.Content, "State: failed\nFailure: workflow input validation failed")

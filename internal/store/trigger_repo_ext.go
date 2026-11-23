@@ -264,6 +264,9 @@ func SetTriggerWebhookTokenHash(ctx context.Context, db orm.Context, id string, 
 // the owner's tenant; nil clears it. A missing trigger is
 // core.ErrTriggerNotFound.
 func SetTriggerWebhookSecret(ctx context.Context, db orm.Context, id string, sealed []byte) error {
+	if id == "" {
+		return errors.New("trigger ID cannot be empty")
+	}
 	return writeTrigger(ctx, db, &Trigger{ID: id, WebhookSecretSealed: sealed}, "webhook secret", TriggerFieldWebhookSecretSealed)
 }
 

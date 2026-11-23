@@ -12,7 +12,7 @@
 // Built by hand, by internal/app's NewOrgAccounts provider (providers.go): never a node
 // compose.go constructs from Deps.
 //
-//forge:provided
+// (exp)
 package orgaccounts
 
 import (

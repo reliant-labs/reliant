@@ -11,6 +11,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llmgatewaystep"
+	"github.com/reliant-labs/reliant/internal/vendorcli"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -41,6 +42,7 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 			}
 			cmd := model.CelStringRaw(model.GetRunArgs(n).GetCommand())
 			c.checkUndeclaredTools(path, cmd)
+			c.checkCLILogins(path, cmd, model.GetRunArgs(n).GetCredentials())
 			if model.TargetsApprovalDecision(cmd) {
 				c.addApprovalDecider(path)
 			}
@@ -439,6 +441,76 @@ func (c *checker) checkUndeclaredTools(path, cmd string) {
 		sort.Strings(missing)
 		c.add(RuleRequiresUndeclaredTool, path, fmt.Sprintf("the command calls %s, which requires.tools does not list, so a machine without it fails this step midway instead of at preflight", strings.Join(missing, ", ")),
 			"add them to requires.tools: ["+strings.Join(missing, ", ")+"]")
+	}
+}
+
+// vendorCLIInvocation matches a call of a vendor agent CLI's binary, bare or
+// by a path (~/.local/bin/claude), where a command can start.
+var vendorCLIInvocation = func() *regexp.Regexp {
+	var bins []string
+	for _, v := range vendorcli.All() {
+		bins = append(bins, regexp.QuoteMeta(v.Binary))
+	}
+	return regexp.MustCompile(`(?:^|[;&|({]\s*|\$\(\s*|\b(?:then|do|if|exec|timeout\s+\S+|!)\s+)(?:[^\s'"();&|]*/)?(` + strings.Join(bins, "|") + `)(?:\s|$|\))`)
+}()
+
+// signedOutWithoutCredentials are the vendor CLIs whose sign-in a
+// `credentials: none` command cannot see: the sandbox hides ~/.claude,
+// ~/.codex and ~/.config/gh (copilot signs in through gh); see
+// daemonpolicy's protectedHome. ~/.gemini and Cursor's files it leaves.
+var signedOutWithoutCredentials = map[string]string{
+	"claude":  "~/.claude",
+	"codex":   "~/.codex",
+	"copilot": "~/.config/gh",
+}
+
+// checkCLILogins: a run command that calls a vendor agent CLI needs it
+// signed in on the machine. One requires.cli_login does not list fails the
+// step midway when it is not, instead of at preflight; and under
+// `credentials: none` claude, codex and copilot cannot see their sign-in at
+// all, whatever preflight found.
+func (c *checker) checkCLILogins(path, cmd, credentials string) {
+	declared := map[string]bool{}
+	for _, id := range c.wf.GetRequires().GetCliLogin() {
+		declared[id] = true
+	}
+	byBinary := map[string]string{}
+	for _, v := range vendorcli.All() {
+		byBinary[v.Binary] = v.ID
+	}
+	var undeclared, hidden []string
+	seen := map[string]bool{}
+	for _, line := range strings.Split(joinContinuations(cmd), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		for _, loc := range vendorCLIInvocation.FindAllStringSubmatchIndex(line, -1) {
+			id := byBinary[line[loc[2]:loc[3]]]
+			if seen[id] || insideQuotes(line[:loc[2]]) {
+				continue
+			}
+			seen[id] = true
+			if !declared[id] {
+				undeclared = append(undeclared, id)
+			}
+			if _, ok := signedOutWithoutCredentials[id]; ok {
+				hidden = append(hidden, id)
+			}
+		}
+	}
+	if len(undeclared) > 0 {
+		sort.Strings(undeclared)
+		c.add(RuleRequiresUndeclaredCLI, path, fmt.Sprintf("the command calls %s, which requires.cli_login does not list, so a machine where it is not signed in fails this step midway instead of at preflight", strings.Join(undeclared, ", ")),
+			"add them to requires.cli_login: ["+strings.Join(undeclared, ", ")+"], and sign each in on the machine with `reliant machine login <vendor>`")
+	}
+	if len(hidden) > 0 && strings.EqualFold(strings.TrimSpace(credentials), "none") {
+		sort.Strings(hidden)
+		dirs := make([]string, len(hidden))
+		for i, id := range hidden {
+			dirs[i] = signedOutWithoutCredentials[id]
+		}
+		c.add(RuleCredentialsNoneCLI, path, fmt.Sprintf("credentials: none hides %s from the command, so %s runs signed out", strings.Join(dirs, ", "), strings.Join(hidden, ", ")),
+			"run it with credentials: inherit (the vendor CLI then uses its sign-in on the machine)")
 	}
 }
 

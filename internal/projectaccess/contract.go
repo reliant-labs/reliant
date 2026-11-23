@@ -17,8 +17,6 @@
 // (authz.ErrNotOrgMember, authz.ErrMembershipUnavailable) it is attached as the
 // withheld cause (svcerr.WithCause): the launcher tells a creator who left the
 // org from a membership outage, which must never be mistaken for an answer.
-//
-//forge:provided
 package projectaccess
 
 import (

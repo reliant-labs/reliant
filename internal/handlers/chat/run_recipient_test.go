@@ -230,6 +230,7 @@ func TestSignalRun_RoutesToTheRunsRunningAgent(t *testing.T) {
 		Logger:    slog.Default(),
 		Config:    &typedconfig.Config{},
 		Repo:      repo,
+		Workflows: store.NewWorkflowExtStore(repo.ORM()),
 		ChatRows:  store.NewChatExtStore(repo.ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()),
 		Chats:     routedService(repo, temporal),

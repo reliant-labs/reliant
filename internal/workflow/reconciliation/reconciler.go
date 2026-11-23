@@ -95,6 +95,8 @@ import (
 // at ERROR (each an issue in forge's ClickStack).
 type Reconciler struct {
 	repo       ReconcilerStore
+	workflows  WorkflowLoader
+	daemons    DaemonReader
 	approvals  Approvals
 	questions  Questions
 	mailbox    Mailbox
@@ -519,6 +521,8 @@ func New(deps Deps) *Reconciler {
 		questions:               deps.Questions,
 		mailbox:                 deps.Mailbox,
 		orphans:                 deps.Orphans,
+		workflows:               deps.Workflows,
+		daemons:                 deps.Daemons,
 		tempClient:              tempClient,
 		owners:                  telemetry.NewChatOwnerCache(chatOwnerOf(repo), time.Hour, 10000),
 		pollInterval:            cfg.PollInterval,
@@ -2259,7 +2263,7 @@ const maxWorkflowDepth = 64
 func (r *Reconciler) rootWorkflowID(ctx context.Context, workflowID string) string {
 	id := workflowID
 	for range maxWorkflowDepth {
-		wf, err := r.repo.GetWorkflow(ctx, id)
+		wf, err := r.workflows.LoadWorkflow(ctx, id)
 		if err != nil || wf == nil || wf.ParentID == nil || *wf.ParentID == "" {
 			return id
 		}
@@ -2614,7 +2618,7 @@ func (r *Reconciler) rootAwaitingResume(ctx context.Context, chatID string) bool
 	if rootID == "" {
 		return false
 	}
-	root, err := r.repo.GetWorkflow(ctx, rootID)
+	root, err := r.workflows.LoadWorkflow(ctx, rootID)
 	if err != nil || root == nil || root.Status != db.Failed() {
 		return false
 	}

@@ -1,24 +1,24 @@
 // Copyright (c) 2025 Reliant Labs
-package app
+// Package connectionproposer is tools.ConnectionProposer, for the worker where
+// propose_connection executes.
+//
+//forge:exclude-contract: implements the consumer-declared tools.ConnectionProposer in internal/llm/tools; a second derived Service interface would duplicate it
+package connectionproposer
 
 import (
 	"context"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
-
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
-	"github.com/reliant-labs/reliant/internal/store"
 )
 
-// connectionProposer is tools.ConnectionProposer for the worker, where
+// Proposer is tools.ConnectionProposer for the worker, where
 // propose_connection executes: a chat's earlier proposals from its approvals,
 // the connection the person made from the connections table (metadata only;
 // the credential is never read), and an org role asked of control-plane now.
-type connectionProposer struct {
+type Proposer struct {
 	approvals   chatApprovals
 	connections ownedConnections
 	roles       orgRoles
@@ -36,13 +36,26 @@ type orgRoles interface {
 	RoleFresh(ctx context.Context, userID, orgID string) (role string, ok bool, err error)
 }
 
-func newConnectionProposer(repo *db.Repo, conns connectionvault.Service, roles orgRoles) tools.ConnectionProposer {
-	return &connectionProposer{approvals: store.NewApprovalExtStore(repo.ORM()), connections: conns, roles: roles}
+// Deps is what the proposer reads.
+type Deps struct {
+	// Approvals are the chat's approval cards, its earlier proposals among them.
+	Approvals chatApprovals
+	// Connections reads the connection the person made (metadata only).
+	Connections ownedConnections
+	// Roles names a person's org role; nil makes no one an org admin.
+	Roles orgRoles
+}
+
+var _ tools.ConnectionProposer = (*Proposer)(nil)
+
+// New is the proposer over d.
+func New(d Deps) *Proposer {
+	return &Proposer{approvals: d.Approvals, connections: d.Connections, roles: d.Roles}
 }
 
 // IsOrgAdmin is true only for a role control-plane names owner or admin; an
 // unknown role is never guessed upward (authz.RequireOrgAdmin's rule).
-func (p *connectionProposer) IsOrgAdmin(ctx context.Context, userID, orgID string) (bool, error) {
+func (p *Proposer) IsOrgAdmin(ctx context.Context, userID, orgID string) (bool, error) {
 	if p.roles == nil {
 		return false, nil
 	}
@@ -53,7 +66,7 @@ func (p *connectionProposer) IsOrgAdmin(ctx context.Context, userID, orgID strin
 	return known && (role == "owner" || role == "admin"), nil
 }
 
-func (p *connectionProposer) ChatProposals(ctx context.Context, chatID string) ([]tools.ConnectionProposalState, error) {
+func (p *Proposer) ChatProposals(ctx context.Context, chatID string) ([]tools.ConnectionProposalState, error) {
 	approvals, err := p.approvals.ListApprovalsByChat(ctx, chatID)
 	if err != nil {
 		return nil, err
@@ -79,6 +92,6 @@ func (p *connectionProposer) ChatProposals(ctx context.Context, chatID string) (
 	return out, nil
 }
 
-func (p *connectionProposer) Connection(ctx context.Context, owner core.ConnectionOwner, id string) (*core.Connection, error) {
+func (p *Proposer) Connection(ctx context.Context, owner core.ConnectionOwner, id string) (*core.Connection, error) {
 	return p.connections.GetOwnedConnection(ctx, owner, id)
 }

@@ -274,3 +274,14 @@ export async function addProviderApiKey(provider: string, apiKey: string): Promi
     invalidateProviderStatuses();
   }
 }
+
+/**
+ * addProviderApiKey's two refreshes beyond the generated success one, as
+ * options for useAddProviderAPIKey (the key entry in onboarding's model step):
+ * the accounts after a failure (one may have been saved before the error) and
+ * the provider statuses either way.
+ */
+export const addProviderApiKeyRefresh = {
+  onError: () => void queryClient.invalidateQueries({ queryKey: providerAccountServiceKeys.all }),
+  onSettled: () => invalidateProviderStatuses(),
+};

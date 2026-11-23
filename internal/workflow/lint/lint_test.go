@@ -330,3 +330,20 @@ nodes:
 		}
 	}
 }
+
+// The undeclared-CLI finding names every vendor CLI the command calls, bare
+// or by path, by its requires.cli_login id; a comment or an echoed word is
+// not a call.
+func TestUndeclaredCLILoginNamesEveryCall(t *testing.T) {
+	got := findingsOf(Check(loadFixture(t, filepath.Join("testdata", RuleRequiresUndeclaredCLI, "bad.yaml"))), RuleRequiresUndeclaredCLI)
+	require.Len(t, got, 1)
+	assert.Contains(t, got[0].Message, "calls claude, codex,")
+	assert.Contains(t, got[0].Fix, "requires.cli_login: [claude, codex]")
+
+	in := loadFixture(t, filepath.Join("testdata", RuleRequiresUndeclaredCLI, "good.yaml"))
+	in.Workflow.Requires.CliLogin = []string{"claude"}
+	got = findingsOf(Check(in), RuleRequiresUndeclaredCLI)
+	require.Len(t, got, 1)
+	assert.Contains(t, got[0].Message, "calls codex,")
+	assert.Contains(t, got[0].Fix, "[codex]")
+}

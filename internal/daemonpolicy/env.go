@@ -153,11 +153,14 @@ const AgentShellEnv = "RELIANT_AGENT_SHELL"
 // CredentialsNone gives every caller, first-party included, the allowlisted
 // subset and strips every credential variable from extra: see
 // WithoutCredentials for what that does and does not cover.
+//
+// Every child's PATH ends with $HOME/.local/bin when that directory exists
+// (withUserLocalBin), unless extra sets PATH.
 func ChildEnv(ctx context.Context, extra map[string]string, credentials string) []string {
 	if credentials == CredentialsNone {
-		return WithoutCredentials(os.Environ(), withAgentShellMarker(extra)) //nolint:forbidigo // filtered to the allowlist for a credentials-none child; not configuration
+		return withUserLocalBin(WithoutCredentials(os.Environ(), withAgentShellMarker(extra)), extra) //nolint:forbidigo // filtered to the allowlist for a credentials-none child; not configuration
 	}
-	return childEnv(ctx, extra)
+	return withUserLocalBin(childEnv(ctx, extra), extra)
 }
 
 func childEnv(ctx context.Context, extra map[string]string) []string {

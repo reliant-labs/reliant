@@ -38,7 +38,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `concurrency` | WorkflowConcurrency | No | *Bounds trigger-launched runs: `{max_running: N}` (later firings wait, FIFO), `{per_member: K}` (K per machine of the trigger's pool), `{max_running_per_key: N, key: ...}` (N per key, e.g. one run per pull request), or a combination, optionally waiting: latest (only the newest waiting firing per key survives; older ones are recorded skipped, "superseded", never failed), key (a template over `trigger` grouping firings) and priority (a CEL integer over `trigger`: waiting firings run highest first). See WorkflowConcurrency below.* |
 | `on_failure` | Workflow | No | *A finally-style handler: an inline graph (`{entry, nodes, edges}`) that runs once when a run FAILS (an unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, error_code, attempt}`, `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). The run still ends FAILED; an error in the handler is logged and never recursive. To release something however the run ends, cancel included, use `finally`.* |
 | `finally` | Workflow | No | *A handler for however a run ends: an inline graph (`{entry, nodes, edges}`) that runs once when a run completes, fails (after on_failure) or is cancelled. Never when it pauses or hands off to a successor run. Its nodes read `run.status` ('completed' \| 'failed' \| 'cancelled'), `failure.*` (empty unless the run failed), `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). It cannot change how the run ended; an error in it is logged and never recursive. Release leases, claims and labels here.* |
-| `requires` | WorkflowRequirements | No | - |
+| `requires` | WorkflowRequirements | No | *What a run needs from outside its definition, checked after its machine is up and before its first node: `{tools, integrations, repos, cli_login}.` A run missing anything fails at once, naming every missing item with its fix. See WorkflowRequirements below.* |
 | `secrets` | map[string]SecretDeclaration | No | - |
 | `permissions` | string[] | No | - |
 | `attention` | WorkflowAttention | No | *Explicit human-attention incident correlation for root unattended launch runs, independent of lifecycle and outcome. Absent preserves legacy behavior. See WorkflowAttention below.* |
@@ -120,6 +120,21 @@ A GitHub check run whose lifecycle the engine owns (`check:`): one per firing, p
 | `head_sha` | string | No | *A template over `trigger` naming the commit. Unset: the event's head commit (a pull request's head, the check suite's or check run's head_sha, the workflow run's head_sha, a push's new commit).* |
 | `output` | string | No | *A template over the ended run's scope (nodes, inputs, trigger, workflow, run.status) evaluating to `{title, summary, text?, annotations?}.` Unset, or one that fails: the engine's own summary. The conclusion comes from how the run ended, never from this.* |
 | `timeout` | string | No | *A Go duration from 1m to 72h (default 6h), from the firing: a check still not concluded then concludes timed_out.* |
+
+---
+
+## WorkflowRequirements
+
+What a run checks before its first node (`requires:`), once its machine is up, on the machine the run inherits and on each pool member the first time a step is placed there. Nothing it checks writes. Example: `requires: {tools: [git, gh], integrations: [github], repos: [.], cli_login: [claude]}`.
+
+### Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `tools` | string[] | No | *Executables that must be on the run machine's PATH (git, gh, task, jq).* |
+| `integrations` | string[] | No | *Integration ids (github, slack) whose connection must resolve, authorized, for the run's owner and acting identity.* |
+| `repos` | string[] | No | *Checkouts relative to the project root ("." for the root) that must exist, reach their origin (git ls-remote, which writes nothing) and have no local tag diverged from origin's.* |
+| `cli_login` | string[] | No | *Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine, each checked with the vendor's own status command, whose output never leaves the machine. Sign one in with `reliant machine login <vendor> --machine <name>`; a step that calls claude, codex or copilot needs credentials: inherit.* |
 
 ---
 

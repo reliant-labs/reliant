@@ -47,7 +47,7 @@ func TestNodeExecutionEvent_CarriesLoopScopeAndNodePath(t *testing.T) {
 	env := suite.NewTestActivityEnvironment()
 	env.SetDataConverter(rtemporal.NewFlexibleDataConverter())
 	repo := &wrapperTestRepo{}
-	registry := NewActivityRegistry(repo)
+	registry := NewActivityRegistry(ActivityRegistryDeps{Store: repo, Workflows: repo})
 	registerWrapped(env, registry, "ExecuteTools",
 		func(context.Context, types.ActivityInput) (*reliantv1.ExecuteToolsOutput, error) {
 			return &reliantv1.ExecuteToolsOutput{}, nil
@@ -92,7 +92,7 @@ func TestNodeExecutionEvent_RootNodeHasNoLoopScope(t *testing.T) {
 	env := suite.NewTestActivityEnvironment()
 	env.SetDataConverter(rtemporal.NewFlexibleDataConverter())
 	repo := &wrapperTestRepo{}
-	registry := NewActivityRegistry(repo)
+	registry := NewActivityRegistry(ActivityRegistryDeps{Store: repo, Workflows: repo})
 	registerWrapped(env, registry, "ExecuteTools",
 		func(context.Context, types.ActivityInput) (*reliantv1.ExecuteToolsOutput, error) {
 			return &reliantv1.ExecuteToolsOutput{}, nil
