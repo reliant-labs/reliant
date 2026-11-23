@@ -9,6 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -171,12 +177,21 @@ func launchFixture(t *testing.T) (*db.Repo, context.Context, string, string) {
 type launchTestStore interface {
 	Store
 	threads.Repository
+	ORM() *orm.Client
+}
+
+func projectsOf(repo launchTestStore) projectaccess.Service {
+	if p, ok := repo.(projectaccess.Service); ok {
+		return p
+	}
+	return projectaccess.NewFromORM(repo.ORM())
 }
 
 func newTestLauncher(t *testing.T, repo launchTestStore, starter *fakeStarter) (*Launcher, *recordingRunRecorder) {
 	t.Helper()
 	recorder := &recordingRunRecorder{repo: repo}
-	return NewLauncher(repo, threads.NewService(repo), starter, recorder, "test-task-queue"), recorder
+	projects := projectsOf(repo)
+	return New(Deps{Store: repo, Projects: projects, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: starter, Runs: recorder, TaskQueue: "test-task-queue"}), recorder
 }
 
 // chatStartEvent is what an interactive first send produces.
@@ -524,7 +539,7 @@ func pendingBranch(t *testing.T, repo *db.Repo, ctx context.Context, projectID, 
 		WorktreeID: &worktreeID, WorkflowName: &workflowName, WorkflowID: &chatID,
 		State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	_, _, _, err := threads.NewService(repo).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
+	_, _, _, err := threads.New(threads.Deps{Repo: repo}).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: chatID, ChatID: chatID, WorkflowName: workflowName, Thread: chatID,
 			Status: db.Pending(), CreatedAt: now, OwnerUserID: ptr(launchTestUserID),

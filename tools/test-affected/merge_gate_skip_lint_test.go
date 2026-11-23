@@ -88,22 +88,24 @@ func TestMergeGateSkipLint(t *testing.T) {
 		noGo       bool   // the branch changes no .go file
 		inSlot     bool   // the gate took the heavy slot itself (MG_IN_SLOT)
 		smallHost  bool   // under MG_GEN_ALONE_GIB: the vite builds run after the wait (run_bundles)
+		pinOnly    bool   // the last commit moves go.mod instead of adding a migration
 	}{
-		{"merge tier", true, nil, "", []string{"build", "test", "golangci", "lint", "vet", "proto", "migsafety", "migorder"}, []string{"demo"}, "0", false, false, false, false},
-		{"merge tier in its own slot drops golangci's lock", false, nil, "", []string{"golangci"}, nil, "0", false, false, true, false},
-		{"merge tier without a Go change skips golangci", true, nil, "", []string{"build", "test", "lint", "proto", "migsafety", "migorder"}, []string{"golangci"}, "0", false, true, false, false},
-		{"skip-lint", true, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "golangci", "proto", "migsafety", "migorder"}, []string{"vet", "lint"}, "0", false, false, false, false},
-		{"skip-lint without a Go change skips golangci", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "proto"}, []string{"vet", "lint", "golangci"}, "0", false, true, false, false},
-		{"skip-lint keeps buf lint without a proto change", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "golangci", "proto", "migsafety"}, []string{"vet", "lint"}, "0", false, false, false, false},
-		{"queue", true, []string{"--queue"}, "queue", []string{"build", "test", "lint", "proto", "migsafety", "migorder"}, []string{"vet", "golangci"}, "1", false, false, false, false},
-		{"queue skips buf lint without a proto change", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "migsafety"}, []string{"vet", "proto", "golangci"}, "1", false, false, false, false},
-		{"queue builds a selected demo bundle", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "demo"}, []string{"vet", "golangci"}, "1", true, false, false, false},
-		{"queue on a small host defers the demo bundle", false, []string{"--queue"}, "queue", []string{"build", "test", "lint"}, []string{"demo", "vet", "golangci"}, "1", true, false, false, true},
-		{"queue with --skip-lint lints nothing", false, []string{"--queue", "--skip-lint"}, "skip-lint", []string{"build", "test"}, []string{"vet", "lint", "golangci"}, "1", false, false, false, false},
-		{"skip-golangci", true, []string{"--skip-golangci"}, "", []string{"build", "test", "lint", "vet", "proto"}, []string{"golangci"}, "0", false, false, false, false},
+		{"merge tier", true, nil, "", []string{"build", "test", "golangci", "lint", "vet", "proto", "migsafety", "closedsets", "migorder"}, []string{"demo"}, "0", false, false, false, false, false},
+		{"merge tier in its own slot drops golangci's lock", false, nil, "", []string{"golangci"}, nil, "0", false, false, true, false, false},
+		{"merge tier without a Go change skips golangci", true, nil, "", []string{"build", "test", "lint", "proto", "migsafety", "closedsets", "migorder"}, []string{"golangci"}, "0", false, true, false, false, false},
+		{"skip-lint", true, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "golangci", "proto", "migsafety", "closedsets", "migorder"}, []string{"vet", "lint"}, "0", false, false, false, false, false},
+		{"skip-lint without a Go change skips golangci", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "proto"}, []string{"vet", "lint", "golangci"}, "0", false, true, false, false, false},
+		{"skip-lint keeps buf lint without a proto change", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "golangci", "proto", "migsafety", "closedsets"}, []string{"vet", "lint"}, "0", false, false, false, false, false},
+		{"queue", true, []string{"--queue"}, "queue", []string{"build", "test", "lint", "proto", "migsafety", "closedsets", "migorder"}, []string{"vet", "golangci"}, "1", false, false, false, false, false},
+		{"queue skips buf lint without a proto change", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "migsafety", "closedsets"}, []string{"vet", "proto", "golangci"}, "1", false, false, false, false, false},
+		{"queue builds a selected demo bundle", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "demo"}, []string{"vet", "golangci"}, "1", true, false, false, false, false},
+		{"queue on a small host defers the demo bundle", false, []string{"--queue"}, "queue", []string{"build", "test", "lint"}, []string{"demo", "vet", "golangci"}, "1", true, false, false, true, false},
+		{"queue with --skip-lint lints nothing", false, []string{"--queue", "--skip-lint"}, "skip-lint", []string{"build", "test"}, []string{"vet", "lint", "golangci"}, "1", false, false, false, false, false},
+		{"skip-golangci", true, []string{"--skip-golangci"}, "", []string{"build", "test", "lint", "vet", "proto"}, []string{"golangci"}, "0", false, false, false, false, false},
+		{"a pin move without a migration still runs closedsets", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "closedsets"}, []string{"vet", "golangci", "migsafety", "migorder"}, "1", false, false, false, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			repo, mergeBase := branchWithMergeOfMain(t, tc.proto, !tc.noGo)
+			repo, mergeBase := branchWithMergeOfMain(t, tc.proto, !tc.noGo, tc.pinOnly)
 			logs := t.TempDir()
 			plan := filepath.Join(logs, "plan.json")
 			if err := os.WriteFile(plan, []byte(`{"go":{"build":["./internal/x"],"packages":["./internal/x"]}}`), 0o644); err != nil {
@@ -187,10 +189,10 @@ func TestMergeGateSkipLint(t *testing.T) {
 
 // branchWithMergeOfMain builds a repository whose HEAD is a PR branch: a
 // commit, a merge of a main that moved on, and another commit (adding a
-// migration). Its first commit adds internal/x/x.go when goFile is set, and
+// migration, or only moving go.mod when pinOnly). Its first commit adds internal/x/x.go when goFile is set, and
 // internal/x/README.md otherwise. It returns the checkout and the merge-base
 // with origin/main.
-func branchWithMergeOfMain(t *testing.T, proto, goFile bool) (string, string) {
+func branchWithMergeOfMain(t *testing.T, proto, goFile, pinOnly bool) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
 	git := func(args ...string) string {
@@ -229,7 +231,11 @@ func branchWithMergeOfMain(t *testing.T, proto, goFile bool) (string, string) {
 	git("update-ref", "refs/remotes/origin/main", "HEAD")
 	git("checkout", "-q", "feature")
 	git("merge", "-q", "--no-edit", "origin/main")
-	write("db/migrations/20260101000000_a.up.sql", "SELECT 1;\n")
+	if pinOnly {
+		write("go.mod", "module x\n")
+	} else {
+		write("db/migrations/20260101000000_a.up.sql", "SELECT 1;\n")
+	}
 	git("add", "-A")
 	git("commit", "-q", "-m", "two")
 	return dir, git("merge-base", "HEAD", "origin/main")

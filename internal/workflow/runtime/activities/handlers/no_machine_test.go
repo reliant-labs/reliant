@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -96,13 +98,11 @@ func setupNoMachineFixture(t *testing.T, noMachine bool) *noMachineFixture {
 	})
 
 	return &noMachineFixture{
-		h:      h,
-		chat:   chat,
-		driver: driver,
-		mcp:    runtime,
-		callLLM: NewCallLLMActivity(h.Repo(), nil,
-			tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
-			&staticConfigProvider{}, resolver, binder),
+		h:       h,
+		chat:    chat,
+		driver:  driver,
+		mcp:     runtime,
+		callLLM: NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: binder}),
 	}
 }
 
@@ -297,7 +297,7 @@ func TestExecuteTools_NoMachineRunRefusesMachineToolsWithoutTrippingTheBreaker(t
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			executor := newMockToolExecutor()
-			activity := NewExecuteToolsActivity(f.h.Repo(), executor)
+			activity := NewExecuteToolsActivity(f.h.Repo(), toolCallsOf(f.h.Repo()), executor)
 			shellID, viewID := "call-shell-"+uuid.NewString(), "call-view-"+uuid.NewString()
 
 			var output ExecuteToolsOutput
@@ -334,7 +334,7 @@ func TestExecuteTools_NoMachineRunStillRunsServerToolsOnAMarkedContext(t *testin
 
 	f := setupNoMachineFixture(t, true)
 	executor := &contextRecordingExecutor{}
-	activity := NewExecuteToolsActivity(f.h.Repo(), executor)
+	activity := NewExecuteToolsActivity(f.h.Repo(), toolCallsOf(f.h.Repo()), executor)
 
 	var output ExecuteToolsOutput
 	require.NoError(t, f.h.ExecuteActivity(activity.Execute, ExecuteToolsInput{

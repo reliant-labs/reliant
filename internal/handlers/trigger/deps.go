@@ -20,7 +20,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
 // OrgMoveResumer turns a trigger a project move paused back on
@@ -53,6 +55,7 @@ type Owners interface {
 }
 
 type Repository interface {
+	triggers.OwnerSource
 	// AssignUnassignedOrg stamps the caller's rows that have no org with
 	// their default org (the lazy backfill, orgs.ListScope).
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
@@ -81,29 +84,28 @@ type Repository interface {
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
 
-	// The project, worktree and chat a trigger names, checked against the
-	// caller.
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
-
-	// The machine pool a pool-bound trigger names, and its members (each gets
-	// the trigger's automation grant).
-	GetMachinePoolForUser(ctx context.Context, userID, id string) (*core.MachinePool, error)
-	// GetMachinePoolByName resolves the pool an agent names by name
-	// (create/update_trigger_activation's machine_pool).
-	GetMachinePoolByName(ctx context.Context, userID, name string) (*core.MachinePool, error)
-	ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error)
 
 	// ListTriggers is called directly too; TriggerLister declares it.
 	launch.WorkflowResolver
 	daemonchoice.Reader
-	AutomationKeyStore
 	TriggerLister
+}
+
+// Pools reads the machine pool a pool-bound trigger names, and its members
+// (each gets the trigger's automation grant). store.MachinePoolExtStore
+// satisfies it; machinepool.MemberReader is the part AgreedCatalog reads.
+type Pools interface {
+	machinepool.MemberReader
+	// GetMachinePoolByName resolves the pool an agent names by name
+	// (create/update_trigger_activation's machine_pool).
+	GetMachinePoolByName(ctx context.Context, userID, name string) (*core.MachinePool, error)
 }
 
 // AutomationKeyStore is where automationGrants keeps the delegated
 // daemon:resume token of each (user, daemon) with an enabled trigger.
+// credentials/automationtokens.Service satisfies it.
 type AutomationKeyStore interface {
 	SetAutomationToken(ctx context.Context, userID, daemonID, token string) error
 	DeleteAutomationToken(ctx context.Context, userID, daemonID string) error

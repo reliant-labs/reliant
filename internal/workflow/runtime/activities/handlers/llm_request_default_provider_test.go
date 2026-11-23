@@ -4,9 +4,10 @@ package handlers
 import (
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
 // The user's Settings default provider (model.provider_preference) decides

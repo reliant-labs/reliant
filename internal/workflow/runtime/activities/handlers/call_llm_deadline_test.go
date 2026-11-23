@@ -6,12 +6,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // An expired activity DEADLINE is not a user interrupt.
@@ -40,7 +43,7 @@ func TestCallLLM_DeadlineExceededFailsRatherThanCompleting(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 	hub := &captureHub{}
-	activityInstance := NewCallLLMActivity(h.Repo(), hub, nil, &staticConfigProvider{}, resolver, nil)
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: hub, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
 
 	run := func(activityCtx context.Context, input ActivityInput) (*CallLLMOutput, error) {
 		boundedCtx, cancel := context.WithTimeout(activityCtx, 300*time.Millisecond)

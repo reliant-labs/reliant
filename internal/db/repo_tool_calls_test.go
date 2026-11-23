@@ -8,10 +8,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
-	"github.com/stretchr/testify/require"
 )
 
 // toolCallFixture is the minimum set of parent rows a tool call needs. The
@@ -192,7 +193,7 @@ func TestUpsertToolCallResultIsIdempotent(t *testing.T) {
 	result.UpdatedAt = time.Now().UTC()
 	require.NoError(t, repo.UpsertToolCallResult(ctx, f.chatID, result))
 
-	got, err := repo.GetToolCallResult(ctx, call.ID)
+	got, err := store.FindToolCallResult(ctx, repo.ORM(), call.ID)
 	require.NoError(t, err)
 	require.Equal(t, "second", got.Content)
 	require.True(t, got.IsError)

@@ -75,21 +75,21 @@ func (s accountRouterStore) RecentAssignmentCounts(ctx context.Context, accountI
 // activities share. It is inactive until a per-account driver builder is wired
 // (see handlers.AccountRouting.DriverFor): accounts are never assigned that
 // cannot then be used.
-func accountRouting(repo AccountRoutingStore, recorder handlers.AccountLimitRecorder, notices ...orgKeyNoticeQueue) *handlers.AccountRouting {
-	marker := credentialMarker{repo: repo}
+func accountRouting(accounts AccountStore, noticeStore OrgKeyNoticeStore, repo AccountRoutingStore, recorder handlers.AccountLimitRecorder, notices ...orgKeyNoticeQueue) *handlers.AccountRouting {
+	marker := credentialMarker{repo: markStore{AccountStore: accounts, notices: noticeStore}}
 	if len(notices) > 0 {
 		marker.notices = notices[0]
 	}
-	store := accountRouterStore{repo: repo}
+	store := accountRouterStore{repo: accounts}
 	return &handlers.AccountRouting{
 		Router:                accountrouter.NewInstrumented(accountrouter.Deps{Store: store}),
-		ClearOtherAssignments: repo.ClearOtherThreadAssignments,
+		ClearOtherAssignments: accounts.ClearOtherThreadAssignments,
 		Store:                 store,
 		Settings:              repo,
 		DriverFor:             accountDriverFor,
 		Recorder:              recorder,
 		Credentials:           marker,
-		Funding:               handlers.NewPersonalFundingStore(repo.ORM(), repo),
+		Funding:               handlers.NewPersonalFundingStore(repo.ORM(), accounts),
 	}
 }
 
@@ -146,4 +146,17 @@ func (m credentialMarker) notifyOrgAdmins(ctx context.Context, orgID string, acc
 		logging.WarnContext(ctx, "Could not start emailing the org's admins about a rejected key; the sweep retries it",
 			"orgID", orgID, "accountID", acct.ID, "error", err)
 	}
+}
+
+// markStore is what credentialMarker writes: the account mark (credentials/provideraccounts) and
+// the confirmation that a rejected org key's notice started (the facade, until orgaccounts).
+type markStore struct {
+	AccountStore
+	notices interface {
+		ConfirmOrgKeyNotice(ctx context.Context, orgID, accountID string, markedAt time.Time) error
+	}
+}
+
+func (m markStore) ConfirmOrgKeyNotice(ctx context.Context, orgID, accountID string, markedAt time.Time) error {
+	return m.notices.ConfirmOrgKeyNotice(ctx, orgID, accountID, markedAt)
 }

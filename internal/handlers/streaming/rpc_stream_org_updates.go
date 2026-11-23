@@ -58,7 +58,7 @@ func (s *Service) StreamOrgUpdates(
 		if err := s.orgFeedMember(ctx, userID, orgID); err != nil {
 			return err
 		}
-		latest, err := s.deps.Repo.LatestOrgUpdateSequence(ctx, orgID)
+		latest, err := s.deps.OrgFeed.LatestOrgUpdateSequence(ctx, orgID)
 		if err != nil {
 			return svcerr.WrapOr(err, svcerr.Internal("failed to read the org feed"))
 		}
@@ -158,7 +158,7 @@ func (s *Service) orgFeedOrg(ctx context.Context, userID, requested string) (str
 // new cursor: the last sequence read, sent or skipped (the caller's own).
 func (s *Service) sendOrgUpdates(ctx context.Context, orgID, userID string, cursor int64, stream *connect.ServerStream[reliantv1.OrgStreamEvent]) (int64, error) {
 	for {
-		rows, err := s.deps.Repo.OrgUpdatesSince(ctx, orgID, cursor, orgFeedBatchSize)
+		rows, err := s.deps.OrgFeed.OrgUpdatesSince(ctx, orgID, cursor, orgFeedBatchSize)
 		if err != nil {
 			return cursor, svcerr.WrapOr(err, svcerr.Internal("failed to read the org feed"))
 		}

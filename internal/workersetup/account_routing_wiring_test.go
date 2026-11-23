@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,7 +82,7 @@ func TestAccountRouting_RealWiring_FailsOverToTheSecondAccountWithANotice(t *tes
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
-	drivers.InitializeAPIKeyProvider(repo)
+	drivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 
 	prevClient := drivers.AccountAvailabilityClient
 	drivers.AccountAvailabilityClient = func(_ context.Context, id models.DriverID, _ models.DriverConfig) (registry.Client, error) {
@@ -90,7 +92,7 @@ func TestAccountRouting_RealWiring_FailsOverToTheSecondAccountWithANotice(t *tes
 
 	user := "user-" + uuid.NewString()
 	addAccount := func(name string) core.ProviderAccount {
-		a, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+		a, _, err := db.TestAccounts(t, repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 			UserID: user, Provider: "claude", AuthKind: core.AuthKindOAuth,
 			IdentityKey: core.ClaudeIdentityKey(name, "org-"+name), Email: name + "@acme.com",
 			ExternalAccountID: name, OrganizationID: "org-" + name,
@@ -121,9 +123,9 @@ func TestAccountRouting_RealWiring_FailsOverToTheSecondAccountWithANotice(t *tes
 	}
 	t.Cleanup(func() { accountDriverFor = prevFor })
 
-	recorder := accountlimits.NewRecorder(repo, nil)
+	recorder := accountlimits.NewRecorder(db.TestAccounts(t, repo), nil)
 	defer recorder.Close()
-	routing := accountRouting(repo, recorder)
+	routing := accountRouting(db.TestAccounts(t, repo), db.TestOrgAccounts(t, repo), repo, recorder)
 	require.NotNil(t, routing.DriverFor, "with GetDriverForAccount wired, routing is live")
 
 	// A chat with one user message, whose thread is already on alice.
@@ -136,13 +138,13 @@ func TestAccountRouting_RealWiring_FailsOverToTheSecondAccountWithANotice(t *tes
 	require.NoError(t, err)
 	_, err = repo.SaveMessageToThread(ctx, chatID, chatID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), "hello", nil, nil, nil)
 	require.NoError(t, err)
-	applied, err := repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: chatID, Provider: "claude", AccountID: alice.ID, AssignedAt: time.Now(), Reason: "initial"}, "")
+	applied, err := db.TestAccounts(t, repo).SetThreadAssignment(ctx, core.Assignment{ThreadID: chatID, Provider: "claude", AccountID: alice.ID, AssignedAt: time.Now(), Reason: "initial"}, "")
 	require.NoError(t, err)
 	require.True(t, applied)
 
 	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
-	activity := handlers.NewCallLLMActivity(repo, nil, nil, emptyConfig{}, nil, nil).WithAccountRouting(routing)
+	activity := handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: repo, Spawns: store.NewToolCallExtStore(repo.ORM()), ToolResults: handlers.NewToolCalls(repo.ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: emptyConfig{}, DriverResolver: nil, MCPBinder: nil}).WithAccountRouting(routing)
 	env.RegisterActivity(activity.Execute)
 	input := types.ActivityInput{
 		Runtime: types.RuntimeContext{ChatID: chatID, Thread: chatID},
@@ -156,7 +158,7 @@ func TestAccountRouting_RealWiring_FailsOverToTheSecondAccountWithANotice(t *tes
 	_, err = env.ExecuteActivity(activity.Execute, input)
 	require.Error(t, err)
 	assert.Equal(t, []string{alice.ID}, builtFor, "the thread's sticky account served the request")
-	limits, err := repo.ListAccountLimits(ctx, user)
+	limits, err := db.TestAccounts(t, repo).ListAccountLimits(ctx, user)
 	require.NoError(t, err)
 	require.NotNil(t, limits[alice.ID].LimitedUntil, "alice is benched in the store")
 	assert.WithinDuration(t, reset, *limits[alice.ID].LimitedUntil, time.Second)
@@ -170,7 +172,7 @@ func TestAccountRouting_RealWiring_FailsOverToTheSecondAccountWithANotice(t *tes
 	assert.Equal(t, bob.ID, out.GetProviderAccountId())
 	assert.Equal(t, bob.ID, builtFor[len(builtFor)-1])
 	assert.Contains(t, out.GetResponseText(), "ok from access-bob", "bob's own credential served it")
-	a, err := repo.GetThreadAssignment(ctx, chatID, "claude")
+	a, err := db.TestAccounts(t, repo).GetThreadAssignment(ctx, chatID, "claude")
 	require.NoError(t, err)
 	assert.Equal(t, bob.ID, a.AccountID, "and the assignment moved")
 

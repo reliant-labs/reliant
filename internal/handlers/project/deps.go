@@ -23,6 +23,30 @@ type OrgResolver interface {
 	DefaultOrg(ctx context.Context, userID string) (string, error)
 }
 
+// Detachments forgets a project's checkout on a machine and reads back what
+// was forgotten. store.ProjectDaemonDetachmentExtStore satisfies it.
+type Detachments interface {
+	// DetachProjectFromDaemon forgets a checkout without touching its files
+	// and records the detachment, which ListProjectDaemonDetachmentsForDaemon
+	// reads back so the connect heal leaves the pair alone.
+	DetachProjectFromDaemon(ctx context.Context, projectID, daemonID, path string, guard func(ctx context.Context) error) error
+	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)
+}
+
+// ProjectLookups finds the user's project in one org (nil scope: any org).
+// Projects are unique per (org, user, path) and (org, user, remote_url).
+// store.ProjectExtStore satisfies it.
+type ProjectLookups interface {
+	GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*core.Project, error)
+	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error)
+}
+
+// DaemonInstalls lists the checkouts a machine holds.
+// store.ProjectDaemonExtStore satisfies it.
+type DaemonInstalls interface {
+	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
+}
+
 // Repository is the slice of *db.Repo the project handlers use.
 type Repository interface {
 	// AssignUnassignedOrg stamps the caller's projects and chats that have
@@ -32,29 +56,11 @@ type Repository interface {
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*db.Project, error)
 	GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*db.Project, error)
-	// GetProjectByPathAndUserInScope and GetProjectByRemoteURLAndUserInScope
-	// find the user's project in one org (nil scope: any org). Projects are
-	// unique per (org, user, path) and (org, user, remote_url).
-	GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*db.Project, error)
-	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*db.Project, error)
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
 	UpdateProject(ctx context.Context, project *db.Project, userID string) error
 	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
 	TouchProject(ctx context.Context, id string, userID string) error
 	DeleteProject(ctx context.Context, id string, userID string) error
-	// A deletion with a restore window (project_delete.go): schedule it
-	// (hiding the project and pausing its triggers), cancel it, purge at
-	// once, and list what the caller may restore.
-	// Each takes the project as the caller's authority was decided on, and
-	// refuses (store.ErrOrgChanged) a project that moved org since.
-	ScheduleProjectDeletion(ctx context.Context, id, by string, deleteAfter time.Time, decided core.ProjectDecision) (core.ProjectDeletion, error)
-	RestoreProject(ctx context.Context, id string, decided core.ProjectDecision) ([]string, error)
-	// An immediate purge is claimed in the request and its batches run after
-	// it returns (rpc_purge_project_now.go).
-	ClaimProjectPurgeNow(ctx context.Context, id string, decided core.ProjectDecision) error
-	PurgeClaimedProject(ctx context.Context, id, owner string) ([]string, error)
-	ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope, includePurging bool) ([]*core.Project, error)
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
 	// RecordObservedProjectDaemonInScope records a checkout the platform
 	// made or found, only while the project is in the machine's scope
@@ -62,7 +68,6 @@ type Repository interface {
 	RecordObservedProjectDaemonInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, scope *core.OrgScope) (bool, error)
 	UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error)
-	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
 	// GetDaemon completes projectcheckout.Reader: whose machine an install
 	// is, and what to call it in a sentence.
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
@@ -71,11 +76,6 @@ type Repository interface {
 	// reclone of a checkout by the op id its machine acknowledges.
 	BeginCheckoutTeardown(ctx context.Context, projectID, daemonID, kind, path string, guard func(ctx context.Context) error) (*db.CheckoutTeardown, error)
 	SettleCheckoutTeardown(ctx context.Context, id, state, detail string) (*db.CheckoutTeardown, error)
-	// DetachProjectFromDaemon forgets a checkout without touching its files
-	// and records the detachment, which ListProjectDaemonDetachmentsForDaemon
-	// reads back so the connect heal leaves the pair alone.
-	DetachProjectFromDaemon(ctx context.Context, projectID, daemonID, path string, guard func(ctx context.Context) error) error
-	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)
 
 	CreateRepo(ctx context.Context, repo *core.Repo) error
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
@@ -98,11 +98,30 @@ type Repository interface {
 	ListFailedWorktreesForDaemon(ctx context.Context, daemonID string, since time.Time, limit int) ([]*db.Worktree, error)
 	MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *db.CleanupMetadata, archived bool) bool) error
 
-	UpsertProjectConfigRecord(ctx context.Context, record *db.ProjectConfigRecord) error
-
 	CreateSetting(ctx context.Context, setting *db.Setting) error
 	GetSetting(ctx context.Context, userID string, projectID *string, key string) (*db.Setting, error)
 	UpdateSetting(ctx context.Context, setting *db.Setting) error
+}
+
+// ProjectConfigs seeds a new project's config record. store.ProjectConfigExtStore
+// satisfies it.
+type ProjectConfigs interface {
+	UpsertProjectConfigRecord(ctx context.Context, rec *core.ProjectConfigRecord) error
+}
+
+// ProjectPurges is a project's deletion with a restore window
+// (project_delete.go): schedule it (hiding the project and pausing its
+// triggers), cancel it, purge at once, and list what the caller may restore.
+// Each takes the project as the caller's authority was decided on, and
+// refuses (store.ErrOrgChanged) a project that moved org since. An immediate
+// purge is claimed in the request and its batches run after it returns
+// (rpc_purge_project_now.go). projectpurge.Service satisfies it.
+type ProjectPurges interface {
+	ScheduleProjectDeletion(ctx context.Context, id, by string, deleteAfter time.Time, decided core.ProjectDecision) (core.ProjectDeletion, error)
+	RestoreProject(ctx context.Context, id string, decided core.ProjectDecision) ([]string, error)
+	ClaimProjectPurgeNow(ctx context.Context, id string, decided core.ProjectDecision) error
+	PurgeClaimedProject(ctx context.Context, id, owner string) ([]string, error)
+	ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope, includePurging bool) ([]*core.Project, error)
 }
 
 // MoveLedger is a project move's ledger and preview reads. A move is recorded

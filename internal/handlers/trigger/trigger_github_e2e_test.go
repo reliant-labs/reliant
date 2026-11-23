@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"connectrpc.com/connect"
@@ -36,6 +38,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -119,11 +122,10 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 	temporalClient := startTriggerDevServer(t)
 	taskQueue := "trigger-github-e2e-" + uuid.NewString()
 
-	launcher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient,
-		runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), taskQueue)
+	launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), TaskQueue: launch.TaskQueue(taskQueue)})
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerEventFireWorkflow, workflow.RegisterOptions{Name: triggers.EventFireWorkflowName})
-	w.RegisterActivityWithOptions(triggers.NewEventFirer(repo, launcher).Fire, activity.RegisterOptions{Name: triggers.EventFireActivityName})
+	w.RegisterActivityWithOptions(triggers.NewEventFirer(triggers.NewStores(repo), launcher).Fire, activity.RegisterOptions{Name: triggers.EventFireActivityName})
 	w.RegisterWorkflowWithOptions(func(workflow.Context, any) error { return nil }, workflow.RegisterOptions{Name: v2workflow.WorkflowDynamic})
 	require.NoError(t, w.Start())
 	defer w.Stop()
@@ -146,7 +148,7 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 	refresher := ghaccess.New(store.NewIntegrationEventAccessExtStore(repo.ORM()), store.NewIntegrationAccessRefreshExtStore(repo.ORM()), userTokens{alice: "tok-alice", bob: "tok-bob"},
 		ghaccess.Options{APIBaseURL: ghServer.URL, HTTPClient: ghServer.Client()})
 
-	intake := triggers.NewIntake(repo, temporalClient, taskQueue)
+	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue)
 	const publicURL = "https://hooks.example.com"
 	inbound := webhook.NewInbound(repo, intake, registry, nil, publicURL)
 	mux := http.NewServeMux()
@@ -154,7 +156,7 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo,
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo),
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake,
 		Access: map[string]IntegrationAccess{"github": e2eGitHubAccess{refresher}},
 	}))

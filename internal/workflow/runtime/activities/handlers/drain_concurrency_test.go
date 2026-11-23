@@ -11,9 +11,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
-	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/threads"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -110,7 +111,7 @@ func testCoordinatedDrains(t *testing.T, serializable bool) {
 		arrived:                 make(chan struct{}, threadsInChat),
 		release:                 make(chan struct{}),
 	}
-	act := NewDrainAgentMessagesActivity(store, threads.NewService(h.Repo()))
+	act := NewDrainAgentMessagesActivity(store, threads.New(threads.Deps{Repo: h.Repo()}))
 	start := make(chan struct{})
 	outputs := make([]DrainAgentMessagesOutput, threadsInChat)
 	errs := make([]error, threadsInChat)

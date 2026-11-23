@@ -17,6 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
@@ -66,9 +67,9 @@ func TestCapacityFirerLaunchFIFOAndTemporalRelease(t *testing.T) {
 	f := newFireFixture(t, nil)
 	ctx := context.Background()
 	starter := &describedStarter{flakyStarter: f.starter, descriptions: map[string]*workflowservice.DescribeWorkflowExecutionResponse{}}
-	launcher := launch.NewLauncher(f.repo, threads.NewService(f.repo), starter, noopRunRecorder{}, "test-queue")
+	launcher := launch.New(launch.Deps{Store: f.repo, Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	resolver := capacityResolver{wf: &reliantv1.Workflow{Concurrency: &reliantv1.WorkflowConcurrency{MaxRunning: 1}}}
-	f.firer = NewFirer(f.repo, launcher).WithWorkflows(resolver).WithCapacityDescriptions(starter)
+	f.firer = NewFirer(NewStores(f.repo), launcher).WithWorkflows(resolver).WithCapacityDescriptions(starter)
 	starter.failDescriptions = true
 	_, err := f.firer.Fire(ctx, f.fireAt(2))
 	require.Error(t, err, "accepted Temporal start with lost description/binding must not release capacity")
@@ -116,8 +117,8 @@ func TestCapacityFirerLaunchFIFOAndTemporalRelease(t *testing.T) {
 	starter.mu.Lock()
 	starter.descriptions[second.ChatID].WorkflowExecutionInfo.Status = enums.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	starter.mu.Unlock()
-	require.NoError(t, NewRedriver(f.repo, starter, "test-queue").RedriveOnce(ctx))
-	occupied, err := f.repo.ListTriggerCapacityExecutions(ctx, store.TriggerCapacityScope{UserID: f.trigger.UserID, ProjectID: f.trigger.ProjectID, WorkflowRef: workflowref.RefKey(f.trigger.Workflow)})
+	require.NoError(t, NewRedriver(NewStores(f.repo), starter, "test-queue").RedriveOnce(ctx))
+	occupied, err := NewCapacityStores(f.repo.ORM()).ListTriggerCapacityExecutions(ctx, store.TriggerCapacityScope{UserID: f.trigger.UserID, ProjectID: f.trigger.ProjectID, WorkflowRef: workflowref.RefKey(f.trigger.Workflow)})
 	require.NoError(t, err)
 	require.Empty(t, occupied)
 }

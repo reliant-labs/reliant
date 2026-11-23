@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -225,10 +226,10 @@ func (s *Service) CreateProjectFromRepo(
 // A found project the caller may no longer act in is refused
 // (reusableProject), never re-added.
 func (s *Service) existingProjectForRepo(ctx context.Context, userID, path, cloneURL string, scope *core.OrgScope) (*core.Project, error) {
-	if existing, err := s.deps.Repo.GetProjectByRemoteURLAndUserInScope(ctx, cloneURL, userID, scope); err == nil && existing != nil {
+	if existing, err := s.deps.Lookups.GetProjectByRemoteURLAndUserInScope(ctx, cloneURL, userID, scope); err == nil && existing != nil {
 		return existing, reusableProject(ctx, userID, existing)
 	}
-	if existing, err := s.deps.Repo.GetProjectByPathAndUserInScope(ctx, path, userID, scope); err == nil && existing != nil {
+	if existing, err := s.deps.Lookups.GetProjectByPathAndUserInScope(ctx, path, userID, scope); err == nil && existing != nil {
 		return existing, reusableProject(ctx, userID, existing)
 	}
 	return nil, nil

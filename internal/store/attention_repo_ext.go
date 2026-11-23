@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -151,63 +152,4 @@ owner_run_id=$15,notified=$16 WHERE user_id=$1 AND project_id=$2 AND incident_ke
 		userID, projectID, u.Key, row.EpisodeID, row.State, row.ChatID, row.TriggerID, row.FailureClass, row.Detail, row.OpenedAt, row.UpdatedAt, row.LeaseUntil,
 		row.RunID, row.StartedNS, row.OwnerRunID, row.Notified)
 	return result, err
-}
-
-// ListAttentionIncidents projects expiry at database read time, without a
-// scheduler or a write on the read path. Identity is rechecked against live
-// chat/project ownership so orphaned or reassigned records cannot leak.
-func ListAttentionIncidents(ctx context.Context, db orm.Context, userID string) ([]*core.AttentionIncident, error) {
-	rows, err := db.Query(ctx, `SELECT a.user_id,a.project_id,a.incident_key,a.episode_id,
-CASE WHEN a.state='recovering' AND a.lease_until<=statement_timestamp() THEN 'action_required' ELSE a.state END,
-a.chat_id,a.trigger_id,
-CASE WHEN a.state='recovering' AND a.lease_until<=statement_timestamp() THEN 'recovery_expired' ELSE a.failure_class END,
-CASE WHEN a.state='recovering' AND a.lease_until<=statement_timestamp() THEN 'Recovery timed out' ELSE a.detail END,
-a.opened_at,CASE WHEN a.state='recovering' AND a.lease_until<=statement_timestamp() THEN a.lease_until ELSE a.updated_at END,
-CASE WHEN a.state='recovering' AND a.lease_until>statement_timestamp() THEN a.lease_until ELSE NULL END
-FROM attention_incidents a JOIN projects p ON p.id=a.project_id AND p.user_id=a.user_id
-JOIN chats c ON c.id=a.chat_id AND c.user_id=a.user_id AND c.project_id=a.project_id
-WHERE a.user_id=$1 AND a.state IN ('recovering','action_required') ORDER BY a.opened_at,a.episode_id`, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := make([]*core.AttentionIncident, 0)
-	for rows.Next() {
-		a := new(core.AttentionIncident)
-		if err = rows.Scan(&a.UserID, &a.ProjectID, &a.Key, &a.EpisodeID, &a.State, &a.ChatID, &a.TriggerID, &a.FailureClass, &a.Detail, &a.OpenedAt, &a.UpdatedAt, &a.LeaseUntil); err != nil {
-			return nil, err
-		}
-		out = append(out, a)
-	}
-	return out, rows.Err()
-}
-
-// AttentionManagedChats retains finished registrations even when stale. An
-// unfinished actor needs an explicit start transition and an open durable
-// backstop; a lost observer finish must still surface through legacy failure
-// notifications. This is also the predicate used by unmanaged firing queries.
-func AttentionManagedChats(ctx context.Context, db orm.Context, userID string, chatIDs []string) (map[string]bool, error) {
-	out := make(map[string]bool)
-	if len(chatIDs) == 0 {
-		return out, nil
-	}
-	rows, err := db.Query(ctx, `SELECT DISTINCT a.chat_id FROM attention_actors a
-JOIN chats c ON c.id=a.chat_id AND c.user_id=a.user_id AND c.project_id=a.project_id
-JOIN projects p ON p.id=a.project_id AND p.user_id=a.user_id
-WHERE a.user_id=$1 AND a.chat_id=ANY($2::text[])
-AND (a.finished OR (a.start_seen AND a.start_state IN ('recovering','action_required') AND EXISTS (
-SELECT 1 FROM attention_incidents i WHERE i.user_id=a.user_id AND i.project_id=a.project_id
-AND i.incident_key=a.incident_key AND i.state IN ('recovering','action_required'))))`, userID, chatIDs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err = rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		out[id] = true
-	}
-	return out, rows.Err()
 }

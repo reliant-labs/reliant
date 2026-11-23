@@ -177,3 +177,10 @@ func (r *Repo) announceChatActivity(ctx context.Context, chatID string, fixed *C
 	}
 	return nil
 }
+
+// EmitChatActivityIfChanged is emitChatActivityIfChanged for the packages that
+// close or change what a chat's activity reads from outside the repository
+// (providerbackoff's usage-limit waits).
+func (r *Repo) EmitChatActivityIfChanged(ctx context.Context, chatID string) error {
+	return r.emitChatActivityIfChanged(ctx, chatID)
+}

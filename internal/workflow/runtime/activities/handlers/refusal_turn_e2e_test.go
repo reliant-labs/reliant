@@ -7,13 +7,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // refusalMockDriver is the provider answering exactly as Anthropic did on chat
@@ -88,16 +91,9 @@ func TestCallLLM_RefusalWithNoContent_ReportsAnError(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-refusal", project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-	activity := NewCallLLMActivity(
-		h.Repo(),
-		nil,
-		nil,
-		&staticConfigProvider{},
-		func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
-			return &refusalMockDriver{finishReason: message.FinishReasonRefusal}, nil
-		},
-		nil,
-	)
+	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+		return &refusalMockDriver{finishReason: message.FinishReasonRefusal}, nil
+	}, MCPBinder: nil})
 
 	var output reliantv1.CallLLMOutput
 	require.NoError(t, h.ExecuteActivity(activity.Execute, buildPlainCallLLMInput(chat.ID), &output),

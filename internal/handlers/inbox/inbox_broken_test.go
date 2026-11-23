@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -71,7 +73,7 @@ nodes:
 	// Deleting the workflow is a different reason, so a different item.
 	f.dismiss(t, item.ItemId)
 	require.Empty(t, brokenItems(f.list(t, nil).Items), "dismissed")
-	require.NoError(t, f.repo.DeleteWorkflowDraftBySlug(f.ctx, f.userID, "review"))
+	require.NoError(t, workflowdraftstest.New(t, f.repo).DeleteWorkflowDraftBySlug(f.ctx, f.userID, "review"))
 	again := brokenItems(f.list(t, nil).Items)
 	require.Len(t, again, 1, "a new reason is news again")
 	assert.NotEqual(t, item.ItemId, again[0].ItemId)

@@ -46,7 +46,7 @@ func (s *Service) SetWorkflowStatus(
 		return nil, err
 	}
 
-	draft, err := s.deps.Repo.GetWorkflowDraft(ctx, req.Msg.DraftId)
+	draft, err := s.deps.Drafts.GetWorkflowDraft(ctx, req.Msg.DraftId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
 	}
@@ -76,7 +76,7 @@ func (s *Service) SetWorkflowStatus(
 	if draft.Status == target {
 		activity.Skip(ctx) // already there: nothing changed
 	} else {
-		updated, err = s.deps.Repo.SetWorkflowDraftStatus(ctx, draft.ID, target)
+		updated, err = s.deps.Drafts.SetWorkflowDraftStatus(ctx, draft.ID, target)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update workflow status"))
 		}

@@ -69,7 +69,7 @@ func (s *Service) ListWorkflows(
 	reads.Add(3)
 	go func() {
 		defer reads.Done()
-		catalog = workflowcatalog.Load(ctx, s.deps.Repo, userID, project.ID)
+		catalog = workflowcatalog.Load(ctx, workflowcatalog.NewReads(s.deps.Drafts, s.deps.Repo), userID, project.ID)
 	}()
 	go func() {
 		defer reads.Done()

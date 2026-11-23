@@ -34,7 +34,7 @@ func (s *Service) applyMemberIdleTimeouts(ctx context.Context, userID string, on
 		logging.WarnContext(ctx, "[DaemonRegistry] pool member idle timeouts not applied: no signed-in session", "userID", userID)
 		return
 	}
-	pools, err := s.deps.Repo.ListMachinePoolsForUser(ctx, userID)
+	pools, err := s.deps.Pools.ListMachinePoolsForUser(ctx, userID)
 	if err != nil || len(pools) == 0 {
 		if err != nil {
 			logging.WarnContext(ctx, "[DaemonRegistry] pool member idle timeouts not applied: listing pools failed", "error", err, "userID", userID)

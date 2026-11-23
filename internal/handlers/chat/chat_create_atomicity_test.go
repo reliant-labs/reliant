@@ -116,10 +116,10 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo:      failingRepo,
-			Questions: &MockQuestions{},
-			Temporal:  temporal,
+			Questions: &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+			Temporal: temporal,
 		},
-		threads: threads.NewService(failingRepo),
+		threads: threads.New(threads.Deps{Repo: failingRepo}),
 		runs:    runs.New(runs.Deps{Repo: failingRepo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
@@ -196,10 +196,10 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo:      failingRepo,
-			Questions: &MockQuestions{},
-			Temporal:  temporal,
+			Questions: &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+			Temporal: temporal,
 		},
-		threads: threads.NewService(failingRepo),
+		threads: threads.New(threads.Deps{Repo: failingRepo}),
 		runs:    runs.New(runs.Deps{Repo: failingRepo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 

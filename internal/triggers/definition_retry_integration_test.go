@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/client"
@@ -13,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/threads"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -40,11 +43,11 @@ func TestRecordedFireRetryKeepsAdmittedCatalogAfterBrokenPush(t *testing.T) {
 			require.NoError(t, p.repo.CreateWorktree(p.ctx, &db.Worktree{ID: uuid.NewString(), Name: "main", Path: t.TempDir(), Branch: "main", BaseBranch: "main", ProjectID: p.projectID, Status: int32(pb.WorktreeStatus_WORKTREE_STATUS_ACTIVE), IsMain: true, CreatedAt: now, UpdatedAt: now, LastActive: now}))
 			starter := &pinRecordingStarter{}
 			starter.setDown(true)
-			launcher := launch.NewLauncher(p.repo, threads.NewService(p.repo), starter, noopRunRecorder{}, "test-q")
+			launcher := launch.New(launch.Deps{Store: p.repo, Projects: projectaccess.NewFromORM(p.repo.ORM()), Selections: store.NewChatSelectionExtStore(p.repo.ORM()), Threads: threads.New(threads.Deps{Repo: p.repo}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-q"})
 			key := "retry-pin-" + uuid.NewString()
 			kind := core.TriggerEventKindSchedule
 			fire := func() (*FireOutput, error) {
-				return NewFirer(p.repo, launcher).WithWorkflows(p.workflows()).Fire(p.ctx, FireRequest{TriggerID: p.schedule.ID, FireWorkflowID: key, ScheduledAt: now})
+				return NewFirer(NewStores(p.repo), launcher).WithWorkflows(p.workflows()).Fire(p.ctx, FireRequest{TriggerID: p.schedule.ID, FireWorkflowID: key, ScheduledAt: now})
 			}
 			if inbound {
 				kind = core.TriggerEventKindWebhook
@@ -52,7 +55,7 @@ func TestRecordedFireRetryKeepsAdmittedCatalogAfterBrokenPush(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, created)
 				fire = func() (*FireOutput, error) {
-					return NewEventFirer(p.repo, launcher).WithWorkflows(p.workflows()).Fire(p.ctx, EventFireInput{TriggerID: p.webhook.ID, Kind: kind, DedupeKey: key, Manual: true})
+					return NewEventFirer(NewStores(p.repo), launcher).WithWorkflows(p.workflows()).Fire(p.ctx, EventFireInput{TriggerID: p.webhook.ID, Kind: kind, DedupeKey: key, Manual: true})
 				}
 			}
 			_, err := fire()

@@ -133,12 +133,40 @@ function ledgerCost() {
   }
 }
 
+/**
+ * BillingService.GetStorageUsage: billed machine disks and app volumes,
+ * tracked images, static sites and buckets, SBOM copies not counted, and
+ * test reports not measured yet (no bytes_now).
+ */
+function storageUsage() {
+  const gib = (n: number) => String(Math.round(n * 2 ** 30))
+  const measuredAt = iso(20 * 60_000)
+  const row = (product: string, bytes: number | undefined, basis: string, counts = true) => ({
+    product: `STORAGE_PRODUCT_${product}`, countsTowardPool: counts, billingBasis: `STORAGE_BILLING_BASIS_${basis}`,
+    ...(bytes === undefined ? {} : { bytesNow: gib(bytes), measuredAt, gibHoursPeriodToDate: String(Math.round(bytes * 24 * 20)) }),
+  })
+  const products = [
+    row('MACHINE_DISKS', 50, 'BILLED'), row('APP_VOLUMES', 8, 'BILLED'), row('CONTAINER_IMAGES', 3.6, 'TRACKED'),
+    row('STATIC_SITES', 0.4, 'TRACKED'), row('BUCKETS', 1.2, 'TRACKED'), row('TEST_REPORTS', undefined, 'TRACKED'),
+    row('SBOM_COPIES', 0.3, 'NOT_COUNTED', false),
+  ]
+  const monthStart = Date.UTC(2026, 10, 1)
+  return {
+    pool: {
+      freeGib: '10', planIncludedGib: '50', includedGib: '60', usedBytes: gib(50 + 8 + 3.6 + 0.4 + 1.2),
+      periodStart: new Date(monthStart).toISOString(), periodEnd: new Date(Date.UTC(2026, 11, 1)).toISOString(), billingActive: false,
+    },
+    products,
+  }
+}
+
 const shopfrontCost = servicesFixtures['controlplane.v1.BillingService/GetProjectCost']
 
 export const u6cFixtures: Fixtures = {
   'controlplane.v1.BillingService/GetProjectCost': (req) =>
     req.projectId === 'ledger' ? ledgerCost() : typeof shopfrontCost === 'function' ? shopfrontCost(req) : shopfrontCost,
   'controlplane.v1.BillingService/ListOrganizationUsage': organizationUsage,
+  'controlplane.v1.BillingService/GetStorageUsage': storageUsage,
   'controlplane.v1.BillingService/ListCurrentUserInvoices': () => ({ invoices: invoices() }),
   'controlplane.v1.StorageBrowserService/ListBrowsableBuckets': (req) => ({ buckets: BUCKETS[String(req.environmentId)] ?? [], policy: 'STORAGE_ACCESS_POLICY_OPEN' }),
   'controlplane.v1.StorageBrowserService/ListObjects': listObjects,

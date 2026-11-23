@@ -7,13 +7,14 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/temporal"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/workflow/requirements"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/temporal"
 )
 
 // requirementsStore is the chat → project lookup, for a chat on a machine.

@@ -8,6 +8,9 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -15,8 +18,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // countingSummaryDriver counts summarization requests.
@@ -89,7 +90,7 @@ func TestCompact_SkipsCompactionThatCannotShrinkTheContext(t *testing.T) {
 
 	driver := &countingSummaryDriver{}
 	captured := &capturedSkips{}
-	compact := NewCompactActivity(h.Repo(), driver.resolver())
+	compact := NewCompactActivity(h.Repo(), toolCallsOf(h.Repo()), driver.resolver())
 	compact.skips = captured.notices()
 
 	input := CompactInput{ChatID: chatID, Thread: thread}
@@ -126,7 +127,7 @@ func TestCompact_ForceCompactsEvenWhenItCannotShrinkTheContext(t *testing.T) {
 
 	driver := &countingSummaryDriver{}
 	captured := &capturedSkips{}
-	compact := NewCompactActivity(h.Repo(), driver.resolver())
+	compact := NewCompactActivity(h.Repo(), toolCallsOf(h.Repo()), driver.resolver())
 	compact.skips = captured.notices()
 
 	input := CompactInput{ChatID: chatID, Thread: thread}.V3()
@@ -156,7 +157,7 @@ func TestCompact_CompactsWhenHistoryIsReclaimable(t *testing.T) {
 
 	driver := &countingSummaryDriver{}
 	captured := &capturedSkips{}
-	compact := NewCompactActivity(h.Repo(), driver.resolver())
+	compact := NewCompactActivity(h.Repo(), toolCallsOf(h.Repo()), driver.resolver())
 	compact.skips = captured.notices()
 
 	var out CompactOutput

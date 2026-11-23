@@ -57,10 +57,10 @@ func TestChatService_CreateChat_RootRunCarriesOwner(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo:      repo,
-			Questions: store.NewQuestionExtStore(repo.ORM()),
-			Temporal:  temporal,
+			Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+			Temporal: temporal,
 		},
-		threads: threads.NewService(repo),
+		threads: threads.New(threads.Deps{Repo: repo}),
 		runs:    runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
@@ -94,9 +94,9 @@ func TestChatService_BranchChat_RootRunCarriesOwner(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo:      repo,
-			Questions: store.NewQuestionExtStore(repo.ORM()),
+			Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
 		},
-		threads: threads.NewService(repo),
+		threads: threads.New(threads.Deps{Repo: repo}),
 	}
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
 		ChatId:    sourceChatID,

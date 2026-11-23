@@ -17,6 +17,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -24,8 +27,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // capturingCompactionDriver records the request the compaction summarization
@@ -111,7 +112,7 @@ func TestCompactThreadUpdate_CarriesPersistedThreadMetadata(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	NewCompactActivity(repo, nil).emitThreadUpdate(ctx, chatID, threadID, "active", "Compact")
+	NewCompactActivity(repo, toolCallsOf(repo), nil).emitThreadUpdate(ctx, chatID, threadID, "active", "Compact")
 
 	updates, err := repo.GetUpdatesSince(ctx, chatID, 0, 100)
 	require.NoError(t, err)
@@ -153,7 +154,7 @@ func TestGenerateCompactionSummary_UsesStandardRequestEnvelope(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			driver := &capturingCompactionDriver{model: tt.model}
 			captured := &capturedDriverOptions{}
-			compactActivity := NewCompactActivity(nil, capturingCompactionResolver(driver, captured))
+			compactActivity := NewCompactActivity(nil, nil, capturingCompactionResolver(driver, captured))
 
 			chat := &db.Chat{ID: "chat-1", UserID: "user-1"}
 			summary, err := compactActivity.generateCompactionSummary(context.Background(), chat, "", "", types.FailoverPolicy{}, toolBearingConversation(), nil)

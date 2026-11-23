@@ -74,7 +74,7 @@ func (s *Service) AdoptAs(ctx context.Context, t *core.Trigger, adopterID string
 	if err != nil {
 		return nil, err
 	}
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, adopted.ProjectID, adopterID)
+	project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, adopted.ProjectID, adopterID)
 	if err != nil {
 		return nil, triggerDBError("get project", err)
 	}

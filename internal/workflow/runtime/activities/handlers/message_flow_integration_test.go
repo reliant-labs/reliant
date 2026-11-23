@@ -8,14 +8,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // ============================================================================
@@ -114,7 +115,7 @@ func TestMessageFlowIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create thread with context window (required for SaveMessageActivity)
-	threadService := threads.NewService(repo)
+	threadService := threads.New(threads.Deps{Repo: repo})
 	_, _, err = threadService.CreateThread(ctx, threads.CreateThreadOpts{
 		ID:     thread,
 		ChatID: chatID,
@@ -328,7 +329,7 @@ func TestMessageFlowIntegration(t *testing.T) {
 			},
 		}
 
-		executeActivity := NewExecuteToolsActivity(repo, mockExecutor)
+		executeActivity := NewExecuteToolsActivity(repo, toolCallsOf(repo), mockExecutor)
 		env.RegisterActivity(executeActivity.Execute)
 
 		// Use tool_calls from SaveMessage output
@@ -622,7 +623,7 @@ func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create thread with context window (required for SaveMessageActivity)
-	threadService := threads.NewService(repo)
+	threadService := threads.New(threads.Deps{Repo: repo})
 	_, _, err = threadService.CreateThread(ctx, threads.CreateThreadOpts{
 		ID:     thread,
 		ChatID: chatID,
@@ -693,7 +694,7 @@ func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
 			},
 		}
 
-		executeActivity := NewExecuteToolsActivity(repo, mockExecutor)
+		executeActivity := NewExecuteToolsActivity(repo, toolCallsOf(repo), mockExecutor)
 		env.RegisterActivity(executeActivity.Execute)
 
 		executeInput := ExecuteToolsInput{

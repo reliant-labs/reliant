@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestLoadBuiltinWorkflow tests that builtin:// prefix loads from embedded FS
@@ -89,7 +91,7 @@ nodes:
 	workflowsJSON := mustMarshalJSON(t, []map[string]string{
 		{"slug": "get-it-right", "name": "get-it-right", "yaml_content": workflowYAML, "content_hash": "abc123"},
 	})
-	require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 		ProjectID:            projectID,
 		DaemonID:             "daemon-" + uuid.NewString(),
 		ProjectWorkflowsJSON: &workflowsJSON,
@@ -159,7 +161,7 @@ nodes:
 	workflowsJSON := mustMarshalJSON(t, []map[string]string{
 		{"slug": "blog-content-pipeline", "name": "blog-content-pipeline", "yaml_content": workflowYAML, "content_hash": "abc123"},
 	})
-	require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 		ProjectID:            projectID,
 		DaemonID:             "daemon-" + uuid.NewString(),
 		ProjectWorkflowsJSON: &workflowsJSON,

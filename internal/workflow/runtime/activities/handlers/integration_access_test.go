@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -98,7 +100,7 @@ func setupIntegrationFixture(t *testing.T, noMachine bool, conns *ownerConnectio
 	factory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo(), IntegrationCredentials: source})
 	return &integrationFixture{
 		h: h, project: project, chat: chat, driver: driver, conns: conns,
-		callLLM: NewCallLLMActivity(h.Repo(), nil, factory, &staticConfigProvider{}, resolver, nil),
+		callLLM: NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: factory, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil}),
 	}
 }
 

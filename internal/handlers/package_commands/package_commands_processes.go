@@ -43,7 +43,7 @@ func (s *Service) workspace(ctx context.Context, userID, worktreeID, chatID stri
 		return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
 	// Another user's workspace reads like a missing one.
-	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, worktree.ProjectID, userID); err != nil {
+	if _, err := s.deps.Projects.GetProjectWithUserCheck(ctx, worktree.ProjectID, userID); err != nil {
 		return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 	ws, err := daemonplacement.WorkspaceDaemon(ctx, s.deps.Repo, userID, worktree.ProjectID, worktree.ID, chatID)

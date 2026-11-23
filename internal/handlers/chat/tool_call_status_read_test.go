@@ -48,9 +48,11 @@ func TestGetMessage_PopulatesDurableToolCallStatus(t *testing.T) {
 	}))
 
 	svc, err := message.New(message.Deps{
-		Logger: slog.Default(),
-		Config: &typedconfig.Config{},
-		Repo:   repo,
+		Logger:  slog.Default(),
+		Config:  &typedconfig.Config{},
+		Repo:    repo,
+		Chats:   store.NewChatExtStore(repo.ORM()),
+		Senders: store.NewThreadExtStore(repo.ORM()),
 	})
 	require.NoError(t, err)
 	resp, err := svc.GetMessage(ctx, connect.NewRequest(&reliantv1.GetMessageRequest{
@@ -87,7 +89,7 @@ func TestListMessages_PopulatesDurableToolCallStatus(t *testing.T) {
 		UpdatedAt:   time.Now().UTC(),
 	}))
 
-	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}}
+	svc := &Service{deps: Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}}
 	resp, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
 		ChatId: f.ChatID,
 	}))

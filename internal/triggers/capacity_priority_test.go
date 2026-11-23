@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/require"
 	enums "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -12,15 +14,16 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
 func policyCapacityFixture(t *testing.T, policy *reliantv1.WorkflowConcurrency) (*fireFixture, *describedStarter, *recordingStarter) {
 	f := newFireFixture(t, nil)
 	starter := &describedStarter{flakyStarter: f.starter, descriptions: map[string]*workflowservice.DescribeWorkflowExecutionResponse{}}
-	launcher := launch.NewLauncher(f.repo, threads.NewService(f.repo), starter, noopRunRecorder{}, "test-queue")
+	launcher := launch.New(launch.Deps{Store: f.repo, Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	wake := &recordingStarter{}
-	f.firer = NewFirer(f.repo, launcher).WithWorkflows(capacityResolver{wf: &reliantv1.Workflow{Concurrency: policy}}).
+	f.firer = NewFirer(NewStores(f.repo), launcher).WithWorkflows(capacityResolver{wf: &reliantv1.Workflow{Concurrency: policy}}).
 		WithCapacityDescriptions(starter).WithCapacityWake(wake, "test-queue")
 	return f, starter, wake
 }

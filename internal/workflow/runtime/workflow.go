@@ -13,6 +13,10 @@ import (
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 
 	"github.com/google/uuid"
+	"go.temporal.io/sdk/log"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/ptr"
@@ -24,9 +28,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/threadcancel"
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
-	"go.temporal.io/sdk/log"
-	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/workflow"
 )
 
 // reliantNamespace is a UUID v5 namespace for generating deterministic UUIDs
@@ -202,7 +203,7 @@ type SpawnHandoff struct {
 	// can fix (providerCapacityError): a chat-wide capacity wake resumes it
 	// (capacity_wake.go). Carried across a continue-as-new with the record.
 	CapacityStop bool `json:"capacity_stop,omitempty"`
-	// LastFailure is the digest (db.FailureReportDigest) of the failure report
+	// LastFailure is the digest (core.FailureReportDigest) of the failure report
 	// this stopped sub-agent's parent last received from it. A resumed run that
 	// fails again with the same report does not send it a second time
 	// (runDetachedSpawnChild): every message resumes the whole chat, and a

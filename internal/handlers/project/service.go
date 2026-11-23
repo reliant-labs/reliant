@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+
 	"connectrpc.com/connect"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
@@ -25,6 +27,19 @@ type Deps struct {
 	// Repo stores projects and what hangs off them: their daemons, repos,
 	// main worktree, seeded config row and prompts.
 	Repo Repository
+	// Lookups finds a user's project by path or remote within an org.
+	Lookups ProjectLookups
+	// Installs lists the checkouts a machine holds.
+	Installs DaemonInstalls
+	// Detachments records and reads a project's detachments from machines.
+	Detachments Detachments
+	// Projects reads a project the caller may write (owner and org decided
+	// together: projectaccess).
+	Projects projectaccess.Service
+	// Purges schedules, restores and purges a project (projectpurge).
+	Purges ProjectPurges
+	// ProjectConfigs seeds the config record of a new project.
+	ProjectConfigs ProjectConfigs
 	// Router runs every filesystem and git operation on the caller's
 	// daemon, which owns the filesystem. The API server always has one; in
 	// a composition without one, the daemon-backed steps fail through their
@@ -95,6 +110,24 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("project: Deps.Repo is required")
+	}
+	if d.Lookups == nil {
+		return fmt.Errorf("project: Deps.Lookups is required")
+	}
+	if d.Installs == nil {
+		return fmt.Errorf("project: Deps.Installs is required")
+	}
+	if d.Detachments == nil {
+		return fmt.Errorf("project: Deps.Detachments is required")
+	}
+	if d.Projects == nil {
+		return fmt.Errorf("project: Deps.Projects is required")
+	}
+	if d.ProjectConfigs == nil {
+		return fmt.Errorf("project: Deps.ProjectConfigs is required")
+	}
+	if d.Purges == nil {
+		return fmt.Errorf("project: Deps.Purges is required")
 	}
 	if d.Ledger == nil {
 		return fmt.Errorf("project: Deps.Ledger is required")

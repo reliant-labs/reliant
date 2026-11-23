@@ -193,8 +193,8 @@ func TestTriggerEventQueries(t *testing.T) {
 	if err := store.SetLaunchEventRunStatus(ctx, env.ORM, "chat-ev", core.TriggerRunCompleted); err != nil {
 		t.Fatalf("SetLaunchEventRunStatus: %v", err)
 	}
-	if err := env.Repo.SetLaunchEventRunStatus(ctx, "chat-none", core.TriggerRunFailed); err != nil {
-		t.Fatalf("Repo.SetLaunchEventRunStatus(no launch event): %v", err)
+	if err := store.SetLaunchEventRunStatus(ctx, env.Repo.ORM(), "chat-none", core.TriggerRunFailed); err != nil {
+		t.Fatalf("store.SetLaunchEventRunStatus(no launch event, Repo.ORM()): %v", err)
 	}
 	if err := store.SetLaunchEventRunStatus(ctx, env.ORM, "chat-none", core.TriggerRunFailed); err != nil {
 		t.Fatalf("SetLaunchEventRunStatus(no launch event): %v", err)
@@ -239,7 +239,7 @@ func TestTriggerEventQueries(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListStalePendingTriggerEvents(%d): %v", limit, err)
 		}
-		twin, err := env.Repo.ListStalePendingTriggerEvents(ctx, cutoff, limit)
+		twin, err := store.ListStalePendingTriggerEvents(ctx, env.ORM, cutoff, limit)
 		if err != nil {
 			t.Fatalf("Repo.ListStalePendingTriggerEvents(%d): %v", limit, err)
 		}
@@ -263,7 +263,7 @@ func TestTriggerEventQueries(t *testing.T) {
 	if settled, err := store.SettlePendingTriggerEvent(ctx, env.ORM, "ev-pending-1", core.TriggerEventSkipped, "filtered", nil); err != nil || !settled {
 		t.Fatalf("SettlePendingTriggerEvent = %v, %v; want settled", settled, err)
 	}
-	if settled, err := env.Repo.SettlePendingTriggerEvent(ctx, "ev-pending-1", core.TriggerEventFailed, "again", nil); err != nil || settled {
+	if settled, err := store.SettlePendingTriggerEvent(ctx, env.ORM, "ev-pending-1", core.TriggerEventFailed, "again", nil); err != nil || settled {
 		t.Fatalf("Repo.SettlePendingTriggerEvent(settled) = %v, %v; want not applied", settled, err)
 	}
 	if claimed, err := env.Repo.ClaimPendingTriggerEvent(ctx, "ev-pending-2", map[string]any{"start": "y"}, nil); err != nil || !claimed {

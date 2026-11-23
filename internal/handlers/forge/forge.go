@@ -292,7 +292,7 @@ func (s *Service) forgeProject(ctx context.Context, projectID, userID string) (*
 	if strings.TrimSpace(projectID) == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+	project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		// The store's NotFound (core.ErrProjectNotFound) covers a project that
 		// does not exist and one that is someone else's alike.

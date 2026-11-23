@@ -13,6 +13,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
@@ -26,10 +27,10 @@ func TestCapacityLaunchWakesTheNextWaitingEvent(t *testing.T) {
 	f := newFireFixture(t, nil)
 	ctx := context.Background()
 	starter := &describedStarter{flakyStarter: f.starter, descriptions: map[string]*workflowservice.DescribeWorkflowExecutionResponse{}}
-	launcher := launch.NewLauncher(f.repo, threads.NewService(f.repo), starter, noopRunRecorder{}, "test-queue")
+	launcher := launch.New(launch.Deps{Store: f.repo, Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	resolver := capacityResolver{wf: &reliantv1.Workflow{Concurrency: &reliantv1.WorkflowConcurrency{MaxRunning: 2}}}
 	wake := &recordingStarter{}
-	f.firer = NewFirer(f.repo, launcher).WithWorkflows(resolver).WithCapacityDescriptions(starter).WithCapacityWake(wake, "test-queue")
+	f.firer = NewFirer(NewStores(f.repo), launcher).WithWorkflows(resolver).WithCapacityDescriptions(starter).WithCapacityWake(wake, "test-queue")
 
 	first, err := f.firer.Fire(ctx, f.fireAt(2))
 	require.NoError(t, err)
@@ -73,7 +74,6 @@ func TestCapacityLaunchWakesTheNextWaitingEvent(t *testing.T) {
 
 type orderedCapacityRepo struct {
 	capacityRedriveRepo
-	capacityRepository
 	calls []string
 }
 

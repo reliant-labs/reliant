@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
@@ -31,7 +32,7 @@ func TestSweep_UnarchiveBetweenPhasesNeverRemoves(t *testing.T) {
 	e := newEnv(t)
 	wt, path := e.worktree(t, "race", true)
 	var phases atomic.Int32
-	e.sweeper = New(e.repo, senderFunc(func(ctx context.Context, u, d, cmd string, payload []byte, to int32) ([]byte, error) {
+	e.sweeper = New(stores(e.repo), senderFunc(func(ctx context.Context, u, d, cmd string, payload []byte, to int32) ([]byte, error) {
 		out, err := e.sender.SendDaemonCommandToDaemon(ctx, u, d, cmd, payload, to)
 		if phases.Add(1) == 1 {
 			require.NoError(t, e.repo.UnarchiveWorktree(e.ctx, wt.ID)) // the user clicks Restore
@@ -58,7 +59,7 @@ func TestSweep_RelockedAsActiveRefusesAStaleRemoval(t *testing.T) {
 
 	e := newEnv(t)
 	wt, path := e.worktree(t, "relock", true)
-	cands, err := e.repo.ListWorktreesForReclaim(e.ctx)
+	cands, err := store.NewWorktreeExtStore(e.repo.ORM()).ListWorktreesForReclaim(e.ctx)
 	require.NoError(t, err)
 	var cand *core.ReclaimCandidate
 	for _, c := range cands {
@@ -67,7 +68,7 @@ func TestSweep_RelockedAsActiveRefusesAStaleRemoval(t *testing.T) {
 		}
 	}
 	require.NotNil(t, cand)
-	live, _ := e.repo.ListLiveWorktreePathsForUser(e.ctx, e.userID)
+	live, _ := store.NewWorktreeExtStore(e.repo.ORM()).ListLiveWorktreePathsForUser(e.ctx, e.userID)
 	req, _ := e.sweeper.describe(e.ctx, []*core.ReclaimCandidate{cand}, live, false, nil)
 	_, err = e.sweeper.send(e.ctx, target{e.userID, e.daemon}, cmdReconcile, 60000, req) // phase one: claims
 	require.NoError(t, err)
@@ -232,12 +233,12 @@ func TestStorageView_DiskAlertIsTheVolumeUnderPressure(t *testing.T) {
 	}
 
 	put(12*gib, false)
-	view, err := StorageView(e.ctx, e.repo, e.userID)
+	view, err := StorageView(e.ctx, stores(e.repo), e.userID)
 	require.NoError(t, err)
 	assert.Empty(t, view, "no volume under pressure and nothing held: no item")
 
 	put(0, true)
-	view, err = StorageView(e.ctx, e.repo, e.userID)
+	view, err = StorageView(e.ctx, stores(e.repo), e.userID)
 	require.NoError(t, err)
 	require.Len(t, view, 1, "a full cache volume raises the item even with nothing held")
 	assert.True(t, view[0].DiskLow())
@@ -250,7 +251,7 @@ func TestStorageView_DiskAlertIsTheVolumeUnderPressure(t *testing.T) {
 	store(&reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{
 		{Label: "build caches & docker", TotalBytes: 40 * gib, FreeBytes: 0, Pressure: true, LastNoSpaceAtMs: time.Now().UnixMilli()},
 	}})
-	view, err = StorageView(e.ctx, e.repo, e.userID)
+	view, err = StorageView(e.ctx, stores(e.repo), e.userID)
 	require.NoError(t, err)
 	require.Len(t, view, 1)
 	assert.Equal(t, diskwatch.SeverityFailing, view[0].Severity)
@@ -258,7 +259,7 @@ func TestStorageView_DiskAlertIsTheVolumeUnderPressure(t *testing.T) {
 	// The pre-report shape measured the worktree root; it is not a report.
 	require.NoError(t, e.repo.SetDaemonStorageState(e.ctx, e.daemon,
 		`{"free_bytes":1,"total_bytes":`+itoa(100*gib)+`,"reported_at":"`+time.Now().UTC().Format(time.RFC3339)+`"}`))
-	view, err = StorageView(e.ctx, e.repo, e.userID)
+	view, err = StorageView(e.ctx, stores(e.repo), e.userID)
 	require.NoError(t, err)
 	assert.Empty(t, view)
 }
@@ -281,13 +282,13 @@ func TestCleanup_DataAndNestedWorktreesAreListedButNeverRemoved(t *testing.T) {
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
 	require.Equal(t, "data", e.get(t, wt.ID).CleanupMetadata.HeldReason)
 
-	view, err := StorageView(e.ctx, e.repo, e.userID)
+	view, err := StorageView(e.ctx, stores(e.repo), e.userID)
 	require.NoError(t, err)
 	require.Len(t, view, 1)
 	require.Len(t, view[0].Held, 1)
 	assert.False(t, view[0].Held[0].Removable)
 
-	results, _, err := e.sweeper.Cleanup(e.ctx, e.repo, e.userID, e.daemon, []string{wt.ID})
+	results, _, err := e.sweeper.Cleanup(e.ctx, stores(e.repo), e.userID, e.daemon, []string{wt.ID})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, CleanupSkipped, results[0].Outcome)
@@ -307,7 +308,7 @@ func TestStartCleanup_RunsDetachedAndRecordsSnapshotRefs(t *testing.T) {
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
 
 	ctx, cancel := context.WithCancel(e.ctx)
-	accepted, skipped, err := e.sweeper.StartCleanup(ctx, e.repo, e.userID, e.daemon, []string{wt.ID, "nope"})
+	accepted, skipped, err := e.sweeper.StartCleanup(ctx, stores(e.repo), e.userID, e.daemon, []string{wt.ID, "nope"})
 	require.NoError(t, err)
 	cancel() // the request that started it goes away
 	assert.Equal(t, []string{wt.ID}, accepted)
@@ -334,7 +335,7 @@ func TestSweep_KeptWorktreesAreHeldVisibleAndBackedOff(t *testing.T) {
 	assert.Equal(t, "kept", meta.HeldReason)
 	assert.True(t, exists(path))
 
-	view, err := StorageView(e.ctx, e.repo, e.userID)
+	view, err := StorageView(e.ctx, stores(e.repo), e.userID)
 	require.NoError(t, err)
 	require.Len(t, view, 1, "a kept worktree shows in the inbox")
 	require.Len(t, view[0].Held, 1)
@@ -354,7 +355,7 @@ func TestCleanup_RemovesAKeptWorktree(t *testing.T) {
 	e.sweeper.WithKeepFiles(keepAll{})
 	wt, path := e.worktree(t, "keptclean", true)
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
-	results, _, err := e.sweeper.Cleanup(e.ctx, e.repo, e.userID, e.daemon, []string{wt.ID})
+	results, _, err := e.sweeper.Cleanup(e.ctx, stores(e.repo), e.userID, e.daemon, []string{wt.ID})
 	require.NoError(t, err)
 	require.Equal(t, CleanupRemoved, results[0].Outcome, "%+v", results[0])
 	assert.False(t, exists(path))
@@ -380,12 +381,12 @@ func TestCleaning_ExpiresWhenItsOwnerDies(t *testing.T) {
 	cur := e.get(t, wt.ID)
 	assert.False(t, cur.CleanupMetadata.CleaningNow(time.Now()), "an expired lease is not cleaning")
 
-	view, err := StorageView(e.ctx, e.repo, e.userID)
+	view, err := StorageView(e.ctx, stores(e.repo), e.userID)
 	require.NoError(t, err)
 	require.Len(t, view[0].Held, 1)
 	assert.False(t, view[0].Held[0].Cleaning, "the inbox must not show a dead clean-up as running")
 
-	accepted, _, err := e.sweeper.StartCleanup(e.ctx, e.repo, e.userID, e.daemon, []string{wt.ID})
+	accepted, _, err := e.sweeper.StartCleanup(e.ctx, stores(e.repo), e.userID, e.daemon, []string{wt.ID})
 	require.NoError(t, err)
 	assert.Equal(t, []string{wt.ID}, accepted, "Clean up is not blocked by a flag whose owner is gone")
 	e.sweeper.WaitCleanups()
@@ -436,12 +437,12 @@ func TestListLiveWorktreePathsForUser_IsScopedToTheUser(t *testing.T) {
 	e := newEnv(t)
 	_, path := e.worktree(t, "mine", false)
 	other := newEnv(t)
-	otherPaths, err := other.repo.ListLiveWorktreePathsForUser(other.ctx, other.userID)
+	otherPaths, err := store.NewWorktreeExtStore(other.repo.ORM()).ListLiveWorktreePathsForUser(other.ctx, other.userID)
 	require.NoError(t, err)
 	for _, p := range otherPaths {
 		assert.NotEqual(t, path, p.Path, "another user's rows must not influence mine")
 	}
-	mine, err := e.repo.ListLiveWorktreePathsForUser(e.ctx, e.userID)
+	mine, err := store.NewWorktreeExtStore(e.repo.ORM()).ListLiveWorktreePathsForUser(e.ctx, e.userID)
 	require.NoError(t, err)
 	var found bool
 	for _, p := range mine {
@@ -469,7 +470,7 @@ func TestSweep_DeliversAPendingFenceRetirement(t *testing.T) {
 	archived := e.get(t, wt.ID)
 	fence := Fence(archived)
 	// The machine claims it under that fence.
-	live, _ := e.repo.ListLiveWorktreePathsForUser(e.ctx, e.userID)
+	live, _ := store.NewWorktreeExtStore(e.repo.ORM()).ListLiveWorktreePathsForUser(e.ctx, e.userID)
 	req, _ := e.sweeper.describe(e.ctx, []*core.ReclaimCandidate{{Worktree: archived, OwnerUserID: e.userID, ProjectPath: e.project.Path}}, live, false, nil)
 	_, err := e.sweeper.send(e.ctx, target{e.userID, e.daemon}, cmdReconcile, 60000, req)
 	require.NoError(t, err)

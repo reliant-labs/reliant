@@ -187,7 +187,7 @@ func postNotice(ctx context.Context, repo threads.Repository, chatID, thread, wo
 		opts.ActivityID = &key
 		opts.AttemptNumber = 1
 	}
-	if _, err := threads.NewService(repo).SaveMessage(ctx, opts); err != nil {
+	if _, err := threads.New(threads.Deps{Repo: repo}).SaveMessage(ctx, opts); err != nil {
 		logging.WarnContext(ctx, "[Failover] Could not save the provider notice; continuing",
 			"chatID", chatID, "thread", thread, "error", err)
 	}

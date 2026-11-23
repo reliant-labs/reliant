@@ -10,13 +10,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// MemberReader reads a pool and its members. *db.Repo implements it.
+// MemberReader reads a pool and its members. store.MachinePoolExtStore implements it.
 type MemberReader interface {
 	GetMachinePoolForUser(ctx context.Context, userID, id string) (*core.MachinePool, error)
 	ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error)
 }
 
-// Store is what the Placer reads. *db.Repo implements it.
+// Store is what the Placer reads. store.MachinePoolExtStore implements it.
 type Store interface {
 	MemberReader
 	// LockMachinePool and CountMachinePoolMemberLiveRuns run inside the

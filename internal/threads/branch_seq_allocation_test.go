@@ -49,7 +49,7 @@ func TestBranchSeqAllocationClearsInheritedHistory(t *testing.T) {
 	)
 
 	// What the branch actually renders.
-	inherited, err := NewService(h.repo).LoadCurrentMessages(ctx, branchThread.ID)
+	inherited, err := New(Deps{Repo: h.repo}).LoadCurrentMessages(ctx, branchThread.ID)
 	if err != nil {
 		t.Fatalf("load branch messages: %v", err)
 	}

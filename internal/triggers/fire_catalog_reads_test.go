@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -128,7 +131,7 @@ func TestFireReadsItsPinnedCatalogOncePerSide(t *testing.T) {
 			require.NoError(t, p.repo.CreateWorktree(p.ctx, &db.Worktree{ID: uuid.NewString(), Name: "main", Path: t.TempDir(), Branch: "main", BaseBranch: "main", ProjectID: p.projectID, Status: int32(pb.WorktreeStatus_WORKTREE_STATUS_ACTIVE), IsMain: true, CreatedAt: now, UpdatedAt: now, LastActive: now}))
 			repo := &fireReadCountingRepo{Repo: p.repo, pinned: map[string]int{}}
 			starter := &pinRecordingStarter{}
-			launcher := launch.NewLauncher(repo, threads.NewService(p.repo), starter, noopRunRecorder{}, "test-q")
+			launcher := launch.New(launch.Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: p.repo}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-q"})
 			workflows := LaunchWorkflows{Repo: repo}
 			key := "reads-" + uuid.NewString()
 			kind := core.TriggerEventKindSchedule
@@ -141,9 +144,9 @@ func TestFireReadsItsPinnedCatalogOncePerSide(t *testing.T) {
 				created, cerr := p.repo.CreateTriggerEvent(p.ctx, &core.TriggerEvent{ID: uuid.NewString(), UserID: p.userID, TriggerID: &p.webhook.ID, Kind: kind, DedupeKey: key, OccurredAt: now, CreatedAt: now, Payload: map[string]any{}, Outcome: core.TriggerEventPending})
 				require.NoError(t, cerr)
 				require.True(t, created)
-				out, err = NewEventFirer(repo, launcher).WithWorkflows(workflows).Fire(p.ctx, EventFireInput{TriggerID: p.webhook.ID, Kind: kind, DedupeKey: key, Manual: true})
+				out, err = NewEventFirer(NewStores(repo.Repo), launcher).WithWorkflows(workflows).Fire(p.ctx, EventFireInput{TriggerID: p.webhook.ID, Kind: kind, DedupeKey: key, Manual: true})
 			} else {
-				out, err = NewFirer(repo, launcher).WithWorkflows(workflows).Fire(p.ctx, FireRequest{TriggerID: p.schedule.ID, FireWorkflowID: key, ScheduledAt: now})
+				out, err = NewFirer(NewStores(repo.Repo), launcher).WithWorkflows(workflows).Fire(p.ctx, FireRequest{TriggerID: p.schedule.ID, FireWorkflowID: key, ScheduledAt: now})
 			}
 			require.NoError(t, err)
 			require.Equal(t, string(core.TriggerEventLaunched), out.Outcome, out.Reason)

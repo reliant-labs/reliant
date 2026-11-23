@@ -8,14 +8,16 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/reliant-labs/reliant/internal/threads"
 
+	"github.com/stretchr/testify/require"
+
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
-	"github.com/stretchr/testify/require"
 )
 
 func TestGetRunNodeOutput(t *testing.T) {
@@ -59,7 +61,7 @@ func TestGetRunExecuteIncludesNodeMetadata(t *testing.T) {
 		require.Equal(t, root, id)
 		return []*db.StepExecution{{ID: "step", StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: ptr.Of(int64(2)), OutputJSON: ptr.Of(`{"stderr":"token=hidden"}`)}}, nil
 	}
-	resp, err := (&getRunTool{repo: repo, threads: threads.NewService(repo)}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
+	resp, err := (&getRunTool{repo: repo, threads: threads.New(threads.Deps{Repo: repo})}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
 	var detail RunDetail
@@ -87,7 +89,7 @@ func TestGetRunReportsAUsageLimitWait(t *testing.T) {
 		return nil, svcerr.NotFound("context window")
 	}
 	repo.ListRunNodeExecutionsFunc = func(context.Context, string, int) ([]*db.StepExecution, error) { return nil, nil }
-	resp, err := (&getRunTool{repo: repo, threads: threads.NewService(repo)}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
+	resp, err := (&getRunTool{repo: repo, threads: threads.New(threads.Deps{Repo: repo})}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
 	require.Contains(t, resp.Content, "State: running\n")
@@ -119,7 +121,7 @@ func TestGetRunReportsWhyARunFailedBeforeItsFirstNode(t *testing.T) {
 	}
 	repo.ListRunNodeExecutionsFunc = func(context.Context, string, int) ([]*db.StepExecution, error) { return nil, nil }
 
-	resp, err := (&getRunTool{repo: repo, threads: threads.NewService(repo)}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
+	resp, err := (&getRunTool{repo: repo, threads: threads.New(threads.Deps{Repo: repo})}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
 	require.Contains(t, resp.Content, "State: failed\nFailure: workflow input validation failed")

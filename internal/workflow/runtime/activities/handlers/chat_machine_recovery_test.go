@@ -213,7 +213,7 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	mcp := bound.MCP.EnsureProjectServersLoaded(toolCtx, f.path)
 	require.NotEmpty(t, mcp.Errors)
 	var toolsOut ExecuteToolsOutput
-	err = f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), f.remote).Execute, ExecuteToolsInput{
+	err = f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), toolCallsOf(f.h.Repo()), f.remote).Execute, ExecuteToolsInput{
 		ChatID: f.chat, Thread: f.chat, ProjectPath: f.path,
 		ToolCalls: []message.ToolCall{{ID: uuid.NewString(), Name: "shell", Input: `{"command":"pwd"}`}},
 	}, &toolsOut)

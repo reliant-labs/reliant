@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+
 	"connectrpc.com/connect"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -28,6 +30,9 @@ type Deps struct {
 	Repo Repository
 	// Favorites stores command favorites.
 	Favorites Favorites
+	// Projects reads a project the caller may write (owner and org decided
+	// together: projectaccess).
+	Projects projectaccess.Service
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -47,6 +52,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Favorites == nil {
 		return fmt.Errorf("package_commands: Deps.Favorites is required")
+	}
+	if d.Projects == nil {
+		return fmt.Errorf("package_commands: Deps.Projects is required")
 	}
 	return nil
 }

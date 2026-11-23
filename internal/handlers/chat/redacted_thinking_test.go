@@ -30,7 +30,7 @@ func TestRedactedThinkingCiphertextNeverReachesAClient(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
-	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}))
+	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}))
 	f := dbtest.SeedTranscriptBodies(t, ctx, repo, "test-user")
 
 	const ciphertext = "EmwKAhgBEgy3va3pzix/LafPsn4aDFIT2Xlxh0L5L8rLVyIwxtE3rAFBa8cr3qpPkNRj2YfWXGmKDxH4mUcR0FnMPF3A=="

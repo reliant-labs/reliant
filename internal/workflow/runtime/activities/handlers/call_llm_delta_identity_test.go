@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -71,7 +73,7 @@ func TestCallLLM_DeltaIdentity(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	hub := &captureHub{}
-	activityInstance := NewCallLLMActivity(h.Repo(), hub, nil, &staticConfigProvider{}, resolver, nil)
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: hub, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
 
 	preallocatedID := uuid.NewString()
 	input := callLLMInput(chat.ID, chat.ID, "mock-model")
@@ -119,7 +121,7 @@ func TestCallLLM_DeltaIdentity_NoPreallocatedID(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	hub := &captureHub{}
-	activityInstance := NewCallLLMActivity(h.Repo(), hub, nil, &staticConfigProvider{}, resolver, nil)
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: hub, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
 
 	var output CallLLMOutput
 	err := h.ExecuteActivity(activityInstance.Execute, callLLMInput(chat.ID, chat.ID, "mock-model"), &output)
@@ -240,7 +242,7 @@ func TestCallLLM_CancelledStreamPersistsPartialTurn(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	hub := &captureHub{}
-	activityInstance := NewCallLLMActivity(h.Repo(), hub, nil, &staticConfigProvider{}, resolver, nil)
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: hub, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
 
 	input := callLLMInput(chat.ID, chat.ID, "mock-model")
 	runCancelled := func(actCtx context.Context, input ActivityInput) (*CallLLMOutput, error) {
@@ -317,7 +319,7 @@ func TestCallLLM_CancelledStreamReportsInterrupted(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-	activityInstance := NewCallLLMActivity(h.Repo(), &captureHub{}, nil, &staticConfigProvider{}, resolver, nil)
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: &captureHub{}, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
 
 	input := callLLMInput(chat.ID, chat.ID, "mock-model")
 	runCancelled := func(actCtx context.Context, input ActivityInput) (*CallLLMOutput, error) {
@@ -360,7 +362,7 @@ func TestCallLLM_CompletedStreamDoesNotReportInterrupted(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-	activityInstance := NewCallLLMActivity(h.Repo(), &captureHub{}, nil, &staticConfigProvider{}, resolver, nil)
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), ToolResults: toolCallsOf(h.Repo()), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: &captureHub{}, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
 
 	var output CallLLMOutput
 	require.NoError(t, h.ExecuteActivity(activityInstance.Execute,

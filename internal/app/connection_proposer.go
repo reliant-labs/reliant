@@ -5,10 +5,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // connectionProposer is tools.ConnectionProposer for the worker, where
@@ -22,7 +25,7 @@ type connectionProposer struct {
 }
 
 type chatApprovals interface {
-	ListApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
+	ListApprovalsByChat(ctx context.Context, chatID string) ([]*core.Approval, error)
 }
 
 type ownedConnections interface {
@@ -33,8 +36,8 @@ type orgRoles interface {
 	RoleFresh(ctx context.Context, userID, orgID string) (role string, ok bool, err error)
 }
 
-func newConnectionProposer(repo *db.Repo, roles orgRoles) tools.ConnectionProposer {
-	return &connectionProposer{approvals: repo, connections: repo.Connections(), roles: roles}
+func newConnectionProposer(repo *db.Repo, conns connectionvault.Service, roles orgRoles) tools.ConnectionProposer {
+	return &connectionProposer{approvals: store.NewApprovalExtStore(repo.ORM()), connections: conns, roles: roles}
 }
 
 // IsOrgAdmin is true only for a role control-plane names owner or admin; an

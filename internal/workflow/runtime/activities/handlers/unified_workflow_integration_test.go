@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -17,8 +20,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // ============================================================================
@@ -326,7 +327,7 @@ func TestUnifiedWorkflow_ExecuteTools_SaveToolResults(t *testing.T) {
 			EndTime:   time.Now(),
 		})
 
-		executeActivity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
+		executeActivity := NewExecuteToolsActivity(h.Repo(), toolCallsOf(h.Repo()), mockExecutor)
 		env.RegisterActivity(executeActivity.Execute)
 
 		executeInput := ExecuteToolsInput{
@@ -562,7 +563,7 @@ func TestUnifiedWorkflow_EndToEnd(t *testing.T) {
 			EndTime:   time.Now(),
 		})
 
-		executeActivity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
+		executeActivity := NewExecuteToolsActivity(h.Repo(), toolCallsOf(h.Repo()), mockExecutor)
 		env.RegisterActivity(executeActivity.Execute)
 
 		executeInput := ExecuteToolsInput{

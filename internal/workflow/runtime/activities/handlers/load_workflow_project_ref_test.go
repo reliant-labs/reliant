@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
-	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
+	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
 // Issue #623, app half of bug 1: a run resolves project://X by the workflow's
@@ -55,7 +57,7 @@ nodes:
 		{"slug": "blog-content-pipeline", "name": "blog-content-pipeline", "relative_path": ".reliant/workflows/blog.yaml", "yaml_content": pipeline},
 		{"slug": "content-next", "name": "content-next", "relative_path": ".reliant/workflows/content-next.yaml", "yaml_content": contentNext},
 	})
-	require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 		ProjectID: projectID, DaemonID: "daemon-" + uuid.NewString(),
 		ProjectWorkflowsJSON: &workflowsJSON, PushedAt: now,
 	}))

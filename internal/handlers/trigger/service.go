@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+
 	"connectrpc.com/connect"
 	"go.temporal.io/sdk/client"
 
@@ -35,6 +37,11 @@ type Deps struct {
 	Repo Repository
 	// Owners re-owns an orphaned trigger (deps.go).
 	Owners Owners
+	// Projects reads a project the caller may write (owner and org decided
+	// together: projectaccess).
+	Projects projectaccess.Service
+	// Pools reads the machine pool a pool-bound trigger names.
+	Pools Pools
 
 	// OrgMoves turns the triggers a project move paused back on.
 	OrgMoves OrgMoveResumer
@@ -55,6 +62,11 @@ type Deps struct {
 	// (self-hosted) nothing is minted.
 	// forge:optional-dep
 	ControlPlane AutomationTokens
+
+	// AutomationKeys holds each daemon's delegated token the minted one is
+	// stored in (credentials/automationtokens). Required with ControlPlane.
+	// forge:optional-dep
+	AutomationKeys AutomationKeyStore
 
 	// The inbound kinds (webhook, integration and workflow-event triggers).
 	// Each is optional; a kind whose dependency is missing is rejected with
@@ -189,8 +201,17 @@ func (d Deps) validateDeps() error {
 	if d.Owners == nil {
 		return fmt.Errorf("trigger: Deps.Owners is required")
 	}
+	if d.ControlPlane != nil && d.AutomationKeys == nil {
+		return fmt.Errorf("trigger: Deps.AutomationKeys is required with Deps.ControlPlane")
+	}
+	if d.Projects == nil {
+		return fmt.Errorf("trigger: Deps.Projects is required")
+	}
 	if d.OrgMoves == nil {
 		return fmt.Errorf("trigger: Deps.OrgMoves is required")
+	}
+	if d.Pools == nil {
+		return fmt.Errorf("trigger: Deps.Pools is required")
 	}
 	return nil
 }
@@ -223,7 +244,7 @@ func New(deps Deps) (*Service, error) {
 		s.publicURL = strings.TrimSpace(deps.Integrations.GetPublicUrl())
 	}
 	if deps.ControlPlane != nil {
-		s.grants = &automationGrants{client: deps.ControlPlane, keys: deps.Repo, triggers: deps.Repo}
+		s.grants = &automationGrants{client: deps.ControlPlane, keys: deps.AutomationKeys, triggers: deps.Repo}
 	}
 	return s, nil
 }

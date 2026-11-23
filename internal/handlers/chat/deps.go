@@ -13,7 +13,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/chatselection"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -38,6 +39,40 @@ type OrgResolver interface {
 type Questions interface {
 	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error)
 	ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
+}
+
+// Messages reads one message by id and a thread's newest turn: the send's
+// idempotency check asks whether a client message id is already taken and
+// whether anything answered it. store.MessageExtStore satisfies it.
+type Messages interface {
+	FindMessage(ctx context.Context, id string) (*core.Message, error)
+	LatestTurnInThread(ctx context.Context, threadID string) (*core.Message, error)
+}
+
+// ToolBlocks reads tool-call and tool-result content blocks by tool call id.
+// store.MessageContentBlockExtStore satisfies it.
+type ToolBlocks interface {
+	FindToolBlock(ctx context.Context, toolCallID string, blockType reliantv1.ContentBlockType) (*core.MessageContentBlock, error)
+	ListToolBlocks(ctx context.Context, toolCallID string, blockType reliantv1.ContentBlockType) ([]*core.MessageContentBlock, error)
+}
+
+// Spawns reads the spawn tree a branch inherits and a resumed run is rebuilt
+// from: the sub-agents a branch's chat inherits, the background spawns still
+// open in a root execution, and a sub-agent that stopped on a failure.
+// store.ToolCallExtStore satisfies it. Each takes the chat, thread or workflow
+// id the handler already authorized.
+type Spawns interface {
+	ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*core.InheritedSpawnChild, error)
+	ListLiveBackgroundSpawns(ctx context.Context, rootWorkflowID string) ([]*core.LiveBackgroundSpawn, error)
+	GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string) (*core.StoppedSpawnAgent, error)
+}
+
+// durableState is what a resumed run is rebuilt from: the repository's durable
+// rows and the spawn tree. It is the one value handed to the runtime's
+// *FromDurableState helpers, which declare their own roles over it.
+type durableState struct {
+	Repository
+	Spawns
 }
 
 // Repository is everything the chat handlers read and write.
@@ -66,17 +101,12 @@ type Repository interface {
 	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
 	// MoveChatToProject moves an idle chat, with its plans, to another project.
 	MoveChatToProject(ctx context.Context, m db.ChatMove) (bool, error)
-	// ListCapacityWakeTargets lists the root runs of a user's chats that may
-	// have a thread blocked on a provider (WakeUserChats).
-	ListCapacityWakeTargets(ctx context.Context, userID string) ([]string, error)
 
 	// Threads and the workflows that run them.
 	ListThreadsByConversation(ctx context.Context, chatID string) ([]*db.Thread, error)
 	ReviveThread(ctx context.Context, threadID string) (int64, error)
 	ListForkedThreadIDs(ctx context.Context, threadIDs []string) ([]string, error)
-	ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*db.InheritedSpawnChild, error)
 	ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error)
-	IsLatestTurnInThread(ctx context.Context, threadID, messageID string) (bool, error)
 	CountMessagesInThread(ctx context.Context, threadID string) (int, error)
 	// ClaimUserActivation records a message as the user's activation (their
 	// first typed message ever) once, durably, and reports whether this call
@@ -91,8 +121,6 @@ type Repository interface {
 	ListMessages(ctx context.Context, chatID string, opts db.MessageListOptions) ([]*db.Message, error)
 	ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*db.MessageContentBlock, error)
 	GetToolCall(ctx context.Context, id string) (*db.ToolCall, error)
-	GetToolResultBlock(ctx context.Context, toolCallID string) (*db.MessageContentBlock, error)
-	ListToolResultBlocks(ctx context.Context, toolCallID string) ([]*db.MessageContentBlock, error)
 	ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*db.MessageContentBlock, error)
 	ListMessagesByIDs(ctx context.Context, ids []string) ([]*db.Message, error)
 
@@ -138,9 +166,7 @@ type Repository interface {
 	// runtime.StoppedSpawnFromDurableState, launch.LoadChatTrigger) declare
 	// unexported or anonymous roles, so their methods are written out here.
 	GetWorkflowCheckpoint(ctx context.Context, workflowID string) (*db.WorkflowCheckpoint, error)
-	ListLiveBackgroundSpawns(ctx context.Context, rootWorkflowID string) ([]*db.LiveBackgroundSpawn, error)
 	ListToolGrants(ctx context.Context, chatID string) ([]*db.ToolGrant, error)
-	GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string) (*db.StoppedSpawnAgent, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	// CreateNumberedMessage appends a message the handler builds itself (the
 	// branch repair), numbered from the counters.
@@ -152,9 +178,18 @@ type Repository interface {
 	threads.Repository
 	runs.Repository
 	launch.Store
-	chatselection.Store
+	// GetProjectWithUserCheck is the org-aware project read the handlers and the
+	// launcher share; db.Repo delegates it to projectaccess.
+	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	daemonchoice.Reader
 	daemonplacement.WorktreeReader
 	daemonplacement.PinStore
-	messageproto.Reader
+	messageproto.ToolCallReader
+}
+
+// Senders titles the senders of the messages a read assembles (a sender that
+// is another run's main thread is titled by that run).
+// store.ThreadExtStore satisfies it.
+type Senders interface {
+	SenderTitlesByThreadIDs(ctx context.Context, threadIDs []string) (map[string]string, error)
 }

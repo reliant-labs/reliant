@@ -6,10 +6,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
-	"github.com/reliant-labs/reliant/internal/models/message"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 func TestExecuteToolsActivity_CapsAggregateToolResultBatch(t *testing.T) {
@@ -30,7 +31,7 @@ func TestExecuteToolsActivity_CapsAggregateToolResultBatch(t *testing.T) {
 	executor.SetResult(secondID, &toolexec.ToolResult{Success: true, Content: secondContent})
 
 	compactionThreshold := int64(10_000)
-	activityInstance := NewExecuteToolsActivity(f.h.Repo(), executor)
+	activityInstance := NewExecuteToolsActivity(f.h.Repo(), toolCallsOf(f.h.Repo()), executor)
 	var output ExecuteToolsOutput
 	require.NoError(t, f.h.ExecuteActivity(activityInstance.Execute, ExecuteToolsInput{
 		ChatID:              f.chatID,

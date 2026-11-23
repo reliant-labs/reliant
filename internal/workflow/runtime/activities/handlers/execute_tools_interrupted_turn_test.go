@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -81,7 +82,7 @@ func TestInterruptedTurn_AnswersEveryCallWithoutRunningAny(t *testing.T) {
 	input.Runtime.InterruptedTurn = true
 
 	var output ExecuteToolsOutput
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), executor).Execute, input, &output))
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), toolCallsOf(f.h.Repo()), executor).Execute, input, &output))
 
 	for _, callID := range []string{finished, running, background, neverStarted, response} {
 		assert.Zero(t, executor.GetExecutionCount(callID), "an interrupted turn runs nothing: %s", callID)
@@ -118,7 +119,7 @@ func TestInterruptedTurn_AnswersEveryCallWithoutRunningAny(t *testing.T) {
 		"a backgrounded row is the reconciler's to close from the process's real outcome")
 	assert.Equal(t, core.ToolCallStatusCancelled, status(neverStarted),
 		"a call that never started is recorded, so the UI shows it stopped rather than nothing")
-	recorded, err := f.h.Repo().GetToolCallResult(ctx, neverStarted)
+	recorded, err := store.FindToolCallResult(ctx, f.h.Repo().ORM(), neverStarted)
 	require.NoError(t, err)
 	require.NotNil(t, recorded)
 	assert.Equal(t, NotRunInterruptedToolResultContent, recorded.Content,
@@ -133,9 +134,9 @@ type ToolResultMsgView struct {
 
 // unreadableToolCallStore is a store whose tool-call row lookups fail, as a
 // database that is briefly unavailable fails them.
-type unreadableToolCallStore struct{ ExecuteToolsStore }
+type unreadableToolCallStore struct{ ToolCalls }
 
-func (unreadableToolCallStore) GetToolCall(context.Context, string) (*db.ToolCall, error) {
+func (unreadableToolCallStore) FindToolCall(context.Context, string) (*core.ToolCall, error) {
 	return nil, errors.New("connection refused")
 }
 
@@ -166,8 +167,8 @@ func TestInterruptedTurn_AnUnreadableRowIsOfUnknownEffect(t *testing.T) {
 	input.Runtime.InterruptedTurn = true
 
 	var output ExecuteToolsOutput
-	store := unreadableToolCallStore{ExecuteToolsStore: f.h.Repo()}
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(store, executor).Execute, input, &output))
+	store := unreadableToolCallStore{ToolCalls: toolCallsOf(f.h.Repo())}
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), store, executor).Execute, input, &output))
 
 	assert.Zero(t, executor.GetExecutionCount(running), "an interrupted turn runs nothing")
 	require.Len(t, output.ToolResults, 1)

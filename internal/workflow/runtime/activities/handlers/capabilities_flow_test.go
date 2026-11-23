@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,9 +45,7 @@ func toolsConfig(permission string, preloaded, loadable, spawn []string) *relian
 // workflow recorded for the thread, and returns its output.
 func (f *noMachineFixture) turn(t *testing.T, cfg *reliantv1.ToolsConfig, grants []string) *reliantv1.CallLLMOutput {
 	t.Helper()
-	callLLM := NewCallLLMActivity(f.h.Repo(), nil,
-		tools.NewToolsFactory(&tools.ToolsOptions{Repo: f.h.Repo()}),
-		&staticConfigProvider{}, f.callLLM.driverResolver, f.callLLM.mcpBinder)
+	callLLM := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), ToolResults: toolCallsOf(f.h.Repo()), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: f.h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: f.callLLM.driverResolver, MCPBinder: f.callLLM.mcpBinder})
 	var output CallLLMOutput
 	require.NoError(t, f.h.ExecuteActivity(callLLM.Execute, ActivityInput{
 		Runtime: RuntimeContext{ChatID: f.chat.ID, Thread: f.chat.ID, ToolGrants: grants},
@@ -80,7 +80,7 @@ func serverToolExecutor(repo *db.Repo) toolexec.ToolExecutor {
 func (f *noMachineFixture) execute(t *testing.T, executor toolexec.ToolExecutor, caps *reliantv1.ToolCapabilities, calls ...message.ToolCall) *ExecuteToolsOutput {
 	t.Helper()
 	var output ExecuteToolsOutput
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), executor).Execute, ExecuteToolsInput{
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), toolCallsOf(f.h.Repo()), executor).Execute, ExecuteToolsInput{
 		ChatID:       f.chat.ID,
 		Thread:       f.chat.ID,
 		Capabilities: caps,
