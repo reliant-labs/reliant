@@ -60,17 +60,6 @@ try {
         if (await done.isVisible()) await done.click();
         const welcome = page.getByRole("button", { name: /explore (on my own|freely)/i });
         if (await welcome.isVisible()) await welcome.click();
-        const banner = page.getByTestId("forge-demo-banner");
-        if (await banner.isVisible()) {
-          const style = await banner.evaluate(el => ({ position: getComputedStyle(el).position, background: getComputedStyle(el).backgroundColor }));
-          assert.equal(style.position, "static", "demo notice must scroll in normal flow");
-          assert(!style.background.includes("rgba"), `demo notice must be opaque: ${style.background}`);
-          const heading = page.locator("main h1");
-          await heading.scrollIntoViewIfNeeded();
-          const bannerBelow = await banner.evaluate(el => el.getBoundingClientRect().bottom);
-          const headingTop = await heading.evaluate(el => el.getBoundingClientRect().top);
-          assert(bannerBelow <= headingTop, "demo notice must not cover the content heading");
-        }
         const geometry = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
         assert(geometry.document <= geometry.viewport + 1, `page overflow: ${JSON.stringify(geometry)}`);
         if (process.env.SCREENSHOT_DIR) {

@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { AlertCircle, FolderX, GitFork, Loader2 } from "lucide-react";
 
-import { createProjectFromRepo } from "../../hooks/project-queries";
+import { createProjectFromRepo, useProjectDaemonInstalls } from "../../hooks/project-queries";
 import {
   ProjectCheckoutState,
   type ProjectCheckoutMissing,
 } from "../../gen/reliant/v1/filesystem_pb";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { machineDisplayName } from "../../lib/machineName";
+import { setUpPathOn } from "../../lib/projectPlacement";
 import { describeCloneError } from "../Projects/cloneTargets";
 
 type NamedMachine = Parameters<typeof machineDisplayName>[0];
@@ -88,6 +89,7 @@ export function ProjectCheckoutMissingPanel({
   onCloneQueued: () => void;
 }) {
   const { daemons } = useDaemonStatus();
+  const installs = useProjectDaemonInstalls(Boolean(missing.remoteUrl && missing.daemonId));
   const [cloning, setCloning] = useState(false);
   const [cloneError, setCloneError] = useState<string | null>(null);
 
@@ -115,11 +117,20 @@ export function ProjectCheckoutMissingPanel({
     setCloning(true);
     setCloneError(null);
     try {
+      // The failed row's path is the one that failed: on a machine of
+      // another platform than the project's it is never creatable.
+      const path = setUpPathOn({
+        installs: installs.data ?? [],
+        projectId: missing.projectId,
+        path: missing.path,
+        daemonId: missing.daemonId,
+        platformOf: (id) => daemons.find((d) => d.daemonId === id)?.platform,
+      });
       await createProjectFromRepo({
         cloneUrl: missing.remoteUrl,
         daemonId: missing.daemonId,
         name: projectName,
-        path: missing.path,
+        ...(path ? { path } : {}),
       });
       onCloneQueued();
     } catch (err) {

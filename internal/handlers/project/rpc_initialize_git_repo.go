@@ -27,7 +27,7 @@ func (s *Service) InitializeGitRepo(
 		return nil, err
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.ProjectRows.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
@@ -101,7 +101,7 @@ func (s *Service) InitializeGitRepo(
 	// Adding one would contradict repo.Discover, which deliberately drops the
 	// root once nested repos are found, and would make worktree creation fan
 	// out an extra checkout for a repo the user never asked for.
-	existingRepos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
+	existingRepos, err := s.deps.Repos.ListReposByProject(ctx, project.ID)
 	if err != nil {
 		logging.WarnContext(ctx, "Failed to list repos after git init; skipping root repo registration",
 			"error", err, "projectID", project.ID)

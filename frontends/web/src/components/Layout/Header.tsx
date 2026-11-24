@@ -7,6 +7,7 @@ import {
   PanelRight,
   Menu,
   FolderGit2,
+  GitBranch,
   Settings,
 } from "lucide-react";
 import {
@@ -34,6 +35,7 @@ import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
 import { useCurrentWorktree, useMainWorktree } from "../../hooks/worktree-queries";
 import { BrandMark } from "../icons/BrandMark";
 import { homePath } from "@/lib/paths";
+import { useTopBarSlot } from "./topBar";
 
 interface HeaderProps {
   /** Home (`/`). When set, the header leads with the Reliant mark linking there. */
@@ -79,6 +81,8 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
 
     const {
       isElectron,
+      isMac,
+      isFullscreen,
       trafficLightPadding,
       dragRegionStyle,
       noDragRegionStyle,
@@ -92,8 +96,10 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
 
     const main = useMainWorktree(currentProject?.id);
     const mainWorktree = main && !main.deleted_at ? main : null;
+    const branchName = currentWorktree?.branch || currentWorktree?.name || mainWorktree?.branch || mainWorktree?.name || currentProject?.default_branch || "main";
 
-
+    // The open chat's header renders into this bar (topBar.ts).
+    const setChatSlot = useTopBarSlot((state) => state.setEl);
 
     // Helper to format shortcut display
     const formatShortcut = (handler: string): string => {
@@ -163,7 +169,10 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
         style={dragRegionStyle}
       >
         {/* Left side */}
-        <div className="flex items-center flex-1 transition-[padding] duration-200 ease-in-out gap-1" style={{ paddingLeft: trafficLightPadding }}>
+        <div
+          className="flex min-w-0 flex-1 items-center gap-1 transition-[padding] duration-200 ease-in-out"
+          style={{ paddingLeft: trafficLightPadding }}
+        >
 
           {/* The brand mark: the one place the signed-in shell says whose app
               this is. After the macOS traffic lights (trafficLightPadding), a
@@ -192,8 +201,11 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
 
           {/* Toggle Chat Sidebar button. A plain hamburger (owner, 2026-11-22):
               the one glyph every app uses for "show the navigation", the same
-              one the mobile shell's MobileMenuButton draws. */}
-          {onToggleChatSidebar && (
+              one the mobile shell's MobileMenuButton draws. In the macOS app a
+              docked nav has its own toggle beside the traffic lights
+              (AppShell, which carries the tour anchor then), so the bar does
+              not repeat it. */}
+          {onToggleChatSidebar && !(isMac && !isFullscreen && !windowAligned) && (
             <Tooltip
               content={`Toggle Chat Sidebar (${formatShortcut(
                 "onToggleSidebar"
@@ -213,48 +225,43 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             </Tooltip>
           )}
 
-        </div>
-
-        {/* Center - the project and workspace the open chat works in (its
-            files, terminal and git). Clicking it opens the sidebar's project
-            switcher. */}
-        {currentProject && (
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center">
-          <div
-            className="flex items-center gap-2 text-sm font-medium text-foreground/80 px-2 py-1 rounded-md bg-accent/20"
-            style={noDragRegionStyle}
-          >
-            <Tooltip content={`Switch project (${formatShortcut("onSwitchProject")})`} side="bottom" delay={300}>
-            <button
-              type="button"
-              className="rounded px-2 py-0.5 transition-colors hover:bg-accent/60"
-              onClick={openProjectSwitcher}
-              data-testid="header-project-name"
+          {/* The project and branch read left to right after the toggle, then
+              the open chat's title: one path (Vercel, Linear). The project
+              name opens the switcher; the branch is a fact. */}
+          {currentProject && (
+            <nav
+              aria-label="Project"
+              className="flex min-w-0 shrink items-center gap-0.5 text-ui"
+              data-testid="header-breadcrumb"
             >
-              {currentProject.name}
-            </button>
-            </Tooltip>
+              <Tooltip content={`Switch project (${formatShortcut("onSwitchProject")})`} side="bottom" delay={300}>
+                <button
+                  type="button"
+                  className="max-w-[12rem] truncate rounded-md px-1.5 py-1 font-medium text-foreground transition-colors hover:bg-foreground/5"
+                  onClick={openProjectSwitcher}
+                  data-testid="header-project-name"
+                  style={noDragRegionStyle}
+                >
+                  {currentProject.name}
+                </button>
+              </Tooltip>
+              {/* Below xl the chat title gets the room: the branch is in the nav's chat groups. */}
+              <span aria-hidden="true" className="hidden text-muted-foreground/50 xl:inline">/</span>
+              <span className="hidden min-w-0 items-center gap-1 px-1.5 text-muted-foreground xl:flex" title={branchName}>
+                <GitBranch className="size-3.5 shrink-0" aria-hidden="true" />
+                <span className="max-w-[14rem] truncate">{branchName}</span>
+              </span>
+            </nav>
+          )}
 
-            {currentProject && (
-              <>
-                <span className="text-muted-foreground/50">/</span>
-                <span className="flex items-center gap-1.5 px-2 py-0.5 text-muted-foreground">
-                  <FolderGit2 className="w-3.5 h-3.5 translate-y-[1px]" />
-                  <span>{currentWorktree?.branch || currentWorktree?.name || mainWorktree?.branch || mainWorktree?.name || currentProject.default_branch || "main"}</span>
-                </span>
-              </>
-            )}
-          </div>
+          {/* The open chat's header renders here (ChatHeader portals into it). */}
+          <div ref={setChatSlot} className="flex min-w-0 flex-1 items-center self-stretch" data-testid="topbar-chat-slot" />
         </div>
-        )}
 
         {/* Right side - controls */}
-        <div className="flex items-center flex-1 justify-end">
-          {/* Draggable spacer to the right of search */}
-          <div
-            className="flex-1 min-w-4"
-            style={dragRegionStyle}
-          />
+        <div className="flex shrink-0 items-center justify-end">
+          {/* A sliver of drag region between the chat's controls and the bar's */}
+          <div className="w-2 self-stretch" style={dragRegionStyle} />
 
           {/* Control buttons (not draggable) */}
           <div
@@ -288,8 +295,13 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             {/* Detected workspace ports (open preview) */}
             <DetectedPortsChip />
 
-            {/* Daemon status */}
+            {/* The machine's one home: a dot and its name (ChatHeader names a
+                machine only when the chat's is not this one). */}
             <DaemonStatusDot />
+
+            {(onToggleTerminal || onToggleFileBrowser) && (
+              <div aria-hidden="true" className="mx-1 h-4 w-px bg-border" />
+            )}
 
             {/* The workflows tour's last step labels these two as one (data-tour). */}
             {(onToggleTerminal || onToggleFileBrowser) && (
@@ -367,10 +379,9 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             {/* Config Health Indicator */}
             <ConfigHealthIndicator />
 
-            {/* Settings. Always here: the Sidebar — the app's only other
-                Settings link — renders solely inside the chat shell, which
-                needs a project. A user with no project yet (the first-run
-                state) reaches /settings, and signs out, through this. */}
+            {/* Keep Settings available even when a project is selected: the
+                sidebar's Settings link is not mounted in every shell state.
+                This also provides access to sign-out. */}
             {onNavigateToSettings && (
               <Tooltip
                 content={`Settings (${formatShortcut("onToggleSettings")})`}

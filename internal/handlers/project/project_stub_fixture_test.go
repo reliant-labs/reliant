@@ -81,21 +81,22 @@ func ownedProject() *db.Project {
 // ownedProjectRepo is a store holding only ownedProject, with no nested
 // repos. Every other project is not found, as GetProject and
 // GetProjectWithUserCheck answer.
-func ownedProjectRepo(t *testing.T) *project.MockRepository {
+func ownedProjectRepo(t *testing.T) *stubRepo {
 	t.Helper()
-	store := projectaccesstest.Bound(&project.MockRepository{
-		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) {
-			if id == "p-1" {
-				return ownedProject(), nil
-			}
-			return nil, svcerr.NotFound("project")
-		},
+	store := projectaccesstest.Bound(&stubRepo{MockRepository: &project.MockRepository{
 		ListReposByProjectFunc: func(context.Context, string) ([]*core.Repo, error) { return nil, nil },
 		ListProjectDaemonsForProjectFunc: func(_ context.Context, projectID string) ([]*core.ProjectDaemon, error) {
 			return []*core.ProjectDaemon{{ProjectID: projectID, DaemonID: "daemon-1", Path: "/work", InstallState: core.ProjectInstallInstalled}}, nil
 		},
 		GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
 			return &db.Daemon{ID: id, UserID: "test-user"}, nil
+		},
+	},
+		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) {
+			if id == "p-1" {
+				return ownedProject(), nil
+			}
+			return nil, svcerr.NotFound("project")
 		},
 	}, func(_ context.Context, id, userID string) (*db.Project, error) {
 		if id == "p-1" && userID == "test-user" {
@@ -111,7 +112,7 @@ func ownedProjectRepo(t *testing.T) *project.MockRepository {
 // db.Repo's: one pending op per checkout, reused by a retry of the same
 // teardown (marked Reused, as db.Repo marks it); a settle is final, and a done remove drops the checkout row (here:
 // calls DeleteProjectDaemonFunc). It returns the book, by op id.
-func withTeardowns(store *project.MockRepository) map[string]*db.CheckoutTeardown {
+func withTeardowns(store *stubRepo) map[string]*db.CheckoutTeardown {
 	var mu sync.Mutex
 	book := map[string]*db.CheckoutTeardown{}
 	store.BeginCheckoutTeardownFunc = func(ctx context.Context, projectID, daemonID, kind, path string, guard func(context.Context) error) (*db.CheckoutTeardown, error) {
@@ -176,12 +177,12 @@ func newServicePurges(t *testing.T, store project.Repository, purges project.Pro
 	if len(router) > 0 {
 		r = router[0]
 	}
-	return project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Purges: purges, Router: r}))
+	return project.NewTestProject(t, withDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Purges: purges, Router: r}))
 }
 
 // onDaemon is a store where ownedProject is cloned at /clone on daemon d-1,
 // on its default branch.
-func onDaemon(t *testing.T) *project.MockRepository {
+func onDaemon(t *testing.T) *stubRepo {
 	t.Helper()
 	store := ownedProjectRepo(t)
 	store.ListProjectDaemonsForProjectFunc = func(_ context.Context, projectID string) ([]*core.ProjectDaemon, error) {

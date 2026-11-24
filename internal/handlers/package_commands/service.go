@@ -28,6 +28,8 @@ type Deps struct {
 	Router Router
 	// Repo reads a request's chat, the user's machines and command favorites.
 	Repo Repository
+	// Favorites stores command favorites.
+	Favorites Favorites
 	// Placement resolves worktrees and the machine a command runs on.
 	Placement Placement
 	// Projects reads a project the caller may write (owner and org decided
@@ -49,6 +51,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("package_commands: Deps.Repo is required")
+	}
+	if d.Favorites == nil {
+		return fmt.Errorf("package_commands: Deps.Favorites is required")
 	}
 	if d.Placement == nil {
 		return fmt.Errorf("package_commands: Deps.Placement is required")

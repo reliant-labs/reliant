@@ -25,7 +25,7 @@ func TestDepsRefuseAMissingFiringsOrWebhookSecretStore(t *testing.T) {
 
 	// Every other required dependency present: only the role under test is missing.
 	full := Deps{
-		Logger: slog.Default(), Config: &config.Config{}, Repo: &MockRepository{},
+		Logger: slog.Default(), Config: &config.Config{}, Repo: &MockRepository{}, Owners: &MockOwners{},
 		Firings: store.NewTriggerEventExtStore(nil), WebhookSecrets: store.NewTriggerExtStore(nil),
 		Projects: &projectaccess.MockService{}, OrgMoves: &MockOrgMoveResumer{}, Pools: &MockPools{},
 	}

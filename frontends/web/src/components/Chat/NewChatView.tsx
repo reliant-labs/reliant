@@ -29,6 +29,7 @@ import {
   isSettingUpAnywhere,
   preferredDaemonIds,
   projectPlacement,
+  setUpPathOn,
   startBlockedReason,
 } from "@/lib/projectPlacement";
 import { describeCloneError } from "../Projects/cloneTargets";
@@ -277,16 +278,25 @@ export function NewChatView({
   const placementSettingUp = Boolean(runsOnDaemonId) && placement.stateOn(runsOnDaemonId ?? "") === "setting_up";
 
   // Set the project up on a machine that lacks it: the same clone "Clone it
-  // onto <machine>" runs (CreateProjectFromRepo), into the project's path. A
-  // plain folder has nothing to clone from, so it is only explained.
+  // onto <machine>" runs (CreateProjectFromRepo), into the project's path when
+  // that machine can have it (setUpPathOn). A plain folder has nothing to
+  // clone from, so it is only explained.
+  const platformOf = (daemonId: string) => daemons.find((d) => d.daemonId === daemonId)?.platform;
   const setUpProjectOn =
     currentProject && canSetUpElsewhere(currentProject)
       ? async (daemonId: string) => {
+          const path = setUpPathOn({
+            installs: installRows,
+            projectId: currentProject.id,
+            path: currentProject.path,
+            daemonId,
+            platformOf,
+          });
           await createProjectFromRepo({
             cloneUrl: currentProject.remote_url ?? "",
             daemonId,
             name: currentProject.name,
-            path: currentProject.path,
+            ...(path ? { path } : {}),
           });
         }
       : undefined;
@@ -608,6 +618,7 @@ export function NewChatView({
                         : undefined
                     }
                     installs={installRows}
+                    platformOf={platformOf}
                   />
                 )}
 
