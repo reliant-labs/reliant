@@ -589,6 +589,15 @@ export const newChatSearchSchema = z.object({
   // set by a screen that starts a chat from an app, so a refresh keeps the
   // tag. Anything but a string is dropped rather than failing the route.
   app: z.string().optional().catch(undefined),
+  // `?with=<id>,<id>`: the projects the draft has attached beside its project
+  // (store/newChatProjectsStore), in the order the person added them, so a
+  // refresh or a shared `/new` link keeps them. Comma-separated ids (a lone
+  // numeric id arrives JSON-parsed); anything unreadable is none.
+  with: z
+    .union([z.string(), z.number()])
+    .transform(String)
+    .optional()
+    .catch(undefined),
 });
 export type NewChatSearch = z.infer<typeof newChatSearchSchema>;
 

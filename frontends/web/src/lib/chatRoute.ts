@@ -141,7 +141,24 @@ let appliedNewChatShown: Promise<boolean> = Promise.resolve(true);
 
 /** A stable key for a new-chat draft context, to compare with the one applied. */
 export function newChatTargetKey(search: NewChatSearch): string {
-  return JSON.stringify([search.project ?? null, search.machine ?? null, search.ws ?? null, search.app ?? null]);
+  return JSON.stringify([search.project ?? null, search.machine ?? null, search.ws ?? null, search.app ?? null, search.with ?? null]);
+}
+
+/** `?with=`'s ids, in order, each once: [] for none. */
+export function attachedProjectsOfParam(value: unknown): string[] {
+  const raw = typeof value === "number" ? String(value) : value;
+  if (typeof raw !== "string") return [];
+  const out: string[] = [];
+  for (const part of raw.split(",")) {
+    const id = part.trim();
+    if (id && !out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+/** The `?with=` value for `ids` (undefined: no param). */
+export function attachedProjectsParam(ids: readonly string[]): string | undefined {
+  return ids.length > 0 ? ids.join(",") : undefined;
 }
 
 /** Record `search` as the applied draft context; `shown` settles once the view shows it (default: it already does). */

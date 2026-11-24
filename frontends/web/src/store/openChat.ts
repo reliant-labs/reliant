@@ -26,9 +26,10 @@ import { useWorkspaceStateStore } from "./workspaceStateStore";
 import { useWorktreeStore } from "./worktreeStore";
 import { useNewChatMachineStore } from "./newChatMachineStore";
 import { useNewChatAppStore } from "./newChatAppStore";
-import { prepareNewChatProjects } from "./newChatProjectsStore";
+import { prepareNewChatProjects, setNewChatAttachedProjects, setNewChatSetUpJob } from "./newChatProjectsStore";
+import { fetchProjects, getCachedProjects } from "../hooks/project-queries";
 import { chatProjectFilterIds } from "../hooks/useChatProjectFilter";
-import { markNewChatApplied, navigateToChatUrl, navigateToNewChatUrl, newChatAppliedKey, newChatTargetKey } from "../lib/chatRoute";
+import { attachedProjectsParam, markNewChatApplied, navigateToChatUrl, navigateToNewChatUrl, newChatAppliedKey, newChatTargetKey } from "../lib/chatRoute";
 import type { NewChatSearch } from "../routeSchemas";
 
 
@@ -121,16 +122,41 @@ export interface NewChatTarget {
   daemonId?: string | null;
   /** The app the chat is started from (Chat.app_name, newChatAppStore); none for every other new chat. */
   appName?: string | null;
+  /**
+   * The projects attached beside it, in the order added (`/new?with=`;
+   * newChatProjectsStore). Undefined: the defaults (the shell's choice of
+   * several), or the draft on screen's own when only its project changes.
+   */
+  attachedProjectIds?: readonly string[];
 }
 
-/** The new-chat route's search for `target` (`/new?project=&machine=&ws=&app=`). */
+/** The new-chat route's search for `target` (`/new?project=&machine=&ws=&app=&with=`). */
 export function newChatSearchOf(target: NewChatTarget): NewChatSearch {
   return {
     project: target.projectId ?? undefined,
     machine: target.daemonId ?? undefined,
     ws: target.worktreeId ?? undefined,
     app: target.appName ?? undefined,
+    with: target.attachedProjectIds ? attachedProjectsParam(target.attachedProjectIds) : undefined,
   };
+}
+
+/**
+ * `ids` the person can see (their projects' list), in order. A shared or
+ * edited `/new?with=` link may name a project they have no access to, or one
+ * since removed: it is dropped, never attached.
+ */
+async function visibleProjectIds(ids: readonly string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  let known = getCachedProjects();
+  if (ids.some((id) => !known.some((p) => p.id === id))) {
+    try {
+      known = await fetchProjects();
+    } catch {
+      // The list is unknown: attach only what the cache already vouches for.
+    }
+  }
+  return ids.filter((id) => known.some((p) => p.id === id));
 }
 
 /** Whether the new-chat view already shows `search`'s draft context (the `/new` route applies each one once). */
@@ -183,7 +209,14 @@ async function showNewChat(target: NewChatTarget): Promise<void> {
   // this is the draft on screen changing project (the project chip), which
   // keeps what the person attached.
   const changingDraft = !!target.projectId && useChatStore.getState().activeChatId === null;
-  prepareNewChatProjects(projectId, chatProjectFilterIds(), changingDraft);
+  if (target.attachedProjectIds !== undefined) {
+    // The URL names them (`/new?with=`): those, minus any the person cannot see.
+    setNewChatSetUpJob(() => null);
+    setNewChatAttachedProjects(projectId, await visibleProjectIds(target.attachedProjectIds));
+    if (!isLatest()) return;
+  } else {
+    prepareNewChatProjects(projectId, chatProjectFilterIds(), changingDraft);
+  }
   if (projectId && target.daemonId) {
     useNewChatMachineStore.getState().offer({ projectId, daemonId: target.daemonId });
   }

@@ -13,10 +13,12 @@
  *
  * The draft is read and written ONLY through getNewChatAttachedProjects /
  * useNewChatAttachedProjects and setNewChatAttachedProjects, so its source
- * can move without touching a caller. Today it is this store: a reload of
- * `/new` works the defaults out again from the shell's choice, so only a
- * project added by hand in the draft is lost to one. (A `/new?with=` search
- * param, the URL/state owner's, would make these three read and write it.)
+ * can move without touching a caller. The URL is the truth: `/new?with=<id>,<id>`
+ * names them in the order added (routeSchemas newChatSearchSchema). The `/new`
+ * route applies it here (store/openChat.ts applyNewChat, ids the person
+ * cannot see dropped), and mirrors every change back into it with a replace
+ * (hooks/useChatRoute.ts), so a refresh or a shared link keeps a project
+ * added by hand. This store is the tab's cache of it.
  */
 
 import { create } from "zustand";
