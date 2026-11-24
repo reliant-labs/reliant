@@ -62,6 +62,7 @@ const KNOWN_REFUSALS: Record<string, { why: string; surfaces: string[] }> = {
     surfaces: [
       'home-sidebar', 'chat-detailed', 'chat-filter-heading', 'chat-list', 'chat', 'chat-tools', 'chat-failure',
       'mobile-new-chat', 'workflows', 'runs', 'shell-workflows', 'shell-connectors-mcp', 'shell-agents-no-sandbox',
+      'shell-setup-guide',
     ],
   },
   // ForgeService/GetTopology (reliant#3444, a read that writes) is not here:
