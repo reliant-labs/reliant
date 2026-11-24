@@ -5,8 +5,8 @@
  * (control-plane#3286's proto/services/tests/v1/tests.proto) as WIRE messages
  * (services/controlPlane/tests/wire.ts), so the fixture api maps them through
  * the same wire.ts the real client will: a fixture can never say something
- * the wire cannot. ONE module, shared by the page tests, the visual harness
- * (e2e/visual/fixtures/tests.ts) and the preview.
+ * the wire cannot. ONE module, shared by the page tests and the preview (the
+ * visual harness reads the shop pack's Tests story instead, src/fixtures/shop).
  *
  * `fixtureTestApi(scenario)` is an in-memory TestApi; hand it to
  * TestApiProvider. The project is shopfront's: main's newest report merges
@@ -48,7 +48,7 @@ import { fixtureReleaseTestsWire } from "./releaseTestsFixtures";
 
 /**
  * A fixed "now", so relative times do not move: the visual harness's and the
- * preview's frozen clock, FIXED_NOW in e2e/visual/fixtures/base.ts (2026-11-18
+ * preview's frozen clock, FIXED_NOW in e2e/visual/clock.ts (2026-11-18
  * 15:30 UTC). src cannot import e2e/, so it is repeated here and
  * __tests__/testsEnvScope.test.tsx holds the two equal. Every Tests fixture time
  * (this file's, runFlakeFixtures.ts's) is relative to it, so nothing lands
