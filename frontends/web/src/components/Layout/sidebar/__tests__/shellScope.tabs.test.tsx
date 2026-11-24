@@ -154,6 +154,41 @@ describe("two tabs choosing different scopes", () => {
 });
 
 describe("All and the focus in the URL", () => {
+  it.each(["/c/chat-1", "/forge/p/app", "/new"])(
+    "keeps a single-project URL scope authoritative on %s for the nav and imperative readers",
+    (pathname) => {
+      const { result, rerender } = renderHook(
+        ({ projects }) => {
+          const search = { projects };
+          const shell = useShellProject(pathname, search);
+          usePublishShellScope(shell, search);
+          return shell;
+        },
+        { initialProps: { projects: "p2" } },
+      );
+      expect(result.current.mode).toBe("one");
+      expect(result.current.ids).toEqual(["p2"]);
+      expect(shellScopeNow()).toEqual({ mode: "one", projectId: "p2" });
+      expect(shellProjectNow()).toBe("p2");
+
+      // A search-only navigation must invalidate resolution too.
+      rerender({ projects: "p3" });
+      expect(result.current.ids).toEqual(["p3"]);
+      expect(shellProjectNow()).toBe("p3");
+    },
+  );
+
+  it("lets an explicit project path override a carried scope for every reader", () => {
+    const { result } = renderHook(() => {
+      const search = { projects: "p2" };
+      const shell = useShellProject("/project/p1", search);
+      usePublishShellScope(shell, search);
+      return shell;
+    });
+    expect(result.current.ids).toEqual(["p1"]);
+    expect(shellProjectNow()).toBe("p1");
+  });
+
   async function mountAt(path: string) {
     function Probe() {
       const location = useRouterState({ select: (s) => s.location });

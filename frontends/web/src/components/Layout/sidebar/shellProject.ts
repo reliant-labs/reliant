@@ -265,6 +265,7 @@ export function useShellProject(pathname: string, search: Record<string, unknown
   // the tab's default (hooks/useChatProjectFilter).
   const urlScope = scopeOfSearch(search);
   const urlAll = urlScope?.mode === "all";
+  const urlProjectId = urlScope?.mode === "one" ? urlScope.projectId : null;
   const urlFocus = focusOfSearch(search) ?? null;
   const focus = urlFocus ?? pickedFocus;
   const consoleApp = consolePageOf(pathname)?.project ?? null;
@@ -303,6 +304,11 @@ export function useShellProject(pathname: string, search: Record<string, unknown
     const allIds = (catalog?.rows ?? []).flatMap((row) => (row.kind === "project" ? [row.project.id] : []));
     const ids = mode === "many" ? filterKey.split(",") : mode === "all" ? allIds : [];
     const candidates: ShellProjectRef[] = [];
+    // A carried single-project scope is as authoritative as All or several.
+    // Only an explicit project path overrides it; a chat/app can be opened
+    // within another project's shell without changing the list's scope.
+    const scopeRef: ShellProjectRef | null = !explicit && urlProjectId ? { kind: "project", id: urlProjectId } : null;
+    if (scopeRef) candidates.push(scopeRef);
     if (routeRef) candidates.push(routeRef);
     // In a choice of several, the focus is the last project picked among them.
     if (mode !== "one" && focus) candidates.push(refOfKey(focus));
@@ -315,8 +321,8 @@ export function useShellProject(pathname: string, search: Record<string, unknown
     for (const candidate of candidates) {
       if (mode === "many" && candidate !== routeRef && candidate.kind === "project" && !ids.includes(candidate.id)) continue;
       const found = rowForRef(catalog, candidate);
-      // The route's own ref holds even when the catalog does not list it (an app it never read).
-      if (found || candidate === routeRef || !catalog) {
+      // URL refs hold even when the catalog does not list them yet.
+      if (found || candidate === routeRef || candidate === scopeRef || !catalog) {
         ref = candidate;
         row = found;
         break;
@@ -337,7 +343,7 @@ export function useShellProject(pathname: string, search: Record<string, unknown
     return { ...base, ids: mode === "one" ? (projectId ? [projectId] : []) : ids, key, name, projectId, app, deployed, row };
     // routeRef is rebuilt every render; its key is what changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeRefKey, lastPick, focus, contextProjectId, catalog, consoleApp, mode, filterKey]);
+  }, [routeRefKey, explicit, urlProjectId, lastPick, focus, contextProjectId, catalog, consoleApp, mode, filterKey]);
 
   // In one-project mode a route that names a project becomes the last pick;
   // in a choice of several only an explicit one does (and ends the choice).
