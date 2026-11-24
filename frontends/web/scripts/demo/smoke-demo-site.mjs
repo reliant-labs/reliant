@@ -30,8 +30,7 @@
 //    Tests, Security and Configure are buttons that fold, and must hold their
 //    pages (navGroups below); every other row (navRows: Home, Overview,
 //    Dashboards, Data, Storage, Auth, How it was built) is a link of its own.
-//    The pages the demo does not serve (navAbsent: Usage, Speed insights) must
-//    have no item. Groups are unfolded, and a row with sub-pages (Environments)
+//    The pages the demo does not serve (navAbsent: Usage) must have no item. Groups are unfolded, and a row with sub-pages (Environments)
 //    is opened, so every sub-item is clicked too. An item is dead, and the run
 //    fails, when the click does not move the URL to the item's href, or the
 //    page's heading and content do not change.
@@ -88,6 +87,7 @@ const pages = [
   `${home}/observability/logs`,
   `${home}/observability/dashboards`,
   `${home}/observability/alerts`,
+  `${home}/speed-insights`,
   `${home}/security/vulnerabilities`,
   `${home}/security/sboms`,
   `${home}/tests`,
@@ -120,6 +120,7 @@ const navGroups = {
   Observability: [
     `${home}/observability`,
     ...["graph", "metrics", "logs", "rpc", "profiles", "errors", "alerts", "traces", "sessions"].map((view) => `${home}/observability/${view}`),
+    `${home}/speed-insights`,
   ],
   Analytics: [`${home}/analytics`, ...["users", "product", "acquisition", "events"].map((tab) => `${home}/analytics/${tab}`)],
   Deployments: [`${home}/services`, `${home}/releases`, `${home}/environments`],
@@ -138,7 +139,7 @@ const navRows = [
   { label: "How it was built", to: (key) => key === demoSection("built") },
 ];
 // The pages the demo does not serve (DEMO_HIDDEN_PAGES, demoPath.ts): no nav item may lead there.
-const navAbsent = [`${home}/usage`, `${home}/speed-insights`];
+const navAbsent = [`${home}/usage`];
 /** Where an href goes, as the nav pass compares it: the path, plus a demo page's `?section=`. */
 const navKey = (href) => {
   const url = new URL(href, base);

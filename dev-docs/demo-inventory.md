@@ -48,9 +48,10 @@ introduced. The Coverage page's source view reads one bundled file (v1.8.4's
 `internal/orders/charge.go`) and never fetches.
 
 The demo leaves out what the shop has nothing to show on: Usage (a sample app
-has no hosting bill) and Speed insights (no measured page loads). They have no
-nav row and no tip, and their URLs land on the Overview (`DEMO_HIDDEN_PAGES`,
-`Demo/demoPath.ts`).
+has no hosting bill). It has no nav row and no tip, and its URLs land on the
+Overview (`DEMO_HIDDEN_PAGES`, `Demo/demoPath.ts`). Speed insights is served:
+`handlers/speedInsights.ts` answers its three SQL panels (the score and vitals,
+the routes table, the series) over the shop's routes, on desktop and mobile.
 
 `handlers/inventory.ts` answers the generated `AppDatabaseService` browse RPCs
 and `IdentityService` reads. Every normal environment declares one database,
