@@ -56,10 +56,21 @@ const TriggerCapacitySuperseded = "superseded by a newer firing (concurrency wai
 // TriggerCapacitySuperseded. Launched events are never touched, and a retried
 // enrollment supersedes nothing more.
 func EnqueueTriggerCapacity(ctx context.Context, db orm.Context, ev *core.TriggerEvent, scope TriggerCapacityScope) error {
+	_, err := EnqueueTriggerCapacitySuperseding(ctx, db, ev, scope)
+	return err
+}
+
+// EnqueueTriggerCapacitySuperseding is EnqueueTriggerCapacity, returning the
+// waiting events the enrollment superseded, as it left them (settled
+// skipped), so each can be accounted for: the firer opens a
+// trigger.fire span per event. Empty when it superseded none.
+func EnqueueTriggerCapacitySuperseding(ctx context.Context, db orm.Context, ev *core.TriggerEvent, scope TriggerCapacityScope) ([]*core.TriggerEvent, error) {
+	var superseded []*core.TriggerEvent
 	if ev == nil || !scope.valid() || ev.UserID != scope.UserID || (ev.Outcome != core.TriggerEventPending && ev.Outcome != core.TriggerEventLaunched) {
-		return errors.New("invalid trigger capacity intent")
+		return nil, errors.New("invalid trigger capacity intent")
 	}
-	return db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+	err := db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		superseded = nil // a retried transaction starts over
 		if err := lockTriggerCapacity(ctx, db, scope); err != nil {
 			return err
 		}
@@ -101,16 +112,29 @@ RETURNING capacity_order`, scope.ProjectID, scope.WorkflowRef, ev.CapacityKey, e
 		if ev.CapacityKey == nil {
 			return nil
 		}
-		_, err = db.Bun().NewRaw(`UPDATE trigger_events
+		var rows []*TriggerEvent
+		err = db.Bun().NewRaw(`UPDATE trigger_events
 SET outcome = 'skipped', outcome_detail = ?
 WHERE user_id = ? AND capacity_project_id = ? AND capacity_workflow_ref = ? AND capacity_key = ?
-  AND outcome = 'pending' AND capacity_order < ?`,
-			TriggerCapacitySuperseded, scope.UserID, scope.ProjectID, scope.WorkflowRef, *ev.CapacityKey, order).Exec(ctx)
+  AND outcome = 'pending' AND capacity_order < ?
+RETURNING `+columnsOf[TriggerEvent]("trigger_events"),
+			TriggerCapacitySuperseded, scope.UserID, scope.ProjectID, scope.WorkflowRef, *ev.CapacityKey, order).Scan(ctx, &rows)
 		if err != nil {
 			return fmt.Errorf("supersede waiting trigger events: %w", err)
 		}
+		for _, row := range rows {
+			settled, err := triggerEventToCore(row)
+			if err != nil {
+				return err
+			}
+			superseded = append(superseded, settled)
+		}
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return superseded, nil
 }
 
 // TriggerCapacityLimits is a workflow's admission policy as one launch sees

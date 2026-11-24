@@ -81,7 +81,12 @@ func TestTriggerCapacityLatestSupersedesOnlyOlderWaitingOfItsKey(t *testing.T) {
 	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, keyedCapacityEvent("other-scope-a", &a), other))
 
 	newest := keyedCapacityEvent("new-a", &a)
-	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, newest, scope))
+	superseded, err := store.EnqueueTriggerCapacitySuperseding(ctx, env.ORM, newest, scope)
+	require.NoError(t, err)
+	require.Len(t, superseded, 1, "it reports exactly the events it superseded")
+	require.Equal(t, "old-a", superseded[0].DedupeKey)
+	require.Equal(t, core.TriggerEventSkipped, superseded[0].Outcome, "as the enrollment left it")
+	require.Equal(t, store.TriggerCapacitySuperseded, superseded[0].OutcomeDetail)
 
 	outcome, detail := outcomeOf(t, env, "old-a")
 	require.Equal(t, core.TriggerEventSkipped, outcome)
@@ -94,7 +99,9 @@ func TestTriggerCapacityLatestSupersedesOnlyOlderWaitingOfItsKey(t *testing.T) {
 	require.Equal(t, core.TriggerEventLaunched, outcome)
 
 	// Retrying the newest enrollment (an ack lost after commit) is a no-op.
-	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, newest, scope))
+	superseded, err = store.EnqueueTriggerCapacitySuperseding(ctx, env.ORM, newest, scope)
+	require.NoError(t, err)
+	require.Empty(t, superseded, "a retry supersedes nothing more")
 	outcome, _ = outcomeOf(t, env, "new-a")
 	require.Equal(t, core.TriggerEventPending, outcome)
 
