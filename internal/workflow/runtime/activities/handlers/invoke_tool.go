@@ -87,6 +87,13 @@ func (a *InvokeToolActivity) WithDaemonRouter(router toolexec.DaemonRouter) *Inv
 	return a
 }
 
+// WithChatProjects gives the tool-execution path the reader of a chat's
+// attached projects; see ExecuteToolsActivity.WithChatProjects.
+func (a *InvokeToolActivity) WithChatProjects(l ChatProjectLister) *InvokeToolActivity {
+	a.executeTools.WithChatProjects(l)
+	return a
+}
+
 // Name returns the activity name for registration.
 func (a *InvokeToolActivity) Name() string { return "InvokeTool" }
 
