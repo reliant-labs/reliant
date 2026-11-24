@@ -90,7 +90,7 @@ export function writeParam<T>(search: SearchRecord, param: SearchParam<T>, value
 export function patchParams(patch: ReadonlyArray<readonly [SearchParam<never>, unknown]>): (prev: SearchRecord) => SearchRecord {
   return (prev) => {
     let next: SearchRecord = { ...prev };
-    for (const [param, value] of patch) next = writeParam(next, param as SearchParam<unknown>, value);
+    for (const [param, value] of patch) next = writeParam(next, param as unknown as SearchParam<unknown>, value);
     return next;
   };
 }
@@ -116,7 +116,7 @@ export function retainSearchParams(
       if (param.key in result) continue;
       const raw = search[param.key];
       if (raw === undefined || raw === null || raw === "") continue;
-      if (!when(readParam(search, param as SearchParam<unknown>), search)) continue;
+      if (!when(readParam(search, param as unknown as SearchParam<unknown>), search)) continue;
       out ??= { ...result };
       out[param.key] = raw;
     }
