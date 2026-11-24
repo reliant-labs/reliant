@@ -379,10 +379,14 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             {/* Config Health Indicator */}
             <ConfigHealthIndicator />
 
-            {/* Keep Settings available even when a project is selected: the
-                sidebar's Settings link is not mounted in every shell state.
-                This also provides access to sign-out. */}
-            {onNavigateToSettings && (
+            {/* Settings, only while there is no project: with one, the nav
+                (Settings at its foot) and ⌘, are the way in. A user with no
+                project yet (the first-run state) has no nav, and reaches
+                /settings, and signs out, through this. Owner decision
+                (2026-11-24, the one top bar's Variant A): no header gear while
+                a project is open. Header.settings.test.tsx holds it; do not
+                restore the gear to answer a review. */}
+            {onNavigateToSettings && !currentProject && (
               <Tooltip
                 content={`Settings (${formatShortcut("onToggleSettings")})`}
                 side="bottom"
