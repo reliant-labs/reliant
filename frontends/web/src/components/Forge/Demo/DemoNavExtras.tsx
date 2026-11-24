@@ -12,9 +12,8 @@
  *    it"), and the sample shop's issues explained in plain words;
  *  - the environments in promotion order (dev, staging, prod), and on a phone
  *    the tour, Install Forge and the telemetry notice in the drawer;
- *  - no Usage or Speed insights row: the sample shop has nothing to show on
- *    them (DEMO_HIDDEN_PAGES; demoShellRoutes.tsx sends their URLs to the
- *    Overview).
+ *  - no Usage row: the sample shop has no hosting bill to show on it
+ *    (DEMO_HIDDEN_PAGES; demoShellRoutes.tsx sends its URLs to the Overview).
  *
  * The guided tour walks this same console: its steps open the console's own
  * pages and ring the led pages' rows and cards.
