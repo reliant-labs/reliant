@@ -12,7 +12,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import { IDS } from './fixtures/base'
-import { CHAT_IDS, CHAT_TITLES, chatWithoutFailedSend } from './fixtures/chat'
+import { CHAT_IDS, CHAT_TITLES, chatWithAttachedProjects, chatWithoutFailedSend } from './fixtures/chat'
 import { stagingDatabaseFixtures } from './fixtures/data'
 import { appCodeCardFixtures, FILTER_PROJECT_IDS, NO_APP_PROJECT_ID, projectsPageSurfaceFixtures, selectorSurfaceFixtures } from './fixtures/projects'
 import { workflowFixtures } from './fixtures/workflows'
@@ -165,6 +165,19 @@ const SURFACES: Surface[] = [
     on: ['desktop'],
     ready: (page) => page.getByText(FIXTURE_BOTTOM).first(),
     act: openFixtureChat,
+  },
+  {
+    // The fixture chat with a second project attached: the composer lists
+    // both as chips (the attached one removable) and offers Add project.
+    name: 'chat-projects',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByText(FIXTURE_BOTTOM).first(),
+    act: async (page) => {
+      await openFixtureChat(page)
+      await expect(page.getByTestId('chat-project-chips')).toBeVisible()
+    },
+    harness: { fixtures: chatWithAttachedProjects },
   },
   {
     // The fixture chat from its first line: the first turn and its answer.
