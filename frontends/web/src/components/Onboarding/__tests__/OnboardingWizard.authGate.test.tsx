@@ -16,7 +16,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import {
   createRootRoute,
   createRoute,
@@ -50,6 +50,7 @@ vi.mock("../../../store/authStore", () => ({
 const tourStoreState = vi.hoisted(() => ({
   state: {
     hasCompletedOnboarding: true,
+    journeys: { workflows: { version: 1, current: null as "completed" | null, completedOlder: false } },
     completedSteps: new Set<string>(),
     skippedSteps: new Set<string>(),
     projectHasCode: true,
@@ -166,6 +167,7 @@ vi.mock("../../../lib/analytics", () => ({ trackEvent: vi.fn() }));
 
 
 import { OnboardingWizard } from "../OnboardingWizard";
+import { useOnboardingChecklistStore } from "../../../store/onboardingChecklistStore";
 
 // ─── Test router ─────────────────────────────────────────────────────────────
 
@@ -204,6 +206,22 @@ function makeRouter(initialEntries: string[]) {
 }
 
 describe("OnboardingWizard — authentication gate", () => {
+  it("rechecks achievements when a journey completes without remounting", async () => {
+    const router = makeRouter(["/auth"]);
+    const view = render(<RouterProvider router={router} />);
+    const detect = useOnboardingChecklistStore.getState().detectCompletedItems;
+    await waitFor(() => expect(detect).toHaveBeenCalled());
+    vi.mocked(detect).mockClear();
+
+    tourStoreState.state = {
+      ...tourStoreState.state,
+      journeys: { workflows: { version: 1, current: "completed", completedOlder: false } },
+    };
+    view.rerender(<RouterProvider router={router} />);
+    await act(async () => { await router.invalidate(); });
+    await waitFor(() => expect(detect).toHaveBeenCalled());
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     authState.current = { user: null };

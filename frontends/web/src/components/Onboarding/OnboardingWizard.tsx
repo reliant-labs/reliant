@@ -50,6 +50,7 @@ export function OnboardingWizard() {
   const nav = useTourNavigation();
 
   const tourInitialized = useTourStore((state) => state.isInitialized);
+  const journeys = useTourStore((state) => state.journeys);
   const loadTourState = useTourStore((state) => state.loadState);
 
   const {
@@ -92,13 +93,19 @@ export function OnboardingWizard() {
     }
   }, [tourInitialized, checklistInitialized, loadTourState, loadChecklistState]);
 
-  // Set up checklist detection after checklist state is ready
+  // Detect persisted achievements on load and when a journey finishes in this
+  // session, without waiting for the wizard to remount.
   useEffect(() => {
     if (!checklistInitialized) return;
     void detectCompletedItems();
+  }, [checklistInitialized, journeys, detectCompletedItems]);
+
+  // Keep the other completion signals subscribed while the checklist is ready.
+  useEffect(() => {
+    if (!checklistInitialized) return;
     const unsub = subscribeToStoreChanges();
     return unsub;
-  }, [checklistInitialized, detectCompletedItems, subscribeToStoreChanges]);
+  }, [checklistInitialized, subscribeToStoreChanges]);
 
   const tourOpen = nav.tour != null;
   const { goToStep } = nav;
