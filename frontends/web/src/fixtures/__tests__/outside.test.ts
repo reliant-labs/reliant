@@ -22,12 +22,29 @@ describe("classifyOutside", () => {
   });
 
   it("allows health and the telemetry sinks", () => {
-    expect(kind("https://api.preview.invalid/healthz")).toBe("health");
+    expect(kind("https://app.preview.test/healthz")).toBe("health");
     expect(kind("https://app.preview.test/__forge/log", "POST")).toBe("telemetry");
     expect(kind("https://app.preview.test/_otel/v1/traces", "POST")).toBe("telemetry");
-    expect(kind("https://ingest.example.test/v1/logs", "POST")).toBe("telemetry");
-    expect(kind("https://eu.i.posthog.com/e/", "POST")).toBe("telemetry");
+    expect(kind("https://app.preview.test/v1/logs", "POST")).toBe("telemetry");
     expect(kind("https://otel.example.test/anything", "POST", { ...CTX, telemetryOrigin: "https://otel.example.test" })).toBe("telemetry");
+  });
+
+  it.each([
+    "/health", "/healthz", "/readyz", "/__forge/log", "/_otel/v1/traces",
+    "/v1/traces", "/v1/logs", "/v1/metrics",
+  ])("refuses cross-origin lookalike sink %s", (path) => {
+    expect(kind(`https://outside.example.test${path}`, "POST")).toBe("refused");
+    expect(kind(`https://outside.example.test${path}`)).toBe("refused");
+  });
+
+  it.each([
+    "https://eu.i.posthog.com/e/",
+    "https://posthog.attacker.test/e/",
+    "https://sentry.attacker.test/envelope/",
+    "https://otel.example.test:8443/v1/logs",
+    "http://otel.example.test/v1/logs",
+  ])("refuses unconfigured telemetry origin %s", (url) => {
+    expect(kind(url, "POST", { ...CTX, telemetryOrigin: "https://otel.example.test" })).toBe("refused");
   });
 
   it("passes the page's own GETs, and refuses everything else", () => {
@@ -65,6 +82,27 @@ describe("installOutside", () => {
 
     await fetch("/config.js");
     expect(real).toHaveBeenCalledTimes(1);
+  });
+
+  it("records cross-origin health and telemetry lookalikes without fetching them", async () => {
+    setRuntimeConfig({ OTEL_ENDPOINT: "https://otel.example.test" });
+    const real = vi.fn();
+    window.fetch = real as unknown as typeof window.fetch;
+    const blocked = vi.fn();
+    restore = installOutside({ user: { id: "u", email: "e@x.test", name: "N" }, now: Date.UTC(2026, 10, 18), onBlocked: blocked });
+
+    const urls = [
+      "https://outside.example.test/healthz",
+      "https://outside.example.test/v1/logs",
+      "https://posthog.attacker.test/e/",
+    ];
+    for (const url of urls) {
+      await expect(fetch(url)).rejects.toThrow(/network outside the page is off/);
+    }
+    expect(blocked.mock.calls).toEqual(urls.map((url) => ["refused", `GET ${url}`]));
+    expect((await fetch(`${window.location.origin}/healthz`)).status).toBe(200);
+    expect((await fetch("https://otel.example.test/v1/logs", { method: "POST" })).status).toBe(204);
+    expect(real).not.toHaveBeenCalled();
   });
 
   it("issues the session at the pack clock, valid for a month", () => {

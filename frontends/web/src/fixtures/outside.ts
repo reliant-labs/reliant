@@ -13,10 +13,10 @@
  *              with a fake session for the pack's user (written to
  *              localStorage before the app reads it), until the session
  *              port (phase 3) replaces it.
- *   health     `/health`, `/healthz`, `/readyz` on any origin: "ok".
- *   telemetry  the dev log sink, OTLP ingest (`/_otel`, `/v1/traces|logs|
- *              metrics`), the configured OTEL_ENDPOINT, and the known
- *              analytics and error-reporting hosts: 204, nothing sent.
+ *   health     same-origin `/health`, `/healthz`, `/readyz`: "ok".
+ *   telemetry  the same-origin dev log sink and OTLP ingest (`/_otel`,
+ *              `/v1/traces|logs|metrics`), and the configured OTEL_ENDPOINT
+ *              origin: 204, nothing sent.
  *   page       a same-origin GET (the bundle's assets, config.js,
  *              version.json): the real fetch.
  *   refused    everything else, cross-origin or a same-origin write. It
@@ -32,9 +32,8 @@ export type OutsideKind = "rpc" | "auth" | "health" | "telemetry" | "page" | "re
 
 /** A Connect RPC path: `/<pkg>.v<N>.<Service>/<Method>`, as the transports build it. */
 const RPC_PATH = /\/([a-z_]\w*(?:\.[a-z_]\w*)*\.v\d\w*(?:\.[a-z_]\w*)*\.[A-Z]\w*)\/([A-Z]\w*)$/;
-const HEALTH_PATH = /\/(health|healthz|readyz)$/;
-const TELEMETRY_PATH = /^\/(__forge\/log|_otel(\/|$))|\/v1\/(traces|logs|metrics)$/;
-const TELEMETRY_HOST = /(posthog|sentry|segment|google-analytics|googletagmanager|clarity\.ms|hotjar|intercom|stripe\.(com|network)|hcaptcha)/i;
+const HEALTH_PATH = /^\/(health|healthz|readyz)$/;
+const TELEMETRY_PATH = /^(?:\/__forge\/log|\/_otel(?:\/.*)?|\/v1\/(?:traces|logs|metrics))$/;
 
 export interface OutsideContext {
   /** The page's origin. */
@@ -68,8 +67,8 @@ export function outsideContext(): OutsideContext {
 export function classifyOutside(url: URL, method: string, ctx: OutsideContext): OutsideKind {
   if (RPC_PATH.test(url.pathname)) return "rpc";
   if (ctx.supabaseOrigin && url.origin === ctx.supabaseOrigin && url.pathname.startsWith("/auth/v1/")) return "auth";
-  if (HEALTH_PATH.test(url.pathname)) return "health";
-  if (TELEMETRY_PATH.test(url.pathname) || (ctx.telemetryOrigin && url.origin === ctx.telemetryOrigin) || TELEMETRY_HOST.test(url.hostname)) {
+  if (url.origin === ctx.origin && HEALTH_PATH.test(url.pathname)) return "health";
+  if ((url.origin === ctx.origin && TELEMETRY_PATH.test(url.pathname)) || (ctx.telemetryOrigin && url.origin === ctx.telemetryOrigin)) {
     return "telemetry";
   }
   if (url.origin === ctx.origin && method === "GET") return "page";
