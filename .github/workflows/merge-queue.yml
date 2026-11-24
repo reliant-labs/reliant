@@ -297,10 +297,12 @@ jobs:
           persist-credentials: false
       # Go for the planner (tools/test-affected: the standard library and
       # yaml, compiled in seconds, so main's build cache is not worth its
-      # restore), Node and pnpm for vitest.
+      # restore), Node and pnpm for vitest. The mock-value descriptor
+      # regressions compile their proto fixture with the pinned buf binary.
       - uses: ./.github/actions/setup
         with:
           node: "true"
+          buf: "true"
           go-build-cache: "false"
           postgres-cache: "false"
           github-read-token: ""

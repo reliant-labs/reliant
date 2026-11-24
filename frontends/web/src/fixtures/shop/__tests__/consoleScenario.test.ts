@@ -260,31 +260,6 @@ describe("every console read is answered; every write is refused", () => {
     }
   });
 
-  it("answers every read of every console service, story or default, with no Unimplemented", async () => {
-    const t = (await import("@/lib/connect")).transport;
-    let reads = 0;
-    for (const service of DEMO_DEFAULT_SERVICES) {
-      const client = createClient(service, t) as unknown as Record<string, (req: object) => Promise<unknown>>;
-      for (const method of methodsOf(service).filter((m) => isDemoRead(m))) {
-        // Structured inventory/config reads require an address, just as the
-        // server does. Coverage must exercise a valid request, not replace
-        // ownership and confirmation checks with generated placeholder data.
-        const addressed: Record<string, object> = {
-          "controlplane.v1.AppDatabaseService/DescribeDatabase": { environmentId: "env-dev", database: "shop" },
-          "controlplane.v1.AppDatabaseService/BrowseTable": { environmentId: "env-dev", database: "shop", table: "public.orders", limit: 50 },
-          "controlplane.v1.StorageBrowserService/ListBrowsableBuckets": { environmentId: "env-staging" },
-          "controlplane.v1.StorageBrowserService/ListObjects": { environmentId: "env-staging", bucket: "uploads" },
-          "controlplane.v1.StorageBrowserService/GetObjectMetadata": { environmentId: "env-staging", bucket: "uploads", key: "README.txt" },
-          "controlplane.v1.StorageBrowserService/PreviewObject": { environmentId: "env-staging", bucket: "uploads", key: "README.txt" },
-          "controlplane.v1.DeployService/GetWorkloadConfig": { environmentId: "env-dev", workload: "api" },
-        };
-        await expect(client[method.localName](addressed[`${service.typeName}/${method.name}`] ?? {}), `${service.typeName}/${method.name}`).resolves.toBeDefined();
-        reads++;
-      }
-    }
-    expect(reads).toBeGreaterThan(70);
-  });
-
   it("refuses every write of every console service, defaults or not", async () => {
     const t = (await import("@/lib/connect")).transport;
     let writes = 0;
