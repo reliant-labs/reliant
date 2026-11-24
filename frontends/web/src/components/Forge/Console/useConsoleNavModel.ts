@@ -71,9 +71,13 @@ export function useRouteUsesEnvScope(): boolean {
 }
 
 export function useConsoleNavModel(project: string, pathname: string, search: { env?: unknown }): ConsoleNavModel {
+  const onConsole = consolePageOf(pathname);
   const page = useMemo<ConsolePage>(() => consolePageOf(pathname)?.page ?? OVERVIEW, [pathname]);
 
-  const { listed, projectId } = useConsoleReliantProject(project);
+  // Only the app's own console makes its project the current one: the shell's
+  // nav draws these sections on every page, a chat's included, where the
+  // URL's chat decides the project (consoleHost.ts).
+  const { listed, projectId } = useConsoleReliantProject(project, { select: onConsole?.project === project });
   const roster = useForgeRoster(listed ? projectId : null, project);
 
   const settled = listed && !roster.isLoading && !roster.topology.isLoading;
