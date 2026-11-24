@@ -108,6 +108,7 @@
         "TriggerRedriver",
         "TriggerScheduleSync",
         "TriggerSenders",
+        "Triggerowner",
         "Usage",
         "UserAuth",
         "UserChain",
@@ -538,6 +539,7 @@
         "TokenAuthority",
         "TriggerDeliveryRelay",
         "TriggerPollers",
+        "Triggerowner",
         "UserUpdateHub",
         "Vault",
         "WorkerCatalogSearch",
@@ -55596,6 +55598,27 @@
       "implementation_candidates": []
     },
     {
+      "id": "Triggerowner",
+      "name": "Triggerowner",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/triggerowner.Service",
+      "source": {
+        "path": "internal/triggerowner/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/triggerowner.service",
+          "source": {
+            "path": "internal/triggerowner/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "Usage",
       "name": "Usage",
       "kind": "component",
@@ -56065,6 +56088,19 @@
       "candidates": [],
       "providers": [
         "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "AutomationTakeover",
+      "field": "Offers",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.Offers",
+      "methods": [],
+      "candidates": [
+        "Triggerowner"
+      ],
+      "providers": [
+        "Triggerowner"
       ],
       "resolution": "composition_expression"
     },
@@ -57461,6 +57497,17 @@
       "candidates": [
         "Database"
       ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "PackageCommands",
+      "field": "Favorites",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/package_commands.Favorites",
+      "methods": [],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -59155,6 +59202,19 @@
     },
     {
       "consumer": "Trigger",
+      "field": "Owners",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Owners",
+      "methods": [],
+      "candidates": [
+        "Triggerowner"
+      ],
+      "providers": [
+        "Triggerowner"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
       "field": "Pools",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Pools",
       "methods": [],
@@ -59275,6 +59335,53 @@
         "Vault"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Triggerowner",
+      "field": "Locks",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Locks",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Triggerowner",
+      "field": "Offers",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Offers",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Triggerowner",
+      "field": "OrgReads",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.OrgReads",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Triggerowner",
+      "field": "Triggers",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Triggers",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Triggerowner",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Usage",
@@ -59466,6 +59573,19 @@
       ],
       "providers": [
         "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerTrigger",
+      "field": "Owners",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Service",
+      "methods": [],
+      "candidates": [
+        "Triggerowner"
+      ],
+      "providers": [
+        "Triggerowner"
       ],
       "resolution": "composition_expression"
     },
@@ -60254,6 +60374,46 @@
       "component": "Trigger.Syncer",
       "source": {
         "path": "internal/handlers/trigger/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Triggerowner.Locks",
+      "source": {
+        "path": "internal/triggerowner/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Triggerowner.Offers",
+      "source": {
+        "path": "internal/triggerowner/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Triggerowner.OrgReads",
+      "source": {
+        "path": "internal/triggerowner/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Triggerowner.Triggers",
+      "source": {
+        "path": "internal/triggerowner/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Triggerowner.Tx",
+      "source": {
+        "path": "internal/triggerowner/service.go",
         "symbol": "New"
       }
     },

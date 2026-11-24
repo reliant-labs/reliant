@@ -54,7 +54,7 @@ func (m *MockRouter) SendDaemonCommandToDaemon(ctx context.Context, userID strin
 var _ Router = (*MockRouter)(nil)
 
 // forge:section MockRepository
-// forge:hash=414ccee34ced4d998d4b29e8df02ecc5ed8a0dba9b8f8064bc7a703869ffe5ae
+// forge:hash=60a440d3cd17b0faf642dc34ee2603d8c20b9ad1c55acdc38528a9d55f370572
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -64,11 +64,8 @@ var _ Router = (*MockRouter)(nil)
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	GetChatFunc               func(context.Context, string) (*db.Chat, error)
-	ListDaemonsByUserIDFunc   func(context.Context, string) ([]*db.Daemon, error)
-	ListCommandFavoritesFunc  func(context.Context, string, string) ([]string, error)
-	AddCommandFavoriteFunc    func(context.Context, string, string, string) error
-	RemoveCommandFavoriteFunc func(context.Context, string, string, string) error
+	GetChatFunc             func(context.Context, string) (*db.Chat, error)
+	ListDaemonsByUserIDFunc func(context.Context, string) ([]*db.Daemon, error)
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
@@ -89,35 +86,54 @@ func (m *MockRepository) ListDaemonsByUserID(ctx context.Context, userID string)
 	return nil, contractkit.MockNotSet("MockRepository", "ListDaemonsByUserID")
 }
 
+// Compile-time check.
+var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockFavorites
+// forge:hash=bb4aa5185917ec46a626ef9684d716e6afebee70d296b3e1d6f79c0b2b1f8640
+
+// MockFavorites is a test mock for the Favorites interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockFavorites.<Method>Func not set" error.
+type MockFavorites struct {
+	contractkit.Recorder
+	ListCommandFavoritesFunc  func(context.Context, string, string) ([]string, error)
+	AddCommandFavoriteFunc    func(context.Context, string, string, string) error
+	RemoveCommandFavoriteFunc func(context.Context, string, string, string) error
+}
+
 // ListCommandFavorites records the call and delegates to ListCommandFavoritesFunc when set.
-func (m *MockRepository) ListCommandFavorites(ctx context.Context, userID string, projectID string) ([]string, error) {
+func (m *MockFavorites) ListCommandFavorites(ctx context.Context, userID string, projectID string) ([]string, error) {
 	m.Recorder.Record("ListCommandFavorites", ctx, userID, projectID)
 	if m.ListCommandFavoritesFunc != nil {
 		return m.ListCommandFavoritesFunc(ctx, userID, projectID)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListCommandFavorites")
+	return nil, contractkit.MockNotSet("MockFavorites", "ListCommandFavorites")
 }
 
 // AddCommandFavorite records the call and delegates to AddCommandFavoriteFunc when set.
-func (m *MockRepository) AddCommandFavorite(ctx context.Context, userID string, projectID string, commandKey string) error {
+func (m *MockFavorites) AddCommandFavorite(ctx context.Context, userID string, projectID string, commandKey string) error {
 	m.Recorder.Record("AddCommandFavorite", ctx, userID, projectID, commandKey)
 	if m.AddCommandFavoriteFunc != nil {
 		return m.AddCommandFavoriteFunc(ctx, userID, projectID, commandKey)
 	}
-	return contractkit.MockNotSet("MockRepository", "AddCommandFavorite")
+	return contractkit.MockNotSet("MockFavorites", "AddCommandFavorite")
 }
 
 // RemoveCommandFavorite records the call and delegates to RemoveCommandFavoriteFunc when set.
-func (m *MockRepository) RemoveCommandFavorite(ctx context.Context, userID string, projectID string, commandKey string) error {
+func (m *MockFavorites) RemoveCommandFavorite(ctx context.Context, userID string, projectID string, commandKey string) error {
 	m.Recorder.Record("RemoveCommandFavorite", ctx, userID, projectID, commandKey)
 	if m.RemoveCommandFavoriteFunc != nil {
 		return m.RemoveCommandFavoriteFunc(ctx, userID, projectID, commandKey)
 	}
-	return contractkit.MockNotSet("MockRepository", "RemoveCommandFavorite")
+	return contractkit.MockNotSet("MockFavorites", "RemoveCommandFavorite")
 }
 
 // Compile-time check.
-var _ Repository = (*MockRepository)(nil)
+var _ Favorites = (*MockFavorites)(nil)
 
 // forge:section MockPlacement
 // forge:hash=8e19b1bbc10c87c51dba4ba658bb53ad6ee37774b95c7149fd2204ef22adee6e

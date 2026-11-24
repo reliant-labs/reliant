@@ -71,6 +71,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal/stopnudge"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/triggertools"
@@ -467,6 +468,8 @@ type WorkerTriggerDeps struct {
 	Pollers         *webhook.Registry
 	Integrations    *IntegrationSettings
 	ControlPlane    *configv1.ControlPlaneConfig
+	// Owners re-owns an orphaned trigger; trigger.New requires it.
+	Owners triggerowner.Service
 }
 
 // NewWorkerTrigger builds the trigger service list_triggers reads through and
@@ -504,6 +507,8 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Repo:           repo,
 		Firings:        store.NewTriggerEventExtStore(repo.ORM()),
 		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()),
+		Owners:         d.Owners,
+		Projects:       projectaccess.NewFromORM(repo.ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(repo.ORM()),
 		Pools:          store.NewMachinePoolExtStore(repo.ORM()),
 		Syncer:         syncer,
