@@ -27,7 +27,7 @@ vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { ObservabilityBillingService } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import { SecretStoreService } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
-import { installShellTransport, setTransport } from "@/lib/connect";
+import { installShellTransport, setTransport, transport } from "@/lib/connect";
 import { listActivity } from "@/services/controlPlane/observability/activityApi";
 import { getEnvironmentStatus, listEnvironmentPromotions, listProjectEnvironments } from "@/services/forge/cloudEnvs";
 import { listDomains } from "@/services/forge/domains";
@@ -72,7 +72,7 @@ describe("the console's sample data, on the demo's transport", () => {
     }
     // Every whole-environment promotion is one marker: same id, promoter and time.
     for (const env of DEMO_ENVS) {
-      for (const promotion of (await listReleasePromotions(env.id)).filter((p) => p.targets.length === 0)) {
+      for (const promotion of (await listReleasePromotions(transport, env.id)).filter((p) => p.targets.length === 0)) {
         const marker = markers.find((m) => m.promotionId === promotion.id);
         expect(marker?.promotedBy, `${promotion.id}`).toBe(promotion.promotedByActor);
         expect(marker?.promotedAtMs, `${promotion.id}`).toBe(Date.parse(promotion.createdAt!));
@@ -83,26 +83,26 @@ describe("the console's sample data, on the demo's transport", () => {
   });
 
   it("Environments: three deployed envs, prod and staging on v1.8.3, dev on the fix", async () => {
-    const live = await getLiveView(DEMO_PROJECT, null);
+    const live = await getLiveView(transport, DEMO_PROJECT, null);
     expect(live.map((e) => e.name)).toEqual(["dev", "prod", "staging"]);
     expect(Object.fromEntries(live.map((e) => [e.name, e.release]))).toEqual({ dev: "v1.8.4", staging: "v1.8.3", prod: "v1.8.3" });
     expect(live.every((e) => e.declared && e.phase === "succeeded")).toBe(true);
-    expect(await getLiveView("someone-else", null)).toEqual([]);
+    expect(await getLiveView(transport, "someone-else", null)).toEqual([]);
 
-    const envs = await listProjectEnvironments(DEMO_PROJECT, null);
+    const envs = await listProjectEnvironments(transport, DEMO_PROJECT, null);
     expect(envs.map((e) => e.name)).toEqual(["dev", "prod", "staging"]);
 
-    const status = await getEnvironmentStatus("env-prod", null);
+    const status = await getEnvironmentStatus(transport, "env-prod", null);
     expect(status.verdict).toBe("converged");
     expect(status.workloads.map((w) => w.name)).toEqual(DEMO_WORKLOADS.map((w) => w.name));
     expect(status.workloads.every((w) => w.observed_state === "ready")).toBe(true);
 
-    const shape = await getEnvironmentShape("env-prod", null);
+    const shape = await getEnvironmentShape(transport, "env-prod", null);
     expect(shape?.workloads.map((w) => w.name)).toEqual(DEMO_WORKLOADS.map((w) => w.name));
     expect(shape?.domains).toContain("shop.example.com");
     expect(shape?.alerts?.length ?? 0).toBeGreaterThan(0);
 
-    const promotions = await listEnvironmentPromotions("env-prod", null, 10);
+    const promotions = await listEnvironmentPromotions(transport, "env-prod", null, 10);
     expect(promotions.length).toBeGreaterThanOrEqual(3);
   });
 
@@ -116,7 +116,7 @@ describe("the console's sample data, on the demo's transport", () => {
       const cutAt = new Map<string, number>(DEMO_RELEASES.map((r) => [r.version, Date.now() - r.age]));
       const ids = new Set<string>();
       for (const env of DEMO_ENVS) {
-        const ledger = await listReleasePromotions(env.id);
+        const ledger = await listReleasePromotions(transport, env.id);
         expect(ledger.every((p, i) => i === 0 || Date.parse(ledger[i - 1].createdAt!) >= Date.parse(p.createdAt!))).toBe(true);
         for (const p of ledger) {
           // A release the demo's list has, so a rollback is judged; never promoted before it was cut.
@@ -125,7 +125,7 @@ describe("the console's sample data, on the demo's transport", () => {
           expect(ids.has(p.id)).toBe(false);
           ids.add(p.id);
           // Each promotion's rollout is its own, not the running one's.
-          expect((await getPromotionRollout(env.id, p.id))?.promotionId).toBe(p.id);
+          expect((await getPromotionRollout(transport, env.id, p.id))?.promotionId).toBe(p.id);
         }
       }
     } finally {
@@ -134,7 +134,7 @@ describe("the console's sample data, on the demo's transport", () => {
     }
 
     const rank = new Map(DEMO_RELEASES.map((r, index) => [r.version, index]));
-    const staging = envPromotionRows(await listReleasePromotions("env-staging"), rank, new Map());
+    const staging = envPromotionRows(await listReleasePromotions(transport, "env-staging"), rank, new Map());
     expect(staging.length).toBeGreaterThan(10);
     expect(staging[0]).toMatchObject({ version: "v1.8.3", targets: [], rollback: false });
     // A whole-release rollback, a scoped deploy, a mixed rollback + redeploy, and a row with no health check.
@@ -148,16 +148,16 @@ describe("the console's sample data, on the demo's transport", () => {
     expect(staging.some((row) => row.health.verdict === "healthy")).toBe(true);
     expect(staging.some((row) => row.health.verdict === "regressed")).toBe(false);
     // The one regression is prod's v1.8.3: the incident.
-    const prod = envPromotionRows(await listReleasePromotions("env-prod"), rank, new Map());
+    const prod = envPromotionRows(await listReleasePromotions(transport, "env-prod"), rank, new Map());
     expect(prod[0]).toMatchObject({ version: "v1.8.3" });
     expect(prod[0].health.verdict).toBe("regressed");
   });
 
   it("Deploys: one per promotion, newest first, and a staging build that failed before it cut a release", async () => {
     const { listDeployRuns, getDeployRun } = await import("@/services/forge/deployAttempts");
-    const runs = await listDeployRuns(DEMO_PROJECT);
+    const runs = await listDeployRuns(transport, DEMO_PROJECT);
     // One per promotion in every env's ledger, plus the failed build.
-    const promotions = (await Promise.all(DEMO_ENVS.map((env) => listReleasePromotions(env.id)))).flat();
+    const promotions = (await Promise.all(DEMO_ENVS.map((env) => listReleasePromotions(transport, env.id)))).flat();
     expect(runs.length).toBe(promotions.length + 1);
     expect(new Set(runs.map((r) => r.id)).size).toBe(runs.length);
     expect(runs.every((r, i) => i === 0 || Date.parse(runs[i - 1].startedAt!) >= Date.parse(r.startedAt!))).toBe(true);
@@ -167,31 +167,31 @@ describe("the console's sample data, on the demo's transport", () => {
     ]);
     const failed = runs.filter((r) => r.state === "failed");
     expect(failed.map((r) => [r.env, r.release, r.failedPhase])).toEqual([["staging", "", "build"]]);
-    expect((await getDeployRun(failed[0].id)).log).toMatch(/nothing was cut or promoted/);
+    expect((await getDeployRun(transport, failed[0].id)).log).toMatch(/nothing was cut or promoted/);
     // prod's from a terminal: its output stayed there.
-    expect((await listDeployRuns(DEMO_PROJECT, "prod")).every((r) => r.source === "terminal" && !r.hasLog)).toBe(true);
-    expect(await listDeployRuns("someone-else")).toEqual([]);
+    expect((await listDeployRuns(transport, DEMO_PROJECT, "prod")).every((r) => r.source === "terminal" && !r.hasLog)).toBe(true);
+    expect(await listDeployRuns(transport, "someone-else")).toEqual([]);
   });
 
   it("Releases: newest first with commits, one release, and its rollout", async () => {
-    const releases = await listProjectReleases(DEMO_PROJECT);
+    const releases = await listProjectReleases(transport, DEMO_PROJECT);
     expect(releases.map((r) => r.version)).toEqual(DEMO_RELEASES.map((r) => r.version));
     expect(releases[0]).toMatchObject({ subject: DEMO_RELEASES[0].subject, author: "maya", branch: "main" });
 
-    const one = await getProjectRelease(DEMO_PROJECT, "v1.8.3");
+    const one = await getProjectRelease(transport, DEMO_PROJECT, "v1.8.3");
     expect(one?.release.version).toBe("v1.8.3");
     expect([...(one?.currentEnvironmentIds ?? [])].sort()).toEqual(["env-prod", "env-staging"]);
 
-    const rollout = await getPromotionRollout("env-prod", "promo-prod-v183");
+    const rollout = await getPromotionRollout(transport, "env-prod", "promo-prod-v183");
     expect(rollout?.workloads.length).toBe(DEMO_WORKLOADS.length);
   });
 
   it("Secrets: names per environment, never a value", async () => {
-    const prod = await listSecrets("env-prod");
+    const prod = await listSecrets(transport, "env-prod");
     expect(prod.secrets.map((s) => s.name)).toEqual([...DEMO_SECRETS.map((s) => s.name)].sort());
     expect(prod.protected).toBe(true);
     // dev is missing the webhook secret and the mail key: the matrix shows the gap.
-    const dev = await listSecrets("env-dev");
+    const dev = await listSecrets(transport, "env-dev");
     expect(dev.secrets.map((s) => s.name)).not.toContain("PAYMENTS_WEBHOOK_SECRET");
 
     const client = createClient(SecretStoreService, (await import("@/lib/connect")).transport);
@@ -203,7 +203,7 @@ describe("the console's sample data, on the demo's transport", () => {
   });
 
   it("Domains: live on prod, one still verifying on staging", async () => {
-    const domains = await listDomains(null);
+    const domains = await listDomains(transport, null);
     expect(domains.map((d) => d.hostname)).toEqual(DEMO_DOMAINS.map((d) => d.hostname));
     expect(domains.find((d) => d.hostname === "shop.example.com")?.state).toBe("live");
     expect(domains.find((d) => d.hostname === "staging.shop.example.com")?.state).toBe("verifying");

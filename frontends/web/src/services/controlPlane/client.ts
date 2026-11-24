@@ -16,9 +16,10 @@
  * generated TS types as-is — DO NOT send snake_case duplicates or
  * hand-rolled aliases.
  */
-import type { Client } from "@connectrpc/connect";
+import type { Client, Transport } from "@connectrpc/connect";
 import type { DescService } from "@bufbuild/protobuf";
-import { connectClient } from "@/lib/connect";
+import { connectClient, transport as appTransport } from "@/lib/connect";
+import { clientFor } from "@/lib/transportScope";
 import { CONTROL_PLANE_API_URL } from "./config";
 
 /**
@@ -26,10 +27,16 @@ import { CONTROL_PLANE_API_URL } from "./config";
  * (inside the shared chain) reads the session token on every request, so
  * token refreshes are picked up without rebuilding anything.
  *
+ * `transport` is the one a caller read from its TransportScope
+ * (`useTransport(transport)`, lib/transportScope.tsx). A scope's own
+ * transport (a fixture pack's) gets a client on it, and needs no control-plane
+ * URL. The app's transport, or none, is today's client.
+ *
  * Throws synchronously when `CONTROL_PLANE_API_URL` (config.js) isn't configured —
  * callers that already gate on `hasControlPlane` will never see that case.
  */
-export function getControlPlaneClient<T extends DescService>(service: T): Client<T> {
+export function getControlPlaneClient<T extends DescService>(service: T, transport?: Transport): Client<T> {
+  if (transport && transport !== appTransport) return clientFor(service, transport);
   if (!CONTROL_PLANE_API_URL) {
     throw new Error("Control plane API URL not configured (CONTROL_PLANE_API_URL)");
   }
