@@ -19,7 +19,9 @@ inputs:
   env:
     type: string
     default: prod
-    description: The env whose findings are being patched (named in the agent's brief).
+    description: >-
+      The env whose findings are being patched (named in the agent's brief), or the directory vuln-patch
+      scanned for them (`.` or a relative path holding a `/`).
   targets:
     type: array
     default: []
@@ -94,7 +96,7 @@ nodes:
             inject:
               role: user
               content: |
-                {{ iter.iteration == 0 ? '' : '## Attempt ' + string(iter.iteration + 1) + ' of ' + string(inputs.max_iterations) + '\n\nYour previous attempt did not pass the check the workflow ran after it:\n' + (has(outputs.reasons) ? outputs.reasons.map(r, '- ' + r).join('\n') : '- (no result was recorded)') + (has(outputs.verify_tail) && outputs.verify_tail != '' ? '\n\nVerify output (tail):\n```\n' + outputs.verify_tail + '\n```' : '') + '\n\nFix what it reports, then call submit_result again. The worktree still holds your earlier changes.\n\n' }}Patch the vulnerabilities below in the forge project at `{{ inputs.dir }}` (env `{{ inputs.env }}`). It is a fresh git worktree; leave every change uncommitted.
+                {{ iter.iteration == 0 ? '' : '## Attempt ' + string(iter.iteration + 1) + ' of ' + string(inputs.max_iterations) + '\n\nYour previous attempt did not pass the check the workflow ran after it:\n' + (has(outputs.reasons) ? outputs.reasons.map(r, '- ' + r).join('\n') : '- (no result was recorded)') + (has(outputs.verify_tail) && outputs.verify_tail != '' ? '\n\nVerify output (tail):\n```\n' + outputs.verify_tail + '\n```' : '') + '\n\nFix what it reports, then call submit_result again. The worktree still holds your earlier changes.\n\n' }}Patch the vulnerabilities below in the forge project at `{{ inputs.dir }}` ({{ inputs.env == '.' || inputs.env.contains('/') ? 'found by scanning its directory `' + inputs.env + '`' : 'env `' + inputs.env + '`' }}). It is a fresh git worktree; leave every change uncommitted.
 
                 {{ inputs.brief != '' ? inputs.brief + '\n\n' : '' }}Targeted findings. Every one must be gone from `reliant forge vuln scan . --json` when you finish:
                 {{ inputs.targets.map(t, '- ' + string(t.id) + (has(t.names) && size(t.names) > 1 ? ' (' + t.names.filter(n, n != t.id).join(', ') + ')' : '') + ': ' + (has(t.package) ? string(t.package) : '?') + ' ' + (has(t.installed) ? string(t.installed) : '') + (has(t.fixed_in) && string(t.fixed_in) != '' ? ', fixed in ' + string(t.fixed_in) : '') + (has(t.status) && string(t.status) != '' ? '; patcher: ' + string(t.status) : '') + (has(t.reason) && string(t.reason) != '' ? ' (' + untrustedText(string(t.reason), 300) + ')' : '')).join('\n') }}

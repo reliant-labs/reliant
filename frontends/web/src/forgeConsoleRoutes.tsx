@@ -93,6 +93,8 @@ import {
   forgeResolveSearchSchema,
   PROJECTS_CARRIED,
   projectsCarrySearchSchema,
+  CONSOLE_CHECKOUT_PARAM,
+  forgeConsoleCheckoutSearchSchema,
 } from './routeSchemas'
 import { registerSecurityNav } from './components/Forge/Security/registerSecurityNav'
 
@@ -254,6 +256,10 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const consoleRoute = createRoute({
     getParentRoute: () => layoutRoute,
     path: (inOrg ? '/apps/$project' : '/forge/p/$project') as '/forge/p/$project',
+    // Which checkout backs the console (`?project=`), carried by every link
+    // inside it: a page change must not drop the person's choice.
+    validateSearch: forgeConsoleCheckoutSearchSchema,
+    search: { middlewares: [retainSearchParams([CONSOLE_CHECKOUT_PARAM])] },
     component: components.console,
   })
   const overviewRoute = createRoute({

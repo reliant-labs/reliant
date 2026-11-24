@@ -621,6 +621,18 @@ export const forgeResolveSearchSchema = z.object({
 });
 
 /**
+ * Every console page's (`/o/<org>/apps/<name>/…`, `/forge/p/<name>/…`):
+ * `project`, the Reliant project id of the checkout behind the console, when
+ * several of the person's projects declare the app's name
+ * (Console/consoleHost.ts consoleCheckout). The console route retains it, so
+ * the console's own links carry it on. An id is a string, whatever it looks like.
+ */
+export const CONSOLE_CHECKOUT_PARAM = "project";
+export const forgeConsoleCheckoutSearchSchema = z.object({
+  project: z.union([z.string(), z.number().transform(String)]).optional().catch(undefined),
+});
+
+/**
  * The console's environment scope (Console/envScope.ts): an
  * environment name or `all`, on every console page. Absent, the console
  * resolves the remembered scope (default prod) and writes it back.

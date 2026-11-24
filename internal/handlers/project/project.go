@@ -188,7 +188,7 @@ func (s *Service) requestMachine(ctx context.Context, userID, projectID, path st
 //     project, and return its relative_path.
 //   - repoID not in the project's repo set -> NotFound.
 func (s *Service) resolveProjectRepo(ctx context.Context, project *db.Project, repoID string) (string, *core.Repo, error) {
-	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
+	repos, err := s.deps.Repos.ListReposByProject(ctx, project.ID)
 	if err != nil {
 		return "", nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
 	}

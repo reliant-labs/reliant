@@ -34,7 +34,7 @@ func (s *Service) RestoreProject(
 		logging.InfoContext(ctx, "[project] restored a project scheduled for deletion", "project_id", project.ID,
 			"restored_by", userID, "triggers_resumed", len(resumed))
 	}
-	restored, err := s.deps.Repo.GetProject(ctx, project.ID)
+	restored, err := s.deps.ProjectRows.GetProject(ctx, project.ID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the restored project"))
 	}

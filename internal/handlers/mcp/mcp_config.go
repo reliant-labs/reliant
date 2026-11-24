@@ -233,7 +233,7 @@ func (s *Service) persistGlobalScopeSnapshotAcrossProjects(
 		return nil
 	}
 
-	sourceProject, err := s.deps.Repo.GetProject(ctx, sourceProjectID)
+	sourceProject, err := s.deps.ProjectRows.GetProject(ctx, sourceProjectID)
 	if err != nil {
 		return fmt.Errorf("failed to resolve source project for global MCP snapshot propagation: %w", err)
 	}

@@ -22,6 +22,8 @@ export interface ShellNavBodyProps {
   search: Record<string, unknown>;
   slots: NavSlots;
   onNavigate: (href: string, options?: NavigateOptions) => void;
+  /** Every row drawn as a top-level row (a phone's drawer; NavRenderer `flat`). */
+  flat?: boolean;
 }
 
 export function ShellNavBody(props: ShellNavBodyProps) {
@@ -33,7 +35,7 @@ function NavWithConsole({ app, ...props }: ShellNavBodyProps & { app: string }) 
   return <NavBody {...props} console={model} />;
 }
 
-function NavBody({ shell, pathname, search, slots, onNavigate, console }: ShellNavBodyProps & { console: GroupedNavInput | null }) {
+function NavBody({ shell, pathname, search, slots, onNavigate, flat, console }: ShellNavBodyProps & { console: GroupedNavInput | null }) {
   const ctx = useMemo<NavCtx>(
     () => ({
       pathname,
@@ -48,5 +50,5 @@ function NavBody({ shell, pathname, search, slots, onNavigate, console }: ShellN
     }),
     [pathname, search, shell.mode, shell.projectId, shell.name, shell.app, console],
   );
-  return <NavRenderer config={hybridNav} ctx={ctx} slots={slots} onNavigate={onNavigate} />;
+  return <NavRenderer config={hybridNav} ctx={ctx} slots={slots} onNavigate={onNavigate} flat={flat} />;
 }

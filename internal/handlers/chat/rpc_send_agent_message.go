@@ -96,7 +96,7 @@ func (s *Service) SendAgentMessage(
 	// is not the answer to a message that was delivered. A repeat of one still
 	// queued carries on below and finds its row there.
 	if clientID != "" {
-		prior, err := s.deps.Repo.GetAgentMessage(ctx, clientID)
+		prior, err := s.deps.AgentMessages.GetAgentMessage(ctx, clientID)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check for an earlier send"))
 		}
@@ -294,7 +294,7 @@ func (s *Service) SendAgentMessage(
 		// message (reliant #2394): withdraw the row and say so, and the
 		// composer keeps the text.
 		if s.wakeLiveRun(ctx, chat, toThread, threadwake.ReasonMailbox) {
-			if _, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, msg.ID, chat.ID); err != nil {
+			if _, err := s.deps.AgentMessages.CancelQueuedAgentMessage(ctx, msg.ID, chat.ID); err != nil {
 				logging.WarnContext(ctx, "Could not withdraw a message whose run ended before it was read",
 					"error", err, "chatID", chat.ID, "messageID", msg.ID)
 			}
@@ -433,7 +433,7 @@ func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threa
 	refuse := func(cause error) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
 		logging.WarnContext(ctx, "Could not start a run for a message queued to a run that closed; withdrawing it",
 			"error", cause, "chatID", chat.ID, "workflowID", workflowID)
-		if _, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, messageID, chat.ID); err != nil {
+		if _, err := s.deps.AgentMessages.CancelQueuedAgentMessage(ctx, messageID, chat.ID); err != nil {
 			logging.WarnContext(ctx, "Could not withdraw the queued message", "error", err, "chatID", chat.ID, "messageID", messageID)
 		}
 		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{

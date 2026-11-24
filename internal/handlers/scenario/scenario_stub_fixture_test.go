@@ -79,7 +79,7 @@ func newScenarioDrafts() *scenario.MockDrafts {
 		}}
 }
 
-func newScenarioRepo(f *fixture) *scenario.MockRepository {
+func newScenarioRepo(f *fixture) *stubRepo {
 	scenarios := map[string]*db.WorkflowScenario{
 		ownScenarioID: {
 			ID: ownScenarioID, UserID: "test-user", Name: "Own scenario", Events: fixtureScenario,
@@ -90,15 +90,7 @@ func newScenarioRepo(f *fixture) *scenario.MockRepository {
 			WorkflowDraftID: ptr.Of("draft-other"),
 		},
 	}
-	return projectaccesstest.Bound(&scenario.MockRepository{
-		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) {
-			if id == ownProjectID {
-				// projects.path is the creating machine's; the checkout this
-				// store records is /home/test/project on scenarioDaemon.
-				return &db.Project{ID: id, UserID: "test-user", Path: "/Users/creator/project"}, nil
-			}
-			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("project"), id)
-		},
+	return projectaccesstest.Bound(&stubRepo{MockRepository: &scenario.MockRepository{
 		ListProjectDaemonsForProjectFunc: func(_ context.Context, projectID string) ([]*core.ProjectDaemon, error) {
 			return []*core.ProjectDaemon{{ProjectID: projectID, DaemonID: scenarioDaemon, Path: "/home/test/project", InstallState: core.ProjectInstallInstalled}}, nil
 		},
@@ -128,6 +120,15 @@ func newScenarioRepo(f *fixture) *scenario.MockRepository {
 		DeleteWorkflowScenarioFunc: func(_ context.Context, id string) error {
 			f.deleted = append(f.deleted, id)
 			return nil
+		},
+	},
+		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) {
+			if id == ownProjectID {
+				// projects.path is the creating machine's; the checkout this
+				// store records is /home/test/project on scenarioDaemon.
+				return &db.Project{ID: id, UserID: "test-user", Path: "/Users/creator/project"}, nil
+			}
+			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("project"), id)
 		},
 	}, func(_ context.Context, id, userID string) (*db.Project, error) {
 		if id == ownProjectID && userID == "test-user" {
