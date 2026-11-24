@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -71,6 +72,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal/stopnudge"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/triggertools"
@@ -379,23 +381,25 @@ type WorkerChatDeps struct {
 //forge:root-only worker
 func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 	svc, err := chat.New(chat.Deps{
-		Logger:      d.Logger,
-		Config:      d.Config,
-		Repo:        d.DB,
-		Workflows:   store.NewWorkflowExtStore(d.DB.ORM()),
-		Worktrees:   store.NewWorktreeExtStore(d.DB.ORM()),
-		ProjectRows: store.NewProjectExtStore(d.DB.ORM()),
-		Questions:   store.NewQuestionExtStore(d.DB.ORM()),
-		Spawns:      store.NewToolCallExtStore(d.DB.ORM()),
-		Selections:  store.NewChatSelectionExtStore(d.DB.ORM()),
-		Messages:    store.NewMessageExtStore(d.DB.ORM()),
-		ToolBlocks:  store.NewMessageContentBlockExtStore(d.DB.ORM()),
-		Senders:     store.NewThreadExtStore(d.DB.ORM()),
-		Backoff:     d.Backoff,
-		Temporal:    d.Temporal.Client,
-		Pause:       d.Pause,
-		Router:      d.Router,
-		LocalModels: local.NewRepoDirectory(d.DB, store.NewModelEndpointExtStore(d.DB.ORM())),
+		Logger:        d.Logger,
+		Config:        d.Config,
+		Repo:          d.DB,
+		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
+		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
+		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
+		Questions:     store.NewQuestionExtStore(d.DB.ORM()),
+		Spawns:        store.NewToolCallExtStore(d.DB.ORM()),
+		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),
+		Messages:      store.NewMessageExtStore(d.DB.ORM()),
+		ToolBlocks:    store.NewMessageContentBlockExtStore(d.DB.ORM()),
+		Senders:       store.NewThreadExtStore(d.DB.ORM()),
+		Backoff:       d.Backoff,
+		Temporal:      d.Temporal.Client,
+		Pause:         d.Pause,
+		Router:        d.Router,
+		LocalModels:   local.NewRepoDirectory(d.DB, store.NewModelEndpointExtStore(d.DB.ORM())),
+		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
+		AgentMessages: store.NewAgentMessageExtStore(d.DB.ORM()),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("chat service: %w", err)
@@ -467,6 +471,8 @@ type WorkerTriggerDeps struct {
 	Pollers         *webhook.Registry
 	Integrations    *IntegrationSettings
 	ControlPlane    *configv1.ControlPlaneConfig
+	// Owners re-owns an orphaned trigger; trigger.New requires it.
+	Owners triggerowner.Service
 }
 
 // NewWorkerTrigger builds the trigger service list_triggers reads through and
@@ -504,6 +510,8 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Repo:           repo,
 		Firings:        store.NewTriggerEventExtStore(repo.ORM()),
 		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()),
+		Owners:         d.Owners,
+		Projects:       projectaccess.NewFromORM(repo.ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(repo.ORM()),
 		Pools:          store.NewMachinePoolExtStore(repo.ORM()),
 		Syncer:         syncer,

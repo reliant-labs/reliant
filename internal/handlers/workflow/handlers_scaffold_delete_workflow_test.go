@@ -24,7 +24,7 @@ func TestDeleteWorkflow_Generated(t *testing.T) {
 	store.Drafts.DeleteWorkflowDraftBySlugFunc = func(context.Context, string, string) error { return nil }
 	store.ListTriggersFunc = func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return nil, nil }
 	store.RunTxFunc = func(ctx context.Context, _ orm.TxPolicy, f func(context.Context) error) error { return f(ctx) }
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(store.deps()))
+	svc := workflow.NewTestWorkflow(t, withDeps(store.deps()))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteWorkflowRequest, pb.DeleteWorkflowResponse]{
 		{

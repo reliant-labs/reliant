@@ -37,6 +37,16 @@ interface Surface {
   harness?: HarnessOptions
 }
 
+/** Where the two fixture projects are checked out, for the phone's new-chat Project row. */
+const NEW_CHAT_INSTALLS = {
+  'reliant.v1.ProjectService/ListProjectDaemons': {
+    projectDaemons: [
+      { projectId: IDS.project, daemonId: IDS.cloudDaemon, path: '/home/workspace/projects/shopfront', clonedAt: '2026-11-01T00:00:00Z', installState: 'PROJECT_INSTALL_STATE_INSTALLED', installError: '', daemonName: 'cloud-machine' },
+      { projectId: IDS.docsProject, daemonId: 'd-retired-0001', path: '/home/alex/code/docs-site', clonedAt: '2026-11-01T00:00:00Z', installState: 'PROJECT_INSTALL_STATE_INSTALLED', installError: '', daemonName: 'old-laptop' },
+    ],
+  },
+}
+
 const LONG_CHAT_TITLE = 'Refactor cart totals and fix multi-quantity discounts'
 const SHORT_CHAT_TITLE = 'Load-test the limiter (spawned from rate limiting)'
 
@@ -609,6 +619,41 @@ const SURFACES: Surface[] = [
     on: ['mobile'],
     ready: (page) => page.getByTestId('nav-observability'),
     act: openNavDrawer,
+  },
+  {
+    // The phone's own drawer on its chat list: drilled into Agents, Workflows open. Its rows are
+    // drawn like the top level's (owner, 2026-11-24: same size, colour, indent, and an icon).
+    name: 'shell-m-drawer-agents',
+    path: '/m/chats',
+    on: ['mobile'],
+    ready: (page) => page.getByTestId('nav-workflows-library'),
+    act: async (page) => {
+      await expect(page.getByText('Write the webhooks guide').first()).toBeVisible({ timeout: 20_000 })
+      await openNavDrawer(page)
+      await expect(page.getByTestId('nav-drill-in')).toHaveAttribute('data-area', 'agents')
+      await page.getByTestId('nav-workflows').click()
+    },
+  },
+  {
+    // The phone's new chat: the Project row names the machine the project is on.
+    name: 'mobile-new-chat',
+    path: '/m/new',
+    on: ['mobile'],
+    ready: (page) => page.getByTestId('mobile-new-chat-project').getByText('On cloud-machine'),
+    harness: { fixtures: NEW_CHAT_INSTALLS },
+  },
+  {
+    // Its picker: shopfront is on the cloud machine; docs-site is checked out only on a machine
+    // that is gone, so it offers to set it up where the chat runs.
+    name: 'mobile-new-chat-projects',
+    path: '/m/new',
+    on: ['mobile'],
+    ready: (page) => page.getByText('Which project', { exact: true }),
+    act: async (page) => {
+      await page.getByTestId('mobile-new-chat-project').getByText('On cloud-machine').waitFor()
+      await page.getByTestId('mobile-new-chat-project').getByRole('button').click()
+    },
+    harness: { fixtures: NEW_CHAT_INSTALLS },
   },
   {
     name: 'shell-m-drawer-observability',

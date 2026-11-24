@@ -31,6 +31,12 @@ describe("AppChip", () => {
     expect(chip.getAttribute("href")).toBe("/forge/p/shop");
   });
 
+  it("names the checkout it sits in, so the console reads that one (`?project=`)", async () => {
+    inRouter(<AppChip app={LIVE} projectId="p-1" />);
+    const chip = await screen.findByRole("link", { name: "shop: deployed" });
+    expect(chip.getAttribute("href")).toBe("/forge/p/shop?project=p-1");
+  });
+
   it("is plain text for an app the org does not have", async () => {
     inRouter(<AppChip app={NOT_HOSTED} />);
     expect(await screen.findByRole("img", { name: "admin: not deployed" })).toBeTruthy();

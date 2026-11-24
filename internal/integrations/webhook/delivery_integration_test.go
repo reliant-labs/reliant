@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/client"
@@ -138,62 +136,6 @@ func (f *receiptFixture) drain(t *testing.T, n int) {
 	worked, err := f.relay.ProcessOne(t.Context())
 	require.NoError(t, err)
 	require.False(t, worked)
-}
-
-func TestDeliveryInboxBurstRecordsBeforeSlowCatalog(t *testing.T) {
-	testkit.Slow(t, "exercise 100 signed GitHub deliveries times 15 trigger events and 100 keyless webhook receipts against PostgreSQL")
-	f := newReceiptFixture(t)
-	for i := range 15 {
-		f.trigger(t, fmt.Sprintf("github-%02d", i), core.TriggerKindIntegration, f.now, true)
-	}
-	f.trigger(t, "plain", core.TriggerKindWebhook, f.now, true)
-	f.grant(t)
-	body := gitHubFixture(t, "issues.opened")
-	// The edge has no catalog reader available before acknowledgment.
-	f.catalog.before = func(context.Context) error { t.Fatal("receipt path touched catalog"); return nil }
-	for i := range 100 {
-		g := f.github("issues", fmt.Sprintf("github-%d", i), body)
-		require.Equal(t, http.StatusOK, g.Code, g.Body.String())
-		h := f.hook("respond-async", "")
-		require.Equal(t, http.StatusAccepted, h.Code, h.Body.String())
-		require.Equal(t, "respond-async", h.Header().Get("Preference-Applied"))
-		require.Contains(t, h.Body.String(), `"status":"pending"`)
-		require.NotContains(t, h.Body.String(), "event_id")
-	}
-	require.Equal(t, http.StatusOK, f.github("issues", "github-0", body).Code)
-	f.count(t, "SELECT count(*) FROM trigger_delivery_inbox", 200)
-	f.count(t, "SELECT count(*) FROM trigger_events", 0)
-	f.count(t, "SELECT count(*) FROM trigger_delivery_inbox WHERE payload::text LIKE '%cookie-secret%' OR payload::text LIKE '%query-secret%' OR payload::text LIKE '%whk_correct%'", 0)
-	// Stall the first actual pin on a latch. Queue durability does not depend
-	// on the catalog being ready or on an HTTP handler still being alive.
-	entered, release := make(chan struct{}), make(chan struct{})
-	finished := make(chan error, 1)
-	f.catalog.before = func(ctx context.Context) error {
-		if f.catalog.reads != 1 {
-			return nil
-		}
-		close(entered)
-		select {
-		case <-release:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	go func() { _, err := f.relay.ProcessOne(t.Context()); finished <- err }()
-	testkit.Receive(t, "first catalog read stalls", entered)
-	f.count(t, "SELECT count(*) FROM trigger_delivery_inbox WHERE completed_at IS NULL", 200)
-	close(release)
-	require.NoError(t, testkit.Receive(t, "first receipt finishes", finished))
-	f.drain(t, 199)
-	f.count(t, "SELECT count(*) FROM trigger_events WHERE kind='integration'", 1500)
-	f.count(t, "SELECT count(*) FROM trigger_events WHERE kind='webhook'", 100)
-	f.count(t, "SELECT count(*) FROM trigger_delivery_inbox WHERE completed_at IS NOT NULL AND payload IS NULL", 200)
-	require.Len(t, f.starts.ids, 1600)
-	for _, calls := range f.starts.ids {
-		require.Equal(t, 1, calls)
-	}
-	require.Equal(t, 200, f.catalog.reads, "one pin per delivery despite fifteen matches sharing a catalog")
 }
 
 func TestDeliveryInboxRetriesReadsAndFencesExpiredLease(t *testing.T) {

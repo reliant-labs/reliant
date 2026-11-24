@@ -27,7 +27,6 @@ type Repository interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	GetQuestionByID(ctx context.Context, id string) (*db.Question, error)
-	EnqueueAgentMessageOnce(ctx context.Context, msg *db.AgentMessage) (bool, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
@@ -46,4 +45,10 @@ type Signaler interface {
 type Messenger interface {
 	SendMessage(ctx context.Context, req *connect.Request[pb.SendMessageRequest]) (*connect.Response[pb.SendMessageResponse], error)
 	SendAgentMessage(ctx context.Context, req *connect.Request[pb.SendAgentMessageRequest]) (*connect.Response[pb.SendAgentMessageResponse], error)
+}
+
+// Mailbox queues the answer given behind a blocking question and announces it
+// to the chat's open clients. *agentmailbox.Mailbox satisfies it.
+type Mailbox interface {
+	EnqueueAgentMessageOnce(ctx context.Context, msg *db.AgentMessage) (bool, error)
 }
