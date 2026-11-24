@@ -4017,6 +4017,11 @@ type RunArgs struct {
 	// and it is revoked when the step ends. Refused, without running the
 	// command, on a machine whose daemon does not apply step keys and on a
 	// deployment that cannot issue them. Output: nodes.<id>.llm_gateway.
+	//
+	// Deprecated (shipped in v1.29.0, slated for removal): it keeps working
+	// throughout v1 and is removed only in a future major.
+	//
+	// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
 	LlmGateway    *LLMGatewayStep `protobuf:"bytes,7,opt,name=llm_gateway,json=llmGateway,proto3" json:"llm_gateway,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -4094,6 +4099,7 @@ func (x *RunArgs) GetWritableCheckouts() []string {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
 func (x *RunArgs) GetLlmGateway() *LLMGatewayStep {
 	if x != nil {
 		return x.LlmGateway
@@ -8011,6 +8017,10 @@ type RunOutput struct {
 	Truncated bool `protobuf:"varint,6,opt,name=truncated,proto3" json:"truncated,omitempty"`
 	// The step key the command ran with, when the node sets llm_gateway:
 	// what it was allowed and what it spent. Never the key itself.
+	// Deprecated with RunArgs.llm_gateway: set while that field keeps working
+	// throughout v1.
+	//
+	// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
 	LlmGateway    *RunLLMGatewayOutput `protobuf:"bytes,7,opt,name=llm_gateway,json=llmGateway,proto3" json:"llm_gateway,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -8088,6 +8098,7 @@ func (x *RunOutput) GetTruncated() bool {
 	return false
 }
 
+// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
 func (x *RunOutput) GetLlmGateway() *RunLLMGatewayOutput {
 	if x != nil {
 		return x.LlmGateway
@@ -9460,6 +9471,11 @@ type WorkflowRequirements struct {
 	// checked with the vendor's own status command, whose output never leaves
 	// the machine; Reliant never reads, stores or relays a vendor's sign-in.
 	// A person signs one in with `reliant machine login <vendor>`.
+	//
+	// Deprecated (shipped in v1.29.0, slated for removal): it keeps working
+	// throughout v1 and is removed only in a future major.
+	//
+	// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
 	CliLogin      []string `protobuf:"bytes,4,rep,name=cli_login,json=cliLogin,proto3" json:"cli_login,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -9516,6 +9532,7 @@ func (x *WorkflowRequirements) GetRepos() []string {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
 func (x *WorkflowRequirements) GetCliLogin() []string {
 	if x != nil {
 		return x.CliLogin
@@ -10042,7 +10059,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x11BaseBranchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:f\x8a\xb5\x18b\n" +
-	"\x0fcreate_worktree\x12\x0fCreate Worktree\x1a.Create a git worktree for isolated development*\x03git2\tGitBranch\"\xf9\v\n" +
+	"\x0fcreate_worktree\x12\x0fCreate Worktree\x1a.Create a git worktree for isolated development*\x03git2\tGitBranch\"\xb7\f\n" +
 	"\aRunArgs\x12~\n" +
 	"\acommand\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBM\x82\xb5\x18I\n" +
 	"1The shell command to run in the project directoryp\x01\x82\x01\x11npm test -- --runR\acommand\x12M\n" +
@@ -10055,9 +10072,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\vcredentials\x18\x05 \x01(\tB\xa0\x02\x82\xb5\x18\x9b\x02\n" +
 	"\x84\x02Set to none to run the command with no GitHub, git, ssh or cloud credentials. On Linux it runs in a sandbox where the daemon's credential files are absent, and is refused where the kernel cannot provide one; on macOS and Windows only the environment is cleanedJ\vCredentials\x82\x01\x04noneR\vcredentials\x12\x99\x02\n" +
 	"\x12writable_checkouts\x18\x06 \x03(\tB\xe9\x01\x82\xb5\x18\xe4\x01\n" +
-	"\xd5\x01With credentials: none, the shared project checkouts, or hand-off directories under the cache directory, the command may write. Every other checkout but its own is read-only to it, and its cache writes are its own \x01\x82\x01\areliantR\x11writableCheckouts\x12\xfc\x02\n" +
-	"\vllm_gateway\x18\a \x01(\v2\x1a.reliant.v1.LLMGatewayStepB\xbe\x02\x82\xb5\x18\xb9\x02\n" +
-	"\xf1\x01Run the command with a short-lived, budget-capped LLM gateway key for a third-party agent CLI, as {cli: claude-code, budget_usd: 2, models: [...]}. The key is set for this command only, redacted from its output and revoked when the step endsJ\vLLM gateway\x82\x01'{\"cli\": \"claude-code\", \"budget_usd\": 2}\x8a\x01\vJSON objectR\n" +
+	"\xd5\x01With credentials: none, the shared project checkouts, or hand-off directories under the cache directory, the command may write. Every other checkout but its own is read-only to it, and its cache writes are its own \x01\x82\x01\areliantR\x11writableCheckouts\x12\xba\x03\n" +
+	"\vllm_gateway\x18\a \x01(\v2\x1a.reliant.v1.LLMGatewayStepB\xfc\x02\x82\xb5\x18\xf5\x02\n" +
+	"\xad\x02Deprecated: kept working throughout v1, slated for removal. Run the command with a short-lived, budget-capped LLM gateway key for a third-party agent CLI, as {cli: claude-code, budget_usd: 2, models: [...]}. The key is set for this command only, redacted from its output and revoked when the step endsJ\vLLM gateway\x82\x01'{\"cli\": \"claude-code\", \"budget_usd\": 2}\x8a\x01\vJSON object\x18\x01R\n" +
 	"llmGateway\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -10496,7 +10513,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\arepo_id\x18\x06 \x01(\tR\x06repoId\x12\x16\n" +
 	"\x06status\x18\a \x01(\tR\x06status\"0\n" +
 	"\x14DeleteWorktreeOutput\x12\x18\n" +
-	"\adeleted\x18\x01 \x01(\bR\adeleted\"\xf4\x01\n" +
+	"\adeleted\x18\x01 \x01(\bR\adeleted\"\xf8\x01\n" +
 	"\tRunOutput\x12\x1b\n" +
 	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
 	"\x06stdout\x18\x02 \x01(\tR\x06stdout\x12\x16\n" +
@@ -10504,8 +10521,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\vworking_dir\x18\x04 \x01(\tR\n" +
 	"workingDir\x12\x19\n" +
 	"\blog_file\x18\x05 \x01(\tR\alogFile\x12\x1c\n" +
-	"\ttruncated\x18\x06 \x01(\bR\ttruncated\x12@\n" +
-	"\vllm_gateway\x18\a \x01(\v2\x1f.reliant.v1.RunLLMGatewayOutputR\n" +
+	"\ttruncated\x18\x06 \x01(\bR\ttruncated\x12D\n" +
+	"\vllm_gateway\x18\a \x01(\v2\x1f.reliant.v1.RunLLMGatewayOutputB\x02\x18\x01R\n" +
 	"llmGateway\"\xe6\x01\n" +
 	"\x13RunLLMGatewayOutput\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12$\n" +
@@ -10633,13 +10650,13 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\venvironment\x18\x01 \x01(\v2\x15.reliant.v1.CelStringR\venvironment\"\\\n" +
 	"\rNodeSecretRef\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x127\n" +
-	"\venvironment\x18\x02 \x01(\v2\x15.reliant.v1.CelStringR\venvironment\"\xac\x03\n" +
+	"\venvironment\x18\x02 \x01(\v2\x15.reliant.v1.CelStringR\venvironment\"\xea\x03\n" +
 	"\x14WorkflowRequirements\x12\x14\n" +
 	"\x05tools\x18\x01 \x03(\tR\x05tools\x12\"\n" +
 	"\fintegrations\x18\x02 \x03(\tR\fintegrations\x12\x14\n" +
-	"\x05repos\x18\x03 \x03(\tR\x05repos\x12\xc3\x02\n" +
-	"\tcli_login\x18\x04 \x03(\tB\xa5\x02\x82\xb5\x18\xa0\x02\n" +
-	"\xfd\x01Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine. Checked with each vendor's own status command before the first node; sign one in with `reliant machine login <vendor> --machine <name>`J\fCLI sign-ins\x82\x01\x0f[claude, codex]R\bcliLogin\"\xf4\x01\n" +
+	"\x05repos\x18\x03 \x03(\tR\x05repos\x12\x81\x03\n" +
+	"\tcli_login\x18\x04 \x03(\tB\xe3\x02\x82\xb5\x18\xdc\x02\n" +
+	"\xb9\x02Deprecated: kept working throughout v1, slated for removal. Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine. Checked with each vendor's own status command before the first node; sign one in with `reliant machine login <vendor> --machine <name>`J\fCLI sign-ins\x82\x01\x0f[claude, codex]\x18\x01R\bcliLogin\"\xf4\x01\n" +
 	"\x13WorkflowConcurrency\x12\x1f\n" +
 	"\vmax_running\x18\x01 \x01(\rR\n" +
 	"maxRunning\x12@\n" +
