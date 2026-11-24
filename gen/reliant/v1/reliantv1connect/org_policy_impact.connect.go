@@ -64,6 +64,7 @@ func NewOrgPolicyImpactServiceClient(httpClient connect.HTTPClient, baseURL stri
 			httpClient,
 			baseURL+OrgPolicyImpactServiceGetPolicyImpactProcedure,
 			connect.WithSchema(orgPolicyImpactServiceMethods.ByName("GetPolicyImpact")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -100,6 +101,7 @@ func NewOrgPolicyImpactServiceHandler(svc OrgPolicyImpactServiceHandler, opts ..
 		OrgPolicyImpactServiceGetPolicyImpactProcedure,
 		svc.GetPolicyImpact,
 		connect.WithSchema(orgPolicyImpactServiceMethods.ByName("GetPolicyImpact")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.OrgPolicyImpactService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

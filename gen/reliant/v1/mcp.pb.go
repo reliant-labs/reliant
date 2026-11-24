@@ -1905,12 +1905,12 @@ const file_reliant_v1_mcp_proto_rawDesc = "" +
 	"\x19MCP_SERVER_STATUS_HEALTHY\x10\x01\x12\x1f\n" +
 	"\x1bMCP_SERVER_STATUS_UNHEALTHY\x10\x02\x12\"\n" +
 	"\x1eMCP_SERVER_STATUS_DISCONNECTED\x10\x03\x12\x1e\n" +
-	"\x1aMCP_SERVER_STATUS_DISABLED\x10\x042\xcd\n" +
+	"\x1aMCP_SERVER_STATUS_DISABLED\x10\x042\xd6\n" +
 	"\n" +
 	"\n" +
-	"MCPService\x12P\n" +
-	"\vListServers\x12\x1e.reliant.v1.ListServersRequest\x1a\x1f.reliant.v1.ListServersResponse\"\x00\x12J\n" +
-	"\tGetServer\x12\x1c.reliant.v1.GetServerRequest\x1a\x1d.reliant.v1.GetServerResponse\"\x00\x12Y\n" +
+	"MCPService\x12S\n" +
+	"\vListServers\x12\x1e.reliant.v1.ListServersRequest\x1a\x1f.reliant.v1.ListServersResponse\"\x03\x90\x02\x01\x12M\n" +
+	"\tGetServer\x12\x1c.reliant.v1.GetServerRequest\x1a\x1d.reliant.v1.GetServerResponse\"\x03\x90\x02\x01\x12Y\n" +
 	"\x0eGetServerTools\x12!.reliant.v1.GetServerToolsRequest\x1a\".reliant.v1.GetServerToolsResponse\"\x00\x12\x9e\x01\n" +
 	"\rInstallServer\x12 .reliant.v1.InstallServerRequest\x1a!.reliant.v1.InstallServerResponse\"H\xa2\xbb\x18D:B\n" +
 	"\ainstall\x12\x12\n" +
@@ -1922,8 +1922,8 @@ const file_reliant_v1_mcp_proto_rawDesc = "" +
 	"\n" +
 	"mcp_server\x12\x04name*\n" +
 	"project_id\x12\xbf\x01\n" +
-	"\rRestartServer\x12 .reliant.v1.RestartServerRequest\x1a!.reliant.v1.RestartServerResponse\"i\xa2\xbb\x18e:c:arestarts a server process from its unchanged config: runtime recovery, not a configuration change\x12\\\n" +
-	"\x0fListRecommended\x12\".reliant.v1.ListRecommendedRequest\x1a#.reliant.v1.ListRecommendedResponse\"\x00\x12\x9a\x01\n" +
+	"\rRestartServer\x12 .reliant.v1.RestartServerRequest\x1a!.reliant.v1.RestartServerResponse\"i\xa2\xbb\x18e:c:arestarts a server process from its unchanged config: runtime recovery, not a configuration change\x12_\n" +
+	"\x0fListRecommended\x12\".reliant.v1.ListRecommendedRequest\x1a#.reliant.v1.ListRecommendedResponse\"\x03\x90\x02\x01\x12\x9a\x01\n" +
 	"\x12UpdateServerConfig\x12%.reliant.v1.UpdateServerConfigRequest\x1a&.reliant.v1.UpdateServerConfigResponse\"5\xa2\xbb\x181:/\n" +
 	"\rupdate_config\x12\x12\n" +
 	"\n" +
