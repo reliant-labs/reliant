@@ -155,6 +155,17 @@ Agents' tool calls (running a command, reading a file, calling an integration) a
 
 **How long we keep it:** each record is deleted **90 days** after the call. Deleting a project deletes its chats' records; deleting your account deletes all of yours.
 
+## Insights daily totals
+
+So that agent insights can cover more than the 90 days the records above are kept, we also keep **daily totals** of model and tool calls, added up as each call is recorded. They hold only what the records above already hold, summed per day, with no chat or run IDs:
+
+- **Per organization:** for calls made in an organization, totals per day, project, workflow, step, agent preset and the call's labels (provider and model, how it was paid for, what it was for, the tool's name and where it ran, and the outcome and failure category). These totals name no person: the tables that hold them have no column for an account ID. Their cost counts only calls the organization paid for, never your own subscription or API key.
+- **Per member:** the same totals with your account ID, for your own view of your usage and, in an organization, for its admins.
+
+Each total holds counts (calls, retried attempts, tokens, cost when it is known) and how long the calls took, as counts per range of durations. Never a prompt, a reply, a tool's input or output, a file name or the text of an error.
+
+**How long we keep them:** until you delete your account, which deletes your per-member totals. Deleting a project deletes the per-member totals of its calls, and folds the organization's totals for it into its totals with no project, so they no longer name the project. An organization's totals are kept after a member is deleted, because they name no one.
+
 ## Telemetry
 
 Both kinds of telemetry are **on by default**. To turn them off, go to **Settings → Privacy**.
@@ -299,6 +310,8 @@ Go to **Settings → Account → Delete account**, or email support@reliantlabs.
 | Request traces in our telemetry store | 7 days |
 | Model usage records, per call | 90 days |
 | Model usage daily totals | Until you delete your account |
+| Insights daily totals per member | Until you delete your account, or the project they belong to |
+| Insights daily totals per organization (no account IDs) | As long as the organization uses Reliant |
 | Analytics events | Up to 90 days |
 | Usage data about the visitors to a hosted app, including the daily visitor code | Up to 90 days by default, or the shorter period the app is set to |
 | A day's random value for the daily visitor code | Held in memory only and deleted shortly after its day ends (never more than 48 hours). Never written to disk or to a backup |

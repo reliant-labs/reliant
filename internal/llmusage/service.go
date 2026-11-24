@@ -126,6 +126,48 @@ func (s *service) PruneLLMCallUsage(ctx context.Context, now time.Time) (int64, 
 	}
 }
 
+// foldBatch bounds one insights backlog fold: the rows it claims and the
+// rollup rows it adds them to are locked until it commits.
+const foldBatch = 1000
+
+// FoldInsights adds the per-call rows the insights rollups do not count yet,
+// model calls then tool calls, in batches, and returns how many it added.
+// These are the rows written before the rollups existed (the backfill of the
+// 90 days that exist) and any a previous release writes during a rollout;
+// every row written since is folded with its write. It is idempotent: each
+// row is marked in the transaction that adds it. Run it before pruning, which
+// keeps a row until it is folded.
+func (s *service) FoldInsights(ctx context.Context) (int64, error) {
+	var total int64
+	for _, src := range []struct {
+		name string
+		fold func(ctx context.Context, batch int) (int64, error)
+	}{
+		{"llm call usage", s.deps.Ledger.FoldLLMCallUsageIntoInsights},
+		{"tool call usage", s.deps.Tools.FoldToolCallUsageIntoInsights},
+	} {
+		for {
+			var n int64
+			err := s.deps.Tx.RunTx(orm.Detached(ctx), orm.ReadCommitted, func(ctx context.Context) error {
+				var err error
+				n, err = src.fold(ctx, foldBatch)
+				return err
+			})
+			if err != nil {
+				return total, fmt.Errorf("fold %s into insights: %w", src.name, err)
+			}
+			total += n
+			if n < foldBatch {
+				break
+			}
+			if err := ctx.Err(); err != nil {
+				return total, err
+			}
+		}
+	}
+	return total, nil
+}
+
 // PruneLLMUsagePurgeFences deletes the account-deletion fences old enough that
 // no call in flight at deletion can still be running.
 func (s *service) PruneLLMUsagePurgeFences(ctx context.Context, now time.Time) (int64, error) {

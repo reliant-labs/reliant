@@ -427,6 +427,23 @@ var sweepOrphanSteps = []struct{ name, sql string }{
 			SELECT t.id FROM hosted_http_action_tickets t
 			WHERE NOT EXISTS (SELECT 1 FROM projects p WHERE p.id = t.project_id)
 			LIMIT ?0)`},
+	// The insights member rows of a project an account purge deleted, when
+	// they are another member's (the purge deletes its own user's rows).
+	{"insights_model_calls_member_daily", insightsMemberOrphanSweep("insights_model_calls_member_daily")},
+	{"insights_tool_calls_member_daily", insightsMemberOrphanSweep("insights_tool_calls_member_daily")},
+	// The org's team rows of such a project keep their counts, under no
+	// project.
+	{"insights_model_calls_daily", insightsTeamOrphanMerge(llmInsights, insightsModelTeam)},
+	{"insights_tool_calls_daily", insightsTeamOrphanMerge(toolInsights, insightsToolTeam)},
+}
+
+// insightsMemberOrphanSweep removes up to ?0 member rows of table that name a
+// project that is gone.
+func insightsMemberOrphanSweep(table string) string {
+	return `DELETE FROM ` + table + ` WHERE ctid IN (
+			SELECT m.ctid FROM ` + table + ` m
+			WHERE m.project_id <> '' AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.id = m.project_id)
+			LIMIT ?0)`
 }
 
 // SweepOrphanedProjectRows removes up to batch rows per table that name a
