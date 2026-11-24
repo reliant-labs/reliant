@@ -1,0 +1,17 @@
+{
+  "name": "reliant-labs",
+  "owner": {
+    "name": "Reliant Labs",
+    "url": "https://reliantlabs.io"
+  },
+  "metadata": {
+    "description": "Reliant Labs plugins for Cursor: Reliant Forge, guardrails for apps and deploys with no account."
+  },
+  "plugins": [
+    {
+      "name": "reliant-forge",
+      "source": "plugins/reliant-forge",
+      "description": "Guardrails for apps in any agent harness. Deploy with no account: a live URL plus a claim link."
+    }
+  ]
+}

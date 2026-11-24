@@ -1,0 +1,30 @@
+{
+  "name": "reliant-forge",
+  "displayName": "Reliant Forge",
+  "version": "1.10.0",
+  "description": "Guardrails for apps in any agent harness. Deploy with no account: a live URL plus a claim link. The Forge MCP server and a deploy skill: put a Vite, Next.js or Dockerfile app live from Cursor, with or without a Reliant account.",
+  "author": {
+    "name": "Reliant Labs"
+  },
+  "publisher": "Reliant Labs",
+  "homepage": "https://reliantlabs.io",
+  "repository": "https://github.com/reliant-labs/forge",
+  "license": "Apache-2.0",
+  "keywords": [
+    "deploy",
+    "deployment",
+    "hosting",
+    "static-site-hosting",
+    "no-signup",
+    "claimable",
+    "mcp",
+    "forge",
+    "reliant",
+    "guardrails"
+  ],
+  "category": "Deployment",
+  "tags": ["mcp", "skills", "deploy"],
+  "logo": "./assets/logo.png",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

@@ -1,0 +1,14 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Binary contract test placeholder; canonical pattern in `forge skill load binaries`.
+//
+// This file exists to prevent the canonical
+// `internal-package/contract_test.go.tmpl` scaffold from running
+// against a binary package — that scaffold renders `New(Deps{})` for
+// the single-result form, and the binary's `New(Deps) (Service, error)`
+// shape would not compile.
+//
+// The lifecycle + validateDeps test for this binary lives in
+// {{.Package}}_test.go alongside the runtime body. Add additional
+// table-driven contract tests here as the Service surface grows; the
+// shape mirrors `forge skill load contracts` (tdd.TableContract).
+package {{.Package}}_test

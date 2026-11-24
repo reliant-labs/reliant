@@ -1,0 +1,49 @@
+"""
+Production ingress overrides for {{.ProjectName}}.
+
+The base topology in `deploy/kcl/ingress.k` is shaped for the local k3d
+loop: plaintext listeners on the host-mapped ports 18080 / 19190. Those
+ports exist nowhere in a cloud cluster and carry no TLS, so a prod
+Gateway that inherits them unchanged is unreachable and unencrypted.
+This file flips them to the cloud shape and is WIRED IN below — an
+override that is defined and never referenced changes nothing.
+
+Set the hostname before the first prod deploy: edit _PUBLIC_HOST below.
+`forge env render prod` shows the Gateway it produces.
+
+cert-manager is expected to be installed cluster-side; `forge doctor`
+verifies the named ClusterIssuer exists.
+"""
+
+import ..ingress as base
+import forge
+
+# TODO: replace with this environment's real public hostname. Until it
+# is real, cert-manager cannot issue a certificate for it and the HTTPS
+# listener never becomes ready.
+_PUBLIC_HOST = "{{.ProjectName}}.example.com"
+
+_PROD_PUBLIC = base.PUBLIC | {
+    host = _PUBLIC_HOST
+    tls = forge.GatewayTLS {
+        cert_issuer = "letsencrypt-prod"
+        secret_name = "{{.ProjectName}}-prod-tls"
+    }
+    listeners = [
+        # Plaintext :80 exists for the ACME HTTP-01 challenge (and for a
+        # redirect, if you attach one). Do NOT attach application routes
+        # to it — nothing an app serves should leave the LB unencrypted.
+        forge.GatewayListener {name = "acme", port = 80, protocol = "HTTP"}
+        # Application traffic, TLS-terminated. Named `http` so routes
+        # written against the base topology attach unchanged.
+        forge.GatewayListener {name = "http", port = 443, protocol = "HTTPS"}
+        # Native gRPC, also TLS-terminated. It needs its own port
+        # because two listeners cannot share one; 8443 is the
+        # conventional alternate TLS port for gRPC behind a cloud LB.
+        forge.GatewayListener {name = "grpc", port = 8443, protocol = "HTTPS"}
+    ]
+}
+
+GATEWAYS = [_PROD_PUBLIC]
+HTTP_ROUTES = base.HTTP_ROUTES
+GRPC_ROUTES = base.GRPC_ROUTES

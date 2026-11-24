@@ -1,0 +1,202 @@
+package app
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"sync"
+	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
+	"github.com/reliant-labs/forge/pkg/observe"
+
+	"example.com/app/pkg/config"
+
+	"github.com/reliant-labs/forge/pkg/serverkit"
+
+	// Blank import registers the "pgx" database/sql driver that
+	// openDatabase's sql.Open("pgx", …) resolves by name.
+	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+)
+
+// Infra is the OWNED provider set — everything the explicit composition
+// (internal/app/compose.go: NewComponents) wires into each component's Deps.
+// compose.go is yours too — forge writes it once and then reconciles only the
+// component set and the Deps literal's KEY set, never the value expressions.
+// It fills each Deps field INLINE off a field on THIS struct (there is NO
+// by-type injector). So a collaborator a component needs becomes a field here,
+// constructed in OpenInfra; NewComponents references it as `infra.<Field>`.
+//
+// Three categories of provider live here:
+//
+//  1. INFRA — DB pool, NATS conn, k8s client, third-party clients
+//     (constructed in OpenInfra; nil-able on unset env).
+//  2. ADAPTER — concrete wrappings, e.g.
+//     `enforcement.NewDBRepository(repo)` assigned onto a field so
+//     NewComponents can hand it to a narrow Deps interface field.
+//  3. BINDING — explicit concrete->interface choices (two producers of one
+//     interface, or in-process-service vs Connect-client selection).
+//
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+//forge:allow
+type Infra struct {
+	// Log and Cfg are the conventional sources NewComponents wires for every
+	// component's Logger / Config Deps field. Keep them named exactly.
+	Log *slog.Logger
+	Cfg *config.Config
+
+	// DB is the shared database pool. A per-component Repository Deps field
+	// is filled from this in NewComponents (directly, or via an adapter
+	// wrapping it that satisfies the narrow Deps interface).
+	DB  *sql.DB
+	ORM *orm.Client
+
+	// httpBase is the SHARED instrumented base transport under every
+	// DefaultClient(): one connection pool for the process, OTel client
+	// spans + W3C trace-context propagation on every outbound request
+	// (the global propagator is installed by observe.Setup at serve time),
+	// and X-Request-Id forwarding so a third-party call's logs stitch onto
+	// the inbound request that caused it.
+	//
+	// Unexported on purpose — consumers go through DefaultClient(). Never
+	// read the field directly either: transport() below is what guarantees
+	// it is non-nil, and a nil RoundTripper is the one failure here that
+	// nothing reports (see its doc comment).
+	httpBase     http.RoundTripper
+	httpBaseOnce sync.Once
+
+	// FORGE_SCAFFOLD: add a field here for every collaborator NewComponents
+	// reported as "no provider" — a DB repository, a NATS publisher, a
+	// third-party client, or an adapter wrapping. Construct it in OpenInfra.
+	// NewComponents passes `infra.<Field>` into the consuming Deps field, so
+	// the field type only has to be ASSIGNABLE to that Deps field
+	// (a concrete *db.PostgresRepository fills a narrow audit.Repository).
+	//
+	// When a service is SPLIT OUT of this binary and a consumer switches
+	// from the in-process interface to a Connect client, build the client's
+	// HTTP stack with observe.NewClientStack (forge/pkg/observe) — it
+	// bundles the otelconnect client interceptor, request-ID forwarding,
+	// and a timeout — and assign the generated client onto a field here.
+	// That is for CONNECT clients only: its transport is deliberately left
+	// uninstrumented because otelconnect already opens the client span.
+	// Plain HTTP to a third-party REST API goes through DefaultClient()
+	// below, which instruments at the transport instead.
+}
+
+// DefaultClient returns a FRESH *http.Client for one outbound consumer —
+// callers may freely tweak Timeout / CheckRedirect / Jar on the returned
+// value without affecting anyone else. All clients share the single
+// instrumented base transport (one connection pool, OTel client spans,
+// W3C trace propagation, X-Request-Id forwarding), so every outbound HTTP
+// call made through it appears in traces, joins the caller's trace
+// context, and carries the caller's correlation ID.
+//
+// This is the canonical value for an adapter's Deps.HTTPClient — the
+// composition site (internal/app/compose.go) wires `infra.DefaultClient()`
+// into any `HTTPClient *http.Client` Deps field automatically.
+func (i *Infra) DefaultClient() *http.Client {
+	return &http.Client{
+		Transport: i.transport(),
+		Timeout:   30 * time.Second,
+	}
+}
+
+// transport is the SINGLE construction point for the shared base
+// transport, and the reason DefaultClient() never reads httpBase itself.
+//
+// http.Client treats a nil Transport as http.DefaultTransport, so an Infra
+// whose httpBase was never set would keep serving outbound calls — with no
+// OTel span, no trace-context propagation, and no request ID. Nothing
+// fails and nothing logs; the traces just quietly have a hole in them.
+// That state is not detectable after the fact, so it is not allowed to
+// exist: every read establishes the transport if it is missing, which
+// makes "uninstrumented outbound HTTP" unreachable rather than merely
+// unlikely.
+//
+// The result is shared across every client this Infra hands out — one
+// connection pool per process — so this must not be inlined into
+// DefaultClient(), which is deliberately per-call.
+func (i *Infra) transport() http.RoundTripper {
+	i.httpBaseOnce.Do(func() {
+		if i.httpBase == nil {
+			// otelhttp OUTSIDE, so its client span covers the whole round
+			// trip including the header the inner transport adds.
+			i.httpBase = otelhttp.NewTransport(observe.NewRequestIDTransport(http.DefaultTransport))
+		}
+	})
+	return i.httpBase
+}
+
+// OpenInfra builds the owned provider set: open every piece of
+// infrastructure (DB/NATS/k8s/clients), wrap adapters, and pick explicit
+// bindings. NewComponents (compose.go) then constructs every component
+// INLINE off the returned *Infra. Late-bound / two-phase wiring (a setter on
+// one constructed component fed by another) goes in compose.go after the
+// component values exist — compose.go is already yours, so write it there.
+//
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+//forge:allow
+func OpenInfra(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Infra, error) {
+	infra := &Infra{Log: logger, Cfg: cfg}
+
+	// Shared instrumented base transport for every DefaultClient(): OTel
+	// client spans + trace-context propagation + request-ID forwarding over
+	// the process-wide connection pool. Built ONCE, here, before anything
+	// can ask for a client; DefaultClient() then hands out fresh
+	// *http.Client values over it.
+	infra.transport()
+
+	db, err := openDatabase(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("open database: %w", err)
+	}
+	infra.DB = db
+
+	if db != nil {
+		ormClient, err := orm.NewClientWithDB(db, "postgres")
+		if err != nil {
+			return nil, fmt.Errorf("create ORM client: %w", err)
+		}
+		infra.ORM = ormClient
+	}
+	return infra, nil
+}
+
+// openDatabase opens the serving pool and waits for the database to answer,
+// retrying with capped exponential backoff and jitter for up to
+// DB_CONNECT_TIMEOUT (serverkit.OpenDB). A dependency that is merely not up
+// YET — a pooler or primary starting beside this pod — is a wait, not a
+// crash: the process stays alive, and because ctx carries the boot probes
+// (serverkit.StartBootProbes) /healthz passes while /readyz fails naming the
+// database. Only a database still unreachable at the deadline is an error,
+// and that exits the process non-zero with the error class and attempt count.
+//
+// The deadline matters in the other direction too: a BLACKHOLED host (a
+// security group that drops instead of refusing) never returns an error, so
+// each attempt is individually bounded and the total is bounded, turning a
+// hang that no probe could see into a failure an operator can.
+func openDatabase(ctx context.Context, cfg *config.Config) (*sql.DB, error) {
+	dsn := cfg.DatabaseUrl
+	if dsn == "" {
+		slog.Warn("DATABASE_URL is not set, skipping database setup")
+		return nil, nil
+	}
+	// Pool sizing comes from the DB_* config knobs (db_max_open_conns and
+	// friends in pkg/config), NOT from literals baked in at scaffold time —
+	// the same knobs the generated `cmd serve` applies to its migration
+	// connection, so one setting tunes both pools. A zero/unset knob leaves
+	// the corresponding database/sql default in place.
+	return serverkit.OpenDB(ctx, "pgx", dsn, serverkit.DBPoolTuning{
+		MaxOpenConns:    int(cfg.DbMaxOpenConns),
+		MaxIdleConns:    int(cfg.DbMaxIdleConns),
+		ConnMaxIdleTime: cfg.DbConnMaxIdleTime.AsDuration(),
+		ConnMaxLifetime: cfg.DbConnMaxLifetime.AsDuration(),
+	}, serverkit.ConnectPolicy{Timeout: cfg.DbConnectTimeout.AsDuration(), Logger: slog.Default()})
+}
