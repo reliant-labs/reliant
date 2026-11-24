@@ -1290,17 +1290,6 @@ type ProjectPurge struct {
 	purges projectpurge.Service
 }
 
-// ProjectPurgesDeps is the database the purge service runs over.
-type ProjectPurgesDeps struct {
-	DB *db.Repo
-}
-
-// NewProjectPurges is the project deletion and purge service: the API's
-// project handler schedules and restores through it, the worker's loop purges.
-func NewProjectPurges(d ProjectPurgesDeps) (projectpurge.Service, error) {
-	return projectpurge.NewInstrumented(projectpurge.Deps{DB: d.DB.ORM()}), nil
-}
-
 // ProjectPurgeDeps is the purge service.
 type ProjectPurgeDeps struct {
 	Purges projectpurge.Service

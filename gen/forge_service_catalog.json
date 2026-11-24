@@ -72,8 +72,8 @@
         "ProcessRuntime",
         "ProcessSettings",
         "Project",
-        "ProjectPurges",
         "Projectaccess",
+        "Projectpurge",
         "ProviderAccount",
         "Providerbackoff",
         "PullRequestRecord",
@@ -525,8 +525,8 @@
         "ProcessRuntime",
         "ProcessSettings",
         "ProjectPurge",
-        "ProjectPurges",
         "Projectaccess",
+        "Projectpurge",
         "Providerbackoff",
         "RemoteExecutor",
         "RepoUpdateFeed",
@@ -55190,18 +55190,6 @@
       "implementation_candidates": []
     },
     {
-      "id": "ProjectPurges",
-      "name": "ProjectPurges",
-      "kind": "provider",
-      "type": "github.com/reliant-labs/reliant/internal/projectpurge.Service",
-      "source": {
-        "path": "internal/app/providers_worker.go",
-        "symbol": "NewProjectPurges"
-      },
-      "methods": [],
-      "implementation_candidates": []
-    },
-    {
       "id": "Projectaccess",
       "name": "Projectaccess",
       "kind": "component",
@@ -55240,6 +55228,43 @@
           "type": "*github.com/reliant-labs/reliant/internal/projectaccess.service",
           "source": {
             "path": "internal/projectaccess/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
+      "id": "Projectpurge",
+      "name": "Projectpurge",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/projectpurge.Service",
+      "source": {
+        "path": "internal/projectpurge/contract.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/projectpurge.MockService",
+          "source": {
+            "path": "internal/projectpurge/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/projectpurge.forgeMiddlewareService",
+          "source": {
+            "path": "internal/projectpurge/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/projectpurge.service",
+          "source": {
+            "path": "internal/projectpurge/service.go",
             "symbol": "service"
           },
           "methods": []
@@ -58108,10 +58133,10 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.ProjectPurges",
       "methods": [],
       "candidates": [
-        "ProjectPurges"
+        "Projectpurge"
       ],
       "providers": [
-        "ProjectPurges"
+        "Projectpurge"
       ],
       "resolution": "composition_expression"
     },
@@ -58181,10 +58206,10 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectpurge.Service",
       "methods": [],
       "candidates": [
-        "ProjectPurges"
+        "Projectpurge"
       ],
       "providers": [
-        "ProjectPurges"
+        "Projectpurge"
       ],
       "resolution": "composition_expression"
     },
@@ -58196,6 +58221,17 @@
       "candidates": [
         "Database"
       ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Projectpurge",
+      "field": "DB",
+      "interface": "github.com/reliant-labs/forge/pkg/orm.Context",
+      "methods": [],
+      "candidates": [],
       "providers": [
         "Database"
       ],
