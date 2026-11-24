@@ -70,6 +70,8 @@ func observeFindingLocation(path []string) (node, where string) {
 				nodes = append(nodes, seg)
 				i++
 			}
+		case "observe_defaults":
+			return strings.Join(nodes, "."), strings.Join(path[i:], ".")
 		case "observe":
 			where = strings.Join(path[i+1:], ".")
 			if len(nodes) == 1 && (nodes[0] == "on_failure" || nodes[0] == "finally") {

@@ -20,9 +20,9 @@ const observeFieldKey = "observe"
 // observe is stopped.
 
 // validateObserve compiles every expression of one observe block in the
-// ObserveContext environment, with `output` typed as node's result. node is
-// nil for a workflow's defaults, which every node of the graph merges, so
-// their `output` is dyn. The block's shape is validateObserveShapes'.
+// ObserveContext environment, with `output` typed as node's result, including
+// when checking workflow defaults at each node. The block's shape is
+// validateObserveShapes'.
 func (s *workflowScope) validateObserve(o *reliantv1.NodeObserve, node *reliantv1.Node, basePath []string, scope *nodeOrderScope, result *Result) {
 	found := NewResult()
 	defer addObserveFindings(found, result)
@@ -85,14 +85,6 @@ func (s *workflowScope) validateObserve(o *reliantv1.NodeObserve, node *reliantv
 		for _, k := range sortedStringKeys(m.GetAttributes()) {
 			template(m.GetAttributes()[k], at("metrics", item, "attributes", k), false)
 		}
-	}
-}
-
-// validateGraphObserve compiles the expressions of one graph's observe
-// defaults (a node's own block is checked with the node).
-func (s *workflowScope) validateGraphObserve(result *Result) {
-	if defaults := s.wf.GetObserve(); defaults != nil {
-		s.validateObserve(defaults, nil, joinPath(s.basePath, observeFieldKey), nil, result)
 	}
 }
 
