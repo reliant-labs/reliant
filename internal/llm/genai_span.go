@@ -62,7 +62,30 @@ func StartGenAISpan(ctx context.Context, provider string, model models.Model, st
 		Stream:     stream,
 		Attributes: extra,
 	})
-	return ctx, &GenAISpan{span: span, ctx: ctx, provider: provider, requested: requested}
+	s := &GenAISpan{span: span, provider: provider, requested: requested}
+	ctx = context.WithValue(ctx, genAISpanKey{}, s)
+	s.ctx = ctx
+	return ctx, s
+}
+
+// genAISpanKey is the context key of the call's GenAISpan, so a driver can
+// add to its own call's span (RecordGatewayCallID) and never to whatever
+// other span its ctx holds.
+type genAISpanKey struct{}
+
+// RecordGatewayCallID sets the LLM gateway's id for the call
+// (telemetry.AttrGatewayCallID) on the chat span ctx carries. Only a driver
+// that routes through the gateway calls it, once per response it gets,
+// success or failure; a later attempt's id replaces an earlier one's, so the
+// span names the attempt that ended the call. An empty id, or a ctx with no
+// chat span (a key validation), records nothing.
+func RecordGatewayCallID(ctx context.Context, id string) {
+	if id == "" {
+		return
+	}
+	if s, ok := ctx.Value(genAISpanKey{}).(*GenAISpan); ok {
+		s.span.SetAttributes(attribute.String(telemetry.AttrGatewayCallID, id))
+	}
 }
 
 // Reliant's own attributes of a model call, beside forge's.
