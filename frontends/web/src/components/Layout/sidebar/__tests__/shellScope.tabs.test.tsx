@@ -178,6 +178,34 @@ describe("All and the focus in the URL", () => {
     },
   );
 
+  it.each(["/c/chat-1", "/forge/p/app", "/new"])(
+    "keeps an unavailable single-project scope on %s instead of falling back to the route or last pick",
+    (pathname) => {
+      useShellLastPick.setState({ key: "p3", focus: "p3" });
+      const { result, rerender } = renderHook(
+        ({ projects }) => {
+          const search = { projects };
+          const shell = useShellProject(pathname, search);
+          usePublishShellScope(shell, search);
+          return shell;
+        },
+        { initialProps: { projects: "p2" } },
+      );
+      expect(result.current.projectId).toBe("p2");
+
+      // The chat belongs to p1, but a search-only pick of an unlisted
+      // project must still decide both the nav and imperative readers.
+      rerender({ projects: "unavailable" });
+      expect(result.current.mode).toBe("one");
+      expect(result.current.key).toBe("unavailable");
+      expect(result.current.projectId).toBe("unavailable");
+      expect(result.current.ids).toEqual(["unavailable"]);
+      expect(result.current.row).toBeUndefined();
+      expect(shellScopeNow()).toEqual({ mode: "one", projectId: "unavailable" });
+      expect(shellProjectNow()).toBe("unavailable");
+    },
+  );
+
   it("lets an explicit project path override a carried scope for every reader", () => {
     const { result } = renderHook(() => {
       const search = { projects: "p2" };
