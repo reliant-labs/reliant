@@ -179,7 +179,7 @@ test.describe('mobile surface', () => {
     const open = page.getByRole('button', { name: 'Open navigation' }).first();
     await expect(open).toBeVisible();
     await open.click();
-    const nav = page.getByRole('dialog').filter({ has: page.getByRole('link', { name: 'Releases' }) }).first();
+    const nav = page.getByRole('dialog').filter({ has: page.getByRole('link', { name: 'Data' }) }).first();
     await expect(nav).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(nav).toBeHidden();

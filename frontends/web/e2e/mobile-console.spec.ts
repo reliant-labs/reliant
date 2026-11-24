@@ -106,8 +106,8 @@ test.describe('console on a phone', () => {
   });
 
   test('the workload page and its Kubernetes events fit, stacked', async ({ page }) => {
-    await open(page, '/forge-workloads-preview', '', 'forge-shell');
+    await open(page, '/forge-workloads-preview', '?workload=api', 'workload-detail');
     await fitsTheScreen(page);
-    await isStacked(page, 'overview-services-table');
+    await isStacked(page, 'workload-pods');
   });
 });

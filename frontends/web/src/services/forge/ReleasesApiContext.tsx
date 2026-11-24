@@ -6,10 +6,11 @@
  *
  * Every hook in hooks/release-queries.ts calls through this context, so the
  * pages can render against something other than control-plane: component
- * tests and the dev-only preview route (/forge-releases-preview) hand it
- * fixtures. The default is the real client, BOUND TO AN ORG: every read it
- * makes names the org the hook's key names (lib/orgScope), so a cached answer
- * is always that org's. Production never provides anything else.
+ * tests hand it fixtures. The default is the real client, BOUND TO AN ORG:
+ * every read it makes names the org the hook's key names (lib/orgScope), so a
+ * cached answer is always that org's. Production never provides anything
+ * else, and neither does the dev-only preview (/forge-releases-preview),
+ * which runs the real client over the shop fixture pack's transport.
  */
 
 import { createContext, useContext, useMemo, type ReactNode } from "react";

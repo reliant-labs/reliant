@@ -22,6 +22,7 @@ import { AttachmentService, GetAttachmentResponseSchema } from "@/gen/reliant/v1
 import { CatalogService } from "@/gen/reliant/v1/catalog_pb";
 import { ChatService, ListMessagesResponseSchema } from "@/gen/reliant/v1/chat_pb";
 import { DaemonRegistryService } from "@/gen/reliant/v1/daemon_registry_pb";
+import { ForgeService } from "@/gen/reliant/v1/forge_pb";
 import { ListProjectsWithAppsResponseSchema, ProjectService } from "@/gen/reliant/v1/project_pb";
 import { QuestionService } from "@/gen/reliant/v1/question_pb";
 import { RunService } from "@/gen/reliant/v1/run_pb";
@@ -50,16 +51,16 @@ import { CHAT_IDS, PROJECT_IDS, WORKTREE_IDS } from "../workspace";
 const FIXED_NOW = Date.UTC(2026, 10, 18, 15, 30);
 
 const SERVICES: DescService[] = [
-  ApprovalService, AttachmentService, CatalogService, ChatService, DaemonRegistryService, ProjectService, QuestionService, RunService,
+  ApprovalService, AttachmentService, CatalogService, ChatService, DaemonRegistryService, ForgeService, ProjectService, QuestionService, RunService,
   SettingsService, StreamingService, TriggerService, WorkflowService, WorktreeService, BillingService, UserService, ObservabilityBillingService,
 ];
 const METHODS = new Map<string, DescMethod>(SERVICES.flatMap((s) => s.methods.map((m) => [`${s.typeName}/${m.name}`, m] as const)));
 
-/** What the app layer answers: phase 2's Appendix A b-rl and b-cp rows, plus the observability usage the visual harness answers. */
+/** What the app layer answers: phase 2's Appendix A b-rl and b-cp rows, plus the observability usage the visual harness answers and forge's reports the console preview reads. */
 const RELIANT_KEYS = [
   "ApprovalService/ListApprovalsByChat", "AttachmentService/GetAttachment", "CatalogService/ListAvailableModels", "CatalogService/ListModels",
   "ChatService/GetChat", "ChatService/GetWorkflowExecutions", "ChatService/ListArchivedChats", "ChatService/ListChats", "ChatService/ListMessages",
-  "DaemonRegistryService/ListDaemons", "ProjectService/GetProject", "ProjectService/ListProjects", "ProjectService/ListProjectsWithApps",
+  "DaemonRegistryService/ListDaemons", "ForgeService/GetEnvShape", "ForgeService/GetEnvStatus", "ForgeService/GetTopology", "ProjectService/GetProject", "ProjectService/ListProjects", "ProjectService/ListProjectsWithApps",
   "QuestionService/ListAsyncQuestions", "QuestionService/ListPendingQuestions", "RunService/LastRunPerWorkflow", "RunService/ListRuns",
   "SettingsService/GetPrivacySettings", "SettingsService/GetProviderStatuses", "SettingsService/ListSettings",
   "StreamingService/StreamChatUpdates", "StreamingService/StreamUserUpdates", "TriggerService/ListTriggers", "WorkflowService/ListWorkflows",
@@ -80,6 +81,9 @@ const REQUESTS: Record<string, Record<string, unknown>> = {
   "reliant.v1.ChatService/GetChat": { chatId: CHAT_IDS.cartTotals },
   "reliant.v1.ChatService/GetWorkflowExecutions": { chatId: CHAT_IDS.cartTotals },
   "reliant.v1.ChatService/ListMessages": { chatId: CHAT_IDS.cartTotals },
+  "reliant.v1.ForgeService/GetEnvShape": { projectId: PROJECT_IDS.shop, env: "prod" },
+  "reliant.v1.ForgeService/GetEnvStatus": { projectId: PROJECT_IDS.shop, env: "prod" },
+  "reliant.v1.ForgeService/GetTopology": { projectId: PROJECT_IDS.shop },
   "reliant.v1.ProjectService/GetProject": { projectId: PROJECT_IDS.shop },
   "reliant.v1.QuestionService/ListAsyncQuestions": { chatId: CHAT_IDS.cartTotals },
   "reliant.v1.StreamingService/StreamChatUpdates": { chatId: CHAT_IDS.cartTotals },
@@ -106,7 +110,7 @@ describe("the app layer", () => {
     const keys = Object.keys(appLayerScenarioHandlers()).sort();
     expect(keys).toEqual([...RELIANT_KEYS, ...CONTROL_PLANE_KEYS].sort());
     for (const key of keys) expect(METHODS.has(key), key).toBe(true);
-    expect(RELIANT_KEYS).toHaveLength(26);
+    expect(RELIANT_KEYS).toHaveLength(29);
   });
 
   it.each([...RELIANT_KEYS, ...CONTROL_PLANE_KEYS].filter((k) => METHODS.get(k)?.methodKind === "unary"))("%s answers a schema-valid, wire-safe message", async (key) => {

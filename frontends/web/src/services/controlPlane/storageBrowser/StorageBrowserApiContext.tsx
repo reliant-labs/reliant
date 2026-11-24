@@ -5,9 +5,10 @@
  * five StorageBrowserService calls it makes.
  *
  * The same shape as the data browser's DataBrowserApiContext: component tests
- * and the dev-only preview (/forge-storage-preview) hand it the in-memory
- * fixture (Storage/__fixtures__/fixtureStorageApi.ts), and production never
- * provides anything but the real client, which calls the control plane
+ * hand it the in-memory fixture (Storage/__fixtures__/fixtureStorageApi.ts),
+ * and production (and the dev-only preview, /forge-storage-preview, over the
+ * shop fixture pack's transport) never provides anything but the real
+ * client, which calls the control plane
  * directly with the user's session (never through the daemon).
  */
 

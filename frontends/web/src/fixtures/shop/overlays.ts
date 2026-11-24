@@ -22,3 +22,11 @@ export const SHOP_OVERLAYS: Readonly<Record<string, ShopOverlay>> = {
   /** Alex has no machine: the daemonless home and the no-sandbox agents page. */
   "no-daemons": () => defineFixturePack({ name: "no-daemons", scenario: serve(DaemonRegistryService, { listDaemons: () => ({ daemons: [] }) }) }),
 };
+
+/**
+ * Console preview overlays, keyed by the preview's `?case=` id and layered
+ * with FixturePreview. Kept separate from the URL-selectable app overlays.
+ */
+export { browserOverlays } from "./overlays/browsers";
+export { consoleOverlays } from "./overlays/console";
+export { deliveryOverlays } from "./overlays/delivery";
