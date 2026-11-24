@@ -95,6 +95,7 @@ func NewBrowserIngestServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+BrowserIngestServiceListKeysProcedure,
 			connect.WithSchema(browserIngestServiceMethods.ByName("ListKeys")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		revokeKey: connect.NewClient[v1.RevokeKeyRequest, v1.RevokeKeyResponse](
@@ -176,6 +177,7 @@ func NewBrowserIngestServiceHandler(svc BrowserIngestServiceHandler, opts ...con
 		BrowserIngestServiceListKeysProcedure,
 		svc.ListKeys,
 		connect.WithSchema(browserIngestServiceMethods.ByName("ListKeys")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	browserIngestServiceRevokeKeyHandler := connect.NewUnaryHandler(

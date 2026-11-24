@@ -158,48 +158,56 @@ func NewTestsServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+TestsServiceGetTestSummaryProcedure,
 			connect.WithSchema(testsServiceMethods.ByName("GetTestSummary")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listTestRuns: connect.NewClient[v1.ListTestRunsRequest, v1.ListTestRunsResponse](
 			httpClient,
 			baseURL+TestsServiceListTestRunsProcedure,
 			connect.WithSchema(testsServiceMethods.ByName("ListTestRuns")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getTestRun: connect.NewClient[v1.GetTestRunRequest, v1.GetTestRunResponse](
 			httpClient,
 			baseURL+TestsServiceGetTestRunProcedure,
 			connect.WithSchema(testsServiceMethods.ByName("GetTestRun")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getCoverage: connect.NewClient[v1.GetCoverageRequest, v1.GetCoverageResponse](
 			httpClient,
 			baseURL+TestsServiceGetCoverageProcedure,
 			connect.WithSchema(testsServiceMethods.ByName("GetCoverage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getFileCoverage: connect.NewClient[v1.GetFileCoverageRequest, v1.GetFileCoverageResponse](
 			httpClient,
 			baseURL+TestsServiceGetFileCoverageProcedure,
 			connect.WithSchema(testsServiceMethods.ByName("GetFileCoverage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getReleaseTests: connect.NewClient[v1.GetReleaseTestsRequest, v1.GetReleaseTestsResponse](
 			httpClient,
 			baseURL+TestsServiceGetReleaseTestsProcedure,
 			connect.WithSchema(testsServiceMethods.ByName("GetReleaseTests")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listFlakyTests: connect.NewClient[v1.ListFlakyTestsRequest, v1.ListFlakyTestsResponse](
 			httpClient,
 			baseURL+TestsServiceListFlakyTestsProcedure,
 			connect.WithSchema(testsServiceMethods.ByName("ListFlakyTests")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getTest: connect.NewClient[v1.GetTestRequest, v1.GetTestResponse](
 			httpClient,
 			baseURL+TestsServiceGetTestProcedure,
 			connect.WithSchema(testsServiceMethods.ByName("GetTest")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		hasCoverageBlob: connect.NewClient[v1.HasCoverageBlobRequest, v1.HasCoverageBlobResponse](
@@ -367,48 +375,56 @@ func NewTestsServiceHandler(svc TestsServiceHandler, opts ...connect.HandlerOpti
 		TestsServiceGetTestSummaryProcedure,
 		svc.GetTestSummary,
 		connect.WithSchema(testsServiceMethods.ByName("GetTestSummary")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	testsServiceListTestRunsHandler := connect.NewUnaryHandler(
 		TestsServiceListTestRunsProcedure,
 		svc.ListTestRuns,
 		connect.WithSchema(testsServiceMethods.ByName("ListTestRuns")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	testsServiceGetTestRunHandler := connect.NewUnaryHandler(
 		TestsServiceGetTestRunProcedure,
 		svc.GetTestRun,
 		connect.WithSchema(testsServiceMethods.ByName("GetTestRun")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	testsServiceGetCoverageHandler := connect.NewUnaryHandler(
 		TestsServiceGetCoverageProcedure,
 		svc.GetCoverage,
 		connect.WithSchema(testsServiceMethods.ByName("GetCoverage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	testsServiceGetFileCoverageHandler := connect.NewUnaryHandler(
 		TestsServiceGetFileCoverageProcedure,
 		svc.GetFileCoverage,
 		connect.WithSchema(testsServiceMethods.ByName("GetFileCoverage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	testsServiceGetReleaseTestsHandler := connect.NewUnaryHandler(
 		TestsServiceGetReleaseTestsProcedure,
 		svc.GetReleaseTests,
 		connect.WithSchema(testsServiceMethods.ByName("GetReleaseTests")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	testsServiceListFlakyTestsHandler := connect.NewUnaryHandler(
 		TestsServiceListFlakyTestsProcedure,
 		svc.ListFlakyTests,
 		connect.WithSchema(testsServiceMethods.ByName("ListFlakyTests")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	testsServiceGetTestHandler := connect.NewUnaryHandler(
 		TestsServiceGetTestProcedure,
 		svc.GetTest,
 		connect.WithSchema(testsServiceMethods.ByName("GetTest")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	testsServiceHasCoverageBlobHandler := connect.NewUnaryHandler(

@@ -87,12 +87,15 @@ func (SessionTimelineKind) EnumDescriptor() ([]byte, []int) {
 	return file_services_rum_v1_rum_proto_rawDescGZIP(), []int{0}
 }
 
-// RumTimeRange is a half-open range [start, end). Both ends are required when
-// the range is present, and end must be after start.
+// RumTimeRange is a half-open range [start, end): when present, either both
+// absolute ends, with end after start, or a window relative to the server's
+// clock (relative, ObservabilityService's TimeRange.relative), which the server
+// resolves when it answers. Never both. A range in a response is absolute.
 type RumTimeRange struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Start         *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start,proto3" json:"start,omitempty"`
 	End           *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=end,proto3" json:"end,omitempty"`
+	Relative      *v1.RelativeWindow     `protobuf:"bytes,3,opt,name=relative,proto3" json:"relative,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -137,6 +140,13 @@ func (x *RumTimeRange) GetStart() *timestamppb.Timestamp {
 func (x *RumTimeRange) GetEnd() *timestamppb.Timestamp {
 	if x != nil {
 		return x.End
+	}
+	return nil
+}
+
+func (x *RumTimeRange) GetRelative() *v1.RelativeWindow {
+	if x != nil {
+		return x.Relative
 	}
 	return nil
 }
@@ -606,8 +616,12 @@ type ListSessionsResponse struct {
 	// but each summary aggregates its whole session, which can span instances
 	// (controlplane.v1.InstanceScope).
 	InstanceScope *v1.InstanceScope `protobuf:"bytes,3,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The absolute range this page read: scope.time_range resolved (or the
+	// default window). A client pages a relative window by sending this as the
+	// next page's scope.time_range, so every page reads the same range.
+	EffectiveTimeRange *RumTimeRange `protobuf:"bytes,4,opt,name=effective_time_range,json=effectiveTimeRange,proto3" json:"effective_time_range,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ListSessionsResponse) Reset() {
@@ -657,6 +671,13 @@ func (x *ListSessionsResponse) GetNextPageToken() string {
 func (x *ListSessionsResponse) GetInstanceScope() *v1.InstanceScope {
 	if x != nil {
 		return x.InstanceScope
+	}
+	return nil
+}
+
+func (x *ListSessionsResponse) GetEffectiveTimeRange() *RumTimeRange {
+	if x != nil {
+		return x.EffectiveTimeRange
 	}
 	return nil
 }
@@ -1320,10 +1341,11 @@ var File_services_rum_v1_rum_proto protoreflect.FileDescriptor
 
 const file_services_rum_v1_rum_proto_rawDesc = "" +
 	"\n" +
-	"\x19services/rum/v1/rum.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/client.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"n\n" +
+	"\x19services/rum/v1/rum.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/client.proto\x1a!controlplane/v1/time_window.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xab\x01\n" +
 	"\fRumTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
-	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xae\x02\n" +
+	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\x12;\n" +
+	"\brelative\x18\x03 \x01(\v2\x1f.controlplane.v1.RelativeWindowR\brelative\"\xae\x02\n" +
 	"\bRumScope\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1a\n" +
 	"\bservices\x18\x03 \x03(\tR\bservices\x12<\n" +
@@ -1382,11 +1404,12 @@ const file_services_rum_v1_rum_proto_rawDesc = "" +
 	"\b_browserB\x05\n" +
 	"\x03_osB\x0e\n" +
 	"\f_device_typeB\x13\n" +
-	"\x11_frontend_version\"\xc2\x01\n" +
+	"\x11_frontend_version\"\x93\x02\n" +
 	"\x14ListSessionsResponse\x12;\n" +
 	"\bsessions\x18\x01 \x03(\v2\x1f.controlplane.v1.SessionSummaryR\bsessions\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12E\n" +
-	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"c\n" +
+	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\x12O\n" +
+	"\x14effective_time_range\x18\x04 \x01(\v2\x1d.controlplane.v1.RumTimeRangeR\x12effectiveTimeRange\"c\n" +
 	"\x11GetSessionRequest\x12/\n" +
 	"\x05scope\x18\x01 \x01(\v2\x19.controlplane.v1.RumScopeR\x05scope\x12\x1d\n" +
 	"\n" +
@@ -1453,14 +1476,14 @@ const file_services_rum_v1_rum_proto_rawDesc = "" +
 	"\x1bSESSION_TIMELINE_KIND_CLICK\x10\x02\x12(\n" +
 	"$SESSION_TIMELINE_KIND_REQUEST_FAILED\x10\x03\x12\x1f\n" +
 	"\x1bSESSION_TIMELINE_KIND_ERROR\x10\x04\x12\x1f\n" +
-	"\x1bSESSION_TIMELINE_KIND_EVENT\x10\x052\x98\x03\n" +
+	"\x1bSESSION_TIMELINE_KIND_EVENT\x10\x052\xac\x03\n" +
 	"\n" +
-	"RumService\x12[\n" +
-	"\fListSessions\x12$.controlplane.v1.ListSessionsRequest\x1a%.controlplane.v1.ListSessionsResponse\x12U\n" +
+	"RumService\x12`\n" +
+	"\fListSessions\x12$.controlplane.v1.ListSessionsRequest\x1a%.controlplane.v1.ListSessionsResponse\"\x03\x90\x02\x01\x12Z\n" +
 	"\n" +
-	"GetSession\x12\".controlplane.v1.GetSessionRequest\x1a#.controlplane.v1.GetSessionResponse\x12m\n" +
-	"\x12GetSessionTimeline\x12*.controlplane.v1.GetSessionTimelineRequest\x1a+.controlplane.v1.GetSessionTimelineResponse\x12g\n" +
-	"\x10GetSessionReplay\x12(.controlplane.v1.GetSessionReplayRequest\x1a).controlplane.v1.GetSessionReplayResponseB\xcd\x01\n" +
+	"GetSession\x12\".controlplane.v1.GetSessionRequest\x1a#.controlplane.v1.GetSessionResponse\"\x03\x90\x02\x01\x12r\n" +
+	"\x12GetSessionTimeline\x12*.controlplane.v1.GetSessionTimelineRequest\x1a+.controlplane.v1.GetSessionTimelineResponse\"\x03\x90\x02\x01\x12l\n" +
+	"\x10GetSessionReplay\x12(.controlplane.v1.GetSessionReplayRequest\x1a).controlplane.v1.GetSessionReplayResponse\"\x03\x90\x02\x01B\xcd\x01\n" +
 	"\x13com.controlplane.v1B\bRumProtoP\x01ZOgithub.com/reliant-labs/reliant/gen/controlplane/services/rum/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -1494,45 +1517,48 @@ var file_services_rum_v1_rum_proto_goTypes = []any{
 	(*GetSessionReplayResponse)(nil),   // 13: controlplane.v1.GetSessionReplayResponse
 	nil,                                // 14: controlplane.v1.SessionTimelineEntry.PropsEntry
 	(*timestamppb.Timestamp)(nil),      // 15: google.protobuf.Timestamp
-	(*v1.ClientContext)(nil),           // 16: controlplane.v1.ClientContext
-	(*v1.InstanceScope)(nil),           // 17: controlplane.v1.InstanceScope
+	(*v1.RelativeWindow)(nil),          // 16: controlplane.v1.RelativeWindow
+	(*v1.ClientContext)(nil),           // 17: controlplane.v1.ClientContext
+	(*v1.InstanceScope)(nil),           // 18: controlplane.v1.InstanceScope
 }
 var file_services_rum_v1_rum_proto_depIdxs = []int32{
 	15, // 0: controlplane.v1.RumTimeRange.start:type_name -> google.protobuf.Timestamp
 	15, // 1: controlplane.v1.RumTimeRange.end:type_name -> google.protobuf.Timestamp
-	1,  // 2: controlplane.v1.RumScope.time_range:type_name -> controlplane.v1.RumTimeRange
-	15, // 3: controlplane.v1.SessionSummary.started_at:type_name -> google.protobuf.Timestamp
-	15, // 4: controlplane.v1.SessionSummary.ended_at:type_name -> google.protobuf.Timestamp
-	16, // 5: controlplane.v1.SessionSummary.client:type_name -> controlplane.v1.ClientContext
-	2,  // 6: controlplane.v1.ListSessionsRequest.scope:type_name -> controlplane.v1.RumScope
-	3,  // 7: controlplane.v1.ListSessionsResponse.sessions:type_name -> controlplane.v1.SessionSummary
-	17, // 8: controlplane.v1.ListSessionsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	2,  // 9: controlplane.v1.GetSessionRequest.scope:type_name -> controlplane.v1.RumScope
-	3,  // 10: controlplane.v1.GetSessionResponse.session:type_name -> controlplane.v1.SessionSummary
-	17, // 11: controlplane.v1.GetSessionResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	15, // 12: controlplane.v1.SessionTimelineEntry.time:type_name -> google.protobuf.Timestamp
-	0,  // 13: controlplane.v1.SessionTimelineEntry.kind:type_name -> controlplane.v1.SessionTimelineKind
-	14, // 14: controlplane.v1.SessionTimelineEntry.props:type_name -> controlplane.v1.SessionTimelineEntry.PropsEntry
-	2,  // 15: controlplane.v1.GetSessionTimelineRequest.scope:type_name -> controlplane.v1.RumScope
-	8,  // 16: controlplane.v1.GetSessionTimelineResponse.entries:type_name -> controlplane.v1.SessionTimelineEntry
-	17, // 17: controlplane.v1.GetSessionTimelineResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	2,  // 18: controlplane.v1.GetSessionReplayRequest.scope:type_name -> controlplane.v1.RumScope
-	15, // 19: controlplane.v1.ReplayEvent.time:type_name -> google.protobuf.Timestamp
-	12, // 20: controlplane.v1.GetSessionReplayResponse.events:type_name -> controlplane.v1.ReplayEvent
-	17, // 21: controlplane.v1.GetSessionReplayResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	4,  // 22: controlplane.v1.RumService.ListSessions:input_type -> controlplane.v1.ListSessionsRequest
-	6,  // 23: controlplane.v1.RumService.GetSession:input_type -> controlplane.v1.GetSessionRequest
-	9,  // 24: controlplane.v1.RumService.GetSessionTimeline:input_type -> controlplane.v1.GetSessionTimelineRequest
-	11, // 25: controlplane.v1.RumService.GetSessionReplay:input_type -> controlplane.v1.GetSessionReplayRequest
-	5,  // 26: controlplane.v1.RumService.ListSessions:output_type -> controlplane.v1.ListSessionsResponse
-	7,  // 27: controlplane.v1.RumService.GetSession:output_type -> controlplane.v1.GetSessionResponse
-	10, // 28: controlplane.v1.RumService.GetSessionTimeline:output_type -> controlplane.v1.GetSessionTimelineResponse
-	13, // 29: controlplane.v1.RumService.GetSessionReplay:output_type -> controlplane.v1.GetSessionReplayResponse
-	26, // [26:30] is the sub-list for method output_type
-	22, // [22:26] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	16, // 2: controlplane.v1.RumTimeRange.relative:type_name -> controlplane.v1.RelativeWindow
+	1,  // 3: controlplane.v1.RumScope.time_range:type_name -> controlplane.v1.RumTimeRange
+	15, // 4: controlplane.v1.SessionSummary.started_at:type_name -> google.protobuf.Timestamp
+	15, // 5: controlplane.v1.SessionSummary.ended_at:type_name -> google.protobuf.Timestamp
+	17, // 6: controlplane.v1.SessionSummary.client:type_name -> controlplane.v1.ClientContext
+	2,  // 7: controlplane.v1.ListSessionsRequest.scope:type_name -> controlplane.v1.RumScope
+	3,  // 8: controlplane.v1.ListSessionsResponse.sessions:type_name -> controlplane.v1.SessionSummary
+	18, // 9: controlplane.v1.ListSessionsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	1,  // 10: controlplane.v1.ListSessionsResponse.effective_time_range:type_name -> controlplane.v1.RumTimeRange
+	2,  // 11: controlplane.v1.GetSessionRequest.scope:type_name -> controlplane.v1.RumScope
+	3,  // 12: controlplane.v1.GetSessionResponse.session:type_name -> controlplane.v1.SessionSummary
+	18, // 13: controlplane.v1.GetSessionResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	15, // 14: controlplane.v1.SessionTimelineEntry.time:type_name -> google.protobuf.Timestamp
+	0,  // 15: controlplane.v1.SessionTimelineEntry.kind:type_name -> controlplane.v1.SessionTimelineKind
+	14, // 16: controlplane.v1.SessionTimelineEntry.props:type_name -> controlplane.v1.SessionTimelineEntry.PropsEntry
+	2,  // 17: controlplane.v1.GetSessionTimelineRequest.scope:type_name -> controlplane.v1.RumScope
+	8,  // 18: controlplane.v1.GetSessionTimelineResponse.entries:type_name -> controlplane.v1.SessionTimelineEntry
+	18, // 19: controlplane.v1.GetSessionTimelineResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	2,  // 20: controlplane.v1.GetSessionReplayRequest.scope:type_name -> controlplane.v1.RumScope
+	15, // 21: controlplane.v1.ReplayEvent.time:type_name -> google.protobuf.Timestamp
+	12, // 22: controlplane.v1.GetSessionReplayResponse.events:type_name -> controlplane.v1.ReplayEvent
+	18, // 23: controlplane.v1.GetSessionReplayResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	4,  // 24: controlplane.v1.RumService.ListSessions:input_type -> controlplane.v1.ListSessionsRequest
+	6,  // 25: controlplane.v1.RumService.GetSession:input_type -> controlplane.v1.GetSessionRequest
+	9,  // 26: controlplane.v1.RumService.GetSessionTimeline:input_type -> controlplane.v1.GetSessionTimelineRequest
+	11, // 27: controlplane.v1.RumService.GetSessionReplay:input_type -> controlplane.v1.GetSessionReplayRequest
+	5,  // 28: controlplane.v1.RumService.ListSessions:output_type -> controlplane.v1.ListSessionsResponse
+	7,  // 29: controlplane.v1.RumService.GetSession:output_type -> controlplane.v1.GetSessionResponse
+	10, // 30: controlplane.v1.RumService.GetSessionTimeline:output_type -> controlplane.v1.GetSessionTimelineResponse
+	13, // 31: controlplane.v1.RumService.GetSessionReplay:output_type -> controlplane.v1.GetSessionReplayResponse
+	28, // [28:32] is the sub-list for method output_type
+	24, // [24:28] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_services_rum_v1_rum_proto_init() }
