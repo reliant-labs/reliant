@@ -74,7 +74,8 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 /** `ms` ago, from this page load. */
-const ago = (ms: number, now = demoNow()): Timestamp => timestampFromMs(now - ms);
+// Whole ms: a fractional one (a phase's share of a build) makes Timestamp.nanos a non-integer, which does not encode.
+const ago = (ms: number, now = demoNow()): Timestamp => timestampFromMs(Math.round(now - ms));
 
 export { DEMO_ENVS, DEMO_PROJECT, DEMO_RELEASES, RUNNING };
 
