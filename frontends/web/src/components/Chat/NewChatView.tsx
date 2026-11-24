@@ -27,12 +27,17 @@ import {
   canChoose,
   canSetUpElsewhere,
   isSettingUpAnywhere,
+  moveSourceDaemonIds,
   preferredDaemonIds,
   projectPlacement,
   setUpPathOn,
   startBlockedReason,
 } from "@/lib/projectPlacement";
 import { describeCloneError } from "../Projects/cloneTargets";
+import { DetachOldMachineOffer, type OldMachine } from "../Projects/DetachOldMachineOffer";
+import { NestedRepoStatus } from "../Projects/NestedRepoStatus";
+import { StaysOnMachineList } from "../Projects/StaysOnMachineList";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import {
   choiceLeavesWorkspace,
   resolveChatMachine,
@@ -282,6 +287,23 @@ export function NewChatView({
   // that machine can have it (setUpPathOn). A plain folder has nothing to
   // clone from, so it is only explained.
   const platformOf = (daemonId: string) => daemons.find((d) => d.daemonId === daemonId)?.platform;
+  // A machine holding the project may be outside the listed ones (another
+  // org's); its install row still carries the server's name for it.
+  const holderName = (daemonId: string) =>
+    daemons.some((d) => d.daemonId === daemonId)
+      ? machineName(daemonId)
+      : (installRows.find((row) => row.daemon_id === daemonId && row.daemon_name)?.daemon_name ?? machineName(daemonId));
+  const isOnline = (daemonId: string) => {
+    const status = daemons.find((d) => d.daemonId === daemonId)?.status;
+    return status === DaemonStatus.ACTIVE || status === DaemonStatus.IDLE;
+  };
+  // A set-up started here, and the machines the project was on then: once
+  // the clone lands, the user is offered (never sent) a detach of those.
+  const [movedOnto, setMovedOnto] = useState<{
+    projectId: string;
+    targetId: string;
+    oldMachines: OldMachine[];
+  } | null>(null);
   const setUpProjectOn =
     currentProject && canSetUpElsewhere(currentProject)
       ? async (daemonId: string) => {
@@ -292,14 +314,31 @@ export function NewChatView({
             daemonId,
             platformOf,
           });
+          const oldMachines = moveSourceDaemonIds(installRows, currentProject.id, daemonId, isOnline).map((id) => ({
+            daemonId: id,
+            name: holderName(id),
+          }));
           await createProjectFromRepo({
             cloneUrl: currentProject.remote_url ?? "",
             daemonId,
             name: currentProject.name,
             ...(path ? { path } : {}),
           });
+          setMovedOnto({ projectId: currentProject.id, targetId: daemonId, oldMachines });
         }
       : undefined;
+  // What a set-up leaves behind, read from the machine the project is on now
+  // (an online one first), shown in the picker before a set-up is chosen.
+  const moveSourceId = currentProject ? moveSourceDaemonIds(installRows, currentProject.id, undefined, isOnline)[0] : undefined;
+  const setUpNote =
+    currentProject && setUpProjectOn && moveSourceId ? (
+      <StaysOnMachineList projectId={currentProject.id} daemonId={moveSourceId} machineName={holderName(moveSourceId)} />
+    ) : undefined;
+  // The chosen machine's checkout, for its nested repositories' progress.
+  const runsOnInstall = runsOnDaemonId
+    ? installRows.find((row) => row.project_id === currentProject?.id && row.daemon_id === runsOnDaemonId)
+    : undefined;
+  const moveOffer = movedOnto && currentProject && movedOnto.projectId === currentProject.id ? movedOnto : null;
 
   const daemonWait = useDaemonWait({
     waiting: !machineReady && !daemonLoading,
@@ -645,6 +684,7 @@ export function NewChatView({
                             onSetUp: setUpProjectOn,
                             onUseFolder: setAttachDaemonId,
                             describeError: describeCloneError,
+                            setUpNote,
                           }
                         : undefined
                     }
@@ -803,6 +843,21 @@ export function NewChatView({
                   )}
                   {placementBlock}
                 </p>
+              )}
+              {placementBlock && <NestedRepoStatus repos={runsOnInstall?.nested_repos} />}
+
+              {/* The set-up started here landed: offer to detach the machine
+                  it came from. An offer only, never done for the user. */}
+              {moveOffer && currentProject && (
+                <div className="w-full max-w-md text-left">
+                  <DetachOldMachineOffer
+                    projectId={currentProject.id}
+                    projectName={currentProject.name}
+                    targetName={machineName(moveOffer.targetId)}
+                    targetInstalled={placement.stateOn(moveOffer.targetId) === "ready"}
+                    oldMachines={moveOffer.oldMachines}
+                  />
+                </div>
               )}
 
               {!emptyState && welcomePanel && <div className="w-full pt-3">{welcomePanel}</div>}

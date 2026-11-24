@@ -91,6 +91,7 @@ import {
 import {
   canSetUpElsewhere,
   isSettingUpAnywhere,
+  moveSourceDaemonIds,
   preferredDaemonIds,
   projectPlacement,
   sectionMachines,
@@ -98,6 +99,9 @@ import {
   type PlacementState,
 } from "@/lib/projectPlacement";
 import { describeCloneError } from "../Projects/cloneTargets";
+import { NestedRepoStatus } from "../Projects/NestedRepoStatus";
+import { StaysOnMachineList } from "../Projects/StaysOnMachineList";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { type Worktree, useWorktreeList } from "../../hooks/worktree-queries";
 import {
   choiceLeavesWorkspace,
@@ -322,6 +326,17 @@ function MobileNewChatDraft() {
     Boolean(runsOnDaemonId) &&
     canSetUpElsewhere(currentProject) &&
     ["absent", "failed"].includes(placement.stateOn(runsOnDaemonId ?? ""));
+  // What a set-up leaves on the machine the project is on now (an online one
+  // first), and how the chosen machine's nested repositories are landing.
+  const moveSourceId = canSetUpHere && currentProject
+    ? moveSourceDaemonIds(installRows, currentProject.id, runsOnDaemonId, (id) => {
+        const status = daemons.find((d) => d.daemonId === id)?.status;
+        return status === DaemonStatus.ACTIVE || status === DaemonStatus.IDLE;
+      })[0]
+    : undefined;
+  const runsOnNestedRepos = runsOnDaemonId
+    ? installRows.find((row) => row.project_id === currentProject?.id && row.daemon_id === runsOnDaemonId)?.nested_repos
+    : undefined;
   const setUpHere = async () => {
     if (!currentProject || !runsOnDaemonId || settingUp) return;
     setSettingUp(true);
@@ -561,6 +576,18 @@ function MobileNewChatDraft() {
           {placementBlock && (
             <StatusLine data-testid="mobile-new-chat-placement">
               <p role="status">{placementBlock}</p>
+              <NestedRepoStatus repos={runsOnNestedRepos} className="mt-1" />
+              {currentProject && moveSourceId && (
+                <StaysOnMachineList
+                  className="mt-2"
+                  projectId={currentProject.id}
+                  daemonId={moveSourceId}
+                  machineName={
+                    installRows.find((row) => row.daemon_id === moveSourceId)?.daemon_name ||
+                    daemonLabel(daemons.find((d) => d.daemonId === moveSourceId), moveSourceId)
+                  }
+                />
+              )}
               {canSetUpHere && (
                 <button
                   type="button"

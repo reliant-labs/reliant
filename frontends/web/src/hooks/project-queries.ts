@@ -48,6 +48,7 @@ import { ResourceVisibility, type FileChangeStatus } from "../gen/reliant/v1/com
 import { trackEvent } from "../lib/analytics";
 import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
+import { nestedRepoInstalls, type NestedRepoInstall } from "../lib/projectPlacement";
 import { queryClient } from "../lib/query-client";
 import { toast } from "../lib/toast-manager";
 import { getOrgScope, orgQueryEnabled, orgRequest, useOrgScope, whenOrgScopeReady, withOrgFailure } from "../lib/orgScope";
@@ -120,6 +121,8 @@ export interface ProjectDaemonInfo {
   verified_at?: string;
   /** The machine's display name, as the server resolved it. */
   daemon_name?: string;
+  /** The nested repositories cloned into the checkout, each with its own state; empty from an older server. */
+  nested_repos?: NestedRepoInstall[];
 }
 
 export interface FileChange {
@@ -182,6 +185,7 @@ function projectDaemonFromProto(proto: ProtoProjectDaemon): ProjectDaemonInfo {
     install_error: proto.installError || undefined,
     verified_at: proto.verifiedAt || undefined,
     daemon_name: proto.daemonName || undefined,
+    nested_repos: nestedRepoInstalls(proto.nestedRepos),
   };
 }
 
