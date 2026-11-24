@@ -136,6 +136,25 @@ Two kinds of request are not recorded: image and video generation (the generatio
 
 **How long we keep it:** each call's record is deleted **90 days** after the call. We keep a daily total per model, provider, payment type and purpose, with no chat or run IDs, until you delete your account. Deleting your account deletes both.
 
+## Tool usage records
+
+Agents' tool calls (running a command, reading a file, calling an integration) are made by our servers too, so we keep the same kind of **usage record** of each tool call a chat or a workflow runs. It is a service record like the model usage records above, and stays on when you turn analytics off.
+
+**What a record contains, exactly:**
+
+- which of your chats, projects and runs the call belonged to, and your account ID
+- where in that run it was made, as internal IDs and names: the workflow and the step in it, the agent (and its preset), and the run it belongs to
+- the name of the tool, when it is one Reliant provides (for example `shell` or an integration action such as `slack__message_post`). For a tool of an MCP server you added, a workflow's own response tool, or a tool name the model made up, only which of those it was, never its name
+- whether it ran on your machine or on our servers
+- whether it succeeded, was cancelled or failed, and for a failure one of a fixed set of categories (refused, invalid input, no workspace, machine offline, could not be delivered, timeout, interrupted, the tool's own error, internal or unknown)
+- how long it took, which attempt it was, and when it happened
+
+**What it never contains:** the tool's inputs or outputs, the command, file names or paths, or the text of an error message. The database table has no column that could hold any of these, and a test fails if one is added.
+
+**Why we keep it, and who can see it:** to show tool and machine error rates, and to run the service. Only you can see your own.
+
+**How long we keep it:** each record is deleted **90 days** after the call. Deleting a project deletes its chats' records; deleting your account deletes all of yours.
+
 ## Telemetry
 
 Both kinds of telemetry are **on by default**. To turn them off, go to **Settings → Privacy**.

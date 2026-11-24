@@ -305,11 +305,12 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
 	if cfg.Database != nil {
-		usage, err := llmusage.NewInstrumented(llmusage.Deps{Ledger: store.NewLlmCallUsageExtStore(cfg.Database.ORM()), Tx: cfg.Database})
+		usage, err := llmusage.NewInstrumented(llmusage.Deps{Ledger: store.NewLlmCallUsageExtStore(cfg.Database.ORM()), Tools: store.NewToolCallUsageExtStore(cfg.Database.ORM()), Tx: cfg.Database})
 		if err != nil {
 			return nil, nil, fmt.Errorf("llm usage ledger: %w", err)
 		}
 		activityDeps.LLMUsage = usage
+		activityDeps.ToolUsage = usage
 		backoff, err := providerbackoff.NewInstrumented(providerbackoff.Deps{Markers: store.NewProviderBackoffExtStore(cfg.Database.ORM()), Tx: cfg.Database, Activity: cfg.Database})
 		if err != nil {
 			return nil, nil, fmt.Errorf("provider backoff markers: %w", err)

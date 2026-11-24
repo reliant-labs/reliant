@@ -1739,6 +1739,7 @@ func (g *Graph) newLlmusage() (llmusage.Service, error) {
 		Logger: g.Log,
 		Config: g.Cfg,
 		Ledger: store.NewLlmCallUsageExtStore(g.Database().ORM()),
+		Tools:  store.NewToolCallUsageExtStore(g.Database().ORM()),
 		Tx:     g.Database(),
 	})
 	if err != nil {
