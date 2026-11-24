@@ -144,12 +144,14 @@ func NewDashboardServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+DashboardServiceListDashboardsProcedure,
 			connect.WithSchema(dashboardServiceMethods.ByName("ListDashboards")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getDashboard: connect.NewClient[v1.GetDashboardRequest, v1.GetDashboardResponse](
 			httpClient,
 			baseURL+DashboardServiceGetDashboardProcedure,
 			connect.WithSchema(dashboardServiceMethods.ByName("GetDashboard")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		saveDashboard: connect.NewClient[v1.SaveDashboardRequest, v1.SaveDashboardResponse](
@@ -168,6 +170,7 @@ func NewDashboardServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+DashboardServiceListDashboardVersionsProcedure,
 			connect.WithSchema(dashboardServiceMethods.ByName("ListDashboardVersions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		restoreDashboardVersion: connect.NewClient[v1.RestoreDashboardVersionRequest, v1.RestoreDashboardVersionResponse](
@@ -204,6 +207,7 @@ func NewDashboardServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+DashboardServiceListDashboardTemplatesProcedure,
 			connect.WithSchema(dashboardServiceMethods.ByName("ListDashboardTemplates")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		promoteDashboardToCode: connect.NewClient[v1.PromoteDashboardToCodeRequest, v1.PromoteDashboardToCodeResponse](
@@ -360,12 +364,14 @@ func NewDashboardServiceHandler(svc DashboardServiceHandler, opts ...connect.Han
 		DashboardServiceListDashboardsProcedure,
 		svc.ListDashboards,
 		connect.WithSchema(dashboardServiceMethods.ByName("ListDashboards")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	dashboardServiceGetDashboardHandler := connect.NewUnaryHandler(
 		DashboardServiceGetDashboardProcedure,
 		svc.GetDashboard,
 		connect.WithSchema(dashboardServiceMethods.ByName("GetDashboard")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	dashboardServiceSaveDashboardHandler := connect.NewUnaryHandler(
@@ -384,6 +390,7 @@ func NewDashboardServiceHandler(svc DashboardServiceHandler, opts ...connect.Han
 		DashboardServiceListDashboardVersionsProcedure,
 		svc.ListDashboardVersions,
 		connect.WithSchema(dashboardServiceMethods.ByName("ListDashboardVersions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	dashboardServiceRestoreDashboardVersionHandler := connect.NewUnaryHandler(
@@ -420,6 +427,7 @@ func NewDashboardServiceHandler(svc DashboardServiceHandler, opts ...connect.Han
 		DashboardServiceListDashboardTemplatesProcedure,
 		svc.ListDashboardTemplates,
 		connect.WithSchema(dashboardServiceMethods.ByName("ListDashboardTemplates")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	dashboardServicePromoteDashboardToCodeHandler := connect.NewUnaryHandler(

@@ -28,7 +28,7 @@
  * toggle opens. It is ONE element in all three: only its positioning changes.
  */
 
-import { Suspense, useCallback, useEffect, useMemo, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useMemo, type ComponentType, type ReactNode } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
 
@@ -39,30 +39,61 @@ import { useSidebarOverlay } from "@/hooks/useSidebarOverlay";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { lazyRoute } from "@/lib/lazyRoute";
 import { runsPath } from "@/lib/paths";
+import type { RunsSearch } from "@/routeSchemas";
+import { useSignedIn } from "@/lib/session";
 import { cn } from "@/lib/utils";
-import { useAuthStore } from "@/store/authStore";
 import { useShortcutLabel } from "@/store/shortcutsStore";
 import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 
+import { pickerParam } from "../../Onboarding/tourParam";
 import { ResizableSidebar } from "../ResizableSidebar";
 import type { NavigateOptions } from "../sidebar/NavRenderer";
 import { holdNavDrawerOpen, navDrawerHeld, releaseNavDrawerHold } from "../sidebar/navDrawerHold";
 import { ShellFrameContext, shellFrameScope, toggleShellNav, useNavDrawer, useShellFrame, type ShellFrame } from "./shellFrame";
 
-// The nav and its chat list load with the first shell page, not with the
-// entry chunk every signed-out page pays for.
-const Sidebar = lazyRoute(() => import("../Sidebar"), "Sidebar");
+const SetupGuide = lazyRoute(() => import("../../Onboarding/OnboardingChecklist"), "OnboardingChecklist");
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
-export function AppShellFrame({ children }: { children: ReactNode }) {
+/**
+ * What the frame hands its nav body: the page on screen, and the frame's
+ * navigation, wired to the router, the drawer and the keyboard host.
+ */
+export interface ShellNavProps {
+  /** The page on screen (the router's): which row is current, which app is open. */
+  pathname: string;
+  /** The page's search, carried by the rows that keep a scope (`?project=`, `?env=`). */
+  search: Record<string, unknown>;
+  /** Opens a page; `drill` keeps a narrow window's drawer open on the area's rows. */
+  onNavigate: (href: string, options?: NavigateOptions) => void;
+  /** Opens the Runs tab with filters (the Workflows row's live pill). */
+  onOpenRuns?: (search?: RunsSearch) => void;
+  /** Opens chat search over the page on screen (the keyboard host's). */
+  onOpenChatSearch?: () => void;
+  /** Opens the journey picker over the page on screen (Help › Take a tour). */
+  onOpenTours?: () => void;
+}
+
+export interface AppShellFrameProps {
+  /**
+   * The nav body, the column under the macOS title strip. The host chooses it:
+   * the app passes its own (routes.tsx `AppNav`, the lazy Layout/Sidebar), so
+   * the frame never imports the app's nav and a host with another nav (the
+   * public demo) can wear the same frame. A lazy component loads with the
+   * first shell page, not with the entry chunk.
+   */
+  nav: ComponentType<ShellNavProps>;
+  children: ReactNode;
+}
+
+export function AppShellFrame({ nav, children }: AppShellFrameProps) {
   // The RENDERED matches, like the keyboard host: mid-navigation the location
   // already names the destination while the page on screen is still the old one.
   const pathname = useRouterState({
     select: (s) => s.matches[s.matches.length - 1]?.pathname ?? s.location.pathname,
   });
   const routeIds = useRouterState({ select: (s) => s.matches.map((match) => match.routeId).join(" ") });
-  const signedIn = useAuthStore((state) => state.user !== null);
+  const signedIn = useSignedIn();
   const inShell = shellFrameScope({ routeIds: routeIds.split(" "), pathname, signedIn });
 
   const expanded = useWorkspaceStateStore((state) => state.leftSidebarExpanded);
@@ -134,7 +165,7 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
               {/* The id is how the right panels leave room for the nav; only a docked nav takes any. */}
               <div id={docked ? "layout-left-sidebar" : undefined} className="flex h-full flex-col">
                 <Suspense fallback={null}>
-                  <ShellNav />
+                  <ShellNav nav={nav} />
                 </Suspense>
               </div>
             </ResizableSidebar>
@@ -144,13 +175,48 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
         <div role={inShell ? "main" : undefined} className={inShell ? "flex h-full min-w-0 flex-1 flex-col" : "contents"} data-testid={inShell ? "shell-main" : undefined}>
           {children}
         </div>
+        {inShell && (
+          <Suspense fallback={null}>
+            <ShellSetupGuide />
+          </Suspense>
+        )}
       </div>
     </ShellFrameContext.Provider>
   );
 }
 
+/** The journey picker, opened over the page on screen: `?tour=` on its own search (Onboarding/JOURNEYS.md). */
+function useOpenTours(): () => void {
+  const navigate = useNavigate();
+  return useCallback(() => {
+    releaseNavDrawerHold();
+    useNavDrawer.getState().setOpen(false);
+    void navigate({ search: ((prev: Record<string, unknown>) => ({ ...prev, tour: pickerParam("menu") })) as never });
+  }, [navigate]);
+}
+
+/**
+ * The Setup Guide (Onboarding/OnboardingChecklist.tsx) floats over every shell
+ * page, except while a tour is open: the tour's spotlights are the guide then.
+ */
+function ShellSetupGuide() {
+  const navigate = useNavigate();
+  const tourOpen = useRouterState({ select: (s) => (s.location.search as { tour?: unknown }).tour != null });
+  const onOpenTours = useOpenTours();
+  const onNavigate = useCallback(
+    (href: string) => {
+      releaseNavDrawerHold();
+      useNavDrawer.getState().setOpen(false);
+      void navigate({ href });
+    },
+    [navigate],
+  );
+  if (tourOpen) return null;
+  return <SetupGuide onNavigate={onNavigate} onOpenTours={onOpenTours} />;
+}
+
 /** The nav, wired to the router and the keyboard host. */
-function ShellNav() {
+function ShellNav({ nav: Nav }: { nav: ComponentType<ShellNavProps> }) {
   const navigate = useNavigate();
   const shortcutHost = useShortcutHost();
   const location = useRouterState({ select: (s) => s.location });
@@ -172,6 +238,7 @@ function ShellNav() {
     [navigate],
   );
   const onOpenChatSearch = useCallback(() => void shortcutHost?.run("onChatSearch"), [shortcutHost]);
+  const onOpenTours = useOpenTours();
 
   return (
     <>
@@ -196,12 +263,13 @@ function ShellNav() {
           )}
         </div>
       )}
-      <Sidebar
+      <Nav
         pathname={location.pathname}
         search={location.search as Record<string, unknown>}
         onNavigate={onNavigate}
         onOpenRuns={(search) => void navigate({ to: runsPath(), search: search ?? {} })}
         onOpenChatSearch={onOpenChatSearch}
+        onOpenTours={onOpenTours}
       />
     </>
   );

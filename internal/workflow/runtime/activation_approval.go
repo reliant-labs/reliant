@@ -169,7 +169,7 @@ func (a activationApprovalAsk) preview(gctx workflow.Context, tc *pb.ToolCallMsg
 // it with the other cards of its turn; empty when it is the only one.
 func (a activationApprovalAsk) wait(gctx workflow.Context, card activationCard, batchID string) (map[string]interface{}, error) {
 	rtx := a.rtx
-	return executeApprovalSignalFlow(gctx, approvalExecution{ChatID: rtx.ChatID, WorkflowID: rtx.WorkflowID, ThreadID: rtx.Thread, StepID: rtx.StepID, LoopNodeID: rtx.LoopNodeID, LoopIteration: rtx.LoopIteration, NodePath: rtx.NodePath, Title: card.preview.Title, ToolCallID: card.call.GetId(), BatchID: batchID, ConnectionProposal: a.cardProposal(card), Logger: workflow.GetLogger(gctx)})
+	return executeApprovalSignalFlow(gctx, approvalExecution{ChatID: rtx.ChatID, WorkflowID: rtx.WorkflowID, ThreadID: rtx.Thread, StepID: rtx.StepID, LoopNodeID: rtx.LoopNodeID, LoopIteration: rtx.LoopIteration, NodePath: rtx.NodePath, Title: card.preview.Title, ToolCallID: card.call.GetId(), ToolName: card.call.GetName(), BatchID: batchID, ConnectionProposal: a.cardProposal(card), Logger: workflow.GetLogger(gctx)})
 }
 
 // cardProposal is the proposal recorded on card's approval, when this run

@@ -30,3 +30,4 @@ export const SHOP_OVERLAYS: Readonly<Record<string, ShopOverlay>> = {
 export { browserOverlays } from "./overlays/browsers";
 export { consoleOverlays } from "./overlays/console";
 export { deliveryOverlays } from "./overlays/delivery";
+export { observabilityOverlays, readCap, retainedCatalog } from "./overlays/observability";

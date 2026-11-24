@@ -50,6 +50,15 @@ type Message struct {
 	// SenderSubject is the one-line subject the sending agent gave the
 	// message (spawn_send's `subject`); nil when it gave none.
 	SenderSubject *string
+	// AuthorUserID is the human who wrote the message when that is not the
+	// chat's owner; nil means the owner (every row written before the
+	// column, and every model, tool or agent message). It is distinct from
+	// SenderThreadID/SenderKind, which name the AGENT that sent a message.
+	// AuthorName is that author's display name at send time, the name the
+	// model's transcript renders (internal/authortag); never an email or an
+	// id. docs/design/chat-collaboration.md §6 (control-plane).
+	AuthorUserID *string
+	AuthorName   *string
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

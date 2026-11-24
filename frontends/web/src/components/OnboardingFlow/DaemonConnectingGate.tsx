@@ -212,7 +212,7 @@ export function DaemonConnectingGate({
         aria-live="polite"
         data-testid="daemon-gate-connected"
       >
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success/15 text-success-ink">
           <CheckCircle2 className="h-7 w-7" />
         </div>
         <div className="space-y-1">
