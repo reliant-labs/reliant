@@ -28,8 +28,9 @@ import (
 // API key with it.
 func addOrgProviderAccountThrough(t *testing.T, api *configv1.ApiServerConfig) error {
 	t.Helper()
+	repo := db.NewTestRepo(t)
 	svc, err := app.NewOrgProviderAccount(api, org_provider_account.Deps{
-		Logger: slog.Default(), Config: &config.Config{}, Store: db.NewTestRepo(t),
+		Logger: slog.Default(), Config: &config.Config{}, Accounts: db.TestAccounts(t, repo), OrgAccounts: db.TestOrgAccounts(t, repo),
 		ValidateKey: func(context.Context, models.Family, string) (bool, string) { return true, "" },
 	})
 	require.NoError(t, err)

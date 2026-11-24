@@ -74,7 +74,7 @@ func (s *Service) AdoptAs(ctx context.Context, t *core.Trigger, adopterID string
 	if err != nil {
 		return nil, err
 	}
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, adopted.ProjectID, adopterID)
+	project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, adopted.ProjectID, adopterID)
 	if err != nil {
 		return nil, triggerDBError("get project", err)
 	}
@@ -113,7 +113,7 @@ func (s *Service) AdoptAs(ctx context.Context, t *core.Trigger, adopterID string
 	if err := s.bindOrgGitHubApp(ctx, adopterID, def, adopted); err != nil {
 		return nil, err
 	}
-	if err := s.deps.Repo.AdoptTrigger(ctx, adopted, t.UserID, offerID,
+	if err := s.deps.Owners.AdoptTrigger(ctx, adopted, t.UserID, offerID,
 		db.OrgRead{Table: "projects", ID: project.ID, Org: project.OrgID}); err != nil {
 		return nil, triggerDBError("adopt trigger", err)
 	}

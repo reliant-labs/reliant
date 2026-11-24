@@ -4,6 +4,8 @@ package main
 import (
 	"fmt"
 	"maps"
+	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -819,18 +821,35 @@ func TestLockfileChangeChecksTheInstallFirst(t *testing.T) {
 // `git ls-files`) keeps the test cache-sound: the test process reads the
 // directories itself.
 func TestNPMProjectsNameEveryLockfile(t *testing.T) {
-	found := map[string]string{}
-	for _, lock := range []string{npmLock, pnpmLock} {
-		for _, pat := range []string{lock, "*/" + lock, "*/*/" + lock} {
-			ms, err := filepath.Glob(filepath.Join(repoRoot, pat))
-			if err != nil {
-				t.Fatal(err)
+	// The repository root and two levels below it, minus node_modules and
+	// hidden directories. Not filepath.Glob("*/*/<lock>"): that lists every
+	// second-level directory, .forge/ included, and Go's test cache keys this
+	// test on each listing's entries and their mtimes, so every recorded test
+	// run (a new .forge/tests/runs/<id>/, scripts/test-capture.sh) made it miss
+	// the cache. No project keeps a lockfile in a hidden directory.
+	subdirs := func(d string) []string {
+		entries, err := os.ReadDir(filepath.Join(repoRoot, d))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, e := range entries {
+			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") && e.Name() != "node_modules" {
+				out = append(out, path.Join(d, e.Name()))
 			}
-			for _, m := range ms {
-				rel, _ := filepath.Rel(repoRoot, filepath.Dir(m))
-				if !strings.Contains(rel, "node_modules") {
-					found[filepath.ToSlash(rel)] = lock
-				}
+		}
+		return out
+	}
+	candidates := []string{"."}
+	for _, d := range subdirs(".") {
+		candidates = append(candidates, d)
+		candidates = append(candidates, subdirs(d)...)
+	}
+	found := map[string]string{}
+	for _, d := range candidates {
+		for _, lock := range []string{npmLock, pnpmLock} {
+			if _, err := os.Stat(filepath.Join(repoRoot, d, lock)); err == nil {
+				found[d] = lock
 			}
 		}
 	}

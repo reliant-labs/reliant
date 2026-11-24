@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -22,10 +23,7 @@ func (s *Service) InterruptThread(
 
 	threadsSvc := s.threads
 	if threadsSvc == nil {
-		threadsSvc = threads.NewService(s.deps.Repo,
-			threads.WithTemporalSignaler(s.deps.Temporal),
-			threads.WithToolCanceler(s.deps.Router),
-		)
+		threadsSvc = threads.New(threads.Deps{Repo: s.deps.Repo, Signaler: s.deps.Temporal, ToolCanceler: s.deps.Router})
 	}
 
 	result, err := threadsSvc.InterruptThread(ctx, threads.InterruptThreadOpts{

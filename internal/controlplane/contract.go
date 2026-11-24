@@ -17,9 +17,10 @@
 // generate` writes a mock of Service into mock_gen.go; adapter tests stand up
 // an httptest server.
 //
-// Built by hand, by internal/app's providers (providers_api.go,
-// providers_worker.go) and internal/mcpserver: never a node compose.go
-// constructs from Deps.
+// Built per consumer, by internal/app's providers (providers_api.go,
+// providers_worker.go) and internal/mcpserver: each wants a different Sign
+// (user bearer vs internal service) and a nil client when self-hosted, and
+// one graph node per type cannot be both.
 //
 //forge:provided
 package controlplane
@@ -204,6 +205,23 @@ type Service interface {
 	// this adapter cannot sign; otherwise a *ProjectOrgMoveError carrying
 	// control-plane's code (unavailable: no catalog could be read).
 	GetModelListPrices(ctx context.Context, refs []ModelRef) ([]ModelListPrice, time.Time, error)
+
+	// MintStepKey mints a workflow run step's LLM gateway step key
+	// (LLMStepKeyInternalService.MintStepKey): a short-lived `rlsk_` bearer
+	// capped to the step's models, budget and lifetime and billed to the
+	// run's org, idempotent by r.RequestID (a repeat rotates the key). Signed
+	// with this process's internal-service identity. The plaintext is
+	// returned once, as a StepKeySecret that never prints. Errors:
+	// ErrStepKeysUnsupported when the control plane has no such service, has
+	// no gateway configured for it, or this adapter cannot sign; otherwise a
+	// *StepKeyError carrying control-plane's code and reason
+	// (ReasonStepKey*).
+	MintStepKey(ctx context.Context, r StepKeyRequest) (StepKey, error)
+
+	// RevokeStepKey revokes the step key minted under requestID and reports
+	// what it spent. Idempotent: an unknown or already revoked request id
+	// answers Revoked false and no error. Errors as MintStepKey.
+	RevokeStepKey(ctx context.Context, requestID string) (StepKeyRevocation, error)
 
 	// HasCoverageBlob asks whether a retained coverage report of the forge
 	// project names the git blob (TestsService.HasCoverageBlob), as the

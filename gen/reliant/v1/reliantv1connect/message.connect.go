@@ -62,6 +62,7 @@ func NewMessageServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+MessageServiceGetMessageProcedure,
 			connect.WithSchema(messageServiceMethods.ByName("GetMessage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -95,6 +96,7 @@ func NewMessageServiceHandler(svc MessageServiceHandler, opts ...connect.Handler
 		MessageServiceGetMessageProcedure,
 		svc.GetMessage,
 		connect.WithSchema(messageServiceMethods.ByName("GetMessage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.MessageService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

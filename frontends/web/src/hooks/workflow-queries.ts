@@ -571,6 +571,38 @@ export function invalidateWorkflows(): Promise<void> {
 }
 
 /**
+ * The options a generated workflow write hook (useDeleteWorkflow,
+ * useCopyWorkflow, …) takes so the write keeps invalidateWorkflows()'s
+ * contract: the preset reads refresh beside the workflow reads, and the write
+ * settles only once the mounted reads have refetched (React Query awaits
+ * onSettled), so a caller that closes a dialog or navigates finds the change.
+ * It replaces the generated refresh (the workflowService scope alone, not
+ * awaited) rather than adding to it.
+ *
+ * `ifSucceeded`: a response with success=false changed nothing (copy and
+ * import refuse a write that way), so nothing refreshes. `triggers`: the write
+ * also removed triggers (a deleted workflow takes its automations with it).
+ */
+export function workflowWriteRefresh(opts: { ifSucceeded?: boolean; triggers?: boolean } = {}) {
+  return {
+    invalidate: false as const,
+    onSettled: async (response: object | undefined) => {
+      if (!response || (opts.ifSucceeded && "success" in response && !response.success)) return;
+      await Promise.all([
+        invalidateWorkflows(),
+        opts.triggers ? queryClient.invalidateQueries({ queryKey: triggerServiceKeys.all }) : undefined,
+      ]);
+    },
+  };
+}
+
+/** An ImportWorkflow request: the server takes the YAML as bytes. */
+export function importWorkflowRequest(projectId: string, yamlContent: string | Uint8Array, overwrite = false) {
+  const yamlBytes = typeof yamlContent === "string" ? new TextEncoder().encode(yamlContent) : yamlContent;
+  return { projectId, yamlContent: yamlBytes, overwrite };
+}
+
+/**
  * Save a workflow (creates or updates).
  *
  * `status` is the intent: "draft" stores as-is (findings returned, not
@@ -642,14 +674,13 @@ export async function deleteWorkflow(projectId: string, name: string): Promise<v
   await Promise.all([invalidateWorkflows(), queryClient.invalidateQueries({ queryKey: triggerServiceKeys.all })]);
 }
 
-/** Import a workflow from YAML content. */
+/** Import a workflow from YAML content, outside React (the onboarding journey seeds one). */
 export async function importWorkflow(
   projectId: string,
   yamlContent: string | Uint8Array,
   overwrite = false,
 ): Promise<ImportWorkflowResult> {
-  const yamlBytes = typeof yamlContent === "string" ? new TextEncoder().encode(yamlContent) : yamlContent;
-  const response = await client.importWorkflow({ projectId, yamlContent: yamlBytes, overwrite });
+  const response = await client.importWorkflow(importWorkflowRequest(projectId, yamlContent, overwrite));
   if (response.success) await invalidateWorkflows();
   return {
     success: response.success,
@@ -663,45 +694,4 @@ export async function importWorkflow(
     existingId: response.existingId,
     status: draftStatusFromProto(response.status),
   };
-}
-
-/** Hide or unhide a workflow. */
-export async function setWorkflowVisibility(
-  projectId: string,
-  slug: string,
-  isHidden: boolean,
-): Promise<{ success: boolean; message: string }> {
-  const response = await client.setWorkflowVisibility({ projectId, slug, isHidden });
-  await invalidateWorkflows();
-  return { success: response.success, message: response.message };
-}
-
-/**
- * Create a new workflow draft: blank, or a copy of a built-in `template`
- * ("builtin://agent"). The server makes the title and slug unique. Call it
- * once per user action — never from an effect, which can run twice.
- */
-export async function createWorkflowDraft(
-  projectId: string,
-  opts: { title?: string; template?: string } = {},
-): Promise<{ draftId: string; slug: string; name: string; title: string }> {
-  const response = await client.createWorkflowDraft({
-    projectId,
-    title: opts.title ?? "",
-    template: opts.template ?? "",
-  });
-  await invalidateWorkflows();
-  return { draftId: response.draftId, slug: response.slug, name: response.name, title: response.title };
-}
-
-/** Copy a workflow under an auto-generated unique name. */
-export async function copyWorkflow(
-  projectId: string,
-  sourceSlug: string,
-  newName?: string,
-  worktreeId?: string,
-): Promise<{ success: boolean; message: string; slug: string; id: string }> {
-  const response = await client.copyWorkflow({ projectId, sourceSlug, newName, worktreeId });
-  if (response.success) await invalidateWorkflows();
-  return { success: response.success, message: response.message, slug: response.slug, id: response.id };
 }

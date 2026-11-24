@@ -104,7 +104,7 @@ func newSharedChatService(t *testing.T) (*viewertest.Fixture, *Service) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, Orgs: f.Membership}))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, Orgs: f.Membership})))
 	svc.heartbeatInterval = time.Hour // only the re-authorization ticks
 	svc.reauthorizeInterval = 10 * time.Millisecond
 	return f, svc
@@ -161,7 +161,7 @@ func TestStreamChatUpdates_UnshareEndsAViewersStream(t *testing.T) {
 	client := sharedStreams(t, svc, f.Membership)
 	_, events, stream := openChatStream(t, client, f.ViewerID, &reliantv1.StreamChatUpdatesRequest{ChatId: f.ChatID})
 
-	changed, err := f.Repo.ApplyShareChange(context.Background(), core.ShareChange{
+	changed, err := applyShareChange(context.Background(), f.Repo, core.ShareChange{
 		Kind: core.ShareKindChat, ResourceID: f.ChatID, OrgID: viewertest.OrgID, OwnerUserID: f.OwnerID,
 		ActorUserID: f.OwnerID, Action: core.ShareActionUnshare, At: time.Now(),
 	})

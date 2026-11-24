@@ -17,7 +17,8 @@ import { REQUIRED_ITEMS, BONUS_ITEMS, CHECKLIST_ITEMS } from "./constants";
 import type { ChecklistItem, ChecklistItemId } from "./types";
 import { trackEvent } from "../../lib/analytics";
 import { useTourNavigation } from "./useTourNavigation";
-import { settingsPath, workflowLibraryPath } from "@/lib/paths";
+import { homePath, settingsPath, workflowLibraryPath } from "@/lib/paths";
+import { requestChatInputFocus, requestCreateWorktree } from "./checklistRequests";
 
 // ─── Action Handlers ──────────────────────────────────────────────────────────
 
@@ -35,7 +36,8 @@ function executeItemAction(item: ChecklistItem, deps: ItemActionDeps) {
       useApiKeySetupStore.getState().openModal();
       break;
     case "start-chat":
-      document.querySelector<HTMLElement>("[data-chat-input]")?.focus();
+      // Off the chat (an app's console, Projects), the chat home's composer.
+      if (!requestChatInputFocus()) void deps.navigate({ to: homePath() });
       break;
     case "use-custom-workflow":
       void deps.navigate({ to: workflowLibraryPath(), search: {} });
@@ -47,7 +49,8 @@ function executeItemAction(item: ChecklistItem, deps: ItemActionDeps) {
       deps.startTour();
       break;
     case "create-workspace":
-      window.dispatchEvent(new CustomEvent("open-create-worktree-modal"));
+      // The modal is the chat home's; from any other page, open it there.
+      if (!requestCreateWorktree()) void deps.navigate({ to: homePath() });
       break;
     case "create-preset":
       void deps.navigate({ to: workflowLibraryPath(), search: {} });
@@ -178,6 +181,13 @@ function ChecklistItemRow({
   );
 }
 
+/**
+ * Where the guide sits: bottom right, lifted clear of the composer. At
+ * bottom-4 it covered the composer's Send button, pill and panel alike, and a
+ * click on Send opened the panel's "Book a demo" link instead.
+ */
+const GUIDE_CORNER = "fixed bottom-28 right-4 z-40";
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function OnboardingChecklist() {
@@ -222,7 +232,7 @@ export function OnboardingChecklist() {
     return (
       <div
         className={cn(
-          "fixed bottom-4 right-4 z-40",
+          GUIDE_CORNER,
           "flex items-center gap-1.5 pl-5 pr-2 py-2.5 font-sans",
           "bg-primary text-primary-foreground rounded-full",
           "shadow-lg shadow-primary/25",
@@ -256,7 +266,8 @@ export function OnboardingChecklist() {
   return (
     <div
       className={cn(
-        "fixed bottom-4 right-4 z-40 w-80 max-h-[480px]",
+        GUIDE_CORNER,
+        "w-80 max-h-[min(480px,calc(100dvh-9rem))]",
         "flex flex-col font-sans",
         "bg-[hsl(var(--surface-modal))] border border-border/50 rounded-xl",
         "elevation-4",

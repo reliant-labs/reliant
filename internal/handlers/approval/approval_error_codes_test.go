@@ -54,13 +54,13 @@ func TestApprovalRPCs_RepositoryFailureCodes(t *testing.T) {
 			t.Parallel()
 			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{
 				GetApprovalFunc: func(context.Context, string) (*db.Approval, error) { return nil, tc.err },
-			}}))
+			}, Chats: &approval.MockChats{}}))
 			_, err := svc.Approve(approval.AuthedContext(t), connect.NewRequest(&pb.ApproveRequest{RequestId: "a-1"}))
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("ListApprovalsByChat, reading the chat: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{
+			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Chats: &approval.MockChats{
 				GetChatRowFunc: func(context.Context, string) (*db.ChatRow, error) { return nil, tc.err },
 			}}))
 			_, err := svc.ListApprovalsByChat(approval.AuthedContext(t), connect.NewRequest(&pb.ListApprovalsByChatRequest{ChatId: "chat-1"}))
@@ -70,11 +70,10 @@ func TestApprovalRPCs_RepositoryFailureCodes(t *testing.T) {
 			t.Parallel()
 			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{
 				GetApprovalFunc: pending,
-				GetChatRowFunc:  own,
 				RunTxFunc: func(context.Context, orm.TxPolicy, func(context.Context) error) error {
 					return tc.err
 				},
-			}}))
+			}, Chats: &approval.MockChats{GetChatRowFunc: own}}))
 			_, err := svc.Deny(approval.AuthedContext(t), connect.NewRequest(&pb.DenyRequest{RequestId: "a-1"}))
 			requireClientReads(t, err, tc.want)
 		})

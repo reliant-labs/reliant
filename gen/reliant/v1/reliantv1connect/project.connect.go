@@ -354,6 +354,7 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+ProjectServiceListProjectsProcedure,
 			connect.WithSchema(projectServiceMethods.ByName("ListProjects")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getProject: connect.NewClient[v1.GetProjectRequest, v1.GetProjectResponse](
@@ -403,6 +404,7 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+ProjectServiceGetProjectMetadataProcedure,
 			connect.WithSchema(projectServiceMethods.ByName("GetProjectMetadata")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateProjectMetadata: connect.NewClient[v1.UpdateProjectMetadataRequest, v1.UpdateProjectMetadataResponse](
@@ -415,18 +417,21 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+ProjectServiceGetProjectGitInfoProcedure,
 			connect.WithSchema(projectServiceMethods.ByName("GetProjectGitInfo")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getProjectGitBranches: connect.NewClient[v1.GetProjectGitBranchesRequest, v1.GetProjectGitBranchesResponse](
 			httpClient,
 			baseURL+ProjectServiceGetProjectGitBranchesProcedure,
 			connect.WithSchema(projectServiceMethods.ByName("GetProjectGitBranches")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getProjectInitStatus: connect.NewClient[v1.GetProjectInitStatusRequest, v1.GetProjectInitStatusResponse](
 			httpClient,
 			baseURL+ProjectServiceGetProjectInitStatusProcedure,
 			connect.WithSchema(projectServiceMethods.ByName("GetProjectInitStatus")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		initializeProject: connect.NewClient[v1.InitializeProjectRequest, v1.InitializeProjectResponse](
@@ -439,12 +444,14 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+ProjectServiceGetProjectChangesProcedure,
 			connect.WithSchema(projectServiceMethods.ByName("GetProjectChanges")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getProjectPrompts: connect.NewClient[v1.GetProjectPromptsRequest, v1.GetProjectPromptsResponse](
 			httpClient,
 			baseURL+ProjectServiceGetProjectPromptsProcedure,
 			connect.WithSchema(projectServiceMethods.ByName("GetProjectPrompts")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		saveProjectPrompts: connect.NewClient[v1.SaveProjectPromptsRequest, v1.SaveProjectPromptsResponse](
@@ -463,12 +470,14 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+ProjectServiceListProjectDaemonsForDaemonProcedure,
 			connect.WithSchema(projectServiceMethods.ByName("ListProjectDaemonsForDaemon")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listProjectDaemons: connect.NewClient[v1.ListProjectDaemonsRequest, v1.ListProjectDaemonsResponse](
 			httpClient,
 			baseURL+ProjectServiceListProjectDaemonsProcedure,
 			connect.WithSchema(projectServiceMethods.ByName("ListProjectDaemons")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		markProjectInstalled: connect.NewClient[v1.MarkProjectInstalledRequest, v1.MarkProjectInstalledResponse](
@@ -487,6 +496,7 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+ProjectServiceListRepositoriesForDaemonProcedure,
 			connect.WithSchema(projectServiceMethods.ByName("ListRepositoriesForDaemon")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		pullProjectOnDaemon: connect.NewClient[v1.PullProjectOnDaemonRequest, v1.PullProjectOnDaemonResponse](
@@ -975,6 +985,7 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		ProjectServiceListProjectsProcedure,
 		svc.ListProjects,
 		connect.WithSchema(projectServiceMethods.ByName("ListProjects")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	projectServiceGetProjectHandler := connect.NewUnaryHandler(
@@ -1024,6 +1035,7 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		ProjectServiceGetProjectMetadataProcedure,
 		svc.GetProjectMetadata,
 		connect.WithSchema(projectServiceMethods.ByName("GetProjectMetadata")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	projectServiceUpdateProjectMetadataHandler := connect.NewUnaryHandler(
@@ -1036,18 +1048,21 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		ProjectServiceGetProjectGitInfoProcedure,
 		svc.GetProjectGitInfo,
 		connect.WithSchema(projectServiceMethods.ByName("GetProjectGitInfo")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	projectServiceGetProjectGitBranchesHandler := connect.NewUnaryHandler(
 		ProjectServiceGetProjectGitBranchesProcedure,
 		svc.GetProjectGitBranches,
 		connect.WithSchema(projectServiceMethods.ByName("GetProjectGitBranches")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	projectServiceGetProjectInitStatusHandler := connect.NewUnaryHandler(
 		ProjectServiceGetProjectInitStatusProcedure,
 		svc.GetProjectInitStatus,
 		connect.WithSchema(projectServiceMethods.ByName("GetProjectInitStatus")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	projectServiceInitializeProjectHandler := connect.NewUnaryHandler(
@@ -1060,12 +1075,14 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		ProjectServiceGetProjectChangesProcedure,
 		svc.GetProjectChanges,
 		connect.WithSchema(projectServiceMethods.ByName("GetProjectChanges")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	projectServiceGetProjectPromptsHandler := connect.NewUnaryHandler(
 		ProjectServiceGetProjectPromptsProcedure,
 		svc.GetProjectPrompts,
 		connect.WithSchema(projectServiceMethods.ByName("GetProjectPrompts")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	projectServiceSaveProjectPromptsHandler := connect.NewUnaryHandler(
@@ -1084,12 +1101,14 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		ProjectServiceListProjectDaemonsForDaemonProcedure,
 		svc.ListProjectDaemonsForDaemon,
 		connect.WithSchema(projectServiceMethods.ByName("ListProjectDaemonsForDaemon")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	projectServiceListProjectDaemonsHandler := connect.NewUnaryHandler(
 		ProjectServiceListProjectDaemonsProcedure,
 		svc.ListProjectDaemons,
 		connect.WithSchema(projectServiceMethods.ByName("ListProjectDaemons")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	projectServiceMarkProjectInstalledHandler := connect.NewUnaryHandler(
@@ -1108,6 +1127,7 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		ProjectServiceListRepositoriesForDaemonProcedure,
 		svc.ListRepositoriesForDaemon,
 		connect.WithSchema(projectServiceMethods.ByName("ListRepositoriesForDaemon")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	projectServicePullProjectOnDaemonHandler := connect.NewUnaryHandler(

@@ -24,7 +24,7 @@ func (s *Service) SetWorkflowDraftSharing(
 		return nil, err
 	}
 	ctx = authz.WithViewerReads(ctx)
-	workflow, err := s.deps.Repo.GetWorkflowDraft(ctx, req.Msg.GetWorkflowId())
+	workflow, err := s.deps.WorkflowDrafts.GetWorkflowDraft(ctx, req.Msg.GetWorkflowId())
 	if err != nil {
 		if svcerr.IsNotFound(err) {
 			return nil, svcerr.NotFound("saved workflow")
@@ -37,14 +37,16 @@ func (s *Service) SetWorkflowDraftSharing(
 	}
 	changed := false
 	if authz.WorkflowVisibility(workflow) != to {
-		if changed, err = s.deps.Repo.ApplyShareChange(ctx, change); err != nil {
+		// ReadCommitted, as SetChatVisibility: the UPDATE's row lock and its
+		// re-checked predicate serialize a concurrent share and unshare.
+		if changed, err = s.applyShareChange(ctx, change); err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to change who can read the saved workflow"))
 		}
 	}
 	resp := &pb.SetWorkflowDraftSharingResponse{Changed: changed}
 	// The saved workflow as the caller now reads it; one decision shapes it
 	// (authz.ReadWorkflowAccess).
-	if after, err := s.deps.Repo.GetWorkflowDraft(ctx, workflow.ID); err == nil {
+	if after, err := s.deps.WorkflowDrafts.GetWorkflowDraft(ctx, workflow.ID); err == nil {
 		if access, denied := authz.ReadWorkflowAccess(ctx, userID, after); denied == nil {
 			resp.Workflow = sharedWorkflowDraft(after, access.Viewer())
 		}

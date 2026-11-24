@@ -53,8 +53,21 @@ import (
 // statements return internal/chatselection's own type, the caller's.
 
 // GetChatSelection returns the chat's selection, nil with no error when it
-// has none. forUpdate locks the row for the rest of the caller's transaction.
-func GetChatSelection(ctx context.Context, db orm.Context, chatID string, forUpdate bool) (*chatselection.Selection, error) {
+// has none. A chat id that is empty is an error, not "no selection".
+func GetChatSelection(ctx context.Context, db orm.Context, chatID string) (*chatselection.Selection, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	return readChatSelection(ctx, db, chatID, false)
+}
+
+// GetChatSelectionForUpdate is GetChatSelection locking the row for the rest
+// of the caller's transaction.
+func GetChatSelectionForUpdate(ctx context.Context, db orm.Context, chatID string) (*chatselection.Selection, error) {
+	return readChatSelection(ctx, db, chatID, true)
+}
+
+func readChatSelection(ctx context.Context, db orm.Context, chatID string, forUpdate bool) (*chatselection.Selection, error) {
 	row := new(ChatSelection)
 	q := db.Bun().NewSelect().Model(row).Where("chat_id = ?", chatID)
 	if forUpdate {
@@ -128,11 +141,64 @@ ON CONFLICT (chat_id) DO NOTHING`
 
 // CopyChatSelection copies fromChatID's selection onto toChatID for userID. A
 // source with no selection, or a target that already has one, is a no-op.
-func CopyChatSelection(ctx context.Context, db orm.Context, fromChatID, toChatID, userID string, now time.Time) error {
-	if _, err := db.Bun().NewRaw(copyChatSelectionSQL, toChatID, userID, now, fromChatID).Exec(ctx); err != nil {
+func CopyChatSelection(ctx context.Context, db orm.Context, fromChatID, toChatID, userID string) error {
+	if fromChatID == "" || toChatID == "" {
+		return fmt.Errorf("chat IDs cannot be empty")
+	}
+	if _, err := db.Bun().NewRaw(copyChatSelectionSQL, toChatID, userID, time.Now().UTC(), fromChatID).Exec(ctx); err != nil {
 		return fmt.Errorf("failed to copy chat selection: %w", err)
 	}
 	return nil
+}
+
+// MutateChatSelection is the chat selection's one writer: one writer of a
+// chat's record at a time, so a read-modify-write cannot lose an edit. The
+// advisory lock covers the first write too, when there is no row to lock.
+//
+// The lock is the whole guarantee, so the transaction is READ COMMITTED
+// (SCHEMA.md rule 7): a writer queued behind another takes its read's snapshot
+// after the lock, so it sees the winner's commit. Under SERIALIZABLE the
+// snapshot is taken at the lock statement, before the wait, so the loser fails
+// with 40001 and lands only on a retry, until contention exhausts them
+// (TestChatSelectionConcurrentWritersLoseNothing). mutate may still run more
+// than once, a deadlock (40P01) being retried, which its contract allows.
+//
+// A person's own pick (chatselection.WithPersonPick on ctx) is recorded as
+// the root model and provider switch this write leaves, bound to the version it
+// leaves and under the same lock: any later write advances the version and so
+// voids it (ChatPersonPickDriver).
+func MutateChatSelection(ctx context.Context, db orm.Context, chatID string, mutate func(current *chatselection.Selection) (*chatselection.Selection, error)) (*chatselection.Selection, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	var out *chatselection.Selection
+	err := db.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
+		if err := LockChatSelection(txCtx, db, chatID); err != nil {
+			return err
+		}
+		cur, err := GetChatSelectionForUpdate(txCtx, db, chatID)
+		if err != nil {
+			return err
+		}
+		next, err := mutate(cur)
+		if err != nil {
+			return err
+		}
+		if next == nil || next == cur {
+			out = cur
+		} else if out, err = UpsertChatSelection(txCtx, db, chatID, next, time.Now().UTC()); err != nil {
+			return err
+		}
+		if pick, ok := chatselection.PersonPickFrom(ctx); ok && out != nil {
+			key, _ := chatselection.RootModelPick(out.Params)
+			return PutChatPersonPick(txCtx, db, chatID, pick.UserID, pick.OrgID, key, out.ChatProvider, out.Version, time.Now())
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func chatSelectionFromRow(row *ChatSelection) (*chatselection.Selection, error) {
@@ -179,4 +245,17 @@ type storedProviderPolicy struct {
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type ChatSelectionExtra struct {
+}
+
+// ChatFundingOrder is the funding order a person chose for chatID (the chat's provider policy,
+// which only a person may change), "" when it inherits.
+func ChatFundingOrder(ctx context.Context, db orm.Context, chatID string) (string, error) {
+	if chatID == "" {
+		return "", fmt.Errorf("chat ID cannot be empty")
+	}
+	sel, err := GetChatSelection(ctx, db, chatID)
+	if err != nil || sel == nil {
+		return "", err
+	}
+	return string(sel.Policy.Funding), nil
 }

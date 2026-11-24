@@ -14,10 +14,13 @@ import (
 	"testing"
 	"time"
 
+	ormstore "github.com/reliant-labs/reliant/internal/store"
+
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
-	"github.com/stretchr/testify/require"
 )
 
 // The Slack tests drive the manifest the binary ships (catalog.MustBuiltin)
@@ -167,7 +170,7 @@ func slackEnv(t *testing.T) (*env, *fakeSlack) {
 	e.tokens = connections.NewTokenSource(e.store, e.vault, providers, doer)
 	e.broker = connections.NewBroker(e.store, e.vault, providers, doer, "https://reliant.example").WithAppOrigins([]string{testAppOrigin})
 	e.svc = connections.NewService(e.store, e.vault, providers, e.tokens, e.broker, doer)
-	e.resolver = connections.NewResolver(e.repo, e.store, e.tokens)
+	e.resolver = connections.NewResolver(connections.ResolverDeps{Owners: e.repo, Runs: ormstore.NewWorkflowExtStore(e.repo.ORM()), Store: e.store, Tokens: e.tokens})
 	return e, f
 }
 

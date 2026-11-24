@@ -23,7 +23,7 @@ func (s *Service) RevokeTriggerOffer(
 		return nil, err
 	}
 	callerID := auth.MustGetUserID(ctx)
-	offer, err := s.deps.Repo.GetTriggerOffer(ctx, req.Msg.GetOfferId())
+	offer, err := s.deps.Offers.GetTriggerOffer(ctx, req.Msg.GetOfferId())
 	if errors.Is(err, core.ErrTriggerOfferNotFound) {
 		return nil, svcerr.NotFound("trigger offer")
 	}
@@ -52,7 +52,7 @@ func (s *Service) RevokeTriggerOffer(
 	if offer.Status != core.TriggerOfferPending {
 		return nil, notLive(offer)
 	}
-	settled, err := s.deps.Repo.SettleTriggerOffer(ctx, offer.ID, core.TriggerOfferRevoked, reason)
+	settled, err := s.deps.Offers.SettleTriggerOffer(ctx, offer.ID, core.TriggerOfferRevoked, reason)
 	if err != nil {
 		return nil, dbError("revoke trigger offer", err)
 	}

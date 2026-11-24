@@ -2217,15 +2217,15 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\x1dUnlaunchedTriggerEventOutcome\x120\n" +
 	",UNLAUNCHED_TRIGGER_EVENT_OUTCOME_UNSPECIFIED\x10\x00\x12,\n" +
 	"(UNLAUNCHED_TRIGGER_EVENT_OUTCOME_SKIPPED\x10\x01\x12+\n" +
-	"'UNLAUNCHED_TRIGGER_EVENT_OUTCOME_FAILED\x10\x022\xdb\b\n" +
+	"'UNLAUNCHED_TRIGGER_EVENT_OUTCOME_FAILED\x10\x022\xe1\b\n" +
 	"\n" +
 	"RunService\x12\x8a\x01\n" +
 	"\bStartRun\x12\x1b.reliant.v1.StartRunRequest\x1a\x1c.reliant.v1.StartRunResponse\"C\xa2\xbb\x18?:=\n" +
 	"\x05start\x12*\n" +
 	"\x03run\x12\x0fresponse.run.id\x1a\x12response.run.title*\bworkflow\x12\xa5\x01\n" +
-	"\tSignalRun\x12\x1c.reliant.v1.SignalRunRequest\x1a\x1d.reliant.v1.SignalRunResponse\"[\xa2\xbb\x18W:U:Sdelivers messages into a live run: per-turn agent traffic the run's history records\x12A\n" +
-	"\x06GetRun\x12\x19.reliant.v1.GetRunRequest\x1a\x1a.reliant.v1.GetRunResponse\"\x00\x12G\n" +
-	"\bListRuns\x12\x1b.reliant.v1.ListRunsRequest\x1a\x1c.reliant.v1.ListRunsResponse\"\x00\x12h\n" +
+	"\tSignalRun\x12\x1c.reliant.v1.SignalRunRequest\x1a\x1d.reliant.v1.SignalRunResponse\"[\xa2\xbb\x18W:U:Sdelivers messages into a live run: per-turn agent traffic the run's history records\x12D\n" +
+	"\x06GetRun\x12\x19.reliant.v1.GetRunRequest\x1a\x1a.reliant.v1.GetRunResponse\"\x03\x90\x02\x01\x12J\n" +
+	"\bListRuns\x12\x1b.reliant.v1.ListRunsRequest\x1a\x1c.reliant.v1.ListRunsResponse\"\x03\x90\x02\x01\x12h\n" +
 	"\x12LastRunPerWorkflow\x12%.reliant.v1.LastRunPerWorkflowRequest\x1a&.reliant.v1.LastRunPerWorkflowResponse\"\x03\x90\x02\x01\x12c\n" +
 	"\bPauseRun\x12\x1b.reliant.v1.PauseRunRequest\x1a\x1c.reliant.v1.PauseRunResponse\"\x1c\xa2\xbb\x18\x18:\x16\n" +
 	"\x05pause\x12\r\n" +

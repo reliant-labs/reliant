@@ -100,6 +100,80 @@ func PrunePRRecordDeliveries(ctx context.Context, db orm.Context, before time.Ti
 	return res.RowsAffected()
 }
 
+// ApplyPRRecordChange applies one decoded event to the records, once: it
+// returns false, changing nothing, when this (provider, delivery key, event
+// index) was applied before. READ COMMITTED is correct because every write
+// is one upsert whose conflict arm re-checks its guard against the row it
+// locked (the snapshot's age, a check's run id), and the receipt's primary
+// key serializes two workers applying the same event.
+func ApplyPRRecordChange(ctx context.Context, db orm.Context, c core.PRRecordChange) (bool, error) {
+	var applied bool
+	err := db.RunTx(ctx, orm.ReadCommitted, func(tx context.Context) error {
+		applied = false
+		d := c.Delivery
+		d.Outcome = core.PRDeliveryIgnored
+		claimed, err := InsertPRRecordDelivery(tx, db, d)
+		if err != nil || !claimed {
+			return err
+		}
+		applied = true
+		if c.Snapshot != nil {
+			res, err := ApplyPRRecordSnapshot(tx, db, *c.Snapshot)
+			if err != nil {
+				return err
+			}
+			d.RecordID = res.RecordID
+			d.Outcome = core.PRDeliveryStale
+			if res.Applied {
+				d.Outcome = core.PRDeliveryApplied
+			}
+			if c.Snapshot.HeadSHA != "" {
+				h := core.PRRecordHead{
+					ID: c.HeadID, RecordID: res.RecordID, HeadSHA: c.Snapshot.HeadSHA,
+					PreviousHeadSHA: c.PreviousHeadSHA, FirstSeenAt: c.Snapshot.ObservedAt,
+				}
+				if c.PreviousHeadSHA != "" {
+					at := c.Snapshot.SnapshotAt
+					h.PushedSnapshotAt = &at
+				}
+				if err := EnsurePRRecordHead(tx, db, h); err != nil {
+					return err
+				}
+			}
+			// A same-second push that moved the head may have been preceded by
+			// the push over it, which could not apply then: follow it.
+			if res.Tied && c.Snapshot.Delta.HeadSHA != "" && res.HeadSHA == c.Snapshot.Delta.HeadSHA {
+				if res.HeadSHA, err = AdvancePRRecordHead(tx, db, res.RecordID); err != nil {
+					return err
+				}
+			}
+			if res.HeadSHA != "" {
+				if err := SupersedePRRecordHeads(tx, db, res.RecordID, res.HeadSHA, c.Snapshot.ObservedAt); err != nil {
+					return err
+				}
+			}
+			for _, rv := range c.Reviews {
+				rv.RecordID = res.RecordID
+				if err := InsertPRRecordReview(tx, db, rv); err != nil {
+					return err
+				}
+				d.Outcome = core.PRDeliveryApplied
+			}
+		}
+		if c.Check != nil {
+			if err := UpsertPRRecordCheck(tx, db, *c.Check); err != nil {
+				return err
+			}
+			d.Outcome = core.PRDeliveryApplied
+		}
+		if d.Outcome == core.PRDeliveryIgnored {
+			return nil
+		}
+		return SettlePRRecordDelivery(tx, db, d)
+	})
+	return applied && err == nil, err
+}
+
 // PRRecordApplied is what applying one snapshot did to its record.
 type PRRecordApplied struct {
 	RecordID string

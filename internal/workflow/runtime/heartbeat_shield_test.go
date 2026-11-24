@@ -81,7 +81,7 @@ func runShieldScenarioWithVerdict(t *testing.T, outlives bool, sdkCancelCause, v
 		}
 	}
 
-	registry := NewActivityRegistry(&wrapperTestRepo{})
+	registry := NewActivityRegistry(ActivityRegistryDeps{Store: &wrapperTestRepo{}, Workflows: &wrapperTestRepo{}})
 	registry.directHeartbeat = func(context.Context, any) error {
 		if verdict == nil {
 			afterCancel.Add(1)

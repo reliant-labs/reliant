@@ -37,11 +37,11 @@ type fundingFake struct {
 	serving     map[string]string    // thread -> account
 	// threadFunding is who pays for each thread: {funding, org, account}.
 	threadFunding map[string][3]string
-	// threadFundingErr fails ThreadFunding.
+	// threadFundingErr fails GetThreadFunding.
 	threadFundingErr error
 	// chatOrder is the order a person chose for each chat.
 	chatOrder map[string]string
-	// recordErr fails RecordThreadFunding.
+	// recordErr fails PutThreadFunding.
 	recordErr error
 	// chatOrderErr fails ChatFundingOrder.
 	chatOrderErr error
@@ -67,7 +67,7 @@ func (f *fundingFake) GetChatPersonalFunding(_ context.Context, chatID string) (
 	return nil, nil
 }
 
-func (f *fundingFake) AskPersonalFunding(_ context.Context, q core.PersonalFunding, now time.Time) (bool, error) {
+func (f *fundingFake) AskChatPersonalFunding(_ context.Context, q core.PersonalFunding, now time.Time) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if cur, ok := f.rows[q.ChatID]; ok && cur.State != core.PersonalFundingUsePersonal && cur.Reason == q.Reason && cur.Model == q.Model {
@@ -79,7 +79,7 @@ func (f *fundingFake) AskPersonalFunding(_ context.Context, q core.PersonalFundi
 	return true, nil
 }
 
-func (f *fundingFake) GrantPersonalFunding(_ context.Context, q core.PersonalFunding, now time.Time) error {
+func (f *fundingFake) GrantChatPersonalFunding(_ context.Context, q core.PersonalFunding, now time.Time) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	q.State, q.AnsweredAt = core.PersonalFundingUsePersonal, &now
@@ -87,7 +87,7 @@ func (f *fundingFake) GrantPersonalFunding(_ context.Context, q core.PersonalFun
 	return nil
 }
 
-func (f *fundingFake) ClearPersonalFunding(_ context.Context, chatID string) (bool, error) {
+func (f *fundingFake) DeleteChatPersonalFundingRow(_ context.Context, chatID string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	_, ok := f.rows[chatID]
@@ -95,7 +95,7 @@ func (f *fundingFake) ClearPersonalFunding(_ context.Context, chatID string) (bo
 	return ok, nil
 }
 
-func (f *fundingFake) MarkPersonalFundingAnnounced(_ context.Context, chatID string) (bool, error) {
+func (f *fundingFake) MarkChatPersonalFundingAnnounced(_ context.Context, chatID string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	r, ok := f.rows[chatID]
@@ -119,7 +119,7 @@ func (f *fundingFake) LatestServingAccount(_ context.Context, threadID string) (
 	return f.serving[threadID], nil
 }
 
-func (f *fundingFake) ThreadFunding(_ context.Context, threadID string) (string, string, string, bool, error) {
+func (f *fundingFake) GetThreadFunding(_ context.Context, threadID string) (string, string, string, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.threadFundingErr != nil {
@@ -129,7 +129,7 @@ func (f *fundingFake) ThreadFunding(_ context.Context, threadID string) (string,
 	return c[0], c[1], c[2], ok, nil
 }
 
-func (f *fundingFake) RecordThreadFunding(_ context.Context, threadID, orgID, funding, accountID string) error {
+func (f *fundingFake) PutThreadFunding(_ context.Context, threadID, orgID, funding, accountID string, _ time.Time) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.recordErr != nil {

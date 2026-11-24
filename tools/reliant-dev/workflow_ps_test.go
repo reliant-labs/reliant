@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 func TestPrintPsRows_Empty(t *testing.T) {
@@ -277,7 +278,7 @@ func TestDerivePsState(t *testing.T) {
 	tests := []struct {
 		name         string
 		wait         *psWait
-		backoff      db.ProviderBackoff
+		backoff      core.ProviderBackoff
 		lastProgress time.Time
 		wantState    psState
 		wantSince    time.Time
@@ -291,14 +292,14 @@ func TestDerivePsState(t *testing.T) {
 		},
 		{
 			name:         "an open provider-backoff marker is a wait, not work and not a stall",
-			backoff:      db.ProviderBackoff{WaitingSince: now.Add(-64 * time.Second), ResumeAt: now.Add(13 * time.Second)},
+			backoff:      core.ProviderBackoff{WaitingSince: now.Add(-64 * time.Second), ResumeAt: now.Add(13 * time.Second)},
 			lastProgress: now.Add(-58 * time.Hour),
 			wantState:    psStateBackoff,
 			wantSince:    now.Add(-64 * time.Second),
 		},
 		{
 			name:         "a backoff marker past its declared resume_at is a leftover, not a live wait",
-			backoff:      db.ProviderBackoff{WaitingSince: now.Add(-time.Hour), ResumeAt: now.Add(-time.Hour).Add(2 * time.Second)},
+			backoff:      core.ProviderBackoff{WaitingSince: now.Add(-time.Hour), ResumeAt: now.Add(-time.Hour).Add(2 * time.Second)},
 			lastProgress: now.Add(-30 * time.Second),
 			wantState:    psStateRunning,
 			wantSince:    now.Add(-30 * time.Second),
@@ -364,14 +365,14 @@ func newPsTestChat(chatID string) *psTestChat {
 		approvalsByExec:  map[string][]*db.Approval{},
 		lastActivity:     map[string]time.Time{},
 		parentThread:     map[string]string{},
-		backoffByThread:  map[string]db.ProviderBackoff{},
+		backoffByThread:  map[string]core.ProviderBackoff{},
 	}}
 }
 
 // backoff marks a thread as parked in an LLM provider's retry ladder, exactly as
 // the driver's pre-sleep marker records it.
 func (c *psTestChat) backoff(thread string, attempt int64, since time.Time, delay time.Duration, waitedMs int64) {
-	c.markers.backoffByThread[thread] = db.ProviderBackoff{
+	c.markers.backoffByThread[thread] = core.ProviderBackoff{
 		ThreadID: thread, ChatID: c.chatID,
 		WaitingSince: since, ResumeAt: since.Add(delay),
 		Attempt: attempt, MaxAttempts: 8, StatusCode: 429, Reason: "http_429",

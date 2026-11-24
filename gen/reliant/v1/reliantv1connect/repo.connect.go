@@ -81,6 +81,7 @@ func NewRepoServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+RepoServiceListReposProcedure,
 			connect.WithSchema(repoServiceMethods.ByName("ListRepos")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		addRepo: connect.NewClient[v1.AddRepoRequest, v1.AddRepoResponse](
@@ -99,6 +100,7 @@ func NewRepoServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+RepoServiceGetRepoGitInfoProcedure,
 			connect.WithSchema(repoServiceMethods.ByName("GetRepoGitInfo")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -166,6 +168,7 @@ func NewRepoServiceHandler(svc RepoServiceHandler, opts ...connect.HandlerOption
 		RepoServiceListReposProcedure,
 		svc.ListRepos,
 		connect.WithSchema(repoServiceMethods.ByName("ListRepos")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	repoServiceAddRepoHandler := connect.NewUnaryHandler(
@@ -184,6 +187,7 @@ func NewRepoServiceHandler(svc RepoServiceHandler, opts ...connect.HandlerOption
 		RepoServiceGetRepoGitInfoProcedure,
 		svc.GetRepoGitInfo,
 		connect.WithSchema(repoServiceMethods.ByName("GetRepoGitInfo")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.RepoService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

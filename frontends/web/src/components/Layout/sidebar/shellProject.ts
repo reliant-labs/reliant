@@ -11,30 +11,41 @@
  *               `/projects/<id>` name it; a chat (`/c/<chatId>`) is in its
  *               own project, so a chat always shows its own project; `/new`
  *               carries it in `?project=`;
- *            2. the person's last pick (localStorage);
+ *            2. the person's last pick in this tab;
  *            3. the project the app is working in (projectStore), else the
  *               most recently active one.
  *          A route that names a project also becomes the last pick.
  *   many   several projects: the chat list's filter of several
- *          (hooks/useChatProjectFilter, `?projects=` + `sidebar.projects`).
- *   all    every project ("All projects" in the switcher).
+ *          (hooks/useChatProjectFilter, `?projects=<id>,<id>`).
+ *   all    every project ("All projects" in the switcher): `?projects=all`.
  *
  * In `many` and `all` the nav's Chats group by project and an app page names
  * its app in an in-page picker; the FOCUSED project (the app the nav's
- * sections open) is the route's app, else the last one picked.
+ * sections open) is the route's app, else `?focus=`, else the last one picked.
+ *
+ * The URL names the scope on every page (`projects`, `focus`: routeSchemas
+ * PROJECTS_CARRIED, kept by the root route). Storage only fills a tab's
+ * first bare home (this tab's default, else the last scope any tab showed:
+ * lib/urlState/shellScope.ts scopeDefault), and the tab's last pick, started
+ * from that default, fills a page that names none until a URL of the page
+ * load names one; so no tab ever follows another's choice, and Back brings
+ * back each entry's scope.
  */
 
 import { useEffect, useMemo } from "react";
 import { create } from "zustand";
 
 import { useChat } from "@/hooks/chat-queries";
-import { useSidebarProjectPrefs } from "@/hooks/sidebar-project-queries";
-import { useChatProjectFilterIds, useChatProjectFilterStore } from "@/hooks/useChatProjectFilter";
 import { chatShellRouteOf } from "@/lib/chatRoute";
 import { orgFreePath } from "@/lib/paths/org";
+import { focusOfSearch, scopeOfSearch } from "@/lib/urlState/shellScope";
+import { publishShellScope, seededScope, useShellScopeStore } from "@/lib/urlState/shellScopeStore";
+import { useActiveOrgStore } from "@/store/activeOrgStore";
 import {
   appRowKey,
   compareByActivity,
+  ownAppsOf,
+  type AppChipModel,
   type CatalogRow,
   type ProjectCatalog,
   type ProjectCatalogRow,
@@ -94,23 +105,24 @@ export function isChatPage(pathname: string): boolean {
 }
 
 /**
- * The catalog row `ref` names. An app resolves to the project whose code
- * deploys it, when there is one, else to its own app-only row.
+ * The catalog row `ref` names. An app resolves to the project whose own code
+ * deploys it (ownAppsOf: not a parent checkout that merely holds its repo),
+ * else to a project holding it anywhere, else to its own app-only row.
  */
 export function rowForRef(catalog: ProjectCatalog | undefined, ref: ShellProjectRef): CatalogRow | undefined {
   if (!catalog) return undefined;
   if (ref.kind === "project") return catalog.rows.find((row) => row.kind === "project" && row.project.id === ref.id);
-  const owner = catalog.rows.find(
-    (row): row is ProjectCatalogRow => row.kind === "project" && row.apps.some((app) => app.name === ref.name && app.link !== "not_hosted"),
-  );
+  const holds = (apps: readonly AppChipModel[]) => apps.some((app) => app.name === ref.name && app.link !== "not_hosted");
+  const projects = catalog.rows.filter((row): row is ProjectCatalogRow => row.kind === "project");
+  const owner = projects.find((row) => holds(ownAppsOf(row))) ?? projects.find((row) => holds(row.apps));
   return owner ?? catalog.rows.find((row) => row.kind === "app" && row.app.name === ref.name);
 }
 
-/** The project's deployed app: a live app of the project (an app-only row is its app); null when none is deployed. */
+/** The project's deployed app: a live app of its own (an app-only row is its app); null when none is deployed. */
 export function deployedAppOf(row: CatalogRow | undefined): string | null {
   if (!row) return null;
   if (row.kind === "app") return row.app.name;
-  const live = row.apps.find((app) => app.state === "live");
+  const live = ownAppsOf(row).find((app) => app.state === "live");
   if (live) return live.name;
   if (row.partial && row.project.is_forge && row.project.forge_project_name) return row.project.forge_project_name.trim() || null;
   return null;
@@ -118,7 +130,8 @@ export function deployedAppOf(row: CatalogRow | undefined): string | null {
 
 /**
  * The app the nav's sections open for `row`: its deployed app, else the app
- * its forge.yaml names (not deployed yet), else the project's own name. Every
+ * its own forge.yaml names (not deployed yet; a nested repository's app is
+ * not the project's, ownAppsOf), else the project's own name. Every
  * project has the same sections (owner, 2026-11-20); on an app with nothing
  * deployed each page says what it will show and how to deploy.
  */
@@ -126,7 +139,7 @@ export function sectionsAppOf(row: CatalogRow | undefined): string | null {
   if (!row) return null;
   const deployed = deployedAppOf(row);
   if (deployed) return deployed;
-  if (row.kind === "project") return row.apps[0]?.name ?? (row.project.forge_project_name?.trim() || row.name);
+  if (row.kind === "project") return ownAppsOf(row)[0]?.name ?? (row.project.forge_project_name?.trim() || row.name);
   return null;
 }
 
@@ -155,26 +168,6 @@ export const ALL_PROJECTS_PICK = "__all__";
 /** The last pick's value for a choice of several (the chat filter's, remembered in `sidebar.projects`). */
 export const SEVERAL_PROJECTS_PICK = "__several__";
 
-const LAST_PICK_KEY = "shell.currentProject";
-const FOCUS_KEY = "shell.focusProject";
-const SEVERAL_KEY = "shell.severalProjects";
-
-function read(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function write(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* storage disabled: kept for this tab */
-  }
-}
-
 interface LastPickState {
   /** A project key, ALL_PROJECTS_PICK, or SEVERAL_PROJECTS_PICK. */
   key: string | null;
@@ -186,28 +179,43 @@ interface LastPickState {
   setFocus: (key: string) => void;
   /** Choose several: SEVERAL_PROJECTS_PICK, remembering which. */
   setSeveral: (ids: readonly string[]) => void;
+  /**
+   * A URL of this page load has named a scope: from then on the URL alone
+   * decides (Back to an entry that names none shows one project). Until
+   * then the pick, started from the tab's default, fills a page that names
+   * none.
+   */
+  urlDecided: boolean;
+}
+
+/**
+ * The tab's memory of the pick: no storage of its own. It starts from the
+ * tab's default (seededScope: this tab's last scope, else the last one any
+ * tab showed) for the signed-in user and org, and is started again from
+ * that org's when the tab switches org.
+ */
+function pickOfDefault(): Pick<LastPickState, "key" | "several" | "focus"> {
+  const { scope, focus } = seededScope();
+  if (!scope) return { key: null, several: [], focus: focus ?? null };
+  if (scope.mode === "all") return { key: ALL_PROJECTS_PICK, several: [], focus: focus ?? null };
+  if (scope.mode === "many") return { key: SEVERAL_PROJECTS_PICK, several: [...scope.projectIds], focus: focus ?? null };
+  return { key: scope.projectId, several: [], focus: scope.projectId };
 }
 
 export const useShellLastPick = create<LastPickState>((set) => ({
-  key: read(LAST_PICK_KEY),
-  focus: read(FOCUS_KEY),
-  several: (read(SEVERAL_KEY) ?? "").split(",").filter(Boolean),
+  ...pickOfDefault(),
+  urlDecided: false,
   set: (key) => {
-    write(LAST_PICK_KEY, key);
     const project = key !== ALL_PROJECTS_PICK && key !== SEVERAL_PROJECTS_PICK;
-    if (project) write(FOCUS_KEY, key);
     set((state) => ({ key, focus: project ? key : state.focus }));
   },
-  setFocus: (focus) => {
-    write(FOCUS_KEY, focus);
-    set({ focus });
-  },
-  setSeveral: (ids) => {
-    write(LAST_PICK_KEY, SEVERAL_PROJECTS_PICK);
-    write(SEVERAL_KEY, ids.join(","));
-    set({ key: SEVERAL_PROJECTS_PICK, several: [...ids] });
-  },
+  setFocus: (focus) => set({ focus }),
+  setSeveral: (ids) => set({ key: SEVERAL_PROJECTS_PICK, several: [...ids] }),
 }));
+
+useActiveOrgStore.subscribe((state, prev) => {
+  if (state.userId !== prev.userId || state.effectiveId !== prev.effectiveId) useShellLastPick.setState(pickOfDefault());
+});
 
 // ── The hook ────────────────────────────────────────────────────────────────
 
@@ -247,19 +255,19 @@ export function useShellProject(pathname: string, search: Record<string, unknown
   const { data: chat } = useChat(chatId);
   const chatProjectId = chatId && chat?.id === chatId ? chat.projectId : undefined;
   const lastPick = useShellLastPick((state) => state.key);
-  const focus = useShellLastPick((state) => state.focus);
+  const pickedFocus = useShellLastPick((state) => state.focus);
   const setLastPick = useShellLastPick((state) => state.set);
   const contextProjectId = useProjectStore((state) => state.currentProject?.id ?? null);
-  const filterIds = useChatProjectFilterIds();
-  // A choice of several outlives a reload of any page: the filter holds it
-  // only for the tab, the setting for good.
-  const { prefs } = useSidebarProjectPrefs();
-  const severalPick = useShellLastPick((state) => state.several);
-  const rememberedKey = (prefs.filter.length >= 2 ? prefs.filter : severalPick).join(",");
-  useEffect(() => {
-    if (lastPick !== SEVERAL_PROJECTS_PICK || filterIds.length >= 2 || !rememberedKey.includes(",")) return;
-    useChatProjectFilterStore.getState().setMany(rememberedKey.split(","));
-  }, [lastPick, filterIds.length, rememberedKey]);
+  // What the URL names: `?projects=` (all, or several) and `?focus=`. Every
+  // page carries them (the root's retainSearchParams), so the URL alone
+  // decides: a page that names neither shows one project, and Back brings
+  // back the scope each entry had. A tab's first bare home is filled from
+  // the tab's default (hooks/useChatProjectFilter).
+  const urlScope = scopeOfSearch(search);
+  const urlAll = urlScope?.mode === "all";
+  const urlProjectId = urlScope?.mode === "one" ? urlScope.projectId : null;
+  const urlFocus = focusOfSearch(search) ?? null;
+  const focus = urlFocus ?? pickedFocus;
   const consoleApp = consolePageOf(pathname)?.project ?? null;
 
   const routeRef: ShellProjectRef | null =
@@ -267,16 +275,40 @@ export function useShellProject(pathname: string, search: Record<string, unknown
   const routeRefKey = routeRef ? refKey(routeRef) : null;
   const explicit = !!route && "explicit" in route && route.explicit;
 
-  // Until the filter holds the remembered choice again (a reload), the choice itself.
-  const severalIds = filterIds.length >= 2 ? filterIds : lastPick === SEVERAL_PROJECTS_PICK ? rememberedKey.split(",").filter(Boolean) : [];
-  const mode: ShellMode =
-    severalIds.length >= 2 && !explicit ? "many" : lastPick === ALL_PROJECTS_PICK && !explicit ? "all" : "one";
+  // Until a URL of this page load names a scope, the tab's pick fills a page that names none.
+  const urlDecided = useShellLastPick((state) => state.urlDecided);
+  const severalPick = useShellLastPick((state) => state.several);
+  const fromPick = !urlScope && !urlDecided;
+  const severalIds =
+    urlScope?.mode === "many" ? urlScope.projectIds : fromPick && lastPick === SEVERAL_PROJECTS_PICK ? severalPick : [];
+  const mode: ShellMode = explicit
+    ? "one"
+    : urlAll
+      ? "all"
+      : severalIds.length >= 2
+        ? "many"
+        : fromPick && lastPick === ALL_PROJECTS_PICK
+          ? "all"
+          : "one";
   const filterKey = severalIds.join(",");
+
+  // The URL's All and focus are the tab's last pick too (Billing reads it; a pick of one project starts from it).
+  useEffect(() => {
+    if (urlScope && !useShellLastPick.getState().urlDecided) useShellLastPick.setState({ urlDecided: true });
+    if (explicit) return;
+    if (urlAll && lastPick !== ALL_PROJECTS_PICK) setLastPick(ALL_PROJECTS_PICK);
+    if (urlFocus && urlFocus !== pickedFocus) useShellLastPick.getState().setFocus(urlFocus);
+  }, [urlScope, explicit, urlAll, urlFocus, lastPick, pickedFocus, setLastPick]);
 
   const resolved = useMemo((): ShellProject => {
     const allIds = (catalog?.rows ?? []).flatMap((row) => (row.kind === "project" ? [row.project.id] : []));
     const ids = mode === "many" ? filterKey.split(",") : mode === "all" ? allIds : [];
     const candidates: ShellProjectRef[] = [];
+    // A carried single-project scope is as authoritative as All or several.
+    // Only an explicit project path overrides it; a chat/app can be opened
+    // within another project's shell without changing the list's scope.
+    const scopeRef: ShellProjectRef | null = !explicit && urlProjectId ? { kind: "project", id: urlProjectId } : null;
+    if (scopeRef) candidates.push(scopeRef);
     if (routeRef) candidates.push(routeRef);
     // In a choice of several, the focus is the last project picked among them.
     if (mode !== "one" && focus) candidates.push(refOfKey(focus));
@@ -289,8 +321,8 @@ export function useShellProject(pathname: string, search: Record<string, unknown
     for (const candidate of candidates) {
       if (mode === "many" && candidate !== routeRef && candidate.kind === "project" && !ids.includes(candidate.id)) continue;
       const found = rowForRef(catalog, candidate);
-      // The route's own ref holds even when the catalog does not list it (an app it never read).
-      if (found || candidate === routeRef || !catalog) {
+      // URL refs hold even when the catalog does not list them yet.
+      if (found || candidate === routeRef || candidate === scopeRef || !catalog) {
         ref = candidate;
         row = found;
         break;
@@ -311,7 +343,7 @@ export function useShellProject(pathname: string, search: Record<string, unknown
     return { ...base, ids: mode === "one" ? (projectId ? [projectId] : []) : ids, key, name, projectId, app, deployed, row };
     // routeRef is rebuilt every render; its key is what changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeRefKey, lastPick, focus, contextProjectId, catalog, consoleApp, mode, filterKey]);
+  }, [routeRefKey, explicit, urlProjectId, lastPick, focus, contextProjectId, catalog, consoleApp, mode, filterKey]);
 
   // In one-project mode a route that names a project becomes the last pick;
   // in a choice of several only an explicit one does (and ends the choice).
@@ -324,18 +356,36 @@ export function useShellProject(pathname: string, search: Record<string, unknown
 }
 
 /**
+ * The sidebar's call: what the nav shows is the scope every other reader
+ * takes (lib/urlState/shellScopeStore.ts shellScopeNow), and this tab's
+ * default for an empty URL. An app with no code here names no project, so
+ * the readers keep the chat list's filter.
+ */
+export function usePublishShellScope(shell: ShellProject, search: Record<string, unknown>): void {
+  const focus = shell.mode === "one" ? null : (focusOfSearch(search) ?? useShellLastPick.getState().focus ?? null);
+  const scopeKey =
+    shell.mode === "one" ? (shell.projectId ? `one:${shell.projectId}` : "") : shell.mode === "many" ? `many:${shell.ids.join(",")}` : "all";
+  useEffect(() => {
+    if (!scopeKey) return publishShellScope(null);
+    const [mode, ids = ""] = scopeKey.split(":");
+    publishShellScope({
+      scope: mode === "one" ? { mode: "one", projectId: ids } : mode === "many" ? { mode: "many", projectIds: ids.split(",") } : { mode: "all" },
+      focus,
+    });
+  }, [scopeKey, focus]);
+  useEffect(() => () => publishShellScope(null), []);
+}
+
+/**
  * Whether the shell shows several projects, and which (for pages under the
- * route outlet: an app page's picker, the Overview of several). The same
- * rule as useShellProject's mode, without the route.
+ * route outlet: an app page's picker, the Overview of several): what the nav
+ * on screen publishes (usePublishShellScope).
  */
 export function useShellSeveral(): { mode: "many" | "all" | null; rows: ProjectCatalogRow[] } {
-  const filterIds = useChatProjectFilterIds();
-  const lastPick = useShellLastPick((state) => state.key);
-  const severalPick = useShellLastPick((state) => state.several);
+  const published = useShellScopeStore((state) => state.published);
   const { catalog } = useSelectorCatalog(undefined);
-  const severalIds = filterIds.length >= 2 ? filterIds : lastPick === SEVERAL_PROJECTS_PICK ? severalPick : [];
-  const mode = severalIds.length >= 2 ? "many" : lastPick === ALL_PROJECTS_PICK ? "all" : null;
-  const filterKey = severalIds.join(",");
+  const mode = published?.scope.mode === "many" ? "many" : published?.scope.mode === "all" ? "all" : null;
+  const filterKey = published?.scope.mode === "many" ? published.scope.projectIds.join(",") : "";
   const rows = useMemo(() => {
     if (!mode || !catalog) return [];
     const ids = filterKey.split(",");

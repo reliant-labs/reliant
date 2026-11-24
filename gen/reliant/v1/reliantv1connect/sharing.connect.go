@@ -132,12 +132,14 @@ func NewSharingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+SharingServiceListSharedChatsProcedure,
 			connect.WithSchema(sharingServiceMethods.ByName("ListSharedChats")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listSharedProjects: connect.NewClient[v1.ListSharedProjectsRequest, v1.ListSharedProjectsResponse](
 			httpClient,
 			baseURL+SharingServiceListSharedProjectsProcedure,
 			connect.WithSchema(sharingServiceMethods.ByName("ListSharedProjects")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setWorkflowDraftSharing: connect.NewClient[v1.SetWorkflowDraftSharingRequest, v1.SetWorkflowDraftSharingResponse](
@@ -268,12 +270,14 @@ func NewSharingServiceHandler(svc SharingServiceHandler, opts ...connect.Handler
 		SharingServiceListSharedChatsProcedure,
 		svc.ListSharedChats,
 		connect.WithSchema(sharingServiceMethods.ByName("ListSharedChats")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	sharingServiceListSharedProjectsHandler := connect.NewUnaryHandler(
 		SharingServiceListSharedProjectsProcedure,
 		svc.ListSharedProjects,
 		connect.WithSchema(sharingServiceMethods.ByName("ListSharedProjects")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	sharingServiceSetWorkflowDraftSharingHandler := connect.NewUnaryHandler(

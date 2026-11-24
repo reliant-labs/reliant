@@ -35,7 +35,7 @@ func seed(t *testing.T, env *storetest.Env, repoID string, number int, labels ..
 	t.Helper()
 	at := time.Date(2026, 11, 20, 10, 0, 0, 0, time.UTC)
 	key := fmt.Sprintf("d-%s-%d", repoID, number)
-	_, err := env.Repo.ApplyPRRecordChange(context.Background(), core.PRRecordChange{
+	_, err := store.ApplyPRRecordChange(context.Background(), env.ORM, core.PRRecordChange{
 		Delivery: core.PRRecordDelivery{Provider: "github", DeliveryKey: key, EventType: "pull_request.synchronize", AppliedAt: at},
 		Snapshot: &core.PRRecordSnapshot{
 			ID: key, Provider: "github", AccountKey: "inst", RepositoryID: repoID, Repository: "acme/widgets",
@@ -68,7 +68,7 @@ func newService(t *testing.T) (*pull_request_record.Service, *storetest.Env) {
 	t.Helper()
 	env := storetest.New(t)
 	svc, err := pull_request_record.New(pull_request_record.Deps{
-		Logger: slog.New(slog.DiscardHandler), Config: &config.Config{}, Store: env.Repo,
+		Logger: slog.New(slog.DiscardHandler), Config: &config.Config{}, Store: store.NewPrRecordExtStore(env.ORM),
 		Now: func() time.Time { return now },
 	})
 	if err != nil {
@@ -133,7 +133,7 @@ func TestRecordsReadOnlyWithTheCallersOwnAccess(t *testing.T) {
 		t.Fatalf("bob with a stale grant: err = %v", err)
 	}
 	// A revocation (the repository removed from the installation) ends it.
-	if _, err := env.Repo.RevokeIntegrationAccess(context.Background(), "github",
+	if _, err := store.RevokeIntegrationAccess(context.Background(), env.ORM, "github",
 		core.IntegrationAccessRevocation{AccountKey: "inst", ResourceKey: "42"}); err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestRecordsGetAcrossARecreatedRepository(t *testing.T) {
 	// A stale snapshot of the deleted repository's #3, delivered late: it
 	// changes nothing but marks that record observed last.
 	late := time.Date(2026, 11, 20, 11, 0, 0, 0, time.UTC)
-	if _, err := env.Repo.ApplyPRRecordChange(context.Background(), core.PRRecordChange{
+	if _, err := store.ApplyPRRecordChange(context.Background(), env.ORM, core.PRRecordChange{
 		Delivery: core.PRRecordDelivery{Provider: "github", DeliveryKey: "late-41-3", EventType: "pull_request.labeled", AppliedAt: late},
 		Snapshot: &core.PRRecordSnapshot{
 			ID: "late-41-3", Provider: "github", AccountKey: "inst", RepositoryID: "41", Repository: "acme/widgets",

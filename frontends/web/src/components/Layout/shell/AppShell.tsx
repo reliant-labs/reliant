@@ -30,7 +30,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { PanelLeft } from "lucide-react";
+import { Menu } from "lucide-react";
 
 import Tooltip from "@/components/forge-ui/tooltip";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
@@ -123,6 +123,8 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
                 : cn(
                     "absolute inset-y-0 left-0 z-50 flex h-full shadow-2xl transition-transform duration-200 ease-out motion-reduce:transition-none",
                     shown ? "translate-x-0" : "-translate-x-full",
+                    // A phone's drawer: 44px touch rows, as the phone's own drawer has (Mobile/MobileNavDrawer).
+                    narrow && "[--row-h:2.75rem]",
                   )
             }
             onMouseEnter={!docked && !narrow ? overlay.handleOverlayMouseEnter : undefined}
@@ -183,10 +185,12 @@ function ShellNav() {
                 type="button"
                 onClick={toggleShellNav}
                 aria-label="Hide sidebar"
+                // The header's toggle steps aside for this one (Header.tsx), so the tour points here then.
+                data-tour="header-sidebar-toggle"
                 style={noDragRegionStyle}
                 className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <PanelLeft className="size-4" aria-hidden="true" />
+                <Menu className="size-4" aria-hidden="true" />
               </button>
             </Tooltip>
           )}

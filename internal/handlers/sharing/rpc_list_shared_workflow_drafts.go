@@ -32,7 +32,7 @@ func (s *Service) ListSharedWorkflowDrafts(
 		return connect.NewResponse(out), nil
 	}
 	limit, offset := page(req.Msg.GetLimit(), req.Msg.GetOffset())
-	workflows, err := s.deps.Repo.ListSharedWorkflowDrafts(ctx, core.SharedWorkflowDraftFilters{
+	workflows, err := s.deps.Shares.ListSharedWorkflowDrafts(ctx, core.SharedWorkflowDraftFilters{
 		OrgID: org, ViewerUserID: userID, Limit: limit, Offset: offset,
 	})
 	if err != nil {

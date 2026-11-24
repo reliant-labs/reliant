@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"go.temporal.io/sdk/activity"
+	structpb "google.golang.org/protobuf/types/known/structpb"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/actingidentity"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
@@ -29,8 +32,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
-	structpb "google.golang.org/protobuf/types/known/structpb"
 )
 
 // ============================================================================
@@ -122,8 +123,14 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 	}
 	tec.chat = chat
 
+	// Missing workspace storage must use the same graceful failure path as
+	// a project lookup error, rather than panicking in no-database setups.
+	if a.rows == nil {
+		return nil, "Failed to load project: workspace storage is unavailable"
+	}
+
 	// Load project
-	project, err := a.repo.GetProject(ctx, chat.ProjectID)
+	project, err := a.rows.GetProject(ctx, chat.ProjectID)
 	if err != nil {
 		return nil, fmt.Sprintf("Failed to load project: %v", err)
 	}
@@ -139,7 +146,7 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 
 	// Load nested repos. Failures degrade gracefully: tools fall back to
 	// single-repo behavior when repos is empty.
-	if repos, err := a.repo.ListReposByProject(ctx, project.ID); err == nil {
+	if repos, err := a.rows.ListReposByProject(ctx, project.ID); err == nil {
 		tec.repos = repos
 	}
 
@@ -165,7 +172,7 @@ func (a *ExecuteToolsActivity) loadWorktreeInfo(ctx context.Context, chat *db.Ch
 		return &rctx.WorktreeInfo{}, false, nil
 	}
 
-	worktree, err := a.repo.GetWorktree(ctx, *worktreeID)
+	worktree, err := a.rows.GetWorktree(ctx, *worktreeID)
 	if err != nil {
 		if threadBound {
 			return nil, true, fmt.Errorf("this agent's workspace %s could not be loaded: %w", *worktreeID, err)
@@ -274,7 +281,15 @@ func ptrValue(s *string) string {
 // This activity executes multiple tool calls in parallel and returns all results
 type ExecuteToolsActivity struct {
 	repo         ExecuteToolsStore
+	rows         WorkspaceRows
+	toolCalls    ToolCalls
 	toolExecutor toolexec.ToolExecutor
+	// results reads the durable result of a finished tool call. Set by
+	// WithToolCallResults.
+	results ToolCallResults
+	// funding reads what a chat's person said about spending their own
+	// accounts (runFunding). Set by WithRunFunding; nil is org_only.
+	funding RunFundingStore
 	// reviver brings an archived worktree back when its chat works in it
 	// again. Set by WithWorktreeReviver; nil revives nothing.
 	reviver WorktreeReviver
@@ -288,6 +303,43 @@ type ExecuteToolsActivity struct {
 	// preemptionPoll is how often a preemptable call checks for mail; zero
 	// means preemptionPollInterval. Only tests set it.
 	preemptionPoll time.Duration
+	// chatProjects reads the projects attached to a chat, which a call's
+	// `project` can route it to (routeCallProject). Set by WithChatProjects;
+	// nil makes every chat its primary project alone.
+	chatProjects ChatProjectLister
+}
+
+// WithToolCallResults gives the tool-execution path the reader of the durable
+// result a finished tool call recorded. RegisterAll always sets it; without it
+// a retried terminal call is answered with the interrupted stub rather than its
+// recorded result (findToolCallResult), and is still never re-executed.
+func (a *ExecuteToolsActivity) WithToolCallResults(r ToolCallResults) *ExecuteToolsActivity {
+	a.results = r
+	return a
+}
+
+// errNoToolCallResults is findToolCallResult's answer for an activity built
+// without WithToolCallResults.
+var errNoToolCallResults = errors.New("execute tools: no tool call result reader (WithToolCallResults was not set)")
+
+// findToolCallResult reads the durable result recorded for toolCallID, or
+// errNoToolCallResults when the activity has no reader. Every caller treats an
+// error as "no result survived", the same as a missing row.
+func (a *ExecuteToolsActivity) findToolCallResult(ctx context.Context, toolCallID string) (*core.ToolCallResult, error) {
+	if a.results == nil {
+		if a.toolCalls != nil {
+			return a.toolCalls.FindToolCallResult(ctx, toolCallID)
+		}
+		return nil, errNoToolCallResults
+	}
+	return a.results.FindToolCallResult(ctx, toolCallID)
+}
+
+// WithRunFunding gives the tool-execution path what a chat's person said about
+// spending their own accounts; without it a run spends only the org's.
+func (a *ExecuteToolsActivity) WithRunFunding(s RunFundingStore) *ExecuteToolsActivity {
+	a.funding = s
+	return a
 }
 
 // WithWorktreeReviver lets a chat that works in its archived worktree bring it
@@ -297,10 +349,13 @@ func (a *ExecuteToolsActivity) WithWorktreeReviver(r WorktreeReviver) *ExecuteTo
 	return a
 }
 
-// NewExecuteToolsActivity creates a new ExecuteToolsActivity
-func NewExecuteToolsActivity(repo ExecuteToolsStore, toolExecutor toolexec.ToolExecutor) *ExecuteToolsActivity {
+// NewExecuteToolsActivity creates a new ExecuteToolsActivity; toolCalls is the
+// tool-call records it reads and writes (NewToolCalls).
+func NewExecuteToolsActivity(repo ExecuteToolsStore, rows WorkspaceRows, toolCalls ToolCalls, toolExecutor toolexec.ToolExecutor) *ExecuteToolsActivity {
 	return &ExecuteToolsActivity{
 		repo:         repo,
+		rows:         rows,
+		toolCalls:    toolCalls,
 		toolExecutor: toolExecutor,
 	}
 }
@@ -664,7 +719,14 @@ func (a *ExecuteToolsActivity) runToolCall(
 	}
 
 	if blocked != "" && tools.NeedsMachine(toolCall.Name) {
-		return a.refuseToolCall(ctx, rtx, toolCall, blocked)
+		// The batch's workspace check is the primary project's. A call that
+		// names its project may run in an attached one, which that check
+		// says nothing about: it is refused only once routed to the primary
+		// (executeSingleTool).
+		if !namesProject(toolCall) {
+			return a.refuseToolCall(ctx, rtx, toolCall, blocked)
+		}
+		ctx = withBatchBlocked(ctx, blocked)
 	}
 
 	// Execute the tool via normal toolexec path
@@ -812,15 +874,35 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	}
 	tec.daemonSelector = toolDaemonSelector(worktreeDaemon, threadBoundExplicit(tec.worktreeThreadBound, worktreeDaemon, chatDaemonSelector(tec.chat, daemonSel)))
 
-	// The machine that selector reaches and the project's checkout on it:
-	// the directory the call runs in is resolved there, and the call is
-	// pinned to it. A machine call to a machine with no checkout is refused
-	// with the reason and the way out — the conversation carries on, and
-	// the next call re-resolves (cloning or switching machine unblocks it).
-	// A call in a branch worktree (Path set) runs without the main checkout.
-	tec.checkout = resolveCallCheckout(ctx, a.repo, a.machines, tec.project, tec.daemonSelector, tec.worktree.Path == "")
+	// Which of the chat's projects the call runs in (its `project`; omitted
+	// is the primary), the machine that selector reaches and that project's
+	// checkout on it: the directory the call runs in is resolved there, and
+	// the call is pinned to it. A machine call to a machine with no checkout
+	// is refused with the reason and the way out — the conversation carries
+	// on, and the next call re-resolves (cloning or switching machine
+	// unblocks it). A call in a branch worktree (Path set) runs without the
+	// main checkout.
+	attached, refusal := a.routeCallProject(ctx, tec)
+	if refusal == "" && !attached && tools.NeedsMachine(toolName) {
+		// A call that named its project skipped the batch's workspace check
+		// in runToolCall, which is the primary's: applied here, once it is
+		// known to run there.
+		refusal = batchBlockedFrom(ctx)
+	}
+	if refusal != "" {
+		result := a.buildToolResult(toolCallID, toolName, refusal, "", true, nil, nil)
+		completedAt := time.Now()
+		a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusFailed, toolCallUpsertOpts{
+			completedAt:  &completedAt,
+			errorMessage: refusal,
+		}, &toolCallResultWrite{content: result.Content, isError: true})
+		return result
+	}
 	if tec.checkout.missing != nil && tools.NeedsMachine(toolName) {
 		refusal := missingRefusal(tec.checkout.missing)
+		if attached {
+			refusal = attachedMissingRefusal(tec.checkout.missing)
+		}
 		result := a.buildToolResult(toolCallID, toolName, refusal, "", true, nil, nil)
 		completedAt := time.Now()
 		a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusFailed, toolCallUpsertOpts{
@@ -880,7 +962,7 @@ func (a *ExecuteToolsActivity) runScope(ctx context.Context, chat *db.Chat) func
 			return scope, drivers.RunFunding{}
 		}
 		runOrder, _ := ctx.Value(runFundingOrderKey{}).(string)
-		return scope, runFunding(ctx, a.repo, chat, who, runOrder)
+		return scope, runFunding(ctx, a.funding, chat, who, runOrder)
 	}
 }
 
@@ -956,7 +1038,7 @@ func runFunding(ctx context.Context, store RunFundingStore, chat *db.Chat, who a
 // treated as no prior result. A row that never learned its thread (written
 // before execute_tools recorded one) is compared on the chat alone.
 func (a *ExecuteToolsActivity) checkPriorTerminalResult(ctx context.Context, chatID, thread, toolCallID, toolName string) (message.ToolResult, bool) {
-	call, err := a.repo.GetToolCall(ctx, toolCallID)
+	call, err := a.toolCalls.FindToolCall(ctx, toolCallID)
 	if err != nil || call == nil || !call.Status.IsTerminal() {
 		return message.ToolResult{}, false
 	}
@@ -975,7 +1057,10 @@ func (a *ExecuteToolsActivity) checkPriorTerminalResult(ctx context.Context, cha
 		"tool_call_id", toolCallID,
 		"status", call.Status)
 
-	result, err := a.repo.GetToolCallResult(ctx, toolCallID)
+	result, err := a.findToolCallResult(ctx, toolCallID)
+	if errors.Is(err, errNoToolCallResults) {
+		activity.GetLogger(ctx).Warn("[ExecuteTools] Terminal tool call's recorded result cannot be read; answering with the interrupted stub", "tool_call_id", toolCallID, "error", err)
+	}
 	if err != nil || result == nil {
 		// Terminal row, but no result content survived (e.g. a historical
 		// Cancelled row that predates durable status). Same stub every other
@@ -1281,7 +1366,7 @@ func (a *ExecuteToolsActivity) upsertTerminalToolCall(
 			return nil
 		}
 		now := time.Now()
-		return a.repo.UpsertToolCallResult(txCtx, tec.getChatID(), &core.ToolCallResult{
+		return a.toolCalls.UpsertToolCallResult(txCtx, tec.getChatID(), &core.ToolCallResult{
 			ToolCallID:   tec.toolCallID,
 			Content:      res.content,
 			IsError:      res.isError,
@@ -1518,7 +1603,7 @@ func (a *ExecuteToolsActivity) recordInterruptedRetry(ctx context.Context, chatI
 	if a.repo == nil || chatID == "" || toolCallID == "" {
 		return
 	}
-	if existing, err := a.repo.GetToolCall(ctx, toolCallID); err == nil && existing != nil &&
+	if existing, err := a.toolCalls.FindToolCall(ctx, toolCallID); err == nil && existing != nil &&
 		existing.ChatID == chatID && existing.Status == core.ToolCallStatusBackgrounded {
 		return
 	}
@@ -1644,7 +1729,7 @@ func (a *ExecuteToolsActivity) upsertToolCallResult(ctx context.Context, chatID,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
-	if err := a.repo.UpsertToolCallResult(ctx, chatID, result); err != nil {
+	if err := a.toolCalls.UpsertToolCallResult(ctx, chatID, result); err != nil {
 		activity.GetLogger(ctx).Error("[TOOL_STATUS] Failed to persist tool call result",
 			"error", err,
 			"tool_call_id", toolCallID)

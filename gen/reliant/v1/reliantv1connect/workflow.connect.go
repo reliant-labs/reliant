@@ -135,6 +135,7 @@ func NewWorkflowServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorkflowServiceListWorkflowsProcedure,
 			connect.WithSchema(workflowServiceMethods.ByName("ListWorkflows")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		saveWorkflow: connect.NewClient[v1.SaveWorkflowRequest, v1.SaveWorkflowResponse](
@@ -147,6 +148,7 @@ func NewWorkflowServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorkflowServiceGetWorkflowProcedure,
 			connect.WithSchema(workflowServiceMethods.ByName("GetWorkflow")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		deleteWorkflow: connect.NewClient[v1.DeleteWorkflowRequest, v1.DeleteWorkflowResponse](
@@ -342,6 +344,7 @@ func NewWorkflowServiceHandler(svc WorkflowServiceHandler, opts ...connect.Handl
 		WorkflowServiceListWorkflowsProcedure,
 		svc.ListWorkflows,
 		connect.WithSchema(workflowServiceMethods.ByName("ListWorkflows")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	workflowServiceSaveWorkflowHandler := connect.NewUnaryHandler(
@@ -354,6 +357,7 @@ func NewWorkflowServiceHandler(svc WorkflowServiceHandler, opts ...connect.Handl
 		WorkflowServiceGetWorkflowProcedure,
 		svc.GetWorkflow,
 		connect.WithSchema(workflowServiceMethods.ByName("GetWorkflow")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	workflowServiceDeleteWorkflowHandler := connect.NewUnaryHandler(

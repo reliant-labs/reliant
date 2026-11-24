@@ -942,7 +942,7 @@ const file_reliant_v1_sharing_proto_rawDesc = "" +
 	"\x06offset\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x06offsetB\t\n" +
 	"\a_org_id\"a\n" +
 	" ListSharedWorkflowDraftsResponse\x12=\n" +
-	"\tworkflows\x18\x01 \x03(\v2\x1f.reliant.v1.SharedWorkflowDraftR\tworkflows2\xa2\b\n" +
+	"\tworkflows\x18\x01 \x03(\v2\x1f.reliant.v1.SharedWorkflowDraftR\tworkflows2\xa8\b\n" +
 	"\x0eSharingService\x12\xaa\x01\n" +
 	"\x11SetChatVisibility\x12$.reliant.v1.SetChatVisibilityRequest\x1a%.reliant.v1.SetChatVisibilityResponse\"H\xa2\xbb\x18D:B\n" +
 	"\x0eset_visibility\x12$\n" +
@@ -952,9 +952,9 @@ const file_reliant_v1_sharing_proto_rawDesc = "" +
 	"\x0eset_visibility\x12,\n" +
 	"\aproject\x12\n" +
 	"project_id\x1a\x15response.project.name*\n" +
-	"visibility\x12\x88\x01\n" +
-	"\x0fListSharedChats\x12\".reliant.v1.ListSharedChatsRequest\x1a#.reliant.v1.ListSharedChatsResponse\",\xa2\xbb\x18(:&:$reads only: lists what others shared\x12\x91\x01\n" +
-	"\x12ListSharedProjects\x12%.reliant.v1.ListSharedProjectsRequest\x1a&.reliant.v1.ListSharedProjectsResponse\",\xa2\xbb\x18(:&:$reads only: lists what others shared\x12\xdf\x01\n" +
+	"visibility\x12\x8b\x01\n" +
+	"\x0fListSharedChats\x12\".reliant.v1.ListSharedChatsRequest\x1a#.reliant.v1.ListSharedChatsResponse\"/\xa2\xbb\x18(:&:$reads only: lists what others shared\x90\x02\x01\x12\x94\x01\n" +
+	"\x12ListSharedProjects\x12%.reliant.v1.ListSharedProjectsRequest\x1a&.reliant.v1.ListSharedProjectsResponse\"/\xa2\xbb\x18(:&:$reads only: lists what others shared\x90\x02\x01\x12\xdf\x01\n" +
 	"\x17SetWorkflowDraftSharing\x12*.reliant.v1.SetWorkflowDraftSharingRequest\x1a+.reliant.v1.SetWorkflowDraftSharingResponse\"k\xa2\xbb\x18g:e\n" +
 	"\x0eset_visibility\x12:\n" +
 	"\bworkflow\x12\x16response.workflow.slug\x1a\x16response.workflow.name*\vworkflow_id*\n" +

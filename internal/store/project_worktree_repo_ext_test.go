@@ -294,7 +294,7 @@ func TestProjectDaemonQueries(t *testing.T) {
 	if err := store.RemoveProjectDaemon(ctx, env.ORM, p, "d2"); err != nil {
 		t.Fatalf("RemoveProjectDaemon(missing): %v", err)
 	}
-	if left, _ := env.Repo.ListProjectDaemonsForDaemon(ctx, "d2"); len(left) != 0 {
+	if left, _ := store.ListProjectDaemonsForDaemon(ctx, env.Repo.ORM(), "d2"); len(left) != 0 {
 		t.Fatalf("row survived RemoveProjectDaemon: %+v", left)
 	}
 }
@@ -335,7 +335,7 @@ func TestVisibilityAndFavoriteQueries(t *testing.T) {
 			t.Fatalf("AddCommandFavorite(%s): %v", k, err)
 		}
 	}
-	if err := env.Repo.AddCommandFavorite(ctx, "u", p, "lint"); err != nil {
+	if err := store.AddCommandFavorite(ctx, env.ORM, "u", p, "lint"); err != nil {
 		t.Fatalf("Repo.AddCommandFavorite: %v", err)
 	}
 	keys, err := store.ListCommandFavorites(ctx, env.ORM, "u", p)
@@ -345,7 +345,7 @@ func TestVisibilityAndFavoriteQueries(t *testing.T) {
 	if err := store.RemoveCommandFavorite(ctx, env.ORM, "u", p, "test"); err != nil {
 		t.Fatalf("RemoveCommandFavorite: %v", err)
 	}
-	if twin, err := env.Repo.ListCommandFavorites(ctx, "u", p); err != nil || len(twin) != 2 {
+	if twin, err := store.ListCommandFavorites(ctx, env.ORM, "u", p); err != nil || len(twin) != 2 {
 		t.Fatalf("Repo.ListCommandFavorites = %v, %v", twin, err)
 	}
 }
@@ -421,6 +421,12 @@ func TestWorktreeQueries(t *testing.T) {
 	}
 	if w, err := store.GetWorktreeByIdempotencyKey(ctx, env.ORM, "other-project", "key-a"); err != nil || w != nil {
 		t.Fatalf("GetWorktreeByIdempotencyKey(other project) = %v, %v", w, err)
+	}
+	if w, err := store.GetWorktreeByIdempotencyKey(ctx, env.ORM, storetest.SeedProjectID, ""); err != nil || w != nil {
+		t.Fatalf("GetWorktreeByIdempotencyKey(empty key) = %v, %v; want nil: the caller opted out", w, err)
+	}
+	if err := store.RemoveWorktree(ctx, env.ORM, ""); err == nil {
+		t.Fatal("RemoveWorktree(empty id) succeeded")
 	}
 	if w, err := store.GetLiveWorktreeByName(ctx, env.ORM, storetest.SeedProjectID, "beta"); err != nil || w != nil {
 		t.Fatalf("GetLiveWorktreeByName(archived) = %v, %v; want nil", w, err)
@@ -527,10 +533,6 @@ func TestWorktreeQueries(t *testing.T) {
 	if err != nil || len(reclaim) != 2 || reclaim[0].Worktree.ID != "wt-b" || reclaim[1].Worktree.ID != "wt-a" ||
 		reclaim[0].OwnerUserID != storetest.SeedUserID || reclaim[0].ProjectPath != "" || reclaim[0].Worktree.CleanupMetadata == nil {
 		t.Fatalf("ListWorktreesForReclaim = %+v, %v", reclaim, err)
-	}
-	twinReclaim, err := env.Repo.ListWorktreesForReclaim(ctx)
-	if err != nil || len(twinReclaim) != len(reclaim) || twinReclaim[0].Worktree.ID != reclaim[0].Worktree.ID {
-		t.Fatalf("Repo.ListWorktreesForReclaim = %+v, %v", twinReclaim, err)
 	}
 	held, err := store.ListHeldWorktreesForUser(ctx, env.ORM, storetest.SeedUserID)
 	if err != nil || len(held) != 1 || held[0].Worktree.ID != "wt-b" || held[0].ProjectName == "" {
@@ -674,5 +676,27 @@ func TestReclaimListsOnlyTheOwnersInstalledCheckout(t *testing.T) {
 		if p, ok := paths[id]; !ok || p != path {
 			t.Errorf("%s: project path = %q (listed %v), want %q", id, p, ok, path)
 		}
+	}
+}
+
+// The sweep's reads of a user or a row with no id answer an error, never every
+// user's or every row's.
+func TestWorktreeSweepReads_EmptyIDsFailClosed(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	if _, err := store.ListLiveWorktreePathsForUser(ctx, env.ORM, ""); err == nil {
+		t.Error("ListLiveWorktreePathsForUser with no user succeeded")
+	}
+	if _, err := store.ListHeldWorktreesForUser(ctx, env.ORM, ""); err == nil {
+		t.Error("ListHeldWorktreesForUser with no user succeeded")
+	}
+	if _, err := store.AdoptWorktreeDaemon(ctx, env.ORM, "", "d"); err == nil {
+		t.Error("AdoptWorktreeDaemon with no worktree succeeded")
+	}
+	if _, err := store.AdoptWorktreeDaemon(ctx, env.ORM, "w", ""); err == nil {
+		t.Error("AdoptWorktreeDaemon with no daemon succeeded")
+	}
+	if _, err := store.MergeUnownedWorktreeCleanupMetadata(ctx, env.ORM, "", func(*core.CleanupMetadata) bool { return true }); err == nil {
+		t.Error("MergeUnownedWorktreeCleanupMetadata with no worktree succeeded")
 	}
 }

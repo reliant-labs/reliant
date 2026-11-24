@@ -12,6 +12,7 @@ import { preloadGeistLatin } from "./vite-plugin-preload-fonts";
 import { securityTxt } from "./vite-plugin-security-txt";
 import { otelProxy } from "./vite-plugin-otel-proxy";
 import { demoBundleGuard, demoSubstitutes } from "./vite-plugin-demo-bundle";
+import { fixtureEntryGuard } from "./vite-plugin-fixture-entry-guard";
 
 // Get worktree name from the checkout root
 // When Vite runs, cwd is frontends/web, so the checkout is two levels up
@@ -74,6 +75,18 @@ const maxWorkers = intEnv("VITEST_MAX_WORKERS") ?? Math.max(2, Math.min(8, cores
 const loadFactor = Math.min(6, Math.max(1, Math.ceil(os.loadavg()[0] / cores)));
 const testTimeout = intEnv("VITEST_TIMEOUT_MS") ?? 5_000 * loadFactor;
 const asyncUtilTimeout = intEnv("VITEST_ASYNC_UTIL_TIMEOUT_MS") ?? Math.round(testTimeout / 2);
+
+// The record directory of the `forge test capture` lane running Vitest, if one
+// is: the release gate's `task test:web` (lane frontend) and the merge gate's
+// web step (lane affected-web, scripts/test-capture.sh). Then, and only then,
+// Vitest writes its results there as JSON (vitest.json) and measures v8
+// coverage into the same directory (coverage-final.json), which
+// `forge test report` merges with the Go lanes. A bare `npm test` is
+// unchanged. FORGE_TEST_COVERAGE=off records results only: the merge gate's
+// choice, since coverage cost the selected files +45% wall time
+// (tools/test-affected's webSteps), so only the release gate's full lane
+// measures it.
+const testLaneDir = process.env.FORGE_TEST_LANE_DIR;
 
 // Vitest pools. Most files run in `vmThreads`: each file gets a fresh VM
 // context in a reused worker instead of a fresh jsdom environment in a fresh
@@ -202,9 +215,12 @@ const appConfig: ViteUserConfig = {
   // Latin file; see vite-plugin-preload-fonts.ts.
   // securityTxt (build-only) emits dist/.well-known/security.txt naming the
   // security and abuse contacts; see vite-plugin-security-txt.ts.
+  // fixtureEntryGuard (build-only) fails the build if fixture code
+  // (src/fixtures) reaches an app entry's static chunk graph: fixture mode is
+  // a lazy chunk config.js turns on; see vite-plugin-fixture-entry-guard.ts.
   // otelProxy and otelBrowserConfig (dev-only) are browser telemetry; see
   // "Browser telemetry" above.
-  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic(), forgeRuntimeConfig(), otelProxy({ upstream: OTEL_UPSTREAM, headersFile: process.env.FORGE_OTEL_HEADERS_FILE ?? "" }), otelBrowserConfig(), preloadGeistLatin(), securityTxt()],
+  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic(), forgeRuntimeConfig(), otelProxy({ upstream: OTEL_UPSTREAM, headersFile: process.env.FORGE_OTEL_HEADERS_FILE ?? "" }), otelBrowserConfig(), preloadGeistLatin(), securityTxt(), fixtureEntryGuard()],
   // Load .env files from the checkout root instead of frontends/web
   envDir: path.resolve(__dirname, "../.."),
   // Define global constants available in the app
@@ -466,6 +482,26 @@ const appConfig: ViteUserConfig = {
     // ~1 GiB per worker (8.6 GiB on 8, 4 GiB on 4) for ~2x the forks speed;
     // maxWorkers (above) holds the sum to half the host's memory.
     vmMemoryLimit: VM_MEMORY_LIMIT,
+    ...(testLaneDir
+      ? {
+          // Naming reporters replaces Vitest's defaults, so the GitHub
+          // Actions annotations it adds by itself are named here too.
+          reporters: process.env.GITHUB_ACTIONS ? ["default", "json", "github-actions"] : ["default", "json"],
+          outputFile: { json: path.join(testLaneDir, "vitest.json") },
+          coverage: {
+            enabled: process.env.FORGE_TEST_COVERAGE !== "off",
+            provider: "v8" as const,
+            // Istanbul JSON (coverage-final.json): statement blocks, the
+            // granularity the Go lanes record. An lcov.info beside it would
+            // be a second, line-granular copy of the same files, which
+            // `forge test report` refuses to merge with it.
+            reporter: ["json"],
+            reportsDirectory: testLaneDir,
+            // The lane directory is capture's; Vitest must not empty it.
+            clean: false,
+          },
+        }
+      : {}),
     // Two projects over this config, split by pool (see FORKS_POOL_FILES).
     // Each owns its include and exclude: `extends` concatenates lists, so a
     // root include would put every file in both projects.

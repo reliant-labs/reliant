@@ -29,6 +29,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/retry"
@@ -37,6 +39,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
@@ -103,7 +106,12 @@ type KeepFilesSetting interface {
 	KeepFiles(ctx context.Context, userID string) bool
 }
 
-// Store is what the sweep needs from the database.
+// Store is what the sweep needs from the database. store.WorktreeExtStore
+// answers the worktree-row reads (GetWorktree, ListWorktreesForReclaim,
+// ListLiveWorktreePathsForUser, AdoptWorktreeDaemon, and StorageStore's
+// ListHeldWorktreesForUser and MergeUnownedWorktreeCleanupMetadata),
+// store.RepoExtStore ListReposByProject; the rest
+// are reads other areas make too, which the repository facade still answers.
 type Store interface {
 	ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error)
 	ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]core.WorktreePath, error)
@@ -679,7 +687,8 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 	}()
 
 	byID := map[string]*core.ReclaimCandidate{}
-	req, shared := s.describe(ctx, batch, live, keep, s.runActivity(ctx, batch))
+	running := s.runActivity(ctx, batch)
+	req, shared := s.describe(ctx, batch, live, keep, running)
 	for _, h := range shared {
 		s.recordHold(ctx, h.cand.Worktree, h.reason, h.detail, 0, nil)
 	}
@@ -703,7 +712,7 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 		return batchFailed
 	}
 
-	logBatch(ctx, t, resp.Results)
+	logBatch(ctx, t, resp.Results, running)
 	var second []worktreereclaim.Worktree
 	for _, r := range resp.Results {
 		c := byID[r.ID]
@@ -1137,10 +1146,12 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 			return
 		}
 		if r.Outcome == worktreereclaim.OutcomeLocked || r.Outcome == worktreereclaim.OutcomeIdleDone {
+			s.noteNotReclaimable(ctx, wt, r.NotReclaimable)
 			s.mergeMeta(ctx, wt, func(m *core.CleanupMetadata) {
 				now := s.now().UTC()
 				m.LockedAt, m.CheckedAt, m.RetireFence = &now, &now, ""
 				m.Transient, m.Rechecks = "", 0
+				m.NotReclaimable = r.NotReclaimable
 				switch {
 				case r.Landed && m.LandedAt == nil:
 					m.LandedAt = &now
@@ -1202,6 +1213,25 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 		s.recordHold(ctx, wt, r.Reason, r.Detail, r.SizeBytes, r.SnapshotRefs)
 		s.recordStripped(ctx, wt, r)
 	}
+}
+
+// noteNotReclaimable logs why the daemon found a live worktree it was asked
+// to prove reclaimable neither landed nor recoverable, when that reason is
+// new for the row (the stored one is wt's CleanupMetadata.NotReclaimable):
+// one line per change, not one per pass. The server only asks a row no run
+// is going in, so this is what holds a finished workspace on disk. Before it,
+// every such answer was "locked" and nothing said why (2026-11-22: 37
+// finished workspaces on one machine, blamed on their orchestrator chat).
+func (s *Sweeper) noteNotReclaimable(ctx context.Context, wt *core.Worktree, why string) {
+	prev := ""
+	if wt.CleanupMetadata != nil {
+		prev = wt.CleanupMetadata.NotReclaimable
+	}
+	if why == "" || why == prev {
+		return
+	}
+	logging.InfoContext(ctx, "[WorktreeSweep] live worktree not reclaimable", "worktreeID", wt.ID, "name", wt.Name,
+		"daemonID", ptrString(wt.DaemonID), "why", why)
 }
 
 // UseStore records the use a daemon saw of a live worktree.
@@ -1491,10 +1521,18 @@ func foundCheckout(r worktreereclaim.Result) bool {
 // each outcome and held reason, how many were landed or recoverable, and
 // what was shed. Without it a sweep that settled nothing looked the same as
 // one that settled everything (2026-10-30: 291 reconciles, no outcomes).
-func logBatch(ctx context.Context, t target, results []worktreereclaim.Result) {
+// Of the live rows, in_run counts those a run is going in (only locked, never
+// asked whether they are reclaimable) and not_reclaimable those the daemon
+// was asked about and refused, which noteNotReclaimable names one by one.
+func logBatch(ctx context.Context, t target, results []worktreereclaim.Result, running map[string]bool) {
 	outcomes := map[string]int{}
 	held := map[string]int{}
-	var landed, recoverable, shed int
+	var landed, recoverable, shed, inRun, notReclaimable int
+	for _, r := range running {
+		if r {
+			inRun++
+		}
+	}
 	var shedBytes int64
 	for _, r := range results {
 		outcomes[string(r.Outcome)]++
@@ -1507,6 +1545,9 @@ func logBatch(ctx context.Context, t target, results []worktreereclaim.Result) {
 		if r.RecoverableIdle {
 			recoverable++
 		}
+		if r.NotReclaimable != "" {
+			notReclaimable++
+		}
 		if r.StrippedBytes > 0 {
 			shed++
 			shedBytes += r.StrippedBytes
@@ -1514,6 +1555,7 @@ func logBatch(ctx context.Context, t target, results []worktreereclaim.Result) {
 	}
 	logging.InfoContext(ctx, "[WorktreeSweep] reconcile batch", "daemonID", t.daemonID, "rows", len(results),
 		"outcomes", outcomes, "held", held, "landed", landed, "recoverable_idle", recoverable,
+		"in_run", inRun, "not_reclaimable", notReclaimable,
 		"shed_rows", shed, "shed_bytes", shedBytes)
 }
 
@@ -1523,4 +1565,34 @@ func ptrString(p *string) string {
 		return ""
 	}
 	return *p
+}
+
+// facade is the sweep's reads that only the repository facade answers, and
+// the ORM handle NewStores builds the repos role over.
+type facade interface {
+	ORM() *orm.Client
+	UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *core.CleanupMetadata) error
+	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
+	TryAdvisoryLock(ctx context.Context, key int64) (release func(), ok bool, err error)
+	ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error)
+}
+
+// Stores is the sweep's Store (and StorageStore): the worktree rows through
+// store.WorktreeExtStore, a project's repos through store.RepoExtStore, and
+// the reads other areas share through the repository facade (*db.Repo).
+type Stores struct {
+	facade
+	store.WorktreeExtStore
+	repos store.RepoExtStore
+}
+
+// NewStores joins the repository facade's shared reads with the worktree rows
+// and the repos role over the facade's ORM.
+func NewStores(shared facade, rows store.WorktreeExtStore) Stores {
+	return Stores{facade: shared, WorktreeExtStore: rows, repos: store.NewRepoExtStore(shared.ORM())}
+}
+
+// ListReposByProject is the project's nested repos (store.RepoExtStore).
+func (s Stores) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
+	return s.repos.ListReposByProject(ctx, projectID)
 }

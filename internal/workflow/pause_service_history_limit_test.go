@@ -28,7 +28,7 @@ func TestResumeInterruptedWorkflow_AtHistoryLimit_DoesNotReset(t *testing.T) {
 		historyEvents: failedByActivityHistory(),
 		resetResp:     &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
-	ps := NewPauseService(tc, newMockPauseRepo())
+	ps := newPauseServiceOver(tc, newMockPauseRepo())
 
 	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.ErrorIs(t, err, ErrHistoryLimitExceeded)
@@ -45,7 +45,7 @@ func TestResumeInterruptedWorkflow_NearHistoryLimit_DoesNotReset(t *testing.T) {
 		historyEvents: failedByActivityHistory(),
 		resetResp:     &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
-	ps := NewPauseService(tc, newMockPauseRepo())
+	ps := newPauseServiceOver(tc, newMockPauseRepo())
 
 	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.ErrorIs(t, err, ErrHistoryLimitExceeded)
@@ -61,7 +61,7 @@ func TestResumeInterruptedWorkflow_NormalHistory_StillResets(t *testing.T) {
 		historyEvents: failedByActivityHistory(),
 		resetResp:     &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
-	ps := NewPauseService(tc, newMockPauseRepo())
+	ps := newPauseServiceOver(tc, newMockPauseRepo())
 
 	newRunID, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.NoError(t, err)
@@ -95,7 +95,7 @@ func TestResumeInterruptedWorkflow_TerminatedForHistorySize_DoesNotReset(t *test
 		historyEvents: terminatedByServerHistory("Workflow history size exceeds limit."),
 		resetResp:     &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
-	ps := NewPauseService(tc, newMockPauseRepo())
+	ps := newPauseServiceOver(tc, newMockPauseRepo())
 
 	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.ErrorIs(t, err, ErrHistoryLimitExceeded)
@@ -108,7 +108,7 @@ func TestResumeInterruptedWorkflow_TerminatedForHistoryCount_DoesNotReset(t *tes
 		historyEvents: terminatedByServerHistory("Workflow history count exceeds limit."),
 		resetResp:     &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
-	ps := NewPauseService(tc, newMockPauseRepo())
+	ps := newPauseServiceOver(tc, newMockPauseRepo())
 
 	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.ErrorIs(t, err, ErrHistoryLimitExceeded)
@@ -125,7 +125,7 @@ func TestResumeInterruptedWorkflow_NearHistorySizeLimit_DoesNotReset(t *testing.
 		historyEvents: failedByActivityHistory(),
 		resetResp:     &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
-	ps := NewPauseService(tc, newMockPauseRepo())
+	ps := newPauseServiceOver(tc, newMockPauseRepo())
 
 	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.ErrorIs(t, err, ErrHistoryLimitExceeded)
@@ -140,7 +140,7 @@ func TestResumeInterruptedWorkflow_UnrelatedTerminate_StillResets(t *testing.T) 
 		historyEvents: terminatedByServerHistory("Workflow stuck: activity task in Scheduled state"),
 		resetResp:     &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
-	ps := NewPauseService(tc, newMockPauseRepo())
+	ps := newPauseServiceOver(tc, newMockPauseRepo())
 
 	newRunID, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	require.NoError(t, err)

@@ -121,7 +121,10 @@ func (s *Service) recordMachineHealth(ctx context.Context, conn *daemonConnectio
 	if next.State == prev.State && !prev.Since.IsZero() {
 		next.Since = prev.Since
 	}
-	if err := s.deps.Repo.UpdateDaemonAttachmentHealth(ctx, conn.daemonID, next); err != nil {
+	if s.deps.Attachments == nil {
+		return
+	}
+	if err := s.deps.Attachments.SetDaemonAttachmentHealth(ctx, conn.daemonID, next); err != nil {
 		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to record machine health", "error", err, "daemonID", conn.daemonID)
 		return
 	}

@@ -19,12 +19,12 @@ func TestSetWorkflowVisibility_Generated(t *testing.T) {
 
 	mine := callerDraft(t, "mine")
 	store := draftsRepo(mine)
-	store.SetWorkflowDraftHiddenFunc = func(_ context.Context, _ string, hidden bool) (*db.WorkflowDraft, error) {
+	store.Drafts.SetWorkflowDraftHiddenFunc = func(_ context.Context, _ string, hidden bool) (*db.WorkflowDraft, error) {
 		d := *mine
 		d.IsHidden = hidden
 		return &d, nil
 	}
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: store}))
+	svc := workflow.NewTestWorkflow(t, withDeps(store.deps()))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.SetWorkflowVisibilityRequest, pb.SetWorkflowVisibilityResponse]{
 		{
@@ -53,7 +53,7 @@ func TestSetWorkflowVisibility_Generated(t *testing.T) {
 				if !resp.Msg.GetSuccess() || !resp.Msg.GetWorkflow().GetIsHidden() {
 					t.Fatalf("response = %v, want the workflow hidden", resp.Msg)
 				}
-				calls := store.Calls("SetWorkflowDraftHidden")
+				calls := store.Drafts.Calls("SetWorkflowDraftHidden")
 				if len(calls) != 1 || calls[0].Args[1] != "wf-mine" || calls[0].Args[2] != true {
 					t.Fatalf("SetWorkflowDraftHidden calls = %v, want one hiding wf-mine", calls)
 				}

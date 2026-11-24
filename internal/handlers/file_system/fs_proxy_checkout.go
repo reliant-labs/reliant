@@ -53,7 +53,7 @@ func (s *Service) checkoutMissingError(
 	// own checkout, which is still the clone this describes. Only a real
 	// worktree is out of scope.
 	if worktreeID != nil && *worktreeID != "" {
-		wt, werr := s.deps.Repo.GetWorktree(ctx, *worktreeID)
+		wt, werr := s.deps.Placement.GetWorktree(ctx, *worktreeID)
 		if werr != nil || wt == nil || !wt.IsMain {
 			return nil
 		}
@@ -72,15 +72,15 @@ func (s *Service) checkoutMissingError(
 		// project-blind default resolution's, which may be one without it.
 		detail.DaemonId = s.projectMachine(ctx, userID, projectID)
 	}
-	if project, perr := s.deps.Repo.GetProject(ctx, projectID); perr == nil && project != nil && project.RemoteURL != nil {
+	if project, perr := s.deps.Placement.GetProject(ctx, projectID); perr == nil && project != nil && project.RemoteURL != nil {
 		detail.RemoteUrl = strings.TrimSpace(*project.RemoteURL)
 	}
-	if rows, lerr := s.deps.Repo.ListProjectDaemonsForProject(ctx, projectID); lerr != nil {
+	if rows, lerr := s.deps.Placement.ListProjectDaemonsForProject(ctx, projectID); lerr != nil {
 		logging.WarnContext(ctx, "[FSProxy] Could not read clone records for a missing project directory",
 			"error", lerr, "projectID", projectID)
 	} else {
 		detail.State, detail.InstallError = checkoutstate.On(rows, detail.DaemonId)
-		detail.AvailableDaemonIds = projectcheckout.InstalledElsewhere(ctx, s.deps.Repo, userID, rows, detail.DaemonId)
+		detail.AvailableDaemonIds = projectcheckout.InstalledElsewhere(ctx, s.deps.Placement, userID, rows, detail.DaemonId)
 	}
 
 	missing := svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("project directory %s does not exist on this machine", scope.basePath))
@@ -93,7 +93,7 @@ func (s *Service) checkoutMissingError(
 // cannot be told.
 func (s *Service) projectMachine(ctx context.Context, userID, projectID string) string {
 	if machines, ok := s.deps.Router.(daemonplacement.Machines); ok {
-		if id, err := daemonplacement.ProjectDefaultDaemonID(ctx, s.deps.Repo, machines, userID, projectID); err == nil {
+		if id, err := daemonplacement.ProjectDefaultDaemonID(ctx, s.deps.Placement, machines, userID, projectID); err == nil {
 			return id
 		}
 		return ""

@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Trigger persistence is the layer every automated run passes through, and two
@@ -284,7 +285,7 @@ func TestListTriggersFiltersByUserAndProject(t *testing.T) {
 
 	// The schedule syncer's reconciliation lists everyone's through its own
 	// query, so no schedule is left unconverged.
-	all, err := repo.ListAllTriggers(ctx)
+	all, err := store.ListAllTriggers(ctx, repo.ORM())
 	if err != nil {
 		t.Fatalf("ListAllTriggers: %v", err)
 	}
@@ -777,7 +778,7 @@ func TestLockTriggerRequiresAnExistingRow(t *testing.T) {
 	ctx := context.Background()
 
 	if err := repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
-		return repo.LockTrigger(txCtx, "no-such-trigger")
+		return store.LockTrigger(txCtx, repo.ORM(), "no-such-trigger")
 	}); !errors.Is(err, core.ErrTriggerNotFound) {
 		t.Errorf("LockTrigger(missing) = %v, want ErrTriggerNotFound", err)
 	}

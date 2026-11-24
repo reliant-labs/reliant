@@ -93,7 +93,7 @@ func TestReconcileKeepsInstallationOnlyRouting(t *testing.T) {
 		{AccountKey: "100", ResourceKey: "1"}, {AccountKey: "200", ResourceKey: "9"},
 	}))
 
-	report, err := NewReconciler(repo, fakeWorkflows{yaml: map[string]string{"triage": declaringWorkflow}}, nil).ReconcileAll(ctx)
+	report, err := NewReconciler(NewStores(repo), fakeWorkflows{yaml: map[string]string{"triage": declaringWorkflow}}, nil).ReconcileAll(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 2, report.Updated, "both projections were stale and rewritten")
 
@@ -102,7 +102,7 @@ func TestReconcileKeepsInstallationOnlyRouting(t *testing.T) {
 	assert.Equal(t, "100", installationIn(t, got.Config), "the binding survives the rewrite")
 
 	routed := func(account, resource string) []string {
-		ts, err := repo.ListAccessRoutedTriggers(ctx, "github", account, resource, now.Add(-time.Minute))
+		ts, err := store.ListAccessRoutedTriggers(ctx, repo.ORM(), "github", account, resource, now.Add(-time.Minute))
 		require.NoError(t, err)
 		ids := []string{}
 		for _, tr := range ts {
@@ -118,12 +118,12 @@ func TestReconcileKeepsInstallationOnlyRouting(t *testing.T) {
 // read of every activation and its first write: a concurrent UpdateTrigger
 // that commits in that window, deterministically.
 type afterRead struct {
-	*db.Repo
+	Stores
 	step func()
 }
 
 func (a *afterRead) ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.Trigger, error) {
-	ts, err := a.Repo.ListAllWorkflowTriggerActivations(ctx)
+	ts, err := a.Stores.ListAllWorkflowTriggerActivations(ctx)
 	if a.step != nil {
 		a.step()
 		a.step = nil
@@ -163,7 +163,7 @@ func TestReconcileNeverOverwritesABindingCommittedAfterItsRead(t *testing.T) {
 			}
 			require.NoError(t, repo.CreateTrigger(ctx, tr))
 
-			store := &afterRead{Repo: repo, step: func() {
+			store := &afterRead{Stores: NewStores(repo), step: func() {
 				// What UpdateTrigger commits: the row's whole config, rebound.
 				_, err := repo.DB.DB(ctx).ExecContext(ctx, `UPDATE triggers SET config = $1 WHERE id = $2`, string(config(tc.after)), tr.ID)
 				require.NoError(t, err)
@@ -200,7 +200,7 @@ func TestProjectionWriteNeverIntroducesABinding(t *testing.T) {
 	}
 	require.NoError(t, repo.CreateTrigger(ctx, tr))
 
-	require.NoError(t, repo.SetTriggerProjection(ctx, tr.ID, core.TriggerProjection{
+	require.NoError(t, NewStores(repo).SetTriggerProjection(ctx, tr.ID, core.TriggerProjection{
 		Config: json.RawMessage(`{"integration":"github","events":["issues.opened"],"installation":"100"}`),
 	}))
 	got, err := repo.GetTrigger(ctx, tr.ID)

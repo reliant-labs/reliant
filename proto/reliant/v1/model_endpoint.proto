@@ -28,7 +28,9 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // Configuring an endpoint is for everything detection cannot find.
 service ModelEndpointService {
   // forge:custom — scoped to the caller, and resolves each endpoint's credential and last probe
-  rpc ListModelEndpoints(ListModelEndpointsRequest) returns (ListModelEndpointsResponse) {}
+  rpc ListModelEndpoints(ListModelEndpointsRequest) returns (ListModelEndpointsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // CreateModelEndpoint validates, probes, and stores an endpoint. The probe
   // result is returned; a failing probe does NOT prevent saving (the server
   // may simply be down right now), it is reported in `probe`.

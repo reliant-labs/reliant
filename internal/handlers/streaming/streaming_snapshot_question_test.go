@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // questionStatusesInSnapshot returns the status of every question update the
@@ -107,7 +108,7 @@ func TestChatSnapshot_DoesNotReplayAnsweredQuestion(t *testing.T) {
 		QuestionID: questionID, ChatID: chatID, Status: "resolved",
 	}))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	statuses := questionStatusesInSnapshot(t, snapshot)
@@ -144,7 +145,7 @@ func TestChatSnapshot_StillDeliversUnansweredQuestion(t *testing.T) {
 		Metadata: `{"type":"ask_user","questions":[{"question":"Which branch?"}]}`,
 	}))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	statuses := questionStatusesInSnapshot(t, snapshot)
@@ -182,7 +183,7 @@ func TestTerminateChat_EmitsQuestionResolved(t *testing.T) {
 		Metadata: `{"type":"ask_user","questions":[{"question":"Ship it?"}]}`,
 	}))
 
-	runSvc := runs.NewService(repo, &questionResolveTemporalClient{}, nil)
+	runSvc := runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: &questionResolveTemporalClient{}, Pause: nil})
 	require.NoError(t, runSvc.Terminate(ctx, chatID))
 
 	q, err := repo.GetQuestionByID(ctx, questionID)
@@ -190,7 +191,7 @@ func TestTerminateChat_EmitsQuestionResolved(t *testing.T) {
 	require.Equal(t, db.QuestionStatusResolved, q.Status,
 		"terminate must void the pending question")
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	statuses := questionStatusesInSnapshot(t, snapshot)

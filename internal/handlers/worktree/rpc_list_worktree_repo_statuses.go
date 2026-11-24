@@ -37,14 +37,14 @@ func (s *Service) ListWorktreeRepoStatuses(
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.getWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
 
 	var statuses []*reliantv1.WorktreeRepoStatus
 	err = s.gitReadOnDisk(ctx, userID, worktree, func() error {
-		repos, err := s.deps.Repo.ListReposByProject(ctx, worktree.ProjectID)
+		repos, err := s.listRepos(ctx, worktree.ProjectID)
 		if err != nil {
 			return svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
 		}

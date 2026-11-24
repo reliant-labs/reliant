@@ -125,18 +125,21 @@ func NewConnectionServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+ConnectionServiceListIntegrationsProcedure,
 			connect.WithSchema(connectionServiceMethods.ByName("ListIntegrations")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listConnections: connect.NewClient[v1.ListConnectionsRequest, v1.ListConnectionsResponse](
 			httpClient,
 			baseURL+ConnectionServiceListConnectionsProcedure,
 			connect.WithSchema(connectionServiceMethods.ByName("ListConnections")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getConnection: connect.NewClient[v1.GetConnectionRequest, v1.GetConnectionResponse](
 			httpClient,
 			baseURL+ConnectionServiceGetConnectionProcedure,
 			connect.WithSchema(connectionServiceMethods.ByName("GetConnection")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createApiKeyConnection: connect.NewClient[v1.CreateApiKeyConnectionRequest, v1.CreateApiKeyConnectionResponse](
@@ -185,6 +188,7 @@ func NewConnectionServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+ConnectionServiceListConnectionEventsProcedure,
 			connect.WithSchema(connectionServiceMethods.ByName("ListConnectionEvents")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -311,18 +315,21 @@ func NewConnectionServiceHandler(svc ConnectionServiceHandler, opts ...connect.H
 		ConnectionServiceListIntegrationsProcedure,
 		svc.ListIntegrations,
 		connect.WithSchema(connectionServiceMethods.ByName("ListIntegrations")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	connectionServiceListConnectionsHandler := connect.NewUnaryHandler(
 		ConnectionServiceListConnectionsProcedure,
 		svc.ListConnections,
 		connect.WithSchema(connectionServiceMethods.ByName("ListConnections")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	connectionServiceGetConnectionHandler := connect.NewUnaryHandler(
 		ConnectionServiceGetConnectionProcedure,
 		svc.GetConnection,
 		connect.WithSchema(connectionServiceMethods.ByName("GetConnection")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	connectionServiceCreateApiKeyConnectionHandler := connect.NewUnaryHandler(
@@ -371,6 +378,7 @@ func NewConnectionServiceHandler(svc ConnectionServiceHandler, opts ...connect.H
 		ConnectionServiceListConnectionEventsProcedure,
 		svc.ListConnectionEvents,
 		connect.WithSchema(connectionServiceMethods.ByName("ListConnectionEvents")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.ConnectionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

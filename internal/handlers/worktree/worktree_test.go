@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 	"github.com/stretchr/testify/assert"
@@ -43,7 +44,12 @@ func newWorktreeService(t testing.TB, repo Repository, router Router, settler ..
 	if len(settler) > 0 {
 		deps.Settler = settler[0]
 	}
-	svc, err := New(deps)
+	if r, ok := repo.(*db.Repo); ok {
+		deps.Rows = store.NewWorktreeExtStore(r.ORM())
+	} else {
+		deps.Rows = &MockRows{}
+	}
+	svc, err := New(WithReadRoles(deps))
 	require.NoError(t, err)
 	return svc
 }

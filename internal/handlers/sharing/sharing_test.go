@@ -23,7 +23,7 @@ func sharingFixture(t *testing.T) (*Service, *viewertest.Fixture) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	return NewTestSharing(t, WithSharingDeps(Deps{Repo: repo, Orgs: f.Membership})), f
+	return NewTestSharing(t, WithSharingDeps(realDeps(repo, f.Membership))), f
 }
 
 const (
@@ -275,7 +275,7 @@ func TestListSharedWithoutOrgs(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestSharing(t, WithSharingDeps(Deps{Repo: repo}))
+	svc := NewTestSharing(t, WithSharingDeps(realDeps(repo, nil)))
 	resp, err := svc.ListSharedChats(f.Viewer, connect.NewRequest(&pb.ListSharedChatsRequest{}))
 	require.NoError(t, err)
 	assert.Empty(t, resp.Msg.Chats)
@@ -453,7 +453,7 @@ func TestListSharedWorkflowDrafts(t *testing.T) {
 		_, err := setDraft(svc, s.ctx, s.id, org)
 		require.NoError(t, err, s.id)
 	}
-	_, err := f.Repo.SetWorkflowDraftHidden(f.Owner, hidden, true)
+	_, err := store.SetWorkflowDraftHidden(f.Owner, f.Repo.ORM(), hidden, true)
 	require.NoError(t, err)
 	// first was shared earlier than second.
 	_, err = f.Repo.ORM().Bun().NewRaw(`UPDATE workflow_drafts SET shared_at = shared_at - interval '1 hour' WHERE id = ?`, first).Exec(context.Background())

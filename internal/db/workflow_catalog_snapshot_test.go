@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A union pin reads the project's workflows and presets from one committed
@@ -99,14 +100,14 @@ func TestWorkflowCheckpointRecordsTheCatalogPin(t *testing.T) {
 	defer repo.Close()
 	ctx := context.Background()
 	workflowID := "wf-" + uuid.NewString()
-	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &WorkflowCheckpoint{
+	require.NoError(t, store.SaveWorkflowCheckpoint(ctx, repo.ORM(), &WorkflowCheckpoint{
 		WorkflowID: workflowID, ChatID: "chat-" + uuid.NewString(), NodeID: "loop", LoopIteration: 2, CatalogPin: "pin-1",
 	}))
 	cp, err := repo.GetWorkflowCheckpoint(ctx, workflowID)
 	require.NoError(t, err)
 	assert.Equal(t, "pin-1", cp.CatalogPin)
 
-	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &WorkflowCheckpoint{WorkflowID: workflowID, ChatID: cp.ChatID, NodeID: "loop"}))
+	require.NoError(t, store.SaveWorkflowCheckpoint(ctx, repo.ORM(), &WorkflowCheckpoint{WorkflowID: workflowID, ChatID: cp.ChatID, NodeID: "loop"}))
 	cp, err = repo.GetWorkflowCheckpoint(ctx, workflowID)
 	require.NoError(t, err)
 	assert.Empty(t, cp.CatalogPin, "a run with no pin records none")

@@ -7,10 +7,11 @@ spaces, repeated slashes, percent signs, and Unicode survive links unchanged.
 Changing bucket or prefix clears the opaque page token and selected object.
 
 The dev-only `/forge-storage-preview` route mounts the real browser in the console
-chrome against `__fixtures__/fixtureStorageApi.ts`. `env=prod` exercises audited
-access; `case=deny|denied|empty|buckets-down|shape|rate|loading|slow` selects other states. `dark=1` and
-`scheme=pure-black` select appearance. Downloads in this harness only increment a
-counter; they never navigate to the fixture URL.
+chrome, on its real client over the shop fixture pack (`src/fixtures/shop`).
+`env=prod` exercises audited access; `case=deny|denied|empty|buckets-down|shape|rate|loading|slow`
+selects other states (overlays in `src/fixtures/shop/overlays/browsers.ts`). `dark=1` and
+`scheme=pure-black` select appearance. Downloads are refused there, as everywhere on
+the pack: no URL is minted. The component tests use `__fixtures__/fixtureStorageApi.ts`.
 
 ## Source and verification
 

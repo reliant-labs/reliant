@@ -210,6 +210,15 @@ The phases:
      test and typecheck phases.
    - **migsafety** is `forge lint --migration-safety`, and runs only when a
      migration changed.
+   - **closedsets** is `forge lint --closed-sets`, and runs when a migration,
+     `go.mod` or `forge.yaml` changed. A CHECK declared `forge:closed-set`
+     (access_tokens' scopes) must list exactly the set the pinned forge carries;
+     a pin bump that grows it needs a widening migration
+     (`task db:migration NAME="<name> --closed-set <constraint>"`). It is its own
+     phase, not a lane of the scoped lint, because a pin bump changes only root
+     files and has no directory to scope to. Without it, the forge bump that
+     added `mcp:oauth` and `mcp:forge` merged and the release gate's DB test
+     failed (#3382).
    - **migorder** is `go run ./tools/test-affected migration-order`, and runs
      only when a migration changed. It fetches `origin/main` and fails a
      migration versioned at or below main's newest, which golang-migrate would
@@ -238,7 +247,7 @@ The gate fails closed on a phase that never completed. Every phase records
 itself in `$MG_LOGDIR/expected` before it launches and leaves a `<phase>.row`
 only when it finishes. The last step, `go run ./tools/test-affected gate-verify`,
 compares what the plan **obliges** (build, test, plus `generate`, `docs`,
-`migorder`, `typecheck`, `demo`, `migsafety`, `lint`, `golangci` as the plan, the diff and
+`migorder`, `typecheck`, `demo`, `migsafety`, `closedsets`, `lint`, `golangci` as the plan, the diff and
 the tier select them) and what the gate **started** against the rows. A phase with no row
 (queued for a slot and cut off, cancelled, timed out, its tool missing) fails
 the gate and is named: `FAILED: docs never completed (no result row; ...)`.
@@ -748,6 +757,30 @@ single-parent squash commit on top of the entry ahead of it (or main). When it
 does not hold, the script exits 2 naming the parent count or the ancestry it
 expected: it refuses, it never passes a break it could not isolate.
 
+**One `buf breaking` finding is additive, not a waiver.** buf's FILE rules
+report any change of an rpc's `idempotency_level` (`RPC_SAME_IDEMPOTENCY_LEVEL`),
+including an rpc that declared none now declaring `NO_SIDE_EFFECTS` or
+`IDEMPOTENT`. That direction changes nothing on the wire: a Connect server also
+accepts GET for a `NO_SIDE_EFFECTS` rpc, every existing client (old daemons,
+SDKs, Electron, web) keeps sending POST, and no reliant client turns GET on. It
+only adds a promise the handler already keeps. So `check-compat.sh proto` runs
+`buf breaking --error-format json` and counts a finding as additive only when its
+`type` is exactly `RPC_SAME_IDEMPOTENCY_LEVEL` and its message is exactly
+`... changed option "idempotency_level" from "IDEMPOTENCY_UNKNOWN" to
+"NO_SIDE_EFFECTS"` (or `"IDEMPOTENT"`). It logs those as `additive, not
+breaking`. Every other finding still needs `breaking:approved`: dropping or
+downgrading `NO_SIDE_EFFECTS` or `IDEMPOTENT` withdraws a promise a client may
+already retry or GET-cache on, and `IDEMPOTENT` to `NO_SIDE_EFFECTS` is left out
+on purpose to keep the exemption to the one change it was made for. A
+run that exits for any reason but findings, a line that is not a finding object,
+or no `jq` on PATH exempts nothing. buf's rule stays on: the narrow exemption is
+in the gate, so a hand-run `buf breaking` still lists the additive findings.
+`scripts/test-check-compat.sh` covers both directions. The vendored control-plane
+contract (`proto-vendor/controlplane/`) is outside this buf workspace, so a
+re-vendor is judged only by `task contract:controlplane:check` (exactly
+`SOURCE`'s export), not by this check; its wire compatibility is control-plane's
+`scripts/check-vendored-proto.sh` to enforce.
+
 **Check after the first queue run that reaches it** (the first entry touching
 `proto/` or `db/migrations/` after this lands): its `task ci:merge -- --queue`
 step logs `check-compat: proto unchanged since <sha>`, `... wire-compatible
@@ -777,8 +810,49 @@ job is setup, then `task <name>`, so CI cannot disagree with a local run.
 | Event | Job | Runs |
 |---|---|---|
 | `pull_request` (each push) | `Review marker`, `CI result` | nothing heavy: a notice whether `pr-review` passed this head, and the verdict, green in about a minute. Label the PR **`ci:run`** to get the merge gate and the path lanes on it too; it is read on the next push (an empty commit will do), because `ci.yml` does not run on `labeled` (a label run would replace the head's `CI result`) |
-| `merge_group` (`merge-queue.yml`) | `Merge gate`, `golangci (changed)` and `vitest (1/4)`..`(4/4)` in parallel, then `CI result` | `Merge gate`: `task ci:merge -- --base <the group's base> --queue --skip-vitest`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, then the five-minute budget check. `golangci (changed)`: `task ci:golangci -- --base <the group's base>`. `vitest`: `scripts/vitest-shard.sh --base <the group's base> --shard <i>/4`. `CI result`: passes only when all three succeeded, from `needs` alone. No path lanes |
+| `merge_group` (`merge-queue.yml`) | `Merge gate`, `golangci (changed)`, `vitest (1/4)`..`(4/4)` and `Visual baseline` in parallel, then `CI result` | `Merge gate`: `task ci:merge -- --base <the group's base> --queue --skip-vitest`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, then the five-minute budget check. `golangci (changed)`: `task ci:golangci -- --base <the group's base>`. `vitest`: `scripts/vitest-shard.sh --base <the group's base> --shard <i>/4`. `Visual baseline`: when `scripts/ci-lanes.sh`'s `visual` lane says the group reaches the web UI, `scripts/visual-gate.sh` (the visual suite in the pinned Playwright image, compare only, on the group's commit; [below](#the-visual-baseline-in-the-queue)); otherwise a pass with a notice saying why. `CI result`: passes only when all four succeeded, from `needs` alone. No other path lanes |
 | push to `main`, nightly, `workflow_dispatch` | `Release gate (<part>)`, the path lanes, then `Release gate` | each part of the gate as its own job, `task release:gate -- --part <part> [--shard I/N] <sha>` (generate, webbuild, compile, lint, go 1/4..4/4, web; `task ci:repo-checks` in compile), then `Release gate` assembles the part records (`scripts/release-gate.sh assemble`) into the one record. On `main` it publishes it as the git note above, so a CI green counts for `task release:tag`. A missing part or shard fails the assembly closed, and so does a red release build, Playwright or electron smoke (no record) |
+
+### The visual baseline in the queue
+
+Owner, 2026-11-24 (reliant#3446). The visual suite (`frontends/web/e2e/visual`)
+was opt-in, and main's baselines went stale two ways: a PR captured on a base
+that lacked another PR's UI change, or a later commit on the PR (a pr-fix push)
+moved pixels after the capture. The next UI PR then inherited dozens of failures
+it did not cause. The merge queue now runs it, compare only
+(`--update-snapshots=none`), on the merge group's own commit, main plus the
+entries ahead, so both kinds fail on the PR that causes them.
+
+- **When.** `scripts/ci-lanes.sh`'s `visual` lane: what the renderer's production
+  build and the suite read (`frontends/web` sources, styles, `public/`, HTML
+  entries, vite/tailwind/postcss/tsconfig, `package.json`, the lockfile and pnpm
+  patches, the `sdk/ts` sources it aliases, `e2e/visual/`, its config and
+  runner), minus unit tests, the other Playwright suites, lint configs and
+  docs, plus the lane's own wiring. A group that reaches none of it passes the
+  job in seconds with a notice.
+- **What it runs.** `scripts/visual-gate.sh`: `task test:web:visual --
+  --update-snapshots=none` (the build with the pinned `RELEASE_VERSION`, then
+  the suite in the pinned image through `visual-docker.sh`, on the hosted
+  runner's docker), then Playwright's JSON report. A capture that differs fails
+  the job with a table of surfaces and what differed, the re-capture commands,
+  and the diffs as the `visual-results` artifact. A lane that compared nothing
+  (no build, no docker, no report, no capture run) fails too: it is never a
+  pass.
+- **Cost.** Its own runner, beside the gate, so a web group pays only what it
+  runs past the gate's other workers. Measured on the hosted runner
+  (2026-11-24, two runs): 371s and 381s from the run's creation to the job's
+  end (install ~8s, build 64-67s, 166 captures in 4.3-4.5 min with 3 workers),
+  166/166 both times. The last 20 web-touching groups' workers ended at a
+  median 374s (p25 312s), so the lane adds a median ~16s and at most ~80s to
+  a web group's wall time. A group it skips spends ~20s on a runner, beside the
+  gate.
+- **Flakes.** `retries: 0`, and nothing re-runs. A surface that differs on a
+  commit whose UI did not move is deleted with a `flake:removed` issue.
+- **The backstop.** `.github/workflows/visual-nightly.yml` runs the same script
+  on main every night and keeps one rolling `visual:stale` issue
+  (`.github/scripts/visual-stale-issue.sh`): a mismatch opens, reopens or
+  comments on it; the next green closes it. It never blocks a merge or a
+  release.
 
 ### Why the release gate runs as parts in CI
 

@@ -66,7 +66,7 @@ func (s *Service) SaveWorkflow(
 
 	if req.Msg.DraftId != nil && *req.Msg.DraftId != "" {
 		// Look up by draft ID first - this allows renames to work correctly
-		draft, err := s.deps.Repo.GetWorkflowDraft(ctx, *req.Msg.DraftId)
+		draft, err := s.deps.Drafts.GetWorkflowDraft(ctx, *req.Msg.DraftId)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow draft by ID"))
 		}
@@ -81,7 +81,7 @@ func (s *Service) SaveWorkflow(
 
 		// If slug is changing (rename), check that the new slug doesn't conflict with another workflow
 		if isRename {
-			conflicting, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
+			conflicting, err := s.deps.Drafts.GetWorkflowDraftBySlug(ctx, userID, slug)
 			if err != nil {
 				return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check slug conflict"))
 			}
@@ -93,7 +93,7 @@ func (s *Service) SaveWorkflow(
 
 	// Fall back to slug-based lookup if draft_id not provided or not found
 	if existingUserWorkflow == nil {
-		draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
+		draft, err := s.deps.Drafts.GetWorkflowDraftBySlug(ctx, userID, slug)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check existing workflow"))
 		}
@@ -133,7 +133,7 @@ func (s *Service) SaveWorkflow(
 
 		// Check for duplicate names among user's workflows
 		// Since !isUpdate means no existing workflow by this slug, any name match is a duplicate
-		existingByName, err := s.deps.Repo.GetWorkflowDraftByName(ctx, userID, protoWf.Name)
+		existingByName, err := s.deps.Drafts.GetWorkflowDraftByName(ctx, userID, protoWf.Name)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check existing workflow name"))
 		}
@@ -178,7 +178,7 @@ func (s *Service) SaveWorkflow(
 		if !isValid {
 			return rejected("Workflow not saved: project workflows run straight from the file, so they must pass validation — " + check.summary()), nil
 		}
-		project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+		project, err := s.deps.ProjectRows.GetProject(ctx, req.Msg.ProjectId)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 		}
@@ -300,18 +300,18 @@ func (s *Service) SaveWorkflow(
 	var saved *db.WorkflowDraft
 	if isRename {
 		// Rename case: update by ID to change the slug
-		if err := s.deps.Repo.UpdateWorkflowDraft(ctx, draft); err != nil {
+		if err := s.deps.Drafts.UpdateWorkflowDraft(ctx, draft); err != nil {
 			// A taken slug is the store's AlreadyExists (db.ErrWorkflowSlugTaken).
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update workflow"))
 		}
 		// Fetch the updated draft to get the new version
-		saved, err = s.deps.Repo.GetWorkflowDraft(ctx, draftID)
+		saved, err = s.deps.Drafts.GetWorkflowDraft(ctx, draftID)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get updated workflow"))
 		}
 	} else {
 		// Normal case: upsert by (user_id, slug)
-		saved, err = s.deps.Repo.UpsertWorkflowDraft(ctx, draft)
+		saved, err = s.deps.Drafts.UpsertWorkflowDraft(ctx, draft)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save workflow"))
 		}

@@ -112,6 +112,15 @@ func oauthFlowToCore(row *OauthFlow, err error) (*core.OAuthFlow, error) {
 	}, nil
 }
 
+// DeleteUserOAuthFlows deletes the person's pending and consumed OAuth flows, and returns how many.
+func DeleteUserOAuthFlows(ctx context.Context, db orm.Context, userID string) (int64, error) {
+	res, err := db.Bun().NewDelete().Model((*OauthFlow)(nil)).Where("user_id = ?", userID).Exec(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // OauthFlowExtra carries fields on OauthFlow that are NOT columns — computed
 // values, transient state, anything derived rather than stored. OauthFlow is
 // embedded on OauthFlowExtra (see oauth_flow_orm.go), so a field added here is a field on

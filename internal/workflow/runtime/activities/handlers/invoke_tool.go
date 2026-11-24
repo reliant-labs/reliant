@@ -8,6 +8,10 @@ import (
 	"sort"
 	"strings"
 
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+	structpb "google.golang.org/protobuf/types/known/structpb"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -16,9 +20,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/temporal"
-	structpb "google.golang.org/protobuf/types/known/structpb"
 )
 
 // An invoke_tool node runs ONE tool because the graph says so, rather than
@@ -45,10 +46,24 @@ type InvokeToolActivity struct {
 }
 
 // NewInvokeToolActivity creates a new InvokeToolActivity.
-func NewInvokeToolActivity(repo ExecuteToolsStore, toolExecutor toolexec.ToolExecutor) *InvokeToolActivity {
+func NewInvokeToolActivity(repo ExecuteToolsStore, rows WorkspaceRows, toolCalls ToolCalls, toolExecutor toolexec.ToolExecutor) *InvokeToolActivity {
 	return &InvokeToolActivity{
-		executeTools: NewExecuteToolsActivity(repo, toolExecutor),
+		executeTools: NewExecuteToolsActivity(repo, rows, toolCalls, toolExecutor),
 	}
+}
+
+// WithToolCallResults gives the tool-execution path the durable-result reader;
+// see ExecuteToolsActivity.WithToolCallResults.
+func (a *InvokeToolActivity) WithToolCallResults(r ToolCallResults) *InvokeToolActivity {
+	a.executeTools.WithToolCallResults(r)
+	return a
+}
+
+// WithRunFunding gives the tool-execution path the run's funding reader; see
+// ExecuteToolsActivity.WithRunFunding.
+func (a *InvokeToolActivity) WithRunFunding(s RunFundingStore) *InvokeToolActivity {
+	a.executeTools.WithRunFunding(s)
+	return a
 }
 
 // WithWorktreeReviver gives the tool-execution path the archived-worktree
@@ -69,6 +84,13 @@ func (a *InvokeToolActivity) WithConfigProvider(provider cfgpkg.ConfigProvider) 
 // resolve through; see ExecuteToolsActivity.WithDaemonRouter.
 func (a *InvokeToolActivity) WithDaemonRouter(router toolexec.DaemonRouter) *InvokeToolActivity {
 	a.executeTools.WithDaemonRouter(router)
+	return a
+}
+
+// WithChatProjects gives the tool-execution path the reader of a chat's
+// attached projects; see ExecuteToolsActivity.WithChatProjects.
+func (a *InvokeToolActivity) WithChatProjects(l ChatProjectLister) *InvokeToolActivity {
+	a.executeTools.WithChatProjects(l)
 	return a
 }
 

@@ -45,7 +45,23 @@ type Relay struct {
 	store       RelayStore
 	router      *EventsReceiver
 	connections PollConnectionReader
+	consumer    DeliveryConsumer
 	now         func() time.Time
+}
+
+// DeliveryConsumer is handed each integration delivery's events before they
+// are routed (PR records, dev-docs/pr-records.md §2.1). It must be idempotent
+// per (provider, deliveryKey, event index): a delivery whose consumer or
+// routing fails is retried whole. An error retries the delivery like a
+// routing error.
+type DeliveryConsumer interface {
+	ConsumeDelivery(ctx context.Context, provider, deliveryKey string, receivedAt time.Time, events []Event) error
+}
+
+// WithDeliveryConsumer registers the consumer of integration deliveries.
+func (r *Relay) WithDeliveryConsumer(c DeliveryConsumer) *Relay {
+	r.consumer = c
+	return r
 }
 
 func NewRelay(store RelayStore, intake Intake, connections PollConnectionReader, pause *triggers.AutoPause) *Relay {
@@ -167,6 +183,11 @@ func (r *Relay) routeIntegration(ctx context.Context, d core.TriggerDelivery) er
 	var body integrationDelivery
 	if err := json.Unmarshal(d.Payload, &body); err != nil {
 		return errInvalidInboxPayload
+	}
+	if r.consumer != nil && len(body.Events) != 0 {
+		if err := r.consumer.ConsumeDelivery(ctx, d.Provider, d.DeliveryKey, d.ReceivedAt, body.Events); err != nil {
+			return err
+		}
 	}
 	var verified []*core.IntegrationTriggerRoute
 	if body.Verified != nil {

@@ -18,6 +18,8 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
@@ -377,7 +379,7 @@ func TestDetachProjectFromDaemon_ForgetsTheRowAndKeepsTheFiles(t *testing.T) {
 
 	assert.Equal(t, map[string]string{f.cloud: path}, f.rows(t, p.ID))
 	assert.Empty(t, f.disk.callsTo(f.laptop), "a detach sends the machine nothing: its files are not touched")
-	detached, err := f.repo.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.laptop)
+	detached, err := store.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.repo.ORM(), f.laptop)
 	require.NoError(t, err)
 	require.Len(t, detached, 1)
 	assert.Equal(t, local, detached[0].Path)
@@ -398,7 +400,7 @@ func TestDetachProjectFromDaemon_ForgetsTheRowAndKeepsTheFiles(t *testing.T) {
 		ProjectId: p.ID, DaemonId: f.laptop, Path: local,
 	}))
 	require.NoError(t, err)
-	detached, err = f.repo.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.laptop)
+	detached, err = store.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.repo.ORM(), f.laptop)
 	require.NoError(t, err)
 	assert.Empty(t, detached)
 }
@@ -534,13 +536,13 @@ func TestDetachProjectFromDaemon_ConcurrentDetachesLeaveOneCheckout(t *testing.T
 // moveBeforeDetach is the repository with an attach that moves the checkout
 // landing between the detach's unlocked read and its locked one.
 type moveBeforeDetach struct {
-	Repository
+	Detachments
 	move func(ctx context.Context)
 }
 
 func (m moveBeforeDetach) DetachProjectFromDaemon(ctx context.Context, projectID, daemonID, path string, guard func(context.Context) error) error {
 	m.move(ctx)
-	return m.Repository.DetachProjectFromDaemon(ctx, projectID, daemonID, path, guard)
+	return m.Detachments.DetachProjectFromDaemon(ctx, projectID, daemonID, path, guard)
 }
 
 // A checkout moved by a concurrent attach is not detached under its old path:
@@ -552,9 +554,9 @@ func TestDetachProjectFromDaemon_RefusesACheckoutMovedUnderIt(t *testing.T) {
 	p := f.project(t, "m", "/home/workspace/m-"+uuid.NewString(), f.cloud, nil)
 	oldPath, newPath := "/Users/me/m-"+uuid.NewString(), "/Users/me/moved-"+uuid.NewString()
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, p.ID, f.laptop, oldPath, nil))
-	svc := newProjectService(t, moveBeforeDetach{Repository: f.repo, move: func(ctx context.Context) {
+	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: f.repo, Projects: projectaccesstest.For(f.repo), Router: f.disk, Detachments: moveBeforeDetach{Detachments: store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), move: func(ctx context.Context) {
 		require.NoError(t, f.repo.UpsertProjectDaemon(ctx, p.ID, f.laptop, newPath, nil))
-	}}, f.disk)
+	}}})))
 
 	_, err := svc.DetachProjectFromDaemon(f.ctx, connect.NewRequest(&reliantv1.DetachProjectFromDaemonRequest{
 		ProjectId: p.ID, DaemonId: f.laptop,
@@ -562,7 +564,7 @@ func TestDetachProjectFromDaemon_RefusesACheckoutMovedUnderIt(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeAborted, codeOf(err))
 	assert.Equal(t, newPath, f.rows(t, p.ID)[f.laptop], "the moved checkout's row stays")
-	detached, err := f.repo.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.laptop)
+	detached, err := store.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.repo.ORM(), f.laptop)
 	require.NoError(t, err)
 	assert.Empty(t, detached, "no tombstone for the path it moved away from")
 
@@ -570,7 +572,7 @@ func TestDetachProjectFromDaemon_RefusesACheckoutMovedUnderIt(t *testing.T) {
 		ProjectId: p.ID, DaemonId: f.laptop,
 	}))
 	require.NoError(t, err)
-	detached, err = f.repo.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.laptop)
+	detached, err = store.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.repo.ORM(), f.laptop)
 	require.NoError(t, err)
 	require.Len(t, detached, 1)
 	assert.Equal(t, newPath, detached[0].Path)

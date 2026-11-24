@@ -236,7 +236,7 @@ func (s *Service) labelAccounts(ctx context.Context, buckets []*pb.LLMUsageBucke
 			ids = append(ids, b.Key)
 		}
 	}
-	names, err := s.deps.Store.ProviderAccountNames(ctx, ids)
+	names, err := s.deps.Accounts.ProviderAccountNames(ctx, ids)
 	if err != nil {
 		s.deps.Logger.WarnContext(ctx, "usage: account names could not be read; showing ids", "error", err)
 		return

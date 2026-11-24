@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
@@ -22,7 +24,7 @@ func TestUploadScenario_Generated(t *testing.T) {
 	router := &scenario.MockSender{PlacementDaemonIDFunc: placeAsNamed, SendDaemonCommandToDaemonFunc: func(context.Context, string, string, string, []byte, int32) ([]byte, error) {
 		return nil, nil
 	}}
-	svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Router: router}))
+	svc := scenario.NewTestScenario(t, withDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Projects: projectaccesstest.For(newScenarioRepo(&fixture{})), Router: router}))
 	upload := func(mut func(*pb.UploadScenarioRequest)) *connect.Request[pb.UploadScenarioRequest] {
 		req := &pb.UploadScenarioRequest{ProjectId: ownProjectID, WorkflowSlug: ownWorkflowSlug, Filename: "drafts.yaml", YamlContent: fixtureScenario}
 		mut(req)
@@ -80,7 +82,7 @@ func TestUploadScenario_Generated(t *testing.T) {
 	}, svc.UploadScenario)
 
 	t.Run("without a daemon router the upload is unavailable", func(t *testing.T) {
-		svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{})}))
+		svc := scenario.NewTestScenario(t, withDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Drafts: newScenarioDrafts(), Projects: projectaccesstest.For(newScenarioRepo(&fixture{}))}))
 		_, err := svc.UploadScenario(scenario.AuthedContext(t), upload(func(*pb.UploadScenarioRequest) {}))
 		require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 	})

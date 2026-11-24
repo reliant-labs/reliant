@@ -56,7 +56,7 @@ function commitOf(version: string): string {
 
 /**
  * The commits of the releases the demo console also shows
- * (Demo/demoData/consoleScenario.ts, DEMO_RELEASES): a chart marker names the
+ * (src/fixtures/shop/handlers/console.ts, DEMO_RELEASES): a chart marker names the
  * same commit as the Releases page. consoleScenario.test.ts holds the two equal.
  */
 const SHARED_COMMITS: Readonly<Record<string, string>> = {
@@ -66,7 +66,7 @@ const SHARED_COMMITS: Readonly<Record<string, string>> = {
   "v1.8.1": "07e2b9d4f1a0",
 };
 
-/** Who put v1.8.3 everywhere, as the console's ledger says (consoleScenario.ts). */
+/** Who put v1.8.3 everywhere, as the console's ledger says (handlers/console.ts). */
 const V183_PROMOTER = "jon";
 
 /** The fixture's ledger, oldest first, relative to `t0`. */
