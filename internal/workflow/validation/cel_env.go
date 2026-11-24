@@ -61,12 +61,14 @@ func newValidationCELEnv(namespaces []wfcel.CELNamespace, typeCtx *WorkflowTypeC
 		opts = append(opts, ext.NativeTypes(
 			ext.ParseStructTag("json"),
 			reflect.TypeOf(&model.WorkflowContext{}),
+			reflect.TypeOf(&model.ObservedNode{}),
 		))
 	} else {
 		opts = append(opts, ext.NativeTypes(
 			ext.ParseStructTag("json"),
 			reflect.TypeOf(&model.WorkflowContext{}),
 			reflect.TypeOf(&model.IterContext{}),
+			reflect.TypeOf(&model.ObservedNode{}),
 		))
 	}
 
@@ -145,6 +147,9 @@ func getNamespaceDecl(ns wfcel.CELNamespace, typeCtx *WorkflowTypeContext) cel.E
 			return cel.Variable(string(ns), cel.ObjectType("outputs"))
 		}
 		return cel.Variable(string(ns), cel.DynType)
+	case wfcel.CELNode:
+		// observe's `node`: fixed fields, so a typo is caught.
+		return cel.Variable(string(ns), cel.ObjectType("model.ObservedNode"))
 	case wfcel.CELOutput:
 		if typeCtx != nil && typeCtx.CurrentNodeOutputType != nil {
 			return cel.Variable(string(ns), typeCtx.CurrentNodeOutputType)

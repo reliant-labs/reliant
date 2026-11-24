@@ -472,12 +472,14 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.SharingService
-  // forge:hash=ba1f046d3f5e2a31ab553258cab866b4b4c9a190a2d52c5a4a39e9a8944b1851
+  // forge:hash=7b0522eaf5cc2056956809e46048457826e556678d77544fb78ef1b2da0d0e73
   & {
     "reliant.v1.SharingService/SetChatVisibility"?: (req: import("@/gen/reliant/v1/sharing_pb").SetChatVisibilityRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").SetChatVisibilityResponseSchema>>;
     "reliant.v1.SharingService/SetProjectVisibility"?: (req: import("@/gen/reliant/v1/sharing_pb").SetProjectVisibilityRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").SetProjectVisibilityResponseSchema>>;
     "reliant.v1.SharingService/ListSharedChats"?: (req: import("@/gen/reliant/v1/sharing_pb").ListSharedChatsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").ListSharedChatsResponseSchema>>;
     "reliant.v1.SharingService/ListSharedProjects"?: (req: import("@/gen/reliant/v1/sharing_pb").ListSharedProjectsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").ListSharedProjectsResponseSchema>>;
+    "reliant.v1.SharingService/SetWorkflowDraftSharing"?: (req: import("@/gen/reliant/v1/sharing_pb").SetWorkflowDraftSharingRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").SetWorkflowDraftSharingResponseSchema>>;
+    "reliant.v1.SharingService/ListSharedWorkflowDrafts"?: (req: import("@/gen/reliant/v1/sharing_pb").ListSharedWorkflowDraftsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").ListSharedWorkflowDraftsResponseSchema>>;
     "reliant.v1.SharingService/SetChatMember"?: (req: import("@/gen/reliant/v1/sharing_pb").SetChatMemberRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").SetChatMemberResponseSchema>>;
     "reliant.v1.SharingService/RemoveChatMember"?: (req: import("@/gen/reliant/v1/sharing_pb").RemoveChatMemberRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").RemoveChatMemberResponseSchema>>;
     "reliant.v1.SharingService/ListChatMembers"?: (req: import("@/gen/reliant/v1/sharing_pb").ListChatMembersRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").ListChatMembersResponseSchema>>;

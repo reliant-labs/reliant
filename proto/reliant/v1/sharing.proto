@@ -9,12 +9,14 @@ import "google/protobuf/timestamp.proto";
 import "reliant/v1/chat.proto";
 import "reliant/v1/common.proto";
 import "reliant/v1/project.proto";
+import "reliant/v1/workflow.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // SharingService is read-only sharing (control-plane
-// docs/design/org-sharing.md): an owner shares a chat or project with the
-// live members of its organization, who can then read it, never change it.
+// docs/design/org-sharing.md): an owner shares a chat, project or saved
+// workflow with the live members of its organization, who can then read it,
+// never change it.
 //
 // Sharing is reachable only through this service and the Chat/Project
 // visibility and viewer_access fields: no existing list (ListChats,
@@ -95,6 +97,48 @@ service SharingService {
     };
   }
 
+  // SetWorkflowDraftSharing shares a saved workflow (a workflow draft, in
+  // the caller's workflow library) with its organization (ORG) or makes it
+  // private again (PRIVATE), so a live member can publish one for the team to
+  // read and fork (control-plane docs/design/org-sharing.md §8.5). The rules
+  // are SetChatVisibility's: only the owner shares, as a person, and only a
+  // saved workflow that belongs to an org; an admin or owner of its org may
+  // make a member's shared one private, never share it; anyone who cannot
+  // read it is NOT_FOUND.
+  //
+  // Sharing a saved workflow shares its definition, read-only. It never lets
+  // a viewer run it as its owner, change it, or see the owner's runs of it.
+  // Not WorkflowService.SetWorkflowVisibility, which hides a workflow from
+  // its owner's own pickers and shares nothing.
+  rpc SetWorkflowDraftSharing(SetWorkflowDraftSharingRequest) returns (SetWorkflowDraftSharingResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_visibility"
+        target: {
+          kind: "workflow"
+          id: "response.workflow.slug"
+          label: "response.workflow.name"
+        }
+        detail: [
+          "workflow_id",
+          "visibility"
+        ]
+      }
+    };
+  }
+
+  // ListSharedWorkflowDrafts lists the saved workflows other members shared
+  // with an organization the caller is a live member of, most recently
+  // shared first: the team's shared workflow library. Never the caller's own
+  // (those are in WorkflowService.ListWorkflows), and never one its owner
+  // hid. Each carries its definition, to read and fork.
+  // forge:custom — SharedWorkflowDraft is a read of workflow_drafts shaped for viewers, not a table
+  rpc ListSharedWorkflowDrafts(ListSharedWorkflowDraftsRequest) returns (ListSharedWorkflowDraftsResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "reads only: lists what others shared"}
+    };
+  }
+
   // SetChatMember grants a person a level on a chat (VIEW, REPLY or MANAGE),
   // or changes the level they hold (control-plane
   // docs/design/chat-collaboration.md §3). A grant admits its holder only
@@ -158,75 +202,6 @@ service SharingService {
       activity: {none: "reads only: who may access a chat"}
     };
   }
-}
-
-// ChatMemberRole is the level a person holds on a chat. Levels nest: each
-// includes everything below it. The owner is never a member.
-enum ChatMemberRole {
-  // A server that predates chat collaboration, or no grant.
-  CHAT_MEMBER_ROLE_UNSPECIFIED = 0;
-  // Read the chat, as an org-wide viewer of a shared chat does.
-  CHAT_MEMBER_ROLE_VIEW = 1;
-  // View, plus send messages and answer what the chat asks.
-  CHAT_MEMBER_ROLE_REPLY = 2;
-  // Reply, plus steer the run, change its settings and its members.
-  CHAT_MEMBER_ROLE_MANAGE = 3;
-}
-
-// ChatMember is one person's grant on a chat.
-message ChatMember {
-  string user_id = 1;
-  ChatMemberRole role = 2;
-  // Who set the level they hold now.
-  string granted_by = 3;
-  // When they first became a member.
-  google.protobuf.Timestamp created_at = 4;
-}
-
-message SetChatMemberRequest {
-  string chat_id = 1 [(buf.validate.field).string.min_len = 1];
-  string user_id = 2 [(buf.validate.field).string.min_len = 1];
-  // VIEW, REPLY or MANAGE.
-  ChatMemberRole role = 3 [(buf.validate.field).enum = {
-    in: [
-      1,
-      2,
-      3
-    ]
-  }];
-}
-
-message SetChatMemberResponse {
-  // The grant as it now stands.
-  ChatMember member = 1;
-  // False when the person already held the level asked for.
-  bool changed = 2;
-}
-
-message RemoveChatMemberRequest {
-  string chat_id = 1 [(buf.validate.field).string.min_len = 1];
-  string user_id = 2 [(buf.validate.field).string.min_len = 1];
-}
-
-message RemoveChatMemberResponse {
-  // False when the person held no grant.
-  bool changed = 1;
-}
-
-message ListChatMembersRequest {
-  string chat_id = 1 [(buf.validate.field).string.min_len = 1];
-}
-
-message ListChatMembersResponse {
-  string owner_user_id = 1;
-  // The members the caller may see (see ListChatMembers), oldest first.
-  repeated ChatMember members = 2;
-  // How many members the chat has, including those not listed.
-  int32 member_count = 3;
-  // The level the caller reads the chat at: VIEW for a viewer (a VIEW grant,
-  // or any member of the organization a chat is shared with), REPLY or
-  // MANAGE for a member holding that grant, UNSPECIFIED for the owner.
-  ChatMemberRole caller_role = 4;
 }
 
 message SetChatVisibilityRequest {
@@ -317,4 +292,142 @@ message ListSharedProjectsRequest {
 
 message ListSharedProjectsResponse {
   repeated Project projects = 1;
+}
+
+// SharedWorkflowDraft is a saved workflow as sharing answers it: what a
+// teammate needs to read and fork it, and nothing of the owner's beyond it
+// (no source path on the owner's machine, no origin, no OCC version).
+message SharedWorkflowDraft {
+  // The saved workflow's id (WorkflowListItem.draft_id for its owner).
+  string id = 1;
+  // The runtime reference name, unique per owner, not per org.
+  string slug = 2;
+  // Display name.
+  string name = 3;
+  optional string description = 4;
+  // The owner: the member who saved and shared it.
+  string user_id = 5;
+  // The organization it belongs to and is shared with.
+  string org_id = 6;
+  // DRAFT (work in progress, may be invalid) or COMPLETE (runnable).
+  WorkflowDraftStatus status = 7;
+  // ORG while shared; PRIVATE after it was made private (in a
+  // SetWorkflowDraftSharing answer to its owner).
+  ResourceVisibility visibility = 8;
+  // True when the caller reads it as a VIEWER (a member of its org, not its
+  // owner): read-only, to read and fork.
+  bool viewer_access = 9;
+  // When it was shared (RFC 3339); unset while private.
+  optional string shared_at = 10;
+  // When its definition last changed (RFC 3339).
+  string updated_at = 11;
+  // The stored YAML definition, as its owner saved it. A teammate forks it by
+  // saving a copy of their own (WorkflowService.ImportWorkflow).
+  string definition = 12;
+}
+
+message SetWorkflowDraftSharingRequest {
+  // The saved workflow's id (WorkflowListItem.draft_id).
+  string workflow_id = 1 [(buf.validate.field).string.min_len = 1];
+  // ORG or PRIVATE.
+  ResourceVisibility visibility = 2 [(buf.validate.field).enum = {
+    in: [
+      1,
+      2
+    ]
+  }];
+}
+
+message SetWorkflowDraftSharingResponse {
+  // The saved workflow as the caller now reads it: unset when they read it no
+  // longer (an admin who made it private).
+  SharedWorkflowDraft workflow = 1;
+  // False when it already had the visibility asked for.
+  bool changed = 2;
+}
+
+message ListSharedWorkflowDraftsRequest {
+  // The organization whose shared workflows to list: one the caller is a
+  // live member of (PERMISSION_DENIED otherwise). Unset: the caller's default
+  // organization.
+  optional string org_id = 1;
+  // At most this many (default and cap 100).
+  int32 limit = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 100
+  }];
+  int32 offset = 3 [(buf.validate.field).int32.gte = 0];
+}
+
+message ListSharedWorkflowDraftsResponse {
+  repeated SharedWorkflowDraft workflows = 1;
+}
+
+// ChatMemberRole is the level a person holds on a chat. Levels nest: each
+// includes everything below it. The owner is never a member.
+enum ChatMemberRole {
+  // A server that predates chat collaboration, or no grant.
+  CHAT_MEMBER_ROLE_UNSPECIFIED = 0;
+  // Read the chat, as an org-wide viewer of a shared chat does.
+  CHAT_MEMBER_ROLE_VIEW = 1;
+  // View, plus send messages and answer what the chat asks.
+  CHAT_MEMBER_ROLE_REPLY = 2;
+  // Reply, plus steer the run, change its settings and its members.
+  CHAT_MEMBER_ROLE_MANAGE = 3;
+}
+
+// ChatMember is one person's grant on a chat.
+message ChatMember {
+  string user_id = 1;
+  ChatMemberRole role = 2;
+  // Who set the level they hold now.
+  string granted_by = 3;
+  // When they first became a member.
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message SetChatMemberRequest {
+  string chat_id = 1 [(buf.validate.field).string.min_len = 1];
+  string user_id = 2 [(buf.validate.field).string.min_len = 1];
+  // VIEW, REPLY or MANAGE.
+  ChatMemberRole role = 3 [(buf.validate.field).enum = {
+    in: [
+      1,
+      2,
+      3
+    ]
+  }];
+}
+
+message SetChatMemberResponse {
+  // The grant as it now stands.
+  ChatMember member = 1;
+  // False when the person already held the level asked for.
+  bool changed = 2;
+}
+
+message RemoveChatMemberRequest {
+  string chat_id = 1 [(buf.validate.field).string.min_len = 1];
+  string user_id = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message RemoveChatMemberResponse {
+  // False when the person held no grant.
+  bool changed = 1;
+}
+
+message ListChatMembersRequest {
+  string chat_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ListChatMembersResponse {
+  string owner_user_id = 1;
+  // The members the caller may see (see ListChatMembers), oldest first.
+  repeated ChatMember members = 2;
+  // How many members the chat has, including those not listed.
+  int32 member_count = 3;
+  // The level the caller reads the chat at: VIEW for a viewer (a VIEW grant,
+  // or any member of the organization a chat is shared with), REPLY or
+  // MANAGE for a member holding that grant, UNSPECIFIED for the owner.
+  ChatMemberRole caller_role = 4;
 }

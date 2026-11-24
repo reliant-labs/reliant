@@ -225,6 +225,39 @@ func ListSharedProjects(ctx context.Context, db orm.Context, f core.SharedProjec
 	return out, nil
 }
 
+// ListSharedWorkflowDrafts lists the saved workflows of f.OrgID their owners
+// shared with the org, most recently shared first, leaving out
+// f.ViewerUserID's own and those their owner hid (is_hidden: retired from
+// their own pickers, so not offered to the team either). Like ListSharedChats
+// it is a visibility predicate; the caller decides each row through authz.
+// An empty org or viewer lists nothing.
+func ListSharedWorkflowDrafts(ctx context.Context, db orm.Context, f core.SharedWorkflowDraftFilters) ([]*core.WorkflowDraft, error) {
+	if f.OrgID == "" || f.ViewerUserID == "" {
+		return []*core.WorkflowDraft{}, nil
+	}
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := ListWorkflowDraft(ctx, db,
+		orm.WhereEq(WorkflowDraftFieldOrgID, f.OrgID),
+		orm.WhereEq(WorkflowDraftFieldVisibility, string(core.VisibilityOrg)),
+		orm.WhereNotEq(WorkflowDraftFieldUserID, f.ViewerUserID),
+		orm.WhereEq(WorkflowDraftFieldIsHidden, false),
+		orm.WithOrderBy(WorkflowDraftFieldSharedAt, orm.Desc),
+		orm.WithOrderBy(WorkflowDraftFieldID, orm.Asc),
+		orm.WithLimit(limit),
+		orm.WithOffset(f.Offset))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list shared workflow drafts: %w", err)
+	}
+	out := make([]*core.WorkflowDraft, len(rows))
+	for i, row := range rows {
+		out[i] = workflowDraftToCore(row)
+	}
+	return out, nil
+}
+
 // visibilityOf maps a nullable visibility column onto core.Visibility (NULL
 // is private).
 func visibilityOf(col *string) core.Visibility {

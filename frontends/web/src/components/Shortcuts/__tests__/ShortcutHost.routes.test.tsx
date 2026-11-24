@@ -17,8 +17,8 @@
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { useState, type ReactElement } from "react";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -50,7 +50,7 @@ import {
   type ShortcutHandlers,
 } from "../../../hooks/useShortcutHost";
 import { useShortcutsStore } from "../../../store/shortcutsStore";
-import { useAuthStore } from "../../../store/authStore";
+import { renderWithSession } from "../../../lib/test-utils";
 import { useProjectStore, type Project } from "../../../store/projectStore";
 import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
 import { ShortcutRegistry } from "../../../lib/keyboard/registry";
@@ -138,6 +138,17 @@ function SettingsPage() {
 
 // ── Router ─────────────────────────────────────────────────────────────────
 
+/** Whether the next render is signed in (the session the host reads). */
+let signedIn = true;
+/** Signs the last render out. */
+let signOut: () => void = () => {};
+
+function renderInSession(ui: ReactElement) {
+  const result = renderWithSession(ui, { session: signedIn ? undefined : null });
+  signOut = () => result.setSession(null);
+  return result;
+}
+
 function renderAt(path: string) {
   const root = createRootRoute({
     component: () => (
@@ -180,7 +191,7 @@ function renderAt(path: string) {
     ]),
     history: createMemoryHistory({ initialEntries: [path] }),
   });
-  render(<RouterProvider router={router} />);
+  renderInSession(<RouterProvider router={router} />);
   return router;
 }
 
@@ -245,7 +256,7 @@ beforeEach(() => {
     _initialized: false,
   });
   getShortcuts.mockImplementation(async () => ({ shortcuts: "{}" }));
-  useAuthStore.setState({ user: { id: "u1" } as never });
+  signedIn = true;
   useProjectStore.setState({ currentProject: PROJECT });
   // The chat workspace's URL carries the sidebar's project filter: filtered
   // to p1, "the workspace" is /project/p1.
@@ -274,7 +285,10 @@ afterEach(() => {
   delete w.RELIANT_CONFIG;
   vi.useRealTimers();
   vi.restoreAllMocks();
-  useAuthStore.setState({ user: null });
+  // Signed out first, as the app does: the host takes its overlays down
+  // while they are still in the document.
+  signOut();
+  signOut = () => {};
   useProjectStore.setState({ currentProject: null });
   useWorkspaceStateStore.setState({ projectFilterId: null });
   document.body.innerHTML = "";
@@ -515,7 +529,7 @@ describe("in the workspace", () => {
     const root = createRootRoute({ component: () => <ShortcutHost><Outlet /></ShortcutHost> });
     const appLayout = createRoute({ getParentRoute: () => root, id: "_app", component: () => <Outlet /> });
     const index = createRoute({ getParentRoute: () => appLayout, path: "/", component: Counter });
-    render(
+    renderInSession(
       <RouterProvider
         router={createRouter({
           routeTree: root.addChildren([appLayout.addChildren([index])]),
@@ -762,7 +776,7 @@ describe("no shortcuts", () => {
   });
 
   it("while the auth guard has no user", async () => {
-    useAuthStore.setState({ user: null });
+    signedIn = false;
     renderAt("/settings");
     await screen.findByTestId("settings");
 
@@ -776,7 +790,7 @@ describe("no shortcuts", () => {
     await mountAt("/settings");
     expect(captureListeners).toBe(1);
 
-    act(() => useAuthStore.setState({ user: null }));
+    signOut();
 
     expect(captureListeners).toBe(0);
   });

@@ -1,7 +1,7 @@
 -- forge:backward-compatible — adds two nullable columns and widens share_events' action CHECK by three values; every row the previous release writes (no target, share/unshare/admin_unshare/moved) still satisfies every constraint, and it never reads the new columns or values.
 
 -- Migration: share_events_member_actions
--- Created: 2026-11-24T16:20:54Z
+-- Created: 2026-11-24T20:20:45Z
 --
 -- A change of a chat's per-person grants (chat_members; control-plane
 -- docs/design/chat-collaboration.md §3.1) is recorded in share_events beside
@@ -20,7 +20,7 @@
 -- columns are nullable with no default (a catalog change), and every CHECK is
 -- added NOT VALID, so the ACCESS EXCLUSIVE lock covers only the catalog, and
 -- lock_timeout bounds the wait for it.
--- 20261124162056_share_events_member_actions_validate validates the existing
+-- 20261124202048_share_events_member_actions_validate validates the existing
 -- rows in its own transaction under SHARE UPDATE EXCLUSIVE. Every existing row
 -- has no target and an action the narrower CHECK admitted, so validation
 -- cannot fail.

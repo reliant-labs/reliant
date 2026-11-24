@@ -66,16 +66,18 @@ import (
 // agentMessageColumns is the column list the passthrough reads scan, in
 // scanAgentMessage's order.
 const agentMessageColumns = `id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
-    status, created_at, delivered_at, delivered_message_id, attachments, synthesized, subject, display_style`
+    status, created_at, delivered_at, delivered_message_id, attachments, synthesized, subject, display_style, author_user_id`
 
 // insertAgentMessageSQL is the insert every enqueue shares; each appends its
 // own conflict clause. attachments is NULL for none (see
-// agentMessageAttachments).
+// agentMessageAttachments). author_user_id is NULL for the chat's owner and
+// for every agent-to-agent row; it is how a queued human message keeps its
+// author until the drain saves it.
 const insertAgentMessageSQL = `
 INSERT INTO agent_messages (
     id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
-    status, created_at, attachments, synthesized, subject, display_style
-) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9::jsonb, ?10, ?11, ?12)`
+    status, created_at, attachments, synthesized, subject, display_style, author_user_id
+) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9::jsonb, ?10, ?11, ?12, ?13)`
 
 func agentMessageInsertArgs(msg *core.AgentMessage) ([]any, error) {
 	attachments, err := agentMessageAttachments(msg.Attachments)
@@ -83,7 +85,7 @@ func agentMessageInsertArgs(msg *core.AgentMessage) ([]any, error) {
 		return nil, err
 	}
 	return []any{msg.ID, msg.ChatID, msg.FromThreadID, msg.ToThreadID, msg.Kind, msg.Body, msg.ToolCallID,
-		msg.Status, msg.CreatedAt, attachments, msg.Synthesized, msg.Subject, msg.DisplayStyle}, nil
+		msg.Status, msg.CreatedAt, attachments, msg.Synthesized, msg.Subject, msg.DisplayStyle, msg.AuthorUserID}, nil
 }
 
 // EnqueueAgentMessage queues msg.
@@ -529,7 +531,7 @@ func scanAgentMessage(rows *sql.Rows) (*core.AgentMessage, error) {
 	)
 	if err := rows.Scan(&msg.ID, &msg.ChatID, &msg.FromThreadID, &msg.ToThreadID, &msg.Kind, &msg.Body, &msg.ToolCallID,
 		&msg.Status, &msg.CreatedAt, &msg.DeliveredAt, &msg.DeliveredMessageID, &attachments, &msg.Synthesized,
-		&msg.Subject, &msg.DisplayStyle); err != nil {
+		&msg.Subject, &msg.DisplayStyle, &msg.AuthorUserID); err != nil {
 		return nil, err
 	}
 	msg.Attachments = agentMessageAttachmentIDs(attachments)
@@ -553,6 +555,7 @@ func agentMessageFromRow(row *AgentMessage) *core.AgentMessage {
 		Synthesized:        row.Synthesized,
 		Subject:            row.Subject,
 		DisplayStyle:       row.DisplayStyle,
+		AuthorUserID:       row.AuthorUserID,
 	}
 }
 

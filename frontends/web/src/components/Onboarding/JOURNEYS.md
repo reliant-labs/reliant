@@ -20,7 +20,8 @@ in its own change.
 | `advanceOn.ts` | Required actions (`advanceOn`) and `phases`. |
 | `useTourNavigation.ts` | Moving between steps, finishing, skipping, analytics. |
 | `JourneyTour.tsx` | The engine UI (picker and step). Shell-neutral. |
-| `OnboardingWizard.tsx` | Reliant's wrapper: auth gates, the version re-offer, the checklist. |
+| `OnboardingWizard.tsx` | Reliant's wrapper: auth gates, the version re-offer, the checklist's state. |
+| `OnboardingChecklist.tsx`, `checklistItems.ts` | The Setup Guide: a floating "Get started · 3/8" pill on every shell page, and its items with their completion signals. |
 | `tourShell.ts` | Which shell (`reliant` / `forge`) and where progress is stored. |
 
 ## The URL
@@ -34,6 +35,10 @@ The URL is the source of truth for what is open:
 ?tour=pick / pick:menu     the journey picker (after onboarding / from a menu)
 ?tour=chat-and-sidebars    a retired single-tour id: opens its successor journey
 ```
+
+The picker's entries in Reliant: the nav footer's **Help › Take a tour**
+(`Layout/sidebar/HelpMenu.tsx`), the command palette, Settings › About, the
+Setup Guide's "Take a tour" and the chat home's "Prefer a quick tour first?".
 
 The root route **retains `?tour=` across navigations** that don't name it
 (`routes.tsx`, `retainTourParam`). So a journey can span pages that the user
@@ -118,7 +123,7 @@ last step). There is no bottom nav bar and no generic Skip step.
 | `id` | kebab-case, **unique across all journeys**, prefixed `wf-` / `fg-`. Appears in the URL and in analytics. Don't rename a shipped id. |
 | `title`, `description` | Card copy. `description` is a ReactNode. |
 | `target` | CSS selector to spotlight. Prefer `[data-tour='…']`; see "Anchors". No target (and no `targets`) means a centred card. |
-| `targets` | Multi-spotlight: several labelled targets (`{selector, label, description}`). |
+| `targets` | Multi-spotlight: several labelled targets (`{selector, label, description, labelPosition?}`). A label goes on the first side with room (right, left, above, below); `labelPosition` names the side to try first, for a wide target whose side is over other chrome. |
 | `type` | `spotlight` / `multi-spotlight` / `card`. Inferred from `target` / `targets`. |
 | `tooltipPosition`, `tooltipPadding`, `spotlightConfig` | Placement. A preferred side; the card flips to a side with room and never covers its target (`calloutPlacement.ts`). |
 | `copyByShell` | `{ forge: { description: … } }`: per-shell title / description / target. |
@@ -179,7 +184,7 @@ the app).
 | `{ kind: "click", selector? }` | edge | The element (default: the step's `target`) is clicked. Capture phase, deferred one tick, so the click's own navigation runs first. |
 | `{ kind: "event", event, where? }` | edge | A tour signal is emitted, optionally narrowed by `where(payload)`. |
 | `{ kind: "route", path }` | level | The pathname matches: a prefix string or a RegExp. |
-| `{ kind: "checklist", item }` | level | An onboarding-checklist item is complete. Reliant only; the checklist's own detectors (`onboardingChecklistStore.subscribeToStoreChanges`) set it, e.g. `create-workflow` when a user-source workflow exists. |
+| `{ kind: "checklist", item }` | level | An onboarding-checklist item is complete. Reliant only; the checklist's own detectors (`onboardingChecklistStore.subscribeToStoreChanges`) set it, e.g. `run-workflow` when a user-source workflow exists. |
 | `{ kind: "store", test, subscribe }` | level | Any store state. Build it with `whenStore(useSomeStore, (s) => …)`. |
 | `{ kind: "element", selector }` | level | An element matching `selector` is in the DOM. |
 | `{ kind: "when", test(ctx) }` | level | Anything else. `ctx = { location: {pathname, search}, signals, context }`. It is re-checked on every location change, signal and context write. |
@@ -241,19 +246,24 @@ done. Gate them per step: `shell: "reliant"` and/or `isAvailable`. If no outro
 step applies (in the forge shell, say), the journey ends on its last step.
 The end card sits on whichever step is last.
 
-The workflows outro tours the chat and its panels, then tidies them away:
+The workflows outro tours the chat and the shell around it, then closes only
+what it opened:
 
 ```ts
 outro: [{
   id: "wf-outro-layout",
   shell: "reliant",
   title: "Back to the chat",
-  target: "[data-onboarding='chat-input']",
-  description: "Conversations on the left, files on the right, the terminal below. Each opens from its button and closes the same way.",
-  route: { path: "/", open: { to: "/" }, label: "Open the chat" },
-  onComplete: layoutActions.collapseAll,
+  targets: [/* the composer, the menu toggle, the files + terminal toggles */],
+  description: "… The menu on the left holds your chats and workflows. The file browser opens on the right and the terminal at the bottom …",
+  route: { path: "/project/", open: () => …, label: "Open the chat" },
+  onEnter: () => { layoutActions.showSidebar(); layoutActions.showFilesForTour(); },
+  onComplete: layoutActions.hidePanelsTourOpened,
 }],
 ```
+
+Never close the left nav when a tour ends: it is the one shell's navigation,
+not a panel the tour borrowed.
 
 `layoutActions` acts through each panel's existing owner and persists the
 change exactly as the user's own toggle would:
@@ -263,7 +273,9 @@ change exactly as the user's own toggle would:
 | `showSidebar` / `hideSidebar` | `workspaceStateStore.setLeftSidebarExpandedGlobal` |
 | `showTerminal` / `hideTerminal` | `terminalStore.showTerminal` / `hideTerminal` |
 | `showFiles` / `hideFiles` | ModernApp's file browser, through its `open-file-browser` / `close-file-browser` window events |
-| `collapseAll` | All three |
+| `showFilesForTour` / `showTerminalForTour` | The same, remembering that the tour opened the panel (nothing when it was already open) |
+| `hidePanelsTourOpened` | Closes the files panel and the terminal, but only those the `…ForTour` actions opened |
+| `collapseAll` | All three, the left nav included; no shipped journey uses it |
 
 ## Anchors (`data-tour="…"`)
 

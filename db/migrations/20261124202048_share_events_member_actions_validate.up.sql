@@ -1,9 +1,9 @@
--- forge:backward-compatible — validates the share_events constraints 20261124162054 added NOT VALID; every existing row satisfies them, and nothing is written.
+-- forge:backward-compatible — validates the share_events constraints 20261124202045 added NOT VALID; every existing row satisfies them, and nothing is written.
 
 -- Migration: share_events_member_actions_validate
--- Created: 2026-11-24T16:20:56Z
+-- Created: 2026-11-24T20:20:48Z
 --
--- 20261124162054_share_events_member_actions added share_events_action_check,
+-- 20261124202045_share_events_member_actions added share_events_action_check,
 -- share_events_target_check and share_events_role_check NOT VALID. Validate
 -- them here, in their own transaction: VALIDATE CONSTRAINT holds SHARE UPDATE
 -- EXCLUSIVE, which does not block reads or writes while it scans.

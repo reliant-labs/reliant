@@ -42,11 +42,13 @@
  *
  * The Project row picks the project the chat runs in (one primary project;
  * attaching more is the desktop's). It lists the org's projects on a
- * connected machine, naming the machine, with the context project first and
- * selected (newChatProjectChoices.ts). Picking one makes it the context
- * project (`selectProject`, as the desktop chip's `openNewChat` does), which
- * re-keys the draft: the workspace resets to its main one and the machine to
- * its placement. A repository on no connected machine is offered as "Set up
+ * connected machine, naming the machine, with the chat's project first and
+ * selected (newChatProjectChoices.ts). The project is the URL's
+ * (`?project=`, as desktop `/new?project=`; components/Mobile/mobileScope.ts),
+ * so a pick navigates (a push: Back returns to the one before) and the
+ * context project follows it (MobileScopeSync). The pick re-keys the draft:
+ * the workspace resets to its main one and the machine to its placement (or
+ * `?machine=`, the one it was just set up on). A repository on no connected machine is offered as "Set up
  * on <machine>": it is cloned there first (reliant#3420's set-up, in the
  * folder `setUpPathOn` picks), and the chat waits on that machine for it.
  *
@@ -122,9 +124,11 @@ import {
   workspacesOnMachine,
 } from "@/lib/workspaceMachine";
 import { daemonLabel } from "../Automations/daemonChoices";
-import { mobileChatPath, mobileChatsPath } from "@/lib/paths";
-import { logger } from "../../lib/logger";
+import { mobileChatPath, mobileChatsPath, mobileNewChatPath } from "@/lib/paths";
+import { scopeOfSearch } from "@/lib/urlState/shellScope";
+import type { SearchRecord } from "@/lib/urlState/searchParams";
 import { newChatProjectChoices } from "./newChatProjectChoices";
+import { newChatProjectOf, newChatProjectParam } from "./mobileScope";
 
 // Workflow refs arrive in two shapes — bare names from ListWorkflows ("agent")
 // and URIs from preferences ("builtin://agent"). Every comparison has to
@@ -190,22 +194,47 @@ function workspaceMeta(worktree: Worktree): string {
 }
 
 export function MobileNewChat() {
-  const projectId = useProjectStore((s) => s.currentProject?.id);
-  // The machine a project picked here arrives on (a set-up's clone target), for that project's draft.
-  const [machineOffer, setMachineOffer] = useState<{ projectId: string; daemonId: string } | null>(null);
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as SearchRecord;
+  const contextProject = useProjectStore((s) => s.currentProject);
+  const { projects, isLoading } = useProjects();
+  const listedKey = isLoading ? null : projects.map((p) => p.id).join(",");
+  const listed = useMemo(() => (listedKey === null ? undefined : new Set(listedKey.split(",").filter(Boolean))), [listedKey]);
+  // The URL names the project (`?project=`, else the list's one project),
+  // else it is the context project; the draft below is keyed by it.
+  const projectId = newChatProjectOf({
+    project: newChatProjectParam(search),
+    scope: scopeOfSearch(search),
+    contextProjectId: contextProject?.id,
+    listed,
+  });
+  const project = projects.find((p) => p.id === projectId) ?? (contextProject?.id === projectId ? contextProject : undefined);
   if (!projectId) return <MobileScreenHeader title="New chat" subtitle="No project" />;
-  // The new chat's project is the context project; the draft below is keyed by it.
-  const chooseProject = (project: Project, daemonId?: string) => {
-    setMachineOffer(daemonId ? { projectId: project.id, daemonId } : null);
-    useProjectStore
-      .getState()
-      .selectProject(project, { restoreWorkspace: false })
-      .catch((error: unknown) => logger.warn("[MobileNewChat] Project switch failed", { projectId: project.id, error }));
+  if (!project) {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <MobileScreenHeader title="New chat" />
+        <div className="flex flex-1 items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-label="Loading project" />
+        </div>
+      </div>
+    );
+  }
+  // A pick is the URL's: a push, so Back returns to the project before it.
+  // The machine it was set up on rides along; the workspace was the old
+  // project's. MobileScopeSync moves the context project after it.
+  const chooseProject = (picked: Project, daemonId?: string) => {
+    void navigate({
+      to: mobileNewChatPath(),
+      search: ((prev: SearchRecord) => ({ ...prev, project: picked.id, machine: daemonId, worktreeId: undefined })) as never,
+    });
   };
+  const machineParam = typeof search.machine === "number" ? String(search.machine) : search.machine;
   return (
-    <NewChatDraftBoundary key={projectId} projectId={projectId}>
+    <NewChatDraftBoundary key={project.id} projectId={project.id}>
       <MobileNewChatDraft
-        initialMachine={machineOffer?.projectId === projectId ? machineOffer.daemonId : null}
+        project={project}
+        initialMachine={typeof machineParam === "string" && machineParam ? machineParam : null}
         onChooseProject={chooseProject}
       />
     </NewChatDraftBoundary>
@@ -213,9 +242,12 @@ export function MobileNewChat() {
 }
 
 function MobileNewChatDraft({
+  project: currentProject,
   initialMachine,
   onChooseProject,
 }: {
+  /** The project the chat starts in (the URL's). */
+  project: Project;
   /** The selected project's placement or the machine it was just set up on. */
   initialMachine: string | null;
   /** Makes `project` the new chat's project and carries its target machine across the draft reset. */
@@ -232,8 +264,7 @@ function MobileNewChatDraft({
   const [error, setError] = useState("");
   const [createdChatId, setCreatedChatId] = useState<string>();
 
-  const currentProject = useProjectStore((s) => s.currentProject);
-  const { worktrees, hasMore, isLoadingMore, loadMore } = useWorktreeList(currentProject?.id);
+  const { worktrees, hasMore, isLoadingMore, loadMore } = useWorktreeList(currentProject.id);
 
   const { workflows, loading: workflowsLoading } = useWorkflows();
   const { isWorkflowHidden } = useHiddenItems();
@@ -454,6 +485,8 @@ function MobileNewChatDraft({
           workflow ?? effectiveWorkflow,
           presets ? Object.fromEntries(Object.entries(presets).filter((entry): entry is [string, string] => entry[1] !== null)) : undefined,
           daemonId || startNoMachine ? { daemonId, noMachine: startNoMachine } : undefined,
+          // The URL's project, not the store's, which follows it a beat later.
+          { projectId: currentProject.id },
         );
 
       trackEvent("chat_created", {

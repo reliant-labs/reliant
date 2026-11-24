@@ -1,7 +1,7 @@
 -- forge:backward-compatible — a new table the previous release never reads or writes.
 
 -- Migration: chat_members
--- Created: 2026-11-24T16:20:51Z
+-- Created: 2026-11-24T20:20:42Z
 --
 -- Per-person grants on a chat (control-plane docs/design/chat-collaboration.md
 -- §3.1, C2): one row per person the owner, or a member at manage, named, with

@@ -28,6 +28,12 @@ type Projects interface {
 	GetProject(ctx context.Context, id string) (*core.Project, error)
 }
 
+// WorkflowDrafts reads the saved workflow a sharing decision is made on.
+// workflowdrafts.Service satisfies it.
+type WorkflowDrafts interface {
+	GetWorkflowDraft(ctx context.Context, id string) (*core.WorkflowDraft, error)
+}
+
 // Shares is the one writer of a visibility (with its share event) and the
 // shared lists. store.ShareEventExtStore satisfies it; its writes must run in
 // a transaction (Deps.Tx), so the visibility and its event land together.
@@ -35,6 +41,7 @@ type Shares interface {
 	ApplyShareChange(ctx context.Context, c core.ShareChange) (bool, error)
 	ListSharedChats(ctx context.Context, f core.SharedChatFilters) ([]*core.Chat, error)
 	ListSharedProjects(ctx context.Context, f core.SharedProjectFilters) ([]*core.Project, error)
+	ListSharedWorkflowDrafts(ctx context.Context, f core.SharedWorkflowDraftFilters) ([]*core.WorkflowDraft, error)
 }
 
 // Members is the one writer of a chat's per-person grants (with its share
@@ -68,9 +75,10 @@ type OrgResolver interface {
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
-	// Chats and Projects read the rows a decision is made on.
-	Chats    Chats
-	Projects Projects
+	// Chats, Projects and WorkflowDrafts read the rows a decision is made on.
+	Chats          Chats
+	Projects       Projects
+	WorkflowDrafts WorkflowDrafts
 	// Shares writes a visibility and lists what is shared.
 	Shares Shares
 	// Members writes and reads a chat's per-person grants.
@@ -105,6 +113,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("sharing: Deps.Projects is required")
+	}
+	if d.WorkflowDrafts == nil {
+		return fmt.Errorf("sharing: Deps.WorkflowDrafts is required")
 	}
 	if d.Shares == nil {
 		return fmt.Errorf("sharing: Deps.Shares is required")
