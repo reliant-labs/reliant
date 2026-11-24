@@ -42,7 +42,9 @@ func scanProcesses() (procSnapshot, error) {
 // its age rule rather than judge from a partial picture. Another user's
 // process cannot create this user's work directories and its descriptors are
 // not ours to read; nor are a non-dumpable process's, which the kernel hands
-// to root (go, the toolchain and what they build and run are dumpable). Such
+// to root (go, the toolchain and what they build and run are dumpable), nor
+// those of one permitted capabilities we lack, which the kernel refuses its
+// own user (holdsForeignCaps; the toolchain never holds any). Such
 // a process contributes what /proc shows everyone: its command line and,
 // when it is a go command or a linker, its start time.
 //
@@ -187,11 +189,61 @@ func (p *procInfo) read(dir string, euid int) error {
 	p.cmdline = cmdline
 	p.refs.addRefs(string(cmdline))
 	if own {
-		if p.exe, err = readRefs(&p.refs, dir); err != nil {
+		exe, err := readRefs(&p.refs, dir)
+		if err != nil {
+			if errors.Is(err, fs.ErrPermission) && holdsForeignCaps(dir) {
+				// Ours by owner, but the kernel refuses our own uid its
+				// references because it holds capabilities we lack (a
+				// lingering systemd --user with CAP_WAKE_ALARM). Like a
+				// non-dumpable process it is not ours to read, and it cannot
+				// be what holds a work directory: go, the toolchain and what
+				// they build and run never hold capabilities beyond the
+				// user's. It keeps its command line, start time and whatever
+				// references were read before the refusal.
+				return nil
+			}
 			return fmt.Errorf("(%s): %w", p.comm, err)
 		}
+		p.exe = exe
 	}
 	return nil
+}
+
+// selfStatus is the /proc status file of this process, whose permitted
+// capabilities holdsForeignCaps compares against. A var for tests.
+var selfStatus = "/proc/self/status"
+
+// holdsForeignCaps reports whether the process at dir is permitted a
+// capability this process is not. The kernel refuses such a process's
+// references (cwd, fd, environ, …) to the same uid (ptrace_may_access: the
+// target's permitted set must be a subset of the caller's), so a refusal of
+// one of this user's processes is explained only when it holds one. An
+// unreadable or malformed status explains nothing: false, and the scan fails
+// as before.
+func holdsForeignCaps(dir string) bool {
+	theirs, err := capPermitted(filepath.Join(dir, "status"))
+	if err != nil {
+		return false
+	}
+	ours, err := capPermitted(selfStatus)
+	if err != nil {
+		return false
+	}
+	return theirs&^ours != 0
+}
+
+// capPermitted reads the CapPrm mask from a /proc status file.
+func capPermitted(path string) (uint64, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	for line := range strings.Lines(string(b)) {
+		if v, ok := strings.CutPrefix(line, "CapPrm:"); ok {
+			return strconv.ParseUint(strings.TrimSpace(v), 16, 64)
+		}
+	}
+	return 0, fmt.Errorf("%s: no CapPrm line", path)
 }
 
 // readRefs adds every reference one of this user's processes holds to s: its
