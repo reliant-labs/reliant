@@ -148,6 +148,10 @@ var chatPurgeSteps = []struct{ name, sql string }{
 	{"workflows", `DELETE FROM workflows WHERE chat_id = ANY(?0)`},
 	{"update_stream_counters", `
 		DELETE FROM update_stream_counters WHERE stream_kind = 'chat' AND stream_id = ANY(?0)`},
+	// The pull requests the chats produced: keyed by chat with no foreign
+	// key. A link writer selects its chat FOR KEY SHARE, so one in flight is
+	// waited for by this batch's FOR UPDATE and its row is deleted here.
+	{"chat_pr_links", `DELETE FROM chat_pr_links WHERE chat_id = ANY(?0)`},
 
 	// The chats, and what still cascades from them (user_updates, run_events,
 	// chat_selections).
