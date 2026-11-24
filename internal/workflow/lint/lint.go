@@ -111,6 +111,7 @@ const (
 	RuleLLMGatewayUnused       = "llm-gateway-cli-unused"
 	RuleCredentialsNoneSignIn  = "credentials-none-vendor-signin"
 	RuleObserveInvalid         = "observe-invalid"
+	RuleObserveDecision        = "observe-decision-unrecorded"
 )
 
 func rule(id string, sev Severity, summary string) Rule {
@@ -144,6 +145,7 @@ var rules = []Rule{
 	rule(RuleAskQuestionType, SeverityWarning, "An ask_question node's metadata has no \"type\": \"ask_user\", so the app shows the question with no options and `reliant workflow answer` cannot answer it."),
 	rule(RuleLLMGatewayUnused, SeverityWarning, "A run node sets llm_gateway for a CLI its command never runs, so the step pays for a key nothing uses (almost always a copy-paste mistake)."),
 	rule(RuleCredentialsNoneSignIn, SeverityWarning, "A credentials: none run command calls gemini or cursor-agent, whose sign-ins that sandbox hides from the next minor release, so the CLI will run signed out."),
+	rule(RuleObserveDecision, SeverityWarning, "A compute or run node looks like it makes a decision (an output, or for a run node its id, named like decide, verdict, skip, cut, hold, route, ...) that another node reads, and records none: no observe: of its own and no workflow default with an event."),
 	rule(RuleObserveInvalid, SeverityError, "An observe: block has the wrong shape or an expression that does not compile in its scope. Validation only warns about observe, so a run is never stopped by it; this is where it is caught."),
 }
 
@@ -239,6 +241,7 @@ func (c *checker) run() {
 	}
 	c.checkWorkflow()
 	c.checkObserve()
+	c.checkObserveDecisions()
 	c.checkApprovalPermission()
 	c.checkSecrets()
 	c.checkScenarios()

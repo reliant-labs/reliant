@@ -225,7 +225,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=4098fa500a987c40af0a60fcef3dfbed68c962fecb1580d56c9739addd40c7b0
+// forge:hash=e9c5975fe50824681d437e0fb4ae198fc086064fec3690868188e62e790b60a5
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -276,6 +276,7 @@ type MockRepository struct {
 	ListPlansByChatIDFunc                                    func(context.Context, string) ([]*db.Plan, error)
 	ListTasksByPlanFunc                                      func(context.Context, string) ([]*db.Task, error)
 	GetStepExecutionsForChatFunc                             func(context.Context, string) ([]*db.ChatStepExecution, error)
+	ListChatNodeObservationsFunc                             func(context.Context, string, int) ([]*db.NodeObservation, error)
 	GetBasicStepExecutionsForChatFunc                        func(context.Context, string) ([]*db.ChatStepExecution, error)
 	ListStepExecutionRecordsForChatFunc                      func(context.Context, string, string, int) ([]*db.StepExecution, error)
 	GetLatestUpdateSequenceFunc                              func(context.Context, string) (int64, error)
@@ -743,6 +744,15 @@ func (m *MockRepository) GetStepExecutionsForChat(ctx context.Context, chatID st
 		return m.GetStepExecutionsForChatFunc(ctx, chatID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetStepExecutionsForChat")
+}
+
+// ListChatNodeObservations records the call and delegates to ListChatNodeObservationsFunc when set.
+func (m *MockRepository) ListChatNodeObservations(ctx context.Context, chatID string, limit int) ([]*db.NodeObservation, error) {
+	m.Recorder.Record("ListChatNodeObservations", ctx, chatID, limit)
+	if m.ListChatNodeObservationsFunc != nil {
+		return m.ListChatNodeObservationsFunc(ctx, chatID, limit)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListChatNodeObservations")
 }
 
 // GetBasicStepExecutionsForChat records the call and delegates to GetBasicStepExecutionsForChatFunc when set.

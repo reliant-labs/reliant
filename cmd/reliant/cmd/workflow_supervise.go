@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -410,6 +411,25 @@ type statusStepGroup struct {
 	// Record is the workflow this thread ran.
 	Record string       `json:"record,omitempty"`
 	Steps  []statusStep `json:"steps"`
+	// Observations are what this thread's nodes recorded with observe:,
+	// oldest first.
+	Observations []statusObservation `json:"observations,omitempty"`
+}
+
+// statusObservation is what one node attempt's observe: block recorded.
+type statusObservation struct {
+	Node          string                `json:"node"`
+	LoopIteration *int32                `json:"loop_iteration,omitempty"`
+	Attempt       int32                 `json:"attempt,omitempty"`
+	Attributes    map[string]any        `json:"attributes,omitempty"`
+	Events        []statusObservedEvent `json:"events,omitempty"`
+	Errors        []string              `json:"errors,omitempty"`
+	Truncated     bool                  `json:"truncated,omitempty"`
+}
+
+type statusObservedEvent struct {
+	Name       string         `json:"name"`
+	Attributes map[string]any `json:"attributes,omitempty"`
 }
 
 type statusReport struct {
@@ -583,6 +603,18 @@ func toStatusStepGroups(groups []reliant.StatusStepGroup) []statusStepGroup {
 				Result: st.Result, ExitCode: st.ExitCode, LastMs: st.LastMs,
 			})
 		}
+		for _, o := range g.Observations {
+			node := o.NodePath
+			if node == "" {
+				node = o.NodeID
+			}
+			so := statusObservation{Node: node, LoopIteration: o.LoopIteration, Attempt: o.Attempt,
+				Attributes: o.Attributes, Errors: o.Errors, Truncated: o.Truncated}
+			for _, e := range o.Events {
+				so.Events = append(so.Events, statusObservedEvent{Name: e.Name, Attributes: e.Attributes})
+			}
+			sg.Observations = append(sg.Observations, so)
+		}
 		out = append(out, sg)
 	}
 	return out
@@ -628,7 +660,9 @@ func printStatusReport(w io.Writer, r statusReport) {
 				header += "  ← " + g.Record
 			}
 			fmt.Fprintln(w, header)
-			fmt.Fprintf(w, "    %-24s %-22s %5s %6s  %-9s %s\n", "STEP", "ACTIVITY", "RUNS", "FAILED", "LAST", "LAST(ms)")
+			if len(g.Steps) > 0 {
+				fmt.Fprintf(w, "    %-24s %-22s %5s %6s  %-9s %s\n", "STEP", "ACTIVITY", "RUNS", "FAILED", "LAST", "LAST(ms)")
+			}
 			for _, s := range g.Steps {
 				ms := ""
 				if s.LastMs > 0 {
@@ -643,6 +677,7 @@ func printStatusReport(w io.Writer, r statusReport) {
 				fmt.Fprintf(w, "    %-24s %-22s %5d %6s  %-9s %s\n",
 					truncate(s.StepID, 24), truncate(s.Activity, 22), s.Runs, failed, s.Result, ms)
 			}
+			printStatusObservations(w, g.Observations)
 		}
 	}
 
@@ -656,6 +691,54 @@ func printStatusReport(w io.Writer, r statusReport) {
 			fmt.Fprintf(w, "  %s: %s\n", where, f.Error)
 		}
 	}
+}
+
+// printStatusObservations prints what a node thread's nodes recorded with
+// observe:, under its steps: a decision as "name: value (reason)", any other
+// event and the attributes as key=value, and a failed expression as such.
+func printStatusObservations(w io.Writer, observations []statusObservation) {
+	if len(observations) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "    OBSERVED")
+	for _, o := range observations {
+		node := o.Node
+		if o.LoopIteration != nil {
+			node += "#" + strconv.Itoa(int(*o.LoopIteration))
+		}
+		if len(o.Attributes) > 0 {
+			fmt.Fprintf(w, "    %-24s %s\n", truncate(node, 24), observedPairs(o.Attributes))
+		}
+		for _, e := range o.Events {
+			line := e.Name
+			if d := (reliant.StatusObservedEvent{Name: e.Name, Attributes: e.Attributes}).Decision(); d != "" {
+				line = "decision " + d
+			} else if len(e.Attributes) > 0 {
+				line += " " + observedPairs(e.Attributes)
+			}
+			fmt.Fprintf(w, "    %-24s %s\n", truncate(node, 24), line)
+		}
+		for _, msg := range o.Errors {
+			fmt.Fprintf(w, "    %-24s observe error: %s\n", truncate(node, 24), msg)
+		}
+		if o.Truncated {
+			fmt.Fprintf(w, "    %-24s (cut to its size cap)\n", truncate(node, 24))
+		}
+	}
+}
+
+// observedPairs is attrs as "k=v k=v", in key order.
+func observedPairs(attrs map[string]any) string {
+	keys := make([]string, 0, len(attrs))
+	for k := range attrs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, len(keys))
+	for i, k := range keys {
+		parts[i] = fmt.Sprintf("%s=%v", k, attrs[k])
+	}
+	return strings.Join(parts, " ")
 }
 
 // hasFailedStep reports whether any step's runs include a failure.

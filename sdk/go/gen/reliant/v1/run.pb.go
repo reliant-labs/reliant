@@ -866,8 +866,14 @@ type GetRunResponse struct {
 	// outputs are never included; command streams are redacted, bounded tails.
 	Nodes          []*RunNodeExecution `protobuf:"bytes,2,rep,name=nodes,proto3" json:"nodes,omitempty"`
 	NodesTruncated bool                `protobuf:"varint,3,opt,name=nodes_truncated,json=nodesTruncated,proto3" json:"nodes_truncated,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// What the run's nodes recorded with observe: (attributes and events),
+	// newest first, including nested workflows, at most as many as nodes.
+	// Joined to nodes by workflow_id, node_path, loop scope and attempt; a node
+	// the workflow completed itself (compute, join, ...) has no node entry.
+	Observations          []*NodeObservation `protobuf:"bytes,4,rep,name=observations,proto3" json:"observations,omitempty"`
+	ObservationsTruncated bool               `protobuf:"varint,5,opt,name=observations_truncated,json=observationsTruncated,proto3" json:"observations_truncated,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *GetRunResponse) Reset() {
@@ -917,6 +923,20 @@ func (x *GetRunResponse) GetNodes() []*RunNodeExecution {
 func (x *GetRunResponse) GetNodesTruncated() bool {
 	if x != nil {
 		return x.NodesTruncated
+	}
+	return false
+}
+
+func (x *GetRunResponse) GetObservations() []*NodeObservation {
+	if x != nil {
+		return x.Observations
+	}
+	return nil
+}
+
+func (x *GetRunResponse) GetObservationsTruncated() bool {
+	if x != nil {
+		return x.ObservationsTruncated
 	}
 	return false
 }
@@ -2017,7 +2037,7 @@ var File_reliant_v1_run_proto protoreflect.FileDescriptor
 const file_reliant_v1_run_proto_rawDesc = "" +
 	"\n" +
 	"\x14reliant/v1/run.proto\x12\n" +
-	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15reliant/v1/chat.proto\"\xe8\a\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15reliant/v1/chat.proto\x1a\x17reliant/v1/common.proto\"\xe8\a\n" +
 	"\x03Run\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rworkflow_name\x18\x02 \x01(\tR\fworkflowName\x12\x16\n" +
@@ -2079,11 +2099,13 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"messageIds\x120\n" +
 	"\x14not_delivered_reason\x18\x03 \x01(\tR\x12notDeliveredReason\"&\n" +
 	"\rGetRunRequest\x12\x15\n" +
-	"\x06run_id\x18\x01 \x01(\tR\x05runId\"\x90\x01\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\"\x88\x02\n" +
 	"\x0eGetRunResponse\x12!\n" +
 	"\x03run\x18\x01 \x01(\v2\x0f.reliant.v1.RunR\x03run\x122\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x1c.reliant.v1.RunNodeExecutionR\x05nodes\x12'\n" +
-	"\x0fnodes_truncated\x18\x03 \x01(\bR\x0enodesTruncated\"\xa8\x04\n" +
+	"\x0fnodes_truncated\x18\x03 \x01(\bR\x0enodesTruncated\x12?\n" +
+	"\fobservations\x18\x04 \x03(\v2\x1b.reliant.v1.NodeObservationR\fobservations\x125\n" +
+	"\x16observations_truncated\x18\x05 \x01(\bR\x15observationsTruncated\"\xa8\x04\n" +
 	"\x10RunNodeExecution\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -2283,8 +2305,9 @@ var file_reliant_v1_run_proto_goTypes = []any{
 	(WorkflowStopReason)(0),            // 27: reliant.v1.WorkflowStopReason
 	(ChatActivity)(0),                  // 28: reliant.v1.ChatActivity
 	(*InputMessage)(nil),               // 29: reliant.v1.InputMessage
-	(*timestamppb.Timestamp)(nil),      // 30: google.protobuf.Timestamp
-	(*structpb.Value)(nil),             // 31: google.protobuf.Value
+	(*NodeObservation)(nil),            // 30: reliant.v1.NodeObservation
+	(*timestamppb.Timestamp)(nil),      // 31: google.protobuf.Timestamp
+	(*structpb.Value)(nil),             // 32: google.protobuf.Value
 }
 var file_reliant_v1_run_proto_depIdxs = []int32{
 	26, // 0: reliant.v1.Run.state:type_name -> reliant.v1.WorkflowState
@@ -2299,39 +2322,40 @@ var file_reliant_v1_run_proto_depIdxs = []int32{
 	29, // 9: reliant.v1.SignalRunRequest.messages:type_name -> reliant.v1.InputMessage
 	3,  // 10: reliant.v1.GetRunResponse.run:type_name -> reliant.v1.Run
 	10, // 11: reliant.v1.GetRunResponse.nodes:type_name -> reliant.v1.RunNodeExecution
-	26, // 12: reliant.v1.ListRunsRequest.state:type_name -> reliant.v1.WorkflowState
-	1,  // 13: reliant.v1.ListRunsRequest.display_states:type_name -> reliant.v1.RunDisplayState
-	30, // 14: reliant.v1.ListRunsRequest.started_after:type_name -> google.protobuf.Timestamp
-	30, // 15: reliant.v1.ListRunsRequest.started_before:type_name -> google.protobuf.Timestamp
-	3,  // 16: reliant.v1.ListRunsResponse.runs:type_name -> reliant.v1.Run
-	13, // 17: reliant.v1.ListRunsResponse.unlaunched_events:type_name -> reliant.v1.UnlaunchedTriggerEvent
-	2,  // 18: reliant.v1.UnlaunchedTriggerEvent.outcome:type_name -> reliant.v1.UnlaunchedTriggerEventOutcome
-	3,  // 19: reliant.v1.LastRunPerWorkflowResponse.runs:type_name -> reliant.v1.Run
-	3,  // 20: reliant.v1.ResumeRunResponse.run:type_name -> reliant.v1.Run
-	31, // 21: reliant.v1.StartRunRequest.InputsEntry.value:type_name -> google.protobuf.Value
-	4,  // 22: reliant.v1.RunService.StartRun:input_type -> reliant.v1.StartRunRequest
-	6,  // 23: reliant.v1.RunService.SignalRun:input_type -> reliant.v1.SignalRunRequest
-	8,  // 24: reliant.v1.RunService.GetRun:input_type -> reliant.v1.GetRunRequest
-	11, // 25: reliant.v1.RunService.ListRuns:input_type -> reliant.v1.ListRunsRequest
-	14, // 26: reliant.v1.RunService.LastRunPerWorkflow:input_type -> reliant.v1.LastRunPerWorkflowRequest
-	16, // 27: reliant.v1.RunService.PauseRun:input_type -> reliant.v1.PauseRunRequest
-	18, // 28: reliant.v1.RunService.ResumeRun:input_type -> reliant.v1.ResumeRunRequest
-	20, // 29: reliant.v1.RunService.CancelRun:input_type -> reliant.v1.CancelRunRequest
-	22, // 30: reliant.v1.RunService.InterruptRun:input_type -> reliant.v1.InterruptRunRequest
-	5,  // 31: reliant.v1.RunService.StartRun:output_type -> reliant.v1.StartRunResponse
-	7,  // 32: reliant.v1.RunService.SignalRun:output_type -> reliant.v1.SignalRunResponse
-	9,  // 33: reliant.v1.RunService.GetRun:output_type -> reliant.v1.GetRunResponse
-	12, // 34: reliant.v1.RunService.ListRuns:output_type -> reliant.v1.ListRunsResponse
-	15, // 35: reliant.v1.RunService.LastRunPerWorkflow:output_type -> reliant.v1.LastRunPerWorkflowResponse
-	17, // 36: reliant.v1.RunService.PauseRun:output_type -> reliant.v1.PauseRunResponse
-	19, // 37: reliant.v1.RunService.ResumeRun:output_type -> reliant.v1.ResumeRunResponse
-	21, // 38: reliant.v1.RunService.CancelRun:output_type -> reliant.v1.CancelRunResponse
-	23, // 39: reliant.v1.RunService.InterruptRun:output_type -> reliant.v1.InterruptRunResponse
-	31, // [31:40] is the sub-list for method output_type
-	22, // [22:31] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	30, // 12: reliant.v1.GetRunResponse.observations:type_name -> reliant.v1.NodeObservation
+	26, // 13: reliant.v1.ListRunsRequest.state:type_name -> reliant.v1.WorkflowState
+	1,  // 14: reliant.v1.ListRunsRequest.display_states:type_name -> reliant.v1.RunDisplayState
+	31, // 15: reliant.v1.ListRunsRequest.started_after:type_name -> google.protobuf.Timestamp
+	31, // 16: reliant.v1.ListRunsRequest.started_before:type_name -> google.protobuf.Timestamp
+	3,  // 17: reliant.v1.ListRunsResponse.runs:type_name -> reliant.v1.Run
+	13, // 18: reliant.v1.ListRunsResponse.unlaunched_events:type_name -> reliant.v1.UnlaunchedTriggerEvent
+	2,  // 19: reliant.v1.UnlaunchedTriggerEvent.outcome:type_name -> reliant.v1.UnlaunchedTriggerEventOutcome
+	3,  // 20: reliant.v1.LastRunPerWorkflowResponse.runs:type_name -> reliant.v1.Run
+	3,  // 21: reliant.v1.ResumeRunResponse.run:type_name -> reliant.v1.Run
+	32, // 22: reliant.v1.StartRunRequest.InputsEntry.value:type_name -> google.protobuf.Value
+	4,  // 23: reliant.v1.RunService.StartRun:input_type -> reliant.v1.StartRunRequest
+	6,  // 24: reliant.v1.RunService.SignalRun:input_type -> reliant.v1.SignalRunRequest
+	8,  // 25: reliant.v1.RunService.GetRun:input_type -> reliant.v1.GetRunRequest
+	11, // 26: reliant.v1.RunService.ListRuns:input_type -> reliant.v1.ListRunsRequest
+	14, // 27: reliant.v1.RunService.LastRunPerWorkflow:input_type -> reliant.v1.LastRunPerWorkflowRequest
+	16, // 28: reliant.v1.RunService.PauseRun:input_type -> reliant.v1.PauseRunRequest
+	18, // 29: reliant.v1.RunService.ResumeRun:input_type -> reliant.v1.ResumeRunRequest
+	20, // 30: reliant.v1.RunService.CancelRun:input_type -> reliant.v1.CancelRunRequest
+	22, // 31: reliant.v1.RunService.InterruptRun:input_type -> reliant.v1.InterruptRunRequest
+	5,  // 32: reliant.v1.RunService.StartRun:output_type -> reliant.v1.StartRunResponse
+	7,  // 33: reliant.v1.RunService.SignalRun:output_type -> reliant.v1.SignalRunResponse
+	9,  // 34: reliant.v1.RunService.GetRun:output_type -> reliant.v1.GetRunResponse
+	12, // 35: reliant.v1.RunService.ListRuns:output_type -> reliant.v1.ListRunsResponse
+	15, // 36: reliant.v1.RunService.LastRunPerWorkflow:output_type -> reliant.v1.LastRunPerWorkflowResponse
+	17, // 37: reliant.v1.RunService.PauseRun:output_type -> reliant.v1.PauseRunResponse
+	19, // 38: reliant.v1.RunService.ResumeRun:output_type -> reliant.v1.ResumeRunResponse
+	21, // 39: reliant.v1.RunService.CancelRun:output_type -> reliant.v1.CancelRunResponse
+	23, // 40: reliant.v1.RunService.InterruptRun:output_type -> reliant.v1.InterruptRunResponse
+	32, // [32:41] is the sub-list for method output_type
+	23, // [23:32] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_run_proto_init() }
@@ -2340,6 +2364,7 @@ func file_reliant_v1_run_proto_init() {
 		return
 	}
 	file_reliant_v1_chat_proto_init()
+	file_reliant_v1_common_proto_init()
 	file_reliant_v1_run_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_run_proto_msgTypes[7].OneofWrappers = []any{}
 	file_reliant_v1_run_proto_msgTypes[8].OneofWrappers = []any{}

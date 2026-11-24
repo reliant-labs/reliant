@@ -3,6 +3,8 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "google/protobuf/struct.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // Empty represents an empty message (no fields)
@@ -98,4 +100,52 @@ enum ResourceVisibility {
   RESOURCE_VISIBILITY_PRIVATE = 1;
   // Every live member of the resource's organization, read-only.
   RESOURCE_VISIBILITY_ORG = 2;
+}
+
+// =============================================================================
+// Workflow node observations
+// =============================================================================
+
+// NodeObservation is what one node attempt's observe: block recorded when the
+// node finished (dev-docs/design/workflow-observe.md): the attributes and
+// events its expressions produced, already redacted and bounded, and the
+// expressions that failed. It is a list beside a run's node attempts rather
+// than a field of one, because a node the workflow completes itself (compute,
+// join, router, loop, workflow) has no attempt row: a client renders an
+// observation under the attempt with the same workflow_id, node_path, loop
+// scope and attempt, and one with no such attempt as its own entry.
+message NodeObservation {
+  // NodeId is the node's id; NodePath its position in the run ("" at the top
+  // level of a run that predates node paths).
+  string node_id = 1;
+  string node_path = 2;
+  // LoopNodeId and LoopIteration are the loop scope, unset outside a loop.
+  string loop_node_id = 3;
+  optional int32 loop_iteration = 4;
+  int32 attempt = 5;
+  // Source is who recorded it: "workflow" (the node's observe: block) or
+  // "model" (an event the model recorded itself).
+  string source = 6;
+  // Attributes are the observe.attributes values, typed (bool, number,
+  // string).
+  google.protobuf.Struct attributes = 7;
+  repeated ObservedEvent events = 8;
+  // Errors are the expressions that failed, each a short message for the
+  // author. A failed expression never fails the node.
+  repeated string errors = 9;
+  // Truncated reports that a size cap cut what was recorded.
+  bool truncated = 10;
+  // CreatedAt is when it was recorded, RFC 3339.
+  string created_at = 11;
+  // WorkflowId is the workflow row the node ran in (a run's sub-workflows
+  // have their own).
+  string workflow_id = 12;
+}
+
+// ObservedEvent is one event an observe: block recorded. An event named
+// "decision" with name, value and reason attributes is the convention for a
+// node that chooses something.
+message ObservedEvent {
+  string name = 1;
+  google.protobuf.Struct attributes = 2;
 }

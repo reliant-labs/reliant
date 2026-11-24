@@ -5,6 +5,7 @@ package reliant
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
@@ -101,6 +102,86 @@ type StatusStepGroup struct {
 	// Record is the workflow this thread ran.
 	Record string
 	Steps  []StatusStep
+	// Observations are what this thread's nodes recorded with observe:,
+	// oldest first: attributes and events (a decision is an event named
+	// "decision"). Empty from a server older than the field.
+	Observations []StatusObservation
+}
+
+// StatusObservation is what one node attempt's observe: block recorded.
+type StatusObservation struct {
+	// NodeID is the node; NodePath its position in the run.
+	NodeID   string
+	NodePath string
+	// LoopIteration is set inside a loop.
+	LoopIteration *int32
+	Attempt       int32
+	// Attributes are the typed values the block's attributes produced.
+	Attributes map[string]any
+	Events     []StatusObservedEvent
+	// Errors are the block's expressions that failed; they never fail the
+	// node.
+	Errors []string
+	// Truncated reports that a size cap cut what was recorded.
+	Truncated bool
+}
+
+// StatusObservedEvent is one event an observe: block recorded.
+type StatusObservedEvent struct {
+	Name       string
+	Attributes map[string]any
+}
+
+// Decision is the event's "name: value (reason)" when it is a decision (an
+// event named "decision"), and "" otherwise.
+func (e StatusObservedEvent) Decision() string {
+	if e.Name != "decision" {
+		return ""
+	}
+	text := func(k string) string {
+		if v, ok := e.Attributes[k]; ok && v != nil {
+			return fmt.Sprint(v)
+		}
+		return ""
+	}
+	out := text("value")
+	if name := text("name"); name != "" {
+		out = name + ": " + out
+	}
+	if reason := text("reason"); reason != "" {
+		out += " (" + reason + ")"
+	}
+	return out
+}
+
+// statusObservations converts the wire observations of one workflow.
+func statusObservations(in []*reliantv1.NodeObservation) []StatusObservation {
+	out := make([]StatusObservation, 0, len(in))
+	for _, o := range in {
+		if o == nil {
+			continue
+		}
+		so := StatusObservation{
+			NodeID: o.GetNodeId(), NodePath: o.GetNodePath(), Attempt: o.GetAttempt(),
+			Attributes: o.GetAttributes().AsMap(), Errors: o.GetErrors(), Truncated: o.GetTruncated(),
+		}
+		if o.LoopIteration != nil {
+			it := o.GetLoopIteration()
+			so.LoopIteration = &it
+		}
+		if len(so.Attributes) == 0 {
+			so.Attributes = nil
+		}
+		for _, e := range o.GetEvents() {
+			ev := StatusObservedEvent{Name: e.GetName(), Attributes: e.GetAttributes().AsMap()}
+			if len(ev.Attributes) == 0 {
+				ev.Attributes = nil
+			}
+			so.Events = append(so.Events, ev)
+		}
+		out = append(out, so)
+	}
+	return out
 }
 
 // Status takes a snapshot of a run. It reads the full step history, which is
@@ -259,9 +340,10 @@ func SummarizeSteps(root *reliantv1.WorkflowExecution) []StatusStepGroup {
 		lastAt   string
 	}
 	type group struct {
-		record string
-		byStep map[string]*agg
-		order  []string
+		record       string
+		byStep       map[string]*agg
+		order        []string
+		observations []StatusObservation
 	}
 
 	groups := map[string]*group{}
@@ -305,6 +387,7 @@ func SummarizeSteps(root *reliantv1.WorkflowExecution) []StatusStepGroup {
 	var walk func(wf *reliantv1.WorkflowExecution, node string)
 	walk = func(wf *reliantv1.WorkflowExecution, node string) {
 		g := groupFor(node, wf.GetWorkflowName())
+		g.observations = append(g.observations, statusObservations(wf.GetObservations())...)
 
 		for _, s := range wf.GetSteps() {
 			var exit *int32
@@ -327,7 +410,7 @@ func SummarizeSteps(root *reliantv1.WorkflowExecution) []StatusStepGroup {
 	out := make([]StatusStepGroup, 0, len(groupOrder))
 	for _, node := range groupOrder {
 		g := groups[node]
-		if len(g.order) == 0 {
+		if len(g.order) == 0 && len(g.observations) == 0 {
 			continue
 		}
 		steps := make([]StatusStep, 0, len(g.order))
@@ -338,7 +421,11 @@ func SummarizeSteps(root *reliantv1.WorkflowExecution) []StatusStepGroup {
 				Result: a.result, ExitCode: a.exit, LastMs: a.lastMs,
 			})
 		}
-		out = append(out, StatusStepGroup{Node: node, Record: g.record, Steps: steps})
+		var observations []StatusObservation
+		if len(g.observations) > 0 {
+			observations = g.observations
+		}
+		out = append(out, StatusStepGroup{Node: node, Record: g.record, Steps: steps, Observations: observations})
 	}
 	return out
 }

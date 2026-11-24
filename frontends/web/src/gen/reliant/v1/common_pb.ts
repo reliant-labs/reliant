@@ -7,13 +7,14 @@
 
 import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import type { Message } from "@bufbuild/protobuf";
+import { file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
+import type { JsonObject, Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file reliant/v1/common.proto.
  */
 export const file_reliant_v1_common: GenFile = /*@__PURE__*/
-  fileDesc("ChdyZWxpYW50L3YxL2NvbW1vbi5wcm90bxIKcmVsaWFudC52MSIHCgVFbXB0eSKWAQoLRXJyb3JEZXRhaWwSDAoEY29kZRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEjcKCG1ldGFkYXRhGAMgAygLMiUucmVsaWFudC52MS5FcnJvckRldGFpbC5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASqVAQoKUGxhblN0YXR1cxIbChdQTEFOX1NUQVRVU19VTlNQRUNJRklFRBAAEhcKE1BMQU5fU1RBVFVTX1BFTkRJTkcQARIbChdQTEFOX1NUQVRVU19JTl9QUk9HUkVTUxACEhkKFVBMQU5fU1RBVFVTX0NPTVBMRVRFRBADEhkKFVBMQU5fU1RBVFVTX0NBTkNFTExFRBAEKrYCChdCYWNrZ3JvdW5kUHJvY2Vzc1N0YXR1cxIpCiVCQUNLR1JPVU5EX1BST0NFU1NfU1RBVFVTX1VOU1BFQ0lGSUVEEAASJQohQkFDS0dST1VORF9QUk9DRVNTX1NUQVRVU19SVU5OSU5HEAESJwojQkFDS0dST1VORF9QUk9DRVNTX1NUQVRVU19DT01QTEVURUQQAhIkCiBCQUNLR1JPVU5EX1BST0NFU1NfU1RBVFVTX0ZBSUxFRBADEiQKIEJBQ0tHUk9VTkRfUFJPQ0VTU19TVEFUVVNfS0lMTEVEEAQSLworQkFDS0dST1VORF9QUk9DRVNTX1NUQVRVU19LSUxMRURfRVhURVJOQUxMWRAFEiMKH0JBQ0tHUk9VTkRfUFJPQ0VTU19TVEFUVVNfU1RBTEUQBiqTAgoTVG9vbEV4ZWN1dGlvblN0YXR1cxIlCiFUT09MX0VYRUNVVElPTl9TVEFUVVNfVU5TUEVDSUZJRUQQABIhCh1UT09MX0VYRUNVVElPTl9TVEFUVVNfUEVORElORxABEiMKH1RPT0xfRVhFQ1VUSU9OX1NUQVRVU19FWEVDVVRJTkcQAhIjCh9UT09MX0VYRUNVVElPTl9TVEFUVVNfQ09NUExFVEVEEAMSIAocVE9PTF9FWEVDVVRJT05fU1RBVFVTX0ZBSUxFRBAEEiMKH1RPT0xfRVhFQ1VUSU9OX1NUQVRVU19DQU5DRUxMRUQQBRIhCh1UT09MX0VYRUNVVElPTl9TVEFUVVNfVElNRU9VVBAGKnQKEE91dHB1dFN0cmVhbVR5cGUSIgoeT1VUUFVUX1NUUkVBTV9UWVBFX1VOU1BFQ0lGSUVEEAASHQoZT1VUUFVUX1NUUkVBTV9UWVBFX1NURE9VVBABEh0KGU9VVFBVVF9TVFJFQU1fVFlQRV9TVERFUlIQAiq4AQoQRmlsZUNoYW5nZVN0YXR1cxIiCh5GSUxFX0NIQU5HRV9TVEFUVVNfVU5TUEVDSUZJRUQQABIfChtGSUxFX0NIQU5HRV9TVEFUVVNfTU9ESUZJRUQQARIdChlGSUxFX0NIQU5HRV9TVEFUVVNfU1RBR0VEEAISIAocRklMRV9DSEFOR0VfU1RBVFVTX1VOVFJBQ0tFRBADEh4KGkZJTEVfQ0hBTkdFX1NUQVRVU19ERUxFVEVEEAQqfgoLQ29uZmlnU2NvcGUSHAoYQ09ORklHX1NDT1BFX1VOU1BFQ0lGSUVEEAASFwoTQ09ORklHX1NDT1BFX0dMT0JBTBABEhgKFENPTkZJR19TQ09QRV9QUk9KRUNUEAISHgoaQ09ORklHX1NDT1BFX1BST0pFQ1RfTE9DQUwQAyp3ChJSZXNvdXJjZVZpc2liaWxpdHkSIwofUkVTT1VSQ0VfVklTSUJJTElUWV9VTlNQRUNJRklFRBAAEh8KG1JFU09VUkNFX1ZJU0lCSUxJVFlfUFJJVkFURRABEhsKF1JFU09VUkNFX1ZJU0lCSUxJVFlfT1JHEAJCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw");
+  fileDesc("ChdyZWxpYW50L3YxL2NvbW1vbi5wcm90bxIKcmVsaWFudC52MSIHCgVFbXB0eSKWAQoLRXJyb3JEZXRhaWwSDAoEY29kZRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEjcKCG1ldGFkYXRhGAMgAygLMiUucmVsaWFudC52MS5FcnJvckRldGFpbC5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLAAgoPTm9kZU9ic2VydmF0aW9uEg8KB25vZGVfaWQYASABKAkSEQoJbm9kZV9wYXRoGAIgASgJEhQKDGxvb3Bfbm9kZV9pZBgDIAEoCRIbCg5sb29wX2l0ZXJhdGlvbhgEIAEoBUgAiAEBEg8KB2F0dGVtcHQYBSABKAUSDgoGc291cmNlGAYgASgJEisKCmF0dHJpYnV0ZXMYByABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EikKBmV2ZW50cxgIIAMoCzIZLnJlbGlhbnQudjEuT2JzZXJ2ZWRFdmVudBIOCgZlcnJvcnMYCSADKAkSEQoJdHJ1bmNhdGVkGAogASgIEhIKCmNyZWF0ZWRfYXQYCyABKAkSEwoLd29ya2Zsb3dfaWQYDCABKAlCEQoPX2xvb3BfaXRlcmF0aW9uIkoKDU9ic2VydmVkRXZlbnQSDAoEbmFtZRgBIAEoCRIrCgphdHRyaWJ1dGVzGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCqVAQoKUGxhblN0YXR1cxIbChdQTEFOX1NUQVRVU19VTlNQRUNJRklFRBAAEhcKE1BMQU5fU1RBVFVTX1BFTkRJTkcQARIbChdQTEFOX1NUQVRVU19JTl9QUk9HUkVTUxACEhkKFVBMQU5fU1RBVFVTX0NPTVBMRVRFRBADEhkKFVBMQU5fU1RBVFVTX0NBTkNFTExFRBAEKrYCChdCYWNrZ3JvdW5kUHJvY2Vzc1N0YXR1cxIpCiVCQUNLR1JPVU5EX1BST0NFU1NfU1RBVFVTX1VOU1BFQ0lGSUVEEAASJQohQkFDS0dST1VORF9QUk9DRVNTX1NUQVRVU19SVU5OSU5HEAESJwojQkFDS0dST1VORF9QUk9DRVNTX1NUQVRVU19DT01QTEVURUQQAhIkCiBCQUNLR1JPVU5EX1BST0NFU1NfU1RBVFVTX0ZBSUxFRBADEiQKIEJBQ0tHUk9VTkRfUFJPQ0VTU19TVEFUVVNfS0lMTEVEEAQSLworQkFDS0dST1VORF9QUk9DRVNTX1NUQVRVU19LSUxMRURfRVhURVJOQUxMWRAFEiMKH0JBQ0tHUk9VTkRfUFJPQ0VTU19TVEFUVVNfU1RBTEUQBiqTAgoTVG9vbEV4ZWN1dGlvblN0YXR1cxIlCiFUT09MX0VYRUNVVElPTl9TVEFUVVNfVU5TUEVDSUZJRUQQABIhCh1UT09MX0VYRUNVVElPTl9TVEFUVVNfUEVORElORxABEiMKH1RPT0xfRVhFQ1VUSU9OX1NUQVRVU19FWEVDVVRJTkcQAhIjCh9UT09MX0VYRUNVVElPTl9TVEFUVVNfQ09NUExFVEVEEAMSIAocVE9PTF9FWEVDVVRJT05fU1RBVFVTX0ZBSUxFRBAEEiMKH1RPT0xfRVhFQ1VUSU9OX1NUQVRVU19DQU5DRUxMRUQQBRIhCh1UT09MX0VYRUNVVElPTl9TVEFUVVNfVElNRU9VVBAGKnQKEE91dHB1dFN0cmVhbVR5cGUSIgoeT1VUUFVUX1NUUkVBTV9UWVBFX1VOU1BFQ0lGSUVEEAASHQoZT1VUUFVUX1NUUkVBTV9UWVBFX1NURE9VVBABEh0KGU9VVFBVVF9TVFJFQU1fVFlQRV9TVERFUlIQAiq4AQoQRmlsZUNoYW5nZVN0YXR1cxIiCh5GSUxFX0NIQU5HRV9TVEFUVVNfVU5TUEVDSUZJRUQQABIfChtGSUxFX0NIQU5HRV9TVEFUVVNfTU9ESUZJRUQQARIdChlGSUxFX0NIQU5HRV9TVEFUVVNfU1RBR0VEEAISIAocRklMRV9DSEFOR0VfU1RBVFVTX1VOVFJBQ0tFRBADEh4KGkZJTEVfQ0hBTkdFX1NUQVRVU19ERUxFVEVEEAQqfgoLQ29uZmlnU2NvcGUSHAoYQ09ORklHX1NDT1BFX1VOU1BFQ0lGSUVEEAASFwoTQ09ORklHX1NDT1BFX0dMT0JBTBABEhgKFENPTkZJR19TQ09QRV9QUk9KRUNUEAISHgoaQ09ORklHX1NDT1BFX1BST0pFQ1RfTE9DQUwQAyp3ChJSZXNvdXJjZVZpc2liaWxpdHkSIwofUkVTT1VSQ0VfVklTSUJJTElUWV9VTlNQRUNJRklFRBAAEh8KG1JFU09VUkNFX1ZJU0lCSUxJVFlfUFJJVkFURRABEhsKF1JFU09VUkNFX1ZJU0lCSUxJVFlfT1JHEAJCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_google_protobuf_struct]);
 
 /**
  * Empty represents an empty message (no fields)
@@ -64,6 +65,134 @@ export type ErrorDetail = Message<"reliant.v1.ErrorDetail"> & {
  */
 export const ErrorDetailSchema: GenMessage<ErrorDetail> = /*@__PURE__*/
   messageDesc(file_reliant_v1_common, 1);
+
+/**
+ * NodeObservation is what one node attempt's observe: block recorded when the
+ * node finished (dev-docs/design/workflow-observe.md): the attributes and
+ * events its expressions produced, already redacted and bounded, and the
+ * expressions that failed. It is a list beside a run's node attempts rather
+ * than a field of one, because a node the workflow completes itself (compute,
+ * join, router, loop, workflow) has no attempt row: a client renders an
+ * observation under the attempt with the same workflow_id, node_path, loop
+ * scope and attempt, and one with no such attempt as its own entry.
+ *
+ * @generated from message reliant.v1.NodeObservation
+ */
+export type NodeObservation = Message<"reliant.v1.NodeObservation"> & {
+  /**
+   * NodeId is the node's id; NodePath its position in the run ("" at the top
+   * level of a run that predates node paths).
+   *
+   * @generated from field: string node_id = 1;
+   */
+  nodeId: string;
+
+  /**
+   * @generated from field: string node_path = 2;
+   */
+  nodePath: string;
+
+  /**
+   * LoopNodeId and LoopIteration are the loop scope, unset outside a loop.
+   *
+   * @generated from field: string loop_node_id = 3;
+   */
+  loopNodeId: string;
+
+  /**
+   * @generated from field: optional int32 loop_iteration = 4;
+   */
+  loopIteration?: number | undefined;
+
+  /**
+   * @generated from field: int32 attempt = 5;
+   */
+  attempt: number;
+
+  /**
+   * Source is who recorded it: "workflow" (the node's observe: block) or
+   * "model" (an event the model recorded itself).
+   *
+   * @generated from field: string source = 6;
+   */
+  source: string;
+
+  /**
+   * Attributes are the observe.attributes values, typed (bool, number,
+   * string).
+   *
+   * @generated from field: google.protobuf.Struct attributes = 7;
+   */
+  attributes?: JsonObject | undefined;
+
+  /**
+   * @generated from field: repeated reliant.v1.ObservedEvent events = 8;
+   */
+  events: ObservedEvent[];
+
+  /**
+   * Errors are the expressions that failed, each a short message for the
+   * author. A failed expression never fails the node.
+   *
+   * @generated from field: repeated string errors = 9;
+   */
+  errors: string[];
+
+  /**
+   * Truncated reports that a size cap cut what was recorded.
+   *
+   * @generated from field: bool truncated = 10;
+   */
+  truncated: boolean;
+
+  /**
+   * CreatedAt is when it was recorded, RFC 3339.
+   *
+   * @generated from field: string created_at = 11;
+   */
+  createdAt: string;
+
+  /**
+   * WorkflowId is the workflow row the node ran in (a run's sub-workflows
+   * have their own).
+   *
+   * @generated from field: string workflow_id = 12;
+   */
+  workflowId: string;
+};
+
+/**
+ * Describes the message reliant.v1.NodeObservation.
+ * Use `create(NodeObservationSchema)` to create a new message.
+ */
+export const NodeObservationSchema: GenMessage<NodeObservation> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_common, 2);
+
+/**
+ * ObservedEvent is one event an observe: block recorded. An event named
+ * "decision" with name, value and reason attributes is the convention for a
+ * node that chooses something.
+ *
+ * @generated from message reliant.v1.ObservedEvent
+ */
+export type ObservedEvent = Message<"reliant.v1.ObservedEvent"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: google.protobuf.Struct attributes = 2;
+   */
+  attributes?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.ObservedEvent.
+ * Use `create(ObservedEventSchema)` to create a new message.
+ */
+export const ObservedEventSchema: GenMessage<ObservedEvent> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_common, 3);
 
 /**
  * PlanStatus tracks the lifecycle of a plan

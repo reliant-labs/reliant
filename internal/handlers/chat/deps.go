@@ -141,6 +141,9 @@ type Repository interface {
 
 	// Step executions the workflow view renders.
 	GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*db.ChatStepExecution, error)
+	// ListChatNodeObservations reads what the chat's nodes recorded with
+	// observe:, newest first (the FULL view of GetWorkflowExecutions).
+	ListChatNodeObservations(ctx context.Context, chatID string, limit int) ([]*db.NodeObservation, error)
 	GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]*db.ChatStepExecution, error)
 	ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*db.StepExecution, error)
 

@@ -274,6 +274,8 @@ type (
 	MessageSender                            = sdk.MessageSender
 	MoveChatToProjectRequest                 = sdk.MoveChatToProjectRequest
 	MoveChatToProjectResponse                = sdk.MoveChatToProjectResponse
+	NodeObservation                          = sdk.NodeObservation
+	ObservedEvent                            = sdk.ObservedEvent
 	OutputStreamType                         = sdk.OutputStreamType
 	PauseChatRequest                         = sdk.PauseChatRequest
 	PauseChatResponse                        = sdk.PauseChatResponse

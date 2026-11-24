@@ -241,6 +241,66 @@ type Expectation struct {
 	//	  ran: true
 	//	  status: failed
 	Finally *FinallyExpectation `json:"finally,omitempty" yaml:"finally,omitempty"`
+
+	// Observations asserts on what nodes recorded with their observe: block,
+	// keyed by the node (qualified ids, as elsewhere). The runner evaluates
+	// each node's block over its result exactly as production does after the
+	// node finishes, so a scenario can say "this run decided no_cut because
+	// main_unchanged":
+	//
+	//	observations:
+	//	  plan:
+	//	    events:
+	//	      - name: decision
+	//	        attributes: {name: cut, value: no_cut, reason: main_unchanged}
+	//	  sweep.land:
+	//	    recorded: false
+	Observations map[string]ObservationExpectation `json:"observations,omitempty" yaml:"observations,omitempty"`
+}
+
+// ObservationExpectation asserts on what one node's observe: block recorded
+// over the run (a node inside a loop records once per iteration; a match in
+// any of them counts).
+type ObservationExpectation struct {
+	// Recorded: true requires the node to have recorded an attribute or an
+	// event, false requires it to have recorded neither (it never ran, a
+	// `when:` was false, or it has no block).
+	Recorded *bool `json:"recorded,omitempty" yaml:"recorded,omitempty"`
+	// Attributes must all be among one recording's attributes (partial match:
+	// keys not listed are not checked). Values compare as stored: a number,
+	// a bool or a string.
+	Attributes map[string]interface{} `json:"attributes,omitempty" yaml:"attributes,omitempty"`
+	// Events must each match an event the node recorded: the same name, and
+	// the listed attributes among its attributes (partial match).
+	Events []ObservedEventExpectation `json:"events,omitempty" yaml:"events,omitempty"`
+	// NoErrors: true requires every expression of the block to have
+	// evaluated: an expression that fails never fails the node, so this is
+	// how a scenario catches one.
+	NoErrors bool `json:"no_errors,omitempty" yaml:"no_errors,omitempty"`
+}
+
+// ObservedEventExpectation is one event an ObservationExpectation requires.
+type ObservedEventExpectation struct {
+	// Name is the event's name, e.g. "decision". Required.
+	Name string `json:"name" yaml:"name"`
+	// Attributes must all be among the event's attributes (partial match).
+	Attributes map[string]interface{} `json:"attributes,omitempty" yaml:"attributes,omitempty"`
+}
+
+// RecordedObservation is what one node's observe: block recorded in a run.
+type RecordedObservation struct {
+	Node       string                 `json:"node"`
+	Attributes map[string]interface{} `json:"attributes,omitempty"`
+	Events     []RecordedEvent        `json:"events,omitempty"`
+	// Errors are the expressions that failed, as the run view shows them.
+	Errors    []string `json:"errors,omitempty"`
+	Truncated bool     `json:"truncated,omitempty"`
+}
+
+// RecordedEvent is one event an observe: block recorded.
+type RecordedEvent struct {
+	Name       string                 `json:"name"`
+	Attributes map[string]interface{} `json:"attributes,omitempty"`
 }
 
 // FinallyExpectation asserts on a finally handler's run.
@@ -453,6 +513,10 @@ type ExecutionDetails struct {
 
 	// SavedMessages lists every message the run saved, in order.
 	SavedMessages []SavedMessage `json:"saved_messages,omitempty"`
+
+	// Observations lists what every node's observe: block recorded, in the
+	// order the nodes finished.
+	Observations []RecordedObservation `json:"observations,omitempty"`
 
 	// OnFailure is what the run's on_failure handler did; nil when the
 	// workflow declares none.

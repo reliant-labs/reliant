@@ -172,6 +172,24 @@ For an integration trigger the payload is merged over a sample of the event's de
 
 **Error.** An `observe:` block, on a node or on the workflow, has an expression that does not compile in its scope: a misspelled output (`output.reason` on a node with no `reason` output), a read of `nodes.*` (a node records only what its own `output` says, so a value worked out from other nodes becomes one of its outputs first), `item` outside an event's `each:`, a `when:` wrapped in `{{ }}` or not returning a bool. It also reports a block that is too large once the workflow's defaults are merged into a node's. Validation reports the same findings only as warnings, because it runs whenever a run starts and a node's observability must never stop a run; lint is where they are caught. See [Common node fields](/reference/nodes#common-node-fields).
 
+### observe-decision-unrecorded
+
+**Warning.** A node looks like it makes a decision that other nodes act on, and records nothing about it. The rule reports a `compute` node with an output whose name contains a decision word (`decision`, `decide`, `verdict`, `reason`, `why`, `skip`, `cut`, `hold`, `land`, `take`, `route`, `tier`, `label`, `handoff`, `give_up`, `unstick`) that another expression reads. It also reports a `run` node whose id contains one of those words and whose `stdout` or `exit_code` is read. Such a node is covered when it has an `observe:` block of its own, or when its graph's workflow-level `observe:` records an event. Record the choice as an event named `decision`, with `name`, `value` and `reason` attributes, so the run view, `reliant workflow status` and traces can say what the node chose and why:
+
+```yaml
+- id: plan
+  type: compute
+  outputs:
+    cut: "{{ nodes.world.exit_code != 0 }}"
+    hold: "{{ nodes.world.exit_code == 0 ? 'main_unchanged' : '' }}"
+  observe:
+    events:
+      - name: decision
+        attributes: { name: cut, value: "{{ output.cut ? 'cut' : 'no_cut' }}", reason: "{{ output.hold }}" }
+```
+
+The rule matches names, so it can be wrong. When the choice needs no record, silence it with `# lint:allow observe-decision-unrecorded - <reason>`. See [Common node fields](/reference/nodes#common-node-fields).
+
 ### lint-allow-invalid
 
 **Error.** A `lint:allow` comment names a rule that does not exist (a typo silences nothing) or gives no reason. Use an ID from `reliant workflow lint --rules`, and say why after it.

@@ -101,6 +101,8 @@ An expression sees `output` (this node's result), `inputs`, `trigger`, `workflow
 
 A node that runs as an activity (`call_llm`, `execute_tools`, `run`, `action`, `invoke_tool` and the rest) is recorded when it succeeds: its attributes and events are stored with the run and set on the node's span, and its metrics are emitted as `reliant.observed.<name>`. A node the workflow completes itself (`compute`, `join`, `router`, `loop`, `workflow`, `approval`, `ask_question`) is recorded the same way when it completes, and so is a node whose `tolerate_failure` turned its failure into outputs (`output.failed` is readable); for these `node.attempt` is 1, and `node.duration_ms` is 0 on `join`, `router`, `loop`, `workflow` and `approval`, which the workflow does not time. Telemetry carries a string only when it is one code-like token (`no_cut`, `review:changes`); any other string is withheld from it and kept only in the stored record, and a metric attribute that is not a bool, an integer or such a code is recorded as `other`.
 
+What a node recorded is shown under its node in the run view (a decision, an event named `decision` with `name`, `value` and `reason`, as one line) and in `reliant workflow status`, and a scenario asserts it with `expect.observations`. A viewer of a shared chat does not see it. `reliant workflow lint` warns about a node that looks like it decides something other nodes act on and records nothing (`observe-decision-unrecorded`).
+
 A server that predates `observe` refuses a file that uses it, so add `observe` to a workflow only once every server and CLI that reads the file runs a release that reads it.
 
 ---

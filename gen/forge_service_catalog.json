@@ -9218,6 +9218,72 @@
               "type_name": "reliant.v1.Chat"
             }
           ],
+          "reliant.v1.NodeObservation": [
+            {
+              "name": "node_id",
+              "kind": "string"
+            },
+            {
+              "name": "node_path",
+              "kind": "string"
+            },
+            {
+              "name": "loop_node_id",
+              "kind": "string"
+            },
+            {
+              "name": "loop_iteration",
+              "kind": "int32",
+              "optional": true
+            },
+            {
+              "name": "attempt",
+              "kind": "int32"
+            },
+            {
+              "name": "source",
+              "kind": "string"
+            },
+            {
+              "name": "attributes",
+              "kind": "message",
+              "type_name": "google.protobuf.Struct"
+            },
+            {
+              "name": "events",
+              "kind": "message",
+              "type_name": "reliant.v1.ObservedEvent",
+              "repeated": true
+            },
+            {
+              "name": "errors",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "truncated",
+              "kind": "bool"
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            },
+            {
+              "name": "workflow_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ObservedEvent": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "attributes",
+              "kind": "message",
+              "type_name": "google.protobuf.Struct"
+            }
+          ],
           "reliant.v1.PauseChatRequest": [
             {
               "name": "chat_id",
@@ -10009,6 +10075,12 @@
               "name": "stop_reason",
               "kind": "enum",
               "type_name": "reliant.v1.WorkflowStopReason"
+            },
+            {
+              "name": "observations",
+              "kind": "message",
+              "type_name": "reliant.v1.NodeObservation",
+              "repeated": true
             }
           ],
           "reliant.v1.WorkspaceBranchContext": [
@@ -10131,6 +10203,8 @@
           "reliant.v1.MessageSender": "reliant/v1/chat.proto",
           "reliant.v1.MoveChatToProjectRequest": "reliant/v1/chat.proto",
           "reliant.v1.MoveChatToProjectResponse": "reliant/v1/chat.proto",
+          "reliant.v1.NodeObservation": "reliant/v1/common.proto",
+          "reliant.v1.ObservedEvent": "reliant/v1/common.proto",
           "reliant.v1.PauseChatRequest": "reliant/v1/chat.proto",
           "reliant.v1.PauseChatResponse": "reliant/v1/chat.proto",
           "reliant.v1.ProviderPolicy": "reliant/v1/chat.proto",
@@ -31501,6 +31575,17 @@
               "Name": "nodes_truncated",
               "ProtoType": "bool",
               "IsOptional": false
+            },
+            {
+              "Name": "observations",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.NodeObservation"
+            },
+            {
+              "Name": "observations_truncated",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "InterruptRunRequest": [
@@ -31820,6 +31905,16 @@
             {
               "name": "nodes_truncated",
               "kind": "bool"
+            },
+            {
+              "name": "observations",
+              "kind": "message",
+              "type_name": "reliant.v1.NodeObservation",
+              "repeated": true
+            },
+            {
+              "name": "observations_truncated",
+              "kind": "bool"
             }
           ],
           "reliant.v1.InputMessage": [
@@ -31988,6 +32083,72 @@
               "kind": "message",
               "type_name": "reliant.v1.UnlaunchedTriggerEvent",
               "repeated": true
+            }
+          ],
+          "reliant.v1.NodeObservation": [
+            {
+              "name": "node_id",
+              "kind": "string"
+            },
+            {
+              "name": "node_path",
+              "kind": "string"
+            },
+            {
+              "name": "loop_node_id",
+              "kind": "string"
+            },
+            {
+              "name": "loop_iteration",
+              "kind": "int32",
+              "optional": true
+            },
+            {
+              "name": "attempt",
+              "kind": "int32"
+            },
+            {
+              "name": "source",
+              "kind": "string"
+            },
+            {
+              "name": "attributes",
+              "kind": "message",
+              "type_name": "google.protobuf.Struct"
+            },
+            {
+              "name": "events",
+              "kind": "message",
+              "type_name": "reliant.v1.ObservedEvent",
+              "repeated": true
+            },
+            {
+              "name": "errors",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "truncated",
+              "kind": "bool"
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            },
+            {
+              "name": "workflow_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ObservedEvent": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "attributes",
+              "kind": "message",
+              "type_name": "google.protobuf.Struct"
             }
           ],
           "reliant.v1.PauseRunRequest": [
@@ -32332,6 +32493,8 @@
           "reliant.v1.LastRunPerWorkflowResponse": "reliant/v1/run.proto",
           "reliant.v1.ListRunsRequest": "reliant/v1/run.proto",
           "reliant.v1.ListRunsResponse": "reliant/v1/run.proto",
+          "reliant.v1.NodeObservation": "reliant/v1/common.proto",
+          "reliant.v1.ObservedEvent": "reliant/v1/common.proto",
           "reliant.v1.PauseRunRequest": "reliant/v1/run.proto",
           "reliant.v1.PauseRunResponse": "reliant/v1/run.proto",
           "reliant.v1.ResumeRunRequest": "reliant/v1/run.proto",
