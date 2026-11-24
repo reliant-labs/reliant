@@ -70,12 +70,14 @@ const agentMessageColumns = `id, chat_id, from_thread_id, to_thread_id, kind, bo
 
 // insertAgentMessageSQL is the insert every enqueue shares; each appends its
 // own conflict clause. attachments is NULL for none (see
-// agentMessageAttachments).
+// agentMessageAttachments). author_user_id is NULL for the chat's owner and
+// for every agent-to-agent row; it is how a queued human message keeps its
+// author until the drain saves it.
 const insertAgentMessageSQL = `
 INSERT INTO agent_messages (
     id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
-    status, created_at, attachments, synthesized, subject, display_style
-) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9::jsonb, ?10, ?11, ?12)`
+    status, created_at, attachments, synthesized, subject, display_style, author_user_id
+) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9::jsonb, ?10, ?11, ?12, ?13)`
 
 func agentMessageInsertArgs(msg *core.AgentMessage) ([]any, error) {
 	attachments, err := agentMessageAttachments(msg.Attachments)
@@ -83,7 +85,7 @@ func agentMessageInsertArgs(msg *core.AgentMessage) ([]any, error) {
 		return nil, err
 	}
 	return []any{msg.ID, msg.ChatID, msg.FromThreadID, msg.ToThreadID, msg.Kind, msg.Body, msg.ToolCallID,
-		msg.Status, msg.CreatedAt, attachments, msg.Synthesized, msg.Subject, msg.DisplayStyle}, nil
+		msg.Status, msg.CreatedAt, attachments, msg.Synthesized, msg.Subject, msg.DisplayStyle, msg.AuthorUserID}, nil
 }
 
 // EnqueueAgentMessage queues msg.
