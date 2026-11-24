@@ -7,8 +7,8 @@
  * when it docks, collapses or turns on.
  */
 
-import { act, render, screen, waitFor } from "@testing-library/react";
-import { useEffect } from "react";
+import { act, screen, waitFor } from "@testing-library/react";
+import { useEffect, type ReactElement } from "react";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -21,6 +21,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { renderWithSession } from "@/lib/test-utils";
 import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 
 const probe = vi.hoisted(() => ({ navMounts: 0, pageMounts: 0, signedIn: true, narrow: false }));
@@ -47,10 +48,6 @@ vi.mock("@/hooks/useNarrowViewport", async (importOriginal) => ({
   useNarrowViewport: () => probe.narrow,
 }));
 
-vi.mock("@/store/authStore", () => ({
-  useAuthStore: (select: (state: { user: object | null }) => unknown) => select({ user: probe.signedIn ? { id: "u1" } : null }),
-}));
-
 import { AppShellFrame } from "../AppShell";
 import { PageMain, shellFrameScope, toggleShellNav, useShellFrame } from "../shellFrame";
 
@@ -65,6 +62,11 @@ function Page({ name }: { name: string }) {
       {name}
     </div>
   );
+}
+
+/** Rendered signed in, or signed out while `probe.signedIn` is false. */
+function renderInSession(ui: ReactElement) {
+  return renderWithSession(ui, { session: probe.signedIn ? undefined : null });
 }
 
 function renderAt(path: string) {
@@ -93,7 +95,7 @@ function renderAt(path: string) {
     ]),
     history: createMemoryHistory({ initialEntries: [path] }),
   });
-  render(<RouterProvider router={router} />);
+  renderInSession(<RouterProvider router={router} />);
   return router;
 }
 
@@ -168,7 +170,7 @@ describe("the one shell", () => {
       routeTree: root.addChildren([app.addChildren(chats), authenticated.addChildren([inbox])]),
       history: createMemoryHistory({ initialEntries: ["/c/a"] }),
     });
-    render(<RouterProvider router={router} />);
+    renderInSession(<RouterProvider router={router} />);
 
     const nav = await screen.findByTestId("nav-probe");
     const shell = await screen.findByTestId("page");
@@ -295,7 +297,7 @@ describe("the shell's main landmark", () => {
       ]),
       history: createMemoryHistory({ initialEntries: [path] }),
     });
-    render(<RouterProvider router={router} />);
+    renderInSession(<RouterProvider router={router} />);
   }
 
   it.each(["/", "/c/c0ffee00-2222-4aaa-8bbb-00000000000a", "/projects/00000002-0000-4000-8000-0000000000a2", "/forge/p/shop", "/inbox"])(

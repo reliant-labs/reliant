@@ -34,7 +34,7 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
-import { useAuthStore } from "../../store/authStore";
+import { useSignedIn } from "../../lib/session";
 import { shellProjectNow } from "../../lib/urlState/shellScopeStore";
 import { openAddProject } from "../../store/addProjectDialogStore";
 import { OPEN_PROJECT_SWITCHER_EVENT } from "../../lib/projectSwitcher";
@@ -433,7 +433,7 @@ export function ShortcutHost({ children }: { children: ReactNode }) {
   const routeIds = useRouterState({
     select: (s) => s.matches.map((match) => match.routeId).join(" "),
   });
-  const signedIn = useAuthStore((state) => state.user !== null);
+  const signedIn = useSignedIn();
   const { enabled, workspace } = shortcutScope({
     routeIds: routeIds.split(" "),
     pathname,

@@ -39,8 +39,8 @@ import { useSidebarOverlay } from "@/hooks/useSidebarOverlay";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { lazyRoute } from "@/lib/lazyRoute";
 import { runsPath } from "@/lib/paths";
+import { useSignedIn } from "@/lib/session";
 import { cn } from "@/lib/utils";
-import { useAuthStore } from "@/store/authStore";
 import { useShortcutLabel } from "@/store/shortcutsStore";
 import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 
@@ -64,7 +64,7 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
     select: (s) => s.matches[s.matches.length - 1]?.pathname ?? s.location.pathname,
   });
   const routeIds = useRouterState({ select: (s) => s.matches.map((match) => match.routeId).join(" ") });
-  const signedIn = useAuthStore((state) => state.user !== null);
+  const signedIn = useSignedIn();
   const inShell = shellFrameScope({ routeIds: routeIds.split(" "), pathname, signedIn });
 
   const expanded = useWorkspaceStateStore((state) => state.leftSidebarExpanded);
