@@ -91,6 +91,13 @@ export interface NavRow extends NavItemBase {
   kind: "row";
   label: string;
   icon?: ReactNode;
+  /**
+   * The icon a flat nav (a phone's drawer: NavRenderer `flat`) draws when
+   * there is no `icon`: the nested nav draws this row bare (a drill-in's
+   * views, an accordion's rows), but a flat nav draws every row like a
+   * top-level one, icon included. navConfig.test holds every row to one.
+   */
+  flatIcon?: ReactNode;
   href: NavHref;
   match?: NavMatch;
   /** Leaves the current area for another place (AI providers ↗ in Settings). */
@@ -105,6 +112,13 @@ export interface NavGroup extends NavItemBase {
   kind: "group";
   label: string;
   icon?: ReactNode;
+  /**
+   * The icon a flat nav (a phone's drawer: NavRenderer `flat`) draws when
+   * there is no `icon`: the nested nav draws this row bare (a drill-in's
+   * views, an accordion's rows), but a flat nav draws every row like a
+   * top-level one, icon included. navConfig.test holds every row to one.
+   */
+  flatIcon?: ReactNode;
   children: NavChildren;
   /** Routes the group holds beyond its rows' own (a slot's: the chat pages for Agents ▾). */
   match?: NavMatch;
@@ -117,6 +131,13 @@ export interface NavArea extends NavItemBase {
   kind: "area";
   label: string;
   icon?: ReactNode;
+  /**
+   * The icon a flat nav (a phone's drawer: NavRenderer `flat`) draws when
+   * there is no `icon`: the nested nav draws this row bare (a drill-in's
+   * views, an accordion's rows), but a flat nav draws every row like a
+   * top-level one, icon included. navConfig.test holds every row to one.
+   */
+  flatIcon?: ReactNode;
   /** The routes that are this area: on one, its rows replace the nav. */
   match: NavMatch;
   /** Where its row goes; omitted, its first row's page. */

@@ -38,6 +38,18 @@
  * one-line summary under the header keeps the choice in view; tapping it drops
  * the keyboard and brings the options back.
  *
+ * ## Project (owner, 2026-11-24)
+ *
+ * The Project row picks the project the chat runs in (one primary project;
+ * attaching more is the desktop's). It lists the org's projects on a
+ * connected machine, naming the machine, with the context project first and
+ * selected (newChatProjectChoices.ts). Picking one makes it the context
+ * project (`selectProject`, as the desktop chip's `openNewChat` does), which
+ * re-keys the draft: the workspace resets to its main one and the machine to
+ * its placement. A repository on no connected machine is offered as "Set up
+ * on <machine>": it is cloned there first (reliant#3420's set-up, in the
+ * folder `setUpPathOn` picks), and the chat waits on that machine for it.
+ *
  * ## Why the workflow picker is a single row, not 23 full-bleed ones
  *
  * The previous shape rendered every workflow as its own row — on this
@@ -77,7 +89,7 @@ import { relativeTime } from "./relativeTime";
 import { useComposeMode } from "@/lib/composeMode";
 import { cn } from "@/lib/utils";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
-import { createProjectFromRepo, useProjectDaemonInstalls } from "@/hooks/project-queries";
+import { createProjectFromRepo, useProjectDaemonInstalls, useProjects, type Project } from "@/hooks/project-queries";
 import { useCapability } from "@/lib/surfaceContext";
 import {
   DEFAULT_MACHINE,
@@ -86,6 +98,7 @@ import {
   chatMachineOptions,
   defaultChatMachine,
   defaultMachineDaemon,
+  isUsableMachineForChat,
   startOptionsForMachine,
 } from "@/lib/chatMachine";
 import {
@@ -94,6 +107,7 @@ import {
   preferredDaemonIds,
   projectPlacement,
   sectionMachines,
+  setUpPathOn,
   startBlockedReason,
   type PlacementState,
 } from "@/lib/projectPlacement";
@@ -109,6 +123,8 @@ import {
 } from "@/lib/workspaceMachine";
 import { daemonLabel } from "../Automations/daemonChoices";
 import { mobileChatPath, mobileChatsPath } from "@/lib/paths";
+import { logger } from "../../lib/logger";
+import { newChatProjectChoices } from "./newChatProjectChoices";
 
 // Workflow refs arrive in two shapes — bare names from ListWorkflows ("agent")
 // and URIs from preferences ("builtin://agent"). Every comparison has to
@@ -175,11 +191,36 @@ function workspaceMeta(worktree: Worktree): string {
 
 export function MobileNewChat() {
   const projectId = useProjectStore((s) => s.currentProject?.id);
+  // The machine a project picked here arrives on (a set-up's clone target), for that project's draft.
+  const [machineOffer, setMachineOffer] = useState<{ projectId: string; daemonId: string } | null>(null);
   if (!projectId) return <MobileScreenHeader title="New chat" subtitle="No project" />;
-  return <NewChatDraftBoundary key={projectId} projectId={projectId}><MobileNewChatDraft /></NewChatDraftBoundary>;
+  // The new chat's project is the context project; the draft below is keyed by it.
+  const chooseProject = (project: Project, daemonId?: string) => {
+    setMachineOffer(daemonId ? { projectId: project.id, daemonId } : null);
+    useProjectStore
+      .getState()
+      .selectProject(project, { restoreChat: false, restoreWorkspace: false })
+      .catch((error: unknown) => logger.warn("[MobileNewChat] Project switch failed", { projectId: project.id, error }));
+  };
+  return (
+    <NewChatDraftBoundary key={projectId} projectId={projectId}>
+      <MobileNewChatDraft
+        initialMachine={machineOffer?.projectId === projectId ? machineOffer.daemonId : null}
+        onChooseProject={chooseProject}
+      />
+    </NewChatDraftBoundary>
+  );
 }
 
-function MobileNewChatDraft() {
+function MobileNewChatDraft({
+  initialMachine,
+  onChooseProject,
+}: {
+  /** The machine to start on, when the project was just set up on it. */
+  initialMachine: string | null;
+  /** Makes `project` the new chat's project; `daemonId` is where it was just set up. */
+  onChooseProject: (project: Project, daemonId?: string) => void;
+}) {
   const navigate = useNavigate();
   // `strict: false` — nested under `_authenticated` → `_mobile`, same as
   // every other param/search read on this surface.
@@ -257,7 +298,7 @@ function MobileNewChatDraft() {
     setInstallsPollMs(settingUpAnywhere ? 3_000 : false);
   }, [settingUpAnywhere]);
   const [settingUp, setSettingUp] = useState(false);
-  const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
+  const [selectedMachine, setSelectedMachine] = useState<string | null>(initialMachine);
   // A branch workspace is a checkout on one machine: picking it picks its
   // machine, and a machine offers only its own workspaces (lib/workspaceMachine.ts).
   const effectiveChoice = canPickMachine ? selectedMachine : null;
@@ -322,16 +363,64 @@ function MobileNewChatDraft() {
     Boolean(runsOnDaemonId) &&
     canSetUpElsewhere(currentProject) &&
     ["absent", "failed"].includes(placement.stateOn(runsOnDaemonId ?? ""));
+  // A machine's OS, so a set-up clone lands in a folder that machine can create (setUpPathOn).
+  const platformOf = (daemonId: string) => daemons.find((d) => d.daemonId === daemonId)?.platform;
+
+  // The Project row. A set-up clones onto the machine this chat would run on,
+  // else the machine a chat would default to.
+  const { projects } = useProjects();
+  const chatDaemonId = noMachine ? undefined : (resolvedMachine.lockedBy ?? (machineRowValue || undefined));
+  const setUpDaemonId = chatDaemonId ?? defaultMachineDaemon(daemons.filter(isUsableMachineForChat))?.daemonId;
+  const setUpTarget = setUpDaemonId
+    ? { daemonId: setUpDaemonId, name: daemonLabel(daemons.find((d) => d.daemonId === setUpDaemonId), setUpDaemonId) }
+    : undefined;
+  const projectChoices = newChatProjectChoices({
+    projects: projects ?? [],
+    installs: installRows,
+    daemons,
+    currentProjectId: currentProject?.id,
+    setUpTarget,
+  });
+  const currentChoice = projectChoices.find((choice) => choice.project.id === currentProject?.id);
+  const [settingUpProject, setSettingUpProject] = useState<{ name: string; machine: string } | null>(null);
+  const pickProject = async (projectId: string) => {
+    const choice = projectChoices.find((c) => c.project.id === projectId);
+    if (!choice || projectId === currentProject?.id || choice.kind === "unavailable" || settingUpProject) return;
+    if (choice.kind !== "set-up" || !setUpTarget) {
+      onChooseProject(choice.project);
+      return;
+    }
+    const { project } = choice;
+    setSettingUpProject({ name: project.name, machine: setUpTarget.name });
+    setError("");
+    try {
+      const path = setUpPathOn({ installs: installRows, projectId: project.id, path: project.path, daemonId: setUpTarget.daemonId, platformOf });
+      await createProjectFromRepo({
+        cloneUrl: project.remote_url ?? "",
+        daemonId: setUpTarget.daemonId,
+        name: project.name,
+        ...(path ? { path } : {}),
+      });
+      // The clone is queued; the chat waits on that machine for it.
+      onChooseProject(project, setUpTarget.daemonId);
+    } catch (err) {
+      setError(describeCloneError(err, setUpTarget.name));
+    } finally {
+      setSettingUpProject(null);
+    }
+  };
+
   const setUpHere = async () => {
     if (!currentProject || !runsOnDaemonId || settingUp) return;
     setSettingUp(true);
     setError("");
     try {
+      const path = setUpPathOn({ installs: installRows, projectId: currentProject.id, path: currentProject.path, daemonId: runsOnDaemonId, platformOf });
       await createProjectFromRepo({
         cloneUrl: currentProject.remote_url ?? "",
         daemonId: runsOnDaemonId,
         name: currentProject.name,
-        path: currentProject.path,
+        ...(path ? { path } : {}),
       });
     } catch (err) {
       setError(describeCloneError(err, daemonLabel(daemons.find((d) => d.daemonId === runsOnDaemonId), runsOnDaemonId)));
@@ -459,6 +548,26 @@ function MobileNewChatDraft() {
       )}
 
       <div ref={canvasRef} className="mx-auto min-h-0 w-full max-w-3xl flex-1 space-y-4 overflow-y-auto px-4 py-4">
+        {currentProject && (
+          <div data-testid="mobile-new-chat-project">
+          <MobileCardGroup>
+            <MobileSelectRow
+              label="Project"
+              description={currentChoice?.description}
+              value={currentProject.id}
+              placeholder={currentProject.name}
+              sheetTitle="Which project"
+              options={projectChoices.map((choice) => ({
+                value: choice.project.id,
+                label: choice.project.name,
+                description: choice.description,
+                disabled: choice.kind === "unavailable" && choice.project.id !== currentProject.id,
+              }))}
+              onChange={(id) => void pickProject(id)}
+            />
+          </MobileCardGroup>
+          </div>
+        )}
         {showWorkspaces &&
           (workspacesReadOnly ? (
             <MobileCardGroup label="Workspace">
@@ -575,6 +684,14 @@ function MobileNewChatDraft() {
               )}
             </StatusLine>
           )}
+          {settingUpProject && (
+            <StatusLine data-testid="mobile-new-chat-project-setup">
+              <p role="status" className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Setting up {settingUpProject.name} on {settingUpProject.machine}…
+              </p>
+            </StatusLine>
+          )}
           {error && (
             <StatusLine tone="destructive">
               <p role="alert">{error}</p>
@@ -590,7 +707,7 @@ function MobileNewChatDraft() {
               </Link>
             </StatusLine>
           )}
-          <ChatInput attachmentDraftId={newChatAttachmentDraftId(currentProject!.id)} onSend={handleSend} disabled={isCreating || !currentProject || !!placementBlock} placeholder="What do you want to do?" />
+          <ChatInput attachmentDraftId={newChatAttachmentDraftId(currentProject!.id)} onSend={handleSend} disabled={isCreating || !currentProject || !!placementBlock || !!settingUpProject} placeholder="What do you want to do?" />
         </div>
       </div>
 

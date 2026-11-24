@@ -611,6 +611,36 @@ const SURFACES: Surface[] = [
     act: openNavDrawer,
   },
   {
+    // The phone's own drawer on its chat list: drilled into Agents, Workflows open. Its rows are
+    // drawn like the top level's (owner, 2026-11-24: same size, colour, indent, and an icon).
+    name: 'shell-m-drawer-agents',
+    path: '/m/chats',
+    on: ['mobile'],
+    ready: (page) => page.getByTestId('nav-workflows-library'),
+    act: async (page) => {
+      await expect(page.getByText('Write the webhooks guide').first()).toBeVisible({ timeout: 20_000 })
+      await openNavDrawer(page)
+      await expect(page.getByTestId('nav-drill-in')).toHaveAttribute('data-area', 'agents')
+      await page.getByTestId('nav-workflows').click()
+    },
+  },
+  {
+    // The phone's new chat: the Project row names the machine the project is on.
+    name: 'mobile-new-chat',
+    path: '/m/new',
+    on: ['mobile'],
+    ready: (page) => page.getByTestId('mobile-new-chat-project'),
+  },
+  {
+    name: 'mobile-new-chat-projects',
+    path: '/m/new',
+    on: ['mobile'],
+    ready: (page) => page.getByText('Which project', { exact: true }),
+    act: async (page) => {
+      await page.getByTestId('mobile-new-chat-project').getByRole('button').click()
+    },
+  },
+  {
     name: 'shell-m-drawer-observability',
     path: '/forge/p/shopfront',
     on: ['mobile'],
