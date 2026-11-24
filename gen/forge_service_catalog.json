@@ -555,6 +555,7 @@
         "WorkerTrigger",
         "WorkflowCheckSyncer",
         "WorkflowEventRelay",
+        "Workflowdrafts",
         "WriteLedgerPrune",
         "WriteLedgerStore"
       ],
@@ -60733,6 +60734,19 @@
       ],
       "providers": [
         "Daemonmirror"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerToolsFactory",
+      "field": "WorkflowDrafts",
+      "interface": "github.com/reliant-labs/reliant/internal/workflowdrafts.Service",
+      "methods": [],
+      "candidates": [
+        "Workflowdrafts"
+      ],
+      "providers": [
+        "Workflowdrafts"
       ],
       "resolution": "composition_expression"
     },

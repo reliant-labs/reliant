@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/reliant-labs/forge/pkg/observe"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+
+	"github.com/reliant-labs/forge/pkg/observe"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
@@ -82,6 +83,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/workflowcheck"
+	"github.com/reliant-labs/reliant/internal/workflowdrafts"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
@@ -553,6 +555,9 @@ type WorkerToolsFactoryDeps struct {
 	CatalogSearch   *WorkerCatalogSearch
 	Router          *WorkerDaemonRouter
 	Mirror          daemonmirror.Service
+	// WorkflowDrafts is the saved workflows the workflow and scenario tools
+	// read and write.
+	WorkflowDrafts workflowdrafts.Service
 	// Membership names a person's org role for propose_connection, which
 	// offers an org-wide connection only to an org owner or admin.
 	Membership *orgs.Resolver
@@ -639,6 +644,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		// run_scenario / write_scenario execute on the real runtime via the
 		// scenario runner; injected because the runner imports this package's
 		// dependents.
+		WorkflowDrafts: d.WorkflowDrafts,
 		ScenarioRunner: scenariorunner.RunScenario,
 		// start_run / control_run / send_to_run execute here, inside the
 		// ExecuteTools activity.
