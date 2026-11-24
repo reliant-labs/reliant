@@ -50,6 +50,7 @@ import { SharedWithOrgSection } from "../Sharing/SharedWithOrgSection";
 import { useChatProjectFilter } from "../../hooks/useChatProjectFilter";
 import { ChatProjectFilterButton, ChatProjectFilterScope } from "../Projects/ChatProjectFilter";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
+import { HelpMenu } from "./sidebar/HelpMenu";
 import type { RunsSearch } from "../../routeSchemas";
 import { useMarkUnread } from "../../hooks/message-queries";
 import { activityNeedsAttention } from "../../store/chatNavigationStore";
@@ -132,6 +133,8 @@ interface SidebarProps {
   /** Open the Runs tab with filters; the Workflows row's pill passes "live". */
   onOpenRuns?: (search?: RunsSearch) => void;
   onOpenChatSearch?: () => void;
+  /** Open the journey picker (`?tour=pick:menu`) on the page on screen: Help › Take a tour, the Setup Guide's tour item. */
+  onOpenTours?: () => void;
 }
 
 const NO_SEARCH: Record<string, unknown> = {};
@@ -721,6 +724,7 @@ function SidebarComponent({
   search = NO_SEARCH,
   onNavigate,
   onOpenRuns,
+  onOpenTours,
 }: SidebarProps) {
   const go = useCallback(
     (href: string, options?: NavigateOptions) => (options ? onNavigate?.(href, options) : onNavigate?.(href)),
@@ -2099,6 +2103,8 @@ function SidebarComponent({
       />
     ),
     "update-button": () => <SidebarUpdateButton />,
+    // Help, beside Settings.
+    help: () => <HelpMenu onNavigate={go} onOpenTours={onOpenTours} />,
   };
 
   return (
