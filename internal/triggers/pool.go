@@ -141,6 +141,11 @@ func capacityLimit(ctx context.Context, placer Placer, t *core.Trigger, policy *
 // launched on decisions read from a catalog it would not run: the fire waits
 // and is redriven, reading the new one.
 func launchOnPool(ctx context.Context, placer Placer, launcher Launcher, t *core.Trigger, ev launch.Event, spec launch.Spec, resuming bool, catalog string) (*launch.Result, error) {
+	if spec.FiringTraceParent == "" {
+		// The run links to this attempt's trigger.fire span, named rather
+		// than left to whichever span ctx holds by the time Launch runs.
+		spec.FiringTraceParent = FireSpanFrom(ctx).TraceParent()
+	}
 	if t.MachinePoolID == "" {
 		return launcher.Launch(ctx, ev, spec)
 	}

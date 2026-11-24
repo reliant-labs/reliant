@@ -267,7 +267,6 @@ func validateWorkflowScope(s *workflowScope, result *Result) {
 	validateSwitchCaseConditions(s.wf, s.basePath, result)
 	validateAllJoinReachability(s.wf, s.basePath, result)
 	s.validateDeclaredOutputs(result)
-	s.validateGraphObserve(result)
 }
 
 // validateNode validates one node's condition, config, inject, loop fields
@@ -292,6 +291,10 @@ func (s *workflowScope) validateNode(node *reliantv1.Node, nodePath []string, re
 		s.validateSaveMessage(node, sm, append(append([]string{}, nodePath...), saveMessageFieldKey), after, result)
 	}
 
+	if defaults := s.wf.GetObserve(); defaults != nil {
+		// Defaults run with this node's output, not an untyped graph output.
+		s.validateObserve(defaults, node, append(append([]string{}, nodePath...), "observe_defaults"), after, result)
+	}
 	if o := node.GetObserve(); o != nil {
 		s.validateObserve(o, node, append(append([]string{}, nodePath...), observeFieldKey), after, result)
 	}

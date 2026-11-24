@@ -12,15 +12,23 @@ import (
 func TestObserveInvalid_NamesTheNodeAndThePlace(t *testing.T) {
 	t.Parallel()
 	got := findingsOf(Check(loadFixture(t, filepath.Join("testdata", RuleObserveInvalid, "bad.yaml"))), RuleObserveInvalid)
-	require.Len(t, got, 2, "%v", got)
-	byNode := map[string]Finding{}
+	require.Len(t, got, 3, "%v", got)
+	defaults := map[string]Finding{}
+	var own Finding
 	for _, f := range got {
-		byNode[f.Node] = f
+		if strings.HasPrefix(f.Message, "observe_defaults.") {
+			defaults[f.Node] = f
+		} else {
+			own = f
+		}
 	}
-	assert.True(t, strings.HasPrefix(byNode["plan"].Message, "events.[0].attributes.reason: "), byNode["plan"].Message)
-	assert.Contains(t, byNode["plan"].Message, "reason")
-	assert.True(t, strings.HasPrefix(byNode[""].Message, "attributes.first: "), "the workflow's defaults are reported on the workflow: %s", byNode[""].Message)
-	assert.Contains(t, byNode[""].Message, "`nodes`")
+	assert.Equal(t, "plan", own.Node)
+	assert.True(t, strings.HasPrefix(own.Message, "events.[0].attributes.reason: "), own.Message)
+	assert.Contains(t, own.Message, "reason")
+	for _, node := range []string{"plan", "report"} {
+		assert.True(t, strings.HasPrefix(defaults[node].Message, "observe_defaults.attributes.first: "), defaults[node].Message)
+		assert.Contains(t, defaults[node].Message, "`nodes`")
+	}
 }
 
 func TestObserveFindingLocation(t *testing.T) {

@@ -477,24 +477,29 @@ func EvaluateDeclaredOutputs(
 // strict read failed every replay of a run whose definition used a field this
 // build predates (an additive key such as `observe`), so a new optional field
 // could not be adopted until no older worker was left anywhere. The tolerant
-// read comes last, after the strict read and the legacy fallback have both
-// refused, because the legacy shorthand (a run node's `command` beside its
-// `id`) is also "unknown" to protojson: reading it tolerantly first would drop
-// those fields instead of parsing them.
+// read validates known protobuf fields before considering the legacy syntax.
+// Explicit legacy shorthand is parsed only by the legacy parser, never by a
+// decoder that would discard its arguments.
 func LoadWorkflow(data []byte) (*reliantv1.Workflow, error) {
 	workflow := &reliantv1.Workflow{}
 	protoErr := protojson.Unmarshal(data, workflow)
 	if protoErr == nil {
 		return workflow, nil
 	}
-	if legacyWorkflow, err := loadLegacyWorkflowJSON(data); err == nil {
-		return legacyWorkflow, nil
+	legacy, err := wfyaml.HasLegacyWorkflowJSON(data)
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal workflow JSON: %w", err)
+	}
+	if legacy {
+		// Never retry a failed legacy decode as protobuf: its shorthand
+		// arguments would become unknown fields and silently disappear.
+		return loadLegacyWorkflowJSON(data)
 	}
 	tolerant := &reliantv1.Workflow{}
-	if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(data, tolerant); err == nil {
-		return tolerant, nil
+	if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(data, tolerant); err != nil {
+		return nil, fmt.Errorf("unmarshal workflow JSON: %w", err)
 	}
-	return nil, fmt.Errorf("unmarshal workflow JSON: %w", protoErr)
+	return tolerant, nil
 }
 
 // loadLegacyWorkflowJSON parses generic JSON, converts it to YAML, then

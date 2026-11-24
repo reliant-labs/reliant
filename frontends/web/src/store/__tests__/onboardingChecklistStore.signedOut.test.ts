@@ -61,9 +61,10 @@ vi.mock("../globalDataStore", () => ({
     subscribe: vi.fn(() => () => undefined),
   },
 }));
-vi.mock("../../lib/events", () => ({
-  getEventBus: () => ({ on: vi.fn(() => () => undefined) }),
-}));
+vi.mock("../../lib/events", () => {
+  const bus = { on: vi.fn(() => () => undefined), emit: vi.fn() };
+  return { getEventBus: () => bus, initEventBus: () => bus };
+});
 vi.mock("../../hooks/chat-queries", () => ({
   chatKeys: { all: ["chats"] },
   getCachedChatList: () => [],

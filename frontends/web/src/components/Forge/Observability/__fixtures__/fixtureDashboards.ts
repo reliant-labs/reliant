@@ -10,8 +10,8 @@
  * (FailedPrecondition), archive, restore as a new version, and promote to
  * code returning the file with no pull request yet.
  *
- * State lives in the fixture instance, so a test or the preview harness can
- * star, save and restore and see the result on every surface.
+ * State lives in the fixture instance, so a test can star, save and restore
+ * and see the result on every surface.
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";

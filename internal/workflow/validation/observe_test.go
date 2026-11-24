@@ -49,7 +49,7 @@ observe:
       unit: ms
       value: "{{ node.duration_ms }}"
       when: node.type == 'run'
-      attributes: { node_type: "{{ node.type }}", exit: "{{ output.?exit_code.orValue(-1) }}" }
+      attributes: { node_type: "{{ node.type }}" }
 entry: [plan]
 nodes:
   - id: plan
@@ -84,6 +84,35 @@ edges:
     default: land
 `)
 	assert.Empty(t, got)
+}
+
+func TestObserve_DefaultsUseEachNodesOutputType(t *testing.T) {
+	t.Parallel()
+	got := observeFindingsYAML(t, `
+name: defaults
+entry: [plan]
+observe:
+  attributes: { typo: "{{ output.nonexistent }}", exit: "{{ output.exit_code }}" }
+  events:
+    - name: bad_condition
+      when: output.exit_code
+nodes:
+  - id: plan
+    type: compute
+    outputs: { cut: "{{ true }}" }
+  - id: run
+    type: run
+    command: echo ok
+edges:
+  - from: plan
+    default: run
+`)
+	joined := strings.Join(got, "\n")
+	assert.Contains(t, joined, "nodes.[0](plan).observe_defaults.attributes.typo")
+	assert.Contains(t, joined, "nodes.[1](run).observe_defaults.attributes.typo")
+	assert.Contains(t, joined, "nodes.[0](plan).observe_defaults.attributes.exit")
+	assert.NotContains(t, joined, "nodes.[1](run).observe_defaults.attributes.exit")
+	assert.Contains(t, joined, "condition must return bool")
 }
 
 func TestObserve_ExpressionProblemsAreWarnings(t *testing.T) {
@@ -129,7 +158,7 @@ edges:
 		{"nodes.[1](plan).observe.events.[0].when", "{{"},
 		{"nodes.[1](plan).observe.events.[1].when", "bool"},
 		{"nodes.[1](plan).observe.metrics.[0].value", "undefined_name"},
-		{"observe.attributes.sibling", "references `nodes`"},
+		{"nodes.[1](plan).observe_defaults.attributes.sibling", "references `nodes`"},
 	}
 	for _, want := range expect {
 		found := false

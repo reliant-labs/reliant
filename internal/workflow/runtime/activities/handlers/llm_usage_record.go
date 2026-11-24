@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
 // LLMUsageRecorder is what an activity needs of the usage ledger: one
@@ -56,10 +58,20 @@ type llmUsageCall struct {
 	// FundingOrgID is the org that paid (usageFundingOrg); "" when no org is
 	// known to have.
 	FundingOrgID string
-	LatencyMs    int64
-	Usage        llm.TokenUsage
-	Err          error
-	Interrupted  bool
+	// ProjectID is the project of the chat the call belonged to; "" for a
+	// call with no chat.
+	ProjectID string
+	LatencyMs int64
+	// TTFTMs is the time from the request to its first output token
+	// (driverRetries.ttftMs); nil when no token arrived.
+	TTFTMs *int64
+	// ProviderRequestID is the request id the provider answered with
+	// (DriverResponse.UpstreamRequestID, the span's gen_ai.response.id); ""
+	// when it sent none.
+	ProviderRequestID string
+	Usage             llm.TokenUsage
+	Err               error
+	Interrupted       bool
 }
 
 // recordLLMUsage writes the count-only service record of one model request. It
@@ -85,6 +97,18 @@ func recordLLMUsage(ctx context.Context, c llmUsageCall) {
 		return
 	}
 	info := activity.GetInfo(ctx)
+	// The run the call was part of, from the scope the worker's run-scope
+	// interceptor (and the agent turn, for its preset) put on ctx: the scope
+	// the call's span is opened from, so the row and the span name one run.
+	scope := telemetry.RunScopeFromContext(ctx)
+	workflowID := scope.WorkflowID
+	if workflowID == "" {
+		workflowID = info.WorkflowExecution.ID
+	}
+	rootRunID := scope.RootRunID
+	if rootRunID == "" {
+		rootRunID = scope.RunID // a top-level run is its own root
+	}
 	rec := db.LLMCallUsage{
 		ID:               llmUsageID(info.WorkflowExecution.ID, info.WorkflowExecution.RunID, info.ActivityID, c.Purpose, c.Ordinal, c.Request),
 		UserID:           c.UserID,
@@ -105,7 +129,19 @@ func recordLLMUsage(ctx context.Context, c llmUsageCall) {
 		LatencyMs:        nonNegative(c.LatencyMs),
 		Attempt:          info.Attempt,
 		CreatedAt:        time.Now(),
+
+		WorkflowID:        workflowID,
+		ThreadID:          scope.ThreadID,
+		WorkflowName:      scope.WorkflowName,
+		NodeID:            scope.NodeID,
+		Preset:            scope.Preset,
+		ProjectID:         c.ProjectID,
+		AIRunID:           scope.RunID,
+		AIRootRunID:       rootRunID,
+		ProviderRequestID: strings.TrimSpace(c.ProviderRequestID),
+		TTFTMs:            c.TTFTMs,
 	}
+	rec.CostUSDNanos, rec.CostBasis = llmUsageCost(rec.AuthMode, c.Usage.Cost)
 	switch {
 	case c.Interrupted || errors.Is(c.Err, context.Canceled):
 		rec.Outcome = store.LLMOutcomeCancelled
@@ -136,6 +172,28 @@ func nonNegative(v int64) int64 {
 	return max(v, 0)
 }
 
+// maxReportedCostUSD bounds a reported cost to what nanos fit in an int64. A
+// value past it is a broken report, not a price, and is left unpriced.
+const maxReportedCostUSD = float64(math.MaxInt64) / 1e9
+
+// llmUsageCost is what the ledger records of a call's cost (agent-analytics.md
+// §4): the cost the gateway reported, in billionths of a dollar, else
+// "unpriced" for a subscription or a local model, which have no per-call
+// price, else nothing at all. A reported cost of 0 is the gateway not pricing
+// the call, not a free one (llm.TokenUsage.Cost), so it records no cost: a
+// NULL cost is unknown and is never summed as zero.
+func llmUsageCost(authMode string, costUSD float64) (*int64, string) {
+	if costUSD > 0 && costUSD < maxReportedCostUSD {
+		nanos := int64(math.Round(costUSD * 1e9))
+		return &nanos, store.LLMCostBasisReported
+	}
+	switch authMode {
+	case store.LLMAuthModeSubscription, store.LLMAuthModeLocal:
+		return nil, store.LLMCostBasisUnpriced
+	}
+	return nil, ""
+}
+
 func llmUsageID(workflowID, runID, activityID, purpose string, ordinal, request int) string {
 	id := workflowID + "/" + runID + "/" + activityID + "/" + purpose + "/" + strconv.Itoa(ordinal)
 	if request > 0 {
@@ -149,8 +207,13 @@ func llmUsageID(workflowID, runID, activityID, purpose string, ordinal, request 
 type driverRetries struct {
 	start time.Time
 	// end is when the call's stream ended (finish); zero until then.
-	end  time.Time
-	list []driverRetry
+	end time.Time
+	// firstToken is when the request that ended the call produced its first
+	// output token (observeEvent); zero until then.
+	firstToken time.Time
+	list       []driverRetry
+	// now is the clock; newDriverRetries uses time.Now.
+	now func() time.Time
 }
 
 type driverRetry struct {
@@ -158,23 +221,63 @@ type driverRetry struct {
 	latencyMs int64
 }
 
-func newDriverRetries() *driverRetries { return &driverRetries{start: time.Now()} }
+func newDriverRetries() *driverRetries { return newDriverRetriesAt(time.Now) }
+
+// newDriverRetriesAt is newDriverRetries on the clock now.
+func newDriverRetriesAt(now func() time.Time) *driverRetries {
+	return &driverRetries{start: now(), now: now}
+}
 
 // observe records one failed request. The next one starts once the driver has
 // slept out the wait.
 func (r *driverRetries) observe(wait llm.RetryWait) {
-	now := time.Now()
+	now := r.now()
 	// A driver may retry before the whole wait it announced has passed (a
 	// shortened backoff), so the next request can start before r.start.
 	r.list = append(r.list, driverRetry{wait: wait, latencyMs: max(now.Sub(r.start).Milliseconds(), 0)})
 	r.start = now.Add(wait.Delay)
+	// A token the failed request streamed is not the next request's.
+	r.firstToken = time.Time{}
+}
+
+// observeEvent records what one streamed event says about the call's requests:
+// a retry (observe), or the first output token of the current request. The
+// first token is the first text or thinking delta, as the call's span marks
+// it (gen_ai.first_token), so the row and the span time the same thing.
+func (r *driverRetries) observeEvent(ev llm.DriverEvent) {
+	switch ev.Type {
+	case llm.EventRetryWait:
+		if ev.Retry != nil {
+			r.observe(*ev.Retry)
+		}
+	case llm.EventContentDelta, llm.EventThinkingDelta:
+		// Empty framing deltas do not represent an output token.
+		if (ev.Type == llm.EventContentDelta && ev.Content == "") ||
+			(ev.Type == llm.EventThinkingDelta && ev.Thinking == "") {
+			return
+		}
+		if r.firstToken.IsZero() {
+			r.firstToken = r.now()
+		}
+	}
+}
+
+// ttftMs is the time to first token of the request that ended the call: from
+// its start (after the last retry's wait) to its first output token. nil when
+// it produced none.
+func (r *driverRetries) ttftMs() *int64 {
+	if r == nil || r.firstToken.IsZero() {
+		return nil
+	}
+	ms := max(r.firstToken.Sub(r.start).Milliseconds(), 0)
+	return &ms
 }
 
 // finish marks the call's stream as ended and returns when. Call it as soon as
 // the stream ends: what runs after it, the ledger writes of the retried
 // requests above all, is not part of any request's latency.
 func (r *driverRetries) finish() time.Time {
-	r.end = time.Now()
+	r.end = r.now()
 	return r.end
 }
 
@@ -186,7 +289,7 @@ func (r *driverRetries) finalLatencyMs(callLatencyMs int64) int64 {
 	}
 	end := r.end
 	if end.IsZero() {
-		end = time.Now()
+		end = r.now()
 	}
 	return max(end.Sub(r.start).Milliseconds(), 0)
 }
@@ -219,23 +322,27 @@ func recordDriverRetries(ctx context.Context, call llmUsageCall, retries *driver
 		}
 		c.Err = retriedRequestError{wait: r.wait}
 		c.Interrupted = false
+		// A failed request answered nothing: no request id, no first token.
+		c.ProviderRequestID = ""
+		c.TTFTMs = nil
 		recordLLMUsage(ctx, c)
 	}
 }
 
 // recordLLMCallUsage is CallLLM's turn: the streamed request it makes, plus
 // every request its driver failed and retried along the way.
-func (a *CallLLMActivity) recordLLMCallUsage(ctx context.Context, chat *db.Chat, provider, modelID string, resolved *resolvedLLMCall, latencyMs int64, usage llm.TokenUsage, callErr error, interrupted bool, retries *driverRetries) {
+func (a *CallLLMActivity) recordLLMCallUsage(ctx context.Context, chat *db.Chat, provider, modelID string, resolved *resolvedLLMCall, latencyMs int64, usage llm.TokenUsage, requestID string, callErr error, interrupted bool, retries *driverRetries) {
 	call := llmUsageCall{
-		Recorder: a.usage, UserID: chat.UserID, ChatID: chat.ID,
+		Recorder: a.usage, UserID: chat.UserID, ChatID: chat.ID, ProjectID: chat.ProjectID,
 		Purpose: store.LLMPurposeChat, Ordinal: 1,
 		Provider: provider, Model: modelID, AccountID: usageAccountID(resolved), LatencyMs: latencyMs,
 		OrgID: chatOrgID(chat), Funding: usageFunding(resolved, provider), FundingOrgID: usageFundingOrg(resolved),
-		Usage: usage, Err: callErr, Interrupted: interrupted,
+		Usage: usage, ProviderRequestID: requestID, Err: callErr, Interrupted: interrupted,
 	}
 	if retries != nil {
 		recordDriverRetries(ctx, call, retries)
 		call.LatencyMs = retries.finalLatencyMs(latencyMs)
+		call.TTFTMs = retries.ttftMs()
 	}
 	recordLLMUsage(ctx, call)
 }
@@ -250,17 +357,25 @@ func (a *CallLLMActivity) recordLLMCallUsage(ctx context.Context, chat *db.Chat,
 // TestModelRequestsGoThroughTheUsageLedger fails when a new call site streams a
 // request any other way.
 type usageMeter struct {
-	recorder LLMUsageRecorder
-	userID   string
-	chatID   string
-	purpose  string
-	n        int
+	recorder  LLMUsageRecorder
+	userID    string
+	chatID    string
+	projectID string
+	purpose   string
+	n         int
 }
 
 // newUsageMeter meters one execution's requests for purpose. A nil recorder
 // (an activity built without a store, in tests) still streams, unrecorded.
 func newUsageMeter(recorder LLMUsageRecorder, userID, chatID, purpose string) *usageMeter {
 	return &usageMeter{recorder: recorder, userID: userID, chatID: chatID, purpose: purpose}
+}
+
+// inProject records the meter's requests against projectID, the project of
+// its chat.
+func (m *usageMeter) inProject(projectID string) *usageMeter {
+	m.projectID = projectID
+	return m
 }
 
 // streamAndAccumulate sends one request to resolved's driver, accumulates the
@@ -271,10 +386,10 @@ func (m *usageMeter) streamAndAccumulate(ctx context.Context, resolved *resolved
 	m.n++
 	retries := newDriverRetries()
 	callStart := retries.start
-	resp, err := accumulator.StreamAndAccumulateObserving(ctx, resolved.Driver, prompts, messages, available, retries.observe)
+	resp, err := accumulator.StreamAndAccumulateObserving(ctx, resolved.Driver, prompts, messages, available, retries.observeEvent)
 	callLatencyMs := retries.finish().Sub(callStart).Milliseconds()
 	call := llmUsageCall{
-		Recorder: m.recorder, UserID: m.userID, ChatID: m.chatID,
+		Recorder: m.recorder, UserID: m.userID, ChatID: m.chatID, ProjectID: m.projectID,
 		Purpose: m.purpose, Ordinal: m.n,
 		Provider: usageProvider(resolved, resolved.Driver), Model: resolvedUsageModel(resolved),
 		AccountID: usageAccountID(resolved),
@@ -283,6 +398,7 @@ func (m *usageMeter) streamAndAccumulate(ctx context.Context, resolved *resolved
 	}
 	recordDriverRetries(ctx, call, retries)
 	call.LatencyMs = retries.finalLatencyMs(callLatencyMs)
+	call.TTFTMs = retries.ttftMs()
 	call.Err = err
 	if err != nil && ctx.Err() != nil {
 		// A driver that stops because its context ended closes the stream
@@ -292,6 +408,7 @@ func (m *usageMeter) streamAndAccumulate(ctx context.Context, resolved *resolved
 	}
 	if resp != nil {
 		call.Usage = resp.Usage
+		call.ProviderRequestID = resp.UpstreamRequestID
 	}
 	recordLLMUsage(ctx, call)
 	if err != nil {

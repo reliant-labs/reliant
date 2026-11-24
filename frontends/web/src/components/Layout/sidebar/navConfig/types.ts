@@ -18,7 +18,7 @@
  *            Inbox bell): data says where it goes, the shell says what it is
  *
  * A config's `footer` holds the rows under the nav's hairline (Usage &
- * billing, Settings). `sectionPages` are pages whose own section list takes the
+ * billing, Help, Settings). `sectionPages` are pages whose own section list takes the
  * nav column on their routes (Settings), reached by a plain link, not a drill-in.
  */
 
@@ -65,7 +65,9 @@ export type NavSlotId =
   /** A row's trail: a dot while a chat waits on the person (Agents). */
   | "chats-need-you"
   /** A row's control: the desktop app's update button (Settings). */
-  | "update-button";
+  | "update-button"
+  /** The footer's Help row: a tour, the docs, keyboard shortcuts (sidebar/HelpMenu). */
+  | "help";
 
 /** A count or a dot after a row's label. */
 export type NavBadge = { type: "count"; value: number; tone?: "danger"; label?: string } | { type: "dot"; label: string };

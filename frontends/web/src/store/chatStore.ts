@@ -937,7 +937,10 @@ interface ChatStoreState {
     machine?: { daemonId?: string; noMachine?: boolean },
     // The app the chat is about (Chat.app_name), when it starts from one, and
     // the projects attached beside its own (StartChat.attached_project_ids).
-    about?: { appName?: string; attachedProjectIds?: readonly string[] },
+    // Its own project is the context project unless `projectId` names it: a
+    // page whose URL names the project passes it, so a send never races the
+    // store following the URL.
+    about?: { appName?: string; attachedProjectIds?: readonly string[]; projectId?: string },
   ) => Promise<Chat>;
   // First send of an existing PENDING chat (e.g. a branch): StartChat with chatId.
   startExistingChat: (
@@ -1360,9 +1363,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     workflow?: string | null,
     selectedPresets?: Record<string, string>,
     machine?: { daemonId?: string; noMachine?: boolean },
-    about?: { appName?: string; attachedProjectIds?: readonly string[] },
+    about?: { appName?: string; attachedProjectIds?: readonly string[]; projectId?: string },
   ) => {
-    const projectId = useProjectStore.getState().currentProject?.id;
+    const projectId = about?.projectId ?? useProjectStore.getState().currentProject?.id;
     if (!projectId) {
       throw new Error("No project selected");
     }
