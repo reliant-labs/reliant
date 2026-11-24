@@ -87,6 +87,7 @@ import type {
 
 import forgeDashboardsRaw from "../model/forge-dashboards.json?raw";
 import { createShopApi } from "../model/shopApi";
+import { demoNow } from "../shopStory";
 import { completed } from "./defaults";
 import { alertingHandlers } from "./alerting";
 import { observabilityBillingHandlers } from "./observabilityBilling";
@@ -120,8 +121,13 @@ const OP: Record<number, AttributeOp> = {
   [WireAttributeOp.CONTAINS]: "contains",
 };
 
-/** A QueryScope as the console's ObsScope, window and services. */
-export function modelScope(scope: QueryScope | undefined, now: number = Date.now()): ObsScope & { window: TimeWindow; services: string[] } {
+/**
+ * A QueryScope as the console's ObsScope, window and services. A scope with
+ * no time range reads the hour before `now`: the PACK's clock (shopStory.ts
+ * demoNow), which the story is told at, never the wall clock, which a test or
+ * a pinned pack is not at.
+ */
+export function modelScope(scope: QueryScope | undefined, now: number = demoNow()): ObsScope & { window: TimeWindow; services: string[] } {
   const start = msOf(scope?.timeRange?.start);
   const end = msOf(scope?.timeRange?.end);
   return {
