@@ -89,8 +89,16 @@ func (f *linkFixture) access(userID string, at time.Time) {
 	}
 }
 
-// record applies a pull_request event for #number on head/branch.
+// record applies a pull_request event for #number on head/branch, the
+// branch in the pull request's own repository.
 func (f *linkFixture) record(number int, branch, head, previous string, updated time.Duration) {
+	f.t.Helper()
+	f.recordFrom("Acme/Widgets", number, branch, head, previous, updated)
+}
+
+// recordFrom is record with the head branch in headRepo ("" when the event
+// named none).
+func (f *linkFixture) recordFrom(headRepo string, number int, branch, head, previous string, updated time.Duration) {
 	f.t.Helper()
 	f.seq++
 	c := core.PRRecordChange{
@@ -99,6 +107,7 @@ func (f *linkFixture) record(number int, branch, head, previous string, updated 
 			ID: "rec-" + strconv.Itoa(f.seq), Provider: "github", AccountKey: linkInst, RepositoryID: linkRepoID,
 			Repository: "Acme/Widgets", Number: number, State: core.PRRecordOpen, HeadSHA: head, HeadRef: branch,
 			BaseRef: "main", SnapshotAt: linkAt.Add(updated), ObservedAt: linkAt.Add(updated), Full: true,
+			HeadRepository: headRepo,
 		},
 		HeadID:          "head-" + strconv.Itoa(f.seq),
 		PreviousHeadSHA: previous,
@@ -325,6 +334,22 @@ func TestChatPRLinkInferenceGuards(t *testing.T) {
 			f.record(7, linkBranch, linkSHA1, "", 0)
 			if got := f.prLinks(7); !slices.Equal(got, tc.want) {
 				t.Fatalf("links = %v, want %v", got, tc.want)
+			}
+		})
+	}
+	// A fork's pull request names a branch of the fork: a worktree of the
+	// base repository on a branch of the same name did not produce it.
+	for name, headRepo := range map[string]string{
+		"a fork's pull request on the same branch name infers nothing": "someone/widgets",
+		"a head repository the event did not name infers nothing":      "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newLinkFixture(t)
+			f.standard()
+			f.recordFrom(headRepo, 7, linkBranch, linkSHA1, "", 0)
+			if got := f.prLinks(7); got != nil {
+				t.Fatalf("links = %v, want none", got)
 			}
 		})
 	}

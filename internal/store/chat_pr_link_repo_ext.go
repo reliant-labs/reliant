@@ -187,6 +187,10 @@ func linkRecordedPR(ctx context.Context, db orm.Context, s core.PRRecordSnapshot
 // worktree whose branch is the pull request's head branch, in a live project
 // with a repository whose remote is the pull request's repository, when:
 //
+//   - the head branch lives in the pull request's own repository: a fork's
+//     pull request (or one whose head repository is unknown) names a branch
+//     of another repository, which a worktree of this one never is, even
+//     when the names are the same;
 //   - no explicit link names the pull request (explicit beats inferred);
 //   - the head branch is not the base branch, and the worktree is not a
 //     project's main checkout (a fork's PR from its main names no worktree);
@@ -198,7 +202,7 @@ func linkRecordedPR(ctx context.Context, db orm.Context, s core.PRRecordSnapshot
 //     reads use. A clone of a repository is not access to its pull requests.
 func inferChatPRLinks(ctx context.Context, db orm.Context, ref core.PRRef, s core.PRRecordSnapshot) error {
 	head := strings.TrimSpace(s.HeadRef)
-	if head == "" || head == s.BaseRef {
+	if head == "" || head == s.BaseRef || !strings.EqualFold(strings.TrimSpace(s.HeadRepository), ref.Repository) {
 		return nil
 	}
 	var explicit bool
