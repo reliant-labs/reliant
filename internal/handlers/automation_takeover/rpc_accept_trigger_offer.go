@@ -53,7 +53,7 @@ func (s *Service) AcceptTriggerOffer(
 // one, is NotFound: an offer is visible only to its offeree and the org's
 // admins.
 func (s *Service) ownOffer(ctx context.Context, callerID, id string) (*core.TriggerOffer, error) {
-	offer, err := s.deps.Repo.GetTriggerOffer(ctx, id)
+	offer, err := s.deps.Offers.GetTriggerOffer(ctx, id)
 	if errors.Is(err, core.ErrTriggerOfferNotFound) {
 		return nil, svcerr.NotFound("trigger offer")
 	}

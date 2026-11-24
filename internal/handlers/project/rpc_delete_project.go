@@ -115,7 +115,7 @@ func (s *Service) deletableProject(ctx context.Context, userID, projectID, actio
 	if projectID == "" {
 		return nil, authz.ProjectDeleteNone, svcerr.InvalidArgument("project_id is required")
 	}
-	project, err := s.deps.Repo.GetProject(ctx, projectID)
+	project, err := s.deps.ProjectRows.GetProject(ctx, projectID)
 	if err != nil {
 		if svcerr.IsNotFound(err) {
 			return nil, authz.ProjectDeleteNone, core.ErrProjectNotFound

@@ -178,7 +178,7 @@ func (s *Service) SaveWorkflow(
 		if !isValid {
 			return rejected("Workflow not saved: project workflows run straight from the file, so they must pass validation — " + check.summary()), nil
 		}
-		project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+		project, err := s.deps.ProjectRows.GetProject(ctx, req.Msg.ProjectId)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 		}

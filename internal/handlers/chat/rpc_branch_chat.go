@@ -326,6 +326,13 @@ func (s *Service) BranchChat(
 		if err := s.selections().Copy(txCtx, fromChat.ID, branchChatID, userID); err != nil {
 			return fmt.Errorf("failed to copy the chat's selection to the branch: %w", err)
 		}
+		// ... and works in the same projects. A branch with no machine has
+		// no checkout of any of them to work in.
+		if !noMachine {
+			if err := s.deps.Repo.CopyChatProjects(txCtx, fromChat.ID, branchChatID); err != nil {
+				return err
+			}
+		}
 
 		// Copy plan and tasks from source chat to branched thread
 		if err := s.copyPlanAndTasks(txCtx, sourceChatID, branchWorkflowID); err != nil {

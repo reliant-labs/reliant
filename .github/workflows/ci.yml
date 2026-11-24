@@ -439,6 +439,62 @@ jobs:
       - name: task ci:repo-checks
         if: ${{ !cancelled() && matrix.part == 'compile' }}
         run: task ci:repo-checks BASE="${{ needs.lanes.outputs.base }}"
+      # ── The vulnerability scan: REPORT-ONLY (warn-first) ──────────────────
+      # reliant dogfooding the scans forge ships, as forge's own CI does
+      # (forge#2717), on main's pushes and on dispatch. It rides the compile
+      # part, which already runs on main, so it adds no runner, and it runs
+      # after the part's record is written, so it never changes it.
+      #   - `forge ci vuln-scan --go`: govulncheck over every Go module (forge
+      #     builds its pinned govulncheck), ci.vuln_scan.exemptions applied.
+      #     "Does reliant CALL vulnerable Go code."
+      #   - `forge ci vuln-sbom`: forge's pinned syft describes every lockfile
+      #     and manifest (go.mod, the pnpm locks), its pinned grype scans that
+      #     against the vulnerability database, judged by the default vuln_gate
+      #     rule (KEV and fixable criticals block, high warns). "What does
+      #     reliant depend on that is known vulnerable," npm included.
+      #
+      # IT NEVER FAILS MAIN: continue-on-error. Below the vuln-gate lint
+      # rollout (forge.yaml's forge_version under v1.11.0) vuln-sbom prints a
+      # blocking finding and exits 0, and a scan that cannot run exits 78, an
+      # allowed SKIP, turned into a warning here. govulncheck has no warn-first
+      # mode and the pin will cross v1.11.0, so the step as a whole must not
+      # gate: whether a finding blocks main or a release is the owner's call
+      # (dogfood/owner-reliant.md), not this step's. Read its warnings and the
+      # step log; the release record does not look at it.
+      #
+      # THE DATABASE IS FETCHED PER RUN, NEVER CACHED. `forge ci vuln-sbom`
+      # downloads nothing itself (no database = SKIP), so `forge vuln db pull`
+      # fetches it first (~200 MB). It unpacks to ~3.4 GB: an actions/cache
+      # entry of it would take a third of the repository's 10 GB budget and
+      # evict the Go build caches (go-cache's header). It lives in RUNNER_TEMP
+      # and is deleted after the scan.
+      - name: Vulnerability scan (report-only; main and dispatch)
+        if: ${{ !cancelled() && matrix.part == 'compile' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
+        continue-on-error: true
+        env:
+          FORGE_VULN_DB_DIR: ${{ runner.temp }}/vulndb
+        run: |
+          set -uo pipefail
+          warn() { echo "::warning title=Vulnerability scan (report-only)::$*"; }
+          # The forge go.mod pins, built once (scripts/forge.sh runs FORGE_BIN).
+          GOFLAGS=-trimpath go build -o "${RUNNER_TEMP}/forge-pin/forge" github.com/reliant-labs/forge/cmd/forge || { warn "could not build the pinned forge; nothing scanned"; exit 1; }
+          export FORGE_BIN="${RUNNER_TEMP}/forge-pin/forge"
+          status=0
+          scripts/forge.sh ci vuln-scan --go || { rc=$?; warn "forge ci vuln-scan --go exited ${rc}: a called Go vulnerability (or the scan could not run); see the log"; status=1; }
+          if scripts/forge.sh vuln db pull; then
+            rc=0
+            scripts/forge.sh ci vuln-sbom || rc=$?
+            case "${rc}" in
+              0) ;;
+              78) warn "forge ci vuln-sbom could not scan (no scanner or database): an allowed SKIP below the vuln-gate rollout" ;;
+              *) warn "forge ci vuln-sbom exited ${rc}: a blocking finding, or the scan could not run; see the log"; status=1 ;;
+            esac
+          else
+            warn "forge vuln db pull failed: the SBOM scan did not run"
+            status=1
+          fi
+          rm -rf "${FORGE_VULN_DB_DIR}"
+          exit "${status}"
       - name: Locate the part record and logs
         if: ${{ !cancelled() }}
         run: |

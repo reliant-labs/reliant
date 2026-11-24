@@ -104,6 +104,7 @@ import { useShellProject } from "./sidebar/shellProject";
 import { FindBox } from "./sidebar/FindBox";
 import type { NavigateOptions, NavSlots } from "./sidebar/NavRenderer";
 import { ShellNavBody } from "./sidebar/ShellNavBody";
+import { useNarrowViewport } from "../../hooks/useNarrowViewport";
 import { chatSetupNeeded, chatSetupPath } from "../OnboardingFlow/onboardingGate";
 import { ConnectSandboxCta } from "../EmptyState/ConnectSandboxCta";
 import { useChatSetup } from "../OnboardingFlow/useChatSetup";
@@ -844,6 +845,8 @@ function SidebarComponent({
   // single natural control to focus, so the pane container takes it and
   // ordinary tab-order takes over from there.
   const sidebarRootRef = useRef<HTMLDivElement>(null);
+  // A phone: the nav is the shell's drawer (Layout/shell/AppShell).
+  const narrow = useNarrowViewport();
   useEffect(() => {
     const handleFocus = () => sidebarRootRef.current?.focus();
     const name = focusEventName("left-sidebar");
@@ -2111,8 +2114,9 @@ function SidebarComponent({
       <FindBox />
       <ProjectSwitcherRow shell={shell} pathname={pathname} onNavigate={go} />
 
-      {/* The nav as data (U6c): the variant's rows, or the area the route is in, then the footer. */}
-      <ShellNavBody shell={shell} pathname={pathname} search={search} slots={slots} onNavigate={go} />
+      {/* The nav as data (U6c): the variant's rows, or the area the route is in, then the footer.
+          On a phone it is a drawer, where every row is drawn as a top-level row (NavRenderer `flat`). */}
+      <ShellNavBody shell={shell} pathname={pathname} search={search} slots={slots} onNavigate={go} flat={narrow} />
 
       {/* One context menu for every row; its items follow the row. */}
       {contextMenu && (

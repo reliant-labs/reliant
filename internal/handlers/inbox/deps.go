@@ -90,6 +90,18 @@ type Storage interface {
 	worktreesweep.StorageStore
 }
 
+// ProjectReader reads a project by id. It checks no owner: every caller
+// decides access on the row it returns. store.ProjectExtStore satisfies it.
+type ProjectReader interface {
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+}
+
+// DaemonReader reads a machine by id. It checks no owner: the caller decides
+// whose machine it is. store.DaemonExtStore satisfies it.
+type DaemonReader interface {
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
+}
+
 // Repository is the slice of *db.Repo the inbox handlers use.
 type Repository interface {
 	// WorkflowResolver reads an activation's workflow, to tell which
@@ -103,14 +115,10 @@ type Repository interface {
 	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
 	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
 
-	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
 	// GetChat names the agents whose processes fill a machine near its
 	// process limit.
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	// GetProject decides an item about a project (a recovery, an automation)
-	// through authz: one of an org the caller has left is not listed.
-	GetProject(ctx context.Context, id string) (*db.Project, error)
 }
 
 // Sweeper starts a storage clean-up on one of the caller's machines.
