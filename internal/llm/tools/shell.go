@@ -619,7 +619,7 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 	req := &daemon.RunCommandRequest{
 		Command:     params.Command,
 		WorkingDir:  workingDir,
-		Env:         withChatEnv(params.Env, rctx.ChatID, chatProjectID(rctx)),
+		Env:         withChatEnv(params.Env, rctx.ChatID, chatProjectID(rctx), rctx.Thread),
 		TimeoutMs:   int(time.Duration(params.Timeout) * ShellTimeoutUnit / time.Millisecond),
 		Credentials: credentials,
 		Heavy:       params.Heavy,
@@ -929,6 +929,14 @@ const ChatIDEnv = "RELIANT_CHAT_ID"
 // requires it: a command run anywhere else has none.
 const ProjectIDEnv = "RELIANT_PROJECT_ID"
 
+// ThreadIDEnv names the thread a shell command runs for: the chat's own
+// thread, or the sub-agent's when a spawned agent runs it. Every sub-agent
+// shares its chat's ChatIDEnv, so this is what tells them apart: control-plane's
+// scripts/pr-open.sh counts its open-PR cap per thread with it, instead of
+// charging every sub-agent of a chat against one shared cap. Nothing requires
+// it: a command run anywhere else has none.
+const ThreadIDEnv = "RELIANT_THREAD_ID"
+
 // chatProjectID is the id of the project tc's chat runs in, or "".
 func chatProjectID(tc *rctx.ToolContext) string {
 	if tc == nil || tc.Project == nil {
@@ -937,16 +945,19 @@ func chatProjectID(tc *rctx.ToolContext) string {
 	return tc.Project.ID
 }
 
-// withChatEnv is the request env with ChatIDEnv set to chatID and
-// ProjectIDEnv to projectID, each unless empty or set by the caller. own is
-// never modified.
-func withChatEnv(own map[string]string, chatID, projectID string) map[string]string {
+// withChatEnv is the request env with ChatIDEnv set to chatID,
+// ProjectIDEnv to projectID and ThreadIDEnv to threadID, each unless empty or
+// set by the caller. own is never modified.
+func withChatEnv(own map[string]string, chatID, projectID, threadID string) map[string]string {
 	add := map[string]string{}
 	if _, set := own[ChatIDEnv]; chatID != "" && !set {
 		add[ChatIDEnv] = chatID
 	}
 	if _, set := own[ProjectIDEnv]; projectID != "" && !set {
 		add[ProjectIDEnv] = projectID
+	}
+	if _, set := own[ThreadIDEnv]; threadID != "" && !set {
+		add[ThreadIDEnv] = threadID
 	}
 	if len(add) == 0 {
 		return own
