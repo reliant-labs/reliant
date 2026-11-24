@@ -59424,7 +59424,8 @@
       "interface": "github.com/reliant-labs/reliant/internal/triggerowner.TxRunner",
       "methods": [],
       "candidates": [
-        "Database"
+        "Database",
+        "ORM"
       ],
       "providers": [],
       "resolution": "unresolved"
