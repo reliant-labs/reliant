@@ -7,7 +7,7 @@
  * declared metric nothing has emitted), one metric detail, and exemplars, plus
  * the PanelResult a metrics panel returns (series_meta, series_total, a partial
  * last point and a gap). Deterministic: the same call always returns the same
- * answer, so a test and a __preview__ agree.
+ * answer.
  */
 
 import type {
