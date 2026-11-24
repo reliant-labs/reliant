@@ -548,25 +548,27 @@ const SURFACES: Surface[] = [
   },
   // The floating Setup Guide (Onboarding/OnboardingChecklist.tsx): open above the chat home's
   // composer, and collapsed and open on an app's console; then the nav footer's Help menu (sidebar/HelpMenu.tsx).
+  // `ready` waits on the fixture's settled progress, not on the guide alone: its items are detected
+  // from cached queries (chats, workflows) that land at different times, so the guide first shows fewer done.
   {
     name: 'shell-setup-guide',
     path: '/',
     on: ['desktop'],
-    ready: (page) => page.getByRole('region', { name: 'Setup guide' }),
+    ready: (page) => page.getByRole('region', { name: 'Setup guide' }).getByText('6 of 8 done'),
     harness: { storage: { 'reliant.checklist.panelState': 'expanded' } },
   },
   {
     name: 'shell-setup-guide-app-collapsed',
     path: '/forge/p/shopfront',
     on: ['desktop'],
-    ready: (page) => page.getByTestId('setup-guide-toggle'),
+    ready: (page) => page.getByRole('button', { name: 'Get started, 6 of 8 done' }),
     harness: { storage: { 'reliant.checklist.panelState': 'collapsed' } },
   },
   {
     name: 'shell-setup-guide-app-expanded',
     path: '/forge/p/shopfront',
     on: ['desktop'],
-    ready: (page) => page.getByRole('region', { name: 'Setup guide' }),
+    ready: (page) => page.getByRole('region', { name: 'Setup guide' }).getByText('6 of 8 done'),
     harness: { storage: { 'reliant.checklist.panelState': 'expanded' } },
   },
   {
