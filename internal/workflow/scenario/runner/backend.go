@@ -1314,6 +1314,10 @@ var infrastructureActivities = []string{
 	// sub-agent that stopped on an error. A scenario has no durable rows, so
 	// "it is not" — an empty result — is the faithful answer.
 	"LookupStoppedSubAgent",
+	// Records the observe: block of a node the workflow completed itself.
+	// It never influences the run, and a scenario has no store or spans to
+	// record into.
+	"RecordNodeObservation",
 }
 
 // nonTerminatingPrefix starts every message for a run cut off by its

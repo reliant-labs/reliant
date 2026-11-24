@@ -27,7 +27,9 @@ import (
 // node's save_message is written (so a save that fails retries the activity
 // before anything is observed) and before the message-only fields are cleared
 // (so the result is still whole). The workflow attaches a types.ObserveRequest
-// at dispatch (observe_request.go).
+// at dispatch (observe_request.go). A node the workflow completes itself is
+// observed by the RecordNodeObservation local activity (workflow_observe.go).
+// Both go through one nodeObserver, so they share every rule below.
 //
 // Observability can degrade; it can never change what a run does. Nothing
 // here returns an error to the activity: an expression that fails, a block
@@ -88,13 +90,14 @@ func (w *ActivityWrapper[I, O]) observeNode(
 	durationMs int64,
 ) {
 	activityType := info.ActivityType.Name
+	observer := w.observer()
 	defer func() {
 		if r := recover(); r != nil {
 			logging.WarnContext(ctx, "[ActivityWrapper] Observing the node panicked; the node is unaffected",
 				"activityType", activityType,
 				"stepID", inputInfo.StepID,
 				"panic", fmt.Sprint(r))
-			w.recorder().CountErrors(ctx, []wfobserve.Error{{Kind: telemetry.ObserveErrorPanic}})
+			observer.rec().CountErrors(ctx, []wfobserve.Error{{Kind: telemetry.ObserveErrorPanic}})
 		}
 	}()
 
@@ -114,14 +117,98 @@ func (w *ActivityWrapper[I, O]) observeNode(
 		return
 	}
 	output = normalizeActivityOutput(output, activityType)
+
+	workflowID := inputInfo.WorkflowID
+	if workflowID == "" {
+		workflowID = info.WorkflowExecution.ID
+	}
+	observer.observe(ctx, observedNode{
+		Request:       req,
+		Output:        output,
+		ChatID:        inputInfo.ChatID,
+		WorkflowID:    workflowID,
+		RunID:         inputInfo.RunID,
+		StepID:        inputInfo.StepID,
+		NodePath:      inputInfo.NodePath,
+		LoopNodeID:    inputInfo.LoopNodeID,
+		LoopIteration: inputInfo.LoopIteration,
+		Attempt:       info.Attempt,
+		DurationMs:    durationMs,
+	})
+}
+
+// observer is the wrapper's nodeObserver, from the settings its registry
+// copied in at registration.
+func (w *ActivityWrapper[I, O]) observer() nodeObserver {
+	var writer ObservationWriter
+	if w.observationWriter != nil {
+		writer = w.observationWriter()
+	}
+	return nodeObserver{
+		writer:    writer,
+		evaluator: w.observeEvaluator,
+		recorder:  w.observeRecorder,
+		now:       w.observeClock,
+		logPrefix: "[ActivityWrapper]",
+	}
+}
+
+// ============================================================================
+// The rules both sites share
+// ============================================================================
+
+// nodeObserver evaluates a completed node's observe block and records what it
+// produced: the node span's attributes and events, the metrics, and, when the
+// result is worth one, the stored row. The zero value is production's, with
+// no store (telemetry only).
+type nodeObserver struct {
+	// writer stores the row; nil records telemetry only.
+	writer ObservationWriter
+	// evaluator, recorder and now evaluate the block, emit its metrics and
+	// stamp its row. Zero values are production's.
+	evaluator wfobserve.Evaluator
+	recorder  *wfobserve.Recorder
+	now       func() time.Time
+	// logPrefix names the site in its log lines.
+	logPrefix string
+}
+
+// observedNode is one completed node to observe: its observe request, the
+// output it completed with (as the workflow sees it), and what its stored row
+// is keyed by.
+type observedNode struct {
+	Request *types.ObserveRequest
+	Output  map[string]interface{}
+
+	ChatID     string
+	WorkflowID string
+	RunID      string
+	StepID     string
+	NodePath   string
+	// LoopNodeID is the loop scope ("" outside a loop); LoopIteration is
+	// read only when it is set.
+	LoopNodeID    string
+	LoopIteration int
+	Attempt       int32
+	DurationMs    int64
+}
+
+// observe evaluates n's block and records the result on the span ctx carries,
+// the metrics and the store. It never returns an error: what fails is logged
+// and counted. The caller recovers panics.
+func (o nodeObserver) observe(ctx context.Context, n observedNode) {
+	req := n.Request
+	if req == nil || req.Block == nil {
+		return
+	}
 	// A node that recorded a skip did not run: there is nothing to observe.
-	if model.IsSkippedOutput(output) {
+	if model.IsSkippedOutput(n.Output) {
 		return
 	}
 
 	workflowCtx := req.Workflow
-	res := w.observeEvaluator.Evaluate(req.Block, wfobserve.Scope{
-		Output:   output,
+	res := o.evaluator.Evaluate(req.Block, wfobserve.Scope{
+		Output:   n.Output,
 		Inputs:   req.Inputs,
 		Workflow: &workflowCtx,
 		Iter:     req.Iter,
@@ -129,13 +216,13 @@ func (w *ActivityWrapper[I, O]) observeNode(
 			ID:         req.NodeID,
 			Type:       req.NodeType,
 			Path:       req.NodePath,
-			Attempt:    int64(info.Attempt),
-			DurationMs: durationMs,
+			Attempt:    int64(n.Attempt),
+			DurationMs: n.DurationMs,
 		},
 	})
 
 	wfobserve.Annotate(trace.SpanFromContext(ctx), res)
-	rec := w.recorder()
+	rec := o.rec()
 	workflowName := telemetry.RunScopeFromContext(ctx).WorkflowName
 	if workflowName == "" {
 		workflowName = req.Workflow.Name
@@ -143,101 +230,87 @@ func (w *ActivityWrapper[I, O]) observeNode(
 	rec.Record(ctx, wfobserve.MetricBase{WorkflowName: workflowName, NodeID: req.NodeID, NodeType: req.NodeType}, res.Metrics)
 	rec.CountErrors(ctx, res.Errors)
 	if len(res.Errors) > 0 {
-		logging.DebugContext(ctx, "[ActivityWrapper] Node's observe block had expressions that failed",
-			"activityType", activityType, "stepID", inputInfo.StepID, "errors", len(res.Errors))
+		logging.DebugContext(ctx, o.logPrefix+" Node's observe block had expressions that failed",
+			"stepID", n.StepID, "errors", len(res.Errors))
 	}
 
 	if res.HasRecord() {
-		w.writeObservation(ctx, req, inputInfo, info, res)
+		o.write(ctx, n, res)
 	}
 }
 
-// writeObservation stores res best-effort, exactly as a step row is written
+// write stores res best-effort, exactly as a step row is written
 // (writeStepExecution): on a detached context with its own short deadline,
 // and a failure is logged and counted, never returned.
-func (w *ActivityWrapper[I, O]) writeObservation(
-	ctx context.Context,
-	req *types.ObserveRequest,
-	inputInfo activityInputInfo,
-	info activity.Info,
-	res wfobserve.Result,
-) {
-	rec := w.recorder()
-	var writer ObservationWriter
-	if w.observationWriter != nil {
-		writer = w.observationWriter()
-	}
-	workflowID := inputInfo.WorkflowID
-	if workflowID == "" {
-		workflowID = info.WorkflowExecution.ID
-	}
-	chatID := inputInfo.ChatID
+func (o nodeObserver) write(ctx context.Context, n observedNode, res wfobserve.Result) {
+	req := n.Request
+	rec := o.rec()
+	chatID := n.ChatID
 	if chatID == "" {
 		chatID = req.Workflow.ChatID
 	}
-	stepID := inputInfo.StepID
+	stepID := n.StepID
 	if stepID == "" {
 		stepID = req.NodeID
 	}
-	if writer == nil || workflowID == "" || chatID == "" || stepID == "" {
-		logging.DebugContext(ctx, "[ActivityWrapper] Not storing the node's observation: no store or no identity",
-			"workflowID", workflowID, "chatID", chatID, "stepID", stepID, "hasWriter", writer != nil)
+	if o.writer == nil || n.WorkflowID == "" || chatID == "" || stepID == "" {
+		logging.DebugContext(ctx, o.logPrefix+" Not storing the node's observation: no store or no identity",
+			"workflowID", n.WorkflowID, "chatID", chatID, "stepID", stepID, "hasWriter", o.writer != nil)
 		return
 	}
 	nodePath := req.NodePath
 	if nodePath == "" {
-		nodePath = inputInfo.NodePath
+		nodePath = n.NodePath
 	}
 	row := res.Row()
 	obs := &db.NodeObservation{
 		ID:         uuid.New().String(),
 		ChatID:     chatID,
-		WorkflowID: workflowID,
-		RunID:      inputInfo.RunID,
+		WorkflowID: n.WorkflowID,
+		RunID:      n.RunID,
 		StepID:     stepID,
 		NodePath:   nodePath,
-		Attempt:    info.Attempt,
+		Attempt:    n.Attempt,
 		Source:     db.NodeObservationSourceWorkflow,
 		Attributes: row.Attributes,
 		Events:     row.Events,
 		Errors:     row.Errors,
 		Truncated:  row.Truncated,
-		CreatedAt:  w.observeNow(),
+		CreatedAt:  o.clock(),
 	}
-	if inputInfo.LoopNodeID != "" {
-		loopNode, iteration := inputInfo.LoopNodeID, int64(inputInfo.LoopIteration)
+	if n.LoopNodeID != "" {
+		loopNode, iteration := n.LoopNodeID, int64(n.LoopIteration)
 		obs.LoopNodeID, obs.LoopIteration = &loopNode, &iteration
 	}
 
 	writeCtx, cancel := detachedWriteContext(ctx)
 	defer cancel()
-	outcome, err := writer.RecordNodeObservation(writeCtx, obs, wfobserve.MaxRowsPerRun)
+	outcome, err := o.writer.RecordNodeObservation(writeCtx, obs, wfobserve.MaxRowsPerRun)
 	switch {
 	case err != nil:
-		logging.WarnContext(ctx, "[ActivityWrapper] Failed to store the node's observation; its telemetry was still emitted",
-			"workflowID", workflowID, "stepID", stepID, "error", err)
+		logging.WarnContext(ctx, o.logPrefix+" Failed to store the node's observation; its telemetry was still emitted",
+			"workflowID", n.WorkflowID, "stepID", stepID, "error", err)
 		rec.CountErrors(ctx, []wfobserve.Error{{Kind: telemetry.ObserveErrorWrite}})
 		rec.CountDropped(ctx, telemetry.ObserveDropWriteFailed)
 	case outcome == db.NodeObservationCapped:
-		logging.DebugContext(ctx, "[ActivityWrapper] Run holds its cap of stored observations; this one was not stored",
-			"workflowID", workflowID, "stepID", stepID, "cap", wfobserve.MaxRowsPerRun)
+		logging.DebugContext(ctx, o.logPrefix+" Run holds its cap of stored observations; this one was not stored",
+			"workflowID", n.WorkflowID, "stepID", stepID, "cap", wfobserve.MaxRowsPerRun)
 		rec.CountDropped(ctx, telemetry.ObserveDropRowCap)
 	}
 }
 
-// recorder is the wrapper's metrics recorder: its registry's, else the
-// process's.
-func (w *ActivityWrapper[I, O]) recorder() *wfobserve.Recorder {
-	if w.observeRecorder != nil {
-		return w.observeRecorder
+// rec is the observer's metrics recorder, else the process's.
+func (o nodeObserver) rec() *wfobserve.Recorder {
+	if o.recorder != nil {
+		return o.recorder
 	}
 	return wfobserve.DefaultRecorder()
 }
 
-// observeNow is the stored observation's created_at clock.
-func (w *ActivityWrapper[I, O]) observeNow() time.Time {
-	if w.observeClock != nil {
-		return w.observeClock()
+// clock is the stored observation's created_at clock.
+func (o nodeObserver) clock() time.Time {
+	if o.now != nil {
+		return o.now()
 	}
 	return time.Now()
 }

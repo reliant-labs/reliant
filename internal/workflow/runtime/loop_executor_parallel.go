@@ -396,6 +396,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 			e.workflowID, e.chatID, e.workflowIdentity(),
 			iterNodeOutputs, e.logger, nil, func(joinID string) {
 				recordJoinSatisfied(gCtx, joinNodePath(e.nodePath(), joinID))
+				observeJoin(iterExecutor, e.subWorkflow, joinID, iterNodeOutputs)
 			}, workflow.Now(gCtx))
 
 		// Find triggered steps
@@ -474,6 +475,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 					nestedOutputMap = toleratedLoop
 				}
 				iterNodeOutputs[step.Node.GetId()] = nestedOutputMap
+				iterExecutor.observeCompleted(step.Node, nestedOutputMap, 0)
 				events = append(events, &core.WorkflowEvent{
 					ID:           fmt.Sprintf("ploop-%s-iter%d-nested-%s", e.loopID, index, step.Node.GetId()),
 					WorkflowID:   e.workflowID,
@@ -621,6 +623,8 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 						return result
 					}
 				}
+				// The workflow completed the node (a tolerated failure too).
+				iterExecutor.observeCompleted(step.Node, inlineOutput, 0)
 
 				events = append(events, &core.WorkflowEvent{
 					ID:           fmt.Sprintf("ploop-%s-iter%d-wf-%s", e.loopID, index, step.Node.GetId()),
@@ -659,6 +663,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 					return result
 				}
 				iterNodeOutputs[step.Node.GetId()] = approvalOutput
+				iterExecutor.observeCompleted(step.Node, approvalOutput, 0)
 				events = append(events, &core.WorkflowEvent{
 					ID:           fmt.Sprintf("ploop-%s-iter%d-approval-%s", e.loopID, index, step.Node.GetId()),
 					WorkflowID:   e.workflowID,

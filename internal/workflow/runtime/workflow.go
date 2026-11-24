@@ -2050,6 +2050,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		events = processJoinEvents(events, joinState, wf, workflowID, input.ChatID, input.WorkflowName, nodeOutputs, logger, joinSaveMessageFunc, func(joinID string) {
 			// Top level: a node's path is its own id.
 			recordJoinSatisfied(ctx, joinID)
+			observeJoin(executor, wf, joinID, nodeOutputs)
 		}, workflow.Now(ctx))
 		if joinSaveErr != nil {
 			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread,
@@ -2410,6 +2411,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						return nil, fmt.Errorf("save_message for loop step %s: %w", step.Node.GetId(), err)
 					}
 				}
+				// The workflow completed the loop node, so it observes it
+				// (a tolerated failure too).
+				executor.observeCompleted(step.Node, loopOutputMap, 0)
 
 				// Update thread liveness - mark loop step as completed
 				if threadTracker != nil {
@@ -2848,6 +2852,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					return nil, fmt.Errorf("approval %s failed: %w", step.Node.GetId(), err)
 				}
 				nodeOutputs[step.Node.GetId()] = approvalOutput
+				executor.observeCompleted(step.Node, approvalOutput, 0)
 				events = append(events, &core.WorkflowEvent{
 					ID:           fmt.Sprintf("approval-%s-%s", workflowID, step.Node.GetId()),
 					WorkflowID:   workflowID,
@@ -3265,6 +3270,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						return nil, fmt.Errorf("save_message for inline workflow %s: %w", running.StepID, err)
 					}
 				}
+				// A workflow or router node: the workflow completed it, so
+				// it observes it (a tolerated failure too).
+				executor.observeCompleted(running.Node, running.Output, 0)
 
 				// Create completion event
 				events = append(events, &core.WorkflowEvent{
