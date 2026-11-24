@@ -378,8 +378,10 @@ function panelInit(p: Panel): MessageInitShape<typeof PanelSchema> {
     title: p.title,
     description: p.description ?? "",
     kind: p.kind,
-    signal: p.signal,
-    series: p.series.map((s) => ({
+    signal: p.signal ?? "",
+    // A sql figure nested in a spec (an attention panel's own) arrives as the spec wrote it, without
+    // the intent fields it does not use; dashboardFromJson fills them only on top-level panels.
+    series: (p.series ?? []).map((s) => ({
       label: s.label,
       agg: s.agg,
       quantile: s.quantile ?? 0,

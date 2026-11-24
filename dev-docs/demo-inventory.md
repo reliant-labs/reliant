@@ -16,11 +16,18 @@ incident (prod's v1.8.3 payment timeouts on api), the traffic model every
 aggregate is computed from (`demoStats`), and the database's tables. `demoNow()`
 anchors every relative time to the page load.
 
-`fixtures/shop/model/shopApi.ts` assembles the demo's `ObservabilityApi` from one
-module per area (telemetry via `busyApp.ts`, graph, workloads, panels,
-delivery, issues and release health, alerting, sessions, dashboards, metrics);
-both the demo console (`Forge/Demo/demoApi.ts`) and the wire handlers (`handlers/observability.ts`)
-read it. `handlers/console.ts` answers Releases, Environments, Secrets, Domains
+`fixtures/shop/model/shopApi.ts` assembles the story's model, in the shape of
+the console's `ObservabilityApi`, from one module per area (telemetry via
+`busyApp.ts`, graph, workloads, panels, delivery, issues and release health,
+alerting, sessions, dashboards, metrics). It is the authoring format, not what
+pages read: the handlers (`handlers/observability.ts`, `alerting.ts`,
+`delivery.ts`, `issues.ts`, `user.ts`, `rum.ts`, `dashboards.ts`) encode it on
+the wire, and in the demo shell (the only place `/forge/demo` runs; the app's
+leaves for it) the console's real client (`controlPlaneObservabilityApi`)
+decodes it, so no page reads the model directly.
+`__tests__/realClient.test.ts` holds every read the real client makes to the
+model's answer. `handlers/observabilityBilling.ts` answers observability billing
+Unimplemented: the demo has none. `handlers/console.ts` answers Releases, Environments, Secrets, Domains
 and Activity from the same ledger. Nothing under `src/fixtures/` imports the
 console's unit-test fixtures (`Observability/__fixtures__`);
 `__tests__/coherence.test.ts` fails if one does, or if any page's answer

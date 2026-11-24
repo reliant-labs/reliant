@@ -159,7 +159,8 @@ function recordingOf(session: DemoSession, durationMs: number): RrwebEvent[] {
   }
   events.push({ type: EVENT.Incremental, timestamp: t0 + 20 * SEC, data: { source: SOURCE.Mutation, texts: [{ id: heading.id, value: masked("Your orders") }], attributes: [], removes: [], adds: [] } });
   for (let at = 50 * SEC; at <= durationMs; at += 2500) move(at, 400 + ((at / 100) % 300), 300);
-  return events.filter((e) => e.timestamp - t0 <= durationMs);
+  // The recorder's counter belongs to the recording, not to a response page.
+  return events.map((e, index) => ({ ...e, index })).filter((e) => e.timestamp - t0 <= durationMs);
 }
 
 const PER_PAGE = 8;

@@ -64,10 +64,23 @@ function quality(window: TimeWindow): GraphQuality {
 
 const envOf = (envIds: readonly string[]): DemoEnvKey => (DEMO_ENV_IDS.find((e) => envIds.includes(e)) ?? "env-prod") as DemoEnvKey;
 
+/**
+ * The part of `window` that has happened by `now`: what traffic can have been
+ * seen. A window that starts after `now` (a tab left open past the window it
+ * loaded with) has seen none of it: the empty window at `now`, never an
+ * inverted one, which the traffic model would integrate backwards into
+ * negative counts.
+ */
+function seenOf(window: TimeWindow, now: number): TimeWindow {
+  const endMs = Math.min(window.endMs, now);
+  return { startMs: Math.min(window.startMs, endMs), endMs };
+}
+
 function graphOf(window: TimeWindow, env: DemoEnvKey, now: number): ServiceGraph {
-  const q = (extra: Partial<DemoStatsQuery>): DemoStatsQuery => ({ startMs: window.startMs, endMs: Math.min(window.endMs, now), envIds: [env], now, ...extra });
+  const seen = seenOf(window, now);
+  const q = (extra: Partial<DemoStatsQuery>): DemoStatsQuery => ({ startMs: seen.startMs, endMs: seen.endMs, envIds: [env], now, ...extra });
   const node = (id: string, kind: GraphNode["kind"]): GraphNode => ({ id, kind, envId: env, label: id, parentId: "", rpcId: "", sourceUnavailableReason: "" });
-  const base = { envId: env, userOutcomes: 0n, cancelled: 0n, unknownStatus: 0n, unmatched: 0n, exemplars: [], firstSeenMs: window.startMs, lastSeenMs: Math.min(window.endMs, now) };
+  const base = { envId: env, userOutcomes: 0n, cancelled: 0n, unknownStatus: 0n, unmatched: 0n, exemplars: [], firstSeenMs: seen.startMs, lastSeenMs: seen.endMs };
   const edge = (id: string, source: string, target: string, kind: GraphEdge["kind"], stats: DemoStatsQuery[], extra: Partial<GraphEdge> = {}, scale = 1): GraphEdge => {
     const all = stats.map(demoStats);
     const count = Math.round(all.reduce((a, s) => a + s.requests, 0) * scale);
@@ -145,7 +158,8 @@ function declaredCatalog(): string {
 function catalogOf(window: TimeWindow, envIds: readonly string[], now: number, req: { rpcService?: string; rpcIds?: string[]; services?: string[] }): RPCCatalog {
   const env = envOf(envIds);
   const methods: RPCMethod[] = DEMO_RPC_METHODS.filter((m) => (!req.rpcService || m.service === req.rpcService) && (!req.rpcIds?.length || req.rpcIds.includes(m.id)) && (!req.services?.length || req.services.includes(m.process))).map((m) => {
-    const q: DemoStatsQuery = { startMs: window.startMs, endMs: Math.min(window.endMs, now), envIds: [env], service: m.process, op: m.id, now };
+    const seen = seenOf(window, now);
+    const q: DemoStatsQuery = { startMs: seen.startMs, endMs: seen.endMs, envIds: [env], service: m.process, op: m.id, now };
     const s = demoStats(q);
     return {
       id: m.id,
