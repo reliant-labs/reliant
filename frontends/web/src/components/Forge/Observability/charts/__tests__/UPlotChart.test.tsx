@@ -29,9 +29,11 @@ import { isolatedIndexes, timeExtent, placeExemplars, stackValues, UPlotChart, t
 interface Built {
   opts: any;
   data: (number | null)[][];
+  plot: { over?: HTMLElement; setCursor: (position: { left: number; top: number }) => void; cursor: { idx: number | null } };
 }
 
 const built: Built[] = [];
+let nativeCursor = false;
 
 /** The plot area the fake reports, in canvas pixels (pxRatio 1: also CSS pixels). */
 const PLOT = { left: 64, top: 8, width: 400, height: 200 };
@@ -47,8 +49,21 @@ vi.mock("uplot", () => {
     width = 0;
     bbox = PLOT;
     scales: Record<string, { min: number; max: number }>;
+    over = nativeCursor ? document.createElement("div") : undefined;
+    cursor: { idx: number | null } = { idx: null };
+    setCursor(position: { left: number; top: number }) {
+      this.cursor.idx = position.left < 0 ? null : Math.round(position.left / PLOT.width * (this.data[0]!.length - 1));
+      this.opts.hooks.setCursor.forEach((hook: (plot: FakeUPlot) => void) => hook(this));
+    }
+    posToVal(left: number) {
+      return this.scales.x!.min + left / PLOT.width * (this.scales.x!.max - this.scales.x!.min);
+    }
+    private opts: Built["opts"];
+    private data: Built["data"];
     constructor(opts: Built["opts"], data: Built["data"]) {
-      built.push({ opts, data });
+      this.opts = opts;
+      this.data = data;
+      built.push({ opts, data, plot: this });
       const xs = data[0] as number[];
       const ys = data.slice(1).flat().filter((v): v is number => v !== null);
       const [xMin, xMax] = opts.scales.x.range(this, Math.min(...xs), Math.max(...xs)) as [number, number];
@@ -77,6 +92,7 @@ const last = () => built[built.length - 1]!;
 
 beforeEach(() => {
   built.length = 0;
+  nativeCursor = false;
 });
 
 describe("sparse time series", () => {
@@ -489,6 +505,43 @@ describe("hover: the sample under the pointer", () => {
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "elsewhere" }), { pointerType: "touch" });
     expect(tooltip()).toBeNull();
+  });
+
+  it.each(["escape", "blur", "outside", "scroll"])("keeps a native cursor dismissed after %s, including queued restoration", (dismiss) => {
+    nativeCursor = true;
+    const frames: FrameRequestCallback[] = [];
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => { frames.push(callback); return frames.length; });
+    try {
+      render(<UPlotChart timestamps={TIMES} series={twoSeries} height={36} label="native chart" compact />);
+      const figure = screen.getByRole("group", { name: "native chart" });
+      const plot = last().plot;
+      if (dismiss === "outside" || dismiss === "scroll") {
+        vi.spyOn(plot.over!, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 400, bottom: 36 } as DOMRect);
+        fireEvent.pointerDown(figure.firstElementChild!, { pointerType: "touch", clientX: 400 });
+      } else fireEvent.keyDown(figure, { key: "End" });
+      expect(plot.cursor.idx).toBe(4);
+      expect(tooltip()).not.toBeNull();
+      // Genuine mouse leave restores a held sample, through the synchronous hook.
+      act(() => plot.setCursor({ left: -10, top: -10 }));
+      act(() => { frames.splice(0).forEach((callback) => callback(0)); });
+      expect(plot.cursor.idx).toBe(4);
+      // Queue another leave, then dismiss before its frame can run.
+      act(() => plot.setCursor({ left: -10, top: -10 }));
+      if (dismiss === "escape") fireEvent.keyDown(figure, { key: "Escape" });
+      else if (dismiss === "blur") fireEvent.blur(figure);
+      else if (dismiss === "outside") fireEvent.pointerDown(document.body, { pointerType: "touch" });
+      else {
+        vi.spyOn(plot.over!, "getBoundingClientRect").mockReturnValue({ top: -100, bottom: -64 } as DOMRect);
+        fireEvent.scroll(window);
+      }
+      expect(tooltip()).toBeNull();
+      act(() => { frames.splice(0).forEach((callback) => callback(0)); });
+      expect(plot.cursor.idx).toBeNull();
+      expect(tooltip()).toBeNull();
+      expect(screen.getByTestId("chart-sample-live")).toHaveTextContent("");
+    } finally {
+      raf.mockRestore();
+    }
   });
 
   it("formats a calendar bucket's sample as its UTC date", () => {

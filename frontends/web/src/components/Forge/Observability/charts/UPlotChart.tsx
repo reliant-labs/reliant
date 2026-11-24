@@ -319,14 +319,24 @@ export function UPlotChart({
     },
     [plotRect, timestamps, extent]
   );
+  // Mirrored cursor hooks are synchronous echoes, not new pointer input. A
+  // selection revision also invalidates restorations queued before a clear.
+  const mirroringRef = useRef(false);
+  const selectionRevision = useRef(0);
   // The keys and a finger move uPlot's cursor too, so its crosshair, points and legend follow.
   const mirrorCursor = useCallback(
     (index: number | null) => {
+      selectionRevision.current++;
       const chart = chartRef.current;
       if (!chart?.over || typeof chart.setCursor !== "function") return;
       const sec = index === null ? undefined : timestamps[index];
-      if (sec === undefined) chart.setCursor({ left: -10, top: -10 });
-      else chart.setCursor({ left: chart.valToPos(sec, "x"), top: chart.over.clientHeight / 2 });
+      mirroringRef.current = true;
+      try {
+        if (sec === undefined) chart.setCursor({ left: -10, top: -10 });
+        else chart.setCursor({ left: chart.valToPos(sec, "x"), top: chart.over.clientHeight / 2 });
+      } finally {
+        mirroringRef.current = false;
+      }
     },
     [timestamps]
   );
@@ -420,11 +430,17 @@ export function UPlotChart({
           (u: uPlot) => {
             const idx = u.cursor.idx ?? null;
             cursorCallback.current?.(idx);
+            if (mirroringRef.current) return;
+            const revision = ++selectionRevision.current;
             showSampleRef.current(idx, "pointer");
             // The mouse left, but the keys or a finger hold a sample (a tap is followed by
             // the mouse reported back where it was): put uPlot's crosshair back on it.
             const held = heldRef.current;
-            if (idx === null && held && held.via !== "pointer") requestAnimationFrame(() => mirrorRef.current(held.index));
+            if (idx === null && held && held.via !== "pointer") {
+              requestAnimationFrame(() => {
+                if (selectionRevision.current === revision && chartRef.current === u) mirrorRef.current(held.index);
+              });
+            }
           },
         ],
         // Bands go under the series (drawAxes runs before the series
