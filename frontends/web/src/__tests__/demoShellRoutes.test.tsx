@@ -43,7 +43,7 @@ vi.mock("@/demoBundle/DemoConsoleProviders", () => ({ DemoConsoleProviders: ({ c
 // ("Cannot load …metricsTypes.ts … after the environment was torn down"),
 // intermittently. DemoConsole is mocked above, so nothing here reads that data:
 // the transport is mocked too, and nothing loads after teardown.
-vi.mock("@/components/Forge/Demo/demoData/demoTransport", () => ({ createDemoTransport: () => ({}) }));
+vi.mock("@/components/Forge/Demo/demoTransport", () => ({ createDemoTransport: () => ({}) }));
 
 import { getTourShell, getTourStorage } from "@/components/Onboarding/tourShell";
 import { resetDemoSessionForTests } from "@/components/Forge/Demo/demoSession";
@@ -133,6 +133,13 @@ describe("the demo shell's routes", () => {
     expect(router.state.location.pathname).toBe("/forge/p/shop/nope")
     fireEvent.click(screen.getByRole("link", { name: "Go to the Overview" }))
     await waitFor(() => expect(router.state.location.pathname).toBe("/forge/p/shop"))
+  });
+
+  it.each(["/forge/p/shop/usage", "/forge/p/shop/speed-insights", "/forge/p/other/usage"])("sends %s, a page the demo does not serve, to the Overview", async (path) => {
+    const router = renderDemoShell(`${path}?env=prod`)
+    expect(await screen.findByTestId("console-overview")).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe("/forge/p/shop")
+    expect(searchOf(router)).toMatchObject({ env: "prod" })
   });
 
   it("opens another project's link on shop, the demo's one project, at the same page", async () => {

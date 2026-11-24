@@ -55,7 +55,26 @@ type DrainAgentMessagesActivity struct {
 }
 
 // NewDrainAgentMessagesActivity creates a new DrainAgentMessagesActivity.
-func NewDrainAgentMessagesActivity(deps DrainAgentMessagesDeps) *DrainAgentMessagesActivity {
+// NewDrainAgentMessagesActivity accepts the original store/saver pair as well
+// as DrainAgentMessagesDeps. New code should pass explicit dependencies.
+// Deprecated: use NewDrainAgentMessagesActivityWithDeps.
+func NewDrainAgentMessagesActivity(storeOrDeps any, threads ...MessageSaver) *DrainAgentMessagesActivity {
+	if deps, ok := storeOrDeps.(DrainAgentMessagesDeps); ok {
+		return NewDrainAgentMessagesActivityWithDeps(deps)
+	}
+	var deps DrainAgentMessagesDeps
+	if storeOrDeps != nil {
+		deps.Store = storeOrDeps.(DrainAgentMessagesStore)
+		deps.Mailbox = storeOrDeps.(MailboxQueue)
+	}
+	if len(threads) > 0 {
+		deps.Threads = threads[0]
+	}
+	return NewDrainAgentMessagesActivityWithDeps(deps)
+}
+
+// NewDrainAgentMessagesActivityWithDeps creates a drain with explicit dependencies.
+func NewDrainAgentMessagesActivityWithDeps(deps DrainAgentMessagesDeps) *DrainAgentMessagesActivity {
 	return &DrainAgentMessagesActivity{repo: deps.Store, mailbox: deps.Mailbox, threads: deps.Threads}
 }
 

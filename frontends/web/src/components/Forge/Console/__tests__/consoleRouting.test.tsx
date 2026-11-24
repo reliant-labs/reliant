@@ -451,7 +451,7 @@ describe("redirects from the retired URLs", () => {
     const router = renderAt("/forge/env/e2e?forgeProject=barkshop&tab=releases");
     await landsOn(router, "/forge/p/barkshop/releases", { env: "e2e" });
     // The console selects the project that declares it, over the current one.
-    await waitFor(() => expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-b" })));
+    await waitFor(() => expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-b" }), { skipWorkspaceStateSave: true }));
     expect(screen.getByTestId("page")).toHaveAttribute("data-env", "e2e");
   });
 
@@ -466,19 +466,20 @@ describe("redirects from the retired URLs", () => {
 
   it("sends /forge/observability?project= to the view's page with envs as the scope", async () => {
     const router = renderAt('/forge/observability?project=project-a&view=logs&envs=%5B%22e2e%22%5D&q=timeout');
-    await landsOn(router, "/forge/p/alpha/observability/logs", { env: "e2e", q: "timeout" });
+    await landsOn(router, "/forge/p/alpha/observability/logs", { env: "e2e", q: "timeout", project: "project-a" });
   });
 
   it("sends a retired secrets URL to that env's secret", async () => {
     state.currentProject = PROJECTS[0]!;
     const router = renderAt("/forge/secrets?env=prod&secret=DATABASE_URL");
-    await landsOn(router, "/forge/p/alpha/secrets", { env: "prod", secret: "DATABASE_URL" });
+    await landsOn(router, "/forge/p/alpha/secrets", { env: "prod", secret: "DATABASE_URL", project: "project-a" });
   });
 
   it("sends /forge/domains to Configure › Domains", async () => {
     state.currentProject = PROJECTS[0]!;
     const router = renderAt("/forge/domains");
-    await landsOn(router, "/forge/p/alpha/domains", { env: "prod" });
+    // The console names the checkout the entry resolved (consoleHost.ts).
+    await landsOn(router, "/forge/p/alpha/domains", { env: "prod", project: "project-a" });
   });
 
   it("lands a view that is not a nav entry on the first view, Dashboards", async () => {
@@ -524,6 +525,8 @@ describe("the environment scope", () => {
     await landsOn(router, "/forge/p/alpha/releases", { env: "all" });
     expect(window.localStorage.getItem("forge.console.env.alpha")).toBe("all");
 
+    // Activity is Configure's last row, as in the shell's nav.
+    await user.click(screen.getByRole("button", { name: "Configure" }));
     await user.click(screen.getByRole("link", { name: "Activity" }));
     await landsOn(router, "/forge/p/alpha/activity", { env: "all" });
   });
@@ -639,6 +642,7 @@ describe("the nav", () => {
     const router = renderAt("/forge/p/alpha/observability/graph?env=e2e&declared=true&internal=true&rpcId=acme.v1.OrdersService%2FGetOrder&rpcService=acme.v1.OrdersService");
     await screen.findByTestId("page");
     expect(router.state.location.search).toMatchObject({ env: "e2e", declared: true, internal: true, rpcId: "acme.v1.OrdersService/GetOrder", rpcService: "acme.v1.OrdersService" });
+    await user.click(screen.getByRole("button", { name: "Configure" }));
     await user.click(screen.getByRole("link", { name: "Secrets" }));
     await landsOn(router, "/forge/p/alpha/secrets", { env: "e2e" });
     expect(router.state.location.search).toEqual({ env: "e2e" });
@@ -671,13 +675,13 @@ describe("the nav", () => {
     expect(screen.getByRole("link", { name: /Alerts/ })).toHaveTextContent("2");
   });
 
-  it("is the led console's grouped nav, with each view under its group in the breadcrumb", async () => {
+  it("is the led console's grouped nav, in the shell's groups, with each view under its group in the breadcrumb", async () => {
     renderAt("/forge/p/alpha/observability/errors?env=prod");
     await screen.findByTestId("page");
     const nav = screen.getByRole("navigation", { name: "alpha" });
-    for (const row of ["Overview", "Issues", "Performance", "Sessions", "Releases", "More tools"]) expect(within(nav).getByText(row)).toBeInTheDocument();
-    // The console's own "Observability" parent is gone; its views sit in their groups.
-    expect(within(nav).queryByText("Observability")).toBeNull();
+    for (const row of ["Overview", "Dashboards", "Observability", "Analytics", "Deployments", "Tests", "Data", "Storage", "Auth", "Configure"]) expect(within(nav).getAllByText(row).length).toBeGreaterThan(0);
+    // The open page's group is unfolded.
+    expect(within(nav).getByRole("button", { name: /^Observability/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("link", { name: "Errors" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("Performance & issues›Errors");
   });
@@ -732,5 +736,57 @@ describe("inside the one shell", () => {
   it("still defaults the scope and reflects it into the URL", async () => {
     const router = renderAt("/forge/p/alpha/releases", { inShell: true });
     await landsOn(router, "/forge/p/alpha/releases", { env: "prod" });
+  });
+});
+
+describe("several checkouts declare one app: ?project= names which", () => {
+  const TWO_CHECKOUTS: TestProject[] = [
+    ...PROJECTS,
+    { id: "project-b2", name: "Beta, second checkout", path: "/src/beta-2", forge_project_name: "barkshop" },
+  ];
+  beforeEach(() => {
+    setTransport(mockTransport({ "ProjectService.ListProjects": () => listProjectsResponse(TWO_CHECKOUTS) }));
+  });
+
+  it("asks which, rather than opening the first, when the URL names none", async () => {
+    // Not even the current project decides: it is the tab's history, not the URL.
+    state.currentProject = PROJECTS[1]!;
+    renderAt("/forge/p/barkshop");
+    expect(await screen.findByTestId("console-checkout-picker")).toBeInTheDocument();
+    expect(screen.getByTestId("console-checkout-project-b")).toBeInTheDocument();
+    expect(screen.getByTestId("console-checkout-project-b2")).toBeInTheDocument();
+    expect(screen.queryByTestId("page")).toBeNull();
+    expect(selectProject).not.toHaveBeenCalled();
+  });
+
+  it("opens the checkout the person picks, and names it in the URL", async () => {
+    const user = userEvent.setup();
+    const router = renderAt("/forge/p/barkshop");
+    await user.click(await screen.findByTestId("console-checkout-project-b2"));
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ project: "project-b2" }));
+    expect((await screen.findByTestId("page")).dataset.projectId).toBe("project-b2");
+    expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-b2" }), { skipWorkspaceStateSave: true });
+  });
+
+  it("opens the checkout ?project= names", async () => {
+    renderAt("/forge/p/barkshop?project=project-b2");
+    expect((await screen.findByTestId("page")).dataset.projectId).toBe("project-b2");
+    expect(screen.queryByTestId("console-checkout-picker")).toBeNull();
+  });
+
+  it("keeps ?project= across the console's own links", async () => {
+    const router = renderAt("/forge/p/barkshop?project=project-b2");
+    await screen.findByTestId("page");
+    await router.navigate({ href: "/forge/p/barkshop/releases?env=prod" });
+    await landsOn(router, "/forge/p/barkshop/releases");
+    expect(router.state.location.search).toMatchObject({ project: "project-b2", env: "prod" });
+    expect((await screen.findByTestId("page")).dataset.projectId).toBe("project-b2");
+  });
+
+  it("names the checkout an old /forge?project= link resolved", async () => {
+    const router = renderAt("/forge?project=project-b2");
+    await landsOn(router, "/forge/p/barkshop");
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ project: "project-b2" }));
+    expect((await screen.findByTestId("page")).dataset.projectId).toBe("project-b2");
   });
 });

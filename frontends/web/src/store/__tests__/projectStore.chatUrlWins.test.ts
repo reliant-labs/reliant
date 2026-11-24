@@ -137,22 +137,27 @@ describe("the other background callers over a chat URL", () => {
 });
 
 describe("a person choosing another project from the chat's page", () => {
-  it("leaves the chat's page for that project's chats (a push)", async () => {
-    const { leaveChatPageFor } = await import("../projectStore");
+  it("leaves the chat's page for that project's chats (a push), and B becomes the context", async () => {
+    const { chooseProject } = await import("../projectStore");
 
-    expect(await leaveChatPageFor(projectB.id)).toBe(true);
+    expect(await chooseProject(projectB.id)).toBe(true);
 
     expect(router.state.location.pathname).toBe(`/project/${projectB.id}`);
+    expect(useProjectStore.getState().currentProject?.id).toBe(projectB.id);
+    expect(useWorkspaceStateStore.getState().projectFilterId).toBe(projectB.id);
+    // Back returns to the chat.
+    router.history.back();
+    expect(router.history.location.pathname).toBe(`/c/${urlChat.id}`);
   });
 
   it("waits for navigation and reports an asynchronous failure without changing context", async () => {
-    const { leaveChatPageFor } = await import("../projectStore");
+    const { chooseProject } = await import("../projectStore");
     let rejectNavigation!: (error: Error) => void;
     const navigate = vi.spyOn(router, "navigate").mockImplementationOnce(() => new Promise<void>((_, reject) => {
       rejectNavigation = reject;
     }));
     const settled = vi.fn();
-    const leaving = leaveChatPageFor(projectB.id).then((result) => {
+    const leaving = chooseProject(projectB.id).then((result) => {
       settled(result);
       return result;
     });
@@ -166,9 +171,9 @@ describe("a person choosing another project from the chat's page", () => {
   });
 
   it("does not report success when a blocked navigation resolves without leaving", async () => {
-    const { leaveChatPageFor } = await import("../projectStore");
+    const { chooseProject } = await import("../projectStore");
     const navigate = vi.spyOn(router, "navigate").mockResolvedValueOnce(undefined);
-    expect(await leaveChatPageFor(projectB.id)).toBe(false);
+    expect(await chooseProject(projectB.id)).toBe(false);
     expect(location()).toBe(`/c/${urlChat.id}`);
     navigate.mockRestore();
   });

@@ -202,7 +202,13 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	} else {
 		mailboxStore = &agentMessageStores{}
 	}
-	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: deps.Repo, Spawns: spawnTree, Threads: deps.Threads, ToolResults: toolCalls, Mailbox: mailboxStore.queue, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderBackoff(deps.ProviderBackoff))
+	// The projects attached to a chat, which its tools can run in (a nil
+	// *db.Repo here would be a non-nil interface that panics).
+	var chatProjects handlers.ChatProjectLister
+	if deps.Repo != nil {
+		chatProjects = deps.Repo
+	}
+	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: deps.Repo, Spawns: spawnTree, Threads: deps.Threads, ToolResults: toolCalls, Mailbox: mailboxStore.queue, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderBackoff(deps.ProviderBackoff).WithChatProjects(chatProjects))
 
 	// ========================================================================
 	// TOOL EXECUTION ACTIVITIES
@@ -225,8 +231,8 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	if deps.Repo != nil {
 		runFunding = handlers.NewRunFundingStore(deps.Repo.ORM(), deps.Repo)
 	}
-	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(handlers.ExecuteToolsDeps{Store: deps.Repo, Rows: workspaceRows, ToolExecutor: deps.ToolExecutor, ToolCalls: toolCalls, Preemption: mailboxStore.preempt}).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
-	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(handlers.ExecuteToolsDeps{Store: deps.Repo, Rows: workspaceRows, ToolExecutor: deps.ToolExecutor, ToolCalls: toolCalls, Preemption: mailboxStore.preempt}).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivityWithDeps(handlers.ExecuteToolsDeps{Store: deps.Repo, Rows: workspaceRows, ToolExecutor: deps.ToolExecutor, ToolCalls: toolCalls, Preemption: mailboxStore.preempt}).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter).WithChatProjects(chatProjects))
+	v2.RegisterActivity(registry, handlers.NewInvokeToolActivityWithDeps(handlers.ExecuteToolsDeps{Store: deps.Repo, Rows: workspaceRows, ToolExecutor: deps.ToolExecutor, ToolCalls: toolCalls, Preemption: mailboxStore.preempt}).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter).WithChatProjects(chatProjects))
 	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger).WithHostedExecutor(deps.HostedActions).WithSecretResolver(deps.SecretResolver))
 
 	// ========================================================================

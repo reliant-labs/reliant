@@ -46,10 +46,16 @@ type InvokeToolActivity struct {
 }
 
 // NewInvokeToolActivity creates a new InvokeToolActivity.
-func NewInvokeToolActivity(deps ExecuteToolsDeps) *InvokeToolActivity {
+// Deprecated: use NewInvokeToolActivityWithDeps.
+func NewInvokeToolActivity(storeOrDeps any, legacy ...any) *InvokeToolActivity {
 	return &InvokeToolActivity{
-		executeTools: NewExecuteToolsActivity(deps),
+		executeTools: NewExecuteToolsActivity(storeOrDeps, legacy...),
 	}
+}
+
+// NewInvokeToolActivityWithDeps creates an invoke activity with explicit dependencies.
+func NewInvokeToolActivityWithDeps(deps ExecuteToolsDeps) *InvokeToolActivity {
+	return &InvokeToolActivity{executeTools: NewExecuteToolsActivityWithDeps(deps)}
 }
 
 // WithToolCallResults gives the tool-execution path the durable-result reader;
@@ -84,6 +90,13 @@ func (a *InvokeToolActivity) WithConfigProvider(provider cfgpkg.ConfigProvider) 
 // resolve through; see ExecuteToolsActivity.WithDaemonRouter.
 func (a *InvokeToolActivity) WithDaemonRouter(router toolexec.DaemonRouter) *InvokeToolActivity {
 	a.executeTools.WithDaemonRouter(router)
+	return a
+}
+
+// WithChatProjects gives the tool-execution path the reader of a chat's
+// attached projects; see ExecuteToolsActivity.WithChatProjects.
+func (a *InvokeToolActivity) WithChatProjects(l ChatProjectLister) *InvokeToolActivity {
+	a.executeTools.WithChatProjects(l)
 	return a
 }
 

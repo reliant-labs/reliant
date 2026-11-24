@@ -6,7 +6,7 @@
  * own pages (/forge/demo, DemoConsole) are inside it too, with their `section`:
  *
  *  - the Observability views read `useObservabilityApi()`, not the transport:
- *    the demo's API (Forge/Demo/demoData/demoApi.ts: the sample app on the
+ *    the demo's API (Forge/Demo/demoApi.ts: the sample app on the
  *    console's real client where the scenario serves it, fixtures elsewhere,
  *    read-only either way);
  *  - observability usage is answered as an older control plane would (not
@@ -18,7 +18,7 @@
 import { useMemo, type ReactNode } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { createDemoApi } from "@/components/Forge/Demo/demoData/demoApi";
+import { createDemoApi } from "@/components/Forge/Demo/demoApi";
 import { DemoBrowserProviders } from "@/components/Forge/Demo/DemoBrowserProviders";
 import { DemoNavExtras } from "@/components/Forge/Demo/DemoNavExtras";
 import type { DemoSection } from "@/components/Forge/Demo/demoPath";

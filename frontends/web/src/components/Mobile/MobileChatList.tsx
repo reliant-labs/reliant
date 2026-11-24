@@ -55,7 +55,7 @@ import {
 } from "../../hooks/chat-queries";
 import { prefetchChatMessages } from "../../hooks/message-queries";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { useShellOneProject } from "../../lib/urlState/shellScopeStore";
 import { useProjects } from "../../hooks/project-queries";
 import { cn } from "../../lib/utils";
 import { isChatBusy, needsUserAttention } from "../../lib/chatSendState";
@@ -445,7 +445,7 @@ export function MobileChatList() {
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
   const currentProjectName = useProjectStore((s) => s.currentProject?.name);
   // The list is the project filter's (/m/projects), every project by default.
-  const scope = useWorkspaceStateStore((s) => s.projectFilterId);
+  const scope = useShellOneProject();
   const { projects } = useProjects();
   const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
   const { data: chatList, isLoading } = useChatListWithWorkspaces(scope);

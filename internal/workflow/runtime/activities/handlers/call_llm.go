@@ -208,6 +208,16 @@ type CallLLMActivity struct {
 	// backoff marks a thread parked in the driver's retry ladder; nil marks
 	// nothing.
 	backoff ProviderBackoffMarkers
+	// chatProjects reads the projects attached to a chat: with more than
+	// one project the turn's tools are offered `project` and the prompt
+	// lists them. nil makes every chat its primary project alone.
+	chatProjects ChatProjectLister
+}
+
+// WithChatProjects wires the reader of a chat's attached projects.
+func (a *CallLLMActivity) WithChatProjects(l ChatProjectLister) *CallLLMActivity {
+	a.chatProjects = l
+	return a
 }
 
 // WithProviderBackoff wires the marker a thread parked in a driver's retry
@@ -1461,9 +1471,9 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// The project's checkout on the machine this turn's tools run on (routed
 	// as ExecuteTools routes them), for the prompt's working directory. A
 	// machine with no checkout leaves it unset; the tools say why.
-	projectPath := resolveCallCheckout(ctx, a.repo, a.machines, project,
-		toolDaemonSelector(worktreeDaemonID, threadBoundExplicit(worktreeThreadBound, worktreeDaemonID, chatDaemonSelector(chat, rtx.DaemonSelector))),
-		worktreePath == "").main.Path
+	turnSelector := toolDaemonSelector(worktreeDaemonID, threadBoundExplicit(worktreeThreadBound, worktreeDaemonID, chatDaemonSelector(chat, rtx.DaemonSelector)))
+	turnCheckout := resolveCallCheckout(ctx, a.repo, a.machines, project, turnSelector, worktreePath == "")
+	projectPath := turnCheckout.main.Path
 
 	// Determine working directory (prefer worktree path over project path)
 	workingDir := projectPath
@@ -1777,6 +1787,16 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 				}
 			}
 		}
+	}
+
+	// A chat with several projects: its file, search and shell tools take
+	// `project`, and the prompt says which projects there are. A chat with
+	// one gets exactly the tools and prompt it always did (the prompt prefix
+	// is cached).
+	if projects := chatProjects(ctx, a.chatProjects, a.repo, chat, project); len(projects) > 1 {
+		availableTools = withChatProjectParam(availableTools, projects)
+		systemPrompts = append(systemPrompts, a.chatProjectsNote(ctx, projects, turnCheckout.pin(turnSelector)))
+		activity.GetLogger(ctx).Debug("[CallLLM] Chat has several projects; tools take `project`", "chatID", chat.ID, "projects", len(projects))
 	}
 
 	// A Temporal retry sends exactly the prompts the failed attempt sent. There

@@ -80,6 +80,19 @@ describe("classifyRpcFailure", () => {
     expect(classifyRpcFailure(new ConnectError("boom", Code.Internal), probed)).toBe("report");
   });
 
+  it("treats Unimplemented from the chat's attached-projects rpcs as expected: an older server, not skew", () => {
+    const unrouted = new ConnectError("HTTP 404", Code.Unimplemented);
+    for (const methodName of ["ListChatProjects", "AttachProjectToChat", "DetachProjectFromChat"]) {
+      expect(classifyRpcFailure(unrouted, { serviceTypeName: "reliant.v1.ChatService", methodName, signalAborted: false })).toBe(
+        "expected",
+      );
+    }
+    // Every other ChatService route a server does not serve is still skew.
+    expect(
+      classifyRpcFailure(unrouted, { serviceTypeName: "reliant.v1.ChatService", methodName: "CreateChat", signalAborted: false }),
+    ).toBe("version-skew");
+  });
+
   it("reads the server's DeadlineExceeded as a deadline, not a report", () => {
     // 2026-10-10: a saturated cloud machine answered file-tree polls after
     // the rpc deadline; each one was an exception.

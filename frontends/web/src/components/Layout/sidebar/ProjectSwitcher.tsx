@@ -56,7 +56,16 @@ export function OrgHeaderRow() {
     </SidebarOrgRow>
   );
 }
+import { navigateWithShellScope } from "../shellScopeNav";
+import { useNavDrawer } from "../shell/shellFrame";
+import { releaseNavDrawerHold } from "./navDrawerHold";
 import { ALL_PROJECTS_PICK, sectionInAnotherApp, sectionsAppOf, useShellLastPick, type ShellProject } from "./shellProject";
+
+/** A pick opens a page: the narrow window's drawer closes, as for any row of the nav (shell/AppShell.tsx). */
+function closeNavDrawer(): void {
+  releaseNavDrawerHold();
+  useNavDrawer.getState().setOpen(false);
+}
 
 /** Where picking `selection` goes from `pathname`, and the key it becomes. */
 export function pickTarget(selection: ProjectSelection, pathname: string): { key: string; href: string } {
@@ -69,15 +78,7 @@ export function pickTarget(selection: ProjectSelection, pathname: string): { key
   return { key, href: consolePath(app ?? "", { kind: "overview" }) };
 }
 
-export function ProjectSwitcherRow({
-  shell,
-  pathname,
-  onNavigate,
-}: {
-  shell: ShellProject;
-  pathname: string;
-  onNavigate: (href: string) => void;
-}) {
+export function ProjectSwitcherRow({ shell, pathname }: { shell: ShellProject; pathname: string }) {
   const setLastPick = useShellLastPick((state) => state.set);
   const rememberSeveral = useShellLastPick((state) => state.setSeveral);
   const filter = useChatProjectFilter();
@@ -90,17 +91,20 @@ export function ProjectSwitcherRow({
       // Out of a choice of several, without the filter's own navigation.
       useChatProjectFilterStore.getState().setMany([]);
       setLastPick(key);
-      onNavigate(href);
+      // One project: the URL drops the several or All it carried (the page names its own).
+      navigateWithShellScope(undefined, { to: href });
+      closeNavDrawer();
     },
-    [pathname, setLastPick, onNavigate],
+    [pathname, setLastPick],
   );
 
   const pickAll = useCallback(() => {
     useChatProjectFilterStore.getState().setMany([]);
     setLastPick(ALL_PROJECTS_PICK);
-    // A chat page shows every project's chats from the home; any other page stays.
-    if (chatShellRouteOf(pathname)) onNavigate(homePath());
-  }, [pathname, setLastPick, onNavigate]);
+    // `?projects=all`: a chat page shows every project's chats from the home; any other page stays.
+    navigateWithShellScope({ mode: "all" }, chatShellRouteOf(pathname) ? { to: homePath() } : {});
+    closeNavDrawer();
+  }, [pathname, setLastPick]);
 
   const leadItems = useMemo<ProjectSelectorLeadItem[]>(
     () => [

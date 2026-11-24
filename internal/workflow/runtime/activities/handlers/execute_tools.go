@@ -304,6 +304,10 @@ type ExecuteToolsActivity struct {
 	// preemptionPoll is how often a preemptable call checks for mail; zero
 	// means preemptionPollInterval. Only tests set it.
 	preemptionPoll time.Duration
+	// chatProjects reads the projects attached to a chat, which a call's
+	// `project` can route it to (routeCallProject). Set by WithChatProjects;
+	// nil makes every chat its primary project alone.
+	chatProjects ChatProjectLister
 }
 
 // WithToolCallResults gives the tool-execution path the reader of the durable
@@ -348,7 +352,35 @@ func (a *ExecuteToolsActivity) WithWorktreeReviver(r WorktreeReviver) *ExecuteTo
 
 // NewExecuteToolsActivity creates a new ExecuteToolsActivity; deps.ToolCalls is
 // the tool-call records it reads and writes (NewToolCalls).
-func NewExecuteToolsActivity(deps ExecuteToolsDeps) *ExecuteToolsActivity {
+// NewExecuteToolsActivity accepts explicit dependencies or the original
+// store, rows, tool calls and executor arguments.
+// Deprecated: use NewExecuteToolsActivityWithDeps.
+func NewExecuteToolsActivity(storeOrDeps any, legacy ...any) *ExecuteToolsActivity {
+	if deps, ok := storeOrDeps.(ExecuteToolsDeps); ok {
+		return NewExecuteToolsActivityWithDeps(deps)
+	}
+	var deps ExecuteToolsDeps
+	if storeOrDeps != nil {
+		deps.Store = storeOrDeps.(ExecuteToolsStore)
+		deps.Preemption, _ = storeOrDeps.(MailboxPreempter)
+	}
+	if len(legacy) != 3 {
+		panic("NewExecuteToolsActivity requires store, rows, tool calls and executor")
+	}
+	if legacy[0] != nil {
+		deps.Rows = legacy[0].(WorkspaceRows)
+	}
+	if legacy[1] != nil {
+		deps.ToolCalls = legacy[1].(ToolCalls)
+	}
+	if legacy[2] != nil {
+		deps.ToolExecutor = legacy[2].(toolexec.ToolExecutor)
+	}
+	return NewExecuteToolsActivityWithDeps(deps)
+}
+
+// NewExecuteToolsActivityWithDeps creates a tool activity with explicit dependencies.
+func NewExecuteToolsActivityWithDeps(deps ExecuteToolsDeps) *ExecuteToolsActivity {
 	return &ExecuteToolsActivity{
 		repo:         deps.Store,
 		rows:         deps.Rows,
@@ -717,7 +749,14 @@ func (a *ExecuteToolsActivity) runToolCall(
 	}
 
 	if blocked != "" && tools.NeedsMachine(toolCall.Name) {
-		return a.refuseToolCall(ctx, rtx, toolCall, blocked)
+		// The batch's workspace check is the primary project's. A call that
+		// names its project may run in an attached one, which that check
+		// says nothing about: it is refused only once routed to the primary
+		// (executeSingleTool).
+		if !namesProject(toolCall) {
+			return a.refuseToolCall(ctx, rtx, toolCall, blocked)
+		}
+		ctx = withBatchBlocked(ctx, blocked)
 	}
 
 	// Execute the tool via normal toolexec path
@@ -865,15 +904,35 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	}
 	tec.daemonSelector = toolDaemonSelector(worktreeDaemon, threadBoundExplicit(tec.worktreeThreadBound, worktreeDaemon, chatDaemonSelector(tec.chat, daemonSel)))
 
-	// The machine that selector reaches and the project's checkout on it:
-	// the directory the call runs in is resolved there, and the call is
-	// pinned to it. A machine call to a machine with no checkout is refused
-	// with the reason and the way out — the conversation carries on, and
-	// the next call re-resolves (cloning or switching machine unblocks it).
-	// A call in a branch worktree (Path set) runs without the main checkout.
-	tec.checkout = resolveCallCheckout(ctx, a.repo, a.machines, tec.project, tec.daemonSelector, tec.worktree.Path == "")
+	// Which of the chat's projects the call runs in (its `project`; omitted
+	// is the primary), the machine that selector reaches and that project's
+	// checkout on it: the directory the call runs in is resolved there, and
+	// the call is pinned to it. A machine call to a machine with no checkout
+	// is refused with the reason and the way out — the conversation carries
+	// on, and the next call re-resolves (cloning or switching machine
+	// unblocks it). A call in a branch worktree (Path set) runs without the
+	// main checkout.
+	attached, refusal := a.routeCallProject(ctx, tec)
+	if refusal == "" && !attached && tools.NeedsMachine(toolName) {
+		// A call that named its project skipped the batch's workspace check
+		// in runToolCall, which is the primary's: applied here, once it is
+		// known to run there.
+		refusal = batchBlockedFrom(ctx)
+	}
+	if refusal != "" {
+		result := a.buildToolResult(toolCallID, toolName, refusal, "", true, nil, nil)
+		completedAt := time.Now()
+		a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusFailed, toolCallUpsertOpts{
+			completedAt:  &completedAt,
+			errorMessage: refusal,
+		}, &toolCallResultWrite{content: result.Content, isError: true})
+		return result
+	}
 	if tec.checkout.missing != nil && tools.NeedsMachine(toolName) {
 		refusal := missingRefusal(tec.checkout.missing)
+		if attached {
+			refusal = attachedMissingRefusal(tec.checkout.missing)
+		}
 		result := a.buildToolResult(toolCallID, toolName, refusal, "", true, nil, nil)
 		completedAt := time.Now()
 		a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusFailed, toolCallUpsertOpts{
