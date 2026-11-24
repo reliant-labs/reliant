@@ -83,7 +83,12 @@ type ShareEvent struct {
 	OwnerUserID string
 	ActorUserID string
 	Action      ShareAction
-	CreatedAt   time.Time
+	// TargetUserID is the person a member change is about (grant,
+	// role_change, revoke); empty for a visibility change.
+	TargetUserID string
+	// Role is the level a grant or role_change leaves; empty otherwise.
+	Role      ChatMemberRole
+	CreatedAt time.Time
 }
 
 // SharedChatFilters lists the chats shared with an org that a viewer did not

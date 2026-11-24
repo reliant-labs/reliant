@@ -1652,8 +1652,11 @@ func (g *Graph) newSharing() (*sharing.Service, error) {
 		Chats:    store.NewChatsWithActivityExtStore(o),
 		Projects: store.NewProjectExtStore(o),
 		Shares:   store.NewShareEventExtStore(o),
+		Members:  store.NewChatMemberExtStore(o),
 		Tx:       o,
 		Orgs:     g.OrgResolver(),
+		// SetChatMember grants only with chat_collaboration.enabled.
+		Collaboration: g.ApiServerConfig.GetChatCollaboration(),
 	})
 }
 

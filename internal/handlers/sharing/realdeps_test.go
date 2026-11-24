@@ -12,6 +12,7 @@ func realDeps(repo *db.Repo, orgs OrgResolver) Deps {
 		Chats:    store.NewChatsWithActivityExtStore(o),
 		Projects: store.NewProjectExtStore(o),
 		Shares:   store.NewShareEventExtStore(o),
+		Members:  store.NewChatMemberExtStore(o),
 		Tx:       o,
 		Orgs:     orgs,
 	}

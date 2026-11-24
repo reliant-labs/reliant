@@ -14,6 +14,7 @@ import (
 	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -26,6 +27,464 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// ChatMemberRole is the level a person holds on a chat. Levels nest: each
+// includes everything below it. The owner is never a member.
+type ChatMemberRole int32
+
+const (
+	// A server that predates chat collaboration, or no grant.
+	ChatMemberRole_CHAT_MEMBER_ROLE_UNSPECIFIED ChatMemberRole = 0
+	// Read the chat, as an org-wide viewer of a shared chat does.
+	ChatMemberRole_CHAT_MEMBER_ROLE_VIEW ChatMemberRole = 1
+	// View, plus send messages and answer what the chat asks.
+	ChatMemberRole_CHAT_MEMBER_ROLE_REPLY ChatMemberRole = 2
+	// Reply, plus steer the run, change its settings and its members.
+	ChatMemberRole_CHAT_MEMBER_ROLE_MANAGE ChatMemberRole = 3
+)
+
+// Enum value maps for ChatMemberRole.
+var (
+	ChatMemberRole_name = map[int32]string{
+		0: "CHAT_MEMBER_ROLE_UNSPECIFIED",
+		1: "CHAT_MEMBER_ROLE_VIEW",
+		2: "CHAT_MEMBER_ROLE_REPLY",
+		3: "CHAT_MEMBER_ROLE_MANAGE",
+	}
+	ChatMemberRole_value = map[string]int32{
+		"CHAT_MEMBER_ROLE_UNSPECIFIED": 0,
+		"CHAT_MEMBER_ROLE_VIEW":        1,
+		"CHAT_MEMBER_ROLE_REPLY":       2,
+		"CHAT_MEMBER_ROLE_MANAGE":      3,
+	}
+)
+
+func (x ChatMemberRole) Enum() *ChatMemberRole {
+	p := new(ChatMemberRole)
+	*p = x
+	return p
+}
+
+func (x ChatMemberRole) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ChatMemberRole) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_sharing_proto_enumTypes[0].Descriptor()
+}
+
+func (ChatMemberRole) Type() protoreflect.EnumType {
+	return &file_reliant_v1_sharing_proto_enumTypes[0]
+}
+
+func (x ChatMemberRole) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ChatMemberRole.Descriptor instead.
+func (ChatMemberRole) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{0}
+}
+
+// ChatMember is one person's grant on a chat.
+type ChatMember struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Role   ChatMemberRole         `protobuf:"varint,2,opt,name=role,proto3,enum=reliant.v1.ChatMemberRole" json:"role,omitempty"`
+	// Who set the level they hold now.
+	GrantedBy string `protobuf:"bytes,3,opt,name=granted_by,json=grantedBy,proto3" json:"granted_by,omitempty"`
+	// When they first became a member.
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChatMember) Reset() {
+	*x = ChatMember{}
+	mi := &file_reliant_v1_sharing_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChatMember) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChatMember) ProtoMessage() {}
+
+func (x *ChatMember) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_sharing_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChatMember.ProtoReflect.Descriptor instead.
+func (*ChatMember) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ChatMember) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ChatMember) GetRole() ChatMemberRole {
+	if x != nil {
+		return x.Role
+	}
+	return ChatMemberRole_CHAT_MEMBER_ROLE_UNSPECIFIED
+}
+
+func (x *ChatMember) GetGrantedBy() string {
+	if x != nil {
+		return x.GrantedBy
+	}
+	return ""
+}
+
+func (x *ChatMember) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+type SetChatMemberRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	ChatId string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	UserId string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// VIEW, REPLY or MANAGE.
+	Role          ChatMemberRole `protobuf:"varint,3,opt,name=role,proto3,enum=reliant.v1.ChatMemberRole" json:"role,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetChatMemberRequest) Reset() {
+	*x = SetChatMemberRequest{}
+	mi := &file_reliant_v1_sharing_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetChatMemberRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetChatMemberRequest) ProtoMessage() {}
+
+func (x *SetChatMemberRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_sharing_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetChatMemberRequest.ProtoReflect.Descriptor instead.
+func (*SetChatMemberRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *SetChatMemberRequest) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
+func (x *SetChatMemberRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *SetChatMemberRequest) GetRole() ChatMemberRole {
+	if x != nil {
+		return x.Role
+	}
+	return ChatMemberRole_CHAT_MEMBER_ROLE_UNSPECIFIED
+}
+
+type SetChatMemberResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The grant as it now stands.
+	Member *ChatMember `protobuf:"bytes,1,opt,name=member,proto3" json:"member,omitempty"`
+	// False when the person already held the level asked for.
+	Changed       bool `protobuf:"varint,2,opt,name=changed,proto3" json:"changed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetChatMemberResponse) Reset() {
+	*x = SetChatMemberResponse{}
+	mi := &file_reliant_v1_sharing_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetChatMemberResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetChatMemberResponse) ProtoMessage() {}
+
+func (x *SetChatMemberResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_sharing_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetChatMemberResponse.ProtoReflect.Descriptor instead.
+func (*SetChatMemberResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *SetChatMemberResponse) GetMember() *ChatMember {
+	if x != nil {
+		return x.Member
+	}
+	return nil
+}
+
+func (x *SetChatMemberResponse) GetChanged() bool {
+	if x != nil {
+		return x.Changed
+	}
+	return false
+}
+
+type RemoveChatMemberRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ChatId        string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveChatMemberRequest) Reset() {
+	*x = RemoveChatMemberRequest{}
+	mi := &file_reliant_v1_sharing_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveChatMemberRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveChatMemberRequest) ProtoMessage() {}
+
+func (x *RemoveChatMemberRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_sharing_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveChatMemberRequest.ProtoReflect.Descriptor instead.
+func (*RemoveChatMemberRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *RemoveChatMemberRequest) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
+func (x *RemoveChatMemberRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type RemoveChatMemberResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// False when the person held no grant.
+	Changed       bool `protobuf:"varint,1,opt,name=changed,proto3" json:"changed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveChatMemberResponse) Reset() {
+	*x = RemoveChatMemberResponse{}
+	mi := &file_reliant_v1_sharing_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveChatMemberResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveChatMemberResponse) ProtoMessage() {}
+
+func (x *RemoveChatMemberResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_sharing_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveChatMemberResponse.ProtoReflect.Descriptor instead.
+func (*RemoveChatMemberResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *RemoveChatMemberResponse) GetChanged() bool {
+	if x != nil {
+		return x.Changed
+	}
+	return false
+}
+
+type ListChatMembersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ChatId        string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListChatMembersRequest) Reset() {
+	*x = ListChatMembersRequest{}
+	mi := &file_reliant_v1_sharing_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListChatMembersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListChatMembersRequest) ProtoMessage() {}
+
+func (x *ListChatMembersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_sharing_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListChatMembersRequest.ProtoReflect.Descriptor instead.
+func (*ListChatMembersRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ListChatMembersRequest) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
+type ListChatMembersResponse struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	OwnerUserId string                 `protobuf:"bytes,1,opt,name=owner_user_id,json=ownerUserId,proto3" json:"owner_user_id,omitempty"`
+	// The members the caller may see (see ListChatMembers), oldest first.
+	Members []*ChatMember `protobuf:"bytes,2,rep,name=members,proto3" json:"members,omitempty"`
+	// How many members the chat has, including those not listed.
+	MemberCount int32 `protobuf:"varint,3,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
+	// The level the caller reads the chat at: VIEW for a viewer (a VIEW grant,
+	// or any member of the organization a chat is shared with), REPLY or
+	// MANAGE for a member holding that grant, UNSPECIFIED for the owner.
+	CallerRole    ChatMemberRole `protobuf:"varint,4,opt,name=caller_role,json=callerRole,proto3,enum=reliant.v1.ChatMemberRole" json:"caller_role,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListChatMembersResponse) Reset() {
+	*x = ListChatMembersResponse{}
+	mi := &file_reliant_v1_sharing_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListChatMembersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListChatMembersResponse) ProtoMessage() {}
+
+func (x *ListChatMembersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_sharing_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListChatMembersResponse.ProtoReflect.Descriptor instead.
+func (*ListChatMembersResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListChatMembersResponse) GetOwnerUserId() string {
+	if x != nil {
+		return x.OwnerUserId
+	}
+	return ""
+}
+
+func (x *ListChatMembersResponse) GetMembers() []*ChatMember {
+	if x != nil {
+		return x.Members
+	}
+	return nil
+}
+
+func (x *ListChatMembersResponse) GetMemberCount() int32 {
+	if x != nil {
+		return x.MemberCount
+	}
+	return 0
+}
+
+func (x *ListChatMembersResponse) GetCallerRole() ChatMemberRole {
+	if x != nil {
+		return x.CallerRole
+	}
+	return ChatMemberRole_CHAT_MEMBER_ROLE_UNSPECIFIED
+}
+
 type SetChatVisibilityRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	ChatId string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
@@ -37,7 +496,7 @@ type SetChatVisibilityRequest struct {
 
 func (x *SetChatVisibilityRequest) Reset() {
 	*x = SetChatVisibilityRequest{}
-	mi := &file_reliant_v1_sharing_proto_msgTypes[0]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -49,7 +508,7 @@ func (x *SetChatVisibilityRequest) String() string {
 func (*SetChatVisibilityRequest) ProtoMessage() {}
 
 func (x *SetChatVisibilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_sharing_proto_msgTypes[0]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -62,7 +521,7 @@ func (x *SetChatVisibilityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetChatVisibilityRequest.ProtoReflect.Descriptor instead.
 func (*SetChatVisibilityRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{0}
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SetChatVisibilityRequest) GetChatId() string {
@@ -91,7 +550,7 @@ type SetChatVisibilityResponse struct {
 
 func (x *SetChatVisibilityResponse) Reset() {
 	*x = SetChatVisibilityResponse{}
-	mi := &file_reliant_v1_sharing_proto_msgTypes[1]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -103,7 +562,7 @@ func (x *SetChatVisibilityResponse) String() string {
 func (*SetChatVisibilityResponse) ProtoMessage() {}
 
 func (x *SetChatVisibilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_sharing_proto_msgTypes[1]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -116,7 +575,7 @@ func (x *SetChatVisibilityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetChatVisibilityResponse.ProtoReflect.Descriptor instead.
 func (*SetChatVisibilityResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{1}
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SetChatVisibilityResponse) GetChat() *v1.Chat {
@@ -144,7 +603,7 @@ type SetProjectVisibilityRequest struct {
 
 func (x *SetProjectVisibilityRequest) Reset() {
 	*x = SetProjectVisibilityRequest{}
-	mi := &file_reliant_v1_sharing_proto_msgTypes[2]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -156,7 +615,7 @@ func (x *SetProjectVisibilityRequest) String() string {
 func (*SetProjectVisibilityRequest) ProtoMessage() {}
 
 func (x *SetProjectVisibilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_sharing_proto_msgTypes[2]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -169,7 +628,7 @@ func (x *SetProjectVisibilityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetProjectVisibilityRequest.ProtoReflect.Descriptor instead.
 func (*SetProjectVisibilityRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *SetProjectVisibilityRequest) GetProjectId() string {
@@ -198,7 +657,7 @@ type SetProjectVisibilityResponse struct {
 
 func (x *SetProjectVisibilityResponse) Reset() {
 	*x = SetProjectVisibilityResponse{}
-	mi := &file_reliant_v1_sharing_proto_msgTypes[3]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -210,7 +669,7 @@ func (x *SetProjectVisibilityResponse) String() string {
 func (*SetProjectVisibilityResponse) ProtoMessage() {}
 
 func (x *SetProjectVisibilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_sharing_proto_msgTypes[3]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -223,7 +682,7 @@ func (x *SetProjectVisibilityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetProjectVisibilityResponse.ProtoReflect.Descriptor instead.
 func (*SetProjectVisibilityResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{3}
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *SetProjectVisibilityResponse) GetProject() *Project {
@@ -270,7 +729,7 @@ type ListSharedChatsRequest struct {
 
 func (x *ListSharedChatsRequest) Reset() {
 	*x = ListSharedChatsRequest{}
-	mi := &file_reliant_v1_sharing_proto_msgTypes[4]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -282,7 +741,7 @@ func (x *ListSharedChatsRequest) String() string {
 func (*ListSharedChatsRequest) ProtoMessage() {}
 
 func (x *ListSharedChatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_sharing_proto_msgTypes[4]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -295,7 +754,7 @@ func (x *ListSharedChatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSharedChatsRequest.ProtoReflect.Descriptor instead.
 func (*ListSharedChatsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{4}
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListSharedChatsRequest) GetOrgId() string {
@@ -349,7 +808,7 @@ type ListSharedChatsResponse struct {
 
 func (x *ListSharedChatsResponse) Reset() {
 	*x = ListSharedChatsResponse{}
-	mi := &file_reliant_v1_sharing_proto_msgTypes[5]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -361,7 +820,7 @@ func (x *ListSharedChatsResponse) String() string {
 func (*ListSharedChatsResponse) ProtoMessage() {}
 
 func (x *ListSharedChatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_sharing_proto_msgTypes[5]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -374,7 +833,7 @@ func (x *ListSharedChatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSharedChatsResponse.ProtoReflect.Descriptor instead.
 func (*ListSharedChatsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ListSharedChatsResponse) GetChats() []*v1.Chat {
@@ -399,7 +858,7 @@ type ListSharedProjectsRequest struct {
 
 func (x *ListSharedProjectsRequest) Reset() {
 	*x = ListSharedProjectsRequest{}
-	mi := &file_reliant_v1_sharing_proto_msgTypes[6]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -411,7 +870,7 @@ func (x *ListSharedProjectsRequest) String() string {
 func (*ListSharedProjectsRequest) ProtoMessage() {}
 
 func (x *ListSharedProjectsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_sharing_proto_msgTypes[6]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -424,7 +883,7 @@ func (x *ListSharedProjectsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSharedProjectsRequest.ProtoReflect.Descriptor instead.
 func (*ListSharedProjectsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ListSharedProjectsRequest) GetOrgId() string {
@@ -457,7 +916,7 @@ type ListSharedProjectsResponse struct {
 
 func (x *ListSharedProjectsResponse) Reset() {
 	*x = ListSharedProjectsResponse{}
-	mi := &file_reliant_v1_sharing_proto_msgTypes[7]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -469,7 +928,7 @@ func (x *ListSharedProjectsResponse) String() string {
 func (*ListSharedProjectsResponse) ProtoMessage() {}
 
 func (x *ListSharedProjectsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_sharing_proto_msgTypes[7]
+	mi := &file_reliant_v1_sharing_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -482,7 +941,7 @@ func (x *ListSharedProjectsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSharedProjectsResponse.ProtoReflect.Descriptor instead.
 func (*ListSharedProjectsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_sharing_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ListSharedProjectsResponse) GetProjects() []*Project {
@@ -497,7 +956,35 @@ var File_reliant_v1_sharing_proto protoreflect.FileDescriptor
 const file_reliant_v1_sharing_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/sharing.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x15reliant/v1/chat.proto\x1a\x17reliant/v1/common.proto\x1a\x18reliant/v1/project.proto\"\x88\x01\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15reliant/v1/chat.proto\x1a\x17reliant/v1/common.proto\x1a\x18reliant/v1/project.proto\"\xaf\x01\n" +
+	"\n" +
+	"ChatMember\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12.\n" +
+	"\x04role\x18\x02 \x01(\x0e2\x1a.reliant.v1.ChatMemberRoleR\x04role\x12\x1d\n" +
+	"\n" +
+	"granted_by\x18\x03 \x01(\tR\tgrantedBy\x129\n" +
+	"\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x98\x01\n" +
+	"\x14SetChatMemberRequest\x12 \n" +
+	"\achat_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06chatId\x12 \n" +
+	"\auser_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06userId\x12<\n" +
+	"\x04role\x18\x03 \x01(\x0e2\x1a.reliant.v1.ChatMemberRoleB\f\xbaH\t\x82\x01\x06\x18\x01\x18\x02\x18\x03R\x04role\"a\n" +
+	"\x15SetChatMemberResponse\x12.\n" +
+	"\x06member\x18\x01 \x01(\v2\x16.reliant.v1.ChatMemberR\x06member\x12\x18\n" +
+	"\achanged\x18\x02 \x01(\bR\achanged\"]\n" +
+	"\x17RemoveChatMemberRequest\x12 \n" +
+	"\achat_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06chatId\x12 \n" +
+	"\auser_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06userId\"4\n" +
+	"\x18RemoveChatMemberResponse\x12\x18\n" +
+	"\achanged\x18\x01 \x01(\bR\achanged\":\n" +
+	"\x16ListChatMembersRequest\x12 \n" +
+	"\achat_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06chatId\"\xcf\x01\n" +
+	"\x17ListChatMembersResponse\x12\"\n" +
+	"\rowner_user_id\x18\x01 \x01(\tR\vownerUserId\x120\n" +
+	"\amembers\x18\x02 \x03(\v2\x16.reliant.v1.ChatMemberR\amembers\x12!\n" +
+	"\fmember_count\x18\x03 \x01(\x05R\vmemberCount\x12;\n" +
+	"\vcaller_role\x18\x04 \x01(\x0e2\x1a.reliant.v1.ChatMemberRoleR\n" +
+	"callerRole\"\x88\x01\n" +
 	"\x18SetChatVisibilityRequest\x12 \n" +
 	"\achat_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06chatId\x12J\n" +
 	"\n" +
@@ -537,7 +1024,12 @@ const file_reliant_v1_sharing_proto_rawDesc = "" +
 	"\x06offset\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x06offsetB\t\n" +
 	"\a_org_id\"M\n" +
 	"\x1aListSharedProjectsResponse\x12/\n" +
-	"\bprojects\x18\x01 \x03(\v2\x13.reliant.v1.ProjectR\bprojects2\xa0\x05\n" +
+	"\bprojects\x18\x01 \x03(\v2\x13.reliant.v1.ProjectR\bprojects*\x86\x01\n" +
+	"\x0eChatMemberRole\x12 \n" +
+	"\x1cCHAT_MEMBER_ROLE_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15CHAT_MEMBER_ROLE_VIEW\x10\x01\x12\x1a\n" +
+	"\x16CHAT_MEMBER_ROLE_REPLY\x10\x02\x12\x1b\n" +
+	"\x17CHAT_MEMBER_ROLE_MANAGE\x10\x032\xc7\b\n" +
 	"\x0eSharingService\x12\xaa\x01\n" +
 	"\x11SetChatVisibility\x12$.reliant.v1.SetChatVisibilityRequest\x1a%.reliant.v1.SetChatVisibilityResponse\"H\xa2\xbb\x18D:B\n" +
 	"\x0eset_visibility\x12$\n" +
@@ -549,7 +1041,15 @@ const file_reliant_v1_sharing_proto_rawDesc = "" +
 	"project_id\x1a\x15response.project.name*\n" +
 	"visibility\x12\x8b\x01\n" +
 	"\x0fListSharedChats\x12\".reliant.v1.ListSharedChatsRequest\x1a#.reliant.v1.ListSharedChatsResponse\"/\xa2\xbb\x18(:&:$reads only: lists what others shared\x90\x02\x01\x12\x94\x01\n" +
-	"\x12ListSharedProjects\x12%.reliant.v1.ListSharedProjectsRequest\x1a&.reliant.v1.ListSharedProjectsResponse\"/\xa2\xbb\x18(:&:$reads only: lists what others shared\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x12ListSharedProjects\x12%.reliant.v1.ListSharedProjectsRequest\x1a&.reliant.v1.ListSharedProjectsResponse\"/\xa2\xbb\x18(:&:$reads only: lists what others shared\x90\x02\x01\x12\x88\x01\n" +
+	"\rSetChatMember\x12 .reliant.v1.SetChatMemberRequest\x1a!.reliant.v1.SetChatMemberResponse\"2\xa2\xbb\x18.:,\n" +
+	"\n" +
+	"set_member\x12\x0f\n" +
+	"\x04chat\x12\achat_id*\auser_id*\x04role\x12\x8e\x01\n" +
+	"\x10RemoveChatMember\x12#.reliant.v1.RemoveChatMemberRequest\x1a$.reliant.v1.RemoveChatMemberResponse\"/\xa2\xbb\x18+:)\n" +
+	"\rremove_member\x12\x0f\n" +
+	"\x04chat\x12\achat_id*\auser_id\x12\x88\x01\n" +
+	"\x0fListChatMembers\x12\".reliant.v1.ListChatMembersRequest\x1a#.reliant.v1.ListChatMembersResponse\",\xa2\xbb\x18%:#:!reads only: who may access a chat\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_sharing_proto_rawDescOnce sync.Once
@@ -563,40 +1063,62 @@ func file_reliant_v1_sharing_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_sharing_proto_rawDescData
 }
 
-var file_reliant_v1_sharing_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_reliant_v1_sharing_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_reliant_v1_sharing_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_reliant_v1_sharing_proto_goTypes = []any{
-	(*SetChatVisibilityRequest)(nil),     // 0: reliant.v1.SetChatVisibilityRequest
-	(*SetChatVisibilityResponse)(nil),    // 1: reliant.v1.SetChatVisibilityResponse
-	(*SetProjectVisibilityRequest)(nil),  // 2: reliant.v1.SetProjectVisibilityRequest
-	(*SetProjectVisibilityResponse)(nil), // 3: reliant.v1.SetProjectVisibilityResponse
-	(*ListSharedChatsRequest)(nil),       // 4: reliant.v1.ListSharedChatsRequest
-	(*ListSharedChatsResponse)(nil),      // 5: reliant.v1.ListSharedChatsResponse
-	(*ListSharedProjectsRequest)(nil),    // 6: reliant.v1.ListSharedProjectsRequest
-	(*ListSharedProjectsResponse)(nil),   // 7: reliant.v1.ListSharedProjectsResponse
-	(v1.ResourceVisibility)(0),           // 8: reliant.v1.ResourceVisibility
-	(*v1.Chat)(nil),                      // 9: reliant.v1.Chat
-	(*Project)(nil),                      // 10: reliant.v1.Project
+	(ChatMemberRole)(0),                  // 0: reliant.v1.ChatMemberRole
+	(*ChatMember)(nil),                   // 1: reliant.v1.ChatMember
+	(*SetChatMemberRequest)(nil),         // 2: reliant.v1.SetChatMemberRequest
+	(*SetChatMemberResponse)(nil),        // 3: reliant.v1.SetChatMemberResponse
+	(*RemoveChatMemberRequest)(nil),      // 4: reliant.v1.RemoveChatMemberRequest
+	(*RemoveChatMemberResponse)(nil),     // 5: reliant.v1.RemoveChatMemberResponse
+	(*ListChatMembersRequest)(nil),       // 6: reliant.v1.ListChatMembersRequest
+	(*ListChatMembersResponse)(nil),      // 7: reliant.v1.ListChatMembersResponse
+	(*SetChatVisibilityRequest)(nil),     // 8: reliant.v1.SetChatVisibilityRequest
+	(*SetChatVisibilityResponse)(nil),    // 9: reliant.v1.SetChatVisibilityResponse
+	(*SetProjectVisibilityRequest)(nil),  // 10: reliant.v1.SetProjectVisibilityRequest
+	(*SetProjectVisibilityResponse)(nil), // 11: reliant.v1.SetProjectVisibilityResponse
+	(*ListSharedChatsRequest)(nil),       // 12: reliant.v1.ListSharedChatsRequest
+	(*ListSharedChatsResponse)(nil),      // 13: reliant.v1.ListSharedChatsResponse
+	(*ListSharedProjectsRequest)(nil),    // 14: reliant.v1.ListSharedProjectsRequest
+	(*ListSharedProjectsResponse)(nil),   // 15: reliant.v1.ListSharedProjectsResponse
+	(*timestamppb.Timestamp)(nil),        // 16: google.protobuf.Timestamp
+	(v1.ResourceVisibility)(0),           // 17: reliant.v1.ResourceVisibility
+	(*v1.Chat)(nil),                      // 18: reliant.v1.Chat
+	(*Project)(nil),                      // 19: reliant.v1.Project
 }
 var file_reliant_v1_sharing_proto_depIdxs = []int32{
-	8,  // 0: reliant.v1.SetChatVisibilityRequest.visibility:type_name -> reliant.v1.ResourceVisibility
-	9,  // 1: reliant.v1.SetChatVisibilityResponse.chat:type_name -> reliant.v1.Chat
-	8,  // 2: reliant.v1.SetProjectVisibilityRequest.visibility:type_name -> reliant.v1.ResourceVisibility
-	10, // 3: reliant.v1.SetProjectVisibilityResponse.project:type_name -> reliant.v1.Project
-	9,  // 4: reliant.v1.ListSharedChatsResponse.chats:type_name -> reliant.v1.Chat
-	10, // 5: reliant.v1.ListSharedProjectsResponse.projects:type_name -> reliant.v1.Project
-	0,  // 6: reliant.v1.SharingService.SetChatVisibility:input_type -> reliant.v1.SetChatVisibilityRequest
-	2,  // 7: reliant.v1.SharingService.SetProjectVisibility:input_type -> reliant.v1.SetProjectVisibilityRequest
-	4,  // 8: reliant.v1.SharingService.ListSharedChats:input_type -> reliant.v1.ListSharedChatsRequest
-	6,  // 9: reliant.v1.SharingService.ListSharedProjects:input_type -> reliant.v1.ListSharedProjectsRequest
-	1,  // 10: reliant.v1.SharingService.SetChatVisibility:output_type -> reliant.v1.SetChatVisibilityResponse
-	3,  // 11: reliant.v1.SharingService.SetProjectVisibility:output_type -> reliant.v1.SetProjectVisibilityResponse
-	5,  // 12: reliant.v1.SharingService.ListSharedChats:output_type -> reliant.v1.ListSharedChatsResponse
-	7,  // 13: reliant.v1.SharingService.ListSharedProjects:output_type -> reliant.v1.ListSharedProjectsResponse
-	10, // [10:14] is the sub-list for method output_type
-	6,  // [6:10] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	0,  // 0: reliant.v1.ChatMember.role:type_name -> reliant.v1.ChatMemberRole
+	16, // 1: reliant.v1.ChatMember.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 2: reliant.v1.SetChatMemberRequest.role:type_name -> reliant.v1.ChatMemberRole
+	1,  // 3: reliant.v1.SetChatMemberResponse.member:type_name -> reliant.v1.ChatMember
+	1,  // 4: reliant.v1.ListChatMembersResponse.members:type_name -> reliant.v1.ChatMember
+	0,  // 5: reliant.v1.ListChatMembersResponse.caller_role:type_name -> reliant.v1.ChatMemberRole
+	17, // 6: reliant.v1.SetChatVisibilityRequest.visibility:type_name -> reliant.v1.ResourceVisibility
+	18, // 7: reliant.v1.SetChatVisibilityResponse.chat:type_name -> reliant.v1.Chat
+	17, // 8: reliant.v1.SetProjectVisibilityRequest.visibility:type_name -> reliant.v1.ResourceVisibility
+	19, // 9: reliant.v1.SetProjectVisibilityResponse.project:type_name -> reliant.v1.Project
+	18, // 10: reliant.v1.ListSharedChatsResponse.chats:type_name -> reliant.v1.Chat
+	19, // 11: reliant.v1.ListSharedProjectsResponse.projects:type_name -> reliant.v1.Project
+	8,  // 12: reliant.v1.SharingService.SetChatVisibility:input_type -> reliant.v1.SetChatVisibilityRequest
+	10, // 13: reliant.v1.SharingService.SetProjectVisibility:input_type -> reliant.v1.SetProjectVisibilityRequest
+	12, // 14: reliant.v1.SharingService.ListSharedChats:input_type -> reliant.v1.ListSharedChatsRequest
+	14, // 15: reliant.v1.SharingService.ListSharedProjects:input_type -> reliant.v1.ListSharedProjectsRequest
+	2,  // 16: reliant.v1.SharingService.SetChatMember:input_type -> reliant.v1.SetChatMemberRequest
+	4,  // 17: reliant.v1.SharingService.RemoveChatMember:input_type -> reliant.v1.RemoveChatMemberRequest
+	6,  // 18: reliant.v1.SharingService.ListChatMembers:input_type -> reliant.v1.ListChatMembersRequest
+	9,  // 19: reliant.v1.SharingService.SetChatVisibility:output_type -> reliant.v1.SetChatVisibilityResponse
+	11, // 20: reliant.v1.SharingService.SetProjectVisibility:output_type -> reliant.v1.SetProjectVisibilityResponse
+	13, // 21: reliant.v1.SharingService.ListSharedChats:output_type -> reliant.v1.ListSharedChatsResponse
+	15, // 22: reliant.v1.SharingService.ListSharedProjects:output_type -> reliant.v1.ListSharedProjectsResponse
+	3,  // 23: reliant.v1.SharingService.SetChatMember:output_type -> reliant.v1.SetChatMemberResponse
+	5,  // 24: reliant.v1.SharingService.RemoveChatMember:output_type -> reliant.v1.RemoveChatMemberResponse
+	7,  // 25: reliant.v1.SharingService.ListChatMembers:output_type -> reliant.v1.ListChatMembersResponse
+	19, // [19:26] is the sub-list for method output_type
+	12, // [12:19] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_sharing_proto_init() }
@@ -605,20 +1127,21 @@ func file_reliant_v1_sharing_proto_init() {
 		return
 	}
 	file_reliant_v1_project_proto_init()
-	file_reliant_v1_sharing_proto_msgTypes[4].OneofWrappers = []any{}
-	file_reliant_v1_sharing_proto_msgTypes[6].OneofWrappers = []any{}
+	file_reliant_v1_sharing_proto_msgTypes[11].OneofWrappers = []any{}
+	file_reliant_v1_sharing_proto_msgTypes[13].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_sharing_proto_rawDesc), len(file_reliant_v1_sharing_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   8,
+			NumEnums:      1,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_reliant_v1_sharing_proto_goTypes,
 		DependencyIndexes: file_reliant_v1_sharing_proto_depIdxs,
+		EnumInfos:         file_reliant_v1_sharing_proto_enumTypes,
 		MessageInfos:      file_reliant_v1_sharing_proto_msgTypes,
 	}.Build()
 	File_reliant_v1_sharing_proto = out.File

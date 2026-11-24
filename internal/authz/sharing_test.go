@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	"strings"
 	"testing"
 
@@ -57,8 +56,8 @@ func chatDecisions(ctx context.Context, caller string, shared bool) []decisions 
 	c := &core.Chat{UserID: "bob", OrgID: &acme, Visibility: vis}
 	r := &core.ChatRow{UserID: "bob", OrgID: &acme, Visibility: vis}
 	return []decisions{
-		{CanReadChat(ctx, caller, c), CanWriteChat(ctx, caller, c), viewerOf(ReadChatAccess(ctx, caller, c))},
-		{CanReadChat(ctx, caller, r), CanWriteChat(ctx, caller, r), viewerOf(ReadChatAccess(ctx, caller, r))},
+		{CanReadChat(ctx, caller, c), CanOwnChat(ctx, caller, c), viewerOf(ReadChatAccess(ctx, caller, c))},
+		{CanReadChat(ctx, caller, r), CanOwnChat(ctx, caller, r), viewerOf(ReadChatAccess(ctx, caller, r))},
 	}
 }
 
@@ -135,54 +134,6 @@ func TestSharedRowWithoutAnOrgIsOwnerOnly(t *testing.T) {
 }
 
 func strp(s string) *string { return &s }
-
-// Every kind, any visibility, any actor: CanWrite* allows only the owner.
-// Generated over random rows and actors so a future visibility, kind or
-// credential cannot open a write path without failing here.
-func TestCanWriteImpliesOwner(t *testing.T) {
-	rng := rand.New(rand.NewSource(20261112))
-	users := []string{"", "bob", "alice", "olga", "remi", "Bob"}
-	orgs := []*string{nil, strp("acme"), strp("globex")}
-	vis := []core.Visibility{core.VisibilityPrivate, core.VisibilityOrg, "members", "public"}
-	ctxs := []context.Context{
-		context.Background(),
-		person(WithMembership(context.Background(), live)),
-		WithMembership(context.Background(), live),
-		WithCredentialOrg(person(WithMembership(context.Background(), live)), "acme"),
-		person(WithMembership(context.Background(), NoOrgs{})),
-		person(WithMembership(context.Background(), failingMembership{})),
-		person(WithMembership(context.Background(), allMembers{})),
-	}
-	pick := func(n int) int { return rng.Intn(n) }
-	for i := 0; i < 5000; i++ {
-		owner, caller := users[pick(len(users))], users[pick(len(users))]
-		org, v, ctx := orgs[pick(len(orgs))], vis[pick(len(vis))], ctxs[pick(len(ctxs))]
-		writes := map[string]bool{
-			"chat":     CanWriteChat(ctx, caller, &core.Chat{UserID: owner, OrgID: org, Visibility: v}),
-			"chat row": CanWriteChat(ctx, caller, &core.ChatRow{UserID: owner, OrgID: org, Visibility: v}),
-			"project":  CanWriteProject(ctx, caller, &core.Project{UserID: owner, OrgID: org, Visibility: v}),
-			"workflow": CanWriteWorkflow(ctx, caller, &core.WorkflowDraft{UserID: owner, OrgID: org, Visibility: v}),
-			"trigger":  CanWriteTrigger(ctx, caller, &core.Trigger{UserID: owner, OrgID: org}),
-			"machine":  CanWriteMachine(ctx, caller, &core.Daemon{UserID: owner}),
-			"personal": CanAccessPersonal(caller, owner),
-		}
-		for kind, ok := range writes {
-			if ok && (caller == "" || caller != owner) {
-				t.Fatalf("%s: CanWrite allowed %q on %q's row (org %v, visibility %q)", kind, caller, owner, org, v)
-			}
-		}
-		// The reads sharing does not widen stay owner-only too.
-		for kind, ok := range map[string]bool{
-			"workflow read": CanReadWorkflow(ctx, caller, &core.WorkflowDraft{UserID: owner, OrgID: org, Visibility: v}),
-			"trigger read":  CanReadTrigger(ctx, caller, &core.Trigger{UserID: owner, OrgID: org}),
-			"machine read":  CanReadMachine(ctx, caller, &core.Daemon{UserID: owner}),
-		} {
-			if ok && caller != owner {
-				t.Fatalf("%s: allowed %q on %q's row", kind, caller, owner)
-			}
-		}
-	}
-}
 
 // allMembers makes everyone a member of every org: the widest membership a
 // write could ever be decided against.

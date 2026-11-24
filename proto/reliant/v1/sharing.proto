@@ -5,6 +5,7 @@ package reliant.v1;
 
 import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
 import "reliant/v1/chat.proto";
 import "reliant/v1/common.proto";
 import "reliant/v1/project.proto";
@@ -23,6 +24,13 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // person's (a session in the app): an agent's CLI login is refused, so no
 // agent reads a teammate's transcript into its context. It is not part of the
 // public SDK (proto/public-api.txt).
+//
+// A chat can also be shared with one person at a time (SetChatMember;
+// control-plane docs/design/chat-collaboration.md): a grant of VIEW, REPLY or
+// MANAGE that admits its holder while they are a live member of the chat's
+// organization. A grant at any level reads the chat as a viewer does, even a
+// private one; what REPLY and MANAGE add arrives rpc by rpc, each documented
+// where it does.
 service SharingService {
   // SetChatVisibility shares a chat with its organization (ORG) or makes it
   // private again (PRIVATE).
@@ -86,6 +94,139 @@ service SharingService {
       activity: {none: "reads only: lists what others shared"}
     };
   }
+
+  // SetChatMember grants a person a level on a chat (VIEW, REPLY or MANAGE),
+  // or changes the level they hold (control-plane
+  // docs/design/chat-collaboration.md §3). A grant admits its holder only
+  // while they are a live member of the chat's organization; a VIEW grant
+  // reads the chat even when it is private.
+  //
+  // The chat's owner and its members at MANAGE may grant, as a person
+  // (PERMISSION_DENIED for any other credential, or for a member below
+  // MANAGE); anyone who cannot read the chat is NOT_FOUND. The grantee must be
+  // a live member of the chat's organization and not its owner, and a chat
+  // with no organization has no members (FAILED_PRECONDITION). A chat holds at
+  // most 25 members (FAILED_PRECONDITION). The deployment must enable chat
+  // collaboration (chat_collaboration.enabled; FAILED_PRECONDITION
+  // otherwise). Each change records one share event; granting the level
+  // already held changes nothing (changed = false).
+  rpc SetChatMember(SetChatMemberRequest) returns (SetChatMemberResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_member"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+        }
+        detail: [
+          "user_id",
+          "role"
+        ]
+      }
+    };
+  }
+
+  // RemoveChatMember takes a person's grant on a chat away: the owner or a
+  // member at MANAGE may remove anyone but the owner, and any member may
+  // remove their own grant. It is never gated by chat_collaboration.enabled,
+  // so a grant can always be taken back. It records one share event;
+  // removing a person who holds no grant changes nothing (changed = false).
+  rpc RemoveChatMember(RemoveChatMemberRequest) returns (RemoveChatMemberResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "remove_member"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+        }
+        detail: ["user_id"]
+      }
+    };
+  }
+
+  // forge:custom — decides the caller's level on the chat once and shapes the list for it
+  //
+  // ListChatMembers lists who holds access to a chat, as the caller may see
+  // it (chat-collaboration.md §2.2): the owner and members at MANAGE see every
+  // member and level; members at REPLY see the owner and the REPLY and MANAGE
+  // members; VIEW grantees and org-wide viewers see the owner and a count.
+  // Anyone who cannot read the chat is NOT_FOUND. Ids only: names come from
+  // the organization's roster.
+  rpc ListChatMembers(ListChatMembersRequest) returns (ListChatMembersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      activity: {none: "reads only: who may access a chat"}
+    };
+  }
+}
+
+// ChatMemberRole is the level a person holds on a chat. Levels nest: each
+// includes everything below it. The owner is never a member.
+enum ChatMemberRole {
+  // A server that predates chat collaboration, or no grant.
+  CHAT_MEMBER_ROLE_UNSPECIFIED = 0;
+  // Read the chat, as an org-wide viewer of a shared chat does.
+  CHAT_MEMBER_ROLE_VIEW = 1;
+  // View, plus send messages and answer what the chat asks.
+  CHAT_MEMBER_ROLE_REPLY = 2;
+  // Reply, plus steer the run, change its settings and its members.
+  CHAT_MEMBER_ROLE_MANAGE = 3;
+}
+
+// ChatMember is one person's grant on a chat.
+message ChatMember {
+  string user_id = 1;
+  ChatMemberRole role = 2;
+  // Who set the level they hold now.
+  string granted_by = 3;
+  // When they first became a member.
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message SetChatMemberRequest {
+  string chat_id = 1 [(buf.validate.field).string.min_len = 1];
+  string user_id = 2 [(buf.validate.field).string.min_len = 1];
+  // VIEW, REPLY or MANAGE.
+  ChatMemberRole role = 3 [(buf.validate.field).enum = {
+    in: [
+      1,
+      2,
+      3
+    ]
+  }];
+}
+
+message SetChatMemberResponse {
+  // The grant as it now stands.
+  ChatMember member = 1;
+  // False when the person already held the level asked for.
+  bool changed = 2;
+}
+
+message RemoveChatMemberRequest {
+  string chat_id = 1 [(buf.validate.field).string.min_len = 1];
+  string user_id = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message RemoveChatMemberResponse {
+  // False when the person held no grant.
+  bool changed = 1;
+}
+
+message ListChatMembersRequest {
+  string chat_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ListChatMembersResponse {
+  string owner_user_id = 1;
+  // The members the caller may see (see ListChatMembers), oldest first.
+  repeated ChatMember members = 2;
+  // How many members the chat has, including those not listed.
+  int32 member_count = 3;
+  // The level the caller reads the chat at: VIEW for a viewer (a VIEW grant,
+  // or any member of the organization a chat is shared with), REPLY or
+  // MANAGE for a member holding that grant, UNSPECIFIED for the owner.
+  ChatMemberRole caller_role = 4;
 }
 
 message SetChatVisibilityRequest {
