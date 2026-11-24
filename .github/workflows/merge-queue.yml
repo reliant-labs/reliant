@@ -52,8 +52,10 @@ name: Merge queue
 # the entries ahead, so both now fail on the PR that causes them, naming the
 # surfaces and the re-capture command. A group that reaches no visual input
 # passes it in seconds with a notice saying why. It runs beside the gate, so
-# it adds only what it runs past the gate's own wall time (measured in
-# reliant#3446's PR). visual-nightly.yml runs it on main every night.
+# it adds only what it runs past the other workers: on 2026-11-24 it ended
+# 371-381s after the run's creation, where the last 20 web groups' workers
+# ended at a median 374s (a median ~16s added, at most ~80s).
+# visual-nightly.yml runs it on main every night.
 #
 # WHAT DOES NOT: vet, forge lint's golangci, buf, whole-project and deploy
 # lanes, golangci over packages the group did not change, buf lint on an

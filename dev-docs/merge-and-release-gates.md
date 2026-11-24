@@ -839,7 +839,13 @@ entries ahead, so both kinds fail on the PR that causes them.
   (no build, no docker, no report, no capture run) fails too: it is never a
   pass.
 - **Cost.** Its own runner, beside the gate, so a web group pays only what it
-  runs past the gate (measured in the PR that added it, reliant#3446).
+  runs past the gate's other workers. Measured on the hosted runner
+  (2026-11-24, two runs): 371s and 381s from the run's creation to the job's
+  end (install ~8s, build 64-67s, 166 captures in 4.3-4.5 min with 3 workers),
+  166/166 both times. The last 20 web-touching groups' workers ended at a
+  median 374s (p25 312s), so the lane adds a median ~16s and at most ~80s to
+  a web group's wall time. A group it skips spends ~20s on a runner, beside the
+  gate.
 - **Flakes.** `retries: 0`, and nothing re-runs. A surface that differs on a
   commit whose UI did not move is deleted with a `flake:removed` issue.
 - **The backstop.** `.github/workflows/visual-nightly.yml` runs the same script
