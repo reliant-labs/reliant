@@ -31,9 +31,7 @@ import { getCurrentWorktree } from "./worktree-queries";
  * Select the project the URL names (`/project/<id>`, `/new?project=`), when
  * it names one that is listed. Returns whether it did.
  */
-async function selectRouteProject(): Promise<boolean> {
-  const projectId = routeProjectId();
-  if (!projectId) return false;
+async function selectRouteProject(projectId: string): Promise<boolean> {
   const isCurrent = beginWorkspaceOpen();
   let project;
   try {
@@ -189,7 +187,12 @@ export function useWorkspaceRestore(
       // names one (`/project/<id>`, `/new?project=`): a remembered project
       // only fills a page that names none (a bare `/`).
       if (!skipProjectRestore && !openedRouteChat) {
-        const restored = (await selectRouteProject()) || (await projectStore.restoreLastProject());
+        // A missing or temporarily unavailable URL project is not permission
+        // to open a different, remembered project.
+        const projectId = routeProjectId();
+        const restored = projectId
+          ? await selectRouteProject(projectId)
+          : await projectStore.restoreLastProject();
         // Get fresh state after restoration (the original projectStore reference is stale)
         const freshProjectStore = useProjectStore.getState();
         if (restored && freshProjectStore.currentProject) {

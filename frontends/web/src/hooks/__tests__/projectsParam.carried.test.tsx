@@ -11,7 +11,7 @@
  *   - choosing one project (or every project) drops it
  *   - the sidebar's bridge reads it on a chat's page too
  */
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, retainSearchParams, type AnyRouter } from "@tanstack/react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,7 +20,7 @@ vi.mock("@/hooks/project-queries", async (original) => ({
   ...(await original<typeof import("@/hooks/project-queries")>()),
   useProjects: () => ({ projects: [], isLoading: false, error: null, refetch: () => {} }),
   getCachedProjects: () => [{ id: "a", name: "a", path: "/a" }],
-  fetchProjects: async () => [{ id: "a", name: "a", path: "/a" }],
+  fetchProjects: vi.fn(async () => [{ id: "a", name: "a", path: "/a" }]),
   touchProject: vi.fn(),
 }));
 vi.mock("@/hooks/sidebar-project-queries", () => ({
@@ -39,6 +39,8 @@ import { chooseProject, useProjectStore } from "@/store/projectStore";
 import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 
 import { resetChatProjectFilterForTests, useChatProjectFilter } from "../useChatProjectFilter";
+import { fetchProjects } from "../project-queries";
+import { useWorkspaceRestore } from "../useWorkspaceRestore";
 
 let router: AnyRouter;
 
@@ -64,8 +66,11 @@ async function shellAt(url: string) {
 }
 
 const at = () => router.history.location;
-const settle = () => act(async () => {
-  await new Promise((resolve) => setTimeout(resolve, 0));
+const settle = (pathname: string, search: string) => waitFor(() => {
+  expect(at().pathname).toBe(pathname);
+  expect(Object.fromEntries(new URLSearchParams(at().search))).toEqual(
+    Object.fromEntries(new URLSearchParams(search)),
+  );
 });
 
 beforeEach(() => {
@@ -80,19 +85,40 @@ afterEach(() => {
   delete (globalThis as { __RELIANT_ROUTER?: unknown }).__RELIANT_ROUTER;
 });
 
+describe("workspace restore respects an unavailable URL project", () => {
+  it.each([
+    ["/project/missing", false],
+    ["/new?project=missing", false],
+    ["/project/missing", true],
+    ["/new?project=missing", true],
+  ])("does not restore the remembered project at %s (fetch failure: %s)", async (url, failFetch) => {
+    await shellAt(url);
+    if (failFetch) vi.mocked(fetchProjects).mockRejectedValueOnce(new Error("offline"));
+    const restoreLastProject = vi.spyOn(useProjectStore.getState(), "restoreLastProject");
+    const selectProject = vi.spyOn(useProjectStore.getState(), "selectProject");
+    const { result } = renderHook(() => useWorkspaceRestore());
+
+    await waitFor(() => expect(result.current.isComplete).toBe(true));
+    expect(restoreLastProject).not.toHaveBeenCalled();
+    expect(selectProject).not.toHaveBeenCalled();
+    expect(result.current.restoredProject).toBeNull();
+    expect(router.state.location.href).toBe(url);
+  });
+});
+
 describe("?projects= rides on every chat shell page", () => {
   it("is kept from the home to a chat, to another chat, and to the new-chat view", async () => {
     await shellAt("/?projects=a,b");
     navigateToChatUrl("chat-1");
-    await settle();
+    await settle("/c/chat-1", "?projects=a%2Cb");
     expect(at().pathname).toBe("/c/chat-1");
     expect(at().search).toBe("?projects=a%2Cb");
     navigateToChatUrl("chat-2");
-    await settle();
+    await settle("/c/chat-2", "?projects=a%2Cb");
     expect(at().pathname).toBe("/c/chat-2");
     expect(at().search).toBe("?projects=a%2Cb");
     navigateToNewChatUrl({ project: "a" });
-    await settle();
+    await settle("/new", "?project=a&projects=a%2Cb");
     expect(at().pathname).toBe("/new");
     expect(new URLSearchParams(at().search).get("projects")).toBe("a,b");
   });
@@ -110,11 +136,11 @@ describe("?projects= rides on every chat shell page", () => {
     await shellAt("/c/chat-1");
     const view = renderHook(() => useChatProjectFilter());
     act(() => view.result.current.set(["a", "b"]));
-    await settle();
+    await settle("/c/chat-1", "?projects=a%2Cb");
     expect(at().pathname).toBe("/c/chat-1");
     expect(new URLSearchParams(at().search).get("projects")).toBe("a,b");
     act(() => view.result.current.set([]));
-    await settle();
+    await settle("/c/chat-1", "");
     expect(at().pathname).toBe("/c/chat-1");
     expect(at().search).toBe("");
   });
