@@ -365,7 +365,7 @@ func TestInterruptThread_LeavesQueuedMailboxForDelivery(t *testing.T) {
 	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: newRecordingThreadInterruptCanceler()})
 
 	queuedBody := "actually, stop and check the migration first"
-	require.NoError(t, repo.EnqueueAgentMessage(ctx, &db.AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(ctx, repo.ORM(), &db.AgentMessage{
 		ID:           uuid.NewString(),
 		ChatID:       fx.chatID,
 		FromThreadID: fx.rootThreadID,
@@ -385,7 +385,7 @@ func TestInterruptThread_LeavesQueuedMailboxForDelivery(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.CancelledToolCalls)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1,
 		"interrupt must leave the mailbox for call_llm to deliver, not consume it itself")

@@ -2015,7 +2015,7 @@ func (m *MockSpawnQuestions) PendingQuestionsByThread(ctx context.Context, chatI
 var _ SpawnQuestions = (*MockSpawnQuestions)(nil)
 
 // forge:section MockspawnSendStore
-// forge:hash=36a9020755974b19ce42dc8165d0848dc7fe55cfa49c49151199cc1db0c2128c
+// forge:hash=bff2ab6a9bcf09dc7bbf297886ce8bcf2edc7481d8ed4899d37d9cbe389d97c4
 
 // MockspawnSendStore is a test mock for the spawnSendStore interface.
 //
@@ -2025,17 +2025,7 @@ var _ SpawnQuestions = (*MockSpawnQuestions)(nil)
 // "MockspawnSendStore.<Method>Func not set" error.
 type MockspawnSendStore struct {
 	contractkit.Recorder
-	EnqueueAgentMessageFunc func(context.Context, *db.AgentMessage) error
-	GetThreadFunc           func(context.Context, string) (*db.Thread, error)
-}
-
-// EnqueueAgentMessage records the call and delegates to EnqueueAgentMessageFunc when set.
-func (m *MockspawnSendStore) EnqueueAgentMessage(ctx context.Context, msg *db.AgentMessage) error {
-	m.Recorder.Record("EnqueueAgentMessage", ctx, msg)
-	if m.EnqueueAgentMessageFunc != nil {
-		return m.EnqueueAgentMessageFunc(ctx, msg)
-	}
-	return contractkit.MockNotSet("MockspawnSendStore", "EnqueueAgentMessage")
+	GetThreadFunc func(context.Context, string) (*db.Thread, error)
 }
 
 // GetThread records the call and delegates to GetThreadFunc when set.
@@ -2049,6 +2039,32 @@ func (m *MockspawnSendStore) GetThread(ctx context.Context, id string) (*db.Thre
 
 // Compile-time check.
 var _ spawnSendStore = (*MockspawnSendStore)(nil)
+
+// forge:section MockSpawnMailbox
+// forge:hash=8819d123aae97d2e5646f61e34e15f8e8ddbec3eea3083693e3393ec2983f95c
+
+// MockSpawnMailbox is a test mock for the SpawnMailbox interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockSpawnMailbox.<Method>Func not set" error.
+type MockSpawnMailbox struct {
+	contractkit.Recorder
+	EnqueueAgentMessageFunc func(context.Context, *db.AgentMessage) error
+}
+
+// EnqueueAgentMessage records the call and delegates to EnqueueAgentMessageFunc when set.
+func (m *MockSpawnMailbox) EnqueueAgentMessage(ctx context.Context, msg *db.AgentMessage) error {
+	m.Recorder.Record("EnqueueAgentMessage", ctx, msg)
+	if m.EnqueueAgentMessageFunc != nil {
+		return m.EnqueueAgentMessageFunc(ctx, msg)
+	}
+	return contractkit.MockNotSet("MockSpawnMailbox", "EnqueueAgentMessage")
+}
+
+// Compile-time check.
+var _ SpawnMailbox = (*MockSpawnMailbox)(nil)
 
 // forge:section MockspawnStopStore
 // forge:hash=e23d579f2d6d8c2cfb4cd7c0080d752f6f0216c2d6eee578bb1cc91bb387a032

@@ -47,6 +47,9 @@ type ToolsOptions struct {
 	// parked on. store.QuestionExtStore satisfies it. Optional: nil makes
 	// spawn_status report it is unavailable here, like every database tool.
 	SpawnQuestions SpawnQuestions
+	// SpawnMailbox queues spawn_send's messages. Optional: nil makes
+	// spawn_send report it is unavailable here.
+	SpawnMailbox SpawnMailbox
 	// SpawnTree reads the spawn tree the spawn tools resolve agents through.
 	// store.ToolCallExtStore satisfies it. Optional: nil makes the spawn tools
 	// report they are unavailable here.
@@ -586,7 +589,7 @@ func (f *ToolsFactory) SpawnStatus() Tool {
 }
 
 func (f *ToolsFactory) SpawnSend() Tool {
-	return NewSpawnSendTool(SpawnSendDeps{Store: f.spawnSendStore(), Tree: f.opts.SpawnTree, Notifier: f.opts.AgentMessageNotifier})
+	return NewSpawnSendTool(SpawnSendDeps{Store: f.spawnSendStore(), Mailbox: f.opts.SpawnMailbox, Tree: f.opts.SpawnTree, Notifier: f.opts.AgentMessageNotifier})
 }
 
 func (f *ToolsFactory) SpawnStop() Tool {

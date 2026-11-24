@@ -331,8 +331,11 @@ type SpawnStatusDeps struct {
 
 // SpawnSendDeps is what the spawn_send tool is built from.
 type SpawnSendDeps struct {
-	// Store reads threads and queues the message.
+	// Store reads threads.
 	Store spawnSendStore
+	// Mailbox queues the message. Nil makes the tool report itself
+	// unavailable.
+	Mailbox SpawnMailbox
 	// Tree places the target relative to the caller.
 	Tree SpawnTree
 	// Notifier rings the recipient's doorbell; nil is no doorbell.
@@ -352,6 +355,11 @@ type SpawnStopDeps struct {
 // spawnSendStore is spawn_send's store.
 type spawnSendStore interface {
 	spawnRelationStore
+}
+
+// SpawnMailbox queues spawn_send's message into the recipient's mailbox and
+// announces it to the chat's clients. *agentmailbox.Mailbox satisfies it.
+type SpawnMailbox interface {
 	EnqueueAgentMessage(ctx context.Context, msg *db.AgentMessage) error
 }
 
