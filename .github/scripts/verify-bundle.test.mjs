@@ -145,11 +145,12 @@ test("CI's web-bundle job runs the task, on every change that can alter the bund
   assert.match(CI_WEB, /\n\s+run: task build:web:verify\n/);
   assert.ok(!CI_WEB.includes("NODE_ENV"), "ci.yml's web-bundle job must not set NODE_ENV: the task does, on the build command only");
 
-  // Off a pull request the release gate's webbuild part is the same build, and
-  // a release blocker through the record's webbuild step.
+  // Off a pull request the release gate's webbuild part runs the same build
+  // plus the demo size budget; both are release blockers in the record.
   const gate = read("scripts", "release-gate.sh");
   assert.match(gate, /\n {4}webbuild\) task build:web:verify ;;\n/, "release-gate.sh's webbuild step no longer runs `task build:web:verify`");
-  assert.match(gate, /\n {2}\[webbuild\]="npm webbuild"\n/, "release-gate.sh has no webbuild part for CI to run");
+  assert.match(gate, /\n {2}\[webbuild\]="npm webbuild demo-size"\n/, "release-gate.sh's webbuild part must run the renderer build and demo size budget");
+  assert.match(gate, /\n {4}demo-size\) task demo:bundle-size ;;\n/, "release-gate.sh's demo-size step no longer runs `task demo:bundle-size`");
   const releaseGate = jobBlock(read(".github", "workflows", "ci.yml"), "release-gate");
   assert.match(releaseGate, /\{ label: "webbuild", part: webbuild, shard: "" \}/, "ci.yml's release gate no longer runs the webbuild part, which stands in for web-bundle off a pull request");
 
