@@ -181,6 +181,9 @@ export function inventoryScenarioHandlers() {
     ...completed(IdentityService, mockService(IdentityService, {
       getIdentityStatus: (req) => (demoEnvId(req.environmentId) ? identityStatus(req.environmentId) : {}),
       getUser: (req) => ({ user: demoEnvId(req.environmentId) ? identityUsers(req.environmentId).find((user) => user.userId === req.userId) : undefined }),
+      // Named like a read, so the read-only guard lets it through, but it signs a bearer URL to every
+      // password hash. The demo signs none (as StorageBrowser's presign; the button is disabled first).
+      getExportURL: () => { throw new ConnectError("This is a demo. Identity exports are turned off.", Code.PermissionDenied); },
       listUsers: (req) => {
         if (!demoEnvId(req.environmentId)) return { users: [] };
         const query = req.query?.toLowerCase();

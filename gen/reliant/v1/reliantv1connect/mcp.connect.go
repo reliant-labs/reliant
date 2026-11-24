@@ -106,12 +106,14 @@ func NewMCPServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+MCPServiceListServersProcedure,
 			connect.WithSchema(mCPServiceMethods.ByName("ListServers")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getServer: connect.NewClient[v1.GetServerRequest, v1.GetServerResponse](
 			httpClient,
 			baseURL+MCPServiceGetServerProcedure,
 			connect.WithSchema(mCPServiceMethods.ByName("GetServer")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getServerTools: connect.NewClient[v1.GetServerToolsRequest, v1.GetServerToolsResponse](
@@ -142,6 +144,7 @@ func NewMCPServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+MCPServiceListRecommendedProcedure,
 			connect.WithSchema(mCPServiceMethods.ByName("ListRecommended")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateServerConfig: connect.NewClient[v1.UpdateServerConfigRequest, v1.UpdateServerConfigResponse](
@@ -266,12 +269,14 @@ func NewMCPServiceHandler(svc MCPServiceHandler, opts ...connect.HandlerOption) 
 		MCPServiceListServersProcedure,
 		svc.ListServers,
 		connect.WithSchema(mCPServiceMethods.ByName("ListServers")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	mCPServiceGetServerHandler := connect.NewUnaryHandler(
 		MCPServiceGetServerProcedure,
 		svc.GetServer,
 		connect.WithSchema(mCPServiceMethods.ByName("GetServer")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	mCPServiceGetServerToolsHandler := connect.NewUnaryHandler(
@@ -302,6 +307,7 @@ func NewMCPServiceHandler(svc MCPServiceHandler, opts ...connect.HandlerOption) 
 		MCPServiceListRecommendedProcedure,
 		svc.ListRecommended,
 		connect.WithSchema(mCPServiceMethods.ByName("ListRecommended")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	mCPServiceUpdateServerConfigHandler := connect.NewUnaryHandler(

@@ -13,11 +13,15 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 service MCPService {
   // ListServers returns all configured MCP servers with their status
   // forge:custom — merges the project's three config scopes with the daemon's live server status
-  rpc ListServers(ListServersRequest) returns (ListServersResponse) {}
+  rpc ListServers(ListServersRequest) returns (ListServersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetServer returns detailed information about a specific MCP server
   // forge:custom — resolves one server across the project's config scopes and the daemon's live status
-  rpc GetServer(GetServerRequest) returns (GetServerResponse) {}
+  rpc GetServer(GetServerRequest) returns (GetServerResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetServerTools returns the list of tools exposed by a specific MCP server
   rpc GetServerTools(GetServerToolsRequest) returns (GetServerToolsResponse) {}
@@ -62,7 +66,9 @@ service MCPService {
   }
 
   // ListRecommended returns a list of recommended MCP servers
-  rpc ListRecommended(ListRecommendedRequest) returns (ListRecommendedResponse) {}
+  rpc ListRecommended(ListRecommendedRequest) returns (ListRecommendedResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // UpdateServerConfig updates the configuration of an MCP server
   rpc UpdateServerConfig(UpdateServerConfigRequest) returns (UpdateServerConfigResponse) {
