@@ -35,7 +35,23 @@ describe("classifyOutside", () => {
     expect(kind("https://app.preview.test/__forge/log", "POST")).toBe("telemetry");
     expect(kind("https://app.preview.test/_otel/v1/traces", "POST")).toBe("telemetry");
     expect(kind("https://app.preview.test/v1/logs", "POST")).toBe("telemetry");
-    expect(kind("https://otel.example.test/anything", "POST", { ...CTX, telemetryOrigin: "https://otel.example.test" })).toBe("telemetry");
+    expect(kind("https://otel.example.test/v1/traces", "POST", { ...CTX, telemetryOrigin: "https://otel.example.test" })).toBe("telemetry");
+  });
+
+  it.each([CTX.origin, "https://otel.example.test"])("scopes configured telemetry on %s to POST signal paths", (origin) => {
+    const ctx = { ...CTX, telemetryOrigin: origin, telemetryPath: "/k/fixture-key" };
+    for (const signal of ["traces", "logs", "metrics"]) {
+      const url = `${origin}/k/fixture-key/v1/${signal}`;
+      expect(kind(url, "POST", ctx)).toBe("telemetry");
+      for (const method of ["GET", "PUT", "DELETE", "OPTIONS"]) {
+        expect(kind(url, method, ctx)).toBe(origin === CTX.origin && method === "GET" ? "page" : "refused");
+      }
+    }
+    for (const path of ["/anything", "/k/fixture-key", "/k/fixture-key/other", "/k/fixture-key/v1/logs/extra", "/k/fixture-key-other/v1/logs"]) {
+      expect(kind(`${origin}${path}`, "POST", ctx)).toBe("refused");
+    }
+    expect(kind(`${origin}/_otel/arbitrary`, "POST", ctx)).toBe("refused");
+    expect(kind(`${origin}/reliant.v1.ChatService/ListChats`, "POST", ctx)).toBe("rpc");
   });
 
   it.each([
@@ -94,7 +110,7 @@ describe("installOutside", () => {
   });
 
   it("records cross-origin health and telemetry lookalikes without fetching them", async () => {
-    setRuntimeConfig({ OTEL_ENDPOINT: "https://otel.example.test" });
+    setRuntimeConfig({ OTEL_ENDPOINT: "https://otel.example.test/k/fixture-key/" });
     const real = vi.fn();
     window.fetch = real as unknown as typeof window.fetch;
     const blocked = vi.fn();
@@ -104,13 +120,17 @@ describe("installOutside", () => {
       "https://outside.example.test/healthz",
       "https://outside.example.test/v1/logs",
       "https://posthog.attacker.test/e/",
+      "https://otel.example.test/anything",
+      "https://otel.example.test/k/fixture-key/v1/logs",
     ];
     for (const url of urls) {
       await expect(fetch(url)).rejects.toThrow(/network outside the page is off/);
     }
     expect(blocked.mock.calls).toEqual(urls.map((url) => ["refused", `GET ${url}`]));
     expect((await fetch(`${window.location.origin}/healthz`)).status).toBe(200);
-    expect((await fetch("https://otel.example.test/v1/logs", { method: "POST" })).status).toBe(204);
+    expect((await fetch("https://otel.example.test/k/fixture-key/v1/logs", { method: "POST" })).status).toBe(204);
+    await expect(fetch("https://otel.example.test/anything", { method: "POST" })).rejects.toThrow(/network outside the page is off/);
+    expect(blocked).toHaveBeenLastCalledWith("refused", "POST https://otel.example.test/anything");
     expect(real).not.toHaveBeenCalled();
   });
 

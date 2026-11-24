@@ -16,8 +16,8 @@
  *   health     GET `/health`, `/healthz`, `/readyz` on the page or configured
  *              API origin: "ok", answered locally (never sent).
  *   telemetry  the same-origin dev log sink and OTLP ingest (`/_otel`,
- *              `/v1/traces|logs|metrics`), and the configured OTEL_ENDPOINT
- *              origin: 204, nothing sent.
+ *              `/v1/traces|logs|metrics`), and OTLP signal paths beneath the
+ *              configured OTEL_ENDPOINT, for POSTs only: 204, nothing sent.
  *   page       a same-origin GET (the bundle's assets, config.js,
  *              version.json): the real fetch.
  *   refused    everything else, cross-origin or a same-origin write. It
@@ -34,7 +34,8 @@ export type OutsideKind = "rpc" | "auth" | "health" | "telemetry" | "page" | "re
 /** A Connect RPC path: `/<pkg>.v<N>.<Service>/<Method>`, as the transports build it. */
 const RPC_PATH = /\/([a-z_]\w*(?:\.[a-z_]\w*)*\.v\d\w*(?:\.[a-z_]\w*)*\.[A-Z]\w*)\/([A-Z]\w*)$/;
 const HEALTH_PATH = /^\/(health|healthz|readyz)$/;
-const TELEMETRY_PATH = /^(?:\/__forge\/log|\/_otel(?:\/.*)?|\/v1\/(?:traces|logs|metrics))$/;
+const TELEMETRY_PATH = /^(?:\/__forge\/log|(?:\/_otel)?\/v1\/(?:traces|logs|metrics))$/;
+const OTLP_PATH = /^\/v1\/(?:traces|logs|metrics)$/;
 
 export interface OutsideContext {
   /** The page's origin. */
@@ -43,8 +44,10 @@ export interface OutsideContext {
   apiOrigin?: string | null;
   /** The configured Supabase project's origin, if any. */
   supabaseOrigin: string | null;
-  /** The configured telemetry ingest's origin, if it is absolute. */
+  /** The configured telemetry ingest's origin, if any. */
   telemetryOrigin: string | null;
+  /** Its path prefix, without a trailing slash (e.g. /_otel or /k/<key>). */
+  telemetryPath?: string;
 }
 
 const originOf = (url: string, base: string): string | null => {
@@ -59,11 +62,19 @@ const originOf = (url: string, base: string): string | null => {
 export function outsideContext(): OutsideContext {
   const origin = window.location.origin;
   const config = loadConfig();
+  let telemetry: URL | null = null;
+  try {
+    const endpoint = config.OTEL_ENDPOINT.trim();
+    if (endpoint && endpoint.toLowerCase() !== "off") telemetry = new URL(endpoint, origin);
+  } catch {
+    // Invalid telemetry configuration grants no network exemption.
+  }
   return {
     origin,
     apiOrigin: originOf(config.API_URL, origin),
     supabaseOrigin: originOf(config.SUPABASE_URL, origin),
-    telemetryOrigin: /^https?:\/\//.test(config.OTEL_ENDPOINT) ? originOf(config.OTEL_ENDPOINT, origin) : null,
+    telemetryOrigin: telemetry?.origin ?? null,
+    telemetryPath: telemetry?.pathname.replace(/\/+$/, "") ?? "",
   };
 }
 
@@ -72,7 +83,11 @@ export function classifyOutside(url: URL, method: string, ctx: OutsideContext): 
   if (RPC_PATH.test(url.pathname)) return "rpc";
   if (ctx.supabaseOrigin && url.origin === ctx.supabaseOrigin && url.pathname.startsWith("/auth/v1/")) return "auth";
   if (method === "GET" && (url.origin === ctx.origin || url.origin === ctx.apiOrigin) && HEALTH_PATH.test(url.pathname)) return "health";
-  if ((url.origin === ctx.origin && TELEMETRY_PATH.test(url.pathname)) || (ctx.telemetryOrigin && url.origin === ctx.telemetryOrigin)) {
+  const prefix = ctx.telemetryPath ?? "";
+  const configuredSignal = url.origin === ctx.telemetryOrigin
+    && url.pathname.startsWith(`${prefix}/`)
+    && OTLP_PATH.test(url.pathname.slice(prefix.length));
+  if (method === "POST" && ((url.origin === ctx.origin && TELEMETRY_PATH.test(url.pathname)) || configuredSignal)) {
     return "telemetry";
   }
   if (url.origin === ctx.origin && method === "GET") return "page";
