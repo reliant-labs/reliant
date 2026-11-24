@@ -40,6 +40,7 @@ service AccessTokenService {
   }
   // ListTokens lists the caller org's tokens. Never a plaintext.
   rpc ListTokens(ListTokensRequest) returns (ListTokensResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   // RevokeToken revokes one of the caller org's tokens, immediately.
@@ -77,6 +78,7 @@ service AccessTokenService {
   }
   // ListMyTokens lists tokens acting as the caller.
   rpc ListMyTokens(ListMyTokensRequest) returns (ListMyTokensResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   // RevokeMyToken revokes one of the caller's own tokens.
@@ -135,10 +137,11 @@ service AccessTokenService {
     };
   }
 
-  // ListMyCLILogins lists the caller's human CLI logins (`forge login`): the
+  // ListMyCLILogins lists the caller's human CLI logins (`forge cloud login`): the
   // device, when each was issued and last used, and when it ends. Browser
   // session only: a CLI login is refused, like every rpc of this service.
   rpc ListMyCLILogins(ListMyCLILoginsRequest) returns (ListMyCLILoginsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "reads only: lists the caller's own CLI logins, changes nothing"}
@@ -190,6 +193,7 @@ service AccessTokenService {
   // ListOrgMemberGrants lists every member of the caller's org with the
   // permissions they hold. Caller: a human session holding token:read.
   rpc ListOrgMemberGrants(ListOrgMemberGrantsRequest) returns (ListOrgMemberGrantsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 

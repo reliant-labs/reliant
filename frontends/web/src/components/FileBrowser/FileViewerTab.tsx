@@ -611,8 +611,8 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
     return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [handleSave, hasChanges, showingMarkdownPreview]);
 
-  // The addSelectionToChat shortcut (Cmd+L in the editor; Cmd+K L in a
-  // browser): taken by the viewer whose editor has focus and a selection. Any
+  // The addSelectionToChat shortcut (Cmd+L in the editor, in the desktop app
+  // and a browser tab alike): taken by the viewer whose editor has focus and a selection. Any
   // other viewer may be mounted too, so focus is what decides.
   useEffect(() => {
     const handleAddSelection = (e: Event) => {

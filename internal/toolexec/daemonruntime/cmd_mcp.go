@@ -39,6 +39,7 @@ func init() {
 	RegisterCommand("mcp.write_config", handleWriteConfig)
 	RegisterCommand("mcp.ensure_gitignore", handleEnsureGitignore)
 	RegisterCommand("mcp.install_bundle", handleInstallBundle)
+	RegisterCommand("mcp.install_skill_bundle", handleInstallSkillBundle)
 	RegisterCommand("mcp.check_resource", handleCheckResource)
 	RegisterCommand("mcp.server_status", handleMCPServerStatus)
 	RegisterCommand("mcp.manage_server", handleMCPManageServer)
@@ -147,40 +148,88 @@ type installBundleResponse struct {
 	Error     string `json:"error,omitempty"`
 }
 
+// handleInstallBundle writes a bundle under the absolute TargetDir the server
+// computed.
+//
+// Deprecated: servers send mcp.install_skill_bundle, which names a scope and
+// lets this machine resolve it. The server cannot know this machine's home
+// directory, so a global-scope TargetDir it computed was its own. Kept for
+// servers that still send it.
 func handleInstallBundle(_ context.Context, payload []byte) ([]byte, error) {
 	var req installBundleRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
+	if strings.TrimSpace(req.TargetDir) == "" {
+		return json.Marshal(installBundleResponse{Error: "target_dir is required"})
+	}
+	return json.Marshal(installBundleFiles(req.TargetDir, req.Files, req.ConflictPolicy))
+}
 
+// --- mcp.install_skill_bundle ---
+
+// installSkillBundleRequest names where a bundle goes by scope, the same
+// scopes mcp.write_config takes, so this machine resolves the directory: the
+// global one is under this machine's user config dir, which the server has no
+// way to know.
+type installSkillBundleRequest struct {
+	Scope          string              `json:"scope"`
+	ProjectPath    string              `json:"project_path"`
+	Files          []installBundleFile `json:"files"`
+	ConflictPolicy string              `json:"conflict_policy"`
+}
+
+// skillsDirForScope is the skills directory beside the mcp.json that
+// mcpConfigPathForScope resolves for the same scope.
+func skillsDirForScope(scope, projectPath string) (string, error) {
+	mcpPath, err := mcpConfigPathForScope(scope, projectPath)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(mcpPath), "skills"), nil
+}
+
+func handleInstallSkillBundle(_ context.Context, payload []byte) ([]byte, error) {
+	var req installSkillBundleRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+	targetDir, err := skillsDirForScope(req.Scope, req.ProjectPath)
+	if err != nil {
+		return json.Marshal(installBundleResponse{Error: err.Error()})
+	}
+	return json.Marshal(installBundleFiles(targetDir, req.Files, req.ConflictPolicy))
+}
+
+func installBundleFiles(targetDir string, files []installBundleFile, conflictPolicy string) installBundleResponse {
 	installed := 0
 	skipped := 0
 
-	for _, f := range req.Files {
-		safePath, err := safeInstallBundlePath(req.TargetDir, f.Path)
+	for _, f := range files {
+		safePath, err := safeInstallBundlePath(targetDir, f.Path)
 		if err != nil {
-			return json.Marshal(installBundleResponse{Error: err.Error()})
+			return installBundleResponse{Error: err.Error()}
 		}
 
 		if err := os.MkdirAll(filepath.Dir(safePath), 0o755); err != nil {
-			return json.Marshal(installBundleResponse{Error: fmt.Sprintf("failed to create directory: %v", err)})
+			return installBundleResponse{Error: fmt.Sprintf("failed to create directory: %v", err)}
 		}
 
 		_, statErr := os.Stat(safePath)
 		exists := statErr == nil
-		shouldWrite, _ := applyBundleConflictPolicy(exists, req.ConflictPolicy)
+		shouldWrite, _ := applyBundleConflictPolicy(exists, conflictPolicy)
 		if !shouldWrite {
 			skipped++
 			continue
 		}
 
 		if err := os.WriteFile(safePath, []byte(f.Content), 0o644); err != nil {
-			return json.Marshal(installBundleResponse{Error: fmt.Sprintf("failed to write file %s: %v", f.Path, err)})
+			return installBundleResponse{Error: fmt.Sprintf("failed to write file %s: %v", f.Path, err)}
 		}
 		installed++
 	}
 
-	return json.Marshal(installBundleResponse{Installed: installed, Skipped: skipped})
+	return installBundleResponse{Installed: installed, Skipped: skipped}
 }
 
 func safeInstallBundlePath(root, rel string) (string, error) {

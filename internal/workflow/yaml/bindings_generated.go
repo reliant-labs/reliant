@@ -18,6 +18,7 @@ const yamlKeySaveMessage = "save_message"
 const yamlKeyDaemon = "daemon"
 const yamlKeyOutcome = "outcome"
 const yamlKeyTolerateFailure = "tolerate_failure"
+const yamlKeyObserve = "observe"
 const yamlKeyArgs = "args"
 const yamlKeyFrom = "from"
 const yamlKeyCases = "cases"
@@ -29,6 +30,7 @@ var generatedNodeBaseFieldKeys = map[string]struct{}{
 	"condition":        {},
 	"daemon":           {},
 	"id":               {},
+	"observe":          {},
 	"outcome":          {},
 	"save_message":     {},
 	"timeout":          {},
@@ -204,6 +206,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"command":            {},
 			"credentials":        {},
 			"env":                {},
+			"llm_gateway":        {},
 			"log_file":           {},
 			"work_dir":           {},
 			"writable_checkouts": {},

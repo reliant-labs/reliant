@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/providerusage"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -246,6 +247,26 @@ func TestThrottledHonoursALongerRetryAfter(t *testing.T) {
 	fx.doer.reply = func(*http.Request) (*http.Response, error) { return resp(429, `{}`, "Retry-After", "5400") }
 	fx.f.PollLeased(context.Background(), "a1")
 	assert.Equal(t, 90*time.Minute, fx.store.limit("a1").UsageAPINextAt.Sub(fx.clock.Now()))
+}
+
+// The wait doubles per consecutive failure from the class's floor to its cap; a
+// throttled read waits the longer of that and the provider's Retry-After.
+func TestFailureBackoffLadders(t *testing.T) {
+	network := errors.New("dial tcp: connection refused")
+	unknown := fmt.Errorf("parse: %w", providerusage.ErrUnexpectedResponse)
+	for failures, want := range map[int][2]time.Duration{
+		0: {time.Minute, time.Hour}, 1: {time.Minute, time.Hour}, 2: {2 * time.Minute, 2 * time.Hour},
+		5: {16 * time.Minute, 12 * time.Hour}, 7: {time.Hour, 12 * time.Hour}, 40: {time.Hour, 12 * time.Hour},
+	} {
+		_, got, _ := classifyFailure(network, failures)
+		assert.Equal(t, want[0], got, "transient, %d failures", failures)
+		_, got, _ = classifyFailure(unknown, failures)
+		assert.Equal(t, want[1], got, "unavailable, %d failures", failures)
+	}
+	_, got, _ := classifyFailure(&providerusage.ThrottledError{RetryAfter: 30 * time.Second}, 3)
+	assert.Equal(t, 4*time.Minute, got)
+	_, got, _ = classifyFailure(&providerusage.ThrottledError{RetryAfter: 3 * time.Hour}, 3)
+	assert.Equal(t, 3*time.Hour, got)
 }
 
 func TestUnreadableBodyDegradesToHeadersOnly(t *testing.T) {

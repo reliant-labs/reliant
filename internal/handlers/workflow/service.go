@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+
 	"connectrpc.com/connect"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -22,6 +24,15 @@ type Deps struct {
 	// Repo stores the caller's workflow drafts and reads the projects,
 	// project-synced workflows and visibility settings a listing merges.
 	Repo Repository
+	// ProjectRows reads a project by id; the handler decides access on it.
+	ProjectRows ProjectReader
+	// Projects reads a project the caller may write (owner and org decided
+	// together: projectaccess).
+	Projects projectaccess.Service
+	// Pools checks the machine pools a workflow names.
+	Pools Pools
+	// Drafts reads and writes the caller's saved workflows.
+	Drafts Drafts
 	// Router writes a saved workflow back to its project file on the
 	// caller's machine (SaveWorkflow with a source path). The API server
 	// always has one; without it that save answers Unavailable.
@@ -52,6 +63,18 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("workflow: Deps.Repo is required")
+	}
+	if d.ProjectRows == nil {
+		return fmt.Errorf("workflow: Deps.ProjectRows is required")
+	}
+	if d.Projects == nil {
+		return fmt.Errorf("workflow: Deps.Projects is required")
+	}
+	if d.Pools == nil {
+		return fmt.Errorf("workflow: Deps.Pools is required")
+	}
+	if d.Drafts == nil {
+		return fmt.Errorf("workflow: Deps.Drafts is required")
 	}
 	return nil
 }

@@ -22,22 +22,27 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Store is the slice of the repository this service uses; *db.Repo satisfies it. Every method
-// scopes to the org (or person) it is given, so an id of another org's row is not found.
-type Store interface {
+// Accounts is what the service reads and writes of an org's own accounts and of the caller's: the
+// secrets stay inside credentials/provideraccounts, and every method scopes to the org (or person)
+// it is given, so an id of another org's row is not found.
+type Accounts interface {
 	ListOwnedProviderAccounts(ctx context.Context, owner core.AccountOwner) ([]core.ProviderAccount, error)
 	ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error)
 	UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error)
 	PatchOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
-	SetOrgAccountAccess(ctx context.Context, orgID, accountID, access string) (core.ProviderAccount, error)
 	ReorderOwnedProviderAccounts(ctx context.Context, owner core.AccountOwner, provider string, orderedIDs []string) error
 	DeleteOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string) error
+	// ListProviderAccounts is the caller's own accounts: a workspace is bound from one of them.
+	ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error)
+}
+
+// OrgAccounts is the org's administration: access, key rotation, grants, workspace bindings and
+// seats. credentials/orgaccounts.Service satisfies it; each method scopes to the org it is given.
+type OrgAccounts interface {
+	SetOrgAccountAccess(ctx context.Context, orgID, accountID, access string) (core.ProviderAccount, error)
 	RotateOrgAPIKey(ctx context.Context, orgID, accountID string, k core.OrgAPIKey) (core.ProviderAccount, error)
 	ListOrgAccountGrants(ctx context.Context, orgID string) ([]core.OrgAccountGrant, error)
 	SetOrgAccountGrants(ctx context.Context, orgID, accountID string, userIDs []string, grantedBy string) error
-
-	// ListProviderAccounts is the caller's own accounts: a workspace is bound from one of them.
-	ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error)
 	ListOrgProviderWorkspaces(ctx context.Context, orgID string) ([]core.OrgProviderWorkspace, error)
 	BindOrgProviderWorkspace(ctx context.Context, w core.OrgProviderWorkspace) (core.OrgProviderWorkspace, bool, error)
 	UnbindOrgProviderWorkspace(ctx context.Context, orgID, provider, externalOrgID string) error
@@ -54,8 +59,11 @@ type Store interface {
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
-	// Store holds the org's accounts, their grants and limit state, and its workspace bindings.
-	Store Store
+	// Accounts holds the org's accounts and their limit state (credentials/provideraccounts).
+	Accounts Accounts
+	// OrgAccounts holds their access, grants, key rotation, seats and workspace bindings
+	// (credentials/orgaccounts).
+	OrgAccounts OrgAccounts
 	// ValidateKey checks a pasted API key against its provider with one cheap call before it is
 	// stored (keyvalidate.Validate in production). ok=false carries a message for the admin.
 	ValidateKey func(ctx context.Context, provider models.Family, apiKey string) (ok bool, message string)
@@ -98,8 +106,11 @@ func (d Deps) validateDeps() error {
 	if d.Config == nil {
 		return fmt.Errorf("org_provider_account: Deps.Config is required")
 	}
-	if d.Store == nil {
-		return fmt.Errorf("org_provider_account: Deps.Store is required")
+	if d.Accounts == nil {
+		return fmt.Errorf("org_provider_account: Deps.Accounts is required")
+	}
+	if d.OrgAccounts == nil {
+		return fmt.Errorf("org_provider_account: Deps.OrgAccounts is required")
 	}
 	if d.ValidateKey == nil {
 		return fmt.Errorf("org_provider_account: Deps.ValidateKey is required")

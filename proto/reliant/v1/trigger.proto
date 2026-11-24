@@ -36,12 +36,16 @@ service TriggerService {
   // GetTrigger returns one trigger, including its read-only next fire time
   // and most recent firing.
   // forge:custom — owner-scoped, rendered with its next fire time and most recent firing
-  rpc GetTrigger(GetTriggerRequest) returns (GetTriggerResponse) {}
+  rpc GetTrigger(GetTriggerRequest) returns (GetTriggerResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListTriggers returns the caller's triggers, optionally narrowed to one
   // project.
   // forge:custom — the caller's triggers, rendered with their schedules and recent firings
-  rpc ListTriggers(ListTriggersRequest) returns (ListTriggersResponse) {}
+  rpc ListTriggers(ListTriggersRequest) returns (ListTriggersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // UpdateTrigger replaces a trigger's definition and reconverges its
   // schedule. The owner and kind are not updatable.
@@ -99,7 +103,9 @@ service TriggerService {
   // ListTriggerEvents returns a trigger's firings, newest first, paged by a
   // keyset cursor. Each launched firing carries the state of the run it started.
   // forge:custom — pages one owned trigger's firings by a keyset cursor, with each run's state
-  rpc ListTriggerEvents(ListTriggerEventsRequest) returns (ListTriggerEventsResponse) {}
+  rpc ListTriggerEvents(ListTriggerEventsRequest) returns (ListTriggerEventsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetLaunchEvent returns the event that launched a chat: its kind, the
   // scheduled slot and manual flag for a schedule, the parent chat for an
@@ -108,7 +114,9 @@ service TriggerService {
   //
   // A separate RPC rather than a Chat field because trigger.proto imports
   // chat.proto, so Chat cannot reference TriggerEvent without a cycle.
-  rpc GetLaunchEvent(GetLaunchEventRequest) returns (GetLaunchEventResponse) {}
+  rpc GetLaunchEvent(GetLaunchEventRequest) returns (GetLaunchEventResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // RotateWebhookToken replaces a webhook trigger's token. The old token
   // stops working immediately; the new one is returned once and never again.
@@ -187,7 +195,9 @@ service TriggerService {
   // ListReplayEvents lists the recent events the caller's activations of a
   // workflow's declared triggers received, newest first, so one can be run
   // again with ChatService.RunNow.
-  rpc ListReplayEvents(ListReplayEventsRequest) returns (ListReplayEventsResponse) {}
+  rpc ListReplayEvents(ListReplayEventsRequest) returns (ListReplayEventsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // PreviewReplay maps a past event through a declared trigger's inputs and
   // prompt, as a fire of that event would. Only the mapping applies: the
@@ -213,7 +223,9 @@ service TriggerService {
   // tool's schema as the structured output, and normalized by the same code
   // that tool runs.
   rpc DraftAutomation(DraftAutomationRequest) returns (DraftAutomationResponse) {
-    option (forge.v1.method) = {activity: {none: "Proposes an automation for review; only CreateTrigger persists it"}};
+    option (forge.v1.method) = {
+      activity: {none: "Proposes an automation for review; only CreateTrigger persists it"}
+    };
   }
 }
 

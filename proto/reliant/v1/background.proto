@@ -11,14 +11,20 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // BackgroundService handles background process management
 service BackgroundService {
   // ListProcesses returns all background processes, optionally filtered
-  rpc ListProcesses(ListBackgroundProcessesRequest) returns (ListBackgroundProcessesResponse) {}
+  rpc ListProcesses(ListBackgroundProcessesRequest) returns (ListBackgroundProcessesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetProcessOutput returns the stdout/stderr output of a process
-  rpc GetProcessOutput(GetProcessOutputRequest) returns (GetProcessOutputResponse) {}
+  rpc GetProcessOutput(GetProcessOutputRequest) returns (GetProcessOutputResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // KillProcess terminates a background process
   rpc KillProcess(KillProcessRequest) returns (KillProcessResponse) {
-    option (forge.v1.method) = {activity: {none: "stops a background process on the daemon; process lifecycle, not project history"}};
+    option (forge.v1.method) = {
+      activity: {none: "stops a background process on the daemon; process lifecycle, not project history"}
+    };
   }
 
   // StreamProcessOutput streams real-time process output (stdout/stderr)

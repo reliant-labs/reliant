@@ -108,6 +108,47 @@ if command -v buf >/dev/null; then
   labels '[{"name":"breaking:approved"}]'
   events '[{"event":"labeled","label":{"name":"breaking:approved"},"actor":{"login":"reliant-01"}}]'
   CMD=proto check "the owner's breaking:approved passes it" 0 CI_PR=8
+
+  # idempotency_level: buf's RPC_SAME_IDEMPOTENCY_LEVEL reports every change of it.
+  # Only IDEMPOTENCY_UNKNOWN -> NO_SIDE_EFFECTS or IDEMPOTENT is additive (the wire
+  # is unchanged); every other direction still needs the owner's label.
+  # svc <A's option> <B's option>: rewrite x.proto with a service of two rpcs.
+  svc() {
+    printf 'syntax = "proto3";\npackage x.v1;\nmessage M {\n  string a = 1;\n  string c = 3;\n}\nservice S {\n  rpc A(M) returns (M) {%s}\n  rpc B(M) returns (M) {%s}\n}\n' "$1" "$2" >"$T/r/proto/x/v1/x.proto"
+  }
+  NSE='option idempotency_level = NO_SIDE_EFFECTS;'
+  IDEM='option idempotency_level = IDEMPOTENT;'
+  labels '[]'; events '[]'
+  svc "" ""; g commit -qam "rpcs, no level"; g tag -f base >/dev/null
+  svc "$NSE" ""; g commit -qam "A declares NO_SIDE_EFFECTS"
+  CMD=proto check "UNKNOWN -> NO_SIDE_EFFECTS is additive: passes with no label" 0 CI_PR=8
+  grep -q 'additive, not breaking' "$T/out" && grep -q 'RPC "A" on service "S"' "$T/out" \
+    || { echo "FAIL: the pass does not name the additive rpc"; cat "$T/out"; fail=1; }
+  CMD=proto check "UNKNOWN -> NO_SIDE_EFFECTS passes with no PR at all" 0
+  svc "$NSE" "$IDEM"; g commit -qam "B declares IDEMPOTENT"
+  CMD=proto check "UNKNOWN -> IDEMPOTENT is additive too" 0 CI_PR=8
+  PATH="$T/badjq:$PATH"; mkdir -p "$T/badjq"; printf '#!/bin/sh\nexit 3\n' >"$T/badjq/jq"; chmod +x "$T/badjq/jq"
+  CMD=proto check "a jq that cannot classify the findings exempts none" 1 CI_PR=8
+  PATH="${PATH#"$T/badjq:"}"
+  g tag -f base >/dev/null
+  svc "" "$IDEM"; g commit -qam "A drops NO_SIDE_EFFECTS"
+  CMD=proto check "NO_SIDE_EFFECTS -> UNKNOWN still refuses" 1 CI_PR=8
+  grep -q 'from "NO_SIDE_EFFECTS" to "IDEMPOTENCY_UNKNOWN"' "$T/out" || { echo "FAIL: the refusal does not name the finding"; cat "$T/out"; fail=1; }
+  g reset -q --hard base
+  svc "$IDEM" "$IDEM"; g commit -qam "A: NO_SIDE_EFFECTS -> IDEMPOTENT"
+  CMD=proto check "NO_SIDE_EFFECTS -> IDEMPOTENT still refuses" 1 CI_PR=8
+  g reset -q --hard base
+  svc "$NSE" "$NSE"; g commit -qam "B: IDEMPOTENT -> NO_SIDE_EFFECTS"
+  CMD=proto check "IDEMPOTENT -> NO_SIDE_EFFECTS still refuses" 1 CI_PR=8
+  g reset -q --hard base
+  svc "" ""; g commit -qam "rpcs, no level"; g tag -f base >/dev/null
+  printf 'syntax = "proto3";\npackage x.v1;\nmessage M {\n  string a = 1;\n}\nservice S {\n  rpc A(M) returns (M) {%s}\n  rpc B(M) returns (M) {}\n}\n' "$NSE" >"$T/r/proto/x/v1/x.proto"
+  g commit -qam "A declares NO_SIDE_EFFECTS, and a field goes"
+  CMD=proto check "an additive level beside a removed field still refuses" 1 CI_PR=8
+  grep -q 'deleted field "3"\|field "3"' "$T/out" || { echo "FAIL: the refusal does not name the removed field"; cat "$T/out"; fail=1; }
+  if grep 'FAIL:\|^proto/' "$T/out" | grep -q 'IDEMPOTENCY_UNKNOWN'; then
+    echo "FAIL: the additive finding is listed as blocking"; cat "$T/out"; fail=1
+  fi
 else
   echo "skip: buf is not on PATH, so the proto cases did not run"
 fi

@@ -21,6 +21,9 @@ for (const route of ['/m/new', '/m/chats/chat_a']) {
     await page.goto(route);
     const composer = page.getByRole('textbox', { name: 'Message the agent', exact: true });
     await expect(composer).toBeEditable();
+    // New-chat scope is canonicalized into the URL; resizing must retain it.
+    const expectedRoute = route === '/m/new' ? '/m/new?project=proj_mobile' : route;
+    await expect(page).toHaveURL(url => `${url.pathname}${url.search}` === expectedRoute);
     const draft = 'Keep this draft while rotating and opening chat options.';
     await composer.fill(draft);
     // The draft must survive because the textarea is never remounted (the
@@ -32,7 +35,7 @@ for (const route of ['/m/new', '/m/chats/chat_a']) {
     for (const viewport of [responsiveViewports.wide, responsiveViewports.splitPane,
       { width: 390, height: 460 }, responsiveViewports.phone]) {
       await page.setViewportSize(viewport);
-      await expect(page).toHaveURL(new RegExp(`${route}$`));
+      await expect(page).toHaveURL(url => `${url.pathname}${url.search}` === expectedRoute);
       await expect(page.locator('[data-surface="mobile"]').first()).toBeVisible();
       await expect(composer).toHaveValue(draft);
       await expect(composer).toHaveAttribute('data-e2e-draft-probe', 'original');
@@ -119,7 +122,9 @@ test('Inbox selection survives rotation and split-pane resizing', async ({ page 
 
 test('navigation dialog traps focus, closes on Escape, and restores focus', async ({ page }, info) => {
   await mockMobileBackend(page);
-  await page.goto('/m/chats');
+  // A top-level phone screen: the drawer (the one shell's nav, U6 3/16) opens
+  // at its top level, with the Inbox. At the chat list it opens drilled into Agents.
+  await page.goto('/m/inbox');
   const open = page.getByRole('button', { name: /Open menu/ });
   await expectReachable(open, !!info.project.use.hasTouch);
   await open.click();

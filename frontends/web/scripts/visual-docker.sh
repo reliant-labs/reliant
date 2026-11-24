@@ -4,6 +4,9 @@
 # Linux laptop and a cloud machine all compare against one set of baselines.
 #
 #   scripts/visual-docker.sh [playwright args]   e.g. --update-snapshots, --grep chat
+#   scripts/visual-docker.sh --pull              pull the pinned image and exit
+#                                                (scripts/visual-gate.sh pulls it
+#                                                while the renderer builds)
 #
 # The image is pinned to the exact @playwright/test the lockfile installs:
 # the library and the browser in the image must be one release. Bumping
@@ -28,6 +31,9 @@ die() { echo "visual-docker: $*" >&2; exit 2; }
 command -v docker >/dev/null 2>&1 ||
   die "docker is required. The visual baseline runs in the pinned Playwright image ($IMAGE) so its pixels match on every host. Install Docker, or debug one surface on this host with VISUAL_ALLOW_HOST=1 npx playwright test -c playwright.visual.config.ts (not comparable with the baselines)."
 docker info >/dev/null 2>&1 || die "docker is installed but its daemon is not reachable (docker info failed). Start Docker and re-run."
+if [ "${1:-}" = "--pull" ]; then
+  exec docker pull --quiet "$IMAGE"
+fi
 
 installed="$(node -p "require('$WEB/node_modules/@playwright/test/package.json').version" 2>/dev/null)" ||
   die "frontends/web/node_modules has no @playwright/test: run task install:web first."
@@ -48,7 +54,7 @@ tty=()
 [ -t 1 ] && tty=(-t)
 exec docker run --rm -i "${tty[@]}" --init --ipc=host \
   --user "$(id -u):$(id -g)" \
-  -e HOME=/tmp -e NPM_CONFIG_UPDATE_NOTIFIER=false -e CI -e VISUAL_IN_CONTAINER=1 -e VISUAL_FXLOG -e VISUAL_WORKERS -e VISUAL_PORT \
+  -e HOME=/tmp -e NPM_CONFIG_UPDATE_NOTIFIER=false -e CI -e VISUAL_IN_CONTAINER=1 -e VISUAL_FXLOG -e VISUAL_WORKERS -e VISUAL_PORT -e VISUAL_JSON \
   -v "$REPO:$REPO" -w "$WEB" \
   "$IMAGE" \
   npx --no-install playwright test -c playwright.visual.config.ts "$@"

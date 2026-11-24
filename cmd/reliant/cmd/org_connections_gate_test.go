@@ -47,7 +47,7 @@ func createOrgConnectionThrough(t *testing.T, api interface{ GetCorsAllowedOrigi
 	require.NoError(t, err)
 	repo := db.NewTestRepo(t)
 	conns, err := app.NewAPIConnections(app.APIConnectionsDeps{
-		DB: repo, Vault: vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)}),
+		DB: repo, ConnectionVault: db.TestConnections(t, repo), Vault: vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)}),
 		Integrations: &app.IntegrationSettings{}, AppOrigins: api.GetCorsAllowedOrigins(),
 		OrgConnections: enabled,
 	})

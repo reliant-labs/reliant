@@ -120,7 +120,7 @@ describe("selectProject", () => {
     expect(mocks.clearCurrentChat).toHaveBeenCalledTimes(1);
 
     mocks.clearCurrentChat.mockClear();
-    await useProjectStore.getState().selectProject(mocks.projects[0] as never, { restoreChat: false });
+    await useProjectStore.getState().selectProject(mocks.projects[0] as never, { opensChat: true });
     expect(mocks.clearCurrentChat).not.toHaveBeenCalled();
   });
 

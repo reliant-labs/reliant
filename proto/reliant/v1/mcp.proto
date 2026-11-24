@@ -13,10 +13,18 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 service MCPService {
   // ListServers returns all configured MCP servers with their status
   // forge:custom — merges the project's three config scopes with the daemon's live server status
+  //
+  // It only reads, but it is deliberately NOT NO_SIDE_EFFECTS: each server's
+  // config.headers and config.env come back as the user stored them, API keys
+  // and bearer tokens included, and NO_SIDE_EFFECTS lets Connect serve the rpc
+  // over HTTP GET, whose responses a cache or proxy may store and replay.
   rpc ListServers(ListServersRequest) returns (ListServersResponse) {}
 
   // GetServer returns detailed information about a specific MCP server
   // forge:custom — resolves one server across the project's config scopes and the daemon's live status
+  //
+  // Not NO_SIDE_EFFECTS, for the reason ListServers is not: its config carries
+  // the server's stored headers and env, secrets included.
   rpc GetServer(GetServerRequest) returns (GetServerResponse) {}
 
   // GetServerTools returns the list of tools exposed by a specific MCP server
@@ -56,11 +64,15 @@ service MCPService {
 
   // RestartServer restarts an MCP server
   rpc RestartServer(RestartServerRequest) returns (RestartServerResponse) {
-    option (forge.v1.method) = {activity: {none: "restarts a server process from its unchanged config: runtime recovery, not a configuration change"}};
+    option (forge.v1.method) = {
+      activity: {none: "restarts a server process from its unchanged config: runtime recovery, not a configuration change"}
+    };
   }
 
   // ListRecommended returns a list of recommended MCP servers
-  rpc ListRecommended(ListRecommendedRequest) returns (ListRecommendedResponse) {}
+  rpc ListRecommended(ListRecommendedRequest) returns (ListRecommendedResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // UpdateServerConfig updates the configuration of an MCP server
   rpc UpdateServerConfig(UpdateServerConfigRequest) returns (UpdateServerConfigResponse) {
@@ -130,10 +142,12 @@ enum MCPServerStatus {
 message MCPServerConfig {
   string command = 1;
   repeated string args = 2;
-  repeated string env = 3;
+  // KEY=VALUE pairs as the user wrote them: a value may be a literal API key.
+  repeated string env = 3 [debug_redact = true];
   string type = 4;
   optional string url = 5;
-  map<string, string> headers = 6;
+  // As the user wrote them: a value may be a literal bearer token.
+  map<string, string> headers = 6 [debug_redact = true];
 }
 
 // MCPServerInfo contains basic server info from MCP protocol

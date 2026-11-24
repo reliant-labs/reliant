@@ -174,7 +174,7 @@ describe("NewChatView: where the chat runs", () => {
 
   // Prod, 2026-10-09: the user's only machine was restarting under a release
   // (PENDING). The view defaulted to No machine, the chat was created with
-  // no_machine, and it said "No machine" for good while the Files tab and the
+  // no_machine, and it said "No sandbox" for good while the Files tab and the
   // terminal worked again 20 s later. A machine that is starting is waited
   // for, never treated as absent.
   it("waits for a machine that is starting: it is not No machine", () => {
@@ -182,7 +182,7 @@ describe("NewChatView: where the chat runs", () => {
     daemonState.current = { activeDaemon: undefined, daemons: [starting], loading: false };
     render(<NewChatView tabId="t1" />);
 
-    expect(screen.getByTestId("machine-picker")).not.toHaveTextContent("No machine");
+    expect(screen.getByTestId("machine-picker")).not.toHaveTextContent("No sandbox");
     expect(screen.queryByTestId("new-chat-no-machine-hint")).toBeNull();
     expect(screen.getByRole("status")).toHaveTextContent("Waiting for your machine");
   });
@@ -191,7 +191,7 @@ describe("NewChatView: where the chat runs", () => {
     daemonState.current = { activeDaemon: undefined, daemons: [], loading: false };
     render(<NewChatView tabId="t1" />);
 
-    expect(screen.getByTestId("machine-picker")).toHaveTextContent("No machine");
+    expect(screen.getByTestId("machine-picker")).toHaveTextContent("No sandbox");
     expect(screen.getByTestId("new-chat-no-machine-hint")).toHaveTextContent("not the files in this project");
     // A workspace is a checkout on a machine; there is none to pick.
     expect(screen.queryByText("New workspace")).toBeNull();
@@ -211,7 +211,7 @@ describe("NewChatView: where the chat runs", () => {
     daemonState.current = { activeDaemon: undefined, daemons: [], loading: false, answered: false };
     render(<NewChatView tabId="t1" />);
 
-    expect(screen.getByTestId("machine-picker")).not.toHaveTextContent("No machine");
+    expect(screen.getByTestId("machine-picker")).not.toHaveTextContent("No sandbox");
     expect(screen.queryByTestId("new-chat-no-machine-hint")).toBeNull();
   });
 
@@ -219,7 +219,7 @@ describe("NewChatView: where the chat runs", () => {
     const asleep = { ...laptop, status: 5 };
     daemonState.current = { activeDaemon: undefined, daemons: [asleep], loading: false };
     render(<NewChatView tabId="t1" />);
-    expect(screen.getByTestId("machine-picker")).not.toHaveTextContent("No machine");
+    expect(screen.getByTestId("machine-picker")).not.toHaveTextContent("No sandbox");
     expect(screen.getByRole("status")).toHaveTextContent("Waiting for your machine");
   });
 
@@ -230,7 +230,7 @@ describe("NewChatView: where the chat runs", () => {
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
 
     fireEvent.click(screen.getByTestId("new-chat-continue-without-machine"));
-    expect(screen.getByTestId("machine-picker")).toHaveTextContent("No machine");
+    expect(screen.getByTestId("machine-picker")).toHaveTextContent("No sandbox");
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(startChat).toHaveBeenCalled());
     expect(machineArg()).toEqual({ daemonId: undefined, noMachine: true });
@@ -239,8 +239,8 @@ describe("NewChatView: where the chat runs", () => {
   it("lets the user pick No machine, or a specific machine, explicitly", async () => {
     render(<NewChatView tabId="t1" />);
     fireEvent.click(screen.getByTestId("machine-picker"));
-    fireEvent.click(screen.getByRole("option", { name: /No machine/ }));
-    expect(screen.getByTestId("machine-picker")).toHaveTextContent("No machine");
+    fireEvent.click(screen.getByRole("option", { name: /No sandbox/ }));
+    expect(screen.getByTestId("machine-picker")).toHaveTextContent("No sandbox");
 
     fireEvent.click(screen.getByTestId("machine-picker"));
     fireEvent.click(screen.getByRole("option", { name: /laptop/ }));

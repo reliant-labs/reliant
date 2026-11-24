@@ -258,7 +258,7 @@ describe("a remap made in the desktop app, seen in a browser", () => {
 describe("in the desktop app", () => {
   const surface: Surface = { os: "mac", electron: true };
 
-  it("uses the desktop chords the browser would have kept", async () => {
+  it("keeps the desktop chords the browser would have kept, as aliases", async () => {
     installElectronMenu();
     const { handlers } = await mount(surface);
 
@@ -267,6 +267,45 @@ describe("in the desktop app", () => {
 
     expect(handlers.onNewChat).toHaveBeenCalledOnce();
     expect(handlers.onCloseTab).toHaveBeenCalledOnce();
+  });
+
+  it("takes the same bindings as a browser tab", async () => {
+    installElectronMenu();
+    const { handlers } = await mount(surface);
+
+    press({ key: "Dead", code: "KeyN", metaKey: true, altKey: true });
+    press({ key: "k", code: "KeyK", metaKey: true });
+    press({ key: "x", code: "KeyX", metaKey: true });
+
+    expect(handlers.onNewChat).toHaveBeenCalledOnce();
+    expect(handlers.onCloseTab).toHaveBeenCalledOnce();
+  });
+
+  it("tells the native menu each shortcut's aliases beside its binding", async () => {
+    // A sequence (Close Tab's Cmd+K X) cannot be a menu accelerator; the menu
+    // falls back to the alias.
+    installElectronMenu();
+    await mount(surface);
+
+    const api = (window as unknown as { electronAPI: { updateShortcutBindings: ReturnType<typeof vi.fn> } })
+      .electronAPI;
+    const [bindings, aliases] = api.updateShortcutBindings.mock.calls.at(-1)!;
+    expect(bindings.closeTab).toBe("Cmd+K X");
+    expect(aliases.closeTab).toEqual(["Cmd+W"]);
+    expect(aliases.toggleTerminal).toBeUndefined();
+  });
+
+  it("drops a shortcut's aliases once the user remaps it", async () => {
+    getShortcuts.mockImplementation(async () => ({
+      shortcuts: JSON.stringify({ newChat: { currentBinding: "Cmd+Shift+Y" } }),
+    }));
+    installElectronMenu();
+    const { handlers } = await mount(surface);
+
+    press({ key: "t", code: "KeyT", metaKey: true });
+    expect(handlers.onNewChat).not.toHaveBeenCalled();
+    press({ key: "y", code: "KeyY", metaKey: true, shiftKey: true });
+    expect(handlers.onNewChat).toHaveBeenCalledOnce();
   });
 
   it("runs a menu-delivered shortcut once, through the same handler", async () => {

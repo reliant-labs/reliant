@@ -82,6 +82,9 @@ const (
 	// OrganizationServiceUpdateMemberRoleProcedure is the fully-qualified name of the
 	// OrganizationService's UpdateMemberRole RPC.
 	OrganizationServiceUpdateMemberRoleProcedure = "/controlplane.v1.OrganizationService/UpdateMemberRole"
+	// OrganizationServiceMoveFreeHostingDesignationProcedure is the fully-qualified name of the
+	// OrganizationService's MoveFreeHostingDesignation RPC.
+	OrganizationServiceMoveFreeHostingDesignationProcedure = "/controlplane.v1.OrganizationService/MoveFreeHostingDesignation"
 	// OrganizationServiceStartGitHubAppInstallProcedure is the fully-qualified name of the
 	// OrganizationService's StartGitHubAppInstall RPC.
 	OrganizationServiceStartGitHubAppInstallProcedure = "/controlplane.v1.OrganizationService/StartGitHubAppInstall"
@@ -100,7 +103,7 @@ const (
 type OrganizationServiceClient interface {
 	// ListMyOrganizations lists every org the caller belongs to, with their role
 	// in each, oldest org first, and which one is their default. An org switcher
-	// and `forge login`'s org choice are built on it.
+	// and `forge cloud login`'s org choice are built on it.
 	ListMyOrganizations(context.Context, *connect.Request[v1.ListMyOrganizationsRequest]) (*connect.Response[v1.ListMyOrganizationsResponse], error)
 	// SetDefaultOrganization makes org_id the org the caller acts in when a
 	// request names none. It is a per-person preference stored server-side, so
@@ -166,6 +169,25 @@ type OrganizationServiceClient interface {
 	// role's preset, and scopes says what they hold now. Demoting the last
 	// owner is refused ("last_owner").
 	UpdateMemberRole(context.Context, *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error)
+	// MoveFreeHostingDesignation makes org_id the caller's free hosting org.
+	// Human callers only (reason "human_only"), and only the FOUNDER of org_id:
+	// a non-member is PermissionDenied "not_org_member" (an org that does not
+	// exist included, so org_id cannot probe which orgs exist), any other member
+	// PermissionDenied "free_hosting_founder_only". An org deleted while the
+	// request waited is NotFound. An org with active hosting billing cannot take
+	// it (FailedPrecondition, "free_hosting_target_billed").
+	//
+	// A founder may move it at most once per 30 days (FailedPrecondition,
+	// "free_hosting_move_cooldown", whose message carries the date it may move
+	// again), except away from an org with active hosting billing, which has no
+	// cooldown. dry_run previews the move and changes nothing: it never fails
+	// for the cooldown, reporting cooldown_applies instead. Moving to the org
+	// that already holds it is a no-op (moved false, no cooldown started).
+	//
+	// The response names the deployed sites that lose free hosting in the old
+	// org and the deployed sites that would be served free in the target. There
+	// is no site-count limit. Serving follows within minutes of a real move.
+	MoveFreeHostingDesignation(context.Context, *connect.Request[v1.MoveFreeHostingDesignationRequest]) (*connect.Response[v1.MoveFreeHostingDesignationResponse], error)
 	// StartGitHubAppInstall returns the GitHub URL that installs the App (or
 	// lets the caller pick an existing installation) carrying a signed state
 	// that names this org and the caller. GitHub sends the browser back to the
@@ -209,6 +231,7 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+OrganizationServiceListMyOrganizationsProcedure,
 			connect.WithSchema(organizationServiceMethods.ByName("ListMyOrganizations")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setDefaultOrganization: connect.NewClient[v1.SetDefaultOrganizationRequest, v1.SetDefaultOrganizationResponse](
@@ -227,6 +250,7 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+OrganizationServiceListMembersProcedure,
 			connect.WithSchema(organizationServiceMethods.ByName("ListMembers")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		inviteMember: connect.NewClient[v1.InviteMemberRequest, v1.InviteMemberResponse](
@@ -239,6 +263,7 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+OrganizationServiceListInvitationsProcedure,
 			connect.WithSchema(organizationServiceMethods.ByName("ListInvitations")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		revokeInvitation: connect.NewClient[v1.RevokeInvitationRequest, v1.RevokeInvitationResponse](
@@ -277,6 +302,12 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(organizationServiceMethods.ByName("UpdateMemberRole")),
 			connect.WithClientOptions(opts...),
 		),
+		moveFreeHostingDesignation: connect.NewClient[v1.MoveFreeHostingDesignationRequest, v1.MoveFreeHostingDesignationResponse](
+			httpClient,
+			baseURL+OrganizationServiceMoveFreeHostingDesignationProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("MoveFreeHostingDesignation")),
+			connect.WithClientOptions(opts...),
+		),
 		startGitHubAppInstall: connect.NewClient[v1.StartGitHubAppInstallRequest, v1.StartGitHubAppInstallResponse](
 			httpClient,
 			baseURL+OrganizationServiceStartGitHubAppInstallProcedure,
@@ -293,6 +324,7 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+OrganizationServiceListGitHubAppInstallationsProcedure,
 			connect.WithSchema(organizationServiceMethods.ByName("ListGitHubAppInstallations")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		unlinkGitHubAppInstallation: connect.NewClient[v1.UnlinkGitHubAppInstallationRequest, v1.UnlinkGitHubAppInstallationResponse](
@@ -318,6 +350,7 @@ type organizationServiceClient struct {
 	removeMember                *connect.Client[v1.RemoveMemberRequest, v1.RemoveMemberResponse]
 	leaveOrganization           *connect.Client[v1.LeaveOrganizationRequest, v1.LeaveOrganizationResponse]
 	updateMemberRole            *connect.Client[v1.UpdateMemberRoleRequest, v1.UpdateMemberRoleResponse]
+	moveFreeHostingDesignation  *connect.Client[v1.MoveFreeHostingDesignationRequest, v1.MoveFreeHostingDesignationResponse]
 	startGitHubAppInstall       *connect.Client[v1.StartGitHubAppInstallRequest, v1.StartGitHubAppInstallResponse]
 	linkGitHubAppInstallation   *connect.Client[v1.LinkGitHubAppInstallationRequest, v1.LinkGitHubAppInstallationResponse]
 	listGitHubAppInstallations  *connect.Client[v1.ListGitHubAppInstallationsRequest, v1.ListGitHubAppInstallationsResponse]
@@ -384,6 +417,11 @@ func (c *organizationServiceClient) UpdateMemberRole(ctx context.Context, req *c
 	return c.updateMemberRole.CallUnary(ctx, req)
 }
 
+// MoveFreeHostingDesignation calls controlplane.v1.OrganizationService.MoveFreeHostingDesignation.
+func (c *organizationServiceClient) MoveFreeHostingDesignation(ctx context.Context, req *connect.Request[v1.MoveFreeHostingDesignationRequest]) (*connect.Response[v1.MoveFreeHostingDesignationResponse], error) {
+	return c.moveFreeHostingDesignation.CallUnary(ctx, req)
+}
+
 // StartGitHubAppInstall calls controlplane.v1.OrganizationService.StartGitHubAppInstall.
 func (c *organizationServiceClient) StartGitHubAppInstall(ctx context.Context, req *connect.Request[v1.StartGitHubAppInstallRequest]) (*connect.Response[v1.StartGitHubAppInstallResponse], error) {
 	return c.startGitHubAppInstall.CallUnary(ctx, req)
@@ -410,7 +448,7 @@ func (c *organizationServiceClient) UnlinkGitHubAppInstallation(ctx context.Cont
 type OrganizationServiceHandler interface {
 	// ListMyOrganizations lists every org the caller belongs to, with their role
 	// in each, oldest org first, and which one is their default. An org switcher
-	// and `forge login`'s org choice are built on it.
+	// and `forge cloud login`'s org choice are built on it.
 	ListMyOrganizations(context.Context, *connect.Request[v1.ListMyOrganizationsRequest]) (*connect.Response[v1.ListMyOrganizationsResponse], error)
 	// SetDefaultOrganization makes org_id the org the caller acts in when a
 	// request names none. It is a per-person preference stored server-side, so
@@ -476,6 +514,25 @@ type OrganizationServiceHandler interface {
 	// role's preset, and scopes says what they hold now. Demoting the last
 	// owner is refused ("last_owner").
 	UpdateMemberRole(context.Context, *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error)
+	// MoveFreeHostingDesignation makes org_id the caller's free hosting org.
+	// Human callers only (reason "human_only"), and only the FOUNDER of org_id:
+	// a non-member is PermissionDenied "not_org_member" (an org that does not
+	// exist included, so org_id cannot probe which orgs exist), any other member
+	// PermissionDenied "free_hosting_founder_only". An org deleted while the
+	// request waited is NotFound. An org with active hosting billing cannot take
+	// it (FailedPrecondition, "free_hosting_target_billed").
+	//
+	// A founder may move it at most once per 30 days (FailedPrecondition,
+	// "free_hosting_move_cooldown", whose message carries the date it may move
+	// again), except away from an org with active hosting billing, which has no
+	// cooldown. dry_run previews the move and changes nothing: it never fails
+	// for the cooldown, reporting cooldown_applies instead. Moving to the org
+	// that already holds it is a no-op (moved false, no cooldown started).
+	//
+	// The response names the deployed sites that lose free hosting in the old
+	// org and the deployed sites that would be served free in the target. There
+	// is no site-count limit. Serving follows within minutes of a real move.
+	MoveFreeHostingDesignation(context.Context, *connect.Request[v1.MoveFreeHostingDesignationRequest]) (*connect.Response[v1.MoveFreeHostingDesignationResponse], error)
 	// StartGitHubAppInstall returns the GitHub URL that installs the App (or
 	// lets the caller pick an existing installation) carrying a signed state
 	// that names this org and the caller. GitHub sends the browser back to the
@@ -515,6 +572,7 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 		OrganizationServiceListMyOrganizationsProcedure,
 		svc.ListMyOrganizations,
 		connect.WithSchema(organizationServiceMethods.ByName("ListMyOrganizations")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	organizationServiceSetDefaultOrganizationHandler := connect.NewUnaryHandler(
@@ -533,6 +591,7 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 		OrganizationServiceListMembersProcedure,
 		svc.ListMembers,
 		connect.WithSchema(organizationServiceMethods.ByName("ListMembers")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	organizationServiceInviteMemberHandler := connect.NewUnaryHandler(
@@ -545,6 +604,7 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 		OrganizationServiceListInvitationsProcedure,
 		svc.ListInvitations,
 		connect.WithSchema(organizationServiceMethods.ByName("ListInvitations")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	organizationServiceRevokeInvitationHandler := connect.NewUnaryHandler(
@@ -583,6 +643,12 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 		connect.WithSchema(organizationServiceMethods.ByName("UpdateMemberRole")),
 		connect.WithHandlerOptions(opts...),
 	)
+	organizationServiceMoveFreeHostingDesignationHandler := connect.NewUnaryHandler(
+		OrganizationServiceMoveFreeHostingDesignationProcedure,
+		svc.MoveFreeHostingDesignation,
+		connect.WithSchema(organizationServiceMethods.ByName("MoveFreeHostingDesignation")),
+		connect.WithHandlerOptions(opts...),
+	)
 	organizationServiceStartGitHubAppInstallHandler := connect.NewUnaryHandler(
 		OrganizationServiceStartGitHubAppInstallProcedure,
 		svc.StartGitHubAppInstall,
@@ -599,6 +665,7 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 		OrganizationServiceListGitHubAppInstallationsProcedure,
 		svc.ListGitHubAppInstallations,
 		connect.WithSchema(organizationServiceMethods.ByName("ListGitHubAppInstallations")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	organizationServiceUnlinkGitHubAppInstallationHandler := connect.NewUnaryHandler(
@@ -633,6 +700,8 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 			organizationServiceLeaveOrganizationHandler.ServeHTTP(w, r)
 		case OrganizationServiceUpdateMemberRoleProcedure:
 			organizationServiceUpdateMemberRoleHandler.ServeHTTP(w, r)
+		case OrganizationServiceMoveFreeHostingDesignationProcedure:
+			organizationServiceMoveFreeHostingDesignationHandler.ServeHTTP(w, r)
 		case OrganizationServiceStartGitHubAppInstallProcedure:
 			organizationServiceStartGitHubAppInstallHandler.ServeHTTP(w, r)
 		case OrganizationServiceLinkGitHubAppInstallationProcedure:
@@ -696,6 +765,10 @@ func (UnimplementedOrganizationServiceHandler) LeaveOrganization(context.Context
 
 func (UnimplementedOrganizationServiceHandler) UpdateMemberRole(context.Context, *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.UpdateMemberRole is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) MoveFreeHostingDesignation(context.Context, *connect.Request[v1.MoveFreeHostingDesignationRequest]) (*connect.Response[v1.MoveFreeHostingDesignationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.MoveFreeHostingDesignation is not implemented"))
 }
 
 func (UnimplementedOrganizationServiceHandler) StartGitHubAppInstall(context.Context, *connect.Request[v1.StartGitHubAppInstallRequest]) (*connect.Response[v1.StartGitHubAppInstallResponse], error) {

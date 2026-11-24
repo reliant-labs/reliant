@@ -94,14 +94,16 @@ curl -s  https://demo.reliantlabs.io/config.js                            # only
 node frontends/web/scripts/demo/smoke-demo-site.mjs https://demo.reliantlabs.io
 ```
 
-The smoke script loads `/`, the build story and 13 console pages in headless Chrome,
+The smoke script loads `/`, the build story and 19 console pages in headless Chrome,
 then walks the grouped nav at desktop and phone widths. It exits 1 on any of these:
 
 - a request to another origin, or a 4xx/5xx response;
 - a page error, or a CORS console error;
 - `/` not landing on the Home (`/forge/demo?section=home`), or the Home missing its
   hero heading, its three actions, its four numbered stories or its agent workflows;
-- the nav missing a group (Issues, Performance, More tools) or row, or a dead nav item;
+- the nav missing a group (the signed-in app's Observability, Analytics, Deployments,
+  Tests, Security, Configure) or row, a dead nav item, or an item leading to a page
+  the demo does not serve (Usage, Speed insights);
 - a page without `data-shell="demo"`;
 - Data or Storage on prod (the demo's audited environment) not asking for a
   reason, reading before it is given, or not reading after it.

@@ -137,3 +137,41 @@ func TestRunnerGoStepUsesJSONOnlyUnderABudget(t *testing.T) {
 		t.Fatal("-test-budget bogus must be refused")
 	}
 }
+
+// -capture (the merge gate's) records the root module's Go step and the web
+// step through scripts/test-capture.sh with the same flags and packages; the
+// budget filter still reads a raw -json stream. The SDK module's step stays
+// plain: it is another module, which the run's coverage cannot place.
+func TestRunnerCaptureRecordsTheGoAndWebSteps(t *testing.T) {
+	script := "/repo/scripts/test-capture.sh"
+	pl := &Plan{
+		Go:    GoPlan{Packages: []string{"./internal/leaf"}},
+		Web:   WebPlan{Tests: []string{"src/lib/leaf.test.ts"}},
+		Files: []FileReport{{Path: "sdk/go/reliant/client.go"}},
+	}
+	r := &runner{root: "/repo", out: io.Discard, errOut: io.Discard, capture: true}
+	steps := r.steps(pl, laneSet("go,web"))
+	byName := map[string][]string{}
+	for _, s := range steps {
+		byName[s.name] = s.argv
+		if s.name == "web" && !slices.Contains(s.env, "FORGE_TEST_COVERAGE=off") {
+			t.Errorf("the merge tier records the web step's results without coverage: env %q", s.env)
+		}
+	}
+	want := []string{script, "go", captureLaneGo, "-buildvcs=false", "-short", "-timeout", "5m", "./internal/leaf"}
+	if got := byName["go"]; !slices.Equal(got, want) {
+		t.Errorf("captured go step:\n got %q\nwant %q", got, want)
+	}
+	want = []string{script, "vitest", captureLaneWeb, "npx", "vitest", "run", "src/lib/leaf.test.ts"}
+	if got := byName["web"]; !slices.Equal(got, want) {
+		t.Errorf("captured web step:\n got %q\nwant %q", got, want)
+	}
+	if got := byName["go (sdk module)"]; len(got) == 0 || got[0] != "go" {
+		t.Errorf("the sdk module's step must stay plain go test: %q", got)
+	}
+	r.budget = time.Second
+	s := r.goSteps(pl)
+	if want := []string{script, "--raw", "go", captureLaneGo}; !slices.Equal(s[0].argv[:4], want) || s[0].budget == nil {
+		t.Errorf("a budget reads the captured lane's raw -json stream: %q", s[0].argv)
+	}
+}

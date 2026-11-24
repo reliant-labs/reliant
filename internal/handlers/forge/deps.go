@@ -36,7 +36,6 @@ type Router interface {
 // which is what lets the secret-safety and reachability tests run as plain
 // unit tests. *db.Repo satisfies it.
 type Repository interface {
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
 	// ListProjects lists the caller's projects: a read whose machine is not
 	// reachable is asked of another checkout of the same forge project

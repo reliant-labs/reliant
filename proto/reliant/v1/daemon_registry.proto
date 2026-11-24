@@ -13,10 +13,14 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // All RPCs require a Supabase JWT — the CLI does not call this service.
 service DaemonRegistryService {
   // ListDaemons returns the authenticated user's registered daemons.
-  rpc ListDaemons(ListDaemonsRequest) returns (ListDaemonsResponse) {}
+  rpc ListDaemons(ListDaemonsRequest) returns (ListDaemonsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetDaemon fetches a specific daemon by ID.
-  rpc GetDaemon(GetDaemonRequest) returns (GetDaemonResponse) {}
+  rpc GetDaemon(GetDaemonRequest) returns (GetDaemonResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ResolveDaemon picks the right daemon for routing given optional selectors.
   // Used by distributed OSS routers.
@@ -27,7 +31,9 @@ service DaemonRegistryService {
   // ResumeDaemon wakes up a suspended or idle daemon. Used by routers when
   // the resolved daemon is not currently active.
   rpc ResumeDaemon(ResumeDaemonRequest) returns (ResumeDaemonResponse) {
-    option (forge.v1.method) = {activity: {none: "reports whether the daemon is routable: this server cannot wake a machine, control-plane's ResumeDaemon does"}};
+    option (forge.v1.method) = {
+      activity: {none: "reports whether the daemon is routable: this server cannot wake a machine, control-plane's ResumeDaemon does"}
+    };
   }
 
   // RefreshLocalModels asks an online daemon to re-probe its local model
@@ -35,7 +41,9 @@ service DaemonRegistryService {
   // "Test connection" / "Refresh". Fails with Unavailable when the daemon is
   // offline.
   rpc RefreshLocalModels(RefreshLocalModelsRequest) returns (RefreshLocalModelsResponse) {
-    option (forge.v1.method) = {activity: {none: "re-probes the machine's local model servers: refreshes an observed inventory and configures nothing"}};
+    option (forge.v1.method) = {
+      activity: {none: "re-probes the machine's local model servers: refreshes an observed inventory and configures nothing"}
+    };
   }
 
   // SetLocalModelEndpoints replaces the user-configured local model

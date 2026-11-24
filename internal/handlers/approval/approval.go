@@ -28,7 +28,7 @@ func (s *Service) chatBelongsToUser(ctx context.Context, chatID string) error {
 	if !ok || userID == "" {
 		return svcerr.Unauthenticated("user ID not found in context")
 	}
-	chat, err := s.deps.Repo.GetChatRow(ctx, chatID)
+	chat, err := s.deps.Chats.GetChatRow(ctx, chatID)
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

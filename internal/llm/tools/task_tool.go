@@ -20,13 +20,15 @@ import (
 
 // ListTasksTool allows agents to list tasks for the current plan
 type ListTasksTool struct {
-	repo listTasksStore
+	repo  listTasksStore
+	plans listTasksPlanning
 }
 
 // NewListTasksTool creates a new task listing tool
-func NewListTasksTool(repo listTasksStore) Tool {
+func NewListTasksTool(repo listTasksStore, plans listTasksPlanning) Tool {
 	return NewToolWrapper(&ListTasksTool{
-		repo: repo,
+		repo:  repo,
+		plans: plans,
 	})
 }
 
@@ -74,7 +76,7 @@ type taskDisplayInfo struct {
 }
 
 func (l *ListTasksTool) Execute(rctx *rctx.ToolContext, params ListTasksParams) (ToolResponse, error) {
-	if l.repo == nil {
+	if l.repo == nil || l.plans == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -86,7 +88,7 @@ func (l *ListTasksTool) Execute(rctx *rctx.ToolContext, params ListTasksParams) 
 	// Reads walk up to an ancestor's plan: a spawned sub-agent has its own
 	// thread and usually no plan of its own, and the board it needs is the one
 	// its parent used to delegate the work.
-	resolved, err := resolvePlanForRead(rctx.Context, l.repo, threadID)
+	resolved, err := resolvePlanForRead(rctx.Context, l.plans, l.repo, threadID)
 	if err != nil {
 		if svcerr.IsNotFound(err) {
 			return NewTextErrorResponse("No plan found for this thread. Use create_plan to create one."), nil
@@ -106,9 +108,9 @@ func (l *ListTasksTool) Execute(rctx *rctx.ToolContext, params ListTasksParams) 
 	}
 
 	// Get dependencies
-	allDeps, _ := l.repo.ListDependenciesByPlan(rctx.Context, planID)
+	allDeps, _ := l.plans.ListDependenciesByPlan(rctx.Context, planID)
 
-	stats, _ := l.repo.GetTaskStatsByPlan(rctx.Context, planID)
+	stats, _ := l.plans.GetTaskStatsByPlan(rctx.Context, planID)
 
 	// Build task maps
 	taskMap := make(map[string]*db.Task)
@@ -298,13 +300,15 @@ func (l *ListTasksTool) formatTask(task *db.Task, num int, indent string, taskMa
 
 // UpdateTaskTool allows agents to update task status and details
 type UpdateTaskTool struct {
-	repo updateTaskStore
+	repo  updateTaskStore
+	plans updateTaskPlanning
 }
 
 // NewUpdateTaskTool creates a new task update tool
-func NewUpdateTaskTool(repo updateTaskStore) Tool {
+func NewUpdateTaskTool(repo updateTaskStore, plans updateTaskPlanning) Tool {
 	return NewToolWrapper(&UpdateTaskTool{
-		repo: repo,
+		repo:  repo,
+		plans: plans,
 	})
 }
 
@@ -373,7 +377,7 @@ func (u *UpdateTaskTool) RequiresPermission(params UpdateTaskParams) (bool, erro
 }
 
 func (u *UpdateTaskTool) Execute(rctx *rctx.ToolContext, params UpdateTaskParams) (ToolResponse, error) {
-	if u.repo == nil {
+	if u.repo == nil || u.plans == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -397,7 +401,7 @@ func (u *UpdateTaskTool) Execute(rctx *rctx.ToolContext, params UpdateTaskParams
 	}
 
 	// Check if all tasks are completed
-	stats, _ := u.repo.GetTaskStatsByPlan(rctx.Context, task.PlanID)
+	stats, _ := u.plans.GetTaskStatsByPlan(rctx.Context, task.PlanID)
 	allCompleted := false
 	if stats != nil {
 		allCompleted = (stats.Pending == 0 && stats.InProgress == 0 && stats.Failed == 0 && stats.Blocked == 0)
@@ -463,7 +467,7 @@ func (u *UpdateTaskTool) apply(ctx context.Context, threadID string, params Upda
 		// done". Updating one task row it was handed is single-writer — it is
 		// mutating the plan's SHAPE (adding tasks, retitling it) that stays
 		// with the owning thread.
-		resolved, err := resolvePlanForRead(ctx, u.repo, threadID)
+		resolved, err := resolvePlanForRead(ctx, u.plans, u.repo, threadID)
 		if err != nil {
 			if svcerr.IsNotFound(err) {
 				return nil, respond(NewTextErrorResponse("No plan found for this thread. Use create_plan to create one.")), nil
@@ -478,7 +482,7 @@ func (u *UpdateTaskTool) apply(ctx context.Context, threadID string, params Upda
 		if position < 1 {
 			return nil, respond(NewTextErrorResponse(fmt.Sprintf("Task position %d is out of range: task numbering starts at 1", position))), nil
 		}
-		task, err = u.repo.GetTaskByPosition(ctx, resolved.plan.ID, position-1)
+		task, err = u.plans.GetTaskByPosition(ctx, resolved.plan.ID, position-1)
 		if err != nil {
 			return nil, respond(NewTextErrorResponse(fmt.Sprintf("Failed to find task at position %d: %v", position, err))), nil
 		}
@@ -573,7 +577,7 @@ func (u *UpdateTaskTool) apply(ctx context.Context, threadID string, params Upda
 	}
 
 	// Update the task
-	if err := u.repo.UpdateTask(ctx, task); err != nil {
+	if err := u.plans.UpdateTask(ctx, task); err != nil {
 		// Returned, not answered: a serialization failure is retried by
 		// RunTx, and anything else becomes the tool's error below.
 		return nil, nil, err

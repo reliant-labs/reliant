@@ -13,10 +13,11 @@ package handlers
 import (
 	"testing"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
 // resolveCompactionModelWith mirrors resolveCompactionModel's selection logic

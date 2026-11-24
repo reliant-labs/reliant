@@ -10,8 +10,8 @@
  * (FailedPrecondition), archive, restore as a new version, and promote to
  * code returning the file with no pull request yet.
  *
- * State lives in the fixture instance, so a test or the preview harness can
- * star, save and restore and see the result on every surface.
+ * State lives in the fixture instance, so a test can star, save and restore
+ * and see the result on every surface.
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -40,8 +40,6 @@ export interface DashboardFixtureOptions {
   dashboardsDayGrained?: boolean;
   /** Ships forge's Product usage shape: sections, figures with sparklines and a default comparison, a retention heatmap. */
   dashboardsHeadline?: boolean;
-  /** A control plane that predates DashboardSummary.group/tags: the page infers each group. */
-  dashboardsUngrouped?: boolean;
   /** A young app: its overview and one service dashboard, nothing saved. */
   dashboardsFew?: boolean;
   /**
@@ -365,7 +363,7 @@ export function createDashboardFixture(options: DashboardFixtureOptions, call: C
     return b;
   };
   const grouping = (ref: DashboardRef) =>
-    options.dashboardsUngrouped ? {} : (GROUPING[keyOf(ref)] ?? (ref.key.startsWith("process-") ? { group: "services" } : ["users", "product", "acquisition"].includes(ref.key) ? { group: "product" } : {}));
+    GROUPING[keyOf(ref)] ?? (ref.key.startsWith("process-") ? { group: "services" } : ["users", "product", "acquisition"].includes(ref.key) ? { group: "product" } : {});
   const canWrite = !options.dashboardsReadOnly;
 
   const guarded: Call = (rpc, request, answer) =>

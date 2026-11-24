@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	temporalotel "go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/workflow"
 
@@ -85,8 +86,38 @@ func startRunTelemetry(ctx workflow.Context, input WorkflowInput, execCtx *Execu
 		if input.ChatID != "" {
 			span.SetAttributes(attribute.String(telemetry.AttrGenAIConversationID, input.ChatID))
 		}
+		// A run a trigger launched is the root of its own trace; it links to
+		// the span that fired it, which may be in another org's trace
+		// (launch.runTraceContext). A link, like an attribute, is no command.
+		// It names the trigger_events row it was launched for, which the
+		// trigger.fire span names too, so the two join by attribute as well.
+		if input.Trigger != nil {
+			if firing := telemetry.SpanContextOf(input.Trigger.TraceParent); firing.IsValid() {
+				span.AddLink(trace.Link{SpanContext: firing})
+			}
+			if input.Trigger.EventID != "" {
+				span.SetAttributes(attribute.String(telemetry.AttrTriggerEventID, input.Trigger.EventID))
+			}
+		}
 	}
 	return workflow.WithValue(ctx, rootRunIDKey{}, runID)
+}
+
+// nameRunOrg sets org.id on the workflow's own span (RunWorkflow:DynamicWorkflow)
+// once the run's root definition load has named it. Workflow code cannot read
+// the database, so the org arrives in that load's result (LoadedWorkflow.OrgID),
+// which the worker fills from the same chat-owner lookup that stamps every
+// other span of the run. A recorded result is replayed and an attribute is no
+// command, so this is replay-safe; a run whose history predates the field
+// names no org, as before. Tenant export routes a span by its org.id and drops
+// one without it.
+func nameRunOrg(ctx workflow.Context, orgID string) {
+	if orgID == "" {
+		return
+	}
+	if span, ok := temporalotel.SpanFromWorkflowContext(ctx); ok {
+		span.SetAttributes(attribute.String(telemetry.AttrOrgID, orgID))
+	}
 }
 
 // runTelemetryKey holds, for a save_message the workflow writes itself, the

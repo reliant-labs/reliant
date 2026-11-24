@@ -414,7 +414,7 @@ export interface UserUpdate {
   created_at: string;
   /**
    * The org the update is about (UserUpdateData.org_id); absent for one about
-   * nothing of an org, or from a server that predates the field.
+   * nothing of an org, or one stored before the field existed.
    */
   org_id?: string;
 }

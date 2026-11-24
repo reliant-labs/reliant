@@ -3,12 +3,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { setRuntimeConfig } from "@/test/runtimeConfig";
 import { getAppURL } from "@/lib/constants";
 import {
+  DEFAULT_DEMO_APP_HOST,
   DEFAULT_FORGE_APP_HOST,
   SHELL_OVERRIDE_KEY,
+  demoAppOrigin,
   forgeAppHost,
   forgeAppOrigin,
   normalizeHost,
-  reliantAppOrigin,
   isDemoShell,
   isForgeShell,
   resetShellForTests,
@@ -139,12 +140,11 @@ describe("hosts", () => {
     expect(forgeAppHost()).toBe("forge.staging.test");
   });
 
-  it("links to Reliant at APP_URL, never back at the forge host itself", () => {
-    setRuntimeConfig({ APP_URL: "https://app.staging.test/" });
-    expect(reliantAppOrigin()).toBe("https://app.staging.test");
-    setRuntimeConfig({ APP_URL: "https://forge.reliantlabs.io" });
-    expect(reliantAppOrigin()).toBe("https://app.reliantlabs.io");
+  it("links to the public demo on its own host", () => {
+    expect(DEFAULT_DEMO_APP_HOST).toBe("demo.reliantlabs.io");
+    expect(demoAppOrigin()).toBe("https://demo.reliantlabs.io");
   });
+
 });
 
 describe("getAppURL in the forge shell", () => {

@@ -93,7 +93,7 @@ func TestListInbox_ReadsEachCatalogOnce(t *testing.T) {
 	direct := f.list(t, nil)
 
 	counting := &countingRepo{Repo: f.repo}
-	f.inbox = NewTestInbox(t, WithInboxDeps(Deps{Repo: counting}))
+	f.inbox = NewTestInbox(t, WithInboxDeps(mockDeps(counting)))
 	got := f.list(t, nil)
 	t.Logf("reads: catalogs=%d drafts=%d draft batches=%d", counting.catalogs.Load(), counting.drafts.Load(), counting.draftBatches.Load())
 	require.EqualValues(t, 1, counting.catalogs.Load(),
@@ -148,10 +148,10 @@ func TestListInbox_BatchedDraftReadListsTheSame(t *testing.T) {
 		}))
 	}
 
-	f.inbox = NewTestInbox(t, WithInboxDeps(Deps{Repo: noDraftBatchRepo{f.repo}}))
+	f.inbox = NewTestInbox(t, WithInboxDeps(mockDeps(noDraftBatchRepo{f.repo})))
 	alone := f.list(t, nil)
 	counting := &countingRepo{Repo: f.repo}
-	f.inbox = NewTestInbox(t, WithInboxDeps(Deps{Repo: counting}))
+	f.inbox = NewTestInbox(t, WithInboxDeps(mockDeps(counting)))
 	batched := f.list(t, nil)
 
 	require.EqualValues(t, 1, counting.draftBatches.Load())

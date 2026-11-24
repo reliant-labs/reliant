@@ -176,7 +176,7 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 
 	g.Go(func() error {
 		return lim.do(gctx, func() (err error) {
-			out.pending, err = s.deps.Repo.ListInboxPending(gctx, userID)
+			out.pending, err = s.deps.Items.ListInboxPending(gctx, userID)
 			out.pending = authz.Visible(gctx, userID, out.pending, reads.pending)
 			return err
 		})
@@ -243,7 +243,7 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 	// A missing source row or disconnected/deleted daemon cannot hide them.
 	g.Go(func() error {
 		return lim.do(gctx, func() error {
-			rows, err := s.deps.Repo.ListWorktreeRecoveries(gctx, userID, "")
+			rows, err := s.deps.Recoveries.ListWorktreeRecoveries(gctx, userID, "")
 			if err != nil {
 				return err
 			}
@@ -445,7 +445,7 @@ func (s *Service) dropDismissed(ctx context.Context, userID string, items []*rel
 		keys[i] = dismissalKeys(it.ItemId)
 		candidates = append(candidates, keys[i]...)
 	}
-	dismissed, err := s.deps.Repo.ListDismissedInboxItemIDs(ctx, userID, candidates)
+	dismissed, err := s.deps.Items.ListDismissedInboxItemIDs(ctx, userID, candidates)
 	if err != nil {
 		return nil, err
 	}
@@ -646,7 +646,7 @@ func (s *Service) storageView(ctx context.Context, userID string) ([]*worktreesw
 			return c.machines, nil
 		}
 	}
-	machines, err := worktreesweep.StorageView(ctx, s.deps.Repo, userID)
+	machines, err := worktreesweep.StorageView(ctx, s.deps.Storage, userID)
 	if err != nil {
 		return nil, err
 	}

@@ -9,7 +9,7 @@
  * URL still opens and says so), so turning this on is the only step once the
  * control plane ships.
  *
- * A deployment flag rather than a per-browser one (lib/forgeFeature.ts): it
+ * A deployment flag rather than a per-browser one: it
  * tracks what the deployment's control plane can do, not a person's taste.
  */
 import { loadConfig } from "@/lib/config_gen";

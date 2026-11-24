@@ -123,7 +123,7 @@ type AccessTokenServiceClient interface {
 	// scope sets are never widened: reissue through authenticated login afterwards.
 	// Renewal, label edits and token revocation never reset this durable policy.
 	ResetDaemonScopePolicy(context.Context, *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error)
-	// ListMyCLILogins lists the caller's human CLI logins (`forge login`): the
+	// ListMyCLILogins lists the caller's human CLI logins (`forge cloud login`): the
 	// device, when each was issued and last used, and when it ends. Browser
 	// session only: a CLI login is refused, like every rpc of this service.
 	ListMyCLILogins(context.Context, *connect.Request[v1.ListMyCLILoginsRequest]) (*connect.Response[v1.ListMyCLILoginsResponse], error)
@@ -172,6 +172,7 @@ func NewAccessTokenServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			httpClient,
 			baseURL+AccessTokenServiceListTokensProcedure,
 			connect.WithSchema(accessTokenServiceMethods.ByName("ListTokens")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		revokeToken: connect.NewClient[v1.RevokeTokenRequest, v1.RevokeTokenResponse](
@@ -190,6 +191,7 @@ func NewAccessTokenServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			httpClient,
 			baseURL+AccessTokenServiceListMyTokensProcedure,
 			connect.WithSchema(accessTokenServiceMethods.ByName("ListMyTokens")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		revokeMyToken: connect.NewClient[v1.RevokeMyTokenRequest, v1.RevokeMyTokenResponse](
@@ -214,6 +216,7 @@ func NewAccessTokenServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			httpClient,
 			baseURL+AccessTokenServiceListMyCLILoginsProcedure,
 			connect.WithSchema(accessTokenServiceMethods.ByName("ListMyCLILogins")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		revokeMyCLILogin: connect.NewClient[v1.RevokeMyCLILoginRequest, v1.RevokeMyCLILoginResponse](
@@ -232,6 +235,7 @@ func NewAccessTokenServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			httpClient,
 			baseURL+AccessTokenServiceListOrgMemberGrantsProcedure,
 			connect.WithSchema(accessTokenServiceMethods.ByName("ListOrgMemberGrants")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateOrgMemberGrants: connect.NewClient[v1.UpdateOrgMemberGrantsRequest, v1.UpdateOrgMemberGrantsResponse](
@@ -359,7 +363,7 @@ type AccessTokenServiceHandler interface {
 	// scope sets are never widened: reissue through authenticated login afterwards.
 	// Renewal, label edits and token revocation never reset this durable policy.
 	ResetDaemonScopePolicy(context.Context, *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error)
-	// ListMyCLILogins lists the caller's human CLI logins (`forge login`): the
+	// ListMyCLILogins lists the caller's human CLI logins (`forge cloud login`): the
 	// device, when each was issued and last used, and when it ends. Browser
 	// session only: a CLI login is refused, like every rpc of this service.
 	ListMyCLILogins(context.Context, *connect.Request[v1.ListMyCLILoginsRequest]) (*connect.Response[v1.ListMyCLILoginsResponse], error)
@@ -404,6 +408,7 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 		AccessTokenServiceListTokensProcedure,
 		svc.ListTokens,
 		connect.WithSchema(accessTokenServiceMethods.ByName("ListTokens")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	accessTokenServiceRevokeTokenHandler := connect.NewUnaryHandler(
@@ -422,6 +427,7 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 		AccessTokenServiceListMyTokensProcedure,
 		svc.ListMyTokens,
 		connect.WithSchema(accessTokenServiceMethods.ByName("ListMyTokens")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	accessTokenServiceRevokeMyTokenHandler := connect.NewUnaryHandler(
@@ -446,6 +452,7 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 		AccessTokenServiceListMyCLILoginsProcedure,
 		svc.ListMyCLILogins,
 		connect.WithSchema(accessTokenServiceMethods.ByName("ListMyCLILogins")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	accessTokenServiceRevokeMyCLILoginHandler := connect.NewUnaryHandler(
@@ -464,6 +471,7 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 		AccessTokenServiceListOrgMemberGrantsProcedure,
 		svc.ListOrgMemberGrants,
 		connect.WithSchema(accessTokenServiceMethods.ByName("ListOrgMemberGrants")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	accessTokenServiceUpdateOrgMemberGrantsHandler := connect.NewUnaryHandler(

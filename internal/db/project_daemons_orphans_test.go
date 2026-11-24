@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/daemonmirror/daemonmirrortest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,7 +67,7 @@ func TestRemoveDaemonDeletesItsProjectInstalls(t *testing.T) {
 		require.NoError(t, repo.UpsertProjectDaemon(ctx, projectID, id, "/p", nil))
 	}
 
-	_, removed, err := repo.RemoveDaemon(ctx, old)
+	_, removed, err := daemonmirrortest.New(t, repo).RemoveDaemon(ctx, old)
 	require.NoError(t, err)
 	require.True(t, removed)
 

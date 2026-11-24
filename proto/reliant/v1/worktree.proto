@@ -86,7 +86,9 @@ enum WorktreeStatus {
 service WorktreeService {
   // Owner-scoped durable recovery catalog, independent of source row lifetime.
   // forge:custom — owner authorization and retained catalog semantics.
-  rpc ListWorktreeRecoveries(ListWorktreeRecoveriesRequest) returns (ListWorktreeRecoveriesResponse) {}
+  rpc ListWorktreeRecoveries(ListWorktreeRecoveriesRequest) returns (ListWorktreeRecoveriesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // Restores into a separate worktree; never resets an existing branch.
   rpc RestoreWorktreeRecovery(RestoreWorktreeRecoveryRequest) returns (RestoreWorktreeRecoveryResponse) {
     option (forge.v1.method) = {
@@ -146,9 +148,13 @@ service WorktreeService {
   // most recently archived first. Archived workspaces are never part of
   // ListWorktrees: only the archived view asks for them.
   // forge:custom — authorizes through the project and reads only archived rows
-  rpc ListArchivedWorktrees(ListArchivedWorktreesRequest) returns (ListArchivedWorktreesResponse) {}
+  rpc ListArchivedWorktrees(ListArchivedWorktreesRequest) returns (ListArchivedWorktreesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // forge:custom — authorizes through the worktree's project before it reads
-  rpc GetWorktree(GetWorktreeRequest) returns (GetWorktreeResponse) {}
+  rpc GetWorktree(GetWorktreeRequest) returns (GetWorktreeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // forge:custom — a partial update authorized through the worktree's project
   rpc UpdateWorktree(UpdateWorktreeRequest) returns (UpdateWorktreeResponse) {
     option (forge.v1.method) = {
@@ -264,10 +270,14 @@ service WorktreeService {
 
   // Git Write Operations
   rpc StageFiles(StageFilesRequest) returns (StageFilesResponse) {
-    option (forge.v1.method) = {activity: {none: "git index edit through the daemon: the commit that follows is the event, and git records it"}};
+    option (forge.v1.method) = {
+      activity: {none: "git index edit through the daemon: the commit that follows is the event, and git records it"}
+    };
   }
   rpc UnstageFiles(UnstageFilesRequest) returns (UnstageFilesResponse) {
-    option (forge.v1.method) = {activity: {none: "git index edit through the daemon: undoes a stage, and the repository's history never sees it"}};
+    option (forge.v1.method) = {
+      activity: {none: "git index edit through the daemon: undoes a stage, and the repository's history never sees it"}
+    };
   }
   rpc RevertFiles(RevertFilesRequest) returns (RevertFilesResponse) {
     option (forge.v1.method) = {

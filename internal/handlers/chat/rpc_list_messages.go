@@ -9,6 +9,9 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/errgroup"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -16,7 +19,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // ListMessages lists messages for a chat with content blocks
@@ -61,7 +63,7 @@ func (s *Service) ListMessages(
 		mainThreadID = id
 	}
 
-	threadsSvc := threads.NewService(s.deps.Repo)
+	threadsSvc := threads.New(threads.Deps{Repo: s.deps.Repo})
 
 	var messages []*db.Message
 	var oldestSeq int64
@@ -168,7 +170,7 @@ func (s *Service) ListMessages(
 
 	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoMessages := messageproto.AssembleForDisplay(
-		ctx, s.deps.Repo, messages, blocksByMessageID, attachmentMap, viewingThreadID, 0, toolBodies)
+		ctx, messageproto.NewReader(s.deps.Repo, s.deps.Senders), messages, blocksByMessageID, attachmentMap, viewingThreadID, 0, toolBodies)
 	if access.Viewer() {
 		messageproto.ElideForViewer(protoMessages)
 	}

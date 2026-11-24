@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -49,12 +50,12 @@ func TestLLMCallUsage_EveryActivityAttemptIsCountedAndRepeatsAreNot(t *testing.T
 	first := usageRec("wf/run/act-1", at)
 	first.Outcome, first.ErrorClass, first.InputTokens, first.OutputTokens = store.LLMOutcomeError, "network", 300, 80
 	first.CacheReadTokens, first.CacheWriteTokens, first.LatencyMs = 0, 0, 900
-	written, err := repo.RecordLLMCallUsage(ctx, first)
+	written, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, first)
 	require.NoError(t, err)
 	assert.True(t, written)
 
 	// The same attempt delivered again (a duplicate write): nothing changes.
-	written, err = repo.RecordLLMCallUsage(ctx, first)
+	written, err = llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, first)
 	require.NoError(t, err)
 	assert.False(t, written, "a repeat of the same attempt must not write")
 	assert.Equal(t, 1, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage`))
@@ -64,12 +65,12 @@ func TestLLMCallUsage_EveryActivityAttemptIsCountedAndRepeatsAreNot(t *testing.T
 	// the first, not a replacement of it.
 	second := usageRec("wf/run/act-1", at)
 	second.Attempt, second.InputTokens, second.OutputTokens = 2, 120, 60
-	written, err = repo.RecordLLMCallUsage(ctx, second)
+	written, err = llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, second)
 	require.NoError(t, err)
 	assert.True(t, written, "a later attempt is a call of its own")
 
 	// A late delivery of attempt 1 after attempt 2 changes nothing.
-	written, err = repo.RecordLLMCallUsage(ctx, first)
+	written, err = llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, first)
 	require.NoError(t, err)
 	assert.False(t, written)
 
@@ -103,7 +104,7 @@ func TestLLMCallUsage_ConcurrentDuplicatesCountOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := repo.RecordLLMCallUsage(ctx, rec)
+			_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, rec)
 			assert.NoError(t, err)
 		}()
 	}
@@ -129,6 +130,12 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 			"input_tokens": "bigint", "output_tokens": "bigint", "cache_read_tokens": "bigint",
 			"cache_write_tokens": "bigint", "latency_ms": "bigint", "attempt": "integer",
 			"created_at": "timestamp with time zone", "funding": "text", "account_id": "text",
+			// What the call was part of (agent-analytics.md §3.2): opaque ids
+			// and the workflow, node and preset names, the provider's request
+			// id, time to first token, and cost on a closed-set basis (§4).
+			"workflow_id": "text", "thread_id": "text", "workflow_name": "text", "node_id": "text", "preset": "text",
+			"project_id": "text", "ai_run_id": "text", "ai_root_run_id": "text", "provider_request_id": "text",
+			"ttft_ms": "bigint", "cost_usd_nanos": "bigint", "cost_basis": "text",
 		},
 		"llm_call_usage_daily": {
 			"user_id": "text", "org_id": "text", "provider": "text", "model": "text", "auth_mode": "text", "purpose": "text",
@@ -145,6 +152,16 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 			"cache_write_tokens": "bigint", "latency_ms_total": "bigint", "updated_at": "timestamp with time zone",
 		},
 		"llm_usage_purged_users": {"user_id": "text", "purged_at": "timestamp with time zone"},
+		// The tool calls' ledger (agent-analytics.md §3.5): ids, the run's names,
+		// closed-set labels, a shipped tool's name and counts. No tool input,
+		// output, command, file name or error text.
+		"tool_call_usage": {
+			"id": "text", "attempt": "integer", "user_id": "text", "org_id": "text", "chat_id": "text",
+			"project_id": "text", "workflow_id": "text", "thread_id": "text", "workflow_name": "text",
+			"node_id": "text", "preset": "text", "ai_run_id": "text", "ai_root_run_id": "text",
+			"tool_name": "text", "tool_kind": "text", "location": "text", "outcome": "text", "error_class": "text",
+			"duration_ms": "bigint", "created_at": "timestamp with time zone",
+		},
 	}
 	for table, cols := range want {
 		rows, err := raw.Query(`SELECT column_name, data_type FROM information_schema.columns
@@ -172,12 +189,51 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 	_, err = raw.Exec(`INSERT INTO llm_call_usage (id, user_id, chat_id, provider, model, auth_mode, purpose, outcome, attempt, funding)
 		VALUES ('y', 'u', 'c', 'p', 'm', 'byok', 'chat', 'success', 1, 'acme prod key')`)
 	assert.Error(t, err, "free text in funding must be refused by the schema")
+
+	// cost_basis is a closed set, and a cost is present exactly when the
+	// basis prices the call: no cost without a basis, none on an unpriced
+	// call, and no priced basis without its cost.
+	costRow := func(id, basis string, nanos any) error {
+		var b any
+		if basis != "" {
+			b = basis
+		}
+		_, err := raw.Exec(`INSERT INTO llm_call_usage (id, user_id, chat_id, provider, model, auth_mode, purpose, outcome, attempt, cost_basis, cost_usd_nanos)
+			VALUES ($1, 'u', 'c', 'p', 'm', 'byok', 'chat', 'success', 1, $2, $3)`, id, b, nanos)
+		return err
+	}
+	assert.Error(t, costRow("cb-free", "list price from a blog", int64(5)), "free text in cost_basis must be refused by the schema")
+	assert.Error(t, costRow("cb-nobasis", "", int64(0)), "a cost with no basis must be refused: it would read as a price")
+	assert.Error(t, costRow("cb-unpriced", "unpriced", int64(0)), "an unpriced call must not carry a cost")
+	assert.Error(t, costRow("cb-reported", "reported", nil), "a reported basis must carry its cost")
+	assert.Error(t, costRow("cb-negative", "reported", int64(-1)), "a cost is never negative")
+	assert.NoError(t, costRow("cb-ok-reported", "reported", int64(12_300_000)))
+	assert.NoError(t, costRow("cb-ok-unpriced", "unpriced", nil))
+	assert.NoError(t, costRow("cb-ok-unknown", "", nil))
 	_, err = raw.Exec(`INSERT INTO llm_org_usage_daily (day, org_id, account_id, user_id, provider, model, funding, purpose)
 		VALUES (current_date, 'o', 'a', 'u', 'p', 'm', 'personal', 'chat')`)
 	assert.Error(t, err, "the org rollup must refuse a personal-account row")
 	_, err = raw.Exec(`INSERT INTO llm_org_usage_daily (day, org_id, account_id, user_id, provider, model, funding, purpose)
 		VALUES (current_date, 'o', 'a', 'u', 'p', 'm', 'org_key', 'chat')`)
 	assert.NoError(t, err)
+
+	// The tool ledger's labels are closed sets too, and only a tool Reliant
+	// ships is named: an MCP tool's name is the user's own.
+	insertTool := func(id, name, kind, outcome, class string) error {
+		_, err := raw.Exec(`INSERT INTO tool_call_usage (id, attempt, user_id, chat_id, tool_name, tool_kind, location, outcome, error_class)
+			VALUES ($1, 1, 'u', 'c', $2, $3, 'daemon', $4, $5)`, id, name, kind, outcome, class)
+		return err
+	}
+	assert.Error(t, insertTool("t1", "shell", "builtin", "error", "exit status 1: rm -rf /home/me"),
+		"free text in error_class must be refused by the schema")
+	assert.Error(t, insertTool("t2", "mcp__acme-internal__deploy", "mcp", "success", ""),
+		"an MCP tool's name must not be recorded")
+	assert.Error(t, insertTool("t3", "", "builtin", "success", ""), "a shipped tool is named")
+	assert.Error(t, insertTool("t4", "shell", "builtin", "success", "tool_error"), "a success has no error class")
+	assert.Error(t, insertTool("t5", "shell", "builtin", "error", ""), "an error has a class")
+	assert.Error(t, insertTool("t6", "shell", "plugin", "success", ""), "tool_kind is a closed set")
+	assert.NoError(t, insertTool("t7", "", "mcp", "error", "tool_error"))
+	assert.NoError(t, insertTool("t8", "shell", "builtin", "cancelled", ""))
 }
 
 func TestLLMUsageDaily_RollupSumsPerUserModelProviderAuthModeAndDay(t *testing.T) {
@@ -190,7 +246,7 @@ func TestLLMUsageDaily_RollupSumsPerUserModelProviderAuthModeAndDay(t *testing.T
 	mk := func(id string, at time.Time, mut func(*LLMCallUsage)) {
 		r := usageRec(id, at)
 		mut(&r)
-		_, err := repo.RecordLLMCallUsage(ctx, r)
+		_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, r)
 		require.NoError(t, err)
 	}
 	mk("a", d1, func(r *LLMCallUsage) {})
@@ -256,7 +312,7 @@ func TestLLMCallUsage_RetentionDeletesCallRowsAndKeepsTheRollup(t *testing.T) {
 	old := now.Add(-LLMCallUsageRetention - time.Hour)
 	edge := now.Add(-LLMCallUsageRetention + time.Hour)
 	for i, at := range []time.Time{old, old.Add(-48 * time.Hour), edge, now} {
-		_, err := repo.RecordLLMCallUsage(ctx, usageRec(fmt.Sprintf("r%d", i), at))
+		_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, usageRec(fmt.Sprintf("r%d", i), at))
 		require.NoError(t, err)
 	}
 	require.Equal(t, 4, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage`))
@@ -265,13 +321,13 @@ func TestLLMCallUsage_RetentionDeletesCallRowsAndKeepsTheRollup(t *testing.T) {
 	}
 	require.Equal(t, 4, totalCalls())
 
-	n, err := repo.PruneLLMCallUsage(ctx, now)
+	n, err := llmusagetest.New(t, repo).PruneLLMCallUsage(ctx, now)
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, n)
 	assert.Equal(t, 2, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage`), "rows inside the period stay")
 	assert.Equal(t, 4, totalCalls(), "the rollup keeps the deleted rows' totals")
 
-	n, err = repo.PruneLLMCallUsage(ctx, now)
+	n, err = llmusagetest.New(t, repo).PruneLLMCallUsage(ctx, now)
 	require.NoError(t, err)
 	assert.Zero(t, n, "a second pass has nothing to delete")
 
@@ -284,7 +340,7 @@ func TestLLMCallUsage_PruneWorksInBatches(t *testing.T) {
 	ctx := context.Background()
 	now := day(2026, 10, 29)
 	for i := 0; i < 5; i++ {
-		_, err := repo.RecordLLMCallUsage(ctx, usageRec(fmt.Sprintf("b%d", i), now.Add(-200*24*time.Hour)))
+		_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, usageRec(fmt.Sprintf("b%d", i), now.Add(-200*24*time.Hour)))
 		require.NoError(t, err)
 	}
 	cutoff := now.Add(-LLMCallUsageRetention)
@@ -310,7 +366,7 @@ func TestLLMUsageDaily_PurposeSplitsTheRollup(t *testing.T) {
 	for i, purpose := range []string{store.LLMPurposeChat, store.LLMPurposeChat, store.LLMPurposeCompaction, store.LLMPurposeTitle, store.LLMPurposeDraftAutomation} {
 		r := usageRec(fmt.Sprintf("p%d", i), at)
 		r.Purpose = purpose
-		_, err := repo.RecordLLMCallUsage(ctx, r)
+		_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, r)
 		require.NoError(t, err)
 	}
 	rows, err := repo.ListLLMUsageDaily(ctx, "u1", at, at)
@@ -324,7 +380,7 @@ func TestLLMUsageDaily_PurposeSplitsTheRollup(t *testing.T) {
 
 	bad := usageRec("bad", at)
 	bad.Purpose = "chatting"
-	_, err = repo.RecordLLMCallUsage(ctx, bad)
+	_, err = llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, bad)
 	assert.Error(t, err, "purpose is a closed set")
 }
 
@@ -337,27 +393,27 @@ func TestLLMCallUsage_RefusedForAPurgedUser(t *testing.T) {
 	ctx := context.Background()
 	at := day(2026, 10, 29)
 
-	_, err := repo.RecordLLMCallUsage(ctx, usageRec("before", at))
+	_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, usageRec("before", at))
 	require.NoError(t, err)
 	_, err = raw.Exec(`INSERT INTO llm_usage_purged_users (user_id) VALUES ('u1')`)
 	require.NoError(t, err)
 	_, err = raw.Exec(`DELETE FROM llm_call_usage WHERE user_id = 'u1'; DELETE FROM llm_call_usage_daily WHERE user_id = 'u1'`)
 	require.NoError(t, err)
 
-	written, err := repo.RecordLLMCallUsage(ctx, usageRec("after", at))
+	written, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, usageRec("after", at))
 	require.NoError(t, err)
 	assert.False(t, written, "a call that finishes after deletion is not recorded")
 	assert.Zero(t, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage`))
 	assert.Zero(t, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage_daily`))
 
 	later := usageRec("started-after-the-purge", at.Add(2*time.Hour))
-	written, err = repo.RecordLLMCallUsage(ctx, later)
+	written, err = llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, later)
 	require.NoError(t, err)
 	assert.False(t, written, "the fence refuses every write, whatever time the call started")
 
 	other := usageRec("other-user", at)
 	other.UserID = "u2"
-	written, err = repo.RecordLLMCallUsage(ctx, other)
+	written, err = llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, other)
 	require.NoError(t, err)
 	assert.True(t, written, "the fence is per user")
 }
@@ -370,8 +426,79 @@ func TestLLMUsagePurgeFences_AgeOut(t *testing.T) {
 	_, err := raw.Exec(`INSERT INTO llm_usage_purged_users (user_id, purged_at) VALUES ('old', $1), ('recent', $2)`,
 		now.Add(-store.LLMUsagePurgeFenceRetention-time.Hour), now.Add(-time.Hour))
 	require.NoError(t, err)
-	n, err := repo.PruneLLMUsagePurgeFences(context.Background(), now)
+	n, err := llmusagetest.New(t, repo).PruneLLMUsagePurgeFences(context.Background(), now)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, n)
 	assert.Equal(t, 1, rowCount(t, raw, `SELECT count(*) FROM llm_usage_purged_users WHERE user_id = 'recent'`))
+}
+
+// The run-scope columns (agent-analytics.md §3.2) round-trip, and a field the
+// recorder left empty is NULL, not "": "not recorded" never reads as a value.
+func TestLLMCallUsage_RunScopeColumnsRoundTripAndEmptyIsNull(t *testing.T) {
+	t.Parallel()
+	repo, raw, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ttft, nanos := int64(420), int64(12_300_000)
+	full := usageRec("wf/run/act-scoped", day(2026, 11, 24))
+	full.WorkflowID, full.ThreadID, full.WorkflowName, full.NodeID = "wf-1", "thread-1", "agent", "call_llm"
+	full.Preset, full.ProjectID, full.AIRunID, full.AIRootRunID = "researcher", "proj-1", "run-child", "run-root"
+	full.ProviderRequestID, full.TTFTMs = "req_abc", &ttft
+	full.CostUSDNanos, full.CostBasis = &nanos, store.LLMCostBasisReported
+	_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, full)
+	require.NoError(t, err)
+	_, err = llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, usageRec("wf/run/act-bare", day(2026, 11, 24)))
+	require.NoError(t, err)
+
+	rows, err := store.ListLlmCallUsage(ctx, repo.ORM())
+	require.NoError(t, err)
+	byID := map[string]*store.LlmCallUsage{}
+	for _, r := range rows {
+		byID[r.ID] = r
+	}
+	got := byID["wf/run/act-scoped"]
+	require.NotNil(t, got)
+	str := func(p *string) string {
+		if p == nil {
+			return "<nil>"
+		}
+		return *p
+	}
+	assert.Equal(t, "wf-1", str(got.WorkflowID))
+	assert.Equal(t, "thread-1", str(got.ThreadID))
+	assert.Equal(t, "agent", str(got.WorkflowName))
+	assert.Equal(t, "call_llm", str(got.NodeID))
+	assert.Equal(t, "researcher", str(got.Preset))
+	assert.Equal(t, "proj-1", str(got.ProjectID))
+	assert.Equal(t, "run-child", str(got.AiRunID))
+	assert.Equal(t, "run-root", str(got.AiRootRunID))
+	assert.Equal(t, "req_abc", str(got.ProviderRequestID))
+	require.NotNil(t, got.TtftMs)
+	assert.EqualValues(t, 420, *got.TtftMs)
+	require.NotNil(t, got.CostUsdNanos)
+	assert.EqualValues(t, 12_300_000, *got.CostUsdNanos)
+	assert.Equal(t, "reported", str(got.CostBasis))
+
+	bare := byID["wf/run/act-bare"]
+	require.NotNil(t, bare)
+	for name, p := range map[string]*string{
+		"workflow_id": bare.WorkflowID, "thread_id": bare.ThreadID, "workflow_name": bare.WorkflowName,
+		"node_id": bare.NodeID, "preset": bare.Preset, "project_id": bare.ProjectID, "ai_run_id": bare.AiRunID,
+		"ai_root_run_id": bare.AiRootRunID, "provider_request_id": bare.ProviderRequestID, "cost_basis": bare.CostBasis,
+	} {
+		assert.Nil(t, p, "%s: not recorded is NULL, not an empty value", name)
+	}
+	assert.Nil(t, bare.TtftMs, "no first token is NULL, not 0 ms")
+	assert.Nil(t, bare.CostUsdNanos, "an unpriced call reads as no cost, not as $0")
+
+	// Summed, an unpriced call adds nothing and is not counted as priced: the
+	// total over unpriced calls alone is NULL, never 0.
+	var total sql.NullInt64
+	require.NoError(t, raw.QueryRow(`SELECT sum(cost_usd_nanos) FROM llm_call_usage WHERE id = $1`, "wf/run/act-bare").Scan(&total))
+	assert.False(t, total.Valid, "the cost of unpriced calls is unknown, not zero")
+	var priced, all int
+	require.NoError(t, raw.QueryRow(`SELECT count(cost_usd_nanos), count(*) FROM llm_call_usage`).Scan(&priced, &all))
+	assert.Equal(t, 1, priced, "only the priced call is counted as priced")
+	assert.Equal(t, 2, all)
 }

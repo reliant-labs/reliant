@@ -11,7 +11,7 @@ describe("decodeUserUpdate", () => {
     expect(update.chat_id).toBe("c1");
   });
 
-  it("names no org for an update about none, or from a server that predates the field", () => {
+  it("names no org for an update that carries none", () => {
     const update = decodeUserUpdate(create(UserUpdateDataSchema, { id: "u2", dataJson: "{}" }));
     expect(update).not.toHaveProperty("org_id");
   });

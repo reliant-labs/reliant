@@ -29,7 +29,7 @@ func (s *Service) GetWorkflow(
 
 	// Draft ID lookup takes priority
 	if draftID := req.Msg.GetDraftId(); draftID != "" {
-		draft, err := s.deps.Repo.GetWorkflowDraft(ctx, draftID)
+		draft, err := s.deps.Drafts.GetWorkflowDraft(ctx, draftID)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load draft"))
 		}
@@ -91,7 +91,7 @@ func (s *Service) GetWorkflow(
 			return nil, err
 		}
 	}
-	resolved, resolveErr := workflowsource.Resolve(ctx, s.deps.Repo, workflowsource.Options{
+	resolved, resolveErr := workflowsource.Resolve(ctx, workflowsource.NewStore(s.deps.Repo, s.deps.Drafts), workflowsource.Options{
 		UserID: userID, ProjectID: req.Msg.ProjectId,
 	}, workflowName)
 	if resolveErr == nil && resolved.Source == workflowref.SourceProject {
@@ -107,7 +107,7 @@ func (s *Service) GetWorkflow(
 	// draft or an unparseable definition is shown (with its errors), not
 	// replaced by a project workflow of the same name.
 	// Look up user's workflow by slug
-	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
+	draft, err := s.deps.Drafts.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to look up workflow"))
 	}

@@ -70,6 +70,9 @@
 #                lint, every whole-project lane, the frontends
 #   build        go build ./...
 #   webbuild     task build:web:verify (lint, production renderer, artifact verification)
+#   demo-size    task demo:bundle-size (the forge demo bundle against
+#                frontends/web/scripts/demo/bundle-budget.json; it gates here
+#                only, a pull request pastes its --report-only table)
 #   typecheck    frontends/web's `npm run typecheck` (tsc -b, tests included)
 #   vet          go vet ./...
 #   test-go      task test -- <packages>  (Go -race -count=1 without -short:
@@ -82,7 +85,7 @@
 #
 # Parts (run --part; CI runs each as its own job, so the gate's wall time is
 # the slowest part, not the sum: ~70 min serial on one runner, 2026-10-30):
-#   static       npm generate docs build webbuild typecheck vet
+#   static       npm generate docs build webbuild demo-size typecheck vet
 #   lint         npm lint
 #   go           npm test-go     (sharded: --shard I/N; packages balanced on
 #                                 RG_GO_TIMINGS_FROM's record, else
@@ -91,7 +94,7 @@
 # CI splits static three ways, so its slow steps (generate ~280s, webbuild
 # ~220s) run side by side instead of one after another:
 #   generate     npm generate docs
-#   webbuild     npm webbuild
+#   webbuild     npm webbuild demo-size
 #   compile      npm build typecheck vet
 # A record needs every step, not a fixed set of parts: static, or generate +
 # webbuild + compile (the RC train's rl-gate.sh runs the four above).
@@ -112,16 +115,16 @@
 #   FORGE_BIN          a prebuilt forge (must be the pin; check-forge-generate.sh refuses otherwise)
 set -uo pipefail
 
-STEPS=(npm generate docs lint build webbuild typecheck vet test-go test-web test-electron integration e2e)
+STEPS=(npm generate docs lint build webbuild demo-size typecheck vet test-go test-web test-electron integration e2e)
 PARTS=(static lint go web)
 declare -A PART_STEPS=(
-  [static]="npm generate docs build webbuild typecheck vet"
+  [static]="npm generate docs build webbuild demo-size typecheck vet"
   [lint]="npm lint"
   [go]="npm test-go"
   [web]="npm test-web test-electron integration e2e"
   # static, split three ways for CI (header).
   [generate]="npm generate docs"
-  [webbuild]="npm webbuild"
+  [webbuild]="npm webbuild demo-size"
   [compile]="npm build typecheck vet"
 )
 # The hotfix gate's steps (release-gate.sh hotfix).
@@ -346,11 +349,21 @@ cmd_run() {
   steps_json="[]"
   if [ -n "$part" ]; then read -r -a steps <<<"${PART_STEPS[$part]}"; else steps=("${STEPS[@]}"); fi
   [ -z "$hbase" ] || steps=("${HOTFIX_STEPS[@]}")
+  # The test steps record into ONE run of forge's test record in the private
+  # checkout (.forge/tests/runs/<id>/: test-go as lane unit, test-web as
+  # frontend, integration, e2e; scripts/test-capture.sh). The record never
+  # changes a step's result. On main, ci.yml's test-upload job sends the
+  # parts' runs to the control plane (forge test report --upload).
+  local test_run=""
+  if [ "${FORGE_TESTS:-}" != off ] && [[ " ${steps[*]} " =~ \ (test-go|test-web|integration|e2e|merge)\  ]]; then
+    test_run=$(cd "$snap" && "$forge_sh" test begin 2>/dev/null) && [ -d "$test_run" ] || test_run=""
+    [ -z "$test_run" ] || echo "release-gate: test lanes record into $test_run"
+  fi
   for step in "${steps[@]}"; do
     if [ -n "${RG_ONLY:-}" ] && ! echo ",$RG_ONLY," | grep -q ",$step,"; then continue; fi
     s=$(date +%s)
     echo "release-gate: [$(date -u +%H:%M:%SZ)] $step ..."
-    (cd "$snap" && export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath" FORGE_NO_MERGE_DRIVER=1 RG_GO_SHARD="$shard" RG_HOTFIX_BASE="$hbase" && run_step "$step") >"$L/$step.log" 2>&1
+    (cd "$snap" && export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath" FORGE_NO_MERGE_DRIVER=1 RG_GO_SHARD="$shard" RG_HOTFIX_BASE="$hbase" && { [ -z "$test_run" ] || export FORGE_TEST_RUN="$test_run"; } && run_step "$step") >"$L/$step.log" 2>&1
     rc=$?; e=$(date +%s)
     [ "$rc" = 0 ] || fail=1
     echo "release-gate: $step $([ "$rc" = 0 ] && echo PASS || echo "FAIL (rc $rc; $L/$step.log)") in $((e - s))s"
@@ -578,6 +591,7 @@ run_step() {
     lint) "$forge_sh" lint --quiet --no-fix ;;
     build) go build ./... ;;
     webbuild) task build:web:verify ;;
+    demo-size) task demo:bundle-size ;;
     typecheck) npm --prefix frontends/web run --silent typecheck ;;
     vet) bash scripts/vet.sh ./... ;;
     merge)

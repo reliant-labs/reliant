@@ -58,11 +58,15 @@ service RunService {
   // means both, disambiguated by the run's status rather than by anything in
   // the request, which is why callers cannot express which they intended.
   rpc SignalRun(SignalRunRequest) returns (SignalRunResponse) {
-    option (forge.v1.method) = {activity: {none: "delivers messages into a live run: per-turn agent traffic the run's history records"}};
+    option (forge.v1.method) = {
+      activity: {none: "delivers messages into a live run: per-turn agent traffic the run's history records"}
+    };
   }
 
   // GetRun returns one run's current state.
-  rpc GetRun(GetRunRequest) returns (GetRunResponse) {}
+  rpc GetRun(GetRunRequest) returns (GetRunResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListRuns lists runs, newest first.
   //
@@ -70,7 +74,9 @@ service RunService {
   // every root run the caller owns, narrowed by the filters on the request and
   // paged by page_token. With one of them it lists that session's runs or that
   // run's children.
-  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse) {}
+  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // LastRunPerWorkflow returns the most recent root run of each workflow the
   // caller has run, one Run per workflow name. It is the Library's "last run"
@@ -133,7 +139,9 @@ service RunService {
   // in-flight LLM call and any executing tools are cancelled, and the run
   // parks. Distinct from Cancel, which ends it.
   rpc InterruptRun(InterruptRunRequest) returns (InterruptRunResponse) {
-    option (forge.v1.method) = {activity: {none: "per-turn steering: cancels the in-flight step without ending the run, and each cancelled tool call records its own outcome"}};
+    option (forge.v1.method) = {
+      activity: {none: "per-turn steering: cancels the in-flight step without ending the run, and each cancelled tool call records its own outcome"}
+    };
   }
 }
 

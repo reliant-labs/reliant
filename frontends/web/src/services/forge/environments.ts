@@ -194,8 +194,8 @@ export function isCloudRun(summary: Pick<ForgeEnvSummary, "cloud">): boolean {
  * ensured names its id in forge's report — and that id is used too, under the
  * same guard the managed store applies (managedStoreTarget: hosted, ensured,
  * and on THIS console's control plane). That covers an env the project-scoped
- * list did not return: one ensured before environments had a project, or a
- * control plane that predates the field. Never a guessed id.
+ * list did not return: one ensured before environments had a project. Never a
+ * guessed id.
  */
 export function cloudRunIdOf(summary: Pick<ForgeEnvSummary, "cloud" | "forge">): string | null {
   if (isCloudRun(summary)) return summary.cloud!.id;

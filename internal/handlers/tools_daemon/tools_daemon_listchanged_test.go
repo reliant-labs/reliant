@@ -19,7 +19,6 @@ import (
 // lifecycle change looks the owner up in daemons.
 func listChangedRepo(daemons map[string]*db.Daemon) *MockRepository {
 	return &MockRepository{
-		ReleaseDaemonAttachmentFunc: func(context.Context, string, time.Time) error { return nil },
 		GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
 			if d, ok := daemons[id]; ok {
 				return d, nil
@@ -27,6 +26,17 @@ func listChangedRepo(daemons map[string]*db.Daemon) *MockRepository {
 			return nil, errors.New("not found")
 		},
 	}
+}
+
+// noLeases is the lease role for a gateway under test that has no database:
+// teardown's release succeeds and writes nothing.
+func noLeases() *MockAttachments {
+	return &MockAttachments{ReleaseDaemonAttachmentFunc: func(context.Context, string, time.Time) error { return nil }}
+}
+
+// listChangedService is newTestService over listChangedRepo and noLeases.
+func listChangedService(daemons map[string]*db.Daemon) *Service {
+	return newTestServiceWithLeases(listChangedRepo(daemons), noLeases(), nil)
 }
 
 // daemonListRefetches returns the daemon ids of every "daemons" refetch the
@@ -54,7 +64,7 @@ func daemonListRefetches(t *testing.T, hub *recordingUserHub) map[string][]strin
 // owner's web clients are told to refetch — that signal is what lets them stop
 // polling ListDaemons every few seconds to notice.
 func TestTeardownConnection_AnnouncesDaemonListChange(t *testing.T) {
-	svc := newTestService(listChangedRepo(nil))
+	svc := listChangedService(nil)
 	t.Cleanup(svc.Close)
 	hub := &recordingUserHub{}
 	svc.deps.UserUpdateHub = hub
@@ -78,9 +88,9 @@ func TestTeardownConnection_AnnouncesDaemonListChange(t *testing.T) {
 // is addressed by user, so the owner is resolved from the registry row; a
 // daemon with no row has nothing for a client to list and is skipped.
 func TestPublishDaemonListChanged_ResolvesOwner(t *testing.T) {
-	svc := newTestService(listChangedRepo(map[string]*db.Daemon{
+	svc := listChangedService(map[string]*db.Daemon{
 		"daemon-1": {ID: "daemon-1", UserID: "user-1"},
-	}))
+	})
 	t.Cleanup(svc.Close)
 	hub := &recordingUserHub{}
 	svc.deps.UserUpdateHub = hub

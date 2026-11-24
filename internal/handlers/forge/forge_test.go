@@ -4,12 +4,13 @@ package forge
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 
 	"connectrpc.com/connect"
 	"github.com/nats-io/nats.go"
@@ -111,10 +112,7 @@ func forgeTestProjects(path string) *MockRepository {
 // forgeTestInstalls is forgeTestProjects with the given checkouts, each on a
 // machine the test user owns.
 func forgeTestInstalls(rows ...*core.ProjectDaemon) *MockRepository {
-	return &MockRepository{
-		GetProjectWithUserCheckFunc: func(_ context.Context, id, _ string) (*db.Project, error) {
-			return &db.Project{ID: id, Name: "control-plane", Path: forgeTestCreatorPath}, nil
-		},
+	return projectaccesstest.Bound(&MockRepository{
 		SetProjectForgeNameFunc: func(context.Context, string, string, string) (bool, error) {
 			return false, nil
 		},
@@ -130,7 +128,9 @@ func forgeTestInstalls(rows ...*core.ProjectDaemon) *MockRepository {
 		GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
 			return &db.Daemon{ID: id, UserID: "test-user"}, nil
 		},
-	}
+	}, func(_ context.Context, id, _ string) (*db.Project, error) {
+		return &db.Project{ID: id, Name: "control-plane", Path: forgeTestCreatorPath}, nil
+	})
 }
 
 // newForgeTestService wires the Service over a stub router and project lookup.
@@ -141,7 +141,7 @@ func newForgeTestService(router *forgeTestRouter) *Service {
 // newForgeService builds the Service as server.go does. Every required Dep is
 // set, so New cannot refuse it.
 func newForgeService(router Router, projects Repository) *Service {
-	svc, err := New(Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Router: router, Repo: projects})
+	svc, err := New(Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Router: router, Repo: projects, Projects: projectaccesstest.For(projects)})
 	if err != nil {
 		panic(err)
 	}
@@ -313,7 +313,7 @@ func TestForgeService_DispatchTimeout_OnClusterRead_IsUnreachableNotError(t *tes
 func TestForgeService_NonTimeoutFailures_StillFailLoudly(t *testing.T) {
 	t.Run("missing project dir is NotFound", func(t *testing.T) {
 		router := &forgeTestRouter{
-			replyErr: fmt.Errorf("daemon command forge.env_verify: forge project dir does not exist: /gone"),
+			replyErr: toolexec.DaemonReportedFailure("forge.env_verify", "forge project dir does not exist: /gone"),
 		}
 		_, err := newForgeTestService(router).VerifyEnv(authedCtx(),
 			connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
@@ -336,7 +336,7 @@ func TestForgeService_NonTimeoutFailures_StillFailLoudly(t *testing.T) {
 		// Contains the word "timeout" AND the command-failed marker. The
 		// marker must win: forge ran and failed substantively.
 		router := &forgeTestRouter{
-			replyErr: fmt.Errorf("daemon command forge.env_verify: forge command failed: exit 1: timeout reading config"),
+			replyErr: toolexec.DaemonReportedFailure("forge.env_verify", "forge command failed: exit 1: timeout reading config"),
 		}
 		_, err := newForgeTestService(router).VerifyEnv(authedCtx(),
 			connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
@@ -363,10 +363,10 @@ func TestForgeService_NonTimeoutFailures_StillFailLoudly(t *testing.T) {
 // warning as the message (prod, 2026-10-15) — blaming the project for our
 // timeout.
 func TestForgeService_CommandTimedOut_IsATimeoutNotAFailure(t *testing.T) {
-	const timedOut = "daemon command forge.x: forge command timed out: run forge: context deadline exceeded"
+	timedOut := toolexec.DaemonReportedFailure("forge.x", "forge command timed out: run forge: context deadline exceeded")
 
 	t.Run("on a cluster read it is UNREACHABLE data", func(t *testing.T) {
-		router := &forgeTestRouter{replyErr: errors.New(timedOut)}
+		router := &forgeTestRouter{replyErr: timedOut}
 		resp, err := newForgeTestService(router).GetEnvStatus(authedCtx(),
 			connect.NewRequest(&reliantv1.GetForgeEnvStatusRequest{ProjectId: "p", Env: "prod"}))
 
@@ -375,7 +375,7 @@ func TestForgeService_CommandTimedOut_IsATimeoutNotAFailure(t *testing.T) {
 	})
 
 	t.Run("elsewhere it is DeadlineExceeded", func(t *testing.T) {
-		router := &forgeTestRouter{replyErr: errors.New(timedOut)}
+		router := &forgeTestRouter{replyErr: timedOut}
 		_, err := newForgeTestService(router).ListSecrets(authedCtx(),
 			connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
 
@@ -396,7 +396,7 @@ func TestForgeService_CommandTimedOut_IsATimeoutNotAFailure(t *testing.T) {
 // the three RPCs that dispatch directly (promote apply, deploy start, deploy
 // status), which previously each re-mapped only the missing-dir marker.
 func TestForgeService_CommandFailed_IsFailedPreconditionNotUnavailable(t *testing.T) {
-	const daemonErr = "daemon command forge.x: forge command failed: exit 1: kcl: undefined attribute"
+	daemonErr := toolexec.DaemonReportedFailure("forge.x", "forge command failed: exit 1: kcl: undefined attribute")
 
 	calls := map[string]func(*Service) error{
 		"GetTopology": func(s *Service) error {
@@ -435,7 +435,7 @@ func TestForgeService_CommandFailed_IsFailedPreconditionNotUnavailable(t *testin
 
 	for name, call := range calls {
 		t.Run(name, func(t *testing.T) {
-			err := call(newForgeTestService(&forgeTestRouter{replyErr: fmt.Errorf("%s", daemonErr)}))
+			err := call(newForgeTestService(&forgeTestRouter{replyErr: daemonErr}))
 			require.Error(t, err)
 			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err),
 				"forge ran and failed: retrying cannot help, and it is not a daemon outage")
@@ -617,7 +617,7 @@ func TestForgeService_ListSecrets_NeverEchoesReportBody(t *testing.T) {
 // A dispatch failure on the secret path carries no report-derived text.
 func TestForgeService_ListSecrets_ErrorCarriesNoReportText(t *testing.T) {
 	const canary = "SUPER-SECRET-CANARY-VALUE"
-	router := &forgeTestRouter{replyErr: fmt.Errorf("forge command failed: exit 1")}
+	router := &forgeTestRouter{replyErr: toolexec.DaemonReportedFailure("forge.secret_list", "forge command failed: exit 1")}
 
 	_, err := newForgeTestService(router).ListSecrets(authedCtx(),
 		connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))

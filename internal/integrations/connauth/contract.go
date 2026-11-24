@@ -95,6 +95,12 @@ type Service interface {
 	// so the credential resolution below it does not count it twice. A
 	// process with no resolver, or a call with no run, is not judged.
 	AdmitIntegration(ctx context.Context, runID, integrationID string) (context.Context, error)
+
+	// RunOrgOf is the org runID belongs to (its recorded org, else its
+	// chat's): "" for a run of no org, or in a process whose resolver cannot
+	// tell. It names the org an integration call's span is attributed to
+	// (httpaction.RunOrgSource) and decides nothing.
+	RunOrgOf(ctx context.Context, runID string) (string, error)
 }
 
 // Resolver resolves saved connections. *connections.Resolver satisfies it.

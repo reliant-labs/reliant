@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfg "github.com/reliant-labs/reliant/internal/config"
@@ -49,7 +50,7 @@ func (s *Service) ExportScenario(
 			return nil, err
 		}
 
-		project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+		project, err := s.deps.ProjectRows.GetProject(ctx, req.Msg.ProjectId)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 		}
@@ -58,7 +59,7 @@ func (s *Service) ExportScenario(
 		}
 
 		// Load from stored config
-		allScenarios, err := storedProjectScenarios(ctx, s.deps.Repo, project.ID)
+		allScenarios, err := storedProjectScenarios(ctx, s.deps.ProjectConfigs, project.ID)
 		if svcerr.IsNotFound(err) {
 			return nil, svcerr.NotFound("project config")
 		}

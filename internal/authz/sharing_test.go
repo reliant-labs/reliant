@@ -72,6 +72,19 @@ func projectDecisions(ctx context.Context, caller string, shared bool) []decisio
 	return []decisions{{CanReadProject(ctx, caller, p), CanWriteProject(ctx, caller, p), viewerOf(ReadProjectAccess(ctx, caller, p))}}
 }
 
+// workflowDecisions reads a saved workflow through ReadWorkflowAccess, the
+// one read that serves viewers (CanReadWorkflow stays owner-only:
+// TestCanWriteImpliesOwner, TestWorkflowReadsStayOwnerOnly).
+func workflowDecisions(ctx context.Context, caller string, shared bool) []decisions {
+	vis := core.VisibilityPrivate
+	if shared {
+		vis = core.VisibilityOrg
+	}
+	w := &core.WorkflowDraft{UserID: "bob", OrgID: strp("acme"), Visibility: vis}
+	access, err := ReadWorkflowAccess(ctx, caller, w)
+	return []decisions{{err == nil, CanWriteWorkflow(ctx, caller, w), viewerOf(access, err)}}
+}
+
 // The viewer table: {owner, viewer, non-member, removed member, machine-bound,
 // other-org credential, membership outage, no Membership wired} x {private,
 // shared}. Only a live member with a person credential reads a shared row;
@@ -107,7 +120,7 @@ func TestSharingDecisionTable(t *testing.T) {
 			if shared {
 				want = tc.shared
 			}
-			for kind, decide := range map[string]func(context.Context, string, bool) []decisions{"chat": chatDecisions, "project": projectDecisions} {
+			for kind, decide := range map[string]func(context.Context, string, bool) []decisions{"chat": chatDecisions, "project": projectDecisions, "workflow": workflowDecisions} {
 				t.Run(fmt.Sprintf("%s/%s/shared=%v", tc.name, kind, shared), func(t *testing.T) {
 					for i, got := range decide(tc.ctx, tc.caller, shared) {
 						if got != want {
@@ -293,5 +306,109 @@ func TestReadAccess(t *testing.T) {
 	}
 	if !AccessNone.Viewer() || !AccessViewer.Viewer() || AccessOwner.Viewer() {
 		t.Error("only the owner's access is shaped as the owner's")
+	}
+}
+
+// sharedWorkflowMembers: bob owns, alice and adam are live members of acme
+// (adam its admin), olga is in globex; roles are answered fresh.
+type sharedWorkflowMembers struct{}
+
+func (sharedWorkflowMembers) IsMember(_ context.Context, userID, orgID string) (bool, bool, error) {
+	return live[userID][orgID] || (userID == "adam" && orgID == "acme"), true, nil
+}
+
+func (sharedWorkflowMembers) RoleFresh(_ context.Context, userID, orgID string) (string, bool, error) {
+	switch {
+	case userID == "adam" && orgID == "acme":
+		return "admin", true, nil
+	case live[userID][orgID]:
+		return "member", true, nil
+	}
+	return "", true, nil
+}
+
+// Sharing a saved workflow widens no workflow read but ReadWorkflowAccess:
+// CanReadWorkflow (every lookup by id, slug or name, and the launch path)
+// stays the owner's even on a viewer-serving site, so a teammate can read a
+// shared definition and never run it as its owner.
+func TestWorkflowReadsStayOwnerOnly(t *testing.T) {
+	ctx := person(WithMembership(context.Background(), live))
+	w := &core.WorkflowDraft{ID: "wf", UserID: "bob", OrgID: strp("acme"), Visibility: core.VisibilityOrg}
+	if CanReadWorkflow(ctx, "alice", w) || CanWriteWorkflow(ctx, "alice", w) {
+		t.Fatal("a shared saved workflow widened CanReadWorkflow / CanWriteWorkflow")
+	}
+	if !viewerOf(ReadWorkflowAccess(ctx, "alice", w)) {
+		t.Fatal("a live member at a viewer-serving site must read a shared saved workflow as a viewer")
+	}
+	if got, err := ReadWorkflowAccess(ctx, "bob", w); err != nil || got != AccessOwner {
+		t.Fatalf("owner: %v %v", got, err)
+	}
+	notServing := WithCredentialKind(WithMembership(context.Background(), live), CredentialKindPerson)
+	if _, err := ReadWorkflowAccess(notServing, "alice", w); err == nil {
+		t.Fatal("a site that does not serve viewers admitted one")
+	}
+	rows := []*core.WorkflowDraft{
+		w,
+		{ID: "private", UserID: "bob", OrgID: strp("acme")},
+		{ID: "globex", UserID: "olga", OrgID: strp("globex"), Visibility: core.VisibilityOrg},
+		{ID: "own", UserID: "alice", OrgID: strp("acme"), Visibility: core.VisibilityOrg},
+	}
+	if got := SharedWorkflowDraftsFor(ctx, "alice", rows); len(got) != 1 || got[0].ID != "wf" {
+		t.Fatalf("SharedWorkflowDraftsFor = %v", got)
+	}
+	if WorkflowVisibility(w) != core.VisibilityOrg || WorkflowVisibility(nil) != core.VisibilityPrivate {
+		t.Fatal("WorkflowVisibility")
+	}
+}
+
+// WorkflowShareChange follows ChatShareChange's rules: the owner shares as a
+// person in an org and unshares with any credential; a viewer never shares;
+// an admin of the org makes a member's shared one private; a non-reader is
+// ErrDenied.
+func TestWorkflowShareChange(t *testing.T) {
+	m := sharedWorkflowMembers{}
+	personCtx := person(WithMembership(context.Background(), m))
+	software := WithViewerReads(WithCredentialKind(WithMembership(context.Background(), m), CredentialKindSoftware))
+	private := &core.WorkflowDraft{ID: "wf", UserID: "bob", OrgID: strp("acme")}
+	shared := &core.WorkflowDraft{ID: "wf", UserID: "bob", OrgID: strp("acme"), Visibility: core.VisibilityOrg}
+	orgless := &core.WorkflowDraft{ID: "wf", UserID: "bob"}
+	cases := []struct {
+		name   string
+		ctx    context.Context
+		caller string
+		w      *core.WorkflowDraft
+		to     core.Visibility
+		want   error
+		action core.ShareAction
+	}{
+		{"owner shares", personCtx, "bob", private, core.VisibilityOrg, nil, core.ShareActionShare},
+		{"owner unshares", personCtx, "bob", shared, core.VisibilityPrivate, nil, core.ShareActionUnshare},
+		{"owner unshares through software", software, "bob", shared, core.VisibilityPrivate, nil, core.ShareActionUnshare},
+		{"owner shares through software", software, "bob", private, core.VisibilityOrg, ErrPersonRequired, ""},
+		{"owner shares an org-less one", personCtx, "bob", orgless, core.VisibilityOrg, ErrShareNeedsOrg, ""},
+		{"viewer shares", personCtx, "alice", shared, core.VisibilityOrg, ErrOnlyOwnerShares, ""},
+		{"viewer unshares", personCtx, "alice", shared, core.VisibilityPrivate, ErrNotOrgAdmin, ""},
+		{"admin unshares", personCtx, "adam", shared, core.VisibilityPrivate, nil, core.ShareActionAdminUnshare},
+		{"admin shares", personCtx, "adam", shared, core.VisibilityOrg, ErrOnlyOwnerShares, ""},
+		{"admin of a private one", personCtx, "adam", private, core.VisibilityPrivate, ErrDenied, ""},
+		{"admin through software", software, "adam", shared, core.VisibilityPrivate, ErrDenied, ""},
+		{"outsider", personCtx, "olga", shared, core.VisibilityPrivate, ErrDenied, ""},
+		{"no such workflow", personCtx, "bob", nil, core.VisibilityOrg, ErrDenied, ""},
+		{"unknown visibility", personCtx, "bob", shared, "members", ErrInvalidVisibility, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := WorkflowShareChange(tc.ctx, tc.caller, tc.w, tc.to)
+			if !errors.Is(err, tc.want) || (tc.want == nil && err != nil) {
+				t.Fatalf("err = %v, want %v", err, tc.want)
+			}
+			if tc.want != nil {
+				return
+			}
+			want := core.ShareChange{Kind: core.ShareKindWorkflow, ResourceID: "wf", OrgID: "acme", OwnerUserID: "bob", ActorUserID: tc.caller, Action: tc.action}
+			if c != want {
+				t.Fatalf("change = %+v, want %+v", c, want)
+			}
+		})
 	}
 }

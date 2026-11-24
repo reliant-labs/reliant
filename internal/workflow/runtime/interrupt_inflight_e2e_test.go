@@ -52,7 +52,7 @@ func newInflightInterruptEnv(t *testing.T, env *testsuite.TestWorkflowEnvironmen
 		activity.RegisterOptions{Name: "SaveMessage"},
 	)
 
-	registry := NewActivityRegistry(&wrapperTestRepo{})
+	registry := NewActivityRegistry(ActivityRegistryDeps{Store: &wrapperTestRepo{}, Workflows: &wrapperTestRepo{}})
 	registry.SetMessageWriter(&recordingMessageWriter{})
 	registerWrapped(env, registry, "CallLLM",
 		func(ctx context.Context, input types.ActivityInput) (map[string]interface{}, error) {

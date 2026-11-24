@@ -7,11 +7,12 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // A call the workflow refused is answered with the reason and recorded
@@ -23,7 +24,7 @@ func TestExecuteTools_RefusesCallTheWorkflowRefused(t *testing.T) {
 	const slackPost = "slack__message_post"
 	h, chatID := newValidationChat(t)
 	mockExecutor := newMockToolExecutor()
-	activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
+	activity := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
 	refusedID := "toolu_" + uuid.NewString()
 	readID := "toolu_" + uuid.NewString()
 	reason := "The user did not approve slack__message_post, so it was not run. Do not attempt it another way."

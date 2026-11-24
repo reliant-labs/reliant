@@ -14,7 +14,6 @@
 
 import { Code, ConnectError } from '@connectrpc/connect'
 
-import type { StartOAuthFlowResponse } from '@/gen/reliant/v1/daemon_pb'
 import { DAEMON_CONNECTING_REASONS, hasErrorReason } from '@/lib/errorReasons'
 
 export const OAUTH_LOCAL_SERVER_PORT = 19284
@@ -65,7 +64,7 @@ export async function probeOAuthHelper(
   }
 }
 
-/** Shape matching the daemon's StartOAuthFlowResponse (camelCase). */
+/** What a provider sign-in's callback receiver hands back. */
 export interface OAuthStartResult {
   code: string
   state: string
@@ -158,8 +157,8 @@ export async function releaseOAuthHelper(): Promise<void> {
 
 /**
  * Start an OAuth flow via the local helper HTTP server.
- * Returns the same shape as the daemon's StartOAuthFlowResponse so callers
- * don't need to care which path was used.
+ * Returns the same shape as the desktop receiver (lib/oauth-desktop.ts) so
+ * callers don't need to care which path was used.
  */
 export async function startOAuthViaLocalServer(
   authorizeUrlTemplate: string,
@@ -221,39 +220,12 @@ async function daemonClient() {
 }
 
 /**
- * Start an OAuth flow via the daemon. The daemon spins up a localhost callback
- * server, opens the user's browser to the authorize URL (with the real redirect
- * URI substituted for the `{redirect_uri}` placeholder), waits for the callback,
- * then returns the authorization code, state, and redirect URI.
- *
- * ⚠️ This RPC CANNOT complete a real sign-in and is not used by the desktop
- * app any more. It blocks one request/response RPC on a human working through
- * a consent screen; in the packaged app that failed at ~15s with "Failed to
- * fetch", and cancelling the request tore down the daemon's listener, so the
- * browser's redirect hit a closed port. It is also unreachable by construction
- * in distributed mode, where the daemon is a pod and its loopback listener is
- * on the wrong machine entirely.
- *
- * Electron now uses its own local receiver (`startProviderOAuth` /
- * `waitForProviderOAuth` in electron/src/oauth-provider-login.js), which binds
- * the port and returns immediately, then waits over IPC that no network
- * deadline bounds. Kept only for the non-Electron fallback path.
- */
-export async function startOAuthViaDaemon(
-  authorizeUrlTemplate: string,
-  signal?: AbortSignal,
-): Promise<StartOAuthFlowResponse> {
-  const client = await daemonClient()
-  return client.startOAuthFlow({ authorizeUrlTemplate }, { signal })
-}
-
-/**
  * Ask the daemon to open its localhost OAuth helper port for ONE linking
  * session.
  *
- * Returns immediately — unlike `startOAuthViaDaemon` this does not block on a
- * human at a consent screen, which is what made that RPC fail at ~15s in the
- * packaged app.
+ * Returns immediately: it does not block on a human at a consent screen,
+ * which is what made the old StartOAuthFlow RPC fail at ~15s in the packaged
+ * app.
  *
  * Pair every call with `closeOAuthHelper`. The daemon also closes the port
  * after an idle timeout, but that is the backstop for a UI that never got to

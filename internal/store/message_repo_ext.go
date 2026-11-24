@@ -87,6 +87,9 @@ func InsertMessageOnce(ctx context.Context, db orm.Context, msg *core.Message) (
 
 // FindMessage reads one message by id, or nil when no row holds it.
 func FindMessage(ctx context.Context, db orm.Context, id string) (*core.Message, error) {
+	if id == "" {
+		return nil, fmt.Errorf("message ID cannot be empty")
+	}
 	row, err := GetMessageByID(ctx, db, id)
 	if err != nil {
 		if isMissing(err) {
@@ -115,6 +118,12 @@ func ListMessagesByIDs(ctx context.Context, db orm.Context, ids []string) ([]*co
 // narrows it to one workflow's activity ("" means any): child workflows of
 // one chat reuse activity ids.
 func FindMessageByActivity(ctx context.Context, db orm.Context, chatID, workflowID, activityID string) (*core.Message, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chatID cannot be empty")
+	}
+	if activityID == "" {
+		return nil, fmt.Errorf("activityID cannot be empty")
+	}
 	opts := []orm.QueryOption{
 		orm.WhereEq(MessageFieldChatID, chatID),
 		orm.WhereEq(MessageFieldActivityID, activityID),
@@ -205,6 +214,12 @@ func notTranscriptHidden(q *bun.SelectQuery) {
 // payload. Read DESC, against messages_chat_seq_key walked backward, so the
 // LIMIT keeps the newest rows.
 func ListRecentTranscriptSiblingMessages(ctx context.Context, db orm.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*core.Message, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	if mainThreadID == "" {
+		return nil, fmt.Errorf("main thread ID cannot be empty")
+	}
 	if limit <= 0 {
 		return []*core.Message{}, nil
 	}
@@ -260,6 +275,9 @@ func LatestMessageInThread(ctx context.Context, db orm.Context, threadID string)
 // hidden "params changed" note a send can write after the user's message,
 // are not turns, so they never make an unanswered message look answered.
 func LatestTurnInThread(ctx context.Context, db orm.Context, threadID string) (*core.Message, error) {
+	if threadID == "" {
+		return nil, fmt.Errorf("thread ID cannot be empty")
+	}
 	return firstMessage(ListMessage(ctx, db,
 		orm.WhereEq(MessageFieldThreadID, threadID),
 		orm.WhereNotEq(MessageFieldRole, reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM),
@@ -589,6 +607,8 @@ func messageRow(msg *core.Message) *Message {
 		SenderThreadID:    msg.SenderThreadID,
 		SenderKind:        msg.SenderKind,
 		SenderSubject:     msg.SenderSubject,
+		AuthorUserID:      msg.AuthorUserID,
+		AuthorName:        validUTF8Ptr(msg.AuthorName),
 		CreatedAt:         msg.CreatedAt,
 		UpdatedAt:         msg.UpdatedAt,
 	}
@@ -618,6 +638,8 @@ func messageFromRow(row *Message) *core.Message {
 		SenderThreadID:    row.SenderThreadID,
 		SenderKind:        row.SenderKind,
 		SenderSubject:     row.SenderSubject,
+		AuthorUserID:      row.AuthorUserID,
+		AuthorName:        row.AuthorName,
 		CreatedAt:         row.CreatedAt,
 		UpdatedAt:         row.UpdatedAt,
 	}

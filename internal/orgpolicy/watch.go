@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/retry"
+
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -48,6 +50,10 @@ type Waker interface {
 // wakeBackoff bounds the wait between attempts to deliver one org's wake
 // after a failed one: WatchInterval, doubling, at most wakeBackoffMax.
 const wakeBackoffMax = 10 * time.Minute
+
+// wakeBackoff is the wait before the nth wake after a failure: 30s, 1m, 2m,
+// 4m, 8m, then 10m.
+var wakeBackoff = retry.Backoff{Initial: WatchInterval, Max: wakeBackoffMax}
 
 // Watcher wakes an org's paused chats when its policy changes. A nil
 // *Watcher watches nothing.
@@ -209,10 +215,7 @@ func (w *Watcher) checkOrg(ctx context.Context, org string) {
 		cur.pending = failed
 	} // a listing failure leaves pending as it was: nil owes the whole org
 	cur.attempts++
-	backoff := WatchInterval << min(cur.attempts-1, 5)
-	if backoff > wakeBackoffMax {
-		backoff = wakeBackoffMax
-	}
+	backoff := wakeBackoff.Delay(cur.attempts)
 	cur.retryAt = w.now().Add(backoff)
 	// A wake still owed keeps the org watched past its refusal's window.
 	if until := cur.retryAt.Add(WatchInterval); cur.until.Before(until) {

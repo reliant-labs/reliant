@@ -42,6 +42,7 @@ service OrgPolicyService {
   //
   // forge:custom — the document of one org, not the CRUD of a table.
   rpc GetOrgPolicy(GetOrgPolicyRequest) returns (GetOrgPolicyResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -86,6 +87,7 @@ service OrgPolicyService {
   // an answer here (violations), not an error, so an editor can show every
   // problem at once.
   rpc PreviewOrgPolicy(PreviewOrgPolicyRequest) returns (PreviewOrgPolicyResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -100,6 +102,7 @@ service OrgPolicyService {
   //
   // forge:custom — the caller's usage, not the CRUD of a table.
   rpc GetMyPolicyUsage(GetMyPolicyUsageRequest) returns (GetMyPolicyUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -116,6 +119,7 @@ service OrgPolicyService {
   //
   // forge:custom — an aggregate read, not the CRUD of a table.
   rpc ListOrgPolicyDenials(ListOrgPolicyDenialsRequest) returns (ListOrgPolicyDenialsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 )
@@ -54,7 +55,7 @@ func TestReplaceIntegrationAccessIsExactAndMonotonic(t *testing.T) {
 
 	// The Repository writes the same set: repo 2 is lost, repo 3 appears.
 	t1 := t0.Add(time.Minute)
-	require.NoError(t, env.Repo.ReplaceIntegrationAccess(ctx, "alice", "github", "11", t1, []core.IntegrationAccessGrant{
+	require.NoError(t, store.ReplaceIntegrationAccess(ctx, env.Repo.ORM(), "alice", "github", "11", t1, []core.IntegrationAccessGrant{
 		{AccountKey: "100", ResourceKey: "1", ResourceLabel: "acme/app-renamed"},
 		{AccountKey: "100", ResourceKey: "3", ResourceLabel: "acme/new"},
 	}))
@@ -106,7 +107,7 @@ func TestRevokeAndPruneIntegrationAccess(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, n)
 	// A member removed: only their own grants, narrowed to the account.
-	n, err = env.Repo.RevokeIntegrationAccess(ctx, "github", core.IntegrationAccessRevocation{AccountKey: "100", SubjectID: "11"})
+	n, err = store.RevokeIntegrationAccess(ctx, env.Repo.ORM(), "github", core.IntegrationAccessRevocation{AccountKey: "100", SubjectID: "11"})
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, n)
 	assert.Equal(t, []string{"200/9"}, keys(accessGrants(t, env, "alice", "github")))
@@ -120,7 +121,7 @@ func TestRevokeAndPruneIntegrationAccess(t *testing.T) {
 	n, err = store.PruneIntegrationAccess(ctx, env.ORM, now)
 	require.NoError(t, err)
 	assert.EqualValues(t, 0, n, "refreshed_at = before is kept")
-	n, err = env.Repo.PruneIntegrationAccess(ctx, now.Add(time.Second))
+	n, err = store.PruneIntegrationAccess(ctx, env.Repo.ORM(), now.Add(time.Second))
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, n)
 }
@@ -144,7 +145,7 @@ func TestIntegrationAccessRefreshLease(t *testing.T) {
 	claimed, err := store.ClaimIntegrationAccessRefresh(ctx, env.ORM, "alice", "github", now, now.Add(time.Minute), now)
 	require.NoError(t, err)
 	assert.True(t, claimed, "a pair never refreshed is claimed by the insert")
-	claimed, err = env.Repo.ClaimIntegrationAccessRefresh(ctx, "alice", "github", now, now.Add(time.Minute), now.Add(time.Hour))
+	claimed, err = store.ClaimIntegrationAccessRefresh(ctx, env.Repo.ORM(), "alice", "github", now, now.Add(time.Minute), now.Add(time.Hour))
 	require.NoError(t, err)
 	assert.False(t, claimed, "another replica holds the lease")
 
@@ -164,7 +165,7 @@ func TestIntegrationAccessRefreshLease(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, claimed)
 
-	require.NoError(t, env.Repo.FinishIntegrationAccessRefresh(ctx, "alice", "github", later, nil))
+	require.NoError(t, store.FinishIntegrationAccessRefresh(ctx, env.Repo.ORM(), "alice", "github", later, true, ""))
 	state, err := store.GetIntegrationAccessRefresh(ctx, env.ORM, "alice", "github")
 	require.NoError(t, err)
 	require.NotNil(t, state.RefreshedAt)
@@ -197,7 +198,7 @@ func TestListIntegrationTriggerOwners(t *testing.T) {
 	owners, err := store.ListIntegrationTriggerOwners(ctx, env.ORM, "github")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"alice", "bob"}, owners, "distinct, sorted, enabled triggers of the integration only")
-	twin, err := env.Repo.ListIntegrationTriggerOwners(ctx, "github")
+	twin, err := store.ListIntegrationTriggerOwners(ctx, env.Repo.ORM(), "github")
 	require.NoError(t, err)
 	assert.Equal(t, owners, twin)
 	none, err := store.ListIntegrationTriggerOwners(ctx, env.ORM, "linear")
@@ -218,7 +219,7 @@ func TestIntegrationWriteLedger(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
 	t0 := time.Now().UTC().Truncate(time.Microsecond)
-	ledger := env.Repo.IntegrationWrites()
+	ledger := writeledger.NewLedger(store.NewIntegrationWriteExtStore(env.Repo.ORM()))
 
 	// Defaults: an empty status is an intent, an empty actor the owner.
 	require.NoError(t, store.InsertIntegrationWrite(ctx, env.ORM, ledgerWrite("w1", "github:acme/app", t0)))
@@ -287,7 +288,7 @@ func TestIntegrationWriteLedger(t *testing.T) {
 func TestIntegrationWriteLedgerOutlivesTheCallersTransaction(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
-	ledger := env.Repo.IntegrationWrites()
+	ledger := writeledger.NewLedger(store.NewIntegrationWriteExtStore(env.Repo.ORM()))
 	rollback := errors.New("roll back")
 
 	err := env.Repo.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
@@ -325,16 +326,16 @@ func TestGetIntegrationAccessSubject(t *testing.T) {
 
 	subject := func(userID, integration string, freshAfter time.Time) string {
 		t.Helper()
-		got, err := env.Repo.GetIntegrationAccessSubject(ctx, userID, integration, freshAfter)
+		got, err := store.GetIntegrationAccessSubject(ctx, env.Repo.ORM(), userID, integration, freshAfter)
 		require.NoError(t, err)
 		return got
 	}
 	assert.Empty(t, subject("alice", "github", fresh), "a user never refreshed has no identity")
 
-	require.NoError(t, env.Repo.ReplaceIntegrationAccess(ctx, "alice", "github", "225976313", now, []core.IntegrationAccessGrant{
+	require.NoError(t, store.ReplaceIntegrationAccess(ctx, env.Repo.ORM(), "alice", "github", "225976313", now, []core.IntegrationAccessGrant{
 		{AccountKey: "100", ResourceKey: "1"}, {AccountKey: "100", ResourceKey: "2"},
 	}))
-	require.NoError(t, env.Repo.ReplaceIntegrationAccess(ctx, "bob", "github", "22", now, []core.IntegrationAccessGrant{{AccountKey: "100", ResourceKey: "1"}}))
+	require.NoError(t, store.ReplaceIntegrationAccess(ctx, env.Repo.ORM(), "bob", "github", "22", now, []core.IntegrationAccessGrant{{AccountKey: "100", ResourceKey: "1"}}))
 
 	assert.Equal(t, "225976313", subject("alice", "github", fresh))
 	assert.Equal(t, "22", subject("bob", "github", fresh), "each user reads their own")
@@ -344,11 +345,11 @@ func TestGetIntegrationAccessSubject(t *testing.T) {
 
 	// The identity changes (they reconnect another account): the next refresh
 	// replaces it, so there is no stale copy to outlive the change.
-	require.NoError(t, env.Repo.ReplaceIntegrationAccess(ctx, "alice", "github", "555", now.Add(time.Minute), []core.IntegrationAccessGrant{{AccountKey: "100", ResourceKey: "1"}}))
+	require.NoError(t, store.ReplaceIntegrationAccess(ctx, env.Repo.ORM(), "alice", "github", "555", now.Add(time.Minute), []core.IntegrationAccessGrant{{AccountKey: "100", ResourceKey: "1"}}))
 	assert.Equal(t, "555", subject("alice", "github", fresh))
 
 	// A refresh that finds the credential gone clears the grants and with them
 	// the identity: it is read fresh, never cached.
-	require.NoError(t, env.Repo.ReplaceIntegrationAccess(ctx, "alice", "github", "", now.Add(2*time.Minute), nil))
+	require.NoError(t, store.ReplaceIntegrationAccess(ctx, env.Repo.ORM(), "alice", "github", "", now.Add(2*time.Minute), nil))
 	assert.Empty(t, subject("alice", "github", fresh))
 }

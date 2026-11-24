@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/nomachine"
-	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/nomachine"
+	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
 // toolCtxWithCaps is a tool context carrying a turn's capability set, the way

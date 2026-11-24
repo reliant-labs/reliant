@@ -187,6 +187,7 @@ func NewTokenServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+TokenServiceListTokensProcedure,
 			connect.WithSchema(tokenServiceMethods.ByName("ListTokens")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		revokeToken: connect.NewClient[v1.RevokeTokenRequest, v1.RevokeTokenResponse](
@@ -394,6 +395,7 @@ func NewTokenServiceHandler(svc TokenServiceHandler, opts ...connect.HandlerOpti
 		TokenServiceListTokensProcedure,
 		svc.ListTokens,
 		connect.WithSchema(tokenServiceMethods.ByName("ListTokens")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	tokenServiceRevokeTokenHandler := connect.NewUnaryHandler(

@@ -12,11 +12,15 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // TerminalWSHandler), which routes to the machine holding the workspace.
 service TerminalService {
   // ListSessions returns all active terminal sessions
-  rpc ListSessions(ListTerminalSessionsRequest) returns (ListTerminalSessionsResponse) {}
+  rpc ListSessions(ListTerminalSessionsRequest) returns (ListTerminalSessionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // CloseSession closes a specific terminal session
   rpc CloseSession(CloseTerminalSessionRequest) returns (CloseTerminalSessionResponse) {
-    option (forge.v1.method) = {activity: {none: "closes a terminal session on the daemon: interactive transport, not project history"}};
+    option (forge.v1.method) = {
+      activity: {none: "closes a terminal session on the daemon: interactive transport, not project history"}
+    };
   }
 }
 

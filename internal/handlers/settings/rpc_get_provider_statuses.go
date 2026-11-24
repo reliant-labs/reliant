@@ -31,7 +31,7 @@ var statusProviders = []struct{ id, name string }{
 func (s *Service) GetProviderStatuses(ctx context.Context, req *connect.Request[reliantv1.GetProviderStatusesRequest]) (*connect.Response[reliantv1.GetProviderStatusesResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	accounts, err := s.deps.Repo.ListProviderAccounts(ctx, userID)
+	accounts, err := s.deps.Accounts.ListProviderAccounts(ctx, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get provider statuses"))
 	}

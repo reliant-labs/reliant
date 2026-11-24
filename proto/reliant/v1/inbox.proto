@@ -21,7 +21,9 @@ service InboxService {
   // ListInbox returns the caller's inbox items in priority order. One round
   // trip. With limit = 0 it returns no items, only the counts, which is the
   // cheap call the nav badge makes.
-  rpc ListInbox(ListInboxRequest) returns (ListInboxResponse) {}
+  rpc ListInbox(ListInboxRequest) returns (ListInboxResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // CleanupStorage starts the "Clean up" action of a storage item and returns
   // at once. For each accepted worktree the machine saves the work to a local
@@ -104,13 +106,17 @@ service InboxService {
   // automation, or a new block on the same machine, has a new item_id and so
   // appears again. Unknown ids are rejected with INVALID_ARGUMENT.
   rpc DismissInboxItem(DismissInboxItemRequest) returns (DismissInboxItemResponse) {
-    option (forge.v1.method) = {activity: {none: "per-user inbox read state: hides items without resolving them"}};
+    option (forge.v1.method) = {
+      activity: {none: "per-user inbox read state: hides items without resolving them"}
+    };
   }
 
   // RestoreInboxItem undoes DismissInboxItem. Restoring an item that was not
   // dismissed is a no-op.
   rpc RestoreInboxItem(RestoreInboxItemRequest) returns (RestoreInboxItemResponse) {
-    option (forge.v1.method) = {activity: {none: "per-user inbox read state: undoes a dismiss"}};
+    option (forge.v1.method) = {
+      activity: {none: "per-user inbox read state: undoes a dismiss"}
+    };
   }
 }
 

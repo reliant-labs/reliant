@@ -22,20 +22,48 @@ message CLIConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
     subtrees: [
-      {path: ["auth"]},
-      {path: ["chat"]},
-      {path: ["daemon"]},
-      {path: ["github"]},
-      {path: ["integrations"]},
-      {path: ["machine"]},
-      {path: ["mcp"]},
-      {path: ["models"]},
-      {path: ["preview"]},
-      {path: ["project"]},
-      {path: ["providers"]},
-      {path: ["trigger"]},
-      {path: ["workflow"]},
-      {path: ["worktree"]}
+      {
+        path: ["auth"]
+      },
+      {
+        path: ["chat"]
+      },
+      {
+        path: ["daemon"]
+      },
+      {
+        path: ["github"]
+      },
+      {
+        path: ["integrations"]
+      },
+      {
+        path: ["machine"]
+      },
+      {
+        path: ["mcp"]
+      },
+      {
+        path: ["models"]
+      },
+      {
+        path: ["preview"]
+      },
+      {
+        path: ["project"]
+      },
+      {
+        path: ["providers"]
+      },
+      {
+        path: ["trigger"]
+      },
+      {
+        path: ["workflow"]
+      },
+      {
+        path: ["worktree"]
+      }
     ]
   };
 

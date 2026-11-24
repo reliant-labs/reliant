@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 

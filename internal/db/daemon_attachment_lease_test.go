@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The reachability lease (daemon_attachment) semantics behind prod
@@ -84,7 +86,7 @@ func TestRenewDaemonAttachmentRecreatesAReapedLease(t *testing.T) {
 	}
 
 	// The stall clears and the next heartbeat is read.
-	created, err := repo.RenewDaemonAttachment(ctx, &DaemonAttachment{
+	created, err := store.RenewDaemonAttachment(ctx, repo.ORM(), &DaemonAttachment{
 		DaemonID: daemonID, UserID: userID, Source: DaemonAttachmentSourceInbound,
 		AttachedAt: attachedAt, LastStreamActivity: time.Now().UTC(),
 	})
@@ -130,12 +132,12 @@ func TestRenewDaemonAttachmentOnlyAdvancesTheLease(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed attachment: %v", err)
 	}
-	if err := repo.UpdateDaemonAttachmentMemory(ctx, daemonID, 100, 200, true); err != nil {
+	if err := store.SetDaemonAttachmentMemory(ctx, repo.ORM(), daemonID, 100, 200, true); err != nil {
 		t.Fatalf("seed memory: %v", err)
 	}
 	renew := func(activity time.Time) bool {
 		t.Helper()
-		created, err := repo.RenewDaemonAttachment(ctx, &DaemonAttachment{
+		created, err := store.RenewDaemonAttachment(ctx, repo.ORM(), &DaemonAttachment{
 			DaemonID: daemonID, UserID: userID, Source: DaemonAttachmentSourceInbound,
 			AttachedAt: session, LastStreamActivity: activity,
 		})
@@ -176,7 +178,7 @@ func TestRenewDaemonAttachmentDoesNotCreateAForeignOrRemovedLease(t *testing.T) 
 	at := time.Date(2026, 10, 11, 3, 0, 0, 0, time.UTC)
 	renew := func(daemonID, userID string) {
 		t.Helper()
-		created, err := repo.RenewDaemonAttachment(ctx, &DaemonAttachment{
+		created, err := store.RenewDaemonAttachment(ctx, repo.ORM(), &DaemonAttachment{
 			DaemonID: daemonID, UserID: userID, Source: DaemonAttachmentSourceInbound,
 			AttachedAt: at.Add(time.Minute), LastStreamActivity: at.Add(time.Minute),
 		})
@@ -232,7 +234,7 @@ func TestReleaseDaemonAttachmentKeepsANewerSessionsLease(t *testing.T) {
 	}
 	release := func(attachedAt time.Time) {
 		t.Helper()
-		if err := repo.ReleaseDaemonAttachment(ctx, "lease-fence", attachedAt); err != nil {
+		if err := store.ReleaseDaemonAttachment(ctx, repo.ORM(), "lease-fence", attachedAt); err != nil {
 			t.Fatalf("release: %v", err)
 		}
 	}
@@ -256,7 +258,7 @@ func TestReleaseDaemonAttachmentKeepsANewerSessionsLease(t *testing.T) {
 		t.Fatal("a release must also clear a lease older than its session")
 	}
 
-	if err := repo.ReleaseDaemonAttachment(ctx, "lease-fence", time.Time{}); err == nil {
+	if err := store.ReleaseDaemonAttachment(ctx, repo.ORM(), "lease-fence", time.Time{}); err == nil {
 		t.Error("a release that names no session must be refused, not delete by daemon id alone")
 	}
 }
@@ -297,7 +299,7 @@ func TestReleaseDaemonAttachmentRecordsWhenTheDaemonWasLastSeen(t *testing.T) {
 	}
 	release := func(attachedAt time.Time) {
 		t.Helper()
-		if err := repo.ReleaseDaemonAttachment(ctx, daemonID, attachedAt); err != nil {
+		if err := store.ReleaseDaemonAttachment(ctx, repo.ORM(), daemonID, attachedAt); err != nil {
 			t.Fatalf("release: %v", err)
 		}
 	}
@@ -361,13 +363,13 @@ func TestRenewDaemonAttachmentAdoptsTheNewerSession(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("old session upsert: %v", err)
 	}
-	if _, err := repo.RenewDaemonAttachment(ctx, &DaemonAttachment{
+	if _, err := store.RenewDaemonAttachment(ctx, repo.ORM(), &DaemonAttachment{
 		DaemonID: "lease-adopt", UserID: "lease-user", Source: DaemonAttachmentSourceInbound,
 		AttachedAt: newer, LastStreamActivity: newer.Add(15 * time.Second),
 	}); err != nil {
 		t.Fatalf("renew: %v", err)
 	}
-	if err := repo.ReleaseDaemonAttachment(ctx, "lease-adopt", old); err != nil {
+	if err := store.ReleaseDaemonAttachment(ctx, repo.ORM(), "lease-adopt", old); err != nil {
 		t.Fatalf("old session release: %v", err)
 	}
 	got, ok := readLease(t, rawDB, "lease-adopt")
@@ -380,7 +382,7 @@ func TestRenewDaemonAttachmentAdoptsTheNewerSession(t *testing.T) {
 
 	// The old session's own late renewal (a heartbeat its stalled stream
 	// buffered) never takes the row back.
-	if _, err := repo.RenewDaemonAttachment(ctx, &DaemonAttachment{
+	if _, err := store.RenewDaemonAttachment(ctx, repo.ORM(), &DaemonAttachment{
 		DaemonID: "lease-adopt", UserID: "lease-user", Source: DaemonAttachmentSourceInbound,
 		AttachedAt: old, LastStreamActivity: newer.Add(20 * time.Second),
 	}); err != nil {

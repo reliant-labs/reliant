@@ -91,7 +91,7 @@ func (s *Service) SetTriggerEnabled(
 // project's org, and each resume would buy one more refused, re-paused
 // firing (triggers.AutoPause). An outage is Unavailable, never an answer.
 func (s *Service) requireProjectWritable(ctx context.Context, trigger *core.Trigger) error {
-	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, trigger.ProjectID, auth.MustGetUserID(ctx))
+	_, err := s.deps.Projects.GetProjectWithUserCheck(ctx, trigger.ProjectID, auth.MustGetUserID(ctx))
 	switch {
 	case err == nil:
 		return nil

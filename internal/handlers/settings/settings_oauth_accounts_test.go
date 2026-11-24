@@ -12,6 +12,8 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
@@ -57,7 +59,7 @@ func claudeService(t *testing.T, repo *db.Repo, login *claudeLogin, profile func
 
 func accountsOfProvider(t *testing.T, ctx context.Context, repo *db.Repo, userID, provider string) []core.ProviderAccount {
 	t.Helper()
-	all, err := repo.ListProviderAccounts(ctx, userID)
+	all, err := db.TestAccounts(t, repo).ListProviderAccounts(ctx, userID)
 	require.NoError(t, err)
 	var out []core.ProviderAccount
 	for _, a := range all {
@@ -83,7 +85,7 @@ func TestCompleteClaudeOAuth_SameIdentityTwiceIsOneAccountDifferentIdentityIsTwo
 
 	// The same upstream account signing in again refreshes its row, clears needs-sign-in, adds nothing.
 	reason := "refresh token rejected"
-	_, err = repo.PatchProviderAccount(ctx, "oauth-claude-dedupe", first.Msg.Account.Id, core.AccountPatch{NeedsReauth: &reason})
+	_, err = db.TestAccounts(t, repo).PatchProviderAccount(ctx, "oauth-claude-dedupe", first.Msg.Account.Id, core.AccountPatch{NeedsReauth: &reason})
 	require.NoError(t, err)
 	again, err := svc.CompleteClaudeOAuth(ctx, oauthRequestClaude(""))
 	require.NoError(t, err)
@@ -120,7 +122,7 @@ func TestCompleteClaudeOAuth_ReconnectWithAnotherIdentityLeavesTheTargetUntouche
 	alice, err := svc.CompleteClaudeOAuth(ctx, oauthRequestClaude(""))
 	require.NoError(t, err)
 	reason := "refresh token rejected"
-	_, err = repo.PatchProviderAccount(ctx, user, alice.Msg.Account.Id, core.AccountPatch{NeedsReauth: &reason})
+	_, err = db.TestAccounts(t, repo).PatchProviderAccount(ctx, user, alice.Msg.Account.Id, core.AccountPatch{NeedsReauth: &reason})
 	require.NoError(t, err)
 
 	// The user reconnects alice but signs in as bob.
@@ -209,7 +211,7 @@ func TestCompleteClaudeOAuth_ConnectIsSeenByTheDriversThroughAccounts(t *testing
 	login.acct, login.email = "bob", "bob@example.com"
 	_, err = svc.CompleteClaudeOAuth(ctx, oauthRequestClaude(""))
 	require.NoError(t, err)
-	all, err := repo.ListProviderAccountsWithSecrets(ctx, user)
+	all, err := db.TestAccounts(t, repo).ListProviderAccountsWithSecrets(ctx, user)
 	require.NoError(t, err)
 	require.Len(t, all, 2)
 	assert.Equal(t, "access-alice-org1", all[0].Secrets.Secret)
@@ -378,7 +380,7 @@ func TestSyncReliantProvider_WritesTheManagedAccount(t *testing.T) {
 // source of truth the drivers read.
 func managedKey(t *testing.T, ctx context.Context, repo *db.Repo, userID string) string {
 	t.Helper()
-	all, err := repo.ListProviderAccountsWithSecrets(ctx, userID)
+	all, err := db.TestAccounts(t, repo).ListProviderAccountsWithSecrets(ctx, userID)
 	require.NoError(t, err)
 	for _, a := range all {
 		if a.Provider == "reliant" {
@@ -395,12 +397,12 @@ func TestCompleteClaudeOAuth_SignInInABoundWorkspaceIsTheOrgsSeat(t *testing.T) 
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := isolationContext("oauth-claude-seat")
-	_, _, err := repo.BindOrgProviderWorkspace(context.Background(), core.OrgProviderWorkspace{
+	_, _, err := db.TestOrgAccounts(t, repo).BindOrgProviderWorkspace(context.Background(), core.OrgProviderWorkspace{
 		OrgID: "org-acme", Provider: "claude", ExternalOrgID: "ws-team", DisplayName: "Acme", BoundByUserID: "admin",
 	})
 	require.NoError(t, err)
 	matcher, err := seatmatch.New(seatmatch.Deps{
-		Store: repo,
+		Store: seatStore{db.TestAccounts(t, repo), db.TestOrgAccounts(t, repo)},
 		Members: &seatmatch.MockMembers{IsMemberFunc: func(_ context.Context, userID, orgID string) (bool, bool, error) {
 			return userID == "oauth-claude-seat" && orgID == "org-acme", true, nil
 		}},
@@ -443,4 +445,26 @@ func TestCompleteClaudeOAuth_SignInInABoundWorkspaceIsTheOrgsSeat(t *testing.T) 
 	login.org = "ws-team"
 	_, err = failing.CompleteClaudeOAuth(ctx, oauthRequestClaude(""))
 	require.NoError(t, err)
+}
+
+// seatStore is the accounts joined with the org administration the facade still holds.
+type seatStore struct {
+	accounts provideraccounts.Service
+	org      orgaccounts.Service
+}
+
+func (s seatStore) ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error) {
+	return s.accounts.ListProviderAccounts(ctx, userID)
+}
+func (s seatStore) ProviderWorkspaceBinding(ctx context.Context, provider, ws string) (*core.OrgProviderWorkspace, error) {
+	return s.org.ProviderWorkspaceBinding(ctx, provider, ws)
+}
+func (s seatStore) ListWorkspaceSignIns(ctx context.Context, provider, ws string) ([]core.ProviderAccount, error) {
+	return s.org.ListWorkspaceSignIns(ctx, provider, ws)
+}
+func (s seatStore) AttributeWorkspaceSeat(ctx context.Context, w core.OrgProviderWorkspace, id string) (bool, error) {
+	return s.org.AttributeWorkspaceSeat(ctx, w, id)
+}
+func (s seatStore) ClearWorkspaceSeat(ctx context.Context, orgID, id string) (bool, error) {
+	return s.org.ClearWorkspaceSeat(ctx, orgID, id)
 }

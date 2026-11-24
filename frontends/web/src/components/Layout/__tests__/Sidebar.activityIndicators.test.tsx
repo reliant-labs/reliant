@@ -112,6 +112,11 @@ vi.mock("../../../hooks/inbox-queries", async () => {
 vi.mock("../../../hooks/message-queries", () => ({ useMarkUnread: () => ({ mutateAsync: vi.fn() }) }));
 
 import { Sidebar } from "../Sidebar";
+import { beforeEach as shellBeforeEach } from "vitest";
+import { ALL_PROJECTS_PICK, useShellLastPick } from "../sidebar/shellProject";
+
+// The project shell (U6b): these tests read the list across every project, as "All projects" shows it, on the chat home where Chats are open.
+shellBeforeEach(() => useShellLastPick.setState({ key: ALL_PROJECTS_PICK }));
 
 describe("Sidebar activity indicators", () => {
   beforeEach(() => {
@@ -150,7 +155,7 @@ describe("Sidebar activity indicators", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={queryClient}>
-        <Sidebar />
+        <Sidebar pathname="/" />
       </QueryClientProvider>,
     );
   }

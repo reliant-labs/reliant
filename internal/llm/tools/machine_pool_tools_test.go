@@ -3,9 +3,10 @@ package tools
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/stretchr/testify/require"
 )
 
 func pipelinePool() MachinePoolSummary {

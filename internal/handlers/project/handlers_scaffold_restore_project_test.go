@@ -23,11 +23,12 @@ func TestRestoreProject_Generated(t *testing.T) {
 
 	store := ownedProjectRepo(t)
 	var restored []string
-	store.RestoreProjectFunc = func(_ context.Context, id string, _ core.ProjectDecision) ([]string, error) {
+	purges := &project.MockProjectPurges{}
+	purges.RestoreProjectFunc = func(_ context.Context, id string, _ core.ProjectDecision) ([]string, error) {
 		restored = append(restored, id)
 		return []string{"trigger-1"}, nil
 	}
-	svc := newService(t, store, nil)
+	svc := newServicePurges(t, store, purges)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.RestoreProjectRequest, pb.RestoreProjectResponse]{
 		{

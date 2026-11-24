@@ -39,8 +39,17 @@ import {
 import { errorReason, hasErrorReason } from "@/lib/errorReasons";
 
 import { getControlPlaneClient } from "./client";
+import { hasControlPlane } from "./config";
 import { mapActivityEvent, type ActivityList } from "./observability/activityApi";
 import type { MyOrg } from "./orgs";
+
+/** Whether this deployment has orgs to be a member of (a control plane); without one there is no one to invite. */
+export const orgMembershipAvailable = hasControlPlane;
+
+/** Whether an org's seats show more than its founder: a second member, or an invitation waiting on an answer. */
+export function seatsShowATeam(seats: Pick<SeatUsage, "members" | "pendingInvitations">): boolean {
+  return seats.members > 1 || seats.pendingInvitations > 0;
+}
 
 /** The three roles. Roles are presets of grants; admin and owner hold them all. */
 export type OrgRole = "owner" | "admin" | "member";
@@ -69,8 +78,8 @@ export interface OrgMember {
   isFounder: boolean;
   /**
    * Their sign-in subject: the id this app keys a person's chats and projects
-   * by (userId is control-plane's own). "" from a control plane that
-   * predates it.
+   * by (userId is control-plane's own). "" when the control plane knows
+   * none.
    */
   externalId: string;
 }
@@ -269,8 +278,8 @@ export async function listMembershipActivity(orgId: string, pageToken = ""): Pro
  * Display names by the id this app keys a person's records by: a chat's
  * `userId` is their sign-in subject, which the roster carries as
  * `externalId` (its `userId` is control-plane's own id, which matches
- * nothing here). The name they set, else their email. A control plane that
- * predates `externalId` names nobody, and the callers say "the person who
+ * nothing here). The name they set, else their email. A member with no
+ * `externalId` is named by nobody, and the callers say "the person who
  * shared it" instead.
  */
 export function memberNamesBySubject(

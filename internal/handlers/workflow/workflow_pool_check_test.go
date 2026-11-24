@@ -4,11 +4,13 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -145,7 +147,7 @@ func TestCheckMachinePools(t *testing.T) {
 // with no pool is judged as before.
 func TestValidateWorkflow_ChecksMachinePools(t *testing.T) {
 	ctx, repo, svc, projectID := saveTestSetup(t)
-	_, err := repo.PutMachinePool(ctx, &db.MachinePool{UserID: "test-user", Name: "gate", Selector: map[string]string{"pool": "gate"}})
+	_, err := store.PutMachinePool(ctx, repo.ORM(), &core.MachinePool{UserID: "test-user", Name: "gate", Selector: map[string]string{"pool": "gate"}}, uuid.NewString(), time.Now().UTC())
 	require.NoError(t, err)
 
 	tests := []struct {

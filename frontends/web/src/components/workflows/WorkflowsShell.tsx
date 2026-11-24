@@ -52,16 +52,20 @@ import { cn } from "@/lib/utils";
 import {
   WORKFLOWS_AREA_PATH,
   WORKFLOWS_TABS,
+  isWorkflowsDetailPath,
   workflowsTabForPath,
   type WorkflowsTab,
 } from "@/lib/workflowsArea";
+import { ShellPageHeader, useShellFrame } from "../Layout/shell/shellFrame";
+import { LearnLink } from "@/lib/learnLinks";
 import { useProjectStore } from "@/store/projectStore";
 import { useProjects } from "@/hooks/project-queries";
-import DropdownMenu from "../forge-ui/dropdown_menu";
+import { ProjectSelector } from "../Projects/ProjectSelector";
 import Tooltip from "../forge-ui/tooltip";
 import { useWorkflowsScope } from "./useWorkflowsScope";
 import { homePath } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
+import { PageMain } from "@/components/Layout/shell/shellFrame";
 
 const TAB_ICONS: Record<WorkflowsTab, typeof Workflow> = {
   workflows: Workflow,
@@ -103,7 +107,9 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
   // detail page's list, or out of the area from a list.
   const leave = useCallback(() => void navigate({ to: homePath(), search: {} }), [navigate]);
   const stepBack = useCallback(() => void navigate(getParentRouteNavigateOptions(pathname)), [navigate, pathname]);
-  useEscapeToLeave(stepBack);
+  // Inside the one shell the nav is the way around: Escape only steps a detail page back to its list.
+  const { inShell } = useShellFrame();
+  useEscapeToLeave(inShell && !isWorkflowsDetailPath(pathname) ? null : stepBack);
 
   const navItems = useMemo(() => {
     const params = new URLSearchParams();
@@ -120,6 +126,43 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
       };
     });
   }, [activeTab, search.project, search.allProjects]);
+
+  if (inShell) {
+    // The area's sections are rows of the one nav (Layout/Sidebar, under
+    // Workflows): no rail and no exit here, just the breadcrumb and the scope.
+    const section = WORKFLOWS_TABS.find((tab) => tab.key === activeTab);
+    const fill = isFillLayout(pathname);
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col bg-background" data-testid="workflows-shell">
+        <ShellPageHeader
+          testId="workflows-header"
+          actions={
+            <>
+              <LearnLink section="workflows" />
+              <div className="flex min-w-0 max-w-xs items-center max-md:max-w-48">
+                <ProjectSwitcher />
+              </div>
+            </>
+          }
+        >
+          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-ui text-muted-foreground">
+            <span className="hidden md:inline">Workflows</span>
+            <span aria-hidden="true" className="hidden md:inline">›</span>
+            <span aria-current="page" className="truncate font-medium text-foreground">
+              {section?.key === "workflows" ? "Library" : (section?.label ?? "Workflows")}
+            </span>
+          </nav>
+        </ShellPageHeader>
+        {fill ? (
+          <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+        ) : (
+          <PageMain className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-2 max-md:px-4">
+            <div className="mx-auto w-full max-w-6xl">{children}</div>
+          </PageMain>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-full" data-testid="workflows-shell">
@@ -171,8 +214,9 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
  * runs before a window bubble listener — so a bubble-phase check saw the menu
  * already gone, and one Escape closed the filter menu AND left the area.
  */
-function useEscapeToLeave(onLeave: () => void) {
+function useEscapeToLeave(onLeave: (() => void) | null) {
   useEffect(() => {
+    if (!onLeave) return;
     let overlayOwnsEscape = false;
     const onCapture = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -254,7 +298,8 @@ function WorkflowsHeader({ onClose, activeTab, showExit }: {
 
 /**
  * The area's scope: one project, or All projects. Every page honours it
- * (useWorkflowsScope). Choosing a project makes it current and narrows to it;
+ * (useWorkflowsScope). The list is the project selector (Projects/ProjectSelector).
+ * Choosing a project makes it current and narrows to it;
  * All projects keeps the current project as background (`?project=`) and sets
  * `?allProjects=true`.
  */
@@ -274,12 +319,30 @@ function ProjectSwitcher() {
     } as never);
 
   return (
-    <DropdownMenu
+    <ProjectSelector
       open={open}
       onOpenChange={setOpen}
+      mode="chat"
       align="left"
-      label="Projects"
-      menuClassName="max-h-80 w-72 overflow-y-auto"
+      selectedKey={scope.allProjects ? ALL_PROJECTS_KEY : (currentProject?.id ?? ALL_PROJECTS_KEY)}
+      leadItems={[
+        {
+          key: ALL_PROJECTS_KEY,
+          label: "All projects",
+          testId: "workflows-project-all",
+          onSelect: () => {
+            if (!scope.allProjects) setAllProjects(true);
+          },
+        },
+      ]}
+      onSelect={(selection) => {
+        if (selection.kind !== "project") return;
+        const project = projects.find((p) => p.id === selection.row.key) ?? selection.row.project;
+        const active = !scope.allProjects && project.id === currentProject?.id;
+        if (active) return;
+        if (scope.allProjects) setAllProjects(false);
+        if (project.id !== currentProject?.id) void selectProject(project);
+      }}
       trigger={(props) => (
         <button
           type="button"
@@ -292,35 +355,12 @@ function ProjectSwitcher() {
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
       )}
-      groups={[
-        {
-          selection: "single",
-          items: [
-            {
-              label: "All projects",
-              checked: scope.allProjects,
-              onClick: () => {
-                if (!scope.allProjects) setAllProjects(true);
-              },
-            },
-            ...projects.map((project) => {
-              const active = !scope.allProjects && project.id === currentProject?.id;
-              return {
-                label: project.name,
-                checked: active,
-                onClick: () => {
-                  if (active) return;
-                  if (scope.allProjects) setAllProjects(false);
-                  if (project.id !== currentProject?.id) void selectProject(project);
-                },
-              };
-            }),
-          ],
-        },
-      ]}
     />
   );
 }
+
+/** The selector's key for All projects. */
+const ALL_PROJECTS_KEY = "";
 
 /** The resolution ladder in the header comment. Runs once per mount of the area. */
 function useWorkflowsProjectResolution() {

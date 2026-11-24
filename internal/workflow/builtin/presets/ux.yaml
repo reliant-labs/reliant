@@ -14,6 +14,7 @@ params:
   - fetch
   - view
   - write
+  - save_attachment  # copy an image or file the user attached into the workspace, byte for byte
   - edit
   - tag:shell
   - get_plan

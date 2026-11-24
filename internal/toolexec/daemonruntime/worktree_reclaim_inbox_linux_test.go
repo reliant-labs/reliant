@@ -24,7 +24,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
+	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -130,7 +132,18 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 
 	// The Inbox lists it on the machine's item.
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	inboxSvc, err := inbox.New(inbox.Deps{Logger: logger, Config: config.Defaults(), Repo: repo})
+	inboxSvc, err := inbox.New(inbox.Deps{
+		Logger: logger, Config: config.Defaults(), Repo: repo,
+		OrgKeys:     db.TestOrgAccounts(t, repo),
+		ProjectRows: store.NewProjectExtStore(repo.ORM()),
+		Machines:    store.NewDaemonExtStore(repo.ORM()),
+		Items:       store.NewInboxDismissalExtStore(repo.ORM()),
+		Firings:     store.NewTriggerEventExtStore(repo.ORM()),
+		Notices:     store.NewTriggerExtStore(repo.ORM()),
+		Storage:     worktreesweep.NewStores(repo, store.NewWorktreeExtStore(repo.ORM())),
+		Recoveries:  store.NewWorktreeRecoveryExtStore(repo.ORM()),
+		Marks:       store.NewWorktreeExtStore(repo.ORM()),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +206,7 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 	})
 
 	// The person approves it in the Inbox.
-	decider, err := worktree_reclaim.New(worktree_reclaim.Deps{Logger: logger, Config: config.Defaults(), Repo: repo, Sender: daemonOnTheWire{daemonID: daemonID}})
+	decider, err := worktree_reclaim.New(worktree_reclaim.Deps{Logger: logger, Config: config.Defaults(), Repo: repo, Daemons: store.NewDaemonExtStore(repo.ORM()), Sender: daemonOnTheWire{daemonID: daemonID}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -18,7 +19,7 @@ import (
 
 // The connection vault ports (P5b lane L5): connections, connection_secrets,
 // connection_events and oauth_flows. Each query is written through one layer
-// and read back through the other — env.Repo.Connections(), the store the
+// and read back through the other — db.TestConnections(t, env.Repo), the store the
 // ports replaced and now the adapter over them.
 
 // vaultKey gives the test's sealed fields the vault key they reference
@@ -51,7 +52,7 @@ func TestConnectionCreateAndReads(t *testing.T) {
 	env := storetest.New(t)
 	vaultKey(t, env)
 	ctx := context.Background()
-	twin := env.Repo.Connections()
+	twin := db.TestConnections(t, env.Repo)
 
 	first := newConnection("alice", "github", "work")
 	require.NoError(t, store.InsertUserConnection(ctx, env.ORM, first,
@@ -125,7 +126,7 @@ func TestConnectionWrites(t *testing.T) {
 	env := storetest.New(t)
 	vaultKey(t, env)
 	ctx := context.Background()
-	twin := env.Repo.Connections()
+	twin := db.TestConnections(t, env.Repo)
 	a, b := newConnection("alice", "github", "a"), newConnection("alice", "github", "b")
 	require.NoError(t, store.InsertUserConnection(ctx, env.ORM, a, []core.ConnectionSecret{secret(core.SecretFieldAccessToken, "t1")}, event(core.ConnectionEventCreated, "alice")))
 	require.NoError(t, store.InsertUserConnection(ctx, env.ORM, b, nil, event(core.ConnectionEventCreated, "alice")))
@@ -211,7 +212,7 @@ func TestConnectionSecretsLock(t *testing.T) {
 	env := storetest.New(t)
 	vaultKey(t, env)
 	ctx := context.Background()
-	twin := env.Repo.Connections()
+	twin := db.TestConnections(t, env.Repo)
 	c := newConnection("alice", "github", "work")
 	require.NoError(t, twin.CreateConnection(ctx, c, []core.ConnectionSecret{secret(core.SecretFieldAccessToken, "t1")}, event(core.ConnectionEventCreated, "alice")))
 
@@ -226,10 +227,10 @@ func TestConnectionSecretsLock(t *testing.T) {
 		})
 	require.NoError(t, err)
 
-	// The adapter half (*db.SecretsTx): the callback runs its statements
+	// The adapter half (*connectionvault.SecretsTx): the callback runs its statements
 	// with its own ctx, which does not carry the transaction, and they must
 	// still land in it (or they would block on the row the lock holds).
-	err = twin.WithSecretsLock(ctx, "alice", c.ID, func(tx *db.SecretsTx) error {
+	err = twin.WithSecretsLock(ctx, "alice", c.ID, func(tx *connectionvault.SecretsTx) error {
 		assert.Equal(t, c.ID, tx.Connection().ID)
 		access := tx.Secrets()[core.SecretFieldAccessToken]
 		require.ErrorIs(t, tx.Replace(ctx, access.Generation+1, nil, nil), core.ErrGenerationConflict)
@@ -253,7 +254,7 @@ func TestConnectionSecretsLock(t *testing.T) {
 	assert.Equal(t, []byte("t3"), secrets[core.SecretFieldAccessToken].Ciphertext)
 
 	// A failed callback rolls back everything it wrote.
-	require.Error(t, twin.WithSecretsLock(ctx, "alice", c.ID, func(tx *db.SecretsTx) error {
+	require.Error(t, twin.WithSecretsLock(ctx, "alice", c.ID, func(tx *connectionvault.SecretsTx) error {
 		require.NoError(t, tx.MarkStatus(ctx, core.ConnectionStatusActive, ""))
 		return assert.AnError
 	}))
@@ -268,7 +269,7 @@ func TestConnectionSecretsLock(t *testing.T) {
 func TestConnectionEventsPage(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
-	twin := env.Repo.Connections()
+	twin := db.TestConnections(t, env.Repo)
 	c := newConnection("alice", "github", "work")
 	require.NoError(t, store.InsertUserConnection(ctx, env.ORM, c, nil, event(core.ConnectionEventCreated, "alice")))
 	for i := 0; i < 4; i++ {
@@ -298,7 +299,7 @@ func TestConnectionEventsPage(t *testing.T) {
 func TestOAuthFlowSingleUse(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
-	twin := env.Repo.Connections()
+	twin := db.TestConnections(t, env.Repo)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	flow := &core.OAuthFlow{
 		StateHash: []byte("state-1"), UserID: "alice", SessionIDHash: []byte("sess"), IntegrationID: "github",

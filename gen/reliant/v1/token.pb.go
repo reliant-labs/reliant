@@ -1114,13 +1114,13 @@ const file_reliant_v1_token_proto_rawDesc = "" +
 	"\tTokenKind\x12\x1a\n" +
 	"\x16TOKEN_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11TOKEN_KIND_DAEMON\x10\x01\x12\x12\n" +
-	"\x0eTOKEN_KIND_API\x10\x022\x97\a\n" +
+	"\x0eTOKEN_KIND_API\x10\x022\x9a\a\n" +
 	"\fTokenService\x12\x93\x01\n" +
 	"\vCreateToken\x12\x1e.reliant.v1.CreateTokenRequest\x1a\x1f.reliant.v1.CreateTokenResponse\"C\xa2\xbb\x18?:=\n" +
 	"\x06create\x12-\n" +
-	"\x05token\x12\x10response.info.id\x1a\x12response.info.name*\x04kind\x12M\n" +
+	"\x05token\x12\x10response.info.id\x1a\x12response.info.name*\x04kind\x12P\n" +
 	"\n" +
-	"ListTokens\x12\x1d.reliant.v1.ListTokensRequest\x1a\x1e.reliant.v1.ListTokensResponse\"\x00\x12k\n" +
+	"ListTokens\x12\x1d.reliant.v1.ListTokensRequest\x1a\x1e.reliant.v1.ListTokensResponse\"\x03\x90\x02\x01\x12k\n" +
 	"\vRevokeToken\x12\x1e.reliant.v1.RevokeTokenRequest\x1a\x1f.reliant.v1.RevokeTokenResponse\"\x1b\xa2\xbb\x18\x17:\x15\n" +
 	"\x06revoke\x12\v\n" +
 	"\x05token\x12\x02id\x12\x7f\n" +

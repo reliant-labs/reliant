@@ -45,7 +45,9 @@ async function isStacked(page: Page, testId: string) {
 
 test.describe('console on a phone', () => {
   test('traces stack into cards led by the root operation, and a trace opens', async ({ page }) => {
-    await open(page, '/forge-observability-preview', '?view=traces', 'obs-panel');
+    // The console's Traces page leads with a summary; its full list is one click away.
+    await open(page, '/forge-observability-preview', '?view=traces', 'lead-traces');
+    await page.getByTestId('lead-full-list').click();
     await isStacked(page, 'obs-trace-table');
     const row = page.getByTestId('obs-trace-row').first();
     // The root operation leads the card even though Started is the first column.
@@ -88,26 +90,22 @@ test.describe('console on a phone', () => {
   });
 
   test('release comparison and dashboard panel tables stack', async ({ page }) => {
-    await open(page, '/forge-dashboards-preview', '', 'observability-home');
+    await open(page, '/forge-dashboards-preview', '?page=dashboard&dash=workspace/payments-provider', 'dashboard-header');
     await fitsTheScreen(page);
     // The console nav is a drawer here: it opens, and Escape closes it.
     await page.getByRole('button', { name: 'Open navigation' }).click();
-    const drawer = page.getByRole('dialog', { name: /console/ });
+    const drawer = page.getByRole('dialog', { name: 'shop' });
     await expect(drawer).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(drawer).toBeHidden();
-    await page.getByRole('link', { name: 'Your dashboards' }).click();
-    await expect(page.getByTestId('dashboards-starred')).toBeVisible(LOADED);
-    await page.getByTestId('dashboards-starred').getByRole('link', { name: 'Checkout latency' }).click();
-    await expect(page.getByTestId('dashboard-header')).toBeVisible(LOADED);
     await fitsTheScreen(page);
     const tables = page.getByTestId('obs-panel-table');
     if ((await tables.count()) > 0) await isStacked(page, 'obs-panel-table');
   });
 
   test('the workload page and its Kubernetes events fit, stacked', async ({ page }) => {
-    await open(page, '/forge-workloads-preview', '', 'forge-shell');
+    await open(page, '/forge-workloads-preview', '?workload=api', 'workload-detail');
     await fitsTheScreen(page);
-    await isStacked(page, 'overview-services-table');
+    await isStacked(page, 'workload-pods');
   });
 });

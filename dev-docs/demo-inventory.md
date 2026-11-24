@@ -7,7 +7,7 @@ Its default Connect transport answers from browser-local mock scenarios.
 ## One synthetic shop, one story
 
 Every answer the demo gives comes from one module,
-`components/Forge/Demo/demoData/shopStory.ts`: the cast (jon, maya, priya, and
+`fixtures/shop/shopStory.ts` (the shop fixture pack, `src/fixtures/shop/`): the cast (jon, maya, priya, and
 CI as `github-actions`), shop's customers, its services (`api`, `worker`,
 `inventory` and the static storefront `shop-web`; Postgres, NATS and the
 payment provider are dependencies, never services), the release ledger (each
@@ -16,17 +16,44 @@ incident (prod's v1.8.3 payment timeouts on api), the traffic model every
 aggregate is computed from (`demoStats`), and the database's tables. `demoNow()`
 anchors every relative time to the page load.
 
-`demoData/shop/shopApi.ts` assembles the demo's `ObservabilityApi` from one
-module per area (telemetry via `busyApp.ts`, graph, workloads, panels,
-delivery, issues and release health, alerting, sessions, dashboards, metrics);
-both the demo console (`demoApi.ts`) and the wire scenario (`demoScenario.ts`)
-read it. `consoleScenario.ts` answers Releases, Environments, Secrets, Domains
-and Activity from the same ledger. Nothing under `demoData/` imports the
+`fixtures/shop/model/shopApi.ts` assembles the story's model, in the shape of
+the console's `ObservabilityApi`, from one module per area (telemetry via
+`busyApp.ts`, graph, workloads, panels, delivery, issues and release health,
+alerting, sessions, dashboards, metrics). It is the authoring format, not what
+pages read: the handlers (`handlers/observability.ts`, `alerting.ts`,
+`delivery.ts`, `issues.ts`, `user.ts`, `rum.ts`, `dashboards.ts`) encode it on
+the wire, and in the demo shell (the only place `/forge/demo` runs; the app's
+leaves for it) the console's real client (`controlPlaneObservabilityApi`)
+decodes it, so no page reads the model directly.
+`__tests__/realClient.test.ts` holds every read the real client makes to the
+model's answer. `handlers/observabilityBilling.ts` answers observability billing
+Unimplemented: the demo has none. `handlers/console.ts` answers Releases, Environments, Secrets, Domains
+and Activity from the same ledger. Nothing under `src/fixtures/` imports the
 console's unit-test fixtures (`Observability/__fixtures__`);
 `__tests__/coherence.test.ts` fails if one does, or if any page's answer
 contradicts the story.
 
-`inventoryScenario.ts` answers the generated `AppDatabaseService` browse RPCs
+`model/security.ts` and `model/tests.ts` hold the Security and Tests data in
+the same ledger; `handlers/security.ts` and `handlers/tests.ts` answer the
+control plane's VulnerabilityService and TestsService RPCs from it over the
+demo transport, so the pages' default API clients run unchanged.
+Security: each release's SBOMs for `api`, `worker`, `inventory` and
+`shop-web` (from its lockfile), the findings in the release each environment
+runs, prod's enforced gate and staging's audited one, an exemption with a
+reason and an expiry, and the connect-go advisory v1.8.3's dependency bump
+fixed. Tests: CI's runs on each release commit, the coverage trend with the
+releases marked, maya's failed branch run that reproduced the incident, and
+`TestCreateOrder_RetryOnTimeout`, the flaky test v1.8.3's payment retry
+introduced. The Coverage page's source view reads one bundled file (v1.8.4's
+`internal/orders/charge.go`) and never fetches.
+
+The demo leaves out what the shop has nothing to show on: Usage (a sample app
+has no hosting bill). It has no nav row and no tip, and its URLs land on the
+Overview (`DEMO_HIDDEN_PAGES`, `Demo/demoPath.ts`). Speed insights is served:
+`handlers/speedInsights.ts` answers its three SQL panels (the score and vitals,
+the routes table, the series) over the shop's routes, on desktop and mobile.
+
+`handlers/inventory.ts` answers the generated `AppDatabaseService` browse RPCs
 and `IdentityService` reads. Every normal environment declares one database,
 `shop`: the selector must not invent extra connections. The tables are
 `public.customers`, `public.products`, `public.stock`, `public.orders` and
@@ -42,7 +69,7 @@ paging and optional counts. They never evaluate SQL or call a backend. Prod
 requires a matching confirmation and nonempty reason, to demonstrate the audited
 workflow; `demo-local-read` identifies a synthetic read, not an audit server row.
 
-`configScenario.ts` answers `GetWorkloadConfig` with immutable **fake** bundle
+`handlers/config.ts` answers `GetWorkloadConfig` with immutable **fake** bundle
 identities/digests. YAML and objects are projections of the same redacted tree.
 The fixed `[withheld]` markers reveal neither values nor secret-derived hashes.
 Bundle selectors are scoped to their environment, and historical release reads
@@ -74,6 +101,53 @@ Working deep links (once the reviewed demo release is deployed):
 
 - `/forge/p/shop/releases/v1.8.3?env=prod`
 - `/forge/p/shop/workloads/dev/api?env=dev&tab=config`
+
+## Bundle size
+
+The demo bundle has a size budget, `frontends/web/scripts/demo/bundle-budget.json`.
+`frontends/web/scripts/demo/bundle-size.mjs` measures a build from its
+`DEMO_BUNDLE_REPORT` and its `index.html`:
+
+- **initial**: the entry script plus every `modulepreload` and stylesheet link
+  in the built `index.html`, the build's own `assets/` files only (not the
+  host's `/config.js`). This is what the first page load fetches.
+- **total**: every JS and CSS file the build emits.
+
+Gzip is level 9, and brotli uses zlib's defaults. The budget caps initial gzip
+and total gzip.
+
+```sh
+task demo:bundle-size                                   # build, measure, fail over budget
+task demo:bundle-size -- --report-only                  # the table alone, for a PR body
+task demo:bundle-size -- --report-only --json-out /tmp/before.json   # on main, then on the branch:
+task demo:bundle-size -- --report-only --before /tmp/before.json     # before, after, and the change
+```
+
+It builds the demo as forge ships it (`WEB_BUILD_TARGET=demo`) into a temporary
+directory, so `dist-demo/` is left alone. **It gates the release gate only**
+(its `demo-size` step). It never runs in the merge gate or the merge queue. A
+PR that moves the demo pastes its before/after table into the body. The bundle
+guard (`vite-plugin-demo-bundle.ts`) is separate and unchanged: it decides which
+modules may be in the bundle, and this script measures only its size.
+
+Main 355d77cbc, 2026-11-24 (clean `pnpm install --frozen-lockfile`):
+
+| | Initial raw | Initial gzip | Initial brotli | Total JS+CSS raw | Total gzip |
+|---|---|---|---|---|---|
+| main 355d77cbc | 1,778.0 KiB (34 files) | **484.4 KiB** | 414.6 KiB | 20,029.4 KiB (287 files) | **5,064.0 KiB** |
+| budget | | ≤ 510 KiB | | | ≤ 5,120 KiB |
+
+`vite build --mode demo` measures 0.1 KiB more initial gzip (484.5 KiB),
+because `import.meta.env.MODE` differs.
+
+**Moving a ceiling.** Each ceiling is the baseline plus a small margin: initial
+gzip about +5% and total gzip about +56 KiB, rounded up to 10 KiB. The budget
+file records the baseline commit, its numbers and the rule. To move a ceiling,
+measure main, apply the rule, update the baseline and both ceilings together,
+and give the reason in the PR. Do not raise a ceiling just to let one change
+through. The phase-3 plan (reliant#3462) first proposed 645 / 5,080 KiB from
+main 49556b0ba (621.3 / 5,026.7 KiB). On 2026-11-24 the ceilings were
+re-derived from 355d77cbc under the same rule.
 
 ## Follow-up integration dependencies
 

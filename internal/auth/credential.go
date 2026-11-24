@@ -26,10 +26,12 @@ const (
 	// CredentialUnknown is a context no validator classified. It is the zero
 	// value, so a path that forgets to classify fails closed.
 	CredentialUnknown Credential = iota
-	// CredentialSession is the identity provider's session JWT: what the web
-	// app and the desktop app hold after someone signs in in a browser. No
-	// agent, daemon or CLI login is issued one: the CLI logs in for an `rlat_`
-	// access token, and daemon.json holds only `rlat_` tokens.
+	// CredentialSession is Supabase's session JWT, presented as a bearer:
+	// what the web app and the desktop app hold after someone signs in in a
+	// browser, until they move to the managed identity's cookie session
+	// (design-auth-swap R6–R8). No agent, daemon or CLI login is issued one:
+	// the CLI logs in for an `rlat_` access token, and daemon.json holds only
+	// `rlat_` tokens.
 	CredentialSession
 	// CredentialOAuthClient is an identity-provider JWT issued to a
 	// third-party OAuth client (it carries a client_id claim): for example an
@@ -44,6 +46,13 @@ const (
 	// (AUTH_MODE=apikey). Every client of that deployment — the web app, the
 	// CLI, an agent's shell — presents the same key.
 	CredentialSharedKey
+	// CredentialIdentityToken is a token the managed identity (Zitadel,
+	// forge.ManagedIdentity) issued, held by software: its access token as a
+	// bearer, or a server-side session id presented anywhere but the sign-in
+	// cookie. The app never sends one — a browser holds only the cookie — so
+	// whoever does is a program holding the user's token, and it never acts
+	// as a person.
+	CredentialIdentityToken
 )
 
 // String names c for logs and errors.
@@ -57,8 +66,29 @@ func (c Credential) String() string {
 		return "access token"
 	case CredentialSharedKey:
 		return "shared API key"
+	case CredentialIdentityToken:
+		return "identity token"
 	default:
 		return "unclassified credential"
+	}
+}
+
+// Label names c in metrics (reliant_auth_credentials_total): a fixed,
+// bounded set.
+func (c Credential) Label() string {
+	switch c {
+	case CredentialSession:
+		return "supabase_session"
+	case CredentialOAuthClient:
+		return "oauth_client"
+	case CredentialAccessToken:
+		return "access_token"
+	case CredentialSharedKey:
+		return "shared_key"
+	case CredentialIdentityToken:
+		return "identity_token"
+	default:
+		return "unknown"
 	}
 }
 
@@ -157,7 +187,7 @@ func RequirePersonOrApprovedCard(ctx context.Context, action string) error {
 
 func article(c Credential) string {
 	switch c {
-	case CredentialOAuthClient, CredentialAccessToken, CredentialUnknown:
+	case CredentialOAuthClient, CredentialAccessToken, CredentialIdentityToken, CredentialUnknown:
 		return "an "
 	default:
 		return "a "

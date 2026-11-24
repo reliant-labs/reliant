@@ -17,6 +17,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	org_provider_account "github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
@@ -73,6 +74,7 @@ func (r *roles) RoleFresh(_ context.Context, userID, orgID string) (string, bool
 type env struct {
 	t        *testing.T
 	repo     *db.Repo
+	accounts provideraccounts.Service
 	roles    *roles
 	svc      *org_provider_account.Service
 	enabled  bool
@@ -120,14 +122,15 @@ func newEnvWith(t *testing.T, rollout *configv1.OrgsConfig) *env {
 	r.set(org, memberID, orgs.RoleMember)
 	r.set(org, demoted, orgs.RoleAdmin)
 	r.set("org-2", strayID, orgs.RoleAdmin)
-	e := &env{t: t, repo: repo, roles: r, enabled: enabled, seats: &seatmatch.MockService{
+	e := &env{t: t, repo: repo, accounts: db.TestAccounts(t, repo), roles: r, enabled: enabled, seats: &seatmatch.MockService{
 		MatchWorkspaceFunc: func(context.Context, core.OrgProviderWorkspace) (int, error) { return 0, nil },
 	}, woken: &wakes{}}
 	e.svc = org_provider_account.NewTestOrgProviderAccount(t, org_provider_account.WithOrgProviderAccountDeps(org_provider_account.Deps{
-		Store:      repo,
-		OrgRollout: rollout,
-		Seats:      e.seats,
-		ChatWaker:  e.woken,
+		Accounts:    e.accounts,
+		OrgAccounts: db.TestOrgAccounts(t, repo),
+		OrgRollout:  rollout,
+		Seats:       e.seats,
+		ChatWaker:   e.woken,
 		ValidateKey: func(_ context.Context, _ models.Family, key string) (bool, string) {
 			e.keysSeen = append(e.keysSeen, key)
 			if e.reject {
@@ -160,21 +163,21 @@ func (e *env) seed() fixture {
 	ctx := context.Background()
 	add := func(key, label string) string {
 		owner := core.OrgAccountOwner(org)
-		a, _, err := e.repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+		a, _, err := e.accounts.UpsertProviderAccount(ctx, core.AccountUpsert{
 			Owner: owner, OrgAccess: core.OrgAccessMembers, CreatedByUserID: adminID,
 			Provider: "anthropic", AuthKind: core.AuthKindAPIKey,
 			IdentityKey: core.APIKeyIdentityKey(owner.Key(), "anthropic", key), KeyHint: core.KeyHint(key),
 			Secrets: core.AccountSecrets{Secret: key},
 		})
 		require.NoError(e.t, err)
-		a, err = e.repo.PatchOwnedProviderAccount(ctx, owner, a.ID, core.AccountPatch{Label: &label})
+		a, err = e.accounts.PatchOwnedProviderAccount(ctx, owner, a.ID, core.AccountPatch{Label: &label})
 		require.NoError(e.t, err)
 		return a.ID
 	}
 	f := fixture{account: add(orgKey, "Acme prod"), second: add("sk-ant-org-second-key-e5f6", "Acme batch")}
 	f.ownTeam = e.claudeSignIn(adminID, "ws-new", "team")
 	f.seat = e.claudeSignIn(memberID, "ws-1", "team")
-	_, _, err := e.repo.BindOrgProviderWorkspace(ctx, core.OrgProviderWorkspace{
+	_, _, err := db.TestOrgAccounts(e.t, e.repo).BindOrgProviderWorkspace(ctx, core.OrgProviderWorkspace{
 		OrgID: org, Provider: "claude", ExternalOrgID: "ws-1", DisplayName: "Acme Inc.", BoundByUserID: adminID,
 	})
 	require.NoError(e.t, err)
@@ -187,7 +190,7 @@ func (e *env) seed() fixture {
 // claudeSignIn connects user's Claude sign-in in workspace ws on plan.
 func (e *env) claudeSignIn(user, ws, plan string) string {
 	e.t.Helper()
-	a, _, err := e.repo.UpsertProviderAccount(context.Background(), core.AccountUpsert{
+	a, _, err := e.accounts.UpsertProviderAccount(context.Background(), core.AccountUpsert{
 		UserID: user, Provider: "claude", AuthKind: core.AuthKindOAuth,
 		IdentityKey: core.ClaudeIdentityKey("acct-"+user, ws), Email: user + "@acme.example",
 		ExternalAccountID: "acct-" + user, OrganizationID: ws, OrganizationName: "Workspace " + ws, Plan: plan,
@@ -481,7 +484,7 @@ func TestAddValidatesAndAnAdminSeesTheHint(t *testing.T) {
 	assert.Contains(t, err.Error(), keyvalidate.MsgInvalid)
 	assert.NotContains(t, err.Error(), orgKey)
 	assert.Equal(t, []string{orgKey}, e.keysSeen, "validated before anything is stored")
-	accounts, err := e.repo.ListOwnedProviderAccounts(context.Background(), core.OrgAccountOwner(org))
+	accounts, err := e.accounts.ListOwnedProviderAccounts(context.Background(), core.OrgAccountOwner(org))
 	require.NoError(t, err)
 	assert.Empty(t, accounts)
 
@@ -499,7 +502,7 @@ func TestAddValidatesAndAnAdminSeesTheHint(t *testing.T) {
 	assert.Equal(t, first.Account.Account.Id, again.Account.Account.Id)
 
 	// The org's key is not the admin's: their own list does not show it.
-	mine, err := e.repo.ListProviderAccounts(context.Background(), adminID)
+	mine, err := e.accounts.ListProviderAccounts(context.Background(), adminID)
 	require.NoError(t, err)
 	assert.Empty(t, mine)
 
@@ -539,7 +542,7 @@ func TestRotateKeepsTheAccount(t *testing.T) {
 	assert.Equal(t, "…"+core.KeyHint(newKey), a.Account.GetMaskedKey())
 	require.Len(t, a.Grants, 1)
 	assert.Equal(t, memberID, a.Grants[0].UserId)
-	opened, err := e.repo.GetOwnedProviderAccountWithSecrets(context.Background(), core.OrgAccountOwner(org), f.account)
+	opened, err := e.accounts.GetOwnedProviderAccountWithSecrets(context.Background(), core.OrgAccountOwner(org), f.account)
 	require.NoError(t, err)
 	assert.Equal(t, newKey, opened.Secrets.Secret)
 
@@ -601,7 +604,7 @@ func TestBindOnlyFromTheCallersOwnTeamPlanAccount(t *testing.T) {
 	pro := e.claudeSignIn(adminID, "ws-personal", "pro")
 	_, err = bind(pro)
 	requireRefused(t, err, connect.CodeFailedPrecondition, "", "a Pro plan is no workspace an org pays for")
-	ownKey, _, err := e.repo.UpsertProviderAccount(context.Background(), core.AccountUpsert{
+	ownKey, _, err := e.accounts.UpsertProviderAccount(context.Background(), core.AccountUpsert{
 		UserID: adminID, Provider: "anthropic", AuthKind: core.AuthKindAPIKey, IdentityKey: "key:own", KeyHint: "9999",
 		Secrets: core.AccountSecrets{Secret: "sk-ant-own-9999"},
 	})
@@ -673,7 +676,7 @@ func TestGrantsNameLiveMembersOnly(t *testing.T) {
 		OrgId: org, AccountId: f.account, UserIds: []string{memberID, strayID},
 	}))
 	requireRefused(t, err, connect.CodeInvalidArgument, "")
-	grants, err := e.repo.ListOrgAccountGrants(context.Background(), org)
+	grants, err := db.TestOrgAccounts(e.t, e.repo).ListOrgAccountGrants(context.Background(), org)
 	require.NoError(t, err)
 	assert.Empty(t, grants)
 

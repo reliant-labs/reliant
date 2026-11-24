@@ -19,7 +19,9 @@ vi.mock("@/lib/lazyRoute", async (importOriginal) => ({
   lazyRoute: () => () => null,
 }));
 
+import { homeTarget, routeRequiresOnboarding } from "@/components/OnboardingFlow/onboardingGate";
 import { projectsKey } from "@/hooks/project-queries";
+import { projectsPath } from "@/lib/paths";
 import { mobileHandoffAllowed } from "@/lib/mobileRedirect";
 import { getOrgScope, requestOrgOfKey } from "@/lib/orgScope";
 import { getRouteOrgScope, isMemberOnly, ORG_ROUTE_ID } from "@/lib/routeOrg";
@@ -47,9 +49,9 @@ afterEach(() => {
 
 /**
  * Each canonical org URL, where it lands, by the leaf route it commits: the
- * same on both hosts, which mount one tree. (The forge brand's home sends a
- * person who has not onboarded to their apps from the page, not the route:
- * onboardingGate.ts, forgeBrandHomeTarget.)
+ * same on both hosts, which mount one tree. (The home sends a person who
+ * cannot chat yet to their projects from the page, not the route:
+ * onboardingGate.ts, homeTarget; __tests__/daemonlessShell.routes.test.tsx.)
  */
 const DIRECT: { url: string; lands: [path: string, leaf: RegExp] }[] = [
   { url: "/o/acme", lands: ["/o/acme", /\/_app\/$/] },
@@ -57,10 +59,9 @@ const DIRECT: { url: string; lands: [path: string, leaf: RegExp] }[] = [
   { url: "/o/acme/project/p-1", lands: ["/o/acme/project/p-1", /\/project\/\$projectId$/] },
   { url: "/o/acme/workflows", lands: ["/o/acme/workflows/library", /\/workflows\/library$/] },
   { url: "/o/acme/workflow/new", lands: ["/o/acme/workflow/new", /\/workflow\/new$/] },
-  { url: "/o/acme/apps", lands: ["/o/acme/apps", /_authenticated\/apps$/] },
+  { url: "/o/acme/projects", lands: ["/o/acme/projects", /_authenticated\/projects$/] },
   { url: "/o/acme/apps/shop/releases", lands: ["/o/acme/apps/shop/releases", /\/releases$/] },
   { url: "/o/acme/observability/logs", lands: ["/o/acme/observability/logs", /\/observability\/\$view$/] },
-  { url: "/o/acme/sites", lands: ["/o/acme/sites", /^\/o\/\$org\/_authenticated\/sites$/] },
   { url: "/o/acme/usage", lands: ["/o/acme/usage", /^\/o\/\$org\/_authenticated\/usage$/] },
   { url: "/o/org-a/inbox", lands: ["/o/acme/inbox", /_authenticated\/inbox$/] },
 ];
@@ -209,6 +210,10 @@ describe("org-less paths with the flag on (the Reliant host forwards; R5, R7)", 
     ["/workflows/library/builtin%3A%2F%2Fget-it-right", "/o/side/workflows/library/builtin%3A%2F%2Fget-it-right"],
     ["/workflow/new", "/o/side/workflow/new"],
     ["/forge/observability/logs", "/o/side/observability/logs"],
+    // An app's console by name (U18): the tab's org, which its reads already used.
+    ["/forge/p/shop", "/o/side/apps/shop"],
+    ["/forge/p/shop/releases", "/o/side/apps/shop/releases"],
+    ["/apps/shop", "/o/side/apps/shop"],
   ])("forwards %s into the tab's org: %s", async (from, to) => {
     const h = createOrgRouteHarness(world("reliant", true, { tabOrg: "org-b" }));
     await h.open(from);
@@ -216,7 +221,14 @@ describe("org-less paths with the flag on (the Reliant host forwards; R5, R7)", 
     expect(h.notFound()).toBe(false);
   });
 
-  it.each(["/workflows/library/my-saved-flow", "/workflow/my-saved-flow", "/project/p-1", "/workflows/runs/c-1", "/forge/p/shop"])(
+  it("keeps the query of an app's console link, `?project=` (the checkout) included", async () => {
+    const h = createOrgRouteHarness(world("reliant", true, { tabOrg: "org-b" }));
+    await h.open("/forge/p/shop/releases?project=p-1&env=prod");
+    expect(h.pathname()).toBe("/o/side/apps/shop/releases");
+    expect(h.search()).toMatchObject({ project: "p-1", env: "prod" });
+  });
+
+  it.each(["/workflows/library/my-saved-flow", "/workflow/my-saved-flow", "/project/p-1", "/workflows/runs/c-1"])(
     "leaves %s, which names a resource of its own org, where it is",
     async (path) => {
       const h = createOrgRouteHarness(world("reliant", true, { tabOrg: "org-b" }));
@@ -226,9 +238,9 @@ describe("org-less paths with the flag on (the Reliant host forwards; R5, R7)", 
   );
 
   it.each([
-    ["/sites", "/o/side/sites"],
+    ["/sites", "/o/side/projects"],
     ["/usage", "/o/side/usage"],
-    ["/apps", "/o/side/apps"],
+    ["/apps", "/o/side/projects"],
   ])("forwards on the forge host too, which mounts the same tree (U6): %s → %s", async (from, to) => {
     const h = createOrgRouteHarness(world("forge", true, { tabOrg: "org-b" }));
     await h.open(from);
@@ -286,11 +298,10 @@ describe("the one shell's pages", () => {
   /** A page: whether its org-less form forwards with the flag on, and its leaf (either form). */
   const PAGES: { url: string; forwards: boolean; leaf: RegExp }[] = [
     { url: "/", forwards: true, leaf: /\/_app\/$/ },
-    { url: "/apps", forwards: true, leaf: /_authenticated\/apps$/ },
-    { url: "/sites", forwards: true, leaf: /_authenticated\/sites$/ },
+    { url: "/projects", forwards: true, leaf: /_authenticated\/projects$/ },
     { url: "/usage", forwards: true, leaf: /_authenticated\/usage$/ },
-    // An app by name: its own org decides (the resolver, U4), never the tab's.
-    { url: "/forge/p/shop", forwards: false, leaf: /\/forge\/p\/\$project\/$/ },
+    // An app by name: into the tab's org (U18), until the resolver (U4) names the app's own.
+    { url: "/forge/p/shop", forwards: true, leaf: /\/(forge\/p|apps)\/\$project\/$/ },
     { url: "/o/acme/apps/shop", forwards: false, leaf: /\/apps\/\$project\/$/ },
     { url: "/o/acme/usage", forwards: false, leaf: /_authenticated\/usage$/ },
     // Not org-scoped yet (U8).
@@ -316,6 +327,13 @@ describe("the one shell's pages", () => {
           }
           expect(h.pathname()).toBe(forwards && flag ? inOrg(segment, url) : url);
           expect(h.leafRouteId()).toMatch(leaf);
+          // A daemonless person (U6): only the home is a chat route, and only
+          // the home sends them to Projects; every other page works in place.
+          const home = url === "/";
+          expect(routeRequiresOnboarding(h.pathname())).toBe(home);
+          for (const setup of ["onboard", "connect-machine"] as const) {
+            expect(homeTarget(h.pathname(), setup, { forgeBrand: host === "forge" })).toBe(home ? projectsPath() : null);
+          }
         });
       });
     });

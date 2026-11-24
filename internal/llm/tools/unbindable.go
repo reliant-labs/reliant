@@ -34,6 +34,9 @@ var unbindableParams = map[string]map[string]string{
 		"attachment_id": "names the one attachment to save, which is chosen per call and cannot be known in advance",
 		"save_to":       "every save would target the same file, so each call destroys the last one's output",
 	},
+	"present_image": {
+		"paths": "names the files to show, which are chosen per call; bound, every call would show the same files",
+	},
 	"write": {
 		"file_path": "every write would target the same file, so each call destroys the last one's output",
 	},

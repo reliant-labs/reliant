@@ -186,7 +186,7 @@ export interface ReleaseComparison {
     deltas: ObjectDelta[];
     unchanged: number;
     summariesMissing: boolean;
-    /** The workload the server filtered the objects to; "" when it compared every object (or predates the filter). */
+    /** The workload the server filtered the objects to; "" when it compared every object. */
     workload: string;
   };
 }
@@ -607,9 +607,7 @@ export async function getProjectRelease(
 
 /**
  * What changed from `from` to `to`; objects are compared in `environmentId`
- * when given, and only `workload`'s objects when that is given too. A control
- * plane that predates the filter compares every object (objects.workload is
- * then ""), so a caller that names one filters the deltas itself as well.
+ * when given, and only `workload`'s objects when that is given too.
  */
 export async function compareProjectReleases(
   req: {

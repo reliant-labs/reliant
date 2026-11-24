@@ -21,6 +21,11 @@ type Deps struct {
 
 	// Repo reads and resolves questions and the chats that own them.
 	Repo Repository
+	// Questions lists the questions a chat or a user has open.
+	Questions Questions
+	// Mailbox queues an answer given behind a blocking question (Mailbox,
+	// deps.go).
+	Mailbox Mailbox
 	// Signals delivers a resolved question to the workflow parked on it.
 	Signals Signaler
 	// Messages delivers the answer to an async question to the thread that
@@ -41,6 +46,12 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("question: Deps.Repo is required")
+	}
+	if d.Questions == nil {
+		return fmt.Errorf("question: Deps.Questions is required")
+	}
+	if d.Mailbox == nil {
+		return fmt.Errorf("question: Deps.Mailbox is required")
 	}
 	if d.Signals == nil {
 		return fmt.Errorf("question: Deps.Signals is required")
