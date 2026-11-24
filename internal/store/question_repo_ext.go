@@ -240,6 +240,7 @@ func questionToRow(q *core.Question) *Question {
 		ToolCallID:         q.ToolCallID,
 		Async:              q.Async,
 		WithdrawnReason:    q.WithdrawnReason,
+		AnsweredBy:         q.AnsweredBy,
 	}
 	if q.LoopIteration != nil {
 		it := int64(*q.LoopIteration)
@@ -264,6 +265,7 @@ func questionFromRow(row *Question) *core.Question {
 		ToolCallID:         row.ToolCallID,
 		Async:              row.Async,
 		WithdrawnReason:    row.WithdrawnReason,
+		AnsweredBy:         row.AnsweredBy,
 	}
 	if row.Status != nil {
 		q.Status = int(*row.Status)
