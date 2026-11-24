@@ -28,9 +28,12 @@
  *   - a chat's (`/c/<id>`, and a thread of it): the chat names its own org
  *     (`Chat.org_id`), and its route's loader redirects there
  *     (lib/chatRouteResolve.ts), not into the tab's.
- *   - links that name a resource by id or by app name: `/project/<id>`,
- *     a project's page `/projects/<id>[/settings|/workspaces]`,
- *     `/workflows/runs/<id>`, `/workflows/automations/<id>`,
+ *   - a project's (`/project/<id>`, and its page
+ *     `/projects/<id>[/settings|/workspaces]`): the project names its own org
+ *     (`Project.org_id`), and its routes' loader redirects there
+ *     (lib/projectRouteResolve.ts), not into the tab's.
+ *   - links that name a resource by id or by app name in a way nothing here
+ *     can resolve yet: `/workflows/runs/<id>`, `/workflows/automations/<id>`,
  *     `/forge?project=`, `/forge/env/<env>?forgeProject=`, and the org
  *     Observability with an app in its query. So do saved workflows, by name:
  *     `/workflows/library/<name>` and the builder's `/workflow/<name>` (a

@@ -34,7 +34,7 @@ import { useMatch, useRouter, useRouterState } from "@tanstack/react-router";
 import { useChatViewOverride } from "@/components/Chat/thread-views/useChatThreadMode";
 import { getChatFromCache } from "@/hooks/chat-queries";
 import { chatShellRouteOf, latestPathname, navigateToChatUrl, newChatAppliedShown, patchNewChatUrl, type ChatShellRoute } from "@/lib/chatRoute";
-import { takeMovedChatNotice, type ChatRouteData } from "@/lib/chatRouteResolve";
+import type { ChatRouteData } from "@/lib/chatRouteResolve";
 import { followActiveChat } from "@/lib/chatUrlFollow";
 import { isElectron } from "@/lib/constants";
 import { openChatInWorkspace } from "@/lib/openChatInWorkspace";
@@ -115,12 +115,6 @@ export function useChatRoute({ ready, panelOpen, setPanelOpen, projectId, worktr
   // ── The chat ──────────────────────────────────────────────────────────────
   const routeChat = route?.kind === "chat" && data?.kind === "chat" && data.chat.id === route.chatId ? data.chat : null;
   const openedFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (!routeChat) return;
-    // A link into the wrong org was sent here: say so once, on the page it landed on.
-    const notice = takeMovedChatNotice(routeChat.id);
-    if (notice) toast.info(notice);
-  }, [routeChat]);
   useEffect(() => {
     // Left the chat's page: the shell stays mounted, so a Back to it (the
     // same match) opens it again, over whatever the page in between showed.
