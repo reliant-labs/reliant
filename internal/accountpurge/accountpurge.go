@@ -283,6 +283,12 @@ var purgeSteps = []step{
 	// CASCADEs (threads, messages, tool_calls, user_updates) have nothing left
 	// to trip over.
 	{"chats", `DELETE FROM chats WHERE user_id = $1`},
+	// The pull requests the user's chats produced (chat_pr_links): keyed by
+	// chat, with the chat's owner as user_id, and no foreign key. After the
+	// chats: a link writer holds a key share on its chat, which the chats
+	// delete waits for, so a link committed meanwhile is visible here, and
+	// one that comes later finds no chat and writes nothing.
+	{"chat_pr_links", `DELETE FROM chat_pr_links WHERE user_id = $1`},
 
 	// Project children that CASCADE, deleted explicitly so a future FK change
 	// cannot silently orphan them.
