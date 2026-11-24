@@ -60654,6 +60654,19 @@
     },
     {
       "consumer": "WorkerTrigger",
+      "field": "AutomationKeys",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/automationtokens.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsAutomationtokens"
+      ],
+      "providers": [
+        "CredentialsAutomationtokens"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerTrigger",
       "field": "ConnectionVault",
       "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
       "methods": [],

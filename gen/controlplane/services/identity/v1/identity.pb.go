@@ -1836,6 +1836,200 @@ func (x *ListIdentitiesResponse) GetIdentities() []*v1.IdentitySummary {
 	return nil
 }
 
+type ImportIdentityUsersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	EnvironmentId string                 `protobuf:"bytes,2,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
+	// The managed identity this request is for, by ManagedIdentity.name. Empty
+	// is the environment's only identity, or the one named "identity" when it
+	// declares several. A name it does not declare is NotFound.
+	Identity string `protobuf:"bytes,3,opt,name=identity,proto3" json:"identity,omitempty"`
+	// 1 to 500 rows: forge's client batches a file by 500.
+	Users []*v1.ImportIdentityUser `protobuf:"bytes,4,rep,name=users,proto3" json:"users,omitempty"`
+	// Validate and resolve every row against the instance; write nothing.
+	DryRun bool `protobuf:"varint,5,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"`
+	// Converge an account that already has the row's id (profile, verified
+	// flag, links, metadata, roles); nothing the row does not name is removed.
+	UpdateExisting bool `protobuf:"varint,6,opt,name=update_existing,json=updateExisting,proto3" json:"update_existing,omitempty"`
+	// Also overwrite the password hash of an account that already exists.
+	UpdatePasswords bool `protobuf:"varint,7,opt,name=update_passwords,json=updatePasswords,proto3" json:"update_passwords,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ImportIdentityUsersRequest) Reset() {
+	*x = ImportIdentityUsersRequest{}
+	mi := &file_services_identity_v1_identity_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportIdentityUsersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportIdentityUsersRequest) ProtoMessage() {}
+
+func (x *ImportIdentityUsersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_identity_v1_identity_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportIdentityUsersRequest.ProtoReflect.Descriptor instead.
+func (*ImportIdentityUsersRequest) Descriptor() ([]byte, []int) {
+	return file_services_identity_v1_identity_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ImportIdentityUsersRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ImportIdentityUsersRequest) GetEnvironmentId() string {
+	if x != nil {
+		return x.EnvironmentId
+	}
+	return ""
+}
+
+func (x *ImportIdentityUsersRequest) GetIdentity() string {
+	if x != nil {
+		return x.Identity
+	}
+	return ""
+}
+
+func (x *ImportIdentityUsersRequest) GetUsers() []*v1.ImportIdentityUser {
+	if x != nil {
+		return x.Users
+	}
+	return nil
+}
+
+func (x *ImportIdentityUsersRequest) GetDryRun() bool {
+	if x != nil {
+		return x.DryRun
+	}
+	return false
+}
+
+func (x *ImportIdentityUsersRequest) GetUpdateExisting() bool {
+	if x != nil {
+		return x.UpdateExisting
+	}
+	return false
+}
+
+func (x *ImportIdentityUsersRequest) GetUpdatePasswords() bool {
+	if x != nil {
+		return x.UpdatePasswords
+	}
+	return false
+}
+
+type ImportIdentityUsersResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// One per row, in request order.
+	Results []*v1.ImportIdentityResult `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
+	// The rows per outcome: what the activity records instead of the rows.
+	Created       int32 `protobuf:"varint,2,opt,name=created,proto3" json:"created,omitempty"`
+	Updated       int32 `protobuf:"varint,3,opt,name=updated,proto3" json:"updated,omitempty"`
+	Unchanged     int32 `protobuf:"varint,4,opt,name=unchanged,proto3" json:"unchanged,omitempty"`
+	Conflict      int32 `protobuf:"varint,5,opt,name=conflict,proto3" json:"conflict,omitempty"`
+	Invalid       int32 `protobuf:"varint,6,opt,name=invalid,proto3" json:"invalid,omitempty"`
+	Failed        int32 `protobuf:"varint,7,opt,name=failed,proto3" json:"failed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportIdentityUsersResponse) Reset() {
+	*x = ImportIdentityUsersResponse{}
+	mi := &file_services_identity_v1_identity_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportIdentityUsersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportIdentityUsersResponse) ProtoMessage() {}
+
+func (x *ImportIdentityUsersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_identity_v1_identity_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportIdentityUsersResponse.ProtoReflect.Descriptor instead.
+func (*ImportIdentityUsersResponse) Descriptor() ([]byte, []int) {
+	return file_services_identity_v1_identity_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ImportIdentityUsersResponse) GetResults() []*v1.ImportIdentityResult {
+	if x != nil {
+		return x.Results
+	}
+	return nil
+}
+
+func (x *ImportIdentityUsersResponse) GetCreated() int32 {
+	if x != nil {
+		return x.Created
+	}
+	return 0
+}
+
+func (x *ImportIdentityUsersResponse) GetUpdated() int32 {
+	if x != nil {
+		return x.Updated
+	}
+	return 0
+}
+
+func (x *ImportIdentityUsersResponse) GetUnchanged() int32 {
+	if x != nil {
+		return x.Unchanged
+	}
+	return 0
+}
+
+func (x *ImportIdentityUsersResponse) GetConflict() int32 {
+	if x != nil {
+		return x.Conflict
+	}
+	return 0
+}
+
+func (x *ImportIdentityUsersResponse) GetInvalid() int32 {
+	if x != nil {
+		return x.Invalid
+	}
+	return 0
+}
+
+func (x *ImportIdentityUsersResponse) GetFailed() int32 {
+	if x != nil {
+		return x.Failed
+	}
+	return 0
+}
+
 type CheckIdentitySocialSignInRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
@@ -1850,7 +2044,7 @@ type CheckIdentitySocialSignInRequest struct {
 
 func (x *CheckIdentitySocialSignInRequest) Reset() {
 	*x = CheckIdentitySocialSignInRequest{}
-	mi := &file_services_identity_v1_identity_proto_msgTypes[26]
+	mi := &file_services_identity_v1_identity_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1862,7 +2056,7 @@ func (x *CheckIdentitySocialSignInRequest) String() string {
 func (*CheckIdentitySocialSignInRequest) ProtoMessage() {}
 
 func (x *CheckIdentitySocialSignInRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_identity_v1_identity_proto_msgTypes[26]
+	mi := &file_services_identity_v1_identity_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1875,7 +2069,7 @@ func (x *CheckIdentitySocialSignInRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckIdentitySocialSignInRequest.ProtoReflect.Descriptor instead.
 func (*CheckIdentitySocialSignInRequest) Descriptor() ([]byte, []int) {
-	return file_services_identity_v1_identity_proto_rawDescGZIP(), []int{26}
+	return file_services_identity_v1_identity_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CheckIdentitySocialSignInRequest) GetOrgId() string {
@@ -1914,7 +2108,7 @@ type CheckIdentitySocialSignInResponse struct {
 
 func (x *CheckIdentitySocialSignInResponse) Reset() {
 	*x = CheckIdentitySocialSignInResponse{}
-	mi := &file_services_identity_v1_identity_proto_msgTypes[27]
+	mi := &file_services_identity_v1_identity_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1926,7 +2120,7 @@ func (x *CheckIdentitySocialSignInResponse) String() string {
 func (*CheckIdentitySocialSignInResponse) ProtoMessage() {}
 
 func (x *CheckIdentitySocialSignInResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_identity_v1_identity_proto_msgTypes[27]
+	mi := &file_services_identity_v1_identity_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1939,7 +2133,7 @@ func (x *CheckIdentitySocialSignInResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use CheckIdentitySocialSignInResponse.ProtoReflect.Descriptor instead.
 func (*CheckIdentitySocialSignInResponse) Descriptor() ([]byte, []int) {
-	return file_services_identity_v1_identity_proto_rawDescGZIP(), []int{27}
+	return file_services_identity_v1_identity_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *CheckIdentitySocialSignInResponse) GetProviders() []*v1.IdentitySocialCheck {
@@ -2108,7 +2302,23 @@ const file_services_identity_v1_identity_proto_rawDesc = "" +
 	"\x16ListIdentitiesResponse\x12@\n" +
 	"\n" +
 	"identities\x18\x01 \x03(\v2 .controlplane.v1.IdentitySummaryR\n" +
-	"identities\"|\n" +
+	"identities\"\x9e\x02\n" +
+	"\x1aImportIdentityUsersRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12%\n" +
+	"\x0eenvironment_id\x18\x02 \x01(\tR\renvironmentId\x12\x1a\n" +
+	"\bidentity\x18\x03 \x01(\tR\bidentity\x129\n" +
+	"\x05users\x18\x04 \x03(\v2#.controlplane.v1.ImportIdentityUserR\x05users\x12\x17\n" +
+	"\adry_run\x18\x05 \x01(\bR\x06dryRun\x12'\n" +
+	"\x0fupdate_existing\x18\x06 \x01(\bR\x0eupdateExisting\x12)\n" +
+	"\x10update_passwords\x18\a \x01(\bR\x0fupdatePasswords\"\xfe\x01\n" +
+	"\x1bImportIdentityUsersResponse\x12?\n" +
+	"\aresults\x18\x01 \x03(\v2%.controlplane.v1.ImportIdentityResultR\aresults\x12\x18\n" +
+	"\acreated\x18\x02 \x01(\x05R\acreated\x12\x18\n" +
+	"\aupdated\x18\x03 \x01(\x05R\aupdated\x12\x1c\n" +
+	"\tunchanged\x18\x04 \x01(\x05R\tunchanged\x12\x1a\n" +
+	"\bconflict\x18\x05 \x01(\x05R\bconflict\x12\x18\n" +
+	"\ainvalid\x18\x06 \x01(\x05R\ainvalid\x12\x16\n" +
+	"\x06failed\x18\a \x01(\x05R\x06failed\"|\n" +
 	" CheckIdentitySocialSignInRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12%\n" +
 	"\x0eenvironment_id\x18\x02 \x01(\tR\renvironmentId\x12\x1a\n" +
@@ -2116,11 +2326,11 @@ const file_services_identity_v1_identity_proto_rawDesc = "" +
 	"!CheckIdentitySocialSignInResponse\x12B\n" +
 	"\tproviders\x18\x01 \x03(\v2$.controlplane.v1.IdentitySocialCheckR\tproviders\x12.\n" +
 	"\x13social_callback_url\x18\x02 \x01(\tR\x11socialCallbackUrl\x12\x1a\n" +
-	"\bidentity\x18\x03 \x01(\tR\bidentity2\xf7\v\n" +
-	"\x0fIdentityService\x12j\n" +
-	"\x11GetIdentityStatus\x12).controlplane.v1.GetIdentityStatusRequest\x1a*.controlplane.v1.GetIdentityStatusResponse\x12f\n" +
-	"\x0eListIdentities\x12&.controlplane.v1.ListIdentitiesRequest\x1a'.controlplane.v1.ListIdentitiesResponse\"\x03\x90\x02\x01\x12b\n" +
-	"\tListUsers\x12).controlplane.v1.ListIdentityUsersRequest\x1a*.controlplane.v1.ListIdentityUsersResponse\x12a\n" +
+	"\bidentity\x18\x03 \x01(\tR\bidentity2\xeb\f\n" +
+	"\x0fIdentityService\x12o\n" +
+	"\x11GetIdentityStatus\x12).controlplane.v1.GetIdentityStatusRequest\x1a*.controlplane.v1.GetIdentityStatusResponse\"\x03\x90\x02\x01\x12f\n" +
+	"\x0eListIdentities\x12&.controlplane.v1.ListIdentitiesRequest\x1a'.controlplane.v1.ListIdentitiesResponse\"\x03\x90\x02\x01\x12g\n" +
+	"\tListUsers\x12).controlplane.v1.ListIdentityUsersRequest\x1a*.controlplane.v1.ListIdentityUsersResponse\"\x03\x90\x02\x01\x12a\n" +
 	"\aGetUser\x12'.controlplane.v1.GetIdentityUserRequest\x1a(.controlplane.v1.GetIdentityUserResponse\"\x03\x90\x02\x01\x12e\n" +
 	"\n" +
 	"InviteUser\x12*.controlplane.v1.InviteIdentityUserRequest\x1a+.controlplane.v1.InviteIdentityUserResponse\x12k\n" +
@@ -2133,7 +2343,8 @@ const file_services_identity_v1_identity_proto_rawDesc = "" +
 	"DeleteUser\x12*.controlplane.v1.DeleteIdentityUserRequest\x1a+.controlplane.v1.DeleteIdentityUserResponse\x12q\n" +
 	"\x0eRevokeSessions\x12..controlplane.v1.RevokeIdentitySessionsRequest\x1a/.controlplane.v1.RevokeIdentitySessionsResponse\x12n\n" +
 	"\rRequestExport\x12-.controlplane.v1.RequestIdentityExportRequest\x1a..controlplane.v1.RequestIdentityExportResponse\x12k\n" +
-	"\fGetExportURL\x12,.controlplane.v1.GetIdentityExportURLRequest\x1a-.controlplane.v1.GetIdentityExportURLResponse\x12z\n" +
+	"\fGetExportURL\x12,.controlplane.v1.GetIdentityExportURLRequest\x1a-.controlplane.v1.GetIdentityExportURLResponse\x12h\n" +
+	"\vImportUsers\x12+.controlplane.v1.ImportIdentityUsersRequest\x1a,.controlplane.v1.ImportIdentityUsersResponse\x12z\n" +
 	"\x11CheckSocialSignIn\x121.controlplane.v1.CheckIdentitySocialSignInRequest\x1a2.controlplane.v1.CheckIdentitySocialSignInResponseB\xd7\x01\n" +
 	"\x13com.controlplane.v1B\rIdentityProtoP\x01ZTgithub.com/reliant-labs/reliant/gen/controlplane/services/identity/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
@@ -2149,7 +2360,7 @@ func file_services_identity_v1_identity_proto_rawDescGZIP() []byte {
 	return file_services_identity_v1_identity_proto_rawDescData
 }
 
-var file_services_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_services_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_services_identity_v1_identity_proto_goTypes = []any{
 	(*GetIdentityStatusRequest)(nil),          // 0: controlplane.v1.GetIdentityStatusRequest
 	(*GetIdentityStatusResponse)(nil),         // 1: controlplane.v1.GetIdentityStatusResponse
@@ -2177,79 +2388,87 @@ var file_services_identity_v1_identity_proto_goTypes = []any{
 	(*GetIdentityExportURLResponse)(nil),      // 23: controlplane.v1.GetIdentityExportURLResponse
 	(*ListIdentitiesRequest)(nil),             // 24: controlplane.v1.ListIdentitiesRequest
 	(*ListIdentitiesResponse)(nil),            // 25: controlplane.v1.ListIdentitiesResponse
-	(*CheckIdentitySocialSignInRequest)(nil),  // 26: controlplane.v1.CheckIdentitySocialSignInRequest
-	(*CheckIdentitySocialSignInResponse)(nil), // 27: controlplane.v1.CheckIdentitySocialSignInResponse
-	(v1.IdentityState)(0),                     // 28: controlplane.v1.IdentityState
-	(*v1.IdentityApp)(nil),                    // 29: controlplane.v1.IdentityApp
-	(*v1.IdentityDelivery)(nil),               // 30: controlplane.v1.IdentityDelivery
-	(*timestamppb.Timestamp)(nil),             // 31: google.protobuf.Timestamp
-	(v1.IdentityMailDelivery)(0),              // 32: controlplane.v1.IdentityMailDelivery
-	(v1.IdentityNotEnabledReason)(0),          // 33: controlplane.v1.IdentityNotEnabledReason
-	(*v1.IdentityEnvironment)(nil),            // 34: controlplane.v1.IdentityEnvironment
-	(*v1.IdentitySocialStatus)(nil),           // 35: controlplane.v1.IdentitySocialStatus
-	(v1.IdentityUserState)(0),                 // 36: controlplane.v1.IdentityUserState
-	(*v1.IdentityUser)(nil),                   // 37: controlplane.v1.IdentityUser
-	(*v1.IdentityRole)(nil),                   // 38: controlplane.v1.IdentityRole
-	(*v1.IdentityPasswordCode)(nil),           // 39: controlplane.v1.IdentityPasswordCode
-	(*v1.IdentitySummary)(nil),                // 40: controlplane.v1.IdentitySummary
-	(*v1.IdentitySocialCheck)(nil),            // 41: controlplane.v1.IdentitySocialCheck
+	(*ImportIdentityUsersRequest)(nil),        // 26: controlplane.v1.ImportIdentityUsersRequest
+	(*ImportIdentityUsersResponse)(nil),       // 27: controlplane.v1.ImportIdentityUsersResponse
+	(*CheckIdentitySocialSignInRequest)(nil),  // 28: controlplane.v1.CheckIdentitySocialSignInRequest
+	(*CheckIdentitySocialSignInResponse)(nil), // 29: controlplane.v1.CheckIdentitySocialSignInResponse
+	(v1.IdentityState)(0),                     // 30: controlplane.v1.IdentityState
+	(*v1.IdentityApp)(nil),                    // 31: controlplane.v1.IdentityApp
+	(*v1.IdentityDelivery)(nil),               // 32: controlplane.v1.IdentityDelivery
+	(*timestamppb.Timestamp)(nil),             // 33: google.protobuf.Timestamp
+	(v1.IdentityMailDelivery)(0),              // 34: controlplane.v1.IdentityMailDelivery
+	(v1.IdentityNotEnabledReason)(0),          // 35: controlplane.v1.IdentityNotEnabledReason
+	(*v1.IdentityEnvironment)(nil),            // 36: controlplane.v1.IdentityEnvironment
+	(*v1.IdentitySocialStatus)(nil),           // 37: controlplane.v1.IdentitySocialStatus
+	(v1.IdentityUserState)(0),                 // 38: controlplane.v1.IdentityUserState
+	(*v1.IdentityUser)(nil),                   // 39: controlplane.v1.IdentityUser
+	(*v1.IdentityRole)(nil),                   // 40: controlplane.v1.IdentityRole
+	(*v1.IdentityPasswordCode)(nil),           // 41: controlplane.v1.IdentityPasswordCode
+	(*v1.IdentitySummary)(nil),                // 42: controlplane.v1.IdentitySummary
+	(*v1.ImportIdentityUser)(nil),             // 43: controlplane.v1.ImportIdentityUser
+	(*v1.ImportIdentityResult)(nil),           // 44: controlplane.v1.ImportIdentityResult
+	(*v1.IdentitySocialCheck)(nil),            // 45: controlplane.v1.IdentitySocialCheck
 }
 var file_services_identity_v1_identity_proto_depIdxs = []int32{
-	28, // 0: controlplane.v1.GetIdentityStatusResponse.state:type_name -> controlplane.v1.IdentityState
-	29, // 1: controlplane.v1.GetIdentityStatusResponse.apps:type_name -> controlplane.v1.IdentityApp
-	30, // 2: controlplane.v1.GetIdentityStatusResponse.deliveries:type_name -> controlplane.v1.IdentityDelivery
-	31, // 3: controlplane.v1.GetIdentityStatusResponse.last_reconciled_at:type_name -> google.protobuf.Timestamp
-	31, // 4: controlplane.v1.GetIdentityStatusResponse.next_attempt_at:type_name -> google.protobuf.Timestamp
-	31, // 5: controlplane.v1.GetIdentityStatusResponse.grace_until:type_name -> google.protobuf.Timestamp
-	32, // 6: controlplane.v1.GetIdentityStatusResponse.mail_delivery:type_name -> controlplane.v1.IdentityMailDelivery
-	33, // 7: controlplane.v1.GetIdentityStatusResponse.not_enabled_reason:type_name -> controlplane.v1.IdentityNotEnabledReason
-	34, // 8: controlplane.v1.GetIdentityStatusResponse.owner_environment:type_name -> controlplane.v1.IdentityEnvironment
-	34, // 9: controlplane.v1.GetIdentityStatusResponse.sharer_environments:type_name -> controlplane.v1.IdentityEnvironment
-	35, // 10: controlplane.v1.GetIdentityStatusResponse.social:type_name -> controlplane.v1.IdentitySocialStatus
-	36, // 11: controlplane.v1.ListIdentityUsersRequest.state:type_name -> controlplane.v1.IdentityUserState
-	37, // 12: controlplane.v1.ListIdentityUsersResponse.users:type_name -> controlplane.v1.IdentityUser
-	38, // 13: controlplane.v1.ListIdentityUsersResponse.roles:type_name -> controlplane.v1.IdentityRole
-	37, // 14: controlplane.v1.GetIdentityUserResponse.user:type_name -> controlplane.v1.IdentityUser
-	39, // 15: controlplane.v1.InviteIdentityUserResponse.code:type_name -> controlplane.v1.IdentityPasswordCode
-	37, // 16: controlplane.v1.SetIdentityUserRolesResponse.user:type_name -> controlplane.v1.IdentityUser
-	39, // 17: controlplane.v1.SendIdentityPasswordResetResponse.code:type_name -> controlplane.v1.IdentityPasswordCode
-	31, // 18: controlplane.v1.RequestIdentityExportResponse.expires_at:type_name -> google.protobuf.Timestamp
-	31, // 19: controlplane.v1.GetIdentityExportURLResponse.expires_at:type_name -> google.protobuf.Timestamp
-	40, // 20: controlplane.v1.ListIdentitiesResponse.identities:type_name -> controlplane.v1.IdentitySummary
-	41, // 21: controlplane.v1.CheckIdentitySocialSignInResponse.providers:type_name -> controlplane.v1.IdentitySocialCheck
-	0,  // 22: controlplane.v1.IdentityService.GetIdentityStatus:input_type -> controlplane.v1.GetIdentityStatusRequest
-	24, // 23: controlplane.v1.IdentityService.ListIdentities:input_type -> controlplane.v1.ListIdentitiesRequest
-	2,  // 24: controlplane.v1.IdentityService.ListUsers:input_type -> controlplane.v1.ListIdentityUsersRequest
-	4,  // 25: controlplane.v1.IdentityService.GetUser:input_type -> controlplane.v1.GetIdentityUserRequest
-	6,  // 26: controlplane.v1.IdentityService.InviteUser:input_type -> controlplane.v1.InviteIdentityUserRequest
-	8,  // 27: controlplane.v1.IdentityService.SetUserRoles:input_type -> controlplane.v1.SetIdentityUserRolesRequest
-	10, // 28: controlplane.v1.IdentityService.SendPasswordReset:input_type -> controlplane.v1.SendIdentityPasswordResetRequest
-	12, // 29: controlplane.v1.IdentityService.LockUser:input_type -> controlplane.v1.LockIdentityUserRequest
-	14, // 30: controlplane.v1.IdentityService.UnlockUser:input_type -> controlplane.v1.UnlockIdentityUserRequest
-	16, // 31: controlplane.v1.IdentityService.DeleteUser:input_type -> controlplane.v1.DeleteIdentityUserRequest
-	18, // 32: controlplane.v1.IdentityService.RevokeSessions:input_type -> controlplane.v1.RevokeIdentitySessionsRequest
-	20, // 33: controlplane.v1.IdentityService.RequestExport:input_type -> controlplane.v1.RequestIdentityExportRequest
-	22, // 34: controlplane.v1.IdentityService.GetExportURL:input_type -> controlplane.v1.GetIdentityExportURLRequest
-	26, // 35: controlplane.v1.IdentityService.CheckSocialSignIn:input_type -> controlplane.v1.CheckIdentitySocialSignInRequest
-	1,  // 36: controlplane.v1.IdentityService.GetIdentityStatus:output_type -> controlplane.v1.GetIdentityStatusResponse
-	25, // 37: controlplane.v1.IdentityService.ListIdentities:output_type -> controlplane.v1.ListIdentitiesResponse
-	3,  // 38: controlplane.v1.IdentityService.ListUsers:output_type -> controlplane.v1.ListIdentityUsersResponse
-	5,  // 39: controlplane.v1.IdentityService.GetUser:output_type -> controlplane.v1.GetIdentityUserResponse
-	7,  // 40: controlplane.v1.IdentityService.InviteUser:output_type -> controlplane.v1.InviteIdentityUserResponse
-	9,  // 41: controlplane.v1.IdentityService.SetUserRoles:output_type -> controlplane.v1.SetIdentityUserRolesResponse
-	11, // 42: controlplane.v1.IdentityService.SendPasswordReset:output_type -> controlplane.v1.SendIdentityPasswordResetResponse
-	13, // 43: controlplane.v1.IdentityService.LockUser:output_type -> controlplane.v1.LockIdentityUserResponse
-	15, // 44: controlplane.v1.IdentityService.UnlockUser:output_type -> controlplane.v1.UnlockIdentityUserResponse
-	17, // 45: controlplane.v1.IdentityService.DeleteUser:output_type -> controlplane.v1.DeleteIdentityUserResponse
-	19, // 46: controlplane.v1.IdentityService.RevokeSessions:output_type -> controlplane.v1.RevokeIdentitySessionsResponse
-	21, // 47: controlplane.v1.IdentityService.RequestExport:output_type -> controlplane.v1.RequestIdentityExportResponse
-	23, // 48: controlplane.v1.IdentityService.GetExportURL:output_type -> controlplane.v1.GetIdentityExportURLResponse
-	27, // 49: controlplane.v1.IdentityService.CheckSocialSignIn:output_type -> controlplane.v1.CheckIdentitySocialSignInResponse
-	36, // [36:50] is the sub-list for method output_type
-	22, // [22:36] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	30, // 0: controlplane.v1.GetIdentityStatusResponse.state:type_name -> controlplane.v1.IdentityState
+	31, // 1: controlplane.v1.GetIdentityStatusResponse.apps:type_name -> controlplane.v1.IdentityApp
+	32, // 2: controlplane.v1.GetIdentityStatusResponse.deliveries:type_name -> controlplane.v1.IdentityDelivery
+	33, // 3: controlplane.v1.GetIdentityStatusResponse.last_reconciled_at:type_name -> google.protobuf.Timestamp
+	33, // 4: controlplane.v1.GetIdentityStatusResponse.next_attempt_at:type_name -> google.protobuf.Timestamp
+	33, // 5: controlplane.v1.GetIdentityStatusResponse.grace_until:type_name -> google.protobuf.Timestamp
+	34, // 6: controlplane.v1.GetIdentityStatusResponse.mail_delivery:type_name -> controlplane.v1.IdentityMailDelivery
+	35, // 7: controlplane.v1.GetIdentityStatusResponse.not_enabled_reason:type_name -> controlplane.v1.IdentityNotEnabledReason
+	36, // 8: controlplane.v1.GetIdentityStatusResponse.owner_environment:type_name -> controlplane.v1.IdentityEnvironment
+	36, // 9: controlplane.v1.GetIdentityStatusResponse.sharer_environments:type_name -> controlplane.v1.IdentityEnvironment
+	37, // 10: controlplane.v1.GetIdentityStatusResponse.social:type_name -> controlplane.v1.IdentitySocialStatus
+	38, // 11: controlplane.v1.ListIdentityUsersRequest.state:type_name -> controlplane.v1.IdentityUserState
+	39, // 12: controlplane.v1.ListIdentityUsersResponse.users:type_name -> controlplane.v1.IdentityUser
+	40, // 13: controlplane.v1.ListIdentityUsersResponse.roles:type_name -> controlplane.v1.IdentityRole
+	39, // 14: controlplane.v1.GetIdentityUserResponse.user:type_name -> controlplane.v1.IdentityUser
+	41, // 15: controlplane.v1.InviteIdentityUserResponse.code:type_name -> controlplane.v1.IdentityPasswordCode
+	39, // 16: controlplane.v1.SetIdentityUserRolesResponse.user:type_name -> controlplane.v1.IdentityUser
+	41, // 17: controlplane.v1.SendIdentityPasswordResetResponse.code:type_name -> controlplane.v1.IdentityPasswordCode
+	33, // 18: controlplane.v1.RequestIdentityExportResponse.expires_at:type_name -> google.protobuf.Timestamp
+	33, // 19: controlplane.v1.GetIdentityExportURLResponse.expires_at:type_name -> google.protobuf.Timestamp
+	42, // 20: controlplane.v1.ListIdentitiesResponse.identities:type_name -> controlplane.v1.IdentitySummary
+	43, // 21: controlplane.v1.ImportIdentityUsersRequest.users:type_name -> controlplane.v1.ImportIdentityUser
+	44, // 22: controlplane.v1.ImportIdentityUsersResponse.results:type_name -> controlplane.v1.ImportIdentityResult
+	45, // 23: controlplane.v1.CheckIdentitySocialSignInResponse.providers:type_name -> controlplane.v1.IdentitySocialCheck
+	0,  // 24: controlplane.v1.IdentityService.GetIdentityStatus:input_type -> controlplane.v1.GetIdentityStatusRequest
+	24, // 25: controlplane.v1.IdentityService.ListIdentities:input_type -> controlplane.v1.ListIdentitiesRequest
+	2,  // 26: controlplane.v1.IdentityService.ListUsers:input_type -> controlplane.v1.ListIdentityUsersRequest
+	4,  // 27: controlplane.v1.IdentityService.GetUser:input_type -> controlplane.v1.GetIdentityUserRequest
+	6,  // 28: controlplane.v1.IdentityService.InviteUser:input_type -> controlplane.v1.InviteIdentityUserRequest
+	8,  // 29: controlplane.v1.IdentityService.SetUserRoles:input_type -> controlplane.v1.SetIdentityUserRolesRequest
+	10, // 30: controlplane.v1.IdentityService.SendPasswordReset:input_type -> controlplane.v1.SendIdentityPasswordResetRequest
+	12, // 31: controlplane.v1.IdentityService.LockUser:input_type -> controlplane.v1.LockIdentityUserRequest
+	14, // 32: controlplane.v1.IdentityService.UnlockUser:input_type -> controlplane.v1.UnlockIdentityUserRequest
+	16, // 33: controlplane.v1.IdentityService.DeleteUser:input_type -> controlplane.v1.DeleteIdentityUserRequest
+	18, // 34: controlplane.v1.IdentityService.RevokeSessions:input_type -> controlplane.v1.RevokeIdentitySessionsRequest
+	20, // 35: controlplane.v1.IdentityService.RequestExport:input_type -> controlplane.v1.RequestIdentityExportRequest
+	22, // 36: controlplane.v1.IdentityService.GetExportURL:input_type -> controlplane.v1.GetIdentityExportURLRequest
+	26, // 37: controlplane.v1.IdentityService.ImportUsers:input_type -> controlplane.v1.ImportIdentityUsersRequest
+	28, // 38: controlplane.v1.IdentityService.CheckSocialSignIn:input_type -> controlplane.v1.CheckIdentitySocialSignInRequest
+	1,  // 39: controlplane.v1.IdentityService.GetIdentityStatus:output_type -> controlplane.v1.GetIdentityStatusResponse
+	25, // 40: controlplane.v1.IdentityService.ListIdentities:output_type -> controlplane.v1.ListIdentitiesResponse
+	3,  // 41: controlplane.v1.IdentityService.ListUsers:output_type -> controlplane.v1.ListIdentityUsersResponse
+	5,  // 42: controlplane.v1.IdentityService.GetUser:output_type -> controlplane.v1.GetIdentityUserResponse
+	7,  // 43: controlplane.v1.IdentityService.InviteUser:output_type -> controlplane.v1.InviteIdentityUserResponse
+	9,  // 44: controlplane.v1.IdentityService.SetUserRoles:output_type -> controlplane.v1.SetIdentityUserRolesResponse
+	11, // 45: controlplane.v1.IdentityService.SendPasswordReset:output_type -> controlplane.v1.SendIdentityPasswordResetResponse
+	13, // 46: controlplane.v1.IdentityService.LockUser:output_type -> controlplane.v1.LockIdentityUserResponse
+	15, // 47: controlplane.v1.IdentityService.UnlockUser:output_type -> controlplane.v1.UnlockIdentityUserResponse
+	17, // 48: controlplane.v1.IdentityService.DeleteUser:output_type -> controlplane.v1.DeleteIdentityUserResponse
+	19, // 49: controlplane.v1.IdentityService.RevokeSessions:output_type -> controlplane.v1.RevokeIdentitySessionsResponse
+	21, // 50: controlplane.v1.IdentityService.RequestExport:output_type -> controlplane.v1.RequestIdentityExportResponse
+	23, // 51: controlplane.v1.IdentityService.GetExportURL:output_type -> controlplane.v1.GetIdentityExportURLResponse
+	27, // 52: controlplane.v1.IdentityService.ImportUsers:output_type -> controlplane.v1.ImportIdentityUsersResponse
+	29, // 53: controlplane.v1.IdentityService.CheckSocialSignIn:output_type -> controlplane.v1.CheckIdentitySocialSignInResponse
+	39, // [39:54] is the sub-list for method output_type
+	24, // [24:39] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_services_identity_v1_identity_proto_init() }
@@ -2264,7 +2483,7 @@ func file_services_identity_v1_identity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_identity_v1_identity_proto_rawDesc), len(file_services_identity_v1_identity_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   28,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

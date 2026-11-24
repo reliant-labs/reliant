@@ -9,173 +9,251 @@
  * stay live.
  *
  * Local stand-in for `@reliantlabs/forge-web-runtime/transport-scope`
- * (forge#2726, F4a; not yet released), with the same names and signatures,
- * so reliant's call sites can move onto it before the forge release ships.
- * Once a forge release publishes it, this file becomes a re-export and no
- * caller changes, just as src/fixtures/transport.ts stands in for forge#2716.
- * Matched to F4a's web-runtime/src/transport-scope.tsx (forge branch
- * feat/web-runtime-transport-scope, before its PR opened), including its two
- * exported types, TransportScopeOptions and ScopedClientContext. Keep it in
- * step with forge's; anything reliant adds is marked
- * "RELIANT EXTENSION" and listed here, so the swap knows what to keep:
+ * (forge#2726, F4a: forge#2735, not yet released). Everything below the
+ * "forge#2735, verbatim" line is a COPY of that PR's
+ * web-runtime/src/transport-scope.tsx (head ec728df1f), so the swap is one
+ * line: once a forge release publishes it, this whole file becomes
  *
- *   1. `createTransportScope` without a `queryClient` builds one with the
- *      app's defaults (lib/query-client.ts `createAppQueryClient`: staleTime,
- *      gcTime, the retry policy), not a bare `new QueryClient()`. The
- *      signature is forge's; only the default differs. On the swap this file
- *      keeps a one-line `createTransportScope` wrapper that fills
- *      `queryClient: createAppQueryClient()` and re-exports the rest.
+ *   export * from "@reliantlabs/forge-web-runtime/transport-scope";
  *
- * ── How a call finds its transport ──
+ * and no caller changes, just as src/fixtures/transport.ts stands in for
+ * forge#2716. There are NO reliant extensions; keep it that way, and keep the
+ * copy in step with forge's.
  *
- * React context cannot be read inside a `queryFn` or `mutationFn`, and
- * forge's generated hooks build their client at module scope. TanStack Query 5
- * passes the executing QueryClient to both functions as `context.client`, so
- * THE SCOPE'S QUERYCLIENT CARRIES ITS TRANSPORT: `createTransportScope` binds
- * the two (`transportOf`), and `scopedClient(Svc, fallback)(ctx)` resolves the
- * client from whichever QueryClient is running the call. One mechanism covers
- * hooks, `fetchQuery`/`prefetchQuery` on `scope.queryClient` outside React,
- * and `<service>Mutations(scope.queryClient)`. Inside a component,
- * `useClient` / `useTransport` read the nearest scope from context.
+ * In reliant:
+ *   - the fallback is the module transport: `useTransport(transport)` and
+ *     `useClient(Svc, connectClient(Svc))`, both from lib/connect.ts (its
+ *     routing and test seam included);
+ *   - a scope that should cache and retry like the rest of the app passes
+ *     `queryClient: createAppQueryClient()` (lib/query-client.ts): forge's
+ *     default is a bare `new QueryClient()`;
+ *   - `readOnly` is a flag for the UI only. The scope enforces nothing: a
+ *     read-only scope's TRANSPORT refuses writes (the fixture transport's
+ *     readOnly, src/fixtures/transport.ts).
  *
- * A scope ALWAYS has its own QueryClient, so its cache is isolated by
- * construction and the scope id never joins a query key: every
- * `xServiceKeys.*` stays a module constant, and `invalidateQueries(xKeys.all)`
- * invalidates the cache of whichever client it is called on.
+ * ── forge#2735, verbatim ──
  *
- * Outside a scope every lookup returns its `fallback`, which in reliant is the
- * module transport (`transport` / `connectClient(Svc)` from lib/connect.ts):
- * today's behaviour, test seam and routing included.
+ * TransportScope: a subtree of the app with its own Connect transport and its
+ * own React Query cache.
+ *
+ * WHY. A forge frontend has one transport, the module singleton behind
+ * `connectClient` in the owned src/lib/connect.ts, and its generated hooks
+ * build their clients at module scope. That is right for an app, and it
+ * leaves no way to point PART of the tree somewhere else: a sample app in a
+ * product tour that reads a fixture pack while the person's own chats and
+ * projects beside it stay live, a preview panel, a storybook-like gallery
+ * inside the app. Routing by request content (an interceptor that recognises
+ * "sample" ids) is the alternative, and it fails open: the first request it
+ * does not recognise goes to the real backend.
+ *
+ * HOW. The QueryClient carries the transport. React context cannot be read
+ * inside a queryFn or a mutationFn, but TanStack Query passes the QueryClient
+ * that runs them as `context.client` (queries from 5.66.0, mutations from
+ * 5.89.0). So a scope is a transport bound to a QueryClient of its own:
+ * createTransportScope records the binding (transportOf), and
+ * TransportScopeProvider mounts that QueryClient over the subtree. Every read
+ * the subtree makes — a hook, a `fetchQuery`/`prefetchQuery` on the scope's
+ * client outside React, a `<service>Mutations(scope.queryClient)` write —
+ * resolves its client from the QueryClient it runs on, through scopedClient.
+ *
+ * The scope's id is NOT part of any query key. A scope always owns its
+ * QueryClient, so its cache is isolated by construction, and a generated
+ * `<service>Keys.*` stays a module constant: an app's hand-written
+ * `invalidateQueries({ queryKey: orderServiceKeys.all })` keeps matching under
+ * a scope and outside it.
+ *
+ * Outside a scope — or on a TanStack Query too old to pass `context.client` —
+ * scopedClient returns the fallback, the module client, which is exactly what
+ * a generated hook used before this module existed.
  */
-
-import { createContext, useContext, type ReactElement, type ReactNode } from "react";
-import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
-import { createClient, type Client, type Transport } from "@connectrpc/connect";
 import type { DescService } from "@bufbuild/protobuf";
+import { createClient, type Client, type Transport } from "@connectrpc/connect";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  createContext,
+  createElement,
+  useContext,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
-import { createAppQueryClient } from "@/lib/query-client";
-
-/** A subtree's own transport and query cache. */
+/**
+ * A subtree's transport and the QueryClient that caches what it reads.
+ *
+ * `readOnly` is a flag for the app's own UI to read (hide write controls,
+ * show a "sample data" note). The runtime enforces nothing with it: what a
+ * scope's transport refuses is the transport's business.
+ */
 export interface TransportScope {
-  /** Names the scope (logs, tests). Never part of a query key. */
+  /** A name for the scope, for logs and debugging. Never part of a query key. */
   readonly id: string;
-  /** What every call made in the scope is sent over. */
+  /** Where every rpc made under this scope goes. */
   readonly transport: Transport;
-  /** The scope's own cache; it carries `transport` (see `transportOf`). */
+  /** The scope's own cache. Its binding to `transport` is what scopedClient reads. */
   readonly queryClient: QueryClient;
-  /** The UI's capability inside the scope: offer no write controls when true. */
+  /** Whether the app should treat the subtree as read-only. Advisory. */
   readonly readOnly: boolean;
 }
 
 /** What createTransportScope takes. */
 export interface TransportScopeOptions {
-  /** Names the scope (logs, tests). */
+  /** A name for the scope, for logs and debugging. */
   id: string;
-  /** Where every rpc made under the scope goes: a fixture pack's transport, a second backend. */
+  /** Where every rpc made under the scope goes: a fixture or mock transport, a second backend. */
   transport: Transport;
   /**
-   * The scope's cache. Defaults to a new one with the app's defaults
-   * (RELIANT EXTENSION 1). Never pass the app's own: its reads would all go
-   * to this transport.
+   * The scope's cache. Defaults to a new QueryClient with React Query's
+   * defaults. Pass one to set defaultOptions; never pass the app's own: its
+   * reads would then all go to this transport.
    */
   queryClient?: QueryClient;
-  /** Whether the UI treats the subtree as read-only. Default false. */
+  /** Whether the app should treat the subtree as read-only. Default false. */
   readOnly?: boolean;
 }
 
-/** What scopedClient reads: a query or mutation function's context, or anything carrying the QueryClient a call runs on. */
+/**
+ * What scopedClient reads from: React Query's query or mutation function
+ * context, or anything carrying the QueryClient a call runs on.
+ */
 export interface ScopedClientContext {
   readonly client?: QueryClient;
 }
 
-// The transport each scope's QueryClient carries. A WeakMap, so a dropped
-// scope's client and transport are collected with it.
+// QueryClient → the transport its scope was created with. A WeakMap, so a
+// scope's client and its transport are collected with the scope.
 const transports = new WeakMap<QueryClient, Transport>();
 
+// Transport → (service → client). Clients are cheap but not free, and a hook
+// that called createClient on every render would hand its consumers a new
+// identity each time.
+const clients = new WeakMap<Transport, WeakMap<DescService, unknown>>();
+
 /**
- * A scope over `transport`, with its own QueryClient. Throws when
- * `queryClient` already carries a different transport: the second binding
- * would silently move every read of the first scope.
+ * createTransportScope binds a transport to a QueryClient: every generated
+ * read and write that runs on that QueryClient goes to the transport.
+ *
+ * A QueryClient belongs to one transport. Binding one that is already bound
+ * to a different transport throws, because the second binding would silently
+ * move every read of the first scope.
  */
-export function createTransportScope(options: TransportScopeOptions): TransportScope {
-  const queryClient = options.queryClient ?? createAppQueryClient();
+export function createTransportScope(
+  options: TransportScopeOptions,
+): TransportScope {
+  const queryClient = options.queryClient ?? new QueryClient();
   const bound = transports.get(queryClient);
   if (bound !== undefined && bound !== options.transport) {
-    throw new Error(`createTransportScope(${JSON.stringify(options.id)}): this QueryClient already carries another scope's transport; give each scope its own`);
+    throw new Error(
+      `@reliantlabs/forge-web-runtime: createTransportScope("${options.id}") was given a ` +
+        "QueryClient already bound to another transport. Each scope needs a " +
+        "QueryClient of its own.",
+    );
   }
   transports.set(queryClient, options.transport);
-  return { id: options.id, transport: options.transport, queryClient, readOnly: options.readOnly ?? false };
-}
-
-const ScopeContext = createContext<TransportScope | null>(null);
-
-/**
- * Mounts `scope` over `children`: its QueryClient (QueryClientProvider) and
- * the scope itself (`useTransportScope`). The nearest scope wins. Mount no
- * other QueryClientProvider inside it: hooks below that one would run on its
- * client and leave the scope.
- */
-export function TransportScopeProvider({ scope, children }: { scope: TransportScope; children?: ReactNode }): ReactElement {
-  return (
-    <QueryClientProvider client={scope.queryClient}>
-      <ScopeContext.Provider value={scope}>{children}</ScopeContext.Provider>
-    </QueryClientProvider>
-  );
-}
-
-/** The nearest scope, or null outside every scope. */
-export function useTransportScope(): TransportScope | null {
-  return useContext(ScopeContext);
-}
-
-/** The nearest scope's transport, else `fallback` (reliant: lib/connect.ts `transport`). */
-export function useTransport(fallback: Transport): Transport {
-  return useTransportScope()?.transport ?? fallback;
+  return {
+    id: options.id,
+    transport: options.transport,
+    queryClient,
+    readOnly: options.readOnly ?? false,
+  };
 }
 
 /**
- * A client for `service` on the nearest scope's transport, else `fallback`
- * (reliant: `connectClient(service)`). Stable across renders (`clientFor`).
+ * transportOf returns the transport a QueryClient was bound to by
+ * createTransportScope, or undefined for any other QueryClient (the app's
+ * own).
  */
-export function useClient<S extends DescService>(service: S, fallback: Client<S>): Client<S> {
-  const scope = useTransportScope();
-  return scope ? clientFor(service, scope.transport) : fallback;
-}
-
-const clients = new WeakMap<Transport, WeakMap<DescService, Client<DescService>>>();
-
-/** A client for `service` on `transport`, memoized per (transport, service). */
-export function clientFor<S extends DescService>(service: S, transport: Transport): Client<S> {
-  let byService = clients.get(transport);
-  if (!byService) {
-    byService = new WeakMap();
-    clients.set(transport, byService);
-  }
-  let client = byService.get(service) as Client<S> | undefined;
-  if (!client) {
-    client = createClient(service, transport);
-    byService.set(service, client as Client<DescService>);
-  }
-  return client;
-}
-
-/** The transport `queryClient` carries, set by `createTransportScope`; undefined for any other client. */
 export function transportOf(queryClient: QueryClient): Transport | undefined {
   return transports.get(queryClient);
 }
 
 /**
- * What a generated hook calls (forge F4b): given the query or mutation
- * function's context, the client on the transport its QueryClient carries,
- * else `fallback`. A context with no `client` (an older TanStack, a direct
- * call) gets `fallback`, which is today's behaviour.
+ * clientFor returns a Connect client for `service` over `transport`. It is
+ * memoized per transport and service, so two calls return the same object
+ * and a hook may call it on every render.
+ */
+export function clientFor<S extends DescService>(
+  service: S,
+  transport: Transport,
+): Client<S> {
+  let byService = clients.get(transport);
+  if (byService === undefined) {
+    byService = new WeakMap();
+    clients.set(transport, byService);
+  }
+  let client = byService.get(service) as Client<S> | undefined;
+  if (client === undefined) {
+    client = createClient(service, transport);
+    byService.set(service, client);
+  }
+  return client;
+}
+
+/**
+ * scopedClient is what a generated hook file calls: a function of React
+ * Query's query or mutation function context that returns the client to
+ * use. On a QueryClient bound by createTransportScope it is that scope's
+ * client; on any other, or with no context at all, it is `fallback`.
  *
  *   const clientOf = scopedClient(OrderService, connectClient(OrderService));
- *   queryFn: (ctx) => clientOf(ctx).getOrder(req)
+ *   queryFn: (ctx) => clientOf(ctx).getOrder(req, { signal: ctx.signal })
  */
-export function scopedClient<S extends DescService>(service: S, fallback: Client<S>): (ctx?: ScopedClientContext) => Client<S> {
-  return (ctx) => {
-    const transport = ctx?.client ? transportOf(ctx.client) : undefined;
-    return transport ? clientFor(service, transport) : fallback;
+export function scopedClient<S extends DescService>(
+  service: S,
+  fallback: Client<S>,
+): (context?: ScopedClientContext) => Client<S> {
+  return (context) => {
+    const transport =
+      context?.client === undefined
+        ? undefined
+        : transports.get(context.client);
+    return transport === undefined ? fallback : clientFor(service, transport);
   };
+}
+
+const ScopeContext = createContext<TransportScope | null>(null);
+
+/**
+ * TransportScopeProvider mounts a scope over its children: the scope's
+ * QueryClient (a QueryClientProvider) and the scope itself (useTransportScope).
+ * A scope nested in another wins for its subtree.
+ *
+ * Do not mount another QueryClientProvider inside it: generated hooks below
+ * that one would run on its client and leave the scope.
+ */
+export function TransportScopeProvider({
+  scope,
+  children,
+}: {
+  scope: TransportScope;
+  children?: ReactNode;
+}): ReactElement {
+  return createElement(
+    QueryClientProvider,
+    { client: scope.queryClient },
+    createElement(ScopeContext.Provider, { value: scope }, children),
+  );
+}
+
+/** The nearest TransportScope above this component, or null outside any. */
+export function useTransportScope(): TransportScope | null {
+  return useContext(ScopeContext);
+}
+
+/** The nearest scope's transport, or `fallback` (the app's) outside any. */
+export function useTransport(fallback: Transport): Transport {
+  return useContext(ScopeContext)?.transport ?? fallback;
+}
+
+/**
+ * useClient is a hand-written hook's way to call an rpc: the client for
+ * `service` over the nearest scope's transport, or `fallback` (the app's
+ * module client) outside any. Memoized, so its identity is stable across
+ * renders.
+ */
+export function useClient<S extends DescService>(
+  service: S,
+  fallback: Client<S>,
+): Client<S> {
+  const scope = useContext(ScopeContext);
+  return scope === null ? fallback : clientFor(service, scope.transport);
 }

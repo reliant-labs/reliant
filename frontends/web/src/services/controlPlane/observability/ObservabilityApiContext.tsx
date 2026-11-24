@@ -5,10 +5,10 @@
  *
  * Every hook in hooks/observability-queries.ts calls through this context, so
  * the area can render against something other than control-plane: component
- * tests hand it an in-memory fake, and the dev-only preview route
- * (/forge-observability-preview) hands it fixtures, which is what makes the
- * screens lookable-at and Playwright-testable without a backend. The default
- * is the real client; production never provides anything else.
+ * tests hand it an in-memory fake. The default is the real client;
+ * production never provides anything else, and neither do the dev-only
+ * previews (/forge-observability-preview, …), which run the real client over
+ * the shop fixture pack's transport.
  */
 
 import { createContext, useContext, type ReactNode } from "react";

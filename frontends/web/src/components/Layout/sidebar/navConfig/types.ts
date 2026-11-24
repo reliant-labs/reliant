@@ -87,6 +87,12 @@ interface NavItemBase {
   available?: (ctx: NavCtx) => boolean;
   /** The row's test id, when it is not `nav-<id>` (ids tests and tours already name). */
   testId?: string;
+  /**
+   * The item's tour anchor (`data-tour`, Onboarding/JOURNEYS.md "Anchors"):
+   * on a group, its whole block (the row and, open, its rows). Set only on
+   * the items a journey points at; tourAnchors.test pins each one.
+   */
+  tour?: string;
 }
 
 export interface NavRow extends NavItemBase {
@@ -102,6 +108,13 @@ export interface NavRow extends NavItemBase {
   flatIcon?: ReactNode;
   href: NavHref;
   match?: NavMatch;
+  /**
+   * The kind of console page the row opens, when it always opens one kind
+   * (Services, Usage, Speed insights…). It is what a host that does not serve
+   * a page prunes by (navConfig/prune.ts `withoutPages`); rows that open no
+   * console page, or several kinds, leave it unset.
+   */
+  page?: ConsolePage["kind"];
   /** Leaves the current area for another place (AI providers ↗ in Settings). */
   external?: boolean;
   badge?: NavBadgeOf;

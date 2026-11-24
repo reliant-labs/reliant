@@ -15,6 +15,8 @@ export type Project = Real.Project;
 
 // The demo has no project pages to navigate to or chat page to leave.
 export const chooseProject: typeof Real.chooseProject = async () => false;
+// …so a project filter never moves the URL (the shell's ProjectSwitcher, through useChatProjectFilter).
+export const syncProjectFilterUrl: typeof Real.syncProjectFilterUrl = () => {};
 
 const none = async (): Promise<never> => {
   throw new Error("Reliant projects are not part of the forge demo.");

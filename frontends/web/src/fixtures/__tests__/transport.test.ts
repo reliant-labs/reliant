@@ -10,8 +10,10 @@
  * policy in overlay.ts (withEmptyReads, pending, fail).
  *
  * Schemas are real generated services: StorageBrowserService has NO_SIDE_EFFECTS
- * reads and one write (PresignObjectDownload); DeployService is unannotated
- * (GetTenant reads by name, CreateTenant writes, StreamLogs streams);
+ * reads (ListBrowsableBuckets) and one write (PresignObjectDownload);
+ * DeployService has annotated reads (GetTenant) and writes (CreateTenant);
+ * UserService/GetCurrentUser is an unannotated read (it writes on read);
+ * ToolsDaemonService/ConnectDaemon is an unannotated stream;
  * StreamingService/StreamUserUpdates is an annotated server stream.
  */
 
@@ -22,6 +24,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { ListObjectsRequestSchema, ListObjectsResponseSchema, StorageBrowserService } from "@/gen/controlplane/services/storage_browser/v1/storage_browser_pb";
+import { UserService } from "@/gen/controlplane/services/user/v1/user_pb";
 import { StreamingService } from "@/gen/reliant/v1/streaming_pb";
 import { ToolsDaemonService } from "@/gen/reliant/v1/tools_daemon_pb";
 
@@ -71,10 +74,12 @@ async function stillPending(p: Promise<unknown>): Promise<boolean> {
 
 it("the schemas say what these tests assume", () => {
   const NO_SIDE_EFFECTS = MethodOptions_IdempotencyLevel.NO_SIDE_EFFECTS;
-  expect(StorageBrowserService.method.listObjects.idempotency).toBe(NO_SIDE_EFFECTS);
+  // ListBrowsableBuckets writes no audit row; ListObjects does, so control-plane#3523 unmarked it.
+  expect(StorageBrowserService.method.listBrowsableBuckets.idempotency).toBe(NO_SIDE_EFFECTS);
   expect(StorageBrowserService.method.presignObjectDownload.idempotency).not.toBe(NO_SIDE_EFFECTS);
-  expect(DeployService.method.getTenant.idempotency).not.toBe(NO_SIDE_EFFECTS);
-  expect(DeployService.method.streamLogs.idempotency).not.toBe(NO_SIDE_EFFECTS);
+  expect(DeployService.method.getTenant.idempotency).toBe(NO_SIDE_EFFECTS);
+  expect(UserService.method.getCurrentUser.idempotency).not.toBe(NO_SIDE_EFFECTS);
+  expect(ToolsDaemonService.method.connectDaemon.idempotency).not.toBe(NO_SIDE_EFFECTS);
   expect(StreamingService.method.streamUserUpdates.idempotency).toBe(NO_SIDE_EFFECTS);
 });
 
@@ -118,15 +123,15 @@ describe("createFixtureTransport: routes", () => {
       readOnly: true,
       routes: (router) =>
         router.service(StorageBrowserService, {
-          listObjects(_req, ctx) {
+          listBrowsableBuckets(_req, ctx) {
             header = ctx.requestHeader.get("x-fixture");
             return {};
           },
         }),
     });
-    await storage(transport).listObjects({});
+    await storage(transport).listBrowsableBuckets({});
     expect(await code(storage(transport).presignObjectDownload({}))).toBe(Code.PermissionDenied);
-    expect(calls).toEqual(["ListObjects", "PresignObjectDownload"]);
+    expect(calls).toEqual(["ListBrowsableBuckets", "PresignObjectDownload"]);
     expect(header).toBe("yes");
   });
 });
@@ -246,20 +251,21 @@ describe("createFixtureTransport: readOnly", () => {
     const transport = createFixtureTransport({
       readOnly: true,
       readOnlyMessage: MESSAGE,
-      scenario: { [LIST]: () => ({ prefixes: ["p"] }), [PRESIGN]: write, [`${DeployService.typeName}/StreamLogs`]: () => [{}] },
+      scenario: { [BUCKETS]: () => ({ buckets: [{ name: "p" }] }), [PRESIGN]: write, [`${ToolsDaemonService.typeName}/ConnectDaemon`]: () => [{}] },
     });
-    expect((await storage(transport).listObjects({})).prefixes).toEqual(["p"]);
+    expect((await storage(transport).listBrowsableBuckets({})).buckets[0]?.name).toBe("p");
     const refused = await storage(transport).presignObjectDownload({}).catch((e: unknown) => e);
     expect(ConnectError.from(refused).code).toBe(Code.PermissionDenied);
     expect(ConnectError.from(refused).rawMessage).toBe(MESSAGE);
     expect(write).not.toHaveBeenCalled();
     // An unannotated stream is refused too: no name heuristic.
-    expect(await code(drain(deploy(transport).streamLogs({})))).toBe(Code.PermissionDenied);
+    expect(await code(drain(createClient(ToolsDaemonService, transport).connectDaemon((async function* () {})())))).toBe(Code.PermissionDenied);
   });
 
   it("the deprecated isDemoRead classifier runs through the same guard", async () => {
-    const transport = createFixtureTransport({ defaults: [DeployService], readOnly: isDemoRead, readOnlyMessage: MESSAGE });
-    await expect(deploy(transport).getTenant({})).resolves.toBeDefined();
+    const transport = createFixtureTransport({ defaults: [DeployService, UserService], readOnly: isDemoRead, readOnlyMessage: MESSAGE });
+    // An unannotated read, let through by its verb.
+    await expect(createClient(UserService, transport).getCurrentUser({})).resolves.toBeDefined();
     await expect(deploy(transport).createTenant({})).rejects.toSatisfy((e) => e instanceof ConnectError && e.code === Code.PermissionDenied && e.rawMessage === MESSAGE);
   });
 });
@@ -397,13 +403,13 @@ describe("checkFixturePack", () => {
 
 describe("overlay.ts (harness policy)", () => {
   it("withEmptyReads: an unanswered read answers the empty response; off by default", async () => {
-    const pack = defineFixturePack({ name: "p", scenario: { [LIST]: () => ({ prefixes: ["pack"] }) } });
-    expect(await code(storage(createFixtureTransport({ pack, readOnly: true })).listBrowsableBuckets({}))).toBe(Code.Unimplemented);
+    const pack = defineFixturePack({ name: "p", scenario: { [BUCKETS]: () => ({ buckets: [{ name: "pack" }] }) } });
+    expect(await code(deploy(createFixtureTransport({ pack, readOnly: true })).getTenant({}))).toBe(Code.Unimplemented);
 
-    const transport = createFixtureTransport(withEmptyReads({ pack, readOnly: true, readOnlyMessage: MESSAGE }, [StorageBrowserService, StreamingService]));
-    expect((await storage(transport).listBrowsableBuckets({})).buckets).toEqual([]);
+    const transport = createFixtureTransport(withEmptyReads({ pack, readOnly: true, readOnlyMessage: MESSAGE }, [StorageBrowserService, DeployService, StreamingService]));
+    expect(await deploy(transport).getTenant({})).toEqual(create(DeployService.method.getTenant.output));
     // The pack still wins, and a write is still refused, never answered empty.
-    expect((await storage(transport).listObjects({})).prefixes).toEqual(["pack"]);
+    expect((await storage(transport).listBrowsableBuckets({})).buckets[0]?.name).toBe("pack");
     expect(await code(storage(transport).presignObjectDownload({}))).toBe(Code.PermissionDenied);
     // An unanswered stream read answers one empty message, then is open and quiet until aborted.
     const abort = new AbortController();
