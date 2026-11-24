@@ -109,6 +109,11 @@ type ProjectReconcileRepo interface {
 	// checkout is installed now).
 	MarkProjectDaemonInstalledInScope(ctx context.Context, projectID, daemonID string, scope *core.OrgScope) (bool, error)
 	FailProjectDaemonInstallInScope(ctx context.Context, projectID, daemonID, installErr string, scope *core.OrgScope) (bool, error)
+	// SettleProjectDaemonFromNestedReposInScope settles a checkout with
+	// nested repositories from their outcomes once none is left to clone:
+	// failed naming them (also from installed), else installed. Fenced on
+	// the nested plan and scoped like the two above.
+	SettleProjectDaemonFromNestedReposInScope(ctx context.Context, projectID, daemonID, installErr string, scope *core.OrgScope) (bool, error)
 	// The machine's detachments and cleanup of other orgs' checkouts are the
 	// service's Checkouts (MachineCheckouts), joined to this by reconcileStore.
 	// UpdateProject also serves projectfacts.ReconcileGitRepo.
@@ -168,8 +173,8 @@ type ProjectDaemons interface {
 	// The nested repositories cloned into a checkout once its root lands
 	// (tools_daemon_nested_clone.go): claim the ones to clone, record each
 	// outcome, read them back, and list the checkouts with some to run.
-	ClaimProjectDaemonRepos(ctx context.Context, projectID, daemonID string, staleBefore time.Time) ([]*core.ProjectDaemonRepo, error)
-	SettleProjectDaemonRepo(ctx context.Context, projectID, daemonID, repoID, installErr string) error
+	ClaimNextProjectDaemonRepo(ctx context.Context, projectID, daemonID, claimID string, lease time.Duration) (*core.NestedRepoClaim, error)
+	SettleProjectDaemonRepo(ctx context.Context, projectID, daemonID, repoID, claimID, installErr string) (bool, error)
 	ListProjectDaemonReposForPair(ctx context.Context, projectID, daemonID string) ([]*core.ProjectDaemonRepo, error)
 	ListProjectsWithUnsettledDaemonRepos(ctx context.Context, daemonID string) ([]string, error)
 }

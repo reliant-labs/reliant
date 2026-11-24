@@ -106,9 +106,8 @@ func (s *Service) reconcileProjectDaemonsOnConnect(ctx context.Context, conn *da
 	s.restoreCheckoutsOnConnect(conn, missing)
 	// Nested repositories still to clone into a checkout whose root is
 	// there (tools_daemon_nested_clone.go), each on its own budget.
-	if scope, _, err := s.machineProjectScope(ctx, conn); err == nil {
-		s.resumeNestedClonesOnConnect(ctx, conn, scope, check)
-	}
+	// Each pass authorizes its project against the machine's scope itself.
+	s.resumeNestedClonesOnConnect(ctx, conn, check)
 	return nil
 }
 
@@ -470,11 +469,19 @@ func settleStaleInstall(ctx context.Context, database ProjectReconcileStore, che
 		return false, err
 	}
 	if state.Exists {
-		// The root landed; its nested repositories, if any are still to
-		// clone, settle the row when they have (resumeNestedClonesOnConnect
-		// runs them after this pass).
-		if nested, err := database.ListProjectDaemonReposForPair(ctx, row.ProjectID, row.DaemonID); err == nil && hasUnsettledNestedRepos(nested) {
+		// The root landed. A checkout with nested repositories is settled
+		// from them: not yet while one is still to clone
+		// (resumeNestedClonesOnConnect runs them after this pass), and
+		// failed, never installed, when one did not clone.
+		nested, err := database.ListProjectDaemonReposForPair(ctx, row.ProjectID, row.DaemonID)
+		if err != nil {
+			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: could not read a lost clone's nested repositories; not settled",
+				"error", err, "daemonID", row.DaemonID, "projectID", row.ProjectID)
 			return false, nil
+		}
+		if len(nested) > 0 {
+			settled := settleNestedCheckout(ctx, database, row.ProjectID, row.DaemonID, nested, scope)
+			return settled && nestedFailureReason(nested) == "", nil
 		}
 		installed, err := database.MarkProjectDaemonInstalledInScope(ctx, row.ProjectID, row.DaemonID, scope)
 		if err != nil {

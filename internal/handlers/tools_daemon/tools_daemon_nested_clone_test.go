@@ -5,56 +5,134 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// fakeNestedStore is project_daemon_repos and one checkout row in memory.
-type fakeNestedStore struct {
-	rows        []*core.ProjectDaemonRepo
-	installed   bool
-	failedWith  string
-	claimCalled bool
+// nestedT0 is the fake clock's start: nothing here reads the wall clock.
+var nestedT0 = time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+
+// fakeClock is the time a pass and its fake store share; wait advances it.
+type fakeClock struct {
+	mu  sync.Mutex
+	now time.Time
 }
 
-func (f *fakeNestedStore) ClaimProjectDaemonRepos(_ context.Context, _, _ string, _ time.Time) ([]*core.ProjectDaemonRepo, error) {
+func (c *fakeClock) Now() time.Time { c.mu.Lock(); defer c.mu.Unlock(); return c.now }
+func (c *fakeClock) Advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = c.now.Add(d)
+}
+
+// fakeNestedStore is project_daemon_repos and one checkout row in memory,
+// with ClaimNextProjectDaemonRepo's rules: one at a time, shallowest first,
+// never inside a repository still to clone, a claim taken over only once its
+// lease ran out, and settling fenced on the claim.
+type fakeNestedStore struct {
+	mu          sync.Mutex
+	clock       *fakeClock
+	rows        []*core.ProjectDaemonRepo
+	claims      map[string]string // repoID → claim
+	leases      []time.Duration
+	claimCalled bool
+	installed   bool
+	failedWith  string
+}
+
+func newFakeNestedStore(clock *fakeClock, rows ...*core.ProjectDaemonRepo) *fakeNestedStore {
+	return &fakeNestedStore{clock: clock, rows: rows, claims: map[string]string{}}
+}
+
+func nestedDepth(rel string) int { return strings.Count(strings.Trim(rel, "/"), "/") }
+
+func nestedInside(rel, dir string) bool {
+	rel, dir = strings.Trim(rel, "/"), strings.Trim(dir, "/")
+	return dir != "" && strings.HasPrefix(rel, dir+"/")
+}
+
+func (f *fakeNestedStore) ClaimNextProjectDaemonRepo(_ context.Context, _, _, claimID string, lease time.Duration) (*core.NestedRepoClaim, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.claimCalled = true
-	var out []*core.ProjectDaemonRepo
+	now := f.clock.Now()
+	var best *core.ProjectDaemonRepo
 	for _, r := range f.rows {
-		if r.State == core.NestedRepoPending {
-			r.State = core.NestedRepoCloning
-			c := *r
-			out = append(out, &c)
+		ready := r.State == core.NestedRepoPending ||
+			(r.State == core.NestedRepoCloning && (r.LeaseUntil == nil || r.LeaseUntil.Before(now)))
+		if !ready {
+			continue
 		}
+		blocked := false
+		for _, a := range f.rows {
+			if a != r && a.State.Unsettled() && nestedInside(r.RelativePath, a.RelativePath) {
+				blocked = true
+			}
+		}
+		if blocked {
+			continue
+		}
+		if best == nil || nestedDepth(r.RelativePath) < nestedDepth(best.RelativePath) ||
+			(nestedDepth(r.RelativePath) == nestedDepth(best.RelativePath) && r.RelativePath < best.RelativePath) {
+			best = r
+		}
+	}
+	if best == nil {
+		return nil, nil
+	}
+	until := now.Add(lease)
+	best.State, best.Error, best.LeaseUntil = core.NestedRepoCloning, "", &until
+	f.claims[best.RepoID] = claimID
+	f.leases = append(f.leases, lease)
+	insideFailed := false
+	for _, a := range f.rows {
+		if a.State == core.NestedRepoFailed && nestedInside(best.RelativePath, a.RelativePath) {
+			insideFailed = true
+		}
+	}
+	c := *best
+	return &core.NestedRepoClaim{Repo: &c, InsideFailed: insideFailed}, nil
+}
+
+func (f *fakeNestedStore) SettleProjectDaemonRepo(_ context.Context, _, _, repoID, claimID, installErr string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, r := range f.rows {
+		if r.RepoID != repoID || r.State != core.NestedRepoCloning || f.claims[repoID] != claimID {
+			continue
+		}
+		r.State, r.Error, r.LeaseUntil = core.NestedRepoInstalled, "", nil
+		if installErr != "" {
+			r.State, r.Error = core.NestedRepoFailed, installErr
+		}
+		delete(f.claims, repoID)
+		return true, nil
+	}
+	return false, nil
+}
+
+func (f *fakeNestedStore) ListProjectDaemonReposForPair(context.Context, string, string) ([]*core.ProjectDaemonRepo, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]*core.ProjectDaemonRepo, len(f.rows))
+	for i, r := range f.rows {
+		c := *r
+		out[i] = &c
 	}
 	return out, nil
 }
 
-func (f *fakeNestedStore) SettleProjectDaemonRepo(_ context.Context, _, _, repoID, installErr string) error {
-	for _, r := range f.rows {
-		if r.RepoID == repoID && r.State == core.NestedRepoCloning {
-			r.State, r.Error = core.NestedRepoInstalled, ""
-			if installErr != "" {
-				r.State, r.Error = core.NestedRepoFailed, installErr
-			}
-		}
+func (f *fakeNestedStore) SettleProjectDaemonFromNestedReposInScope(_ context.Context, _, _, installErr string, _ *core.OrgScope) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if installErr != "" {
+		f.failedWith = installErr
+		return true, nil
 	}
-	return nil
-}
-
-func (f *fakeNestedStore) ListProjectDaemonReposForPair(context.Context, string, string) ([]*core.ProjectDaemonRepo, error) {
-	return f.rows, nil
-}
-
-func (f *fakeNestedStore) MarkProjectDaemonInstalledInScope(context.Context, string, string, *core.OrgScope) (bool, error) {
 	f.installed = true
-	return true, nil
-}
-
-func (f *fakeNestedStore) FailProjectDaemonInstallInScope(_ context.Context, _, _, installErr string, _ *core.OrgScope) (bool, error) {
-	f.failedWith = installErr
 	return true, nil
 }
 
@@ -64,16 +142,37 @@ func nestedRow(id, name, rel, remote string) *core.ProjectDaemonRepo {
 
 func landed(context.Context) (bool, error) { return true, nil }
 
+func allowed(context.Context) (*core.OrgScope, error) { return nil, nil }
+
+// testPass is a pass over store on the fake clock: its waits advance the
+// clock and are recorded.
+func testPass(store *fakeNestedStore, claimID, root string, run cloneRunner) (*nestedClonePass, *[]time.Duration) {
+	var waits []time.Duration
+	return &nestedClonePass{
+		store: store, run: run, landed: landed, authorize: allowed,
+		wait: func(ctx context.Context, d time.Duration) bool {
+			if ctx.Err() != nil {
+				return false
+			}
+			waits = append(waits, d)
+			store.clock.Advance(d)
+			return true
+		},
+		now:     store.clock.Now,
+		claimID: claimID, projectID: "p1", daemonID: "d1", rootPath: root,
+	}, &waits
+}
+
 func TestCloneNestedRepos_ClonesEachIntoItsPathShallowestFirst(t *testing.T) {
-	store := &fakeNestedStore{rows: []*core.ProjectDaemonRepo{
+	store := newFakeNestedStore(&fakeClock{now: nestedT0},
 		nestedRow("r-deep", "inner", "tools/inner", "git@github.com:acme/inner.git"),
 		nestedRow("r-tools", "tools", "tools", "https://github.com/acme/tools"),
 		nestedRow("r-forge", "forge", "forge", "git@github.com:acme/forge.git"),
-	}}
+	)
 	var ran []cloneStep
-	run := func(_ context.Context, step cloneStep) error { ran = append(ran, step); return nil }
+	pass, _ := testPass(store, "c1", "/srv/projects/acme", func(_ context.Context, step cloneStep) error { ran = append(ran, step); return nil })
 
-	if !cloneNestedRepos(context.Background(), store, run, landed, "p1", "d1", "/srv/projects/acme", nil) {
+	if !pass.runPass(context.Background()) {
 		t.Fatal("the checkout was not settled")
 	}
 	want := []cloneStep{
@@ -92,25 +191,31 @@ func TestCloneNestedRepos_ClonesEachIntoItsPathShallowestFirst(t *testing.T) {
 	if !store.installed || store.failedWith != "" {
 		t.Fatalf("checkout = installed %v, failed %q; want installed", store.installed, store.failedWith)
 	}
+	// Each claim holds past the latest the machine can still run its clone.
+	for _, lease := range store.leases {
+		if lease <= time.Duration(nestedCloneTimeoutMs)*time.Millisecond {
+			t.Fatalf("lease %s does not cover the clone's own timeout", lease)
+		}
+	}
 }
 
 func TestCloneNestedRepos_AFailureNamesTheRepositoryAndGitsError(t *testing.T) {
-	store := &fakeNestedStore{rows: []*core.ProjectDaemonRepo{
+	store := newFakeNestedStore(&fakeClock{now: nestedT0},
 		nestedRow("r-forge", "forge", "forge", "git@github.com:acme/forge.git"),
 		nestedRow("r-in", "plugin", "forge/plugin", "https://github.com/acme/plugin"),
 		nestedRow("r-web", "web", "web", "https://github.com/acme/web"),
-	}}
+	)
 	gitErr := "git clone failed: exit status 128: git@github.com: Permission denied (publickey)."
 	var ran []string
-	run := func(_ context.Context, step cloneStep) error {
+	pass, _ := testPass(store, "c1", "/w/acme", func(_ context.Context, step cloneStep) error {
 		ran = append(ran, step.Path)
 		if strings.HasSuffix(step.Path, "/forge") {
 			return errors.New(gitErr)
 		}
 		return nil
-	}
+	})
 
-	cloneNestedRepos(context.Background(), store, run, landed, "p1", "d1", "/w/acme", nil)
+	pass.runPass(context.Background())
 
 	// Nothing is cloned inside a repository that failed: its clone would
 	// create forge/ and forge could never be cloned there again.
@@ -136,11 +241,11 @@ func TestCloneNestedRepos_AFailureNamesTheRepositoryAndGitsError(t *testing.T) {
 }
 
 func TestCloneNestedRepos_WaitsForTheRoot(t *testing.T) {
-	store := &fakeNestedStore{rows: []*core.ProjectDaemonRepo{nestedRow("r1", "forge", "forge", "https://github.com/acme/forge")}}
-	notYet := func(context.Context) (bool, error) { return false, nil }
-	run := func(context.Context, cloneStep) error { t.Fatal("cloned before the root landed"); return nil }
+	store := newFakeNestedStore(&fakeClock{now: nestedT0}, nestedRow("r1", "forge", "forge", "https://github.com/acme/forge"))
+	pass, _ := testPass(store, "c1", "/w/acme", func(context.Context, cloneStep) error { t.Fatal("cloned before the root landed"); return nil })
+	pass.landed = func(context.Context) (bool, error) { return false, nil }
 
-	if cloneNestedRepos(context.Background(), store, run, notYet, "p1", "d1", "/w/acme", nil) {
+	if pass.runPass(context.Background()) {
 		t.Fatal("settled a checkout whose root has not landed")
 	}
 	if store.claimCalled || store.installed || store.failedWith != "" {
@@ -148,21 +253,144 @@ func TestCloneNestedRepos_WaitsForTheRoot(t *testing.T) {
 	}
 }
 
-func TestCloneNestedRepos_LeavesTheSettleToWhoeverHoldsAClaim(t *testing.T) {
-	// Another gateway is cloning one; this one has nothing to claim.
-	busy := nestedRow("r1", "forge", "forge", "https://github.com/acme/forge")
-	busy.State = core.NestedRepoCloning
-	store := &fakeNestedStore{rows: []*core.ProjectDaemonRepo{busy}}
-	run := func(context.Context, cloneStep) error {
-		t.Fatal("cloned a repository another gateway holds")
+// Review B1: a pass the project is no longer the machine's to set up for
+// (another org's, a revoked membership, a failed lookup) claims and clones
+// nothing, and settles nothing.
+func TestCloneNestedRepos_AnUnauthorizedPassClaimsNothing(t *testing.T) {
+	store := newFakeNestedStore(&fakeClock{now: nestedT0}, nestedRow("r1", "forge", "forge", "https://github.com/acme/forge"))
+	pass, _ := testPass(store, "c1", "/w/acme", func(context.Context, cloneStep) error {
+		t.Fatal("cloned for a project that is not the machine's")
 		return nil
+	})
+	pass.authorize = func(context.Context) (*core.OrgScope, error) { return nil, errNestedProjectNotMachines }
+
+	if pass.runPass(context.Background()) {
+		t.Fatal("an unauthorized pass settled the checkout")
+	}
+	if store.claimCalled || store.installed || store.failedWith != "" {
+		t.Fatalf("an unauthorized pass touched the store: %+v", store)
+	}
+}
+
+// Review B2: the connection carrying a clone goes away and the machine
+// reconnects at once. The new connection's pass clones what is free, waits
+// for the old claim's lease (the machine may still be running that clone),
+// then takes it over and settles the checkout, with no further reconnect.
+func TestCloneNestedRepos_AQuickReconnectSettlesWithoutAnotherReconnect(t *testing.T) {
+	clock := &fakeClock{now: nestedT0}
+	store := newFakeNestedStore(clock,
+		nestedRow("r-forge", "forge", "forge", "https://github.com/acme/forge"),
+		nestedRow("r-web", "web", "web", "https://github.com/acme/web"),
+	)
+
+	// The first connection: its clone of forge is cut off by the drop.
+	oldCtx, drop := context.WithCancel(context.Background())
+	old, _ := testPass(store, "old", "/w/acme", func(_ context.Context, step cloneStep) error {
+		if !strings.HasSuffix(step.Path, "/forge") {
+			t.Fatalf("the old connection cloned %s after it went away", step.Path)
+		}
+		drop()
+		return errCloneConnectionGone
+	})
+	if old.runPass(oldCtx) {
+		t.Fatal("a pass whose connection went away settled the checkout")
+	}
+	if r := store.rows[0]; r.State != core.NestedRepoCloning {
+		t.Fatalf("forge = %s; a clone the machine may still be running was settled", r.State)
 	}
 
-	if cloneNestedRepos(context.Background(), store, run, landed, "p1", "d1", "/w/acme", nil) {
-		t.Fatal("settled the checkout while a nested clone is still running")
+	// The reconnect, before the old claim runs out.
+	var ran []string
+	fresh, waits := testPass(store, "new", "/w/acme", func(_ context.Context, step cloneStep) error {
+		ran = append(ran, step.Path)
+		return nil
+	})
+	if !fresh.runPass(context.Background()) {
+		t.Fatal("the reconnect's pass did not settle the checkout")
 	}
-	if store.installed || store.failedWith != "" {
-		t.Fatalf("checkout settled: %+v", store)
+	if strings.Join(ran, ",") != "/w/acme/web,/w/acme/forge" {
+		t.Fatalf("clones = %v, want web at once, forge once the old claim ran out", ran)
+	}
+	if !store.installed {
+		t.Fatal("checkout not installed")
+	}
+	var waited time.Duration
+	for _, w := range *waits {
+		if w < nestedWaitMin || w > nestedWaitMax {
+			t.Fatalf("wait %s outside [%s, %s]", w, nestedWaitMin, nestedWaitMax)
+		}
+		waited += w
+	}
+	if waited < nestedCloneLease {
+		t.Fatalf("took the old claim over after %s, before its lease (%s) ran out", waited, nestedCloneLease)
+	}
+}
+
+// Review B3: while one pass clones a parent, another pass on the checkout
+// clones neither the parent nor anything inside it, and the pass whose claim
+// is taken over records nothing.
+func TestCloneNestedRepos_ConcurrentPassesNeverCloneOneTreeTwice(t *testing.T) {
+	clock := &fakeClock{now: nestedT0}
+	store := newFakeNestedStore(clock,
+		nestedRow("r-forge", "forge", "forge", "https://github.com/acme/forge"),
+		nestedRow("r-plugin", "plugin", "forge/plugin", "https://github.com/acme/plugin"),
+	)
+	var second *nestedClonePass
+	var secondRan []string
+	first, _ := testPass(store, "first", "/w/acme", func(ctx context.Context, step cloneStep) error {
+		if strings.HasSuffix(step.Path, "/forge") {
+			// Mid-clone of forge, a second trigger's pass runs; it waits
+			// for forge's claim and gives up when its context ends.
+			waitCtx, cancel := context.WithCancel(ctx)
+			second.wait = func(context.Context, time.Duration) bool { cancel(); return false }
+			if second.runPass(waitCtx) {
+				t.Error("the second pass settled the checkout mid-clone")
+			}
+		}
+		return nil
+	})
+	second, _ = testPass(store, "second", "/w/acme", func(_ context.Context, step cloneStep) error {
+		secondRan = append(secondRan, step.Path)
+		return nil
+	})
+
+	if !first.runPass(context.Background()) {
+		t.Fatal("the first pass did not settle the checkout")
+	}
+	if len(secondRan) != 0 {
+		t.Fatalf("the second pass cloned %v while forge was cloning", secondRan)
+	}
+
+	// A claim taken over after its lease ran out: the old pass records nothing.
+	store.rows[0].State, store.rows[0].Error = core.NestedRepoPending, ""
+	if c, _ := store.ClaimNextProjectDaemonRepo(context.Background(), "p1", "d1", "stale", nestedCloneLease); c == nil {
+		t.Fatal("no claim")
+	}
+	clock.Advance(nestedCloneLease + time.Second)
+	if c, _ := store.ClaimNextProjectDaemonRepo(context.Background(), "p1", "d1", "taker", nestedCloneLease); c == nil {
+		t.Fatal("the expired claim was not taken over")
+	}
+	if ok, _ := store.SettleProjectDaemonRepo(context.Background(), "p1", "d1", "r-forge", "stale", "boom"); ok {
+		t.Fatal("a pass whose claim was taken over recorded its outcome")
+	}
+}
+
+func TestNextNestedWake(t *testing.T) {
+	soon := nestedT0.Add(5 * time.Second)
+	past := nestedT0.Add(-time.Minute)
+	far := nestedT0.Add(time.Hour)
+	for _, tc := range []struct {
+		name string
+		rows []*core.ProjectDaemonRepo
+		want time.Duration
+	}{
+		{"no lease", []*core.ProjectDaemonRepo{{State: core.NestedRepoPending}}, nestedWaitMax},
+		{"earliest lease", []*core.ProjectDaemonRepo{{State: core.NestedRepoCloning, LeaseUntil: &far}, {State: core.NestedRepoCloning, LeaseUntil: &soon}}, 5 * time.Second},
+		{"lease already out", []*core.ProjectDaemonRepo{{State: core.NestedRepoCloning, LeaseUntil: &past}}, nestedWaitMin},
+	} {
+		if got := nextNestedWake(tc.rows, nestedT0); got != tc.want {
+			t.Errorf("%s: %s, want %s", tc.name, got, tc.want)
+		}
 	}
 }
 

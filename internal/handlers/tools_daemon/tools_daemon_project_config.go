@@ -134,11 +134,24 @@ func (s *Service) handleFileSystemChanged(ctx context.Context, conn *daemonConne
 	// The checkout's nested repositories are cloned into it now that its
 	// root is there, and the row is settled when they are
 	// (tools_daemon_nested_clone.go), not here.
-	if nested, err := s.deps.Installs.ListProjectDaemonReposForPair(ctx, project.ID, conn.daemonID); err != nil {
-		logging.WarnContext(ctx, "could not read a checkout's nested repositories; settling its root alone (the next connect clones them)",
+	// A checkout with nested repositories that all settled is settled from
+	// them: failed when one did not clone, so a repeated announcement never
+	// turns a checkout missing one into installed. A failed read settles
+	// nothing: the next connect does.
+	nested, err := s.deps.Installs.ListProjectDaemonReposForPair(ctx, project.ID, conn.daemonID)
+	if err != nil {
+		logging.WarnContext(ctx, "could not read a checkout's nested repositories; not settling it (the next connect does)",
 			"error", err, "project_id", project.ID, "daemon_id", conn.daemonID)
-	} else if hasUnsettledNestedRepos(nested) {
-		s.cloneNestedReposAsync(ctx, conn, project.ID, projectPath, scope, func(context.Context) (bool, error) { return true, nil })
+		return nil
+	}
+	if hasUnsettledNestedRepos(nested) {
+		s.cloneNestedReposAsync(ctx, conn, project.ID, projectPath, func(context.Context) (bool, error) { return true, nil })
+		return s.deps.Repo.EmitUserRefetch(ctx, conn.userID, db.RefetchFileTree, db.RefetchOpts{
+			ProjectID: &project.ID,
+		})
+	}
+	if nestedFailureReason(nested) != "" {
+		settleNestedCheckout(ctx, nestedCloneAdapter{s.deps.Repo, s.deps.Installs}, project.ID, conn.daemonID, nested, scope)
 		return s.deps.Repo.EmitUserRefetch(ctx, conn.userID, db.RefetchFileTree, db.RefetchOpts{
 			ProjectID: &project.ID,
 		})

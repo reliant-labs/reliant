@@ -347,19 +347,20 @@ func LockProjectOrgForShare(ctx context.Context, db orm.Context, projectID strin
 
 const projectDaemonRepoSelect = `SELECT pdr.project_id, pdr.daemon_id, pdr.repo_id,
 	r.name, r.relative_path, COALESCE(r.remote_url, '') AS remote_url,
-	pdr.state, pdr.error, pdr.state_changed_at
+	pdr.state, pdr.error, pdr.state_changed_at, pdr.lease_until
 FROM project_daemon_repos pdr JOIN repos r ON r.id = pdr.repo_id`
 
 type projectDaemonRepoRow struct {
-	ProjectID      string    `bun:"project_id"`
-	DaemonID       string    `bun:"daemon_id"`
-	RepoID         string    `bun:"repo_id"`
-	Name           string    `bun:"name"`
-	RelativePath   string    `bun:"relative_path"`
-	RemoteURL      string    `bun:"remote_url"`
-	State          string    `bun:"state"`
-	Error          string    `bun:"error"`
-	StateChangedAt time.Time `bun:"state_changed_at"`
+	ProjectID      string     `bun:"project_id"`
+	DaemonID       string     `bun:"daemon_id"`
+	RepoID         string     `bun:"repo_id"`
+	Name           string     `bun:"name"`
+	RelativePath   string     `bun:"relative_path"`
+	RemoteURL      string     `bun:"remote_url"`
+	State          string     `bun:"state"`
+	Error          string     `bun:"error"`
+	StateChangedAt time.Time  `bun:"state_changed_at"`
+	LeaseUntil     *time.Time `bun:"lease_until"`
 }
 
 func projectDaemonReposToCore(rows []projectDaemonRepoRow) []*core.ProjectDaemonRepo {
@@ -369,6 +370,7 @@ func projectDaemonReposToCore(rows []projectDaemonRepoRow) []*core.ProjectDaemon
 			ProjectID: r.ProjectID, DaemonID: r.DaemonID, RepoID: r.RepoID,
 			Name: r.Name, RelativePath: r.RelativePath, RemoteURL: r.RemoteURL,
 			State: core.NestedRepoState(r.State), Error: r.Error, StateChangedAt: r.StateChangedAt,
+			LeaseUntil: r.LeaseUntil,
 		}
 	}
 	return out
@@ -378,7 +380,9 @@ func projectDaemonReposToCore(rows []projectDaemonRepoRow) []*core.ProjectDaemon
 // project's checkout on the machine, once its root clone lands: each of
 // repoIDs pending (again, for one that cloned or failed before: a set-up
 // that is run again clones every one again, and an existing clone is kept
-// by the daemon), and every other row of the pair removed. The pair's
+// by the daemon), and every other row of the pair removed. Planning again
+// drops every claim, so a pass still cloning the old plan settles nothing
+// (SettleProjectDaemonRepo is fenced on its claim). The pair's
 // project_daemons row must exist. Run it in the transaction that queues the
 // root clone.
 func PlanProjectDaemonRepos(ctx context.Context, db orm.Context, projectID, daemonID string, repoIDs []string) error {
@@ -396,7 +400,8 @@ func PlanProjectDaemonRepos(ctx context.Context, db orm.Context, projectID, daem
 	for _, repoID := range repoIDs {
 		if _, err := db.Bun().NewRaw(`INSERT INTO project_daemon_repos (project_id, daemon_id, repo_id, state, error, state_changed_at)
 VALUES (?0, ?1, ?2, 'pending', '', now())
-ON CONFLICT (project_id, daemon_id, repo_id) DO UPDATE SET state = 'pending', error = '', state_changed_at = now()`,
+ON CONFLICT (project_id, daemon_id, repo_id) DO UPDATE SET state = 'pending', error = '', state_changed_at = now(),
+	claim_id = '', lease_until = NULL`,
 			projectID, daemonID, repoID).Exec(ctx); err != nil {
 			return fmt.Errorf("plan nested repository %s: %w", repoID, err)
 		}
@@ -404,41 +409,128 @@ ON CONFLICT (project_id, daemon_id, repo_id) DO UPDATE SET state = 'pending', er
 	return nil
 }
 
-// ClaimProjectDaemonRepos claims the nested repositories of the project's
-// checkout on the machine that are ready to clone, for the caller to clone:
-// the pending ones, and those a gateway claimed before staleBefore and never
-// settled (it went away mid-clone). Each claimed row reads cloning from now.
-// Two gateways never claim one row: the update is the claim.
-func ClaimProjectDaemonRepos(ctx context.Context, db orm.Context, projectID, daemonID string, staleBefore time.Time) ([]*core.ProjectDaemonRepo, error) {
-	var rows []projectDaemonRepoRow
-	err := db.Bun().NewRaw(`WITH claimed AS (
-	UPDATE project_daemon_repos SET state = 'cloning', error = '', state_changed_at = now()
-	WHERE project_id = ?0 AND daemon_id = ?1
-	  AND (state = 'pending' OR (state = 'cloning' AND state_changed_at < ?2))
-	RETURNING project_id, daemon_id, repo_id, state, error, state_changed_at
-)
-SELECT c.project_id, c.daemon_id, c.repo_id, r.name, r.relative_path, COALESCE(r.remote_url, '') AS remote_url,
-	c.state, c.error, c.state_changed_at
-FROM claimed c JOIN repos r ON r.id = c.repo_id
-ORDER BY r.relative_path`, projectID, daemonID, staleBefore).Scan(ctx, &rows)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("claim nested repositories: %w", err)
-	}
-	return projectDaemonReposToCore(rows), nil
+type nestedRepoClaimRow struct {
+	projectDaemonRepoRow
+	InsideFailed bool `bun:"inside_failed"`
 }
 
-// SettleProjectDaemonRepo records how the clone of a claimed nested
-// repository went: installed when installErr is empty, else failed with it.
-// A row no longer cloning (planned again meanwhile) is left alone.
-func SettleProjectDaemonRepo(ctx context.Context, db orm.Context, projectID, daemonID, repoID, installErr string) error {
+// ClaimNextProjectDaemonRepo claims, for the pass named by claimID, one
+// nested repository of the project's checkout on the machine that is ready
+// to clone, shallowest first: a pending one, or one whose claim's lease ran
+// out (its pass went away, and the machine can no longer be running the
+// clone it was sent). One sitting inside a repository of the checkout that
+// is still pending or cloning is not ready: a clone needs its parent landed,
+// and two clones of one tree never run at once. Its lease runs lease from
+// the database's clock, which must cover the clone's own timeout on the
+// machine. nil when none is ready. Concurrent passes never claim one row:
+// the candidate is locked SKIP LOCKED and the update re-checks it.
+func ClaimNextProjectDaemonRepo(ctx context.Context, db orm.Context, projectID, daemonID, claimID string, lease time.Duration) (*core.NestedRepoClaim, error) {
+	if projectID == "" || daemonID == "" || claimID == "" {
+		return nil, fmt.Errorf("project ID, daemon ID and claim ID cannot be empty")
+	}
+	var rows []nestedRepoClaimRow
+	err := db.Bun().NewRaw(`WITH pair AS (
+	SELECT p.repo_id, p.state, trim(both '/' from r.relative_path) AS rel
+	FROM project_daemon_repos p JOIN repos r ON r.id = p.repo_id
+	WHERE p.project_id = ?0 AND p.daemon_id = ?1
+), candidate AS (
+	SELECT c.repo_id
+	FROM project_daemon_repos c JOIN repos cr ON cr.id = c.repo_id
+	WHERE c.project_id = ?0 AND c.daemon_id = ?1
+	  AND (c.state = 'pending' OR (c.state = 'cloning' AND (c.lease_until IS NULL OR c.lease_until < now())))
+	  AND NOT EXISTS (
+		SELECT 1 FROM pair a
+		WHERE a.repo_id <> c.repo_id AND a.rel <> '' AND a.state IN ('pending', 'cloning')
+		  AND starts_with(trim(both '/' from cr.relative_path), a.rel || '/'))
+	ORDER BY length(trim(both '/' from cr.relative_path)) - length(replace(trim(both '/' from cr.relative_path), '/', '')),
+		cr.relative_path
+	LIMIT 1
+	FOR UPDATE OF c SKIP LOCKED
+), claimed AS (
+	UPDATE project_daemon_repos u SET state = 'cloning', error = '', claim_id = ?2,
+		lease_until = now() + make_interval(secs => ?3), state_changed_at = now()
+	FROM candidate
+	WHERE u.project_id = ?0 AND u.daemon_id = ?1 AND u.repo_id = candidate.repo_id
+	  AND (u.state = 'pending' OR (u.state = 'cloning' AND (u.lease_until IS NULL OR u.lease_until < now())))
+	RETURNING u.project_id, u.daemon_id, u.repo_id, u.state, u.error, u.state_changed_at, u.lease_until
+)
+SELECT c.project_id, c.daemon_id, c.repo_id, r.name, r.relative_path, COALESCE(r.remote_url, '') AS remote_url,
+	c.state, c.error, c.state_changed_at, c.lease_until,
+	EXISTS (SELECT 1 FROM pair a
+		WHERE a.repo_id <> c.repo_id AND a.rel <> '' AND a.state = 'failed'
+		  AND starts_with(trim(both '/' from r.relative_path), a.rel || '/')) AS inside_failed
+FROM claimed c JOIN repos r ON r.id = c.repo_id`, projectID, daemonID, claimID, lease.Seconds()).Scan(ctx, &rows)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("claim a nested repository: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return &core.NestedRepoClaim{
+		Repo:         projectDaemonReposToCore([]projectDaemonRepoRow{rows[0].projectDaemonRepoRow})[0],
+		InsideFailed: rows[0].InsideFailed,
+	}, nil
+}
+
+// SettleProjectDaemonRepo records how the clone of a nested repository the
+// pass claimID claimed went: installed when installErr is empty, else failed
+// with it. It is fenced on the claim: a row no longer held by that claim
+// (taken over after its lease ran out, or planned again meanwhile) is left
+// alone, and settled reports false.
+func SettleProjectDaemonRepo(ctx context.Context, db orm.Context, projectID, daemonID, repoID, claimID, installErr string) (bool, error) {
+	if claimID == "" {
+		return false, fmt.Errorf("claim ID cannot be empty")
+	}
 	state := core.NestedRepoInstalled
 	if installErr != "" {
 		state = core.NestedRepoFailed
 	}
-	_, err := db.Bun().NewRaw(`UPDATE project_daemon_repos SET state = ?3, error = ?4, state_changed_at = now()
-WHERE project_id = ?0 AND daemon_id = ?1 AND repo_id = ?2 AND state = 'cloning'`,
-		projectID, daemonID, repoID, string(state), installErr).Exec(ctx)
+	res, err := db.Bun().NewRaw(`UPDATE project_daemon_repos SET state = ?3, error = ?4, state_changed_at = now(),
+	claim_id = '', lease_until = NULL
+WHERE project_id = ?0 AND daemon_id = ?1 AND repo_id = ?2 AND state = 'cloning' AND claim_id = ?5`,
+		projectID, daemonID, repoID, string(state), installErr, claimID).Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// MarkProjectDaemonInstalledFromNestedRepos settles the checkout installed
+// once its root has landed and every one of its nested repositories cloned:
+// it changes nothing while one is still to clone or one failed, so it never
+// reports a checkout missing a nested repository as installed. A checkout
+// with no nested rows is settled like MarkProjectDaemonInstalled.
+func MarkProjectDaemonInstalledFromNestedRepos(ctx context.Context, db orm.Context, projectID, daemonID string) error {
+	_, err := db.Bun().NewRaw(`UPDATE project_daemons SET install_state = ?2, install_error = '', cloned_at = NOW(), verified_at = NOW()
+WHERE project_id = ?0 AND daemon_id = ?1 AND install_state <> ?2
+  AND NOT EXISTS (SELECT 1 FROM project_daemon_repos n
+	WHERE n.project_id = ?0 AND n.daemon_id = ?1 AND n.state IN ('pending', 'cloning', 'failed'))`,
+		projectID, daemonID, string(core.ProjectInstallInstalled)).Exec(ctx)
 	return err
+}
+
+// FailProjectDaemonFromNestedRepos settles the checkout failed with
+// installErr because a nested repository of its current plan did not
+// clone: from installing, or from installed (an older gateway settled the
+// root alone before this release cloned the nested ones). It is fenced on
+// the plan: it changes nothing unless a nested row failed and none is still
+// to clone, so a set-up planned again meanwhile is not failed by the old
+// plan's outcome. It reports whether it marked the row failed.
+func FailProjectDaemonFromNestedRepos(ctx context.Context, db orm.Context, projectID, daemonID, installErr string) (bool, error) {
+	res, err := db.Bun().NewRaw(`UPDATE project_daemons SET install_state = ?2, install_error = ?3
+WHERE project_id = ?0 AND daemon_id = ?1 AND install_state IN (?4, ?5)
+  AND EXISTS (SELECT 1 FROM project_daemon_repos n
+	WHERE n.project_id = ?0 AND n.daemon_id = ?1 AND n.state = 'failed')
+  AND NOT EXISTS (SELECT 1 FROM project_daemon_repos n
+	WHERE n.project_id = ?0 AND n.daemon_id = ?1 AND n.state IN ('pending', 'cloning'))`,
+		projectID, daemonID, string(core.ProjectInstallFailed), installErr,
+		string(core.ProjectInstallInstalling), string(core.ProjectInstallInstalled)).Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 // ListProjectDaemonReposForPair returns the nested repositories of the

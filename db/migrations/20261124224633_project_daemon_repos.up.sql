@@ -17,9 +17,16 @@ CREATE TABLE project_daemon_repos (
     state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'cloning', 'installed', 'failed')),
     -- git's own words for a failed clone; empty otherwise.
     error TEXT NOT NULL DEFAULT '',
-    -- When state last changed: a claim older than the clone timeout is the
-    -- claim of a gateway that went away, and may be taken again.
+    -- When state last changed.
     state_changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- The claim of the gateway pass cloning it (state cloning): settling is
+    -- fenced on it, so a pass whose claim was taken over, or whose row was
+    -- planned again, settles nothing. Empty otherwise.
+    claim_id TEXT NOT NULL DEFAULT '',
+    -- Until when the claim holds: past the latest the machine can still be
+    -- running the clone it was sent (the clone's own timeout, with a
+    -- margin), so a claim is never taken over while that clone may run.
+    lease_until TIMESTAMPTZ,
     PRIMARY KEY (project_id, daemon_id, repo_id),
     FOREIGN KEY (project_id, daemon_id) REFERENCES project_daemons (project_id, daemon_id) ON DELETE CASCADE
 );
