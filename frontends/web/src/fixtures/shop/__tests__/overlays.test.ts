@@ -7,7 +7,7 @@
  */
 
 import { Code, ConnectError, createClient, type Transport } from "@connectrpc/connect";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DeployHoldKind, DeployRolloutPhase } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 import { AppDatabaseService, DataAccessPolicy } from "@/gen/controlplane/services/app_database/v1/app_database_pb";
@@ -129,5 +129,14 @@ describe("the shop overlays", () => {
     const refused = await capped(0).queryPanel({}).catch((e: unknown) => ConnectError.from(e));
     expect([(refused as ConnectError).code, (refused as ConnectError).metadata.get("x-forge-error-reason")]).toEqual([Code.ResourceExhausted, "in_flight_limit"]);
     expect(await codeOf(capped(4).listMetrics({ scope: { envIds: ["env-prod"] } }))).not.toBe(Code.ResourceExhausted);
+  });
+
+  it("reads no clock at import, so fixture mode can pin it after importing them (install.ts)", async () => {
+    vi.resetModules();
+    const story = await import("../shopStory");
+    story.resetDemoNowForTests();
+    await import("../overlays");
+    expect(() => story.pinClock(FIXED_NOW)).not.toThrow();
+    story.resetDemoNowForTests();
   });
 });

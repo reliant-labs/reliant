@@ -37,8 +37,13 @@ const dashboards = DashboardService.method;
 const issues = IssuesService.method;
 const rum = RumService.method;
 
-/** The pack's own answers, "pkg.Service/Method" keyed: what a refining overlay turns. */
-const pack = shopScenario().handlers as Record<string, unknown>;
+/**
+ * The pack's own answers, "pkg.Service/Method" keyed: what a refining overlay
+ * turns. Built at the first answer, never at import: building them reads the
+ * pack clock, which a harness pins after importing the overlays (install.ts).
+ */
+let handlers: Record<string, unknown> | null = null;
+const pack = (): Record<string, unknown> => (handlers ??= shopScenario().handlers as Record<string, unknown>);
 
 /** Every service the observability views read. */
 const OBSERVABILITY: DescService[] = [ObservabilityService, DashboardService, AlertingService, DeliveryInsightsService, IssuesService, RumService];
@@ -124,7 +129,7 @@ export const observabilityOverlays = {
     /** A request naming environments is refused, as one naming another org's environment is. */
     "env-denied": answering("delivery.env-denied", readsOf([DeliveryInsightsService]), (method, request) => {
       if (((request as { scope?: { envIds?: string[] } }).scope?.envIds ?? []).length > 0) throw new ConnectError("one or more environments are not available to this organization", Code.PermissionDenied);
-      return (pack[`${method.parent.typeName}/${method.name}`] as (req: unknown) => unknown)(request);
+      return (pack()[`${method.parent.typeName}/${method.name}`] as (req: unknown) => unknown)(request);
     }),
     truncated: refining("delivery.truncated", DeliveryInsightsService.method.listReleases, pack, (list) => {
       list.releases = list.releases.slice(0, 5);
@@ -218,7 +223,7 @@ export function retainedCatalog(code: Code.PermissionDenied | Code.Unavailable):
   let calls = 0;
   return answering(`graph.retained-${code === Code.PermissionDenied ? "denied" : "unavailable"}`, obs.getServiceGraphCatalog, (method, request) => {
     if (++calls > 1) throw new ConnectError("catalog no longer readable", code);
-    return (pack[`${method.parent.typeName}/${method.name}`] as (req: unknown) => unknown)(request);
+    return (pack()[`${method.parent.typeName}/${method.name}`] as (req: unknown) => unknown)(request);
   });
 }
 
