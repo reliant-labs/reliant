@@ -77,8 +77,9 @@ it:
   page origin (fetch, XHR, images, WebSocket, sendBeacon) and asserts there are
   none. It also asserts that `/auth/v1/*` is answered in the page with the
   fixture session, and that the page is noindex. Then it makes real writes
-  through the UI (settings saves) and asserts that the read-only guard refuses
-  each one, again with nothing sent.
+  through the UI (sending a chat message from the home composer, and two
+  settings saves) and asserts that the read-only guard refuses each one, again
+  with nothing sent.
 
   Run it with:
 

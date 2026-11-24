@@ -17,12 +17,14 @@
  *   - the page is marked noindex;
  *   - no page error and no RPC escaped the fixture transport.
  *
- * Then it makes real writes through the UI, on a fresh page. Settings
- * saves: a palette pick and the monospace switch, each one
- * SettingsService/BatchUpsertSettings. It asserts the fail-closed read-only
- * guard refused each one, still with nothing sent off the page. Starting a
- * chat needs the org the pack answers once #3434 lands; P2.2's harness covers
- * it after that.
+ * Then it makes real writes through the UI, each on a fresh page, and
+ * asserts the fail-closed read-only guard refused every one, still with
+ * nothing sent off the page:
+ *
+ *   - sending a chat message from the home composer (ChatService/StartChat);
+ *     the message goes back in the box and the page says changes are off;
+ *   - settings saves: a palette pick and the monospace switch, each one
+ *     SettingsService/BatchUpsertSettings.
  *
  * `@harness`: it runs once, in desktop-dark, and takes no screenshot.
  */
@@ -158,6 +160,31 @@ test('the preview refuses real writes from the UI, with nothing sent off the pag
   await quiet(page)
   const probe = (await readProbe(page))!
   expect(probe.refused.every((rpc) => rpc === write), `only the writes made: ${probe.refused.join(', ')}`).toBe(true)
+  expect.soft(net.egress, 'requests that left the page origin').toEqual([])
+  expect.soft(probe.escaped, 'rpcs that reached fetch').toEqual([])
+  expect.soft(probe.outside, 'fetches the boundary refused').toEqual([])
+  expect.soft(net.pageErrors, 'page errors').toEqual([])
+})
+
+test('the preview refuses sending a chat message, with nothing sent off the page', { tag: '@harness' }, async ({ page, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const net = await preview(page, origin)
+  const write = 'reliant.v1.ChatService/StartChat'
+  const message = 'Add a coupon field to checkout'
+
+  await page.goto('/')
+  await expect.poll(async () => (await readProbe(page))?.ready ?? false, { timeout: 20_000 }).toBe(true)
+  await quiet(page)
+
+  const composer = page.getByTestId('chat-input')
+  await composer.fill(message)
+  await composer.press('Enter')
+  await expect.poll(async () => (await readProbe(page))?.refused ?? [], { message: `${write}, refused` }).toContain(write)
+  // Nothing was sent: the message is back in the box.
+  await expect(composer).toHaveValue(message)
+
+  await quiet(page)
+  const probe = (await readProbe(page))!
   expect.soft(net.egress, 'requests that left the page origin').toEqual([])
   expect.soft(probe.escaped, 'rpcs that reached fetch').toEqual([])
   expect.soft(probe.outside, 'fetches the boundary refused').toEqual([])
