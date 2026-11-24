@@ -365,12 +365,31 @@ describe("overlay.ts (harness policy)", () => {
     // The pack still wins, and a write is still refused, never answered empty.
     expect((await storage(transport).listObjects({})).prefixes).toEqual(["pack"]);
     expect(await code(storage(transport).presignObjectDownload({}))).toBe(Code.PermissionDenied);
-    // An unanswered stream read is open and quiet until aborted.
+    // An unanswered stream read answers one empty message, then is open and quiet until aborted.
     const abort = new AbortController();
-    const next = streaming(transport).streamUserUpdates({}, { signal: abort.signal })[Symbol.asyncIterator]().next();
+    const it = streaming(transport).streamUserUpdates({}, { signal: abort.signal })[Symbol.asyncIterator]();
+    expect((await it.next()).value?.event.case).toBeUndefined();
+    const next = it.next();
     expect(await stillPending(next)).toBe(true);
     cancel(abort);
     expect(await code(next)).toBe(Code.Canceled);
+  });
+
+  it("withEmptyReads: an unanswered stream read sends its header, so it is open rather than in flight", async () => {
+    const transport = createFixtureTransport(withEmptyReads({ readOnly: true }, [StreamingService]));
+    const abort = new AbortController();
+    const onHeader = vi.fn();
+    const it = streaming(transport).streamUserUpdates({}, { signal: abort.signal, onHeader })[Symbol.asyncIterator]();
+    const first = it.next();
+    expect(await stillPending(first)).toBe(false);
+    expect(onHeader).toHaveBeenCalledTimes(1);
+    // The same header arrives on the raw transport: the call settles as an open stream.
+    const raw = transport.stream(StreamingService.method.streamUserUpdates, abort.signal, undefined, undefined, (async function* () {
+      yield create(StreamingService.method.streamUserUpdates.input);
+    })(), undefined);
+    expect(await stillPending(raw)).toBe(false);
+    expect((await raw).header).toBeInstanceOf(Headers);
+    cancel(abort);
   });
 
   it("withEmptyReads: the pack's own defaults win over the empty answer", async () => {

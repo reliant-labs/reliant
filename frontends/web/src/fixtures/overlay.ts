@@ -46,15 +46,25 @@ export function fail(code: Code, message = `fixture: ${Code[code]}`): () => neve
 
 const isRead = (method: DescMethod) => method.idempotency === MethodOptions_IdempotencyLevel.NO_SIDE_EFFECTS;
 
-/** An empty server stream that stays open (no reconnect timer), until the router drops it. */
-const openEmptyStream = (): AsyncIterable<never> => ({
-  [Symbol.asyncIterator]: () => ({ next: () => new Promise<IteratorResult<never>>(() => {}) }),
-});
+/**
+ * A server stream that answers ONE empty message and then stays open (no
+ * reconnect timer) until the caller aborts and the router drops it. The one
+ * message is what makes it open: createRouterTransport sends a stream's
+ * header only once the handler yields its first message, so a stream that
+ * yields nothing never answers its header, and a settle probe counts it in
+ * flight forever.
+ */
+const openEmptyStream = (method: DescMethod) =>
+  async function* (): AsyncIterable<unknown> {
+    yield create(method.output);
+    await new Promise<never>(() => {});
+  };
 
 /**
  * `options` with one more rung at the bottom of its dispatch: a READ of one
  * of `services` that no route, scenario handler or service default answers
- * gets the empty response (a server stream: no messages, and it stays open)
+ * gets the empty response (a server stream: one empty message, then it stays
+ * open until aborted)
  * instead of Unimplemented. Harness policy for the visual harness and the
  * hosted preview, where a read nobody wrote a fixture for should render as
  * "nothing there" rather than an error toast; the public demo does not use it.
@@ -72,7 +82,7 @@ export function withEmptyReads(options: CreateFixtureTransportOptions, services:
     for (const method of service.methods) {
       if (!reads(method)) continue;
       const streams = method.methodKind === "server_streaming" || method.methodKind === "bidi_streaming";
-      defaults[method.localName] = streams ? openEmptyStream : () => create(method.output);
+      defaults[method.localName] = streams ? openEmptyStream(method) : () => create(method.output);
     }
     return defaults as unknown as AnyServiceDefaults;
   });
