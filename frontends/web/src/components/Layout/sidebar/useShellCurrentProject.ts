@@ -17,13 +17,17 @@
  * So a cold load of these pages has no context project while the nav shows
  * one. This hook READS the nav's resolution; it never selects a project.
  *
- * Interim: the shared URL-state module (the `?projects=` scope, #3426) will
- * own this resolution; this hook then reads it from there.
+ * The nav publishes what it shows (lib/urlState/shellScopeStore.ts): its one
+ * project comes first, so this page and every other reader take exactly the
+ * nav's; the resolution below is for a page with no nav on screen yet. Its
+ * last pick is the tab's own (seeded from the tab's default), never another
+ * tab's.
  */
 
 import { useMemo } from "react";
 
 import { useProjects, type Project } from "@/hooks/project-queries";
+import { useShellScopeStore } from "@/lib/urlState/shellScopeStore";
 import { useProjectStore } from "@/store/projectStore";
 
 import { useShellProject } from "./shellProject";
@@ -36,8 +40,16 @@ export function useShellCurrentProject(): Project | null {
   const context = useProjectStore((state) => state.currentProject);
   const shell = useShellProject(NO_ROUTE, NO_SEARCH);
   const { projects } = useProjects();
+  const published = useShellScopeStore((state) => state.published);
+  const shownId = published?.scope.mode === "one" ? published.scope.projectId : null;
 
   return useMemo(() => {
+    // The one project the nav shows.
+    if (shownId) {
+      if (context?.id === shownId) return context;
+      const shown = projects.find((project) => project.id === shownId);
+      if (shown) return shown;
+    }
     // The shell has nothing at all to show (no catalog row, nothing
     // remembered): keep whatever the context holds.
     if (!shell.key) return context;
@@ -46,5 +58,5 @@ export function useShellCurrentProject(): Project | null {
     if (context?.id === shell.projectId) return context;
     if (shell.row?.kind === "project") return shell.row.project;
     return projects.find((project) => project.id === shell.projectId) ?? null;
-  }, [context, shell.key, shell.projectId, shell.row, projects]);
+  }, [shownId, context, shell.key, shell.projectId, shell.row, projects]);
 }

@@ -65,6 +65,7 @@ const { useShellCurrentProject } = await import("../useShellCurrentProject");
 const { SEVERAL_PROJECTS_PICK, useShellLastPick, useShellProject } = await import("../shellProject");
 const { useChatProjectFilterStore } = await import("@/hooks/useChatProjectFilter");
 const { useProjectStore } = await import("@/store/projectStore");
+const { publishShellScope, resetShellScopeForTests } = await import("@/lib/urlState/shellScopeStore");
 
 /** The page's project and the nav's, on the same route. */
 function renderBoth() {
@@ -78,6 +79,7 @@ beforeEach(() => {
   useProjectStore.setState({ currentProject: null });
 });
 afterEach(() => {
+  resetShellScopeForTests();
   useShellLastPick.setState({ key: null, several: [], focus: null });
   useChatProjectFilterStore.setState({ many: [] });
   useProjectStore.setState({ currentProject: null });
@@ -140,5 +142,16 @@ describe("useShellCurrentProject", () => {
 
     expect(result.current.nav.key).toBe("app:storefront");
     expect(result.current.page).toBeNull();
+  });
+
+  it("is the one project the nav on screen shows, over its own resolution", () => {
+    useShellLastPick.setState({ key: "p2", focus: "p2" });
+    const { result, rerender } = renderBoth();
+    expect(result.current.page?.id).toBe("p2");
+
+    // The sidebar published another project (its route's, say): the page takes the nav's.
+    publishShellScope({ scope: { mode: "one", projectId: "p4" }, focus: null });
+    rerender();
+    expect(result.current.page?.id).toBe("p4");
   });
 });
