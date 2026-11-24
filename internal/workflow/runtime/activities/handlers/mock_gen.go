@@ -1262,7 +1262,7 @@ func (m *MockApprovalResolveStore) ResolvePendingApproval(ctx context.Context, i
 var _ ApprovalResolveStore = (*MockApprovalResolveStore)(nil)
 
 // forge:section MockCallLLMStore
-// forge:hash=ff86885168e8dc81aa17a379e04e37bec2eb73d59f325dac3e572de0e78ac5f8
+// forge:hash=0f755a9e7678a3c5650f9c83e27381fe5f19d90623dde72d34a7ffe0749654c5
 
 // MockCallLLMStore is a test mock for the CallLLMStore interface.
 //
@@ -1332,6 +1332,7 @@ type MockCallLLMStore struct {
 	GetTriggerEventByChatFunc                                func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	ChatPersonTurnAtFunc                                     func(context.Context, string) (*time.Time, error)
 	GetTriggerFunc                                           func(context.Context, string) (*core.Trigger, error)
+	LatestHumanTurnAuthorFunc                                func(context.Context, string) (string, error)
 	MarkAgentMessagesDeliveredFunc                           func(context.Context, []string, time.Time, string) ([]string, error)
 	SetAgentMessagesDeliveredMessageIDFunc                   func(context.Context, []string, string) error
 	ListContentBlocksForMessagesFunc                         func(context.Context, []string) ([]*db.MessageContentBlock, error)
@@ -1877,6 +1878,15 @@ func (m *MockCallLLMStore) GetTrigger(ctx context.Context, id string) (*core.Tri
 	return nil, contractkit.MockNotSet("MockCallLLMStore", "GetTrigger")
 }
 
+// LatestHumanTurnAuthor records the call and delegates to LatestHumanTurnAuthorFunc when set.
+func (m *MockCallLLMStore) LatestHumanTurnAuthor(ctx context.Context, chatID string) (string, error) {
+	m.Recorder.Record("LatestHumanTurnAuthor", ctx, chatID)
+	if m.LatestHumanTurnAuthorFunc != nil {
+		return m.LatestHumanTurnAuthorFunc(ctx, chatID)
+	}
+	return "", contractkit.MockNotSet("MockCallLLMStore", "LatestHumanTurnAuthor")
+}
+
 // MarkAgentMessagesDelivered records the call and delegates to MarkAgentMessagesDeliveredFunc when set.
 func (m *MockCallLLMStore) MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) ([]string, error) {
 	m.Recorder.Record("MarkAgentMessagesDelivered", ctx, ids, deliveredAt, deliveredMessageID)
@@ -2070,7 +2080,7 @@ func (m *MockCleanupStore) UpsertToolCall(ctx context.Context, call *core.ToolCa
 var _ CleanupStore = (*MockCleanupStore)(nil)
 
 // forge:section MockCompactStore
-// forge:hash=7fb470f6e5cd1897e7ad5e9dbec595aa225f7effa375ef664b92c99514b2d0ad
+// forge:hash=c847ad89361ed84bd9f7b4d1d177bdc1c3aecc3b5e91549188b50b6d2e1f185d
 
 // MockCompactStore is a test mock for the CompactStore interface.
 //
@@ -2124,6 +2134,7 @@ type MockCompactStore struct {
 	GetTriggerEventByChatFunc                                func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	ChatPersonTurnAtFunc                                     func(context.Context, string) (*time.Time, error)
 	GetTriggerFunc                                           func(context.Context, string) (*core.Trigger, error)
+	LatestHumanTurnAuthorFunc                                func(context.Context, string) (string, error)
 	ListContentBlocksForMessagesFunc                         func(context.Context, []string) ([]*db.MessageContentBlock, error)
 }
 
@@ -2521,6 +2532,15 @@ func (m *MockCompactStore) GetTrigger(ctx context.Context, id string) (*core.Tri
 		return m.GetTriggerFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockCompactStore", "GetTrigger")
+}
+
+// LatestHumanTurnAuthor records the call and delegates to LatestHumanTurnAuthorFunc when set.
+func (m *MockCompactStore) LatestHumanTurnAuthor(ctx context.Context, chatID string) (string, error) {
+	m.Recorder.Record("LatestHumanTurnAuthor", ctx, chatID)
+	if m.LatestHumanTurnAuthorFunc != nil {
+		return m.LatestHumanTurnAuthorFunc(ctx, chatID)
+	}
+	return "", contractkit.MockNotSet("MockCompactStore", "LatestHumanTurnAuthor")
 }
 
 // ListContentBlocksForMessages records the call and delegates to ListContentBlocksForMessagesFunc when set.
@@ -3110,7 +3130,7 @@ func (m *MockWorktreeReviver) ReviveArchivedWorktree(ctx context.Context, id str
 var _ WorktreeReviver = (*MockWorktreeReviver)(nil)
 
 // forge:section MockExecuteToolsStore
-// forge:hash=2b71bff8169eb1c2c27fb973e04a2106416fb2328861edfe847a82b69d163630
+// forge:hash=24602ebea45d0c108a7ecb042959919c6d32a0fe41ca2451b6e80296eaaf4b07
 
 // MockExecuteToolsStore is a test mock for the ExecuteToolsStore interface.
 //
@@ -3140,6 +3160,7 @@ type MockExecuteToolsStore struct {
 	GetTriggerEventByChatFunc             func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	ChatPersonTurnAtFunc                  func(context.Context, string) (*time.Time, error)
 	GetTriggerFunc                        func(context.Context, string) (*core.Trigger, error)
+	LatestHumanTurnAuthorFunc             func(context.Context, string) (string, error)
 }
 
 // RunTx records the call and delegates to RunTxFunc when set.
@@ -3322,6 +3343,15 @@ func (m *MockExecuteToolsStore) GetTrigger(ctx context.Context, id string) (*cor
 	return nil, contractkit.MockNotSet("MockExecuteToolsStore", "GetTrigger")
 }
 
+// LatestHumanTurnAuthor records the call and delegates to LatestHumanTurnAuthorFunc when set.
+func (m *MockExecuteToolsStore) LatestHumanTurnAuthor(ctx context.Context, chatID string) (string, error) {
+	m.Recorder.Record("LatestHumanTurnAuthor", ctx, chatID)
+	if m.LatestHumanTurnAuthorFunc != nil {
+		return m.LatestHumanTurnAuthorFunc(ctx, chatID)
+	}
+	return "", contractkit.MockNotSet("MockExecuteToolsStore", "LatestHumanTurnAuthor")
+}
+
 // Compile-time check.
 var _ ExecuteToolsStore = (*MockExecuteToolsStore)(nil)
 
@@ -3362,7 +3392,7 @@ func (m *MockRunFundingStore) ChatFundingOrder(ctx context.Context, chatID strin
 var _ RunFundingStore = (*MockRunFundingStore)(nil)
 
 // forge:section MockGenerateTitleStore
-// forge:hash=1a0958c5135d364a5649f6f7386ff8d21f4bc00e583a7146e6450856f7a7de5f
+// forge:hash=5a34c5be032bd209f461c693186806e2372f2d2c04d1c5c7dd6090c811cf68e7
 
 // MockGenerateTitleStore is a test mock for the GenerateTitleStore interface.
 //
@@ -3379,6 +3409,7 @@ type MockGenerateTitleStore struct {
 	GetTriggerEventByChatFunc func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	ChatPersonTurnAtFunc      func(context.Context, string) (*time.Time, error)
 	GetTriggerFunc            func(context.Context, string) (*core.Trigger, error)
+	LatestHumanTurnAuthorFunc func(context.Context, string) (string, error)
 }
 
 // RunTx records the call and delegates to RunTxFunc when set.
@@ -3442,6 +3473,15 @@ func (m *MockGenerateTitleStore) GetTrigger(ctx context.Context, id string) (*co
 		return m.GetTriggerFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockGenerateTitleStore", "GetTrigger")
+}
+
+// LatestHumanTurnAuthor records the call and delegates to LatestHumanTurnAuthorFunc when set.
+func (m *MockGenerateTitleStore) LatestHumanTurnAuthor(ctx context.Context, chatID string) (string, error) {
+	m.Recorder.Record("LatestHumanTurnAuthor", ctx, chatID)
+	if m.LatestHumanTurnAuthorFunc != nil {
+		return m.LatestHumanTurnAuthorFunc(ctx, chatID)
+	}
+	return "", contractkit.MockNotSet("MockGenerateTitleStore", "LatestHumanTurnAuthor")
 }
 
 // Compile-time check.

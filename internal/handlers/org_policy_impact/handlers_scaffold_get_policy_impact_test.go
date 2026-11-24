@@ -91,6 +91,9 @@ func (c *calls) ChatPersonTurnAt(_ context.Context, chatID string) (*time.Time, 
 	return nil, nil
 }
 
+// LatestHumanTurnAuthor: no chat here has a member's message.
+func (c *calls) LatestHumanTurnAuthor(context.Context, string) (string, error) { return "", nil }
+
 func (c *calls) GetTrigger(_ context.Context, id string) (*core.Trigger, error) {
 	return &core.Trigger{ID: id}, nil
 }

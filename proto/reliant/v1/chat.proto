@@ -797,6 +797,25 @@ message Chat {
   // a branch of the chat carries it. Unset: a chat about no particular app,
   // which is every chat started from the sidebar.
   optional string app_name = 48;
+  // The caller's level on a chat they read as someone other than its owner
+  // (viewer_access is then true): VIEW, REPLY or MANAGE (control-plane
+  // docs/design/chat-collaboration.md §12). Unset on the owner's own chat
+  // and from a server that predates chat collaboration; a client then reads
+  // viewer_access alone, as a read-only view.
+  optional ChatAccessLevel access_level = 49;
+}
+
+// ChatAccessLevel is how far a person who is not a chat's owner may act in
+// it (chat_members, control-plane docs/design/chat-collaboration.md §2).
+enum ChatAccessLevel {
+  CHAT_ACCESS_LEVEL_UNSPECIFIED = 0;
+  // Read-only: an org-wide viewer of a shared chat, or a view grant.
+  CHAT_ACCESS_LEVEL_VIEW = 1;
+  // May send messages and answer questions; they run as the owner's agent,
+  // on the owner's machine, funded by the org.
+  CHAT_ACCESS_LEVEL_REPLY = 2;
+  // Reply, plus steering the run, its settings and the member list.
+  CHAT_ACCESS_LEVEL_MANAGE = 3;
 }
 
 // ChatOrigin is who started a chat. It is the chat list's policy key: a USER

@@ -1145,6 +1145,13 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Orgs:          g.OrgResolver(),
 		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.Database()}),
 		AgentMessages: store.NewAgentMessageExtStore(g.Database().ORM()),
+		// A chat's reply members send only with chat_collaboration.enabled.
+		Collaboration: g.ApiServerConfig.GetChatCollaboration(),
+		Members:       g.OrgResolver(),
+		FundingLeases: store.NewChatPersonalFundingExtStore(g.Database().ORM()),
+		PersonPicks:   store.NewChatPersonPickExtStore(g.Database().ORM()),
+		Settings:      g.Database(),
+		Attachments:   store.NewAttachmentExtStore(g.Database().ORM()),
 	})
 }
 
@@ -1462,6 +1469,9 @@ func (g *Graph) newQuestion() (*question.Service, error) {
 		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.Database()}),
 		Signals:   g.PauseService(),
 		Messages:  g.Chat(),
+		// A chat's reply members answer only with chat_collaboration.enabled.
+		Collaboration: g.ApiServerConfig.GetChatCollaboration(),
+		Replies:       g.Chat(),
 	})
 }
 
@@ -1654,8 +1664,11 @@ func (g *Graph) newSharing() (*sharing.Service, error) {
 		Projects:       store.NewProjectExtStore(o),
 		WorkflowDrafts: g.Workflowdrafts(),
 		Shares:         store.NewShareEventExtStore(o),
+		Members:        store.NewChatMemberExtStore(o),
 		Tx:             o,
 		Orgs:           g.OrgResolver(),
+		// SetChatMember grants only with chat_collaboration.enabled.
+		Collaboration: g.ApiServerConfig.GetChatCollaboration(),
 	})
 }
 

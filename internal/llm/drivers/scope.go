@@ -35,12 +35,21 @@ type Scope struct {
 	// reads as "any", today's behaviour): it may draw on every source, as a
 	// person's run does. It never widens an attended scope.
 	UnattendedAnySource bool
+	// Collaborator reports that the call answers a chat member's message,
+	// not the owner's: every call from a member's message up to the owner's
+	// next one (control-plane docs/design/chat-collaboration.md §5.3 rule 2).
+	// It draws on org-funded accounts only, as an unattended run does, so a
+	// member never spends the owner's own accounts; but the run stays
+	// attended for everything else (org policy verdicts, tools), because the
+	// owner's chat is still a person's chat.
+	Collaborator bool
 }
 
 // OrgFundedOnly reports that the scope may draw only on org-funded accounts:
-// an unattended run in an org whose automation is not stamped "any".
+// an unattended run in an org whose automation is not stamped "any", and any
+// call that answers a chat member (Collaborator).
 func (s Scope) OrgFundedOnly() bool {
-	return s.OrgID != "" && !s.Attended && !s.UnattendedAnySource
+	return s.OrgID != "" && (s.Collaborator || (!s.Attended && !s.UnattendedAnySource))
 }
 
 // PersonalScope is the scope of a call that belongs to no run: key

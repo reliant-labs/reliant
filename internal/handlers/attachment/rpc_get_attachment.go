@@ -11,7 +11,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -61,8 +60,8 @@ func (s *Service) GetAttachment(
 		return nil, svcerr.NotFound("attachment")
 	}
 
-	// Verify ownership
-	if !authz.CanAccessPersonal(userID, dbAttachment.UserID) {
+	// Its uploader, or the owner of a chat a member attached it in.
+	if !canRead(ctx, s.deps.Attachments, userID, dbAttachment) {
 		return nil, svcerr.NotFound("attachment")
 	}
 

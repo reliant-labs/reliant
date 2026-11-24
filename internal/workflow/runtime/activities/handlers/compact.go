@@ -466,6 +466,7 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 		OrgID:               chatOrgID(chat),
 		Attended:            who.attended,
 		UnattendedAnySource: who.anySource,
+		Collaborator:        who.collaborator,
 		SessionID:           chat.ID, // Use chat ID as thread ID for Anthropic
 		ChatID:              chat.ID,
 		// The turn decides who pays (§10) and asks: a compaction reads that
@@ -725,6 +726,7 @@ func (a *GenerateTitleActivity) generateTitleForChat(ctx context.Context, chat *
 		OrgID:               chatOrgID(chat),
 		Attended:            who.attended,
 		UnattendedAnySource: who.anySource,
+		Collaborator:        who.collaborator,
 		// The chat's consent (§10), read and never written: a title spends
 		// the person's own account only where the chat's turn already may.
 		ChatID:      chatID,

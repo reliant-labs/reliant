@@ -58,7 +58,14 @@ func (s *Service) ListSharedChats(
 	}
 	ctx = authz.WithViewerReads(ctx)
 	for _, c := range authz.SharedChatsFor(ctx, userID, chats) {
-		out.Chats = append(out.Chats, chatproto.ForViewer(chatproto.Chat(c)))
+		// Each row carries the caller's level on it: a member of an
+		// org-shared chat holds more than view (chat-collaboration.md §12).
+		// A level that cannot be read now is the viewer's.
+		var role core.ChatMemberRole
+		if access, err := authz.ReadChatAccess(ctx, userID, c); err == nil {
+			role = access.Role()
+		}
+		out.Chats = append(out.Chats, chatproto.ForMember(chatproto.Chat(c), role))
 	}
 	return connect.NewResponse(out), nil
 }

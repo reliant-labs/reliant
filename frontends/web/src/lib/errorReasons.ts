@@ -53,6 +53,14 @@ export const ERROR_REASONS = [
   "run_no_listening_agent",
   /** Input to a run with several agents running in parallel that names none of them; the message lists them (handlers/chat run_recipient.go). */
   "run_recipient_ambiguous",
+  /** A chat member's send to a chat its owner put on their own AI account; nothing was queued, and only the owner can send (handlers/chat, chat-collaboration §5.3). */
+  "chat_personally_funded",
+  /** A chat member's request set something only a manager may (the workflow, mode, a parameter or preset) (handlers/chat, chat-collaboration §5.2). */
+  "needs_manage",
+  /** A chat member's request did something only the chat's owner may (a system message) (handlers/chat). */
+  "needs_owner",
+  /** A chat member holds the most undelivered queued messages one person may in another's chat (handlers/chat). */
+  "reply_queue_full",
   /** A save raced a newer revision of the same definition (handlers/workflow). */
   "stale_revision",
   /** Killing a process that already exited (handlers/package_commands, background). */

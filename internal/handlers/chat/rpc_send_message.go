@@ -93,7 +93,7 @@ func (s *Service) saveIncomingMessages(
 	// there — in the transcript or queued in a mailbox — an earlier attempt of
 	// this same send wrote it, along with the notes that went with it, and the
 	// message the caller is owed is that one.
-	clientID := canonicalClientMessageID(req.Msg.GetClientMessageId())
+	clientID := storedClientID(ctx, chat, req.Msg.GetClientMessageId())
 	hasMessage := hasUserContent || len(req.Msg.Attachments) > 0
 	var savedMessageID string
 	err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
@@ -164,7 +164,7 @@ func (s *Service) queueIncomingMessage(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SendMessageRequest],
 	chat *db.Chat,
-	userID, clientID, thread, workflowID string,
+	sender, clientID, thread, workflowID string,
 	systemMessages []*reliantv1.InputMessage,
 	userContent string,
 ) (*db.AgentMessage, error) {
@@ -181,6 +181,8 @@ func (s *Service) queueIncomingMessage(
 		Status:       core.AgentMessageStatusQueued,
 		CreatedAt:    time.Now(),
 	}
+	// The person it is from rides the row, for the drain to copy (§6.1).
+	msg.AuthorUserID, msg.AuthorName = db.AuthorColumns(ctx)
 	// An agent sending through the human's path (send_to_run) queues as
 	// itself, so the drain attributes the message to it instead of to the
 	// human.
@@ -194,7 +196,7 @@ func (s *Service) queueIncomingMessage(
 	var queued *db.AgentMessage
 	err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		queued = nil
-		if err := s.recordPersonTurn(txCtx, userID, chat); err != nil {
+		if err := s.recordPersonTurn(txCtx, sender, chat); err != nil {
 			return err
 		}
 		row, inserted, err := s.enqueueHumanMessage(txCtx, msg, clientID != "")
@@ -251,7 +253,7 @@ func (s *Service) saveOrQueueBehindMailbox(
 	req *connect.Request[reliantv1.SendMessageRequest],
 	chat *db.Chat,
 	prior *priorSend,
-	userID, clientID, thread, workflowID string,
+	sender, clientID, thread, workflowID string,
 	systemMessages []*reliantv1.InputMessage,
 	userContent string,
 	hasUserContent bool,
@@ -263,7 +265,7 @@ func (s *Service) saveOrQueueBehindMailbox(
 			return err
 		}
 		if behind {
-			row, err := s.queueIncomingMessage(txCtx, req, chat, userID, clientID, thread, workflowID, systemMessages, userContent)
+			row, err := s.queueIncomingMessage(txCtx, req, chat, sender, clientID, thread, workflowID, systemMessages, userContent)
 			if err != nil {
 				return err
 			}
@@ -385,7 +387,10 @@ func (s *Service) SendMessage(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SendMessageRequest],
 ) (*connect.Response[reliantv1.SendMessageResponse], error) {
-	userID := auth.MustGetUserID(ctx)
+	// The sender is who asked; the run user is whose run this is. They differ
+	// only for a chat member's reply (chat_collaboration.go), and everything
+	// below that touches the run takes runUser.
+	sender := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
@@ -404,11 +409,27 @@ func (s *Service) SendMessage(
 		return nil, err
 	}
 
-	// Get chat with ownership check (defense-in-depth via single query)
-	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
+	// The chat, if sender may send to it: its owner, or with collaboration
+	// on a member at reply or above. Anyone else is NotFound.
+	chat, err := s.chatForSend(ctx, req.Msg.ChatId, sender)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
+	runUser := chat.UserID
+	member := sender != runUser
+	if member {
+		// A member's reply carries text and attachments only, of their own,
+		// and only to a chat on the org's accounts; all of it refused before
+		// anything is written (chat-collaboration.md §5.2, §5.3, §6.4). Their
+		// client ids are their own (§6.3).
+		if err := s.memberSendChecks(ctx, req.Msg, chat, sender, systemMessages); err != nil {
+			return nil, err
+		}
+		clientID = memberMessageID(sender, clientID)
+	}
+	// Every human message this send saves or queues is recorded as the
+	// sender's (§6.1).
+	ctx = db.WithMessageAuthor(ctx, s.sendAuthor(ctx, chat, sender))
 
 	// A repeat of a send whose message has already been read is answered
 	// before anything else happens. The machine wake and the queued-for-machine
@@ -422,7 +443,7 @@ func (s *Service) SendMessage(
 		return replayResponse(chat, early), nil
 	}
 
-	s.wakeDaemonForAttendedTurn(ctx, userID, chat)
+	s.wakeDaemonForAttendedTurn(ctx, runUser, chat)
 
 	if chat.Activity != nil && reliantv1.ChatActivity(*chat.Activity) == reliantv1.ChatActivity_CHAT_ACTIVITY_WAITING_FOR_DAEMON {
 		// A live run is waiting for the machine this send just woke. Its
@@ -506,8 +527,13 @@ func (s *Service) SendMessage(
 		return replay, nil
 	}
 	if prior != nil {
-		if fresh, err := s.getChatForUser(ctx, req.Msg.ChatId, userID); err == nil {
+		if fresh, err := s.chatForSend(ctx, req.Msg.ChatId, sender); err == nil {
 			chat = fresh
+		}
+	} else if member {
+		// Under the lock, so two of one member's sends cannot both pass it.
+		if err := s.requireMemberQueueRoom(ctx, chat.ID, sender); err != nil {
+			return nil, err
 		}
 	}
 
@@ -547,7 +573,7 @@ func (s *Service) SendMessage(
 						"workflowName", existingWorkflow.WorkflowName,
 					)
 
-					return s.resurrectGhostWorkflow(ctx, req, chat, existingWorkflow, workflowID, userID)
+					return s.resurrectGhostWorkflow(ctx, req, chat, existingWorkflow, workflowID, runUser)
 				} else if !temporalState.IsRunning {
 					if existingWorkflow.Status == db.Paused() {
 						// Paused workflow whose Temporal execution timed out or completed.
@@ -585,7 +611,7 @@ func (s *Service) SendMessage(
 				// liveRunStateUpdate.
 				newPresets := changedPresets(chat.SelectedPresets, req.Msg.SelectedPresets)
 				presetsChanged := applyRequestPresets(chat, req.Msg.SelectedPresets)
-				stateUpdate, err := s.liveRunStateUpdate(ctx, userID, chat, existingWorkflow.WorkflowName, req, newPresets)
+				stateUpdate, err := s.liveRunStateUpdate(ctx, runUser, chat, existingWorkflow.WorkflowName, req, newPresets)
 				if err != nil {
 					return nil, err
 				}
@@ -626,7 +652,7 @@ func (s *Service) SendMessage(
 				var queued bool
 				err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 					var saveErr error
-					savedMessageID, queued, saveErr = s.saveOrQueueBehindMailbox(txCtx, req, chat, prior, userID, clientID, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+					savedMessageID, queued, saveErr = s.saveOrQueueBehindMailbox(txCtx, req, chat, prior, sender, clientID, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 					return saveErr
 				})
 				if err != nil {
@@ -641,7 +667,7 @@ func (s *Service) SendMessage(
 					runID = *chat.RunID
 				}
 
-				outcome, resumeErr := s.resumePausedRun(ctx, userID, chat, existingWorkflow.WorkflowName, targetThread, stateUpdate, req.Msg.WorkflowParams)
+				outcome, resumeErr := s.resumePausedRun(ctx, runUser, chat, existingWorkflow.WorkflowName, targetThread, stateUpdate, req.Msg.WorkflowParams)
 				if resumeErr != nil {
 					// The resume is the step that actually restarts the run.
 					// Swallowing this failure and returning
@@ -690,7 +716,7 @@ func (s *Service) SendMessage(
 
 				// Return with updated workflow_status so frontend knows we resumed
 				workflowStatus := fmt.Sprintf("%d", db.Active())
-				go s.trackMessageSent(ctx, userID, chat, savedMessageID, targetThread, userContent, len(req.Msg.Attachments))
+				go s.trackMessageSent(ctx, sender, chat, savedMessageID, targetThread, userContent, len(req.Msg.Attachments))
 				return connect.NewResponse(&reliantv1.SendMessageResponse{
 					ChatId:         req.Msg.ChatId,
 					WorkflowId:     workflowID,
@@ -723,7 +749,7 @@ func (s *Service) SendMessage(
 				// liveRunStateUpdate.
 				newPresets := changedPresets(chat.SelectedPresets, req.Msg.SelectedPresets)
 				presetsChanged := applyRequestPresets(chat, req.Msg.SelectedPresets)
-				stateUpdate, err := s.liveRunStateUpdate(ctx, userID, chat, existingWorkflow.WorkflowName, req, newPresets)
+				stateUpdate, err := s.liveRunStateUpdate(ctx, runUser, chat, existingWorkflow.WorkflowName, req, newPresets)
 				if err != nil {
 					return nil, err
 				}
@@ -751,7 +777,7 @@ func (s *Service) SendMessage(
 				// before the run is woken.
 				var queuedMsg *db.AgentMessage
 				if hasUserContent || len(req.Msg.Attachments) > 0 {
-					queuedMsg, err = s.queueIncomingMessage(ctx, req, chat, userID, clientID, targetThread, workflowID, systemMessages, userContent)
+					queuedMsg, err = s.queueIncomingMessage(ctx, req, chat, sender, clientID, targetThread, workflowID, systemMessages, userContent)
 					if err != nil {
 						return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save message"))
 					}
@@ -761,11 +787,11 @@ func (s *Service) SendMessage(
 				// above, after the send-time model policy (#685) has moved any
 				// model no connected provider can serve.
 				if len(stateUpdate) > 0 {
-					modelMoves := s.fallBackFromUnservableModels(ctx, userID, chat, existingWorkflow.WorkflowName, workflowID, targetThread, stateUpdate, func(input string) bool {
+					modelMoves := s.fallBackFromUnservableModels(ctx, runUser, chat, existingWorkflow.WorkflowName, workflowID, targetThread, stateUpdate, func(input string) bool {
 						return s.checkParamsActuallyChanged(ctx, workflowID, map[string]interface{}{input: stateUpdate[input]})
 					})
-					s.refreshLiveChatProvider(ctx, userID, chat, existingWorkflow.WorkflowName, stateUpdate)
-					_, _ = s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, stateUpdate, modelMoves, 0)
+					s.refreshLiveChatProvider(ctx, runUser, chat, existingWorkflow.WorkflowName, stateUpdate)
+					_, _ = s.recordSelection(ctx, runUser, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, stateUpdate, modelMoves, 0)
 
 					// Only add "params changed" message if params actually changed from current workflow state
 					if s.checkParamsActuallyChanged(ctx, workflowID, stateUpdate) {
@@ -837,7 +863,7 @@ func (s *Service) SendMessage(
 				if queuedMsg != nil {
 					messageID = queuedMsg.ID
 				}
-				go s.trackMessageSent(ctx, userID, chat, messageID, targetThread, userContent, len(req.Msg.Attachments))
+				go s.trackMessageSent(ctx, sender, chat, messageID, targetThread, userContent, len(req.Msg.Attachments))
 				return connect.NewResponse(&reliantv1.SendMessageResponse{
 					ChatId:         req.Msg.ChatId,
 					WorkflowId:     workflowID,
@@ -880,7 +906,7 @@ func (s *Service) SendMessage(
 				// new-run path below persists the presets once it starts).
 				newPresets := changedPresets(chat.SelectedPresets, req.Msg.SelectedPresets)
 				applyRequestPresets(chat, req.Msg.SelectedPresets)
-				stateUpdate, err := s.liveRunStateUpdate(ctx, userID, chat, activeWorkflowNameForResume(chat, existingWorkflow), req, newPresets)
+				stateUpdate, err := s.liveRunStateUpdate(ctx, runUser, chat, activeWorkflowNameForResume(chat, existingWorkflow), req, newPresets)
 				if err != nil {
 					return nil, err
 				}
@@ -902,16 +928,16 @@ func (s *Service) SendMessage(
 					if err != nil {
 						return nil, svcerr.Wrap(err)
 					}
-					inputUpdate, modelNotices, modelMoves = s.resumeInputUpdate(ctx, userID, chat, existingWorkflow.WorkflowName, workflowID,
+					inputUpdate, modelNotices, modelMoves = s.resumeInputUpdate(ctx, runUser, chat, existingWorkflow.WorkflowName, workflowID,
 						s.underSelection(ctx, chat.ID, activeWorkflowNameForResume(chat, existingWorkflow), stateUpdate), recorded)
 					if inputUpdate == nil {
 						inputUpdate = make(map[string]interface{})
 					}
-					if err := s.reconcileResumeMode(ctx, userID, chat, activeWorkflowNameForResume(chat, existingWorkflow), inputUpdate, stateUpdate); err != nil {
+					if err := s.reconcileResumeMode(ctx, runUser, chat, activeWorkflowNameForResume(chat, existingWorkflow), inputUpdate, stateUpdate); err != nil {
 						return nil, svcerr.Wrap(err)
 					}
-					inputUpdate = s.withProviderPolicy(ctx, userID, chat, recorded, inputUpdate)
-					inputUpdate = s.refreshLiveChatProvider(ctx, userID, chat, existingWorkflow.WorkflowName, inputUpdate)
+					inputUpdate = s.withProviderPolicy(ctx, runUser, chat, recorded, inputUpdate)
+					inputUpdate = s.refreshLiveChatProvider(ctx, runUser, chat, existingWorkflow.WorkflowName, inputUpdate)
 				}
 
 				// A run that died parked on an unanswered ask_question wakes on
@@ -944,10 +970,10 @@ func (s *Service) SendMessage(
 					}
 				}
 				if pendingQuestion != nil && pendingQuestion.TemporalWorkflowID != "" && hasUserContent {
-					resp, resumed, presavedID := s.resumeFailedQuestionWorkflow(ctx, req, chat, existingWorkflow, pendingQuestion, targetThread, userID, userContent, systemMessages, inputUpdate)
+					resp, resumed, presavedID := s.resumeFailedQuestionWorkflow(ctx, req, chat, existingWorkflow, pendingQuestion, targetThread, runUser, userContent, systemMessages, inputUpdate)
 					if resumed {
 						s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, targetThread, modelNotices)
-						_, _ = s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, inputUpdate, modelMoves, 0)
+						_, _ = s.recordSelection(ctx, runUser, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, inputUpdate, modelMoves, 0)
 						return resp, nil
 					}
 					// Guard-exhausted / not reset-resumable: the question is already
@@ -976,7 +1002,7 @@ func (s *Service) SendMessage(
 					// another drain boundary, so whatever was queued for this
 					// thread still belongs ahead of the new message, which is
 					// queued behind it (saveOrQueueBehindMailbox).
-					presavedID, queued, saveErr := s.saveOrQueueBehindMailbox(ctx, req, chat, prior, userID, clientID, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+					presavedID, queued, saveErr := s.saveOrQueueBehindMailbox(ctx, req, chat, prior, sender, clientID, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 					if saveErr != nil {
 						return nil, svcerr.WrapOr(saveErr, svcerr.Internal("failed to save messages"))
 					}
@@ -1001,9 +1027,9 @@ func (s *Service) SendMessage(
 					}
 					if outcome.Kind == runs.OutcomeResumed {
 						s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, targetThread, modelNotices)
-						_, _ = s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, inputUpdate, modelMoves, 0)
+						_, _ = s.recordSelection(ctx, runUser, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, inputUpdate, modelMoves, 0)
 						workflowStatus := fmt.Sprintf("%d", db.Active())
-						go s.trackMessageSent(ctx, userID, chat, presavedID, targetThread, userContent, len(req.Msg.Attachments))
+						go s.trackMessageSent(ctx, sender, chat, presavedID, targetThread, userContent, len(req.Msg.Attachments))
 						return connect.NewResponse(&reliantv1.SendMessageResponse{
 							ChatId:         req.Msg.ChatId,
 							WorkflowId:     workflowID,
@@ -1105,7 +1131,7 @@ func (s *Service) SendMessage(
 	// Build workflow inputs: presets, then the chat's stored selection, then
 	// this send's params. A send that carries no params still runs the model
 	// and mode the chat was set to, from any device.
-	initialData, err := s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, effectivePresets, req.Msg.WorkflowParams)
+	initialData, err := s.launcher().BuildChatWorkflowInputs(ctx, runUser, chat, workflowName, effectivePresets, req.Msg.WorkflowParams)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -1114,7 +1140,7 @@ func (s *Service) SendMessage(
 	// saved below. This catches missing required inputs, unknown models and a
 	// user with no provider early (400), and a refused send must leave nothing
 	// behind; see liveRunStateUpdate.
-	if validationErrors := s.launcher().ValidateChatWorkflowInputs(ctx, userID, chat, workflowName, initialData); len(validationErrors) > 0 {
+	if validationErrors := s.launcher().ValidateChatWorkflowInputs(ctx, runUser, chat, workflowName, initialData); len(validationErrors) > 0 {
 		return nil, inputValidationError(validationErrors)
 	}
 	if presetsChanged {
@@ -1146,7 +1172,7 @@ func (s *Service) SendMessage(
 		Thread:       targetThread,
 		ThreadMode:   threadMode,
 	}
-	if jwt, ok := auth.GetUserJWT(userID); ok {
+	if jwt, ok := auth.GetUserJWT(runUser); ok {
 		execContext.UserJWT = jwt
 	}
 
@@ -1176,7 +1202,7 @@ func (s *Service) SendMessage(
 		var saved string
 		var queued bool
 		if orderBehindMailbox {
-			saved, queued, err = s.saveOrQueueBehindMailbox(ctx, req, chat, prior, userID, clientID, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+			saved, queued, err = s.saveOrQueueBehindMailbox(ctx, req, chat, prior, sender, clientID, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 		} else {
 			saved, err = s.saveIncomingMessages(ctx, req, chat, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 		}
@@ -1191,10 +1217,10 @@ func (s *Service) SendMessage(
 
 	// A move is announced once: the chat's selection records the moved model,
 	// so a composer still sending the original pin does not repeat the notice.
-	modelMoves := s.fallBackFromUnservableModels(ctx, userID, chat, workflowName, workflowID, targetThread, initialData,
+	modelMoves := s.fallBackFromUnservableModels(ctx, runUser, chat, workflowName, workflowID, targetThread, initialData,
 		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
-	s.refreshChatProvider(ctx, userID, chat, workflowName, initialData)
-	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
+	s.refreshChatProvider(ctx, runUser, chat, workflowName, initialData)
+	_, _ = s.recordSelection(ctx, runUser, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
 
 	// Inject the session daemon the chat was pinned to above.
 	launch.InjectSessionDaemonID(initialData, chat)
@@ -1228,7 +1254,7 @@ func (s *Service) SendMessage(
 	s.runs.RecordRun(ctx, req.Msg.ChatId, workflowID, runID)
 
 	workflowStatus := fmt.Sprintf("%d", db.Active())
-	go s.trackMessageSent(ctx, userID, chat, savedMessageID, targetThread, userContent, len(req.Msg.Attachments))
+	go s.trackMessageSent(ctx, sender, chat, savedMessageID, targetThread, userContent, len(req.Msg.Attachments))
 	return connect.NewResponse(&reliantv1.SendMessageResponse{
 		ChatId:         req.Msg.ChatId,
 		WorkflowId:     workflowID,

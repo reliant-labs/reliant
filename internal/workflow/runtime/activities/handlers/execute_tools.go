@@ -957,7 +957,7 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 func (a *ExecuteToolsActivity) runScope(ctx context.Context, chat *db.Chat) func() (drivers.Scope, drivers.RunFunding) {
 	return func() (drivers.Scope, drivers.RunFunding) {
 		who := chatAttendance(ctx, a.repo, chat)
-		scope := llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: who.attended, UnattendedAnySource: who.anySource}.scope()
+		scope := llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: who.attended, UnattendedAnySource: who.anySource, Collaborator: who.collaborator}.scope()
 		if scope.Personal() {
 			return scope, drivers.RunFunding{}
 		}
@@ -978,7 +978,9 @@ type runFundingOrderKey struct{}
 // (§11.3). A store that cannot answer is org_only: the person's own accounts
 // are never spent without their say.
 func runFunding(ctx context.Context, store RunFundingStore, chat *db.Chat, who attendance, runOrder string) drivers.RunFunding {
-	if store == nil {
+	if store == nil || who.collaborator {
+		// A chat member's message is the org's to fund (chat-collaboration
+		// §5.3): the owner's own accounts are not spent for it.
 		return drivers.RunFunding{OrgOnly: true}
 	}
 	orgID := chatOrgID(chat)

@@ -38,6 +38,7 @@ type (
 	CancelRunResponse                        = sdk.CancelRunResponse
 	ChangedFile                              = sdk.ChangedFile
 	Chat                                     = sdk.Chat
+	ChatAccessLevel                          = sdk.ChatAccessLevel
 	ChatActivity                             = sdk.ChatActivity
 	ChatErrorUpdate                          = sdk.ChatErrorUpdate
 	ChatOrigin                               = sdk.ChatOrigin
@@ -511,6 +512,10 @@ const (
 	BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_RUNNING                  = sdk.BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_RUNNING
 	BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_STALE                    = sdk.BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_STALE
 	BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_UNSPECIFIED              = sdk.BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_UNSPECIFIED
+	ChatAccessLevel_CHAT_ACCESS_LEVEL_MANAGE                                   = sdk.ChatAccessLevel_CHAT_ACCESS_LEVEL_MANAGE
+	ChatAccessLevel_CHAT_ACCESS_LEVEL_REPLY                                    = sdk.ChatAccessLevel_CHAT_ACCESS_LEVEL_REPLY
+	ChatAccessLevel_CHAT_ACCESS_LEVEL_UNSPECIFIED                              = sdk.ChatAccessLevel_CHAT_ACCESS_LEVEL_UNSPECIFIED
+	ChatAccessLevel_CHAT_ACCESS_LEVEL_VIEW                                     = sdk.ChatAccessLevel_CHAT_ACCESS_LEVEL_VIEW
 	ChatActivity_CHAT_ACTIVITY_AWAITING_INPUT                                  = sdk.ChatActivity_CHAT_ACTIVITY_AWAITING_INPUT
 	ChatActivity_CHAT_ACTIVITY_ERROR                                           = sdk.ChatActivity_CHAT_ACTIVITY_ERROR
 	ChatActivity_CHAT_ACTIVITY_IDLE                                            = sdk.ChatActivity_CHAT_ACTIVITY_IDLE
@@ -739,6 +744,8 @@ var (
 	ApprovalType_value                   = sdk.ApprovalType_value
 	BackgroundProcessStatus_name         = sdk.BackgroundProcessStatus_name
 	BackgroundProcessStatus_value        = sdk.BackgroundProcessStatus_value
+	ChatAccessLevel_name                 = sdk.ChatAccessLevel_name
+	ChatAccessLevel_value                = sdk.ChatAccessLevel_value
 	ChatActivity_name                    = sdk.ChatActivity_name
 	ChatActivity_value                   = sdk.ChatActivity_value
 	ChatOrigin_name                      = sdk.ChatOrigin_name

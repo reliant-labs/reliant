@@ -24,6 +24,11 @@ func (getForeignRepo) GetAttachment(_ context.Context, id string) (*core.Attachm
 	return &core.Attachment{ID: id, UserID: "someone-else", Filename: "a.png", Content: []byte("x")}, nil
 }
 
+// AttachedInChatOwnedBy: the foreign attachment is in no chat of the caller's.
+func (getForeignRepo) AttachedInChatOwnedBy(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
 func TestGetAttachment_Generated(t *testing.T) {
 	t.Parallel()
 

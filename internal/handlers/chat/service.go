@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/chatselection"
@@ -82,6 +83,37 @@ type Deps struct {
 	// lists ignore org_id.
 	// forge:optional-dep
 	Orgs OrgResolver
+
+	// Collaboration gates chat collaboration (chat_collaboration.enabled;
+	// control-plane docs/design/chat-collaboration.md §12): only with it set
+	// may a chat's reply and manage members send and answer in it. nil is
+	// off, and every send is the owner's alone, as before.
+	// forge:optional-dep
+	Collaboration *configv1.ChatCollaborationConfig
+	// Members names the people who write in a chat: their display name in
+	// its org, recorded on each message they send (messages.author_name).
+	// *orgs.Resolver satisfies it. Without it, names are not recorded and the
+	// transcript falls back to neutral ones.
+	// forge:optional-dep
+	Members MemberDirectory
+	// FundingLeases, PersonPicks and Settings say whether the owner put a chat on
+	// their own AI account, which a member's send is refused for (§5.3).
+	// Without them a member's send to a chat in an org is refused (fail
+	// closed); the owner's sends never read them.
+	// forge:optional-dep
+	FundingLeases FundingLeases
+	// forge:optional-dep
+	PersonPicks PersonPicks
+	// Settings reads the owner's per-org funding preference
+	// (orgfunding.SettingKey), which a chat with no order of its own follows.
+	// *db.Repo satisfies it.
+	// forge:optional-dep
+	Settings SettingsReader
+	// Attachments says who uploaded the attachments a member's send names:
+	// only their own may be attached (§6.4). Without it a member's send that
+	// carries attachments is refused.
+	// forge:optional-dep
+	Attachments AttachmentUploaders
 
 	// Workflows, Worktrees and ProjectRows are the by-id reads the run
 	// lifecycle and the launcher make (store.WorkflowExtStore,

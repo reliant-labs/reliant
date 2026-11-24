@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -33,6 +34,16 @@ type Deps struct {
 	// its send paths rather than rebuilding them is what makes the answer
 	// behave exactly like a message the user typed to that thread.
 	Messages Messenger
+	// Collaboration gates chat collaboration (chat_collaboration.enabled):
+	// only with it set may a chat's reply and manage members answer its
+	// questions. nil is off: the owner answers alone, as before.
+	// forge:optional-dep
+	Collaboration *configv1.ChatCollaborationConfig
+	// Replies refuses a member's answer to a chat on the owner's own
+	// account, and names who an answer is from. Without it a member's answer
+	// is refused (fail closed) and answers record no author.
+	// forge:optional-dep
+	Replies ReplyGate
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

@@ -48,7 +48,10 @@ func (s *Service) SendAgentMessage(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SendAgentMessageRequest],
 ) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
-	userID := auth.MustGetUserID(ctx)
+	// The sender and the run's owner, as in SendMessage: a reply member's
+	// message to one thread is theirs, its run is the owner's
+	// (chat_collaboration.go).
+	sender := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
@@ -67,13 +70,31 @@ func (s *Service) SendAgentMessage(
 	// Ownership check: the chat must belong to the caller. Combined with the
 	// thread.ChatID check below, this is what stops a user from addressing
 	// an arbitrary thread in someone else's chat.
-	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
+	chat, err := s.chatForSend(ctx, req.Msg.ChatId, sender)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat == nil {
 		return nil, svcerr.NotFound("chat")
 	}
+	runUser := chat.UserID
+	if sender != runUser {
+		// Text and attachments are all this request carries; a member's
+		// must be their own, to a chat on the org's accounts, within their
+		// queue, under ids of their own (chat-collaboration.md §5.3, §6.3,
+		// §6.4, §7).
+		if err := s.requireOwnAttachments(ctx, sender, req.Msg.Attachments); err != nil {
+			return nil, err
+		}
+		if err := s.refusePersonallyFunded(ctx, chat); err != nil {
+			return nil, err
+		}
+		if err := s.requireMemberQueueRoom(ctx, chat.ID, sender); err != nil {
+			return nil, err
+		}
+		clientID = memberMessageID(sender, clientID)
+	}
+	ctx = db.WithMessageAuthor(ctx, s.sendAuthor(ctx, chat, sender))
 
 	target, err := s.deps.Repo.GetThread(ctx, req.Msg.ThreadId)
 	if err != nil {
@@ -259,6 +280,7 @@ func (s *Service) SendAgentMessage(
 		// Hidden when it is an async ask_user answer, shown on its card.
 		DisplayStyle: db.QueuedDisplayStyle(ctx),
 	}
+	msg.AuthorUserID, msg.AuthorName = db.AuthorColumns(ctx)
 	// Queued once: a repeat of a send that already queued the message finds its
 	// row and finishes around it, so what the first attempt may not have
 	// reached (the wake, the run to start) still happens, and nothing is
@@ -282,13 +304,13 @@ func (s *Service) SendAgentMessage(
 	// A paused chat takes no turn until it is resumed, and the doorbell below
 	// does not resume it. A message is the user asking the chat to go on, so
 	// it resumes the run first, as SendMessage does.
-	if refused, err := s.resumePausedRunForMessage(ctx, userID, chat, toThread, msg.ID); refused != nil || err != nil {
+	if refused, err := s.resumePausedRunForMessage(ctx, runUser, chat, toThread, msg.ID); refused != nil || err != nil {
 		return refused, err
 	}
 
 	switch {
 	case resumeStoppedAgent:
-		return s.resumeStoppedAgent(ctx, userID, chat, req.Msg.ThreadId, msg.ID, resumability)
+		return s.resumeStoppedAgent(ctx, runUser, chat, req.Msg.ThreadId, msg.ID, resumability)
 	case routedToGraphAgent:
 		// A graph run that closed before the wake is never restarted for a
 		// message (reliant #2394): withdraw the row and say so, and the

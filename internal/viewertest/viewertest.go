@@ -32,6 +32,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The org the fixture's rows belong to, and another one.
@@ -152,5 +153,7 @@ func (f *Fixture) Context(userID string) context.Context {
 func (f *Fixture) ContextAs(userID string, c auth.Credential) context.Context {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 	ctx = authz.WithMembership(ctx, f.Membership)
+	// The grants a process reads from its database (app.NewDBRepo).
+	ctx = authz.WithGrants(ctx, store.NewChatMemberExtStore(f.Repo.ORM()))
 	return auth.WithCredential(ctx, c)
 }

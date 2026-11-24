@@ -222,6 +222,27 @@ func ResolveQuestion(ctx context.Context, db orm.Context, id string, responseDat
 	return nil
 }
 
+// ResolveQuestionBy marks a PENDING question answered by answeredBy with
+// responseData at resolvedAt, and reports whether it did: false when the
+// question is missing or already resolved, so of two people answering at once
+// exactly one wins, and the row names them (questions.answered_by; nil for
+// the chat's owner, whose answers keep the column NULL;
+// control-plane docs/design/chat-collaboration.md §6.1, §7).
+func ResolveQuestionBy(ctx context.Context, db orm.Context, id string, responseData *string, resolvedAt time.Time, answeredBy *string) (bool, error) {
+	res, err := db.Exec(ctx, `UPDATE questions
+SET status = $2, response_data = $3, resolved_at = $4, answered_by = $5
+WHERE id = $1 AND status = $6`,
+		id, int32(core.QuestionStatusResolved), responseData, resolvedAt, answeredBy, int32(core.QuestionStatusPending))
+	if err != nil {
+		return false, fmt.Errorf("failed to resolve question: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("failed to resolve question: %w", err)
+	}
+	return n > 0, nil
+}
+
 func questionToRow(q *core.Question) *Question {
 	status := int32(q.Status)
 	row := &Question{

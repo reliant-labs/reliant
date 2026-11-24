@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -44,6 +45,10 @@ type llmCallSpec struct {
 	// authority. A call with no chat leaves them unset: the personal scope.
 	OrgID    string
 	Attended bool
+	// Collaborator marks a call that answers a chat member's message
+	// (drivers.Scope.Collaborator): org-funded accounts only, and the owner
+	// is never asked to fund it. Read through chatAttendance, like Attended.
+	Collaborator bool
 	// ChatID is the chat the call is for: whose funding question (§10) it
 	// reads and writes. Empty for a call with no chat.
 	ChatID string
@@ -175,7 +180,7 @@ func (s llmCallSpec) scope() drivers.Scope {
 	if s.OrgID == "" {
 		return drivers.PersonalScope(s.UserID)
 	}
-	return drivers.Scope{UserID: s.UserID, OrgID: s.OrgID, Attended: s.Attended, UnattendedAnySource: s.UnattendedAnySource}
+	return drivers.Scope{UserID: s.UserID, OrgID: s.OrgID, Attended: s.Attended, UnattendedAnySource: s.UnattendedAnySource, Collaborator: s.Collaborator}
 }
 
 // chatOrgID is the org a call made for chat is scoped to: the chat row's
@@ -199,6 +204,10 @@ type AttendanceStore interface {
 	// GetTrigger reads the trigger that launched an unattended run, for its
 	// unattended-funding stamp.
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
+	// LatestHumanTurnAuthor is who wrote the chat's latest message the send
+	// path stamped: a chat member's id, or "" for the owner's own and for a
+	// chat with none (store.LatestHumanTurnAuthor).
+	LatestHumanTurnAuthor(ctx context.Context, chatID string) (string, error)
 }
 
 // attendance is who is behind a call made for a chat (org-provider-accounts
@@ -207,6 +216,10 @@ type AttendanceStore interface {
 type attendance struct {
 	attended  bool
 	anySource bool
+	// collaborator: the call answers a chat member's message
+	// (collaboratorSpan), so it draws on org-funded sources only and asks the
+	// owner nothing (chat-collaboration.md §5.3 rule 2).
+	collaborator bool
 }
 
 // attendanceVerdict is what deciding attendance concluded: a person is
@@ -250,13 +263,16 @@ const maxAttendanceLineage = 8
 // sources only, never the person's own (fail closed).
 func chatAttendance(ctx context.Context, store AttendanceStore, chat *db.Chat) attendance {
 	verdict, root := attendedFrom(ctx, store, chat)
+	// A member's message is the org's to fund whoever launched the run, an
+	// automation stamped "any" included.
+	collaborator := collaboratorSpan(ctx, store, chat)
 	switch verdict {
 	case verdictAttended:
-		return attendance{attended: true}
+		return attendance{attended: true, collaborator: collaborator}
 	case verdictUnattended:
-		return attendance{anySource: triggerMaySpendAnySource(ctx, store, root)}
+		return attendance{anySource: !collaborator && triggerMaySpendAnySource(ctx, store, root), collaborator: collaborator}
 	default:
-		return attendance{}
+		return attendance{collaborator: collaborator}
 	}
 }
 
@@ -275,6 +291,54 @@ func triggerMaySpendAnySource(ctx context.Context, store AttendanceStore, root *
 		return false
 	}
 	return !t.UnattendedFunding.OrgOnly()
+}
+
+// collaboratorSpan reports that a call made for chat answers a chat member,
+// not its owner (control-plane docs/design/chat-collaboration.md §5.3 rule
+// 2): the latest message the send path stamped in chat is a member's. Every
+// call from a member's message to the owner's next one is in the span, the
+// sub-agents of the chat included (they share its messages), and so is a run
+// an agent started from such a span (agent.start_run), whose own chat has no
+// stamped message of its own: the walk goes to its parent, as attendedFrom's
+// does. The owner's own next message, stamped by the send path, ends it.
+//
+// Fail closed: a read that fails is a member's span, so the call waits for an
+// org account rather than risk spending the owner's own. A chat in no org has
+// no members, and is never in a span.
+func collaboratorSpan(ctx context.Context, store AttendanceStore, chat *db.Chat) bool {
+	for range maxAttendanceLineage {
+		if chat == nil || chatOrgID(chat) == "" {
+			return false
+		}
+		if store == nil {
+			return false
+		}
+		author, err := store.LatestHumanTurnAuthor(ctx, chat.ID)
+		if err != nil {
+			logging.WarnContext(ctx, "Could not read who wrote the chat's latest message; using only the org's accounts", "chatID", chat.ID, "error", err)
+			return true
+		}
+		if author != "" {
+			return !authz.IsChatOwner(author, chat)
+		}
+		if core.TriggerEventKind(chat.LaunchKind) != core.TriggerEventKindAgentStartRun {
+			return false
+		}
+		event, err := store.GetTriggerEventByChat(ctx, core.TriggerEventKindAgentStartRun, chat.ID)
+		if err != nil || event == nil {
+			logging.WarnContext(ctx, "Could not read an agent-started run's launch; using only the org's accounts", "chatID", chat.ID, "error", err)
+			return true
+		}
+		parent, _ := event.Payload["parent_chat_id"].(string)
+		if parent == "" {
+			return false
+		}
+		if chat, err = store.GetChat(ctx, parent); err != nil {
+			logging.WarnContext(ctx, "Could not read an agent-started run's parent chat; using only the org's accounts", "chatID", parent, "error", err)
+			return true
+		}
+	}
+	return true
 }
 
 func chatAttended(ctx context.Context, store AttendanceStore, chat *db.Chat) attendanceVerdict {
@@ -589,6 +653,12 @@ func resolveLLMCallOnce(ctx context.Context, resolver drivers.DriverResolver, sp
 				}
 				if spec.ChatProvider != "" {
 					return nil, providerSwitchHold(spec.ChatProvider, ownSelector, err)
+				}
+				if spec.Collaborator && spec.scope().OrgFundedOnly() {
+					// A member's message waits for the org's accounts; it
+					// never fails the owner's chat, and never asks the
+					// owner to fund it (chat-collaboration.md §5.3).
+					return nil, collaboratorHold(spec, selector)
 				}
 				if spec.scope().OrgFundedOnly() {
 					return nil, noOrgAccountError(err, selector)

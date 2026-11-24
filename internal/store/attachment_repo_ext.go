@@ -38,6 +38,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -129,4 +130,55 @@ func attachmentToCore(row *Attachment) *core.Attachment {
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type AttachmentExtra struct {
+}
+
+// AttachmentUploaders maps each of ids that exists to its uploader
+// (attachments.user_id), without reading the bytes: what a send asks to
+// check that every attachment it names is the sender's own.
+func AttachmentUploaders(ctx context.Context, db orm.Context, ids []string) (map[string]string, error) {
+	out := make(map[string]string, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := db.Query(ctx, `SELECT id, user_id FROM attachments WHERE id = ANY($1::text[])`, orm.StringArray(ids))
+	if err != nil {
+		return nil, fmt.Errorf("read attachment uploaders: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, userID string
+		if err := rows.Scan(&id, &userID); err != nil {
+			return nil, fmt.Errorf("scan attachment uploader: %w", err)
+		}
+		out[id] = userID
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read attachment uploaders: %w", err)
+	}
+	return out, nil
+}
+
+// AttachedInChatOwnedBy reports whether attachment id is one a chat member
+// attached to their own message (an image, file reference or document
+// content block of a message whose author_user_id is the attachment's
+// uploader) in a chat ownerID owns: besides its uploader, the one person who
+// may read it (control-plane docs/design/chat-collaboration.md §6.4). The
+// owner is chats.user_id, never another member, so the rule cannot widen to
+// the chat's other members; and the message must be the uploader's own, so an
+// owner cannot reach someone else's file by naming its id in a send of their
+// own. The block types are literals so idx_content_blocks_attachment's
+// predicate matches.
+func AttachedInChatOwnedBy(ctx context.Context, db orm.Context, id, ownerID string) (bool, error) {
+	if id == "" || ownerID == "" {
+		return false, nil
+	}
+	var ok bool
+	err := db.QueryRow(ctx, `SELECT EXISTS (
+    SELECT 1 FROM message_content_blocks b
+    JOIN messages m ON m.id = b.message_id
+    JOIN chats c ON c.id = m.chat_id
+    JOIN attachments a ON a.id = b.content
+    WHERE b.content = $1 AND b.block_type IN (4, 6, 7)
+      AND c.user_id = $2 AND m.author_user_id = a.user_id)`, id, ownerID).Scan(&ok)
+	return ok, err
 }

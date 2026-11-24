@@ -56,8 +56,8 @@
 // A chat or project its owner shared with its org (visibility 'org';
 // control-plane docs/design/org-sharing.md) is readable by every live member
 // of that org: a VIEWER. Sharing widens CanReadChat and CanReadProject only;
-// every CanWrite*, CanAccessPersonal, and the machine, trigger and saved
-// workflow reads keep the owner rule. A viewer must hold a PERSON credential
+// CanOwnChat, every CanWrite*, CanAccessPersonal, and the machine, trigger
+// and saved workflow reads keep the owner rule. A viewer must hold a PERSON credential
 // (WithCredentialKind, which auth.WithCredential installs at the edge): an
 // agent's shell holds its user's CLI login, and a teammate's transcript is
 // not something an agent may read into its context. Unset is not a person, so
@@ -69,6 +69,21 @@
 //
 // Only this package and internal/store read a row's Visibility (guard_test);
 // a handler that shows it asks ChatVisibility / ProjectVisibility.
+//
+// ── CHAT MEMBERS ──────────────────────────────────────────────────────
+//
+// A chat's owner, and its members at manage, may grant a person a level on it
+// (chat_members: view, reply, manage; control-plane
+// docs/design/chat-collaboration.md). A grant admits its holder only while
+// they are a live member of the chat's org, acting as a person, through no
+// credential bound to another org, and is read uncached at every decision
+// from the Grants the context or the process carries (grants.go), so a revoke
+// bites at once. A grant at any level reads the chat, even a private one, at a
+// site that serves viewers (ReadChatAccess answers its level); CanReplyChat
+// and CanManageChat answer the levels above, and visibility never changes
+// them. Every action on a chat asks CanOwnChat until a PR moves its site, with
+// its test: a site nobody moves stays owner-only. Only this package and
+// internal/store read a chat_members row (guard_test).
 //
 // The resource kinds that will belong to an org: chats, projects, machines,
 // saved workflows (workflow_drafts), triggers and their events. A workflow
@@ -263,8 +278,11 @@ type resource struct {
 	present     bool
 	ownerUserID string
 	orgID       string
+	// chatID is the chat's id, set only for a chat: the one kind that has
+	// per-person grants (chat_members, grants.go).
+	chatID string
 	// visibility is VisibilityOrg for a row its owner shared with its org.
-	// Only denyRead reads it; deny (the write rule) never does.
+	// Only denyRead reads it; deny (the write rule) and memberDeny never do.
 	visibility core.Visibility
 	// orgless marks a kind that does not belong to an org yet (machines,
 	// trigger events): no org to bind a credential to, so owner only.
@@ -359,42 +377,91 @@ func credentialReaches(ctx context.Context, userID, bound, org string) bool {
 }
 
 // denyRead is the read rule: deny (the owner, a live member of the row's org,
-// through a credential of that org), or, for a row its owner shared with its
-// org, a viewer: a live member of the row's org, holding a person credential
-// (WithCredentialKind), through no credential bound to another org, on a read
-// site that serves viewers (WithViewerReads). nil
-// allows. A row that is not shared answers exactly what deny answers, so
-// sharing changes nothing for private rows. A viewer's refusal is ErrDenied,
-// or ErrMembershipUnavailable when membership could not be asked (fail
-// closed, logged like deny's); never ErrNotOrgMember, which only an owner may
-// be told.
+// through a credential of that org), or a reader who is not the owner: a live
+// member of the row's org, holding a person credential (WithCredentialKind),
+// through no credential bound to another org, on a read site that serves
+// viewers (WithViewerReads), who either reads a row its owner shared with its
+// org or holds a grant on the chat (chat_members, any level). nil allows. A
+// row that is not shared, read by someone holding no grant, answers exactly
+// what deny answers, so sharing and grants change nothing for anyone else. A
+// non-owner's refusal is ErrDenied, or ErrMembershipUnavailable when
+// membership or a grant could not be asked (fail closed, logged like deny's);
+// never ErrNotOrgMember, which only an owner may be told.
 func denyRead(ctx context.Context, userID string, r resource) error {
+	_, err := readDecision(ctx, userID, r, false)
+	return err
+}
+
+// readDecision is denyRead with the level the caller reads at, when level is
+// asked for: the owner's, a member's (their grant's level), or a viewer's. A
+// shared chat's org-wide viewer reads whether or not their grant can be read,
+// because the org-wide view never depended on one: a grant that cannot be
+// read (an outage, no Grants wired) adds nothing, and is logged. Without
+// level, a shared row's read asks no grant at all.
+func readDecision(ctx context.Context, userID string, r resource, level bool) (Access, error) {
 	if !r.present || userID == "" || r.ownerUserID == userID {
-		return deny(ctx, userID, r)
+		if err := deny(ctx, userID, r); err != nil {
+			return AccessNone, err
+		}
+		return AccessOwner, nil
 	}
-	if r.visibility != core.VisibilityOrg || r.orgID == "" || r.orgless {
-		return ErrDenied
+	if r.orgID == "" || r.orgless {
+		return AccessNone, ErrDenied
+	}
+	shared := r.visibility == core.VisibilityOrg
+	if !shared && r.chatID == "" {
+		return AccessNone, ErrDenied
 	}
 	if !servesViewers(ctx) || !personCredential(ctx) {
-		return ErrDenied
+		return AccessNone, ErrDenied
 	}
 	if bound, ok := boundOrg(ctx); ok && bound != r.orgID {
 		logging.InfoContext(ctx, "[authz] a credential bound to another org; denying a shared read", "user_id", userID, "credential_org", bound, "org_id", r.orgID)
 		recordCredentialRefusal(ctx, r.orgID)
-		return ErrDenied
+		return AccessNone, ErrDenied
 	}
+	var role core.ChatMemberRole
+	if !shared {
+		// A private chat reads only through a grant, asked first: a caller
+		// who holds none is refused exactly as before grants existed, and
+		// membership is never asked about them.
+		var err error
+		if role, err = chatGrant(ctx, userID, r); err != nil {
+			return AccessNone, err
+		}
+		if role == "" {
+			return AccessNone, ErrDenied
+		}
+	}
+	if err := liveMember(ctx, userID, r.orgID, "a shared read"); err != nil {
+		return AccessNone, err
+	}
+	if shared && level && r.chatID != "" {
+		if got, err := chatGrant(ctx, userID, r); err == nil {
+			role = got
+		}
+	}
+	return accessFor(role), nil
+}
+
+// liveMember is nil when userID is a live member of orgID: the membership
+// half of every decision about someone who is not the row's owner. It fails
+// closed: no Membership on ctx (logged at ERROR: a path never wired) and an
+// outage are ErrMembershipUnavailable; a non-member, and a deployment with no
+// answer (no orgs, so no one but an owner), are ErrDenied. what names the
+// decision in the log.
+func liveMember(ctx context.Context, userID, orgID, what string) error {
 	m := membershipOf(ctx)
 	if m == nil {
-		logging.ErrorContext(ctx, "[authz] no membership on the context; denying a shared read (a path was never wired with authz.WithMembership)",
-			"user_id", userID, "org_id", r.orgID)
+		logging.ErrorContext(ctx, "[authz] no membership on the context; denying "+what+" (a path was never wired with authz.WithMembership)",
+			"user_id", userID, "org_id", orgID)
 		return ErrMembershipUnavailable
 	}
-	member, ok, err := m.IsMember(ctx, userID, r.orgID)
+	member, ok, err := m.IsMember(ctx, userID, orgID)
 	if err != nil {
-		logging.WarnContext(ctx, "[authz] could not check org membership; denying a shared read", "user_id", userID, "org_id", r.orgID, "error", err)
+		logging.WarnContext(ctx, "[authz] could not check org membership; denying "+what, "user_id", userID, "org_id", orgID, "error", err)
 		return ErrMembershipUnavailable
 	}
-	// A deployment with no answer (no orgs) has no viewers: owner only.
 	if !ok || !member {
 		return ErrDenied
 	}
@@ -426,12 +493,14 @@ func isViewer(ctx context.Context, userID string, r resource) bool {
 	return r.present && userID != "" && r.ownerUserID != userID && denyRead(ctx, userID, r) == nil
 }
 
-// Access is how a caller reads a chat or project: as its owner, or as a
-// viewer of one its owner shared. A read site that serves viewers decides it
-// ONCE (ReadChatAccess / ReadProjectAccess) and shapes its whole answer from
-// that value. It never asks again: a second decision can differ from the
-// first (a membership answer expiring, an outage), and a viewer whose second
-// answer came back "not a viewer" must not be handed the owner's shape.
+// Access is how a caller reads a chat or project: as its owner, as a member
+// holding a grant on a chat (manage, reply), or as a viewer (a view grant, or
+// any live member of the org of a row its owner shared). A read site that
+// serves viewers decides it ONCE (ReadChatAccess / ReadProjectAccess) and
+// shapes its whole answer from that value. It never asks again: a second
+// decision can differ from the first (a membership answer expiring, an
+// outage, a revoke), and a viewer whose second answer came back "not a
+// viewer" must not be handed the owner's shape.
 type Access uint8
 
 const (
@@ -441,22 +510,69 @@ const (
 	AccessOwner
 	// AccessViewer is a viewer's read: the read-only, redacted answer.
 	AccessViewer
+	// AccessReply is a reply member's read. Shaped as a viewer's
+	// (Viewer); it says only that the caller holds reply on the chat.
+	AccessReply
+	// AccessManage is a manage member's read. Shaped as a viewer's
+	// (Viewer); it says only that the caller holds manage on the chat.
+	AccessManage
 )
 
 // Viewer reports whether an answer must be shaped for a viewer: every access
-// but the owner's, so a zero value fails closed.
+// but the owner's, so a zero value fails closed, and a member at any level
+// reads what a viewer reads.
 func (a Access) Viewer() bool { return a != AccessOwner }
 
-// readAccess is denyRead's verdict as an Access: the owner (decided by the
-// row, which no membership answer changes) or a viewer.
+// AtLeast reports whether a reads at least as much as b, in the order
+// Owner > Manage > Reply > Viewer > None. The constants' own values are not
+// in that order, so never compare them directly.
+func (a Access) AtLeast(b Access) bool { return a.rank() >= b.rank() }
+
+func (a Access) rank() int {
+	switch a {
+	case AccessOwner:
+		return 4
+	case AccessManage:
+		return 3
+	case AccessReply:
+		return 2
+	case AccessViewer:
+		return 1
+	}
+	return 0
+}
+
+// Role is the grant level the access was read through: view for a viewer
+// (a view grant, or none on a shared row), reply or manage for a member, and
+// empty for the owner and no access.
+func (a Access) Role() core.ChatMemberRole {
+	switch a {
+	case AccessViewer:
+		return core.ChatMemberView
+	case AccessReply:
+		return core.ChatMemberReply
+	case AccessManage:
+		return core.ChatMemberManage
+	}
+	return ""
+}
+
+// accessFor is a non-owner's Access for the grant they read through ("" for
+// none: an org-wide viewer).
+func accessFor(role core.ChatMemberRole) Access {
+	switch role {
+	case core.ChatMemberManage:
+		return AccessManage
+	case core.ChatMemberReply:
+		return AccessReply
+	}
+	return AccessViewer
+}
+
+// readAccess is the read rule's verdict as an Access: the owner (decided by
+// the row, which no membership answer changes), a member, or a viewer.
 func readAccess(ctx context.Context, userID string, r resource) (Access, error) {
-	if err := denyRead(ctx, userID, r); err != nil {
-		return AccessNone, err
-	}
-	if r.ownerUserID == userID {
-		return AccessOwner, nil
-	}
-	return AccessViewer, nil
+	return readDecision(ctx, userID, r, true)
 }
 
 // ReadChatAccess is CanReadChat's decision with how the caller reads: the
@@ -478,19 +594,20 @@ func chatResource[C chatRecord](chat C) resource {
 	switch c := any(chat).(type) {
 	case *core.Chat:
 		if c != nil && !c.ProjectDeleted {
-			return resource{present: true, ownerUserID: c.UserID, orgID: orgOf(c.OrgID), visibility: c.Visibility}
+			return resource{present: true, ownerUserID: c.UserID, orgID: orgOf(c.OrgID), chatID: c.ID, visibility: c.Visibility}
 		}
 	case *core.ChatRow:
 		if c != nil && !c.ProjectDeleted {
-			return resource{present: true, ownerUserID: c.UserID, orgID: orgOf(c.OrgID), visibility: c.Visibility}
+			return resource{present: true, ownerUserID: c.UserID, orgID: orgOf(c.OrgID), chatID: c.ID, visibility: c.Visibility}
 		}
 	}
 	return resource{}
 }
 
 // CanReadChat reports whether userID may see chat and what hangs off it:
-// its messages, runs, plans, tasks, questions and live stream: its owner, or,
-// once shared with its org, a viewer (see denyRead). nil is false.
+// its messages, runs, plans, tasks, questions and live stream: its owner, a
+// member holding a grant on it at any level, or, once shared with its org, a
+// viewer (see denyRead). nil is false.
 func CanReadChat[C chatRecord](ctx context.Context, userID string, chat C) bool {
 	return denyRead(ctx, userID, chatResource(chat)) == nil
 }
@@ -510,10 +627,41 @@ func ChatVisibility[C chatRecord](chat C) core.Visibility {
 	return chatResource(chat).visibility
 }
 
-// CanWriteChat reports whether userID may change chat or act in it: send,
-// branch, pause, resume, approve, answer, place its work. nil is false.
-func CanWriteChat[C chatRecord](ctx context.Context, userID string, chat C) bool {
+// CanOwnChat reports whether userID is chat's owner, and may still act as
+// one: a live member of its org, through a credential of that org. It is what
+// every action on a chat asked before collaboration (send, branch, pause,
+// resume, approve, answer, place its work), and every such site still asks
+// it: a site moves to CanReplyChat or CanManageChat only deliberately, with its
+// test (control-plane docs/design/chat-collaboration.md §4.1). nil is false.
+func CanOwnChat[C chatRecord](ctx context.Context, userID string, chat C) bool {
 	return decide(ctx, userID, chatResource(chat))
+}
+
+// IsChatOwner reports whether userID is chat's owner by the row alone: which
+// side of a collaboration a caller ALREADY authorized to act in chat is on —
+// its owner, or a member whose message runs as the owner's (control-plane
+// docs/design/chat-collaboration.md §5.1) — and whether a stored answer about
+// a chat was given by its owner. It decides no access: ask CanOwnChat,
+// CanReplyChat or CanManageChat for that. nil is false.
+func IsChatOwner[C chatRecord](userID string, chat C) bool {
+	r := chatResource(chat)
+	return r.present && userID != "" && r.ownerUserID == userID
+}
+
+// CanReplyChat reports whether userID may act in chat as a reply member:
+// its owner (CanOwnChat), or a member holding reply or manage on it who is a
+// live member of its org, acting as a person through no credential bound to
+// another org (memberDeny). The chat's visibility never changes the answer:
+// an org-wide viewer never replies. nil is false.
+func CanReplyChat[C chatRecord](ctx context.Context, userID string, chat C) bool {
+	return memberDeny(ctx, userID, chatResource(chat), core.ChatMemberReply) == nil
+}
+
+// CanManageChat reports whether userID may manage chat: its owner
+// (CanOwnChat), or a member holding manage on it, decided as CanReplyChat
+// decides. nil is false.
+func CanManageChat[C chatRecord](ctx context.Context, userID string, chat C) bool {
+	return memberDeny(ctx, userID, chatResource(chat), core.ChatMemberManage) == nil
 }
 
 // projectResource is the project as every decision reads it. A project
@@ -877,7 +1025,7 @@ var (
 // (control-plane docs/design/org-sharing.md §2): the change to apply, with its
 // action, or why it is refused.
 //
-//   - The owner (CanWriteChat) may make it private with any credential, and
+//   - The owner (CanOwnChat) may make it private with any credential, and
 //     may share it only as a person and only when it belongs to an org.
 //   - Anyone who may not read it is ErrDenied (NotFound: it does not exist for
 //     them).

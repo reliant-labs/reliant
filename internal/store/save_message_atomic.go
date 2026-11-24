@@ -54,6 +54,11 @@ type AtomicMessageWrite struct {
 	// ThinkingLevel (messages.thinking_level) is the effective thinking level
 	// an assistant turn ran at; nil when none was recorded.
 	ThinkingLevel *string
+	// AuthorUserID and AuthorName (messages.author_user_id/author_name) name
+	// a human message's author: a collaborator's id and name, or the owner's
+	// name alone (chat-collaboration.md §6.1); nil otherwise.
+	AuthorUserID *string
+	AuthorName   *string
 
 	Blocks []core.MessageContentBlock
 
@@ -141,7 +146,7 @@ msg AS (
         token_count, cost, workflow_id, run_id, activity_id,
         created_at, updated_at, provider_account_id,
         sender_thread_id, sender_kind, sender_subject,
-        thinking_level
+        thinking_level, author_user_id, author_name
     )
     SELECT
         $3, $2, ord.last_assigned, sq.last_assigned, $1, $4,
@@ -149,7 +154,7 @@ msg AS (
         $11, $12, $13, $14, $15,
         $16, $16, $31,
         $32, $33, $34,
-        $35
+        $35, $36, $37
     FROM ord, sq
 ),
 blocks AS (
@@ -241,6 +246,8 @@ func SaveMessageAtomic(ctx context.Context, db orm.Context, w AtomicMessageWrite
 			senderKindValue(w.SenderKind),
 			emptyNilPtr(w.SenderSubject),
 			emptyNilPtr(w.ThinkingLevel),
+			emptyNilPtr(w.AuthorUserID),
+			emptyNilPtr(validUTF8Ptr(w.AuthorName)),
 		).Scan(&result.Ordinal, &result.Seq, &result.UpdateSeq)
 		if err != nil {
 			return fmt.Errorf("failed to write message: %w", err)

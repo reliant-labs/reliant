@@ -50,9 +50,18 @@ const (
 	// SharingServiceSetWorkflowDraftSharingProcedure is the fully-qualified name of the
 	// SharingService's SetWorkflowDraftSharing RPC.
 	SharingServiceSetWorkflowDraftSharingProcedure = "/reliant.v1.SharingService/SetWorkflowDraftSharing"
+	// SharingServiceSetChatMemberProcedure is the fully-qualified name of the SharingService's
+	// SetChatMember RPC.
+	SharingServiceSetChatMemberProcedure = "/reliant.v1.SharingService/SetChatMember"
 	// SharingServiceListSharedWorkflowDraftsProcedure is the fully-qualified name of the
 	// SharingService's ListSharedWorkflowDrafts RPC.
 	SharingServiceListSharedWorkflowDraftsProcedure = "/reliant.v1.SharingService/ListSharedWorkflowDrafts"
+	// SharingServiceRemoveChatMemberProcedure is the fully-qualified name of the SharingService's
+	// RemoveChatMember RPC.
+	SharingServiceRemoveChatMemberProcedure = "/reliant.v1.SharingService/RemoveChatMember"
+	// SharingServiceListChatMembersProcedure is the fully-qualified name of the SharingService's
+	// ListChatMembers RPC.
+	SharingServiceListChatMembersProcedure = "/reliant.v1.SharingService/ListChatMembers"
 )
 
 // SharingServiceClient is a client for the reliant.v1.SharingService service.
@@ -96,6 +105,22 @@ type SharingServiceClient interface {
 	// Not WorkflowService.SetWorkflowVisibility, which hides a workflow from
 	// its owner's own pickers and shares nothing.
 	SetWorkflowDraftSharing(context.Context, *connect.Request[v1.SetWorkflowDraftSharingRequest]) (*connect.Response[v1.SetWorkflowDraftSharingResponse], error)
+	// SetChatMember grants a person a level on a chat (VIEW, REPLY or MANAGE),
+	// or changes the level they hold (control-plane
+	// docs/design/chat-collaboration.md §3). A grant admits its holder only
+	// while they are a live member of the chat's organization; a VIEW grant
+	// reads the chat even when it is private.
+	//
+	// The chat's owner and its members at MANAGE may grant, as a person
+	// (PERMISSION_DENIED for any other credential, or for a member below
+	// MANAGE); anyone who cannot read the chat is NOT_FOUND. The grantee must be
+	// a live member of the chat's organization and not its owner, and a chat
+	// with no organization has no members (FAILED_PRECONDITION). A chat holds at
+	// most 25 members (FAILED_PRECONDITION). The deployment must enable chat
+	// collaboration (chat_collaboration.enabled; FAILED_PRECONDITION
+	// otherwise). Each change records one share event; granting the level
+	// already held changes nothing (changed = false).
+	SetChatMember(context.Context, *connect.Request[v1.SetChatMemberRequest]) (*connect.Response[v1.SetChatMemberResponse], error)
 	// ListSharedWorkflowDrafts lists the saved workflows other members shared
 	// with an organization the caller is a live member of, most recently
 	// shared first: the team's shared workflow library. Never the caller's own
@@ -103,6 +128,21 @@ type SharingServiceClient interface {
 	// hid. Each carries its definition, to read and fork.
 	// forge:custom — SharedWorkflowDraft is a read of workflow_drafts shaped for viewers, not a table
 	ListSharedWorkflowDrafts(context.Context, *connect.Request[v1.ListSharedWorkflowDraftsRequest]) (*connect.Response[v1.ListSharedWorkflowDraftsResponse], error)
+	// RemoveChatMember takes a person's grant on a chat away: the owner or a
+	// member at MANAGE may remove anyone but the owner, and any member may
+	// remove their own grant. It is never gated by chat_collaboration.enabled,
+	// so a grant can always be taken back. It records one share event;
+	// removing a person who holds no grant changes nothing (changed = false).
+	RemoveChatMember(context.Context, *connect.Request[v1.RemoveChatMemberRequest]) (*connect.Response[v1.RemoveChatMemberResponse], error)
+	// forge:custom — decides the caller's level on the chat once and shapes the list for it
+	//
+	// ListChatMembers lists who holds access to a chat, as the caller may see
+	// it (chat-collaboration.md §2.2): the owner and members at MANAGE see every
+	// member and level; members at REPLY see the owner and the REPLY and MANAGE
+	// members; VIEW grantees and org-wide viewers see the owner and a count.
+	// Anyone who cannot read the chat is NOT_FOUND. Ids only: names come from
+	// the organization's roster.
+	ListChatMembers(context.Context, *connect.Request[v1.ListChatMembersRequest]) (*connect.Response[v1.ListChatMembersResponse], error)
 }
 
 // NewSharingServiceClient constructs a client for the reliant.v1.SharingService service. By
@@ -148,10 +188,29 @@ func NewSharingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sharingServiceMethods.ByName("SetWorkflowDraftSharing")),
 			connect.WithClientOptions(opts...),
 		),
+		setChatMember: connect.NewClient[v1.SetChatMemberRequest, v1.SetChatMemberResponse](
+			httpClient,
+			baseURL+SharingServiceSetChatMemberProcedure,
+			connect.WithSchema(sharingServiceMethods.ByName("SetChatMember")),
+			connect.WithClientOptions(opts...),
+		),
 		listSharedWorkflowDrafts: connect.NewClient[v1.ListSharedWorkflowDraftsRequest, v1.ListSharedWorkflowDraftsResponse](
 			httpClient,
 			baseURL+SharingServiceListSharedWorkflowDraftsProcedure,
 			connect.WithSchema(sharingServiceMethods.ByName("ListSharedWorkflowDrafts")),
+			connect.WithClientOptions(opts...),
+		),
+		removeChatMember: connect.NewClient[v1.RemoveChatMemberRequest, v1.RemoveChatMemberResponse](
+			httpClient,
+			baseURL+SharingServiceRemoveChatMemberProcedure,
+			connect.WithSchema(sharingServiceMethods.ByName("RemoveChatMember")),
+			connect.WithClientOptions(opts...),
+		),
+		listChatMembers: connect.NewClient[v1.ListChatMembersRequest, v1.ListChatMembersResponse](
+			httpClient,
+			baseURL+SharingServiceListChatMembersProcedure,
+			connect.WithSchema(sharingServiceMethods.ByName("ListChatMembers")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -164,7 +223,10 @@ type sharingServiceClient struct {
 	listSharedChats          *connect.Client[v1.ListSharedChatsRequest, v1.ListSharedChatsResponse]
 	listSharedProjects       *connect.Client[v1.ListSharedProjectsRequest, v1.ListSharedProjectsResponse]
 	setWorkflowDraftSharing  *connect.Client[v1.SetWorkflowDraftSharingRequest, v1.SetWorkflowDraftSharingResponse]
+	setChatMember            *connect.Client[v1.SetChatMemberRequest, v1.SetChatMemberResponse]
 	listSharedWorkflowDrafts *connect.Client[v1.ListSharedWorkflowDraftsRequest, v1.ListSharedWorkflowDraftsResponse]
+	removeChatMember         *connect.Client[v1.RemoveChatMemberRequest, v1.RemoveChatMemberResponse]
+	listChatMembers          *connect.Client[v1.ListChatMembersRequest, v1.ListChatMembersResponse]
 }
 
 // SetChatVisibility calls reliant.v1.SharingService.SetChatVisibility.
@@ -192,9 +254,24 @@ func (c *sharingServiceClient) SetWorkflowDraftSharing(ctx context.Context, req 
 	return c.setWorkflowDraftSharing.CallUnary(ctx, req)
 }
 
+// SetChatMember calls reliant.v1.SharingService.SetChatMember.
+func (c *sharingServiceClient) SetChatMember(ctx context.Context, req *connect.Request[v1.SetChatMemberRequest]) (*connect.Response[v1.SetChatMemberResponse], error) {
+	return c.setChatMember.CallUnary(ctx, req)
+}
+
 // ListSharedWorkflowDrafts calls reliant.v1.SharingService.ListSharedWorkflowDrafts.
 func (c *sharingServiceClient) ListSharedWorkflowDrafts(ctx context.Context, req *connect.Request[v1.ListSharedWorkflowDraftsRequest]) (*connect.Response[v1.ListSharedWorkflowDraftsResponse], error) {
 	return c.listSharedWorkflowDrafts.CallUnary(ctx, req)
+}
+
+// RemoveChatMember calls reliant.v1.SharingService.RemoveChatMember.
+func (c *sharingServiceClient) RemoveChatMember(ctx context.Context, req *connect.Request[v1.RemoveChatMemberRequest]) (*connect.Response[v1.RemoveChatMemberResponse], error) {
+	return c.removeChatMember.CallUnary(ctx, req)
+}
+
+// ListChatMembers calls reliant.v1.SharingService.ListChatMembers.
+func (c *sharingServiceClient) ListChatMembers(ctx context.Context, req *connect.Request[v1.ListChatMembersRequest]) (*connect.Response[v1.ListChatMembersResponse], error) {
+	return c.listChatMembers.CallUnary(ctx, req)
 }
 
 // SharingServiceHandler is an implementation of the reliant.v1.SharingService service.
@@ -238,6 +315,22 @@ type SharingServiceHandler interface {
 	// Not WorkflowService.SetWorkflowVisibility, which hides a workflow from
 	// its owner's own pickers and shares nothing.
 	SetWorkflowDraftSharing(context.Context, *connect.Request[v1.SetWorkflowDraftSharingRequest]) (*connect.Response[v1.SetWorkflowDraftSharingResponse], error)
+	// SetChatMember grants a person a level on a chat (VIEW, REPLY or MANAGE),
+	// or changes the level they hold (control-plane
+	// docs/design/chat-collaboration.md §3). A grant admits its holder only
+	// while they are a live member of the chat's organization; a VIEW grant
+	// reads the chat even when it is private.
+	//
+	// The chat's owner and its members at MANAGE may grant, as a person
+	// (PERMISSION_DENIED for any other credential, or for a member below
+	// MANAGE); anyone who cannot read the chat is NOT_FOUND. The grantee must be
+	// a live member of the chat's organization and not its owner, and a chat
+	// with no organization has no members (FAILED_PRECONDITION). A chat holds at
+	// most 25 members (FAILED_PRECONDITION). The deployment must enable chat
+	// collaboration (chat_collaboration.enabled; FAILED_PRECONDITION
+	// otherwise). Each change records one share event; granting the level
+	// already held changes nothing (changed = false).
+	SetChatMember(context.Context, *connect.Request[v1.SetChatMemberRequest]) (*connect.Response[v1.SetChatMemberResponse], error)
 	// ListSharedWorkflowDrafts lists the saved workflows other members shared
 	// with an organization the caller is a live member of, most recently
 	// shared first: the team's shared workflow library. Never the caller's own
@@ -245,6 +338,21 @@ type SharingServiceHandler interface {
 	// hid. Each carries its definition, to read and fork.
 	// forge:custom — SharedWorkflowDraft is a read of workflow_drafts shaped for viewers, not a table
 	ListSharedWorkflowDrafts(context.Context, *connect.Request[v1.ListSharedWorkflowDraftsRequest]) (*connect.Response[v1.ListSharedWorkflowDraftsResponse], error)
+	// RemoveChatMember takes a person's grant on a chat away: the owner or a
+	// member at MANAGE may remove anyone but the owner, and any member may
+	// remove their own grant. It is never gated by chat_collaboration.enabled,
+	// so a grant can always be taken back. It records one share event;
+	// removing a person who holds no grant changes nothing (changed = false).
+	RemoveChatMember(context.Context, *connect.Request[v1.RemoveChatMemberRequest]) (*connect.Response[v1.RemoveChatMemberResponse], error)
+	// forge:custom — decides the caller's level on the chat once and shapes the list for it
+	//
+	// ListChatMembers lists who holds access to a chat, as the caller may see
+	// it (chat-collaboration.md §2.2): the owner and members at MANAGE see every
+	// member and level; members at REPLY see the owner and the REPLY and MANAGE
+	// members; VIEW grantees and org-wide viewers see the owner and a count.
+	// Anyone who cannot read the chat is NOT_FOUND. Ids only: names come from
+	// the organization's roster.
+	ListChatMembers(context.Context, *connect.Request[v1.ListChatMembersRequest]) (*connect.Response[v1.ListChatMembersResponse], error)
 }
 
 // NewSharingServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -286,10 +394,29 @@ func NewSharingServiceHandler(svc SharingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(sharingServiceMethods.ByName("SetWorkflowDraftSharing")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sharingServiceSetChatMemberHandler := connect.NewUnaryHandler(
+		SharingServiceSetChatMemberProcedure,
+		svc.SetChatMember,
+		connect.WithSchema(sharingServiceMethods.ByName("SetChatMember")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sharingServiceListSharedWorkflowDraftsHandler := connect.NewUnaryHandler(
 		SharingServiceListSharedWorkflowDraftsProcedure,
 		svc.ListSharedWorkflowDrafts,
 		connect.WithSchema(sharingServiceMethods.ByName("ListSharedWorkflowDrafts")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sharingServiceRemoveChatMemberHandler := connect.NewUnaryHandler(
+		SharingServiceRemoveChatMemberProcedure,
+		svc.RemoveChatMember,
+		connect.WithSchema(sharingServiceMethods.ByName("RemoveChatMember")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sharingServiceListChatMembersHandler := connect.NewUnaryHandler(
+		SharingServiceListChatMembersProcedure,
+		svc.ListChatMembers,
+		connect.WithSchema(sharingServiceMethods.ByName("ListChatMembers")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.SharingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -304,8 +431,14 @@ func NewSharingServiceHandler(svc SharingServiceHandler, opts ...connect.Handler
 			sharingServiceListSharedProjectsHandler.ServeHTTP(w, r)
 		case SharingServiceSetWorkflowDraftSharingProcedure:
 			sharingServiceSetWorkflowDraftSharingHandler.ServeHTTP(w, r)
+		case SharingServiceSetChatMemberProcedure:
+			sharingServiceSetChatMemberHandler.ServeHTTP(w, r)
 		case SharingServiceListSharedWorkflowDraftsProcedure:
 			sharingServiceListSharedWorkflowDraftsHandler.ServeHTTP(w, r)
+		case SharingServiceRemoveChatMemberProcedure:
+			sharingServiceRemoveChatMemberHandler.ServeHTTP(w, r)
+		case SharingServiceListChatMembersProcedure:
+			sharingServiceListChatMembersHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -335,6 +468,18 @@ func (UnimplementedSharingServiceHandler) SetWorkflowDraftSharing(context.Contex
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SharingService.SetWorkflowDraftSharing is not implemented"))
 }
 
+func (UnimplementedSharingServiceHandler) SetChatMember(context.Context, *connect.Request[v1.SetChatMemberRequest]) (*connect.Response[v1.SetChatMemberResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SharingService.SetChatMember is not implemented"))
+}
+
 func (UnimplementedSharingServiceHandler) ListSharedWorkflowDrafts(context.Context, *connect.Request[v1.ListSharedWorkflowDraftsRequest]) (*connect.Response[v1.ListSharedWorkflowDraftsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SharingService.ListSharedWorkflowDrafts is not implemented"))
+}
+
+func (UnimplementedSharingServiceHandler) RemoveChatMember(context.Context, *connect.Request[v1.RemoveChatMemberRequest]) (*connect.Response[v1.RemoveChatMemberResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SharingService.RemoveChatMember is not implemented"))
+}
+
+func (UnimplementedSharingServiceHandler) ListChatMembers(context.Context, *connect.Request[v1.ListChatMembersRequest]) (*connect.Response[v1.ListChatMembersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SharingService.ListChatMembers is not implemented"))
 }

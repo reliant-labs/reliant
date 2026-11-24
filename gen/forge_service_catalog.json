@@ -8247,6 +8247,12 @@
               "name": "app_name",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "access_level",
+              "kind": "enum",
+              "type_name": "reliant.v1.ChatAccessLevel",
+              "optional": true
             }
           ],
           "reliant.v1.ChatErrorUpdate": [
@@ -10179,6 +10185,12 @@
             "AGENT_MESSAGE_KIND_HUMAN_MESSAGE",
             "AGENT_MESSAGE_KIND_RUN_MESSAGE"
           ],
+          "reliant.v1.ChatAccessLevel": [
+            "CHAT_ACCESS_LEVEL_UNSPECIFIED",
+            "CHAT_ACCESS_LEVEL_VIEW",
+            "CHAT_ACCESS_LEVEL_REPLY",
+            "CHAT_ACCESS_LEVEL_MANAGE"
+          ],
           "reliant.v1.ChatActivity": [
             "CHAT_ACTIVITY_IDLE",
             "CHAT_ACTIVITY_RUNNING",
@@ -10313,6 +10325,12 @@
             5,
             6
           ],
+          "reliant.v1.ChatAccessLevel": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.ChatActivity": [
             0,
             1,
@@ -10441,6 +10459,10 @@
           "reliant.v1.AgentMessageKind": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "AgentMessageKind"
+          },
+          "reliant.v1.ChatAccessLevel": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ChatAccessLevel"
           },
           "reliant.v1.ChatActivity": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -36953,6 +36975,16 @@
       "proto_file": "reliant/v1/sharing.proto",
       "methods": [
         {
+          "id": "reliant.v1.SharingService/ListChatMembers",
+          "name": "ListChatMembers",
+          "input": "reliant.v1.ListChatMembersRequest",
+          "output": "reliant.v1.ListChatMembersResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.SharingService/ListSharedChats",
           "name": "ListSharedChats",
           "input": "reliant.v1.ListSharedChatsRequest",
@@ -36977,6 +37009,26 @@
           "name": "ListSharedWorkflowDrafts",
           "input": "reliant.v1.ListSharedWorkflowDraftsRequest",
           "output": "reliant.v1.ListSharedWorkflowDraftsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.SharingService/RemoveChatMember",
+          "name": "RemoveChatMember",
+          "input": "reliant.v1.RemoveChatMemberRequest",
+          "output": "reliant.v1.RemoveChatMemberResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.SharingService/SetChatMember",
+          "name": "SetChatMember",
+          "input": "reliant.v1.SetChatMemberRequest",
+          "output": "reliant.v1.SetChatMemberResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -37123,6 +37175,27 @@
             }
           },
           {
+            "Name": "SetChatMember",
+            "InputType": "SetChatMemberRequest",
+            "OutputType": "SetChatMemberResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.SetChatMemberRequest",
+            "OutputTypeFQ": "reliant.v1.SetChatMemberResponse",
+            "InputProtoFile": "reliant/v1/sharing.proto",
+            "OutputProtoFile": "reliant/v1/sharing.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "set_member",
+              "TargetKind": "chat",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
             "Name": "ListSharedWorkflowDrafts",
             "InputType": "ListSharedWorkflowDraftsRequest",
             "OutputType": "ListSharedWorkflowDraftsResponse",
@@ -37141,11 +37214,83 @@
               "Declared": true,
               "None": "reads only: lists what others shared"
             }
+          },
+          {
+            "Name": "RemoveChatMember",
+            "InputType": "RemoveChatMemberRequest",
+            "OutputType": "RemoveChatMemberResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.RemoveChatMemberRequest",
+            "OutputTypeFQ": "reliant.v1.RemoveChatMemberResponse",
+            "InputProtoFile": "reliant/v1/sharing.proto",
+            "OutputProtoFile": "reliant/v1/sharing.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "remove_member",
+              "TargetKind": "chat",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ListChatMembers",
+            "InputType": "ListChatMembersRequest",
+            "OutputType": "ListChatMembersResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ListChatMembersRequest",
+            "OutputTypeFQ": "reliant.v1.ListChatMembersResponse",
+            "InputProtoFile": "reliant/v1/sharing.proto",
+            "OutputProtoFile": "reliant/v1/sharing.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "reads only: who may access a chat"
+            }
           }
         ],
         "ProtoFile": "reliant/v1/sharing.proto",
         "ModulePath": "github.com/reliant-labs/reliant",
         "Messages": {
+          "ListChatMembersRequest": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListChatMembersResponse": [
+            {
+              "Name": "owner_user_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "members",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ChatMember"
+            },
+            {
+              "Name": "member_count",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "caller_role",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ],
           "ListSharedChatsRequest": [
             {
               "Name": "org_id",
@@ -37234,6 +37379,55 @@
               "ProtoType": "[]message",
               "IsOptional": false,
               "MessageType": "reliant.v1.SharedWorkflowDraft"
+            }
+          ],
+          "RemoveChatMemberRequest": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "user_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "RemoveChatMemberResponse": [
+            {
+              "Name": "changed",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "SetChatMemberRequest": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "user_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "role",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ],
+          "SetChatMemberResponse": [
+            {
+              "Name": "member",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ChatMember"
+            },
+            {
+              "Name": "changed",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "SetChatVisibilityRequest": [
@@ -37482,6 +37676,32 @@
               "name": "app_name",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "access_level",
+              "kind": "enum",
+              "type_name": "reliant.v1.ChatAccessLevel",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ChatMember": [
+            {
+              "name": "user_id",
+              "kind": "string"
+            },
+            {
+              "name": "role",
+              "kind": "enum",
+              "type_name": "reliant.v1.ChatMemberRole"
+            },
+            {
+              "name": "granted_by",
+              "kind": "string"
+            },
+            {
+              "name": "created_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
             }
           ],
           "reliant.v1.ChatSelection": [
@@ -37506,6 +37726,36 @@
             {
               "name": "updated_at",
               "kind": "string"
+            }
+          ],
+          "reliant.v1.ListChatMembersRequest": [
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            }
+          ],
+          "reliant.v1.ListChatMembersResponse": [
+            {
+              "name": "owner_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "members",
+              "kind": "message",
+              "type_name": "reliant.v1.ChatMember",
+              "repeated": true
+            },
+            {
+              "name": "member_count",
+              "kind": "int32"
+            },
+            {
+              "name": "caller_role",
+              "kind": "enum",
+              "type_name": "reliant.v1.ChatMemberRole"
             }
           ],
           "reliant.v1.ListSharedChatsRequest": [
@@ -37722,6 +37972,60 @@
               "type_name": "reliant.v1.ProviderPolicy.Funding"
             }
           ],
+          "reliant.v1.RemoveChatMemberRequest": [
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "user_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            }
+          ],
+          "reliant.v1.RemoveChatMemberResponse": [
+            {
+              "name": "changed",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.SetChatMemberRequest": [
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "user_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "role",
+              "kind": "enum",
+              "type_name": "reliant.v1.ChatMemberRole"
+            }
+          ],
+          "reliant.v1.SetChatMemberResponse": [
+            {
+              "name": "member",
+              "kind": "message",
+              "type_name": "reliant.v1.ChatMember"
+            },
+            {
+              "name": "changed",
+              "kind": "bool"
+            }
+          ],
           "reliant.v1.SetChatVisibilityRequest": [
             {
               "name": "chat_id",
@@ -37890,7 +38194,10 @@
         },
         "SchemaFiles": {
           "reliant.v1.Chat": "reliant/v1/chat.proto",
+          "reliant.v1.ChatMember": "reliant/v1/sharing.proto",
           "reliant.v1.ChatSelection": "reliant/v1/chat.proto",
+          "reliant.v1.ListChatMembersRequest": "reliant/v1/sharing.proto",
+          "reliant.v1.ListChatMembersResponse": "reliant/v1/sharing.proto",
           "reliant.v1.ListSharedChatsRequest": "reliant/v1/sharing.proto",
           "reliant.v1.ListSharedChatsResponse": "reliant/v1/sharing.proto",
           "reliant.v1.ListSharedProjectsRequest": "reliant/v1/sharing.proto",
@@ -37899,6 +38206,10 @@
           "reliant.v1.ListSharedWorkflowDraftsResponse": "reliant/v1/sharing.proto",
           "reliant.v1.Project": "reliant/v1/project.proto",
           "reliant.v1.ProviderPolicy": "reliant/v1/chat.proto",
+          "reliant.v1.RemoveChatMemberRequest": "reliant/v1/sharing.proto",
+          "reliant.v1.RemoveChatMemberResponse": "reliant/v1/sharing.proto",
+          "reliant.v1.SetChatMemberRequest": "reliant/v1/sharing.proto",
+          "reliant.v1.SetChatMemberResponse": "reliant/v1/sharing.proto",
           "reliant.v1.SetChatVisibilityRequest": "reliant/v1/sharing.proto",
           "reliant.v1.SetChatVisibilityResponse": "reliant/v1/sharing.proto",
           "reliant.v1.SetProjectVisibilityRequest": "reliant/v1/sharing.proto",
@@ -37909,6 +38220,12 @@
           "reliant.v1.WorktreeSummary": "reliant/v1/worktree.proto"
         },
         "Enums": {
+          "reliant.v1.ChatAccessLevel": [
+            "CHAT_ACCESS_LEVEL_UNSPECIFIED",
+            "CHAT_ACCESS_LEVEL_VIEW",
+            "CHAT_ACCESS_LEVEL_REPLY",
+            "CHAT_ACCESS_LEVEL_MANAGE"
+          ],
           "reliant.v1.ChatActivity": [
             "CHAT_ACTIVITY_IDLE",
             "CHAT_ACTIVITY_RUNNING",
@@ -37918,6 +38235,12 @@
             "CHAT_ACTIVITY_WAITING_FOR_DAEMON",
             "CHAT_ACTIVITY_QUEUED_FOR_MACHINE",
             "CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT"
+          ],
+          "reliant.v1.ChatMemberRole": [
+            "CHAT_MEMBER_ROLE_UNSPECIFIED",
+            "CHAT_MEMBER_ROLE_VIEW",
+            "CHAT_MEMBER_ROLE_REPLY",
+            "CHAT_MEMBER_ROLE_MANAGE"
           ],
           "reliant.v1.ChatOrigin": [
             "CHAT_ORIGIN_UNSPECIFIED",
@@ -37978,6 +38301,12 @@
           ]
         },
         "EnumNumbers": {
+          "reliant.v1.ChatAccessLevel": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.ChatActivity": [
             0,
             1,
@@ -37987,6 +38316,12 @@
             5,
             6,
             7
+          ],
+          "reliant.v1.ChatMemberRole": [
+            0,
+            1,
+            2,
+            3
           ],
           "reliant.v1.ChatOrigin": [
             0,
@@ -38047,9 +38382,17 @@
           ]
         },
         "EnumGoRefs": {
+          "reliant.v1.ChatAccessLevel": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ChatAccessLevel"
+          },
           "reliant.v1.ChatActivity": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ChatActivity"
+          },
+          "reliant.v1.ChatMemberRole": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ChatMemberRole"
           },
           "reliant.v1.ChatOrigin": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -56959,6 +57302,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "Attachments",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.AttachmentUploaders",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Backoff",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Backoff",
       "methods": [],
@@ -56968,6 +57322,17 @@
       ],
       "providers": [
         "Providerbackoff"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "FundingLeases",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.FundingLeases",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -56990,6 +57355,19 @@
       "candidates": [],
       "providers": [
         "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "Members",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.MemberDirectory",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
       ],
       "resolution": "composition_expression"
     },
@@ -57027,6 +57405,17 @@
       ],
       "providers": [
         "PauseService"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "PersonPicks",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.PersonPicks",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -57098,6 +57487,19 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Senders",
       "methods": [],
       "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "Settings",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.SettingsReader",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],
@@ -58845,6 +59247,20 @@
     },
     {
       "consumer": "Question",
+      "field": "Replies",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.ReplyGate",
+      "methods": [],
+      "candidates": [
+        "Chat",
+        "WorkerChat"
+      ],
+      "providers": [
+        "Chat"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/question.Repository",
       "methods": [],
@@ -59237,6 +59653,15 @@
       "candidates": [
         "Database"
       ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Sharing",
+      "field": "Members",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.Members",
+      "methods": [],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -61001,6 +61426,14 @@
     {
       "code": "binding_unresolved",
       "component": "Sharing.Chats",
+      "source": {
+        "path": "internal/handlers/sharing/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Sharing.Members",
       "source": {
         "path": "internal/handlers/sharing/service.go",
         "symbol": "New"

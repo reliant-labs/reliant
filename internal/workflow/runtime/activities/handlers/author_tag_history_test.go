@@ -92,4 +92,59 @@ func TestConvertAndRepairMessages_AuthorTags(t *testing.T) {
 			`<message from="the owner">|thanks`,
 		}, rendered)
 	})
+
+	// The owner's rows carry their name once the send path stamps it
+	// (author_name, author_user_id NULL). The name the owner's turns render
+	// under comes from rows up to the first collaborator's turn only, so a
+	// later rename never rewrites a turn already sent.
+	render := func(t *testing.T, rows []*db.Message, texts []string) []string {
+		t.Helper()
+		got, err := ConvertAndRepairMessages(ctx, rows, authorHistoryStore(rows, texts), nil)
+		require.NoError(t, err)
+		var out []string
+		for _, m := range got {
+			var s string
+			for i, p := range m.Parts {
+				if i > 0 {
+					s += "|"
+				}
+				s += p.(message.TextContent).Text
+			}
+			out = append(out, s)
+		}
+		return out
+	}
+	t.Run("the owner's stamped name names their turns", func(t *testing.T) {
+		named := authorRow("m1", user)
+		named.AuthorName = strp("Alex")
+		renamed := authorRow("m6", user)
+		renamed.AuthorName = strp("Alexandra")
+		rows := []*db.Message{named, reply, collab, renamed}
+		require.Equal(t, []string{
+			"hi", "hello",
+			`<message from="Dana" earlier_turns_from="Alex">|look`,
+			`<message from="Alex">|thanks`,
+		}, render(t, rows, []string{"hi", "hello", "look", "thanks"}), "a rename after the first collaborator turn changes nothing already rendered")
+	})
+	t.Run("an owner named only after the first collaborator turn stays the owner", func(t *testing.T) {
+		laterNamed := authorRow("m6", user)
+		laterNamed.AuthorName = strp("Alex")
+		rows := []*db.Message{ownerTurn, reply, collab, laterNamed}
+		require.Equal(t, []string{
+			"hi", "hello",
+			`<message from="Dana" earlier_turns_from="the owner">|look`,
+			`<message from="the owner">|thanks`,
+		}, render(t, rows, []string{"hi", "hello", "look", "thanks"}), "bytes sent before the owner had a name never change")
+	})
+	t.Run("an owner's stamped name alone changes nothing", func(t *testing.T) {
+		named := authorRow("m1", user)
+		named.AuthorName = strp("Alex")
+		rows := []*db.Message{named, reply}
+		store := authorHistoryStore(rows, []string{"hi", "hello"})
+		want, err := messageconv.DbMessagesToMessages(ctx, rows, store)
+		require.NoError(t, err)
+		got, err := ConvertAndRepairMessages(ctx, rows, store, nil)
+		require.NoError(t, err)
+		require.True(t, reflect.DeepEqual(want, got), "a single-person chat whose owner rows are stamped still sends byte-identical requests")
+	})
 }

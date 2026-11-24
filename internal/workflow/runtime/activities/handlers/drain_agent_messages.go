@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/sdk/activity"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authortag"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -253,6 +254,11 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 				opts.SenderThreadID = m.FromThreadID
 				opts.SenderKind = m.Kind
 				opts.SenderSubject = m.Subject
+			} else {
+				// The person who queued it rides the row, so the saved
+				// message keeps its author (chat-collaboration.md §6.1).
+				opts.AuthorUserID = stringOrEmpty(m.AuthorUserID)
+				opts.AuthorName = stringOrEmpty(m.AuthorName)
 			}
 			if _, err := a.threads.SaveMessage(txCtx, opts); err != nil {
 				return fmt.Errorf("failed to save drained agent message %s: %w", m.ID, err)
@@ -340,6 +346,13 @@ func (a *DrainAgentMessagesActivity) buildEnvelope(ctx context.Context, queued [
 		case core.AgentMessageKindFailed:
 			fmt.Fprintf(&b, "\n%d. <agent_result agent_id=%q status=\"failed\">", i+1, m.FromThreadID)
 		case core.AgentMessageKindHumanMessage:
+			if m.AuthorUserID != nil && *m.AuthorUserID != "" {
+				// A collaborator's message: named as its body's tag names it
+				// (internal/authortag), never by an email or an id. The
+				// owner's rows keep the old bytes.
+				fmt.Fprintf(&b, "\n%d. <message from=%q queued_at=%q>", i+1, collaboratorLabel(m.AuthorName), queuedAt)
+				break
+			}
 			fmt.Fprintf(&b, "\n%d. <message from=\"user\" queued_at=%q>", i+1, queuedAt)
 		case core.AgentMessageKindRunMessage:
 			// Another top-level run (send_to_run), not the user and not a
@@ -401,4 +414,21 @@ func (a *DrainAgentMessagesActivity) spawnNotification(ctx context.Context, m *c
 	}
 
 	return fmt.Sprintf("spawn %q %s", label, verb)
+}
+
+// collaboratorLabel is the envelope's name for a collaborator's queued
+// message: their display name at send time, or authortag's fallback.
+func collaboratorLabel(name *string) string {
+	if name == nil || strings.TrimSpace(*name) == "" {
+		return authortag.FallbackMemberName
+	}
+	return strings.TrimSpace(*name)
+}
+
+// stringOrEmpty is *p, or "" for nil.
+func stringOrEmpty(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
