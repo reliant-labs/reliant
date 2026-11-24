@@ -66,10 +66,15 @@ export const useInboxScopeStore = createStore<InboxScopeState>()(
 /**
  * The project the Inbox is scoped to, or undefined for every project. With no
  * current project there is nothing to scope to, so "project" falls back to all.
+ *
+ * `currentProjectId` is the page's own current project when it resolves one
+ * (the Inbox page: the shell's, useShellCurrentProject; null for none);
+ * omitted, it is the context project.
  */
-export function useInboxProjectId(): string | undefined {
+export function useInboxProjectId(currentProjectId?: string | null): string | undefined {
   const scope = useInboxScopeStore((state) => state.scope);
-  const projectId = useProjectStore((state) => state.currentProject?.id);
+  const contextProjectId = useProjectStore((state) => state.currentProject?.id);
+  const projectId = currentProjectId === undefined ? contextProjectId : (currentProjectId ?? undefined);
   return scope === "project" ? projectId : undefined;
 }
 

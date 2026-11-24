@@ -24,6 +24,7 @@ vi.mock("../../lib/notifications", async (importOriginal) => {
 });
 
 import { chatKeys } from "../../hooks/chat-queries";
+import { chatServiceKeys } from "../../hooks/chat-service-hooks_gen";
 import { queryClient } from "../../lib/query-client";
 import { useChatStore } from "../chatStore";
 import { useGlobalUpdatesStore } from "../globalUpdatesStore";
@@ -162,6 +163,27 @@ describe("globalUpdatesStore: a chat moved to another project", () => {
       expect(invalidate.mock.calls.some(([f]) => JSON.stringify(f?.queryKey) === JSON.stringify(chatKeys.lists()))).toBe(true),
     );
     invalidate.mockRestore();
+  });
+});
+
+describe("globalUpdatesStore: a chat's attached projects changed", () => {
+  it("re-reads that chat's projects (the composer's chips), and leaves its other caches alone", () => {
+    const projectsKey = chatServiceKeys.listChatProjects({ chatId: "c1" });
+    const otherKey = chatServiceKeys.listChatProjects({ chatId: "c2" });
+    queryClient.setQueryData(projectsKey, { projects: [] });
+    queryClient.setQueryData(otherKey, { projects: [] });
+    useGlobalUpdatesStore.getState().handleUpdate([
+      buildUpdate({
+        update_type: UserUpdateType.CHAT_CONFIG_CHANGED,
+        data: { chat_id: "c1", attached_project_ids: ["p2"] },
+      }),
+    ]);
+    // Stale at once (the coalesced refetch follows for an observed read).
+    expect(queryClient.getQueryState(projectsKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(otherKey)?.isInvalidated).toBe(false);
+    // Not a move: the chat itself is unchanged.
+    expect(queryClient.getQueryData<Chat>(chatKeys.detail("c1"))!.projectId).toBe("p1");
+    expect(queryClient.getQueryState(chatKeys.list("p1"))?.isInvalidated).toBe(false);
   });
 });
 

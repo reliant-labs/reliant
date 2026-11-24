@@ -16,6 +16,7 @@ export interface StartChatRequest {
   selectedPresets?: Record<string, string>;   // Preset selections per target ("" = workflow-level, "Agent A" = group)
   client_message_id?: string; // Optional - the id of the first message; a repeat with it returns the same chat
   app_name?: string;          // Optional - the app the chat is about (forge.yaml name; set only when started from an app)
+  attached_project_ids?: string[]; // Optional - projects attached beside project_id, before the first turn
 }
 
 // NOTE: model/temperature/maxTokens are workflow params, not chat fields

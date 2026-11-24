@@ -8,6 +8,12 @@
  * GetDashboard answers the four generated Product analytics dashboards (the Analytics tabs, U6): line
  * panels whose `gallery-*` ids the QueryPanel answers below.
  *
+ * It also answers `chart-hover`, a dashboard that is not in the gallery's list
+ * (so the gallery's baseline does not move): a figure with its trend and a
+ * two-series line, which the chart hover surfaces open and hover
+ * (`shell-chart-hover`: the crosshair and tooltip on a full chart and on a
+ * card's sparkline).
+ *
  * Registered by wrapping the merged table (withDashboardFixtures), so its
  * QueryPanel answers its own panels and hands every other one to whatever
  * answered before it.
@@ -59,6 +65,37 @@ const SHOPFRONT = [
 
 const GENERATED_PRODUCT = ['product-overview', 'users', 'product', 'acquisition']
 
+/** The chart hover surfaces' dashboard: opened by URL, never listed. */
+const CHART_HOVER = dashboard('REPO', 'chart-hover', 'Chart hover', 'A figure with its trend, and a two-series line', { panels: 2 })
+const chartHoverSpec = {
+  id: 'chart-hover', title: 'Chart hover', filters: [], panels: [
+    { id: 'hover-figure', title: 'Requests per second', kind: 'number', signal: 'traces', series: [{ label: 'Requests', agg: 'rate' }], width: 8, height: 4 },
+    { id: 'hover-line', title: 'Requests and errors per second', kind: 'line', signal: 'traces', series: [{ label: 'Requests', agg: 'rate' }, { label: 'Errors', agg: 'rate' }], width: 16, height: 8 },
+  ],
+}
+
+/** 24 hourly points of a deterministic wave around `base`. */
+const wave = (base: number, phase: number) =>
+  Array.from({ length: 24 }, (_, i) => ({
+    time: at((23 - i) * HOUR),
+    value: Math.round(base * (1 + 0.35 * Math.sin((i + phase) / 3.1)) * 100) / 100,
+    partial: false,
+  }))
+
+function chartHoverQueryPanel(id: string): Record<string, unknown> | undefined {
+  if (id === 'hover-figure') return { panelId: id, kind: 'number', unit: 'rate', stepSeconds: 3600, series: [{ label: 'Requests', group: {}, value: 42.5, points: wave(40, 2) }] }
+  if (id === 'hover-line') {
+    return {
+      panelId: id, kind: 'line', unit: 'rate', stepSeconds: 3600,
+      series: [
+        { label: 'Requests', group: {}, value: 0, points: wave(40, 2) },
+        { label: 'Errors', group: {}, value: 0, points: wave(3, 5) },
+      ],
+    }
+  }
+  return undefined
+}
+
 /** A generated dashboard's spec: a heading line, then line panels the gallery's QueryPanel answers. */
 const productSpec = (key: string, title: string) => ({
   id: key, title, filters: [], panels: [
@@ -77,6 +114,7 @@ const at = (ago: number) => new Date(FIXED_NOW - ago).toISOString()
 export function dashboardsQueryPanel(req: Record<string, unknown>): Record<string, unknown> | undefined {
   const panel = (req.panel ?? {}) as { id?: string }
   const id = String(panel.id ?? '')
+  if (id.startsWith('hover-')) return chartHoverQueryPanel(id)
   if (!id.startsWith('gallery-')) return undefined
   const key = id.slice('gallery-'.length)
   // A key with no traffic yet draws the card's "No data" state.
@@ -107,6 +145,7 @@ export function withDashboardFixtures(base: Fixtures): Fixtures {
     'controlplane.v1.ObservabilityService/QueryPanel': (req) => dashboardsQueryPanel(req) ?? call(previous, req),
     'controlplane.v1.DashboardService/GetDashboard': (req) => {
       const key = String(((req.ref ?? {}) as { key?: string }).key ?? '')
+      if (key === CHART_HOVER.ref.key) return { summary: CHART_HOVER, spec: chartHoverSpec, version: 1, canWrite: false }
       const summary = SHOPFRONT.find((d) => d.ref.key === key)
       if (!summary || !GENERATED_PRODUCT.includes(key)) return call(getPrevious, req)
       return { summary, spec: productSpec(key, summary.title), version: 1, canWrite: false }

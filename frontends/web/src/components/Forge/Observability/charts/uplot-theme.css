@@ -44,3 +44,18 @@
   height: 0.75em;
   border-radius: 2px;
 }
+
+/*
+ * The hover crosshair (UPlotChart, "HOVER"): uPlot paints it a fixed slate
+ * (#607D8B), right on one theme only. It takes the axis' muted ink instead,
+ * so it reads on every scheme, light and dark. The point on each series is
+ * ringed in the card's own fill, so it lifts off the line it sits on.
+ */
+.obs-uplot .u-cursor-x,
+.obs-uplot .u-cursor-y {
+  border-color: var(--color-ink-muted);
+}
+
+.obs-uplot .u-cursor-pt {
+  box-shadow: 0 0 0 2px var(--color-surface);
+}

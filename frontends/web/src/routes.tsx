@@ -2,8 +2,9 @@ import { useEffect } from 'react'
 // The workflows journey's content and Reliant's end-of-tour landing (the demo bundle leaves them out).
 import './components/Onboarding/journeys/catalog'
 import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
+import { OrgArrivalNotice } from './components/Orgs/OrgArrivalNotice'
 import { followActiveOrg } from './components/Orgs/followActiveOrg'
-import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate, type AnyRoute } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, Outlet, Navigate, retainSearchParams, useRouterState, useNavigate, type AnyRoute } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
 import { mobilePathFor, shouldRedirectToMobileNow } from './lib/mobileRedirect'
@@ -30,6 +31,7 @@ import {
   connectionOAuthCallbackSearchSchema,
   githubOAuthCallbackSearchSchema,
   indexSearchSchema,
+  PROJECTS_CARRIED,
   mobileNewChatSearchSchema,
   oauthCallbackSearchSchema,
   onboardingSearchSchema,
@@ -336,6 +338,9 @@ function RootShell() {
       <AutomationDialogHost />
       <AnonSignInNudge />
       <Toaster />
+      {/* A URL that moved this tab into another org says so, once
+          (lib/orgArrivalNotice.ts): after the Toaster, which must have subscribed. */}
+      <OrgArrivalNotice />
       <NewBuildPrompt />
       {/* The forced upgrade when this build is below the reliant API's
           published minimum (lib/clientMinimum.ts). */}
@@ -597,6 +602,8 @@ const appLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: '_app',
   validateSearch: indexSearchSchema,
+  // The chat list's project filter rides on every chat shell page.
+  search: { middlewares: [retainSearchParams([...PROJECTS_CARRIED])] },
   component: AppLayout,
 })
 
@@ -801,6 +808,14 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
     component: App,
   })
 
+  // A project URL's loader finds the project's org: a project in another org
+  // redirects there, and one that is not the person's is not found
+  // (lib/projectRouteResolve.ts). Loaded on demand, like the chat's below.
+  const projectLoader = async ({ params, location, context }: { params: { projectId: string }; location: LocationLike; context: unknown }) => {
+    const { resolveProjectRoute } = await import('./lib/projectRouteResolve')
+    return resolveProjectRoute(params.projectId, location, { orgRoute: (context as { orgRoute?: OrgRouteState }).orgRoute })
+  }
+
   // Project routes — the URL carries the sidebar's project filter.
   // `/project/$projectId` shows one project (App reads the param via useParams
   // and calls setProjectFilter); `/` shows every project. `/project` (no id)
@@ -808,6 +823,7 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
   const projectRoute = createRoute({
     getParentRoute: appParent,
     path: 'project/$projectId',
+    loader: projectLoader,
     component: App,
   })
 
@@ -923,11 +939,13 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
   const projectSettingsRoute = createRoute({
     getParentRoute: authParent,
     path: '/projects/$projectId/settings',
+    loader: projectLoader,
     component: ProjectSettingsPage,
   })
   const projectWorkspacesRoute = createRoute({
     getParentRoute: authParent,
     path: '/projects/$projectId/workspaces',
+    loader: projectLoader,
     component: ProjectWorkspacesPage,
   })
 
@@ -938,6 +956,7 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
   const projectHomeRoute = createRoute({
     getParentRoute: authParent,
     path: '/projects/$projectId',
+    loader: projectLoader,
     component: ProjectHomePage,
   })
 
@@ -976,6 +995,7 @@ const orgAppLayoutRoute = createRoute({
   getParentRoute: () => orgLayoutRoute,
   id: '_app',
   validateSearch: indexSearchSchema,
+  search: { middlewares: [retainSearchParams([...PROJECTS_CARRIED])] },
   component: AppLayout,
 })
 

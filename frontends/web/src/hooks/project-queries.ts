@@ -358,6 +358,47 @@ export function getCachedProjects(): Project[] {
 }
 
 /**
+ * Whether `projectId` is in the org `orgId`'s project list, read through the
+ * list's shared entry (so the org's page that opens next reuses the answer).
+ * Throws when the list cannot be read.
+ */
+export async function isProjectInOrgList(projectId: string, orgId: string): Promise<boolean> {
+  const response = await queryClient.fetchQuery(
+    projectServiceQueries.listProjects(listProjectsRequest(orgId), { staleTime: PROJECTS_STALE_TIME_MS }),
+  );
+  return response.projects.some((row) => row.id === projectId);
+}
+
+/** Codes GetProject answers for a project that is not there for this caller. */
+const PROJECT_ABSENT = new Set([Code.NotFound, Code.PermissionDenied, Code.InvalidArgument]);
+
+/**
+ * The org a project is in (`Project.org_id`; "" for a row from before orgs),
+ * for a link that names it by id alone (lib/projectRouteResolve.ts), or null
+ * when there is no such project for this caller. From any org's list the
+ * cache holds, else GetProject: it names no org, and the server answers the
+ * project's owner, or a viewer it is shared with, whatever org it is in.
+ * Throws on any other failure.
+ *
+ * GetProject's answer is not cached: the project store reconciles its
+ * selection from every GetProject entry (subscribeToProjectRows), and this
+ * read selects nothing.
+ */
+export async function lookupProjectOrg(projectId: string): Promise<string | null> {
+  for (const [, response] of queryClient.getQueriesData<ListProjectsResponse>({ queryKey: projectServiceKeys.listProjects.all })) {
+    const row = response?.projects.find((project) => project.id === projectId);
+    if (row?.orgId) return row.orgId;
+  }
+  try {
+    const { project } = await client.getProject({ projectId });
+    return project ? (project.orgId ?? "") : null;
+  } catch (error) {
+    if (error instanceof ConnectError && PROJECT_ABSENT.has(error.code)) return null;
+    throw error;
+  }
+}
+
+/**
  * Patch one row in place (no refetch), in whichever org's list holds it: the
  * row is found by id, so a write that lands after an org switch patches the
  * list the project is in, never the tab's current one.

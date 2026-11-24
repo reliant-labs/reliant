@@ -8,11 +8,12 @@
 
 import type * as Host from "./consoleHost";
 
+export type ConsoleCheckout = Host.ConsoleCheckout;
 export type ConsoleReliantProject = Host.ConsoleReliantProject;
 export type ConsoleUser = Host.ConsoleUser;
 
-export const projectDeclaring: typeof Host.projectDeclaring = () => null;
+export const consoleCheckout: typeof Host.consoleCheckout = () => ({ kind: "none" });
 
-export const useConsoleReliantProject: typeof Host.useConsoleReliantProject = () => ({ listed: true, projectId: null });
+export const useConsoleReliantProject: typeof Host.useConsoleReliantProject = () => ({ listed: true, projectId: null, candidates: null });
 
 export const useConsoleUser: typeof Host.useConsoleUser = () => undefined;
