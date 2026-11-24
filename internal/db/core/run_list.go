@@ -60,8 +60,11 @@ type RunListFilters struct {
 	UserID string
 	// Org narrows the list to one organization's runs (a run's is its
 	// chat's); nil lists every run UserID owns (every client before orgs).
-	Org           *OrgScope
-	ProjectID     *string
+	Org       *OrgScope
+	ProjectID *string
+	// ProjectIDs lists several projects' runs: the union with ProjectID.
+	// Both empty lists every project.
+	ProjectIDs    []string
 	Workflows     []string
 	TriggerID     *string
 	LaunchKinds   []string

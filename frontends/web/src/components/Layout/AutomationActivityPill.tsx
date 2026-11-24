@@ -12,6 +12,10 @@
  * It counts runs NOT already in the sidebar (an adopted live run has its own
  * row and activity dot) and does not poll: see useLiveRuns.
  *
+ * It counts the projects the nav shows (one, several, or every one), in the
+ * tab's org, never the whole org's: a count beside a nav scoped to two
+ * projects that included a third's runs read as those projects' runs.
+ *
  * It says nothing about what needs you: the Inbox is the one place that does,
  * and its sidebar badge is the one count (WORKFLOW_UI.md §8).
  */
@@ -19,7 +23,7 @@
 import { useMemo } from "react";
 
 import type { RunsSearch } from "@/routeSchemas";
-import { summarizeLiveAutomations, useLiveRuns } from "@/hooks/run-queries";
+import { summarizeLiveAutomations, useLiveRuns, type LiveRunsScope } from "@/hooks/run-queries";
 import { cn } from "@/lib/utils";
 
 interface AutomationActivityPillProps {
@@ -27,17 +31,22 @@ interface AutomationActivityPillProps {
   listedChatIds: ReadonlySet<string>;
   /** Open the Runs list with these filters. */
   onOpenRuns?: (search: RunsSearch) => void;
+  /** The projects the nav shows; every project when unset. */
+  scope?: LiveRunsScope;
 }
 
-/**
- * Live runs can be in any project and can have started any time ago, so the
- * links widen both: "Live" scoped to the last 24 hours of one project would
- * hide exactly the long-running automation the pill just counted.
- */
-const LIVE_SEARCH: RunsSearch = { state: ["live"], allProjects: true, range: "all" };
+const ALL_PROJECTS: LiveRunsScope = { kind: "all" };
 
-export function AutomationActivityPill({ listedChatIds, onOpenRuns }: AutomationActivityPillProps) {
-  const { data } = useLiveRuns();
+/**
+ * A live run can have started any time ago, so the link widens the window:
+ * "Live" in the last 24 hours would hide exactly the long-running automation
+ * the pill just counted. It names no projects: Runs is scoped by the nav the
+ * pill sits in (useWorkflowsScope), so the list is the runs counted.
+ */
+const LIVE_SEARCH: RunsSearch = { state: ["live"], range: "all" };
+
+export function AutomationActivityPill({ listedChatIds, onOpenRuns, scope = ALL_PROJECTS }: AutomationActivityPillProps) {
+  const { data } = useLiveRuns(scope);
 
   const summary = useMemo(
     () => summarizeLiveAutomations(data?.runs ?? [], listedChatIds, !!data?.nextPageToken),

@@ -13,7 +13,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
@@ -28,6 +28,16 @@ import {
   useRunList,
 } from "../run-queries";
 import { runServiceKeys } from "../run-service-hooks_gen";
+import { useActiveOrgStore } from "@/store/activeOrgStore";
+
+// Orgs exist only with a control plane: on for the org test alone.
+const cp = vi.hoisted(() => ({ on: false }));
+vi.mock("@/services/controlPlane/config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/config")>()),
+  get hasControlPlane() {
+    return cp.on;
+  },
+}));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
@@ -159,5 +169,34 @@ describe("RunService keys", () => {
 
     expect(calls("ListRuns")).toBe(6);
     expect(calls("LastRunPerWorkflow")).toBe(2);
+  });
+
+  // The Library's "Last run" column read every org's runs: the request could
+  // not name one. It names the tab's org now, so the key does too.
+  it("the Library's last runs are read in the tab's org, and only once it is known", async () => {
+    const requests: unknown[] = [];
+    setTransport(
+      mockTransport({
+        "RunService.LastRunPerWorkflow": (request) => {
+          requests.push(request);
+          return { runs: [] };
+        },
+      }),
+    );
+    cp.on = true;
+    useActiveOrgStore.setState({ userId: "u1", chosenId: null, effectiveId: null, resolved: false, failure: null });
+    try {
+      const lastRuns = renderHook(() => useLastRunPerWorkflow(undefined, false, ["p1", "p2"]), { wrapper });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(requests, "nothing is read before the org is known").toHaveLength(0);
+
+      act(() => useActiveOrgStore.setState({ chosenId: "org-a", effectiveId: "org-a", resolved: true }));
+      await waitFor(() => expect(lastRuns.result.current.data).toBeDefined());
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({ orgId: "org-a", projectIds: ["p1", "p2"] });
+    } finally {
+      cp.on = false;
+      useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
+    }
   });
 });

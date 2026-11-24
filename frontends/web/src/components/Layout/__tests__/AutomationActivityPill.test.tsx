@@ -113,8 +113,43 @@ describe("AutomationActivityPill", () => {
     expect(running).toHaveAccessibleName("2 automations running. Open live runs");
     expect(screen.queryByTestId("automation-activity-pill-needs-you")).toBeNull();
 
+    // Every time, so a long-running automation is listed; the projects are
+    // the nav's, which Runs follows (useWorkflowsScope).
     fireEvent.click(running);
-    expect(onOpenRuns).toHaveBeenCalledWith({ state: ["live"], allProjects: true, range: "all" });
+    expect(onOpenRuns).toHaveBeenCalledWith({ state: ["live"], range: "all" });
+  });
+
+  // The bug of 2026-11-24: beside a nav scoped to some projects, the count
+  // was every project's live runs in the org.
+  it("counts only the projects the nav shows: one, or several", async () => {
+    listRuns.mockResolvedValue({ runs: [protoRun("a", "schedule", RunDisplayState.RUNNING)], nextPageToken: "" });
+    const { unmount } = renderWithQuery(
+      <AutomationActivityPill listedChatIds={new Set()} scope={{ kind: "projects", projectIds: ["p1", "p2"] }} />,
+    );
+    await screen.findByTestId("automation-activity-pill");
+    expect(listRuns.mock.calls[0]![0].projectIds).toEqual(["p1", "p2"]);
+    unmount();
+
+    listRuns.mockClear();
+    renderWithQuery(<AutomationActivityPill listedChatIds={new Set()} scope={{ kind: "projects", projectIds: ["p1"] }} />);
+    await screen.findByTestId("automation-activity-pill");
+    expect(listRuns.mock.calls[0]![0].projectIds).toEqual(["p1"]);
+  });
+
+  it("reads every project's only when the nav shows every project", async () => {
+    listRuns.mockResolvedValue({ runs: [protoRun("a", "schedule", RunDisplayState.RUNNING)], nextPageToken: "" });
+    renderWithQuery(<AutomationActivityPill listedChatIds={new Set()} scope={{ kind: "all" }} />);
+    await screen.findByTestId("automation-activity-pill");
+    expect(listRuns.mock.calls[0]![0].projectIds).toEqual([]);
+    expect(listRuns.mock.calls[0]![0].projectId).toBeUndefined();
+  });
+
+  it("reads nothing while the nav shows an app with no code here", async () => {
+    listRuns.mockResolvedValue({ runs: [protoRun("a", "schedule", RunDisplayState.RUNNING)], nextPageToken: "" });
+    renderWithQuery(<AutomationActivityPill listedChatIds={new Set()} scope={{ kind: "none" }} />);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(listRuns).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("automation-activity-pill")).toBeNull();
   });
 
   // "Needs you" is the Inbox's job (§8): its sidebar badge is the one count,

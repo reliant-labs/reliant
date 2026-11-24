@@ -31542,6 +31542,16 @@
               "Name": "workflow",
               "ProtoType": "[]string",
               "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "project_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "LastRunPerWorkflowResponse": [
@@ -31639,6 +31649,11 @@
               "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "project_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "ListRunsResponse": [
@@ -31875,6 +31890,16 @@
               "name": "workflow",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "project_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.LastRunPerWorkflowResponse": [
@@ -31971,6 +31996,11 @@
               "name": "org_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "project_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ListRunsResponse": [
