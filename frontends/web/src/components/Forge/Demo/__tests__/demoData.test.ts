@@ -8,8 +8,8 @@
  *    the story's model (model/shopApi.ts) answers — the wire encoding loses nothing;
  *  - the transport refuses every write before a handler or the gateway sees it;
  *  - DEMO_DATA_SOURCE=remote asks the gateway first and falls back to the
- *    sample data, saying so, when it fails;
- *  - the demo console's API uses the wire only on the demo host.
+ *    sample data, saying so, when it fails, for every observability read
+ *    (fixtures/shop/__tests__/realClient.test.ts holds each read's encoding).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,11 +25,10 @@ import { resetShellForTests } from "@/lib/shell";
 import { controlPlaneObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { setRuntimeConfig } from "@/test/runtimeConfig";
 
-import { createDemoApi } from "../demoApi";
 import { DEMO_SIGNALS } from "@/fixtures/shop/model/busyApp";
 import { createShopApi } from "@/fixtures/shop/model/shopApi";
 import { getDemoDataStatus, resetDemoDataStatusForTests } from "../demoDataStatus";
-import { DEMO_SCENARIO_RPCS, splitLogQuery } from "@/fixtures/shop/handlers/observability";
+import { splitLogQuery } from "@/fixtures/shop/handlers/observability";
 import { isDemoRead } from "@/fixtures/readOnly";
 import { createDemoTransport, demoDataConfig } from "../demoTransport";
 
@@ -107,16 +106,10 @@ describe("the demo transport", () => {
     await expect(client.updateIssueStatus({ issueId: "x" } as never)).rejects.toSatisfy(
       (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied,
     );
-    // A read the story says nothing about gets forge's generated default (handlers/defaults.ts).
+    // A read is answered: the story's (handlers/issues.ts), else forge's generated default (handlers/defaults.ts).
     await expect(client.listIssues({} as never)).resolves.toBeDefined();
     expect(["ListTraces", "GetTrace", "SearchLogs", "QueryPanel", "CompareReleases", "WatchDeploy", "StreamLogs", "PlanDeploy"].every((name) => isDemoRead({ name }))).toBe(true);
     expect(["UpdateIssueStatus", "CreateSilence", "SaveDashboard", "MarkNotificationsRead"].some((name) => isDemoRead({ name }))).toBe(false);
-  });
-
-  it("serves the console's trace reads by the scenario's RPC keys", () => {
-    expect(Object.values(DEMO_SCENARIO_RPCS)).toEqual(
-      expect.arrayContaining(["controlplane.v1.ObservabilityService/ListTraces", "controlplane.v1.ObservabilityService/GetTrace"]),
-    );
   });
 
   it("asks the gateway first when the source is remote, and uses its answer", async () => {
@@ -213,6 +206,20 @@ describe("the demo transport", () => {
     expect(gateway.unary).not.toHaveBeenCalled();
   });
 
+  it("falls back to the sample data for every observability read, not only the telemetry ones", async () => {
+    const gateway = {
+      unary: vi.fn(async () => {
+        throw new ConnectError("gateway down", Code.Unavailable);
+      }),
+      stream: vi.fn(),
+    } as unknown as Transport;
+    installShellTransport(createDemoTransport({ source: "remote", url: "https://gw.test" }, gateway));
+    const issues = await controlPlaneObservabilityApi.listIssues({ ...scope, window: { startMs: END_MS - 86_400_000, endMs: END_MS }, statuses: [], sort: "last" });
+    expect(issues.issues.length).toBeGreaterThan(0);
+    expect(gateway.unary).toHaveBeenCalled();
+    expect(getDemoDataStatus()).toBe("fallback");
+  });
+
   it("reads DEMO_DATA_SOURCE and DEMO_DATA_URL; remote without a URL is the sample data", () => {
     setRuntimeConfig({});
     expect(demoDataConfig()).toEqual({ source: "fixtures", url: "" });
@@ -220,18 +227,5 @@ describe("the demo transport", () => {
     expect(demoDataConfig()).toEqual({ source: "fixtures", url: "" });
     setRuntimeConfig({ DEMO_DATA_SOURCE: "remote", DEMO_DATA_URL: "https://demo-data.example.test/" });
     expect(demoDataConfig()).toEqual({ source: "remote", url: "https://demo-data.example.test" });
-  });
-});
-
-describe("the demo console's API", () => {
-  it("reads the scenario's RPCs over the wire on the demo host, the fixtures elsewhere, and refuses writes in both", async () => {
-    resetShellForTests("demo");
-    const onDemo = createDemoApi();
-    expect(onDemo.listTraces).toBe(controlPlaneObservabilityApi.listTraces);
-    await expect(onDemo.updateIssueStatus({} as never)).rejects.toThrow(/demo/i);
-    resetShellForTests("forge");
-    const elsewhere = createDemoApi();
-    expect(elsewhere.listTraces).not.toBe(controlPlaneObservabilityApi.listTraces);
-    await expect(elsewhere.assignIssue({} as never)).rejects.toThrow(/demo/i);
   });
 });

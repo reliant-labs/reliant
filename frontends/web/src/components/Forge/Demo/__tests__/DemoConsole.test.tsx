@@ -6,6 +6,8 @@
  * journey visits on fixture data, under a demo banner, and the whole walk —
  * a trace, its logs, its flamegraph, an issue, its Ask-an-agent sheet, the
  * firing alert — touches no transport, no fetch, no project list and no chat.
+ * On the demo host the console's real client reads the shop pack over the
+ * demo's transport, and nothing else.
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -36,10 +38,25 @@ vi.mock("@/fixtures/shop/model/shopApi", async (importOriginal) => {
     },
   };
 });
+// The demo bundle configures a control plane (config.demo.ts) so the real clients run; the other shells' tests leave it unset.
+const cp = vi.hoisted(() => ({ on: false }));
+vi.mock("@/services/controlPlane/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/controlPlane/config")>();
+  return {
+    ...actual,
+    get CONTROL_PLANE_API_URL() {
+      return cp.on ? "https://cp.test" : actual.CONTROL_PLANE_API_URL;
+    },
+    get hasControlPlane() {
+      return cp.on || actual.hasControlPlane;
+    },
+  };
+});
 vi.mock("uplot", async () => (await import("../../Observability/__tests__/obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("../../Observability/__tests__/obsMocks")).obsMocks.virtual());
 
 import { tourEvents } from "@/components/Onboarding/tourEvents";
+import { createShopTransport } from "@/fixtures/shop";
 import { setTransport } from "@/lib/connect";
 import { resetShellForTests } from "@/lib/shell";
 
@@ -245,8 +262,22 @@ describe("the forge demo console", () => {
   }, 30_000);
 
   describe("on the demo host", () => {
-    beforeEach(() => resetShellForTests("demo"));
-    afterEach(() => resetShellForTests());
+    // What the demo shell installs (demoShellBoot.ts): the shop pack's transport, every read through it.
+    const shopCalls: string[] = [];
+    beforeEach(() => {
+      resetShellForTests("demo");
+      cp.on = true;
+      shopCalls.length = 0;
+      const shop = createShopTransport();
+      setTransport({
+        unary: (method, ...rest) => (shopCalls.push(`${method.parent.typeName}/${method.name}`), shop.unary(method, ...rest)),
+        stream: (method, ...rest) => (shopCalls.push(`${method.parent.typeName}/${method.name}`), shop.stream(method, ...rest)),
+      } as Transport);
+    });
+    afterEach(() => {
+      cp.on = false;
+      resetShellForTests();
+    });
 
     it("draws no banner (the action row says it once), and lists How it was built as a nav row", async () => {
       renderDemo("/forge/demo?view=overview");
@@ -256,6 +287,9 @@ describe("the forge demo console", () => {
       expect(screen.queryByTestId("how-built-link")).toBeNull();
       const row = screen.getByRole("link", { name: "How it was built" });
       expect(row).toHaveAttribute("href", "/forge/demo?section=built");
+      // The overview's reads went to the shop pack, through the console's real client.
+      expect(shopCalls).toEqual(expect.arrayContaining(["controlplane.v1.ObservabilityService/GetServiceOverview"]));
+      expect(fixtureCalls.map((c) => c.rpc)).toContain("GetServiceOverview");
       expectNothingTouched();
     }, 30_000);
 

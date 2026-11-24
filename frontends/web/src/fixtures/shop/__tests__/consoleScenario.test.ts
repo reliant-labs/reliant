@@ -24,7 +24,9 @@ import { Code, ConnectError, createClient } from "@connectrpc/connect";
 
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 
+import { DashboardSource } from "@/gen/controlplane/services/dashboard/v1/dashboard_pb";
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
+import { ObservabilityBillingService } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import { SecretStoreService } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
 import { installShellTransport, setTransport } from "@/lib/connect";
 import { listActivity } from "@/services/controlPlane/observability/activityApi";
@@ -38,11 +40,12 @@ import { listSecrets } from "@/services/forge/secretStore";
 import { DEMO_DOMAINS, DEMO_ENVS, DEMO_PROJECT, DEMO_RELEASES, DEMO_SECRETS, DEMO_WORKLOADS, consoleScenarioHandlers } from "../handlers/console";
 import { DEMO_DEFAULT_SERVICES } from "../handlers/defaults";
 import { outsideDemo } from "../handlers/scope";
+import { createShopApi } from "../model/shopApi";
 import { isDemoRead } from "../../readOnly";
 import { createShopTransport } from "..";
 import { FIXTURE_ENVS, FIXTURE_PROJECT } from "@/components/Forge/Observability/__fixtures__/fixtureApi";
 import { shopPromotions } from "../model/delivery";
-import { demoNow, resetDemoNowForTests } from "../shopStory";
+import { DEMO_INCIDENT, demoNow, resetDemoNowForTests } from "../shopStory";
 import { describePromotion } from "@/components/Forge/Observability/releaseMarkers";
 
 const { OPTIONAL: LABEL_OPTIONAL, REPEATED: LABEL_REPEATED } = FieldDescriptorProto_Label;
@@ -262,8 +265,32 @@ describe("every console read is answered; every write is refused", () => {
 
   it("answers every read of every console service, story or default, with no Unimplemented", async () => {
     const t = (await import("@/lib/connect")).transport;
+    // The story answers a read that names one thing (an issue, a session, a metric, a dashboard)
+    // only for a thing it has, as the server does: ask about the story's own.
+    const story = createShopApi();
+    const scope = { orgId: "org-acme", projectId: "shop", envIds: ["env-prod"], filters: [] };
+    const day = { startMs: Date.now() - 86_400_000, endMs: Date.now() };
+    const [session] = (await story.listSessions({ ...scope, window: day, hasError: false, hasReplay: true, userId: "", pathContains: "", pageSize: 1 })).sessions;
+    const [metric] = (await story.listMetricCatalog({ ...scope, window: { startMs: Date.now() - 3_600_000, endMs: Date.now() } })).metrics;
+    const named = {
+      "controlplane.v1.DashboardService/GetDashboard": { orgId: "org-acme", ref: { source: DashboardSource.GENERATED, projectId: "shop", key: "overview" } },
+      "controlplane.v1.DashboardService/ListDashboardVersions": { orgId: "org-acme", ref: { source: DashboardSource.GENERATED, projectId: "shop", key: "overview" } },
+      "controlplane.v1.IssuesService/GetIssue": { issueId: DEMO_INCIDENT.issueId },
+      "controlplane.v1.IssuesService/ListIssueEvents": { issueId: DEMO_INCIDENT.issueId },
+      "controlplane.v1.IssuesService/ListIssueTimeline": { issueId: DEMO_INCIDENT.issueId },
+      "controlplane.v1.ObservabilityService/GetMetric": { scope: { orgId: "org-acme", projectId: "shop", envIds: ["env-prod"] }, metricName: metric.name },
+      "controlplane.v1.ObservabilityService/GetReleaseHealth": { scope: { orgId: "org-acme", projectId: "shop", envIds: ["env-prod"] } },
+      "controlplane.v1.RumService/GetSession": { scope: { orgId: "org-acme", projectId: "shop" }, sessionId: session.sessionId },
+      "controlplane.v1.RumService/GetSessionTimeline": { scope: { orgId: "org-acme", projectId: "shop" }, sessionId: session.sessionId },
+      "controlplane.v1.RumService/GetSessionReplay": { scope: { orgId: "org-acme", projectId: "shop" }, sessionId: session.sessionId },
+    };
+    // The demo has no billing: its reads answer as a control plane without the billing API (handlers/billing.ts).
+    const billing = createClient(ObservabilityBillingService, t) as unknown as Record<string, (req: object) => Promise<unknown>>;
+    for (const method of methodsOf(ObservabilityBillingService).filter((m) => isDemoRead(m))) {
+      await expect(billing[method.localName]({ orgId: "org-acme" }), method.name).rejects.toSatisfy((err: unknown) => ConnectError.from(err).code === Code.Unimplemented);
+    }
     let reads = 0;
-    for (const service of DEMO_DEFAULT_SERVICES) {
+    for (const service of DEMO_DEFAULT_SERVICES.filter((s) => s !== ObservabilityBillingService)) {
       const client = createClient(service, t) as unknown as Record<string, (req: object) => Promise<unknown>>;
       for (const method of methodsOf(service).filter((m) => isDemoRead(m))) {
         // Structured inventory/config reads require an address, just as the
@@ -277,6 +304,7 @@ describe("every console read is answered; every write is refused", () => {
           "controlplane.v1.StorageBrowserService/GetObjectMetadata": { environmentId: "env-staging", bucket: "uploads", key: "README.txt" },
           "controlplane.v1.StorageBrowserService/PreviewObject": { environmentId: "env-staging", bucket: "uploads", key: "README.txt" },
           "controlplane.v1.DeployService/GetWorkloadConfig": { environmentId: "env-dev", workload: "api" },
+          ...named,
         };
         await expect(client[method.localName](addressed[`${service.typeName}/${method.name}`] ?? {}), `${service.typeName}/${method.name}`).resolves.toBeDefined();
         reads++;

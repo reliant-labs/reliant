@@ -3,6 +3,8 @@ import { createClient } from "@connectrpc/connect";
 import { loadAll } from "js-yaml";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
+
 import { AppDatabaseService, BrowseCount, BrowseFilterOp } from "@/gen/controlplane/services/app_database/v1/app_database_pb";
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { IdentityUserState } from "@/gen/controlplane/controlplane/v1/identity_pb";
@@ -12,7 +14,8 @@ import { demoBundleId, DEMO_WITHHELD } from "../handlers/config";
 import { createShopTransport } from "..";
 import { demoIdentityUsers, demoSubjects } from "../handlers/inventory";
 import { DEMO_AUDIENCE_SIZE, demoAudience, demoAudienceTotals } from "../model/audience";
-import { createDemoApi } from "@/components/Forge/Demo/demoApi";
+import { installShellTransport } from "@/lib/connect";
+import { controlPlaneObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
 const transport = () => createShopTransport();
 const request = { environmentId: "env-dev", database: "shop", table: "public.orders", limit: 50 };
@@ -148,7 +151,9 @@ describe("public demo inventory wire reads", () => {
   });
 
   it("shows the same current release and immutable bundle in workload rows, history and config", async () => {
-    const api = createDemoApi({ wire: false });
+    // The workload pages' reads, through the console's real client over the same transport.
+    installShellTransport(transport());
+    const api = controlPlaneObservabilityApi;
     const deploy = createClient(DeployService, transport());
     for (const environmentId of ["env-dev", "env-staging", "env-prod"]) {
       const req = { orgId: "org-demo", projectId: "shop", envIds: [environmentId], filters: [], window: { startMs: Date.now() - 3_600_000, endMs: Date.now() } };

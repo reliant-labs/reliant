@@ -1,0 +1,51 @@
+// Copyright (c) 2025 Reliant Labs
+
+/**
+ * What every shop handler needs to put the story's model on the wire and read
+ * a request back into it: time, durations, counts and points. Each module
+ * of services/controlPlane/observability maps wire → model; a handler is the
+ * same mapping run backwards.
+ */
+
+import { create } from "@bufbuild/protobuf";
+import { DurationSchema, TimestampSchema, type Duration, type Timestamp } from "@bufbuild/protobuf/wkt";
+
+/** Epoch ms → Timestamp, keeping the sub-millisecond part (api.ts's msOf reads it back). */
+export function ts(ms: number): Timestamp {
+  const seconds = Math.floor(ms / 1000);
+  return create(TimestampSchema, { seconds: BigInt(seconds), nanos: Math.round((ms - seconds * 1000) * 1e6) });
+}
+
+/** A model time that may be unset (0 or null) → an absent Timestamp, as a server leaves it unset. */
+export const tsOpt = (ms: number | null | undefined): Timestamp | undefined => (ms ? ts(ms) : undefined);
+
+export function msOf(t: Timestamp | undefined): number {
+  return t ? Number(t.seconds) * 1000 + t.nanos / 1e6 : 0;
+}
+
+export function dur(ms: number): Duration {
+  const seconds = Math.floor(ms / 1000);
+  return create(DurationSchema, { seconds: BigInt(seconds), nanos: Math.round((ms - seconds * 1000) * 1e6) });
+}
+
+export const durOpt = (ms: number | null | undefined): Duration | undefined => (ms === null || ms === undefined ? undefined : dur(ms));
+
+export function msOfDuration(d: Duration | undefined): number | undefined {
+  return d ? Number(d.seconds) * 1000 + d.nanos / 1e6 : undefined;
+}
+
+/** A model count → int64. */
+export const int64 = (n: number | null | undefined): bigint => BigInt(Math.round(n ?? 0));
+
+/** A model double that may be null (a gap) → the wire's NaN, which the client reads back as null. */
+export const dbl = (n: number | null | undefined): number => (n === null || n === undefined ? Number.NaN : n);
+
+/** A TimeRange back into a window, or undefined when the request names none. */
+export function windowOf(range: { start?: Timestamp; end?: Timestamp } | undefined): { startMs: number; endMs: number } | undefined {
+  return range?.start && range.end ? { startMs: msOf(range.start), endMs: msOf(range.end) } : undefined;
+}
+
+/** A model series (epoch seconds, values with null gaps) as the wire's TimePoints. */
+export function points(timestamps: readonly number[], values: readonly (number | null)[], partial?: readonly boolean[]) {
+  return timestamps.map((t, i) => ({ time: ts(t * 1000), value: values[i] ?? 0, null: values[i] === null || values[i] === undefined, partial: partial?.[i] ?? false }));
+}

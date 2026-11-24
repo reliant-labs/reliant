@@ -11,9 +11,12 @@
  *
  * ── NO DAEMON, NO CHAT, NO CONTROL PLANE ────────────────────────────────────
  *
- * On forge.reliantlabs.io it is public: signed out, no daemon, no Reliant
- * project. So everything it reads comes from createFixtureApi, through
- * ObservabilityApiProvider and its own QueryClient, and "Ask Reliant" is in
+ * On the demo host it is public: signed out, no daemon, no Reliant project.
+ * Everything it reads is the shop fixture pack (src/fixtures/shop), answered
+ * by the demo's Connect transport to the console's REAL clients, in its own
+ * QueryClient; in the Reliant and forge shells, whose transport is the real
+ * control plane, the Observability views read the same pack's model in memory
+ * (FixtureApiOffDemoHost). "Ask Reliant" is in
  * handoff mode (AskAgentModeProvider): one "Ask an agent" button on every
  * surface, opening a sheet to copy from rather than starting a chat. A test
  * (Demo/__tests__/DemoConsole.test.tsx) walks every view and asserts that no
@@ -29,13 +32,12 @@
  */
 
 import { lazy, Suspense, useCallback, useMemo, useState, type ReactNode } from "react";
-import { Code, ConnectError } from "@connectrpc/connect";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import PageHeader from "@/components/forge-ui/page_header";
 import { getTourShell, type TourShell } from "@/components/Onboarding/tourShell";
-import { ObservabilityBillingApiContext } from "@/hooks/observability-billing-queries";
+import { createShopApi } from "@/fixtures/shop/model/shopApi";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
 import { ConsoleShell } from "../Console/ConsoleShell";
@@ -49,7 +51,7 @@ import { OBS_VIEW_LABELS, OBS_VIEWS, viewOf, type ObsNavigate, type ObsSearch, t
 import { FIXTURE_DECLARED } from "../Observability/__fixtures__/fixtureAlerting";
 import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../Observability/__fixtures__/fixtureApi";
 import { ObsReadOnlyProvider, type ObsReadOnly } from "../Observability/obsReadOnly";
-import { createDemoApi } from "./demoApi";
+import { withReadOnly } from "../Observability/readOnlyApi";
 import { DemoBrowserProviders } from "./DemoBrowserProviders";
 import { DataBrowser } from "../Data/DataBrowser";
 import type { DataSearch } from "../Data/dataUrl-model";
@@ -72,18 +74,6 @@ const NAV_ENVS = FIXTURE_ENVS.map((env) => ({ name: env.name, preview: false }))
 const SCOPE = { long: FIXTURE_ENVS.map((env) => ({ name: env.name, recorded: true })), previews: [] };
 const PLACE: ObsPlace = { kind: "project", project: FIXTURE_PROJECT, environments: ENVIRONMENTS };
 
-// Usage reads are the control plane's; the demo answers them as an older control plane would.
-const legacyOnly = async () => {
-  throw new ConnectError("Not in the demo", Code.Unimplemented);
-};
-const legacyBillingApi = {
-  getObservabilityUsage: legacyOnly,
-  listObservabilityUsage: legacyOnly,
-  getObservabilityStorage: legacyOnly,
-  getObservabilityLimits: legacyOnly,
-  updateObservabilityLimits: legacyOnly,
-};
-
 const READ_ONLY: ObsReadOnly = { readOnly: true, reason: "Read-only demo" };
 
 /** Every nav row and crumb stays on the demo: a panel view by `view`, anything else the overview. */
@@ -100,6 +90,19 @@ function demoLink(target: ConsolePage): string {
 /** The nav's open page for a panel view. */
 function pageOf(view: ObsView): ConsolePage {
   return view !== "overview" && isObsNavView(view) ? { kind: "obs-view", view } : { kind: "overview" };
+}
+
+/**
+ * The Observability views' data outside the demo host. On the demo host the
+ * console's real client reads the shop pack over the demo's transport, so
+ * nothing is provided. The Reliant and forge shells' transport is the real
+ * control plane, so there /forge/demo reads the same pack's model in memory,
+ * read-only. Removed when the page can scope a transport to its subtree
+ * (phase 4's TransportScope).
+ */
+function FixtureApiOffDemoHost({ children }: { children: ReactNode }) {
+  const api = useMemo(() => (isDemoShell() ? null : withReadOnly(createShopApi())), []);
+  return api ? <ObservabilityApiProvider api={api}>{children}</ObservabilityApiProvider> : <>{children}</>;
 }
 
 /** The public demo's nav additions (DemoNavExtras); the other shells keep the console's own nav. */
@@ -119,9 +122,8 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
   const [collapsed, setCollapsed] = useState(false);
   // Its own client and API: nothing here shares a cache entry with a real project's console.
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }));
-  // Writes are refused in every shell, visibly (obsReadOnly) and underneath (readOnlyApi); on the
-  // demo host the scenario's reads go over forge's mock transport (demoData/demoApi.ts).
-  const api = useMemo(() => createDemoApi(), []);
+  // Writes are refused in every shell, visibly (obsReadOnly) and underneath: by the demo
+  // transport's read-only guard on the demo host, by readOnlyApi elsewhere.
 
   const view = viewOf(search.view);
   // The public demo opens on prod, as its console pages do (Console/envScope DEFAULT_ENV); there `envs: ["all"]` is All.
@@ -160,8 +162,7 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
       <ObsReadOnlyProvider value={READ_ONLY}>
         <QueryClientProvider client={queryClient}>
           <DemoBrowserProviders>
-          <ObservabilityApiProvider api={api}>
-            <ObservabilityBillingApiContext.Provider value={legacyBillingApi}>
+          <FixtureApiOffDemoHost>
               <MaybeDemoNav section={search.section as DemoSection | undefined}>
               <ConsoleShell
                 project={FIXTURE_PROJECT}
@@ -219,8 +220,7 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
                 </div>
               </ConsoleShell>
               </MaybeDemoNav>
-            </ObservabilityBillingApiContext.Provider>
-          </ObservabilityApiProvider>
+          </FixtureApiOffDemoHost>
           </DemoBrowserProviders>
         </QueryClientProvider>
       </ObsReadOnlyProvider>
