@@ -1,7 +1,7 @@
 -- forge:backward-compatible — a new partial index; no statement of the previous release changes meaning, and it only adds a faster path to rows the previous release already reads.
 
 -- Migration: threads_live_workflow_index
--- Created: 2026-11-21T21:19:30Z
+-- Created: 2026-11-24T22:05:34Z
 --
 -- The live threads (status 2 running, 6 paused) of a workflow, by workflow_id.
 -- threads had no index on workflow_id, so the two statements that close or
