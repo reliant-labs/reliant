@@ -170,7 +170,13 @@ for (const load of surfaceLoads()) {
     expect.soft(report.escaped, 'rpcs that reached fetch').toEqual([])
     expect.soft(offOrigin, 'requests the browser sent off the page origin').toEqual([])
     const known = KNOWN_REFUSALS[load.path]
-    expect.soft(report.refused, known ? `writes refused at load (known: ${known.why})` : 'writes refused at load').toEqual(known?.rpcs ?? [])
+    // These routes mount the chat workspace, which records opening its project.
+    // Keep the write refused (never grant a fixture transport write permission).
+    const touchesProject = ['/', '/m/chats', '/m/new', '/m/workflows', '/m/runs', '/workflows', '/workflows/library', '/workflows/runs', `/project/${IDS.project}`].includes(new URL(load.path, origin).pathname)
+      || new URL(load.path, origin).pathname.startsWith('/m/chats/')
+      || load.path === '/connectors?tab=mcp'
+    const expectedRefusals = [...(known?.rpcs ?? []), ...(touchesProject ? ['reliant.v1.ProjectService/TouchProject'] : [])]
+    expect.soft(report.refused, known ? `writes refused at load (known: ${known.why})` : 'writes refused at load (TouchProject only on chat workspace routes)').toEqual(expectedRefusals)
     expect.soft(report.outside, 'fetches outside the allowed set').toEqual([])
     expect.soft(pageErrors, 'page errors').toEqual([])
     expect(probe.started, 'the app made no rpc at all').toBeGreaterThan(0)

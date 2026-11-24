@@ -548,13 +548,13 @@ const file_reliant_v1_question_proto_rawDesc = "" +
 	"\x0eQuestionStatus\x12\x1f\n" +
 	"\x1bQUESTION_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17QUESTION_STATUS_PENDING\x10\x01\x12\x1c\n" +
-	"\x18QUESTION_STATUS_RESOLVED\x10\x022\xf4\x02\n" +
+	"\x18QUESTION_STATUS_RESOLVED\x10\x022\xfa\x02\n" +
 	"\x0fQuestionService\x12\x8c\x01\n" +
 	"\x0fResolveQuestion\x12\".reliant.v1.ResolveQuestionRequest\x1a#.reliant.v1.ResolveQuestionResponse\"0\xa2\xbb\x18,:*\n" +
 	"\aresolve\x12\x17\n" +
-	"\bquestion\x12\vquestion_id*\x06action\x12k\n" +
-	"\x14ListPendingQuestions\x12'.reliant.v1.ListPendingQuestionsRequest\x1a(.reliant.v1.ListPendingQuestionsResponse\"\x00\x12e\n" +
-	"\x12ListAsyncQuestions\x12%.reliant.v1.ListAsyncQuestionsRequest\x1a&.reliant.v1.ListAsyncQuestionsResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\bquestion\x12\vquestion_id*\x06action\x12n\n" +
+	"\x14ListPendingQuestions\x12'.reliant.v1.ListPendingQuestionsRequest\x1a(.reliant.v1.ListPendingQuestionsResponse\"\x03\x90\x02\x01\x12h\n" +
+	"\x12ListAsyncQuestions\x12%.reliant.v1.ListAsyncQuestionsRequest\x1a&.reliant.v1.ListAsyncQuestionsResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_question_proto_rawDescOnce sync.Once

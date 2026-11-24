@@ -1,13 +1,15 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The demo's ObservabilityApi: shop's story (shopStory.ts) answered for every
- * read the console's observability views make, one module per area. The demo
- * console (demoApi.ts) and the wire scenario (handlers/observability.ts) both read it,
- * so the two can never disagree.
+ * shop's story (shopStory.ts) as the console's ObservabilityApi model: every
+ * read the console's observability views make, one module per area. It is
+ * the pack's authoring format: the handlers (../handlers/*.ts) encode its
+ * answers on the wire, where the console's real client reads them
+ * (__tests__/realClient.test.ts holds the two to one answer). Only
+ * /forge/demo outside the demo host reads it directly (DemoConsole.tsx).
  *
- * Writes never reach it: the read-only layer (Observability/readOnlyApi.ts)
- * and the transport (demoTransport.ts) refuse them first. A module's write
+ * Writes never reach it: the transport's read-only guard (and, off the demo
+ * host, Observability/readOnlyApi.ts) refuses them first. A module's write
  * methods therefore only refuse (`demoWriteRefused`).
  */
 

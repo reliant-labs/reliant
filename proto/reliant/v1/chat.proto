@@ -241,11 +241,15 @@ service ChatService {
 
   // ListChats lists all non-archived chats for a project
   // forge:custom — the caller's non-archived chats in one project, with the user update sequence the stream resumes from
-  rpc ListChats(ListChatsRequest) returns (ListChatsResponse) {}
+  rpc ListChats(ListChatsRequest) returns (ListChatsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetChat retrieves a specific chat by ID
   // forge:custom — owner-checked, and reports the run's live Temporal state alongside the chat row
-  rpc GetChat(GetChatRequest) returns (GetChatResponse) {}
+  rpc GetChat(GetChatRequest) returns (GetChatResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // UpdateChat updates chat metadata (title, temperature, etc.)
   // forge:custom — a partial update that resolves the worktree and emits title/config change events
@@ -280,10 +284,14 @@ service ChatService {
   }
 
   // SearchChats searches chats by title and message content
-  rpc SearchChats(SearchChatsRequest) returns (SearchChatsResponse) {}
+  rpc SearchChats(SearchChatsRequest) returns (SearchChatsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListArchivedChats lists all archived chats with worktree info
-  rpc ListArchivedChats(ListArchivedChatsRequest) returns (ListArchivedChatsResponse) {}
+  rpc ListArchivedChats(ListArchivedChatsRequest) returns (ListArchivedChatsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SendMessage sends a user message to a chat and continues workflow
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) {
@@ -311,7 +319,9 @@ service ChatService {
   // SendAgentMessage or spawn_send but not yet drained into that thread's
   // history. This is what lets a human see what they queued instead of it
   // being invisible until the agent happens to drain it.
-  rpc ListQueuedAgentMessages(ListQueuedAgentMessagesRequest) returns (ListQueuedAgentMessagesResponse) {}
+  rpc ListQueuedAgentMessages(ListQueuedAgentMessagesRequest) returns (ListQueuedAgentMessagesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // CancelQueuedAgentMessage revokes a single queued mailbox entry before
   // the target agent drains it. This is a race against the agent's own loop
@@ -349,12 +359,16 @@ service ChatService {
 
   // ListMessages lists messages for a chat with content blocks
   // forge:custom — reads a chat's thread history through threads.Service, including a branch's inherited messages
-  rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse) {}
+  rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetToolResult returns one tool call's full result content. The transcript
   // read paths send a truncated preview of a large result (ContentBlock.
   // truncated); this is how the client gets the rest, on demand.
-  rpc GetToolResult(GetToolResultRequest) returns (GetToolResultResponse) {}
+  rpc GetToolResult(GetToolResultRequest) returns (GetToolResultResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetContentBlockBodies returns the bodies of content blocks that a
   // transcript read sent elided (ContentBlock.body_elided), by block id. A
@@ -362,7 +376,9 @@ service ChatService {
   // inherits (the same rule as GetToolResult). Any other id comes back in
   // not_found, so the response never says whether an id exists elsewhere.
   // forge:custom — owner-checked batch read of block bodies, branch inheritance resolved
-  rpc GetContentBlockBodies(GetContentBlockBodiesRequest) returns (GetContentBlockBodiesResponse) {}
+  rpc GetContentBlockBodies(GetContentBlockBodiesRequest) returns (GetContentBlockBodiesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // UpdateChatState changes chat state (idle/archived)
   rpc UpdateChatState(UpdateChatStateRequest) returns (UpdateChatStateResponse) {
@@ -482,7 +498,9 @@ service ChatService {
   }
 
   // ListBranches lists all chats branched from a parent chat
-  rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse) {}
+  rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // UpdateWorkflowParams updates workflow parameters for a running chat
   // This signals the running workflow to update its inputs (e.g., mode, temperature)
@@ -500,28 +518,40 @@ service ChatService {
   }
 
   // GetChatUpdates fetches chat updates since a sequence number
-  rpc GetChatUpdates(GetChatUpdatesRequest) returns (GetChatUpdatesResponse) {}
+  rpc GetChatUpdates(GetChatUpdatesRequest) returns (GetChatUpdatesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListChatPlans lists plans associated with a chat
-  rpc ListChatPlans(ListChatPlansRequest) returns (ListChatPlansResponse) {}
+  rpc ListChatPlans(ListChatPlansRequest) returns (ListChatPlansResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetWorkflowExecutions returns the workflow execution tree for a chat
-  rpc GetWorkflowExecutions(GetWorkflowExecutionsRequest) returns (GetWorkflowExecutionsResponse) {}
+  rpc GetWorkflowExecutions(GetWorkflowExecutionsRequest) returns (GetWorkflowExecutionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListStepExecutions returns the full record of a chat's steps — resolved
   // inputs, output and error per attempt — optionally scoped to one node.
   // What the builder's Run tab inspects a step from.
   // forge:custom — a chat's step records per attempt, scoped by node_path and bounded to the newest steps
-  rpc ListStepExecutions(ListStepExecutionsRequest) returns (ListStepExecutionsResponse) {}
+  rpc ListStepExecutions(ListStepExecutionsRequest) returns (ListStepExecutionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetWorkflowNodeExecutions returns the newest node_execution update of each
   // node of one of a chat's workflow runs: the node state a run-status view
   // starts from, before it follows the chat stream's live node events. The
   // chat snapshot does not carry node state.
-  rpc GetWorkflowNodeExecutions(GetWorkflowNodeExecutionsRequest) returns (GetWorkflowNodeExecutionsResponse) {}
+  rpc GetWorkflowNodeExecutions(GetWorkflowNodeExecutionsRequest) returns (GetWorkflowNodeExecutionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetThreadWorkflowInputs returns the workflow inputs for a specific thread
-  rpc GetThreadWorkflowInputs(GetThreadWorkflowInputsRequest) returns (GetThreadWorkflowInputsResponse) {}
+  rpc GetThreadWorkflowInputs(GetThreadWorkflowInputsRequest) returns (GetThreadWorkflowInputsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SetChatDaemon sets the active daemon for a chat session.
   // The selected daemon is used as the default for tool execution in this chat.
@@ -574,7 +604,9 @@ service ChatService {
   // The chat's owner only: a viewer of a shared chat is answered as anyone
   // else who cannot read it (NOT_FOUND).
   // forge:custom
-  rpc ListChatProjects(ListChatProjectsRequest) returns (ListChatProjectsResponse) {}
+  rpc ListChatProjects(ListChatProjectsRequest) returns (ListChatProjectsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // AttachProjectToChat attaches another of the caller's projects to a chat,
   // beside its primary project. The chat's tools can then work in that

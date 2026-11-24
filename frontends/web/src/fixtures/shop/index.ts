@@ -31,8 +31,10 @@ import { coverageSourceHandlers } from "./handlers/coverageSource";
 import { DEMO_DEFAULT_SERVICES, defaultHandlers, withMessageRequests } from "./handlers/defaults";
 import { inventoryScenarioHandlers } from "./handlers/inventory";
 import { observabilityHandlers } from "./handlers/observability";
+import { organizationScenarioHandlers } from "./handlers/organization";
 import { scopedToDemo } from "./handlers/scope";
 import { securityHandlers } from "./handlers/security";
+import { withSpeedInsights } from "./handlers/speedInsights";
 import { storageScenarioHandlers } from "./handlers/storage";
 import { testsHandlers } from "./handlers/tests";
 import { createShopApi } from "./model/shopApi";
@@ -52,7 +54,7 @@ export function shopScenario(fixtures: ObservabilityApi = createShopApi()): Mock
   // (handlers/defaults.ts). A read naming another project or environment is answered empty
   // first (handlers/scope.ts), defaults included, which is why the pack composes its own
   // defaults rather than declaring them as the pack's `defaults`.
-  const handlers = { ...defaultHandlers(), ...consoleScenarioHandlers(), ...configScenarioHandlers(), ...inventoryScenarioHandlers(), ...storageScenarioHandlers(), ...observabilityHandlers(fixtures), ...securityHandlers(), ...testsHandlers(), ...coverageSourceHandlers() };
+  const handlers = withSpeedInsights({ ...defaultHandlers(), ...consoleScenarioHandlers(), ...configScenarioHandlers(), ...inventoryScenarioHandlers(), ...storageScenarioHandlers(), ...organizationScenarioHandlers(), ...observabilityHandlers(fixtures), ...securityHandlers(), ...testsHandlers(), ...coverageSourceHandlers() });
   return { name: "shop", handlers: withMessageRequests(scopedToDemo(handlers, DEMO_DEFAULT_SERVICES)) as unknown as MockScenario["handlers"] };
 }
 

@@ -25,6 +25,7 @@ import { Code, ConnectError, createClient } from "@connectrpc/connect";
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
+import { ObservabilityBillingService } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import { SecretStoreService } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
 import { installShellTransport, setTransport } from "@/lib/connect";
 import { listActivity } from "@/services/controlPlane/observability/activityApi";
@@ -257,6 +258,15 @@ describe("every console read is answered; every write is refused", () => {
       const method = service?.methods.find((m) => m.name === name);
       expect(method, key).toBeDefined();
       expect(isDemoRead(method!), key).toBe(true);
+    }
+  });
+
+  it("answers observability usage as a control plane without billing does: Unimplemented", async () => {
+    const t = (await import("@/lib/connect")).transport;
+    // The demo has no billing: its reads answer as a control plane without the billing API (handlers/observabilityBilling.ts).
+    const billing = createClient(ObservabilityBillingService, t) as unknown as Record<string, (req: object) => Promise<unknown>>;
+    for (const method of methodsOf(ObservabilityBillingService).filter((m) => isDemoRead(m))) {
+      await expect(billing[method.localName]({ orgId: "org-acme" }), method.name).rejects.toSatisfy((err: unknown) => ConnectError.from(err).code === Code.Unimplemented);
     }
   });
 

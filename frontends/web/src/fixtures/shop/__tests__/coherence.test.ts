@@ -2,11 +2,11 @@
 
 /**
  * The demo tells ONE story (shopStory.ts), whichever page a visitor opens.
- * Every read the console makes is asked here — over the demo transport where
- * the console reads it over the wire (Releases, Environments, Secrets,
- * Activity, Data, and the scenario's observability RPCs), and from the
- * demo's ObservabilityApi for the rest — and the answers are held to the
- * story:
+ * Every read the console makes is asked here, the way the demo host asks
+ * it: over the demo transport, through the console's REAL clients (the
+ * generated ones for Releases, Environments, Secrets, Activity and Data;
+ * controlPlaneObservabilityApi for every observability read) — and the
+ * answers are held to the story:
  *
  *  - each release has ONE commit, and each promotion ONE promoter and ONE
  *    time, on the release page, the environment cards, the chart markers,
@@ -40,7 +40,6 @@ import { controlPlaneObservabilityApi, type ObservabilityApi } from "@/services/
 
 import { DEMO_PROFILE_TYPES } from "../model/busyApp";
 import { createShopTransport } from "..";
-import { createShopApi } from "../model/shopApi";
 import { DEMO_BACKENDS, DEMO_CAST, DEMO_DEPENDENCIES, DEMO_ENV_IDS, DEMO_FRONTEND, DEMO_INCIDENT, DEMO_RELEASES, DEMO_RPC_METHODS, DEMO_SERVICE_NAMES, demoNow, resetDemoNowForTests, RUNNING } from "../shopStory";
 
 const HOUR = 3_600_000;
@@ -98,23 +97,14 @@ const LEAKS = [
 const json = (value: unknown) => JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? Number(v) : v));
 
 let transport: ReturnType<typeof createShopTransport>;
-let model: ObservabilityApi;
 let answers: unknown[] = [];
 const seen = <T>(value: T): T => {
   answers.push(value);
   return value;
 };
 
-/** The demo's ObservabilityApi as the demo host composes it: the scenario's reads over the wire, the rest from the model. */
-const obs = (): ObservabilityApi => ({
-  ...model,
-  listTraces: controlPlaneObservabilityApi.listTraces,
-  getTrace: controlPlaneObservabilityApi.getTrace,
-  searchLogs: controlPlaneObservabilityApi.searchLogs,
-  getServiceOverview: controlPlaneObservabilityApi.getServiceOverview,
-  getFlamegraph: controlPlaneObservabilityApi.getFlamegraph,
-  getServiceSignals: controlPlaneObservabilityApi.getServiceSignals,
-});
+/** The demo host's ObservabilityApi: the console's real client, every read over the demo transport. */
+const obs = (): ObservabilityApi => controlPlaneObservabilityApi;
 
 describe.each(WHEN)("the demo's one story, %s", (_when, at) => {
   beforeAll(() => {
@@ -126,7 +116,6 @@ describe.each(WHEN)("the demo's one story, %s", (_when, at) => {
     setTransport(null);
     transport = createShopTransport();
     installShellTransport(transport);
-    model = createShopApi(NOW);
   });
 
   afterAll(() => {
@@ -151,7 +140,7 @@ describe.each(WHEN)("the demo's one story, %s", (_when, at) => {
     expect(compare.artifacts.length).toBeGreaterThan(0);
     expect(compare.objects?.deltas.length).toBeGreaterThan(0);
 
-    const markers = seen(await model.listReleases({ ...scope(), window: { startMs: NOW - 30 * 24 * HOUR, endMs: NOW } })).promotions;
+    const markers = seen(await obs().listReleases({ ...scope(), window: { startMs: NOW - 30 * 24 * HOUR, endMs: NOW } })).promotions;
     for (const env of DEMO_ENV_IDS) {
       const promotions = seen(await deploy.listPromotions({ environmentId: env })).promotions;
       for (const p of promotions) {
@@ -174,10 +163,10 @@ describe.each(WHEN)("the demo's one story, %s", (_when, at) => {
       const env = e.environment!.id as (typeof DEMO_ENV_IDS)[number];
       const current = e.currentPromotion!;
       expect(current.releaseVersion).toBe(RUNNING[env].version);
-      const health = seen(await model.getReleaseHealth({ ...scope([env]), promotionId: current.id, windowMs: 15 * 60_000 }));
+      const health = seen(await obs().getReleaseHealth({ ...scope([env]), promotionId: current.id, windowMs: 15 * 60_000 }));
       expect(health.promotion?.gitCommit).toBe(commitOf.get(current.releaseVersion));
       expect(health.verdict).toBe(env === "env-prod" ? "fail" : "pass");
-      const workloads = seen(await model.getWorkload({ ...scope([env]), window: hour, workload: "api" }));
+      const workloads = seen(await obs().getWorkload({ ...scope([env]), window: hour, workload: "api" }));
       expect(workloads.workloads[0].declared?.sourceCommit).toBe(commitOf.get(current.releaseVersion));
       const config = seen(await deploy.getWorkloadConfig({ environmentId: env, workload: "api" }));
       expect(config.bundleId).toBe(workloads.workloads[0].declared?.bundleId);
@@ -193,13 +182,13 @@ describe.each(WHEN)("the demo's one story, %s", (_when, at) => {
     for (const r of logs.records) expect(SERVICES.has(r.service), r.service).toBe(true);
     const signals = seen(await api.getServiceSignals({ ...scope(), window: hour }));
     expect(signals.services.map((s) => s.service).sort()).toEqual([...DEMO_BACKENDS].sort());
-    const catalog = seen(await model.listMetricCatalog({ ...scope(), window: hour }));
+    const catalog = seen(await obs().listMetricCatalog({ ...scope(), window: hour }));
     for (const m of catalog.metrics) for (const s of m.services) expect(SERVICES.has(s), `${m.name}: ${s}`).toBe(true);
-    const graph = seen(await model.getServiceGraph({ ...scope(["env-prod"]), window: hour, rpcIds: [], includeInternal: false }));
+    const graph = seen(await obs().getServiceGraph({ ...scope(["env-prod"]), window: hour, rpcIds: [], includeInternal: false }));
     for (const n of graph.nodes) expect(SERVICES.has(n.id) || DEPENDENCIES.has(n.id), n.id).toBe(true);
     for (const env of DEMO_ENV_IDS) {
       const overview = seen(await api.getServiceOverview({ ...scope([env]), window: hour }));
-      const workloads = seen(await model.listWorkloads({ ...scope([env]), window: hour }));
+      const workloads = seen(await obs().listWorkloads({ ...scope([env]), window: hour }));
       for (const s of overview.services) expect(workloads.workloads.some((w) => w.workload === s.name), `${s.name} in ${env}`).toBe(true);
       for (const w of workloads.workloads) {
         expect(SERVICES.has(w.workload)).toBe(true);
@@ -219,19 +208,19 @@ describe.each(WHEN)("the demo's one story, %s", (_when, at) => {
 
   it("has one incident: one open issue, one firing alert, nothing failing outside prod's charging path", async () => {
     const api = obs();
-    const issues = seen(await model.listIssues({ ...scope(), window: day, statuses: [], sort: "last" }));
+    const issues = seen(await obs().listIssues({ ...scope(), window: day, statuses: [], sort: "last" }));
     expect(issues.issues.map((i) => i.id)).toEqual([DEMO_INCIDENT.issueId]);
     expect(issues.issues[0].title).toBe(DEMO_INCIDENT.error);
     expect(CAST.has(issues.issues[0].assignee?.name ?? "")).toBe(true);
-    const detail = seen(await model.getIssue({ ...scope(), issueId: DEMO_INCIDENT.issueId }));
+    const detail = seen(await obs().getIssue({ ...scope(), issueId: DEMO_INCIDENT.issueId }));
     expect(detail.firstRelease?.gitCommit).toBe(DEMO_RELEASES.find((r) => r.version === "v1.8.3")!.commit);
-    const alerts = seen(await model.listAlerts("org-acme", ""));
+    const alerts = seen(await obs().listAlerts("org-acme", ""));
     expect(alerts.filter((a) => a.state === "firing").map((a) => a.rule)).toEqual([DEMO_INCIDENT.alert]);
-    const notifications = seen(await model.listNotifications("org-acme", {}));
+    const notifications = seen(await obs().listNotifications("org-acme", {}));
     expect(notifications.unread).toBe(alerts.length);
     // Every route the shape declares has a receiver.
     const shape = seen(await createClient(DeployService, transport).getEnvironmentShape({ environmentId: "env-prod" }));
-    const receivers = seen(await model.listReceivers("org-acme"));
+    const receivers = seen(await obs().listReceivers("org-acme"));
     for (const route of (shape.declaredShape as { alert_routes: { receiver: string }[] }).alert_routes) expect(receivers.map((r) => r.name)).toContain(route.receiver);
     for (const env of ["env-dev", "env-staging"]) {
       const overview = await api.getServiceOverview({ ...scope([env]), window: day });
@@ -264,31 +253,31 @@ describe.each(WHEN)("the demo's one story, %s", (_when, at) => {
         for (const v of versions.versions) expect(CAST.has(v.setBy?.email.split("@")[0] ?? ""), v.setBy?.email).toBe(true);
       }
     }
-    const members = seen(await model.listOrgMembers("org-acme"));
+    const members = seen(await obs().listOrgMembers("org-acme"));
     expect(members.users.map((u) => u.name).sort()).toEqual([...CAST].sort());
-    const dashboards = seen(await model.listDashboards({ orgId: "org-acme", projectId: "shop" }));
+    const dashboards = seen(await obs().listDashboards({ orgId: "org-acme", projectId: "shop" }));
     for (const d of dashboards.dashboards) {
       if (d.workspace) expect(CAST.has(d.workspace.createdBy?.name ?? "")).toBe(true);
-      const versions = seen(await model.listDashboardVersions("org-acme", d.ref));
+      const versions = seen(await obs().listDashboardVersions("org-acme", d.ref));
       for (const v of versions) expect(ACTORS.has(v.author?.name ?? ""), v.author?.name).toBe(true);
     }
-    const silences = seen(await model.listSilences("org-acme", true));
+    const silences = seen(await obs().listSilences("org-acme", true));
     for (const s of silences) expect(CAST.has(s.createdBy.split("@")[0])).toBe(true);
-    const timeline = seen(await model.listIssueTimeline({ issueId: DEMO_INCIDENT.issueId }));
+    const timeline = seen(await obs().listIssueTimeline({ issueId: DEMO_INCIDENT.issueId }));
     for (const e of timeline.entries) if (e.actor?.kind === "user") expect(CAST.has(e.actor.name)).toBe(true);
   });
 
   it("lists the shop's real RPC methods, freshly aggregated, with plausible metrics", async () => {
-    const catalog = seen(await model.getServiceGraphCatalog({ ...scope(["env-prod"]), window: hour }));
+    const catalog = seen(await obs().getServiceGraphCatalog({ ...scope(["env-prod"]), window: hour }));
     expect(catalog.methods.map((m) => m.id).sort()).toEqual(DEMO_RPC_METHODS.map((m) => m.id).sort());
     expect(catalog.quality!.aggregatedThroughMs).toBeGreaterThanOrEqual(NOW - 60_000);
     expect(new Set(catalog.methods.map((m) => m.observedCount)).size).toBe(catalog.methods.length);
-    const graph = seen(await model.getServiceGraph({ ...scope(["env-prod"]), window: hour, rpcIds: [], includeInternal: false }));
+    const graph = seen(await obs().getServiceGraph({ ...scope(["env-prod"]), window: hour, rpcIds: [], includeInternal: false }));
     expect(new Set(graph.edges.map((e) => e.count)).size).toBeGreaterThan(graph.edges.length - 3);
-    const metrics = seen(await model.listMetricCatalog({ ...scope(), window: hour }));
+    const metrics = seen(await obs().listMetricCatalog({ ...scope(), window: hour }));
     for (const m of metrics.metrics) {
       const panel = { id: m.name, title: m.name, kind: "line", signal: "metrics", series: [{ label: "v", agg: m.monotonic ? "rate" : m.kind === "histogram" ? "quantile" : "avg", quantile: 0.95, field: m.name }] };
-      const res = seen(await model.queryPanel({ ...scope(["env-prod"]), window: hour, panel, services: [], stepSeconds: 0 }));
+      const res = seen(await obs().queryPanel({ ...scope(["env-prod"]), window: hour, panel, services: [], stepSeconds: 0 }));
       const values = res.series.flatMap((s) => s.values).filter((v): v is number => v !== null);
       expect(values.length, `${m.name} has data`).toBeGreaterThan(0);
       if (m.unit === "By" && !m.monotonic) expect(Math.min(...values), m.name).toBeGreaterThan(10 * 2 ** 20);
@@ -297,7 +286,7 @@ describe.each(WHEN)("the demo's one story, %s", (_when, at) => {
   });
 
   it("puts every browser session on the release its environment ran", async () => {
-    const sessions = seen(await model.listSessions({ ...scope(), window: day, hasError: false, hasReplay: false, userId: "", pathContains: "", pageSize: 100 }));
+    const sessions = seen(await obs().listSessions({ ...scope(), window: day, hasError: false, hasReplay: false, userId: "", pathContains: "", pageSize: 100 }));
     expect(sessions.sessions.length).toBeGreaterThan(10);
     const versions = new Set<string>(DEMO_RELEASES.map((r) => r.version));
     for (const s of sessions.sessions) {

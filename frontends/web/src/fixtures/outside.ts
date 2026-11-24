@@ -13,7 +13,8 @@
  *              with a fake session for the pack's user (written to
  *              localStorage before the app reads it), until the session
  *              port (phase 3) replaces it.
- *   health     same-origin `/health`, `/healthz`, `/readyz`: "ok".
+ *   health     GET `/health`, `/healthz`, `/readyz` on the page or configured
+ *              API origin: "ok", answered locally (never sent).
  *   telemetry  the same-origin dev log sink and OTLP ingest (`/_otel`,
  *              `/v1/traces|logs|metrics`), and the configured OTEL_ENDPOINT
  *              origin: 204, nothing sent.
@@ -38,6 +39,8 @@ const TELEMETRY_PATH = /^(?:\/__forge\/log|\/_otel(?:\/.*)?|\/v1\/(?:traces|logs
 export interface OutsideContext {
   /** The page's origin. */
   origin: string;
+  /** The configured API's origin: its GET health probe is answered locally. */
+  apiOrigin?: string | null;
   /** The configured Supabase project's origin, if any. */
   supabaseOrigin: string | null;
   /** The configured telemetry ingest's origin, if it is absolute. */
@@ -58,6 +61,7 @@ export function outsideContext(): OutsideContext {
   const config = loadConfig();
   return {
     origin,
+    apiOrigin: originOf(config.API_URL, origin),
     supabaseOrigin: originOf(config.SUPABASE_URL, origin),
     telemetryOrigin: /^https?:\/\//.test(config.OTEL_ENDPOINT) ? originOf(config.OTEL_ENDPOINT, origin) : null,
   };
@@ -67,7 +71,7 @@ export function outsideContext(): OutsideContext {
 export function classifyOutside(url: URL, method: string, ctx: OutsideContext): OutsideKind {
   if (RPC_PATH.test(url.pathname)) return "rpc";
   if (ctx.supabaseOrigin && url.origin === ctx.supabaseOrigin && url.pathname.startsWith("/auth/v1/")) return "auth";
-  if (url.origin === ctx.origin && HEALTH_PATH.test(url.pathname)) return "health";
+  if (method === "GET" && (url.origin === ctx.origin || url.origin === ctx.apiOrigin) && HEALTH_PATH.test(url.pathname)) return "health";
   if ((url.origin === ctx.origin && TELEMETRY_PATH.test(url.pathname)) || (ctx.telemetryOrigin && url.origin === ctx.telemetryOrigin)) {
     return "telemetry";
   }

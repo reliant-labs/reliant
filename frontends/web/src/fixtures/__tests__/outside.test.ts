@@ -21,6 +21,15 @@ describe("classifyOutside", () => {
     expect(kind("https://other.supabase.co/auth/v1/user")).toBe("refused");
   });
 
+  it("allows health only on the page or configured API origin, for GETs", () => {
+    const ctx = { ...CTX, apiOrigin: "https://api.preview.test" };
+    expect(kind("https://api.preview.test/health", "GET", ctx)).toBe("health");
+    expect(kind("https://api.preview.test/health", "POST", ctx)).toBe("refused");
+    expect(kind("https://api.preview.test:8443/health", "GET", ctx)).toBe("refused");
+    expect(kind("http://api.preview.test/health", "GET", ctx)).toBe("refused");
+    expect(kind("https://api.preview.test/other", "GET", ctx)).toBe("refused");
+  });
+
   it("allows health and the telemetry sinks", () => {
     expect(kind("https://app.preview.test/healthz")).toBe("health");
     expect(kind("https://app.preview.test/__forge/log", "POST")).toBe("telemetry");
