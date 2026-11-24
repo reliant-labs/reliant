@@ -146,6 +146,21 @@ export const DEPLOY_MESSAGES = [
   },
 ];
 
+/** An org app as the catalog reports it: its environments, its newest deploy, whether it serves a site. */
+function hostedApp(name: string, envs: typeof ENVIRONMENTS) {
+  const statuses = envs.map((env) => STATUSES[env.id] as { currentPromotion?: { createdAt: string }; deployments?: Array<{ deployment: { tier: string } }> } | undefined);
+  const deployed = statuses.map((status) => status?.currentPromotion?.createdAt).filter((at): at is string => !!at).sort();
+  return {
+    name,
+    createdAt: envs.map((env) => env.createdAt).sort()[0] ?? '',
+    ...(deployed.length > 0 ? { lastDeployedAt: deployed[deployed.length - 1] } : {}),
+    environments: envs.map((env) => env.name),
+    hasStaticSite: statuses.some((status) => status?.deployments?.some((d) => d.deployment.tier === 'DEPLOY_TIER_STATIC') ?? false),
+    sources: [],
+    warning: '',
+  };
+}
+
 const json = (route: Route, body: unknown) =>
   route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
 
@@ -186,6 +201,12 @@ export interface AppsMockOptions {
    * Default false.
    */
   person?: boolean;
+  /**
+   * The runtime flag `web.org_routes` (ORG_ROUTES="true" in config.js): links
+   * take the `/o/<org>/…` form, and old org-less URLs redirect into it.
+   * Default false, as prod serves it today.
+   */
+  orgRoutes?: boolean;
 }
 
 /** A JWT supabase-js can decode: it reads only `exp` and `sub` locally. */
@@ -247,7 +268,41 @@ export async function mockAppsBackend(page: Page, options: AppsMockOptions = {})
     return options.projectsByOrg[orgId ?? defaultOrgId()] ?? [];
   };
   await page.route('**/reliant.v1.ProjectService/ListProjects', (route) => json(route, { projects: projectsFor(route.request()) }));
-  await page.route('**/reliant.v1.ProjectService/GetProject', (route) => json(route, { project: PROJECT }));
+  // GetProject names no org: with projectsByOrg it answers a project of any of them, stamped with its org.
+  await page.route('**/reliant.v1.ProjectService/GetProject', (route) => {
+    if (!options.projectsByOrg) return json(route, { project: PROJECT });
+    const { projectId } = (route.request().postDataJSON() ?? {}) as { projectId?: string };
+    for (const [orgId, projects] of Object.entries(options.projectsByOrg)) {
+      const project = projects.find((p) => p.id === projectId);
+      if (project) return json(route, { project: { orgId, ...project } });
+    }
+    return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ code: 'not_found', message: 'project not found' }) });
+  });
+  // The project catalog (Projects, the project selector): the org's projects
+  // with the deployed apps their forge project names, and every other app as
+  // one with no code here. Built from the same projects and environments.
+  await page.route('**/reliant.v1.ProjectService/ListProjectsWithApps', (route) => {
+    const { orgId } = (route.request().postDataJSON() ?? {}) as { orgId?: string };
+    const org = orgId ?? defaultOrgId();
+    const pool = options.environmentsByOrg ? (options.environmentsByOrg[org] ?? []) : environments;
+    const apps = new Map<string, ReturnType<typeof hostedApp>>();
+    for (const env of pool) apps.set(env.project, hostedApp(env.project, pool.filter((e) => e.project === env.project)));
+    const claimed = new Set<string>();
+    const projects = projectsFor(route.request()).map((project) => {
+      const app = project.forgeProjectName ? apps.get(project.forgeProjectName) : undefined;
+      if (app) claimed.add(app.name);
+      return {
+        project: { ...project, orgId: (project as { orgId?: string }).orgId ?? org, viewerAccess: false },
+        repos: [{ id: `r-${project.id}`, name: project.name, relativePath: '', remote: '' }],
+        apps: project.forgeProjectName
+          ? [{ name: project.forgeProjectName, repoId: `r-${project.id}`, subpath: '', link: app ? 'PROJECT_APP_LINK_NAME' : 'PROJECT_APP_LINK_NOT_HOSTED', ...(app ? { hosted: app } : {}) }]
+          : [],
+        checkouts: [{ daemonId: 'daemon_1', daemonName: 'cloud-machine', installState: 'PROJECT_INSTALL_STATE_INSTALLED' }],
+      };
+    });
+    const unlinkedApps = [...apps.values()].filter((app) => !claimed.has(app.name));
+    return json(route, { orgId: org, projects, unlinkedApps, hostedAppsState: 'HOSTED_APPS_STATE_OK' });
+  });
   await page.route('**/reliant.v1.ChatService/ListChats', (route) => {
     const projects = new Set(projectsFor(route.request()).map((p) => p.id));
     const chats = options.projectsByOrg ? CHATS.filter((c) => projects.has(c.projectId)) : CHATS;
@@ -272,7 +327,7 @@ export async function mockAppsBackend(page: Page, options: AppsMockOptions = {})
   );
   // Observe requests independently of which route fulfils them.
   page.on('request', (request) => {
-    const product = /\/reliant\.v1\.(ProjectService\/ListProjects|ChatService\/ListChats)$/.test(new URL(request.url()).pathname);
+    const product = /\/reliant\.v1\.(ProjectService\/ListProjects(WithApps)?|ChatService\/ListChats)$/.test(new URL(request.url()).pathname);
     if (!request.url().includes('/controlplane.v1.DeployService/') && !product) return;
     const body = (request.postDataJSON() ?? {}) as { orgId?: string };
     options.onOrgRequest?.(new URL(request.url()).pathname.split('/').pop() ?? '', body.orgId);
@@ -308,7 +363,12 @@ export async function mockAppsBackend(page: Page, options: AppsMockOptions = {})
   // set in an init script, so the built app's own config.js cannot replace it.
   // A control plane implies Supabase auth is configured too; the API-key
   // session, or with `person` the Supabase session, signs the user in.
-  const config = { CONTROL_PLANE_API_URL: origin, SUPABASE_URL: `${origin}/supabase`, SUPABASE_ANON_KEY: 'anon-test-key' };
+  const config = {
+    CONTROL_PLANE_API_URL: origin,
+    SUPABASE_URL: `${origin}/supabase`,
+    SUPABASE_ANON_KEY: 'anon-test-key',
+    ...(options.orgRoutes ? { ORG_ROUTES: 'true' } : {}),
+  };
   await page.route('**/config.js', (route) =>
     route.fulfill({ status: 200, contentType: 'text/javascript', body: `window.__FORGE_CONFIG__ = ${JSON.stringify(config)};` }),
   );

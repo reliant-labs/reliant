@@ -53,7 +53,15 @@ func requireSandbox(t *testing.T) {
 	}
 }
 
-// run executes script under the sandbox with plan and returns its combined output.
+// coverageWarning is what the Go runtime of a binary built with -cover prints
+// as it exits with no GOCOVERDIR. The sandbox's init is this test binary, which
+// the merge gate builds with -cover, and it runs with the command's environment,
+// so it prints this after the command's output. It is not the command's output,
+// so no test should see it.
+const coverageWarning = "warning: GOCOVERDIR not set, no coverage data emitted\n"
+
+// run executes script under the sandbox with plan and returns its combined
+// output, minus what this test binary's coverage instrumentation added to it.
 func run(t *testing.T, plan Plan, script string) (string, int) {
 	t.Helper()
 	cmd := exec.Command("bash", "-c", script)
@@ -71,7 +79,7 @@ func run(t *testing.T, plan Plan, script string) (string, int) {
 		require.True(t, ok, "%v", err)
 		code = ee.ExitCode()
 	}
-	return string(out), code
+	return strings.TrimSuffix(string(out), coverageWarning), code
 }
 
 // fakeHome is a home directory laid out like a daemon's, with a credential in

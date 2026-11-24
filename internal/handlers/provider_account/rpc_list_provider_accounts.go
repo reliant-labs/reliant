@@ -20,11 +20,11 @@ func (s *Service) ListProviderAccounts(
 	if err != nil {
 		return nil, err
 	}
-	accounts, err := s.deps.Store.ListProviderAccounts(ctx, userID)
+	accounts, err := s.deps.Accounts.ListProviderAccounts(ctx, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
-	limits, err := s.deps.Store.ListAccountLimits(ctx, userID)
+	limits, err := s.deps.Accounts.ListAccountLimits(ctx, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

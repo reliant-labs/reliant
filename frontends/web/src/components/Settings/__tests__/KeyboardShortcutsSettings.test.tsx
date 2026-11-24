@@ -6,7 +6,7 @@
  * never rebind onto — or away from — that shape.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { KeyboardShortcutsSettings } from "../KeyboardShortcutsSettings";
 import { useShortcutsStore } from "../../../store/shortcutsStore";
@@ -161,5 +161,31 @@ describe("KeyboardShortcutsSettings capture", () => {
     expect(screen.queryAllByText(/Listening for key combination/)).toHaveLength(
       0,
     );
+  });
+});
+
+describe("KeyboardShortcutsSettings desktop aliases", () => {
+  const w = window as unknown as Record<string, unknown>;
+
+  beforeEach(() => {
+    hydrate();
+  });
+
+  afterEach(() => {
+    delete w.RELIANT_CONFIG;
+  });
+
+  it("names a shortcut's old chord in the desktop app", () => {
+    w.RELIANT_CONFIG = { isElectron: true };
+    render(<KeyboardShortcutsSettings />);
+
+    // jsdom reports a non-Mac navigator: New Chat's Cmd+T alias is Ctrl+T.
+    expect(screen.getAllByText(/Also Ctrl\+T in the desktop app/).length).toBeGreaterThan(0);
+  });
+
+  it("names none in a browser tab, where the browser keeps those chords", () => {
+    render(<KeyboardShortcutsSettings />);
+
+    expect(screen.queryAllByText(/in the desktop app, until you change/)).toHaveLength(0);
   });
 });

@@ -27,7 +27,7 @@ func (s *Service) DeleteOrgProviderAccount(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.deps.Store.DeleteOwnedProviderAccount(ctx, core.OrgAccountOwner(orgID), req.Msg.GetAccountId()); err != nil {
+	if err := s.deps.Accounts.DeleteOwnedProviderAccount(ctx, core.OrgAccountOwner(orgID), req.Msg.GetAccountId()); err != nil {
 		return nil, svcerr.Wrap(err)
 	}
 	s.deps.Logger.InfoContext(ctx, "org provider account deleted", "org_id", orgID, "account_id", req.Msg.GetAccountId(), "user_id", userID)

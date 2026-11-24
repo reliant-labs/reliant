@@ -31,13 +31,14 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ComponentType,
   type ReactNode,
 } from "react";
 import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
-import { useAuthStore } from "../../store/authStore";
-import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { useSignedIn } from "../../lib/session";
+import { shellProjectNow } from "../../lib/urlState/shellScopeStore";
 import { openAddProject } from "../../store/addProjectDialogStore";
-import { openProjectSwitcher } from "../../lib/projectSwitcher";
+import { OPEN_PROJECT_SWITCHER_EVENT } from "../../lib/projectSwitcher";
 import {
   useAppKeyboardShortcuts,
   type ShortcutHandlerLookup,
@@ -53,20 +54,48 @@ import { themeSnapshot } from "../../findBar/protocol";
 import { chatOnScreen } from "../../lib/keyboard/contexts";
 import { OFF_WORKSPACE } from "../../lib/keyboard/scope";
 import { surfaceForPath } from "../../lib/surface";
-import { lazyRoute } from "../../lib/lazyRoute";
 import { logger } from "../../lib/logger";
 import { SequenceHint } from "../Layout/SequenceHint";
-import { homePath, projectPath, settingsPath, workflowsPath } from "@/lib/paths";
+import { revealShellNav, toggleShellNav } from "../Layout/shell/shellFrame";
+import { homePath, projectChatsPath, settingsPath, workflowsPath } from "@/lib/paths";
 import { orgFreeRouteId } from "@/lib/paths/org";
 import { chatShellRouteOf } from "@/lib/chatRoute";
 
-// Loaded on first open (and warmed once the host is live): they would
-// otherwise ride in the entry chunk to every unauthenticated page.
-const CommandPalette = lazyRoute(
-  () => import("../Layout/CommandPalette"),
-  "CommandPalette",
-);
-const ChatSearch = lazyRoute(() => import("../Layout/ChatSearch"), "ChatSearch");
+/** An overlay the host opens; a lazy one (a `preload`) is warmed once the host is live. */
+type OverlayComponent<P> = ComponentType<P> & { preload?: () => unknown };
+
+/**
+ * The app-level overlays the keyboard host opens: a seam, like the nav's
+ * slots (Layout/sidebar/NavRenderer). The host keeps the keys, the menu
+ * bridge and which overlay is open; whoever mounts it says what each overlay
+ * is (routes.tsx passes the app's three, lazily, so none rides in the entry
+ * chunk to the signed-out pages). One left out leaves its shortcuts unbound,
+ * so the key keeps its native meaning there: a host with no palette (the
+ * public demo) passes none and pulls none of them into its bundle.
+ */
+export interface ShortcutOverlays {
+  /** Switch project (the shortcut, the header, ⌘K's Switch project…): Projects/SwitchProjectDialog. */
+  projectSwitcher?: OverlayComponent<{ open: boolean; onClose: () => void }>;
+  /** Chat search and the chat switcher: Layout/ChatSearch. */
+  chatSearch?: OverlayComponent<{
+    isOpen?: boolean;
+    initialMode?: "current" | "history";
+    onClose?: () => void;
+    onChatOpened?: () => void;
+  }>;
+  /** The command palette: Layout/CommandPalette. */
+  commandPalette?: OverlayComponent<{ isOpen: boolean; inWorkspace: boolean; onClose: () => void }>;
+}
+
+const NO_OVERLAYS: ShortcutOverlays = Object.freeze({});
+
+/** The host's handlers that open an overlay, and the overlay each needs. */
+const OVERLAY_OF: Readonly<Record<string, keyof ShortcutOverlays>> = {
+  onCommandPalette: "commandPalette",
+  onChatSearch: "chatSearch",
+  onSwitchChat: "chatSearch",
+  onSwitchProject: "projectSwitcher",
+};
 
 /** TanStack route ids of the two auth-guarded app layouts (routes.tsx). */
 const WORKSPACE_LAYOUT = "/_app";
@@ -123,7 +152,8 @@ export function shortcutScope({
 
 type Overlay =
   | { kind: "palette" }
-  | { kind: "chat-search"; mode: "current" | "history" };
+  | { kind: "chat-search"; mode: "current" | "history" }
+  | { kind: "project-selector" };
 
 interface PendingWorkspaceAction {
   action: () => void;
@@ -142,6 +172,8 @@ interface LiveState {
   navigate: ReturnType<typeof useNavigate>;
   /** Where the router is going, ahead of the page on screen. */
   latestPathname: () => string;
+  /** The overlays this host can open (its `overlays` prop). */
+  overlays: ShortcutOverlays;
 }
 
 interface HostCore {
@@ -215,9 +247,9 @@ function createHostCore(
     if (chatShellRouteOf(live.current.latestPathname())) return;
     const { navigate } = live.current;
     // The chat workspace's URL carries the sidebar's project filter.
-    const projectId = useWorkspaceStateStore.getState().projectFilterId;
+    const projectId = shellProjectNow();
     if (projectId) {
-      void navigate({ to: projectPath(projectId), search: {} });
+      void navigate({ to: projectChatsPath(projectId), search: {} });
     } else {
       void navigate({ to: homePath(), search: {} });
     }
@@ -251,23 +283,15 @@ function createHostCore(
     setOverlay(overlay);
   };
 
-  // Adding a project is a dialog; switching is the sidebar's project menu.
-  // Both open over the chat workspace, which is where they act.
+  // Adding a project is a dialog over the chat workspace, which is where it acts.
   const addProject = () => {
     closeOverlays();
     if (!live.current.workspace) navigateToWorkspace();
     openAddProject();
   };
-  const switchProject = () => {
-    closeOverlays();
-    if (live.current.workspace) {
-      openProjectSwitcher();
-    } else {
-      navigateToWorkspace();
-      // The workspace mounts its sidebar on the next frame.
-      requestAnimationFrame(() => openProjectSwitcher());
-    }
-  };
+  // The project selector floats over whatever page is open; picking acts
+  // from there (Projects/SwitchProjectDialog).
+  const switchProject = () => openOverlay({ kind: "project-selector" });
 
   /**
    * Act on the composer on screen; with none, go to the workspace and act on
@@ -316,6 +340,9 @@ function createHostCore(
       else void live.current.navigate({ to: settingsPath() });
     },
     onOpenWorkflows: () => void live.current.navigate({ to: workflowsPath() }),
+    // The nav is the shell's, on every page of it, not the workspace's.
+    onToggleSidebar: toggleShellNav,
+    onFocusLeftSidebar: revealShellNav,
     onOpenProject: addProject,
     onSwitchProject: switchProject,
     // The file viewer whose editor has a selection claims the event and adds
@@ -365,7 +392,12 @@ function createHostCore(
     // meaning unless a mounted layer claims it.
   }
 
-  const lookup: ShortcutHandlerLookup = (name) => layerHandler(name) ?? base[name];
+  // A host handler whose overlay the host was not given is not there at all.
+  const hostHandler = (name: string) => {
+    const overlay = OVERLAY_OF[name];
+    return overlay && !live.current.overlays[overlay] ? undefined : base[name];
+  };
+  const lookup: ShortcutHandlerLookup = (name) => layerHandler(name) ?? hostHandler(name);
   const isSuspended = () => suspensions > 0;
 
   const host: ShortcutHostApi = {
@@ -422,7 +454,14 @@ function createHostCore(
   };
 }
 
-export function ShortcutHost({ children }: { children: ReactNode }) {
+export function ShortcutHost({
+  overlays = NO_OVERLAYS,
+  children,
+}: {
+  /** The overlays it opens (ShortcutOverlays); omitted, none. */
+  overlays?: ShortcutOverlays;
+  children: ReactNode;
+}) {
   // Both read from the RENDERED matches. Mid-navigation `location` already
   // names the destination while `matches` still describe the page on screen;
   // mixing the two made a transition into the workspace look like a detour
@@ -435,7 +474,7 @@ export function ShortcutHost({ children }: { children: ReactNode }) {
   const routeIds = useRouterState({
     select: (s) => s.matches.map((match) => match.routeId).join(" "),
   });
-  const signedIn = useAuthStore((state) => state.user !== null);
+  const signedIn = useSignedIn();
   const { enabled, workspace } = shortcutScope({
     routeIds: routeIds.split(" "),
     pathname,
@@ -453,9 +492,10 @@ export function ShortcutHost({ children }: { children: ReactNode }) {
     pathname,
     navigate,
     latestPathname,
+    overlays,
   });
   useLayoutEffect(() => {
-    live.current = { enabled, workspace, pathname, navigate, latestPathname };
+    live.current = { enabled, workspace, pathname, navigate, latestPathname, overlays };
   });
 
   const [core] = useState(() => createHostCore(live, setOverlay));
@@ -472,6 +512,15 @@ export function ShortcutHost({ children }: { children: ReactNode }) {
 
   const closeOverlay = useCallback(() => setOverlay(null), []);
 
+  // openProjectSwitcher (the header, ⌘K's Switch project…) asks by event.
+  const canSwitchProject = overlays.projectSwitcher !== undefined;
+  useEffect(() => {
+    if (!enabled || !canSwitchProject) return;
+    const open = () => setOverlay({ kind: "project-selector" });
+    window.addEventListener(OPEN_PROJECT_SWITCHER_EVENT, open);
+    return () => window.removeEventListener(OPEN_PROJECT_SWITCHER_EVENT, open);
+  }, [enabled, canSwitchProject]);
+
   return (
     <ShortcutHostContext.Provider value={core.host}>
       {children}
@@ -480,6 +529,7 @@ export function ShortcutHost({ children }: { children: ReactNode }) {
           core={core}
           pathname={pathname}
           workspace={workspace}
+          overlays={overlays}
           overlay={overlay}
           onCloseOverlay={closeOverlay}
         />
@@ -493,12 +543,14 @@ function ActiveShortcuts({
   core,
   pathname,
   workspace,
+  overlays,
   overlay,
   onCloseOverlay,
 }: {
   core: HostCore;
   pathname: string;
   workspace: boolean;
+  overlays: ShortcutOverlays;
   overlay: Overlay | null;
   onCloseOverlay: () => void;
 }) {
@@ -513,20 +565,23 @@ function ActiveShortcuts({
     clearPendingSequence();
   }, [pathname, clearPendingSequence]);
 
+  const { projectSwitcher: SwitchProject, commandPalette: CommandPalette, chatSearch: ChatSearch } = overlays;
   // Warm the overlays so the first Cmd+Shift+P does not wait on a fetch.
   useEffect(() => {
-    void CommandPalette.preload?.();
-    void ChatSearch.preload?.();
-  }, []);
+    void CommandPalette?.preload?.();
+    void ChatSearch?.preload?.();
+    void SwitchProject?.preload?.();
+  }, [CommandPalette, ChatSearch, SwitchProject]);
 
   return (
     <>
       <SequenceHint pending={pendingSequence} isAvailable={core.isAvailable} />
       <Suspense fallback={null}>
-        {overlay?.kind === "palette" && (
+        {overlay?.kind === "project-selector" && SwitchProject && <SwitchProject open onClose={onCloseOverlay} />}
+        {overlay?.kind === "palette" && CommandPalette && (
           <CommandPalette isOpen inWorkspace={workspace} onClose={onCloseOverlay} />
         )}
-        {overlay?.kind === "chat-search" && (
+        {overlay?.kind === "chat-search" && ChatSearch && (
           <ChatSearch
             // A different tab is a different search: remount rather than
             // carry the last query across.

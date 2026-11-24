@@ -77,6 +77,21 @@ func DeleteAPIKey(ctx context.Context, db orm.Context, userID, provider string) 
 	return err
 }
 
+// DeleteUserAPIKeys deletes every key the user holds, and returns how many. It is the account
+// purge's: one statement, scoped to the one user.
+func DeleteUserAPIKeys(ctx context.Context, db orm.Context, userID string) (int64, error) {
+	res, err := db.Bun().NewDelete().Model((*ApiKey)(nil)).Where("user_id = ?", userID).Exec(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// UserHasAPIKey reports whether the user holds any key.
+func UserHasAPIKey(ctx context.Context, db orm.Context, userID string) (bool, error) {
+	return db.Bun().NewSelect().Model((*ApiKey)(nil)).Where("user_id = ?", userID).Exists(ctx)
+}
+
 // ApiKeyExtra carries fields on ApiKey that are NOT columns — computed
 // values, transient state, anything derived rather than stored. ApiKey is
 // embedded on ApiKeyExtra (see api_key_orm.go), so a field added here is a field on

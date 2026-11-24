@@ -22,10 +22,15 @@ import { resolveMainWorktree, resolveWorktree } from "../hooks/worktree-queries"
 import { useChatStore } from "./chatStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { useProjectStore } from "./projectStore";
-import { useWorkspaceStateStore } from "./workspaceStateStore";
+import { lastProjectOfTab } from "./workspaceStateStore";
+import { shellProjectNow } from "../lib/urlState/shellScopeStore";
 import { useWorktreeStore } from "./worktreeStore";
 import { useNewChatMachineStore } from "./newChatMachineStore";
-import { markNewChatApplied, navigateToChatUrl, navigateToNewChatUrl, newChatAppliedKey, newChatTargetKey } from "../lib/chatRoute";
+import { useNewChatAppStore } from "./newChatAppStore";
+import { prepareNewChatProjects, setNewChatAttachedProjects, setNewChatSetUpJob } from "./newChatProjectsStore";
+import { fetchProjects, getCachedProjects } from "../hooks/project-queries";
+import { chatProjectFilterIds } from "../hooks/useChatProjectFilter";
+import { attachedProjectsParam, markNewChatApplied, navigateToChatUrl, navigateToNewChatUrl, newChatAppliedKey, newChatTargetKey } from "../lib/chatRoute";
 import type { NewChatSearch } from "../routeSchemas";
 
 
@@ -97,31 +102,62 @@ export function leaveSharedChat(chatId: string): boolean {
 
 /**
  * The project a global "New chat" starts in: the sidebar's filter when it
- * names one, else the open chat's project (the context project), else the
- * last one used.
+ * names one; with a choice of several, the open chat's project (the context
+ * project) when it is one of them, else the first (the rest are attached:
+ * newChatProjectsStore); else the context project, else the last one used.
  */
 export function newChatTargetProjectId(): string | null {
-  const filter = useWorkspaceStateStore.getState().projectFilterId;
+  const filter = shellProjectNow();
   if (filter) return filter;
   const context = useProjectStore.getState().currentProject?.id;
+  const several = chatProjectFilterIds();
+  if (several.length >= 2) return context && several.includes(context) ? context : several[0];
   if (context) return context;
-  return useWorkspaceStateStore.getState().lastProjectId;
+  return lastProjectOfTab();
 }
 
-/** Where a new chat starts: its project, workspace and machine. */
+/** Where a new chat starts: its project, workspace and machine, and the app it is about. */
 export interface NewChatTarget {
   projectId?: string | null;
   worktreeId?: string | null;
   daemonId?: string | null;
+  /** The app the chat is started from (Chat.app_name, newChatAppStore); none for every other new chat. */
+  appName?: string | null;
+  /**
+   * The projects attached beside it, in the order added (`/new?with=`;
+   * newChatProjectsStore). Undefined: the defaults (the shell's choice of
+   * several), or the draft on screen's own when only its project changes.
+   */
+  attachedProjectIds?: readonly string[];
 }
 
-/** The new-chat route's search for `target` (`/new?project=&machine=&ws=`). */
+/** The new-chat route's search for `target` (`/new?project=&machine=&ws=&app=&with=`). */
 export function newChatSearchOf(target: NewChatTarget): NewChatSearch {
   return {
     project: target.projectId ?? undefined,
     machine: target.daemonId ?? undefined,
     ws: target.worktreeId ?? undefined,
+    app: target.appName ?? undefined,
+    with: target.attachedProjectIds ? attachedProjectsParam(target.attachedProjectIds) : undefined,
   };
+}
+
+/**
+ * `ids` the person can see (their projects' list), in order. A shared or
+ * edited `/new?with=` link may name a project they have no access to, or one
+ * since removed: it is dropped, never attached.
+ */
+async function visibleProjectIds(ids: readonly string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  let known = getCachedProjects();
+  if (ids.some((id) => !known.some((p) => p.id === id))) {
+    try {
+      known = await fetchProjects();
+    } catch {
+      // The list is unknown: attach only what the cache already vouches for.
+    }
+  }
+  return ids.filter((id) => known.some((p) => p.id === id));
 }
 
 /** Whether the new-chat view already shows `search`'s draft context (the `/new` route applies each one once). */
@@ -134,6 +170,8 @@ export function isNewChatApplied(search: NewChatSearch): boolean {
  * and the workspace `worktreeId` (default: the open chat's, when it is in that
  * project; else the project's main workspace). `daemonId` names the machine
  * the chat should run on (newChatMachineStore); without it the view picks.
+ * `appName` tags the chat with the app it is started from (newChatAppStore);
+ * every new chat opened without one carries none, whatever was set before.
  *
  * Goes to `/new` with that context in its search (a push from a chat, a
  * replace when the new-chat view is already on screen), so a refresh keeps
@@ -168,9 +206,22 @@ export function applyNewChat(target: NewChatTarget = {}): Promise<void> {
 async function showNewChat(target: NewChatTarget): Promise<void> {
   const isLatest = beginWorkspaceOpen();
   const projectId = target.projectId ?? newChatTargetProjectId();
+  // The projects attached beside it: the shell's choice of several, unless
+  // this is the draft on screen changing project (the project chip), which
+  // keeps what the person attached.
+  const changingDraft = !!target.projectId && useChatStore.getState().activeChatId === null;
+  if (target.attachedProjectIds !== undefined) {
+    // The URL names them (`/new?with=`): those, minus any the person cannot see.
+    setNewChatSetUpJob(() => null);
+    setNewChatAttachedProjects(projectId, await visibleProjectIds(target.attachedProjectIds));
+    if (!isLatest()) return;
+  } else {
+    prepareNewChatProjects(projectId, chatProjectFilterIds(), changingDraft);
+  }
   if (projectId && target.daemonId) {
     useNewChatMachineStore.getState().offer({ projectId, daemonId: target.daemonId });
   }
+  useNewChatAppStore.getState().set(projectId && target.appName ? { projectId, appName: target.appName } : null);
   const projectStore = useProjectStore.getState();
   let contextProjectId = projectStore.currentProject?.id;
   const activeChatId = useChatStore.getState().activeChatId;
@@ -183,7 +234,7 @@ async function showNewChat(target: NewChatTarget): Promise<void> {
     if (!isCurrent()) return;
     if (!project) throw new ChatProjectUnavailableError();
     const selected = useProjectStore.getState().selectProject(project, {
-      restoreChat: false,
+      opensChat: true,
       restoreWorkspace: false,
       isCurrent: isLatest,
     });

@@ -45,7 +45,8 @@ const PAGES: ConsolePage[] = [
   { kind: "dashboard", dashKind: "workspace", key: "checkout latency/2" },
   { kind: "storage" },
   { kind: "data" },
-  { kind: "users" },
+  { kind: "auth" },
+  { kind: "auth", tab: "sign-in" },
   { kind: "environments" },
   { kind: "environment", env: "prod" },
   { kind: "environment", env: "pr 12/x" },
@@ -67,7 +68,10 @@ describe("console paths", () => {
     expect(consolePath("control-plane", { kind: "workload", env: "prod", name: "admin-server" })).toBe("/forge/p/control-plane/workloads/prod/admin-server");
     expect(consolePath("control-plane", { kind: "storage" })).toBe("/forge/p/control-plane/storage");
     expect(consolePath("control-plane", { kind: "data" })).toBe("/forge/p/control-plane/data");
-    expect(consolePath("control-plane", { kind: "users" })).toBe("/forge/p/control-plane/users");
+    // The old Users page is Auth's first tab (U6d): its path is Auth's.
+    expect(consolePath("control-plane", { kind: "users" })).toBe("/forge/p/control-plane/auth");
+    expect(consolePath("control-plane", { kind: "auth" })).toBe("/forge/p/control-plane/auth");
+    expect(consolePath("control-plane", { kind: "auth", tab: "sign-in" })).toBe("/forge/p/control-plane/auth/sign-in");
   });
 
   it("pins a workload's page to its environment, as an environment's page is", () => {
@@ -82,13 +86,17 @@ describe("console paths", () => {
     expect(consolePageOf(consolePath("my shop", page))).toEqual({ project: "my shop", page });
   });
 
+  it("reads /observability as Observability's own Overview (U6e), and builds it back", () => {
+    expect(consolePageOf("/forge/p/x/observability")).toEqual({ project: "x", page: { kind: "obs-overview" } });
+    expect(consolePath("x", { kind: "obs-overview" })).toBe("/forge/p/x/observability");
+  });
+
   it("knows a path outside the console, or a page that does not exist, is not one", () => {
     expect(consolePageOf("/forge")).toBeNull();
     expect(consolePageOf("/forge/env/prod")).toBeNull();
     expect(consolePageOf("/forge/p/x/observability/workloads")).toBeNull();
     expect(consolePageOf("/forge/p/x/nope")).toBeNull();
     // The retired pages are redirects, not pages.
-    expect(consolePageOf("/forge/p/x/observability")).toBeNull();
     expect(consolePageOf("/forge/p/x/monitoring")).toBeNull();
     expect(consolePageOf("/forge/p/x/settings")).toBeNull();
     // A dashboard is addressed by its kind: a template is no page, and nothing nests below a dashboard.

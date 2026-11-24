@@ -9,6 +9,7 @@ package workersetup
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"time"
 
@@ -21,10 +22,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/llmusage"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/orgmove"
+	"github.com/reliant-labs/reliant/internal/providerbackoff"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -38,13 +42,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	"github.com/reliant-labs/reliant/internal/workflowcheck"
 
-	"github.com/reliant-labs/reliant/internal/authz"
-	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
 
 // maxHeartbeatThrottleInterval is worker.Options.MaxHeartbeatThrottleInterval.
@@ -66,6 +71,17 @@ type Config struct {
 	// Required dependencies
 	TemporalClient client.Client
 	Database       *db.Repo
+	// Checks records what a workflow's `check:` fire and run activities
+	// report (workflowcheck), never writing GitHub; nil builds the
+	// record-only one over Database.
+	Checks workflowcheck.Service
+	// ProviderAccounts holds the accounts, limit state and thread assignments the call_llm
+	// routing reads and writes (credentials/provideraccounts).
+	ProviderAccounts AccountStore
+	// Connections holds the saved logins the trigger pollers read (credentials/connectionvault).
+	Connections TriggerConnections
+	// OrgAccounts holds the org key notices the sweep claims and confirms (credentials/orgaccounts).
+	OrgAccounts    OrgKeyNoticeStore
 	StreamingHub   streaming.StreamingHub
 	ToolsFactory   *tools.ToolsFactory
 	ToolExecutor   toolexec.ToolExecutor
@@ -129,6 +145,10 @@ type Config struct {
 	// SecretResolver resolves declared secrets for the step activities (a
 	// command, a request); nil refuses every step that uses one.
 	SecretResolver handlers.SecretResolver
+
+	// StepKeys mints and revokes the LLM gateway step key a run node with
+	// llm_gateway runs with (the control plane); nil refuses every such node.
+	StepKeys handlers.StepKeyIssuer
 
 	// AllowPrivateEgress is ServerProcessConfig.network.allow_private_egress:
 	// whether a user-supplied model endpoint may resolve to a private,
@@ -245,13 +265,17 @@ func sdkClient(c client.Client) client.Client {
 
 func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// Create activity registry
-	registry := v2.NewActivityRegistry(cfg.Database)
+	var workflows v2.WorkflowRows
+	if cfg.Database != nil {
+		workflows = store.NewWorkflowExtStore(cfg.Database.ORM())
+	}
+	registry := v2.NewActivityRegistry(v2.ActivityRegistryDeps{Store: cfg.Database, Workflows: workflows})
 	if cfg.StopNudges != nil {
 		registry.SetStopNudges(cfg.StopNudges)
 	}
 
 	// Create threads service
-	threadsService := threads.NewService(cfg.Database)
+	threadsService := threads.New(threads.Deps{Repo: cfg.Database, Messages: store.NewMessageExtStore(cfg.Database.ORM()), Senders: store.NewThreadExtStore(cfg.Database.ORM())})
 
 	// Create activity dependencies
 	activityDeps := v2activities.NewActivities(
@@ -277,9 +301,25 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	activityDeps.Connections = cfg.IntegrationCredentials
 	activityDeps.HostedActions = cfg.HostedActions
 	activityDeps.SecretResolver = cfg.SecretResolver
+	activityDeps.StepKeys = cfg.StepKeys
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
-	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))
+	if cfg.Database != nil {
+		usage, err := llmusage.NewInstrumented(llmusage.Deps{Ledger: store.NewLlmCallUsageExtStore(cfg.Database.ORM()), Tools: store.NewToolCallUsageExtStore(cfg.Database.ORM()), Tx: cfg.Database})
+		if err != nil {
+			return nil, nil, fmt.Errorf("llm usage ledger: %w", err)
+		}
+		activityDeps.LLMUsage = usage
+		activityDeps.ToolUsage = usage
+		backoff, err := providerbackoff.NewInstrumented(providerbackoff.Deps{Markers: store.NewProviderBackoffExtStore(cfg.Database.ORM()), Tx: cfg.Database, Activity: cfg.Database})
+		if err != nil {
+			return nil, nil, fmt.Errorf("provider backoff markers: %w", err)
+		}
+		activityDeps.ProviderBackoff = backoff
+	}
+	if cfg.ProviderAccounts != nil && cfg.Database != nil {
+		activityDeps.AccountRouting = accountRouting(cfg.ProviderAccounts, cfg.OrgAccounts, cfg.Database, cfg.AccountLimits, orgKeyNoticeQueueFor(cfg))
+	}
 
 	// Register all activities
 	v2activities.RegisterAll(registry, activityDeps)
@@ -328,9 +368,11 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// A workflow's `check:` (workflowcheck): an event fire opens the check
 	// and the run reports its start and end through these activities. They
 	// only record; the worker's check syncer writes GitHub.
-	var checks workflowcheck.Service
+	checks := cfg.Checks
 	if cfg.Database != nil {
-		checks = workflowcheck.NewInstrumented(workflowcheck.Deps{Store: cfg.Database})
+		if checks == nil {
+			checks = workflowcheck.NewInstrumented(workflowcheck.Deps{Store: store.NewWorkflowCheckRunExtStore(cfg.Database.ORM())})
+		}
 		reports := workflowcheck.Activities{Service: checks}
 		w.RegisterActivityWithOptions(reports.Started, activity.RegisterOptions{Name: workflowcheck.StartedActivityName})
 		w.RegisterActivityWithOptions(reports.Ended, activity.RegisterOptions{Name: workflowcheck.EndedActivityName})
@@ -339,41 +381,44 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		// {labels: …}` places its run (or a node) through this, on every
 		// worker with a database: a run is not a trigger fire, so it needs
 		// no launcher.
-		runs := machinepool.NewRunPlacer(cfg.Database)
+		poolStore := store.NewMachinePoolExtStore(cfg.Database.ORM())
+		placements := store.NewRunMachinePlacementExtStore(cfg.Database.ORM())
+		runs := machinepool.NewRunPlacer(poolStore, placements, cfg.Database)
 		if w, ok := cfg.DaemonRouter.(toolexec.RunWaker); ok {
 			runs = runs.WithWaker(poolMemberWaker{w: w})
 		}
-		w.RegisterActivityWithOptions(machinepool.PlaceRunActivity{Chats: cfg.Database, Placer: runs}.Execute,
+		w.RegisterActivityWithOptions(machinepool.PlaceRunActivity{Chats: placements, Placer: runs}.Execute,
 			activity.RegisterOptions{Name: machinepool.PlaceRunActivityName})
 	}
 	if cfg.TriggerPollers != nil {
 		if repo := cfg.Database; repo != nil {
 			poller := triggers.NewTriggerPoller(
-				triggerPollRepo{Repo: repo, connections: repo.Connections()},
+				triggerPollRepo{Stores: triggers.NewStores(repo), connections: cfg.Connections},
 				cfg.TriggerPollers,
-				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: repo}),
+				triggers.NewIntake(triggers.NewStores(repo), cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}),
 				cfg.TriggerCredentials,
 			).WithAutoPause(triggerAutoPause(cfg)).WithDeliveryInbox(cfg.TriggerPollInbox)
 			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
 		}
 	}
-	if cfg.TriggerLauncher != nil {
+	if cfg.TriggerLauncher != nil && cfg.Database != nil {
 		// Places pool-bound triggers' runs on a member (internal/machinepool).
-		pools := machinepool.NewPlacer(cfg.Database)
+		poolStore := store.NewMachinePoolExtStore(cfg.Database.ORM())
+		pools := machinepool.NewPlacer(poolStore)
 		if w, ok := cfg.DaemonRouter.(toolexec.RunWaker); ok {
 			pools = pools.WithWaker(poolMemberWaker{w: w})
 		}
 		pause := triggerAutoPause(cfg)
 		w.RegisterActivityWithOptions(
-			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).Fire,
+			triggers.NewFirer(triggers.NewStores(cfg.Database), cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).Fire,
 			activity.RegisterOptions{Name: triggers.FireActivityName},
 		)
 		w.RegisterActivityWithOptions(
-			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).WithChecks(checks).Fire,
+			triggers.NewEventFirer(triggers.NewStores(cfg.Database), cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).WithChecks(checks).Fire,
 			activity.RegisterOptions{Name: triggers.EventFireActivityName},
 		)
 	} else {
-		logging.Warn("no trigger launcher configured; this worker will not execute scheduled fires")
+		logging.Warn("no trigger launcher and database configured; this worker will not execute scheduled fires")
 	}
 
 	// A rejected org key's email to the org's owners and admins: always
@@ -395,7 +440,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 	pauses := pauseNotices{admins: pauseAdmins}
 	if cfg.Database != nil {
-		pauses.store = cfg.Database
+		pauses.store = newPauseStores(cfg.Database, cfg.Database.ORM())
 	}
 	w.RegisterActivityWithOptions(pauses.Notify, activity.RegisterOptions{
 		Name: NotifyOrgAutomationNoOrgAccountActivityName,
@@ -428,7 +473,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	if cfg.TriggerLauncher != nil {
 		dispatcher := workflowevent.NewDispatcher(cfg.Database, cfg.TriggerLauncher, nil).WithWorkflows(declarations).WithAutoPause(triggerAutoPause(cfg))
 		w.RegisterActivityWithOptions(
-			workflowevent.NewActivity(cfg.Database, dispatcher).Dispatch,
+			workflowevent.NewActivity(store.NewRunEventExtStore(cfg.Database.ORM()), dispatcher).Dispatch,
 			activity.RegisterOptions{Name: workflowevent.DispatchActivityName},
 		)
 	}
@@ -437,11 +482,9 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// Rejected org keys whose notice never started (a Temporal outage at the
 	// rejection), and paused automations whose email was never delivered, are
 	// started here, where the notices' workflows run.
-	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil && cfg.Database != nil {
+	if sweeps := noticeSweeps(cfg, orgKeyNoticeQueueFor(cfg)); len(sweeps) > 0 {
 		out.background = append(out.background, func(ctx context.Context) {
-			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval,
-				func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.Database, q) },
-				func(ctx context.Context) { sweepPauseNotices(ctx, cfg.Database, q) })
+			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval, sweeps...)
 		})
 	}
 	return out, registry, nil
@@ -567,7 +610,7 @@ func triggerAutoPause(cfg *Config) *triggers.AutoPause {
 	pause := triggers.NewAutoPause(cfg.Database, schedules)
 	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil {
 		// A pause for want of an org account emails the org's admins.
-		pause = pause.WithNoOrgAccountPause(noOrgAccountPauseNotifier(cfg.Database, q))
+		pause = pause.WithNoOrgAccountPause(noOrgAccountPauseNotifier(newPauseStores(cfg.Database, cfg.Database.ORM()), q))
 	}
 	return pause
 }
@@ -599,9 +642,15 @@ func (p poolMemberWaker) WakeMember(ctx context.Context, userID, daemonID string
 	return err
 }
 
+// TriggerConnections is the one read of a saved login the trigger pollers make.
+// credentials/connectionvault.Service satisfies it.
+type TriggerConnections interface {
+	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
+}
+
 type triggerPollRepo struct {
-	*db.Repo
-	connections db.ConnectionStore
+	triggers.Stores
+	connections TriggerConnections
 }
 
 func (r triggerPollRepo) GetConnection(ctx context.Context, userID, id string) (*core.Connection, error) {

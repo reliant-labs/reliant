@@ -122,7 +122,8 @@ export function BarList({ panel, data, unit, keys, trend, compact = false, limit
                 </span>
               </span>
               {sparkline && (
-                <span className="hidden w-16 shrink-0 @md:block" aria-hidden="true">
+                // Not aria-hidden: the trend is focusable (it reads each sample from the keyboard) and names itself.
+                <span className="hidden w-16 shrink-0 @md:block">
                   {line && line.values.filter((v) => v !== null).length > 1 ? (
                     <UPlotChart height={18} timestamps={line.timestamps} series={[{ label, values: line.values, color: token }]} unit={unit} label={`${label}, over the window`} compact />
                   ) : null}

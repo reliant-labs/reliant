@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
@@ -109,7 +110,7 @@ func newReclaimEnv(t *testing.T) *reclaimEnv {
 	require.NoError(t, repo.UpsertProjectDaemon(e.ctx, e.project.ID, e.daemon, projectPath, nil))
 	require.NoError(t, repo.UpsertDaemonAttachment(e.ctx, &db.DaemonAttachment{DaemonID: e.daemon, UserID: userID, Source: db.DaemonAttachmentSourceInbound}))
 
-	e.sweeper = worktreesweep.New(repo, e.router)
+	e.sweeper = worktreesweep.New(worktreesweep.NewStores(repo, store.NewWorktreeExtStore(repo.ORM())), e.router)
 	e.svc = newWorktreeService(t, repo, e.router, e.sweeper)
 	return e
 }
@@ -229,7 +230,7 @@ func TestRecreate_AppliesTheSavedSnapshotAndKeepsRefsUntilThen(t *testing.T) {
 	require.Equal(t, "dirty", held.CleanupMetadata.HeldReason)
 
 	// A confirmed clean-up saves and removes it.
-	results, _, err := e.sweeper.Cleanup(e.ctx, e.repo, e.userID, e.daemon, []string{wt.ID})
+	results, _, err := e.sweeper.Cleanup(e.ctx, worktreesweep.NewStores(e.repo, store.NewWorktreeExtStore(e.repo.ORM())), e.userID, e.daemon, []string{wt.ID})
 	require.NoError(t, err)
 	require.Equal(t, worktreesweep.CleanupRemoved, results[0].Outcome, "%+v", results[0])
 	require.False(t, exists(path))
@@ -339,7 +340,7 @@ func TestRecreate_RestoresEveryRepoOfAMultiRepoWorkspace(t *testing.T) {
 		age(t, filepath.Join(ws, n))
 	}
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
-	results, _, err := e.sweeper.Cleanup(e.ctx, e.repo, e.userID, e.daemon, []string{wt.ID})
+	results, _, err := e.sweeper.Cleanup(e.ctx, worktreesweep.NewStores(e.repo, store.NewWorktreeExtStore(e.repo.ORM())), e.userID, e.daemon, []string{wt.ID})
 	require.NoError(t, err)
 	require.Equal(t, worktreesweep.CleanupRemoved, results[0].Outcome, "%+v", results[0])
 	require.False(t, exists(filepath.Join(ws, "api")))
@@ -382,7 +383,7 @@ func TestRecreate_AFailedApplyKeepsTheSnapshotRefs(t *testing.T) {
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
 	age(t, path)
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
-	results, _, err := e.sweeper.Cleanup(e.ctx, e.repo, e.userID, e.daemon, []string{wt.ID})
+	results, _, err := e.sweeper.Cleanup(e.ctx, worktreesweep.NewStores(e.repo, store.NewWorktreeExtStore(e.repo.ORM())), e.userID, e.daemon, []string{wt.ID})
 	require.NoError(t, err)
 	require.Equal(t, worktreesweep.CleanupRemoved, results[0].Outcome)
 
@@ -413,7 +414,7 @@ func TestRecreate_BranchMovedIsReportedAndKeepsTheRefs(t *testing.T) {
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
 	age(t, path)
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
-	results, _, err := e.sweeper.Cleanup(e.ctx, e.repo, e.userID, e.daemon, []string{wt.ID})
+	results, _, err := e.sweeper.Cleanup(e.ctx, worktreesweep.NewStores(e.repo, store.NewWorktreeExtStore(e.repo.ORM())), e.userID, e.daemon, []string{wt.ID})
 	require.NoError(t, err)
 	require.Equal(t, worktreesweep.CleanupRemoved, results[0].Outcome)
 
@@ -541,7 +542,7 @@ func TestRecreate_AppliedSnapshotKeepsSavedCommitRefs(t *testing.T) {
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
 	age(t, path)
 	require.NoError(t, e.sweeper.Sweep(e.ctx)) // dirty: held
-	results, _, err := e.sweeper.Cleanup(e.ctx, e.repo, e.userID, e.daemon, []string{wt.ID})
+	results, _, err := e.sweeper.Cleanup(e.ctx, worktreesweep.NewStores(e.repo, store.NewWorktreeExtStore(e.repo.ORM())), e.userID, e.daemon, []string{wt.ID})
 	require.NoError(t, err)
 	require.Equal(t, worktreesweep.CleanupRemoved, results[0].Outcome, "%+v", results[0])
 	gone, _ := e.repo.GetWorktree(e.ctx, wt.ID)

@@ -821,10 +821,10 @@ const file_reliant_v1_repo_proto_rawDesc = "" +
 	"\x06behind\x18\t \x01(\x05R\x06behind\x12\x1d\n" +
 	"\n" +
 	"remote_url\x18\n" +
-	" \x01(\tR\tremoteUrl2\x89\x04\n" +
+	" \x01(\tR\tremoteUrl2\x8f\x04\n" +
 	"\vRepoService\x12Y\n" +
-	"\rDiscoverRepos\x12 .reliant.v1.DiscoverReposRequest\x1a!.reliant.v1.DiscoverReposResponse\"\x03\x90\x02\x01\x12J\n" +
-	"\tListRepos\x12\x1c.reliant.v1.ListReposRequest\x1a\x1d.reliant.v1.ListReposResponse\"\x00\x12\x89\x01\n" +
+	"\rDiscoverRepos\x12 .reliant.v1.DiscoverReposRequest\x1a!.reliant.v1.DiscoverReposResponse\"\x03\x90\x02\x01\x12M\n" +
+	"\tListRepos\x12\x1c.reliant.v1.ListReposRequest\x1a\x1d.reliant.v1.ListReposResponse\"\x03\x90\x02\x01\x12\x89\x01\n" +
 	"\aAddRepo\x12\x1a.reliant.v1.AddRepoRequest\x1a\x1b.reliant.v1.AddRepoResponse\"E\xa2\xbb\x18A:?\n" +
 	"\x03add\x12,\n" +
 	"\x04repo\x12\x10response.repo.id\x1a\x12response.repo.name*\n" +
@@ -832,8 +832,8 @@ const file_reliant_v1_repo_proto_rawDesc = "" +
 	"\n" +
 	"RemoveRepo\x12\x1d.reliant.v1.RemoveRepoRequest\x1a\x1e.reliant.v1.RemoveRepoResponse\"\x1f\xa2\xbb\x18\x1b:\x19\n" +
 	"\x06remove\x12\x0f\n" +
-	"\x04repo\x12\arepo_id\x12Y\n" +
-	"\x0eGetRepoGitInfo\x12!.reliant.v1.GetRepoGitInfoRequest\x1a\".reliant.v1.GetRepoGitInfoResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x04repo\x12\arepo_id\x12\\\n" +
+	"\x0eGetRepoGitInfo\x12!.reliant.v1.GetRepoGitInfoRequest\x1a\".reliant.v1.GetRepoGitInfoResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_repo_proto_rawDescOnce sync.Once

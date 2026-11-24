@@ -11,6 +11,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
 
@@ -21,7 +22,7 @@ func TestMessageServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestMessage(t, WithMessageDeps(Deps{Repo: repo}))
+	svc := NewTestMessage(t, WithMessageDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Senders: &MockSenders{}}))
 	viewertest.RunService(t, f, svc, "reliant.v1.MessageService", nil)
 }
 
@@ -30,7 +31,7 @@ func TestGetMessageElidesResultsForAViewer(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestMessage(t, WithMessageDeps(Deps{Repo: repo}))
+	svc := NewTestMessage(t, WithMessageDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Senders: &MockSenders{}}))
 	get := func(ctx context.Context) *reliantv1.ContentBlock {
 		resp, err := svc.GetMessage(ctx, connect.NewRequest(&reliantv1.GetMessageRequest{MessageId: f.Transcript.ToolMessageID}))
 		if err != nil {
@@ -59,7 +60,7 @@ func TestGetMessageDecidesViewerAccessOnce(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestMessage(t, WithMessageDeps(Deps{Repo: repo}))
+	svc := NewTestMessage(t, WithMessageDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Senders: &MockSenders{}}))
 	for _, after := range []error{nil, errors.New("control plane down")} {
 		m := &viewertest.FirstAnswerOnly{First: f.Membership, After: after}
 		resp, err := svc.GetMessage(f.ContextWith(f.ViewerID, m), connect.NewRequest(&reliantv1.GetMessageRequest{MessageId: f.Transcript.ToolMessageID}))
@@ -85,7 +86,7 @@ func TestGetMessageRefusesAViewerAHiddenMessage(t *testing.T) {
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
 	hidden := f.Hidden
-	svc := NewTestMessage(t, WithMessageDeps(Deps{Repo: repo}))
+	svc := NewTestMessage(t, WithMessageDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Senders: &MockSenders{}}))
 	req := connect.NewRequest(&reliantv1.GetMessageRequest{MessageId: hidden.MessageID})
 
 	_, err := svc.GetMessage(f.Viewer, req)

@@ -553,7 +553,7 @@ func (*RemoveClusterResponse) Descriptor() ([]byte, []int) {
 // ConnectClusterRequest declares a cluster by address.
 //
 // ADDRESSED BY NAME, NOT BY ID, and that is what makes it idempotent in the
-// way `forge cluster connect <name>` needs. A caller running from a checkout
+// way `forge cloud cluster connect <name>` needs. A caller running from a checkout
 // knows the name it declared; it does not know the uuid we minted, and
 // requiring one would mean every connect is preceded by a list.
 type ConnectClusterRequest struct {
@@ -577,7 +577,7 @@ type ConnectClusterRequest struct {
 	// the alternative is sending a standing credential to whatever answers that
 	// address.
 	CaPem string `protobuf:"bytes,4,opt,name=ca_pem,json=caPem,proto3" json:"ca_pem,omitempty"`
-	// The scoped ServiceAccount token `forge cluster connect` minted in the
+	// The scoped ServiceAccount token `forge cloud cluster connect` minted in the
 	// target cluster. REQUIRED: a request without one is InvalidArgument.
 	//
 	// WRITE-ONLY. It is NEVER RETURNED by any RPC on this service — there is no
@@ -597,7 +597,7 @@ type ConnectClusterRequest struct {
 	// projected token an External Secrets Operator in the cluster logs in with.
 	// See ClusterIssuerRegistration.
 	//
-	// PRESENCE IS THE SWITCH, because an older `forge cluster connect` sends no
+	// PRESENCE IS THE SWITCH, because an older `forge cloud cluster connect` sends no
 	// issuer and re-running it must not silently withdraw one:
 	//   absent          the registration is left as it is;
 	//   present         it is replaced by this one;
@@ -997,11 +997,11 @@ const file_services_cluster_v1_cluster_proto_rawDesc = "" +
 	"\x1eCLUSTER_CONNECTION_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aCLUSTER_CONNECTION_WAITING\x10\x01\x12 \n" +
 	"\x1cCLUSTER_CONNECTION_CONNECTED\x10\x02\x12\x1c\n" +
-	"\x18CLUSTER_CONNECTION_STALE\x10\x032\x87\x03\n" +
-	"\x0eClusterService\x12[\n" +
-	"\fListClusters\x12$.controlplane.v1.ListClustersRequest\x1a%.controlplane.v1.ListClustersResponse\x12U\n" +
+	"\x18CLUSTER_CONNECTION_STALE\x10\x032\x91\x03\n" +
+	"\x0eClusterService\x12`\n" +
+	"\fListClusters\x12$.controlplane.v1.ListClustersRequest\x1a%.controlplane.v1.ListClustersResponse\"\x03\x90\x02\x01\x12Z\n" +
 	"\n" +
-	"GetCluster\x12\".controlplane.v1.GetClusterRequest\x1a#.controlplane.v1.GetClusterResponse\x12^\n" +
+	"GetCluster\x12\".controlplane.v1.GetClusterRequest\x1a#.controlplane.v1.GetClusterResponse\"\x03\x90\x02\x01\x12^\n" +
 	"\rRemoveCluster\x12%.controlplane.v1.RemoveClusterRequest\x1a&.controlplane.v1.RemoveClusterResponse\x12a\n" +
 	"\x0eConnectCluster\x12&.controlplane.v1.ConnectClusterRequest\x1a'.controlplane.v1.ConnectClusterResponseB\xd5\x01\n" +
 	"\x13com.controlplane.v1B\fClusterProtoP\x01ZSgithub.com/reliant-labs/reliant/gen/controlplane/services/cluster/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"

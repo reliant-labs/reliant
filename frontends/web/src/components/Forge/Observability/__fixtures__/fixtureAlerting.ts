@@ -7,7 +7,7 @@
  *
  * It is stateful per instance, like the real service: creating a silence or a
  * receiver, expiring one, sending a test or marking notifications read is
- * visible to the next read, so a test or the preview can walk a whole flow.
+ * visible to the next read, so a test can walk a whole flow.
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";

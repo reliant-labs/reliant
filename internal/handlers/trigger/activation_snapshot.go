@@ -61,14 +61,12 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 	// checked it is the org's, and the definition (in the approval hash)
 	// names it.
 	if def.GetConnectionId() != "" && !ghdelegated.IsOrgAppConnectionID(def.GetConnectionId()) {
-		if source := s.connections(); source != nil {
-			c, err := source.GetConnection(ctx, user, def.GetConnectionId())
-			if err != nil {
-				return nil, svcerr.Wrap(err)
-			}
-			snap.Connection = c
-			snap.Capabilities.Add(connectionCapabilities(c)...)
+		c, err := s.deps.Repo.GetConnection(ctx, user, def.GetConnectionId())
+		if err != nil {
+			return nil, svcerr.Wrap(err)
 		}
+		snap.Connection = c
+		snap.Capabilities.Add(connectionCapabilities(c)...)
 	}
 	// Raw values only enter the memory-only digest, never its safe summary.
 	loaded := map[string]*pb.Workflow{}

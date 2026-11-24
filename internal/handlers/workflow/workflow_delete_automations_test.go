@@ -6,10 +6,11 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/orm"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -31,14 +32,14 @@ func (r *retirer) RetireDeletedTriggers(_ context.Context, deleted []*core.Trigg
 // function and, as a transaction does, discards the deletions it made when the
 // function fails.
 type automationsStore struct {
-	*workflow.MockRepository
+	*draftsStore
 	triggers []*core.Trigger
 	deleted  []string
 }
 
 func newAutomationsStore(slug string, triggers ...*core.Trigger) *automationsStore {
-	s := &automationsStore{MockRepository: draftsRepo(callerDraftNoT(slug)), triggers: triggers}
-	s.DeleteWorkflowDraftBySlugFunc = func(context.Context, string, string) error { return nil }
+	s := &automationsStore{draftsStore: draftsRepo(callerDraftNoT(slug)), triggers: triggers}
+	s.Drafts.DeleteWorkflowDraftBySlugFunc = func(context.Context, string, string) error { return nil }
 	s.ListTriggersFunc = func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return s.triggers, nil }
 	s.DeleteTriggerFunc = func(_ context.Context, id string) error {
 		s.deleted = append(s.deleted, id)
@@ -62,11 +63,11 @@ func automation(id, ref, project string) *core.Trigger {
 
 func deleteFlow(t *testing.T, store *automationsStore, r *retirer, name string) (*connect.Response[pb.DeleteWorkflowResponse], error) {
 	t.Helper()
-	deps := workflow.Deps{Repo: store}
+	deps := store.deps()
 	if r != nil {
 		deps.Automations = r
 	}
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(deps))
+	svc := workflow.NewTestWorkflow(t, withDeps(deps))
 	return svc.DeleteWorkflow(workflow.AuthedContext(t), connect.NewRequest(&pb.DeleteWorkflowRequest{ProjectId: "p-1", Name: name}))
 }
 
@@ -89,7 +90,7 @@ func TestDeleteWorkflow_DeletesItsAutomationsAcrossProjects(t *testing.T) {
 	assert.Contains(t, resp.Msg.GetMessage(), "3 automations")
 	assert.ElementsMatch(t, []string{"a1", "a2", "a3"}, store.deleted, "only the automations that ran the deleted user workflow go")
 	assert.Len(t, r.retired, 3, "their schedules and access are retired")
-	assert.Len(t, store.Calls("DeleteWorkflowDraftBySlug"), 1)
+	assert.Len(t, store.Drafts.Calls("DeleteWorkflowDraftBySlug"), 1)
 }
 
 func TestDeleteWorkflow_WithNoAutomationsRetiresNothing(t *testing.T) {
@@ -131,7 +132,7 @@ func TestDeleteWorkflow_IsAllOrNothing(t *testing.T) {
 	t.Parallel()
 	slug := workflowref.Slug("pr-review")
 	store := newAutomationsStore(slug, automation("a1", "pr-review", "p-1"))
-	store.DeleteWorkflowDraftBySlugFunc = func(context.Context, string, string) error { return errors.New("db down") }
+	store.Drafts.DeleteWorkflowDraftBySlugFunc = func(context.Context, string, string) error { return errors.New("db down") }
 	r := &retirer{}
 
 	_, err := deleteFlow(t, store, r, "pr-review")

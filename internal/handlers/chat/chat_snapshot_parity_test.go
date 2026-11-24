@@ -17,11 +17,13 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/handlers/streaming"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -99,7 +101,7 @@ func TestChatSnapshot_MatchesListMessagesEnrichment(t *testing.T) {
 	require.NotNil(t, fromSnapshot)
 
 	recent := int32(50)
-	resp, err := (&Service{deps: Deps{Repo: repo}}).ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
+	resp, err := (&Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}}).ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
 		ChatId: chatID, Recent: &recent,
 	}))
 	require.NoError(t, err)
@@ -115,13 +117,19 @@ func TestChatSnapshot_MatchesListMessagesEnrichment(t *testing.T) {
 // chatSnapshotOverStream subscribes userID to chatID and returns the first
 // chat snapshot the streaming service sends: the snapshot a client receives,
 // read the way the client reads it.
-func chatSnapshotOverStream(t *testing.T, repo streaming.Repository, userID, chatID string) *reliantv1.ChatSyncSnapshot {
+func chatSnapshotOverStream(t *testing.T, repo *db.Repo, userID, chatID string) *reliantv1.ChatSyncSnapshot {
 	t.Helper()
 
 	svc, err := streaming.New(streaming.Deps{
-		Logger: slog.Default(),
-		Config: &typedconfig.Config{},
-		Repo:   repo,
+		Logger:     slog.Default(),
+		Config:     &typedconfig.Config{},
+		Repo:       repo,
+		Senders:    store.NewThreadExtStore(repo.ORM()),
+		Heads:      store.NewChatUpdateExtStore(repo.ORM()),
+		UserLog:    store.NewUserUpdateExtStore(repo.ORM()),
+		OrgFeed:    store.NewOrgUpdateExtStore(repo.ORM()),
+		Siblings:   store.NewMessageExtStore(repo.ORM()),
+		SpawnCalls: store.NewToolCallExtStore(repo.ORM()),
 	})
 	require.NoError(t, err)
 

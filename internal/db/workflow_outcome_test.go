@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestSetWorkflowOutcomeRoundTrips proves the verdict survives the schema: the
@@ -34,7 +36,7 @@ func TestSetWorkflowOutcomeRoundTrips(t *testing.T) {
 		t.Fatalf("a fresh workflow must declare no outcome, got %q", *got.Outcome)
 	}
 
-	if err := repo.SetWorkflowOutcome(ctx, "wf-outcome", "failure"); err != nil {
+	if err := store.SetWorkflowOutcome(ctx, repo.ORM(), "wf-outcome", "failure"); err != nil {
 		t.Fatalf("set outcome: %v", err)
 	}
 	if err := repo.UpdateWorkflowStatus(ctx, "wf-outcome", Completed()); err != nil {

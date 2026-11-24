@@ -137,10 +137,10 @@ const file_reliant_v1_message_proto_rawDesc = "" +
 	"toolBodies\x88\x01\x01B\x0e\n" +
 	"\f_tool_bodies\"C\n" +
 	"\x12GetMessageResponse\x12-\n" +
-	"\amessage\x18\x01 \x01(\v2\x13.reliant.v1.MessageR\amessage2_\n" +
-	"\x0eMessageService\x12M\n" +
+	"\amessage\x18\x01 \x01(\v2\x13.reliant.v1.MessageR\amessage2b\n" +
+	"\x0eMessageService\x12P\n" +
 	"\n" +
-	"GetMessage\x12\x1d.reliant.v1.GetMessageRequest\x1a\x1e.reliant.v1.GetMessageResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"GetMessage\x12\x1d.reliant.v1.GetMessageRequest\x1a\x1e.reliant.v1.GetMessageResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_message_proto_rawDescOnce sync.Once

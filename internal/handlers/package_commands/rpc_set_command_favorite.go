@@ -31,16 +31,16 @@ func (s *Service) SetCommandFavorite(
 	}
 
 	// Verify project exists and belongs to user
-	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+	_, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Add or remove favorite based on is_favorite flag
 	if req.Msg.IsFavorite {
-		err = s.deps.Repo.AddCommandFavorite(ctx, userID, projectID, commandKey)
+		err = s.deps.Favorites.AddCommandFavorite(ctx, userID, projectID, commandKey)
 	} else {
-		err = s.deps.Repo.RemoveCommandFavorite(ctx, userID, projectID, commandKey)
+		err = s.deps.Favorites.RemoveCommandFavorite(ctx, userID, projectID, commandKey)
 	}
 
 	if err != nil {

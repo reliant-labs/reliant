@@ -3,6 +3,7 @@ package daemon_registry_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -19,7 +20,7 @@ func TestSetMachineLabels(t *testing.T) {
 	t.Parallel()
 	var stored map[string]string
 	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{
-		Repo: &daemon_registry.MockRepository{
+		Pools: &daemon_registry.MockPools{
 			SetDaemonLabelsFunc: func(_ context.Context, userID, id string, labels map[string]string) (bool, error) {
 				if userID != "test-user" || id != "d-1" {
 					return false, nil
@@ -27,6 +28,8 @@ func TestSetMachineLabels(t *testing.T) {
 				stored = labels
 				return true, nil
 			},
+		},
+		Repo: &daemon_registry.MockRepository{
 			GetDaemonFunc: func(context.Context, string) (*db.Daemon, error) {
 				return &db.Daemon{ID: "d-1", UserID: "test-user", Labels: stored}, nil
 			},
@@ -53,8 +56,8 @@ func TestSetMachineLabels(t *testing.T) {
 func TestPutAndListMachinePools(t *testing.T) {
 	t.Parallel()
 	var put *core.MachinePool
-	repo := &daemon_registry.MockRepository{
-		PutMachinePoolFunc: func(_ context.Context, p *core.MachinePool) (*core.MachinePool, error) {
+	pools := &daemon_registry.MockPools{
+		PutMachinePoolFunc: func(_ context.Context, p *core.MachinePool, _ string, _ time.Time) (*core.MachinePool, error) {
 			copied := *p
 			copied.ID = "pool-1"
 			put = &copied
@@ -67,7 +70,7 @@ func TestPutAndListMachinePools(t *testing.T) {
 			return []core.MachinePoolMemberRow{{DaemonID: "d-1", Name: "cicd", Phase: "connected", LiveRuns: 2}}, nil
 		},
 	}
-	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: repo}))
+	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: &daemon_registry.MockRepository{}, Pools: pools}))
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.PutMachinePoolRequest, pb.PutMachinePoolResponse]{
 		{Name: "no pool", Req: connect.NewRequest(&pb.PutMachinePoolRequest{}), Ctx: personContext(t), WantErr: connect.CodeInvalidArgument},
 		{Name: "bad name", Req: connect.NewRequest(&pb.PutMachinePoolRequest{Pool: &pb.MachinePoolSpec{Name: "CI CD"}}), Ctx: personContext(t), WantErr: connect.CodeInvalidArgument},
@@ -108,7 +111,7 @@ func TestPutAndListMachinePools(t *testing.T) {
 func TestDeleteMachinePool(t *testing.T) {
 	t.Parallel()
 	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{
-		Repo: &daemon_registry.MockRepository{
+		Pools: &daemon_registry.MockPools{
 			DeleteMachinePoolByNameFunc: func(_ context.Context, _, name string) error {
 				switch name {
 				case "used":
@@ -154,19 +157,23 @@ func TestPoolMembersTakeTheMemberIdleTimeout(t *testing.T) {
 		{ID: "p-gpu", Name: "gpu", Selector: map[string]string{"gpu": "yes"}, MemberIdleTimeout: "5m"},
 	}
 	repo := &daemon_registry.MockRepository{
-		PutMachinePoolFunc: func(_ context.Context, p *core.MachinePool) (*core.MachinePool, error) { return p, nil },
+		ListDaemonsByUserIDFunc: func(context.Context, string) ([]*db.Daemon, error) { return daemons, nil },
+		GetDaemonFunc:           func(_ context.Context, id string) (*db.Daemon, error) { return &db.Daemon{ID: id}, nil },
+	}
+	poolStore := &daemon_registry.MockPools{
+		PutMachinePoolFunc: func(_ context.Context, p *core.MachinePool, _ string, _ time.Time) (*core.MachinePool, error) {
+			return p, nil
+		},
 		ListMachinePoolsForUserFunc: func(context.Context, string) ([]*core.MachinePool, error) {
 			return pools, nil
 		},
 		ListMachinePoolMembersFunc: func(context.Context, *core.MachinePool, string) ([]core.MachinePoolMemberRow, error) {
 			return nil, nil
 		},
-		ListDaemonsByUserIDFunc: func(context.Context, string) ([]*db.Daemon, error) { return daemons, nil },
-		SetDaemonLabelsFunc:     func(context.Context, string, string, map[string]string) (bool, error) { return true, nil },
-		GetDaemonFunc:           func(_ context.Context, id string) (*db.Daemon, error) { return &db.Daemon{ID: id}, nil },
+		SetDaemonLabelsFunc: func(context.Context, string, string, map[string]string) (bool, error) { return true, nil },
 	}
 	set := &recordingIdleTimeouts{set: map[string]string{}}
-	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: repo, IdleTimeouts: set}))
+	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: repo, Pools: poolStore, IdleTimeouts: set}))
 
 	if _, err := svc.PutMachinePool(personContext(t), connect.NewRequest(&pb.PutMachinePoolRequest{
 		Pool: &pb.MachinePoolSpec{Name: "cicd", MemberIdleTimeout: "10m"},

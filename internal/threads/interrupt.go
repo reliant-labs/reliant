@@ -7,6 +7,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -22,33 +23,6 @@ const interruptToolCancelReason = "user interrupted the agent"
 // A malformed request is an svcerr.InvalidArgument, and a chat or thread the
 // caller cannot see an svcerr.NotFound, so a handler returns either as it is.
 var ErrInterruptUndeliverable = svcerr.Unavailable("interrupt undeliverable")
-
-// ServiceOption configures a threads Service.
-type ServiceOption func(*Service)
-
-// TemporalSignaler is the Temporal signal operation needed to wake a thread.
-type TemporalSignaler interface {
-	SignalWorkflow(ctx context.Context, workflowID, runID, signalName string, signalArg interface{}) error
-}
-
-// ToolCanceler is the daemon operation needed to cancel one running tool execution.
-type ToolCanceler interface {
-	SendToolExecutionCancel(ctx context.Context, userID, requestID, reason string) error
-}
-
-// WithTemporalSignaler wires the workflow signal delivery used by InterruptThread.
-func WithTemporalSignaler(signaler TemporalSignaler) ServiceOption {
-	return func(s *Service) {
-		s.temporalSignaler = signaler
-	}
-}
-
-// WithToolCanceler wires the daemon cancel delivery used by InterruptThread.
-func WithToolCanceler(canceler ToolCanceler) ServiceOption {
-	return func(s *Service) {
-		s.toolCanceler = canceler
-	}
-}
 
 // InterruptThreadOpts contains the target thread and authenticated caller.
 type InterruptThreadOpts struct {

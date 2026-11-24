@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // twoMachineProject is one project checked out on two machines, "default"
@@ -97,7 +98,7 @@ func TestSyncProjectConfigSnapshot_AnotherMachineCannotEraseWorkflows(t *testing
 	require.NoError(t, err)
 	require.Len(t, presets, 1)
 
-	record, err := p.repo.GetProjectConfigRecord(ctx, p.projectID)
+	record, err := store.GetProjectConfigRecord(ctx, p.repo.ORM(), p.projectID)
 	require.NoError(t, err)
 	assert.Equal(t, "from "+p.cicdID, *record.UserConfigYAML, "the rest of the record is still the last pusher's")
 
@@ -146,7 +147,7 @@ func TestSyncProjectConfigSnapshot_StalenessIsPerMachine(t *testing.T) {
 	require.True(t, p.push(t, p.cicdID, 5000, nil, nil))
 	require.True(t, p.push(t, p.defaultID, 1000, []config.StoredWorkflow{release}, nil), "default's clock is behind cicd's push")
 	require.Len(t, p.unionWorkflows(t), 1)
-	record, err := p.repo.GetProjectConfigRecord(ctx, p.projectID)
+	record, err := store.GetProjectConfigRecord(ctx, p.repo.ORM(), p.projectID)
 	require.NoError(t, err)
 	assert.Equal(t, "from "+p.cicdID, *record.UserConfigYAML, "the older snapshot does not replace the newer record")
 	assert.Equal(t, int64(5000), record.PushedAt.UnixMilli())
@@ -178,7 +179,7 @@ func TestProjectMachineCatalog_RemovedMachineLeavesTheUnionOnItsNextWrite(t *tes
 	require.True(t, p.push(t, p.defaultID, 1000, []config.StoredWorkflow{{Name: "release", RelativePath: p.releasePath, YAMLContent: releaseYAML}}, nil))
 	_, err := p.repo.ORM().Exec(ctx, `DELETE FROM daemons WHERE id = $1`, p.defaultID)
 	require.NoError(t, err)
-	catalogs, err := p.repo.projectMachineCatalogs(ctx, p.projectID)
+	catalogs, err := store.ProjectMachineCatalogs(ctx, p.repo.ORM(), p.projectID)
 	require.NoError(t, err)
 	assert.Empty(t, catalogs, "the machine's catalog goes with it")
 	require.True(t, p.push(t, p.cicdID, 2000, nil, nil))

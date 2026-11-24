@@ -11,13 +11,16 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	mcpclient "github.com/reliant-labs/reliant/internal/mcp"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
-	"github.com/stretchr/testify/require"
 )
 
 func TestMCPService_SetServerEnabled_UpdatesStatusAcrossToggles(t *testing.T) {
@@ -285,7 +288,7 @@ func TestMCPService_ListServers_PrefersStoredConfigSnapshotOverFilesystem(t *tes
 
 	// Stored daemon snapshot is source-of-truth and says enabled=false.
 	storedMCP := `{"project":"{\"mcpServers\":{\"toggle-server\":{\"command\":\"go\",\"args\":[\"version\"],\"enabled\":false}}}"}`
-	require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 		ProjectID:  projectID,
 		DaemonID:   "daemon-test",
 		MCPConfigs: &storedMCP,
@@ -306,7 +309,7 @@ func TestMCPService_SetServerEnabled_UpdatesStoredSnapshot(t *testing.T) {
 	// Seed stored snapshot with enabled=true so we can verify write-through update.
 	now := time.Now().UTC()
 	storedMCP := `{"project":"{\"mcpServers\":{\"toggle-server\":{\"command\":\"go\",\"args\":[\"version\"],\"enabled\":true}}}"}`
-	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.ProjectConfigs.UpsertProjectConfigRecord(ctx, &core.ProjectConfigRecord{
 		ProjectID:  projectID,
 		DaemonID:   "daemon-test",
 		MCPConfigs: &storedMCP,
@@ -320,7 +323,7 @@ func TestMCPService_SetServerEnabled_UpdatesStoredSnapshot(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
+	record, err := svc.deps.ProjectConfigs.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
 	require.NotNil(t, record)
 	require.NotNil(t, record.MCPConfigs)
@@ -337,7 +340,7 @@ func TestMCPService_UpdateServerConfig_UpdatesStoredSnapshot(t *testing.T) {
 
 	now := time.Now().UTC()
 	storedMCP := `{"project":"{\"mcpServers\":{\"toggle-server\":{\"command\":\"go\",\"args\":[\"version\"],\"enabled\":true}}}"}`
-	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.ProjectConfigs.UpsertProjectConfigRecord(ctx, &core.ProjectConfigRecord{
 		ProjectID:  projectID,
 		DaemonID:   "daemon-test",
 		MCPConfigs: &storedMCP,
@@ -353,7 +356,7 @@ func TestMCPService_UpdateServerConfig_UpdatesStoredSnapshot(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
+	record, err := svc.deps.ProjectConfigs.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
 	storedServers := readMergedScopedServersFromStoredRecord(record)
 	require.Contains(t, storedServers, "toggle-server")
@@ -365,7 +368,7 @@ func TestMCPService_InstallServer_PersistsToStoredSnapshot(t *testing.T) {
 	manager.startErr = nil
 
 	now := time.Now().UTC()
-	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.ProjectConfigs.UpsertProjectConfigRecord(ctx, &core.ProjectConfigRecord{
 		ProjectID: projectID,
 		DaemonID:  "daemon-test",
 		PushedAt:  now,
@@ -383,7 +386,7 @@ func TestMCPService_InstallServer_PersistsToStoredSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Success)
 
-	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
+	record, err := svc.deps.ProjectConfigs.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
 	storedServers := readMergedScopedServersFromStoredRecord(record)
 	require.Contains(t, storedServers, "installed-server")
@@ -397,7 +400,7 @@ func TestMCPService_MoveServerScope_UsesStoredSnapshotAndPersistsMove(t *testing
 	// Stored snapshot has server in project scope and empty local scope.
 	now := time.Now().UTC()
 	storedMCP := `{"project":"{\"mcpServers\":{\"toggle-server\":{\"command\":\"go\",\"args\":[\"version\"],\"enabled\":true}}}","local":"{\"mcpServers\":{}}"}`
-	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.ProjectConfigs.UpsertProjectConfigRecord(ctx, &core.ProjectConfigRecord{
 		ProjectID:  projectID,
 		DaemonID:   "daemon-test",
 		MCPConfigs: &storedMCP,
@@ -413,7 +416,7 @@ func TestMCPService_MoveServerScope_UsesStoredSnapshotAndPersistsMove(t *testing
 	require.True(t, resp.Msg.Success)
 	require.Equal(t, reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL, resp.Msg.Scope)
 
-	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
+	record, err := svc.deps.ProjectConfigs.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
 	require.NotNil(t, record)
 	servers := readMergedScopedServersFromStoredRecord(record)
@@ -427,7 +430,7 @@ func TestMCPService_UninstallServer_RemovesFromStoredSnapshot(t *testing.T) {
 
 	now := time.Now().UTC()
 	storedMCP := `{"project":"{\"mcpServers\":{\"toggle-server\":{\"command\":\"go\",\"args\":[\"version\"],\"enabled\":true}}}"}`
-	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.ProjectConfigs.UpsertProjectConfigRecord(ctx, &core.ProjectConfigRecord{
 		ProjectID:  projectID,
 		DaemonID:   "daemon-test",
 		MCPConfigs: &storedMCP,
@@ -441,7 +444,7 @@ func TestMCPService_UninstallServer_RemovesFromStoredSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Success)
 
-	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
+	record, err := svc.deps.ProjectConfigs.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
 	require.NotNil(t, record)
 	servers := readMergedScopedServersFromStoredRecord(record)
@@ -453,7 +456,7 @@ func TestMCPService_ReadMergedScopedServers_GlobalScopeUsesStoredRecord(t *testi
 
 	now := time.Now().UTC()
 	storedGlobal := `{"user":"{\"mcpServers\":{\"shared-global\":{\"command\":\"global-cmd\",\"args\":[\"--from-db\"],\"enabled\":true}}}"}`
-	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.ProjectConfigs.UpsertProjectConfigRecord(ctx, &core.ProjectConfigRecord{
 		ProjectID:  projectID,
 		DaemonID:   "daemon-test",
 		MCPConfigs: &storedGlobal,
@@ -492,13 +495,13 @@ func TestMCPService_SetServerEnabled_GlobalScopePropagatesStoredSnapshotAcrossPr
 	}
 
 	sharedGlobalEnabled := `{"user":"{\"mcpServers\":{\"shared-global\":{\"command\":\"go\",\"args\":[\"version\"],\"enabled\":true}}}"}`
-	require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 		ProjectID:  projectA,
 		DaemonID:   "daemon-a",
 		MCPConfigs: &sharedGlobalEnabled,
 		PushedAt:   now,
 	}))
-	require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 		ProjectID:  projectB,
 		DaemonID:   "daemon-b",
 		MCPConfigs: &sharedGlobalEnabled,
@@ -517,9 +520,9 @@ func TestMCPService_SetServerEnabled_GlobalScopePropagatesStoredSnapshotAcrossPr
 	}))
 	require.NoError(t, err)
 
-	recordA, err := repo.GetProjectConfigRecord(ctx, projectA)
+	recordA, err := store.GetProjectConfigRecord(ctx, repo.ORM(), projectA)
 	require.NoError(t, err)
-	recordB, err := repo.GetProjectConfigRecord(ctx, projectB)
+	recordB, err := store.GetProjectConfigRecord(ctx, repo.ORM(), projectB)
 	require.NoError(t, err)
 
 	serversA := readMergedScopedServersFromStoredRecord(recordA)
@@ -539,7 +542,7 @@ func seedMCPServerConfig(t *testing.T, svc *Service, ctx context.Context, projec
 	}
 	storedMCP := fmt.Sprintf(`{"project":"{\"mcpServers\":{\"toggle-server\":{\"command\":\"go\",\"args\":[\"version\"],\"enabled\":%s}}}"}`, enabledStr)
 	now := time.Now().UTC()
-	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, svc.deps.ProjectConfigs.UpsertProjectConfigRecord(ctx, &core.ProjectConfigRecord{
 		ProjectID:  projectID,
 		DaemonID:   "daemon-test",
 		MCPConfigs: &storedMCP,

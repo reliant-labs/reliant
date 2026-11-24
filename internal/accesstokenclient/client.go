@@ -85,6 +85,13 @@ type introspectResponse struct {
 	// machine (control-plane's daemons.org_id). Absent for any other token,
 	// a machine with no recorded org, and from an older control plane.
 	DaemonOrgID string `json:"daemonOrgId"`
+	// ClientID and Audience are an MCP client token's (mcp:oauth or
+	// mcp:forge) OAuth client and the RFC 8707 resource it was issued for.
+	// Empty for every other token, and from an older control plane, so such
+	// a token is never accepted as an MCP client's
+	// (fat.Principal.IsMCPOAuthFor and IsMCPForgeFor need both).
+	ClientID string `json:"clientId"`
+	Audience string `json:"audience"`
 }
 
 // wildcardScopes reads a daemon credential's resolved scopes, SKIPPING any
@@ -170,6 +177,8 @@ func (out introspectResponse) principal() (*fat.Principal, error) {
 		AllScopes:    out.AllScopes, // a daemon's wildcard: auth.MachineBound refuses it
 		Ephemeral:    out.Ephemeral,
 		ExpiresAt:    out.ExpiresAt,
+		ClientID:     out.ClientID,
+		Audience:     out.Audience,
 	}
 	if out.Resource != nil && out.Resource.Kind != "" {
 		p.Resource = &fat.Resource{Kind: fat.ResourceKind(out.Resource.Kind), ID: out.Resource.ID}
@@ -395,6 +404,12 @@ type OrgMembership struct {
 	// refuses what it gates (fail closed; docs/design/org-provider-accounts.md
 	// §5 there). A set, not a slice, so an OrgMembership stays comparable.
 	OrgScopes OrgScopeSet
+	// DisplayName is the member's name as the org roster shows it, read with
+	// membership. "" when Member is false, when they set none, and from a
+	// control plane that predates the field: a caller renders "" as a neutral
+	// fallback, never as an email or an id (docs/design/chat-collaboration.md
+	// §6.2 there).
+	DisplayName string
 }
 
 // OrgScopeSet is a set of org-administration scopes, held as their names
@@ -436,6 +451,7 @@ func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string)
 		MemberSince    *time.Time `json:"memberSince"`
 		OrgLiveMembers *int32     `json:"orgLiveMembers"`
 		OrgScopes      []string   `json:"orgScopes"`
+		DisplayName    string     `json:"displayName"`
 	}
 	body := map[string]any{"userId": userID}
 	if orgID != "" {
@@ -459,6 +475,7 @@ func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string)
 			m.OrgLiveMembers, m.OrgLiveMembersKnown = *out.OrgLiveMembers, true
 		}
 		m.OrgScopes = NewOrgScopeSet(out.OrgScopes...)
+		m.DisplayName = strings.TrimSpace(out.DisplayName)
 	}
 	return m, nil
 }

@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/descriptorpb"
 
@@ -16,9 +18,12 @@ import (
 // writing: each one's argv is pinned to forge's read-only flag by the
 // daemonruntime tests (`--plan` for the promote preview, `--dry-run` for the
 // deploy preview), which is what makes dispatching one a read.
+// forge.deploy_status runs no forge at all: the daemon answers it from its
+// in-memory registry of started deploys (handleForgeDeployStatus).
 var readOnlyForgeCommands = map[string]string{
-	"forge.promote_plan": "env deploy <env> <release> --plan",
-	"forge.deploy_plan":  "env deploy <env> --dry-run",
+	"forge.promote_plan":  "env deploy <env> <release> --plan",
+	"forge.deploy_plan":   "env deploy <env> --dry-run",
+	"forge.deploy_status": "no forge command: a snapshot of the daemon's deploy registry",
 }
 
 // TestForgeService_NoSideEffectsRPCsOnlyRead holds every ForgeService rpc
@@ -41,6 +46,12 @@ func TestForgeService_NoSideEffectsRPCsOnlyRead(t *testing.T) {
 		"PlanDeploy": func(s *Service) error {
 			_, err := s.PlanDeploy(authedCtx(), connect.NewRequest(&reliantv1.PlanForgeDeployRequest{
 				ProjectId: "p", Env: "prod",
+			}))
+			return err
+		},
+		"GetDeployStatus": func(s *Service) error {
+			_, err := s.GetDeployStatus(authedCtx(), connect.NewRequest(&reliantv1.GetForgeDeployStatusRequest{
+				ProjectId: "p", Handle: "deploy-1",
 			}))
 			return err
 		},
@@ -77,13 +88,12 @@ func TestForgeService_NoSideEffectsRPCsOnlyRead(t *testing.T) {
 			// answers an unset method with an error, and the recorder below
 			// fails the row if anything tried.
 			installs := forgeTestProjects("/daemon/workspace/control-plane")
-			repo := &MockRepository{
-				GetProjectWithUserCheckFunc: func(_ context.Context, id, _ string) (*db.Project, error) {
-					return &db.Project{ID: id, Path: "/daemon/workspace/control-plane"}, nil
-				},
+			repo := projectaccesstest.Bound(&MockRepository{
 				ListProjectDaemonsForProjectFunc: installs.ListProjectDaemonsForProjectFunc,
 				GetDaemonFunc:                    installs.GetDaemonFunc,
-			}
+			}, func(_ context.Context, id, _ string) (*db.Project, error) {
+				return &db.Project{ID: id, Path: "/daemon/workspace/control-plane"}, nil
+			})
 
 			if err := call(newForgeService(router, repo)); err != nil {
 				t.Fatalf("%s: %v", name, err)

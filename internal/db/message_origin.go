@@ -42,18 +42,11 @@ func WithMessageOrigin(ctx context.Context, origin MessageOrigin) context.Contex
 	return context.WithValue(ctx, messageOriginKey{}, origin)
 }
 
-// SenderTitles maps each sender thread id to the heading a message from it is
-// shown under: the thread's own title, or, for a run's main thread (untitled,
-// and sharing its chat's id), the run's title. Ids with neither are absent.
-func (r *Repo) SenderTitles(ctx context.Context, threadIDs []string) (map[string]string, error) {
-	return store.SenderTitlesByThreadIDs(ctx, r.ORM(), threadIDs)
-}
-
-// SenderTitle is SenderTitles for one thread, nil when it resolves to none.
+// senderTitle is store.SenderTitlesByThreadIDs for one thread, nil when it resolves to none.
 // Best-effort: an untitled sender degrades a card's heading, never the
 // transcript, so a failed lookup is no title rather than an error.
-func (r *Repo) SenderTitle(ctx context.Context, threadID string) *string {
-	titles, err := r.SenderTitles(ctx, []string{threadID})
+func (r *Repo) senderTitle(ctx context.Context, threadID string) *string {
+	titles, err := store.SenderTitlesByThreadIDs(ctx, r.ORM(), []string{threadID})
 	if err != nil {
 		return nil
 	}

@@ -28,10 +28,13 @@ async function noSidewaysScroll(page: Page) {
 }
 
 test.describe('mobile surface', () => {
-  test('the drawer reaches the Inbox, Apps and Observability, with the Inbox badge', async ({ page }) => {
+  test('the drawer draws the shell\'s areas, with the Inbox badge, and its Inbox opens the phone Inbox', async ({ page }) => {
     const errors = collectErrors(page);
     await mockMobileBackend(page);
-    await page.goto('/m/chats');
+    // A top-level phone screen: the drawer (the one shell's nav, U6 3/16) opens
+    // at its top level there. At the chat list it opens drilled into Agents,
+    // and on Settings into Settings.
+    await page.goto('/m/inbox');
 
     // Three blocking items in the mocks: the hamburger says so before it is opened.
     const menu = page.getByRole('button', { name: /Open menu, 3 items need you/ });
@@ -39,12 +42,16 @@ test.describe('mobile surface', () => {
     await menu.click();
 
     const drawer = page.getByRole('dialog', { name: 'Navigation' });
-    await expect(drawer.getByRole('link', { name: /^Inbox/ })).toHaveAttribute('href', '/m/inbox');
-    await expect(drawer.getByTestId('drawer-inbox-count')).toHaveText('3');
-    await expect(drawer.getByRole('link', { name: /^Apps/ })).toHaveAttribute('href', '/apps');
-    await expect(drawer.getByRole('link', { name: /^Observability/ })).toHaveAttribute('href', '/forge/observability');
+    const nav = drawer.getByRole('navigation', { name: 'Main navigation' });
+    const inbox = nav.getByRole('link', { name: /^Inbox/ });
+    await expect(inbox).toHaveAttribute('href', '/inbox');
+    await expect(inbox).toContainText('3 items need you');
+    // Apps are Projects now (U6): the shell's Overview lands there.
+    await expect(nav.getByRole('link', { name: /^Overview/ })).toHaveAttribute('href', '/projects');
+    await expect(nav.getByRole('link', { name: /^Agents/ })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: /^Settings/ })).toBeVisible();
 
-    await drawer.getByRole('link', { name: /^Inbox/ }).click();
+    await inbox.click();
     await expect(page).toHaveURL(/\/m\/inbox$/, LOADED);
     await expect(page.getByRole('heading', { level: 1, name: 'Inbox' })).toBeVisible(LOADED);
     expect(errors).toEqual([]);
@@ -172,7 +179,7 @@ test.describe('mobile surface', () => {
     const open = page.getByRole('button', { name: 'Open navigation' }).first();
     await expect(open).toBeVisible();
     await open.click();
-    const nav = page.getByRole('dialog').filter({ has: page.getByRole('link', { name: 'Releases' }) }).first();
+    const nav = page.getByRole('dialog').filter({ has: page.getByRole('link', { name: 'Data' }) }).first();
     await expect(nav).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(nav).toBeHidden();

@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gopkg.in/yaml.v3"
+
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
-	"gopkg.in/yaml.v3"
 )
 
 // =============================================================================
@@ -34,7 +35,8 @@ type CreateWorkflowResult struct {
 }
 
 type createWorkflowTool struct {
-	repo createWorkflowStore
+	repo  createWorkflowStore
+	slugs WorkflowSlugChecker
 }
 
 const (
@@ -67,8 +69,8 @@ JSON with id, name, slug, and status.
 }`
 )
 
-func NewCreateWorkflowTool(repo createWorkflowStore) Tool {
-	tool := &createWorkflowTool{repo: repo}
+func NewCreateWorkflowTool(repo createWorkflowStore, slugs WorkflowSlugChecker) Tool {
+	tool := &createWorkflowTool{repo: repo, slugs: slugs}
 	return NewToolWrapper[CreateWorkflowParams, ToolResponse](tool)
 }
 
@@ -85,7 +87,7 @@ func (t *createWorkflowTool) RequiresPermission(args CreateWorkflowParams) (bool
 }
 
 func (t *createWorkflowTool) Execute(ctx *rctx.ToolContext, args CreateWorkflowParams) (ToolResponse, error) {
-	if t.repo == nil {
+	if t.repo == nil || t.slugs == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -147,7 +149,7 @@ func (t *createWorkflowTool) Execute(ctx *rctx.ToolContext, args CreateWorkflowP
 		return NewTextErrorResponse(rejection), nil
 	}
 
-	if taken, err := t.repo.WorkflowSlugExists(ctx, userID, slug); err == nil && taken {
+	if taken, err := t.slugs.WorkflowSlugExists(ctx, userID, slug); err == nil && taken {
 		return NewTextErrorResponse(workflowSlugTakenMessage(slug)), nil
 	}
 

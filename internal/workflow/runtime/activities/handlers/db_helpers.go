@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authortag"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -80,7 +82,7 @@ const CancelledByInterruptToolResultContent = "Tool execution cancelled by user.
 // Returns:
 //   - messages: Converted messages in chronological order, ready for LLM
 //   - error: Any error that occurred
-func LoadMessagesForLLM(ctx context.Context, repo LLMHistoryStore, chatID string, thread string, explicitContextSeq *int) ([]message.Message, error) {
+func LoadMessagesForLLM(ctx context.Context, repo LLMHistoryStore, results ToolResultRecoveryStore, chatID string, thread string, explicitContextSeq *int) ([]message.Message, error) {
 	if thread == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
@@ -88,21 +90,21 @@ func LoadMessagesForLLM(ctx context.Context, repo LLMHistoryStore, chatID string
 	// Use threads.Service.LoadCurrentMessages for proper fork chain and compaction handling.
 	// This fixes the bug where forked threads inherit sequence numbers but don't have
 	// compaction summaries, causing incorrect parent traversal skipping.
-	svc := threads.NewService(repo)
+	svc := threads.New(threads.Deps{Repo: repo})
 	dbMessages, err := svc.LoadCurrentMessages(ctx, thread)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load current messages: %w", err)
 	}
 
-	return convertAndRepairMessages(ctx, dbMessages, repo, chatID, thread)
+	return convertAndRepairMessages(ctx, dbMessages, repo, results, chatID, thread)
 }
 
 // ConvertAndRepairMessages converts DB messages to message.Message and
 // guarantees the tool-pairing invariant holds on the result.
 //
 // Use this function when you already have DB messages loaded.
-func ConvertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, repo MessageRepairStore) ([]message.Message, error) {
-	return convertAndRepairMessages(ctx, dbMessages, repo, "", "")
+func ConvertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, repo MessageRepairStore, results ToolResultRecoveryStore) ([]message.Message, error) {
+	return convertAndRepairMessages(ctx, dbMessages, repo, results, "", "")
 }
 
 // convertAndRepairMessages is the prompt-assembly boundary: the last point where
@@ -133,11 +135,22 @@ func ConvertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, rep
 // inherited data, they are a bug in this package. Returning an error surfaces it
 // at the activity boundary (retried and reported) instead of shipping a request
 // the provider will reject with a far less actionable message.
-func convertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, repo MessageRepairStore, chatID, thread string) ([]message.Message, error) {
+func convertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, repo MessageRepairStore, results ToolResultRecoveryStore, chatID, thread string) ([]message.Message, error) {
 	msgs, err := messageconv.DbMessagesToMessages(ctx, dbMessages, repo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert messages: %w", err)
 	}
+
+	// Name each human turn's author once the chat has more than one
+	// (internal/authortag). Here, while msgs is still one-to-one with the
+	// rows that carry the author, and before repair adds or drops anything.
+	// A history with no recorded author comes back untouched, byte for byte.
+	//
+	// The owner's rows carry no name (NULL means the owner), so their turns
+	// render authortag.FallbackOwnerName until the send path, which records
+	// authors, also supplies the owner's display name
+	// (chat-collaboration.md §6.2). Until then no row has an author.
+	msgs = authortag.Render(msgs, authorTurns(dbMessages), "")
 
 	if violations := ValidateToolPairing(msgs); len(violations) > 0 {
 		logging.WarnContext(ctx, "[ToolPairing] Loaded history violates the tool-call/tool-result invariant; repairing in memory",
@@ -166,7 +179,7 @@ func convertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, rep
 	// result. Anything still missing afterwards falls through to the synthetic
 	// placeholder, which remains the correct answer for a call that genuinely
 	// never produced one.
-	msgs = recoverPersistedToolResults(ctx, repo, msgs)
+	msgs = recoverPersistedToolResults(ctx, results, msgs)
 
 	msgs = repairMessageHistory(msgs)
 
@@ -337,7 +350,7 @@ func recoverPersistedToolResults(ctx context.Context, repo ToolResultRecoverySto
 			// merely one recorded under its id: the id is the provider's and
 			// can name another chat's call, whose output the model must
 			// never be handed as this call's.
-			row, err := repo.GetToolCallResultForMessage(ctx, tc.ID, assistantMessageID)
+			row, err := repo.FindToolCallResultForMessage(ctx, tc.ID, assistantMessageID)
 			if err != nil || row == nil || row.Content == "" {
 				// No durable result — leave it for repairMessageHistory, which
 				// synthesizes the "outcome unknown" placeholder.
@@ -370,4 +383,25 @@ func recoverPersistedToolResults(ctx context.Context, repo ToolResultRecoverySto
 		"messageCountBefore", len(msgs),
 		"messageCountAfter", len(out))
 	return out
+}
+
+// authorTurns describes each loaded row's authorship for authortag.Render, in
+// order. A human turn is a user-role row no agent sent (no sender) that the
+// transcript shows; a HIDDEN row is LLM-only text (a mailbox envelope, an
+// agent's result, an async answer shown on its question card), never a turn a
+// person typed into the chat.
+func authorTurns(rows []*db.Message) []authortag.Turn {
+	turns := make([]authortag.Turn, len(rows))
+	for i, m := range rows {
+		hidden := m.DisplayStyle != nil && *m.DisplayStyle == reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN
+		turns[i].Human = m.Role == reliantv1.MessageRole_MESSAGE_ROLE_USER &&
+			m.SenderKind == nil && m.SenderThreadID == nil && !hidden
+		if m.AuthorUserID != nil {
+			turns[i].AuthorUserID = *m.AuthorUserID
+		}
+		if m.AuthorName != nil {
+			turns[i].AuthorName = *m.AuthorName
+		}
+	}
+	return turns
 }

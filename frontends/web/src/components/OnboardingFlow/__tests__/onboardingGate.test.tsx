@@ -26,12 +26,17 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
 
 import { OnboardingGate } from "../OnboardingGate";
 import {
-  forgeBrandHomeTarget,
+  chatRouteAction,
+  chatSetup,
+  chatSetupPath,
+  homeTarget,
   isOnboardingReturnTo,
   onboardingGateDecision,
   onboardingGateTarget,
   routeRequiresOnboarding,
+  type ChatSetup,
 } from "../onboardingGate";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { resetShellForTests } from "@/lib/shell";
 import { onboardingSearchSchema } from "@/routeSchemas";
 
@@ -72,6 +77,7 @@ function renderAt(url: string) {
         page("/settings/$section"),
         page("/apps"),
         page("/sites"),
+        page("/projects"),
         page("/usage"),
         page("/inbox"),
         page("/workflows"),
@@ -155,12 +161,12 @@ describe("OnboardingGate", () => {
     expect(await screen.findByTestId("where")).toHaveTextContent("/m/chats");
   });
 
-  it("sends a not-yet-onboarded user on the forge brand from the phone's chat list to their apps, not the wizard", async () => {
+  it("sends a not-yet-onboarded user on the forge brand from the phone's chat list to their projects, not the wizard", async () => {
     resetShellForTests("forge");
     mockUseCurrentUser.mockReturnValue(notOnboarded);
     const router = renderAt("/m/chats");
 
-    await waitFor(() => expect(router.state.location.pathname).toBe("/apps"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/projects"));
     expect(screen.queryByTestId("wizard")).toBeNull();
   });
 
@@ -270,29 +276,185 @@ describe("onboardingGateDecision", () => {
   });
 });
 
-describe("forgeBrandHomeTarget", () => {
-  it.each([
-    ["/", true, "/apps"],
-    ["/o/acme", true, "/apps"],
-    ["/m", true, "/apps"],
-    ["/m/chats", true, "/apps"],
-    // A chat they asked for still onboards them.
-    ["/project/1", true, null],
-    ["/m/chats/c-1", true, null],
-    ["/c/c-1", true, null],
-    ["/new", true, null],
-    ["/o/acme/new", true, null],
-    // Reliant onboards everyone.
-    ["/", false, null],
-    ["/m/chats", false, null],
-  ] as const)("%s (forge brand %s) → %s", (pathname, forgeBrand, expected) => {
-    expect(forgeBrandHomeTarget(pathname, forgeBrand)).toBe(expected);
+/**
+ * The daemonless home (U6, owner 2026-11-19): what chats need from a person,
+ * and where each home and chat route sends them, on both brands, for every
+ * persona — onboarded or not × a usable machine, none, or a list still
+ * loading or failed.
+ */
+const ACTIVE = [{ status: DaemonStatus.ACTIVE }];
+const STALE = [{ status: DaemonStatus.DISCONNECTED }, { status: DaemonStatus.FAILED }];
+const DONE = { onboardingCompleted: true };
+const NOT_DONE = { onboardingCompleted: false };
+
+/** [persona, chatSetup facts, the ChatSetup they make] */
+const SETUP_PERSONAS = [
+  ["user loading", { userLoading: true, user: undefined, daemonsLoading: true, daemons: undefined }, "checking"],
+  ["user record failed", { userLoading: false, user: null, daemonsLoading: false, daemons: undefined }, "unknown"],
+  ["not onboarded, no machine", { userLoading: false, user: NOT_DONE, daemonsLoading: false, daemons: [] }, "onboard"],
+  ["not onboarded, a machine", { userLoading: false, user: NOT_DONE, daemonsLoading: false, daemons: ACTIVE }, "onboard"],
+  ["not onboarded, machines loading", { userLoading: false, user: NOT_DONE, daemonsLoading: true, daemons: undefined }, "onboard"],
+  ["not onboarded, machines failed", { userLoading: false, user: NOT_DONE, daemonsLoading: false, daemons: undefined }, "onboard"],
+  ["onboarded, a machine", { userLoading: false, user: DONE, daemonsLoading: false, daemons: ACTIVE }, "ready"],
+  ["onboarded, no machine", { userLoading: false, user: DONE, daemonsLoading: false, daemons: [] }, "connect-machine"],
+  ["onboarded, only unusable machines", { userLoading: false, user: DONE, daemonsLoading: false, daemons: STALE }, "connect-machine"],
+  ["onboarded, machines loading", { userLoading: false, user: DONE, daemonsLoading: true, daemons: undefined }, "checking"],
+  ["onboarded, machines failed", { userLoading: false, user: DONE, daemonsLoading: false, daemons: undefined }, "unknown"],
+] as const;
+
+describe("chatSetup", () => {
+  it.each(SETUP_PERSONAS)("%s → %s", (_who, facts, expected) => {
+    expect(chatSetup(facts)).toBe(expected);
   });
 
-  it("is what the gate's target is, on the forge brand's homes", () => {
-    expect(onboardingGateTarget("/m/chats?x=1", true)).toEqual({ to: "/apps", search: {}, replace: true });
-    expect(onboardingGateTarget("/m/chats/c-1", true).to).toBe("/onboarding");
-    expect(onboardingGateTarget("/m/chats", false).to).toBe("/onboarding");
+  it("keeps a settled answer through a failed refetch (no flapping)", () => {
+    // TanStack keeps the last data on a refetch error; the decision reads the data.
+    expect(chatSetup({ userLoading: false, user: DONE, daemonsLoading: false, daemons: [] })).toBe("connect-machine");
+    expect(chatSetup({ userLoading: false, user: DONE, daemonsLoading: false, daemons: ACTIVE })).toBe("ready");
+  });
+});
+
+describe("chatSetupPath", () => {
+  it("sends a person who has not onboarded to the wizard, and one who has to Settings › Machines", () => {
+    expect(chatSetupPath("onboard")).toBe("/onboarding");
+    expect(chatSetupPath("onboard", "/project/p-1")).toBe("/onboarding?returnTo=%2Fproject%2Fp-1");
+    // Never a returnTo that would loop.
+    expect(chatSetupPath("onboard", "/")).toBe("/onboarding");
+    // The wizard leaves at once for an onboarded person (useArrivedComplete).
+    expect(chatSetupPath("connect-machine", "/project/p-1")).toBe("/settings/machines");
+  });
+});
+
+describe.each([false, true])("homeTarget (forge brand %s)", (forgeBrand) => {
+  /** Where each home sends each ChatSetup: one brand-independent rule on the desktop. */
+  const DESKTOP: [setup: ChatSetup, expected: string | null][] = [
+    ["onboard", "/projects"],
+    ["connect-machine", "/projects"],
+    ["ready", null],
+    // No redirect on a guess: loading or failed stays put.
+    ["checking", null],
+    ["unknown", null],
+  ];
+  describe.each(["/", "/o/acme", "/o/acme/"])("at %s", (home) => {
+    it.each(DESKTOP)("%s → %s", (setup, expected) => {
+      expect(homeTarget(home, setup, { forgeBrand })).toBe(expected);
+    });
+  });
+
+  it("onboards rather than redirects a home that asked for a chat (?plan, ?start)", () => {
+    expect(homeTarget("/", "onboard", { forgeBrand, chatIntent: true })).toBeNull();
+    expect(homeTarget("/", "connect-machine", { forgeBrand, chatIntent: true })).toBeNull();
+  });
+
+  it("leaves every other chat route alone: a chat the person asked for", () => {
+    for (const path of ["/project/p-1", "/o/acme/project/p-1", "/m/chats/c-1", "/m/new"]) {
+      expect(homeTarget(path, "onboard", { forgeBrand })).toBeNull();
+      expect(homeTarget(path, "connect-machine", { forgeBrand })).toBeNull();
+    }
+  });
+
+  it("keeps the phone's rule: the forge brand's chat list sends a person who has not onboarded to their projects", () => {
+    for (const path of ["/m", "/m/chats"]) {
+      expect(homeTarget(path, "onboard", { forgeBrand })).toBe(forgeBrand ? "/projects" : null);
+      expect(homeTarget(path, "connect-machine", { forgeBrand })).toBeNull();
+    }
+  });
+
+  it("is what the gate's target is, on the homes", () => {
+    expect(onboardingGateTarget("/m/chats?x=1", forgeBrand)).toEqual(
+      forgeBrand
+        ? { to: "/projects", search: {}, replace: true }
+        : { to: "/onboarding", search: { returnTo: "/m/chats?x=1" }, replace: true },
+    );
+    expect(onboardingGateTarget("/m/chats/c-1", forgeBrand).to).toBe("/onboarding");
+    expect(onboardingGateTarget("/", forgeBrand)).toEqual({ to: "/projects", search: {}, replace: true });
+  });
+});
+
+describe.each([false, true])("chatRouteAction (forge brand %s)", (forgeBrand) => {
+  const act = (pathname: string, persona: (typeof SETUP_PERSONAS)[number], chatIntent = false) => {
+    const [, facts] = persona;
+    return chatRouteAction({
+      pathname,
+      href: pathname,
+      chatIntent,
+      userLoading: facts.userLoading,
+      user: facts.user,
+      setup: chatSetup(facts),
+      forgeBrand,
+    });
+  };
+  const persona = (who: string) => SETUP_PERSONAS.find(([name]) => name === who)!;
+  const projects = { kind: "go", to: "/projects", search: {} };
+  const stay = { kind: "stay" };
+  const wait = { kind: "wait" };
+
+  const onboard = (returnTo: string) => ({ kind: "go", to: "/onboarding", search: { returnTo } });
+  const machines = { kind: "go", to: "/settings/machines", search: {} };
+  /** The same answer at the org form of a URL: the wizard remembers that URL. */
+  const inOrgForm = (expected: object, url: string) => {
+    const search = (expected as { search?: { returnTo?: string } }).search;
+    return typeof search === "object" && search.returnTo ? onboard(url) : expected;
+  };
+
+  /**
+   * [persona, at the home, at a project's chats, at a chat by its URL (U5's
+   * /c/…), at the new-chat view (U5's /new)]. A chat — a project's, or one by
+   * its URL — is a chat the person asked for: the wizard for a person who has
+   * not onboarded, and otherwise the chat's own Connect a machine. The
+   * new-chat view is New chat: while chats cannot run it goes where New chat
+   * goes (chatSetupPath).
+   */
+  const TABLE = [
+    ["user loading", wait, wait, wait, wait],
+    // A failed record: the wizard asks again, as it always did.
+    ["user record failed", { kind: "go", to: "/onboarding", search: "keep" }, onboard("/project/p-1"), onboard("/c/c-1"), onboard("/new")],
+    ["not onboarded, no machine", projects, onboard("/project/p-1"), onboard("/c/c-1"), onboard("/new")],
+    ["not onboarded, a machine", projects, onboard("/project/p-1"), onboard("/c/c-1"), onboard("/new")],
+    ["not onboarded, machines loading", projects, onboard("/project/p-1"), onboard("/c/c-1"), onboard("/new")],
+    ["not onboarded, machines failed", projects, onboard("/project/p-1"), onboard("/c/c-1"), onboard("/new")],
+    ["onboarded, a machine", stay, stay, stay, stay],
+    // The chat has its own Connect a machine; the wizard would bounce them straight back.
+    ["onboarded, no machine", projects, stay, stay, machines],
+    ["onboarded, only unusable machines", projects, stay, stay, machines],
+    // Checking: hold the home and the new-chat view rather than flash it and leave.
+    ["onboarded, machines loading", wait, stay, stay, wait],
+    ["onboarded, machines failed", stay, stay, stay, stay],
+  ] as const;
+
+  describe.each(TABLE)("%s", (who, atHome, atProject, atChat, atNew) => {
+    it("at the home (/, /o/acme)", () => {
+      expect(act("/", persona(who))).toEqual(atHome);
+      expect(act("/o/acme", persona(who))).toEqual(atHome);
+    });
+    it("at a project's chats", () => {
+      expect(act("/project/p-1", persona(who))).toEqual(atProject);
+    });
+    it("at a chat by its URL (/c/…, /o/acme/c/…)", () => {
+      expect(act("/c/c-1", persona(who))).toEqual(atChat);
+      expect(act("/o/acme/c/c-1/t/t-2", persona(who))).toEqual(inOrgForm(atChat, "/o/acme/c/c-1/t/t-2"));
+    });
+    it("at the new-chat view (/new, /o/acme/new)", () => {
+      expect(act("/new", persona(who))).toEqual(atNew);
+      expect(act("/o/acme/new", persona(who))).toEqual(inOrgForm(atNew, "/o/acme/new"));
+    });
+  });
+
+  it("sends a home that asked for a chat where New chat goes: the wizard, search and all, or Settings › Machines", () => {
+    expect(act("/", persona("not onboarded, no machine"), true)).toEqual({ kind: "go", to: "/onboarding", search: "keep" });
+    // Onboarded with no usable machine: never the new-chat view with nothing to run it on.
+    expect(act("/", persona("onboarded, no machine"), true)).toEqual(machines);
+    expect(act("/o/acme", persona("onboarded, only unusable machines"), true)).toEqual(machines);
+    expect(act("/", persona("onboarded, machines loading"), true)).toEqual(wait);
+    expect(act("/", persona("onboarded, a machine"), true)).toEqual(stay);
+    expect(act("/", persona("onboarded, machines failed"), true)).toEqual(stay);
+  });
+
+  it("does nothing off the chat routes", () => {
+    for (const path of ["/projects", "/apps", "/forge/p/x", "/inbox", "/workflows", "/usage", "/settings"]) {
+      expect(act(path, persona("not onboarded, no machine"))).toEqual(stay);
+      expect(act(path, persona("onboarded, no machine"))).toEqual(stay);
+    }
   });
 });
 

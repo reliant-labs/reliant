@@ -145,9 +145,10 @@ service StorageBrowserService {
   //
   // ERRORS: every admission step.
   rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse) {
-    // A read: the console's hook is a query. Each call still writes its
-    // audit_log row, and an open its activity event, which no caller observes.
-    option idempotency_level = NO_SIDE_EFFECTS;
+    // Deliberately NOT NO_SIDE_EFFECTS: data access must always write its
+    // audit_log row, and NO_SIDE_EFFECTS would let Connect serve this read
+    // over HTTP GET, where a cache or proxy could replay the response without
+    // one.
     option (forge.v1.method) = {
       auth_required: true
       activity: {
@@ -168,9 +169,10 @@ service StorageBrowserService {
   //
   // ERRORS: every admission step.
   rpc GetObjectMetadata(GetObjectMetadataRequest) returns (GetObjectMetadataResponse) {
-    // A read: the console's hook is a query. Each call still writes its
-    // audit_log row, which no caller observes.
-    option idempotency_level = NO_SIDE_EFFECTS;
+    // Deliberately NOT NO_SIDE_EFFECTS: data access must always write its
+    // audit_log row, and NO_SIDE_EFFECTS would let Connect serve this read
+    // over HTTP GET, where a cache or proxy could replay the response without
+    // one.
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "a page view: every call writes its audit_log row (with the reason); the feed's line per bucket is ListObjects' open_bucket"}
@@ -219,9 +221,11 @@ service StorageBrowserService {
   //
   // ERRORS: every admission step, plus the two above.
   rpc PreviewObject(PreviewObjectRequest) returns (PreviewObjectResponse) {
-    // A read: the console's hook is a query keyed by the object. Each call
-    // still writes its audit_log row, which no caller observes.
-    option idempotency_level = NO_SIDE_EFFECTS;
+    // Deliberately NOT NO_SIDE_EFFECTS, like PresignObjectDownload: an image
+    // preview is a presigned GET minted per call, and every call writes its
+    // audit_log row. NO_SIDE_EFFECTS would let Connect serve it over HTTP GET,
+    // where a cache or proxy could replay the signed URL without the audit
+    // row. The handler also sends Cache-Control: no-store.
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "a page view: every call writes its audit_log row (with the key, size and TTL); a download, not a preview, is a feed line"}

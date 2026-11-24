@@ -100,7 +100,14 @@ func WithChatProvider(cur *Selection, chatID, userID, workflowName, driver strin
 	return next
 }
 
-// Store is the persistence the service needs. *db.Repo satisfies it.
+// Deps is what the service is built from.
+type Deps struct {
+	// Store persists the selections.
+	Store Store
+}
+
+// Store is the persistence the service needs. store.ChatSelectionExtStore
+// satisfies it.
 type Store interface {
 	// GetChatSelection returns the chat's record, nil with no error when it has none.
 	GetChatSelection(ctx context.Context, chatID string) (*Selection, error)
@@ -134,7 +141,7 @@ type Service interface {
 	Copy(ctx context.Context, fromChatID, toChatID, userID string) error
 }
 
-// New builds the service over a store.
-func New(store Store) Service {
-	return &service{store: store}
+// New builds the service over its Deps.
+func New(deps Deps) Service {
+	return &service{store: deps.Store}
 }

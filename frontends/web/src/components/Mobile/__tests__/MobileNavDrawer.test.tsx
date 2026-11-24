@@ -6,8 +6,8 @@
  * reads the router's own location, not whatever a mock hands it.
  */
 
-import { useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useState, type ReactNode } from "react";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -31,13 +31,47 @@ vi.mock("../../../hooks/useOrgs", () => ({
   useActiveOrg: () => ({ orgs: [], active: null, canSwitch: false, select: vi.fn() }),
 }));
 
-let forgeEnabled = true;
-vi.mock("../../../lib/forgeFeature", () => ({
-  isForgeUIEnabled: () => forgeEnabled,
+// The nav itself (the one hybrid model) is covered in
+// Layout/sidebar/__tests__/MobileHybridNav.test.tsx; here it is a stand-in
+// with the org and project the drawer hands it (drawn in its order: org,
+// Find, project), a destination and a drill-in, to pin the drawer's own mechanics.
+vi.mock("../../Layout/sidebar/MobileHybridNav", () => ({
+  MobileHybridNav: ({
+    onNavigate,
+    org,
+    project,
+  }: {
+    onNavigate: (href: string, options?: { drill?: boolean }) => void;
+    org?: ReactNode;
+    project?: ReactNode;
+  }) => (
+    <div data-testid="mobile-hybrid-nav">
+      {org}
+      <span data-testid="mobile-nav-find">Find</span>
+      {project}
+      <a
+        href="/m/daemons"
+        onClick={(event) => {
+          event.preventDefault();
+          onNavigate("/m/daemons");
+        }}
+      >
+        Sandboxes
+      </a>
+      <a
+        href="/m/inbox"
+        onClick={(event) => {
+          event.preventDefault();
+          onNavigate("/m/inbox", { drill: true });
+        }}
+      >
+        Drill in
+      </a>
+    </div>
+  ),
 }));
 
 const { MobileNavDrawer } = await import("../MobileNavDrawer");
-const { useMobileDrawerStore, EMPTY_INBOX_BADGE } = await import("../../../store/mobileDrawerStore");
 
 function Screen({ path }: { path: string }) {
   return (
@@ -86,87 +120,28 @@ describe("MobileNavDrawer", () => {
     expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
   });
 
-  beforeEach(() => {
-    forgeEnabled = true;
-    useMobileDrawerStore.setState({ inboxBadge: EMPTY_INBOX_BADGE });
-  });
-
-  it("reaches the Inbox, Apps and Observability — the surfaces a phone could not open", async () => {
-    renderAt("/m/chats", true, vi.fn());
-    await screen.findByRole("dialog", { name: "Navigation" });
-    expect(screen.getByRole("link", { name: /^Inbox/ })).toHaveAttribute("href", "/m/inbox");
-    // The forge console itself, which collapses its own nav at phone width.
-    expect(screen.getByRole("link", { name: /^Apps/ })).toHaveAttribute("href", "/apps");
-    expect(screen.getByRole("link", { name: /^Observability/ })).toHaveAttribute("href", "/forge/observability");
-  });
-
-  it("hides Apps and Observability when the forge UI is off, as the desktop sidebar does", async () => {
-    forgeEnabled = false;
-    renderAt("/m/chats", true, vi.fn());
-    await screen.findByRole("dialog", { name: "Navigation" });
-    expect(screen.queryByRole("link", { name: /^Apps/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /^Observability/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^Inbox/ })).toBeInTheDocument();
-  });
-
-  it("shows the Inbox's blocking count on its row", async () => {
-    useMobileDrawerStore.setState({
-      inboxBadge: { count: 3, informational: false, degraded: false, announcement: "3 items need you" },
-    });
-    renderAt("/m/chats", true, vi.fn());
-    await screen.findByRole("dialog", { name: "Navigation" });
-    expect(screen.getByTestId("drawer-inbox-count")).toHaveTextContent("3");
-    expect(screen.getByRole("link", { name: /Inbox.*3 items need you/ })).toBeInTheDocument();
-  });
-
-  it("shows a dot, not a count, for automation problems alone", async () => {
-    useMobileDrawerStore.setState({
-      inboxBadge: { count: 0, informational: true, degraded: false, announcement: "Automation problems" },
-    });
-    renderAt("/m/chats", true, vi.fn());
-    await screen.findByRole("dialog", { name: "Navigation" });
-    expect(screen.queryByTestId("drawer-inbox-count")).not.toBeInTheDocument();
-    expect(screen.getByTestId("drawer-inbox-dot")).toBeInTheDocument();
-  });
-
-  it("marks the Inbox current on /m/inbox", async () => {
-    renderAt("/m/inbox", true, vi.fn());
-    await screen.findByRole("dialog", { name: "Navigation" });
-    expect(screen.getByRole("link", { name: /^Inbox/ })).toHaveAttribute("aria-current", "page");
-  });
-
-  it("renders all seven destinations plus the project switcher when open", async () => {
+  it("hands the one nav model the project, drawn under Find as on the desktop", async () => {
     renderAt("/m/chats", true, vi.fn());
     const dialog = await screen.findByRole("dialog", { name: "Navigation" });
-    expect(dialog).toBeInTheDocument();
-
-    expect(screen.getByRole("link", { name: /New chat/ })).toHaveAttribute("href", "/m/new");
-    expect(screen.getByRole("link", { name: /Search/ })).toHaveAttribute("href", "/m/search");
-    expect(screen.getByRole("link", { name: /Workflows/ })).toHaveAttribute("href", "/m/workflows");
-    expect(screen.getByRole("link", { name: /Machines/ })).toHaveAttribute("href", "/m/daemons");
-    expect(screen.getByRole("link", { name: /GitHub/ })).toHaveAttribute("href", "/m/github");
-    expect(screen.getByRole("link", { name: /Settings/ })).toHaveAttribute("href", "/m/settings");
-    expect(screen.getByRole("link", { name: /Account/ })).toHaveAttribute("href", "/m/account");
-    expect(screen.getByRole("link", { name: /Project/ })).toHaveAttribute("href", "/m/projects");
+    const nav = within(dialog).getByTestId("mobile-hybrid-nav");
+    const project = screen.getByRole("link", { name: /Project/ });
+    expect(project).toHaveAttribute("href", "/m/projects");
     expect(screen.getByText("reliant")).toBeInTheDocument();
+    // Inside the nav, after Find (U6, owner: org, then Find, then the project).
+    expect(nav.contains(project)).toBe(true);
+    expect(within(nav).getByTestId("mobile-nav-find").compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("lays the destinations out as a grid above the project switcher", async () => {
-    renderAt("/m/chats", true, vi.fn());
+  it("stays open through a drill-in, and closes on a destination", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const router = renderAt("/m/chats", true, onClose);
     await screen.findByRole("dialog", { name: "Navigation" });
-
-    const nav = screen.getByRole("navigation", { name: "Main" });
-    expect(nav.className).toContain("grid-cols-3");
-    // Every destination is a tile in the grid; the project is not one of them.
-    expect(within(nav).getByRole("link", { name: /^Inbox/ })).toBeInTheDocument();
-    expect(within(nav).getByRole("link", { name: /^Settings/ })).toBeInTheDocument();
-    const project = screen.getByRole("link", { name: /Project/ });
-    expect(nav).not.toContainElement(project);
-    expect(nav.compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // Tiles keep a touch target above the 44px floor.
-    for (const tile of within(nav).getAllByRole("link")) {
-      expect(tile.className).toContain("min-h-[64px]");
-    }
+    await user.click(screen.getByRole("link", { name: "Drill in" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/m/inbox"));
+    expect(onClose).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("link", { name: "Sandboxes" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
   it("calls onClose when the scrim is tapped", async () => {
@@ -207,7 +182,7 @@ describe("MobileNavDrawer", () => {
     renderAt("/m/chats", true, onClose);
     await screen.findByRole("dialog", { name: "Navigation" });
 
-    await user.click(screen.getByRole("link", { name: /Machines/ }));
+    await user.click(screen.getByRole("link", { name: /Sandboxes/ }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 

@@ -52,7 +52,7 @@ type ReplayMapping struct {
 // one: its params and owner are what `trigger.activation` reads. Nil builds the
 // scope from the workflow's input defaults alone, which is what a first-time
 // activation would see.
-func MapReplay(ctx context.Context, repo any, userID, workflowRef string, wf *reliantv1.Workflow, activation *core.Trigger, replay Replay) (*ReplayMapping, error) {
+func MapReplay(ctx context.Context, repo OwnerSource, userID, workflowRef string, wf *reliantv1.Workflow, activation *core.Trigger, replay Replay) (*ReplayMapping, error) {
 	name, err := replayTriggerName(wf, replay.TriggerName)
 	if err != nil {
 		return nil, err

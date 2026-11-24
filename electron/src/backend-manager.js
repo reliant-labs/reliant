@@ -350,14 +350,6 @@ class BackendManager {
       });
     }
 
-    // Set data directory based on mode
-    // In development: use ./data (relative to cwd) for worktree isolation
-    // In production: use userData/data for shared app data
-    if (!backendEnv.RELIANT_DATA_DIR) {
-      backendEnv.RELIANT_DATA_DIR = this.isDevelopment
-        ? './data'  // Dev: local to each worktree
-        : path.join(appPath('userData'), 'data');  // Prod: shared app data
-    }
     return backendEnv;
   }
 

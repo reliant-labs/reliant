@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { defaultParseSearch, defaultStringifySearch } from '@tanstack/react-router'
+import { mobileNewChatSearchSchema } from '@/routeSchemas'
 import {
   MOBILE_MAX_WIDTH,
   mobilePathFor,
@@ -109,6 +111,23 @@ describe('shouldRedirectToMobile', () => {
     // A prefix match, not a substring one.
     expect(shouldRedirectToMobile(phone({ pathname: '/forgery' }))).toBe(true)
   })
+
+  it('leaves Projects on a phone, and the retired /apps and /sites that redirect there (U6)', () => {
+    // The drawer's Apps opens Projects narrowed to the apps; an old /apps link
+    // redirects there. Handing either off would land the phone on the chat list.
+    for (const pathname of ['/projects', '/o/acme/projects', '/apps', '/o/acme/apps', '/sites', '/o/acme/sites']) {
+      expect(shouldRedirectToMobile(phone({ pathname, search: '?show=apps' })), pathname).toBe(false)
+    }
+    expect(shouldRedirectToMobile(phone({ pathname: '/projectsx' }))).toBe(true)
+  })
+
+  it('leaves Projects and a project page on a phone: one responsive page, no /m twin', () => {
+    for (const pathname of ['/projects', '/projects/p-1', '/projects/p-1/workspaces', '/o/acme/projects/p-1/settings']) {
+      expect(shouldRedirectToMobile(phone({ pathname })), pathname).toBe(false)
+    }
+    // The chat home filtered to a project is still the chat surface.
+    expect(shouldRedirectToMobile(phone({ pathname: '/project/p-1' }))).toBe(true)
+  })
 })
 
 describe('mobilePathFor', () => {
@@ -162,8 +181,48 @@ describe('mobilePathFor', () => {
   })
 
   it('lands everything without a twin on the chat list', () => {
-    for (const pathname of ['/', '/project/abc', '/workflow/new']) {
+    for (const pathname of ['/', '/workflow/new', '/project/abc/settings']) {
       expect(mobilePathFor(pathname), pathname).toBe('/m/chats')
     }
+  })
+
+  // The project switcher's pick off a console page lands on `/project/<id>`:
+  // the phone's list scoped to it, never a bare list that drops the pick.
+  it("opens a project's chat home as the chat list scoped to it", () => {
+    expect(mobilePathFor('/project/abc')).toBe('/m/chats?projects=abc')
+    expect(mobilePathFor('/o/acme/project/abc/')).toBe('/m/chats?projects=abc')
+    expect(mobilePathFor('/project/a%2Fb')).toBe('/m/chats?projects=a%2Fb')
+    // The path names the project: a scope carried with it is not the page's.
+    expect(mobilePathFor('/project/abc', '?projects=all&focus=app%3Ashop')).toBe('/m/chats?projects=abc')
+  })
+
+  it.each(['p1', '123', 'true', 'null', 'p1,p2'])('round-trips scope and draft strings through the router: %s', (id) => {
+    const parseDestination = (url: string) => defaultParseSearch(new URL(url, 'http://phone').search)
+    expect(parseDestination(mobilePathFor(`/project/${encodeURIComponent(id)}`))).toEqual({ projects: id })
+    const scope = { projects: id, focus: id }
+    expect(parseDestination(mobilePathFor('/', defaultStringifySearch(scope)))).toEqual(scope)
+    // Raw external links and router-generated links both remain valid drafts.
+    for (const search of [new URLSearchParams({ project: id, machine: id, ws: id }).toString(), defaultStringifySearch({ project: id, machine: id, ws: id })]) {
+      const parsed = parseDestination(mobilePathFor('/new', search))
+      expect(mobileNewChatSearchSchema.parse(parsed)).toMatchObject({ project: id, machine: id, worktreeId: id })
+    }
+  })
+
+  it("opens a draft with its project, machine and workspace", () => {
+    expect(mobilePathFor('/new', '?project=p1&machine=d1&ws=w1')).toBe('/m/new?project=p1&machine=d1&worktreeId=w1')
+    expect(mobilePathFor('/o/acme/new', 'project=p1&app=shop')).toBe('/m/new?project=p1')
+    expect(mobilePathFor('/new', 'project=p1&projects=p2')).toBe('/m/new?project=p1&projects=p2')
+  })
+
+  it('keeps the shell scope on every twin', () => {
+    expect(mobilePathFor('/', '?projects=p1')).toBe('/m/chats?projects=p1')
+    expect(mobilePathFor('/', 'projects=all&focus=p2')).toBe('/m/chats?projects=all&focus=p2')
+    expect(mobilePathFor('/inbox', 'projects=p1%2Cp2&tour=x')).toBe('/m/inbox?projects=p1%2Cp2')
+    expect(mobilePathFor('/c/chat_1', 'projects=p1&panel=files')).toBe('/m/chats/chat_1?projects=p1')
+    expect(mobilePathFor('/settings/ai', 'projects=p1')).toBe('/m/settings?section=ai&projects=p1')
+    expect(mobilePathFor('/settings/billing', 'returnTo=%2Fclaim&projects=all')).toBe(
+      '/m/settings?section=billing&returnTo=%2Fclaim&projects=all',
+    )
+    expect(mobilePathFor('/workflows/runs/r%2F1', 'projects=p1')).toBe('/m/chats/r%2F1?projects=p1')
   })
 })

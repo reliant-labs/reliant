@@ -55,7 +55,7 @@ import {
 } from "../../hooks/chat-queries";
 import { prefetchChatMessages } from "../../hooks/message-queries";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { useMobileChatScope } from "./mobileScope";
 import { useProjects } from "../../hooks/project-queries";
 import { cn } from "../../lib/utils";
 import { isChatBusy, needsUserAttention } from "../../lib/chatSendState";
@@ -444,8 +444,8 @@ export function MobileChatList() {
   const { chatId: selectedChatId } = useParams({ strict: false });
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
   const currentProjectName = useProjectStore((s) => s.currentProject?.name);
-  // The list is the project filter's (/m/projects), every project by default.
-  const scope = useWorkspaceStateStore((s) => s.projectFilterId);
+  // The URL's scope (`?projects=`, picked on /m/projects): one project, else every project.
+  const scope = useMobileChatScope();
   const { projects } = useProjects();
   const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
   const { data: chatList, isLoading } = useChatListWithWorkspaces(scope);
@@ -627,7 +627,8 @@ export function MobileChatList() {
             // A workspace is made to work in, and an empty one is not listed
             // here (groups come from chats). So land on the composer already
             // pointed at it, rather than back on a list that doesn't show it.
-            void navigate({ to: mobileNewChatPath(), search: { worktreeId: worktree.id } });
+            // The URL names its project too: the workspace is that project's.
+            void navigate({ to: mobileNewChatPath(), search: { project: currentProjectId, worktreeId: worktree.id } });
           }}
         />
       )}

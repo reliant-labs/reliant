@@ -15,6 +15,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // detachedFixture is a user's project created at its path on "cloud", whose
@@ -98,7 +99,7 @@ func TestEnsureOwnedProjectForPath_AnotherUsersCheckoutRowIsNeverResolved(t *tes
 func TestDetachedProject_StaysOffTheMachine(t *testing.T) {
 	f := newDetachedFixture(t)
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.project.ID, f.laptop, f.project.Path, nil))
-	require.NoError(t, f.repo.DetachProjectFromDaemon(f.ctx, f.project.ID, f.laptop, f.project.Path, nil))
+	require.NoError(t, store.DetachProjectFromDaemon(f.ctx, f.repo.ORM(), f.project.ID, f.laptop, f.project.Path, nil))
 	svc := newTestService(f.repo)
 	conn := newTestConn(f.userID, f.laptop, nil)
 
@@ -110,7 +111,7 @@ func TestDetachedProject_StaysOffTheMachine(t *testing.T) {
 	everythingExists := func(context.Context, string) (projectPathState, error) {
 		return projectPathState{Exists: true}, nil
 	}
-	missing, added, err := reconcileProjectDaemons(f.ctx, f.repo, f.laptop, f.userID, nil, "", everythingExists)
+	missing, added, err := reconcileProjectDaemons(f.ctx, reconcileStore{f.repo, store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), store.NewProjectExtStore(f.repo.ORM()), store.NewProjectDaemonExtStore(f.repo.ORM())}, f.laptop, f.userID, nil, "", everythingExists)
 	require.NoError(t, err)
 	assert.Empty(t, added)
 	assert.Empty(t, missing, "a detached project is not missing either: nothing restores it")
@@ -120,7 +121,7 @@ func TestDetachedProject_StaysOffTheMachine(t *testing.T) {
 	assert.Equal(t, f.cloud, rows[0].DaemonID)
 
 	// Another machine is unaffected.
-	_, added, err = reconcileProjectDaemons(f.ctx, f.repo, f.cloud, f.userID, nil, "", everythingExists)
+	_, added, err = reconcileProjectDaemons(f.ctx, reconcileStore{f.repo, store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), store.NewProjectExtStore(f.repo.ORM()), store.NewProjectDaemonExtStore(f.repo.ORM())}, f.cloud, f.userID, nil, "", everythingExists)
 	require.NoError(t, err)
 	assert.Empty(t, added, "the cloud machine already had its row")
 }
@@ -130,7 +131,7 @@ func TestDetachedProject_StaysOffTheMachine(t *testing.T) {
 func TestDetachedProject_ItsOtherPathIsNotANewProject(t *testing.T) {
 	f := newDetachedFixture(t)
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.project.ID, f.laptop, f.localPath, nil))
-	require.NoError(t, f.repo.DetachProjectFromDaemon(f.ctx, f.project.ID, f.laptop, f.localPath, nil))
+	require.NoError(t, store.DetachProjectFromDaemon(f.ctx, f.repo.ORM(), f.project.ID, f.laptop, f.localPath, nil))
 	svc := newTestService(f.repo)
 
 	_, err := svc.ensureOwnedProjectForPath(f.ctx, newTestConn(f.userID, f.laptop, nil), f.localPath, nil)
@@ -146,7 +147,7 @@ func TestDetachedProject_ItsOtherPathIsNotANewProject(t *testing.T) {
 func TestDetachedProject_AnotherProjectAttachedAtItsPathSyncs(t *testing.T) {
 	f := newDetachedFixture(t)
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.project.ID, f.laptop, f.localPath, nil))
-	require.NoError(t, f.repo.DetachProjectFromDaemon(f.ctx, f.project.ID, f.laptop, f.localPath, nil))
+	require.NoError(t, store.DetachProjectFromDaemon(f.ctx, f.repo.ORM(), f.project.ID, f.laptop, f.localPath, nil))
 
 	now := time.Unix(1_800_000_000, 0).UTC()
 	other := &db.Project{ID: uuid.NewString(), UserID: f.userID, Name: "other",
@@ -167,7 +168,7 @@ func TestDetachedProject_AnotherProjectAttachedAtItsPathSyncs(t *testing.T) {
 	assert.True(t, synced, "the attached project's snapshot from the machine is synced")
 
 	// A stays detached from the machine.
-	detached, err := f.repo.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.laptop)
+	detached, err := store.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.repo.ORM(), f.laptop)
 	require.NoError(t, err)
 	require.Len(t, detached, 1)
 	assert.Equal(t, f.project.ID, detached[0].ProjectID)
@@ -176,13 +177,13 @@ func TestDetachedProject_AnotherProjectAttachedAtItsPathSyncs(t *testing.T) {
 // detachDuringIntakeRepo starts a detach right after the path resolution has
 // read the machine's detachments, before it reads the machine's checkout.
 type detachDuringIntakeRepo struct {
-	*db.Repo
+	MachineCheckouts
 	once   sync.Once
 	detach func()
 }
 
 func (r *detachDuringIntakeRepo) ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error) {
-	rows, err := r.Repo.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
+	rows, err := r.MachineCheckouts.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
 	r.once.Do(r.detach)
 	return rows, err
 }
@@ -198,10 +199,10 @@ func TestEnsureOwnedProjectForPath_DetachBetweenItsReadsCreatesNoProject(t *test
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.project.ID, f.laptop, f.localPath, nil))
 
 	detachDone := make(chan error, 1)
-	repo := &detachDuringIntakeRepo{Repo: f.repo}
+	repo := &detachDuringIntakeRepo{MachineCheckouts: store.NewProjectDaemonDetachmentExtStore(f.repo.ORM())}
 	repo.detach = func() {
 		go func() {
-			detachDone <- f.repo.DetachProjectFromDaemon(f.ctx, f.project.ID, f.laptop, f.localPath, nil)
+			detachDone <- store.DetachProjectFromDaemon(f.ctx, f.repo.ORM(), f.project.ID, f.laptop, f.localPath, nil)
 		}()
 		// Hand control back once the detach either finished (no lock held it
 		// off) or is waiting on an advisory lock in this test's database.
@@ -222,7 +223,7 @@ func TestEnsureOwnedProjectForPath_DetachBetweenItsReadsCreatesNoProject(t *test
 			time.Sleep(5 * time.Millisecond)
 		}
 	}
-	svc := newTestService(repo)
+	svc := newTestService(f.repo, repo)
 	conn := newTestConn(f.userID, f.laptop, nil)
 
 	got, err := svc.ensureOwnedProjectForPath(f.ctx, conn, f.localPath, nil)
@@ -258,10 +259,10 @@ func TestReconcile_DetachDuringTheProbeStaysDetached(t *testing.T) {
 	// the user attaches and then detaches it while the pass probes.
 	detachDuringProbe := func(ctx context.Context, path string) (projectPathState, error) {
 		require.NoError(t, f.repo.UpsertProjectDaemon(ctx, f.project.ID, f.laptop, path, nil))
-		require.NoError(t, f.repo.DetachProjectFromDaemon(ctx, f.project.ID, f.laptop, path, nil))
+		require.NoError(t, store.DetachProjectFromDaemon(ctx, f.repo.ORM(), f.project.ID, f.laptop, path, nil))
 		return projectPathState{Exists: true}, nil
 	}
-	_, added, err := reconcileProjectDaemons(f.ctx, f.repo, f.laptop, f.userID, nil, "", detachDuringProbe)
+	_, added, err := reconcileProjectDaemons(f.ctx, reconcileStore{f.repo, store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), store.NewProjectExtStore(f.repo.ORM()), store.NewProjectDaemonExtStore(f.repo.ORM())}, f.laptop, f.userID, nil, "", detachDuringProbe)
 	require.NoError(t, err)
 	assert.Empty(t, added)
 
@@ -269,7 +270,7 @@ func TestReconcile_DetachDuringTheProbeStaysDetached(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, f.cloud, rows[0].DaemonID, "the laptop's checkout was not recorded again")
-	detached, err := f.repo.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.laptop)
+	detached, err := store.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.repo.ORM(), f.laptop)
 	require.NoError(t, err)
 	assert.Len(t, detached, 1, "the detachment stands")
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -98,7 +99,7 @@ func (s *Service) findPriorSend(ctx context.Context, chat *db.Chat, id, userCont
 		return nil, nil
 	}
 
-	msg, err := s.deps.Repo.FindMessage(ctx, id)
+	msg, err := s.deps.Messages.FindMessage(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("check for an earlier send: %w", err)
 	}
@@ -113,14 +114,15 @@ func (s *Service) findPriorSend(ctx context.Context, chat *db.Chat, id, userCont
 		if !same {
 			return nil, launch.ErrClientMessageReused
 		}
-		latest, err := s.deps.Repo.IsLatestTurnInThread(ctx, msg.ThreadID, msg.ID)
+		turn, err := s.deps.Messages.LatestTurnInThread(ctx, msg.ThreadID)
 		if err != nil {
 			return nil, fmt.Errorf("check whether the earlier send was answered: %w", err)
 		}
+		latest := turn != nil && turn.ID == msg.ID
 		return &priorSend{history: msg, settled: !latest}, nil
 	}
 
-	row, err := s.deps.Repo.GetAgentMessage(ctx, id)
+	row, err := s.deps.AgentMessages.GetAgentMessage(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("check for an earlier queued send: %w", err)
 	}
@@ -215,7 +217,7 @@ func (s *Service) priorSendOrReplay(ctx context.Context, chat *db.Chat, id, user
 	if prior.undelivered {
 		// Never read, so it is not a message the agent has: the send starts over
 		// under the same id.
-		if _, err := s.deps.Repo.DeleteUndeliveredAgentMessage(ctx, prior.mailbox.ID, chat.ID); err != nil {
+		if _, err := s.deps.AgentMessages.DeleteUndeliveredAgentMessage(ctx, prior.mailbox.ID, chat.ID); err != nil {
 			return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to retry an undelivered message"))
 		}
 		return nil, nil, nil
@@ -232,7 +234,7 @@ func (s *Service) priorSendOrReplay(ctx context.Context, chat *db.Chat, id, user
 // one that is taken by a different message is refused.
 func (s *Service) enqueueHumanMessage(ctx context.Context, msg *db.AgentMessage, named bool) (row *db.AgentMessage, inserted bool, err error) {
 	if !named {
-		if err := s.deps.Repo.EnqueueAgentMessage(ctx, msg); err != nil {
+		if err := s.deps.Mailbox.EnqueueAgentMessage(ctx, msg); err != nil {
 			return nil, false, err
 		}
 		return msg, true, nil
@@ -241,14 +243,14 @@ func (s *Service) enqueueHumanMessage(ctx context.Context, msg *db.AgentMessage,
 	// Twice: the first look can find an undelivered row to clear, and the second
 	// insert is then the only thing left that can lose to a racing twin.
 	for attempt := 0; attempt < 3; attempt++ {
-		ok, err := s.deps.Repo.EnqueueAgentMessageOnce(ctx, msg)
+		ok, err := s.deps.Mailbox.EnqueueAgentMessageOnce(ctx, msg)
 		if err != nil {
 			return nil, false, err
 		}
 		if ok {
 			return msg, true, nil
 		}
-		existing, err := s.deps.Repo.GetAgentMessage(ctx, msg.ID)
+		existing, err := s.deps.AgentMessages.GetAgentMessage(ctx, msg.ID)
 		if err != nil {
 			return nil, false, err
 		}
@@ -260,7 +262,7 @@ func (s *Service) enqueueHumanMessage(ctx context.Context, msg *db.AgentMessage,
 			return nil, false, launch.ErrClientMessageReused
 		}
 		if existing.Status == core.AgentMessageStatusUndelivered {
-			if _, err := s.deps.Repo.DeleteUndeliveredAgentMessage(ctx, existing.ID, msg.ChatID); err != nil {
+			if _, err := s.deps.AgentMessages.DeleteUndeliveredAgentMessage(ctx, existing.ID, msg.ChatID); err != nil {
 				return nil, false, err
 			}
 			continue
@@ -281,7 +283,7 @@ var errSendAlreadySaved = errors.New("send already saved")
 // message queued to a running thread (the thread's next turn drains that into
 // history, so it must not be saved a second time).
 func (s *Service) savedSendID(ctx context.Context, chatID, id string) (string, error) {
-	msg, err := s.deps.Repo.FindMessage(ctx, id)
+	msg, err := s.deps.Messages.FindMessage(ctx, id)
 	if err != nil {
 		return "", fmt.Errorf("check for an earlier send: %w", err)
 	}
@@ -291,7 +293,7 @@ func (s *Service) savedSendID(ctx context.Context, chatID, id string) (string, e
 		}
 		return msg.ID, nil
 	}
-	row, err := s.deps.Repo.GetAgentMessage(ctx, id)
+	row, err := s.deps.AgentMessages.GetAgentMessage(ctx, id)
 	if err != nil {
 		return "", fmt.Errorf("check for an earlier queued send: %w", err)
 	}

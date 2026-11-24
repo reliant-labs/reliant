@@ -33,6 +33,9 @@ const launchEventOfChatSQL = `(SELECT l.id FROM trigger_events l WHERE l.chat_id
 // redriven fire must not add a second. created reports whether this call
 // wrote it.
 func InsertWorkflowCheckRun(ctx context.Context, db orm.Context, row *core.WorkflowCheckRun) (created bool, err error) {
+	if row == nil || row.ID == "" || row.TriggerEventID == "" {
+		return false, fmt.Errorf("workflow check run needs an id and a trigger event")
+	}
 	now := time.Now().UTC()
 	if row.CreatedAt.IsZero() {
 		row.CreatedAt = now
@@ -70,6 +73,9 @@ func InsertWorkflowCheckRun(ctx context.Context, db orm.Context, row *core.Workf
 // started — the first stamp stands — and makes them due now. A chat with no
 // check is a no-op.
 func MarkWorkflowCheckRunsStarted(ctx context.Context, db orm.Context, chatID string, at time.Time) error {
+	if chatID == "" {
+		return fmt.Errorf("chat ID cannot be empty")
+	}
 	_, err := db.Bun().NewRaw(`UPDATE workflow_check_runs
 SET started_at = COALESCE(started_at, ?1::timestamptz),
     next_sync_at = LEAST(next_sync_at, ?1::timestamptz),
@@ -86,6 +92,9 @@ WHERE trigger_event_id = `+launchEventOfChatSQL+`
 // firing's checks — the first record stands, so a retried report changes
 // nothing — and makes them due now.
 func RecordWorkflowCheckRunsEnded(ctx context.Context, db orm.Context, chatID string, ending core.WorkflowCheckEnding, at time.Time) error {
+	if chatID == "" {
+		return fmt.Errorf("chat ID cannot be empty")
+	}
 	var output any
 	if ending.Output != nil {
 		raw, err := json.Marshal(ending.Output)
@@ -121,7 +130,7 @@ func ClaimWorkflowCheckRuns(ctx context.Context, db orm.Context, holder string, 
 		return nil, nil
 	}
 	if holder == "" {
-		return nil, errors.New("failed to claim workflow check runs: no holder")
+		return nil, errors.New("workflow check run lease holder cannot be empty")
 	}
 	claimable := func(q *bun.SelectQuery) *bun.SelectQuery {
 		return q.Where("c.claimed_until IS NULL").WhereOr("c.claimed_until < ?", now)
@@ -162,6 +171,9 @@ RETURNING `+columnsOf[WorkflowCheckRun]("c"), holder, leaseUntil, ids, now).Scan
 // returns the ids it renewed. A lease missing from the answer is lost: the
 // row was retaken after it expired, finished, or deleted.
 func RenewWorkflowCheckRunLeases(ctx context.Context, db orm.Context, holder string, leases []core.WorkflowCheckLease, until time.Time) ([]string, error) {
+	if holder == "" {
+		return nil, errors.New("workflow check run lease holder cannot be empty")
+	}
 	if len(leases) == 0 {
 		return nil, nil
 	}
@@ -195,6 +207,9 @@ WHERE e.id = ?0::text`
 // ObserveWorkflowCheckRun reads a check's firing and its run; a firing that
 // is gone is core.ErrWorkflowCheckRunNotFound.
 func ObserveWorkflowCheckRun(ctx context.Context, db orm.Context, triggerEventID string) (*core.WorkflowCheckObservation, error) {
+	if triggerEventID == "" {
+		return nil, core.ErrWorkflowCheckRunNotFound
+	}
 	var row struct {
 		Outcome       string                   `bun:"outcome"`
 		OutcomeDetail string                   `bun:"outcome_detail"`
@@ -236,6 +251,9 @@ func ObserveWorkflowCheckRun(ctx context.Context, db orm.Context, triggerEventID
 // run's own reports (started_at, ended_status and the output) are never
 // written here, so a report that lands during a sync is not lost.
 func SaveWorkflowCheckRunSync(ctx context.Context, db orm.Context, row *core.WorkflowCheckRun) error {
+	if row == nil || row.ID == "" {
+		return fmt.Errorf("workflow check run ID cannot be empty")
+	}
 	if row.ClaimedBy == "" {
 		return fmt.Errorf("failed to save workflow check run %s: it was not claimed", row.ID)
 	}

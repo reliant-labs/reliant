@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // storedPNG seeds the fake repo with an image attachment owned by the user the
@@ -273,4 +274,60 @@ func TestSaveAttachment_RunsThroughTheWrapper(t *testing.T) {
 	require.False(t, resp.IsError, "unexpected error response: %s", resp.Content)
 	assert.Equal(t, pngBytes, recorder.content)
 	assert.Equal(t, filepath.Join("/workspace", "assets/bike.png"), recorder.path)
+}
+
+// TestSaveAttachment_WarnsWhenExtensionDisagreesWithContent pins the warning
+// for a PNG saved under a .jpg name. The write still happens — the bytes are
+// right, only the name is misleading — but the model must be told, because it
+// asked for a JPEG and will otherwise reference the file as one.
+func TestSaveAttachment_WarnsWhenExtensionDisagreesWithContent(t *testing.T) {
+	repo := newFakeAttachmentRepo()
+	storedPNG(t, repo, "att-1", "test-user")
+
+	tool := &saveAttachmentTool{repo: repo}
+	recorder := &recordingDaemon{}
+	ctx := saveAttachmentCtx(t).WithDaemon(recorder)
+
+	resp, err := tool.Execute(ctx, SaveAttachmentParams{AttachmentID: "att-1", SaveTo: "public/logo.jpg"})
+	require.NoError(t, err)
+	require.False(t, resp.IsError, "a mismatched extension warns, it does not refuse: %s", resp.Content)
+	assert.Equal(t, pngBytes, recorder.content, "the bytes are written unchanged")
+
+	assert.Contains(t, resp.Content, "Warning:")
+	assert.Contains(t, resp.Content, "image/png")
+	assert.Contains(t, resp.Content, "image/jpeg")
+	assert.Contains(t, resp.Content, ".png", "the warning names the extension that matches the content")
+
+	var output SaveAttachmentOutput
+	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &output))
+	assert.NotEmpty(t, output.Warning)
+}
+
+func TestExtensionMismatchWarning(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name, savedTo, mime, filename string
+		warn                          bool
+	}{
+		{"matching extension", "a/logo.png", "image/png", "image.png", false},
+		{"jpg and jpeg are one type", "a/photo.jpeg", "image/jpeg", "photo.jpg", false},
+		{"non-standard image/jpg alias", "a/photo.jpg", "image/jpg", "photo.jpg", false},
+		{"mime parameters ignored", "a/logo.png", "image/png; charset=binary", "x.png", false},
+		{"png saved as jpg", "a/logo.jpg", "image/png", "image.png", true},
+		{"pdf saved as png", "doc.png", "application/pdf", "doc.pdf", true},
+		{"no extension", "a/logo", "image/png", "image.png", false},
+		{"unknown extension", "a/logo.zzqq", "image/png", "image.png", false},
+		{"unknown stored type", "a/logo.png", "application/octet-stream", "blob", false},
+		{"stored text saved as markdown", "notes.md", "text/plain", "notes.txt", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := extensionMismatchWarning(tc.savedTo, tc.mime, tc.filename)
+			if tc.warn {
+				assert.NotEmpty(t, got)
+			} else {
+				assert.Empty(t, got)
+			}
+		})
+	}
 }

@@ -311,11 +311,13 @@ export const useTourStore = create<TourState>((set, get) => ({
     // tour (wizard hook or external) gets consistent side effects.
     // The checklist is Reliant's (settings-backed); a shell with its own
     // storage (the forge shell) has none to update.
+    // Only a journey finished with Finish earns the guide's "Take a tour": an
+    // Exit tour (skipped) or a dismissed picker (no journey) is not taking it.
     const startedIn = generation;
     if (getTourStorage().kind === "settings") try {
       const { useOnboardingChecklistStore } = await import("./onboardingChecklistStore");
       if (startedIn !== generation) return;
-      void useOnboardingChecklistStore.getState().markComplete("take-product-tour");
+      if (journey && outcome === "completed") void useOnboardingChecklistStore.getState().markComplete("take-product-tour");
       void useOnboardingChecklistStore.getState().markWelcomeShown();
     } catch {
       /* ignore */

@@ -27,7 +27,7 @@ func (s *Service) GetProject(
 		// (no path) and without the git check, which would reach the owner's
 		// machine.
 		viewing := authz.WithViewerReads(ctx)
-		if shared, getErr := s.deps.Repo.GetProject(viewing, req.Msg.ProjectId); getErr == nil {
+		if shared, getErr := s.deps.ProjectRows.GetProject(viewing, req.Msg.ProjectId); getErr == nil {
 			// Not the owner here, so a readable answer is a viewer's: it is
 			// shaped for one whatever the decision says.
 			if _, denied := authz.ReadProjectAccess(viewing, userID, shared); denied == nil {
@@ -37,7 +37,7 @@ func (s *Service) GetProject(
 		return nil, err
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.ProjectRows.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}

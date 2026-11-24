@@ -211,17 +211,12 @@ func TestWorktreeReap_ModeOnRunsWithoutTheStorageReaper(t *testing.T) {
 				if approvedOnly {
 					t.Error("a scheduled pass ran approved-only")
 				}
-				cancel() // one pass is the test; RunReaper returns
+				cancel() // one pass is the test
 			}})
 			w.ConfigureReaper(ReaperConfig{Enabled: false, Interval: time.Hour, PressureInterval: 10 * time.Minute, PolicyPath: filepath.Join(t.TempDir(), "storage.json")})
 
-			done := make(chan struct{})
-			go func() { w.RunReaper(ctx); close(done) }()
-			select {
-			case <-done:
-			case <-time.After(10 * time.Second):
-				t.Fatal("RunReaper did not return")
-			}
+			// One poll of RunReaper with the reaper off (runReaperOff).
+			w.reaperOffTick(ctx)
 			if len(sweeps) != tc.sweeps || forge != 0 || cacheRuns != 0 {
 				t.Fatalf("sweeps %v, forge reaps %d, cache passes %d; want %d sweeps and no reaper work", sweeps, forge, cacheRuns, tc.sweeps)
 			}

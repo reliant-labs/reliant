@@ -2,9 +2,9 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The led console's grouped nav: the console's same pages and links,
- * regrouped, for any project shape (one environment, many, previews, starred
- * dashboards, no Product analytics hub).
+ * The led console's grouped nav: the console's same pages and links, in the
+ * shell's groups and order, for any project shape (one environment, many,
+ * previews, starred dashboards, no Product analytics hub).
  */
 
 import { describe, expect, it } from "vitest";
@@ -25,23 +25,53 @@ const lit = (items: SidebarNavItem[]) => flat(items).filter((item) => item.activ
 const hrefs = (items: SidebarNavItem[]) => new Set(flat(items).flatMap((item) => (item.href ? [item.href] : [])));
 
 describe("buildGroupedConsoleNav", () => {
-  it("groups the console's pages, Configure last and Activity in the footer", () => {
+  it("draws the shell's groups in the shell's order, Activity last in Configure", () => {
     const { items, footer } = nav({ productAnalytics: HUB });
     expect(items.map((item) => [item.label, (item.children ?? []).map((child) => child.label).join(",")])).toEqual([
       ["Overview", ""],
-      ["Issues", "Errors,Alerts"],
-      ["Performance", "Traces,RPC explorer"],
-      ["Sessions", ""],
-      ["Product analytics", ""],
-      ["Releases", ""],
+      ["Dashboards", ""],
+      ["Observability", "Overview,Service graph,Metrics,Logs,RPC explorer,Profiles,Errors,Alerts,Traces,Speed insights,Sessions"],
+      ["Analytics", "Product overview,Users,Product,Acquisition,Events & metrics"],
+      ["Deployments", "Services,Releases,Environments"],
+      ["Tests", "Overview,Coverage,Runs,Flaky tests"],
       ["Data", ""],
-      ["Users", ""],
-      ["More tools", "Dashboards,Logs,Metrics,Profiles,Service graph,Storage"],
-      ["Environments", "prod"],
-      ["Secrets", ""],
-      ["Domains", ""],
+      ["Storage", ""],
+      ["Auth", ""],
+      ["Configure", "Secrets,Domains,Usage,Activity"],
     ]);
-    expect(footer.map((item) => item.label)).toEqual(["Activity"]);
+    expect(footer).toEqual([]);
+    // The groups are folding buttons (no page of their own), as in the shell's nav.
+    for (const group of items.filter((item) => item.children?.length && item.label !== "Dashboards")) expect(group.href, group.label).toBeUndefined();
+  });
+
+  it("keeps the order of the shell's nav (navConfig/hybrid.ts), less the product's own rows", () => {
+    const shell = ["Overview", "Dashboards", "Observability", "Analytics", "Deployments", "Tests", "Data", "Storage", "Auth", "Security", "Configure"];
+    const labels = nav().items.map((item) => item.label);
+    expect(labels).toEqual(shell.filter((label) => labels.includes(label)));
+  });
+
+  it("leaves out the pages a host does not serve", () => {
+    const labels = flat(nav({ hiddenPages: ["usage", "speed-insights"] }).items).map((item) => item.label);
+    expect(labels).not.toContain("Usage");
+    expect(labels).not.toContain("Speed insights");
+    expect(labels).toContain("Activity");
+  });
+
+  it("counts tests needing attention on Tests, and firing alerts on Observability and Alerts", () => {
+    const { items } = nav({ navCounts: { tests: 2 }, alertsFiring: 1 });
+    expect(items.find((item) => item.label === "Tests")!.badge).toMatchObject({ value: 2 });
+    expect(items.find((item) => item.label === "Tests")!.badge).not.toHaveProperty("tone", "danger");
+    expect(items.find((item) => item.label === "Observability")!.badge).toMatchObject({ value: 1, tone: "danger" });
+    expect(nav().items.find((item) => item.label === "Tests")!.badge).toBeUndefined();
+  });
+
+  it("lights the page's row inside its group", () => {
+    expect(lit(nav({ page: { kind: "tests-run", run: "r1" } }).items)).toEqual(["Runs"]);
+    expect(lit(nav({ page: { kind: "workload", env: "prod", name: "api" } }).items)).toEqual(["Services"]);
+    expect(lit(nav({ page: { kind: "obs-overview" } }).items)).toEqual(["Overview"]);
+    expect(lit(nav({ page: { kind: "events" } }).items)).toEqual(["Events & metrics"]);
+    expect(lit(nav({ page: { kind: "analytics", tab: "users" } }).items)).toEqual(["Users"]);
+    expect(lit(nav({ page: { kind: "activity" } }).items)).toEqual(["Activity"]);
   });
 
   it("reaches every page the console's own nav reaches, with the same scoped links", () => {
@@ -52,10 +82,9 @@ describe("buildGroupedConsoleNav", () => {
     for (const view of OBS_NAV_VIEWS) expect([...grouped].some((href) => href.includes(`/observability/${view}`))).toBe(true);
   });
 
-  it("has no Product analytics row without a hub, and lights it on any of the hub's tabs", () => {
-    expect(nav().items.map((item) => item.label)).not.toContain("Product analytics");
-    expect(lit(nav({ productAnalytics: HUB, page: { kind: "dashboard", dashKind: "release", key: "acquisition" } }).items)).toEqual(["Product analytics"]);
-    // Any other dashboard lights Dashboards, under More tools.
+  it("lights the hub's Analytics tab on one of the hub's dashboards", () => {
+    expect(lit(nav({ productAnalytics: HUB, page: { kind: "dashboard", dashKind: "release", key: "acquisition" } }).items)).toEqual(["Acquisition"]);
+    // Any other dashboard lights Dashboards (top-level, the one place).
     expect(lit(nav({ productAnalytics: HUB, page: { kind: "dashboard", dashKind: "release", key: "api" } }).items)).toEqual(["Dashboards"]);
   });
 
@@ -69,7 +98,7 @@ describe("buildGroupedConsoleNav", () => {
 
   it("lists every long-lived environment and the previews as one row", () => {
     const envs = [...Array.from({ length: 12 }, (_, i) => ({ name: `env-${i}-with-a-rather-long-name`, preview: false })), { name: "pr-1", preview: true }, { name: "pr-2", preview: true }];
-    const environments = nav({ envs }).items.find((item) => item.label === "Environments")!;
+    const environments = flat(nav({ envs }).items).find((item) => item.label === "Environments")!;
     expect(environments.children).toHaveLength(13);
     expect(environments.children?.at(-1)).toMatchObject({ label: "Previews", badge: { value: 2 } });
   });
@@ -79,7 +108,7 @@ describe("buildGroupedConsoleNav", () => {
     expect(lit(nav({ optionalViews: { profiles: false }, page: { kind: "obs-view", view: "profiles" } }).items)).toEqual(["Profiles"]);
   });
 
-  it("counts alerts firing on Alerts", () => {
+  it("counts alerts firing on Alerts too", () => {
     const alerts = flat(nav({ alertsFiring: 2 }).items).find((item) => item.label === "Alerts")!;
     expect(alerts.badge).toMatchObject({ value: 2, tone: "danger" });
   });
@@ -91,16 +120,18 @@ describe("buildGroupedConsoleNav", () => {
 });
 
 describe("groupedCrumbs", () => {
-  it("puts a view under its group, a hub tab under Product analytics, and a dashboard under More tools", () => {
-    expect(groupedCrumbs({ kind: "obs-view", view: "errors" }, [])).toEqual([{ label: "Issues" }, { label: "Errors" }]);
-    expect(groupedCrumbs({ kind: "obs-view", view: "sessions" }, [])).toEqual([{ label: "Sessions" }]);
-    expect(groupedCrumbs({ kind: "dashboard", dashKind: "release", key: "users" }, [{ label: "Observability" }, { label: "Users" }], HUB)).toEqual([{ label: "Product analytics" }, { label: "Users" }]);
+  it("puts a view under its variant group, a hub tab under Analytics, and a dashboard under Dashboards", () => {
+    expect(groupedCrumbs({ kind: "obs-view", view: "errors" }, [])).toEqual([{ label: "Performance & issues" }, { label: "Errors" }]);
+    expect(groupedCrumbs({ kind: "obs-view", view: "logs" }, [])).toEqual([{ label: "Observability" }, { label: "Logs" }]);
+    expect(groupedCrumbs({ kind: "dashboard", dashKind: "release", key: "users" }, [{ label: "Observability" }, { label: "Users" }], HUB)).toEqual([{ label: "Analytics" }, { label: "Users" }]);
     expect(groupedCrumbs({ kind: "dashboard", dashKind: "release", key: "api" }, [{ label: "Observability" }, { label: "Dashboards", href: "/d" }, { label: "api" }])).toEqual([
-      { label: "More tools" },
       { label: "Dashboards", href: "/d" },
       { label: "api" },
     ]);
-    expect(groupedCrumbs({ kind: "releases" }, [{ label: "Releases" }])).toBeNull();
+    expect(groupedCrumbs({ kind: "releases" }, [{ label: "Releases" }])).toEqual([{ label: "Deployments" }, { label: "Releases" }]);
+    expect(groupedCrumbs({ kind: "services" }, [{ label: "Services" }])).toEqual([{ label: "Deployments" }, { label: "Services" }]);
+    expect(groupedCrumbs({ kind: "events" }, [{ label: "Product analytics" }, { label: "Events & metrics" }])).toEqual([{ label: "Analytics" }, { label: "Events & metrics" }]);
+    expect(groupedCrumbs({ kind: "secrets" }, [{ label: "Secrets" }])).toBeNull();
   });
 });
 

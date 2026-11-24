@@ -4,6 +4,8 @@ package threads
 import (
 	"context"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A branched chat DISPLAYS its parent's history but does not own those rows —
@@ -49,7 +51,7 @@ func TestBranchSeqAllocationClearsInheritedHistory(t *testing.T) {
 	)
 
 	// What the branch actually renders.
-	inherited, err := NewService(h.repo).LoadCurrentMessages(ctx, branchThread.ID)
+	inherited, err := New(Deps{Repo: h.repo, Messages: store.NewMessageExtStore(h.repo.ORM()), Senders: store.NewThreadExtStore(h.repo.ORM())}).LoadCurrentMessages(ctx, branchThread.ID)
 	if err != nil {
 		t.Fatalf("load branch messages: %v", err)
 	}

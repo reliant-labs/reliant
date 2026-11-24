@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/approvalkind"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
@@ -52,6 +53,11 @@ type ApprovalCreateInput struct {
 	// node. Its approval is APPROVAL_TYPE_TOOL_CALL: the run answers the call
 	// itself, approved or denied.
 	ToolCallID string `json:"tool_call_id,omitempty" reliant:"-"`
+	// ToolName is that tool call's tool, which decides who may approve it
+	// (approvalkind.For: a trigger change needs manage, the machine the
+	// owner). Empty for a workflow approval node, and from workflow code
+	// that predates the field, whose tool-call approval is then owner-only.
+	ToolName string `json:"tool_name,omitempty" reliant:"-"`
 	// BatchID is shared by the approvals one step raised together, so they
 	// can be decided together. Empty for an approval raised on its own.
 	BatchID string `json:"batch_id,omitempty" reliant:"-"`
@@ -91,12 +97,13 @@ type ApprovalResolveOutput struct {
 // ApprovalCreateActivity creates an approval record in the DB and returns immediately.
 // The workflow then waits on a signal channel for resolution — no polling needed.
 type ApprovalCreateActivity struct {
-	repo ApprovalCreateStore
+	repo      ApprovalCreateStore
+	approvals ApprovalLookup
 }
 
 // NewApprovalCreateActivity creates a new ApprovalCreateActivity
-func NewApprovalCreateActivity(repo ApprovalCreateStore) *ApprovalCreateActivity {
-	return &ApprovalCreateActivity{repo: repo}
+func NewApprovalCreateActivity(deps ApprovalCreateDeps) *ApprovalCreateActivity {
+	return &ApprovalCreateActivity{repo: deps.Repo, approvals: deps.Approvals}
 }
 
 // Name returns the activity name for registration
@@ -140,7 +147,7 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		"entityID", entityID)
 
 	// IDEMPOTENCY: Check if we already created this approval using the workflow-scoped entity ID.
-	existingApproval, err := a.repo.GetApprovalByEntityID(ctx, entityID)
+	existingApproval, err := a.approvals.GetApprovalByEntityID(ctx, entityID)
 	if err == nil && existingApproval != nil {
 		logger.Debug("[ApprovalCreate] Found existing approval",
 			"approvalID", existingApproval.ID,
@@ -214,6 +221,15 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		threadID = &input.ThreadID
 	}
 
+	// Who may decide it is fixed now, once, and never re-derived: the row
+	// carries no tool name to derive it from later (chat-collaboration.md
+	// §2.4).
+	minRole := approvalkind.For(approvalkind.Source{
+		ToolCall:           input.ToolCallID != "",
+		ToolName:           input.ToolName,
+		ConnectionProposal: input.ConnectionProposal != nil,
+	}).String()
+
 	approval := &db.Approval{
 		ID:                 approvalID,
 		ChatID:             input.ChatID,
@@ -227,6 +243,7 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		ResolvedAt:         nil,
 		ThreadID:           threadID,
 		BatchID:            batchID,
+		MinRole:            &minRole,
 	}
 
 	// Dual-write: create approval record + chat_update + mark chat unread atomically.
@@ -356,6 +373,9 @@ func (a *ApprovalResolveActivity) Category() schema.ActivityCategory {
 // is announced on the chat feed, or clients keep showing it as pending. A
 // person's decision that landed first is kept.
 func (a *ApprovalResolveActivity) Execute(ctx context.Context, input ApprovalResolveInput) (ApprovalResolveOutput, error) {
+	if a.repo == nil {
+		return ApprovalResolveOutput{}, fmt.Errorf("approval resolution store is not configured")
+	}
 	logger := activity.GetLogger(ctx)
 	logger.Info("[ApprovalResolve] Resolving approval",
 		"approvalID", input.ApprovalID,

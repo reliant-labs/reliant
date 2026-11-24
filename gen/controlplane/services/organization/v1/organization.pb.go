@@ -2230,6 +2230,260 @@ func (x *SetDefaultOrganizationResponse) GetDefaultOrgId() string {
 	return ""
 }
 
+type MoveFreeHostingDesignationRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org to make the caller's free hosting org; the caller must be its
+	// founder.
+	OrgId string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// Preview the move and change nothing.
+	DryRun        bool `protobuf:"varint,2,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MoveFreeHostingDesignationRequest) Reset() {
+	*x = MoveFreeHostingDesignationRequest{}
+	mi := &file_services_organization_v1_organization_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MoveFreeHostingDesignationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MoveFreeHostingDesignationRequest) ProtoMessage() {}
+
+func (x *MoveFreeHostingDesignationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_organization_v1_organization_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MoveFreeHostingDesignationRequest.ProtoReflect.Descriptor instead.
+func (*MoveFreeHostingDesignationRequest) Descriptor() ([]byte, []int) {
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *MoveFreeHostingDesignationRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *MoveFreeHostingDesignationRequest) GetDryRun() bool {
+	if x != nil {
+		return x.DryRun
+	}
+	return false
+}
+
+type MoveFreeHostingDesignationResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org that held the caller's designation before; "" when none did.
+	FromOrgId string `protobuf:"bytes,1,opt,name=from_org_id,json=fromOrgId,proto3" json:"from_org_id,omitempty"`
+	ToOrgId   string `protobuf:"bytes,2,opt,name=to_org_id,json=toOrgId,proto3" json:"to_org_id,omitempty"`
+	// Deployed, enabled static sites that lose free hosting in from_org_id.
+	// Empty for a no-op or when from_org_id has active hosting billing.
+	StoppingSites []*FreeHostingMoveSite `protobuf:"bytes,3,rep,name=stopping_sites,json=stoppingSites,proto3" json:"stopping_sites,omitempty"`
+	// All deployed, enabled static sites in to_org_id that would be served free.
+	ServedSites []*FreeHostingMoveSite `protobuf:"bytes,4,rep,name=served_sites,json=servedSites,proto3" json:"served_sites,omitempty"`
+	// Kept for compatibility. Always empty: there is no site-count limit.
+	UnservedSites []*FreeHostingMoveSite `protobuf:"bytes,5,rep,name=unserved_sites,json=unservedSites,proto3" json:"unserved_sites,omitempty"`
+	// True when the 30-day cooldown refuses the move. Only a dry run answers
+	// with it; a real move inside the cooldown is FailedPrecondition.
+	CooldownApplies bool `protobuf:"varint,6,opt,name=cooldown_applies,json=cooldownApplies,proto3" json:"cooldown_applies,omitempty"`
+	// When the caller may move it next: after this move when moved, else the
+	// end of the cooldown running now (which does not bind a move away from an
+	// org with active hosting billing; cooldown_applies says whether it binds
+	// this one). Unset when no cooldown runs.
+	NextMoveAllowedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=next_move_allowed_at,json=nextMoveAllowedAt,proto3" json:"next_move_allowed_at,omitempty"`
+	// True when the designation moved (never for a dry run or a no-op).
+	Moved         bool `protobuf:"varint,8,opt,name=moved,proto3" json:"moved,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MoveFreeHostingDesignationResponse) Reset() {
+	*x = MoveFreeHostingDesignationResponse{}
+	mi := &file_services_organization_v1_organization_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MoveFreeHostingDesignationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MoveFreeHostingDesignationResponse) ProtoMessage() {}
+
+func (x *MoveFreeHostingDesignationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_organization_v1_organization_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MoveFreeHostingDesignationResponse.ProtoReflect.Descriptor instead.
+func (*MoveFreeHostingDesignationResponse) Descriptor() ([]byte, []int) {
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *MoveFreeHostingDesignationResponse) GetFromOrgId() string {
+	if x != nil {
+		return x.FromOrgId
+	}
+	return ""
+}
+
+func (x *MoveFreeHostingDesignationResponse) GetToOrgId() string {
+	if x != nil {
+		return x.ToOrgId
+	}
+	return ""
+}
+
+func (x *MoveFreeHostingDesignationResponse) GetStoppingSites() []*FreeHostingMoveSite {
+	if x != nil {
+		return x.StoppingSites
+	}
+	return nil
+}
+
+func (x *MoveFreeHostingDesignationResponse) GetServedSites() []*FreeHostingMoveSite {
+	if x != nil {
+		return x.ServedSites
+	}
+	return nil
+}
+
+func (x *MoveFreeHostingDesignationResponse) GetUnservedSites() []*FreeHostingMoveSite {
+	if x != nil {
+		return x.UnservedSites
+	}
+	return nil
+}
+
+func (x *MoveFreeHostingDesignationResponse) GetCooldownApplies() bool {
+	if x != nil {
+		return x.CooldownApplies
+	}
+	return false
+}
+
+func (x *MoveFreeHostingDesignationResponse) GetNextMoveAllowedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NextMoveAllowedAt
+	}
+	return nil
+}
+
+func (x *MoveFreeHostingDesignationResponse) GetMoved() bool {
+	if x != nil {
+		return x.Moved
+	}
+	return false
+}
+
+// FreeHostingMoveSite is one static site under the free hosting allowance.
+type FreeHostingMoveSite struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	DeploymentId string                 `protobuf:"bytes,1,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
+	OrgId        string                 `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Project      string                 `protobuf:"bytes,3,opt,name=project,proto3" json:"project,omitempty"`
+	Env          string                 `protobuf:"bytes,4,opt,name=env,proto3" json:"env,omitempty"`
+	// The deployment's name.
+	Name string `protobuf:"bytes,5,opt,name=name,proto3" json:"name,omitempty"`
+	// The platform URL, with its scheme; "" until one is allocated.
+	Url           string `protobuf:"bytes,6,opt,name=url,proto3" json:"url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FreeHostingMoveSite) Reset() {
+	*x = FreeHostingMoveSite{}
+	mi := &file_services_organization_v1_organization_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FreeHostingMoveSite) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FreeHostingMoveSite) ProtoMessage() {}
+
+func (x *FreeHostingMoveSite) ProtoReflect() protoreflect.Message {
+	mi := &file_services_organization_v1_organization_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FreeHostingMoveSite.ProtoReflect.Descriptor instead.
+func (*FreeHostingMoveSite) Descriptor() ([]byte, []int) {
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *FreeHostingMoveSite) GetDeploymentId() string {
+	if x != nil {
+		return x.DeploymentId
+	}
+	return ""
+}
+
+func (x *FreeHostingMoveSite) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *FreeHostingMoveSite) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *FreeHostingMoveSite) GetEnv() string {
+	if x != nil {
+		return x.Env
+	}
+	return ""
+}
+
+func (x *FreeHostingMoveSite) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *FreeHostingMoveSite) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
 var File_services_organization_v1_organization_proto protoreflect.FileDescriptor
 
 const file_services_organization_v1_organization_proto_rawDesc = "" +
@@ -2390,23 +2644,43 @@ const file_services_organization_v1_organization_proto_rawDesc = "" +
 	"\x1dSetDefaultOrganizationRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"F\n" +
 	"\x1eSetDefaultOrganizationResponse\x12$\n" +
-	"\x0edefault_org_id\x18\x01 \x01(\tR\fdefaultOrgId2\x82\x0e\n" +
-	"\x13OrganizationService\x12p\n" +
-	"\x13ListMyOrganizations\x12+.controlplane.v1.ListMyOrganizationsRequest\x1a,.controlplane.v1.ListMyOrganizationsResponse\x12y\n" +
+	"\x0edefault_org_id\x18\x01 \x01(\tR\fdefaultOrgId\"S\n" +
+	"!MoveFreeHostingDesignationRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x17\n" +
+	"\adry_run\x18\x02 \x01(\bR\x06dryRun\"\xd1\x03\n" +
+	"\"MoveFreeHostingDesignationResponse\x12\x1e\n" +
+	"\vfrom_org_id\x18\x01 \x01(\tR\tfromOrgId\x12\x1a\n" +
+	"\tto_org_id\x18\x02 \x01(\tR\atoOrgId\x12K\n" +
+	"\x0estopping_sites\x18\x03 \x03(\v2$.controlplane.v1.FreeHostingMoveSiteR\rstoppingSites\x12G\n" +
+	"\fserved_sites\x18\x04 \x03(\v2$.controlplane.v1.FreeHostingMoveSiteR\vservedSites\x12K\n" +
+	"\x0eunserved_sites\x18\x05 \x03(\v2$.controlplane.v1.FreeHostingMoveSiteR\runservedSites\x12)\n" +
+	"\x10cooldown_applies\x18\x06 \x01(\bR\x0fcooldownApplies\x12K\n" +
+	"\x14next_move_allowed_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x11nextMoveAllowedAt\x12\x14\n" +
+	"\x05moved\x18\b \x01(\bR\x05moved\"\xa3\x01\n" +
+	"\x13FreeHostingMoveSite\x12#\n" +
+	"\rdeployment_id\x18\x01 \x01(\tR\fdeploymentId\x12\x15\n" +
+	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\x18\n" +
+	"\aproject\x18\x03 \x01(\tR\aproject\x12\x10\n" +
+	"\x03env\x18\x04 \x01(\tR\x03env\x12\x12\n" +
+	"\x04name\x18\x05 \x01(\tR\x04name\x12\x10\n" +
+	"\x03url\x18\x06 \x01(\tR\x03url2\x9e\x0f\n" +
+	"\x13OrganizationService\x12u\n" +
+	"\x13ListMyOrganizations\x12+.controlplane.v1.ListMyOrganizationsRequest\x1a,.controlplane.v1.ListMyOrganizationsResponse\"\x03\x90\x02\x01\x12y\n" +
 	"\x16SetDefaultOrganization\x12..controlplane.v1.SetDefaultOrganizationRequest\x1a/.controlplane.v1.SetDefaultOrganizationResponse\x12m\n" +
-	"\x12CreateOrganization\x12*.controlplane.v1.CreateOrganizationRequest\x1a+.controlplane.v1.CreateOrganizationResponse\x12X\n" +
-	"\vListMembers\x12#.controlplane.v1.ListMembersRequest\x1a$.controlplane.v1.ListMembersResponse\x12[\n" +
-	"\fInviteMember\x12$.controlplane.v1.InviteMemberRequest\x1a%.controlplane.v1.InviteMemberResponse\x12d\n" +
-	"\x0fListInvitations\x12'.controlplane.v1.ListInvitationsRequest\x1a(.controlplane.v1.ListInvitationsResponse\x12g\n" +
+	"\x12CreateOrganization\x12*.controlplane.v1.CreateOrganizationRequest\x1a+.controlplane.v1.CreateOrganizationResponse\x12]\n" +
+	"\vListMembers\x12#.controlplane.v1.ListMembersRequest\x1a$.controlplane.v1.ListMembersResponse\"\x03\x90\x02\x01\x12[\n" +
+	"\fInviteMember\x12$.controlplane.v1.InviteMemberRequest\x1a%.controlplane.v1.InviteMemberResponse\x12i\n" +
+	"\x0fListInvitations\x12'.controlplane.v1.ListInvitationsRequest\x1a(.controlplane.v1.ListInvitationsResponse\"\x03\x90\x02\x01\x12g\n" +
 	"\x10RevokeInvitation\x12(.controlplane.v1.RevokeInvitationRequest\x1a).controlplane.v1.RevokeInvitationResponse\x12^\n" +
 	"\rGetInvitation\x12%.controlplane.v1.GetInvitationRequest\x1a&.controlplane.v1.GetInvitationResponse\x12g\n" +
 	"\x10AcceptInvitation\x12(.controlplane.v1.AcceptInvitationRequest\x1a).controlplane.v1.AcceptInvitationResponse\x12[\n" +
 	"\fRemoveMember\x12$.controlplane.v1.RemoveMemberRequest\x1a%.controlplane.v1.RemoveMemberResponse\x12j\n" +
 	"\x11LeaveOrganization\x12).controlplane.v1.LeaveOrganizationRequest\x1a*.controlplane.v1.LeaveOrganizationResponse\x12g\n" +
-	"\x10UpdateMemberRole\x12(.controlplane.v1.UpdateMemberRoleRequest\x1a).controlplane.v1.UpdateMemberRoleResponse\x12v\n" +
+	"\x10UpdateMemberRole\x12(.controlplane.v1.UpdateMemberRoleRequest\x1a).controlplane.v1.UpdateMemberRoleResponse\x12\x85\x01\n" +
+	"\x1aMoveFreeHostingDesignation\x122.controlplane.v1.MoveFreeHostingDesignationRequest\x1a3.controlplane.v1.MoveFreeHostingDesignationResponse\x12v\n" +
 	"\x15StartGitHubAppInstall\x12-.controlplane.v1.StartGitHubAppInstallRequest\x1a..controlplane.v1.StartGitHubAppInstallResponse\x12\x82\x01\n" +
-	"\x19LinkGitHubAppInstallation\x121.controlplane.v1.LinkGitHubAppInstallationRequest\x1a2.controlplane.v1.LinkGitHubAppInstallationResponse\x12\x85\x01\n" +
-	"\x1aListGitHubAppInstallations\x122.controlplane.v1.ListGitHubAppInstallationsRequest\x1a3.controlplane.v1.ListGitHubAppInstallationsResponse\x12\x88\x01\n" +
+	"\x19LinkGitHubAppInstallation\x121.controlplane.v1.LinkGitHubAppInstallationRequest\x1a2.controlplane.v1.LinkGitHubAppInstallationResponse\x12\x8a\x01\n" +
+	"\x1aListGitHubAppInstallations\x122.controlplane.v1.ListGitHubAppInstallationsRequest\x1a3.controlplane.v1.ListGitHubAppInstallationsResponse\"\x03\x90\x02\x01\x12\x88\x01\n" +
 	"\x1bUnlinkGitHubAppInstallation\x123.controlplane.v1.UnlinkGitHubAppInstallationRequest\x1a4.controlplane.v1.UnlinkGitHubAppInstallationResponseB\xdf\x01\n" +
 	"\x13com.controlplane.v1B\x11OrganizationProtoP\x01ZXgithub.com/reliant-labs/reliant/gen/controlplane/services/organization/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
@@ -2422,7 +2696,7 @@ func file_services_organization_v1_organization_proto_rawDescGZIP() []byte {
 	return file_services_organization_v1_organization_proto_rawDescData
 }
 
-var file_services_organization_v1_organization_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
+var file_services_organization_v1_organization_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
 var file_services_organization_v1_organization_proto_goTypes = []any{
 	(*GitHubAppInstallation)(nil),               // 0: controlplane.v1.GitHubAppInstallation
 	(*StartGitHubAppInstallRequest)(nil),        // 1: controlplane.v1.StartGitHubAppInstallRequest
@@ -2461,65 +2735,74 @@ var file_services_organization_v1_organization_proto_goTypes = []any{
 	(*ListMyOrganizationsResponse)(nil),         // 34: controlplane.v1.ListMyOrganizationsResponse
 	(*SetDefaultOrganizationRequest)(nil),       // 35: controlplane.v1.SetDefaultOrganizationRequest
 	(*SetDefaultOrganizationResponse)(nil),      // 36: controlplane.v1.SetDefaultOrganizationResponse
-	(*timestamppb.Timestamp)(nil),               // 37: google.protobuf.Timestamp
+	(*MoveFreeHostingDesignationRequest)(nil),   // 37: controlplane.v1.MoveFreeHostingDesignationRequest
+	(*MoveFreeHostingDesignationResponse)(nil),  // 38: controlplane.v1.MoveFreeHostingDesignationResponse
+	(*FreeHostingMoveSite)(nil),                 // 39: controlplane.v1.FreeHostingMoveSite
+	(*timestamppb.Timestamp)(nil),               // 40: google.protobuf.Timestamp
 }
 var file_services_organization_v1_organization_proto_depIdxs = []int32{
-	37, // 0: controlplane.v1.GitHubAppInstallation.linked_at:type_name -> google.protobuf.Timestamp
-	37, // 1: controlplane.v1.GitHubAppInstallation.suspended_at:type_name -> google.protobuf.Timestamp
+	40, // 0: controlplane.v1.GitHubAppInstallation.linked_at:type_name -> google.protobuf.Timestamp
+	40, // 1: controlplane.v1.GitHubAppInstallation.suspended_at:type_name -> google.protobuf.Timestamp
 	0,  // 2: controlplane.v1.LinkGitHubAppInstallationResponse.installation:type_name -> controlplane.v1.GitHubAppInstallation
 	0,  // 3: controlplane.v1.ListGitHubAppInstallationsResponse.installations:type_name -> controlplane.v1.GitHubAppInstallation
-	37, // 4: controlplane.v1.OrgMember.joined_at:type_name -> google.protobuf.Timestamp
-	37, // 5: controlplane.v1.OrgInvitation.created_at:type_name -> google.protobuf.Timestamp
-	37, // 6: controlplane.v1.OrgInvitation.expires_at:type_name -> google.protobuf.Timestamp
-	37, // 7: controlplane.v1.OrgInvitation.last_sent_at:type_name -> google.protobuf.Timestamp
+	40, // 4: controlplane.v1.OrgMember.joined_at:type_name -> google.protobuf.Timestamp
+	40, // 5: controlplane.v1.OrgInvitation.created_at:type_name -> google.protobuf.Timestamp
+	40, // 6: controlplane.v1.OrgInvitation.expires_at:type_name -> google.protobuf.Timestamp
+	40, // 7: controlplane.v1.OrgInvitation.last_sent_at:type_name -> google.protobuf.Timestamp
 	32, // 8: controlplane.v1.CreateOrganizationResponse.organization:type_name -> controlplane.v1.MyOrganization
 	9,  // 9: controlplane.v1.ListMembersResponse.members:type_name -> controlplane.v1.OrgMember
 	10, // 10: controlplane.v1.ListMembersResponse.seats:type_name -> controlplane.v1.SeatUsage
 	11, // 11: controlplane.v1.InviteMemberResponse.invitation:type_name -> controlplane.v1.OrgInvitation
 	11, // 12: controlplane.v1.ListInvitationsResponse.invitations:type_name -> controlplane.v1.OrgInvitation
-	37, // 13: controlplane.v1.GetInvitationResponse.expires_at:type_name -> google.protobuf.Timestamp
+	40, // 13: controlplane.v1.GetInvitationResponse.expires_at:type_name -> google.protobuf.Timestamp
 	32, // 14: controlplane.v1.AcceptInvitationResponse.organization:type_name -> controlplane.v1.MyOrganization
 	9,  // 15: controlplane.v1.UpdateMemberRoleResponse.member:type_name -> controlplane.v1.OrgMember
-	37, // 16: controlplane.v1.MyOrganization.created_at:type_name -> google.protobuf.Timestamp
-	37, // 17: controlplane.v1.MyOrganization.joined_at:type_name -> google.protobuf.Timestamp
+	40, // 16: controlplane.v1.MyOrganization.created_at:type_name -> google.protobuf.Timestamp
+	40, // 17: controlplane.v1.MyOrganization.joined_at:type_name -> google.protobuf.Timestamp
 	32, // 18: controlplane.v1.ListMyOrganizationsResponse.organizations:type_name -> controlplane.v1.MyOrganization
-	33, // 19: controlplane.v1.OrganizationService.ListMyOrganizations:input_type -> controlplane.v1.ListMyOrganizationsRequest
-	35, // 20: controlplane.v1.OrganizationService.SetDefaultOrganization:input_type -> controlplane.v1.SetDefaultOrganizationRequest
-	12, // 21: controlplane.v1.OrganizationService.CreateOrganization:input_type -> controlplane.v1.CreateOrganizationRequest
-	14, // 22: controlplane.v1.OrganizationService.ListMembers:input_type -> controlplane.v1.ListMembersRequest
-	16, // 23: controlplane.v1.OrganizationService.InviteMember:input_type -> controlplane.v1.InviteMemberRequest
-	18, // 24: controlplane.v1.OrganizationService.ListInvitations:input_type -> controlplane.v1.ListInvitationsRequest
-	20, // 25: controlplane.v1.OrganizationService.RevokeInvitation:input_type -> controlplane.v1.RevokeInvitationRequest
-	22, // 26: controlplane.v1.OrganizationService.GetInvitation:input_type -> controlplane.v1.GetInvitationRequest
-	24, // 27: controlplane.v1.OrganizationService.AcceptInvitation:input_type -> controlplane.v1.AcceptInvitationRequest
-	26, // 28: controlplane.v1.OrganizationService.RemoveMember:input_type -> controlplane.v1.RemoveMemberRequest
-	28, // 29: controlplane.v1.OrganizationService.LeaveOrganization:input_type -> controlplane.v1.LeaveOrganizationRequest
-	30, // 30: controlplane.v1.OrganizationService.UpdateMemberRole:input_type -> controlplane.v1.UpdateMemberRoleRequest
-	1,  // 31: controlplane.v1.OrganizationService.StartGitHubAppInstall:input_type -> controlplane.v1.StartGitHubAppInstallRequest
-	3,  // 32: controlplane.v1.OrganizationService.LinkGitHubAppInstallation:input_type -> controlplane.v1.LinkGitHubAppInstallationRequest
-	5,  // 33: controlplane.v1.OrganizationService.ListGitHubAppInstallations:input_type -> controlplane.v1.ListGitHubAppInstallationsRequest
-	7,  // 34: controlplane.v1.OrganizationService.UnlinkGitHubAppInstallation:input_type -> controlplane.v1.UnlinkGitHubAppInstallationRequest
-	34, // 35: controlplane.v1.OrganizationService.ListMyOrganizations:output_type -> controlplane.v1.ListMyOrganizationsResponse
-	36, // 36: controlplane.v1.OrganizationService.SetDefaultOrganization:output_type -> controlplane.v1.SetDefaultOrganizationResponse
-	13, // 37: controlplane.v1.OrganizationService.CreateOrganization:output_type -> controlplane.v1.CreateOrganizationResponse
-	15, // 38: controlplane.v1.OrganizationService.ListMembers:output_type -> controlplane.v1.ListMembersResponse
-	17, // 39: controlplane.v1.OrganizationService.InviteMember:output_type -> controlplane.v1.InviteMemberResponse
-	19, // 40: controlplane.v1.OrganizationService.ListInvitations:output_type -> controlplane.v1.ListInvitationsResponse
-	21, // 41: controlplane.v1.OrganizationService.RevokeInvitation:output_type -> controlplane.v1.RevokeInvitationResponse
-	23, // 42: controlplane.v1.OrganizationService.GetInvitation:output_type -> controlplane.v1.GetInvitationResponse
-	25, // 43: controlplane.v1.OrganizationService.AcceptInvitation:output_type -> controlplane.v1.AcceptInvitationResponse
-	27, // 44: controlplane.v1.OrganizationService.RemoveMember:output_type -> controlplane.v1.RemoveMemberResponse
-	29, // 45: controlplane.v1.OrganizationService.LeaveOrganization:output_type -> controlplane.v1.LeaveOrganizationResponse
-	31, // 46: controlplane.v1.OrganizationService.UpdateMemberRole:output_type -> controlplane.v1.UpdateMemberRoleResponse
-	2,  // 47: controlplane.v1.OrganizationService.StartGitHubAppInstall:output_type -> controlplane.v1.StartGitHubAppInstallResponse
-	4,  // 48: controlplane.v1.OrganizationService.LinkGitHubAppInstallation:output_type -> controlplane.v1.LinkGitHubAppInstallationResponse
-	6,  // 49: controlplane.v1.OrganizationService.ListGitHubAppInstallations:output_type -> controlplane.v1.ListGitHubAppInstallationsResponse
-	8,  // 50: controlplane.v1.OrganizationService.UnlinkGitHubAppInstallation:output_type -> controlplane.v1.UnlinkGitHubAppInstallationResponse
-	35, // [35:51] is the sub-list for method output_type
-	19, // [19:35] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	39, // 19: controlplane.v1.MoveFreeHostingDesignationResponse.stopping_sites:type_name -> controlplane.v1.FreeHostingMoveSite
+	39, // 20: controlplane.v1.MoveFreeHostingDesignationResponse.served_sites:type_name -> controlplane.v1.FreeHostingMoveSite
+	39, // 21: controlplane.v1.MoveFreeHostingDesignationResponse.unserved_sites:type_name -> controlplane.v1.FreeHostingMoveSite
+	40, // 22: controlplane.v1.MoveFreeHostingDesignationResponse.next_move_allowed_at:type_name -> google.protobuf.Timestamp
+	33, // 23: controlplane.v1.OrganizationService.ListMyOrganizations:input_type -> controlplane.v1.ListMyOrganizationsRequest
+	35, // 24: controlplane.v1.OrganizationService.SetDefaultOrganization:input_type -> controlplane.v1.SetDefaultOrganizationRequest
+	12, // 25: controlplane.v1.OrganizationService.CreateOrganization:input_type -> controlplane.v1.CreateOrganizationRequest
+	14, // 26: controlplane.v1.OrganizationService.ListMembers:input_type -> controlplane.v1.ListMembersRequest
+	16, // 27: controlplane.v1.OrganizationService.InviteMember:input_type -> controlplane.v1.InviteMemberRequest
+	18, // 28: controlplane.v1.OrganizationService.ListInvitations:input_type -> controlplane.v1.ListInvitationsRequest
+	20, // 29: controlplane.v1.OrganizationService.RevokeInvitation:input_type -> controlplane.v1.RevokeInvitationRequest
+	22, // 30: controlplane.v1.OrganizationService.GetInvitation:input_type -> controlplane.v1.GetInvitationRequest
+	24, // 31: controlplane.v1.OrganizationService.AcceptInvitation:input_type -> controlplane.v1.AcceptInvitationRequest
+	26, // 32: controlplane.v1.OrganizationService.RemoveMember:input_type -> controlplane.v1.RemoveMemberRequest
+	28, // 33: controlplane.v1.OrganizationService.LeaveOrganization:input_type -> controlplane.v1.LeaveOrganizationRequest
+	30, // 34: controlplane.v1.OrganizationService.UpdateMemberRole:input_type -> controlplane.v1.UpdateMemberRoleRequest
+	37, // 35: controlplane.v1.OrganizationService.MoveFreeHostingDesignation:input_type -> controlplane.v1.MoveFreeHostingDesignationRequest
+	1,  // 36: controlplane.v1.OrganizationService.StartGitHubAppInstall:input_type -> controlplane.v1.StartGitHubAppInstallRequest
+	3,  // 37: controlplane.v1.OrganizationService.LinkGitHubAppInstallation:input_type -> controlplane.v1.LinkGitHubAppInstallationRequest
+	5,  // 38: controlplane.v1.OrganizationService.ListGitHubAppInstallations:input_type -> controlplane.v1.ListGitHubAppInstallationsRequest
+	7,  // 39: controlplane.v1.OrganizationService.UnlinkGitHubAppInstallation:input_type -> controlplane.v1.UnlinkGitHubAppInstallationRequest
+	34, // 40: controlplane.v1.OrganizationService.ListMyOrganizations:output_type -> controlplane.v1.ListMyOrganizationsResponse
+	36, // 41: controlplane.v1.OrganizationService.SetDefaultOrganization:output_type -> controlplane.v1.SetDefaultOrganizationResponse
+	13, // 42: controlplane.v1.OrganizationService.CreateOrganization:output_type -> controlplane.v1.CreateOrganizationResponse
+	15, // 43: controlplane.v1.OrganizationService.ListMembers:output_type -> controlplane.v1.ListMembersResponse
+	17, // 44: controlplane.v1.OrganizationService.InviteMember:output_type -> controlplane.v1.InviteMemberResponse
+	19, // 45: controlplane.v1.OrganizationService.ListInvitations:output_type -> controlplane.v1.ListInvitationsResponse
+	21, // 46: controlplane.v1.OrganizationService.RevokeInvitation:output_type -> controlplane.v1.RevokeInvitationResponse
+	23, // 47: controlplane.v1.OrganizationService.GetInvitation:output_type -> controlplane.v1.GetInvitationResponse
+	25, // 48: controlplane.v1.OrganizationService.AcceptInvitation:output_type -> controlplane.v1.AcceptInvitationResponse
+	27, // 49: controlplane.v1.OrganizationService.RemoveMember:output_type -> controlplane.v1.RemoveMemberResponse
+	29, // 50: controlplane.v1.OrganizationService.LeaveOrganization:output_type -> controlplane.v1.LeaveOrganizationResponse
+	31, // 51: controlplane.v1.OrganizationService.UpdateMemberRole:output_type -> controlplane.v1.UpdateMemberRoleResponse
+	38, // 52: controlplane.v1.OrganizationService.MoveFreeHostingDesignation:output_type -> controlplane.v1.MoveFreeHostingDesignationResponse
+	2,  // 53: controlplane.v1.OrganizationService.StartGitHubAppInstall:output_type -> controlplane.v1.StartGitHubAppInstallResponse
+	4,  // 54: controlplane.v1.OrganizationService.LinkGitHubAppInstallation:output_type -> controlplane.v1.LinkGitHubAppInstallationResponse
+	6,  // 55: controlplane.v1.OrganizationService.ListGitHubAppInstallations:output_type -> controlplane.v1.ListGitHubAppInstallationsResponse
+	8,  // 56: controlplane.v1.OrganizationService.UnlinkGitHubAppInstallation:output_type -> controlplane.v1.UnlinkGitHubAppInstallationResponse
+	40, // [40:57] is the sub-list for method output_type
+	23, // [23:40] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_services_organization_v1_organization_proto_init() }
@@ -2537,7 +2820,7 @@ func file_services_organization_v1_organization_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_organization_v1_organization_proto_rawDesc), len(file_services_organization_v1_organization_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   37,
+			NumMessages:   40,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

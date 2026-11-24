@@ -17,6 +17,12 @@
 #   web          the release's renderer build + verify-bundle (task build:web:verify)
 #   playwright   Playwright against the built renderer (task test:web:e2e)
 #   electron     the electron-builder package smoke (task build:electron:smoke)
+#   visual       the visual baseline, compare only (scripts/visual-gate.sh; the
+#                merge queue's `visual` job): what the production build of the
+#                renderer and the visual suite read. That is frontends/web and
+#                the sdk/ts sources it aliases, minus unit tests, the other
+#                Playwright suites, lint configs and docs, plus the lane's own
+#                wiring. A change it misses is visual-nightly.yml's to find.
 #   cp_contract  proto-vendor/controlplane/ is exactly the export of the
 #                control-plane commit its SOURCE declares, and that commit is on
 #                control-plane main (task contract:controlplane:check; needs the
@@ -36,7 +42,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --base) base=${2:?--base needs a rev}; shift 2 ;;
     --full) full=true; shift ;;
-    -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
     *) echo "ci-lanes: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -69,9 +75,9 @@ if [ "$diffed" = true ] && grep -qE '^(proto-vendor/controlplane/|\.github/scrip
   cp_contract=true
 fi
 
-web=true playwright=true electron=true
+web=true playwright=true electron=true visual=true
 if [ "$full" = false ]; then
-  web=false playwright=false electron=false
+  web=false playwright=false electron=false visual=false
   # The web build (lint, typecheck, vite build, verify-bundle).
   if grep -qE '^(frontends/web/|package(-lock)?\.json$|electron/release\.config\.json$|\.github/scripts/verify-bundle\.mjs$)' <<< "$changed"; then web=true; fi
   # Playwright drives the built renderer: any web change but unit tests and
@@ -81,9 +87,26 @@ if [ "$full" = false ]; then
   # The electron package: electron itself, or what it bundles the renderer
   # with. Renderer source is the web lane's to build.
   if grep -qE '^(electron/|package(-lock)?\.json$|frontends/web/package(-lock)?\.json$|frontends/web/vite\.config\.ts$)' <<< "$changed"; then electron=true; fi
+  # The visual baseline: the renderer's production build (sources, styles,
+  # public assets, HTML entries, vite/tailwind/postcss/tsconfig, the lockfile,
+  # pnpm patches, the sdk/ts it aliases) and the suite (e2e/visual, its
+  # config and runner). Not unit tests, the other Playwright suites, lint
+  # configs or docs: none of them reaches a pixel. The lane's own wiring runs
+  # it too, so a change to the gate is proven on the change.
+  # (Collected, then tested: a `grep -q` at the end of a pipe can exit before
+  # the greps ahead of it finish, and pipefail would read their SIGPIPE as no.)
+  reach=$(grep -E '^(frontends/web/|sdk/ts/)' <<< "$changed" \
+    | grep -vE '(/__tests__/|\.(test|spec)\.[cm]?[jt]sx?$|\.md$)' \
+    | grep -vE '^frontends/web/e2e/' \
+    | grep -vE '^(frontends/web/(eslint-rules/|eslint\.config\.js$|stylelint\.config\.js$|playwright\.config\.ts$|tsconfig\.test\.json$)|sdk/ts/(scripts/|vitest\.config\.ts$))' || true)
+  if [ -n "$reach" ]; then visual=true; fi
+  if grep -qE '^(frontends/web/e2e/visual/|scripts/visual-gate\.sh$|\.github/workflows/merge-queue\.yml$|\.github/workflows/visual-nightly\.yml$)' <<< "$changed"; then
+    visual=true
+  fi
 fi
 
 echo "web=$web"
 echo "playwright=$playwright"
 echo "electron=$electron"
+echo "visual=$visual"
 echo "cp_contract=$cp_contract"

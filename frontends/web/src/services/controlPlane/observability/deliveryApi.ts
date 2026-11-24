@@ -10,6 +10,7 @@
  * "deleted" and "another org's" alike.
  */
 
+import type { Transport } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { DurationSchema, TimestampSchema, type Duration, type Timestamp } from "@bufbuild/protobuf/wkt";
 
@@ -42,8 +43,8 @@ import {
 import { countOf, mapIssue } from "./issuesApi";
 import type { TimeWindow } from "./types";
 
-function client() {
-  return getControlPlaneClient(DeliveryInsightsService);
+function client(transport?: Transport) {
+  return getControlPlaneClient(DeliveryInsightsService, transport);
 }
 
 function timestamp(ms: number): Timestamp {
@@ -84,8 +85,8 @@ function mapPromotion(p: WirePromotion): Promotion {
 }
 
 /** Promotions in `window` (required by the server), oldest first; the newest `limit` when there are more. */
-export async function listReleases(req: DeliveryScope & { window: TimeWindow; limit?: number }): Promise<PromotionList> {
-  const res = await client().listReleases({
+export async function listReleases(req: DeliveryScope & { window: TimeWindow; limit?: number }, transport?: Transport): Promise<PromotionList> {
+  const res = await client(transport).listReleases({
     scope: wireDeliveryScope(req, req.window),
     limit: Math.min(req.limit ?? RELEASES_LIMIT.default, RELEASES_LIMIT.max),
   });
@@ -97,8 +98,8 @@ export async function listReleases(req: DeliveryScope & { window: TimeWindow; li
  * with a deployment counted as failed when rolled back within
  * `failureWindowHours` (0: the server's 24).
  */
-export async function getDoraMetrics(req: DeliveryScope & { window?: TimeWindow; failureWindowHours?: number }): Promise<DoraMetrics> {
-  const res = await client().getDoraMetrics({
+export async function getDoraMetrics(req: DeliveryScope & { window?: TimeWindow; failureWindowHours?: number }, transport?: Transport): Promise<DoraMetrics> {
+  const res = await client(transport).getDoraMetrics({
     scope: wireDeliveryScope(req, req.window),
     failureWindowHours: req.failureWindowHours ?? 0,
   });
@@ -217,9 +218,9 @@ export function mapReleaseHealth(res: GetReleaseHealthResponse): ReleaseHealth {
  * when `promotionId` is absent). The scope must name exactly one environment;
  * the windows come from the promotion, so no time range is sent.
  */
-export async function getReleaseHealth(req: ReleaseHealthRequest, options: { signal?: AbortSignal } = {}): Promise<ReleaseHealth> {
+export async function getReleaseHealth(req: ReleaseHealthRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ReleaseHealth> {
   const now = Date.now();
-  const res = await obsClient(ObservabilityService).getReleaseHealth({
+  const res = await obsClient(ObservabilityService, transport).getReleaseHealth({
     // time_range is required on every QueryScope and ignored here (the
     // promotion decides the windows): the last minute satisfies the validator.
     scope: { ...wireDeliveryScope(req, { startMs: now - 60_000, endMs: now }), services: [], filters: [] },

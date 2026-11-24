@@ -68,10 +68,10 @@ type ClusterServiceClient interface {
 	// The platform is told the address, the CA and the scoped ServiceAccount
 	// token up front, all required. The token is the ONLY credential the
 	// platform ever uses against the cluster; a request without one is
-	// InvalidArgument and names `forge cluster connect`. Nothing is installed in
+	// InvalidArgument and names `forge cloud cluster connect`. Nothing is installed in
 	// the target cluster.
 	//
-	// DECLARATIVE AND IDEMPOTENT BY NAME. `forge cluster connect <name>` is
+	// DECLARATIVE AND IDEMPOTENT BY NAME. `forge cloud cluster connect <name>` is
 	// re-run from a checkout, so a second call with different values UPDATES
 	// them rather than failing on a name collision. That is what makes the
 	// connect command safe to put in a script, and it is why there is no
@@ -95,12 +95,14 @@ func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+ClusterServiceListClustersProcedure,
 			connect.WithSchema(clusterServiceMethods.ByName("ListClusters")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getCluster: connect.NewClient[v1.GetClusterRequest, v1.GetClusterResponse](
 			httpClient,
 			baseURL+ClusterServiceGetClusterProcedure,
 			connect.WithSchema(clusterServiceMethods.ByName("GetCluster")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		removeCluster: connect.NewClient[v1.RemoveClusterRequest, v1.RemoveClusterResponse](
@@ -161,10 +163,10 @@ type ClusterServiceHandler interface {
 	// The platform is told the address, the CA and the scoped ServiceAccount
 	// token up front, all required. The token is the ONLY credential the
 	// platform ever uses against the cluster; a request without one is
-	// InvalidArgument and names `forge cluster connect`. Nothing is installed in
+	// InvalidArgument and names `forge cloud cluster connect`. Nothing is installed in
 	// the target cluster.
 	//
-	// DECLARATIVE AND IDEMPOTENT BY NAME. `forge cluster connect <name>` is
+	// DECLARATIVE AND IDEMPOTENT BY NAME. `forge cloud cluster connect <name>` is
 	// re-run from a checkout, so a second call with different values UPDATES
 	// them rather than failing on a name collision. That is what makes the
 	// connect command safe to put in a script, and it is why there is no
@@ -184,12 +186,14 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 		ClusterServiceListClustersProcedure,
 		svc.ListClusters,
 		connect.WithSchema(clusterServiceMethods.ByName("ListClusters")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	clusterServiceGetClusterHandler := connect.NewUnaryHandler(
 		ClusterServiceGetClusterProcedure,
 		svc.GetCluster,
 		connect.WithSchema(clusterServiceMethods.ByName("GetCluster")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	clusterServiceRemoveClusterHandler := connect.NewUnaryHandler(

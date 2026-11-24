@@ -24,7 +24,7 @@ func TestListWorktrees_NeverAsksForArchivedRows(t *testing.T) {
 		got = f
 		return []*db.Worktree{{ID: "w", ProjectID: ownProjectID}}, nil
 	}
-	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: repo}))
+	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.WithReadRoles(worktree.Deps{Repo: repo})))
 
 	_, err := svc.ListWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListWorktreesRequest{ProjectId: ownProjectID}))
 	require.NoError(t, err)
@@ -42,7 +42,7 @@ func TestListWorktrees_MainOnlyAsksForMain(t *testing.T) {
 		got = f
 		return []*db.Worktree{{ID: mainWorktreeID, ProjectID: ownProjectID, IsMain: true}}, nil
 	}
-	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: repo}))
+	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.WithReadRoles(worktree.Deps{Repo: repo})))
 
 	resp, err := svc.ListWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListWorktreesRequest{ProjectId: ownProjectID, MainOnly: true}))
 	require.NoError(t, err)
@@ -66,7 +66,7 @@ func TestListArchivedWorktrees_PagesAndAsksOnlyForArchived(t *testing.T) {
 		}
 		return all[f.Offset:min(f.Offset+f.Limit, len(all))], nil
 	}
-	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: repo}))
+	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.WithReadRoles(worktree.Deps{Repo: repo})))
 
 	var ids []string
 	token := ""

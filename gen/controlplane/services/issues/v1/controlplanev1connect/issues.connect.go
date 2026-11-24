@@ -65,6 +65,12 @@ const (
 	// IssuesServiceListIssueTimelineProcedure is the fully-qualified name of the IssuesService's
 	// ListIssueTimeline RPC.
 	IssuesServiceListIssueTimelineProcedure = "/controlplane.v1.IssuesService/ListIssueTimeline"
+	// IssuesServiceDeclareMaintenanceWindowProcedure is the fully-qualified name of the IssuesService's
+	// DeclareMaintenanceWindow RPC.
+	IssuesServiceDeclareMaintenanceWindowProcedure = "/controlplane.v1.IssuesService/DeclareMaintenanceWindow"
+	// IssuesServiceListMaintenanceWindowsProcedure is the fully-qualified name of the IssuesService's
+	// ListMaintenanceWindows RPC.
+	IssuesServiceListMaintenanceWindowsProcedure = "/controlplane.v1.IssuesService/ListMaintenanceWindows"
 )
 
 // IssuesServiceClient is a client for the controlplane.v1.IssuesService service.
@@ -120,6 +126,25 @@ type IssuesServiceClient interface {
 	// Postgres alone. A person needs org membership, a machine credential
 	// obs:read.
 	ListIssueTimeline(context.Context, *connect.Request[v1.ListIssueTimelineRequest]) (*connect.Response[v1.ListIssueTimelineResponse], error)
+	// DeclareMaintenanceWindow records planned maintenance ahead of time: a
+	// database restart, a migration, a failover drill. Errors whose events all
+	// fall inside the window are attributed to it by the issues worker: a new
+	// fingerprint seen only inside it is born IGNORED until the window ends, and a
+	// resolved issue is not reopened by events inside it. An error that outlives
+	// the window is regressed as usual. Server issues only.
+	//
+	// A window spans at most 24 hours and must not have ended; env_id unset
+	// covers every environment of the org. Triage: a person needs org
+	// membership, a machine credential obs:triage (and, when it is bound to an
+	// environment, that one, with env_id set to it).
+	DeclareMaintenanceWindow(context.Context, *connect.Request[v1.DeclareMaintenanceWindowRequest]) (*connect.Response[v1.DeclareMaintenanceWindowResponse], error)
+	// ListMaintenanceWindows returns the org's maintenance windows that end at or
+	// after `since` (default: now), earliest first. A person needs org
+	// membership, a machine credential obs:read.
+	//
+	// forge:custom — a window is declared through DeclareMaintenanceWindow and
+	// never edited, and its table is the worker's (forge:no-entity).
+	ListMaintenanceWindows(context.Context, *connect.Request[v1.ListMaintenanceWindowsRequest]) (*connect.Response[v1.ListMaintenanceWindowsResponse], error)
 }
 
 // NewIssuesServiceClient constructs a client for the controlplane.v1.IssuesService service. By
@@ -137,18 +162,21 @@ func NewIssuesServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+IssuesServiceListIssuesProcedure,
 			connect.WithSchema(issuesServiceMethods.ByName("ListIssues")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getIssue: connect.NewClient[v1.GetIssueRequest, v1.GetIssueResponse](
 			httpClient,
 			baseURL+IssuesServiceGetIssueProcedure,
 			connect.WithSchema(issuesServiceMethods.ByName("GetIssue")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listIssueEvents: connect.NewClient[v1.ListIssueEventsRequest, v1.ListIssueEventsResponse](
 			httpClient,
 			baseURL+IssuesServiceListIssueEventsProcedure,
 			connect.WithSchema(issuesServiceMethods.ByName("ListIssueEvents")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateIssueStatus: connect.NewClient[v1.UpdateIssueStatusRequest, v1.UpdateIssueStatusResponse](
@@ -191,12 +219,27 @@ func NewIssuesServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+IssuesServiceListAssignableUsersProcedure,
 			connect.WithSchema(issuesServiceMethods.ByName("ListAssignableUsers")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listIssueTimeline: connect.NewClient[v1.ListIssueTimelineRequest, v1.ListIssueTimelineResponse](
 			httpClient,
 			baseURL+IssuesServiceListIssueTimelineProcedure,
 			connect.WithSchema(issuesServiceMethods.ByName("ListIssueTimeline")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		declareMaintenanceWindow: connect.NewClient[v1.DeclareMaintenanceWindowRequest, v1.DeclareMaintenanceWindowResponse](
+			httpClient,
+			baseURL+IssuesServiceDeclareMaintenanceWindowProcedure,
+			connect.WithSchema(issuesServiceMethods.ByName("DeclareMaintenanceWindow")),
+			connect.WithClientOptions(opts...),
+		),
+		listMaintenanceWindows: connect.NewClient[v1.ListMaintenanceWindowsRequest, v1.ListMaintenanceWindowsResponse](
+			httpClient,
+			baseURL+IssuesServiceListMaintenanceWindowsProcedure,
+			connect.WithSchema(issuesServiceMethods.ByName("ListMaintenanceWindows")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -204,17 +247,19 @@ func NewIssuesServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // issuesServiceClient implements IssuesServiceClient.
 type issuesServiceClient struct {
-	listIssues          *connect.Client[v1.ListIssuesRequest, v1.ListIssuesResponse]
-	getIssue            *connect.Client[v1.GetIssueRequest, v1.GetIssueResponse]
-	listIssueEvents     *connect.Client[v1.ListIssueEventsRequest, v1.ListIssueEventsResponse]
-	updateIssueStatus   *connect.Client[v1.UpdateIssueStatusRequest, v1.UpdateIssueStatusResponse]
-	addIssueComment     *connect.Client[v1.AddIssueCommentRequest, v1.AddIssueCommentResponse]
-	updateIssueComment  *connect.Client[v1.UpdateIssueCommentRequest, v1.UpdateIssueCommentResponse]
-	deleteIssueComment  *connect.Client[v1.DeleteIssueCommentRequest, v1.DeleteIssueCommentResponse]
-	assignIssue         *connect.Client[v1.AssignIssueRequest, v1.AssignIssueResponse]
-	linkIssueChat       *connect.Client[v1.LinkIssueChatRequest, v1.LinkIssueChatResponse]
-	listAssignableUsers *connect.Client[v1.ListAssignableUsersRequest, v1.ListAssignableUsersResponse]
-	listIssueTimeline   *connect.Client[v1.ListIssueTimelineRequest, v1.ListIssueTimelineResponse]
+	listIssues               *connect.Client[v1.ListIssuesRequest, v1.ListIssuesResponse]
+	getIssue                 *connect.Client[v1.GetIssueRequest, v1.GetIssueResponse]
+	listIssueEvents          *connect.Client[v1.ListIssueEventsRequest, v1.ListIssueEventsResponse]
+	updateIssueStatus        *connect.Client[v1.UpdateIssueStatusRequest, v1.UpdateIssueStatusResponse]
+	addIssueComment          *connect.Client[v1.AddIssueCommentRequest, v1.AddIssueCommentResponse]
+	updateIssueComment       *connect.Client[v1.UpdateIssueCommentRequest, v1.UpdateIssueCommentResponse]
+	deleteIssueComment       *connect.Client[v1.DeleteIssueCommentRequest, v1.DeleteIssueCommentResponse]
+	assignIssue              *connect.Client[v1.AssignIssueRequest, v1.AssignIssueResponse]
+	linkIssueChat            *connect.Client[v1.LinkIssueChatRequest, v1.LinkIssueChatResponse]
+	listAssignableUsers      *connect.Client[v1.ListAssignableUsersRequest, v1.ListAssignableUsersResponse]
+	listIssueTimeline        *connect.Client[v1.ListIssueTimelineRequest, v1.ListIssueTimelineResponse]
+	declareMaintenanceWindow *connect.Client[v1.DeclareMaintenanceWindowRequest, v1.DeclareMaintenanceWindowResponse]
+	listMaintenanceWindows   *connect.Client[v1.ListMaintenanceWindowsRequest, v1.ListMaintenanceWindowsResponse]
 }
 
 // ListIssues calls controlplane.v1.IssuesService.ListIssues.
@@ -272,6 +317,16 @@ func (c *issuesServiceClient) ListIssueTimeline(ctx context.Context, req *connec
 	return c.listIssueTimeline.CallUnary(ctx, req)
 }
 
+// DeclareMaintenanceWindow calls controlplane.v1.IssuesService.DeclareMaintenanceWindow.
+func (c *issuesServiceClient) DeclareMaintenanceWindow(ctx context.Context, req *connect.Request[v1.DeclareMaintenanceWindowRequest]) (*connect.Response[v1.DeclareMaintenanceWindowResponse], error) {
+	return c.declareMaintenanceWindow.CallUnary(ctx, req)
+}
+
+// ListMaintenanceWindows calls controlplane.v1.IssuesService.ListMaintenanceWindows.
+func (c *issuesServiceClient) ListMaintenanceWindows(ctx context.Context, req *connect.Request[v1.ListMaintenanceWindowsRequest]) (*connect.Response[v1.ListMaintenanceWindowsResponse], error) {
+	return c.listMaintenanceWindows.CallUnary(ctx, req)
+}
+
 // IssuesServiceHandler is an implementation of the controlplane.v1.IssuesService service.
 type IssuesServiceHandler interface {
 	// ListIssues returns the scope's issues, filtered, a page at a time. The
@@ -325,6 +380,25 @@ type IssuesServiceHandler interface {
 	// Postgres alone. A person needs org membership, a machine credential
 	// obs:read.
 	ListIssueTimeline(context.Context, *connect.Request[v1.ListIssueTimelineRequest]) (*connect.Response[v1.ListIssueTimelineResponse], error)
+	// DeclareMaintenanceWindow records planned maintenance ahead of time: a
+	// database restart, a migration, a failover drill. Errors whose events all
+	// fall inside the window are attributed to it by the issues worker: a new
+	// fingerprint seen only inside it is born IGNORED until the window ends, and a
+	// resolved issue is not reopened by events inside it. An error that outlives
+	// the window is regressed as usual. Server issues only.
+	//
+	// A window spans at most 24 hours and must not have ended; env_id unset
+	// covers every environment of the org. Triage: a person needs org
+	// membership, a machine credential obs:triage (and, when it is bound to an
+	// environment, that one, with env_id set to it).
+	DeclareMaintenanceWindow(context.Context, *connect.Request[v1.DeclareMaintenanceWindowRequest]) (*connect.Response[v1.DeclareMaintenanceWindowResponse], error)
+	// ListMaintenanceWindows returns the org's maintenance windows that end at or
+	// after `since` (default: now), earliest first. A person needs org
+	// membership, a machine credential obs:read.
+	//
+	// forge:custom — a window is declared through DeclareMaintenanceWindow and
+	// never edited, and its table is the worker's (forge:no-entity).
+	ListMaintenanceWindows(context.Context, *connect.Request[v1.ListMaintenanceWindowsRequest]) (*connect.Response[v1.ListMaintenanceWindowsResponse], error)
 }
 
 // NewIssuesServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -338,18 +412,21 @@ func NewIssuesServiceHandler(svc IssuesServiceHandler, opts ...connect.HandlerOp
 		IssuesServiceListIssuesProcedure,
 		svc.ListIssues,
 		connect.WithSchema(issuesServiceMethods.ByName("ListIssues")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	issuesServiceGetIssueHandler := connect.NewUnaryHandler(
 		IssuesServiceGetIssueProcedure,
 		svc.GetIssue,
 		connect.WithSchema(issuesServiceMethods.ByName("GetIssue")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	issuesServiceListIssueEventsHandler := connect.NewUnaryHandler(
 		IssuesServiceListIssueEventsProcedure,
 		svc.ListIssueEvents,
 		connect.WithSchema(issuesServiceMethods.ByName("ListIssueEvents")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	issuesServiceUpdateIssueStatusHandler := connect.NewUnaryHandler(
@@ -392,12 +469,27 @@ func NewIssuesServiceHandler(svc IssuesServiceHandler, opts ...connect.HandlerOp
 		IssuesServiceListAssignableUsersProcedure,
 		svc.ListAssignableUsers,
 		connect.WithSchema(issuesServiceMethods.ByName("ListAssignableUsers")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	issuesServiceListIssueTimelineHandler := connect.NewUnaryHandler(
 		IssuesServiceListIssueTimelineProcedure,
 		svc.ListIssueTimeline,
 		connect.WithSchema(issuesServiceMethods.ByName("ListIssueTimeline")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	issuesServiceDeclareMaintenanceWindowHandler := connect.NewUnaryHandler(
+		IssuesServiceDeclareMaintenanceWindowProcedure,
+		svc.DeclareMaintenanceWindow,
+		connect.WithSchema(issuesServiceMethods.ByName("DeclareMaintenanceWindow")),
+		connect.WithHandlerOptions(opts...),
+	)
+	issuesServiceListMaintenanceWindowsHandler := connect.NewUnaryHandler(
+		IssuesServiceListMaintenanceWindowsProcedure,
+		svc.ListMaintenanceWindows,
+		connect.WithSchema(issuesServiceMethods.ByName("ListMaintenanceWindows")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/controlplane.v1.IssuesService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -424,6 +516,10 @@ func NewIssuesServiceHandler(svc IssuesServiceHandler, opts ...connect.HandlerOp
 			issuesServiceListAssignableUsersHandler.ServeHTTP(w, r)
 		case IssuesServiceListIssueTimelineProcedure:
 			issuesServiceListIssueTimelineHandler.ServeHTTP(w, r)
+		case IssuesServiceDeclareMaintenanceWindowProcedure:
+			issuesServiceDeclareMaintenanceWindowHandler.ServeHTTP(w, r)
+		case IssuesServiceListMaintenanceWindowsProcedure:
+			issuesServiceListMaintenanceWindowsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -475,4 +571,12 @@ func (UnimplementedIssuesServiceHandler) ListAssignableUsers(context.Context, *c
 
 func (UnimplementedIssuesServiceHandler) ListIssueTimeline(context.Context, *connect.Request[v1.ListIssueTimelineRequest]) (*connect.Response[v1.ListIssueTimelineResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.ListIssueTimeline is not implemented"))
+}
+
+func (UnimplementedIssuesServiceHandler) DeclareMaintenanceWindow(context.Context, *connect.Request[v1.DeclareMaintenanceWindowRequest]) (*connect.Response[v1.DeclareMaintenanceWindowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.DeclareMaintenanceWindow is not implemented"))
+}
+
+func (UnimplementedIssuesServiceHandler) ListMaintenanceWindows(context.Context, *connect.Request[v1.ListMaintenanceWindowsRequest]) (*connect.Response[v1.ListMaintenanceWindowsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.ListMaintenanceWindows is not implemented"))
 }

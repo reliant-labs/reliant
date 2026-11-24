@@ -12,9 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // clearCachesRouter answers disk.clear_caches the way a daemon does.
@@ -57,7 +59,7 @@ func TestDiskReport_HeartbeatToRegistryAndKeptWhileOffline(t *testing.T) {
 
 	// The session ends: release every attachment row up to now (#722 made a
 	// release take the session's attached_at, so it cannot drop a newer one).
-	require.NoError(t, repo.ReleaseDaemonAttachment(context.Background(), "daemon-1", time.Now()))
+	require.NoError(t, store.ReleaseDaemonAttachment(context.Background(), repo.ORM(), "daemon-1", time.Now()))
 	got, err := reg.GetDaemon(userCtx("user-1"), connect.NewRequest(&reliantv1.GetDaemonRequest{DaemonId: "daemon-1"}))
 	require.NoError(t, err)
 	require.NotNil(t, got.Msg.Daemon.GetDisk(), "the report outlives the connection")

@@ -1,7 +1,8 @@
 /**
  * Chat fixtures: models, a sidebar's worth of chats (two projects, branched
  * chats, a long branch name, running / needs-input / failed / unread /
- * automation rows, an untitled chat), one short chat, and THE fixture chat
+ * automation rows, an untitled chat; two started from the shopfront app,
+ * so they carry its tag), one short chat, and THE fixture chat
  * (`CHAT_IDS.long`) that every chat surface and every chat restyle PR reads.
  * Ported from the November review's fixtures-chat-sidebars/20-chat-sidebars.js.
  *
@@ -25,7 +26,7 @@
  * binary-proto stream: the snapshot below is encoded with the app's schemas.
  */
 import type { Fixtures } from '../rpc'
-import { DAY, FIXED_NOW, HOUR, IDS, MIN, USER, WORKTREES, iso } from './base'
+import { DAY, DOCS_PROJECT, FIXED_NOW, HOUR, IDS, MIN, PROJECT, USER, WORKTREES, iso } from './base'
 
 export const CHAT_IDS = {
   long: 'c0ffee00-2222-4aaa-8bbb-00000000000a',
@@ -76,13 +77,15 @@ const chat = (o: Chat & { ago: number }): Chat => {
 
 const CHATS = [
   chat({ id: CHAT_IDS.long, title: 'Refactor cart totals and fix multi-quantity discounts', activity: 'CHAT_ACTIVITY_RUNNING',
-    workflowState: 'WORKFLOW_STATE_ACTIVE', workflowStopReason: undefined, ago: 5000, workflowName: 'builtin://get-it-right' }),
+    workflowState: 'WORKFLOW_STATE_ACTIVE', workflowStopReason: undefined, ago: 5000, workflowName: 'builtin://get-it-right',
+    appName: 'shopfront' }),
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-00000000000b', title: 'Add rate limiting to /checkout', worktreeId: WORKTREES.rate.id, worktree: WORKTREES.rate,
     activity: 'CHAT_ACTIVITY_AWAITING_INPUT', workflowState: 'WORKFLOW_STATE_ACTIVE', ago: 2 * MIN }),
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-00000000000c', title: 'Load-test the limiter (spawned from rate limiting)', worktreeId: WORKTREES.rate.id,
     worktree: WORKTREES.rate, unread: true, ago: 40 * MIN }),
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-00000000000d', title: 'Retry Stripe webhooks with idempotency keys', worktreeId: WORKTREES.pay.id,
-    worktree: WORKTREES.pay, activity: 'CHAT_ACTIVITY_ERROR', workflowStopReason: 'WORKFLOW_STOP_REASON_FAILED', ago: 3 * HOUR }),
+    worktree: WORKTREES.pay, activity: 'CHAT_ACTIVITY_ERROR', workflowStopReason: 'WORKFLOW_STOP_REASON_FAILED', ago: 3 * HOUR,
+    appName: 'shopfront' }),
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-00000000000e', title: 'Nightly: triage failing CI', launchKind: 'trigger.schedule', triggerId: 'trg-nightly', ago: 7 * HOUR }),
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-00000000000f', title: 'Migrate order confirmation emails from inline HTML strings to MJML templates with snapshot tests', ago: 26 * HOUR }),
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-000000000010', title: '', ago: 3 * DAY }),
@@ -517,6 +520,8 @@ export const chatFixtures: Fixtures = {
     return { messages: m, total: m.length, count: m.length, hasMore: false, oldestSeq: '1' }
   },
   'reliant.v1.ChatService/GetWorkflowExecutions': (req) => ({ allRootWorkflows: req.chatId === MAIN ? WORKFLOW_TREE : [] }),
+  // Each chat works in its own project alone (chatWithAttachedProjects adds one).
+  'reliant.v1.ChatService/ListChatProjects': (req) => ({ projects: chatProjectsOf(String(req.chatId), []) }),
   'reliant.v1.ApprovalService/ListApprovalsByChat': (req) => req.chatId === MAIN
     ? { approvals: [{
       id: 'appr-c1-push', chatId: MAIN, approvalType: 'APPROVAL_TYPE_TOOL_CALL', entityId: 'blk-c1-approve',
@@ -563,6 +568,24 @@ function chatStream({ failedSend }: { failedSend: boolean }) {
       ],
     }
   }
+}
+
+/** A chat's projects as ListChatProjects lists them: its own first, then `attached`. */
+function chatProjectsOf(chatId: string, attached: Array<typeof PROJECT | typeof DOCS_PROJECT>) {
+  const chat = CHATS.find((c) => c.id === chatId)
+  const own = chat?.projectId === IDS.docsProject ? DOCS_PROJECT : PROJECT
+  const daemonId = chat?.activeDaemonId ?? IDS.cloudDaemon
+  return [
+    { projectId: own.id, name: own.name, primary: true, daemonId, path: own.path, attachedAt: '' },
+    ...attached.map((p) => ({ projectId: p.id, name: p.name, primary: false, daemonId, path: p.path, attachedAt: iso(20 * MIN) })),
+  ]
+}
+
+/** The fixture chat with docs-site attached beside shopfront: the composer's project chips. */
+export const chatWithAttachedProjects: Fixtures = {
+  'reliant.v1.ChatService/ListChatProjects': (req) => ({
+    projects: chatProjectsOf(String(req.chatId), String(req.chatId) === MAIN ? [DOCS_PROJECT] : []),
+  }),
 }
 
 /** The fixture chat without its failed send (see chatStream). */

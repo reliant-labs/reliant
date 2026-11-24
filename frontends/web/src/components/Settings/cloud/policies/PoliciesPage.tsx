@@ -229,6 +229,8 @@ function OrgPoliciesPage({ org }: { org: MyOrg }) {
             <div
               className="sticky bottom-0 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-popover px-4 py-3 shadow-lg"
               data-testid="policies-savebar"
+              // The floating Setup Guide stays above it (Onboarding/OnboardingChecklist.tsx).
+              data-guide-clear
             >
               <p className="min-w-0 flex-1 text-sm text-foreground">Unsaved changes to {listWords(dirtySections.map((k) => SECTION_TITLES[k]))}.</p>
               <Button variant="ghost" size="sm" onClick={() => load(base)}>

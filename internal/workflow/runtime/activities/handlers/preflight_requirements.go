@@ -10,13 +10,15 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
+	"go.temporal.io/sdk/temporal"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/requirements"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/temporal"
 )
 
 // PreflightRequirementsInput is the run's declared `requires:` and who the run
@@ -28,6 +30,7 @@ type PreflightRequirementsInput struct {
 	Tools          []string                 `json:"tools,omitempty"`
 	Integrations   []string                 `json:"integrations,omitempty"`
 	Repos          []string                 `json:"repos,omitempty"`
+	CLILogin       []string                 `json:"cli_login,omitempty"` // requires.cli_login
 	ActingIdentity string                   `json:"acting_identity,omitempty"`
 	Automation     string                   `json:"automation,omitempty"`
 }
@@ -47,13 +50,15 @@ const PreflightRequirementsErrType = requirements.UnmetErrType
 const preflightProbeTimeout = 3 * time.Minute
 
 // PreflightRequirementsActivity checks a run's `requires:` before its first
-// node: tools on the machine's PATH, checkouts that exist and reach origin
-// with no local tag diverged from origin's, and integrations whose connection
+// node: tools on the machine's PATH, vendor agent CLIs installed and signed in
+// there, checkouts that exist and reach origin with no local tag diverged
+// from origin's, and integrations whose connection
 // resolves for the run's owner. Unmet requirements fail the run, with every
 // problem named; a check that could not run (the machine did not answer) is
 // an ordinary error the activity's retry policy owns.
 type PreflightRequirementsActivity struct {
 	repo        RunExecutorContextStore
+	rows        ProjectWorktreeReader
 	executor    toolexec.ToolExecutor
 	credentials httpaction.CredentialSource
 	// machine overrides the daemon-backed probe runner; tests set it.
@@ -71,28 +76,28 @@ func (a *PreflightRequirementsActivity) WithDaemonRouter(router toolexec.DaemonR
 
 // NewPreflightRequirementsActivity builds the activity. credentials may be nil
 // (a worker with no connections), which fails any required integration.
-func NewPreflightRequirementsActivity(repo RunExecutorContextStore, executor toolexec.ToolExecutor, credentials httpaction.CredentialSource) *PreflightRequirementsActivity {
-	return &PreflightRequirementsActivity{repo: repo, executor: executor, credentials: credentials}
+func NewPreflightRequirementsActivity(repo RunExecutorContextStore, rows ProjectWorktreeReader, executor toolexec.ToolExecutor, credentials httpaction.CredentialSource) *PreflightRequirementsActivity {
+	return &PreflightRequirementsActivity{repo: repo, rows: rows, executor: executor, credentials: credentials}
 }
 
 func (a *PreflightRequirementsActivity) Name() string        { return "PreflightRequirements" }
 func (a *PreflightRequirementsActivity) DisplayName() string { return "Preflight Requirements" }
 func (a *PreflightRequirementsActivity) Description() string {
-	return "Check a run's declared requirements (tools, integrations, checkouts) before its first node"
+	return "Check a run's declared requirements (tools, CLI sign-ins, integrations, checkouts) before its first node"
 }
 func (a *PreflightRequirementsActivity) Category() schema.ActivityCategory {
 	return schema.CategoryUtility
 }
 
 func (a *PreflightRequirementsActivity) Execute(ctx context.Context, input PreflightRequirementsInput) (PreflightRequirementsOutput, error) {
-	req := &reliantv1.WorkflowRequirements{Tools: input.Tools, Integrations: input.Integrations, Repos: input.Repos}
+	req := &reliantv1.WorkflowRequirements{Tools: input.Tools, Integrations: input.Integrations, Repos: input.Repos, CliLogin: input.CLILogin}
 	if requirements.Empty(req) {
 		return PreflightRequirementsOutput{}, nil
 	}
 
 	var machine requirements.Machine
 	if requirements.NeedsMachine(req) {
-		execCtx, err := resolveRunExecutorContext(ctx, a.repo, input.ChatID)
+		execCtx, err := resolveRunExecutorContext(ctx, a.repo, a.rows, input.ChatID)
 		if err != nil {
 			return PreflightRequirementsOutput{}, fmt.Errorf("resolve the run's machine: %w", err)
 		}
@@ -121,6 +126,10 @@ func (a *PreflightRequirementsActivity) Execute(ctx context.Context, input Prefl
 				remote := NewRemoteRunExecutor(a.executor)
 				remote.SetContext(execCtx)
 				machine = runExecutorMachine{exec: remote, dir: execCtx.ProjectPath}
+			}
+			if len(input.CLILogin) > 0 {
+				// A CLI sign-in's fix names the machine to sign it in on.
+				machine = namedMachine{Machine: machine, name: a.machineArg(ctx, execCtx)}
 			}
 		}
 	}
@@ -152,6 +161,31 @@ func (a *PreflightRequirementsActivity) Execute(ctx context.Context, input Prefl
 type runExecutorMachine struct {
 	exec RunExecutor
 	dir  string
+}
+
+// Name is not known to the executor; namedMachine supplies it.
+func (runExecutorMachine) Name() string { return "" }
+
+// namedMachine is a probe machine with the name `reliant machine login
+// --machine` knows it by.
+type namedMachine struct {
+	requirements.Machine
+	name string
+}
+
+func (m namedMachine) Name() string { return m.name }
+
+// machineArg is how `reliant machine login --machine` names the machine the
+// probe runs on (daemonplacement.MachineArg); "" when it cannot be resolved.
+func (a *PreflightRequirementsActivity) machineArg(ctx context.Context, execCtx RunExecutorContext) string {
+	id := ""
+	if execCtx.DaemonSelector != nil {
+		id = execCtx.DaemonSelector.ID
+	}
+	if id == "" {
+		id = configMachine(ctx, a.router, execCtx.UserID, execCtx.DaemonSelector)
+	}
+	return daemonplacement.MachineArg(ctx, a.repo, id)
 }
 
 func (m runExecutorMachine) Run(ctx context.Context, command string) (string, int, error) {

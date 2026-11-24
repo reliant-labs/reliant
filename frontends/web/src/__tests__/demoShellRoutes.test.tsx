@@ -33,7 +33,7 @@ vi.mock("@/forgeConsolePages", async () => {
     const { readOnly, reason } = useObsReadOnly();
     return <main data-testid={`console-${name}`} data-read-only={readOnly} data-read-only-reason={reason} />;
   };
-  const names = ["overview", "workload", "releases", "release", "observabilityView", "dashboards", "dashboard", "environments", "environment", "secrets", "domains", "activity", "data", "storage", "orgObservability", "landing", "legacyEnv", "legacyDomains", "legacyCommand"];
+  const names = ["overview", "workload", "releases", "release", "observabilityView", "dashboards", "dashboard", "environments", "environment", "secrets", "domains", "activity", "data", "storage", "speedInsights", "orgObservability", "landing", "legacyEnv", "legacyDomains", "legacyCommand"];
   return { forgeConsolePages: { layout: Outlet, console: Outlet, orgLayout: Outlet, ...Object.fromEntries(names.map((n) => [n, page(n)])) }, preloadForgeConsole: () => {} };
 });
 vi.mock("@/demoBundle/DemoConsoleProviders", () => ({ DemoConsoleProviders: ({ children }: { children: React.ReactNode }) => children }));
@@ -43,7 +43,7 @@ vi.mock("@/demoBundle/DemoConsoleProviders", () => ({ DemoConsoleProviders: ({ c
 // ("Cannot load …metricsTypes.ts … after the environment was torn down"),
 // intermittently. DemoConsole is mocked above, so nothing here reads that data:
 // the transport is mocked too, and nothing loads after teardown.
-vi.mock("@/components/Forge/Demo/demoData/demoTransport", () => ({ createDemoTransport: () => ({}) }));
+vi.mock("@/components/Forge/Demo/demoTransport", () => ({ createDemoTransport: () => ({}) }));
 
 import { getTourShell, getTourStorage } from "@/components/Onboarding/tourShell";
 import { resetDemoSessionForTests } from "@/components/Forge/Demo/demoSession";
@@ -119,6 +119,7 @@ describe("the demo shell's routes", () => {
     ["/forge/p/shop/storage", "console-storage"],
     ["/forge/p/shop/observability/traces", "console-observabilityView"],
     ["/forge/p/shop/observability/dashboards", "console-dashboards"],
+    ["/forge/p/shop/speed-insights", "console-speedInsights"],
   ])("mounts the console page at %s", async (path, testId) => {
     const router = renderDemoShell(path);
     const page = await screen.findByTestId(testId);
@@ -133,6 +134,13 @@ describe("the demo shell's routes", () => {
     expect(router.state.location.pathname).toBe("/forge/p/shop/nope")
     fireEvent.click(screen.getByRole("link", { name: "Go to the Overview" }))
     await waitFor(() => expect(router.state.location.pathname).toBe("/forge/p/shop"))
+  });
+
+  it.each(["/forge/p/shop/usage", "/forge/p/other/usage"])("sends %s, a page the demo does not serve, to the Overview", async (path) => {
+    const router = renderDemoShell(`${path}?env=prod`)
+    expect(await screen.findByTestId("console-overview")).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe("/forge/p/shop")
+    expect(searchOf(router)).toMatchObject({ env: "prod" })
   });
 
   it("opens another project's link on shop, the demo's one project, at the same page", async () => {

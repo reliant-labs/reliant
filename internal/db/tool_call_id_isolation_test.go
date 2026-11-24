@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
 
@@ -133,7 +135,7 @@ func TestToolCallIDIsolation_ResultWriteDoesNotReplaceAnotherChatsResult(t *test
 	})
 	require.ErrorIs(t, err, core.ErrToolCallIDInAnotherChat)
 
-	got, err := repo.GetToolCallResult(ctx, reusedToolCallID)
+	got, err := store.FindToolCallResult(ctx, repo.ORM(), reusedToolCallID)
 	require.NoError(t, err)
 	require.Equal(t, "chat A's output", got.Content)
 }
@@ -195,7 +197,7 @@ func TestToolCallIDIsolation_LiveSpawnIsNotHiddenByAnotherChatsReport(t *testing
 	childThread(t, repo, childB, "chat-iso-b")
 	require.NoError(t, repo.EnqueueAgentMessage(ctx, spawnReport("chat-iso-b", childB, "chat-iso-b", "chat B's result")))
 
-	live, err := repo.ListLiveBackgroundSpawns(ctx, rootA)
+	live, err := store.NewToolCallExtStore(repo.ORM()).ListLiveBackgroundSpawns(ctx, rootA)
 	require.NoError(t, err)
 	require.Len(t, live, 1, "chat A's spawn has not reported and must be relaunched")
 	require.Equal(t, reusedToolCallID, live[0].ToolCallID)

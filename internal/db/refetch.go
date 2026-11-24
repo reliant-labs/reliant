@@ -4,28 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// RefetchType identifies what data the frontend should re-fetch.
-type RefetchType string
+// RefetchType identifies what data the frontend should re-fetch; the type and
+// its values are core's.
+type RefetchType = core.RefetchType
 
 const (
-	RefetchWorktreeChanges    RefetchType = "worktree_changes"
-	RefetchWorkflowExecutions RefetchType = "workflow_executions"
-	RefetchConfigHealth       RefetchType = "config_health"
-	RefetchPlanTasks          RefetchType = "plan_tasks"
-	RefetchFileTree           RefetchType = "file_tree"
-	// RefetchAgentMailbox is chat-scoped: a thread in the chat gained a queued
-	// agent message, so the pending-queue strip should re-read its mailbox.
-	RefetchAgentMailbox RefetchType = "agent_mailbox"
-	// RefetchInbox is user-scoped: the inbox gained or lost an item that no
-	// chat activity change announces — an async question, which is no gate,
-	// so the chat's activity does not move when one is asked or answered.
-	RefetchInbox RefetchType = "inbox"
-	// RefetchProjectOrgMoved is project-scoped: the project, its chats, runs
-	// and triggers moved to another org (MoveProjectOrg), so every list that
-	// follows the active org is stale.
-	RefetchProjectOrgMoved RefetchType = "project_org_moved"
+	RefetchWorktreeChanges    = core.RefetchWorktreeChanges
+	RefetchWorkflowExecutions = core.RefetchWorkflowExecutions
+	RefetchConfigHealth       = core.RefetchConfigHealth
+	RefetchPlanTasks          = core.RefetchPlanTasks
+	RefetchFileTree           = core.RefetchFileTree
+	RefetchAgentMailbox       = core.RefetchAgentMailbox
+	RefetchInbox              = core.RefetchInbox
+	RefetchProjectOrgMoved    = core.RefetchProjectOrgMoved
 )
 
 // RefetchData is the JSON payload for refetch events.
