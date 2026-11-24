@@ -91,6 +91,11 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 	if input.Thread == "" {
 		return DrainAgentMessagesOutput{}, fmt.Errorf("thread is required")
 	}
+	if a.mailbox == nil {
+		// An error, not a panic: CallLLM logs a failed drain and takes the
+		// turn anyway, leaving the mail queued.
+		return DrainAgentMessagesOutput{}, fmt.Errorf("drain agent messages: no mailbox is wired")
+	}
 
 	queued, err := a.mailbox.ListQueuedAgentMessagesForThread(ctx, input.Thread)
 	if err != nil {
