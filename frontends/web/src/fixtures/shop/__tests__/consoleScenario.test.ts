@@ -248,6 +248,7 @@ describe("every console read is answered; every write is refused", () => {
     "DashboardService/ListDashboards",
   ];
 
+  const SIGNS_A_CREDENTIAL = new Set(["controlplane.v1.IdentityService/GetExportURL"]);
   const methodsOf = (service: DescService) => service.methods.filter((m) => m.methodKind === "unary");
 
   it("names real RPCs, each one a read", () => {
@@ -278,7 +279,13 @@ describe("every console read is answered; every write is refused", () => {
           "controlplane.v1.StorageBrowserService/PreviewObject": { environmentId: "env-staging", bucket: "uploads", key: "README.txt" },
           "controlplane.v1.DeployService/GetWorkloadConfig": { environmentId: "env-dev", workload: "api" },
         };
-        await expect(client[method.localName](addressed[`${service.typeName}/${method.name}`] ?? {}), `${service.typeName}/${method.name}`).resolves.toBeDefined();
+        const key = `${service.typeName}/${method.name}`;
+        // Read-named for the guard, but it signs a credential (handlers/inventory.ts): refused by the pack.
+        if (SIGNS_A_CREDENTIAL.has(key)) {
+          await expect(client[method.localName]({}), key).rejects.toMatchObject({ code: Code.PermissionDenied });
+          continue;
+        }
+        await expect(client[method.localName](addressed[key] ?? {}), key).resolves.toBeDefined();
         reads++;
       }
     }

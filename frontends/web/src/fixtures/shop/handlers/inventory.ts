@@ -21,12 +21,14 @@ import { completed } from "./defaults";
 import { demoEnvId } from "./scope";
 import { DEMO_IDENTITY_ROLES, demoAudience, type DemoAccount, type DemoAccountState } from "../model/audience";
 import { shopDatabase, type Cell, type Row } from "../model/database";
-import { DEMO_DB_TABLES, demoNow } from "../shopStory";
+import { DEMO_DB_TABLES, DEMO_ORG, demoNow } from "../shopStory";
 import { mockService } from "@reliantlabs/forge-web-runtime/mock-transport";
 
 type Column = { name: string; pgType: string; nullable?: boolean; comment?: string };
 const invalid = (message: string): never => { throw new ConnectError(message, Code.InvalidArgument); };
 const missing = (): never => { throw new ConnectError("No such sample resource.", Code.NotFound); };
+/** Identity reads name an org (the caller's, organization.ts): another org's is not found, as a non-member's would be. Empty is unscoped. */
+const inDemoOrg = (req: { orgId: string }) => { if (req.orgId && req.orgId !== DEMO_ORG) throw new ConnectError("No such sample organization.", Code.NotFound); };
 
 /** A Postgres timestamptz cell (database.ts pgTime) as epoch ms. */
 const timeOf = (value: string) => Date.parse(/^\d{4}-\d\d-\d\d \d/.test(value) ? value.replace(" ", "T").replace(/\+00$/, "Z") : value);
@@ -179,9 +181,13 @@ export function inventoryScenarioHandlers() {
       browseTable: browse,
     })),
     ...completed(IdentityService, mockService(IdentityService, {
-      getIdentityStatus: (req) => (demoEnvId(req.environmentId) ? identityStatus(req.environmentId) : {}),
-      getUser: (req) => ({ user: demoEnvId(req.environmentId) ? identityUsers(req.environmentId).find((user) => user.userId === req.userId) : undefined }),
+      getIdentityStatus: (req) => { inDemoOrg(req); return demoEnvId(req.environmentId) ? identityStatus(req.environmentId) : {}; },
+      getUser: (req) => { inDemoOrg(req); return { user: demoEnvId(req.environmentId) ? identityUsers(req.environmentId).find((user) => user.userId === req.userId) : undefined }; },
+      // Named like a read, so the read-only guard lets it through, but it signs a bearer URL to every
+      // password hash. The demo signs none (as StorageBrowser's presign; the button is disabled first).
+      getExportURL: () => { throw new ConnectError("This is a demo. Identity exports are turned off.", Code.PermissionDenied); },
       listUsers: (req) => {
+        inDemoOrg(req);
         if (!demoEnvId(req.environmentId)) return { users: [] };
         const query = req.query?.toLowerCase();
         const users = identityUsers(req.environmentId).filter((u) => (!query || u.email.toLowerCase().includes(query)) && (req.state === undefined || req.state === u.state));

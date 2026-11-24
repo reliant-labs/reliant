@@ -1,22 +1,51 @@
 // Copyright (c) 2025 Reliant Labs
-import { describe, expect, it, vi } from "vitest";
+
+/**
+ * The demo host's Data, Storage and Identity reads: the console's DEFAULT
+ * clients (the ones production runs, over `connectClient`), with the shell
+ * transport the demo installs at boot, the shop pack's (demoShellBoot.ts). No
+ * demo client exists to test any more: these are the real ones.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Code } from "@connectrpc/connect";
-import { createDemoBrowserApis } from "../browserApis";
+
+import { createShopTransport } from "@/fixtures/shop";
 import { demoSubjects } from "@/fixtures/shop/handlers/inventory";
+import { DEMO_ORG } from "@/fixtures/shop/shopStory";
+import { installShellTransport } from "@/lib/connect";
+import { queryClient } from "@/lib/query-client";
+import { controlPlaneIdentityApi as identity } from "@/services/controlPlane/identity/IdentityApiContext";
+import { controlPlaneDataBrowserApi as data } from "@/services/controlPlane/observability/DataBrowserApiContext";
+import { controlPlaneStorageBrowserApi as storage } from "@/services/controlPlane/storageBrowser/StorageBrowserApiContext";
+
+// The demo bundle's twin (services/controlPlane/config.demo.ts): the cloud reads are on.
+vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://demo.invalid", hasControlPlane: true }));
 
 const request = { environmentId: "env-staging", database: "shop", table: "public.customers", columns: [], filters: [], sort: [], limit: 25, offset: 0, count: "estimated" as const };
-describe("isolated demo browser clients", () => {
+
+beforeEach(() => installShellTransport(createShopTransport()));
+afterEach(() => {
+  installShellTransport(null);
+  queryClient.clear();
+});
+
+describe("the demo's browser reads, on the real clients over the shop transport", () => {
   it("uses typed synthetic reads without any network, auth or live control-plane client", async () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network forbidden"));
     try {
-      const { data, storage, identity } = createDemoBrowserApis();
-      expect(await identity.currentOrgId()).toBe("demo-org");
-      expect((await identity.listUsers("demo-org", "env-staging", {}, "")).users[0]?.email).toBe("jon@example.com");
-      expect((await identity.listUsers("demo-org", "env-staging", { query: "lena.fischer" }, "")).users[0]?.userId).toBe(demoSubjects()[0]);
-      expect((await identity.getUser("demo-org", "env-staging", demoSubjects()[0]))?.userId).toBe(demoSubjects()[0]);
+      expect(await identity.currentOrgId()).toBe(DEMO_ORG);
+      expect((await identity.listUsers(DEMO_ORG, "env-staging", {}, "")).users[0]?.email).toBe("jon@example.com");
+      expect((await identity.listUsers(DEMO_ORG, "env-staging", { query: "lena.fischer" }, "")).users[0]?.userId).toBe(demoSubjects()[0]);
+      expect((await identity.getUser!(DEMO_ORG, "env-staging", demoSubjects()[0]))?.userId).toBe(demoSubjects()[0]);
       await expect(identity.listUsers("foreign-org", "env-staging", {}, "")).rejects.toMatchObject({ code: Code.NotFound });
-      await expect(identity.getStatus("demo-org", "foreign-env")).rejects.toMatchObject({ code: Code.NotFound });
-      await expect(identity.deleteUser("demo-org", "env-staging", demoSubjects()[0])).rejects.toMatchObject({ code: Code.PermissionDenied });
+      // Another environment is answered empty (fixtures/shop/handlers/scope.ts): never shop's identity.
+      expect(await identity.getStatus(DEMO_ORG, "foreign-env")).toMatchObject({ hasInstance: false, issuer: "", apps: [] });
+      // Every write is refused by the transport's read-only guard, before the pack sees it.
+      await expect(identity.deleteUser(DEMO_ORG, "env-staging", demoSubjects()[0])).rejects.toMatchObject({ code: Code.PermissionDenied });
+      await expect(identity.inviteUser(DEMO_ORG, "env-staging", { email: "new@example.com", roles: [] })).rejects.toMatchObject({ code: Code.PermissionDenied });
+      await expect(identity.requestExport(DEMO_ORG, "env-staging")).rejects.toMatchObject({ code: Code.PermissionDenied });
+      // Read-named, but it signs a credential: the pack refuses it too.
+      await expect(identity.getExportURL(DEMO_ORG, "env-staging")).rejects.toMatchObject({ code: Code.PermissionDenied });
       expect((await data.describeDatabase(request)).tables.map((table) => table.name)).toContain("customers");
       expect((await data.browseTable(request)).rows.flat()).toContain("lena.fischer@example.com");
       expect((await storage.listBrowsableBuckets("env-staging")).buckets[0]?.name).toBe("uploads");
@@ -29,7 +58,6 @@ describe("isolated demo browser clients", () => {
   });
 
   it("refuses foreign scope and requires deliberate synthetic prod confirmation", async () => {
-    const { data, storage } = createDemoBrowserApis();
     expect((await data.browseTable({ ...request, environmentId: "foreign-env" })).rows).toEqual([]);
     expect((await storage.listBrowsableBuckets("foreign-env")).buckets).toEqual([]);
     const target = { environmentId: "env-prod", bucket: "uploads", key: "README.txt" };
@@ -39,7 +67,6 @@ describe("isolated demo browser clients", () => {
   });
 
   it("declares no bucket in dev, so the demo shows the empty Storage state there, and reads nothing from it", async () => {
-    const { storage } = createDemoBrowserApis();
     expect(await storage.listBrowsableBuckets("env-dev")).toMatchObject({ buckets: [], policy: "open" });
     expect((await storage.listBrowsableBuckets("env-prod")).buckets.map((bucket) => bucket.name)).toEqual(["uploads"]);
     await expect(storage.getObjectMetadata({ environmentId: "env-dev", bucket: "uploads", key: "README.txt" })).rejects.toMatchObject({ code: Code.NotFound });
