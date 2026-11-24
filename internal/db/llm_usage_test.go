@@ -130,6 +130,12 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 			"input_tokens": "bigint", "output_tokens": "bigint", "cache_read_tokens": "bigint",
 			"cache_write_tokens": "bigint", "latency_ms": "bigint", "attempt": "integer",
 			"created_at": "timestamp with time zone", "funding": "text", "account_id": "text",
+			// What the call was part of (agent-analytics.md §3.2): opaque ids
+			// and the workflow, node and preset names, the provider's request
+			// id, time to first token, and cost on a closed-set basis (§4).
+			"workflow_id": "text", "thread_id": "text", "workflow_name": "text", "node_id": "text", "preset": "text",
+			"project_id": "text", "ai_run_id": "text", "ai_root_run_id": "text", "provider_request_id": "text",
+			"ttft_ms": "bigint", "cost_usd_nanos": "bigint", "cost_basis": "text",
 		},
 		"llm_call_usage_daily": {
 			"user_id": "text", "org_id": "text", "provider": "text", "model": "text", "auth_mode": "text", "purpose": "text",
@@ -173,6 +179,27 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 	_, err = raw.Exec(`INSERT INTO llm_call_usage (id, user_id, chat_id, provider, model, auth_mode, purpose, outcome, attempt, funding)
 		VALUES ('y', 'u', 'c', 'p', 'm', 'byok', 'chat', 'success', 1, 'acme prod key')`)
 	assert.Error(t, err, "free text in funding must be refused by the schema")
+
+	// cost_basis is a closed set, and a cost is present exactly when the
+	// basis prices the call: no cost without a basis, none on an unpriced
+	// call, and no priced basis without its cost.
+	costRow := func(id, basis string, nanos any) error {
+		var b any
+		if basis != "" {
+			b = basis
+		}
+		_, err := raw.Exec(`INSERT INTO llm_call_usage (id, user_id, chat_id, provider, model, auth_mode, purpose, outcome, attempt, cost_basis, cost_usd_nanos)
+			VALUES ($1, 'u', 'c', 'p', 'm', 'byok', 'chat', 'success', 1, $2, $3)`, id, b, nanos)
+		return err
+	}
+	assert.Error(t, costRow("cb-free", "list price from a blog", int64(5)), "free text in cost_basis must be refused by the schema")
+	assert.Error(t, costRow("cb-nobasis", "", int64(0)), "a cost with no basis must be refused: it would read as a price")
+	assert.Error(t, costRow("cb-unpriced", "unpriced", int64(0)), "an unpriced call must not carry a cost")
+	assert.Error(t, costRow("cb-reported", "reported", nil), "a reported basis must carry its cost")
+	assert.Error(t, costRow("cb-negative", "reported", int64(-1)), "a cost is never negative")
+	assert.NoError(t, costRow("cb-ok-reported", "reported", int64(12_300_000)))
+	assert.NoError(t, costRow("cb-ok-unpriced", "unpriced", nil))
+	assert.NoError(t, costRow("cb-ok-unknown", "", nil))
 	_, err = raw.Exec(`INSERT INTO llm_org_usage_daily (day, org_id, account_id, user_id, provider, model, funding, purpose)
 		VALUES (current_date, 'o', 'a', 'u', 'p', 'm', 'personal', 'chat')`)
 	assert.Error(t, err, "the org rollup must refuse a personal-account row")
@@ -375,4 +402,75 @@ func TestLLMUsagePurgeFences_AgeOut(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, n)
 	assert.Equal(t, 1, rowCount(t, raw, `SELECT count(*) FROM llm_usage_purged_users WHERE user_id = 'recent'`))
+}
+
+// The run-scope columns (agent-analytics.md §3.2) round-trip, and a field the
+// recorder left empty is NULL, not "": "not recorded" never reads as a value.
+func TestLLMCallUsage_RunScopeColumnsRoundTripAndEmptyIsNull(t *testing.T) {
+	t.Parallel()
+	repo, raw, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ttft, nanos := int64(420), int64(12_300_000)
+	full := usageRec("wf/run/act-scoped", day(2026, 11, 24))
+	full.WorkflowID, full.ThreadID, full.WorkflowName, full.NodeID = "wf-1", "thread-1", "agent", "call_llm"
+	full.Preset, full.ProjectID, full.AIRunID, full.AIRootRunID = "researcher", "proj-1", "run-child", "run-root"
+	full.ProviderRequestID, full.TTFTMs = "req_abc", &ttft
+	full.CostUSDNanos, full.CostBasis = &nanos, store.LLMCostBasisReported
+	_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, full)
+	require.NoError(t, err)
+	_, err = llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, usageRec("wf/run/act-bare", day(2026, 11, 24)))
+	require.NoError(t, err)
+
+	rows, err := store.ListLlmCallUsage(ctx, repo.ORM())
+	require.NoError(t, err)
+	byID := map[string]*store.LlmCallUsage{}
+	for _, r := range rows {
+		byID[r.ID] = r
+	}
+	got := byID["wf/run/act-scoped"]
+	require.NotNil(t, got)
+	str := func(p *string) string {
+		if p == nil {
+			return "<nil>"
+		}
+		return *p
+	}
+	assert.Equal(t, "wf-1", str(got.WorkflowID))
+	assert.Equal(t, "thread-1", str(got.ThreadID))
+	assert.Equal(t, "agent", str(got.WorkflowName))
+	assert.Equal(t, "call_llm", str(got.NodeID))
+	assert.Equal(t, "researcher", str(got.Preset))
+	assert.Equal(t, "proj-1", str(got.ProjectID))
+	assert.Equal(t, "run-child", str(got.AiRunID))
+	assert.Equal(t, "run-root", str(got.AiRootRunID))
+	assert.Equal(t, "req_abc", str(got.ProviderRequestID))
+	require.NotNil(t, got.TtftMs)
+	assert.EqualValues(t, 420, *got.TtftMs)
+	require.NotNil(t, got.CostUsdNanos)
+	assert.EqualValues(t, 12_300_000, *got.CostUsdNanos)
+	assert.Equal(t, "reported", str(got.CostBasis))
+
+	bare := byID["wf/run/act-bare"]
+	require.NotNil(t, bare)
+	for name, p := range map[string]*string{
+		"workflow_id": bare.WorkflowID, "thread_id": bare.ThreadID, "workflow_name": bare.WorkflowName,
+		"node_id": bare.NodeID, "preset": bare.Preset, "project_id": bare.ProjectID, "ai_run_id": bare.AiRunID,
+		"ai_root_run_id": bare.AiRootRunID, "provider_request_id": bare.ProviderRequestID, "cost_basis": bare.CostBasis,
+	} {
+		assert.Nil(t, p, "%s: not recorded is NULL, not an empty value", name)
+	}
+	assert.Nil(t, bare.TtftMs, "no first token is NULL, not 0 ms")
+	assert.Nil(t, bare.CostUsdNanos, "an unpriced call reads as no cost, not as $0")
+
+	// Summed, an unpriced call adds nothing and is not counted as priced: the
+	// total over unpriced calls alone is NULL, never 0.
+	var total sql.NullInt64
+	require.NoError(t, raw.QueryRow(`SELECT sum(cost_usd_nanos) FROM llm_call_usage WHERE id = $1`, "wf/run/act-bare").Scan(&total))
+	assert.False(t, total.Valid, "the cost of unpriced calls is unknown, not zero")
+	var priced, all int
+	require.NoError(t, raw.QueryRow(`SELECT count(cost_usd_nanos), count(*) FROM llm_call_usage`).Scan(&priced, &all))
+	assert.Equal(t, 1, priced, "only the priced call is counted as priced")
+	assert.Equal(t, 2, all)
 }
