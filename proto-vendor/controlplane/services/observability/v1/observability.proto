@@ -6,6 +6,7 @@ import "buf/validate/validate.proto";
 import "controlplane/v1/client.proto";
 import "controlplane/v1/deploy.proto";
 import "controlplane/v1/issues.proto";
+import "controlplane/v1/time_window.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
@@ -48,6 +49,7 @@ service ObservabilityService {
   // and a query string (grammar on SearchLogsRequest.query), newest first by
   // default, with cursor pagination. Max range 7 days.
   rpc SearchLogs(SearchLogsRequest) returns (SearchLogsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -58,6 +60,7 @@ service ObservabilityService {
   // duration, span and error counts, services touched) plus, on the first
   // page, a RED summary of the matched traces. Max range 7 days.
   rpc ListTraces(ListTracesRequest) returns (ListTracesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -67,6 +70,7 @@ service ObservabilityService {
   // GetTrace returns every span of one trace, for the waterfall. Max range 7
   // days (the traces TTL).
   rpc GetTrace(GetTraceRequest) returns (GetTraceResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -76,6 +80,7 @@ service ObservabilityService {
   // ListMetrics returns the metric names the org has, with their type and unit,
   // so a metric picker has something to offer. Max range 30 days.
   rpc ListMetrics(ListMetricsRequest) returns (ListMetricsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -88,6 +93,7 @@ service ObservabilityService {
   // the declared closed value set), and suggested breakdown keys. The range
   // is capped at 24 hours for the attribute scan. Cached for a minute.
   rpc GetMetric(GetMetricRequest) returns (GetMetricResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -99,6 +105,7 @@ service ObservabilityService {
   // group and a minimum value. Exemplars whose trace is stored sort first.
   // Max range 7 days.
   rpc ListMetricExemplars(ListMetricExemplarsRequest) returns (ListMetricExemplarsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -108,6 +115,7 @@ service ObservabilityService {
   // GetServiceGraph aggregates received pre-tail evidence, never estimated total traffic.
   // Maximum window 1 hour; arbitrary QueryScope attribute filters are rejected.
   rpc GetServiceGraph(GetServiceGraphRequest) returns (GetServiceGraphResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -117,6 +125,7 @@ service ObservabilityService {
   // GetServiceGraphCatalog lists observed fully qualified RPC methods and available
   // declared metadata. Missing hosted code inventory is explicitly unavailable.
   rpc GetServiceGraphCatalog(GetServiceGraphCatalogRequest) returns (GetServiceGraphCatalogResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -127,6 +136,7 @@ service ObservabilityService {
   // p50/p95/p99 latency over server spans: the default landing view. Max range
   // 7 days.
   rpc GetServiceOverview(GetServiceOverviewRequest) returns (GetServiceOverviewResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -138,6 +148,7 @@ service ObservabilityService {
   // (30 days of aggregates; the raw per-sample tier, used for trace_id, keeps
   // 72 hours).
   rpc GetFlamegraph(GetFlamegraphRequest) returns (GetFlamegraphResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -182,6 +193,7 @@ service ObservabilityService {
   // ResourceExhausted). With
   // `explain`, nothing is run: the response carries the compiled statements.
   rpc QueryPanel(QueryPanelRequest) returns (QueryPanelResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -195,6 +207,7 @@ service ObservabilityService {
   // current selection. Bounded (max 100 values, max range 7 days) and cached
   // for a minute.
   rpc ListAttributeValues(ListAttributeValuesRequest) returns (ListAttributeValuesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -208,6 +221,7 @@ service ObservabilityService {
   // the telemetry plus the bundles the control plane already holds. Max range
   // 7 days, at most 500 services, cached for a minute.
   rpc GetServiceSignals(GetServiceSignalsRequest) returns (GetServiceSignalsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -221,6 +235,7 @@ service ObservabilityService {
   // (kubeletstats + Kubernetes events), stamped with the tenant from namespace
   // labels by the node agent, never from payloads. Max range 7 days.
   rpc ListWorkloads(ListWorkloadsRequest) returns (ListWorkloadsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -232,6 +247,7 @@ service ObservabilityService {
   // image / service.version changes over time, per environment in scope. Max
   // range 7 days.
   rpc GetWorkload(GetWorkloadRequest) returns (GetWorkloadResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -247,6 +263,7 @@ service ObservabilityService {
   // operator labelled, never from the data. Admission and scoping are every
   // other read's (QueryScope). Max range 30 days.
   rpc GetManagedDatabaseMetrics(GetManagedDatabaseMetricsRequest) returns (GetManagedDatabaseMetricsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -259,6 +276,7 @@ service ObservabilityService {
   // a deployed environment's real spec replaces it once it reaches
   // control-plane. Max range 30 days.
   rpc GetDashboards(GetDashboardsRequest) returns (GetDashboardsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -279,6 +297,7 @@ service ObservabilityService {
   // issues and alerts as well as telemetry, all under obs:read for a machine
   // credential.
   rpc GetReleaseHealth(GetReleaseHealthRequest) returns (GetReleaseHealthResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -293,6 +312,7 @@ service ObservabilityService {
   // still retained. The statement is forge's (obsquery.UserActivityQuery), so
   // the local and hosted answers agree. Max range 90 days.
   rpc GetUserActivity(GetUserActivityRequest) returns (GetUserActivityResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -320,6 +340,7 @@ service ObservabilityService {
   // forge:custom — a read over runtime configs and the release ledger; a
   // FrontendReplay row is not a stored entity.
   rpc ListFrontendReplay(ListFrontendReplayRequest) returns (ListFrontendReplayResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -329,11 +350,21 @@ service ObservabilityService {
 
 // === Shared ===
 
-// TimeRange is a half-open range [start, end). Both ends are required and
-// end must be after start; each RPC caps the length.
+// TimeRange is a half-open range [start, end): either both absolute ends, with
+// end after start, or a window relative to the server's clock (relative), which
+// the server resolves to absolute bounds when it answers. Never both. Each RPC
+// caps the length. A range in a response is always absolute.
 message TimeRange {
-  google.protobuf.Timestamp start = 1 [(buf.validate.field).required = true];
-  google.protobuf.Timestamp end = 2 [(buf.validate.field).required = true];
+  option (buf.validate.message).cel = {
+    id: "time_range.bounds"
+    message: "set start and end, or relative, not both"
+    expression: "has(this.relative) ? !has(this.start) && !has(this.end) : has(this.start) && has(this.end)"
+  };
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+  // E.g. {last: 1h}: the hour before the server's now. A client that polls a
+  // moving window sends this, so its request (and its cache key) stays the same.
+  controlplane.v1.RelativeWindow relative = 3;
 }
 
 // QueryScope is what every request is scoped by (console v2, contract K1).
@@ -695,6 +726,10 @@ message SearchLogsResponse {
   // instance_users, echoed exactly. Unset when the request named none, or
   // when this read could not apply it (controlplane.v1.InstanceScope).
   controlplane.v1.InstanceScope instance_scope = 3;
+  // The absolute range this page read: scope.time_range, resolved when it was
+  // relative. A client pages a relative window by sending this as the next
+  // page's scope.time_range, so every page reads the same range.
+  TimeRange effective_time_range = 4;
 }
 
 message LogRecord {
@@ -785,6 +820,8 @@ message ListTracesResponse {
   // instance_users, echoed exactly. Unset when the request named none, or
   // when this read could not apply it (controlplane.v1.InstanceScope).
   controlplane.v1.InstanceScope instance_scope = 5;
+  // The absolute range this page read (SearchLogsResponse.effective_time_range).
+  TimeRange effective_time_range = 6;
 }
 
 message TraceRedGroup {

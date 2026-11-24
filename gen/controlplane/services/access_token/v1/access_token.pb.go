@@ -2198,22 +2198,22 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\x06scopes\x18\x01 \x03(\tR\x06scopes\"c\n" +
 	"\x15ExchangeTokenResponse\x122\n" +
 	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token\x12\x16\n" +
-	"\x06secret\x18\x02 \x01(\tR\x06secret2\xb0\n" +
+	"\x06secret\x18\x02 \x01(\tR\x06secret2\xc4\n" +
 	"\n" +
 	"\x12AccessTokenService\x12X\n" +
-	"\vCreateToken\x12#.controlplane.v1.CreateTokenRequest\x1a$.controlplane.v1.CreateTokenResponse\x12U\n" +
+	"\vCreateToken\x12#.controlplane.v1.CreateTokenRequest\x1a$.controlplane.v1.CreateTokenResponse\x12Z\n" +
 	"\n" +
-	"ListTokens\x12\".controlplane.v1.ListTokensRequest\x1a#.controlplane.v1.ListTokensResponse\x12X\n" +
+	"ListTokens\x12\".controlplane.v1.ListTokensRequest\x1a#.controlplane.v1.ListTokensResponse\"\x03\x90\x02\x01\x12X\n" +
 	"\vRevokeToken\x12#.controlplane.v1.RevokeTokenRequest\x1a$.controlplane.v1.RevokeTokenResponse\x12^\n" +
-	"\rCreateMyToken\x12%.controlplane.v1.CreateMyTokenRequest\x1a&.controlplane.v1.CreateMyTokenResponse\x12[\n" +
-	"\fListMyTokens\x12$.controlplane.v1.ListMyTokensRequest\x1a%.controlplane.v1.ListMyTokensResponse\x12^\n" +
+	"\rCreateMyToken\x12%.controlplane.v1.CreateMyTokenRequest\x1a&.controlplane.v1.CreateMyTokenResponse\x12`\n" +
+	"\fListMyTokens\x12$.controlplane.v1.ListMyTokensRequest\x1a%.controlplane.v1.ListMyTokensResponse\"\x03\x90\x02\x01\x12^\n" +
 	"\rRevokeMyToken\x12%.controlplane.v1.RevokeMyTokenRequest\x1a&.controlplane.v1.RevokeMyTokenResponse\x12^\n" +
 	"\rUpdateMyToken\x12%.controlplane.v1.UpdateMyTokenRequest\x1a&.controlplane.v1.UpdateMyTokenResponse\x12y\n" +
-	"\x16ResetDaemonScopePolicy\x12..controlplane.v1.ResetDaemonScopePolicyRequest\x1a/.controlplane.v1.ResetDaemonScopePolicyResponse\x12d\n" +
-	"\x0fListMyCLILogins\x12'.controlplane.v1.ListMyCLILoginsRequest\x1a(.controlplane.v1.ListMyCLILoginsResponse\x12g\n" +
+	"\x16ResetDaemonScopePolicy\x12..controlplane.v1.ResetDaemonScopePolicyRequest\x1a/.controlplane.v1.ResetDaemonScopePolicyResponse\x12i\n" +
+	"\x0fListMyCLILogins\x12'.controlplane.v1.ListMyCLILoginsRequest\x1a(.controlplane.v1.ListMyCLILoginsResponse\"\x03\x90\x02\x01\x12g\n" +
 	"\x10RevokeMyCLILogin\x12(.controlplane.v1.RevokeMyCLILoginRequest\x1a).controlplane.v1.RevokeMyCLILoginResponse\x12^\n" +
-	"\rExchangeToken\x12%.controlplane.v1.ExchangeTokenRequest\x1a&.controlplane.v1.ExchangeTokenResponse\x12p\n" +
-	"\x13ListOrgMemberGrants\x12+.controlplane.v1.ListOrgMemberGrantsRequest\x1a,.controlplane.v1.ListOrgMemberGrantsResponse\x12v\n" +
+	"\rExchangeToken\x12%.controlplane.v1.ExchangeTokenRequest\x1a&.controlplane.v1.ExchangeTokenResponse\x12u\n" +
+	"\x13ListOrgMemberGrants\x12+.controlplane.v1.ListOrgMemberGrantsRequest\x1a,.controlplane.v1.ListOrgMemberGrantsResponse\"\x03\x90\x02\x01\x12v\n" +
 	"\x15UpdateOrgMemberGrants\x12-.controlplane.v1.UpdateOrgMemberGrantsRequest\x1a..controlplane.v1.UpdateOrgMemberGrantsResponseB\xde\x01\n" +
 	"\x13com.controlplane.v1B\x10AccessTokenProtoP\x01ZXgithub.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 

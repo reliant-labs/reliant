@@ -7,6 +7,7 @@
 package controlplanev1
 
 import (
+	v1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -169,11 +170,14 @@ func (x *ListMembershipActivityRequest) GetPageToken() string {
 }
 
 // ActivityTimeRange is a half-open range [start, end). Either end may be unset
-// (unbounded on that side).
+// (unbounded on that side). Or, instead of either end, a window relative to the
+// server's clock (relative, ObservabilityService's TimeRange.relative), which
+// the server resolves when it answers.
 type ActivityTimeRange struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Start         *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start,proto3" json:"start,omitempty"`
 	End           *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=end,proto3" json:"end,omitempty"`
+	Relative      *v1.RelativeWindow     `protobuf:"bytes,3,opt,name=relative,proto3" json:"relative,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -218,6 +222,13 @@ func (x *ActivityTimeRange) GetStart() *timestamppb.Timestamp {
 func (x *ActivityTimeRange) GetEnd() *timestamppb.Timestamp {
 	if x != nil {
 		return x.End
+	}
+	return nil
+}
+
+func (x *ActivityTimeRange) GetRelative() *v1.RelativeWindow {
+	if x != nil {
+		return x.Relative
 	}
 	return nil
 }
@@ -780,7 +791,7 @@ var File_services_activity_v1_activity_proto protoreflect.FileDescriptor
 
 const file_services_activity_v1_activity_proto_rawDesc = "" +
 	"\n" +
-	"#services/activity/v1/activity.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe0\x01\n" +
+	"#services/activity/v1/activity.proto\x12\x0fcontrolplane.v1\x1a!controlplane/v1/time_window.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe0\x01\n" +
 	"\x1dListMembershipActivityRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1e\n" +
 	"\bactor_id\x18\x02 \x01(\tH\x00R\aactorId\x88\x01\x01\x12\x17\n" +
@@ -791,10 +802,11 @@ const file_services_activity_v1_activity_proto_rawDesc = "" +
 	"page_token\x18\x06 \x01(\tR\tpageTokenB\v\n" +
 	"\t_actor_idB\a\n" +
 	"\x05_verbB\x06\n" +
-	"\x04_via\"s\n" +
+	"\x04_via\"\xb0\x01\n" +
 	"\x11ActivityTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
-	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xe2\x01\n" +
+	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\x12;\n" +
+	"\brelative\x18\x03 \x01(\v2\x1f.controlplane.v1.RelativeWindowR\brelative\"\xe2\x01\n" +
 	"\rActivityScope\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12A\n" +
 	"\n" +
@@ -856,10 +868,10 @@ const file_services_activity_v1_activity_proto_rawDesc = "" +
 	"\x1fACTIVITY_ACTOR_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18ACTIVITY_ACTOR_KIND_USER\x10\x01\x12\x1f\n" +
 	"\x1bACTIVITY_ACTOR_KIND_MACHINE\x10\x02\x12\x1e\n" +
-	"\x1aACTIVITY_ACTOR_KIND_SYSTEM\x10\x032\xdf\x01\n" +
-	"\x0fActivityService\x12[\n" +
-	"\fListActivity\x12$.controlplane.v1.ListActivityRequest\x1a%.controlplane.v1.ListActivityResponse\x12o\n" +
-	"\x16ListMembershipActivity\x12..controlplane.v1.ListMembershipActivityRequest\x1a%.controlplane.v1.ListActivityResponseB\xd7\x01\n" +
+	"\x1aACTIVITY_ACTOR_KIND_SYSTEM\x10\x032\xe9\x01\n" +
+	"\x0fActivityService\x12`\n" +
+	"\fListActivity\x12$.controlplane.v1.ListActivityRequest\x1a%.controlplane.v1.ListActivityResponse\"\x03\x90\x02\x01\x12t\n" +
+	"\x16ListMembershipActivity\x12..controlplane.v1.ListMembershipActivityRequest\x1a%.controlplane.v1.ListActivityResponse\"\x03\x90\x02\x01B\xd7\x01\n" +
 	"\x13com.controlplane.v1B\rActivityProtoP\x01ZTgithub.com/reliant-labs/reliant/gen/controlplane/services/activity/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -889,29 +901,31 @@ var file_services_activity_v1_activity_proto_goTypes = []any{
 	(*ActivityEnvironment)(nil),           // 9: controlplane.v1.ActivityEnvironment
 	nil,                                   // 10: controlplane.v1.ActivityEvent.DetailEntry
 	(*timestamppb.Timestamp)(nil),         // 11: google.protobuf.Timestamp
+	(*v1.RelativeWindow)(nil),             // 12: controlplane.v1.RelativeWindow
 }
 var file_services_activity_v1_activity_proto_depIdxs = []int32{
 	11, // 0: controlplane.v1.ActivityTimeRange.start:type_name -> google.protobuf.Timestamp
 	11, // 1: controlplane.v1.ActivityTimeRange.end:type_name -> google.protobuf.Timestamp
-	2,  // 2: controlplane.v1.ActivityScope.time_range:type_name -> controlplane.v1.ActivityTimeRange
-	3,  // 3: controlplane.v1.ListActivityRequest.scope:type_name -> controlplane.v1.ActivityScope
-	0,  // 4: controlplane.v1.ListActivityRequest.actor_kind:type_name -> controlplane.v1.ActivityActorKind
-	6,  // 5: controlplane.v1.ListActivityResponse.events:type_name -> controlplane.v1.ActivityEvent
-	11, // 6: controlplane.v1.ActivityEvent.at:type_name -> google.protobuf.Timestamp
-	7,  // 7: controlplane.v1.ActivityEvent.actor:type_name -> controlplane.v1.ActivityActor
-	8,  // 8: controlplane.v1.ActivityEvent.target:type_name -> controlplane.v1.ActivityEventTarget
-	9,  // 9: controlplane.v1.ActivityEvent.env:type_name -> controlplane.v1.ActivityEnvironment
-	10, // 10: controlplane.v1.ActivityEvent.detail:type_name -> controlplane.v1.ActivityEvent.DetailEntry
-	0,  // 11: controlplane.v1.ActivityActor.kind:type_name -> controlplane.v1.ActivityActorKind
-	4,  // 12: controlplane.v1.ActivityService.ListActivity:input_type -> controlplane.v1.ListActivityRequest
-	1,  // 13: controlplane.v1.ActivityService.ListMembershipActivity:input_type -> controlplane.v1.ListMembershipActivityRequest
-	5,  // 14: controlplane.v1.ActivityService.ListActivity:output_type -> controlplane.v1.ListActivityResponse
-	5,  // 15: controlplane.v1.ActivityService.ListMembershipActivity:output_type -> controlplane.v1.ListActivityResponse
-	14, // [14:16] is the sub-list for method output_type
-	12, // [12:14] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	12, // 2: controlplane.v1.ActivityTimeRange.relative:type_name -> controlplane.v1.RelativeWindow
+	2,  // 3: controlplane.v1.ActivityScope.time_range:type_name -> controlplane.v1.ActivityTimeRange
+	3,  // 4: controlplane.v1.ListActivityRequest.scope:type_name -> controlplane.v1.ActivityScope
+	0,  // 5: controlplane.v1.ListActivityRequest.actor_kind:type_name -> controlplane.v1.ActivityActorKind
+	6,  // 6: controlplane.v1.ListActivityResponse.events:type_name -> controlplane.v1.ActivityEvent
+	11, // 7: controlplane.v1.ActivityEvent.at:type_name -> google.protobuf.Timestamp
+	7,  // 8: controlplane.v1.ActivityEvent.actor:type_name -> controlplane.v1.ActivityActor
+	8,  // 9: controlplane.v1.ActivityEvent.target:type_name -> controlplane.v1.ActivityEventTarget
+	9,  // 10: controlplane.v1.ActivityEvent.env:type_name -> controlplane.v1.ActivityEnvironment
+	10, // 11: controlplane.v1.ActivityEvent.detail:type_name -> controlplane.v1.ActivityEvent.DetailEntry
+	0,  // 12: controlplane.v1.ActivityActor.kind:type_name -> controlplane.v1.ActivityActorKind
+	4,  // 13: controlplane.v1.ActivityService.ListActivity:input_type -> controlplane.v1.ListActivityRequest
+	1,  // 14: controlplane.v1.ActivityService.ListMembershipActivity:input_type -> controlplane.v1.ListMembershipActivityRequest
+	5,  // 15: controlplane.v1.ActivityService.ListActivity:output_type -> controlplane.v1.ListActivityResponse
+	5,  // 16: controlplane.v1.ActivityService.ListMembershipActivity:output_type -> controlplane.v1.ListActivityResponse
+	15, // [15:17] is the sub-list for method output_type
+	13, // [13:15] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_services_activity_v1_activity_proto_init() }

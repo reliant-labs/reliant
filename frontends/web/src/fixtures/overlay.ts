@@ -90,18 +90,25 @@ export function failing(name: string, methods: FixtureMethods, code: Code, messa
  * by `refine`: the story's answer with one fact turned (prod held on billing,
  * a policy set to deny). `refine` gets the decoded response message, and may
  * change it in place or return a new one.
+ *
+ * `handlers` may be a function, called at the first answer: building a pack's
+ * handler map can read the pack clock, which no module may do at import (a
+ * harness pins the clock after importing its overlays; shop/shopStory.ts).
  */
 export function refining<M extends DescMethod>(
   name: string,
   method: M,
-  handlers: Record<string, unknown>,
+  handlers: Record<string, unknown> | (() => Record<string, unknown>),
   refine: (answer: MessageShape<M["output"]>, request: MessageShape<M["input"]>) => MessageShape<M["output"]> | void,
 ): FixturePack {
   const key = `${method.parent.typeName}/${method.name}`;
-  const handler = handlers[key];
-  if (typeof handler !== "function") throw new Error(`refining(${name}): the pack has no handler for ${key}`);
+  const handlerOf = () => {
+    const handler = (typeof handlers === "function" ? handlers() : handlers)[key];
+    if (typeof handler !== "function") throw new ConnectError(`refining(${name}): the pack has no handler for ${key}`, Code.Unimplemented);
+    return handler as (req: unknown) => unknown;
+  };
   return answering(name, method, async (_method, request) => {
-    const answer = create(method.output, (await (handler as (req: unknown) => unknown)(request)) as never) as MessageShape<M["output"]>;
+    const answer = create(method.output, (await handlerOf()(request)) as never) as MessageShape<M["output"]>;
     return refine(answer, request as MessageShape<M["input"]>) ?? answer;
   });
 }

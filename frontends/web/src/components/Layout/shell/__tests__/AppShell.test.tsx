@@ -27,28 +27,27 @@ import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 const probe = vi.hoisted(() => ({ navMounts: 0, pageMounts: 0, signedIn: true, narrow: false }));
 
 // The nav itself is covered in Sidebar*.test.tsx; here it only says when it
-// mounts and which page it was told is on screen.
-vi.mock("../../Sidebar", () => ({
-  Sidebar: ({ pathname, onNavigate }: { pathname: string; onNavigate?: (href: string, options?: { drill?: boolean }) => void }) => {
-    useEffect(() => {
-      probe.navMounts += 1;
-    }, []);
-    return (
-      <>
-        <div data-testid="nav-probe">{pathname}</div>
-        <button type="button" onClick={() => onNavigate?.("/inbox", { drill: true })}>drill</button>
-        <button type="button" onClick={() => onNavigate?.("/forge/p/shop")}>destination</button>
-      </>
-    );
-  },
-}));
+// mounts and which page it was told is on screen. It is the frame's `nav`
+// seam: the frame draws whatever nav body its host hands it.
+function ProbeNav({ pathname, onNavigate }: ShellNavProps) {
+  useEffect(() => {
+    probe.navMounts += 1;
+  }, []);
+  return (
+    <>
+      <div data-testid="nav-probe">{pathname}</div>
+      <button type="button" onClick={() => onNavigate("/inbox", { drill: true })}>drill</button>
+      <button type="button" onClick={() => onNavigate("/forge/p/shop")}>destination</button>
+    </>
+  );
+}
 
 vi.mock("@/hooks/useNarrowViewport", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/useNarrowViewport")>()),
   useNarrowViewport: () => probe.narrow,
 }));
 
-import { AppShellFrame } from "../AppShell";
+import { AppShellFrame, type ShellNavProps } from "../AppShell";
 import { PageMain, shellFrameScope, toggleShellNav, useShellFrame } from "../shellFrame";
 
 /** A page that counts its mounts and says what the frame told it. */
@@ -72,7 +71,7 @@ function renderInSession(ui: ReactElement) {
 function renderAt(path: string) {
   const root = createRootRoute({
     component: () => (
-      <AppShellFrame>
+      <AppShellFrame nav={ProbeNav}>
         <Outlet />
       </AppShellFrame>
     ),
@@ -155,7 +154,7 @@ describe("the one shell", () => {
     }
     const root = createRootRoute({
       component: () => (
-        <AppShellFrame>
+        <AppShellFrame nav={ProbeNav}>
           <Outlet />
         </AppShellFrame>
       ),
@@ -271,7 +270,7 @@ describe("the shell's main landmark", () => {
   function renderPageAt(path: string) {
     const root = createRootRoute({
       component: () => (
-        <AppShellFrame>
+        <AppShellFrame nav={ProbeNav}>
           <Outlet />
         </AppShellFrame>
       ),
