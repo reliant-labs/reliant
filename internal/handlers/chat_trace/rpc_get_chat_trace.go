@@ -130,8 +130,12 @@ func (s *Service) GetChatTrace(
 	}
 	resp.ModelCalls, resp.Totals = modelCalls(rows, chat.UserID, viewer)
 
-	// The trace half: the span store, seven days.
-	spanFrom := oldest.Add(-spanStartSlack)
+	// The trace half: the span store, seven days. Clock slack applies only
+	// to the inferred chat boundary, never to the caller's explicit window.
+	spanFrom := chat.CreatedAt.UTC().Add(-spanStartSlack)
+	if from.After(spanFrom) {
+		spanFrom = from
+	}
 	if expiry := now.Add(-spanStoreTTL); spanFrom.Before(expiry) {
 		spanFrom = expiry
 		if oldest.Before(expiry) {

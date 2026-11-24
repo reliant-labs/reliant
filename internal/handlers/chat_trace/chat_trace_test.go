@@ -156,6 +156,36 @@ func get(svc *Service, ctx context.Context, req *pb.GetChatTraceRequest) (*pb.Ge
 
 func nanos(n int64) *int64 { return &n }
 
+func TestGetChatTrace_SpanWindow(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		start *timestamppb.Timestamp
+		want  time.Time
+	}{
+		{"inferred creation allows clock slack", nil, chatCreated.Add(-spanStartSlack)},
+		{"explicit start after creation", timestamppb.New(chatCreated.Add(time.Hour)), chatCreated.Add(time.Hour)},
+		{"explicit start at creation", timestamppb.New(chatCreated), chatCreated},
+		{"explicit start within clock slack", timestamppb.New(chatCreated.Add(-30 * time.Second)), chatCreated.Add(-30 * time.Second)},
+		{"explicit start before clock slack", timestamppb.New(chatCreated.Add(-2 * time.Minute)), chatCreated.Add(-spanStartSlack)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spans := &fakeSpans{}
+			f, svc := setup(t, spans)
+			end := now.Add(-time.Minute)
+			resp, err := get(svc, f.Owner, &pb.GetChatTraceRequest{
+				ChatId: f.ChatID, StartTime: tc.start, EndTime: timestamppb.New(end),
+			})
+			require.NoError(t, err)
+			asked := spans.queries()
+			require.Len(t, asked, 1)
+			assert.Equal(t, tc.want, asked[0].Start)
+			assert.Equal(t, end, asked[0].End)
+			assert.Equal(t, tc.want, resp.GetSpansStartTime().AsTime())
+			assert.Equal(t, end, resp.GetSpansEndTime().AsTime())
+		})
+	}
+}
+
 // notMember answers every membership question "not a member": a member the
 // org removed.
 type notMember struct{}
