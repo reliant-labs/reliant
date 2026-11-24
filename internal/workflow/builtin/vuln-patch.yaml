@@ -77,6 +77,17 @@ inputs:
       Ask a person to approve before the pull request opens when the agent changed files other than dependency
       manifests and lockfiles (go.mod, package.json, a Dockerfile, …). Off: the verify gate alone decides.
 
+# What a workflow that starts this one by ref routes on. Every ending that opens no pull request,
+# but nothing-to-patch, declares outcome: failure, which fails a run of this workflow but not the
+# parent of a `workflow:` node that runs it: a parent reads result instead.
+outputs:
+  # opened: the pull request is open (pr_url). nothing: no finding to patch, no pull request.
+  # failed: no pull request; the run's last message says why.
+  result: >-
+    {{ nodes.?pr.?is_error.orValue(true) == false ? 'opened'
+       : (nodes.?route.?kind.orValue('') == 'nothing' ? 'nothing' : 'failed') }}
+  pr_url: "{{ nodes.?pr.?is_error.orValue(true) == false ? string(nodes.?pr.?data.?html_url.orValue('')) : '' }}"
+
 entry: [check]
 
 nodes:

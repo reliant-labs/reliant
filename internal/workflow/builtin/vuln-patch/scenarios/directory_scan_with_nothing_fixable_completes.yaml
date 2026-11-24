@@ -24,6 +24,7 @@ expect:
   skipped: [patch]
   completed: [listing, route, nothing]
   not_reached: [fix, compose, publish, pr, cannot_patch]
+  outputs: {result: nothing, pr_url: ""}
   node_outputs:
     check: {list_args: ["scan", "'./tools'", "--json"]}
     route: {kind: nothing}

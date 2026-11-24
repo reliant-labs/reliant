@@ -34,6 +34,7 @@ expect:
   completed: [check, wt, dir, where, repo_info, patch, parsed, plan, route, compose, publish, pr, opened]
   skipped: [listing]
   not_reached: [fix, invalid, nothing, cannot_patch]
+  outputs: {result: opened, pr_url: "https://github.com/acme/forge/pull/21"}
   node_outputs:
     check:
       valid: true

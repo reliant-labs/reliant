@@ -10,3 +10,4 @@ expect:
   not_reached: [wt, dir, patch, listing, fix, publish, pr]
   node_outputs:
     check: {valid: false}
+  outputs: {result: failed, pr_url: ""}
