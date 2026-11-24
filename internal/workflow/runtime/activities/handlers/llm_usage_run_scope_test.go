@@ -334,7 +334,9 @@ func TestDriverRetries_TimeToFirstToken(t *testing.T) {
 
 	clock = t0.Add(300 * time.Millisecond)
 	r.observeEvent(llm.DriverEvent{Type: llm.EventToolUseStart}) // framing, not an output delta
-	assert.Nil(t, r.ttftMs())
+	r.observeEvent(llm.DriverEvent{Type: llm.EventContentDelta})
+	r.observeEvent(llm.DriverEvent{Type: llm.EventThinkingDelta})
+	assert.Nil(t, r.ttftMs(), "empty deltas before the real token are framing")
 	clock = t0.Add(400 * time.Millisecond)
 	r.observeEvent(llm.DriverEvent{Type: llm.EventThinkingDelta, Thinking: "hmm"})
 	clock = t0.Add(900 * time.Millisecond)
@@ -344,6 +346,13 @@ func TestDriverRetries_TimeToFirstToken(t *testing.T) {
 	require.NotNil(t, got)
 	assert.EqualValues(t, 250, *got, "from 150ms (100ms + the 50ms wait) to the first delta at 400ms")
 	require.Len(t, r.list, 1, "the retry is still its own provider request")
+
+	emptyOnly := newDriverRetriesAt(now)
+	clock = clock.Add(100 * time.Millisecond)
+	emptyOnly.observeEvent(llm.DriverEvent{Type: llm.EventContentDelta})
+	emptyOnly.observeEvent(llm.DriverEvent{Type: llm.EventThinkingDelta})
+	emptyOnly.finish()
+	assert.Nil(t, emptyOnly.ttftMs(), "an empty-only stream produced no output token")
 }
 
 // What the ledger records of a call's cost: the reported cost in nanos, else

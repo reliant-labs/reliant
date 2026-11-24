@@ -251,6 +251,11 @@ func (r *driverRetries) observeEvent(ev llm.DriverEvent) {
 			r.observe(*ev.Retry)
 		}
 	case llm.EventContentDelta, llm.EventThinkingDelta:
+		// Empty framing deltas do not represent an output token.
+		if (ev.Type == llm.EventContentDelta && ev.Content == "") ||
+			(ev.Type == llm.EventThinkingDelta && ev.Thinking == "") {
+			return
+		}
 		if r.firstToken.IsZero() {
 			r.firstToken = r.now()
 		}
