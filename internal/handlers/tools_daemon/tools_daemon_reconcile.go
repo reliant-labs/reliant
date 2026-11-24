@@ -104,6 +104,11 @@ func (s *Service) reconcileProjectDaemonsOnConnect(ctx context.Context, conn *da
 	// A pool member whose disk came up empty gets its checkouts back
 	// (tools_daemon_restore.go). Its own, longer, budget: clones are slow.
 	s.restoreCheckoutsOnConnect(conn, missing)
+	// Nested repositories still to clone into a checkout whose root is
+	// there (tools_daemon_nested_clone.go), each on its own budget.
+	if scope, _, err := s.machineProjectScope(ctx, conn); err == nil {
+		s.resumeNestedClonesOnConnect(ctx, conn, scope, check)
+	}
 	return nil
 }
 
@@ -465,6 +470,12 @@ func settleStaleInstall(ctx context.Context, database ProjectReconcileStore, che
 		return false, err
 	}
 	if state.Exists {
+		// The root landed; its nested repositories, if any are still to
+		// clone, settle the row when they have (resumeNestedClonesOnConnect
+		// runs them after this pass).
+		if nested, err := database.ListProjectDaemonReposForPair(ctx, row.ProjectID, row.DaemonID); err == nil && hasUnsettledNestedRepos(nested) {
+			return false, nil
+		}
 		installed, err := database.MarkProjectDaemonInstalledInScope(ctx, row.ProjectID, row.DaemonID, scope)
 		if err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to settle a lost clone that landed",

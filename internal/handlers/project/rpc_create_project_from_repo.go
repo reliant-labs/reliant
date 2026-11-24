@@ -86,11 +86,10 @@ func (s *Service) CreateProjectFromRepo(
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("could not derive a project name from %q — pass name explicitly", cloneURL))
 	}
 	branch := strings.TrimSpace(req.Msg.GetBranch())
+	// An empty path is defaulted once the machine is read: where it keeps
+	// projects depends on the machine (defaultClonePath).
 	path := strings.TrimSpace(req.Msg.GetPath())
-	if path == "" {
-		path = cloudProjectPath(name)
-	}
-	if !ospath.IsAbs(path) {
+	if path != "" && !ospath.IsAbs(path) {
 		// ospath, not filepath: the path names a directory on the user's
 		// DAEMON, which may be Windows while this server is Linux.
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("project path must be absolute, got: %q", path))
@@ -131,6 +130,9 @@ func (s *Service) CreateProjectFromRepo(
 		if scope, err = s.machineScope(ctx, userID, machine); err != nil {
 			return nil, err
 		}
+	}
+	if path == "" {
+		path = s.defaultClonePath(ctx, machine, name)
 	}
 	existing, err := s.existingProjectForRepo(ctx, userID, path, cloneURL, scope)
 	if err != nil {
@@ -182,12 +184,17 @@ func (s *Service) CreateProjectFromRepo(
 		branchPtr = &branch
 	}
 
-	// Record where the checkout will live, in the state it is actually in.
+	// Record where the checkout will live, in the state it is actually in,
+	// with the nested repositories the machine's gateway clones into it
+	// once the root lands (tools_daemon nested_clone.go): the project stays
+	// installing until they have, and fails naming each one that did not.
 	installState := core.ProjectInstallInstalled
+	var nested []string
 	if cloneResult.Queued {
 		installState = core.ProjectInstallInstalling
+		nested = s.nestedRepoIDs(ctx, project.ID)
 		if err := s.deps.Repo.UpsertQueuedProjectDaemon(
-			ctx, project.ID, daemonID, clonedPath, branchPtr, requestID,
+			ctx, project.ID, daemonID, clonedPath, branchPtr, requestID, nested,
 		); err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to record project installation"))
 		}
@@ -205,7 +212,7 @@ func (s *Service) CreateProjectFromRepo(
 
 	logging.InfoContext(ctx, "CreateProjectFromRepo: project added",
 		"project_id", project.ID, "daemon_id", daemonID,
-		"queued", cloneResult.Queued, "repo", gitremote.Redacted(cloneURL))
+		"queued", cloneResult.Queued, "nested_repos", len(nested), "repo", gitremote.Redacted(cloneURL))
 
 	return connect.NewResponse(&reliantv1.CreateProjectFromRepoResponse{
 		Project:       projectToProto(project),
@@ -225,8 +232,17 @@ func (s *Service) CreateProjectFromRepo(
 // any org): the same repo may be a project in each of the caller's orgs.
 // A found project the caller may no longer act in is refused
 // (reusableProject), never re-added.
+//
+// The remote matches in another spelling too (git@github.com:o/r.git is
+// https://github.com/o/r): a repository added over SSH on one machine and
+// picked from the GitHub list (HTTPS) for another is one project, set up on
+// a second machine, not a second project. Existing duplicates stay as they
+// are; the oldest matching project is the one found.
 func (s *Service) existingProjectForRepo(ctx context.Context, userID, path, cloneURL string, scope *core.OrgScope) (*core.Project, error) {
 	if existing, err := s.deps.Lookups.GetProjectByRemoteURLAndUserInScope(ctx, cloneURL, userID, scope); err == nil && existing != nil {
+		return existing, reusableProject(ctx, userID, existing)
+	}
+	if existing, err := s.deps.Lookups.GetProjectBySameRemoteAndUserInScope(ctx, cloneURL, userID, scope); err == nil && existing != nil {
 		return existing, reusableProject(ctx, userID, existing)
 	}
 	if existing, err := s.deps.Lookups.GetProjectByPathAndUserInScope(ctx, path, userID, scope); err == nil && existing != nil {

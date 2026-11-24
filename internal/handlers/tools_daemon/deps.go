@@ -164,4 +164,12 @@ type ProjectDaemons interface {
 	// ResolveQueuedProjectDaemon applies the outcome a daemon reported for a
 	// clone queued to it.
 	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
+
+	// The nested repositories cloned into a checkout once its root lands
+	// (tools_daemon_nested_clone.go): claim the ones to clone, record each
+	// outcome, read them back, and list the checkouts with some to run.
+	ClaimProjectDaemonRepos(ctx context.Context, projectID, daemonID string, staleBefore time.Time) ([]*core.ProjectDaemonRepo, error)
+	SettleProjectDaemonRepo(ctx context.Context, projectID, daemonID, repoID, installErr string) error
+	ListProjectDaemonReposForPair(ctx context.Context, projectID, daemonID string) ([]*core.ProjectDaemonRepo, error)
+	ListProjectsWithUnsettledDaemonRepos(ctx context.Context, daemonID string) ([]string, error)
 }

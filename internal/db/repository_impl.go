@@ -1118,8 +1118,10 @@ func (r *Repo) RecordObservedProjectDaemonInScope(ctx context.Context, projectID
 	return recorded, err
 }
 
-// UpsertQueuedProjectDaemon records a clone that is queued but has not run.
-func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error {
+// UpsertQueuedProjectDaemon records a clone that is queued but has not run,
+// and the nested repositories (nestedRepoIDs, the project's repos below its
+// root) to clone into it once it lands, in one transaction.
+func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string, nestedRepoIDs []string) error {
 	if projectID == "" {
 		return fmt.Errorf("project ID cannot be empty")
 	}
@@ -1139,6 +1141,9 @@ func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonI
 			return err
 		}
 		if err := store.RecordProjectDaemonQueued(ctx, r.ORM(), projectID, daemonID, path, defaultBranch, requestID); err != nil {
+			return err
+		}
+		if err := store.PlanProjectDaemonRepos(ctx, r.ORM(), projectID, daemonID, nestedRepoIDs); err != nil {
 			return err
 		}
 		return store.ClearProjectDaemonDetachment(ctx, r.ORM(), projectID, daemonID)

@@ -369,7 +369,7 @@ func TestMoveChatToProject_PicksAMachineThatHasTheProject(t *testing.T) {
 		from, fromMain := f.project(moveUser, "billing")
 		to, _ := f.project(moveUser, "properties")
 		laptop := f.machine(moveUser, "laptop")
-		require.NoError(t, f.repo.UpsertQueuedProjectDaemon(f.ctx, to, laptop, "/srv/properties", nil, uuid.NewString()))
+		require.NoError(t, f.repo.UpsertQueuedProjectDaemon(f.ctx, to, laptop, "/srv/properties", nil, uuid.NewString(), nil))
 		desktop := f.machine(moveUser, "desktop")
 		chatID := f.chat(from, fromMain, &desktop)
 

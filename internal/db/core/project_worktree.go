@@ -183,6 +183,44 @@ const (
 	ProjectInstallFailed ProjectInstallState = "failed"
 )
 
+// NestedRepoState is how far the clone of one nested repository of a
+// project has got on one machine (project_daemon_repos).
+type NestedRepoState string
+
+const (
+	// NestedRepoPending waits for the project root's clone to land.
+	NestedRepoPending NestedRepoState = "pending"
+	// NestedRepoCloning is claimed by a gateway that is cloning it.
+	NestedRepoCloning NestedRepoState = "cloning"
+	// NestedRepoInstalled is on the machine's disk.
+	NestedRepoInstalled NestedRepoState = "installed"
+	// NestedRepoFailed did not clone; Error says why.
+	NestedRepoFailed NestedRepoState = "failed"
+)
+
+// Unsettled reports whether a clone of the repository is still to run or
+// running.
+func (s NestedRepoState) Unsettled() bool {
+	return s == NestedRepoPending || s == NestedRepoCloning
+}
+
+// ProjectDaemonRepo is the clone of one nested repository of a project on
+// one machine: a repository below the project root, cloned into its
+// relative path once the root clone (the ProjectDaemon) has landed. The
+// repository's name, path and remote are read from its Repo row.
+type ProjectDaemonRepo struct {
+	ProjectID string
+	DaemonID  string
+	RepoID    string
+	// Name, RelativePath and RemoteURL are the Repo row's.
+	Name           string
+	RelativePath   string
+	RemoteURL      string
+	State          NestedRepoState
+	Error          string
+	StateChangedAt time.Time
+}
+
 // CleanupMetadata tracks what became of an archived worktree's directory.
 //
 // DirectoryDeleted is the settled state: the daemon removed the directory (or

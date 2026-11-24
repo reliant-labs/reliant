@@ -260,7 +260,7 @@ func TestProjectDaemonQueries(t *testing.T) {
 	}
 
 	// Written by the Repository, settled through the store by request and by announcement.
-	if err := env.Repo.UpsertQueuedProjectDaemon(ctx, p, "d2", "/srv/d2", nil, "req-2"); err != nil {
+	if err := env.Repo.UpsertQueuedProjectDaemon(ctx, p, "d2", "/srv/d2", nil, "req-2", nil); err != nil {
 		t.Fatalf("Repo.UpsertQueuedProjectDaemon: %v", err)
 	}
 	if err := store.ResolveQueuedProjectDaemon(ctx, env.ORM, "req-2", ""); err != nil {
@@ -269,7 +269,7 @@ func TestProjectDaemonQueries(t *testing.T) {
 	if pd, _ := store.GetProjectDaemonByPK(ctx, env.ORM, p, "d2"); pd.InstallState != core.ProjectInstallInstalled {
 		t.Fatalf("after resolve = %+v", pd)
 	}
-	if err := env.Repo.UpsertQueuedProjectDaemon(ctx, p, "d3", "/srv/d3", nil, "req-3"); err != nil {
+	if err := env.Repo.UpsertQueuedProjectDaemon(ctx, p, "d3", "/srv/d3", nil, "req-3", nil); err != nil {
 		t.Fatalf("Repo.UpsertQueuedProjectDaemon: %v", err)
 	}
 	if err := store.MarkProjectDaemonInstalled(ctx, env.ORM, p, "d3"); err != nil {

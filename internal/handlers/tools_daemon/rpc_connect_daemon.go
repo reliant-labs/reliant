@@ -152,6 +152,7 @@ func (s *Service) ConnectDaemon(
 		UserID:       userID,
 		Hostname:     daemonStringPtrOrNil(reg.Hostname),
 		Platform:     daemonStringPtrOrNil(reg.Platform),
+		WorkingDir:   daemonStringPtrOrNil(reg.WorkingDir),
 		Capabilities: capabilitiesJSON,
 		ProjectPaths: projectPathsJSON,
 		DaemonType:   normalizeRegisteredDaemonType(reg.GetDaemonType()),

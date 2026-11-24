@@ -213,7 +213,14 @@ func (s *Service) CreateProject(
 	// same rule CreateProjectFromRepo applies (existingProjectForRepo).
 	if pinned != "" {
 		if root, ok := rootRepo(discoverResp.Discovered); ok && strings.TrimSpace(root.RemoteURL) != "" {
-			if existing, err := s.deps.Lookups.GetProjectByRemoteURLAndUserInScope(ctx, strings.TrimSpace(root.RemoteURL), userID, scope); err == nil && existing != nil {
+			remote := strings.TrimSpace(root.RemoteURL)
+			existing, err := s.deps.Lookups.GetProjectByRemoteURLAndUserInScope(ctx, remote, userID, scope)
+			if err != nil || existing == nil {
+				// The same repository under another spelling of its remote
+				// (SSH here, HTTPS there) is the same project.
+				existing, err = s.deps.Lookups.GetProjectBySameRemoteAndUserInScope(ctx, remote, userID, scope)
+			}
+			if err == nil && existing != nil {
 				if err := reusableProject(ctx, userID, existing); err != nil {
 					return nil, err
 				}

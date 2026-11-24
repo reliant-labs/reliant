@@ -326,7 +326,7 @@ func (m *MockMachineDetachments) ListProjectDaemonDetachmentsForDaemon(ctx conte
 var _ MachineDetachments = (*MockMachineDetachments)(nil)
 
 // forge:section MockProjectReconcileStore
-// forge:hash=9644154d3dae81cb1041c66be0a83af9db2e27067cf016d990e78ce5c4555f3a
+// forge:hash=4ff5b620aec1ed77f1f75facd8ff1e08c9c6556a5278a130813ca2127ad8b2ee
 
 // MockProjectReconcileStore is a test mock for the ProjectReconcileStore interface.
 //
@@ -350,6 +350,10 @@ type MockProjectReconcileStore struct {
 	ListProjectDaemonsForDaemonFunc           func(context.Context, string) ([]*core.ProjectDaemon, error)
 	StartQueuedProjectDaemonClonesFunc        func(context.Context, string) error
 	ResolveQueuedProjectDaemonFunc            func(context.Context, string, string) error
+	ClaimProjectDaemonReposFunc               func(context.Context, string, string, time.Time) ([]*core.ProjectDaemonRepo, error)
+	SettleProjectDaemonRepoFunc               func(context.Context, string, string, string, string) error
+	ListProjectDaemonReposForPairFunc         func(context.Context, string, string) ([]*core.ProjectDaemonRepo, error)
+	ListProjectsWithUnsettledDaemonReposFunc  func(context.Context, string) ([]string, error)
 }
 
 // ListProjects records the call and delegates to ListProjectsFunc when set.
@@ -476,6 +480,42 @@ func (m *MockProjectReconcileStore) ResolveQueuedProjectDaemon(ctx context.Conte
 		return m.ResolveQueuedProjectDaemonFunc(ctx, requestID, installErr)
 	}
 	return contractkit.MockNotSet("MockProjectReconcileStore", "ResolveQueuedProjectDaemon")
+}
+
+// ClaimProjectDaemonRepos records the call and delegates to ClaimProjectDaemonReposFunc when set.
+func (m *MockProjectReconcileStore) ClaimProjectDaemonRepos(ctx context.Context, projectID string, daemonID string, staleBefore time.Time) ([]*core.ProjectDaemonRepo, error) {
+	m.Recorder.Record("ClaimProjectDaemonRepos", ctx, projectID, daemonID, staleBefore)
+	if m.ClaimProjectDaemonReposFunc != nil {
+		return m.ClaimProjectDaemonReposFunc(ctx, projectID, daemonID, staleBefore)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "ClaimProjectDaemonRepos")
+}
+
+// SettleProjectDaemonRepo records the call and delegates to SettleProjectDaemonRepoFunc when set.
+func (m *MockProjectReconcileStore) SettleProjectDaemonRepo(ctx context.Context, projectID string, daemonID string, repoID string, installErr string) error {
+	m.Recorder.Record("SettleProjectDaemonRepo", ctx, projectID, daemonID, repoID, installErr)
+	if m.SettleProjectDaemonRepoFunc != nil {
+		return m.SettleProjectDaemonRepoFunc(ctx, projectID, daemonID, repoID, installErr)
+	}
+	return contractkit.MockNotSet("MockProjectReconcileStore", "SettleProjectDaemonRepo")
+}
+
+// ListProjectDaemonReposForPair records the call and delegates to ListProjectDaemonReposForPairFunc when set.
+func (m *MockProjectReconcileStore) ListProjectDaemonReposForPair(ctx context.Context, projectID string, daemonID string) ([]*core.ProjectDaemonRepo, error) {
+	m.Recorder.Record("ListProjectDaemonReposForPair", ctx, projectID, daemonID)
+	if m.ListProjectDaemonReposForPairFunc != nil {
+		return m.ListProjectDaemonReposForPairFunc(ctx, projectID, daemonID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "ListProjectDaemonReposForPair")
+}
+
+// ListProjectsWithUnsettledDaemonRepos records the call and delegates to ListProjectsWithUnsettledDaemonReposFunc when set.
+func (m *MockProjectReconcileStore) ListProjectsWithUnsettledDaemonRepos(ctx context.Context, daemonID string) ([]string, error) {
+	m.Recorder.Record("ListProjectsWithUnsettledDaemonRepos", ctx, daemonID)
+	if m.ListProjectsWithUnsettledDaemonReposFunc != nil {
+		return m.ListProjectsWithUnsettledDaemonReposFunc(ctx, daemonID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "ListProjectsWithUnsettledDaemonRepos")
 }
 
 // Compile-time check.
@@ -696,7 +736,7 @@ func (m *MockProjectLookups) GetProjectByRemoteURLAndUserInScope(ctx context.Con
 var _ ProjectLookups = (*MockProjectLookups)(nil)
 
 // forge:section MockProjectDaemons
-// forge:hash=e6c9a8fda58562efce5718241539c4cbc519b2dac45d2225b193694b507e84d7
+// forge:hash=8e00d0fdefbd6e7912baffb38f1bdd19d0e3d2c910ae7925998356d2abe9165d
 
 // MockProjectDaemons is a test mock for the ProjectDaemons interface.
 //
@@ -706,9 +746,13 @@ var _ ProjectLookups = (*MockProjectLookups)(nil)
 // "MockProjectDaemons.<Method>Func not set" error.
 type MockProjectDaemons struct {
 	contractkit.Recorder
-	ListProjectDaemonsForDaemonFunc    func(context.Context, string) ([]*core.ProjectDaemon, error)
-	StartQueuedProjectDaemonClonesFunc func(context.Context, string) error
-	ResolveQueuedProjectDaemonFunc     func(context.Context, string, string) error
+	ListProjectDaemonsForDaemonFunc          func(context.Context, string) ([]*core.ProjectDaemon, error)
+	StartQueuedProjectDaemonClonesFunc       func(context.Context, string) error
+	ResolveQueuedProjectDaemonFunc           func(context.Context, string, string) error
+	ClaimProjectDaemonReposFunc              func(context.Context, string, string, time.Time) ([]*core.ProjectDaemonRepo, error)
+	SettleProjectDaemonRepoFunc              func(context.Context, string, string, string, string) error
+	ListProjectDaemonReposForPairFunc        func(context.Context, string, string) ([]*core.ProjectDaemonRepo, error)
+	ListProjectsWithUnsettledDaemonReposFunc func(context.Context, string) ([]string, error)
 }
 
 // ListProjectDaemonsForDaemon records the call and delegates to ListProjectDaemonsForDaemonFunc when set.
@@ -736,6 +780,42 @@ func (m *MockProjectDaemons) ResolveQueuedProjectDaemon(ctx context.Context, req
 		return m.ResolveQueuedProjectDaemonFunc(ctx, requestID, installErr)
 	}
 	return contractkit.MockNotSet("MockProjectDaemons", "ResolveQueuedProjectDaemon")
+}
+
+// ClaimProjectDaemonRepos records the call and delegates to ClaimProjectDaemonReposFunc when set.
+func (m *MockProjectDaemons) ClaimProjectDaemonRepos(ctx context.Context, projectID string, daemonID string, staleBefore time.Time) ([]*core.ProjectDaemonRepo, error) {
+	m.Recorder.Record("ClaimProjectDaemonRepos", ctx, projectID, daemonID, staleBefore)
+	if m.ClaimProjectDaemonReposFunc != nil {
+		return m.ClaimProjectDaemonReposFunc(ctx, projectID, daemonID, staleBefore)
+	}
+	return nil, contractkit.MockNotSet("MockProjectDaemons", "ClaimProjectDaemonRepos")
+}
+
+// SettleProjectDaemonRepo records the call and delegates to SettleProjectDaemonRepoFunc when set.
+func (m *MockProjectDaemons) SettleProjectDaemonRepo(ctx context.Context, projectID string, daemonID string, repoID string, installErr string) error {
+	m.Recorder.Record("SettleProjectDaemonRepo", ctx, projectID, daemonID, repoID, installErr)
+	if m.SettleProjectDaemonRepoFunc != nil {
+		return m.SettleProjectDaemonRepoFunc(ctx, projectID, daemonID, repoID, installErr)
+	}
+	return contractkit.MockNotSet("MockProjectDaemons", "SettleProjectDaemonRepo")
+}
+
+// ListProjectDaemonReposForPair records the call and delegates to ListProjectDaemonReposForPairFunc when set.
+func (m *MockProjectDaemons) ListProjectDaemonReposForPair(ctx context.Context, projectID string, daemonID string) ([]*core.ProjectDaemonRepo, error) {
+	m.Recorder.Record("ListProjectDaemonReposForPair", ctx, projectID, daemonID)
+	if m.ListProjectDaemonReposForPairFunc != nil {
+		return m.ListProjectDaemonReposForPairFunc(ctx, projectID, daemonID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectDaemons", "ListProjectDaemonReposForPair")
+}
+
+// ListProjectsWithUnsettledDaemonRepos records the call and delegates to ListProjectsWithUnsettledDaemonReposFunc when set.
+func (m *MockProjectDaemons) ListProjectsWithUnsettledDaemonRepos(ctx context.Context, daemonID string) ([]string, error) {
+	m.Recorder.Record("ListProjectsWithUnsettledDaemonRepos", ctx, daemonID)
+	if m.ListProjectsWithUnsettledDaemonReposFunc != nil {
+		return m.ListProjectsWithUnsettledDaemonReposFunc(ctx, daemonID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectDaemons", "ListProjectsWithUnsettledDaemonRepos")
 }
 
 // Compile-time check.
