@@ -145,3 +145,58 @@ func TestDeleteUserProjectRemovesEveryChatKeyedTable(t *testing.T) {
 		})
 	}
 }
+
+// Project-only history must go before SET NULL loses its ownership links,
+// including rows that arrive after the bounded cleanup loops have finished.
+func TestDeleteUserProjectRemovesProjectOnlyHistory(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	seedProjectWithChat(t, env, "deleted", "deleted-chat")
+	seedProjectWithChat(t, env, "kept", "kept-chat")
+	seed := func(project, suffix string) {
+		t.Helper()
+		key := project + suffix
+		execOrFatal(t, env, `INSERT INTO triggers (id, user_id, project_id, name, kind, workflow)
+			VALUES ($1, 'owner', $2, $1, 'schedule', 'agent')`, key, project)
+		for seq := 1; seq <= 3; seq++ {
+			execOrFatal(t, env, `INSERT INTO trigger_events (id, trigger_id, user_id, kind, dedupe_key, occurred_at, outcome, payload)
+				VALUES ($1 || '-' || $2::int::text, $1, 'owner', 'schedule', $1 || '-' || $2::int::text, $3, 'pending', '{"private":true}')`, key, seq, projectDeleteWriterNow)
+		}
+		execOrFatal(t, env, `INSERT INTO background_processes (id, command, working_dir, project_id, user_id, status, created_at, updated_at)
+			VALUES ($1, 'npm run dev', '/srv', $2, 'owner', 2, $3, $3)`, key, project, projectDeleteWriterNow)
+		for seq := 1; seq <= 3; seq++ {
+			execOrFatal(t, env, `INSERT INTO background_process_output (process_id, seq, stream, line, created_at)
+				VALUES ($1, $2, 'stdout', 'private', $3)`, key, seq, projectDeleteWriterNow)
+		}
+	}
+	seed("deleted", "-initial")
+	seed("kept", "-initial")
+	late := false
+	defer store.SetProjectDeleteBeforeFinal(func(_ context.Context, _ string) {
+		if !late {
+			late = true
+			seed("deleted", "-late")
+		}
+	})()
+	if err := store.DeleteUserProjectInSlices(ctx, env.ORM, "deleted", "owner", 2, 2); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		table, key string
+		want       int
+	}{
+		{"trigger_events", "id", 3},
+		{"background_processes", "id", 1},
+		{"background_process_output", "process_id", 3},
+	} {
+		var removed, kept int
+		// Count by durable IDs, not the ownership FKs that deletion nulls.
+		q := `SELECT count(*) FILTER (WHERE ` + tc.key + ` LIKE 'deleted-%'), count(*) FILTER (WHERE ` + tc.key + ` LIKE 'kept-%') FROM ` + tc.table
+		if err := env.SQL.QueryRowContext(ctx, q).Scan(&removed, &kept); err != nil {
+			t.Fatal(err)
+		}
+		if removed != 0 || kept != tc.want {
+			t.Errorf("%s: deleted=%d kept=%d, want 0 and %d", tc.table, removed, kept, tc.want)
+		}
+	}
+}

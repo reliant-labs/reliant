@@ -351,9 +351,9 @@ var messageThinSteps = []struct{ name, sql string }{
 	{"messages", `DELETE FROM messages WHERE id = ANY(?0)`},
 }
 
-// flatThinSteps each remove up to ?1 rows of one flat table under the
-// project's chats, ?0 being the project's id: tables nothing restricts and
-// nothing hangs off, which a chat can hold millions of.
+// flatThinSteps each remove up to ?1 rows under the project or its chats,
+// ?0 being the project's id. Process output precedes its parent processes;
+// the other tables are flat history that can hold millions of rows.
 var flatThinSteps = []struct{ name, sql string }{
 	{"chat_updates", `
 		DELETE FROM chat_updates WHERE id IN (
@@ -379,12 +379,23 @@ var flatThinSteps = []struct{ name, sql string }{
 	{"video_generation_jobs", `
 		DELETE FROM video_generation_jobs WHERE tool_call_id IN (
 			SELECT tool_call_id FROM video_generation_jobs WHERE chat_id IN (` + projectChatIDs + `) LIMIT ?1)`},
+	// Firings with no chat still belong to the project's triggers. Delete
+	// them before the project cascade removes the trigger and nulls the FK.
+	{"project trigger_events", `
+		DELETE FROM trigger_events WHERE id IN (
+			SELECT id FROM trigger_events WHERE trigger_id IN (
+				SELECT id FROM triggers WHERE project_id = ?0) LIMIT ?1)`},
 	// One row per line a background process printed: a dev server left
-	// running prints hundreds of thousands.
+	// running prints hundreds of thousands. Include manual/package commands
+	// that name the project but have no chat, before deleting their processes.
 	{"background_process_output", `
 		DELETE FROM background_process_output WHERE id IN (
 			SELECT id FROM background_process_output WHERE process_id IN (
-				SELECT id FROM background_processes WHERE chat_id IN (` + projectChatIDs + `)) LIMIT ?1)`},
+				SELECT id FROM background_processes WHERE project_id = ?0
+				OR chat_id IN (` + projectChatIDs + `)) LIMIT ?1)`},
+	{"project background_processes", `
+		DELETE FROM background_processes WHERE id IN (
+			SELECT id FROM background_processes WHERE project_id = ?0 LIMIT ?1)`},
 }
 
 // thinProjectChats removes the bulk stored under the project's chats in
@@ -430,9 +441,9 @@ func thinProjectChats(ctx context.Context, db orm.Context, id string, sizes proj
 // deleteProjectRow deletes the project row, and the little that still
 // cascades from it: its repos, plans, triggers, configs, machine catalogs and
 // any update written since the loops passed. It reports false, deleting
-// nothing, when a chat or worktree arrived after the loops passed it: a chat's
-// workflows, chat_updates and other rows with no foreign key would not go with
-// the cascade, so the caller runs the loops again instead.
+// nothing, when a chat, worktree, process or trigger event arrived after the
+// loops passed it: history without a cascading foreign key would otherwise
+// survive, so the caller runs the loops again instead.
 //
 // FOR UPDATE on the project row is what makes the recheck the last word: every
 // insert of a chat or worktree takes a key share on it, which conflicts, so
@@ -449,10 +460,20 @@ func deleteProjectRow(ctx context.Context, db orm.Context, id, userID string) (b
 			deleted = true // gone already (a concurrent delete)
 			return nil
 		}
+		// Event inserts take a key share on their trigger, not the project.
+		// Lock those too before checking for late firings, so none can slip
+		// between the recheck and the cascade that nulls trigger_id.
+		var triggers []string
+		if err := db.Bun().NewRaw(`SELECT id FROM triggers WHERE project_id = ?0 FOR UPDATE`, id).Scan(ctx, &triggers); err != nil {
+			return fmt.Errorf("lock the project's triggers: %w", err)
+		}
 		var arrived bool
 		if err := db.Bun().NewRaw(`SELECT EXISTS (SELECT 1 FROM chats WHERE project_id = ?0)
-			OR EXISTS (SELECT 1 FROM worktrees WHERE project_id = ?0)`, id).Scan(ctx, &arrived); err != nil {
-			return fmt.Errorf("recheck the project's chats and worktrees: %w", err)
+			OR EXISTS (SELECT 1 FROM worktrees WHERE project_id = ?0)
+			OR EXISTS (SELECT 1 FROM background_processes WHERE project_id = ?0)
+			OR EXISTS (SELECT 1 FROM trigger_events WHERE trigger_id IN (
+				SELECT id FROM triggers WHERE project_id = ?0))`, id).Scan(ctx, &arrived); err != nil {
+			return fmt.Errorf("recheck the project's contents: %w", err)
 		}
 		if arrived {
 			return nil
