@@ -12,7 +12,7 @@
  * hybrid.ts places it.
  */
 
-import { FlaskConical } from "lucide-react";
+import { ChartPie, FlaskConical, History, LayoutDashboard, TriangleAlert, type LucideIcon } from "lucide-react";
 
 import { withSearch } from "@/lib/paths";
 
@@ -22,12 +22,17 @@ import type { NavCtx, NavGroup, NavRow } from "./types";
 
 const hasApp = (ctx: NavCtx) => !!ctx.app;
 
+/** The flat nav's icon for each Tests view (NavRow `flatIcon`). */
+const TESTS_VIEW_ICONS: Record<TestsView, LucideIcon> = { overview: LayoutDashboard, coverage: ChartPie, runs: History, flaky: TriangleAlert };
+
 function testsRow(view: TestsView): NavRow {
   const kinds = TESTS_VIEW_KINDS[view];
+  const Icon = TESTS_VIEW_ICONS[view];
   return {
     kind: "row",
     id: `tests-${view}`,
     label: TESTS_VIEW_LABELS[view],
+    flatIcon: <Icon className="size-4" aria-hidden="true" />,
     href: (ctx) => (ctx.app ? withSearch(testsPath(ctx.app, view), { env: ctx.console?.env }) : undefined),
     // A run is under Runs, a test under Flaky tests.
     match: (ctx) => !!ctx.page && kinds.includes(ctx.page.kind),
@@ -38,6 +43,7 @@ function testsRow(view: TestsView): NavRow {
 export const testsGroup: NavGroup = {
   kind: "group",
   id: "tests",
+  tour: "nav-tests",
   label: "Tests",
   icon: <FlaskConical className="size-4" aria-hidden="true" />,
   available: hasApp,

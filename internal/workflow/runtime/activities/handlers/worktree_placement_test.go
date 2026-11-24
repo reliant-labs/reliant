@@ -168,7 +168,7 @@ func (f *activityPlacementFixture) chat(t *testing.T, worktreeID string) string 
 
 func (f *activityPlacementFixture) createWorktree(t *testing.T, chatID string, selector *types.DaemonSelector) *db.Worktree {
 	t.Helper()
-	activity := NewCreateWorktreeActivity(f.repo, f.router)
+	activity := NewCreateWorktreeActivity(f.repo, workspaceRowsOf(f.repo), f.router)
 	out, err := activity.Execute(context.Background(), ActivityInput{
 		Runtime: types.RuntimeContext{ChatID: chatID, DaemonSelector: selector},
 		Node: &reliantv1.Node{
@@ -268,7 +268,7 @@ func TestDeleteWorktreeActivity_RoutesToOwningDaemon(t *testing.T) {
 	f.worktree(t, "doomed", "daemon-b")
 	chatID := f.chat(t, "")
 
-	activity := NewDeleteWorktreeActivity(f.repo, f.router)
+	activity := NewDeleteWorktreeActivity(f.repo, workspaceRowsOf(f.repo), f.router)
 	_, err := activity.Execute(context.Background(), DeleteWorktreeInput{ChatID: chatID, Name: "doomed"})
 	require.NoError(t, err)
 

@@ -6,6 +6,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -24,7 +25,7 @@ func (s *Service) ListRepos(
 		return nil, err
 	}
 
-	repos, err := s.deps.Repo.ListReposByProject(ctx, req.Msg.ProjectId)
+	repos, err := s.deps.Repos.ListReposByProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos"))
 	}

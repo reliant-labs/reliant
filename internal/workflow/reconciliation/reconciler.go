@@ -95,6 +95,9 @@ import (
 // at ERROR (each an issue in forge's ClickStack).
 type Reconciler struct {
 	repo       ReconcilerStore
+	workflows  WorkflowLoader
+	daemons    DaemonReader
+	approvals  Approvals
 	questions  Questions
 	tempClient client.Client
 
@@ -172,6 +175,10 @@ type Reconciler struct {
 	// completion in this process (see it).
 	approvalFeedRepaired atomic.Bool
 }
+
+// SetApprovals gives the approval sweep the store it reads and closes through;
+// without it the sweep does nothing.
+func (r *Reconciler) SetApprovals(a Approvals) { r.approvals = a }
 
 // SetResetGuard installs the shared reset-attempt guard (see
 // v2workflow.ResetAttemptGuard). Nil-safe: an unset guard always allows resets.
@@ -510,6 +517,8 @@ func New(deps Deps) *Reconciler {
 	return &Reconciler{
 		repo:                    repo,
 		questions:               deps.Questions,
+		workflows:               deps.Workflows,
+		daemons:                 deps.Daemons,
 		tempClient:              tempClient,
 		owners:                  telemetry.NewChatOwnerCache(chatOwnerOf(repo), time.Hour, 10000),
 		pollInterval:            cfg.PollInterval,
@@ -2250,7 +2259,7 @@ const maxWorkflowDepth = 64
 func (r *Reconciler) rootWorkflowID(ctx context.Context, workflowID string) string {
 	id := workflowID
 	for range maxWorkflowDepth {
-		wf, err := r.repo.GetWorkflow(ctx, id)
+		wf, err := r.workflows.LoadWorkflow(ctx, id)
 		if err != nil || wf == nil || wf.ParentID == nil || *wf.ParentID == "" {
 			return id
 		}
@@ -2605,7 +2614,7 @@ func (r *Reconciler) rootAwaitingResume(ctx context.Context, chatID string) bool
 	if rootID == "" {
 		return false
 	}
-	root, err := r.repo.GetWorkflow(ctx, rootID)
+	root, err := r.workflows.LoadWorkflow(ctx, rootID)
 	if err != nil || root == nil || root.Status != db.Failed() {
 		return false
 	}

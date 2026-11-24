@@ -8,6 +8,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { transport } from "@/lib/connect";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
@@ -53,7 +54,7 @@ describe("listSecrets carries protection", () => {
       protected: true,
       stepUpValidUntil: timestampFromDate(UNTIL),
     });
-    const listing = await listSecrets("denv_1");
+    const listing = await listSecrets(transport, "denv_1");
     expect(listing.protected).toBe(true);
     expect(listing.stepUpValidUntil).toBe(UNTIL.toISOString());
     expect(listing.secrets.map((s) => s.name)).toEqual(["A", "B"]);
@@ -61,7 +62,7 @@ describe("listSecrets carries protection", () => {
 
   it("an unprotected environment carries no grant", async () => {
     rpc.listSecrets.mockResolvedValue({ secrets: [], protected: false });
-    expect(await listSecrets("denv_1")).toEqual({ secrets: [], protected: false });
+    expect(await listSecrets(transport, "denv_1")).toEqual({ secrets: [], protected: false });
   });
 });
 
@@ -84,13 +85,13 @@ describe("recognising a step-up refusal", () => {
 describe("the step-up RPCs", () => {
   it("BeginStepUp is keyed on the environment and answers where the code went", async () => {
     rpc.beginStepUp.mockResolvedValue({ sentTo: "a***@acme.dev", expiresAt: timestampFromDate(UNTIL) });
-    expect(await beginStepUp("denv_1")).toEqual({ sentTo: "a***@acme.dev", expiresAt: UNTIL.toISOString() });
+    expect(await beginStepUp(transport, "denv_1")).toEqual({ sentTo: "a***@acme.dev", expiresAt: UNTIL.toISOString() });
     expect(rpc.beginStepUp).toHaveBeenCalledWith({ environmentId: "denv_1" });
   });
 
   it("CompleteStepUp sends the code inbound and answers until when the grant holds", async () => {
     rpc.completeStepUp.mockResolvedValue({ validUntil: timestampFromDate(UNTIL) });
-    expect(await completeStepUp("denv_1", "ABCDE-FGHJK")).toEqual({ validUntil: UNTIL.toISOString() });
+    expect(await completeStepUp(transport, "denv_1", "ABCDE-FGHJK")).toEqual({ validUntil: UNTIL.toISOString() });
     expect(rpc.completeStepUp).toHaveBeenCalledWith({ environmentId: "denv_1", code: "ABCDE-FGHJK" });
   });
 
@@ -129,7 +130,7 @@ describe("who set each version", () => {
         { version: 6, destroyed: false, setBy: { kind: SecretAuthorKind.USER, email: "" } },
       ],
     });
-    const { versions } = await getSecretVersions("denv_1", "KEY");
+    const { versions } = await getSecretVersions(transport, "denv_1", "KEY");
     const byVersion = Object.fromEntries(versions.map((v) => [v.version, v.setBy]));
     expect(byVersion).toEqual({
       1: { kind: "user", email: "alice@acme.dev" },

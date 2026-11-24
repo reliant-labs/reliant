@@ -136,6 +136,31 @@ func workflowWritableCheckouts(tc *rctx.ToolContext, params ShellParams) ([]stri
 	return nil, ""
 }
 
+// runStepEnv is the call's own environment: a run step's, set by the server
+// (rctx.RunStepEnv, read only with rctx.RunStep), never anything the input
+// carries. nil for every other call.
+func runStepEnv(tc *rctx.ToolContext) *daemon.StepEnv {
+	if !tc.RunStep || tc.RunStepEnv.Empty() {
+		return nil
+	}
+	return tc.RunStepEnv
+}
+
+// stepEnvRefusal says why a run step's command cannot run with its step
+// environment here, "" when it can. Refused rather than run without it: the
+// command was declared to spend the step's key, and a background process or a
+// command another machine runs for this one would escape the redaction and the
+// revocation.
+func stepEnvRefusal(tc *rctx.ToolContext, params ShellParams) string {
+	switch {
+	case params.RunInBackground:
+		return "refused: a run step with llm_gateway cannot run in the background (its key is revoked when the step ends); no command was run"
+	case daemon.IsRemote(tc.Daemon):
+		return "refused: llm_gateway applies only on the machine that runs the step's command, and this call would reach it as another machine's client; no command was run"
+	}
+	return ""
+}
+
 // shellKeepAliveParamDoc is the schema description for ShellParams.KeepAlive.
 const shellKeepAliveParamDoc = "With run_in_background: keep this process running after this chat finishes. Without it, a background process is stopped once it has been idle for 4 hours by default (no output, and no agent read it with shell_output/shell_wait, listed it with shell_list or killed it) and the chat that started it has no run in progress. Set it only for an intentional long-lived server the user will keep using."
 
@@ -594,7 +619,7 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 	req := &daemon.RunCommandRequest{
 		Command:     params.Command,
 		WorkingDir:  workingDir,
-		Env:         withChatEnv(params.Env, rctx.ChatID, chatProjectID(rctx)),
+		Env:         withChatEnv(params.Env, rctx.ChatID, chatProjectID(rctx), rctx.Thread),
 		TimeoutMs:   int(time.Duration(params.Timeout) * ShellTimeoutUnit / time.Millisecond),
 		Credentials: credentials,
 		Heavy:       params.Heavy,
@@ -608,6 +633,17 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 		// so the neutral assignments keep it from failing open. A caller's own
 		// env cannot restore a credential: the daemon strips them again.
 		req.Env = neutralCredentialEnv(req.Env)
+	}
+	// A run step's own environment (an LLM gateway step key), from the
+	// server-built context only. Applied by this machine's daemon client to
+	// this one foreground command, and redacted from what it prints.
+	stepEnv := runStepEnv(rctx)
+	if !stepEnv.Empty() {
+		if refusal := stepEnvRefusal(rctx, params); refusal != "" {
+			outcome.refused("run_step_env")
+			return NewTextErrorResponse(refusal), nil
+		}
+		req.StepEnv = stepEnv
 	}
 
 	// Handle background execution
@@ -664,8 +700,10 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 		return response, nil
 	}
 
-	stdout := result.Stdout
-	stderr := result.Stderr
+	// Before any cut: a key split by a truncation marker would survive a
+	// redaction applied after it.
+	stdout := stepEnv.Redact(result.Stdout)
+	stderr := stepEnv.Redact(result.Stderr)
 	exitCode := result.ExitCode
 	interrupted := result.TimedOut
 	outcome.completed(exitCode, result.DurationMs, interrupted)
@@ -891,6 +929,14 @@ const ChatIDEnv = "RELIANT_CHAT_ID"
 // requires it: a command run anywhere else has none.
 const ProjectIDEnv = "RELIANT_PROJECT_ID"
 
+// ThreadIDEnv names the thread a shell command runs for: the chat's own
+// thread, or the sub-agent's when a spawned agent runs it. Every sub-agent
+// shares its chat's ChatIDEnv, so this is what tells them apart: control-plane's
+// scripts/pr-open.sh counts its open-PR cap per thread with it, instead of
+// charging every sub-agent of a chat against one shared cap. Nothing requires
+// it: a command run anywhere else has none.
+const ThreadIDEnv = "RELIANT_THREAD_ID"
+
 // chatProjectID is the id of the project tc's chat runs in, or "".
 func chatProjectID(tc *rctx.ToolContext) string {
 	if tc == nil || tc.Project == nil {
@@ -899,16 +945,19 @@ func chatProjectID(tc *rctx.ToolContext) string {
 	return tc.Project.ID
 }
 
-// withChatEnv is the request env with ChatIDEnv set to chatID and
-// ProjectIDEnv to projectID, each unless empty or set by the caller. own is
-// never modified.
-func withChatEnv(own map[string]string, chatID, projectID string) map[string]string {
+// withChatEnv is the request env with ChatIDEnv set to chatID,
+// ProjectIDEnv to projectID and ThreadIDEnv to threadID, each unless empty or
+// set by the caller. own is never modified.
+func withChatEnv(own map[string]string, chatID, projectID, threadID string) map[string]string {
 	add := map[string]string{}
 	if _, set := own[ChatIDEnv]; chatID != "" && !set {
 		add[ChatIDEnv] = chatID
 	}
 	if _, set := own[ProjectIDEnv]; projectID != "" && !set {
 		add[ProjectIDEnv] = projectID
+	}
+	if _, set := own[ThreadIDEnv]; threadID != "" && !set {
+		add[ThreadIDEnv] = threadID
 	}
 	if len(add) == 0 {
 		return own

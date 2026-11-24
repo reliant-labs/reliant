@@ -9,11 +9,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
@@ -44,7 +48,7 @@ func seedMessage(t *testing.T, repo *db.Repo, ctx context.Context, chatID, threa
 		})
 		require.NoError(t, cwErr)
 	}
-	svc := threads.NewService(repo)
+	svc := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	_, err := svc.SaveMessage(ctx, threads.SaveMessageOpts{
 		ChatID:  chatID,
 		Thread:  threadID,
@@ -75,7 +79,7 @@ func TestSpawnStatus_Listing_OnlyReturnsCallersOwnChildren(t *testing.T) {
 	otherParentID, otherChildID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 	require.NotEqual(t, callerParentID, otherParentID)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerParentID, nil, nil)
 
 	resp, _ := runSpawnStatus(t, tool, rc, SpawnStatusParams{})
@@ -102,14 +106,15 @@ func TestSpawnStatus_Listing_ShowsAChildWaitingOnAUsageLimit(t *testing.T) {
 	createTestChat(t, repo, chatID)
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp, _ := runSpawnStatus(t, tool, rc, SpawnStatusParams{})
 	require.NotContains(t, resp.Content, "waiting for usage limit", "a child that is not waiting reads as running")
 
-	resumeAt := time.Now().UTC().Add(90 * time.Minute).Truncate(time.Second)
-	require.NoError(t, repo.RecordUsageLimitWait(ctx, chatID, childID, "Anthropic", false, resumeAt, time.Now()))
+	fixed := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	resumeAt := fixed.Add(90 * time.Minute)
+	require.NoError(t, providerbackofftest.New(t, repo).RecordUsageLimitWait(ctx, chatID, childID, "Anthropic", false, resumeAt, fixed))
 
 	resp, _ = runSpawnStatus(t, tool, rc, SpawnStatusParams{})
 	require.False(t, resp.IsError, "response: %+v", resp)
@@ -117,7 +122,7 @@ func TestSpawnStatus_Listing_ShowsAChildWaitingOnAUsageLimit(t *testing.T) {
 	require.Contains(t, resp.Content, "Anthropic's usage limit until "+resumeAt.Format(time.RFC3339))
 	require.Contains(t, resp.Content, "not failed and continues by itself")
 
-	require.NoError(t, repo.ClearUsageLimitWait(ctx, chatID, childID, time.Now()))
+	require.NoError(t, providerbackofftest.New(t, repo).ClearUsageLimitWait(ctx, chatID, childID, fixed.Add(time.Minute)))
 	resp, _ = runSpawnStatus(t, tool, rc, SpawnStatusParams{})
 	require.NotContains(t, resp.Content, "waiting for usage limit", "back to running once the wait is over")
 }
@@ -137,7 +142,7 @@ func TestSpawnStatus_Listing_NoChildren_ReturnsFriendlyMessage(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, threadID, nil, nil)
 
 	resp, _ := runSpawnStatus(t, tool, rc, SpawnStatusParams{})
@@ -160,7 +165,7 @@ func TestSpawnStatus_SingleAgent_RejectsNonChildAgent(t *testing.T) {
 	callerID, _, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 	_, unrelatedChildID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
 	resp, _ := runSpawnStatus(t, tool, rc, SpawnStatusParams{AgentID: unrelatedChildID})
@@ -178,7 +183,7 @@ func TestSpawnStatus_SingleAgent_OwnChildWithNoMessages_ReturnsFriendlyMessage(t
 
 	callerID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
 	resp, _ := runSpawnStatus(t, tool, rc, SpawnStatusParams{AgentID: childID})
@@ -204,7 +209,7 @@ func TestSpawnStatus_SingleAgent_ReturnsLastAssistantMessage_NotFirstOrConcatena
 	seedMessage(t, repo, ctx, chatID, childID, reliantv1.MessageRole_MESSAGE_ROLE_USER, "keep going")
 	seedMessage(t, repo, ctx, chatID, childID, reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT, "final answer")
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
 	resp, _ := runSpawnStatus(t, tool, rc, SpawnStatusParams{AgentID: childID})
@@ -228,7 +233,7 @@ func TestSpawnStatus_Wait_ReturnsPromptlyWhenAlreadyTerminal(t *testing.T) {
 
 	callerID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusCompleted)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
 	start := time.Now()
@@ -255,7 +260,7 @@ func TestSpawnStatus_Wait_UnknownAgentFailsFast(t *testing.T) {
 
 	callerID, _, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
 	start := time.Now()
@@ -279,7 +284,7 @@ func TestSpawnStatus_Wait_TimeoutIsNotAnError(t *testing.T) {
 
 	callerID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
 	start := time.Now()
@@ -318,7 +323,7 @@ func TestSpawnStatus_Wait_CutShortSaysItStoppedEarly(t *testing.T) {
 	time.AfterFunc(200*time.Millisecond, cancel)
 	rc := rctx.NewToolContext(callCtx, chatID, callerID, nil, nil)
 
-	resp, meta := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}}), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
+	resp, meta := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())}), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
 
 	require.False(t, resp.IsError, "response: %+v", resp)
 	require.True(t, meta.StoppedEarly, "metadata: %+v", meta)
@@ -348,11 +353,6 @@ func TestSpawnStatus_Wait_CutShortReportsTheAgentFinishing(t *testing.T) {
 			// of its report happen at a specific read, never on a wall clock.
 			// Like the real store, reads on a cancelled context fail, NOT vanish.
 			repo := &MockspawnStatusStore{
-				ListSpawnChildrenFunc: func(ctx context.Context, parentID string) ([]*db.SpawnChild, error) {
-					require.NoError(t, ctx.Err())
-					require.Equal(t, "parent", parentID)
-					return []*db.SpawnChild{{ChildThreadID: &childID}}, nil
-				},
 				GetThreadFunc: func(ctx context.Context, id string) (*db.Thread, error) {
 					require.Equal(t, childID, id)
 					reads++
@@ -394,8 +394,15 @@ func TestSpawnStatus_Wait_CutShortReportsTheAgentFinishing(t *testing.T) {
 					return []*db.MessageContentBlock{{BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT, Content: &answer}}, ctx.Err()
 				},
 			}
+			tree := &MockSpawnTree{
+				ListSpawnChildrenFunc: func(ctx context.Context, parentID string) ([]*core.SpawnChild, error) {
+					require.NoError(t, ctx.Err())
+					require.Equal(t, "parent", parentID)
+					return []*core.SpawnChild{{ChildThreadID: &childID}}, nil
+				},
+			}
 			rc := rctx.NewToolContext(callCtx, "chat", "parent", nil, nil)
-			resp, meta := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}}), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
+			resp, meta := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: tree}), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
 
 			require.False(t, resp.IsError, "response: %+v", resp)
 			require.True(t, meta.HasExited, "the agent finished; metadata: %+v", meta)
@@ -430,9 +437,6 @@ func TestSpawnStatus_Wait_InitialReadCancellationPreservesStatus(t *testing.T) {
 			childID := "child"
 			reads := 0
 			repo := &MockspawnStatusStore{
-				ListSpawnChildrenFunc: func(context.Context, string) ([]*db.SpawnChild, error) {
-					return []*db.SpawnChild{{ChildThreadID: &childID}}, nil
-				},
 				GetThreadFunc: func(ctx context.Context, _ string) (*db.Thread, error) {
 					reads++
 					if reads == 1 && tc.cancelRead {
@@ -446,8 +450,13 @@ func TestSpawnStatus_Wait_InitialReadCancellationPreservesStatus(t *testing.T) {
 					return &db.Thread{ID: childID, Status: db.ThreadStatusRunning}, nil
 				},
 			}
+			tree := &MockSpawnTree{
+				ListSpawnChildrenFunc: func(context.Context, string) ([]*core.SpawnChild, error) {
+					return []*core.SpawnChild{{ChildThreadID: &childID}}, nil
+				},
+			}
 			rc := rctx.NewToolContext(callCtx, "chat", "parent", nil, nil)
-			resp, meta := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}}), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
+			resp, meta := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: tree}), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
 			require.Equal(t, tc.missing, resp.IsError, "response: %+v", resp)
 			if tc.missing {
 				require.Contains(t, resp.Content, "could not be found")
@@ -477,9 +486,6 @@ func TestSpawnStatus_Wait_CancellationDoesNotMaskStoreFailure(t *testing.T) {
 	storeErr := errors.New("permission denied by store")
 	reads := 0
 	repo := &MockspawnStatusStore{
-		ListSpawnChildrenFunc: func(context.Context, string) ([]*db.SpawnChild, error) {
-			return []*db.SpawnChild{{ChildThreadID: &childID}}, nil
-		},
 		GetThreadFunc: func(context.Context, string) (*db.Thread, error) {
 			reads++
 			if reads == 1 {
@@ -489,8 +495,13 @@ func TestSpawnStatus_Wait_CancellationDoesNotMaskStoreFailure(t *testing.T) {
 			return &db.Thread{ID: childID, Status: db.ThreadStatusCompleted}, nil
 		},
 	}
+	tree := &MockSpawnTree{
+		ListSpawnChildrenFunc: func(context.Context, string) ([]*core.SpawnChild, error) {
+			return []*core.SpawnChild{{ChildThreadID: &childID}}, nil
+		},
+	}
 	rc := rctx.NewToolContext(callCtx, "chat", "parent", nil, nil)
-	resp, _ := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}}), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
+	resp, _ := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: tree}), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
 	require.True(t, resp.IsError, "a coincident cancellation must not recover an unrelated store error")
 	require.Equal(t, 1, reads, "non-cancellation errors must not trigger a detached retry")
 	require.Equal(t, "Agent \"child\" could not be found.", resp.Content, "preserve the existing store-error response")
@@ -509,7 +520,7 @@ func TestSpawnStatus_Wait_ClampsTimeoutAboveCeiling(t *testing.T) {
 
 	callerID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusCompleted)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
 	// Stated against the shared constant, not a literal. toolexec's ceiling is

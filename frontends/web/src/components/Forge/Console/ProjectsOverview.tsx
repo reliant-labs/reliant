@@ -7,7 +7,6 @@
  */
 
 import { useMemo } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 
 import Status from "@/components/forge-ui/status";
@@ -19,6 +18,7 @@ import type { ProjectCatalogRow } from "@/services/projects/catalog";
 
 import { verdictBusy, verdictTone } from "../../Apps/appParts";
 import { ProjectMark } from "../../Layout/ProjectMark";
+import { navigateWithShellScope } from "../../Layout/shellScopeNav";
 import { deployedAppOf, sectionsAppOf, useShellLastPick, useShellSeveral } from "../../Layout/sidebar/shellProject";
 import { formatAgo, formatCount, formatDuration } from "../Observability/format";
 import { redPanel } from "../Observability/Home/homeModel";
@@ -83,7 +83,6 @@ export function useAppHealth(app: string, deployed: boolean) {
 export const VERDICT_WORDS = VERDICT_LABEL;
 
 function ProjectRow({ row }: { row: ProjectCatalogRow }) {
-  const navigate = useNavigate();
   const setLastPick = useShellLastPick((state) => state.set);
   const deployed = deployedAppOf(row);
   const app = sectionsAppOf(row) ?? row.name;
@@ -104,7 +103,7 @@ function ProjectRow({ row }: { row: ProjectCatalogRow }) {
         event.preventDefault();
         // Into this project alone: the shell's one project, on its app's Overview.
         setLastPick(row.key);
-        void navigate({ href });
+        navigateWithShellScope(undefined, { to: href });
       }}
       data-testid={`projects-overview-row-${row.key}`}
       className="no-color grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)_2rem] items-center gap-4 border-b border-border-subtle px-4 py-3 text-ui text-ink transition-colors last:border-b-0 hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"

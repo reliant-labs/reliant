@@ -58,6 +58,62 @@ func requireSameMail(t *testing.T, label string, got, want *core.AgentMessage) {
 	}
 }
 
+// A queued human message keeps its author through the mailbox
+// (chat-collaboration.md §6.1): both enqueue paths write author_user_id, both
+// reads return it, and an owner's (nil) author stays nil, never "".
+func TestAgentMessageAuthorRoundTrip(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	seedMailbox(t, env, "au-chat", "au-main")
+	base := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	dana := "u-dana"
+
+	byCollab := mailMsg("au-1", "au-chat", "au-main", "au-main", core.AgentMessageKindHumanMessage, base)
+	byCollab.AuthorUserID = &dana
+	byOwner := mailMsg("au-2", "au-chat", "au-main", "au-main", core.AgentMessageKindHumanMessage, base.Add(time.Second))
+	byCollabOnce := mailMsg("au-3", "au-chat", "au-main", "au-main", core.AgentMessageKindHumanMessage, base.Add(2*time.Second))
+	byCollabOnce.AuthorUserID = &dana
+	byOwnerOnce := mailMsg("au-4", "au-chat", "au-main", "au-main", core.AgentMessageKindHumanMessage, base.Add(3*time.Second))
+
+	for _, m := range []*core.AgentMessage{byCollab, byOwner} {
+		if err := store.EnqueueAgentMessage(ctx, env.ORM, m); err != nil {
+			t.Fatalf("EnqueueAgentMessage(%s): %v", m.ID, err)
+		}
+	}
+	for _, m := range []*core.AgentMessage{byCollabOnce, byOwnerOnce} {
+		inserted, err := store.EnqueueAgentMessageOnce(ctx, env.ORM, m)
+		if err != nil || !inserted {
+			t.Fatalf("EnqueueAgentMessageOnce(%s) = %v, %v; want inserted", m.ID, inserted, err)
+		}
+	}
+
+	want := map[string]*string{"au-1": &dana, "au-2": nil, "au-3": &dana, "au-4": nil}
+	check := func(label string, got *core.AgentMessage) {
+		t.Helper()
+		w := want[got.ID]
+		switch {
+		case w == nil && got.AuthorUserID != nil:
+			t.Fatalf("%s %s: author %q, want nil (the owner)", label, got.ID, *got.AuthorUserID)
+		case w != nil && (got.AuthorUserID == nil || *got.AuthorUserID != *w):
+			t.Fatalf("%s %s: author %v, want %q", label, got.ID, got.AuthorUserID, *w)
+		}
+	}
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, env.ORM, "au-main")
+	if err != nil || len(queued) != len(want) {
+		t.Fatalf("ListQueuedAgentMessagesForThread = %d rows, %v; want %d", len(queued), err, len(want))
+	}
+	for _, m := range queued {
+		check("queued read", m)
+	}
+	for id := range want {
+		got, err := store.GetAgentMessage(ctx, env.ORM, id)
+		if err != nil {
+			t.Fatalf("GetAgentMessage(%s): %v", id, err)
+		}
+		check("ORM read", got)
+	}
+}
+
 func TestAgentMessageDrain(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
@@ -133,7 +189,7 @@ func TestAgentMessageDrain(t *testing.T) {
 	if err := store.SetAgentMessagesDeliveredMessageID(ctx, env.ORM, claimed, "mb-envelope"); err != nil {
 		t.Fatalf("SetAgentMessagesDeliveredMessageID: %v", err)
 	}
-	delivered, err := env.Repo.GetAgentMessage(ctx, "m-1")
+	delivered, err := store.GetAgentMessage(ctx, env.Repo.ORM(), "m-1")
 	if err != nil || delivered.Status != core.AgentMessageStatusDelivered || !delivered.DeliveredAt.Equal(deliveredAt) ||
 		delivered.DeliveredMessageID == nil || *delivered.DeliveredMessageID != "mb-envelope" {
 		t.Fatalf("Repo.GetAgentMessage after drain = %+v, %v", delivered, err)
@@ -183,16 +239,16 @@ func TestAgentMessageDrain(t *testing.T) {
 	if inserted, err := store.EnqueueAgentMessageOnce(ctx, env.ORM, mailMsg("m-4", "mb-chat", "mb-parent", "mb-child", core.AgentMessageKindHumanMessage, base)); err != nil || !inserted {
 		t.Fatalf("EnqueueAgentMessageOnce(reused id) = %v, %v; want inserted", inserted, err)
 	}
-	if inserted, err := env.Repo.EnqueueAgentMessageOnce(ctx, mailMsg("m-4", "mb-chat", "mb-parent", "mb-child", core.AgentMessageKindHumanMessage, base)); err != nil || inserted {
-		t.Fatalf("Repo.EnqueueAgentMessageOnce(taken id) = %v, %v; want false", inserted, err)
+	if inserted, err := store.EnqueueAgentMessageOnce(ctx, env.Repo.ORM(), mailMsg("m-4", "mb-chat", "mb-parent", "mb-child", core.AgentMessageKindHumanMessage, base)); err != nil || inserted {
+		t.Fatalf("store.EnqueueAgentMessageOnce(taken id, Repo.ORM()) = %v, %v; want false", inserted, err)
 	}
 }
 
 func mustMail(t *testing.T, env *storetest.Env, id string) *core.AgentMessage {
 	t.Helper()
-	m, err := env.Repo.GetAgentMessage(context.Background(), id)
+	m, err := store.GetAgentMessage(context.Background(), env.Repo.ORM(), id)
 	if err != nil || m == nil {
-		t.Fatalf("Repo.GetAgentMessage(%s) = %v, %v", id, m, err)
+		t.Fatalf("store.GetAgentMessage(%s, Repo.ORM()) = %v, %v", id, m, err)
 	}
 	return m
 }
@@ -225,8 +281,8 @@ func TestAgentMessageCancelAndClaim(t *testing.T) {
 	if ok, err := store.CancelQueuedAgentMessage(ctx, env.ORM, "h-3", "cl-chat"); err != nil || !ok {
 		t.Fatalf("CancelQueuedAgentMessage = %v, %v; want true", ok, err)
 	}
-	if ok, err := env.Repo.CancelQueuedAgentMessage(ctx, "h-3", "cl-chat"); err != nil || ok {
-		t.Fatalf("Repo.CancelQueuedAgentMessage(gone) = %v, %v; want false", ok, err)
+	if ok, err := store.CancelQueuedAgentMessage(ctx, env.Repo.ORM(), "h-3", "cl-chat"); err != nil || ok {
+		t.Fatalf("store.CancelQueuedAgentMessage(gone, Repo.ORM()) = %v, %v; want false", ok, err)
 	}
 
 	// Claim one, then the rest of the human queue: oldest first, and never

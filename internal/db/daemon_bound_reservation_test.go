@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/daemonmirror/daemonmirrortest"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,7 +79,7 @@ func TestApplyDaemonLifecycleReservesTheID(t *testing.T) {
 	ctx := context.Background()
 	id := uuid.NewString()
 
-	wrote, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: id, UserID: "user-A", Name: "cloud", DaemonType: "managed"})
+	wrote, err := daemonmirrortest.New(t, repo).UpsertDaemonIdentity(ctx, core.DaemonIdentity{DaemonID: id, UserID: "user-A", Name: "cloud", DaemonType: "managed"})
 	require.NoError(t, err)
 	require.True(t, wrote)
 	require.False(t, reserved(t, repo, id), "an identity alone is not the signal")

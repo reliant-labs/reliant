@@ -80,6 +80,7 @@ type ClaimableServiceClient interface {
 	// GetClaimableChallenge hands out a fresh proof-of-work challenge for
 	// StartClaimableDeploy. Stateless on the server (the challenge is signed and
 	// time-boxed), so it creates nothing and is cheap to call.
+	// Remains POST-only: each caller needs a fresh challenge, not a cached nonce.
 	GetClaimableChallenge(context.Context, *connect.Request[v1.GetClaimableChallengeRequest]) (*connect.Response[v1.GetClaimableChallengeResponse], error)
 	// GetClaimableAvailability says whether a claimable deploy can start right
 	// now, and if not, every reason why: an operator's switch, or a dependency
@@ -167,6 +168,7 @@ func NewClaimableServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+ClaimableServiceGetClaimableAvailabilityProcedure,
 			connect.WithSchema(claimableServiceMethods.ByName("GetClaimableAvailability")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getClaim: connect.NewClient[v1.GetClaimRequest, v1.GetClaimResponse](
@@ -260,6 +262,7 @@ type ClaimableServiceHandler interface {
 	// GetClaimableChallenge hands out a fresh proof-of-work challenge for
 	// StartClaimableDeploy. Stateless on the server (the challenge is signed and
 	// time-boxed), so it creates nothing and is cheap to call.
+	// Remains POST-only: each caller needs a fresh challenge, not a cached nonce.
 	GetClaimableChallenge(context.Context, *connect.Request[v1.GetClaimableChallengeRequest]) (*connect.Response[v1.GetClaimableChallengeResponse], error)
 	// GetClaimableAvailability says whether a claimable deploy can start right
 	// now, and if not, every reason why: an operator's switch, or a dependency
@@ -343,6 +346,7 @@ func NewClaimableServiceHandler(svc ClaimableServiceHandler, opts ...connect.Han
 		ClaimableServiceGetClaimableAvailabilityProcedure,
 		svc.GetClaimableAvailability,
 		connect.WithSchema(claimableServiceMethods.ByName("GetClaimableAvailability")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	claimableServiceGetClaimHandler := connect.NewUnaryHandler(

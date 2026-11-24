@@ -19,6 +19,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	wfmodel "github.com/reliant-labs/reliant/internal/workflow/model"
@@ -96,7 +97,7 @@ type switchHarness struct {
 
 	// durable is what the stopped-descendant lookup reports, once: a
 	// descendant that failed in an earlier execution of the chat.
-	durable     *db.StoppedSpawnAgent
+	durable     *core.StoppedSpawnAgent
 	durableOnce sync.Once
 
 	hold     map[string]bool
@@ -279,7 +280,7 @@ func newSwitchHarness(t *testing.T, env *testsuite.TestWorkflowEnvironment, root
 	register("LookupStoppedSubAgent", func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
 		out := map[string]interface{}{}
 		if all, _ := input["all"].(bool); all && h.durable != nil {
-			h.durableOnce.Do(func() { out["agents"] = []*db.StoppedSpawnAgent{h.durable} })
+			h.durableOnce.Do(func() { out["agents"] = []*core.StoppedSpawnAgent{h.durable} })
 		}
 		return out, nil
 	})
@@ -339,7 +340,7 @@ func TestUpdateWorkflowParams_ProviderSwitchReachesTheWorkflowsDescendants(t *te
 	// only the database remembers it.
 	const durableThread = "durable-thread"
 	h.whoOfThread[durableThread] = "durable"
-	h.durable = &db.StoppedSpawnAgent{
+	h.durable = &core.StoppedSpawnAgent{
 		ToolCallID:        "durable",
 		ParentThreadID:    fx.rootThreadID,
 		ToolInput:         `{"preset":"fast","prompt":"earlier job"}`,

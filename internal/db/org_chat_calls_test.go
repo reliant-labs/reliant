@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -32,7 +33,7 @@ func TestLatestOrgChatCalls(t *testing.T) {
 	call := func(id, chatID, org, provider, funding, purpose string, at time.Time) {
 		rec := usageRec(id, at)
 		rec.ChatID, rec.OrgID, rec.Provider, rec.Funding, rec.Purpose = chatID, org, provider, funding, purpose
-		_, err := repo.RecordLLMCallUsage(ctx, rec)
+		_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, rec)
 		require.NoError(t, err)
 	}
 	chat("c-live", &acme, ChatStateIdle)

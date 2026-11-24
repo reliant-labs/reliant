@@ -209,6 +209,8 @@ type BillingServiceClient interface {
 	GetCurrentUserSubscription(context.Context, *connect.Request[v1.GetCurrentUserSubscriptionRequest]) (*connect.Response[v1.GetCurrentUserSubscriptionResponse], error)
 	CreateCurrentUserCheckoutSession(context.Context, *connect.Request[v1.CreateCurrentUserCheckoutSessionRequest]) (*connect.Response[v1.CreateCurrentUserCheckoutSessionResponse], error)
 	CreateCurrentUserBillingPortalSession(context.Context, *connect.Request[v1.CreateCurrentUserBillingPortalSessionRequest]) (*connect.Response[v1.CreateCurrentUserBillingPortalSessionResponse], error)
+	// Remains POST-only: each invoice carries Stripe's hosted-invoice and PDF
+	// URLs, bearer links that must not be cached as a safe read.
 	ListCurrentUserInvoices(context.Context, *connect.Request[v1.ListCurrentUserInvoicesRequest]) (*connect.Response[v1.ListCurrentUserInvoicesResponse], error)
 	// ListOrgLimitChanges is the org's limit-change history, newest first: who
 	// changed which limit, from what, to what, and when. One list across every
@@ -268,7 +270,8 @@ type BillingServiceClient interface {
 	// user preference, never inferred from wallet balance, org membership, or
 	// provisioning state. A funded user may still prefer their own API key.
 	SetCurrentUserReliantEnabled(context.Context, *connect.Request[v1.SetCurrentUserReliantEnabledRequest]) (*connect.Response[v1.SetCurrentUserReliantEnabledResponse], error)
-	// Workspace compute plan (per-user).
+	// Workspace compute plan (per-user). Remains POST-only: the response may
+	// contain a bearer management URL and must not be cached as a safe read.
 	GetCurrentUserComputeSubscription(context.Context, *connect.Request[v1.GetCurrentUserComputeSubscriptionRequest]) (*connect.Response[v1.GetCurrentUserComputeSubscriptionResponse], error)
 	SetCurrentUserComputeOverage(context.Context, *connect.Request[v1.SetCurrentUserComputeOverageRequest]) (*connect.Response[v1.SetCurrentUserComputeOverageResponse], error)
 	// Deploy (infrastructure) overage ceiling — the cpu/memory/storage twin of
@@ -408,42 +411,49 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BillingServiceGetOrganizationCostSummaryProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetOrganizationCostSummary")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getStorageUsage: connect.NewClient[v1.GetStorageUsageRequest, v1.GetStorageUsageResponse](
 			httpClient,
 			baseURL+BillingServiceGetStorageUsageProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetStorageUsage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listOrganizationUsage: connect.NewClient[v1.ListOrganizationUsageRequest, v1.ListOrganizationUsageResponse](
 			httpClient,
 			baseURL+BillingServiceListOrganizationUsageProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("ListOrganizationUsage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getProjectCost: connect.NewClient[v1.GetProjectCostRequest, v1.GetProjectCostResponse](
 			httpClient,
 			baseURL+BillingServiceGetProjectCostProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetProjectCost")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listPlans: connect.NewClient[v1.ListPlansRequest, v1.ListPlansResponse](
 			httpClient,
 			baseURL+BillingServiceListPlansProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("ListPlans")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getPlan: connect.NewClient[v1.GetPlanRequest, v1.GetPlanResponse](
 			httpClient,
 			baseURL+BillingServiceGetPlanProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetPlan")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getCurrentUserSubscription: connect.NewClient[v1.GetCurrentUserSubscriptionRequest, v1.GetCurrentUserSubscriptionResponse](
 			httpClient,
 			baseURL+BillingServiceGetCurrentUserSubscriptionProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserSubscription")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createCurrentUserCheckoutSession: connect.NewClient[v1.CreateCurrentUserCheckoutSessionRequest, v1.CreateCurrentUserCheckoutSessionResponse](
@@ -468,6 +478,7 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BillingServiceListOrgLimitChangesProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("ListOrgLimitChanges")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getCurrentUserWalletOverview: connect.NewClient[v1.GetCurrentUserWalletOverviewRequest, v1.GetCurrentUserWalletOverviewResponse](
@@ -492,6 +503,7 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BillingServiceGetCurrentUserWalletTopupQuoteProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserWalletTopupQuote")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		redeemCoupon: connect.NewClient[v1.RedeemCouponRequest, v1.RedeemCouponResponse](
@@ -552,6 +564,7 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BillingServiceGetCurrentUserInfraOverageProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserInfraOverage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createCurrentUserComputeSubscriptionIntent: connect.NewClient[v1.CreateCurrentUserComputeSubscriptionIntentRequest, v1.CreateCurrentUserComputeSubscriptionIntentResponse](
@@ -564,6 +577,7 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BillingServiceGetMachinePricingReadinessProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetMachinePricingReadiness")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		acceptNextMachinePricing: connect.NewClient[v1.AcceptNextMachinePricingRequest, v1.AcceptNextMachinePricingResponse](
@@ -589,6 +603,7 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BillingServiceGetCurrentUserUsageBillingProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserUsageBilling")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createCurrentUserUsageBillingCheckout: connect.NewClient[v1.CreateCurrentUserUsageBillingCheckoutRequest, v1.CreateCurrentUserUsageBillingCheckoutResponse](
@@ -607,24 +622,28 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BillingServiceListUsageBillingBudgetVersionsProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("ListUsageBillingBudgetVersions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getOrgHostingUsageSummary: connect.NewClient[v1.GetOrgHostingUsageSummaryRequest, v1.GetOrgHostingUsageSummaryResponse](
 			httpClient,
 			baseURL+BillingServiceGetOrgHostingUsageSummaryProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetOrgHostingUsageSummary")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getFreeHostingStatus: connect.NewClient[v1.GetFreeHostingStatusRequest, v1.GetFreeHostingStatusResponse](
 			httpClient,
 			baseURL+BillingServiceGetFreeHostingStatusProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetFreeHostingStatus")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getCurrentUserWalletAutoRecharge: connect.NewClient[v1.GetCurrentUserWalletAutoRechargeRequest, v1.GetCurrentUserWalletAutoRechargeResponse](
 			httpClient,
 			baseURL+BillingServiceGetCurrentUserWalletAutoRechargeProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserWalletAutoRecharge")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setCurrentUserWalletAutoRecharge: connect.NewClient[v1.SetCurrentUserWalletAutoRechargeRequest, v1.SetCurrentUserWalletAutoRechargeResponse](
@@ -649,30 +668,35 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BillingServiceGetCurrentUserComputeUsageProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserComputeUsage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getCurrentUserComputeEligibility: connect.NewClient[v1.GetCurrentUserComputeEligibilityRequest, v1.GetCurrentUserComputeEligibilityResponse](
 			httpClient,
 			baseURL+BillingServiceGetCurrentUserComputeEligibilityProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserComputeEligibility")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getUsageSummary: connect.NewClient[v1.GetUsageSummaryRequest, v1.GetUsageSummaryResponse](
 			httpClient,
 			baseURL+BillingServiceGetUsageSummaryProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetUsageSummary")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getInvoicePreview: connect.NewClient[v1.GetInvoicePreviewRequest, v1.GetInvoicePreviewResponse](
 			httpClient,
 			baseURL+BillingServiceGetInvoicePreviewProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetInvoicePreview")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getCurrentUserBillingEmail: connect.NewClient[v1.GetCurrentUserBillingEmailRequest, v1.GetCurrentUserBillingEmailResponse](
 			httpClient,
 			baseURL+BillingServiceGetCurrentUserBillingEmailProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserBillingEmail")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateBillingEmail: connect.NewClient[v1.UpdateBillingEmailRequest, v1.UpdateBillingEmailResponse](
@@ -1011,6 +1035,8 @@ type BillingServiceHandler interface {
 	GetCurrentUserSubscription(context.Context, *connect.Request[v1.GetCurrentUserSubscriptionRequest]) (*connect.Response[v1.GetCurrentUserSubscriptionResponse], error)
 	CreateCurrentUserCheckoutSession(context.Context, *connect.Request[v1.CreateCurrentUserCheckoutSessionRequest]) (*connect.Response[v1.CreateCurrentUserCheckoutSessionResponse], error)
 	CreateCurrentUserBillingPortalSession(context.Context, *connect.Request[v1.CreateCurrentUserBillingPortalSessionRequest]) (*connect.Response[v1.CreateCurrentUserBillingPortalSessionResponse], error)
+	// Remains POST-only: each invoice carries Stripe's hosted-invoice and PDF
+	// URLs, bearer links that must not be cached as a safe read.
 	ListCurrentUserInvoices(context.Context, *connect.Request[v1.ListCurrentUserInvoicesRequest]) (*connect.Response[v1.ListCurrentUserInvoicesResponse], error)
 	// ListOrgLimitChanges is the org's limit-change history, newest first: who
 	// changed which limit, from what, to what, and when. One list across every
@@ -1070,7 +1096,8 @@ type BillingServiceHandler interface {
 	// user preference, never inferred from wallet balance, org membership, or
 	// provisioning state. A funded user may still prefer their own API key.
 	SetCurrentUserReliantEnabled(context.Context, *connect.Request[v1.SetCurrentUserReliantEnabledRequest]) (*connect.Response[v1.SetCurrentUserReliantEnabledResponse], error)
-	// Workspace compute plan (per-user).
+	// Workspace compute plan (per-user). Remains POST-only: the response may
+	// contain a bearer management URL and must not be cached as a safe read.
 	GetCurrentUserComputeSubscription(context.Context, *connect.Request[v1.GetCurrentUserComputeSubscriptionRequest]) (*connect.Response[v1.GetCurrentUserComputeSubscriptionResponse], error)
 	SetCurrentUserComputeOverage(context.Context, *connect.Request[v1.SetCurrentUserComputeOverageRequest]) (*connect.Response[v1.SetCurrentUserComputeOverageResponse], error)
 	// Deploy (infrastructure) overage ceiling — the cpu/memory/storage twin of
@@ -1206,42 +1233,49 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		BillingServiceGetOrganizationCostSummaryProcedure,
 		svc.GetOrganizationCostSummary,
 		connect.WithSchema(billingServiceMethods.ByName("GetOrganizationCostSummary")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceGetStorageUsageHandler := connect.NewUnaryHandler(
 		BillingServiceGetStorageUsageProcedure,
 		svc.GetStorageUsage,
 		connect.WithSchema(billingServiceMethods.ByName("GetStorageUsage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceListOrganizationUsageHandler := connect.NewUnaryHandler(
 		BillingServiceListOrganizationUsageProcedure,
 		svc.ListOrganizationUsage,
 		connect.WithSchema(billingServiceMethods.ByName("ListOrganizationUsage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceGetProjectCostHandler := connect.NewUnaryHandler(
 		BillingServiceGetProjectCostProcedure,
 		svc.GetProjectCost,
 		connect.WithSchema(billingServiceMethods.ByName("GetProjectCost")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceListPlansHandler := connect.NewUnaryHandler(
 		BillingServiceListPlansProcedure,
 		svc.ListPlans,
 		connect.WithSchema(billingServiceMethods.ByName("ListPlans")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceGetPlanHandler := connect.NewUnaryHandler(
 		BillingServiceGetPlanProcedure,
 		svc.GetPlan,
 		connect.WithSchema(billingServiceMethods.ByName("GetPlan")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceGetCurrentUserSubscriptionHandler := connect.NewUnaryHandler(
 		BillingServiceGetCurrentUserSubscriptionProcedure,
 		svc.GetCurrentUserSubscription,
 		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserSubscription")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceCreateCurrentUserCheckoutSessionHandler := connect.NewUnaryHandler(
@@ -1266,6 +1300,7 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		BillingServiceListOrgLimitChangesProcedure,
 		svc.ListOrgLimitChanges,
 		connect.WithSchema(billingServiceMethods.ByName("ListOrgLimitChanges")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceGetCurrentUserWalletOverviewHandler := connect.NewUnaryHandler(
@@ -1290,6 +1325,7 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		BillingServiceGetCurrentUserWalletTopupQuoteProcedure,
 		svc.GetCurrentUserWalletTopupQuote,
 		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserWalletTopupQuote")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceRedeemCouponHandler := connect.NewUnaryHandler(
@@ -1350,6 +1386,7 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		BillingServiceGetCurrentUserInfraOverageProcedure,
 		svc.GetCurrentUserInfraOverage,
 		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserInfraOverage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceCreateCurrentUserComputeSubscriptionIntentHandler := connect.NewUnaryHandler(
@@ -1362,6 +1399,7 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		BillingServiceGetMachinePricingReadinessProcedure,
 		svc.GetMachinePricingReadiness,
 		connect.WithSchema(billingServiceMethods.ByName("GetMachinePricingReadiness")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceAcceptNextMachinePricingHandler := connect.NewUnaryHandler(
@@ -1387,6 +1425,7 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		BillingServiceGetCurrentUserUsageBillingProcedure,
 		svc.GetCurrentUserUsageBilling,
 		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserUsageBilling")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceCreateCurrentUserUsageBillingCheckoutHandler := connect.NewUnaryHandler(
@@ -1405,24 +1444,28 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		BillingServiceListUsageBillingBudgetVersionsProcedure,
 		svc.ListUsageBillingBudgetVersions,
 		connect.WithSchema(billingServiceMethods.ByName("ListUsageBillingBudgetVersions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceGetOrgHostingUsageSummaryHandler := connect.NewUnaryHandler(
 		BillingServiceGetOrgHostingUsageSummaryProcedure,
 		svc.GetOrgHostingUsageSummary,
 		connect.WithSchema(billingServiceMethods.ByName("GetOrgHostingUsageSummary")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceGetFreeHostingStatusHandler := connect.NewUnaryHandler(
 		BillingServiceGetFreeHostingStatusProcedure,
 		svc.GetFreeHostingStatus,
 		connect.WithSchema(billingServiceMethods.ByName("GetFreeHostingStatus")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceGetCurrentUserWalletAutoRechargeHandler := connect.NewUnaryHandler(
 		BillingServiceGetCurrentUserWalletAutoRechargeProcedure,
 		svc.GetCurrentUserWalletAutoRecharge,
 		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserWalletAutoRecharge")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceSetCurrentUserWalletAutoRechargeHandler := connect.NewUnaryHandler(
@@ -1447,30 +1490,35 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		BillingServiceGetCurrentUserComputeUsageProcedure,
 		svc.GetCurrentUserComputeUsage,
 		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserComputeUsage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceGetCurrentUserComputeEligibilityHandler := connect.NewUnaryHandler(
 		BillingServiceGetCurrentUserComputeEligibilityProcedure,
 		svc.GetCurrentUserComputeEligibility,
 		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserComputeEligibility")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceGetUsageSummaryHandler := connect.NewUnaryHandler(
 		BillingServiceGetUsageSummaryProcedure,
 		svc.GetUsageSummary,
 		connect.WithSchema(billingServiceMethods.ByName("GetUsageSummary")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceGetInvoicePreviewHandler := connect.NewUnaryHandler(
 		BillingServiceGetInvoicePreviewProcedure,
 		svc.GetInvoicePreview,
 		connect.WithSchema(billingServiceMethods.ByName("GetInvoicePreview")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceGetCurrentUserBillingEmailHandler := connect.NewUnaryHandler(
 		BillingServiceGetCurrentUserBillingEmailProcedure,
 		svc.GetCurrentUserBillingEmail,
 		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserBillingEmail")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceUpdateBillingEmailHandler := connect.NewUnaryHandler(

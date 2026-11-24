@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
+	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -28,9 +29,9 @@ import (
 
 func (w *orgFundingWorld) backgroundRouting() *handlers.AccountRouting {
 	w.t.Helper()
-	recorder := accountlimits.NewRecorder(w.repo, nil)
+	recorder := accountlimits.NewRecorder(db.TestAccounts(w.t, w.repo), nil)
 	w.t.Cleanup(recorder.Close)
-	return accountRouting(w.repo, recorder)
+	return accountRouting(db.TestAccounts(w.t, w.repo), db.TestOrgAccounts(w.t, w.repo), w.repo, recorder)
 }
 
 // backgroundActivityEnv is an activity environment of its own: every
@@ -58,7 +59,7 @@ func (w *orgFundingWorld) title(first string) (string, error) {
 // compact runs a forced compaction of the chat's root thread once.
 func (w *orgFundingWorld) compact() (*handlers.CompactOutput, error) {
 	w.t.Helper()
-	activity := handlers.NewCompactActivity(w.repo, nil).WithAccountRouting(w.backgroundRouting())
+	activity := handlers.NewCompactActivity(handlers.CompactDeps{ToolResults: handlers.NewToolCalls(w.repo.ORM()), Store: w.repo, Threads: threads.New(threads.Deps{Repo: w.repo, Messages: store.NewMessageExtStore(w.repo.ORM()), Senders: store.NewThreadExtStore(w.repo.ORM())})}).WithAccountRouting(w.backgroundRouting())
 	env := backgroundActivityEnv()
 	env.RegisterActivity(activity.Execute)
 	input := types.ActivityInput{

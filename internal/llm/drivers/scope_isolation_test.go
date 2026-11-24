@@ -21,7 +21,7 @@ import (
 func TestScopedLoader_CandidatesAreOnlyTheScopesPersonsAccounts(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	InitializeAPIKeyProvider(repo)
+	InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	previous := AccountAvailabilityClient
 	AccountAvailabilityClient = noReportClients
 	t.Cleanup(func() { AccountAvailabilityClient = previous })
@@ -76,7 +76,7 @@ func TestScopedLoader_CandidatesAreOnlyTheScopesPersonsAccounts(t *testing.T) {
 	}
 
 	t.Run("a scope with no person reads nothing", func(t *testing.T) {
-		_, err := buildAvailableDrivers(ctx, repo, Scope{OrgID: "org-a", Attended: true}, noReportClients)
+		_, err := buildAvailableDrivers(ctx, db.TestAccounts(t, repo), Scope{OrgID: "org-a", Attended: true}, noReportClients)
 		require.Error(t, err)
 		_, err = LookupAvailableDrivers(ctx, Scope{OrgID: "org-a"})
 		require.True(t, errors.Is(err, ErrDriverLookupFailed), "got %v", err)
@@ -93,7 +93,7 @@ func otherOf(user, a, b string) string {
 
 func mustBuild(t *testing.T, repo *db.Repo, scope Scope) models.AvailableDrivers {
 	t.Helper()
-	avail, err := buildAvailableDrivers(context.Background(), repo, scope, noReportClients)
+	avail, err := buildAvailableDrivers(context.Background(), db.TestAccounts(t, repo), scope, noReportClients)
 	require.NoError(t, err)
 	return avail
 }

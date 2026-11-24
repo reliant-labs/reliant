@@ -119,7 +119,7 @@ func TestRequestDaemonRestartOnlyReachesCapableDaemons(t *testing.T) {
 }
 
 func TestPublishDaemonHeartbeat_CarriesUpgradeState(t *testing.T) {
-	svc := newTestService(listChangedRepo(nil))
+	svc := listChangedService(nil)
 	t.Cleanup(svc.Close)
 	hub := &recordingUserHub{}
 	svc.deps.UserUpdateHub = hub

@@ -29,6 +29,8 @@ export interface MobileSettingOption {
   value: string;
   label: string;
   description?: string;
+  /** Listed but not selectable; the description says why. */
+  disabled?: boolean;
 }
 
 /**
@@ -214,7 +216,8 @@ export function MobileOptionSheet({
                 type="button"
                 onClick={() => onSelect(option.value)}
                 aria-pressed={isSelected}
-                className="flex min-h-[44px] w-full items-center justify-between gap-3 px-4 py-3 text-left active:bg-foreground/5"
+                disabled={option.disabled}
+                className="flex min-h-[44px] w-full items-center justify-between gap-3 px-4 py-3 text-left active:bg-foreground/5 disabled:opacity-50 disabled:active:bg-transparent"
               >
                 <div className="min-w-0">
                   <p

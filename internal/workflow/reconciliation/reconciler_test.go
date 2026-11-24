@@ -28,6 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/store"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 )
 
@@ -235,7 +236,7 @@ type mockRepo struct {
 	// Approval sweep (approval_sweep_test.go): the stale approvals the query
 	// reports, which closes find them still pending, the closes made, and
 	// the unannounced resolutions and announcements.
-	staleApprovals        []db.StaleApproval
+	staleApprovals        []store.StaleApproval
 	approvalAlreadyClosed map[string]bool
 	closedApprovals       map[string]string // id -> reason
 	unannounced           []*db.Approval
@@ -325,7 +326,7 @@ func (m *mockRepo) ListBackgroundedProcessToolCalls(_ context.Context) ([]*db.Ba
 	return out, nil
 }
 
-func (m *mockRepo) ChatsHeldOnUsageLimit(_ context.Context, chatIDs []string, since time.Time) ([]string, error) {
+func (m *mockRepo) ListChatsHeldOnUsageLimit(_ context.Context, chatIDs []string, since time.Time) ([]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.heldSince = append(m.heldSince, since)
@@ -505,9 +506,9 @@ func (m *mockRepo) ReapOrphanedThreads(_ context.Context) ([]db.ReapedThread, er
 	return m.reapedThreads, nil
 }
 
-// GetWorkflow serves workflowRows; a row absent from it reads as not found,
+// LoadWorkflow serves workflowRows; a row absent from it reads as not found,
 // matching the real store's svcerr.NotFound("record").
-func (m *mockRepo) GetWorkflow(_ context.Context, id string) (*db.Workflow, error) {
+func (m *mockRepo) LoadWorkflow(_ context.Context, id string) (*db.Workflow, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if wf, ok := m.workflowRows[id]; ok {
@@ -739,7 +740,7 @@ func TestReconciler_PausedWorkflow_TemporalDead_Repaired(t *testing.T) {
 		describeResponses: map[string]mockDescribeResponse{},
 	}
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
 
 	wf := &db.Workflow{
 		ID:           "wf-1",
@@ -766,7 +767,7 @@ func TestReconciler_PausedWorkflow_TemporalAlive_StaysPaused(t *testing.T) {
 		},
 	}
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
 
 	wf := &db.Workflow{
 		ID:           "wf-1",
@@ -794,7 +795,7 @@ func TestReconciler_PausedWorkflow_TemporalTimedOut_Repaired(t *testing.T) {
 		},
 	}
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
 
 	wf := &db.Workflow{
 		ID:           "wf-1",
@@ -822,7 +823,7 @@ func TestReconciler_PausedWorkflow_TemporalCompleted_Repaired(t *testing.T) {
 		},
 	}
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
 
 	wf := &db.Workflow{
 		ID:           "wf-1",
@@ -853,7 +854,7 @@ func TestReconciler_RunningWorkflow_TemporalDead_Repaired(t *testing.T) {
 		},
 	}
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
 
 	wf := &db.Workflow{
 		ID:           "wf-1",
@@ -887,7 +888,7 @@ func TestReconciler_RunningWorkflow_TemporalFailed_Repaired(t *testing.T) {
 		},
 	}
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
 
 	wf := &db.Workflow{
 		ID:           "wf-1",
@@ -910,7 +911,7 @@ func TestReconciler_ChildWorkflow_Skipped(t *testing.T) {
 		describeResponses: map[string]mockDescribeResponse{},
 	}
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
 
 	parentID := "parent-wf"
 	wf := &db.Workflow{
@@ -934,7 +935,7 @@ func TestReconciler_CompletedWorkflow_Skipped(t *testing.T) {
 		describeResponses: map[string]mockDescribeResponse{},
 	}
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
 
 	wf := &db.Workflow{
 		ID:           "wf-1",
@@ -959,7 +960,7 @@ func TestReconciler_TemporalError_PropagatedAsError(t *testing.T) {
 		},
 	}
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
 
 	wf := &db.Workflow{
 		ID:           "wf-1",
@@ -985,7 +986,7 @@ func TestReconciler_RunningWorkflow_TemporalRunning_NoChange(t *testing.T) {
 		},
 	}
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
 
 	wf := &db.Workflow{
 		ID:           "wf-1",
@@ -1013,7 +1014,7 @@ func TestReconciler_StuckActivity_NoPollers_Skipped(t *testing.T) {
 	}
 	tempClient.setPollersActive(false) // worker down/rebuilding
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 	wf := runningWorkflow()
 
 	// Many passes: with no pollers, stuck handling must never trigger.
@@ -1039,7 +1040,7 @@ func TestReconciler_StuckActivity_PollerCheckError_Skipped(t *testing.T) {
 		describeTaskQueueErr: fmt.Errorf("temporal unavailable"),
 	}
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 	wf := runningWorkflow()
 
 	for i := 0; i < 4; i++ {
@@ -1071,7 +1072,7 @@ func TestReconciler_StuckActivity_StalePollers_Skipped(t *testing.T) {
 		},
 	}
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 	wf := runningWorkflow()
 
 	for i := 0; i < 4; i++ {
@@ -1094,7 +1095,7 @@ func TestReconciler_StuckActivity_DebounceRequiresConsecutivePasses(t *testing.T
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(3)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(3)})
 	wf := runningWorkflow()
 
 	// Passes 1 and 2: observed but not confirmed.
@@ -1134,7 +1135,7 @@ func TestReconciler_StuckActivity_PollerOutageResetsDebounce(t *testing.T) {
 		historyEvents: makeHistoryWithActivity("act-1"),
 	}
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(3)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(3)})
 	wf := runningWorkflow()
 
 	// Two poller-active passes...
@@ -1172,7 +1173,7 @@ func TestReconciler_StuckActivity_ConfirmationWindowMustElapse(t *testing.T) {
 		StuckConfirmationPasses: 2,
 		StuckConfirmationWindow: time.Hour,
 	}
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: config})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: config})
 	wf := runningWorkflow()
 
 	for i := 0; i < 5; i++ {
@@ -1195,7 +1196,7 @@ func TestReconciler_StuckActivity_TerminateFallbackOnResetError(t *testing.T) {
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 	wf := runningWorkflow()
 
 	// First pass observes; second confirms, reset fails, terminate fallback.
@@ -1234,7 +1235,7 @@ func TestReconciler_StuckActivity_ResetGuardBoundsRepeatedResets(t *testing.T) {
 	// poller-active pass. Two passes per confirmation is the reliable pattern
 	// (the first sets firstObserved, the second confirms after real wall-clock
 	// elapsed) — a single-pass confirmation is flaky against the 1ns test window.
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 	reconciler.SetResetGuard(v2workflow.NewResetAttemptGuard(2))
 	wf := runningWorkflow()
 
@@ -1285,7 +1286,7 @@ func TestReconciler_StuckWorkflowTask_ResetToLastWorkflowTaskCompleted(t *testin
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 	wf := runningWorkflow()
 
 	reconciler.ReconcileWorkflow(context.Background(), wf)
@@ -1308,7 +1309,7 @@ func TestReconciler_StuckActivity_ActivityIDChangeResetsDebounce(t *testing.T) {
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(3)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(3)})
 	wf := runningWorkflow()
 
 	// Two observations of act-1...
@@ -1348,7 +1349,7 @@ func TestReconciler_PollerCheckCachedPerPass(t *testing.T) {
 	}
 	tempClient.setPollersActive(false)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(3)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(3)})
 
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
@@ -1372,7 +1373,7 @@ func TestReconciler_StuckObservationsPrunedWhenWorkflowGone(t *testing.T) {
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(10)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(10)})
 
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
@@ -1424,7 +1425,7 @@ func TestReconciler_WedgedWorkflowTask_TerminatedAndMarkedFailed(t *testing.T) {
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 	wf := runningWorkflow()
 
 	// First pass observes; second confirms.
@@ -1468,7 +1469,7 @@ func TestReconciler_WedgedWorkflowTask_PausedWorkflow_TerminatedAndMarkedFailed(
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 	wf := runningWorkflow()
 	wf.Status = db.Paused()
 
@@ -1502,7 +1503,7 @@ func TestReconciler_WedgedWorkflowTask_BelowThreshold_NoAction(t *testing.T) {
 	tempClient.setPollersActive(true)
 
 	cfg := stuckTestConfig(1)
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: cfg})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: cfg})
 	wf := runningWorkflow()
 
 	for i := 0; i < 4; i++ {
@@ -1527,7 +1528,7 @@ func TestReconciler_WedgedWorkflowTask_NoPollers_Skipped(t *testing.T) {
 	}
 	tempClient.setPollersActive(false) // worker down/rebuilding
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 	wf := runningWorkflow()
 
 	for i := 0; i < 5; i++ {
@@ -1550,7 +1551,7 @@ func TestReconciler_WedgedWorkflowTask_PollerOutageRestartsTheStreak(t *testing.
 		retryingWedge: true,
 	}
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
 	wf := runningWorkflow()
 
 	// A poller-active pass sets the baseline...
@@ -1591,7 +1592,7 @@ func TestReconciler_WedgedWorkflowTask_PrecedenceOverStuckReset(t *testing.T) {
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 	wf := runningWorkflow()
 
 	reconciler.ReconcileWorkflow(context.Background(), wf)
@@ -1615,7 +1616,7 @@ func TestReconciler_WedgedThenRecovered_ClearsDebounce(t *testing.T) {
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(3)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(3)})
 	wf := runningWorkflow()
 
 	// A wedge observation sets the baseline...
@@ -1718,7 +1719,7 @@ func TestReconciler_ProgressWatchdog_DetectThenConfirm(t *testing.T) {
 	confirmedBefore := anomalyCount("progress_stall_confirmed")
 
 	// Detect at 2 passes, confirm at 4.
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
 	wf := runningWorkflow()
 
 	// Passes 1-3: observe + detect, but never act.
@@ -1768,7 +1769,7 @@ func TestReconciler_ProgressWatchdog_HistoryGrowthResetsStreak(t *testing.T) {
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
 	wf := runningWorkflow()
 
 	// Three static passes (confirm would need 4)...
@@ -1814,7 +1815,7 @@ func TestReconciler_ProgressWatchdog_PendingQuestionExcluded(t *testing.T) {
 	tempClient.setPollersActive(true)
 
 	detectedBefore := anomalyCount("progress_stall_detected")
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
 	wf := runningWorkflow()
 
 	for i := 0; i < 6; i++ {
@@ -1844,7 +1845,7 @@ func TestReconciler_ProgressWatchdog_PendingApprovalExcluded(t *testing.T) {
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
 	wf := runningWorkflow()
 
 	for i := 0; i < 6; i++ {
@@ -1879,7 +1880,7 @@ func TestReconciler_ProgressWatchdog_PausedDescendantExcluded(t *testing.T) {
 	tempClient.setPollersActive(true)
 
 	detectedBefore := anomalyCount("progress_stall_detected")
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
 	wf := runningWorkflow()
 
 	for i := 0; i < 6; i++ {
@@ -1910,7 +1911,7 @@ func TestReconciler_ProgressWatchdog_ExclusionCheckError_Holds(t *testing.T) {
 	tempClient.setPollersActive(true)
 
 	detectedBefore := anomalyCount("progress_stall_detected")
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
 	wf := runningWorkflow()
 
 	for i := 0; i < 6; i++ {
@@ -1936,7 +1937,7 @@ func TestReconciler_ProgressWatchdog_PendingActivityNotSuspicious(t *testing.T) 
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
 	wf := runningWorkflow()
 
 	for i := 0; i < 6; i++ {
@@ -1962,7 +1963,7 @@ func TestReconciler_ProgressWatchdog_PausedWorkflowNeverEnters(t *testing.T) {
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
 	wf := &db.Workflow{
 		ID:           "wf-1",
 		ChatID:       "chat-1",
@@ -1997,7 +1998,7 @@ func TestReconciler_ProgressWatchdog_ConfirmationWindowMustElapse(t *testing.T) 
 		ProgressStallWindow: time.Hour,
 	}
 	detectedBefore := anomalyCount("progress_stall_detected")
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: config})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: config})
 	wf := runningWorkflow()
 
 	for i := 0; i < 8; i++ {
@@ -2023,7 +2024,7 @@ func TestReconciler_ProgressWatchdog_ConfirmActionGatedOnPollers(t *testing.T) {
 	}
 	tempClient.setPollersActive(false)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: progressTestConfig(2)})
 	wf := runningWorkflow()
 
 	// Six passes, all past the confirmation threshold from pass 4 on: no
@@ -2058,7 +2059,7 @@ func TestReconciler_ProgressObservationsPrunedWhenWorkflowGone(t *testing.T) {
 	tempClient.setPollersActive(true)
 
 	// Generous thresholds: observe only, never report/act.
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
 
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
@@ -2081,7 +2082,7 @@ func TestReconciler_AnomalyMetrics_Counters(t *testing.T) {
 		tempClient := &mockReconcilerTemporalClient{
 			describeResponses: map[string]mockDescribeResponse{}, // not found
 		}
-		reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
+		reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
 
 		result := reconciler.ReconcileWorkflow(context.Background(), runningWorkflow())
 		require.NoError(t, result.Error)
@@ -2100,7 +2101,7 @@ func TestReconciler_AnomalyMetrics_Counters(t *testing.T) {
 			retryingWedge: true,
 		}
 		tempClient.setPollersActive(true)
-		reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
+		reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 		wf := runningWorkflow()
 
 		reconciler.ReconcileWorkflow(context.Background(), wf)
@@ -2120,7 +2121,7 @@ func TestReconciler_AnomalyMetrics_Counters(t *testing.T) {
 			historyEvents: makeHistoryWithActivity("act-1"),
 		}
 		tempClient.setPollersActive(true)
-		reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
+		reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 		wf := runningWorkflow()
 
 		reconciler.ReconcileWorkflow(context.Background(), wf)
@@ -2141,7 +2142,7 @@ func TestReconciler_AnomalyMetrics_Counters(t *testing.T) {
 			resetErr:      fmt.Errorf("reset not allowed"),
 		}
 		tempClient.setPollersActive(true)
-		reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
+		reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 		wf := runningWorkflow()
 
 		reconciler.ReconcileWorkflow(context.Background(), wf)
@@ -2170,7 +2171,7 @@ func TestReconcileRunningWorkflows_IncludesPausedWedgedZombie(t *testing.T) {
 	}
 	tempClient.setPollersActive(true)
 
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: stuckTestConfig(2)})
 
 	// First pass observes, second confirms — both through the background
 	// entry point, which must pick the paused row up each time.

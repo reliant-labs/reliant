@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -186,7 +187,7 @@ func (s *Service) persistStoredMCPConfigScopes(
 		return nil
 	}
 
-	record, err := s.deps.Repo.GetProjectConfigRecord(ctx, projectID)
+	record, err := s.deps.ProjectConfigs.GetProjectConfigRecord(ctx, projectID)
 	if err != nil {
 		if svcerr.IsNotFound(err) {
 			return nil
@@ -216,7 +217,7 @@ func (s *Service) persistStoredMCPConfigScopes(
 
 	record.MCPConfigs = updatedMCPConfigs
 	record.PushedAt = time.Now().UTC()
-	if err := s.deps.Repo.UpsertProjectConfigRecord(ctx, record); err != nil {
+	if err := s.deps.ProjectConfigs.UpsertProjectConfigRecord(ctx, record); err != nil {
 		return fmt.Errorf("failed to persist stored MCP configuration snapshot: %w", err)
 	}
 
@@ -232,7 +233,7 @@ func (s *Service) persistGlobalScopeSnapshotAcrossProjects(
 		return nil
 	}
 
-	sourceProject, err := s.deps.Repo.GetProject(ctx, sourceProjectID)
+	sourceProject, err := s.deps.ProjectRows.GetProject(ctx, sourceProjectID)
 	if err != nil {
 		return fmt.Errorf("failed to resolve source project for global MCP snapshot propagation: %w", err)
 	}
@@ -256,7 +257,7 @@ func (s *Service) persistGlobalScopeSnapshotAcrossProjects(
 			continue
 		}
 
-		record, recErr := s.deps.Repo.GetProjectConfigRecord(ctx, project.ID)
+		record, recErr := s.deps.ProjectConfigs.GetProjectConfigRecord(ctx, project.ID)
 		if recErr != nil {
 			if svcerr.IsNotFound(recErr) {
 				continue
@@ -271,7 +272,7 @@ func (s *Service) persistGlobalScopeSnapshotAcrossProjects(
 
 		record.MCPConfigs = updatedMCPConfigs
 		record.PushedAt = time.Now().UTC()
-		if err := s.deps.Repo.UpsertProjectConfigRecord(ctx, record); err != nil {
+		if err := s.deps.ProjectConfigs.UpsertProjectConfigRecord(ctx, record); err != nil {
 			return fmt.Errorf("failed to persist propagated global MCP snapshot for project %s: %w", project.ID, err)
 		}
 	}
@@ -301,7 +302,7 @@ func scopeToDaemonWriteScope(scope reliantv1.ConfigScope) string {
 func (s *Service) readMCPConfigForScope(ctx context.Context, projectID string, scope reliantv1.ConfigScope) (*MCPConfigFile, error) {
 	normalizedScope := normalizeScope(scope)
 
-	mcpConfigs, err := s.deps.Repo.GetProjectMCPConfigsJSON(ctx, projectID)
+	mcpConfigs, err := s.deps.ProjectConfigs.GetProjectMCPConfigsJSON(ctx, projectID)
 	if err != nil {
 		if svcerr.IsNotFound(err) {
 			return &MCPConfigFile{MCPServers: make(map[string]MCPServerConfig)}, nil
@@ -328,7 +329,7 @@ func (s *Service) readMCPConfigForScope(ctx context.Context, projectID string, s
 // the daemon indexed (18 MB in prod), so each MCP page load read it three
 // times to use a few hundred bytes of one column.
 func (s *Service) readMergedScopedServers(ctx context.Context, projectID string) (map[string]serverScopeConfig, error) {
-	mcpConfigs, err := s.deps.Repo.GetProjectMCPConfigsJSON(ctx, projectID)
+	mcpConfigs, err := s.deps.ProjectConfigs.GetProjectMCPConfigsJSON(ctx, projectID)
 	if err != nil {
 		if svcerr.IsNotFound(err) {
 			return map[string]serverScopeConfig{}, nil

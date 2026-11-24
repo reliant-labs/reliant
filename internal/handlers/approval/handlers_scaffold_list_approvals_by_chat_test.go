@@ -22,14 +22,12 @@ func TestListApprovalsByChat_Generated(t *testing.T) {
 	t.Parallel()
 
 	// chat-1 belongs to another user; no other chat exists.
-	svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{
-		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
-			if id == "chat-1" {
-				return &db.ChatRow{ID: id, UserID: "someone-else"}, nil
-			}
-			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
-		},
-	}}))
+	svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{}, Chats: &approval.MockChats{GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
+		if id == "chat-1" {
+			return &db.ChatRow{ID: id, UserID: "someone-else"}, nil
+		}
+		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+	}}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListApprovalsByChatRequest, pb.ListApprovalsByChatResponse]{
 		{

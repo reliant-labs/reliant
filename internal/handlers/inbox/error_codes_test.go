@@ -35,13 +35,15 @@ func TestInboxStoreErrorCodes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			repo := &MockRepository{
-				ListAttentionIncidentsFunc: func(context.Context, string) ([]*core.AttentionIncident, error) { return nil, nil },
-				ListInboxPendingFunc:       func(context.Context, string) ([]*core.InboxPending, error) { return nil, tc.err },
 				// The other required read succeeds, so the pending read's
 				// error is the one the caller sees.
 				ListTriggersFunc: func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return nil, nil },
 			}
-			svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo, Recoveries: noRecoveries(), Marks: &MockMarkDecisionStore{}}), WithPlaceholderDeps())
+			items := &MockItems{
+				ListAttentionIncidentsFunc: func(context.Context, string) ([]*core.AttentionIncident, error) { return nil, nil },
+				ListInboxPendingFunc:       func(context.Context, string) ([]*core.InboxPending, error) { return nil, tc.err },
+			}
+			svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo, Items: items, Recoveries: noRecoveries(), Marks: &MockMarkDecisionStore{}}), WithPlaceholderDeps())
 			_, err := svc.ListInbox(AuthedContext(t), connect.NewRequest(&reliantv1.ListInboxRequest{}))
 			require.Error(t, err)
 			assert.Equal(t, tc.code, svcerr.Code(err))
@@ -58,10 +60,10 @@ func TestInboxStoreErrorCodes(t *testing.T) {
 func TestInboxErrorsOnTheWire(t *testing.T) {
 	t.Parallel()
 
-	repo := &MockRepository{ListInboxPendingFunc: func(context.Context, string) ([]*core.InboxPending, error) {
+	items := &MockItems{ListInboxPendingFunc: func(context.Context, string) ([]*core.InboxPending, error) {
 		return nil, errors.New("dsn=postgres://u:secret@h")
 	}}
-	_, client := NewTestInboxServer(t, WithInboxDeps(Deps{Repo: repo, Recoveries: noRecoveries(), Marks: &MockMarkDecisionStore{}}), WithPlaceholderDeps())
+	_, client := NewTestInboxServer(t, WithInboxDeps(Deps{Repo: &MockRepository{}, Items: items, Recoveries: noRecoveries(), Marks: &MockMarkDecisionStore{}}), WithPlaceholderDeps())
 	_, err := client.ListInbox(context.Background(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))

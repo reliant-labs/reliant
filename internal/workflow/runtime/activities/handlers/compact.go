@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"go.temporal.io/sdk/activity"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -25,7 +27,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
 )
 
 // ============================================================================
@@ -63,7 +64,8 @@ type GenerateTitleOutput struct {
 // 4. Return success - workflow continues with updated context
 type CompactActivity struct {
 	repo           CompactStore
-	threads        *threads.Service
+	threads        MessageSaver
+	toolResults    ToolResultRecoveryStore
 	driverResolver drivers.DriverResolver
 	// skips reports windows the activity declined to compact (see
 	// compaction_guard.go). Process-wide, so a window is reported once no
@@ -72,6 +74,15 @@ type CompactActivity struct {
 	// routing keeps the summary request on the thread's account; nil routes
 	// nothing.
 	routing *AccountRouting
+	// usage records the summary request in the usage ledger; nil records
+	// nothing.
+	usage LLMUsageRecorder
+}
+
+// WithUsageRecorder wires the usage ledger into compaction.
+func (a *CompactActivity) WithUsageRecorder(r LLMUsageRecorder) *CompactActivity {
+	a.usage = r
+	return a
 }
 
 // WithAccountRouting wires multi-account routing into compaction, so the
@@ -82,11 +93,12 @@ func (a *CompactActivity) WithAccountRouting(r *AccountRouting) *CompactActivity
 }
 
 // NewCompactActivity creates a new CompactActivity
-func NewCompactActivity(repo CompactStore, resolver drivers.DriverResolver) *CompactActivity {
+func NewCompactActivity(deps CompactDeps) *CompactActivity {
 	return &CompactActivity{
-		repo:           repo,
-		threads:        threads.NewService(repo),
-		driverResolver: resolver,
+		repo:           deps.Store,
+		toolResults:    deps.ToolResults,
+		threads:        deps.Threads,
+		driverResolver: deps.DriverResolver,
 		skips:          compactionSkips,
 	}
 }
@@ -133,7 +145,7 @@ func (a *CompactActivity) Execute(ctx context.Context, input ActivityInput) (Com
 	}
 
 	// Load conversation history (handles branching, DB repair, and in-memory repair)
-	currentContextMessages, err := LoadMessagesForLLM(ctx, a.repo, rtx.ChatID, thread, nil)
+	currentContextMessages, err := LoadMessagesForLLM(ctx, a.repo, a.toolResults, rtx.ChatID, thread, nil)
 	if err != nil {
 		return CompactOutput{}, fmt.Errorf("failed to load conversation history: %w", err)
 	}
@@ -251,6 +263,15 @@ type GenerateTitleActivity struct {
 	// providerPrefs reads the user's Settings default provider, so a title
 	// runs on the provider they chose; nil titles in the tier's own order.
 	providerPrefs modelprefs.SettingsReader
+	// usage records the title request in the usage ledger; nil records
+	// nothing.
+	usage LLMUsageRecorder
+}
+
+// WithUsageRecorder wires the usage ledger into titling.
+func (a *GenerateTitleActivity) WithUsageRecorder(r LLMUsageRecorder) *GenerateTitleActivity {
+	a.usage = r
+	return a
 }
 
 // WithProviderPreferences makes titling honor the user's Settings default
@@ -517,7 +538,7 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 	}
 	// Each request below, including the smaller-prefix retries after an
 	// overflow, is a request the provider counted; the meter records each one.
-	meter := newUsageMeter(a.repo, chat.UserID, chat.ID, store.LLMPurposeCompaction)
+	meter := newUsageMeter(a.usage, chat.UserID, chat.ID, store.LLMPurposeCompaction).inProject(chat.ProjectID)
 	for attempt := 1; ; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -754,7 +775,7 @@ func (a *GenerateTitleActivity) generateTitleForChat(ctx context.Context, chat *
 	var consentRefused *personalFundingRefused
 	// The title makes up to titleAttempts requests (an account or provider
 	// that refuses is retried elsewhere); the meter records each.
-	meter := newUsageMeter(a.repo, userID, chatID, store.LLMPurposeTitle)
+	meter := newUsageMeter(a.usage, userID, chatID, store.LLMPurposeTitle).inProject(chat.ProjectID)
 	for range titleAttempts {
 		raw, err = a.requestTitle(ctx, meter, spec, firstMessage)
 		var noConsent *personalFundingRefused

@@ -125,7 +125,7 @@ import { useActiveOrg } from "@/hooks/useOrgs";
 import { formatPrice } from "@/components/Billing/priceFormat";
 import { isSafeReturnTo } from "@/lib/returnTo";
 import { ALL_PROJECTS_PICK, refOfKey, SEVERAL_PROJECTS_PICK, useShellLastPick } from "@/components/Layout/sidebar/shellProject";
-import { useProjectStore } from "@/store/projectStore";
+import { useShellCurrentProject } from "@/components/Layout/sidebar/useShellCurrentProject";
 import { consolePath } from "@/components/Forge/Console/paths";
 import ForgeLink from "@/components/forge-ui/link";
 import { onboardingPath, projectsPath, settingsPath, usageBillingPath } from "@/lib/paths";
@@ -198,9 +198,11 @@ const ReliantAISection = lazy(() => import("./reliantAI").then((m) => ({ default
  * current project when it has an app.
  */
 function ProjectCostsPointer() {
-  // The shell's last pick, else the current project's app: no route or catalog read, so Settings renders anywhere.
+  // The shell's last pick, else the current project's app. The current
+  // project is the one the shell's nav shows: a cold load of Settings has no
+  // context project of its own (reliant#3445).
   const pick = useShellLastPick((state) => state.key);
-  const current = useProjectStore((state) => state.currentProject);
+  const current = useShellCurrentProject();
   const pickRef = pick && pick !== ALL_PROJECTS_PICK && pick !== SEVERAL_PROJECTS_PICK ? refOfKey(pick) : null;
   const app =
     pickRef?.kind === "app"

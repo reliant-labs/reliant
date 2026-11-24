@@ -78,7 +78,7 @@ func seedPolicyUser(t *testing.T) *db.Repo {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	InitializeAPIKeyProvider(repo)
+	InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	previous := AccountAvailabilityClient
 	AccountAvailabilityClient = noReportClients
 	t.Cleanup(func() { AccountAvailabilityClient = previous })
@@ -134,7 +134,7 @@ func TestOrgPolicy_NarrowsTheCandidatesAtTheSeam(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			withProvidersSwitch(t, tc.sw)
 			ctx := policyCtx(tc.doc)
-			avail, err := buildAvailableDrivers(ctx, repo, tc.scope, noReportClients)
+			avail, err := buildAvailableDrivers(ctx, db.TestAccounts(t, repo), tc.scope, noReportClients)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, driverIDs(avail))
 			for d := range avail.Drivers {
@@ -161,7 +161,7 @@ func TestOrgPolicy_ModelsNarrowTheManagedDriver(t *testing.T) {
 	withProvidersSwitch(t, orgpolicy.EnforcementEnforce)
 	ctx := policyCtx(&controlplanev1.OrgPolicy{Models: &controlplanev1.ModelsPolicy{Mode: enforced, Allowed: []string{"claude-opus-4-6"}}})
 
-	avail, err := buildAvailableDrivers(ctx, repo, orgScope(true), noReportClients)
+	avail, err := buildAvailableDrivers(ctx, db.TestAccounts(t, repo), orgScope(true), noReportClients)
 	require.NoError(t, err)
 	require.NotNil(t, avail.Availability)
 	assert.True(t, avail.Availability("reliant", policyModel).Disabled, "the gateway may not serve a model the org does not allow")
@@ -228,11 +228,11 @@ func TestOrgPolicy_RefusalExplainsAResolutionThePolicyBroke(t *testing.T) {
 	withProvidersSwitch(t, orgpolicy.EnforcementEnforce)
 	ctx := policyCtx(onlyDrivers(enforced, "openai"))
 
-	before, err := buildAvailableDrivers(context.Background(), repo, orgScope(true), noReportClients)
+	before, err := buildAvailableDrivers(context.Background(), db.TestAccounts(t, repo), orgScope(true), noReportClients)
 	require.NoError(t, err)
 	assert.Contains(t, driverIDs(before), "claude", "before the policy the chat's provider serves")
 
-	after, err := buildAvailableDrivers(ctx, repo, orgScope(false), noReportClients)
+	after, err := buildAvailableDrivers(ctx, db.TestAccounts(t, repo), orgScope(false), noReportClients)
 	require.NoError(t, err)
 	assert.Empty(t, after.Accounts, "after it, nothing the person has is allowed")
 	refusal := OrgPolicyRefusal(ctx, orgScope(false), after, models.ModelSelector{ID: policyModel}, true)
@@ -303,7 +303,7 @@ func TestOrgPolicy_UnreadablePolicyFailsClosedOnlyWhereItEnforces(t *testing.T) 
 	ctx := orgpolicy.WithResolver(context.Background(), orgpolicy.New(policyDocs{down: true}))
 
 	withProvidersSwitch(t, orgpolicy.EnforcementEnforce)
-	_, err := buildAvailableDrivers(ctx, repo, orgScope(true), noReportClients)
+	_, err := buildAvailableDrivers(ctx, db.TestAccounts(t, repo), orgScope(true), noReportClients)
 	require.Error(t, err)
 	assert.True(t, orgpolicy.IsUnavailable(err), "%v", err)
 	_, err = LookupAvailableDrivers(ctx, orgScope(true))
@@ -311,7 +311,7 @@ func TestOrgPolicy_UnreadablePolicyFailsClosedOnlyWhereItEnforces(t *testing.T) 
 	assert.True(t, OrgPolicyRefuses(ctx, orgScope(true), "local", models.FundingLocal), "a choice ahead of the call gives way")
 
 	orgpolicy.SetProcessEnforcement(orgpolicy.PointProviders, orgpolicy.EnforcementAudit)
-	avail, err := buildAvailableDrivers(ctx, repo, orgScope(true), noReportClients)
+	avail, err := buildAvailableDrivers(ctx, db.TestAccounts(t, repo), orgScope(true), noReportClients)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"anthropic", "claude", "reliant"}, driverIDs(avail))
 }
@@ -377,7 +377,7 @@ func TestOrgPolicy_EnforcedAutomationsReplaceTheStamp(t *testing.T) {
 	}
 
 	withProvidersSwitch(t, orgpolicy.EnforcementEnforce)
-	avail, err := buildAvailableDrivers(policyCtx(personal(enforced)), repo, orgOnly, noReportClients)
+	avail, err := buildAvailableDrivers(policyCtx(personal(enforced)), db.TestAccounts(t, repo), orgOnly, noReportClients)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"anthropic", "claude"}, driverIDs(avail),
 		"the section names the person's own accounts: an org_only run spends them, and not the Reliant credits it does not name")
@@ -392,7 +392,7 @@ func TestOrgPolicy_EnforcedAutomationsReplaceTheStamp(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			withProvidersSwitch(t, tc.sw)
-			avail, err := buildAvailableDrivers(policyCtx(tc.doc), repo, orgOnly, noReportClients)
+			avail, err := buildAvailableDrivers(policyCtx(tc.doc), db.TestAccounts(t, repo), orgOnly, noReportClients)
 			require.NoError(t, err)
 			assert.NotContains(t, driverIDs(avail), "anthropic", "the org_only stamp stands")
 			assert.NotContains(t, driverIDs(avail), "claude")
@@ -401,7 +401,7 @@ func TestOrgPolicy_EnforcedAutomationsReplaceTheStamp(t *testing.T) {
 
 	// An attended run is never touched by the automations section.
 	withProvidersSwitch(t, orgpolicy.EnforcementEnforce)
-	attended, err := buildAvailableDrivers(policyCtx(personal(enforced)), repo, orgScope(true), noReportClients)
+	attended, err := buildAvailableDrivers(policyCtx(personal(enforced)), db.TestAccounts(t, repo), orgScope(true), noReportClients)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"anthropic", "claude", "reliant"}, driverIDs(attended))
 }

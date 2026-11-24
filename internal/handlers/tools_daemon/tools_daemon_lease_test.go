@@ -21,6 +21,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -66,33 +67,33 @@ func runIncoming(t *testing.T, svc *Service, conn *daemonConnection, stream *par
 	})
 }
 
-// leaseProbeRepo is the real repository, reporting each lease renewal and
+// leaseProbe is the real lease store, reporting each lease renewal and
 // detected-ports write the gateway's background goroutines finish. A test
 // waits on these instead of polling the database against a wall-clock bound:
 // on a loaded gate host one write can take seconds (a fresh pool connection
 // to a busy shared Postgres), and the renewer and the state worker run
 // independently, so polling also left the test unable to tell WHICH
 // heartbeat's write it was looking at.
-type leaseProbeRepo struct {
-	Repository
+type leaseProbe struct {
+	Attachments
 	renewed chan bool     // one per finished RenewDaemonAttachment: whether it re-created the row
-	ports   chan struct{} // one per finished UpdateDaemonAttachmentPorts
+	ports   chan struct{} // one per finished SetDaemonAttachmentPorts
 }
 
-func newLeaseProbeRepo(repo Repository) *leaseProbeRepo {
-	return &leaseProbeRepo{Repository: repo, renewed: make(chan bool, 64), ports: make(chan struct{}, 64)}
+func newLeaseProbe(leases Attachments) *leaseProbe {
+	return &leaseProbe{Attachments: leases, renewed: make(chan bool, 64), ports: make(chan struct{}, 64)}
 }
 
-func (r *leaseProbeRepo) RenewDaemonAttachment(ctx context.Context, att *db.DaemonAttachment) (bool, error) {
-	created, err := r.Repository.RenewDaemonAttachment(ctx, att)
+func (r *leaseProbe) RenewDaemonAttachment(ctx context.Context, att *core.DaemonAttachment) (bool, error) {
+	created, err := r.Attachments.RenewDaemonAttachment(ctx, att)
 	if err == nil {
 		r.renewed <- created
 	}
 	return created, err
 }
 
-func (r *leaseProbeRepo) UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error {
-	err := r.Repository.UpdateDaemonAttachmentPorts(ctx, daemonID, ports)
+func (r *leaseProbe) SetDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error {
+	err := r.Attachments.SetDaemonAttachmentPorts(ctx, daemonID, ports)
 	if err == nil {
 		r.ports <- struct{}{}
 	}
@@ -133,8 +134,9 @@ func TestHeartbeatOnALiveStreamRecreatesAReapedLease(t *testing.T) {
 	userID, daemonID := "lease-user", uuid.NewString()
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
 
-	probe := newLeaseProbeRepo(repo)
-	svc := newTestService(probe)
+	leases, _ := realLeases(repo)
+	probe := newLeaseProbe(leases)
+	svc := newTestServiceWithLeases(repo, probe, nil)
 	hub := &recordingUserHub{}
 	svc.deps.UserUpdateHub = hub
 	stream := newParkedStream()
@@ -204,30 +206,37 @@ func TestHeartbeatOnALiveStreamRecreatesAReapedLease(t *testing.T) {
 // lookup) until released, and records lease renewals as they happen.
 type leaseRecordingRepo struct {
 	Repository
+	Attachments
 
 	stateEntered chan struct{}
 	release      chan struct{}
 
 	mu       sync.Mutex
-	renewals []*db.DaemonAttachment
+	renewals []*core.DaemonAttachment
 }
 
 var _ Repository = (*leaseRecordingRepo)(nil)
 
-func (r *leaseRecordingRepo) GetProjectByPathAndUserInScope(context.Context, string, string, *core.OrgScope) (*db.Project, error) {
+func (r *leaseRecordingRepo) GetProjectByRemoteURLAndUserInScope(context.Context, string, string, *core.OrgScope) (*core.Project, error) {
+	return nil, nil
+}
+
+var _ ProjectLookups = (*leaseRecordingRepo)(nil)
+
+func (r *leaseRecordingRepo) GetProjectByPathAndUserInScope(context.Context, string, string, *core.OrgScope) (*core.Project, error) {
 	r.stateEntered <- struct{}{}
 	<-r.release
 	return nil, nil
 }
 
-func (r *leaseRecordingRepo) RenewDaemonAttachment(_ context.Context, att *db.DaemonAttachment) (bool, error) {
+func (r *leaseRecordingRepo) RenewDaemonAttachment(_ context.Context, att *core.DaemonAttachment) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.renewals = append(r.renewals, att)
 	return false, nil
 }
 
-func (r *leaseRecordingRepo) UpdateDaemonAttachmentPorts(context.Context, string, []uint32) error {
+func (r *leaseRecordingRepo) SetDaemonAttachmentPorts(context.Context, string, []uint32) error {
 	return nil
 }
 
@@ -242,7 +251,7 @@ func (r *leaseRecordingRepo) renewalCount() int {
 // it rode that FIFO, a backlog of slow writes aged a live stream's lease out.
 func TestLeaseRenewalIsNotQueuedBehindStatePersistence(t *testing.T) {
 	repo := &leaseRecordingRepo{stateEntered: make(chan struct{}, 1), release: make(chan struct{})}
-	svc := newTestService(repo)
+	svc := newTestServiceWithLeases(repo, repo, nil)
 	stream := newParkedStream()
 	conn := newTestConn("user-1", "daemon-1", stream)
 	runIncoming(t, svc, conn, stream)
@@ -279,8 +288,8 @@ func TestLeaseRenewalIsNotQueuedBehindStatePersistence(t *testing.T) {
 func TestSweeperReapsAStreamSilentInboundWhileTheGatewayKeepsSending(t *testing.T) {
 	// Teardown's lease release, without a database; the recorder keeps what
 	// was released.
-	repo := &MockRepository{ReleaseDaemonAttachmentFunc: func(context.Context, string, time.Time) error { return nil }}
-	svc := newTestService(repo)
+	repo := &MockAttachments{ReleaseDaemonAttachmentFunc: func(context.Context, string, time.Time) error { return nil }}
+	svc := newTestServiceWithLeases(&MockRepository{}, repo, nil)
 	t.Cleanup(svc.Close)
 
 	base := time.Date(2026, 10, 11, 12, 10, 0, 0, time.UTC)
@@ -331,7 +340,8 @@ func TestSweeperReapsAStreamSilentInboundWhileTheGatewayKeepsSending(t *testing.
 // so the daemon can tell a gateway that is consuming its stream from one that
 // has stopped. Before the first daemon heartbeat it acknowledges nothing (0).
 func TestServerHeartbeatAcknowledgesTheNewestDaemonHeartbeatRead(t *testing.T) {
-	svc := newTestService(&leaseRecordingRepo{stateEntered: make(chan struct{}, 1), release: make(chan struct{})})
+	rec := &leaseRecordingRepo{stateEntered: make(chan struct{}, 1), release: make(chan struct{})}
+	svc := newTestServiceWithLeases(rec, rec, nil)
 	stream := newParkedStream()
 	conn := newTestConn("user-1", "daemon-1", stream)
 
@@ -443,9 +453,10 @@ func leaseFixture(t *testing.T) (repo *db.Repo, rawDB *sql.DB, registry *daemon_
 func TestDaemonStaysActiveWhenTheOldReplicaTearsDownAfterAReconnect(t *testing.T) {
 	repo, _, registry, userID, daemonID := leaseFixture(t)
 
-	replicaA := newTestService(repo)
+	leases, models := realLeases(repo)
+	replicaA := newTestServiceWithLeases(repo, leases, models)
 	t.Cleanup(replicaA.Close)
-	replicaB := newTestService(repo)
+	replicaB := newTestServiceWithLeases(repo, leases, models)
 	t.Cleanup(replicaB.Close)
 
 	dialDaemon(t, replicaA, userID, daemonID)
@@ -472,7 +483,8 @@ func TestDaemonStaysActiveWhenTheOldReplicaTearsDownAfterAReconnect(t *testing.T
 func TestHeartbeatRestoresAMissingLeaseAndDisconnectIsStillPrompt(t *testing.T) {
 	repo, rawDB, registry, userID, daemonID := leaseFixture(t)
 
-	gateway := newTestService(repo)
+	leases, models := realLeases(repo)
+	gateway := newTestServiceWithLeases(repo, leases, models)
 	t.Cleanup(gateway.Close)
 	stream := dialDaemon(t, gateway, userID, daemonID)
 	require.Equal(t, reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE, registryStatus(t, registry, userID, daemonID))

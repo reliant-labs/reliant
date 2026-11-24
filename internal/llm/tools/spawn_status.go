@@ -82,6 +82,8 @@ type SpawnStatusResponseMetadata struct {
 type spawnStatusTool struct {
 	repo      spawnStatusStore
 	questions SpawnQuestions
+	tree      SpawnTree
+	backoff   providerBackoffReader
 	threads   *threads.Service
 }
 
@@ -152,7 +154,7 @@ Use spawn_send to message an agent that is still running.`
 
 // NewSpawnStatusTool builds the spawn_status tool.
 func NewSpawnStatusTool(deps SpawnStatusDeps) Tool {
-	return NewToolWrapper[SpawnStatusParams, ToolResponse](&spawnStatusTool{repo: deps.Store, questions: deps.Questions, threads: threads.NewService(deps.Store)})
+	return NewToolWrapper[SpawnStatusParams, ToolResponse](&spawnStatusTool{repo: deps.Store, questions: deps.Questions, tree: deps.Tree, backoff: deps.Backoff, threads: threads.New(threads.Deps{Repo: deps.Store})})
 }
 
 func (s *spawnStatusTool) Name() string {
@@ -168,7 +170,7 @@ func (s *spawnStatusTool) RequiresPermission(params SpawnStatusParams) (bool, er
 }
 
 func (s *spawnStatusTool) Execute(rctx *rctx.ToolContext, params SpawnStatusParams) (ToolResponse, error) {
-	if s.repo == nil || s.questions == nil {
+	if s.repo == nil || s.questions == nil || s.tree == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 	threadID := rctx.Thread
@@ -179,7 +181,7 @@ func (s *spawnStatusTool) Execute(rctx *rctx.ToolContext, params SpawnStatusPara
 	if params.AgentID == "" {
 		return s.listChildren(rctx, threadID, params.Status)
 	}
-	resolved, err := resolveSpawnAgentID(rctx, s.repo, threadID, params.AgentID)
+	resolved, err := resolveSpawnAgentID(rctx, s.tree, threadID, params.AgentID)
 	if err != nil {
 		return NewTextErrorResponse(err.Error()), nil
 	}
@@ -204,14 +206,14 @@ func (s *spawnStatusTool) listChildren(rctx *rctx.ToolContext, threadID, statusF
 	default:
 		return NewTextErrorResponse(fmt.Sprintf("status %q is not a listing filter: use \"running\", \"finished\", or omit it", statusFilter)), nil
 	}
-	children, err := s.repo.ListSpawnChildren(rctx.Context, threadID)
+	children, err := s.tree.ListSpawnChildren(rctx.Context, threadID)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to list spawned agents: %v", err)), nil
 	}
 	children = latestSpawnPerAgent(children)
 	// Inheritance is advisory context for a branch, never a reason to fail
 	// the listing of the caller's own children.
-	inherited, inhErr := s.repo.ListInheritedSpawnChildren(rctx.Context, threadID)
+	inherited, inhErr := s.tree.ListInheritedSpawnChildren(rctx.Context, threadID)
 	if inhErr != nil {
 		inherited = nil
 	}
@@ -311,14 +313,14 @@ func (s *spawnStatusTool) listChildren(rctx *rctx.ToolContext, threadID, statusF
 // the same thread, so without this an agent resumed twice was listed three
 // times. Calls whose child has not landed yet (no thread) are kept as they
 // are. Request order is preserved, by each agent's latest call.
-func latestSpawnPerAgent(children []*db.SpawnChild) []*db.SpawnChild {
+func latestSpawnPerAgent(children []*core.SpawnChild) []*core.SpawnChild {
 	latest := make(map[string]int, len(children))
 	for i, child := range children {
 		if child.ChildThreadID != nil {
 			latest[*child.ChildThreadID] = i
 		}
 	}
-	out := make([]*db.SpawnChild, 0, len(children))
+	out := make([]*core.SpawnChild, 0, len(children))
 	for i, child := range children {
 		if child.ChildThreadID != nil && latest[*child.ChildThreadID] != i {
 			continue
@@ -337,7 +339,7 @@ type spawnSignals struct {
 	approvalSignalAvailable bool
 	lastActivity            map[string]time.Time
 	// usageWaits holds the threads parked on a provider usage limit.
-	usageWaits map[string]db.ProviderBackoff
+	usageWaits map[string]core.ProviderBackoff
 }
 
 // loadSignals reads the gating and activity signals for one chat. Neither
@@ -363,8 +365,11 @@ func (s *spawnStatusTool) loadSignals(rctx *rctx.ToolContext, chatID string) *sp
 	if lastActivity, laErr := s.repo.LastThreadActivityByChat(rctx.Context, chatID); laErr == nil {
 		signals.lastActivity = lastActivity
 	}
-	if backoffs, bErr := s.repo.ProviderBackoffByChat(rctx.Context, chatID); bErr == nil {
-		signals.usageWaits = map[string]db.ProviderBackoff{}
+	if s.backoff == nil {
+		return signals
+	}
+	if backoffs, bErr := s.backoff.ProviderBackoffByChat(rctx.Context, chatID); bErr == nil {
+		signals.usageWaits = map[string]core.ProviderBackoff{}
 		for thread, b := range backoffs {
 			if b.Waiting() && b.IsUsageLimit() {
 				signals.usageWaits[thread] = b
@@ -376,7 +381,7 @@ func (s *spawnStatusTool) loadSignals(rctx *rctx.ToolContext, chatID string) *sp
 
 // describeChild renders one spawn call as a listing entry, and reports
 // whether the agent is still running.
-func (s *spawnStatusTool) describeChild(rctx *rctx.ToolContext, child *db.SpawnChild, signals *spawnSignals, now time.Time) (SpawnAgentInfo, bool) {
+func (s *spawnStatusTool) describeChild(rctx *rctx.ToolContext, child *core.SpawnChild, signals *spawnSignals, now time.Time) (SpawnAgentInfo, bool) {
 	info := SpawnAgentInfo{
 		Status: toolCallStatusLabel(child.ToolCallStatus),
 	}
@@ -429,7 +434,7 @@ func (s *spawnStatusTool) describeChild(rctx *rctx.ToolContext, child *db.SpawnC
 			info.Status = "waiting for usage limit"
 			info.WaitingUntil = wait.ResumeAt.UTC().Format(time.RFC3339)
 			info.WaitingFor = wait.Provider
-			info.WaitingProbing = wait.Reason == db.ReasonUsageLimitProbe
+			info.WaitingProbing = wait.Reason == core.ReasonUsageLimitProbe
 		}
 		if q, ok := signals.pendingQuestions[info.AgentID]; ok && q != nil {
 			info.GatedOnAgent = true
@@ -485,9 +490,9 @@ func (s *spawnStatusTool) singleAgent(rctx *rctx.ToolContext, threadID string, p
 	// status and latest answer — but not waited on. Waiting is how an
 	// orchestrator collects a result to act on, and the original
 	// conversation, which still receives that result, is its one owner.
-	var inherited *db.InheritedSpawnChild
-	if err := verifyIsOwnChild(rctx, s.repo, threadID, params.AgentID); err != nil {
-		inherited = findInheritedSpawnChild(rctx, s.repo, threadID, params.AgentID)
+	var inherited *core.InheritedSpawnChild
+	if err := verifyIsOwnChild(rctx, s.tree, threadID, params.AgentID); err != nil {
+		inherited = findInheritedSpawnChild(rctx, s.tree, threadID, params.AgentID)
 		if inherited == nil {
 			return NewTextErrorResponse(err.Error()), nil
 		}
@@ -664,7 +669,7 @@ func (s *spawnStatusTool) lastMessageSnapshot(rctx *rctx.ToolContext, params Spa
 	// the same persisted wait/activity signals as listing mode, including a
 	// provider wait before the first model response.
 	signals := s.loadSignals(rctx, thread.ChatID)
-	var wait db.ProviderBackoff
+	var wait core.ProviderBackoff
 	waiting := false
 	if !metadata.HasExited {
 		wait, waiting = signals.usageWaits[params.AgentID]
@@ -675,7 +680,7 @@ func (s *spawnStatusTool) lastMessageSnapshot(rctx *rctx.ToolContext, params Spa
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "=== %s: %s ===\n\n", params.AgentID, metadata.Status)
 	if waiting {
-		fmt.Fprintf(&sb, "Waiting: %s\n", usageWaitSentence(wait.Provider, wait.ResumeAt.UTC().Format(time.RFC3339), wait.Reason == db.ReasonUsageLimitProbe))
+		fmt.Fprintf(&sb, "Waiting: %s\n", usageWaitSentence(wait.Provider, wait.ResumeAt.UTC().Format(time.RFC3339), wait.Reason == core.ReasonUsageLimitProbe))
 	}
 	if last := signals.lastActivity[params.AgentID]; !last.IsZero() {
 		fmt.Fprintf(&sb, "Last activity: %s\n", last.UTC().Format(time.RFC3339))

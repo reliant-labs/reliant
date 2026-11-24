@@ -111,20 +111,28 @@ type workflowDraftLookup interface {
 // inheritedSpawnLookup is what findInheritedSpawnChild reads: the sub-agents
 // a thread inherited through a branch.
 type inheritedSpawnLookup interface {
-	ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*db.InheritedSpawnChild, error)
+	ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*core.InheritedSpawnChild, error)
 }
 
 // spawnChildLister is what verifyIsOwnChild and spawnStopRefForChild read: a
 // thread's own spawned children.
 type spawnChildLister interface {
-	ListSpawnChildren(ctx context.Context, threadID string) ([]*db.SpawnChild, error)
+	ListSpawnChildren(ctx context.Context, threadID string) ([]*core.SpawnChild, error)
 }
 
-// spawnRelationStore is what spawnSendRelationship reads to place a target
-// thread relative to the caller.
+// spawnRelationStore is what spawnSendRelationship reads, beside the spawn
+// tree, to place a target thread relative to the caller.
 type spawnRelationStore interface {
-	spawnChildLister
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
+}
+
+// SpawnTree reads who spawned whom: a thread's own spawned children and the
+// sub-agents it inherited by being a branch. store.ToolCallExtStore satisfies
+// it. The spawn tools take it beside their store, and none of its reads is
+// scoped to a caller: each tool passes its own thread id.
+type SpawnTree interface {
+	ListSpawnChildren(ctx context.Context, threadID string) ([]*core.SpawnChild, error)
+	ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*core.InheritedSpawnChild, error)
 }
 
 // startRunLineageReader is what agentStartRunDepth walks: the launch event
@@ -290,13 +298,16 @@ type generateVideoStore interface {
 // for the child's last assistant message.
 type spawnStatusStore interface {
 	threads.Repository
-	spawnChildLister
-	inheritedSpawnLookup
 	CountMessagesInThread(ctx context.Context, threadID string) (int, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	LastThreadActivityByChat(ctx context.Context, chatID string) (map[string]time.Time, error)
 	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
-	ProviderBackoffByChat(ctx context.Context, chatID string) (map[string]db.ProviderBackoff, error)
+}
+
+// providerBackoffReader reads a chat's provider backoff markers.
+// providerbackoff.Service satisfies it.
+type providerBackoffReader interface {
+	ProviderBackoffByChat(ctx context.Context, chatID string) (map[string]core.ProviderBackoff, error)
 }
 
 // SpawnQuestions is what spawn_status reads to say which agents are waiting on
@@ -312,19 +323,40 @@ type SpawnStatusDeps struct {
 	Store spawnStatusStore
 	// Questions reads the pending questions agents are parked on.
 	Questions SpawnQuestions
+	// Tree reads the caller's own and inherited sub-agents.
+	Tree SpawnTree
+	// Backoff reads the provider backoff markers agents are parked on.
+	Backoff providerBackoffReader
+}
+
+// SpawnSendDeps is what the spawn_send tool is built from.
+type SpawnSendDeps struct {
+	// Store reads threads and queues the message.
+	Store spawnSendStore
+	// Tree places the target relative to the caller.
+	Tree SpawnTree
+	// Notifier rings the recipient's doorbell; nil is no doorbell.
+	Notifier AgentMessageNotifier
+}
+
+// SpawnStopDeps is what the spawn_stop tool is built from.
+type SpawnStopDeps struct {
+	// Store reads the target thread.
+	Store spawnStopStore
+	// Tree resolves the caller's own children.
+	Tree SpawnTree
+	// Stopper requests the stop; nil is no way to stop anything.
+	Stopper SpawnStopper
 }
 
 // spawnSendStore is spawn_send's store.
 type spawnSendStore interface {
 	spawnRelationStore
-	inheritedSpawnLookup
 	EnqueueAgentMessage(ctx context.Context, msg *db.AgentMessage) error
 }
 
 // spawnStopStore is spawn_stop's store.
 type spawnStopStore interface {
-	spawnChildLister
-	inheritedSpawnLookup
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 }
 
@@ -349,15 +381,40 @@ type getRunStore interface {
 	threads.Repository
 	runCallerStore
 	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
-	// GetWorkflow reads the run's root workflow, which carries why it failed.
-	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
+}
+
+// RunWorkflows reads a run's root workflow, which carries why it failed
+// (get_run). store.WorkflowExtStore satisfies it.
+type RunWorkflows interface {
+	LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error)
+}
+
+// PlacementRecords reads the worktree, project and machine rows the worktree
+// and report_bug tools name. daemonplacement.Records satisfies it. It checks
+// no owner: each tool reads only the rows of the run it serves.
+type PlacementRecords interface {
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
+}
+
+// bugReportMachines is what report_bug reads about the machine a report came
+// from.
+type bugReportMachines interface {
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
+}
+
+// worktreeRecords is what the worktree tool reads besides its store: the
+// chat's project and a worktree row it archived.
+type worktreeRecords interface {
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	GetProject(ctx context.Context, id string) (*db.Project, error)
 }
 
 // bugReportLookup is what report_bug reads to say where a report came from.
 type bugReportLookup interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetLatestMessageInThread(ctx context.Context, threadID string) (*db.Message, error)
-	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
 	// ListFreshDaemonAttachmentsForUser names the build each of the user's
 	// attached daemons registered with: the daemon's own version, which is
@@ -442,12 +499,10 @@ type runScenarioStore interface {
 type worktreeStore interface {
 	workspacecreate.Store
 	repopkg.AdoptStore
-	GetProject(ctx context.Context, id string) (*db.Project, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
-	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 }
 
 // listPendingQuestionsStore is list_pending_questions' store: the open

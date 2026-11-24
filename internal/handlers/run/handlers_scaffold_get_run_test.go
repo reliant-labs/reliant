@@ -18,7 +18,7 @@ func TestGetRun_Generated(t *testing.T) {
 	t.Parallel()
 
 	// No run, session or project exists (emptyRunRepo).
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: emptyRunRepo()}))
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: emptyRunRepo(), Workflows: emptyRunWorkflows(), ChatRows: emptyChatRows(), ChatViews: emptyChatViews()}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetRunRequest, pb.GetRunResponse]{
 		{

@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	llmdrivers "github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -103,11 +104,16 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 			}
 			service := &Service{
 				deps: Deps{
-					Repo:      repo,
-					Questions: store.NewQuestionExtStore(repo.ORM()),
-					Temporal:  temporal,
+					Repo:        repo,
+					Workflows:   store.NewWorkflowExtStore(repo.ORM()),
+					Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
+					ProjectRows: store.NewProjectExtStore(repo.ORM()),
+					Questions:   store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+					Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+					AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
+					Temporal:      temporal,
 				},
-				runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: tc.pauseController}),
+				runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: tc.pauseController}),
 			}
 
 			_, err := service.SendMessage(ctx, sendWithUnknownModel(t, fx.chatID, "continue"))
@@ -143,7 +149,7 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 // availability falls back to "every configured provider serves".
 func connectOnlyAnthropic(t *testing.T, ctx context.Context, repo *db.Repo, userID string) {
 	t.Helper()
-	llmdrivers.InitializeAPIKeyProvider(repo)
+	llmdrivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	original := llmdrivers.AccountAvailabilityClient
 	llmdrivers.AccountAvailabilityClient = func(context.Context, models.DriverID, models.DriverConfig) (registry.Client, error) {
 		return nil, errors.New("no provider catalog in this test")

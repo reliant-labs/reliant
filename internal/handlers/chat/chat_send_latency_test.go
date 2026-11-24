@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -71,11 +72,16 @@ func TestSendMessage_DoesNotWaitOnASlowParamsQuery(t *testing.T) {
 	}}
 	service := &Service{
 		deps: Deps{
-			Repo:      repo,
-			Questions: store.NewQuestionExtStore(repo.ORM()),
-			Temporal:  temporal,
+			Repo:        repo,
+			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
+			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
+			ProjectRows: store.NewProjectExtStore(repo.ORM()),
+			Questions:   store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
+			Temporal:      temporal,
 		},
-		runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
+		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
 	// A backstop, so a regression fails instead of hanging the package.
@@ -146,7 +152,7 @@ func TestSendMessage_DoesNotReadTheWholeProjectConfigRow(t *testing.T) {
 			require.NoError(t, err)
 			// A synced record, as every project with a connected daemon has.
 			skills := `[{"name":"a-skill","body":"` + strings.Repeat("x", 64<<10) + `"}]`
-			require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+			require.NoError(t, store.UpsertProjectConfigRecord(ctx, repo.ORM(), &db.ProjectConfigRecord{
 				ProjectID: chat.ProjectID, DaemonID: "daemon-1", ProjectSkillsJSON: &skills,
 			}))
 
@@ -159,11 +165,16 @@ func TestSendMessage_DoesNotReadTheWholeProjectConfigRow(t *testing.T) {
 			}
 			service := &Service{
 				deps: Deps{
-					Repo:      repo,
-					Questions: store.NewQuestionExtStore(repo.ORM()),
-					Temporal:  temporal,
+					Repo:        repo,
+					Workflows:   store.NewWorkflowExtStore(repo.ORM()),
+					Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
+					ProjectRows: store.NewProjectExtStore(repo.ORM()),
+					Questions:   store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+					Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+					AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
+					Temporal:      temporal,
 				},
-				runs: runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
+				runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
 			}
 
 			req := sendMessageRequest(t, fx.chatID, "next step")

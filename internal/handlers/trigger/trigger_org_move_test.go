@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -54,15 +56,13 @@ func TestResumeAfterOrgMove(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			var asked bool
-			repo := &MockRepository{
-				GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
-					if tc.projectErr != nil {
-						return nil, tc.projectErr
-					}
-					require.Equal(t, "alice", userID, "decided as the trigger's owner")
-					return &db.Project{ID: id, UserID: userID}, nil
-				},
-			}
+			repo := projectaccesstest.Bound(&MockRepository{}, func(_ context.Context, id, userID string) (*db.Project, error) {
+				if tc.projectErr != nil {
+					return nil, tc.projectErr
+				}
+				require.Equal(t, "alice", userID, "decided as the trigger's owner")
+				return &db.Project{ID: id, UserID: userID}, nil
+			})
 			resumer := &MockOrgMoveResumer{
 				ResumePausedTriggerFunc: func(_ context.Context, id, reason string, seen time.Time) (bool, error) {
 					asked = true
@@ -71,7 +71,7 @@ func TestResumeAfterOrgMove(t *testing.T) {
 					return tc.pauseHeld, nil
 				},
 			}
-			svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, OrgMoves: resumer, OrgGitHubApps: tc.apps}))
+			svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), OrgMoves: resumer, OrgGitHubApps: tc.apps}))
 			resumed, why, err := svc.ResumeAfterOrgMove(context.Background(), tc.trigger)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, outcome{resumed: resumed, asked: asked}, "why: %s", why)
@@ -82,13 +82,13 @@ func TestResumeAfterOrgMove(t *testing.T) {
 	}
 
 	// An outage is an error, never a verdict: the move retries.
-	repo := &MockRepository{GetProjectWithUserCheckFunc: func(context.Context, string, string) (*db.Project, error) {
+	repo := projectaccesstest.Bound(&MockRepository{}, func(context.Context, string, string) (*db.Project, error) {
 		return &db.Project{ID: "p-1", UserID: "alice"}, nil
-	}}
+	})
 	down := &StubOrgGitHubApps{ListOrgGitHubInstallationsFunc: func(context.Context, string) ([]gitcredentialclient.OrgInstallation, error) {
 		return nil, errors.New("control-plane is down")
 	}}
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, OrgGitHubApps: down}))
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), OrgGitHubApps: down}))
 	_, _, err := svc.ResumeAfterOrgMove(context.Background(), movedTrigger(t, "acme", "4242"))
 	require.Error(t, err)
 
@@ -98,7 +98,7 @@ func TestResumeAfterOrgMove(t *testing.T) {
 	changed := &MockOrgMoveResumer{ResumePausedTriggerFunc: func(context.Context, string, string, time.Time) (bool, error) {
 		return false, core.ErrTriggerChangedSinceRead
 	}}
-	svc = NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, OrgMoves: changed}))
+	svc = NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), OrgMoves: changed}))
 	_, _, err = svc.ResumeAfterOrgMove(context.Background(), movedTrigger(t, "acme", ""))
 	require.ErrorIs(t, err, core.ErrTriggerChangedSinceRead)
 }

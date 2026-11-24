@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 	"go.temporal.io/api/workflowservice/v1"
@@ -13,6 +14,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
@@ -35,8 +37,28 @@ type Deps struct {
 	// is what the handlers call plus the roles of launch, threads, runs and
 	// the other callees they hand it to.
 	Repo Repository
+	// Backoff reads and releases the provider-backoff markers of the chats' runs.
+	Backoff Backoff
 	// Questions lists the chat's open questions (Questions, deps.go).
 	Questions Questions
+	// Spawns reads the spawn tree (Spawns, deps.go).
+	Spawns Spawns
+	// Selections stores each chat's composer selection (chatselection.Store;
+	// store.ChatSelectionExtStore satisfies it).
+	Selections chatselection.Store
+	// Mailbox queues messages for a thread and announces them (Mailbox,
+	// deps.go).
+	Mailbox Mailbox
+	// AgentMessages reads and removes mailbox rows (AgentMessages, deps.go).
+	AgentMessages AgentMessages
+	// Messages answers the send's idempotency checks (Messages, deps.go).
+	Messages Messages
+	// ToolBlocks reads tool-result blocks for the branch repair and
+	// GetToolResult (ToolBlocks, deps.go).
+	ToolBlocks ToolBlocks
+	// Senders titles the senders of the messages a read assembles
+	// (store.ThreadExtStore satisfies it).
+	Senders Senders
 	// Temporal starts, queries, signals and cancels chat runs.
 	Temporal Temporal
 	// Pause pauses and resumes runs. runs.Service drives it; the handlers
@@ -60,6 +82,13 @@ type Deps struct {
 	// lists ignore org_id.
 	// forge:optional-dep
 	Orgs OrgResolver
+
+	// Workflows, Worktrees and ProjectRows are the by-id reads the run
+	// lifecycle and the launcher make (store.WorkflowExtStore,
+	// WorktreeExtStore, ProjectExtStore).
+	Workflows   launch.WorkflowLoader
+	Worktrees   launch.WorktreeReader
+	ProjectRows launch.ProjectReader
 }
 
 // Temporal is the slice of the Temporal client the chat handlers use, and
@@ -81,6 +110,16 @@ type Router interface {
 	SendToolExecutionCancel(ctx context.Context, userID, requestID, reason string) error
 }
 
+// Backoff reads and releases the provider-backoff markers of a chat's runs.
+// providerbackoff.Service satisfies it.
+type Backoff interface {
+	// ClearUsageLimitWait releases a stopped run's markers (runs.UsageLimitWaits).
+	ClearUsageLimitWait(ctx context.Context, chatID, threadID string, now time.Time) error
+	// ListCapacityWakeTargets lists the root runs of a user's chats that may
+	// have a thread blocked on a provider (WakeUserChats).
+	ListCapacityWakeTargets(ctx context.Context, userID string) ([]string, error)
+}
+
 // validateDeps returns an error if any required Deps field is nil. The
 // gate runs once at construction so handlers need no per-RPC nil-checks.
 func (d Deps) validateDeps() error {
@@ -93,8 +132,32 @@ func (d Deps) validateDeps() error {
 	if d.Repo == nil {
 		return fmt.Errorf("chat: Deps.Repo is required")
 	}
+	if d.Backoff == nil {
+		return fmt.Errorf("chat: Deps.Backoff is required")
+	}
 	if d.Questions == nil {
 		return fmt.Errorf("chat: Deps.Questions is required")
+	}
+	if d.Spawns == nil {
+		return fmt.Errorf("chat: Deps.Spawns is required")
+	}
+	if d.Selections == nil {
+		return fmt.Errorf("chat: Deps.Selections is required")
+	}
+	if d.Mailbox == nil {
+		return fmt.Errorf("chat: Deps.Mailbox is required")
+	}
+	if d.AgentMessages == nil {
+		return fmt.Errorf("chat: Deps.AgentMessages is required")
+	}
+	if d.Messages == nil {
+		return fmt.Errorf("chat: Deps.Messages is required")
+	}
+	if d.ToolBlocks == nil {
+		return fmt.Errorf("chat: Deps.ToolBlocks is required")
+	}
+	if d.Senders == nil {
+		return fmt.Errorf("chat: Deps.Senders is required")
 	}
 	if d.Temporal == nil {
 		return fmt.Errorf("chat: Deps.Temporal is required")
@@ -135,12 +198,9 @@ func New(deps Deps) (*Service, error) {
 		return nil, err
 	}
 	return &Service{
-		deps: deps,
-		runs: runs.New(runs.Deps{Repo: deps.Repo, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause}),
-		threads: threads.NewService(deps.Repo,
-			threads.WithTemporalSignaler(deps.Temporal),
-			threads.WithToolCanceler(deps.Router),
-		),
+		deps:    deps,
+		runs:    runs.New(runs.Deps{Repo: deps.Repo, Workflows: deps.Workflows, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
+		threads: threads.New(threads.Deps{Repo: deps.Repo, Signaler: deps.Temporal, ToolCanceler: deps.Router}),
 	}, nil
 }
 
@@ -154,8 +214,7 @@ func New(deps Deps) (*Service, error) {
 // disagree.
 func (s *Service) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.NewLauncher(s.deps.Repo, threads.NewService(s.deps.Repo), s.deps.Temporal, s.runs, workflow.SharedTaskQueue,
-			launch.WithChatPinner(s.chatPinner()))
+		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Workflows: s.deps.Workflows, Worktrees: s.deps.Worktrees, ProjectRows: s.deps.ProjectRows, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
 	})
 	return s.launcherImpl
 }
@@ -171,6 +230,12 @@ func (s *Service) chatPinner() *daemonplacement.Pinner {
 		s.pinnerImpl = daemonplacement.NewPinner(s.deps.Repo, machines)
 	})
 	return s.pinnerImpl
+}
+
+// durable is the repository and spawn tree together, for the runtime's
+// *FromDurableState helpers.
+func (s *Service) durable() durableState {
+	return durableState{Repository: s.deps.Repo, Spawns: s.deps.Spawns}
 }
 
 // Name returns the service name for logging and registry.

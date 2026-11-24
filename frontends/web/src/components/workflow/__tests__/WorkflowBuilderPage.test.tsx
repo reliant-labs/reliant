@@ -32,11 +32,20 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../../hooks/workflow-queries", async (importActual) => ({
   ...(await importActual<typeof import("../../../hooks/workflow-queries")>()),
-  createWorkflowDraft: mocks.createWorkflowDraft,
   saveWorkflow: mocks.saveWorkflow,
   fetchWorkflow: mocks.fetchWorkflow,
   useWorkflowList: () => ({ data: { workflows: [], invalidWorkflows: [] } }),
 }));
+
+// Keep React Query's pending state and per-call callbacks: they are part of
+// the double-submit and navigation behavior these lifecycle tests exercise.
+vi.mock("../../../hooks/workflow-service-hooks_gen", async (importActual) => {
+  const { useMutation } = await import("@tanstack/react-query");
+  return {
+    ...(await importActual<typeof import("../../../hooks/workflow-service-hooks_gen")>()),
+    useCreateWorkflowDraft: () => useMutation({ mutationFn: mocks.createWorkflowDraft }),
+  };
+});
 
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { error: mocks.toastError, success: vi.fn(), info: vi.fn() }),
@@ -153,7 +162,7 @@ describe("New workflow", () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflow/triage-issues"));
     expect(mocks.createWorkflowDraft).toHaveBeenCalledTimes(1);
-    expect(mocks.createWorkflowDraft).toHaveBeenCalledWith("proj-1", { title: "Triage issues", template: undefined });
+    expect(mocks.createWorkflowDraft.mock.calls[0][0]).toEqual({ projectId: "proj-1", title: "Triage issues", template: undefined });
     expect(await screen.findByTestId("builder-workflow")).toHaveTextContent("triage-issues");
   });
 
@@ -166,7 +175,7 @@ describe("New workflow", () => {
     await userEvent.click(screen.getByRole("radio", { name: /Agent loop template/ }));
     await userEvent.click(screen.getByRole("button", { name: "Create workflow" }));
     await waitFor(() =>
-      expect(mocks.createWorkflowDraft).toHaveBeenCalledWith("proj-1", { title: "My agent", template: "builtin://agent" }),
+      expect(mocks.createWorkflowDraft.mock.calls[0]?.[0]).toEqual({ projectId: "proj-1", title: "My agent", template: "builtin://agent" }),
     );
   });
 });

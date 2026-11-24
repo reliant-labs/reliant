@@ -12,6 +12,7 @@ import { preloadGeistLatin } from "./vite-plugin-preload-fonts";
 import { securityTxt } from "./vite-plugin-security-txt";
 import { otelProxy } from "./vite-plugin-otel-proxy";
 import { demoBundleGuard, demoSubstitutes } from "./vite-plugin-demo-bundle";
+import { fixtureEntryGuard } from "./vite-plugin-fixture-entry-guard";
 
 // Get worktree name from the checkout root
 // When Vite runs, cwd is frontends/web, so the checkout is two levels up
@@ -214,9 +215,12 @@ const appConfig: ViteUserConfig = {
   // Latin file; see vite-plugin-preload-fonts.ts.
   // securityTxt (build-only) emits dist/.well-known/security.txt naming the
   // security and abuse contacts; see vite-plugin-security-txt.ts.
+  // fixtureEntryGuard (build-only) fails the build if fixture code
+  // (src/fixtures) reaches an app entry's static chunk graph: fixture mode is
+  // a lazy chunk config.js turns on; see vite-plugin-fixture-entry-guard.ts.
   // otelProxy and otelBrowserConfig (dev-only) are browser telemetry; see
   // "Browser telemetry" above.
-  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic(), forgeRuntimeConfig(), otelProxy({ upstream: OTEL_UPSTREAM, headersFile: process.env.FORGE_OTEL_HEADERS_FILE ?? "" }), otelBrowserConfig(), preloadGeistLatin(), securityTxt()],
+  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic(), forgeRuntimeConfig(), otelProxy({ upstream: OTEL_UPSTREAM, headersFile: process.env.FORGE_OTEL_HEADERS_FILE ?? "" }), otelBrowserConfig(), preloadGeistLatin(), securityTxt(), fixtureEntryGuard()],
   // Load .env files from the checkout root instead of frontends/web
   envDir: path.resolve(__dirname, "../.."),
   // Define global constants available in the app

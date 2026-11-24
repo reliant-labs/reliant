@@ -31,7 +31,7 @@ func (f *streakFixture) archiveState(chatID, status, outcome string, launchRun b
 		Outcome: outcome, LaunchRun: launchRun,
 	}
 	var out WorkflowStatusOutput
-	require.NoError(f.t, f.h.ExecuteActivity(NewWorkflowStatusActivity(f.h.Repo()).Execute, in, &out))
+	require.NoError(f.t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, in, &out))
 	chat, err := f.h.Repo().GetChat(ctx, chatID)
 	require.NoError(f.t, err)
 	return chat.State

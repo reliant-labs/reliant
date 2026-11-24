@@ -54,6 +54,8 @@ type APIHTTPRoutesDeps struct {
 	Auth *UserAuth
 	// Repo is the database. Required.
 	Repo APIHTTPRoutesStore
+	// Placement places the terminal websocket's terminal. Required.
+	Placement TerminalPlacement
 	// Router reaches the user's daemons: the terminal websocket and the
 	// connector MCP endpoint are a route to one. Required.
 	Router toolexec.DaemonRouter
@@ -78,8 +80,14 @@ type APIHTTPRoutesDeps struct {
 	// without it, connectors authenticate with `rlat_` connector
 	// credentials only and OAuth discovery is not advertised.
 	OAuthIssuers []string
+	// OAuthScopes are the scopes the connector endpoints advertise; empty
+	// advertises "openid".
+	OAuthScopes []string
 	// AuthorizationServer is the control plane that issues this
-	// deployment's rlat_ tokens; empty serves no CLI login discovery.
+	// deployment's rlat_ tokens; empty serves no CLI login discovery. Listed
+	// in OAuthIssuers too, the workspace connector also accepts the
+	// mcp:oauth tokens it issues to MCP clients, and the Reliant Forge
+	// connector its mcp:forge tokens.
 	AuthorizationServer string
 	// ControlPlaneURL wakes a suspended workspace for a connector request;
 	// empty reports it as one that cannot be started.
@@ -97,6 +105,29 @@ type APIHTTPRoutesDeps struct {
 	EnsureProjectForApp http.Handler
 }
 
+// TerminalPlacement is what the terminal websocket reads, besides the chat, to
+// place a terminal: its workspace, project, the project's installs and the
+// machine (daemonplacement.Records in production). It checks no owner: the
+// websocket checks each row against the caller.
+type TerminalPlacement interface {
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
+}
+
+// terminalCheckouts is the chat from Repo beside TerminalPlacement.
+type terminalCheckouts struct {
+	chats interface {
+		GetChat(ctx context.Context, id string) (*db.Chat, error)
+	}
+	TerminalPlacement
+}
+
+func (c terminalCheckouts) GetChat(ctx context.Context, id string) (*db.Chat, error) {
+	return c.chats.GetChat(ctx, id)
+}
+
 // APIHTTPRoutesStore is what the routes read from the database. The routes
 // only forward it: the attachment bytes to the attachment handler, the
 // working-directory classification to the terminal websocket, and the daemon
@@ -104,19 +135,16 @@ type APIHTTPRoutesDeps struct {
 type APIHTTPRoutesStore interface {
 	attachment.ContentReader
 	mcpserver.AttachmentReader
-	// The terminal websocket's checkouts and machine (terminal.WithTerminalCheckouts).
-	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	// GetChat is the terminal websocket's chat; with TerminalPlacement it
+	// is terminal.WithTerminalCheckouts.
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	GetProject(ctx context.Context, id string) (*db.Project, error)
-	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
-	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 }
 
 // NewAPIHTTPRoutes builds the routes; nothing is mounted until Register.
 func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
-	if deps.Auth == nil || deps.Repo == nil || deps.Router == nil || deps.OAuth == nil ||
+	if deps.Auth == nil || deps.Repo == nil || deps.Placement == nil || deps.Router == nil || deps.OAuth == nil ||
 		deps.Inbound == nil || deps.Grants == nil || deps.Tokens == nil {
-		return nil, fmt.Errorf("api http routes: Auth, Repo, Router, OAuth, Inbound, Grants and Tokens are required")
+		return nil, fmt.Errorf("api http routes: Auth, Repo, Placement, Router, OAuth, Inbound, Grants and Tokens are required")
 	}
 	settings := deps.Auth.Settings()
 
@@ -129,7 +157,7 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	// the listener's drain ends it (with a reconnect close code) when it
 	// begins.
 	handle("/api/v2/terminal/ws", serverkit.LongLived(
-		terminal.TerminalWSHandler(deps.Router, deps.Auth.Authenticator().TokenValidator(), terminal.WithTerminalCheckouts(deps.Repo))))
+		terminal.TerminalWSHandler(deps.Router, deps.Auth.Authenticator().TokenValidator(), terminal.WithTerminalCheckouts(terminalCheckouts{chats: deps.Repo, TerminalPlacement: deps.Placement}))))
 	// Range-capable byte serving for <video>; Connect GetAttachment is whole-blob.
 	handle(attachment.AttachmentContentPathPrefix, attachment.AttachmentContentHandler(deps.Repo, deps.Auth.AuthenticateHTTP))
 	deps.OAuth.Register(handle)
@@ -154,8 +182,18 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	// chain. Confinement is enforced daemon-side at command dispatch
 	// (internal/daemonpolicy); this route resolves the grant and terminates
 	// the protocol.
-	mountMCP, err := connectorMCPRoutes(deps.Repo, deps.Grants, deps.Router, deps.PublicURL, deps.OAuthIssuers,
-		connectorTokenValidator(settings), accesstokenclient.NewCachedIntrospector(deps.Tokens), deps.ControlPlaneURL)
+	oauthCfg := mcpserver.OAuthConfig{
+		PublicURL:            deps.PublicURL,
+		AuthorizationServers: deps.OAuthIssuers,
+		Scopes:               deps.OAuthScopes,
+		AccessTokenIssuer:    deps.AuthorizationServer,
+	}
+	// One cached introspector for both connectors: an `rlat_` bearer is
+	// introspected at the control plane once per cache window, whichever
+	// endpoint it reaches.
+	credentials := accesstokenclient.NewCachedIntrospector(deps.Tokens)
+	mountMCP, err := connectorMCPRoutes(deps.Repo, deps.Grants, deps.Router, oauthCfg,
+		connectorTokenValidator(settings), credentials, deps.ControlPlaneURL)
 	if err != nil {
 		return nil, fmt.Errorf("connector MCP endpoint: %w", err)
 	}
@@ -164,8 +202,8 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	// The Reliant Forge connector: forge's account tools (monitoring,
 	// releases, environments) for a signed-in person, at /forge/mcp beside
 	// the workspace endpoint, under a forge connector grant.
-	if mountForge := forgeMCPRoutes(deps.Grants, deps.PublicURL, deps.OAuthIssuers,
-		connectorTokenValidator(settings), deps.ControlPlaneURL); mountForge != nil {
+	if mountForge := forgeMCPRoutes(deps.Grants, oauthCfg,
+		connectorTokenValidator(settings), credentials, deps.ControlPlaneURL); mountForge != nil {
 		r.routes = append(r.routes, mountForge)
 	}
 
@@ -299,8 +337,7 @@ func connectorMCPRoutes(
 	database mcpserver.AttachmentReader,
 	grants connectorgrant.Store,
 	router toolexec.DaemonRouter,
-	publicURL string,
-	oauthIssuers []string,
+	oauthCfg mcpserver.OAuthConfig,
 	tokenValidator mcpserver.OAuthTokenValidator,
 	credentials mcpserver.CredentialIntrospector,
 	controlPlaneURL string,
@@ -329,11 +366,6 @@ func connectorMCPRoutes(
 	waker := mcpserver.NewPollingWaker(
 		mcpserver.NewAttachmentReadiness(database, resumer), slog.Default())
 
-	oauthCfg := mcpserver.OAuthConfig{
-		PublicURL:            publicURL,
-		AuthorizationServers: oauthIssuers,
-	}
-
 	handler, err := mcpserver.NewHTTPHandler(mcpserver.HTTPDeps{
 		Store:       grants,
 		Credentials: credentials,
@@ -346,7 +378,7 @@ func connectorMCPRoutes(
 		// Bindings answer "which connector does this application act
 		// through?", recorded at consent.
 		Bindings:       grants,
-		ConsentBaseURL: publicURL,
+		ConsentBaseURL: oauthCfg.PublicURL,
 	})
 	if err != nil {
 		return nil, err
@@ -391,23 +423,26 @@ func connectorMCPRoutes(
 // and a control plane (an OSS server has neither).
 func forgeMCPRoutes(
 	grants connectorgrant.Store,
-	publicURL string,
-	oauthIssuers []string,
+	oauthCfg mcpserver.OAuthConfig,
 	tokenValidator mcpserver.OAuthTokenValidator,
+	credentials mcpserver.CredentialIntrospector,
 	controlPlaneURL string,
 ) func(mux *http.ServeMux) {
-	oauthCfg := mcpserver.OAuthConfig{PublicURL: publicURL, AuthorizationServers: oauthIssuers}
 	if !oauthCfg.Enabled() || tokenValidator == nil || strings.TrimSpace(controlPlaneURL) == "" {
 		logging.Info("Reliant Forge MCP endpoint not mounted: it needs an OAuth authorization server and a control plane")
 		return nil
 	}
 	handler, err := mcpserver.NewForgeHTTPHandler(mcpserver.ForgeHTTPDeps{
-		Store:           grants,
-		TokenValidator:  tokenValidator,
+		Store:          grants,
+		TokenValidator: tokenValidator,
+		// An MCP client's mcp:forge access token for this endpoint is
+		// accepted only while the control plane is a listed authorization
+		// server (oauthCfg.AccessTokenIssuer in MCP_OAUTH_ISSUERS).
+		Credentials:     credentials,
 		Bindings:        grants,
 		OAuth:           oauthCfg,
 		ControlPlaneURL: controlPlaneURL,
-		ConsentBaseURL:  publicURL,
+		ConsentBaseURL:  oauthCfg.PublicURL,
 		Logger:          slog.Default(),
 	})
 	if err != nil {

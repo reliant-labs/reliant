@@ -10,10 +10,11 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/reliant-labs/reliant/internal/config"
-	"github.com/reliant-labs/reliant/internal/skills/catalog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/skills/catalog"
 )
 
 // skillTestEnv holds a pre-built in-memory skill slice and the tool under test.

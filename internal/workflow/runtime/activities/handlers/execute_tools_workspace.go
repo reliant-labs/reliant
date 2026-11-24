@@ -82,7 +82,7 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	if err != nil || chat.NoMachine || chat.ProjectID == "" {
 		return out
 	}
-	project, err := a.repo.GetProject(ctx, chat.ProjectID)
+	project, err := a.rows.GetProject(ctx, chat.ProjectID)
 	if err != nil || project == nil {
 		return out
 	}
@@ -94,7 +94,7 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	}
 	var worktree *db.Worktree
 	if worktreeID != nil && *worktreeID != "" {
-		if wt, err := a.repo.GetWorktree(ctx, *worktreeID); err == nil {
+		if wt, err := a.rows.GetWorktree(ctx, *worktreeID); err == nil {
 			worktree = wt
 		}
 	}
@@ -190,7 +190,7 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	// rebuilding a workspace from a guess at its layout is worse than
 	// falling back.
 	if inBranch && worktree.DeletedAt == nil && mainPath != "" && samePath(path, worktree.Path) {
-		if repos, err := a.repo.ListReposByProject(ctx, project.ID); err == nil {
+		if repos, err := a.rows.ListReposByProject(ctx, project.ID); err == nil {
 			req.Repair = true
 			req.WorktreeID = worktree.ID
 			req.Branch = worktree.Branch

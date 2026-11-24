@@ -17,9 +17,21 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 )
+
+// Approvals is what the approval sweep reads and writes: approvals nothing
+// waits on any more, and closed approvals whose chat feed still says pending
+// (approval_sweep.go). store.ApprovalExtStore reads them; approvalclose.Closer
+// closes and announces.
+type Approvals interface {
+	ListStaleApprovals(ctx context.Context, limit int) ([]store.StaleApproval, error)
+	ListUnannouncedApprovalResolutions(ctx context.Context, limit int) ([]*db.Approval, error)
+	ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error)
+	AnnounceApprovalResolution(ctx context.Context, a *db.Approval) error
+}
 
 // Questions reads a chat's open blocking questions: the progress watchdog
 // never terminates a run that is parked on one. store.QuestionExtStore
@@ -39,13 +51,27 @@ type Deps struct {
 	// Config holds the pass's thresholds; nil, or a zero field, is the
 	// DefaultConfig value.
 	Config *ReconcilerConfig
+	// Workflows reads a workflow row by id.
+	Workflows WorkflowLoader
+	// Daemons reads the daemon a backgrounded process runs on.
+	Daemons DaemonReader
+}
+
+// WorkflowLoader reads a workflow row by id. store.WorkflowExtStore
+// satisfies it.
+type WorkflowLoader interface {
+	LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error)
+}
+
+// DaemonReader reads a daemon row by id. store.DaemonExtStore satisfies it.
+type DaemonReader interface {
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 }
 
 // ReconcilerStore is everything a reconcile pass reads and writes.
 type ReconcilerStore interface {
 	// Workflow rows: the drift scan, CAS terminal transitions, and the
 	// checkpoint a terminal repair keeps or drops.
-	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	ListWorkflowsByStatus(ctx context.Context, status db.WorkflowStatus) ([]*db.Workflow, error)
 	ListWorkflowsByChat(ctx context.Context, chatID string) ([]*db.Workflow, error)
 	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus db.WorkflowStatus) (bool, error)
@@ -67,13 +93,6 @@ type ReconcilerStore interface {
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
 
-	// Approvals nothing waits on any more, and closed approvals whose chat
-	// feed still says pending (approval_sweep.go).
-	ListStaleApprovals(ctx context.Context, limit int) ([]db.StaleApproval, error)
-	ResolvePendingApproval(ctx context.Context, id string, status int32, reason, actionTaken string) (bool, error)
-	ListUnannouncedApprovalResolutions(ctx context.Context, limit int) ([]*db.Approval, error)
-	AnnounceApprovalResolution(ctx context.Context, a *db.Approval) error
-
 	// Stranded spawns, backgrounded processes and the tool-call rows they
 	// close.
 	ListStrandedSpawnToolCalls(ctx context.Context) ([]*db.ToolCall, error)
@@ -81,10 +100,6 @@ type ReconcilerStore interface {
 	ListBackgroundedProcessToolCalls(ctx context.Context) ([]*db.BackgroundedProcessCall, error)
 	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
-	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
-	// Which chats owning a still-running backgrounded process are held on a
-	// provider usage limit (reassertHeldRunWork).
-	ChatsHeldOnUsageLimit(ctx context.Context, chatIDs []string, since time.Time) ([]string, error)
 
 	// The agent-message mailbox.
 	EnqueueAgentMessageIfAbsent(ctx context.Context, msg *db.AgentMessage) (bool, error)

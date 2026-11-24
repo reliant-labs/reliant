@@ -28,6 +28,7 @@ import { useInboxCounts, useInboxProjectId } from "@/hooks/inbox-queries";
 import { useActivityStore } from "@/store/activityStore";
 
 import { SidebarRow } from "../Layout/sidebar/primitives";
+import { useShellCurrentProject } from "../Layout/sidebar/useShellCurrentProject";
 
 interface InboxNavItemProps {
   onOpen?: () => void;
@@ -56,7 +57,9 @@ export interface InboxBadgeState {
  * sidebar row, the mobile drawer row and the mobile menu button.
  */
 export function useInboxBadge(): InboxBadgeState {
-  const counts = useInboxCounts(useInboxProjectId());
+  // The project the Inbox page shows (the shell's), so the badge never counts
+  // every project while the page shows one, a cold /inbox included.
+  const counts = useInboxCounts(useInboxProjectId(useShellCurrentProject()?.id ?? null));
   // Selects the count, not the map: the map is replaced on every activity
   // change of every chat, and this hook backs a badge on every mobile screen
   // header as well as the drawer and the desktop sidebar. A number only

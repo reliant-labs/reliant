@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"connectrpc.com/connect"
@@ -26,6 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -50,11 +53,10 @@ func TestInboundTriggersFireEndToEnd(t *testing.T) {
 	temporalClient := startTriggerDevServer(t)
 	taskQueue := "trigger-inbound-e2e-" + uuid.NewString()
 
-	launcher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient,
-		runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(temporalClient, repo)}), taskQueue)
+	launcher := launch.New(launch.Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: temporalClient, Runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporalClient, Pause: v2workflow.NewPauseService(v2workflow.PauseServiceDeps{Temporal: temporalClient, Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM())})}), TaskQueue: launch.TaskQueue(taskQueue)})
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerEventFireWorkflow, workflow.RegisterOptions{Name: triggers.EventFireWorkflowName})
-	w.RegisterActivityWithOptions(triggers.NewEventFirer(repo, launcher).Fire, activity.RegisterOptions{Name: triggers.EventFireActivityName})
+	w.RegisterActivityWithOptions(triggers.NewEventFirer(triggers.NewStores(repo), launcher).Fire, activity.RegisterOptions{Name: triggers.EventFireActivityName})
 	w.RegisterWorkflowWithOptions(func(workflow.Context, any) error { return nil }, workflow.RegisterOptions{Name: v2workflow.WorkflowDynamic})
 	require.NoError(t, w.Start())
 	defer w.Stop()
@@ -62,17 +64,17 @@ func TestInboundTriggersFireEndToEnd(t *testing.T) {
 	provider := webhook.NewTestProvider("e2e-secret")
 	registry := webhook.NewRegistry()
 	require.NoError(t, registry.Register(provider))
-	intake := triggers.NewIntake(repo, temporalClient, taskQueue)
+	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue)
 	const publicURL = "https://hooks.example.com"
-	inbound := webhook.NewInbound(repo, intake, registry, nil, publicURL)
+	inbound := webhook.NewInbound(webhook.NewStores(repo), intake, registry, nil, publicURL)
 	mux := http.NewServeMux()
 	inbound.Register(func(p string, h http.Handler) { mux.Handle(p, h) })
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo,
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Projects: projectaccesstest.For(repo),
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake,
-	}))
+	})))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()
@@ -139,7 +141,7 @@ func TestInboundTriggersFireEndToEnd(t *testing.T) {
 		AuthKind: "none", Name: "test", ExternalAccountID: ptr.Of("acct-1"), Status: core.ConnectionStatusActive,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.Connections().CreateConnection(ctx, mine, nil,
+	require.NoError(t, db.TestConnections(t, repo).CreateConnection(ctx, mine, nil,
 		core.ConnectionEvent{ConnectionID: mine.ID, UserID: userID, Kind: core.ConnectionEventCreated, Actor: "user:" + userID}))
 	intDef := base("on issue")
 	intDef.Source = &reliantv1.TriggerDefinition_Integration{Integration: &reliantv1.IntegrationSource{

@@ -18,10 +18,32 @@ Where to look in code: `internal/telemetry/ai_attrs.go` (gen_ai and `forge.ai.*`
 names), `ai_spans.go` (node, agent turn, tool call), `run_scope.go` (the scope
 and the `reliant.chat.id` family), `run_exec_attrs.go` and `run_exec_span.go`,
 `ai_error_type.go` (the `error.type` vocabulary of the AI spans),
+`gateway_attrs.go` (the LLM gateway's call id on the `chat` span),
 `internal/llm/genai_span.go` and `genai_error_type.go` (the provider call), and
 `internal/workflow/runtime/run_telemetry.go` (the run's own span). #3286 adds
 `integration_attrs.go` and `integration_spans.go`; #3289 adds `trigger_attrs.go`
 and `internal/triggers/fire_span.go`.
+
+The four AI spans of a turn (`workflow.node`, `invoke_agent`, `chat`,
+`execute_tool`) are opened by forge's `pkg/observe/genai` starters (`StartNode`,
+`StartAgent`, `StartChat`, `StartTool`); Reliant's `StartNodeSpan`,
+`StartAgentTurn`, `llm.StartGenAISpan` and `StartToolCall` are thin wrappers that
+put the run scope into forge's scope (`genai.WithScope`) and add Reliant's own
+attributes. Their instrumentation scope is forge's
+(`github.com/reliant-labs/forge/pkg/observe/genai`). Every `gen_ai.*` and
+`forge.ai.*` constant in `ai_attrs.go` is an alias of forge's, so the names here
+and the ones forge's AI dashboards read cannot drift. The span tree of a scripted
+turn is pinned by `internal/llm/genai_span_tree_test.go` against
+`internal/llm/testdata/genai_span_tree.golden.json`: names, kinds, parents,
+attribute keys, events, links and statuses. A change there is a change to this
+contract.
+
+**Sampling.** The tracer provider `observability.Init` installs (forge's
+`observe.Setup`) wraps the `OTEL_TRACES_SAMPLER` sampler in forge's
+`genai.KeepSampler`: a span that starts with `gen_ai.operation.name` or any
+`forge.ai.*` attribute is always recorded and sampled, because token and cost
+totals are sums over them. Every other span is the base sampler's
+(`internal/observability/keep_sampler_test.go`).
 
 The spans go to Reliant's own ClickStack through `internal/observability` and
 only staff can query them today. Nothing here is exported to tenants yet; the
@@ -120,9 +142,9 @@ Four namespaces, and a name belongs to the first that fits.
 prefix. Where the convention has a name, use it.
 
 **`forge.ai.*`** is what the convention does not cover yet: the workflow, its
-nodes, the run, the tool's location and the cost. These are forge's names, spelled
-as forge's `pkg/observe/genai` declares them, and forge's built-in AI dashboards
-read them. Reuse them; never duplicate one under a Reliant name (no
+nodes, the run, the tool's location and the cost. These are forge's names:
+reliant's constants are aliases of forge's `pkg/observe/genai` ones, and forge's
+built-in AI dashboards read them. Reuse them; never duplicate one under a Reliant name (no
 `reliant.workflow.*` for what `forge.ai.workflow.*` already says). Reliant adds no
 new `forge.ai.*` name on its own: that namespace is forge's to extend.
 
@@ -132,11 +154,14 @@ new `forge.ai.*` name on its own: that namespace is forge's to extend.
 |---|---|---|
 | `reliant.chat.*` | `run_scope.go` | The chat. Today only `reliant.chat.id`. |
 | `reliant.run.*` | `run_exec_attrs.go` | A run node's command (`run.exec`). |
+| `reliant.gateway.*` | `gateway_attrs.go` | A model call routed through Reliant's LLM gateway. Today only `reliant.gateway.call_id`. |
 | `reliant.integration.*` | `integration_attrs.go` (#3286) | An integration call. |
 | `reliant.trigger.*` | `trigger_attrs.go` (#3289) | A trigger firing, and the join from a run back to it. |
 
 `reliant.cost_usd` and `reliant.model_id` and `reliant.tool_calls` on the `chat`
-span are older, flat `reliant.*` names, kept as they are.
+span are older, flat `reliant.*` names, kept as they are. forge reads
+`reliant.cost_usd` (`genai.AttrCostUSDReliant`) but never emits it, so Reliant
+adds it itself beside `forge.ai.cost.usd`.
 
 **Other OpenTelemetry conventions** are used when one fits and the value is safe:
 `error.type`, `process.exit.code`, `http.response.status_code`, `server.address`,
@@ -316,11 +341,12 @@ driver's HTTP spans are its children.
 | `gen_ai.operation.name` | string | `chat` |
 | `gen_ai.provider.name` | string | The driver family: `anthropic`, `openai`, `codex`, ... |
 | `gen_ai.request.model` | string | The model asked for. |
-| `gen_ai.request.stream` | bool | Whether the call streamed. |
+| `gen_ai.request.stream` | bool | Whether the call streamed. Always set: forge's `StartChat` records only `true`, and Reliant adds `false`. |
 | `reliant.model_id` | string | Reliant's own model id, when it has one. |
 | `GenAIAttributes()` | | The run scope, as above. |
 | `gen_ai.response.model` | string | The model that served it (the requested one when the provider did not say). |
 | `gen_ai.response.id` | string | The provider's request id. |
+| `reliant.gateway.call_id` | string | The LLM gateway's id for the call: LiteLLM's `x-litellm-call-id`, which control-plane's wallet ledger stores as the call's `provider_request_id`. Set only by the `reliant` driver, on every call the gateway answered, failed and streamed ones included; after retries it is the last answered attempt's. Never set on any other provider's call. It is the exact join to the gateway's billed cost; `gen_ai.response.id` is the upstream provider's id, a different value (`dev-docs/design/agent-analytics.md` §3.2, §4). |
 | `gen_ai.response.finish_reasons` | string[] | One value. |
 | `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens` | int | Token counts. |
 | `gen_ai.usage.cache_read.input_tokens`, `gen_ai.usage.cache_creation.input_tokens`, `gen_ai.usage.reasoning.output_tokens` | int | Set only when non-zero. |
@@ -331,7 +357,9 @@ driver's HTTP spans are its children.
 Span events: `gen_ai.first_token` (once per call, retries included: the span's
 start to it is the time to first token) and `gen_ai.retry_wait` with `attempt`,
 `http.response.status_code`, `reason` (a short code like `http_529`) and
-`delay_ms`.
+`delay_ms`. A retry with no HTTP status (`reason=connection_error`) has no
+`http.response.status_code`; before forge's `genai.RetryWait` it said `0`, and
+readers treat the two alike.
 
 ## `execute_tool <tool>`
 
@@ -578,7 +606,11 @@ must keep true:
   use: a read filters on both, and a span with no `org.id` is treated as not the
   chat's.
 - **Org coverage is audited**, with a test that opens each kind of span and asserts
-  `org.id`. The gaps below are what such an audit finds today.
+  `org.id`: `TestGenAISpanTree_EveryAISpanCarriesOrgID`
+  (`internal/llm/genai_span_tree_test.go`) for the node, agent turn, model call
+  and tool call, failed and cancelled ones included, and
+  `internal/workflow/runtime/run_telemetry_test.go` for the run span. The gaps
+  below are what such an audit finds today.
 
 ## Known gaps
 

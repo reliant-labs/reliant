@@ -22,7 +22,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/controlplane"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -34,19 +34,17 @@ type OrgUsage interface {
 	ListLLMOrgUsageDaily(ctx context.Context, orgID string, from, to time.Time) ([]*store.LlmOrgUsageDaily, error)
 }
 
-// AccountNames names the accounts a response groups by. *db.Repo satisfies
-// it: provider accounts are a sealed table that handlers never reach through
-// the store, so this stays on the facade until internal/credentials takes it
-// over.
-type AccountNames interface {
-	ProviderAccountNames(ctx context.Context, ids []string) (map[string]db.ProviderAccountName, error)
-}
-
 // ListPrices is the list price of each model, from control-plane
 // (LLMPriceInternalService: LiteLLM's model catalog). controlplane.Service
 // satisfies it.
 type ListPrices interface {
 	GetModelListPrices(ctx context.Context, refs []controlplane.ModelRef) ([]controlplane.ModelListPrice, time.Time, error)
+}
+
+// AccountNames names the provider accounts a usage response groups by; provideraccounts.Service
+// satisfies it.
+type AccountNames interface {
+	ProviderAccountNames(ctx context.Context, ids []string) (map[string]core.ProviderAccountName, error)
 }
 
 // Deps holds dependencies for the org_usage service. Composition
@@ -81,11 +79,11 @@ func (d Deps) validateDeps() error {
 	if d.Config == nil {
 		return fmt.Errorf("org_usage: Deps.Config is required")
 	}
-	if d.Accounts == nil {
-		return fmt.Errorf("org_usage: Deps.Accounts is required")
-	}
 	if d.Usage == nil {
 		return fmt.Errorf("org_usage: Deps.Usage is required")
+	}
+	if d.Accounts == nil {
+		return fmt.Errorf("org_usage: Deps.Accounts is required")
 	}
 	return nil
 }

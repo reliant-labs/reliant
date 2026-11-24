@@ -148,7 +148,7 @@ func (r *Reconciler) reconcileBackgroundedProcesses(ctx context.Context, stats *
 
 // settleOwnedProcesses closes the calls whose process ran on daemonID.
 func (r *Reconciler) settleOwnedProcesses(ctx context.Context, stats *passStats, daemons BackgroundProcessDaemons, userID, daemonID string, calls []*db.BackgroundedProcessCall) int {
-	row, err := r.repo.GetDaemon(ctx, daemonID)
+	row, err := r.daemons.GetDaemon(ctx, daemonID)
 	if svcerr.IsNotFound(err) {
 		// The daemon was deleted, and its processes with it.
 		closed := 0
@@ -441,16 +441,26 @@ type HeldRunActivity interface {
 	Activity(daemonID, userID, daemonType, reason string)
 }
 
-type heldRunActivityHolder struct{ pub HeldRunActivity }
+// UsageLimitHolds says which chats have a thread parked on a provider usage
+// limit. store.ProviderBackoffExtStore satisfies it.
+type UsageLimitHolds interface {
+	ListChatsHeldOnUsageLimit(ctx context.Context, chatIDs []string, since time.Time) ([]string, error)
+}
 
-// SetHeldRunActivity enables reassertHeldRunWork. Safe to call while the poll
-// loop runs.
-func (r *Reconciler) SetHeldRunActivity(pub HeldRunActivity) {
-	if pub == nil {
+type heldRunActivityHolder struct {
+	pub   HeldRunActivity
+	holds UsageLimitHolds
+}
+
+// SetHeldRunActivity enables reassertHeldRunWork: pub publishes the activity
+// of a machine whose held run still has background work, and holds says which
+// runs are held. Safe to call while the poll loop runs.
+func (r *Reconciler) SetHeldRunActivity(pub HeldRunActivity, holds UsageLimitHolds) {
+	if pub == nil || holds == nil {
 		r.heldRunActivity.Store(nil)
 		return
 	}
-	r.heldRunActivity.Store(&heldRunActivityHolder{pub: pub})
+	r.heldRunActivity.Store(&heldRunActivityHolder{pub: pub, holds: holds})
 }
 
 const (
@@ -493,7 +503,7 @@ func (r *Reconciler) reassertHeldRunWork(ctx context.Context, userID, daemonID, 
 	if len(chatIDs) == 0 {
 		return
 	}
-	held, err := r.repo.ChatsHeldOnUsageLimit(ctx, chatIDs, now.Add(-heldRunAwakeFor))
+	held, err := h.holds.ListChatsHeldOnUsageLimit(ctx, chatIDs, now.Add(-heldRunAwakeFor))
 	if err != nil {
 		logging.WarnContext(ctx, "[Reconciler] Could not read usage-limit holds; not keeping a held run's machine awake this pass",
 			"daemonID", daemonID, "error", err)

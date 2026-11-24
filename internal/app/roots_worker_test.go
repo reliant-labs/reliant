@@ -77,10 +77,11 @@ func TestWorkerReadiness(t *testing.T) {
 // The process-wide state is installed before anything could read it: the
 // config-only settings before every other node, the database-backed globals
 // (the LLM key provider, analytics, the error reporter) right after the
-// database they read.
+// database they read (analytics reads each consent through privacy, which is
+// built first for it).
 func TestWorkerInstallsProcessStateFirst(t *testing.T) {
 	names := PlanWorker().Names()
-	require.Equal(t, []string{"probe_listener", "integration_settings", "process_settings", "db_repo", "database", "process_runtime"}, names[:6])
+	require.Equal(t, []string{"probe_listener", "integration_settings", "process_settings", "db_repo", "database", "vault", "credentials_provideraccounts", "privacy", "process_runtime"}, names[:9])
 }
 
 // The worker's variants never reach another root: each is

@@ -54,7 +54,7 @@ func TestReconciler_RepairedRootTerminationEmitsOneFailedRunEvent(t *testing.T) 
 		},
 		historyEvents: makeTerminatedCloseEvent("Workflow history count exceeds limit."),
 	}
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
 
 	for pass := 0; pass < 3; pass++ {
 		_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
@@ -85,7 +85,7 @@ func TestReconciler_RepairedChildEmitsNoRunEvent(t *testing.T) {
 		},
 		historyEvents: makeTerminatedCloseEvent("terminated"),
 	}
-	reconciler := New(Deps{Store: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
+	reconciler := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig()})
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
 

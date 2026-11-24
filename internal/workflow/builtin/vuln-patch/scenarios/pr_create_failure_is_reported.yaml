@@ -29,3 +29,4 @@ expect:
   outcome: failed
   completed: [publish, pr, pr_failed]
   not_reached: [opened]
+  outputs: {result: failed, pr_url: ""}

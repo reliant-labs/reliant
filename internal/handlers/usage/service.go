@@ -11,7 +11,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -25,11 +25,10 @@ type Usage interface {
 	ListLLMUsageDetail(ctx context.Context, userID string, from, to time.Time) ([]*store.LLMUsageDetail, error)
 }
 
-// AccountNames labels an account breakdown. *db.Repo satisfies it: provider
-// accounts are a sealed table that handlers never reach through the store, so
-// this stays on the facade until internal/credentials takes it over.
+// AccountNames names the provider accounts a usage response groups by; provideraccounts.Service
+// satisfies it.
 type AccountNames interface {
-	ProviderAccountNames(ctx context.Context, ids []string) (map[string]db.ProviderAccountName, error)
+	ProviderAccountNames(ctx context.Context, ids []string) (map[string]core.ProviderAccountName, error)
 }
 
 // Deps holds dependencies for the usage service. Composition

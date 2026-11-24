@@ -58,7 +58,7 @@ func (s *Service) GetToolResult(
 // displays, or nil. A block written in the chat itself wins over one a branch
 // inherited (see chatBlockVisibility).
 func (s *Service) chatToolResultBlock(ctx context.Context, chatID, userID, toolCallID string) (*db.MessageContentBlock, error) {
-	blocks, err := s.deps.Repo.ListToolResultBlocks(ctx, toolCallID)
+	blocks, err := s.deps.ToolBlocks.ListToolBlocks(ctx, toolCallID, pb.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT)
 	if err != nil {
 		return nil, err
 	}

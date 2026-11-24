@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,7 +22,7 @@ func TestHostedHTTPActionTicketConcurrentIssueClaimsOnce(t *testing.T) {
 		go func(tkt core.HostedHTTPActionTicket) {
 			defer wg.Done()
 			tkt.ID = uuid.NewString()
-			ok, err := repo.CreateHostedHTTPActionTicket(ctx, tkt)
+			ok, err := store.CreateHostedHTTPActionTicket(ctx, repo.ORM(), tkt)
 			require.NoError(t, err)
 			if ok {
 				success.Add(1)
@@ -34,7 +35,7 @@ func TestHostedHTTPActionTicketConcurrentIssueClaimsOnce(t *testing.T) {
 	_, err := repo.ORM().Bun().NewRaw("UPDATE hosted_http_action_tickets SET created_at=CURRENT_TIMESTAMP-INTERVAL '1 minute',expires_at=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE workflow_id=?", ticket.WorkflowID).Exec(ctx)
 	require.NoError(t, err)
 	ticket.ID = uuid.NewString()
-	ok, err := repo.CreateHostedHTTPActionTicket(ctx, ticket)
+	ok, err := store.CreateHostedHTTPActionTicket(ctx, repo.ORM(), ticket)
 	require.NoError(t, err)
 	require.False(t, ok)
 }

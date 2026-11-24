@@ -13,6 +13,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A send the client named is saved under the client's id, and the primary key
@@ -167,20 +168,20 @@ func TestEnqueueAgentMessageOnce_TakenIDInsertsNothing(t *testing.T) {
 		}
 	}
 
-	inserted, err := repo.EnqueueAgentMessageOnce(ctx, row("first"))
+	inserted, err := store.EnqueueAgentMessageOnce(ctx, repo.ORM(), row("first"))
 	require.NoError(t, err)
 	require.True(t, inserted)
 
-	inserted, err = repo.EnqueueAgentMessageOnce(ctx, row("second"))
+	inserted, err = store.EnqueueAgentMessageOnce(ctx, repo.ORM(), row("second"))
 	require.NoError(t, err, "a taken id is an outcome, not an error")
 	assert.False(t, inserted)
 
-	got, err := repo.GetAgentMessage(ctx, id)
+	got, err := store.GetAgentMessage(ctx, repo.ORM(), id)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Equal(t, "first", got.Body, "the repeat must not overwrite the row")
 
-	missing, err := repo.GetAgentMessage(ctx, uuid.NewString())
+	missing, err := store.GetAgentMessage(ctx, repo.ORM(), uuid.NewString())
 	require.NoError(t, err)
 	assert.Nil(t, missing)
 }
@@ -205,7 +206,7 @@ func TestEnqueueAgentMessageOnce_ConcurrentCallsInsertOneRow(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			inserted[i], errs[i] = repo.EnqueueAgentMessageOnce(ctx, &AgentMessage{
+			inserted[i], errs[i] = store.EnqueueAgentMessageOnce(ctx, repo.ORM(), &AgentMessage{
 				ID: id, ChatID: chatID, FromThreadID: parentThreadID, ToThreadID: parentThreadID,
 				Kind: core.AgentMessageKindHumanMessage, Body: "race",
 				Status: core.AgentMessageStatusQueued, CreatedAt: time.Now().UTC(),
@@ -243,24 +244,30 @@ func TestDeleteUndeliveredAgentMessage_OnlyTouchesUndeliveredRows(t *testing.T) 
 		int32(core.AgentMessageStatusUndelivered), undeliveredID)
 	require.NoError(t, err)
 
-	deleted, err := repo.DeleteUndeliveredAgentMessage(ctx, queuedID, chatID)
+	deleted, err := store.DeleteUndeliveredAgentMessage(ctx, repo.ORM(), queuedID, chatID)
 	require.NoError(t, err)
 	assert.False(t, deleted, "a row that is still queued is not undelivered")
 
-	deleted, err = repo.DeleteUndeliveredAgentMessage(ctx, undeliveredID, "some-other-chat")
+	deleted, err = store.DeleteUndeliveredAgentMessage(ctx, repo.ORM(), undeliveredID, "some-other-chat")
 	require.NoError(t, err)
 	assert.False(t, deleted, "and a row is only removed from its own chat")
 
-	deleted, err = repo.DeleteUndeliveredAgentMessage(ctx, undeliveredID, chatID)
+	deleted, err = store.DeleteUndeliveredAgentMessage(ctx, repo.ORM(), undeliveredID, chatID)
 	require.NoError(t, err)
 	assert.True(t, deleted)
 
-	gone, err := repo.GetAgentMessage(ctx, undeliveredID)
+	gone, err := store.GetAgentMessage(ctx, repo.ORM(), undeliveredID)
 	require.NoError(t, err)
 	assert.Nil(t, gone)
-	kept, err := repo.GetAgentMessage(ctx, queuedID)
+	kept, err := store.GetAgentMessage(ctx, repo.ORM(), queuedID)
 	require.NoError(t, err)
 	assert.NotNil(t, kept)
+}
+
+func isLatestTurn(ctx context.Context, t *testing.T, repo *Repo, threadID, messageID string) (bool, error) {
+	t.Helper()
+	turn, err := store.LatestTurnInThread(ctx, repo.ORM(), threadID)
+	return turn != nil && turn.ID == messageID, err
 }
 
 func TestIsLatestTurnInThread(t *testing.T) {
@@ -279,19 +286,19 @@ func TestIsLatestTurnInThread(t *testing.T) {
 	first, err := repo.SaveMessageToThread(ctx, chatID, chatID, user, "question", nil, nil, nil)
 	require.NoError(t, err)
 
-	latest, err := repo.IsLatestTurnInThread(ctx, chatID, first.ID)
+	latest, err := isLatestTurn(ctx, t, repo, chatID, first.ID)
 	require.NoError(t, err)
 	assert.True(t, latest, "nothing follows the message")
 
 	_, err = repo.SaveMessageToThread(ctx, chatID, chatID, system, "a note about the run", nil, nil, nil)
 	require.NoError(t, err)
-	latest, err = repo.IsLatestTurnInThread(ctx, chatID, first.ID)
+	latest, err = isLatestTurn(ctx, t, repo, chatID, first.ID)
 	require.NoError(t, err)
 	assert.True(t, latest, "a system note is not a turn, so it does not make the message look answered")
 
 	_, err = repo.SaveMessageToThread(ctx, chatID, chatID, assistant, "answer", nil, nil, nil)
 	require.NoError(t, err)
-	latest, err = repo.IsLatestTurnInThread(ctx, chatID, first.ID)
+	latest, err = isLatestTurn(ctx, t, repo, chatID, first.ID)
 	require.NoError(t, err)
 	assert.False(t, latest, "a reply follows it")
 }

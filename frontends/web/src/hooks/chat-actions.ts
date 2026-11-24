@@ -159,6 +159,7 @@ export async function startChat(request: StartChatRequest & { builder_test?: boo
     builderTest: request.builder_test || undefined,
     clientMessageId: request.client_message_id,
     appName: request.app_name || undefined,
+    attachedProjectIds: request.attached_project_ids ?? [],
   });
   return chatOf(response);
 }
@@ -256,16 +257,6 @@ export async function resumeChat(chatId: string): Promise<{
     needs_recovery: response.needsRecovery,
     recovery_type: response.recoveryType,
   };
-}
-
-/**
- * "Retry now" on a run held until a provider's usage limit resets. Resolves to
- * whether a waiting run was woken. `useModel` ("<model>@<driver>") answers the
- * wait with a cross-provider fallback instead, until the original reset.
- */
-export async function retryUsageLimitWait(chatId: string, useModel?: string): Promise<boolean> {
-  const response = await client.retryUsageLimitWait({ chatId, useModel });
-  return response.woken;
 }
 
 /** Dismiss a chat's unread state. */

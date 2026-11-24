@@ -8,14 +8,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // prodOverflowError is the refusal that ended two sub-agents in prod on
@@ -124,7 +125,7 @@ func TestGenerateCompactionSummary_RecoversFromContextOverflow(t *testing.T) {
 	t.Parallel()
 
 	driver := &overflowingSummarizer{refusals: 1, err: errors.New(prodOverflowError)}
-	compact := NewCompactActivity(nil, driver.resolver())
+	compact := NewCompactActivity(CompactDeps{DriverResolver: driver.resolver()})
 
 	summary, err := compact.generateCompactionSummary(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, "", "", types.FailoverPolicy{}, longConversation(), nil)
 	require.NoError(t, err, "a summarizer that refuses the history as too long must not fail the compaction")
@@ -142,7 +143,7 @@ func TestGenerateCompactionSummary_GivesUpAfterBoundedRetries(t *testing.T) {
 	t.Parallel()
 
 	driver := &overflowingSummarizer{refusals: 100, err: errors.New(prodOverflowError)}
-	compact := NewCompactActivity(nil, driver.resolver())
+	compact := NewCompactActivity(CompactDeps{DriverResolver: driver.resolver()})
 
 	_, err := compact.generateCompactionSummary(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, "", "", types.FailoverPolicy{}, longConversation(), nil)
 	require.Error(t, err)
@@ -156,7 +157,7 @@ func TestGenerateCompactionSummary_DoesNotRetryOtherFailures(t *testing.T) {
 	t.Parallel()
 
 	driver := &overflowingSummarizer{refusals: 100, err: errors.New("400 Bad Request: invalid model")}
-	compact := NewCompactActivity(nil, driver.resolver())
+	compact := NewCompactActivity(CompactDeps{DriverResolver: driver.resolver()})
 
 	_, err := compact.generateCompactionSummary(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, "", "", types.FailoverPolicy{}, longConversation(), nil)
 	require.Error(t, err)

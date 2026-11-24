@@ -8,7 +8,6 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -78,7 +77,7 @@ func (s *Service) DeleteAccount(
 		resp.RefundOwedCents = result.RefundOwedCents
 	}
 
-	deleted, err := accountpurge.Purge(ctx, s.deps.SQL, userID)
+	deleted, err := s.deps.Purger.Purge(ctx, userID)
 	if err != nil {
 		// The purge is transactional: a failure changed nothing, so the client
 		// can safely retry.

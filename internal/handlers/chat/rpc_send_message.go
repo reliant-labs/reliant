@@ -288,7 +288,7 @@ func (s *Service) sendQueuesBehindMailbox(ctx context.Context, prior *priorSend,
 		// where it put it.
 		return prior.mailbox != nil, nil
 	}
-	queued, err := s.deps.Repo.CountQueuedAgentMessagesForThread(ctx, thread)
+	queued, err := s.deps.AgentMessages.CountQueuedAgentMessagesForThread(ctx, thread)
 	if err != nil {
 		return false, fmt.Errorf("count queued mailbox rows for %s: %w", thread, err)
 	}
@@ -657,7 +657,7 @@ func (s *Service) SendMessage(
 						"workflowID", workflowID, "chatID", req.Msg.ChatId)
 					// The paused run was lost (infra failure, not user
 					// intent) — start a new run that resumes at position.
-					resumeInput = v2.ResumeInputFromDurableState(ctx, s.deps.Repo, req.Msg.ChatId, workflowID)
+					resumeInput = v2.ResumeInputFromDurableState(ctx, s.durable(), req.Msg.ChatId, workflowID)
 					resumeThread = existingWorkflow.Thread
 					// The message is saved or queued already; the new run
 					// reads it, queued ones at its first call_llm.
@@ -813,7 +813,7 @@ func (s *Service) SendMessage(
 					// at graph entry (reliant #2394). Withdraw the row and say
 					// it was not delivered, so the composer keeps the text.
 					if recipient.routed && !recipient.rootReads {
-						if _, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, queuedMsg.ID, chat.ID); err != nil {
+						if _, err := s.deps.AgentMessages.CancelQueuedAgentMessage(ctx, queuedMsg.ID, chat.ID); err != nil {
 							logging.WarnContext(ctx, "Could not withdraw a message whose run ended before it was read",
 								"error", err, "chatID", req.Msg.ChatId, "messageID", queuedMsg.ID)
 						}
@@ -954,7 +954,7 @@ func (s *Service) SendMessage(
 					// resolved and messages saved — fall through to coarse restart.
 					resumeMessagesSaved = true
 					resumePresavedMessageID = presavedID
-					resumeInput = v2.ResumeInputFromDurableState(ctx, s.deps.Repo, req.Msg.ChatId, workflowID)
+					resumeInput = v2.ResumeInputFromDurableState(ctx, s.durable(), req.Msg.ChatId, workflowID)
 					resumeThread = existingWorkflow.Thread
 					break
 				}
@@ -1029,7 +1029,7 @@ func (s *Service) SendMessage(
 				// checkpointed node instead of graph entry, so entry routers never
 				// re-classify the user's "continue" message. Used when there is no
 				// replayable history (ghost) or the reset guard gave up.
-				resumeInput = v2.ResumeInputFromDurableState(ctx, s.deps.Repo, req.Msg.ChatId, workflowID)
+				resumeInput = v2.ResumeInputFromDurableState(ctx, s.durable(), req.Msg.ChatId, workflowID)
 				resumeThread = existingWorkflow.Thread
 				// A message not yet written lands behind the thread's mailbox,
 				// as the reset-and-replay above does. It is written by the

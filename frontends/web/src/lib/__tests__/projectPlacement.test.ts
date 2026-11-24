@@ -10,6 +10,7 @@ import {
   preferredDaemonIds,
   projectPlacement,
   sectionMachines,
+  setUpPathOn,
   startBlockedReason,
 } from "../projectPlacement";
 
@@ -71,6 +72,48 @@ describe("startBlockedReason", () => {
     expect(reason("cicd")).toBe("temp isn't set up on cicd. Set it up there, or pick a machine it's on.");
     expect(reason("gpu")).toBe("Setting up temp on gpu. You can send once it's there.");
     expect(reason("old")).toBe("Setting up temp on old failed. Try again, or pick a machine it's on.");
+  });
+
+  it("names the machine's reason for a failed clone", () => {
+    const failed = projectPlacement(
+      [{ ...row("cp", "ovh", ProjectInstallState.FAILED), install_error: "failed to create directory: mkdir /Users: permission denied" }],
+      "cp",
+    );
+    expect(failed.failureOn("ovh")).toBe("failed to create directory: mkdir /Users: permission denied");
+    expect(
+      startBlockedReason({ placement: failed, daemonId: "ovh", projectName: "control-plane", machineName: "ovh-build-1" }),
+    ).toBe(
+      "Setting up control-plane on ovh-build-1 failed: failed to create directory: mkdir /Users: permission denied. Try again, or pick a machine it's on.",
+    );
+  });
+});
+
+describe("setUpPathOn", () => {
+  const macPath = "/Users/owner/src/reliant-labs/control-plane";
+  const platforms: Record<string, string> = { mac1: "darwin", mac2: "darwin", ovh: "linux", box: "linux", odd: "" };
+  const platformOf = (id: string) => platforms[id];
+  const installed = (daemon: string, path: string) => ({ ...row("cp", daemon, ProjectInstallState.INSTALLED), path });
+  const pathOn = (daemonId: string, rows: ReturnType<typeof installed>[], path: string | undefined = macPath) =>
+    setUpPathOn({ installs: rows, projectId: "cp", path, daemonId, platformOf });
+
+  it("does not send a Mac's folder to a Linux machine (2026-11-23: mkdir /Users: permission denied)", () => {
+    const rows = [installed("mac1", macPath), { ...row("cp", "ovh", ProjectInstallState.FAILED), path: macPath }];
+    expect(pathOn("ovh", rows)).toBeUndefined();
+  });
+
+  it("keeps the project's folder on a machine of the same platform", () => {
+    expect(pathOn("mac2", [installed("mac1", macPath)])).toBe(macPath);
+  });
+
+  it("uses where a machine of the target's platform has the checkout", () => {
+    expect(pathOn("ovh", [installed("mac1", macPath), installed("box", "/home/me/cp")])).toBe("/home/me/cp");
+  });
+
+  it("keeps the project's folder when there is nothing to judge by", () => {
+    expect(pathOn("ovh", [])).toBe(macPath);
+    expect(pathOn("odd", [installed("mac1", macPath)])).toBe(macPath);
+    expect(pathOn("ovh", [installed("odd", macPath)])).toBe(macPath);
+    expect(pathOn("ovh", [], "  ")).toBeUndefined();
   });
 });
 

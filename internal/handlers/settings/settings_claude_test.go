@@ -15,8 +15,8 @@ import (
 // method the code under test starts calling answers the mock's "Func not set" error rather than a
 // silent zero value. No database: the question under test is purely how stored account state is
 // read.
-func accountsRepo(accounts []core.ProviderAccount) *MockRepository {
-	return &MockRepository{
+func accountsRepo(accounts []core.ProviderAccount) *MockAccounts {
+	return &MockAccounts{
 		ListProviderAccountsFunc: func(context.Context, string) ([]core.ProviderAccount, error) {
 			return accounts, nil
 		},
@@ -35,7 +35,7 @@ func claudeAccount(needsReauth bool) core.ProviderAccount {
 
 func claudeStatus(t *testing.T, accounts ...core.ProviderAccount) *reliantv1.ProviderStatus {
 	t.Helper()
-	svc := newTestService(t, Deps{Repo: accountsRepo(accounts)})
+	svc := newTestService(t, Deps{Accounts: accountsRepo(accounts)})
 	resp, err := svc.GetProviderStatuses(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.GetProviderStatusesRequest{}))
 	require.NoError(t, err)
 	return findProviderStatus(t, resp.Msg.Providers, "claude")
@@ -67,7 +67,7 @@ func TestSettingsService_GetProviderStatuses_ClaudeIsConnectedUntilARefreshFails
 func TestSettingsService_ValidateProviderAPIKey_ClaudeMatchesConfiguredSemantics(t *testing.T) {
 	validate := func(t *testing.T, accounts ...core.ProviderAccount) *reliantv1.ValidateProviderAPIKeyResponse {
 		t.Helper()
-		svc := newTestService(t, Deps{Repo: accountsRepo(accounts)})
+		svc := newTestService(t, Deps{Accounts: accountsRepo(accounts)})
 		resp, err := svc.ValidateProviderAPIKey(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.ValidateProviderAPIKeyRequest{
 			Provider: "claude",
 		}))

@@ -7,7 +7,7 @@
 
 import { consolePath, withSearch } from "../../Console/paths";
 import { FIXTURE_PROJECT } from "../../Observability/__fixtures__/fixtureApi";
-import { DEMO_INCIDENT } from "../demoData/shopStory";
+import { DEMO_INCIDENT } from "@/fixtures/shop/shopStory";
 
 const at = (page: Parameters<typeof consolePath>[1], search?: Record<string, unknown>) => withSearch(consolePath(FIXTURE_PROJECT, page), search);
 

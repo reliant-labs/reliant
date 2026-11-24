@@ -25,7 +25,7 @@ import { trackEvent } from "@/lib/analytics";
 import { FIXTURE_PROJECT } from "../../Observability/__fixtures__/fixtureApi";
 import { MiniWaterfall } from "../../Observability/Leads/MiniWaterfall";
 import { DeployYoursButton } from "../DemoCta";
-import { DEMO_INCIDENT, RUNNING } from "../demoData/shopStory";
+import { DEMO_INCIDENT, RUNNING } from "@/fixtures/shop/shopStory";
 import { demoSectionHref, DEMO_SECTION_BUILT, DEMO_SECTION_RELEASES } from "../demoPath";
 import { TOUR_START } from "../DemoScreenActions";
 import { AgentWorkflowList, ChatWithAgentCard } from "./AgentCards";

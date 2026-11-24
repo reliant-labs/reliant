@@ -144,6 +144,7 @@ func NewOrgProviderAccountServiceClient(httpClient connect.HTTPClient, baseURL s
 			httpClient,
 			baseURL+OrgProviderAccountServiceListOrgProviderAccountsProcedure,
 			connect.WithSchema(orgProviderAccountServiceMethods.ByName("ListOrgProviderAccounts")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		addOrgProviderAPIKey: connect.NewClient[v1.AddOrgProviderAPIKeyRequest, v1.AddOrgProviderAPIKeyResponse](
@@ -186,6 +187,7 @@ func NewOrgProviderAccountServiceClient(httpClient connect.HTTPClient, baseURL s
 			httpClient,
 			baseURL+OrgProviderAccountServiceListOrgProviderWorkspacesProcedure,
 			connect.WithSchema(orgProviderAccountServiceMethods.ByName("ListOrgProviderWorkspaces")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		bindOrgProviderWorkspace: connect.NewClient[v1.BindOrgProviderWorkspaceRequest, v1.BindOrgProviderWorkspaceResponse](
@@ -350,6 +352,7 @@ func NewOrgProviderAccountServiceHandler(svc OrgProviderAccountServiceHandler, o
 		OrgProviderAccountServiceListOrgProviderAccountsProcedure,
 		svc.ListOrgProviderAccounts,
 		connect.WithSchema(orgProviderAccountServiceMethods.ByName("ListOrgProviderAccounts")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	orgProviderAccountServiceAddOrgProviderAPIKeyHandler := connect.NewUnaryHandler(
@@ -392,6 +395,7 @@ func NewOrgProviderAccountServiceHandler(svc OrgProviderAccountServiceHandler, o
 		OrgProviderAccountServiceListOrgProviderWorkspacesProcedure,
 		svc.ListOrgProviderWorkspaces,
 		connect.WithSchema(orgProviderAccountServiceMethods.ByName("ListOrgProviderWorkspaces")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	orgProviderAccountServiceBindOrgProviderWorkspaceHandler := connect.NewUnaryHandler(

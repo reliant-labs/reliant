@@ -80,8 +80,8 @@ func TransitionChatOnCompletion(ctx context.Context, repo ChatTransitioner, chat
 // `transition_to` field. Any load/parse failure is a logged no-op ("") —
 // transition is best-effort relative to completion and must never wedge the
 // status write.
-func loadTransitionTarget(ctx context.Context, repo LoadWorkflowStore, chatID, completedWorkflowName string) string {
-	loader := NewLoadWorkflowActivity(repo)
+func loadTransitionTarget(ctx context.Context, repo ChatTransitioner, chatID, completedWorkflowName string) string {
+	loader := NewLoadWorkflowActivity(repo, repo)
 
 	// Builtins resolve from the embedded FS and need no chat/project context;
 	// only custom workflows require resolving user/project to locate the draft.

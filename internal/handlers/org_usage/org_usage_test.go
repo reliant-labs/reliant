@@ -19,8 +19,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/org_usage"
+	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -102,7 +104,7 @@ func newEnv(t *testing.T) *env {
 	e := &env{t: t, repo: repo, dir: &directory{grants: map[string]map[string][]string{}}, prices: &listPrices{}}
 	e.svc = org_usage.NewTestOrgUsage(t, org_usage.WithOrgUsageDeps(org_usage.Deps{
 		Usage:    store.NewLlmOrgUsageDailyExtStore(repo.ORM()),
-		Accounts: repo,
+		Accounts: accountNames(t, repo),
 		Prices:   e.prices,
 		Now:      func() time.Time { return now },
 	}))
@@ -138,7 +140,7 @@ func (e *env) record(c call) {
 	if c.funding == "org_seat" {
 		mode = store.LLMAuthModeSubscription
 	}
-	_, err := e.repo.RecordLLMCallUsage(context.Background(), db.LLMCallUsage{
+	_, err := llmusagetest.New(e.t, e.repo).RecordLLMCallUsage(context.Background(), db.LLMCallUsage{
 		ID: fmt.Sprintf("act-%d", e.seq), UserID: c.user, OrgID: c.org, ChatID: "chat", Provider: c.provider, Model: c.model,
 		AuthMode: mode, Purpose: store.LLMPurposeChat, InputTokens: c.in, OutputTokens: c.out, Outcome: store.LLMOutcomeSuccess,
 		Attempt: 1, CreatedAt: c.at, AccountID: c.account, Funding: c.funding, FundingOrgID: c.fundingOrg,
@@ -379,7 +381,7 @@ func TestGetOrgLLMUsage_InvalidRateIsUnpriced(t *testing.T) {
 	e := newEnv(t)
 	e.record(call{user: "ada", org: "org-a", provider: "anthropic", model: "claude-sonnet-4-5", funding: "org_key", fundingOrg: "org-a", account: "acct-acme-key", in: 1000, out: 10})
 	e.svc = org_usage.NewTestOrgUsage(t, org_usage.WithOrgUsageDeps(org_usage.Deps{
-		Usage: store.NewLlmOrgUsageDailyExtStore(e.repo.ORM()), Accounts: e.repo, Now: func() time.Time { return now },
+		Usage: store.NewLlmOrgUsageDailyExtStore(e.repo.ORM()), Accounts: accountNames(t, e.repo), Now: func() time.Time { return now },
 		Prices: negativePrices{},
 	}))
 	got, err := e.read(e.asPerson("ada"), "org-a", pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_DAY)
@@ -396,4 +398,12 @@ func (negativePrices) GetModelListPrices(_ context.Context, refs []controlplane.
 		out[i] = controlplane.ModelListPrice{Ref: r, Priced: true, InputNanosPerMTok: -3e9, OutputNanosPerMTok: 15e9}
 	}
 	return out, now, nil
+}
+
+// accountNames is the real provider-account store over repo's database, as composition wires it.
+func accountNames(t *testing.T, repo *db.Repo) provideraccounts.Service {
+	t.Helper()
+	svc, err := provideraccounts.New(provideraccounts.Deps{DB: repo.ORM(), Sealer: db.NewTestVault(t, repo)})
+	require.NoError(t, err)
+	return svc
 }

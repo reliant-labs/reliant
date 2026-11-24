@@ -58,8 +58,14 @@ func (m memorySettings) repo() *settings.MockRepository {
 // context before anything leaves the process.
 func newSettingsService(t *testing.T, repo settings.Repository) *settings.Service {
 	t.Helper()
+	return newSettingsServiceWith(t, repo, &settings.MockPrivacy{})
+}
+
+func newSettingsServiceWith(t *testing.T, repo settings.Repository, privacy settings.Privacy) *settings.Service {
+	t.Helper()
 	return settings.NewTestSettings(t, settings.WithSettingsDeps(settings.Deps{
-		Repo: repo,
+		Repo:    repo,
+		Privacy: privacy,
 		PollCopilotDevice: func(ctx context.Context, _ string) (*copilot.GitHubTokens, error) {
 			return nil, ctx.Err()
 		},

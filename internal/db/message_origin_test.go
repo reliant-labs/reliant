@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // send_to_run reaches another run through SignalRun, which is the human's own
@@ -88,7 +89,7 @@ func TestSenderTitles_ThreadTitleThenRunTitle(t *testing.T) {
 	_, err = repo.CreateThread(ctx, &Thread{ID: "thread-sender-titles-untitled", ChatID: run, ParentThreadID: &run, CreatedAt: time.Now()})
 	require.NoError(t, err)
 
-	titles, err := repo.SenderTitles(ctx, []string{run, "thread-sender-titles-spawn", "thread-sender-titles-untitled", "missing"})
+	titles, err := store.SenderTitlesByThreadIDs(ctx, repo.ORM(), []string{run, "thread-sender-titles-spawn", "thread-sender-titles-untitled", "missing"})
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{
 		run:                          "Release captain",

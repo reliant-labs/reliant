@@ -20,7 +20,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
 // OrgMoveResumer turns a trigger a project move paused back on
@@ -45,7 +47,20 @@ type OrgResolver interface {
 	LiveMembersFresh(ctx context.Context, userID, orgID string) (n int, known bool, err error)
 }
 
+// Owners re-owns an orphaned trigger in place (AdoptAs), only while
+// previousOwner still owns it; with offerID it accepts that offer.
+// internal/triggerowner's Service satisfies it.
+type Owners interface {
+	AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner, offerID string, reads ...db.OrgRead) error
+}
+
 type Repository interface {
+	triggers.OwnerSource
+	// DefaultConnection is the owner's default login for an integration: an
+	// integration trigger's write path reads it, so a repository without it
+	// does not compile (it used to be asserted at run time, and a repository
+	// without it made every integration trigger answer Unavailable).
+	DefaultConnection(ctx context.Context, userID, integrationID string) (*core.Connection, error)
 	// AssignUnassignedOrg stamps the caller's rows that have no org with
 	// their default org (the lazy backfill, orgs.ListScope).
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
@@ -62,44 +77,50 @@ type Repository interface {
 	// lock, only while every org the handler's decision read still holds.
 	CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
 	UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
-	// AdoptTrigger re-owns an orphaned trigger in place (AdoptAs), only
-	// while previousOwner still owns it; with offerID it accepts that offer.
-	AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner, offerID string, reads ...db.OrgRead) error
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
-	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
 	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error
 	GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error)
 
 	// Firings, the feed and the integration registrations a trigger holds.
-	RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
 	ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
 
-	// The project, worktree and chat a trigger names, checked against the
-	// caller.
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
-
-	// The machine pool a pool-bound trigger names, and its members (each gets
-	// the trigger's automation grant).
-	GetMachinePoolForUser(ctx context.Context, userID, id string) (*core.MachinePool, error)
-	// GetMachinePoolByName resolves the pool an agent names by name
-	// (create/update_trigger_activation's machine_pool).
-	GetMachinePoolByName(ctx context.Context, userID, name string) (*core.MachinePool, error)
-	ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error)
 
 	// ListTriggers is called directly too; TriggerLister declares it.
 	launch.WorkflowResolver
 	daemonchoice.Reader
-	AutomationKeyStore
 	TriggerLister
+}
+
+// Pools reads the machine pool a pool-bound trigger names, and its members
+// (each gets the trigger's automation grant). store.MachinePoolExtStore
+// satisfies it; machinepool.MemberReader is the part AgreedCatalog reads.
+// Firings reads each trigger's recent firings for the list and detail views.
+// store.TriggerEventExtStore satisfies it.
+type Firings interface {
+	RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
+}
+
+// WebhookSecrets stores a webhook trigger's sealed HMAC secret; nil clears it.
+// store.TriggerExtStore satisfies it.
+type WebhookSecrets interface {
+	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
+}
+
+type Pools interface {
+	machinepool.MemberReader
+	// GetMachinePoolByName resolves the pool an agent names by name
+	// (create/update_trigger_activation's machine_pool).
+	GetMachinePoolByName(ctx context.Context, userID, name string) (*core.MachinePool, error)
 }
 
 // AutomationKeyStore is where automationGrants keeps the delegated
 // daemon:resume token of each (user, daemon) with an enabled trigger.
+// credentials/automationtokens.Service satisfies it.
 type AutomationKeyStore interface {
 	SetAutomationToken(ctx context.Context, userID, daemonID, token string) error
 	DeleteAutomationToken(ctx context.Context, userID, daemonID string) error

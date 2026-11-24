@@ -17,6 +17,7 @@ import (
 )
 
 type capacityBoundary struct {
+	unwiredCapacity
 	event    *core.TriggerEvent
 	released bool
 	desc     *workflowservice.DescribeWorkflowExecutionResponse
@@ -26,8 +27,8 @@ type capacityBoundary struct {
 	young bool
 }
 
-func (b *capacityBoundary) EnqueueTriggerCapacity(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) error {
-	return nil
+func (b *capacityBoundary) EnqueueTriggerCapacitySuperseding(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) ([]*core.TriggerEvent, error) {
+	return nil, nil
 }
 func (b *capacityBoundary) CanLaunchTriggerCapacity(context.Context, string, store.TriggerCapacityScope, store.TriggerCapacityLimits) (bool, error) {
 	return b.released, nil
@@ -82,7 +83,7 @@ func TestCapacityOneBadRowDoesNotBlockTheScope(t *testing.T) {
 	b := &failingReleaseBoundary{capacityBoundary: capacityBoundary{event: &core.TriggerEvent{ID: "waiting", Outcome: core.TriggerEventPending},
 		desc: &workflowservice.DescribeWorkflowExecutionResponse{WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{Execution: &commonpb.WorkflowExecution{WorkflowId: "workflow"}, FirstRunId: "first", Status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED}}}}
 	spec := launch.Spec{}
-	require.NoError(t, prepareCapacity(context.Background(), b, b, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "workflow-ref"}, b.event, store.TriggerCapacityLimits{MaxRunning: 1}, &spec))
+	require.NoError(t, prepareCapacity(context.Background(), b, b, b, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "workflow-ref"}, b.event, store.TriggerCapacityLimits{MaxRunning: 1}, &spec))
 	require.Equal(t, []string{"good"}, b.releasedRows)
 }
 
@@ -117,7 +118,7 @@ func TestCapacityReleaseRequiresMatchingTerminalTemporalChain(t *testing.T) {
 				}
 			}
 			spec := launch.Spec{}
-			require.NoError(t, prepareCapacity(context.Background(), b, b, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "workflow-ref"}, b.event, store.TriggerCapacityLimits{MaxRunning: 1}, &spec))
+			require.NoError(t, prepareCapacity(context.Background(), b, b, b, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "workflow-ref"}, b.event, store.TriggerCapacityLimits{MaxRunning: 1}, &spec))
 			require.Equal(t, tc.want, b.released)
 			reason, err := spec.Guard(context.Background())
 			require.NoError(t, err)
@@ -156,7 +157,7 @@ func TestCapacityClosedChainReleasesBeforeStartAttemptBound(t *testing.T) {
 				b.err = serviceerror.NewNotFound("workflow execution not found")
 			}
 			spec := launch.Spec{}
-			require.NoError(t, prepareCapacity(context.Background(), b, b, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "workflow-ref"}, b.event, store.TriggerCapacityLimits{MaxRunning: 1}, &spec))
+			require.NoError(t, prepareCapacity(context.Background(), b, b, b, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "workflow-ref"}, b.event, store.TriggerCapacityLimits{MaxRunning: 1}, &spec))
 			require.Equal(t, tc.want, b.released)
 			reason, err := spec.Guard(context.Background())
 			require.NoError(t, err)

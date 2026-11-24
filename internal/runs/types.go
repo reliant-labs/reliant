@@ -1,8 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// Built by hand, by internal/app's NewRunLifecycle provider
-// (providers_worker.go) and the chat handler: never a node compose.go
-// constructs from Deps.
+// forge:provided because it is built twice: by internal/app's NewRunLifecycle
+// provider (providers_worker.go), and by the chat handler from the chat's own
+// Deps.
 //
 //forge:provided
 //forge:exclude-contract: a concrete lifecycle service built by hand with a plain Deps; its callers take the narrow roles they need, not a Service interface
@@ -31,6 +31,9 @@ var ErrNoWorkflow = svcerr.FailedPrecondition("chat has no workflow")
 type Repository interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error
+	// GetWorkflow is workflow.WokenStatusStore's read (StatusBeforeWake,
+	// MarkWokenRunActive take the repo whole); the service's own reads go
+	// through Deps.Workflows.
 	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	UpdateWorkflowStatus(ctx context.Context, id string, status db.WorkflowStatus) error
 	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus db.WorkflowStatus) (bool, error)
@@ -40,12 +43,17 @@ type Repository interface {
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 	LockChatRunControl(ctx context.Context, chatID string) (release func(), err error)
-	// ClearUsageLimitWait releases a chat's usage-limit wait markers; an empty
-	// thread releases every thread of the chat.
-	ClearUsageLimitWait(ctx context.Context, chatID, threadID string, now time.Time) error
 	// RunTx runs f in one transaction; a terminal status and its cascade
 	// commit together.
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
+}
+
+// UsageLimitWaits releases a chat's usage-limit wait markers.
+// providerbackoff.Service satisfies it.
+type UsageLimitWaits interface {
+	// ClearUsageLimitWait releases the chat's markers; an empty thread
+	// releases every thread of the chat.
+	ClearUsageLimitWait(ctx context.Context, chatID, threadID string, now time.Time) error
 }
 
 // TemporalClient is the subset of the Temporal SDK client this service needs.

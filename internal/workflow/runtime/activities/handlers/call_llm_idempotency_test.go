@@ -7,7 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/threads"
+
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -16,8 +22,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/ptr"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // mockLLMDriverForIdempotency is a simple mock that returns a basic response
@@ -154,7 +158,7 @@ func TestCallLLMActivity_Idempotency(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create activity (nil toolsFactory since we're testing idempotency, not tool execution)
-	activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, nil, resolver, nil)
+	activityInstance := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: nil, DriverResolver: resolver, MCPBinder: nil})
 
 	input := callLLMInput(chatID, threadID, "mock-model")
 
@@ -357,7 +361,7 @@ func TestCallLLMActivity_CleansUpIncompleteBlocks(t *testing.T) {
 
 	t.Run("Cleanup removes incomplete message and starts fresh", func(t *testing.T) {
 		// Create activity
-		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, nil, resolver, nil)
+		activityInstance := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: nil, DriverResolver: resolver, MCPBinder: nil})
 
 		input := callLLMInput(chatID, threadID, "mock-model")
 
@@ -442,7 +446,7 @@ func TestCallLLMActivity_NoOrphanedRecords(t *testing.T) {
 
 	t.Run("Multiple retries don't create orphaned records", func(t *testing.T) {
 		// Create activity
-		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, nil, resolver, nil)
+		activityInstance := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: nil, DriverResolver: resolver, MCPBinder: nil})
 
 		input := callLLMInput(chatID, threadID, "mock-model")
 
@@ -541,7 +545,7 @@ func TestCallLLMActivity_ActivityIDTracking(t *testing.T) {
 
 	t.Run("Activity ID is tracked in message", func(t *testing.T) {
 		// Create activity
-		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, nil, resolver, nil)
+		activityInstance := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: nil, DriverResolver: resolver, MCPBinder: nil})
 
 		input := callLLMInputEmpty(chatID, threadID)
 
@@ -604,7 +608,7 @@ func TestCallLLMActivity_ThreadHandling(t *testing.T) {
 
 	t.Run("Empty thread path returns error", func(t *testing.T) {
 		// Create activity
-		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, nil, resolver, nil)
+		activityInstance := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: nil, DriverResolver: resolver, MCPBinder: nil})
 
 		// Execute with empty thread path - should return error
 		input := callLLMInputEmpty(chatID, "")
@@ -646,7 +650,7 @@ func TestCallLLMActivity_ThreadHandling(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create activity
-		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, nil, resolver, nil)
+		activityInstance := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: nil, DriverResolver: resolver, MCPBinder: nil})
 
 		// Execute with specific thread path (must match the thread we created)
 		input := callLLMInputEmpty(chatID, childThreadID)
@@ -714,7 +718,7 @@ func TestCallLLMActivity_ThinkingLevel(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, nil, resolver, nil)
+	activityInstance := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: nil, DriverResolver: resolver, MCPBinder: nil})
 
 	t.Run("ThinkingLevel parameter is accepted without error", func(t *testing.T) {
 		input := ActivityInput{

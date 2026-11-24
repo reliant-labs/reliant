@@ -47,6 +47,10 @@ type ToolsOptions struct {
 	// parked on. store.QuestionExtStore satisfies it. Optional: nil makes
 	// spawn_status report it is unavailable here, like every database tool.
 	SpawnQuestions SpawnQuestions
+	// SpawnTree reads the spawn tree the spawn tools resolve agents through.
+	// store.ToolCallExtStore satisfies it. Optional: nil makes the spawn tools
+	// report they are unavailable here.
+	SpawnTree SpawnTree
 	// Scenarios, LaunchedRuns, WorktreeChats and WorkflowSlugs are the row
 	// stores behind the scenario, start_run, worktree and create_workflow
 	// tools (store.WorkflowScenarioExtStore, TriggerEventExtStore,
@@ -56,6 +60,12 @@ type ToolsOptions struct {
 	LaunchedRuns  LaunchedRunCounter
 	WorktreeChats WorktreeChatLister
 	WorkflowSlugs WorkflowSlugChecker
+	// Placement and Workflows are the row reads behind the worktree,
+	// report_bug and get_run tools (daemonplacement.Records and
+	// store.WorkflowExtStore). Optional: nil makes the tool that needs one
+	// report that it is unavailable here, like a nil Repo.
+	Placement PlacementRecords
+	Workflows RunWorkflows
 	// Planning is the plan, task and dependency store behind the planning
 	// tools. Optional: nil makes them report that they are unavailable here,
 	// like a nil Repo.
@@ -68,6 +78,9 @@ type ToolsOptions struct {
 	// no doorbell, and delivery falls back to the recipient's next loop
 	// boundary (the daemon runtime has no Temporal connection).
 	AgentMessageNotifier AgentMessageNotifier
+	// ProviderBackoff lets spawn_status say which sub-agents are parked on a
+	// provider usage limit. Optional: nil leaves them reading as running.
+	ProviderBackoff providerBackoffReader
 	// SpawnStopper lets spawn_stop reach the workflow running a sub-agent.
 	// Optional: nil means spawn_stop reports that stopping is unavailable
 	// here, which is the honest answer in the daemon runtime (no Temporal
@@ -283,6 +296,30 @@ func (f *ToolsFactory) planning() toolPlanning {
 // database. A nil *db.Repo converted to an interface is NOT nil, so handing
 // opts.Repo through as is would defeat every tool's "requires a database
 // connection" check and turn an unavailable tool into a nil dereference.
+// placement is opts.Placement as report_bug's role: nil stays a nil
+// interface.
+func (f *ToolsFactory) placement() bugReportMachines {
+	if f.opts == nil || f.opts.Placement == nil {
+		return nil
+	}
+	return f.opts.Placement
+}
+
+// worktreeRecords is opts.Placement as the worktree tool's role.
+func (f *ToolsFactory) worktreeRecords() worktreeRecords {
+	if f.opts == nil || f.opts.Placement == nil {
+		return nil
+	}
+	return f.opts.Placement
+}
+
+func (o *ToolsOptions) workflows() RunWorkflows {
+	if o == nil {
+		return nil
+	}
+	return o.Workflows
+}
+
 func (f *ToolsFactory) store() toolStore {
 	if f.opts == nil || f.opts.Repo == nil {
 		return nil
@@ -293,6 +330,22 @@ func (f *ToolsFactory) store() toolStore {
 // spawnStatusStore is store() as spawn_status's role: nil when there is no
 // database, so the tool reports itself unavailable rather than dereferencing it.
 func (f *ToolsFactory) spawnStatusStore() spawnStatusStore {
+	if f.opts == nil || f.opts.Repo == nil {
+		return nil
+	}
+	return f.opts.Repo
+}
+
+// spawnSendStore and spawnStopStore are store() as those tools' roles, nil when
+// there is no database.
+func (f *ToolsFactory) spawnSendStore() spawnSendStore {
+	if f.opts == nil || f.opts.Repo == nil {
+		return nil
+	}
+	return f.opts.Repo
+}
+
+func (f *ToolsFactory) spawnStopStore() spawnStopStore {
 	if f.opts == nil || f.opts.Repo == nil {
 		return nil
 	}
@@ -529,15 +582,15 @@ func (f *ToolsFactory) WithdrawQuestion() Tool {
 
 // Spawn observability/messaging tools
 func (f *ToolsFactory) SpawnStatus() Tool {
-	return NewSpawnStatusTool(SpawnStatusDeps{Store: f.spawnStatusStore(), Questions: f.opts.SpawnQuestions})
+	return NewSpawnStatusTool(SpawnStatusDeps{Store: f.spawnStatusStore(), Questions: f.opts.SpawnQuestions, Tree: f.opts.SpawnTree, Backoff: f.opts.ProviderBackoff})
 }
 
 func (f *ToolsFactory) SpawnSend() Tool {
-	return NewSpawnSendTool(f.store(), f.opts.AgentMessageNotifier)
+	return NewSpawnSendTool(SpawnSendDeps{Store: f.spawnSendStore(), Tree: f.opts.SpawnTree, Notifier: f.opts.AgentMessageNotifier})
 }
 
 func (f *ToolsFactory) SpawnStop() Tool {
-	return NewSpawnStopTool(f.store(), f.opts.SpawnStopper)
+	return NewSpawnStopTool(SpawnStopDeps{Store: f.spawnStopStore(), Tree: f.opts.SpawnTree, Stopper: f.opts.SpawnStopper})
 }
 
 func (f *ToolsFactory) StartRun() Tool {
@@ -550,11 +603,11 @@ func (f *ToolsFactory) ListRuns() Tool {
 
 // ReportBug files a Reliant or forge defect with engineering via Sentry.
 func (f *ToolsFactory) ReportBug() Tool {
-	return NewReportBugTool(f.store())
+	return NewReportBugTool(f.store(), f.placement())
 }
 
 func (f *ToolsFactory) GetRun() Tool {
-	return NewGetRunTool(f.store())
+	return NewGetRunTool(f.store(), f.opts.workflows())
 }
 
 func (f *ToolsFactory) ControlRun() Tool {
@@ -660,7 +713,7 @@ func (f *ToolsFactory) WaitForMachine() Tool {
 
 // Worktree tools
 func (f *ToolsFactory) Worktree() Tool {
-	return NewWorktreeTool(f.store(), f.opts.WorktreeChats, f.opts.RunMachine, f.opts.WorktreeSettler)
+	return NewWorktreeTool(f.store(), f.worktreeRecords(), f.opts.WorktreeChats, f.opts.RunMachine, f.opts.WorktreeSettler)
 }
 
 // Skill tools

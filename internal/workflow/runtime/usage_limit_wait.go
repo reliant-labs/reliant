@@ -496,7 +496,7 @@ func (w *usageLimitWaiter) wait(ctx workflow.Context, req usageLimitWaitRequest,
 	markerEpoch := w.retryEpoch
 	manualSinceMarker := func() bool { return w.manualEpoch > markerEpoch }
 	// The marker goes down BEFORE the park, or a supervisor reading the chat
-	// cannot tell this run from a wedged one. See db.ProviderBackoff.
+	// cannot tell this run from a wedged one. See core.ProviderBackoff.
 	w.recordMarker(ctx, req.Thread, limit.Provider, decision)
 	// Waiting out a limit is not running: give the workflow-capacity slot
 	// back (capacity_slot.go). The retried step takes it again first.

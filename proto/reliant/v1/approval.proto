@@ -40,7 +40,9 @@ enum ApprovalStatus {
 // ApprovalService handles workflow approval operations.
 service ApprovalService {
   // ListApprovalsByChat lists all pending approvals for a chat
-  rpc ListApprovalsByChat(ListApprovalsByChatRequest) returns (ListApprovalsByChatResponse) {}
+  rpc ListApprovalsByChat(ListApprovalsByChatRequest) returns (ListApprovalsByChatResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // Approve approves a pending approval request (signals workflow to continue).
   rpc Approve(ApproveRequest) returns (ApproveResponse) {

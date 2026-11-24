@@ -63,3 +63,24 @@ func TestLoadWorkflow_LegacyJSONFallback_StillSupportsArgsShape(t *testing.T) {
 	require.Len(t, wf.GetNodes(), 1)
 	require.NotNil(t, wf.GetNodes()[0].GetSaveMessageNode())
 }
+
+func TestLoadWorkflow_DoesNotFallBackOnMalformedProtoFields(t *testing.T) {
+	t.Parallel()
+	for _, data := range []string{
+		`{"future":{},"name":42}`,
+		`{"name":42,"future":{}}`,
+		`{"future":{},"nodes":[{"id":"a","type":"run","run":"bad"}]}`,
+		`{"future":{},"nodes":[{"id":"a","type":"run","command":"echo ok"}]}`,
+		`{"nodes":[{"id":"a","type":"run","command":"echo ok","typo":true}]}`,
+	} {
+		_, err := LoadWorkflow([]byte(data))
+		require.Error(t, err, data)
+	}
+}
+
+func TestLoadWorkflow_PreservesCommandShorthand(t *testing.T) {
+	t.Parallel()
+	wf, err := LoadWorkflow([]byte(`{"name":"legacy","nodes":[{"id":"a","type":"run","command":"echo ok"}]}`))
+	require.NoError(t, err)
+	require.Equal(t, "echo ok", wf.GetNodes()[0].GetRun().GetCommand().GetLiteral())
+}

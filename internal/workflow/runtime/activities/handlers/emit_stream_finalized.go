@@ -60,7 +60,7 @@ func (a *EmitStreamFinalizedActivity) Execute(ctx context.Context, input EmitStr
 		return EmitStreamFinalizedOutput{}, fmt.Errorf("invalid stream_finalized reason %q", input.Reason)
 	}
 
-	err := a.repo.EmitStreamFinalizedUpdate(ctx, input.ChatID, db.StreamFinalizedUpdate{
+	err := db.EmitStreamFinalizedUpdate(ctx, a.repo, input.ChatID, db.StreamFinalizedUpdate{
 		MessageID:     input.MessageID,
 		Thread:        input.Thread,
 		Reason:        reason,
