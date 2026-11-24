@@ -43,7 +43,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/credwire"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
-	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
@@ -56,7 +55,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/natsutil"
-	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
@@ -747,6 +745,9 @@ func (a *AccountRecorder) Close(context.Context) error {
 // TemporalWorkerDeps is everything the worker's workflows and activities
 // reach.
 type TemporalWorkerDeps struct {
+	// Checks is the record-only workflowcheck the fire and run activities
+	// report to; the WorkflowCheckSyncer writes GitHub.
+	Checks           *RecordOnlyChecks
 	ConnectionVault  connectionvault.Service
 	DB               *db.Repo
 	ProviderAccounts provideraccounts.Service
@@ -942,6 +943,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		OrgAdmins:              orgAdminNotifier(d),
 		TemporalClient:         d.Temporal.Client,
 		Database:               d.DB,
+		Checks:                 d.Checks,
 		ProviderAccounts:       d.ProviderAccounts,
 		Connections:            d.ConnectionVault,
 		OrgAccounts:            d.OrgAccounts,
@@ -1028,13 +1030,11 @@ func (r *TriggerDeliveryRelay) Run(ctx context.Context) error {
 	return r.relay.Run(orgpolicy.WithResolver(authz.WithMembership(ctx, r.membership), r.policies))
 }
 
-// WorkflowCheckSyncerDeps is where workflows' checks are recorded, the
-// credential source whose GitHub broker writes them as the App, and the org
-// policies a write is judged by.
+// WorkflowCheckSyncerDeps is the GitHub-writing checks configuration and the
+// org policies a write is judged by.
 type WorkflowCheckSyncerDeps struct {
-	DB          *db.Repo
-	Credentials *WorkerIntegrationCredentials
-	Policies    *orgpolicy.Resolver
+	Checks   *SyncingChecks
+	Policies *orgpolicy.Resolver
 	// Membership answers whether a check's owner is still a member of its
 	// trigger's org, asked before every write (workflowcheck.ownerMayWrite);
 	// nil is a deployment with no orgs.
@@ -1043,31 +1043,17 @@ type WorkflowCheckSyncerDeps struct {
 
 // NewWorkflowCheckSyncer writes the GitHub check runs workflows' `check:`
 // blocks declare (workflowcheck): every worker runs one; checks are leased
-// with SKIP LOCKED, so they share the queue. Without the GitHub broker (a
-// deployment with no control plane) every write fails with that reason and
-// is retried, so nothing is written as anyone but the App.
+// with SKIP LOCKED, so they share the queue. What it writes with, and why a
+// deployment with no control plane writes nothing, is SyncingChecks.
 //
 //forge:root-only worker
 func NewWorkflowCheckSyncer(d WorkflowCheckSyncerDeps) (*workflowcheck.Syncer, error) {
-	var broker workflowcheck.AppBroker
-	if d.Credentials != nil {
-		if cs, ok := d.Credentials.Source.(connauth.Service); ok {
-			if b, ok := cs.Broker(ghdelegated.BrokerID); ok {
-				broker, _ = b.(workflowcheck.AppBroker)
-			}
-		}
-	}
-	svc := workflowcheck.NewInstrumented(workflowcheck.Deps{
-		Store:  store.NewWorkflowCheckRunExtStore(d.DB.ORM()),
-		GitHub: workflowcheck.NewGitHub(workflowcheck.GitHubDeps{Runner: httpaction.NewRunner(netguard.New()), Broker: broker}),
-		RunURL: workflowcheck.HostedRunURL,
-	})
 	policies := d.Policies
 	var membership authz.Membership = authz.NoOrgs{}
 	if d.Membership != nil {
 		membership = d.Membership
 	}
-	return workflowcheck.NewSyncer(svc, func(ctx context.Context) context.Context {
+	return workflowcheck.NewSyncer(d.Checks.Service, func(ctx context.Context) context.Context {
 		return orgpolicy.WithResolver(authz.WithMembership(ctx, membership), policies)
 	}), nil
 }

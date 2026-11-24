@@ -618,6 +618,7 @@ func (g *Graph) newAccountRecorder() (*AccountRecorder, error) {
 
 func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 	return NewTemporalWorker(TemporalWorkerDeps{
+		Checks:           g.RecordOnlyChecks(),
 		ConnectionVault:  g.CredentialsConnectionvault(),
 		ProviderAccounts: g.CredentialsProvideraccounts(),
 		OrgAccounts:      g.CredentialsOrgaccounts(),
@@ -1795,10 +1796,9 @@ func (g *Graph) newOrgPolicyAttendance() (org_policy_impact.ChatAttendance, erro
 // newWorkflowCheckSyncer constructs the WorkflowCheckSyncer provider (NewWorkflowCheckSyncer, internal/app/providers_worker.go).
 func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
 	return NewWorkflowCheckSyncer(WorkflowCheckSyncerDeps{
-		DB:          g.Database(),
-		Credentials: g.WorkerIntegrationCredentials(),
-		Policies:    g.OrgPolicyResolver(),
-		Membership:  g.OrgResolver(),
+		Checks:     g.SyncingChecks(),
+		Policies:   g.OrgPolicyResolver(),
+		Membership: g.OrgResolver(),
 	})
 }
 
@@ -1907,4 +1907,19 @@ func (g *Graph) newChangeController() (tools.ChangeController, error) {
 		DB:           g.Database(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 	}), nil
+}
+
+// newRecordOnlyChecks constructs the RecordOnlyChecks provider (NewRecordOnlyChecks, internal/app/variant_record_only_checks.go).
+func (g *Graph) newRecordOnlyChecks() (*RecordOnlyChecks, error) {
+	return NewRecordOnlyChecks(RecordOnlyChecksDeps{
+		DB: g.Database(),
+	})
+}
+
+// newSyncingChecks constructs the SyncingChecks provider (NewSyncingChecks, internal/app/variant_syncing_checks.go).
+func (g *Graph) newSyncingChecks() (*SyncingChecks, error) {
+	return NewSyncingChecks(SyncingChecksDeps{
+		DB:          g.Database(),
+		Credentials: g.WorkerIntegrationCredentials(),
+	})
 }

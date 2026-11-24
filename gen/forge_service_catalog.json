@@ -527,12 +527,14 @@
         "ProjectPurges",
         "Projectaccess",
         "Providerbackoff",
+        "RecordOnlyChecks",
         "RemoteExecutor",
         "RepoUpdateFeed",
         "RunLauncher",
         "RunLifecycle",
         "StoredConfigProvider",
         "StreamingHub",
+        "SyncingChecks",
         "TemporalClient",
         "TemporalWorker",
         "TokenAuthority",
@@ -55103,6 +55105,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "RecordOnlyChecks",
+      "name": "RecordOnlyChecks",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.RecordOnlyChecks",
+      "source": {
+        "path": "internal/app/variant_record_only_checks.go",
+        "symbol": "NewRecordOnlyChecks"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "ReliantKeySweep",
       "name": "ReliantKeySweep",
       "kind": "provider",
@@ -55327,6 +55341,18 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewStreamingHub"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "SyncingChecks",
+      "name": "SyncingChecks",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.SyncingChecks",
+      "source": {
+        "path": "internal/app/variant_syncing_checks.go",
+        "symbol": "NewSyncingChecks"
       },
       "methods": [],
       "implementation_candidates": []
