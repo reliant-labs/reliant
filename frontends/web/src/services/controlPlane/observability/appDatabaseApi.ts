@@ -17,7 +17,7 @@
  */
 
 import { create, toJson, type JsonValue } from "@bufbuild/protobuf";
-import type { Client } from "@connectrpc/connect";
+import type { Client, Transport } from "@connectrpc/connect";
 import { TimestampSchema, ValueSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
@@ -35,8 +35,8 @@ import type { PanelResultPoint } from "@/gen/controlplane/controlplane/v1/shared
 import { getControlPlaneClient } from "../client";
 import type { PanelPostgres, PanelResult, TimeWindow } from "./types";
 
-function client() {
-  return getControlPlaneClient(AppDatabaseService);
+function client(transport?: Transport) {
+  return getControlPlaneClient(AppDatabaseService, transport);
 }
 
 function timestamp(ms: number): Timestamp {
@@ -75,8 +75,8 @@ function points(list: PanelResultPoint[]) {
   };
 }
 
-export async function queryDatabasePanel(req: QueryDatabasePanelInput, options: { signal?: AbortSignal } = {}): Promise<DatabasePanelResult> {
-  const res = await client().queryDatabasePanel(
+export async function queryDatabasePanel(req: QueryDatabasePanelInput, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<DatabasePanelResult> {
+  const res = await client(transport).queryDatabasePanel(
     {
       environmentId: req.environmentId,
       database: req.query.database,
@@ -150,7 +150,7 @@ export interface DbColumn {
   nullable: boolean;
   comment: string;
   isPrimaryKey: boolean;
-  /** Explicit server-projected marker only; absent on older servers. */
+  /** Explicit server-projected marker only; absent when the column names no identity. */
   identitySubject?: "id" | "email";
 }
 
@@ -377,6 +377,21 @@ export const listBrowsableDatabases = (...args: Parameters<ReturnType<typeof cre
 export const describeDatabase = (...args: Parameters<ReturnType<typeof createDataBrowserApi>["describeDatabase"]>) => createDataBrowserApi(client()).describeDatabase(...args);
 export const browseTable = (...args: Parameters<ReturnType<typeof createDataBrowserApi>["browseTable"]>) => createDataBrowserApi(client()).browseTable(...args);
 
+type DataBrowserReads = ReturnType<typeof createDataBrowserApi>;
+
+/**
+ * The same three reads on `transport`: a TransportScope's (the data browser's
+ * context default, DataBrowserApiContext), or none for the app's. The client
+ * is still resolved per call.
+ */
+export function dataBrowserReadsOn(transport?: Transport): DataBrowserReads {
+  return {
+    listBrowsableDatabases: (...args) => createDataBrowserApi(client(transport)).listBrowsableDatabases(...args),
+    describeDatabase: (...args) => createDataBrowserApi(client(transport)).describeDatabase(...args),
+    browseTable: (...args) => createDataBrowserApi(client(transport)).browseTable(...args),
+  };
+}
+
 /** One database a postgres panel may read: its limits, and what the dashboard role may SELECT. */
 export interface DashboardDatabase {
   name: string;
@@ -388,8 +403,8 @@ export interface DashboardDatabase {
   tablesError: string;
 }
 
-export async function listDashboardDatabases(environmentId: string, options: { signal?: AbortSignal } = {}): Promise<DashboardDatabase[]> {
-  const res = await client().listDashboardDatabases({ environmentId }, options.signal ? { signal: options.signal } : undefined);
+export async function listDashboardDatabases(environmentId: string, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<DashboardDatabase[]> {
+  const res = await client(transport).listDashboardDatabases({ environmentId }, options.signal ? { signal: options.signal } : undefined);
   return res.databases.map((db) => ({
     name: db.name,
     rowCap: db.rowCap,

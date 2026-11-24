@@ -74,6 +74,36 @@ func TestResolveOrgMembership_MemberSinceAndLiveMembers(t *testing.T) {
 	}
 }
 
+// display_name (chat-collaboration.md §6.2) comes with a member's answer; a
+// member with no name and an older control plane omit it, which reads as "",
+// and a negative answer never carries it even if sent.
+func TestResolveOrgMembership_DisplayName(t *testing.T) {
+	srv := fakeCP(t, func(_ string, body map[string]any) (int, string) {
+		switch body["orgId"] {
+		case "org-acme":
+			return 200, `{"orgId":"org-acme","member":true,"role":"member","displayName":" Dana Lee "}`
+		case "org-unnamed", "org-old":
+			return 200, `{"orgId":"` + body["orgId"].(string) + `","member":true,"role":"member"}`
+		default:
+			return 200, `{"orgId":"org-gone","displayName":"Dana Lee"}`
+		}
+	})
+	defer srv.Close()
+	c := New(Deps{BaseURL: srv.URL, Sign: sign})
+
+	for org, want := range map[string]OrgMembership{
+		"org-acme":    {OrgID: "org-acme", Member: true, Role: "member", DisplayName: "Dana Lee"},
+		"org-unnamed": {OrgID: "org-unnamed", Member: true, Role: "member"},
+		"org-old":     {OrgID: "org-old", Member: true, Role: "member"},
+		"org-gone":    {OrgID: "org-gone"},
+	} {
+		got, err := c.ResolveOrgMembership(context.Background(), "user-1", org)
+		if err != nil || got != want {
+			t.Fatalf("%s: %+v, %v; want %+v", org, got, err, want)
+		}
+	}
+}
+
 // A negative answer is an answer, not an error: protojson omits a false
 // member, and a user with no org omits the org too.
 func TestResolveOrgMembership_NegativeAnswer(t *testing.T) {

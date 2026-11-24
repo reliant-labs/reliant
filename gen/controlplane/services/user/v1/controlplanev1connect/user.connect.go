@@ -118,6 +118,7 @@ func NewUserServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+UserServicePreviewAccountDeletionProcedure,
 			connect.WithSchema(userServiceMethods.ByName("PreviewAccountDeletion")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		deleteCurrentUserAccount: connect.NewClient[v1.DeleteCurrentUserAccountRequest, v1.DeleteCurrentUserAccountResponse](
@@ -221,6 +222,7 @@ func NewUserServiceHandler(svc UserServiceHandler, opts ...connect.HandlerOption
 		UserServicePreviewAccountDeletionProcedure,
 		svc.PreviewAccountDeletion,
 		connect.WithSchema(userServiceMethods.ByName("PreviewAccountDeletion")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	userServiceDeleteCurrentUserAccountHandler := connect.NewUnaryHandler(

@@ -191,6 +191,21 @@ func MachineName(ctx context.Context, r DaemonReader, daemonID string) string {
 	return fmt.Sprintf("self-hosted machine %s", short)
 }
 
+// MachineArg is how a command line names a machine (`--machine <arg>`, which
+// takes a name or an id): the name its owner gave it, else its id. A record
+// that cannot be read is named by its id.
+func MachineArg(ctx context.Context, r DaemonReader, daemonID string) string {
+	if r == nil || daemonID == "" {
+		return daemonID
+	}
+	if d, _ := r.GetDaemon(ctx, daemonID); d != nil {
+		if name := strings.TrimSpace(d.Name); !isPlaceholderLabel(name, daemonID) {
+			return name
+		}
+	}
+	return daemonID
+}
+
 // isPlaceholderLabel reports whether a machine's name or hostname names
 // nothing a person chose or would recognize: empty, the machine's own id, or
 // a bare UUID. A daemon that connected with neither a name nor a hostname had

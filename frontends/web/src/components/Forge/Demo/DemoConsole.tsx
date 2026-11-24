@@ -1,67 +1,57 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The forge demo console: `/forge/demo`, in both shells.
+ * The forge demo's own pages: `/forge/demo` on the demo shell
+ * (demoShellRoutes.tsx), the demo bundle on demo.reliantlabs.io. The app's
+ * `/forge/demo` leaves for it (demoRoute.tsx, createForgeDemoHandoffRoutes):
+ * the demo has one home.
  *
- * The real console chrome (ConsoleShell) and the real Observability views
- * (ObservabilityPanel) on the in-memory fixture API — a made-up app called
- * shop, with an api, a worker and a browser frontend in dev, staging and prod.
- * The forge journey (Onboarding/journeys/forge.tsx) walks it; anyone may
- * browse it.
+ * The real console chrome (ConsoleShell) around the demo's sections (Home,
+ * How releases work, Put an agent on it, How this shop was built), the
+ * Data and Storage browsers (`?browser=`), and the Observability views
+ * (ObservabilityPanel) by `?view=`, all on a made-up app called shop. The
+ * console's own pages (/forge/p/shop/…) are the rest of the demo; the nav
+ * opens them.
  *
  * ── NO DAEMON, NO CHAT, NO CONTROL PLANE ────────────────────────────────────
  *
- * On forge.reliantlabs.io it is public: signed out, no daemon, no Reliant
- * project. So everything it reads comes from createFixtureApi, through
- * ObservabilityApiProvider and its own QueryClient, and "Ask Reliant" is in
- * handoff mode (AskAgentModeProvider): one "Ask an agent" button on every
- * surface, opening a sheet to copy from rather than starting a chat. A test
- * (Demo/__tests__/DemoConsole.test.tsx) walks every view and asserts that no
- * transport, fetch, project list or chat start was touched.
+ * Everything it reads is the shop fixture pack (src/fixtures/shop) on the
+ * demo's transport, with the demo's providers (DemoConsoleProviders, as the
+ * console's pages): the Observability views on the console's REAL client,
+ * the Data, Storage and Identity APIs, and "Ask an agent" in handoff mode.
+ * Writes are refused visibly (the shell root's ObsReadOnlyProvider) and
+ * underneath (the demo transport's read-only guard). A
+ * test (Demo/__tests__/DemoConsole.test.tsx) walks every view and asserts
+ * that no transport, fetch, project list or chat start was touched.
  *
  * ── THE URL IS THE STATE ────────────────────────────────────────────────────
  *
- * The panel's state is the route's search (obsSearch.ts, plus `tour`), so
- * every view and every open trace or issue is a link, and the tour engine's
- * `advanceOn` predicates read it. The nav's rows stay on this route
- * (`linkTo`): Observability views switch `view`; the pages the demo does not
- * have (Releases, Environments, …) open its overview.
+ * The page's state is the route's search (obsSearch.ts, plus `section`,
+ * `browser` and `tour`), so every view and every open trace or issue is a link.
  */
 
-import { lazy, Suspense, useCallback, useMemo, useState, type ReactNode } from "react";
-import { Code, ConnectError } from "@connectrpc/connect";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { lazy, Suspense, useCallback, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import PageHeader from "@/components/forge-ui/page_header";
-import { getTourShell, type TourShell } from "@/components/Onboarding/tourShell";
-import { ObservabilityBillingApiContext } from "@/hooks/observability-billing-queries";
-import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { DemoConsoleProviders } from "@/demoBundle/DemoConsoleProviders";
 
 import { ConsoleShell } from "../Console/ConsoleShell";
 import { ProjectMonogram } from "../Console/ConsoleProjectSwitcher";
 import { DEFAULT_ENV, ENV_ALL } from "../Console/envScope";
 import { consolePath, isObsNavView, withSearch, type ConsolePage } from "../Console/paths";
-import { isDemoShell } from "@/lib/shell";
-import { AskAgentModeProvider } from "../Observability/AskReliant/askAgentMode";
 import ObservabilityPanel, { type ObsPlace } from "../Observability/ObservabilityPanel";
-import { OBS_VIEW_LABELS, OBS_VIEWS, viewOf, type ObsNavigate, type ObsSearch, type ObsView } from "../Observability/obsSearch";
+import { OBS_VIEW_LABELS, viewOf, type ObsNavigate, type ObsSearch, type ObsView } from "../Observability/obsSearch";
 import { FIXTURE_DECLARED } from "../Observability/__fixtures__/fixtureAlerting";
 import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../Observability/__fixtures__/fixtureApi";
-import { ObsReadOnlyProvider, type ObsReadOnly } from "../Observability/obsReadOnly";
-import { createDemoApi } from "./demoData/demoApi";
-import { DemoBrowserProviders } from "./DemoBrowserProviders";
 import { DataBrowser } from "../Data/DataBrowser";
 import type { DataSearch } from "../Data/dataUrl-model";
 import { StorageBrowser } from "../Storage/StorageBrowser";
 import type { StorageSearch } from "../Storage/storageUrl-model";
-import { DemoBanner } from "./DemoBanner";
-import { DemoNavExtras } from "./DemoNavExtras";
 import { DEMO_SECTION_AGENTS, DEMO_SECTION_BUILT, DEMO_SECTION_HOME, DEMO_SECTION_RELEASES, FORGE_DEMO_PATH, type DemoSection } from "./demoPath";
 import { AgentsPage } from "./sections/AgentsPage";
 import { DemoHome } from "./sections/DemoHome";
 import { ReleasesExplained } from "./sections/ReleasesExplained";
-import { HowBuiltLink } from "./howBuilt/HowBuiltLink";
 
 // The recorded forge run and its fixtures: a chunk of their own, loaded when the section opens.
 const HowThisAppWasBuilt = lazy(() => import("./howBuilt/HowThisAppWasBuilt"));
@@ -72,60 +62,22 @@ const NAV_ENVS = FIXTURE_ENVS.map((env) => ({ name: env.name, preview: false }))
 const SCOPE = { long: FIXTURE_ENVS.map((env) => ({ name: env.name, recorded: true })), previews: [] };
 const PLACE: ObsPlace = { kind: "project", project: FIXTURE_PROJECT, environments: ENVIRONMENTS };
 
-// Usage reads are the control plane's; the demo answers them as an older control plane would.
-const legacyOnly = async () => {
-  throw new ConnectError("Not in the demo", Code.Unimplemented);
-};
-const legacyBillingApi = {
-  getObservabilityUsage: legacyOnly,
-  listObservabilityUsage: legacyOnly,
-  getObservabilityStorage: legacyOnly,
-  getObservabilityLimits: legacyOnly,
-  updateObservabilityLimits: legacyOnly,
-};
-
-const READ_ONLY: ObsReadOnly = { readOnly: true, reason: "Read-only demo" };
-
-/** Every nav row and crumb stays on the demo: a panel view by `view`, anything else the overview. */
-function demoLink(target: ConsolePage): string {
-  // The demo site mounts the real console (/forge/p/shop/…): every nav row goes to its page.
-  if (isDemoShell()) return consolePath(FIXTURE_PROJECT, target);
-  if (target.kind === "data" || target.kind === "storage") return withSearch(FORGE_DEMO_PATH, { browser: target.kind, envs: ["staging"] });
-  if (target.kind === "obs-view" && (OBS_VIEWS as readonly string[]).includes(target.view)) {
-    return withSearch(FORGE_DEMO_PATH, { view: target.view });
-  }
-  return FORGE_DEMO_PATH;
-}
+/** Every nav row opens the sample app's console page. */
+const demoLink = (target: ConsolePage) => consolePath(FIXTURE_PROJECT, target);
 
 /** The nav's open page for a panel view. */
 function pageOf(view: ObsView): ConsolePage {
   return view !== "overview" && isObsNavView(view) ? { kind: "obs-view", view } : { kind: "overview" };
 }
 
-/** The public demo's nav additions (DemoNavExtras); the other shells keep the console's own nav. */
-function MaybeDemoNav({ section, children }: { section: DemoSection | undefined; children: ReactNode }) {
-  return isDemoShell() ? <DemoNavExtras section={section}>{children}</DemoNavExtras> : <>{children}</>;
-}
-
-export interface DemoConsoleProps {
-  /** Which shell hosts it; default the tour's (the hostname, or setTourShell at the forge shell's boot). */
-  shell?: TourShell;
-}
-
-export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
-  const shell = shellProp ?? getTourShell();
+export function DemoConsole() {
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as ObsSearch & DataSearch & StorageSearch & { tour?: string; section?: string; browser?: "data" | "storage" };
   const [collapsed, setCollapsed] = useState(false);
-  // Its own client and API: nothing here shares a cache entry with a real project's console.
-  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }));
-  // Writes are refused in every shell, visibly (obsReadOnly) and underneath (readOnlyApi); on the
-  // demo host the scenario's reads go over forge's mock transport (demoData/demoApi.ts).
-  const api = useMemo(() => createDemoApi(), []);
 
   const view = viewOf(search.view);
-  // The public demo opens on prod, as its console pages do (Console/envScope DEFAULT_ENV); there `envs: ["all"]` is All.
-  const fallbackEnv = search.browser ? "staging" : isDemoShell() ? DEFAULT_ENV : ENV_ALL;
+  // The demo opens on prod, as its console pages do (Console/envScope DEFAULT_ENV); `envs: ["all"]` is All.
+  const fallbackEnv = search.browser ? "staging" : DEFAULT_ENV;
   const env = search.envs?.length === 1 ? search.envs[0] : fallbackEnv;
   const browserEnv = FIXTURE_ENVS.find((candidate) => candidate.name === env);
   const browserHref = (next: DataSearch | StorageSearch) => withSearch(FORGE_DEMO_PATH, { browser: search.browser, envs: [env], ...next });
@@ -144,87 +96,62 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
     },
     [navigate]
   );
-  // "How this app was built" back to the console view it was opened from (`tour` rides along).
-  const leaveBuilt = useCallback(() => {
-    void navigate({ to: ".", search: ((prev: Record<string, unknown>) => ({ ...prev, section: undefined })) as never } as never);
-  }, [navigate]);
-  const openBuilt = useCallback(() => {
-    void navigate({
-      to: ".",
-      search: ((prev: Record<string, unknown>) => ({ ...prev, section: DEMO_SECTION_BUILT, trace: undefined, span: undefined, issue: undefined })) as never,
-    } as never);
-  }, [navigate]);
 
   return (
-    <AskAgentModeProvider mode="handoff" cli={shell === "forge" ? "forge" : "reliant forge"} demo>
-      <ObsReadOnlyProvider value={READ_ONLY}>
-        <QueryClientProvider client={queryClient}>
-          <DemoBrowserProviders>
-          <ObservabilityApiProvider api={api}>
-            <ObservabilityBillingApiContext.Provider value={legacyBillingApi}>
-              <MaybeDemoNav section={search.section as DemoSection | undefined}>
-              <ConsoleShell
-                project={FIXTURE_PROJECT}
-                page={search.browser ? { kind: search.browser } : pageOf(view)}
-                env={env}
-                envs={NAV_ENVS}
-                alertsFiring={1}
-                scope={SCOPE}
-                onEnvChange={(next) => navigateObs({ envs: next === fallbackEnv ? undefined : [next] }, { replace: true })}
-                linkTo={demoLink}
-                collapsed={collapsed}
-                onToggleCollapsed={() => setCollapsed((prev) => !prev)}
-                brand={
-                  <span className="flex items-center gap-2 px-1.5 text-sm font-semibold text-ink">
-                    <ProjectMonogram name={FIXTURE_PROJECT} />
-                    {FIXTURE_PROJECT}
-                  </span>
-                }
-                brandCollapsed={<ProjectMonogram name={FIXTURE_PROJECT} />}
-              >
-                {/* The public demo says "sample, read-only" once, in its action row (DemoScreenActions). */}
-                {!isDemoShell() && <DemoBanner shell={shell} />}
-                <div className="space-y-4" data-testid="forge-demo">
-                  {isDemoShell() && search.section === DEMO_SECTION_HOME ? (
-                    <DemoHome />
-                  ) : isDemoShell() && search.section === DEMO_SECTION_RELEASES ? (
-                    <ReleasesExplained />
-                  ) : isDemoShell() && search.section === DEMO_SECTION_AGENTS ? (
-                    <AgentsPage />
-                  ) : search.section === DEMO_SECTION_BUILT ? (
-                    <>
-                      <PageHeader density="compact" title={isDemoShell() ? "How this shop was built" : "How this app was built"} className="mb-0" />
-                      <Suspense fallback={<p className="text-sm text-ink-muted">Loading the recorded run…</p>}>
-                        <HowThisAppWasBuilt onBack={isDemoShell() ? undefined : leaveBuilt} autoPlay={false} leadWithRecording={isDemoShell()} />
-                      </Suspense>
-                    </>
-                  ) : search.browser ? (
-                    <>
-                      <PageHeader density="compact" title={search.browser === "data" ? "Data" : "Storage"} className="mb-0" />
-                      {!browserEnv ? <p role="alert">Choose a sample environment: dev, staging or prod.</p> : search.browser === "data" ? (
-                        <DataBrowser env={browserEnv} search={search} onNavigate={navigateBrowser} href={browserHref} />
-                      ) : (
-                        <StorageBrowser env={browserEnv} search={search} onNavigate={navigateBrowser} href={browserHref} />
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {/* One compact row; the top bar's scope control says which environments. */}
-                      <PageHeader density="compact" title={OBS_VIEW_LABELS[view]} className="mb-0" />
-                      <ObservabilityPanel place={PLACE} search={{ ...search, view, envs: env === ENV_ALL ? undefined : [env] }} navigate={navigateObs} />
-                      {/* Last on the page, after the console's views. The public demo has a nav row for it instead. */}
-                      {!isDemoShell() && <HowBuiltLink onOpen={openBuilt} />}
-                    </>
-                  )}
-                </div>
-              </ConsoleShell>
-              </MaybeDemoNav>
-            </ObservabilityBillingApiContext.Provider>
-          </ObservabilityApiProvider>
-          </DemoBrowserProviders>
-        </QueryClientProvider>
-      </ObsReadOnlyProvider>
-    </AskAgentModeProvider>
+    <DemoConsoleProviders section={search.section as DemoSection | undefined}>
+      <ConsoleShell
+        project={FIXTURE_PROJECT}
+        page={search.browser ? { kind: search.browser } : pageOf(view)}
+        env={env}
+        envs={NAV_ENVS}
+        alertsFiring={1}
+        scope={SCOPE}
+        onEnvChange={(next) => navigateObs({ envs: next === fallbackEnv ? undefined : [next] }, { replace: true })}
+        linkTo={demoLink}
+        collapsed={collapsed}
+        onToggleCollapsed={() => setCollapsed((prev) => !prev)}
+        brand={
+          <span className="flex items-center gap-2 px-1.5 text-sm font-semibold text-ink">
+            <ProjectMonogram name={FIXTURE_PROJECT} />
+            {FIXTURE_PROJECT}
+          </span>
+        }
+        brandCollapsed={<ProjectMonogram name={FIXTURE_PROJECT} />}
+      >
+        {/* The demo says "sample, read-only" once, in its action row (DemoScreenActions). */}
+        <div className="space-y-4" data-testid="forge-demo">
+          {search.section === DEMO_SECTION_HOME ? (
+            <DemoHome />
+          ) : search.section === DEMO_SECTION_RELEASES ? (
+            <ReleasesExplained />
+          ) : search.section === DEMO_SECTION_AGENTS ? (
+            <AgentsPage />
+          ) : search.section === DEMO_SECTION_BUILT ? (
+            <>
+              <PageHeader density="compact" title="How this shop was built" className="mb-0" />
+              <Suspense fallback={<p className="text-sm text-ink-muted">Loading the recorded run…</p>}>
+                <HowThisAppWasBuilt autoPlay={false} leadWithRecording />
+              </Suspense>
+            </>
+          ) : search.browser ? (
+            <>
+              <PageHeader density="compact" title={search.browser === "data" ? "Data" : "Storage"} className="mb-0" />
+              {!browserEnv ? <p role="alert">Choose a sample environment: dev, staging or prod.</p> : search.browser === "data" ? (
+                <DataBrowser env={browserEnv} search={search} onNavigate={navigateBrowser} href={browserHref} />
+              ) : (
+                <StorageBrowser env={browserEnv} search={search} onNavigate={navigateBrowser} href={browserHref} />
+              )}
+            </>
+          ) : (
+            <>
+              {/* One compact row; the top bar's scope control says which environments. */}
+              <PageHeader density="compact" title={OBS_VIEW_LABELS[view]} className="mb-0" />
+              <ObservabilityPanel place={PLACE} search={{ ...search, view, envs: env === ENV_ALL ? undefined : [env] }} navigate={navigateObs} />
+            </>
+          )}
+        </div>
+      </ConsoleShell>
+    </DemoConsoleProviders>
   );
 }
 

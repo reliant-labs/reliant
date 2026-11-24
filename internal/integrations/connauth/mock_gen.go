@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=4fe1a817b7ebc34765e6ddac8a7b0adc51a88a70f69a8ae92e53a532b6ff84fb
+// forge:hash=1ea5f9c47d13ce69deff711c07aa41aa7f88075368877cc4f7498cc5619e682c
 
 // MockService is a test mock for the Service interface.
 //
@@ -34,6 +34,7 @@ type MockService struct {
 	BrokerFunc             func(string) (DelegatedBroker, bool)
 	ForUserFunc            func(string) httpaction.CredentialSource
 	AdmitIntegrationFunc   func(context.Context, string, string) (context.Context, error)
+	RunOrgOfFunc           func(context.Context, string) (string, error)
 }
 
 // Credential records the call and delegates to CredentialFunc when set.
@@ -88,6 +89,15 @@ func (m *MockService) AdmitIntegration(ctx context.Context, runID string, integr
 		return m.AdmitIntegrationFunc(ctx, runID, integrationID)
 	}
 	return nil, contractkit.MockNotSet("MockService", "AdmitIntegration")
+}
+
+// RunOrgOf records the call and delegates to RunOrgOfFunc when set.
+func (m *MockService) RunOrgOf(ctx context.Context, runID string) (string, error) {
+	m.Recorder.Record("RunOrgOf", ctx, runID)
+	if m.RunOrgOfFunc != nil {
+		return m.RunOrgOfFunc(ctx, runID)
+	}
+	return "", contractkit.MockNotSet("MockService", "RunOrgOf")
 }
 
 // Compile-time check.

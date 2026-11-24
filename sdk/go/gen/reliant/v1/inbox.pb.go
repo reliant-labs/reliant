@@ -3026,9 +3026,9 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x15CleanupStorageOutcome\x12'\n" +
 	"#CLEANUP_STORAGE_OUTCOME_UNSPECIFIED\x10\x00\x12$\n" +
 	" CLEANUP_STORAGE_OUTCOME_ACCEPTED\x10\x01\x12#\n" +
-	"\x1fCLEANUP_STORAGE_OUTCOME_SKIPPED\x10\x022\x8d\b\n" +
-	"\fInboxService\x12J\n" +
-	"\tListInbox\x12\x1c.reliant.v1.ListInboxRequest\x1a\x1d.reliant.v1.ListInboxResponse\"\x00\x12\x85\x01\n" +
+	"\x1fCLEANUP_STORAGE_OUTCOME_SKIPPED\x10\x022\x90\b\n" +
+	"\fInboxService\x12M\n" +
+	"\tListInbox\x12\x1c.reliant.v1.ListInboxRequest\x1a\x1d.reliant.v1.ListInboxResponse\"\x03\x90\x02\x01\x12\x85\x01\n" +
 	"\x0eCleanupStorage\x12!.reliant.v1.CleanupStorageRequest\x1a\".reliant.v1.CleanupStorageResponse\",\xa2\xbb\x18(:&\n" +
 	"\x0fcleanup_storage\x12\x13\n" +
 	"\x06daemon\x12\tdaemon_id\x12\x9d\x01\n" +

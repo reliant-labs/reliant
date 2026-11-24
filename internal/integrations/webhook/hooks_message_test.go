@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"go.temporal.io/sdk/client"
 
@@ -67,9 +68,18 @@ func TestInlineWebhookBodyReachesMessageWithoutCredentialsOrTenantOverride(t *te
 }
 
 type messageEventRepo struct {
-	triggers.EventRepo
+	triggers.EventFireRepo
+	triggers.ReceiptStore
 	*fakeStore
 	event *core.TriggerEvent
+}
+
+// This webhook's owner has no linked GitHub identity or connection.
+func (r *messageEventRepo) GetConnection(context.Context, string, string) (*core.Connection, error) {
+	return nil, core.ErrConnectionNotFound
+}
+func (r *messageEventRepo) GetIntegrationAccessSubject(context.Context, string, string, time.Time) (string, error) {
+	return "", nil
 }
 
 func (r *messageEventRepo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {

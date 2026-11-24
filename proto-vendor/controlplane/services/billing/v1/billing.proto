@@ -442,6 +442,21 @@ service BillingService {
   // Canonical current-period organization accounting. Requires billing:read,
   // not billing management. Unknown amounts stay absent; no historical range.
   rpc GetOrganizationCostSummary(GetOrganizationCostSummaryRequest) returns (GetOrganizationCostSummaryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // The organization's storage pool: everything it keeps at rest, by product,
+  // against the pool's included amount. Requires billing:read, re-checked at use,
+  // scoped to the caller's organization. Read-only; reports today's billing basis
+  // per product (most products are tracked, not charged, until the pool's billing
+  // cutover).
+  // forge:custom
+  rpc GetStorageUsage(GetStorageUsageRequest) returns (GetStorageUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -452,6 +467,7 @@ service BillingService {
   // ledgers (never live telemetry). Requires billing:read, re-checked at use,
   // and is scoped to the caller's organization. Range is at most 400 days.
   rpc ListOrganizationUsage(ListOrganizationUsageRequest) returns (ListOrganizationUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -466,6 +482,7 @@ service BillingService {
   // org_id (NOT_FOUND otherwise), and environment_ids must be its
   // environments.
   rpc GetProjectCost(GetProjectCostRequest) returns (GetProjectCostResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -474,14 +491,17 @@ service BillingService {
 
   // Read-only catalog.
   rpc ListPlans(ListPlansRequest) returns (ListPlansResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc GetPlan(GetPlanRequest) returns (GetPlanResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
   // Current user subscription / billing portal / invoices.
   rpc GetCurrentUserSubscription(GetCurrentUserSubscriptionRequest) returns (GetCurrentUserSubscriptionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc CreateCurrentUserCheckoutSession(CreateCurrentUserCheckoutSessionRequest) returns (CreateCurrentUserCheckoutSessionResponse) {
@@ -496,6 +516,8 @@ service BillingService {
       activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
     };
   }
+  // Remains POST-only: each invoice carries Stripe's hosted-invoice and PDF
+  // URLs, bearer links that must not be cached as a safe read.
   rpc ListCurrentUserInvoices(ListCurrentUserInvoicesRequest) returns (ListCurrentUserInvoicesResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
@@ -508,6 +530,7 @@ service BillingService {
   // forge:custom — hand-written over the shared org_limit_changes table; it is
   // not an entity list, so it gets no CRUD wiring or admin page.
   rpc ListOrgLimitChanges(ListOrgLimitChangesRequest) returns (ListOrgLimitChangesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -557,6 +580,7 @@ service BillingService {
   // Creates no Stripe object and no database row: the picker can call it on
   // every amount the user clicks.
   rpc GetCurrentUserWalletTopupQuote(GetCurrentUserWalletTopupQuoteRequest) returns (GetCurrentUserWalletTopupQuoteResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -607,7 +631,8 @@ service BillingService {
     };
   }
 
-  // Workspace compute plan (per-user).
+  // Workspace compute plan (per-user). Remains POST-only: the response may
+  // contain a bearer management URL and must not be cached as a safe read.
   rpc GetCurrentUserComputeSubscription(GetCurrentUserComputeSubscriptionRequest) returns (GetCurrentUserComputeSubscriptionResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
@@ -621,6 +646,11 @@ service BillingService {
   // Deploy (infrastructure) overage ceiling — the cpu/memory/storage twin of
   // the compute pair above. Separate from it because the two cap different
   // products through different gates; see SetCurrentUserInfraOverageRequest.
+  //
+  // Deprecated for hosting: Reliant hosting (PAYG) is bounded by the
+  // organization's hosting budget instead (SetUsageBillingBudget, read back by
+  // GetCurrentUserUsageBilling). This per-user cap never gates hosted
+  // admission. The RPC keeps working for v1 clients and is not removed.
   rpc SetCurrentUserInfraOverage(SetCurrentUserInfraOverageRequest) returns (SetCurrentUserInfraOverageResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -631,6 +661,7 @@ service BillingService {
   // consumption, allowance, the customer's cap, and the current ladder rung
   // per dimension.
   rpc GetCurrentUserInfraOverage(GetCurrentUserInfraOverageRequest) returns (GetCurrentUserInfraOverageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -658,6 +689,7 @@ service BillingService {
 
   // Machine pricing is accepted explicitly for the next billing period only.
   rpc GetMachinePricingReadiness(GetMachinePricingReadinessRequest) returns (GetMachinePricingReadinessResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc AcceptNextMachinePricing(AcceptNextMachinePricingRequest) returns (AcceptNextMachinePricingResponse) {
@@ -691,6 +723,7 @@ service BillingService {
 
   // Independent organization-wide hosted usage funding; never requires a machine plan.
   rpc GetCurrentUserUsageBilling(GetCurrentUserUsageBillingRequest) returns (GetCurrentUserUsageBillingResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   // Explicit PAYG consent. Does not grant funding until verified Stripe reconciliation.
@@ -698,6 +731,59 @@ service BillingService {
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "billing consent is recorded in the usage agreement and audit log"}
+    };
+  }
+  // SetUsageBillingBudget changes the organization's monthly hosting
+  // admission budget without a new Stripe checkout. Each change appends a new
+  // budget version (never edits one) recording the actor, the time and the
+  // hosting usage policy version the actor accepted; the newest version is the
+  // budget admission reads, from the next deploy on. Requires owner or admin of
+  // org_id and an enrolled (non-pending, non-canceled) usage billing agreement.
+  // Lowering the budget below this month's spend refuses new deploys at once;
+  // running work is never stopped by it.
+  rpc SetUsageBillingBudget(SetUsageBillingBudgetRequest) returns (SetUsageBillingBudgetResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "each change is an append-only budget version, plus org_limit_changes and audit_log rows"}
+    };
+  }
+  // ListUsageBillingBudgetVersions is the current agreement's budget history,
+  // newest first, ending with version 0: the budget consented at checkout. Any
+  // member of org_id may read it.
+  //
+  // forge:custom — hand-written: version 0 is synthesized from the agreement
+  // and only the current agreement's versions are listed, so it is not an
+  // entity list and gets no CRUD wiring.
+  rpc ListUsageBillingBudgetVersions(ListUsageBillingBudgetVersionsRequest) returns (ListUsageBillingBudgetVersionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+  // GetOrgHostingUsageSummary is this UTC month's hosting spend for one
+  // organization, per app (deployment) and environment, with a projected
+  // month-end figure (spend so far plus the current running rate for the rest
+  // of the month: an estimate) and when new deploys would be refused by the
+  // hosting budget at that rate. Hosting only: no machine, AI or observability
+  // spend. Requires billing:read, re-checked at use.
+  rpc GetOrgHostingUsageSummary(GetOrgHostingUsageSummaryRequest) returns (GetOrgHostingUsageSummaryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+  // GetFreeHostingStatus reports the free static hosting allowance as it
+  // applies to org_id: whether this org holds its founder's free allowance,
+  // the sites using it, and storage and transfer used against the limits. Any
+  // member of org_id may read it; only the founder learns which of their other
+  // organizations holds the allowance.
+  rpc GetFreeHostingStatus(GetFreeHostingStatusRequest) returns (GetFreeHostingStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
     };
   }
 
@@ -708,6 +794,7 @@ service BillingService {
   // decisions: a user may save a card and never arm auto-recharge, and a
   // compute subscriber already HAS a saved card and only needs the rule.
   rpc GetCurrentUserWalletAutoRecharge(GetCurrentUserWalletAutoRechargeRequest) returns (GetCurrentUserWalletAutoRechargeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc SetCurrentUserWalletAutoRecharge(SetCurrentUserWalletAutoRechargeRequest) returns (SetCurrentUserWalletAutoRechargeResponse) {
@@ -736,6 +823,7 @@ service BillingService {
     };
   }
   rpc GetCurrentUserComputeUsage(GetCurrentUserComputeUsageRequest) returns (GetCurrentUserComputeUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -750,14 +838,17 @@ service BillingService {
   // internal/svcdaemon.checkDaemonSizeAllowed; this RPC reports the same
   // funding facts so the UI can predict it instead of guessing.
   rpc GetCurrentUserComputeEligibility(GetCurrentUserComputeEligibilityRequest) returns (GetCurrentUserComputeEligibilityResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
   // Misc per-org reads that callers expect on the public surface.
   rpc GetUsageSummary(GetUsageSummaryRequest) returns (GetUsageSummaryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc GetInvoicePreview(GetInvoicePreviewRequest) returns (GetInvoicePreviewResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -769,6 +860,7 @@ service BillingService {
   // billing flows use when there is none. Backs reliant/web's
   // BillingEmailRequiredModal.
   rpc GetCurrentUserBillingEmail(GetCurrentUserBillingEmailRequest) returns (GetCurrentUserBillingEmailResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc UpdateBillingEmail(UpdateBillingEmailRequest) returns (UpdateBillingEmailResponse) {
@@ -997,10 +1089,160 @@ message GetCurrentUserUsageBillingRequest {
 message UsageBillingAgreement {
   string id = 1;
   string status = 2;
-  // UTC calendar-month hosting admission budget, not a synchronous cost ceiling.
+  // UTC calendar-month hosting admission budget, not a synchronous cost
+  // ceiling. The CURRENT budget: the newest budget version
+  // (SetUsageBillingBudget), else the budget consented at checkout.
   int64 infra_budget_cents = 3;
   string policy_version = 4;
   google.protobuf.Timestamp billing_start_at = 5;
+  // The budget consented at checkout (budget version 0).
+  int64 consented_infra_budget_cents = 6;
+  // The budget version infra_budget_cents comes from; 0 is the checkout's.
+  int64 budget_version = 7;
+}
+
+message SetUsageBillingBudgetRequest {
+  // Active organization; resolved and authorized server-side (owner/admin).
+  // Empty selects the caller's primary org.
+  optional string org_id = 1;
+  // The new monthly hosting admission budget, in cents. Must be positive.
+  int64 infra_budget_cents = 2;
+  // The hosting usage policy version the caller was shown
+  // (GetCurrentUserUsageBillingResponse.policy_version). It must be the
+  // current one; it is recorded on the new version.
+  string policy_version = 3;
+  // The caller's explicit acceptance of that policy for this budget. Must be
+  // true.
+  bool consent = 4;
+  // Optimistic concurrency: when set, the change applies only if the current
+  // budget version is this one (FAILED_PRECONDITION otherwise). Unset: the
+  // change applies on top of whatever is current.
+  optional int64 expected_current_version = 5;
+}
+
+message SetUsageBillingBudgetResponse {
+  // The agreement as admission now reads it.
+  UsageBillingAgreement agreement = 1;
+  // The version this call appended.
+  UsageBillingBudgetVersion version = 2;
+}
+
+// One version of an organization's hosting budget. Versions are append-only.
+message UsageBillingBudgetVersion {
+  int64 infra_budget_cents = 1;
+  // Who set it. Empty for version 0, which the checkout consent recorded.
+  string actor_user_id = 2;
+  string actor_email = 3;
+  google.protobuf.Timestamp created_at = 4;
+  // The hosting usage policy version accepted with this budget.
+  string policy_version = 5;
+  // 0 is the budget consented at checkout; each change adds one.
+  int64 version = 6;
+  // "checkout_consent" (version 0) or "budget_change".
+  string source = 7;
+  string agreement_id = 8;
+  // True for the version admission reads now.
+  bool current = 9;
+}
+
+message ListUsageBillingBudgetVersionsRequest {
+  // Active organization; empty selects the caller's primary org.
+  optional string org_id = 1;
+}
+
+message ListUsageBillingBudgetVersionsResponse {
+  // Newest first. Empty when the org has no usage billing agreement.
+  repeated UsageBillingBudgetVersion versions = 1;
+}
+
+message GetOrgHostingUsageSummaryRequest {
+  // Active organization; empty selects the caller's primary org.
+  optional string org_id = 1;
+}
+
+message GetOrgHostingUsageSummaryResponse {
+  // Hosting spend this UTC month so far (since billing started, when that is
+  // later): the same figure the budget is compared against.
+  int64 spent_cents = 1;
+  // spent_cents plus the current running rate for the rest of the month.
+  int64 projected_month_end_cents = 2;
+  // Always true today: the projection assumes today's running rate holds.
+  bool projection_is_estimate = 3;
+  // The current hosting budget; 0 when the org has no usage billing agreement.
+  int64 budget_cents = 4;
+  google.protobuf.Timestamp period_start = 5;
+  google.protobuf.Timestamp period_end = 6;
+  // When new deploys would be refused by the budget at the current running
+  // rate, if before period_end. Equal to generated time when already reached.
+  optional google.protobuf.Timestamp blocked_at = 7;
+  // Per app (deployment) and environment, most expensive first.
+  repeated HostingAppUsage apps = 8;
+  // The usage the figures include ends here (metering trails real time).
+  google.protobuf.Timestamp measured_through = 9;
+  // The current running rate, in cents per hour, across the org's hosting.
+  double running_rate_cents_per_hour = 10;
+  // spent_cents has reached budget_cents: new deploys are refused now.
+  bool budget_reached = 11;
+  // The org's usage billing agreement is active.
+  bool billing_active = 12;
+}
+
+message HostingAppUsage {
+  string deployment_id = 1;
+  string deployment_name = 2;
+  string environment_id = 3;
+  string environment_name = 4;
+  // This month so far, at list price (an estimate).
+  int64 spent_cents = 5;
+  // spent_cents plus this app's running rate for the rest of the month.
+  int64 projected_cents = 6;
+  // Static sites only: bytes held in the platform bucket (live + retained
+  // releases). 0 with static_storage_measured false when not measured.
+  int64 static_storage_bytes = 7;
+  // Static sites only: bytes served this month.
+  int64 static_transfer_bytes = 8;
+  bool static_storage_measured = 9;
+}
+
+message GetFreeHostingStatusRequest {
+  // Active organization; empty selects the caller's primary org.
+  optional string org_id = 1;
+}
+
+message GetFreeHostingStatusResponse {
+  // This org holds its founder's free static hosting allowance.
+  bool is_designated = 1;
+  // When another org of the founder holds the allowance: its name, set only
+  // when the caller is that founder. Empty otherwise.
+  string held_by_org_name = 2;
+  // The caller is this org's accountable founder (organizations.owner_id).
+  bool caller_is_founder = 3;
+  // The org's live static sites counted against the allowance (only when
+  // is_designated).
+  repeated FreeHostingSite sites = 4;
+  int32 sites_limit = 5;
+  // Aggregate static storage of those sites, and its limit.
+  int64 storage_bytes = 6;
+  int64 storage_limit_bytes = 7;
+  // Static transfer this UTC month, and its limit.
+  int64 transfer_bytes = 8;
+  int64 transfer_limit_bytes = 9;
+  google.protobuf.Timestamp period_end = 10;
+  // Founder only: the earliest time the designation may move to another org.
+  optional google.protobuf.Timestamp next_move_allowed_at = 11;
+  // Per-site storage limit.
+  int64 site_storage_limit_bytes = 12;
+  // False when storage could not be measured; storage figures are then 0.
+  bool storage_measured = 13;
+}
+
+message FreeHostingSite {
+  string environment_name = 1;
+  string name = 2;
+  string url = 3;
+  int64 storage_bytes = 4;
+  string deployment_id = 5;
+  bool storage_measured = 6;
 }
 
 // Exact decimal cents per displayed unit, derived from the canonical catalog.
@@ -1597,20 +1839,10 @@ message GetCurrentUserComputeUsageResponse {
   // not be rendered as a value.
   bool usage_measured = 10;
 
-  // The plan allowance for this period, in small-daemon-seconds.
-  int64 included_small_daemon_seconds = 11 [deprecated = true];
-  // Consumed this period: drained counter + undrained segments.
-  int64 used_small_daemon_seconds = 12 [deprecated = true];
-  // max(0, included − used). Never negative.
-  int64 remaining_small_daemon_seconds = 13 [deprecated = true];
-  // One-time coupon grant still unspent, in small-daemon-seconds. Reported
-  // alongside the allowance rather than folded into it: the allowance
-  // refills every period, a grant depletes once. Spent after the allowance
-  // and before overage.
-  int64 granted_small_daemon_seconds_remaining = 14 [deprecated = true];
-  // Sum of the multipliers of the daemons running right now (the burn rate
-  // in SDS per second). Zero when nothing runs.
-  int64 running_multiplier = 15 [deprecated = true];
+  // 11-15 were the integer small-daemon-second fields, superseded by the
+  // exact weighted-second fields below.
+  reserved 11, 12, 13, 14, 15;
+  reserved "included_small_daemon_seconds", "used_small_daemon_seconds", "remaining_small_daemon_seconds", "granted_small_daemon_seconds_remaining", "running_multiplier";
   // Exact rational weighted-second accounting; no legacy integer truncation.
   string pricing_version = 23;
   string allowance_weighted_seconds = 24;
@@ -1649,12 +1881,11 @@ message GetCurrentUserComputeUsageResponse {
 // SizeUsage is one size's running usage within a period (design §6.1).
 message SizeUsage {
   string size = 1;
-  int64 multiplier = 2 [deprecated = true];
-  // Deprecated whole seconds; exact rational field is canonical.
-  int64 running_seconds = 3 [deprecated = true];
-  int64 included_small_daemon_seconds = 4 [deprecated = true];
-  int64 overage_seconds = 5 [deprecated = true];
-  // overage_seconds × this size's hourly price / 3600, in cents, as an exact
+  // 2-5 were the integer multiplier and whole-second fields, superseded by
+  // cost_weight and the exact_* rational fields.
+  reserved 2, 3, 4, 5;
+  reserved "multiplier", "running_seconds", "included_small_daemon_seconds", "overage_seconds";
+  // exact_overage_seconds × this size's hourly price / 3600, in cents, as an exact
   // decimal string rounded half-up to 4 places.
   string overage_cost_cents = 6;
   string pricing_version = 7;
@@ -1675,10 +1906,12 @@ message StorageUsage {
   int64 included_gib = 2;
   // max(0, provisioned − included): what bills right now.
   int64 extra_gib = 3;
-  // Billed excess GiB × seconds so far this period.
-  int64 extra_gib_seconds = 4 [deprecated = true];
+  // 4 was the integer extra_gib_seconds, superseded by exact_extra_gib_seconds.
+  reserved 4;
+  reserved "extra_gib_seconds";
+  // Billed excess GiB × seconds so far this period, as an exact rational.
   string exact_extra_gib_seconds = 8;
-  // extra_gib_seconds priced, in cents, exact decimal rounded half-up to 4 dp.
+  // exact_extra_gib_seconds priced, in cents, exact decimal rounded half-up to 4 dp.
   string cost_cents = 5;
   // cost_cents plus extra_gib carried to the end of the period.
   string projected_cost_cents = 6;
@@ -1795,3 +2028,52 @@ message UpdateBillingEmailRequest {
 }
 
 message UpdateBillingEmailResponse {}
+
+message GetStorageUsageRequest {
+  string org_id = 1;
+}
+
+enum StorageProduct {
+  STORAGE_PRODUCT_UNSPECIFIED = 0;
+  STORAGE_PRODUCT_MACHINE_DISKS = 1; // agent sandbox disks (provisioned size)
+  STORAGE_PRODUCT_APP_VOLUMES = 2; // hosting PVCs incl. managed databases (provisioned size)
+  STORAGE_PRODUCT_CONTAINER_IMAGES = 3;
+  STORAGE_PRODUCT_STATIC_SITES = 4;
+  STORAGE_PRODUCT_BUCKETS = 5;
+  STORAGE_PRODUCT_TEST_REPORTS = 6;
+  STORAGE_PRODUCT_SBOM_COPIES = 7; // never counts toward the pool
+}
+
+enum StorageBillingBasis {
+  STORAGE_BILLING_BASIS_UNSPECIFIED = 0;
+  STORAGE_BILLING_BASIS_BILLED = 1; // billed today under its current terms
+  STORAGE_BILLING_BASIS_TRACKED = 2; // measured, not charged
+  STORAGE_BILLING_BASIS_NOT_COUNTED = 3; // a platform copy; shown, never counted
+}
+
+message StorageProductUsage {
+  StorageProduct product = 1;
+  // Absent when nothing has measured it yet (never a fake 0).
+  optional int64 bytes_now = 2;
+  google.protobuf.Timestamp measured_at = 3;
+  // GiB-hours this period, from the hourly ledger. Absent when unmeasured.
+  optional int64 gib_hours_period_to_date = 4;
+  bool counts_toward_pool = 5;
+  StorageBillingBasis billing_basis = 6;
+}
+
+message StoragePool {
+  int64 free_gib = 1; // F, 10
+  int64 plan_included_gib = 2; // sum of the org's machine plans' disk_gib
+  int64 included_gib = 3; // free_gib + plan_included_gib
+  int64 used_bytes = 4; // sum of bytes_now over counts_toward_pool products that are measured
+  google.protobuf.Timestamp period_start = 5;
+  google.protobuf.Timestamp period_end = 6;
+  // false until the billing cutover (P5): the pool is shown, not billed.
+  bool billing_active = 7;
+}
+
+message GetStorageUsageResponse {
+  StoragePool pool = 1;
+  repeated StorageProductUsage products = 2;
+}

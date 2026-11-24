@@ -535,7 +535,7 @@ export function MonacoDiffViewer({ file }: MonacoDiffViewerProps) {
         setOriginalContent("");
         setModifiedContent(file.content);
       }
-      // Last resort: try parsing the diff (for backwards compatibility)
+      // No content (a deleted file, or one emptied): rebuild both sides from the diff
       else if (file.diff) {
         const { original, modified } = parseGitDiff(file.diff);
         setOriginalContent(original);

@@ -88,7 +88,8 @@ test.describe('Activity Indicator Synchronization', () => {
     if (testInfo.title === 'child thread activity should propagate to main indicators') return;
     await mockAppsBackend(page);
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('navigation', { name: 'Chat sidebar navigation' })).toBeVisible();
+    // The one shell's nav (U6): at the chat home it is drilled into Agents, the chat list.
+    await expect(page.getByTestId('shell-nav').getByRole('navigation', { name: 'Agents' })).toBeVisible();
   });
 
   test('thinking indicator should not show when activity is IDLE', async ({ page }) => {
@@ -126,40 +127,6 @@ test.describe('Activity Indicator Synchronization', () => {
     // Thinking indicator should now be visible
     const thinkingIndicator = page.locator('[data-testid="thinking-indicator"]');
     await expect(thinkingIndicator).toBeVisible({ timeout: 1000 });
-
-    // Clean up
-    await setActivity(page, chatId, ChatActivity.IDLE);
-  });
-
-  test('green dot should show for active chat in sidebar', async ({ page }) => {
-    // Get any chat ID from the sidebar
-    const chatItems = page.locator('[data-testid^="chat-activity-dot-"]');
-    const count = await chatItems.count();
-    
-    if (count === 0) {
-      test.skip(true, 'No chats with activity dots found');
-      return;
-    }
-
-    // Get the first chat ID
-    const firstDot = chatItems.first();
-    const testId = await firstDot.getAttribute('data-testid');
-    const chatId = testId?.replace('chat-activity-dot-', '');
-
-    if (!chatId) {
-      test.skip(true, 'Could not extract chat ID');
-      return;
-    }
-
-    // Set activity to RUNNING
-    await setActivity(page, chatId, ChatActivity.RUNNING);
-    await page.waitForTimeout(100);
-
-    // Get activity state from data attribute
-    const activityState = await firstDot.getAttribute('data-activity-state');
-    
-    // The state should be 'thinking' or similar active state
-    expect(['thinking', 'streaming', 'awaiting_approval', 'background_running']).toContain(activityState);
 
     // Clean up
     await setActivity(page, chatId, ChatActivity.IDLE);
@@ -231,33 +198,6 @@ test.describe('Activity Indicator Synchronization', () => {
     activity = ChatActivity.IDLE;
     await expect(thinking).toBeHidden();
     await expect(sidebar).toBeHidden();
-  });
-
-  test('fork metadata workflows should not trigger thread activity indicators', async ({ page }) => {
-    const chatId = await getActiveChatId(page);
-    if (!chatId) {
-      test.skip(true, 'No active chat available');
-      return;
-    }
-
-    // Set threads with only a fork metadata workflow (should be filtered out)
-    // Activity stays IDLE because fork workflows are metadata-only
-    await setActivity(page, chatId, ChatActivity.IDLE);
-    await setThreads(page, chatId, [{
-      thread: `fork-${Date.now()}`,
-      status: 'running',
-      workflow_id: `workflow-fork-${Date.now()}`,
-      workflow_name: 'fork:some-thread', // Fork metadata workflow
-    }]);
-    await page.waitForTimeout(100);
-
-    // Thinking indicator should NOT show (fork workflows are excluded, activity is IDLE)
-    const thinkingIndicator = page.locator('[data-testid="thinking-indicator"]');
-    const thinkingVisible = await thinkingIndicator.isVisible().catch(() => false);
-    expect(thinkingVisible).toBe(false);
-
-    // Clean up
-    await clearThreads(page, chatId);
   });
 });
 

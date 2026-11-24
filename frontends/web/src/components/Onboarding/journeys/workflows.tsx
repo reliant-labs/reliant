@@ -25,7 +25,6 @@ import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 
 import { CHAT_SHELL_PREFIXES } from "../../../lib/chatRoute";
-import { reliantAppOrigin } from "../../../lib/shell";
 import { useProjectStore } from "../../../store/projectStore";
 import { useTourStore } from "../../../store/tourStore";
 import type { TourEventMap, TourEventName } from "../tourEvents";
@@ -36,7 +35,7 @@ import { layoutActions } from "./layoutActions";
 import { EdgeLesson, FOCUS_TARGET, OnCanvas } from "./workflowsCanvas";
 import { APPROVE, LESSONS, LOOP, MERGE, REPORT, REVIEW, SCHEDULE, START, SWITCH } from "./workflowsLessons";
 import { WorkflowsPhoneDeck } from "./workflowsPhone";
-import { homePath, newWorkflowPath, projectPath, workflowBuilderPath } from "@/lib/paths";
+import { homePath, newWorkflowPath, projectChatsPath, workflowBuilderPath, workflowLibraryPath } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
 
 function exampleSlug(context: JourneyContext): string | undefined {
@@ -166,14 +165,20 @@ export const workflowsJourney: Journey = {
   id: "workflows",
   // v3 shows a finished example instead of building one; v2 built it, v1 was
   // the engine's placeholder and v0 the retired single tour. People who
-  // finished v2 see v3 once.
+  // finished v2 see v3 once. The outro's copy and its Finish moved to the one
+  // shell (the menu on the left, the terminal at the bottom, Finish leaves the
+  // menu alone) without a bump: the lessons are unchanged, and a re-offer
+  // would replay all eight steps for one card's wording.
   version: 3,
   controls: "callout",
-  // Workflows need Reliant; the forge shell links here instead.
+  // The tour runs in the Reliant tour shell: it seeds its example into the
+  // current project, which the forge brand's visitor (no onboarding, maybe
+  // no project) may not have. There its end card opens the Workflows area
+  // instead, in this app (one shell).
   shells: ["reliant"],
   elsewhere: {
-    label: "Try AI workflows in Reliant",
-    href: () => `${reliantAppOrigin()}/?journey=workflows`,
+    label: "Try AI workflows",
+    href: () => workflowLibraryPath(),
   },
   title: "Use AI workflows",
   description:
@@ -231,17 +236,22 @@ export const workflowsJourney: Journey = {
       title: "Back to the chat",
       description: (
         <>
-          The chat is where work starts: pick a workflow under the message box and send. Conversations are on the left;
-          files and the terminal open on the right, each from its button at the top. We'll close the side panels when
-          you finish. Ready to build one? Make your own starts a new workflow.
+          The chat is where work starts: pick a workflow under the message box and send. The menu on the left holds
+          your chats and workflows. The file browser opens on the right and the terminal at the bottom, each from its
+          button at the top. Ready to build one? Make your own starts a new workflow.
           <MakeYourOwn />
         </>
       ),
       targets: [
-        { selector: "[data-onboarding='chat-input']", label: "The chat", description: "Start work here." },
-        { selector: "[aria-label='Toggle Chat Sidebar']", label: "Conversations", description: "Opens and closes the list on the left." },
-        { selector: "[aria-label='Toggle File Browser']", label: "Files", description: "Opens and closes files on the right." },
-        { selector: "[aria-label='Toggle Terminal']", label: "Terminal", description: "Opens and closes the terminal." },
+        // Above the composer: it spans the chat column, so beside it is over the nav.
+        { selector: "[data-onboarding='chat-input']", label: "The chat", description: "Start work here.", labelPosition: "above" },
+        { selector: "[data-tour='header-sidebar-toggle']", label: "The menu", description: "Shows and hides the menu on the left." },
+        // One target for the pair: the two buttons sit 30px apart, and two labels overlapped (Header.tsx).
+        {
+          selector: "[data-tour='header-panel-toggles']",
+          label: "Files and terminal",
+          description: "The file browser opens on the right, the terminal at the bottom.",
+        },
       ],
       route: {
         path: "/project/",
@@ -249,16 +259,18 @@ export const workflowsJourney: Journey = {
         alsoAt: CHAT_SHELL_PREFIXES,
         open: () => {
           const projectId = useProjectStore.getState().currentProject?.id;
-          return projectId ? { to: projectPath(projectId) } : { to: homePath() };
+          return projectId ? { to: projectChatsPath(projectId) } : { to: homePath() };
         },
         label: "Open the chat",
       },
-      // Show the panels being explained, then tidy them away.
+      // Show what is being explained. Finish closes only what the tour opened
+      // (the file browser, if it was shut); the menu on the left is the shell's
+      // navigation and stays as it is.
       onEnter: () => {
         layoutActions.showSidebar();
-        layoutActions.showFiles();
+        layoutActions.showFilesForTour();
       },
-      onComplete: layoutActions.collapseAll,
+      onComplete: layoutActions.hidePanelsTourOpened,
     },
   ],
 };

@@ -10,6 +10,8 @@ package db
 import (
 	"context"
 	"fmt"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
 // ============================================================================
@@ -24,6 +26,13 @@ import (
 // 3. Marshals to JSON
 // 4. Calls CreateChatUpdate
 // ============================================================================
+
+// ChatUpdateWriter is where the typed emitters that run outside the
+// repository (EmitStreamFinalizedUpdate, EmitAgentMessagesDrainedUpdate) write.
+// *Repo satisfies it.
+type ChatUpdateWriter interface {
+	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
+}
 
 // EmitToolCallUpdate emits a tool call status update to chat_updates
 func (r *Repo) EmitToolCallUpdate(ctx context.Context, chatID string, update ToolCallUpdate) error {
@@ -59,13 +68,13 @@ func (r *Repo) EmitQuestionUpdate(ctx context.Context, chatID string, update Que
 // EmitStreamFinalizedUpdate emits a stream_finalized marker for a
 // pre-allocated assistant message id (delta identity protocol). entity_id is
 // the message id itself so snapshot dedup keeps exactly one marker per message.
-func (r *Repo) EmitStreamFinalizedUpdate(ctx context.Context, chatID string, update StreamFinalizedUpdate) error {
+func EmitStreamFinalizedUpdate(ctx context.Context, w ChatUpdateWriter, chatID string, update StreamFinalizedUpdate) error {
 	update.UpdateTypeName = "stream_finalized"
 	data, err := MarshalUpdate(update)
 	if err != nil {
 		return fmt.Errorf("failed to marshal stream finalized update: %w", err)
 	}
-	return r.CreateChatUpdate(ctx, chatID, UpdateTypeStreamFinalized, update.MessageID, data)
+	return w.CreateChatUpdate(ctx, chatID, UpdateTypeStreamFinalized, update.MessageID, data)
 }
 
 // EmitAgentMessagesDrainedUpdate announces the mailbox rows a drain just
@@ -82,13 +91,13 @@ func (r *Repo) EmitStreamFinalizedUpdate(ctx context.Context, chatID string, upd
 // entity_id is unique per drain (not per thread): every drain is a distinct
 // event naming a distinct set of ids, so collapsing two of them under one
 // entity in the snapshot dedup would lose the older one's ids.
-func (r *Repo) EmitAgentMessagesDrainedUpdate(ctx context.Context, chatID string, update AgentMessagesDrainedUpdate) error {
+func EmitAgentMessagesDrainedUpdate(ctx context.Context, w ChatUpdateWriter, chatID string, update AgentMessagesDrainedUpdate) error {
 	update.UpdateTypeName = "agent_messages_drained"
 	data, err := MarshalUpdate(update)
 	if err != nil {
 		return fmt.Errorf("failed to marshal agent messages drained update: %w", err)
 	}
-	return r.CreateChatUpdate(ctx, chatID, UpdateTypeAgentMessagesDrained,
+	return w.CreateChatUpdate(ctx, chatID, UpdateTypeAgentMessagesDrained,
 		EntityIDForAgentMessagesDrained(update.Thread), data)
 }
 

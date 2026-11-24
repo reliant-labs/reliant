@@ -13,8 +13,8 @@
  *                                The thread is the path's; choosing another
  *                                navigates (push), so Back closes it.
  *   /new?project=&machine=&ws=   shows the new-chat view in that context
- *   / and /project/<id>          the workspace restore's chat, once it has
- *                                one: the URL is replaced with its `/c/<id>`
+ *   / and /project/<id>          no chat: one open is closed, and the home
+ *                                never redirects to a chat
  *
  * Each runs when the URL changes, never when the store does: a chat the app
  * opened or closed by itself moves the URL instead (lib/chatUrlFollow.ts,
@@ -29,18 +29,19 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMatch, useRouter, useRouterState } from "@tanstack/react-router";
+import { useMatch, useRouter } from "@tanstack/react-router";
 
 import { useChatViewOverride } from "@/components/Chat/thread-views/useChatThreadMode";
 import { getChatFromCache } from "@/hooks/chat-queries";
-import { chatShellRouteOf, latestPathname, navigateToChatUrl, newChatAppliedShown, patchNewChatUrl, type ChatShellRoute } from "@/lib/chatRoute";
-import { takeMovedChatNotice, type ChatRouteData } from "@/lib/chatRouteResolve";
+import { attachedProjectsOfParam, attachedProjectsParam, chatShellRouteOf, navigateToChatUrl, newChatAppliedShown, patchNewChatUrl, type ChatShellRoute } from "@/lib/chatRoute";
+import type { ChatRouteData } from "@/lib/chatRouteResolve";
 import { followActiveChat } from "@/lib/chatUrlFollow";
 import { isElectron } from "@/lib/constants";
 import { openChatInWorkspace } from "@/lib/openChatInWorkspace";
 import { toast } from "@/lib/toast-manager";
 import { CHAT_PANELS, type ChatPanel, type ChatView, type NewChatSearch } from "@/routeSchemas";
 import { useChatStore } from "@/store/chatStore";
+import { useNewChatAttachedProjects } from "@/store/newChatProjectsStore";
 import { applyNewChat, isNewChatApplied, selectSharedChat } from "@/store/openChat";
 import { useCurrentWorktreeState, useWorkspaceStateStore, type RightSidebarTab } from "@/store/workspaceStateStore";
 
@@ -116,12 +117,6 @@ export function useChatRoute({ ready, panelOpen, setPanelOpen, projectId, worktr
   const routeChat = route?.kind === "chat" && data?.kind === "chat" && data.chat.id === route.chatId ? data.chat : null;
   const openedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (!routeChat) return;
-    // A link into the wrong org was sent here: say so once, on the page it landed on.
-    const notice = takeMovedChatNotice(routeChat.id);
-    if (notice) toast.info(notice);
-  }, [routeChat]);
-  useEffect(() => {
     // Left the chat's page: the shell stays mounted, so a Back to it (the
     // same match) opens it again, over whatever the page in between showed.
     if (route?.kind !== "chat") {
@@ -147,6 +142,8 @@ export function useChatRoute({ ready, panelOpen, setPanelOpen, projectId, worktr
           project: typeof search.project === "string" ? search.project : undefined,
           machine: typeof search.machine === "string" ? search.machine : undefined,
           ws: typeof search.ws === "string" ? search.ws : undefined,
+          app: typeof search.app === "string" ? search.app : undefined,
+          with: search.with !== undefined ? attachedProjectsParam(attachedProjectsOfParam(search.with)) : undefined,
         }
       : null;
   const appliedFor = useRef<string | null>(null);
@@ -176,7 +173,13 @@ export function useChatRoute({ ready, panelOpen, setPanelOpen, projectId, worktr
       void newChatAppliedShown().then(settle);
       return;
     }
-    applyNewChat({ projectId: newSearch.project, daemonId: newSearch.machine, worktreeId: newSearch.ws }).then(
+    applyNewChat({
+      projectId: newSearch.project,
+      daemonId: newSearch.machine,
+      worktreeId: newSearch.ws,
+      appName: newSearch.app,
+      attachedProjectIds: newSearch.with !== undefined ? attachedProjectsOfParam(newSearch.with) : undefined,
+    }).then(
       () => settle(true),
       (error) => {
         void toast.error(error);
@@ -185,24 +188,35 @@ export function useChatRoute({ ready, panelOpen, setPanelOpen, projectId, worktr
     // newSearch is derived from locationKey.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, route?.kind, locationKey]);
-  // The draft's project and workspace as the view shows them (the project
-  // chip, the workspace picker), so a refresh keeps them. Only once the
-  // URL's own context is on screen: before that the view still shows the
-  // last one, which is not what the URL asked for.
+  // The draft's project, workspace and attached projects as the view shows
+  // them (the project chip, the workspace picker, the project chips), so a
+  // refresh or a shared link keeps them. Only once the URL's own context is
+  // on screen: before that the view still shows the last one, which is not
+  // what the URL asked for.
+  const attached = attachedProjectsParam(useNewChatAttachedProjects(projectId));
   useEffect(() => {
     if (!ready || route?.kind !== "new" || shownFor !== locationKey || activeChatId !== null || !projectId) return;
-    if (newSearch?.project === projectId && (newSearch.ws ?? null) === worktreeId) return;
-    patchNewChatUrl({ project: projectId, ws: worktreeId ?? undefined });
-  }, [ready, route?.kind, shownFor, locationKey, activeChatId, projectId, worktreeId, newSearch?.project, newSearch?.ws]);
+    if (newSearch?.project === projectId && (newSearch.ws ?? null) === worktreeId && newSearch.with === attached) return;
+    patchNewChatUrl({ project: projectId, ws: worktreeId ?? undefined, with: attached });
+  }, [ready, route?.kind, shownFor, locationKey, activeChatId, projectId, worktreeId, attached, newSearch?.project, newSearch?.ws, newSearch?.with]);
 
-  // ── The home: the restored chat's URL ─────────────────────────────────────
-  const routerStatus = useRouterState({ select: (state) => state.status });
+  // ── The home: no chat ─────────────────────────────────────────────────────
+  // The home names no chat, so none is open on it: a Back from a chat to the
+  // home closes it (the shell stays mounted). It never redirects to a chat.
+  // A chat that becomes active on the home afterwards (a draft's first
+  // message) moves the URL to it (lib/chatUrlFollow.ts).
+  const homeEntered = useRef<string | null>(null);
   useEffect(() => {
-    if (!ready || route?.kind !== "home" || !activeChatId) return;
-    // A navigation on its way decides; the home's URL is only replaced in place.
-    if (routerStatus === "pending" || chatShellRouteOf(latestPathname())?.kind !== "home") return;
-    navigateToChatUrl(activeChatId, { orgId: getChatFromCache(activeChatId)?.orgId, replace: true });
-  }, [ready, route?.kind, activeChatId, routerStatus]);
+    if (route?.kind !== "home") {
+      homeEntered.current = null;
+      return;
+    }
+    if (!ready || homeEntered.current === match.id) return;
+    homeEntered.current = match.id;
+    if (useChatStore.getState().activeChatId === null) return;
+    useChatStore.getState().clearCurrentChat(worktreeId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, route?.kind, match.id]);
 
   // ── The thread ────────────────────────────────────────────────────────────
   const routeChatId = route?.kind === "chat" ? route.chatId : null;

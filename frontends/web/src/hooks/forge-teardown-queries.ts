@@ -24,6 +24,8 @@ import {
   retainedReadFailureOf,
   type RetainedDatabase,
 } from "@/services/forge/cloudEnvs";
+import { transport as appTransport } from "@/lib/connect";
+import { useTransport } from "@/lib/transportScope";
 import { orgQueryEnabled, useOrgScope, withOrgFailure } from "@/lib/orgScope";
 
 import { forgeCloudKeys } from "./forge-queries";
@@ -48,11 +50,12 @@ export function useRetainedDatabases({
   refetchInterval = false,
 }: { enabled?: boolean; refetchInterval?: number | false } = {}) {
   const org = useOrgScope();
+  const transport = useTransport(appTransport);
   return useQuery<RetainedDatabase[]>(
     withOrgFailure(
       {
         queryKey: forgeCloudKeys.retainedDatabases(org.orgId),
-        queryFn: () => listRetainedDatabases(org.orgId),
+        queryFn: () => listRetainedDatabases(transport, org.orgId),
         enabled: enabled && hasCloudControlPlane() && orgQueryEnabled(org),
         staleTime: 30_000,
         // While a keep-data delete is being confirmed (keptDataChecks.ts).
@@ -69,8 +72,9 @@ export function useRetainedDatabases({
 /** Purge one kept database. The row stays listed until the control plane has destroyed its volumes. */
 export function usePurgeRetainedDatabase() {
   const queryClient = useQueryClient();
+  const transport = useTransport(appTransport);
   return useMutation<void, Error, { id: string }>({
-    mutationFn: ({ id }) => purgeRetainedDatabase(id),
+    mutationFn: ({ id }) => purgeRetainedDatabase(transport, id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.retainedDatabases.all });
     },

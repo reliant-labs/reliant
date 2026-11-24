@@ -481,6 +481,130 @@ func (x *IdentitySocialStatus) GetAppliedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// IdentitySocialCheck is one declared social provider's sign-in check
+// (CheckSocialSignIn): the authorize URL the issuer built for a sign-in it
+// started, or why none was started. It carries no secret: a client id is
+// public, and the URL is the one a browser is sent to.
+type IdentitySocialCheck struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// google | github
+	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	// The provider's authorize URL the issuer answered. Empty when no sign-in
+	// was started (see error).
+	AuthUrl string `protobuf:"bytes,2,opt,name=auth_url,json=authUrl,proto3" json:"auth_url,omitempty"`
+	// Why no sign-in was started: the provider is not applied, or the issuer
+	// refused. Empty when one was.
+	Error string `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	// The provider's state as IdentitySocialStatus reports it (applied |
+	// pending | secret_missing). Only an applied provider is started.
+	State string `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	// What the authorize URL carries.
+	RedirectUri string   `protobuf:"bytes,5,opt,name=redirect_uri,json=redirectUri,proto3" json:"redirect_uri,omitempty"`
+	ClientId    string   `protobuf:"bytes,6,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	Scopes      []string `protobuf:"bytes,7,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	// The callback registered at the provider: <issuer>/idps/callback.
+	ExpectedRedirectUri string `protobuf:"bytes,8,opt,name=expected_redirect_uri,json=expectedRedirectUri,proto3" json:"expected_redirect_uri,omitempty"`
+	// redirect_uri equals expected_redirect_uri. False on a started sign-in
+	// means the provider will refuse it until the OAuth app lists
+	// redirect_uri, or the issuer's public URL is fixed.
+	RedirectUriMatches bool `protobuf:"varint,9,opt,name=redirect_uri_matches,json=redirectUriMatches,proto3" json:"redirect_uri_matches,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *IdentitySocialCheck) Reset() {
+	*x = IdentitySocialCheck{}
+	mi := &file_controlplane_v1_identity_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IdentitySocialCheck) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IdentitySocialCheck) ProtoMessage() {}
+
+func (x *IdentitySocialCheck) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_identity_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IdentitySocialCheck.ProtoReflect.Descriptor instead.
+func (*IdentitySocialCheck) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *IdentitySocialCheck) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *IdentitySocialCheck) GetAuthUrl() string {
+	if x != nil {
+		return x.AuthUrl
+	}
+	return ""
+}
+
+func (x *IdentitySocialCheck) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *IdentitySocialCheck) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *IdentitySocialCheck) GetRedirectUri() string {
+	if x != nil {
+		return x.RedirectUri
+	}
+	return ""
+}
+
+func (x *IdentitySocialCheck) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *IdentitySocialCheck) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+func (x *IdentitySocialCheck) GetExpectedRedirectUri() string {
+	if x != nil {
+		return x.ExpectedRedirectUri
+	}
+	return ""
+}
+
+func (x *IdentitySocialCheck) GetRedirectUriMatches() bool {
+	if x != nil {
+		return x.RedirectUriMatches
+	}
+	return false
+}
+
 // IdentityPasswordCode is a one-time code that sets a user's password, handed
 // back to an admin who asked for it (return_code) so they can deliver it
 // themselves. It is a credential: it is never logged or audited.
@@ -500,7 +624,7 @@ type IdentityPasswordCode struct {
 
 func (x *IdentityPasswordCode) Reset() {
 	*x = IdentityPasswordCode{}
-	mi := &file_controlplane_v1_identity_proto_msgTypes[2]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -512,7 +636,7 @@ func (x *IdentityPasswordCode) String() string {
 func (*IdentityPasswordCode) ProtoMessage() {}
 
 func (x *IdentityPasswordCode) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_identity_proto_msgTypes[2]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -525,7 +649,7 @@ func (x *IdentityPasswordCode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdentityPasswordCode.ProtoReflect.Descriptor instead.
 func (*IdentityPasswordCode) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{2}
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *IdentityPasswordCode) GetCode() string {
@@ -563,7 +687,7 @@ type IdentityApp struct {
 
 func (x *IdentityApp) Reset() {
 	*x = IdentityApp{}
-	mi := &file_controlplane_v1_identity_proto_msgTypes[3]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -575,7 +699,7 @@ func (x *IdentityApp) String() string {
 func (*IdentityApp) ProtoMessage() {}
 
 func (x *IdentityApp) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_identity_proto_msgTypes[3]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -588,7 +712,7 @@ func (x *IdentityApp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdentityApp.ProtoReflect.Descriptor instead.
 func (*IdentityApp) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{3}
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *IdentityApp) GetName() string {
@@ -632,7 +756,7 @@ type IdentityDelivery struct {
 
 func (x *IdentityDelivery) Reset() {
 	*x = IdentityDelivery{}
-	mi := &file_controlplane_v1_identity_proto_msgTypes[4]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -644,7 +768,7 @@ func (x *IdentityDelivery) String() string {
 func (*IdentityDelivery) ProtoMessage() {}
 
 func (x *IdentityDelivery) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_identity_proto_msgTypes[4]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -657,7 +781,7 @@ func (x *IdentityDelivery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdentityDelivery.ProtoReflect.Descriptor instead.
 func (*IdentityDelivery) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{4}
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *IdentityDelivery) GetKind() string {
@@ -731,7 +855,7 @@ type IdentityRole struct {
 
 func (x *IdentityRole) Reset() {
 	*x = IdentityRole{}
-	mi := &file_controlplane_v1_identity_proto_msgTypes[5]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -743,7 +867,7 @@ func (x *IdentityRole) String() string {
 func (*IdentityRole) ProtoMessage() {}
 
 func (x *IdentityRole) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_identity_proto_msgTypes[5]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -756,7 +880,7 @@ func (x *IdentityRole) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdentityRole.ProtoReflect.Descriptor instead.
 func (*IdentityRole) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{5}
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *IdentityRole) GetKey() string {
@@ -799,14 +923,18 @@ type IdentityUser struct {
 	// The user's most recent successful sign-in check (a password, passkey or
 	// external identity provider) as the instance recorded it. Unset for a user
 	// who has never signed in.
-	LastSignInAt  *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_sign_in_at,json=lastSignInAt,proto3" json:"last_sign_in_at,omitempty"`
+	LastSignInAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_sign_in_at,json=lastSignInAt,proto3" json:"last_sign_in_at,omitempty"`
+	// Whether the instance has VERIFIED `email` (Zitadel's isVerified), as
+	// opposed to an address a user merely typed. An entitlement bound to an
+	// address must read this, never `email` alone.
+	EmailVerified bool `protobuf:"varint,8,opt,name=email_verified,json=emailVerified,proto3" json:"email_verified,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *IdentityUser) Reset() {
 	*x = IdentityUser{}
-	mi := &file_controlplane_v1_identity_proto_msgTypes[6]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -818,7 +946,7 @@ func (x *IdentityUser) String() string {
 func (*IdentityUser) ProtoMessage() {}
 
 func (x *IdentityUser) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_identity_proto_msgTypes[6]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -831,7 +959,7 @@ func (x *IdentityUser) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdentityUser.ProtoReflect.Descriptor instead.
 func (*IdentityUser) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{6}
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *IdentityUser) GetUserId() string {
@@ -883,6 +1011,353 @@ func (x *IdentityUser) GetLastSignInAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *IdentityUser) GetEmailVerified() bool {
+	if x != nil {
+		return x.EmailVerified
+	}
+	return false
+}
+
+// IdentitySummary is one managed identity of an environment, by name: what
+// ListIdentities returns, so a console or CLI can address each one.
+type IdentitySummary struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ManagedIdentity.name ("identity" unless the declaration names another).
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Empty until the instance is recorded.
+	Issuer string `protobuf:"bytes,2,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	// UNSPECIFIED when the identity is declared and its instance not yet
+	// recorded.
+	State IdentityState `protobuf:"varint,3,opt,name=state,proto3,enum=controlplane.v1.IdentityState" json:"state,omitempty"`
+	// Whether the control plane holds an instance for it.
+	HasInstance   bool `protobuf:"varint,4,opt,name=has_instance,json=hasInstance,proto3" json:"has_instance,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IdentitySummary) Reset() {
+	*x = IdentitySummary{}
+	mi := &file_controlplane_v1_identity_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IdentitySummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IdentitySummary) ProtoMessage() {}
+
+func (x *IdentitySummary) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_identity_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IdentitySummary.ProtoReflect.Descriptor instead.
+func (*IdentitySummary) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *IdentitySummary) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *IdentitySummary) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+func (x *IdentitySummary) GetState() IdentityState {
+	if x != nil {
+		return x.State
+	}
+	return IdentityState_IDENTITY_STATE_UNSPECIFIED
+}
+
+func (x *IdentitySummary) GetHasInstance() bool {
+	if x != nil {
+		return x.HasInstance
+	}
+	return false
+}
+
+// ImportIdentityUser is one account carried over from another identity
+// provider by ImportUsers: its id stays the account's id (every token's sub),
+// and its password hash, verified flag and social links come with it.
+//
+// It carries a CREDENTIAL (password_hash). Nothing that handles it logs,
+// audits or returns the hash: results name the id, an outcome and a reason.
+type ImportIdentityUser struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The account's id in the identity: the id the app already keys its rows
+	// by. 1-200 of [A-Za-z0-9._@-]; a malformed one is the row's invalid
+	// result, never the request's error.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The address, and the account's login name.
+	Email string `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	// The source provider's verified flag.
+	EmailVerified bool   `protobuf:"varint,3,opt,name=email_verified,json=emailVerified,proto3" json:"email_verified,omitempty"`
+	GivenName     string `protobuf:"bytes,4,opt,name=given_name,json=givenName,proto3" json:"given_name,omitempty"`
+	FamilyName    string `protobuf:"bytes,5,opt,name=family_name,json=familyName,proto3" json:"family_name,omitempty"`
+	DisplayName   string `protobuf:"bytes,6,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	// A modular-crypt or PHC hash: bcrypt ($2a$/$2b$/$2y$, cost 10-16), and
+	// argon2, scrypt or pbkdf2 only where the instance verifies them. There is
+	// no plaintext field. Optional: an account without one signs in another way.
+	PasswordHash string `protobuf:"bytes,7,opt,name=password_hash,json=passwordHash,proto3" json:"password_hash,omitempty"`
+	// Social accounts that sign in to this account. Each provider must be a
+	// social provider the identity declares, applied on the instance.
+	Links []*ImportIdentityLink `protobuf:"bytes,8,rep,name=links,proto3" json:"links,omitempty"`
+	// Written to the account. Keys under "forge." are refused.
+	Metadata map[string]string `protobuf:"bytes,9,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Keys of the identity's console-managed roles. A declared role is refused.
+	Roles         []string `protobuf:"bytes,10,rep,name=roles,proto3" json:"roles,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportIdentityUser) Reset() {
+	*x = ImportIdentityUser{}
+	mi := &file_controlplane_v1_identity_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportIdentityUser) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportIdentityUser) ProtoMessage() {}
+
+func (x *ImportIdentityUser) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_identity_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportIdentityUser.ProtoReflect.Descriptor instead.
+func (*ImportIdentityUser) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ImportIdentityUser) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ImportIdentityUser) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+func (x *ImportIdentityUser) GetEmailVerified() bool {
+	if x != nil {
+		return x.EmailVerified
+	}
+	return false
+}
+
+func (x *ImportIdentityUser) GetGivenName() string {
+	if x != nil {
+		return x.GivenName
+	}
+	return ""
+}
+
+func (x *ImportIdentityUser) GetFamilyName() string {
+	if x != nil {
+		return x.FamilyName
+	}
+	return ""
+}
+
+func (x *ImportIdentityUser) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *ImportIdentityUser) GetPasswordHash() string {
+	if x != nil {
+		return x.PasswordHash
+	}
+	return ""
+}
+
+func (x *ImportIdentityUser) GetLinks() []*ImportIdentityLink {
+	if x != nil {
+		return x.Links
+	}
+	return nil
+}
+
+func (x *ImportIdentityUser) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+func (x *ImportIdentityUser) GetRoles() []string {
+	if x != nil {
+		return x.Roles
+	}
+	return nil
+}
+
+// ImportIdentityLink is a social account linked to an imported user.
+type ImportIdentityLink struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// A declared social provider type: "github" or "google".
+	Provider string `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	// The provider's STABLE id for the person (GitHub's numeric id, Google's
+	// sub), never a login or an address.
+	ProviderUserId string `protobuf:"bytes,2,opt,name=provider_user_id,json=providerUserId,proto3" json:"provider_user_id,omitempty"`
+	// A display name for the link (a GitHub login). Optional.
+	ProviderUserName string `protobuf:"bytes,3,opt,name=provider_user_name,json=providerUserName,proto3" json:"provider_user_name,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ImportIdentityLink) Reset() {
+	*x = ImportIdentityLink{}
+	mi := &file_controlplane_v1_identity_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportIdentityLink) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportIdentityLink) ProtoMessage() {}
+
+func (x *ImportIdentityLink) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_identity_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportIdentityLink.ProtoReflect.Descriptor instead.
+func (*ImportIdentityLink) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ImportIdentityLink) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *ImportIdentityLink) GetProviderUserId() string {
+	if x != nil {
+		return x.ProviderUserId
+	}
+	return ""
+}
+
+func (x *ImportIdentityLink) GetProviderUserName() string {
+	if x != nil {
+		return x.ProviderUserName
+	}
+	return ""
+}
+
+// ImportIdentityResult is what ImportUsers did with one row. It carries no
+// row content beyond the id.
+type ImportIdentityResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// created | updated | unchanged | conflict | invalid | failed.
+	Outcome string `protobuf:"bytes,2,opt,name=outcome,proto3" json:"outcome,omitempty"`
+	// Why, for a row that is not created, updated or unchanged
+	// (email_taken_by_other_id, unsupported_hash, provider_not_applied,
+	// link_taken, ...); for unchanged, what an update would change.
+	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportIdentityResult) Reset() {
+	*x = ImportIdentityResult{}
+	mi := &file_controlplane_v1_identity_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportIdentityResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportIdentityResult) ProtoMessage() {}
+
+func (x *ImportIdentityResult) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_identity_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportIdentityResult.ProtoReflect.Descriptor instead.
+func (*ImportIdentityResult) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ImportIdentityResult) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ImportIdentityResult) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
+}
+
+func (x *ImportIdentityResult) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
 var File_controlplane_v1_identity_proto protoreflect.FileDescriptor
 
 const file_controlplane_v1_identity_proto_rawDesc = "" +
@@ -896,7 +1371,17 @@ const file_controlplane_v1_identity_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x14\n" +
 	"\x05state\x18\x02 \x01(\tR\x05state\x129\n" +
 	"\n" +
-	"applied_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tappliedAt\"\x82\x01\n" +
+	"applied_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tappliedAt\"\xae\x02\n" +
+	"\x13IdentitySocialCheck\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x19\n" +
+	"\bauth_url\x18\x02 \x01(\tR\aauthUrl\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\x12\x14\n" +
+	"\x05state\x18\x04 \x01(\tR\x05state\x12!\n" +
+	"\fredirect_uri\x18\x05 \x01(\tR\vredirectUri\x12\x1b\n" +
+	"\tclient_id\x18\x06 \x01(\tR\bclientId\x12\x16\n" +
+	"\x06scopes\x18\a \x03(\tR\x06scopes\x122\n" +
+	"\x15expected_redirect_uri\x18\b \x01(\tR\x13expectedRedirectUri\x120\n" +
+	"\x14redirect_uri_matches\x18\t \x01(\bR\x12redirectUriMatches\"\x82\x01\n" +
 	"\x14IdentityPasswordCode\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x129\n" +
 	"\n" +
@@ -920,7 +1405,7 @@ const file_controlplane_v1_identity_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x14\n" +
 	"\x05group\x18\x03 \x01(\tR\x05group\x12\x1a\n" +
-	"\bdeclared\x18\x04 \x01(\bR\bdeclared\"\xae\x02\n" +
+	"\bdeclared\x18\x04 \x01(\bR\bdeclared\"\xd5\x02\n" +
 	"\fIdentityUser\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12!\n" +
@@ -929,7 +1414,38 @@ const file_controlplane_v1_identity_proto_rawDesc = "" +
 	"\x05roles\x18\x05 \x03(\tR\x05roles\x129\n" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12A\n" +
-	"\x0flast_sign_in_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\flastSignInAt*\xcd\x02\n" +
+	"\x0flast_sign_in_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\flastSignInAt\x12%\n" +
+	"\x0eemail_verified\x18\b \x01(\bR\remailVerified\"\x96\x01\n" +
+	"\x0fIdentitySummary\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
+	"\x06issuer\x18\x02 \x01(\tR\x06issuer\x124\n" +
+	"\x05state\x18\x03 \x01(\x0e2\x1e.controlplane.v1.IdentityStateR\x05state\x12!\n" +
+	"\fhas_instance\x18\x04 \x01(\bR\vhasInstance\"\xcb\x03\n" +
+	"\x12ImportIdentityUser\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05email\x18\x02 \x01(\tR\x05email\x12%\n" +
+	"\x0eemail_verified\x18\x03 \x01(\bR\remailVerified\x12\x1d\n" +
+	"\n" +
+	"given_name\x18\x04 \x01(\tR\tgivenName\x12\x1f\n" +
+	"\vfamily_name\x18\x05 \x01(\tR\n" +
+	"familyName\x12!\n" +
+	"\fdisplay_name\x18\x06 \x01(\tR\vdisplayName\x12(\n" +
+	"\rpassword_hash\x18\a \x01(\tB\x03\x80\x01\x01R\fpasswordHash\x129\n" +
+	"\x05links\x18\b \x03(\v2#.controlplane.v1.ImportIdentityLinkR\x05links\x12M\n" +
+	"\bmetadata\x18\t \x03(\v21.controlplane.v1.ImportIdentityUser.MetadataEntryR\bmetadata\x12\x14\n" +
+	"\x05roles\x18\n" +
+	" \x03(\tR\x05roles\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x88\x01\n" +
+	"\x12ImportIdentityLink\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\x12(\n" +
+	"\x10provider_user_id\x18\x02 \x01(\tR\x0eproviderUserId\x12,\n" +
+	"\x12provider_user_name\x18\x03 \x01(\tR\x10providerUserName\"X\n" +
+	"\x14ImportIdentityResult\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
+	"\aoutcome\x18\x02 \x01(\tR\aoutcome\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason*\xcd\x02\n" +
 	"\rIdentityState\x12\x1e\n" +
 	"\x1aIDENTITY_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16IDENTITY_STATE_PENDING\x10\x01\x12\x1b\n" +
@@ -984,7 +1500,7 @@ func file_controlplane_v1_identity_proto_rawDescGZIP() []byte {
 }
 
 var file_controlplane_v1_identity_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_controlplane_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_controlplane_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_controlplane_v1_identity_proto_goTypes = []any{
 	(IdentityState)(0),            // 0: controlplane.v1.IdentityState
 	(IdentityNotEnabledReason)(0), // 1: controlplane.v1.IdentityNotEnabledReason
@@ -993,28 +1509,37 @@ var file_controlplane_v1_identity_proto_goTypes = []any{
 	(IdentityUserState)(0),        // 4: controlplane.v1.IdentityUserState
 	(*IdentityEnvironment)(nil),   // 5: controlplane.v1.IdentityEnvironment
 	(*IdentitySocialStatus)(nil),  // 6: controlplane.v1.IdentitySocialStatus
-	(*IdentityPasswordCode)(nil),  // 7: controlplane.v1.IdentityPasswordCode
-	(*IdentityApp)(nil),           // 8: controlplane.v1.IdentityApp
-	(*IdentityDelivery)(nil),      // 9: controlplane.v1.IdentityDelivery
-	(*IdentityRole)(nil),          // 10: controlplane.v1.IdentityRole
-	(*IdentityUser)(nil),          // 11: controlplane.v1.IdentityUser
-	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
+	(*IdentitySocialCheck)(nil),   // 7: controlplane.v1.IdentitySocialCheck
+	(*IdentityPasswordCode)(nil),  // 8: controlplane.v1.IdentityPasswordCode
+	(*IdentityApp)(nil),           // 9: controlplane.v1.IdentityApp
+	(*IdentityDelivery)(nil),      // 10: controlplane.v1.IdentityDelivery
+	(*IdentityRole)(nil),          // 11: controlplane.v1.IdentityRole
+	(*IdentityUser)(nil),          // 12: controlplane.v1.IdentityUser
+	(*IdentitySummary)(nil),       // 13: controlplane.v1.IdentitySummary
+	(*ImportIdentityUser)(nil),    // 14: controlplane.v1.ImportIdentityUser
+	(*ImportIdentityLink)(nil),    // 15: controlplane.v1.ImportIdentityLink
+	(*ImportIdentityResult)(nil),  // 16: controlplane.v1.ImportIdentityResult
+	nil,                           // 17: controlplane.v1.ImportIdentityUser.MetadataEntry
+	(*timestamppb.Timestamp)(nil), // 18: google.protobuf.Timestamp
 }
 var file_controlplane_v1_identity_proto_depIdxs = []int32{
-	12, // 0: controlplane.v1.IdentitySocialStatus.applied_at:type_name -> google.protobuf.Timestamp
-	12, // 1: controlplane.v1.IdentityPasswordCode.expires_at:type_name -> google.protobuf.Timestamp
-	12, // 2: controlplane.v1.IdentityApp.broker_expires_at:type_name -> google.protobuf.Timestamp
+	18, // 0: controlplane.v1.IdentitySocialStatus.applied_at:type_name -> google.protobuf.Timestamp
+	18, // 1: controlplane.v1.IdentityPasswordCode.expires_at:type_name -> google.protobuf.Timestamp
+	18, // 2: controlplane.v1.IdentityApp.broker_expires_at:type_name -> google.protobuf.Timestamp
 	2,  // 3: controlplane.v1.IdentityDelivery.state:type_name -> controlplane.v1.IdentityDeliveryState
-	12, // 4: controlplane.v1.IdentityDelivery.last_verified_at:type_name -> google.protobuf.Timestamp
-	12, // 5: controlplane.v1.IdentityDelivery.last_written_at:type_name -> google.protobuf.Timestamp
+	18, // 4: controlplane.v1.IdentityDelivery.last_verified_at:type_name -> google.protobuf.Timestamp
+	18, // 5: controlplane.v1.IdentityDelivery.last_written_at:type_name -> google.protobuf.Timestamp
 	4,  // 6: controlplane.v1.IdentityUser.state:type_name -> controlplane.v1.IdentityUserState
-	12, // 7: controlplane.v1.IdentityUser.created_at:type_name -> google.protobuf.Timestamp
-	12, // 8: controlplane.v1.IdentityUser.last_sign_in_at:type_name -> google.protobuf.Timestamp
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	18, // 7: controlplane.v1.IdentityUser.created_at:type_name -> google.protobuf.Timestamp
+	18, // 8: controlplane.v1.IdentityUser.last_sign_in_at:type_name -> google.protobuf.Timestamp
+	0,  // 9: controlplane.v1.IdentitySummary.state:type_name -> controlplane.v1.IdentityState
+	15, // 10: controlplane.v1.ImportIdentityUser.links:type_name -> controlplane.v1.ImportIdentityLink
+	17, // 11: controlplane.v1.ImportIdentityUser.metadata:type_name -> controlplane.v1.ImportIdentityUser.MetadataEntry
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_controlplane_v1_identity_proto_init() }
@@ -1028,7 +1553,7 @@ func file_controlplane_v1_identity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_controlplane_v1_identity_proto_rawDesc), len(file_controlplane_v1_identity_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   7,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

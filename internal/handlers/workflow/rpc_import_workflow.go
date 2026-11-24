@@ -48,7 +48,7 @@ func (s *Service) ImportWorkflow(
 	userID := auth.MustGetUserID(ctx)
 
 	// Check for existing workflow with same slug (user-owned)
-	existing, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
+	existing, err := s.deps.Drafts.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check existing workflow"))
 	}
@@ -119,7 +119,7 @@ func (s *Service) ImportWorkflow(
 	}
 
 	// Upsert to database
-	saved, err := s.deps.Repo.UpsertWorkflowDraft(ctx, draft)
+	saved, err := s.deps.Drafts.UpsertWorkflowDraft(ctx, draft)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save workflow"))
 	}

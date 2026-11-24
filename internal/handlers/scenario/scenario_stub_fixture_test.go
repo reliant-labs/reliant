@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -64,7 +66,20 @@ type fixture struct {
 // scenarioDaemon holds ownProjectID's checkout (newScenarioRepo).
 const scenarioDaemon = "daemon-1"
 
-func newScenarioRepo(f *fixture) *scenario.MockRepository {
+// newScenarioDrafts is the caller's saved workflows: ownWorkflowSlug is theirs
+// and any other slug is absent.
+func newScenarioDrafts() *scenario.MockDrafts {
+	draft := &db.WorkflowDraft{ID: ownWorkflowDraft, UserID: "test-user", Slug: ownWorkflowSlug, Definition: fixtureWorkflow}
+	return &scenario.MockDrafts{
+		GetWorkflowDraftBySlugFunc: func(_ context.Context, userID, slug string) (*db.WorkflowDraft, error) {
+			if userID == "test-user" && slug == ownWorkflowSlug {
+				return draft, nil
+			}
+			return nil, nil
+		}}
+}
+
+func newScenarioRepo(f *fixture) *stubRepo {
 	scenarios := map[string]*db.WorkflowScenario{
 		ownScenarioID: {
 			ID: ownScenarioID, UserID: "test-user", Name: "Own scenario", Events: fixtureScenario,
@@ -75,34 +90,14 @@ func newScenarioRepo(f *fixture) *scenario.MockRepository {
 			WorkflowDraftID: ptr.Of("draft-other"),
 		},
 	}
-	draft := &db.WorkflowDraft{ID: ownWorkflowDraft, UserID: "test-user", Slug: ownWorkflowSlug, Definition: fixtureWorkflow}
-	return &scenario.MockRepository{
-		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
-			if id == ownProjectID && userID == "test-user" {
-				return &db.Project{ID: id, UserID: userID, Path: "/home/test/project"}, nil
-			}
-			return nil, core.ErrProjectNotFound
-		},
-		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) {
-			if id == ownProjectID {
-				// projects.path is the creating machine's; the checkout this
-				// store records is /home/test/project on scenarioDaemon.
-				return &db.Project{ID: id, UserID: "test-user", Path: "/Users/creator/project"}, nil
-			}
-			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("project"), id)
-		},
+	return projectaccesstest.Bound(&stubRepo{MockRepository: &scenario.MockRepository{
 		ListProjectDaemonsForProjectFunc: func(_ context.Context, projectID string) ([]*core.ProjectDaemon, error) {
 			return []*core.ProjectDaemon{{ProjectID: projectID, DaemonID: scenarioDaemon, Path: "/home/test/project", InstallState: core.ProjectInstallInstalled}}, nil
 		},
 		GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
 			return &db.Daemon{ID: id, UserID: "test-user"}, nil
 		},
-		GetWorkflowDraftBySlugFunc: func(_ context.Context, userID, slug string) (*db.WorkflowDraft, error) {
-			if userID == "test-user" && slug == ownWorkflowSlug {
-				return draft, nil
-			}
-			return nil, nil
-		},
+
 		ListWorkflowScenariosByDraftFunc: func(_ context.Context, draftID string) ([]*db.WorkflowScenario, error) {
 			var out []*db.WorkflowScenario
 			for _, s := range scenarios {
@@ -126,7 +121,21 @@ func newScenarioRepo(f *fixture) *scenario.MockRepository {
 			f.deleted = append(f.deleted, id)
 			return nil
 		},
-	}
+	},
+		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) {
+			if id == ownProjectID {
+				// projects.path is the creating machine's; the checkout this
+				// store records is /home/test/project on scenarioDaemon.
+				return &db.Project{ID: id, UserID: "test-user", Path: "/Users/creator/project"}, nil
+			}
+			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("project"), id)
+		},
+	}, func(_ context.Context, id, userID string) (*db.Project, error) {
+		if id == ownProjectID && userID == "test-user" {
+			return &db.Project{ID: id, UserID: userID, Path: "/home/test/project"}, nil
+		}
+		return nil, core.ErrProjectNotFound
+	})
 }
 
 // placeAsNamed places every named machine as itself (daemonplacement.Machines).

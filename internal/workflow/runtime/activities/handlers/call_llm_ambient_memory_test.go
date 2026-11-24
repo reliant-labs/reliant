@@ -12,6 +12,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/threads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
@@ -118,9 +121,9 @@ func TestCallLLM_ExcludeAmbientMemoryOutgoingHTTP(t *testing.T) {
 			cfg := &cfgpkg.Config{GlobalMemoryMD: ambientGlobalCanary, ProjectMemoryMD: ambientProjectCanary, RepoMemories: map[string]string{"private-repo": ambientRepoCanary}, DaemonRuntimeType: "kata",
 				Skills: []cfgpkg.StoredSkill{{Name: privateSkillPath, SkillPath: privateSkillPath, Description: skillCatalogCanary, Body: skillBodyCanary}},
 			}
-			handler := NewCallLLMActivity(h.Repo(), nil, nil, ambientConfigProvider{cfg}, func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+			handler := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 				return driver, nil
-			}, nil)
+			}, MCPBinder: nil})
 			input := callLLMInput(chat.ID, chat.ID, "mock-model")
 			input.Node.GetCallLlm().ExcludeAmbientMemory = excluded
 			input.Node.GetCallLlm().ExcludeSkillCatalog = excluded
@@ -170,9 +173,9 @@ func TestCallLLM_ExcludeAmbientMemoryProviderBoundary(t *testing.T) {
 			h.CreateTestUserMessageWithText(ctx, chat.ID, chat.ID, approvedBriefCanary)
 			cfg := &cfgpkg.Config{GlobalMemoryMD: ambientGlobalCanary, ProjectMemoryMD: ambientProjectCanary, RepoMemories: map[string]string{"private-repo": ambientRepoCanary}, DaemonRuntimeType: "kata"}
 			driver := &ambientCaptureDriver{failFirst: tc.retry}
-			handler := NewCallLLMActivity(h.Repo(), nil, nil, ambientConfigProvider{cfg}, func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+			handler := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 				return driver, nil
-			}, nil)
+			}, MCPBinder: nil})
 			input := callLLMInput(chat.ID, chat.ID, "mock-model")
 			input.Runtime.ExcludeAmbientMemory = tc.inherited
 			input.Node.GetCallLlm().ExcludeAmbientMemory = tc.local
@@ -226,9 +229,9 @@ func TestCallLLM_ExcludeAmbientMemoryDurableRecovery(t *testing.T) {
 	cfg := &cfgpkg.Config{GlobalMemoryMD: ambientGlobalCanary, ProjectMemoryMD: ambientProjectCanary, RepoMemories: map[string]string{"private": ambientRepoCanary}}
 	capture := &ambientCaptureDriver{}
 	freshHandler := func() *CallLLMActivity {
-		return NewCallLLMActivity(h.Repo(), nil, nil, ambientConfigProvider{cfg}, func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+		return NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 			return capture, nil
-		}, nil)
+		}, MCPBinder: nil})
 	}
 	first := callLLMInput(chat.ID, chat.ID, "mock-model")
 	first.Node.GetCallLlm().ExcludeAmbientMemory = true
@@ -239,7 +242,10 @@ func TestCallLLM_ExcludeAmbientMemoryDurableRecovery(t *testing.T) {
 	require.True(t, stored.ExcludeAmbientMemory)
 	// Real coarse-recovery builder has no former runtime policy to recover;
 	// even then the next actual provider request must consult durable lineage.
-	resume := wfruntime.ResumeInputFromDurableState(ctx, h.Repo(), chat.ID, chat.ID)
+	resume := wfruntime.ResumeInputFromDurableState(ctx, struct {
+		*db.Repo
+		store.ToolCallExtStore
+	}{h.Repo(), store.NewToolCallExtStore(h.Repo().ORM())}, chat.ID, chat.ID)
 	require.NotNil(t, resume)
 	require.Empty(t, resume.AmbientMemoryExcluded)
 	require.NoError(t, h.ExecuteActivity(freshHandler().Execute, callLLMInput(chat.ID, chat.ID, "mock-model"), &out))
@@ -280,9 +286,9 @@ func TestCallLLM_ExcludeAmbientMemoryFailsClosed(t *testing.T) {
 	chat := h.CreateTestChat(ctx, uuid.NewString(), project.ID, project.UserID)
 	h.CreateTestUserMessageWithText(ctx, chat.ID, chat.ID, approvedBriefCanary)
 	driver := &ambientCaptureDriver{}
-	handler := NewCallLLMActivity(failingAmbientPolicyStore{h.Repo()}, nil, nil, ambientConfigProvider{&cfgpkg.Config{GlobalMemoryMD: ambientGlobalCanary}}, func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+	handler := NewCallLLMActivity(CallLLMDeps{Store: failingAmbientPolicyStore{h.Repo()}, Spawns: nil, Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{&cfgpkg.Config{GlobalMemoryMD: ambientGlobalCanary}}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
-	}, nil)
+	}, MCPBinder: nil})
 	var out CallLLMOutput
 	err := h.ExecuteActivity(handler.Execute, callLLMInput(chat.ID, chat.ID, "mock-model"), &out)
 	require.ErrorContains(t, err, "resolve ambient memory exclusion")
@@ -333,9 +339,9 @@ func TestCallLLM_ExcludeAmbientMemoryIncompleteLineageNoProviderRequest(t *testi
 			require.NoError(t, err)
 			cfg := &cfgpkg.Config{GlobalMemoryMD: ambientGlobalCanary, ProjectMemoryMD: ambientProjectCanary, RepoMemories: map[string]string{"private": ambientRepoCanary}}
 			driver := &ambientCaptureDriver{}
-			handler := NewCallLLMActivity(h.Repo(), nil, nil, ambientConfigProvider{cfg}, func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+			handler := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 				return driver, nil
-			}, nil)
+			}, MCPBinder: nil})
 			// Test both default-false (the reproduced leak) and already-excluded
 			// survivors: corrupt lineage is not silently accepted in either case.
 			for _, alreadyExcluded := range []bool{false, true} {
@@ -376,9 +382,9 @@ func TestCallLLM_ExcludeAmbientMemoryMinimalMachineLessContext(t *testing.T) {
 				cfg.Skills = []cfgpkg.StoredSkill{{Name: "private", SkillPath: "private", Description: skillCatalogCanary, Body: skillBodyCanary}}
 			}
 			driver := &ambientCaptureDriver{}
-			handler := NewCallLLMActivity(h.Repo(), nil, nil, ambientConfigProvider{cfg}, func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+			handler := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: ambientConfigProvider{cfg}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 				return driver, nil
-			}, nil)
+			}, MCPBinder: nil})
 			input := callLLMInput(chat.ID, chat.ID, "mock-model")
 			args := input.Node.GetCallLlm()
 			args.ExcludeAmbientMemory = true

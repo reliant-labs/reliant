@@ -54,7 +54,7 @@ func (s *Service) SetOrgProviderAccountGrants(
 			return nil, svcerr.Wrap(err)
 		}
 	}
-	if err := s.deps.Store.SetOrgAccountGrants(ctx, orgID, acct.ID, users, userID); err != nil {
+	if err := s.deps.OrgAccounts.SetOrgAccountGrants(ctx, orgID, acct.ID, users, userID); err != nil {
 		return nil, svcerr.Wrap(err)
 	}
 	if len(users) > 0 {

@@ -43,15 +43,15 @@ import {
   withSearch,
   type LegacyEnvSearch,
 } from "./paths";
-import { appsPath } from "@/lib/paths";
+import { projectsPath } from "@/lib/paths";
 
 type ResolveSearch = { project?: string; forgeProject?: string };
 
-/** `/forge`: the Apps list (/apps) — or, naming one app, that app's console. */
+/** `/forge`: the apps (Projects, `?show=apps`) — or, naming one app, that app's console. */
 export function ForgeLandingRoute() {
   const search = useSearch({ strict: false }) as ResolveSearch;
   // Naming nothing, /forge means "my apps": the list, not a guess at one of them.
-  if (!search.project && !search.forgeProject) return <Navigate to={appsPath()} replace />;
+  if (!search.project && !search.forgeProject) return <Navigate to={projectsPath()} search={{ show: "apps" }} replace />;
   return <ForgeResolve {...pick(search)} target={(name) => consolePath(name, { kind: "overview" })} />;
 }
 

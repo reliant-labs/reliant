@@ -20,6 +20,12 @@ type TriggerInfo struct {
 	// Origin says whether Reliant caused the event and which run did; nil reads
 	// as "not caused by Reliant" (OriginCELValue).
 	Origin *core.TriggerOrigin `json:"origin,omitempty"`
+	// TraceParent is the W3C traceparent of the span that fired an
+	// unattended launch. Such a run is a trace of its own, not a child of
+	// that span (one event fans out to several orgs' triggers), and links to
+	// it instead (startRunTelemetry). Empty for an attended start, whose run
+	// stays in its caller's trace. Telemetry only: never in CELValue.
+	TraceParent string `json:"trace_parent,omitempty"`
 }
 
 // CELValue is the `trigger` namespace: the envelope fields plus `name` and

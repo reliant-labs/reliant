@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -45,20 +47,23 @@ func newMoveFixture() *moveFixture {
 }
 
 func (f *moveFixture) service(t *testing.T, gateOn bool) *project.Service {
-	repo := &project.MockRepository{
+	repo := &stubRepo{MockRepository: &project.MockRepository{
+		AssignUnassignedOrgFunc: func(_ context.Context, userID, orgID string) error {
+			f.stamped = append(f.stamped, userID+"→"+orgID)
+			return nil
+		},
+	},
 		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) {
 			if p, ok := f.projects[id]; ok {
 				return p, nil
 			}
 			return nil, svcerr.ErrNotFound
 		},
+	}
+	repoLedger := &project.MockMoveLedger{
 		ProjectOrgMoveBlockersFunc: func(context.Context, string) (*core.ProjectOrgMoveBlockers, error) {
 			b := f.blockers
 			return &b, nil
-		},
-		AssignUnassignedOrgFunc: func(_ context.Context, userID, orgID string) error {
-			f.stamped = append(f.stamped, userID+"→"+orgID)
-			return nil
 		},
 		FindProjectOrgMoveByRequestFunc: func(_ context.Context, actor, key string) (*core.ProjectOrgMove, error) {
 			for _, m := range f.moves {
@@ -98,7 +103,7 @@ func (f *moveFixture) service(t *testing.T, gateOn bool) *project.Service {
 		return nil
 	}}
 	gates := &configv1.OrgsConfig{ProjectMovesEnabled: gateOn}
-	return project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: repo, OrgRollout: gates, Moves: starter}))
+	return project.NewTestProject(t, withDeps(project.Deps{Repo: repo, Projects: projectaccesstest.For(repo), Ledger: repoLedger, OrgRollout: gates, Moves: starter}))
 }
 
 func personIn(t *testing.T, m authz.Membership) context.Context {

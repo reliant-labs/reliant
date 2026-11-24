@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -127,7 +128,7 @@ func (s *Service) CreateProject(
 	// resolution lands here on the second and later runs. A row is not a
 	// directory, so before handing the caller an id to bind a run to, confirm
 	// the directory the row names is still there.
-	if existing, err := s.deps.Repo.GetProjectByPathAndUserInScope(ctx, req.Msg.Path, userID, scope); pinned == "" && err == nil && existing != nil {
+	if existing, err := s.deps.Lookups.GetProjectByPathAndUserInScope(ctx, req.Msg.Path, userID, scope); pinned == "" && err == nil && existing != nil {
 		if err := reusableProject(ctx, userID, existing); err != nil {
 			return nil, err
 		}
@@ -212,7 +213,7 @@ func (s *Service) CreateProject(
 	// same rule CreateProjectFromRepo applies (existingProjectForRepo).
 	if pinned != "" {
 		if root, ok := rootRepo(discoverResp.Discovered); ok && strings.TrimSpace(root.RemoteURL) != "" {
-			if existing, err := s.deps.Repo.GetProjectByRemoteURLAndUserInScope(ctx, strings.TrimSpace(root.RemoteURL), userID, scope); err == nil && existing != nil {
+			if existing, err := s.deps.Lookups.GetProjectByRemoteURLAndUserInScope(ctx, strings.TrimSpace(root.RemoteURL), userID, scope); err == nil && existing != nil {
 				if err := reusableProject(ctx, userID, existing); err != nil {
 					return nil, err
 				}
@@ -457,7 +458,7 @@ func (s *Service) CreateProject(
 		ProjectID: project.ID,
 		DaemonID:  config.SeedDaemonID,
 	}
-	if err := s.deps.Repo.UpsertProjectConfigRecord(ctx, seedRecord); err != nil {
+	if err := s.deps.ProjectConfigs.UpsertProjectConfigRecord(ctx, seedRecord); err != nil {
 		logging.ErrorContext(ctx, "Failed to seed project config record", "error", err, "project_id", project.ID)
 	}
 
@@ -528,7 +529,7 @@ func (s *Service) findOrAttachOn(ctx context.Context, userID, daemonID, path str
 		}
 		return nil, svcerr.AlreadyExists(fmt.Sprintf("a project already exists at this path: %q on %s%s", here.Name, s.machineName(ctx, daemonID), inOrg(here)))
 	}
-	existing, err := s.deps.Repo.GetProjectByPathAndUserInScope(ctx, path, userID, scope)
+	existing, err := s.deps.Lookups.GetProjectByPathAndUserInScope(ctx, path, userID, scope)
 	if err != nil || existing == nil {
 		return nil, nil
 	}
@@ -581,7 +582,7 @@ func (s *Service) resolveCreateTarget(ctx context.Context, userID, pinned string
 		logging.InfoContext(ctx, "No daemon resolvable for new project; will rely on pending-command + reconcile", "error", err)
 		return createTarget{}, nil
 	}
-	machine, err := s.deps.Repo.GetDaemon(ctx, id)
+	machine, err := s.deps.Machines.GetDaemon(ctx, id)
 	switch {
 	case err != nil && !svcerr.IsNotFound(err):
 		return createTarget{}, svcerr.WrapOr(err, svcerr.Internal("failed to read the machine the project would be created on"))

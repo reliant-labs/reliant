@@ -259,9 +259,9 @@ describe("traces and panels", () => {
 
   it("names a dashboard panel's read with Forge-Panel", async () => {
     client.queryPanel.mockResolvedValue({ panelId: "fleet-now", kind: "sql", unit: "", stepSeconds: 0, truncated: false, columns: [], rows: [], series: [], funnelSteps: [], issues: [], sessions: [] });
-    await queryPanel({ ...env, window, panel: { id: "fleet-now", title: "Fleet now", kind: "sql", signal: "traces", series: [], sql: "SELECT 1" }, services: [], stepSeconds: 0, dashboardId: "devboxes" });
+    await queryPanel({ ...env, window, panel: { id: "fleet-now", title: "Fleet now", kind: "sql", signal: "traces", series: [], sql: "SELECT 1" }, services: [], stepSeconds: 0, dashboardId: "sandboxes" });
     const options = client.queryPanel.mock.calls[0][1];
-    expect(options.headers).toEqual({ "Forge-Panel": "devboxes/fleet-now" });
+    expect(options.headers).toEqual({ "Forge-Panel": "sandboxes/fleet-now" });
     // the read scheduler's abort signal still rides along
     expect(options.signal).toBeInstanceOf(AbortSignal);
   });
@@ -351,7 +351,9 @@ describe("errors", () => {
     expect(obsRetry(0, notSetUp)).toBe(false);
     // Only the hourly allowance is "over-quota"; any other ResourceExhausted is "busy" (quota.test.ts).
     expect(obsErrorKind(new ConnectError("quota", Code.ResourceExhausted))).toBe("busy");
-    expect(obsErrorKind(new ConnectError("this organization's hourly observability query quota is used up", Code.ResourceExhausted))).toBe("over-quota");
+    expect(
+      obsErrorKind(new ConnectError("this organization's hourly observability query quota is used up", Code.ResourceExhausted, { "x-forge-error-reason": "obs_query_quota" }))
+    ).toBe("over-quota");
     expect(obsErrorKind(new ConnectError("slow", Code.DeadlineExceeded))).toBe("too-broad");
     expect(obsRetry(0, new ConnectError("down", Code.Unavailable))).toBe(true);
     expect(obsRetry(1, new ConnectError("down", Code.Unavailable))).toBe(false);
@@ -685,22 +687,11 @@ describe("usage", () => {
     });
   });
 
-  it("falls back to ObservabilityService's copy when the billing service is Unimplemented", async () => {
-    client.getObservabilityUsage
-      .mockRejectedValueOnce(new ConnectError("no such service", Code.Unimplemented))
-      .mockResolvedValueOnce(create(GetObservabilityUsageResponseSchema, { usedBytes: 4n, state: ObservabilityQuotaState.OK }));
-    const usage = await getObservabilityUsage("org-1");
-    expect(services).toEqual([
-      "observability_billing.v1.ObservabilityBillingService",
-      "controlplane.v1.ObservabilityService",
-    ]);
-    expect(client.getObservabilityUsage.mock.calls[1][0]).toEqual({ orgId: "org-1" });
-    expect(usage).toMatchObject({ usedBytes: 4, state: "ok" });
-  });
-
-  it("does not fall back on any other error", async () => {
-    client.getObservabilityUsage.mockRejectedValueOnce(new ConnectError("denied", Code.PermissionDenied));
-    await expect(getObservabilityUsage("org-1")).rejects.toMatchObject({ code: Code.PermissionDenied });
+  // control-plane#3095 removed ObservabilityService's copy of the rpc, so no
+  // error, Unimplemented included, sends the read anywhere else.
+  it.each([Code.Unimplemented, Code.PermissionDenied])("surfaces error code %s without falling back", async (code) => {
+    client.getObservabilityUsage.mockRejectedValueOnce(new ConnectError("failed", code));
+    await expect(getObservabilityUsage("org-1")).rejects.toMatchObject({ code });
     expect(services).toEqual(["observability_billing.v1.ObservabilityBillingService"]);
     expect(client.getObservabilityUsage).toHaveBeenCalledTimes(1);
   });

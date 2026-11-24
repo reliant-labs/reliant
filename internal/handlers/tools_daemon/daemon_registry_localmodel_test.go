@@ -14,11 +14,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
@@ -87,6 +90,15 @@ func userCtx(userID string) context.Context {
 	return context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 }
 
+// registryPools is the generated pool store over repo when it is a database,
+// else an empty mock.
+func registryPools(repo daemon_registry.Repository) daemon_registry.Pools {
+	if r, ok := repo.(interface{ ORM() *orm.Client }); ok {
+		return store.NewMachinePoolExtStore(r.ORM())
+	}
+	return &daemon_registry.MockPools{}
+}
+
 // newDaemonRegistry builds the registry the gateway's writes are read back
 // through. A nil router is cloud mode's: the relays report Unavailable.
 func newDaemonRegistry(t *testing.T, repo daemon_registry.Repository, router daemon_registry.Router) *daemon_registry.Service {
@@ -95,6 +107,8 @@ func newDaemonRegistry(t *testing.T, repo daemon_registry.Repository, router dae
 		Logger: slog.New(slog.DiscardHandler),
 		Config: &typedconfig.Config{},
 		Repo:   repo,
+		Pools:  registryPools(repo),
+		Mirror: &daemon_registry.MockMirror{},
 		Router: router,
 	})
 	require.NoError(t, err)
@@ -147,7 +161,7 @@ func TestInventory_StoredSkippedWhenIdenticalAndPublished(t *testing.T) {
 
 	// Prove the second identical publish does NOT write: tamper with the
 	// stored value; an actual write would restore it.
-	require.NoError(t, repo.SetDaemonLocalModels(ctx, "daemon-1", `{"tampered":true}`))
+	require.NoError(t, store.SetDaemonLocalModels(ctx, repo.ORM(), "daemon-1", `{"tampered":true}`))
 	svc.handleLocalModelInventory(ctx, conn, sampleInventory())
 	after, _ := repo.ListDaemonLocalModels(ctx, "user-1")
 	assert.Equal(t, `{"tampered":true}`, after["daemon-1"], "identical inventory must not be rewritten")
@@ -179,8 +193,8 @@ func TestInventory_WakesRefreshWaiter(t *testing.T) {
 	svc.mu.Lock()
 	svc.connections["daemon-1"] = conn
 	svc.mu.Unlock()
-	repo := &MockRepository{SetDaemonLocalModelsFunc: func(context.Context, string, string) error { return nil }}
-	svc.deps.Repo = repo
+	repo := &MockLocalModels{SetDaemonLocalModelsFunc: func(context.Context, string, string) error { return nil }}
+	svc.deps.LocalModels = repo
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -276,7 +290,7 @@ func TestDaemonRegistry_ListAndGetCarryStoredLocalModels(t *testing.T) {
 	seedDaemon(t, repo, "user-1", "daemon-2", true)  // never published
 	encoded, err := protojson.Marshal(sampleInventory())
 	require.NoError(t, err)
-	require.NoError(t, repo.SetDaemonLocalModels(context.Background(), "daemon-1", string(encoded)))
+	require.NoError(t, store.SetDaemonLocalModels(context.Background(), repo.ORM(), "daemon-1", string(encoded)))
 
 	svc := newDaemonRegistry(t, repo, &localModelRouter{})
 	list, err := svc.ListDaemons(userCtx("user-1"), connect.NewRequest(&reliantv1.ListDaemonsRequest{}))

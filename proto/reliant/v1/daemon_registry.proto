@@ -13,10 +13,14 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // All RPCs require a Supabase JWT — the CLI does not call this service.
 service DaemonRegistryService {
   // ListDaemons returns the authenticated user's registered daemons.
-  rpc ListDaemons(ListDaemonsRequest) returns (ListDaemonsResponse) {}
+  rpc ListDaemons(ListDaemonsRequest) returns (ListDaemonsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetDaemon fetches a specific daemon by ID.
-  rpc GetDaemon(GetDaemonRequest) returns (GetDaemonResponse) {}
+  rpc GetDaemon(GetDaemonRequest) returns (GetDaemonResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ResolveDaemon picks the right daemon for routing given optional selectors.
   // Used by distributed OSS routers.

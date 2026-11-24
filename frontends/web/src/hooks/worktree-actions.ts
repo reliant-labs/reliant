@@ -162,11 +162,11 @@ function forgetWorktreeState(projectId: string, worktreeId: string) {
 }
 
 /**
- * Re-read a workspace that moved between the live and archived lists: its own
- * row (by id, so every reader sees the move whether or not a list is mounted)
- * and every list.
+ * Re-read a workspace that moved between the live and archived lists, or was
+ * recreated (workspace-recovery): its own row (by id, so every reader sees the
+ * move whether or not a list is mounted) and every list.
  */
-async function refreshAfterArchiveChange(worktreeId: string, qc: QueryClient): Promise<void> {
+export async function refreshAfterArchiveChange(worktreeId: string, qc: QueryClient): Promise<void> {
   await Promise.all([
     fetchWorktree(worktreeId, { fresh: true, qc }).catch((error) => {
       logger.warn("[Worktrees] Could not re-read worktree after archive change", { worktreeId, error });
@@ -431,17 +431,6 @@ export async function unarchiveWorktree(id: string, qc: QueryClient = appQueryCl
     toast.error(getErrorMessage(error, "Failed to unarchive workspace"));
     throw error;
   }
-}
-
-/**
- * Rebuild a live workspace's directory from its branch when it has gone
- * missing from disk. The server asks the machine that owns it; a workspace
- * that is still there is left untouched.
- */
-export async function recreateWorktree(id: string, qc: QueryClient = appQueryClient) {
-  const response = await client.recreateWorktree({ worktreeId: id });
-  await refreshAfterArchiveChange(id, qc);
-  return response;
 }
 
 export async function updateWorktreeStatus(

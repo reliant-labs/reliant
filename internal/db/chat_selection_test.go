@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/chatselection"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func selectionTestChat(t *testing.T, repo *Repo, id string) {
@@ -34,7 +35,7 @@ func TestChatSelection_RoundTripAndCascade(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 	selectionTestChat(t, repo, "c1")
-	svc := chatselection.New(repo)
+	svc := chatselection.New(chatselection.Deps{Store: store.NewChatSelectionExtStore(repo.ORM())})
 
 	none, err := svc.Get(ctx, "c1")
 	require.NoError(t, err)
@@ -75,7 +76,7 @@ func TestChatSelection_StaleVersionIsRefusedAndWritesNothing(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 	selectionTestChat(t, repo, "c1")
-	svc := chatselection.New(repo)
+	svc := chatselection.New(chatselection.Deps{Store: store.NewChatSelectionExtStore(repo.ORM())})
 
 	_, err := svc.Merge(ctx, "c1", "u1", "builtin://agent", map[string]any{"mode": "auto"}, 0)
 	require.NoError(t, err)
@@ -98,7 +99,7 @@ func TestChatSelection_ConcurrentEditsOfDifferentKeysBothLand(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 	selectionTestChat(t, repo, "c1")
-	svc := chatselection.New(repo)
+	svc := chatselection.New(chatselection.Deps{Store: store.NewChatSelectionExtStore(repo.ORM())})
 
 	var wg sync.WaitGroup
 	keys := []string{"mode", "temperature", "model", "tools", "skills", "agent"}
@@ -128,7 +129,7 @@ func TestChatSelection_CopyForABranch(t *testing.T) {
 	ctx := context.Background()
 	selectionTestChat(t, repo, "src")
 	selectionTestChat(t, repo, "branch")
-	svc := chatselection.New(repo)
+	svc := chatselection.New(chatselection.Deps{Store: store.NewChatSelectionExtStore(repo.ORM())})
 
 	policy := chatselection.ProviderPolicy{OnLimit: chatselection.OnLimitWait}
 	_, err := svc.Merge(ctx, "src", "u1", "builtin://agent", map[string]any{"model": map[string]any{"id": "x"}}, 0)

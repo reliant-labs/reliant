@@ -119,7 +119,7 @@ function MultiRepoSection({
 export function RecentChanges(props: RecentChangesProps) {
   const { worktreeId, projectId, onClose, inline = false, onFileSelect } = props;
   // The per-repo status list. Empty / single → single-repo panel. Errors fall
-  // back to it too (older daemons). The stream's worktree_changes refreshes it.
+  // back to it too. The stream's worktree_changes refreshes it.
   const { data: repoStatuses } = useWorktreeRepoStatuses(worktreeId);
 
   if (repoStatuses && repoStatuses.length >= 2 && worktreeId) {

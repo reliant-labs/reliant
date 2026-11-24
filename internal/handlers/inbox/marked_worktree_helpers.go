@@ -28,7 +28,7 @@ func (s *Service) markedItems(ctx context.Context, userID string) ([]*pb.InboxIt
 	if s.deps.Sweeper == nil {
 		return nil, nil
 	}
-	rows, err := s.deps.Repo.ListMarkedWorktreesForUser(ctx, userID)
+	rows, err := s.deps.Marks.ListMarkedWorktreesForUser(ctx, userID)
 	if err != nil || len(rows) == 0 {
 		return nil, err
 	}

@@ -15,6 +15,7 @@ import (
 	provider_account "github.com/reliant-labs/reliant/internal/handlers/provider_account"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/orgfunding"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The chat's question before it moves from its org's accounts to the person's
@@ -35,7 +36,7 @@ func TestPersonalFundingQuestion_ReadAndAnswer(t *testing.T) {
 	e := newEnv(t)
 	waker := &wakeRecorder{}
 	e.svc = provider_account.NewTestProviderAccount(t, provider_account.WithProviderAccountDeps(provider_account.Deps{
-		Store: e.repo, ChatWaker: waker,
+		Store: e.repo, Accounts: e.accounts, Funding: store.NewChatPersonalFundingExtStore(e.repo.ORM()), ChatWaker: waker,
 		ValidateKey: func(context.Context, models.Family, string) (bool, string) { return true, "ok" },
 	}))
 	const user = "u-funding"
@@ -43,7 +44,7 @@ func TestPersonalFundingQuestion_ReadAndAnswer(t *testing.T) {
 	// The org's accounts reset well after the test runs; the lease the answer grants lasts until then.
 	reset := time.Date(2099, 1, 2, 5, 0, 0, 0, time.UTC)
 	asked := time.Date(2026, 11, 13, 6, 0, 0, 0, time.UTC)
-	_, err := e.repo.AskPersonalFunding(as(user), core.PersonalFunding{ChatID: chat, UserID: user, OrgID: "org-acme",
+	_, err := store.AskChatPersonalFunding(as(user), e.repo.ORM(), core.PersonalFunding{ChatID: chat, UserID: user, OrgID: "org-acme",
 		Reason: core.PersonalFundingLimited, Model: "claude-5.5-opus", PersonalProvider: "claude",
 		PersonalAccountLabel: "me@example.com", OrgResetAt: &reset}, asked)
 	require.NoError(t, err)
@@ -93,7 +94,7 @@ func TestPersonalFundingQuestion_ReadAndAnswer(t *testing.T) {
 	res, err = answer(asPerson(user), pb.ResolvePersonalFundingChoiceRequest_CHOICE_USE_PERSONAL, true)
 	require.NoError(t, err)
 	assert.Equal(t, pb.PersonalFundingQuestion_STATE_USE_PERSONAL, res.Question.State)
-	row, err := e.repo.GetChatPersonalFunding(as(user), chat)
+	row, err := store.GetChatPersonalFunding(as(user), e.repo.ORM(), chat)
 	require.NoError(t, err)
 	require.NotNil(t, row.LeaseUntil)
 	assert.True(t, row.LeaseUntil.Equal(reset))

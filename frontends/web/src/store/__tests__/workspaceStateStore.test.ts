@@ -27,6 +27,7 @@ const localStorageMock = vi.hoisted(() => {
 import { act } from '@testing-library/react';
 import {
   useWorkspaceStateStore,
+  lastProjectOfTab,
   createDefaultWorktreeState,
   createDefaultProjectState,
   MAIN_WORKTREE_KEY,
@@ -569,6 +570,51 @@ describe('Persisted state migration', () => {
     expect(store.getWorktreeState('project-1', null).terminalOpen).toBe(false);
     expect(store.getWorktreeState('project-1', 'wt-1').terminalOpen).toBe(false);
   });
+
+  it('keeps a v1 payload and reads defaults for the fields it predates', async () => {
+    // No leftSidebarExpanded, expandedLoops or workflow viewer fields: the
+    // readers default them rather than a migration step filling them in.
+    const {
+      expandedLoops: _loops,
+      workflowViewerOpen: _open,
+      workflowViewerMode: _mode,
+      workflowLayoutDirection: _direction,
+      ...v1Worktree
+    } = createDefaultWorktreeState();
+    localStorageMock.setItem(
+      'workspace-state',
+      JSON.stringify({
+        version: 1,
+        state: {
+          lastProjectId: 'project-1',
+          projects: {
+            'project-1': {
+              lastWorktreeId: null,
+              activeView: 'chats',
+              worktrees: {
+                [MAIN_WORKTREE_KEY]: { ...v1Worktree, activeChatId: 'chat-1', chatQueue: ['chat-1'] },
+              },
+            },
+          },
+        },
+      })
+    );
+
+    await act(async () => {
+      await useWorkspaceStateStore.persist.rehydrate();
+    });
+
+    const store = useWorkspaceStateStore.getState();
+    // Not kept since v9 (one value for every tab): this page load's fallback only.
+    expect(store.lastProjectId).toBeNull();
+    expect(lastProjectOfTab()).toBe('project-1');
+    expect(store.leftSidebarExpanded).toBe(true);
+    expect(store.getWorktreeState('project-1', null).activeChatId).toBe('chat-1');
+    expect(store.getExpandedLoops('project-1', null, 'wf')).toEqual([]);
+    expect(store.getWorkflowViewerOpen('project-1', null, 'chat-1')).toBe(false);
+    expect(store.getWorkflowViewerMode('project-1', null, 'chat-1')).toBeNull();
+    expect(store.getWorkflowLayoutDirection('project-1', null, 'wf')).toBe('horizontal');
+  });
 });
 
 describe('Right panel closed by default (v8)', () => {
@@ -633,6 +679,38 @@ describe('Right panel closed by default (v8)', () => {
     });
 
     expect(useWorkspaceStateStore.getState().getWorktreeState('project-1', null).rightPanelState.fileBrowser).toBe(true);
+  });
+});
+
+describe('View state leaves workspace-state (v9)', () => {
+  it('drops the last project and the project filter, keeping the last project for this load only', async () => {
+    localStorageMock.setItem(
+      'workspace-state',
+      JSON.stringify({
+        version: 8,
+        state: { version: 8, lastProjectId: 'project-9', projectFilterId: 'project-9', leftSidebarExpanded: false, projects: {} },
+      })
+    );
+
+    await act(async () => {
+      await useWorkspaceStateStore.persist.rehydrate();
+    });
+
+    const store = useWorkspaceStateStore.getState();
+    expect(store.lastProjectId).toBeNull();
+    expect(store.projectFilterId).toBeNull();
+    expect(store.leftSidebarExpanded).toBe(false);
+    expect(lastProjectOfTab()).toBe('project-9');
+
+    // Written back without either, so no other tab reads this one's.
+    act(() => {
+      useWorkspaceStateStore.getState().setLastProject('project-2');
+      useWorkspaceStateStore.getState().setProjectFilterId('project-2');
+    });
+    const persisted = JSON.parse(localStorageMock.getItem('workspace-state') ?? '{}');
+    expect(persisted.version).toBe(9);
+    expect(persisted.state.lastProjectId).toBeUndefined();
+    expect(persisted.state.projectFilterId).toBeUndefined();
   });
 });
 

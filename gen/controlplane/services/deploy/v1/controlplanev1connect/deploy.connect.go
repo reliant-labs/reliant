@@ -77,6 +77,21 @@ const (
 	// DeployServiceGetManagedDatabaseProcedure is the fully-qualified name of the DeployService's
 	// GetManagedDatabase RPC.
 	DeployServiceGetManagedDatabaseProcedure = "/controlplane.v1.DeployService/GetManagedDatabase"
+	// DeployServiceBeginAppStepUpProcedure is the fully-qualified name of the DeployService's
+	// BeginAppStepUp RPC.
+	DeployServiceBeginAppStepUpProcedure = "/controlplane.v1.DeployService/BeginAppStepUp"
+	// DeployServiceCompleteAppStepUpProcedure is the fully-qualified name of the DeployService's
+	// CompleteAppStepUp RPC.
+	DeployServiceCompleteAppStepUpProcedure = "/controlplane.v1.DeployService/CompleteAppStepUp"
+	// DeployServiceScheduleAppDeletionProcedure is the fully-qualified name of the DeployService's
+	// ScheduleAppDeletion RPC.
+	DeployServiceScheduleAppDeletionProcedure = "/controlplane.v1.DeployService/ScheduleAppDeletion"
+	// DeployServiceCancelAppDeletionProcedure is the fully-qualified name of the DeployService's
+	// CancelAppDeletion RPC.
+	DeployServiceCancelAppDeletionProcedure = "/controlplane.v1.DeployService/CancelAppDeletion"
+	// DeployServiceGetAppDeletionProcedure is the fully-qualified name of the DeployService's
+	// GetAppDeletion RPC.
+	DeployServiceGetAppDeletionProcedure = "/controlplane.v1.DeployService/GetAppDeletion"
 	// DeployServiceEnsureEnvironmentProcedure is the fully-qualified name of the DeployService's
 	// EnsureEnvironment RPC.
 	DeployServiceEnsureEnvironmentProcedure = "/controlplane.v1.DeployService/EnsureEnvironment"
@@ -258,6 +273,27 @@ type DeployServiceClient interface {
 	// caller's org, so another org's database is NotFound, never readable.
 	// forge:custom
 	GetManagedDatabase(context.Context, *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error)
+	// BeginAppStepUp starts a step-up re-authentication for ONE app: the server
+	// emails a one-time code to the caller's verified account address. Nothing
+	// changes until CompleteAppStepUp. Required before ScheduleAppDeletion and
+	// CancelAppDeletion. Owner or admin, signed in as a person.
+	BeginAppStepUp(context.Context, *connect.Request[v1.BeginAppStepUpRequest]) (*connect.Response[v1.BeginAppStepUpResponse], error)
+	// CompleteAppStepUp redeems the code. On success the caller may schedule or
+	// cancel the app's deletion until `valid_until`; the grant belongs to the
+	// caller, to this app, and to nothing else.
+	CompleteAppStepUp(context.Context, *connect.Request[v1.CompleteAppStepUpRequest]) (*connect.Response[v1.CompleteAppStepUpResponse], error)
+	// ScheduleAppDeletion schedules the app's deletion and stops it. Idempotent:
+	// scheduling a scheduled app keeps its date and stops anything started since.
+	ScheduleAppDeletion(context.Context, *connect.Request[v1.ScheduleAppDeletionRequest]) (*connect.Response[v1.ScheduleAppDeletionResponse], error)
+	// CancelAppDeletion clears a scheduled deletion, and nothing else: the
+	// app's environments stay stopped until someone starts them
+	// (SetEnvironmentRunState), because restarting them automatically would
+	// surprise whoever stopped one on purpose. Refused once the purge has
+	// begun. Cancelling an app with nothing scheduled changes nothing.
+	CancelAppDeletion(context.Context, *connect.Request[v1.CancelAppDeletionRequest]) (*connect.Response[v1.CancelAppDeletionResponse], error)
+	// GetAppDeletion reports the app's scheduled deletion, if any. MEMBER
+	// (machine: deploy:read).
+	GetAppDeletion(context.Context, *connect.Request[v1.GetAppDeletionRequest]) (*connect.Response[v1.GetAppDeletionResponse], error)
 	// EnsureEnvironment makes an environment with this NAME exist in the
 	// caller's org and returns it: created when absent, returned unchanged when
 	// present. It is what `forge env deploy` calls for an env that declares
@@ -687,12 +723,14 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DeployServiceGetCapabilitiesProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetCapabilities")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getTenant: connect.NewClient[v1.GetDeployTenantRequest, v1.GetDeployTenantResponse](
 			httpClient,
 			baseURL+DeployServiceGetTenantProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetTenant")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createTenant: connect.NewClient[v1.CreateDeployTenantRequest, v1.CreateDeployTenantResponse](
@@ -711,12 +749,14 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DeployServiceGetEnvironmentProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetEnvironment")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listEnvironments: connect.NewClient[v1.ListDeployEnvironmentsRequest, v1.ListDeployEnvironmentsResponse](
 			httpClient,
 			baseURL+DeployServiceListEnvironmentsProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("ListEnvironments")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listApps: connect.NewClient[v1.ListDeployAppsRequest, v1.ListDeployAppsResponse](
@@ -742,6 +782,7 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DeployServiceListRetainedDatabasesProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("ListRetainedDatabases")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		deleteRetainedDatabase: connect.NewClient[v1.DeleteRetainedDatabaseRequest, v1.DeleteRetainedDatabaseResponse](
@@ -763,6 +804,37 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		beginAppStepUp: connect.NewClient[v1.BeginAppStepUpRequest, v1.BeginAppStepUpResponse](
+			httpClient,
+			baseURL+DeployServiceBeginAppStepUpProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("BeginAppStepUp")),
+			connect.WithClientOptions(opts...),
+		),
+		completeAppStepUp: connect.NewClient[v1.CompleteAppStepUpRequest, v1.CompleteAppStepUpResponse](
+			httpClient,
+			baseURL+DeployServiceCompleteAppStepUpProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("CompleteAppStepUp")),
+			connect.WithClientOptions(opts...),
+		),
+		scheduleAppDeletion: connect.NewClient[v1.ScheduleAppDeletionRequest, v1.ScheduleAppDeletionResponse](
+			httpClient,
+			baseURL+DeployServiceScheduleAppDeletionProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ScheduleAppDeletion")),
+			connect.WithClientOptions(opts...),
+		),
+		cancelAppDeletion: connect.NewClient[v1.CancelAppDeletionRequest, v1.CancelAppDeletionResponse](
+			httpClient,
+			baseURL+DeployServiceCancelAppDeletionProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("CancelAppDeletion")),
+			connect.WithClientOptions(opts...),
+		),
+		getAppDeletion: connect.NewClient[v1.GetAppDeletionRequest, v1.GetAppDeletionResponse](
+			httpClient,
+			baseURL+DeployServiceGetAppDeletionProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetAppDeletion")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		ensureEnvironment: connect.NewClient[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse](
 			httpClient,
 			baseURL+DeployServiceEnsureEnvironmentProcedure,
@@ -779,12 +851,14 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DeployServiceGetDeploymentProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetDeployment")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listDeployments: connect.NewClient[v1.ListDeploymentsRequest, v1.ListDeploymentsResponse](
 			httpClient,
 			baseURL+DeployServiceListDeploymentsProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("ListDeployments")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateDeployment: connect.NewClient[v1.UpdateDeploymentRequest, v1.UpdateDeploymentResponse](
@@ -821,6 +895,7 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DeployServiceListRollbackFloorsProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("ListRollbackFloors")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		scale: connect.NewClient[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse](
@@ -845,12 +920,14 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DeployServiceGetStatusProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetStatus")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		streamLogs: connect.NewClient[v1.StreamDeploymentLogsRequest, v1.StreamDeploymentLogsResponse](
 			httpClient,
 			baseURL+DeployServiceStreamLogsProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("StreamLogs")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		cutRelease: connect.NewClient[v1.CutReleaseRequest, v1.CutReleaseResponse](
@@ -869,30 +946,35 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DeployServiceListReleasesProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("ListReleases")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getRelease: connect.NewClient[v1.GetDeployReleaseRequest, v1.GetDeployReleaseResponse](
 			httpClient,
 			baseURL+DeployServiceGetReleaseProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetRelease")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listPromotions: connect.NewClient[v1.ListDeployPromotionsRequest, v1.ListDeployPromotionsResponse](
 			httpClient,
 			baseURL+DeployServiceListPromotionsProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("ListPromotions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		compareReleases: connect.NewClient[v1.CompareDeployReleasesRequest, v1.CompareDeployReleasesResponse](
 			httpClient,
 			baseURL+DeployServiceCompareReleasesProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("CompareReleases")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getRollout: connect.NewClient[v1.GetDeployRolloutRequest, v1.GetDeployRolloutResponse](
 			httpClient,
 			baseURL+DeployServiceGetRolloutProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetRollout")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		recordGate: connect.NewClient[v1.RecordDeployGateRequest, v1.RecordDeployGateResponse](
@@ -905,18 +987,21 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DeployServiceListGatesProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("ListGates")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getRun: connect.NewClient[v1.GetDeployRunRequest, v1.GetDeployRunResponse](
 			httpClient,
 			baseURL+DeployServiceGetRunProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetRun")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listUsage: connect.NewClient[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse](
 			httpClient,
 			baseURL+DeployServiceListUsageProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("ListUsage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		recordBundle: connect.NewClient[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse](
@@ -929,18 +1014,21 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DeployServiceGetBundleProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetBundle")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getWorkloadConfig: connect.NewClient[v1.GetWorkloadConfigRequest, v1.GetWorkloadConfigResponse](
 			httpClient,
 			baseURL+DeployServiceGetWorkloadConfigProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetWorkloadConfig")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listConvergences: connect.NewClient[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse](
 			httpClient,
 			baseURL+DeployServiceListConvergencesProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("ListConvergences")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		openDeployAttempt: connect.NewClient[v1.OpenDeployAttemptRequest, v1.OpenDeployAttemptResponse](
@@ -965,36 +1053,42 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DeployServiceListDeployAttemptsProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("ListDeployAttempts")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getDeployAttempt: connect.NewClient[v1.GetDeployAttemptRequest, v1.GetDeployAttemptResponse](
 			httpClient,
 			baseURL+DeployServiceGetDeployAttemptProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetDeployAttempt")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getLiveView: connect.NewClient[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse](
 			httpClient,
 			baseURL+DeployServiceGetLiveViewProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetLiveView")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getEnvironmentShape: connect.NewClient[v1.GetDeployEnvironmentShapeRequest, v1.GetDeployEnvironmentShapeResponse](
 			httpClient,
 			baseURL+DeployServiceGetEnvironmentShapeProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetEnvironmentShape")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getProjectTopology: connect.NewClient[v1.GetDeployProjectTopologyRequest, v1.GetDeployProjectTopologyResponse](
 			httpClient,
 			baseURL+DeployServiceGetProjectTopologyProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetProjectTopology")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		planDeploy: connect.NewClient[v1.PlanDeployRequest, v1.PlanDeployResponse](
 			httpClient,
 			baseURL+DeployServicePlanDeployProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("PlanDeploy")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		checkDeployCapacity: connect.NewClient[v1.CheckDeployCapacityRequest, v1.CheckDeployCapacityResponse](
@@ -1025,6 +1119,7 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DeployServiceGetDriftProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetDrift")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -1046,6 +1141,11 @@ type deployServiceClient struct {
 	deleteRetainedDatabase       *connect.Client[v1.DeleteRetainedDatabaseRequest, v1.DeleteRetainedDatabaseResponse]
 	setRetainedDatabaseRetention *connect.Client[v1.SetRetainedDatabaseRetentionRequest, v1.SetRetainedDatabaseRetentionResponse]
 	getManagedDatabase           *connect.Client[v1.GetManagedDatabaseRequest, v1.GetManagedDatabaseResponse]
+	beginAppStepUp               *connect.Client[v1.BeginAppStepUpRequest, v1.BeginAppStepUpResponse]
+	completeAppStepUp            *connect.Client[v1.CompleteAppStepUpRequest, v1.CompleteAppStepUpResponse]
+	scheduleAppDeletion          *connect.Client[v1.ScheduleAppDeletionRequest, v1.ScheduleAppDeletionResponse]
+	cancelAppDeletion            *connect.Client[v1.CancelAppDeletionRequest, v1.CancelAppDeletionResponse]
+	getAppDeletion               *connect.Client[v1.GetAppDeletionRequest, v1.GetAppDeletionResponse]
 	ensureEnvironment            *connect.Client[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse]
 	createDeployment             *connect.Client[v1.CreateDeploymentRequest, v1.CreateDeploymentResponse]
 	getDeployment                *connect.Client[v1.GetDeploymentRequest, v1.GetDeploymentResponse]
@@ -1160,6 +1260,31 @@ func (c *deployServiceClient) SetRetainedDatabaseRetention(ctx context.Context, 
 // GetManagedDatabase calls controlplane.v1.DeployService.GetManagedDatabase.
 func (c *deployServiceClient) GetManagedDatabase(ctx context.Context, req *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error) {
 	return c.getManagedDatabase.CallUnary(ctx, req)
+}
+
+// BeginAppStepUp calls controlplane.v1.DeployService.BeginAppStepUp.
+func (c *deployServiceClient) BeginAppStepUp(ctx context.Context, req *connect.Request[v1.BeginAppStepUpRequest]) (*connect.Response[v1.BeginAppStepUpResponse], error) {
+	return c.beginAppStepUp.CallUnary(ctx, req)
+}
+
+// CompleteAppStepUp calls controlplane.v1.DeployService.CompleteAppStepUp.
+func (c *deployServiceClient) CompleteAppStepUp(ctx context.Context, req *connect.Request[v1.CompleteAppStepUpRequest]) (*connect.Response[v1.CompleteAppStepUpResponse], error) {
+	return c.completeAppStepUp.CallUnary(ctx, req)
+}
+
+// ScheduleAppDeletion calls controlplane.v1.DeployService.ScheduleAppDeletion.
+func (c *deployServiceClient) ScheduleAppDeletion(ctx context.Context, req *connect.Request[v1.ScheduleAppDeletionRequest]) (*connect.Response[v1.ScheduleAppDeletionResponse], error) {
+	return c.scheduleAppDeletion.CallUnary(ctx, req)
+}
+
+// CancelAppDeletion calls controlplane.v1.DeployService.CancelAppDeletion.
+func (c *deployServiceClient) CancelAppDeletion(ctx context.Context, req *connect.Request[v1.CancelAppDeletionRequest]) (*connect.Response[v1.CancelAppDeletionResponse], error) {
+	return c.cancelAppDeletion.CallUnary(ctx, req)
+}
+
+// GetAppDeletion calls controlplane.v1.DeployService.GetAppDeletion.
+func (c *deployServiceClient) GetAppDeletion(ctx context.Context, req *connect.Request[v1.GetAppDeletionRequest]) (*connect.Response[v1.GetAppDeletionResponse], error) {
+	return c.getAppDeletion.CallUnary(ctx, req)
 }
 
 // EnsureEnvironment calls controlplane.v1.DeployService.EnsureEnvironment.
@@ -1437,6 +1562,27 @@ type DeployServiceHandler interface {
 	// caller's org, so another org's database is NotFound, never readable.
 	// forge:custom
 	GetManagedDatabase(context.Context, *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error)
+	// BeginAppStepUp starts a step-up re-authentication for ONE app: the server
+	// emails a one-time code to the caller's verified account address. Nothing
+	// changes until CompleteAppStepUp. Required before ScheduleAppDeletion and
+	// CancelAppDeletion. Owner or admin, signed in as a person.
+	BeginAppStepUp(context.Context, *connect.Request[v1.BeginAppStepUpRequest]) (*connect.Response[v1.BeginAppStepUpResponse], error)
+	// CompleteAppStepUp redeems the code. On success the caller may schedule or
+	// cancel the app's deletion until `valid_until`; the grant belongs to the
+	// caller, to this app, and to nothing else.
+	CompleteAppStepUp(context.Context, *connect.Request[v1.CompleteAppStepUpRequest]) (*connect.Response[v1.CompleteAppStepUpResponse], error)
+	// ScheduleAppDeletion schedules the app's deletion and stops it. Idempotent:
+	// scheduling a scheduled app keeps its date and stops anything started since.
+	ScheduleAppDeletion(context.Context, *connect.Request[v1.ScheduleAppDeletionRequest]) (*connect.Response[v1.ScheduleAppDeletionResponse], error)
+	// CancelAppDeletion clears a scheduled deletion, and nothing else: the
+	// app's environments stay stopped until someone starts them
+	// (SetEnvironmentRunState), because restarting them automatically would
+	// surprise whoever stopped one on purpose. Refused once the purge has
+	// begun. Cancelling an app with nothing scheduled changes nothing.
+	CancelAppDeletion(context.Context, *connect.Request[v1.CancelAppDeletionRequest]) (*connect.Response[v1.CancelAppDeletionResponse], error)
+	// GetAppDeletion reports the app's scheduled deletion, if any. MEMBER
+	// (machine: deploy:read).
+	GetAppDeletion(context.Context, *connect.Request[v1.GetAppDeletionRequest]) (*connect.Response[v1.GetAppDeletionResponse], error)
 	// EnsureEnvironment makes an environment with this NAME exist in the
 	// caller's org and returns it: created when absent, returned unchanged when
 	// present. It is what `forge env deploy` calls for an env that declares
@@ -1862,12 +2008,14 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		DeployServiceGetCapabilitiesProcedure,
 		svc.GetCapabilities,
 		connect.WithSchema(deployServiceMethods.ByName("GetCapabilities")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceGetTenantHandler := connect.NewUnaryHandler(
 		DeployServiceGetTenantProcedure,
 		svc.GetTenant,
 		connect.WithSchema(deployServiceMethods.ByName("GetTenant")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceCreateTenantHandler := connect.NewUnaryHandler(
@@ -1886,12 +2034,14 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		DeployServiceGetEnvironmentProcedure,
 		svc.GetEnvironment,
 		connect.WithSchema(deployServiceMethods.ByName("GetEnvironment")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceListEnvironmentsHandler := connect.NewUnaryHandler(
 		DeployServiceListEnvironmentsProcedure,
 		svc.ListEnvironments,
 		connect.WithSchema(deployServiceMethods.ByName("ListEnvironments")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceListAppsHandler := connect.NewUnaryHandler(
@@ -1917,6 +2067,7 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		DeployServiceListRetainedDatabasesProcedure,
 		svc.ListRetainedDatabases,
 		connect.WithSchema(deployServiceMethods.ByName("ListRetainedDatabases")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceDeleteRetainedDatabaseHandler := connect.NewUnaryHandler(
@@ -1938,6 +2089,37 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceBeginAppStepUpHandler := connect.NewUnaryHandler(
+		DeployServiceBeginAppStepUpProcedure,
+		svc.BeginAppStepUp,
+		connect.WithSchema(deployServiceMethods.ByName("BeginAppStepUp")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceCompleteAppStepUpHandler := connect.NewUnaryHandler(
+		DeployServiceCompleteAppStepUpProcedure,
+		svc.CompleteAppStepUp,
+		connect.WithSchema(deployServiceMethods.ByName("CompleteAppStepUp")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceScheduleAppDeletionHandler := connect.NewUnaryHandler(
+		DeployServiceScheduleAppDeletionProcedure,
+		svc.ScheduleAppDeletion,
+		connect.WithSchema(deployServiceMethods.ByName("ScheduleAppDeletion")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceCancelAppDeletionHandler := connect.NewUnaryHandler(
+		DeployServiceCancelAppDeletionProcedure,
+		svc.CancelAppDeletion,
+		connect.WithSchema(deployServiceMethods.ByName("CancelAppDeletion")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceGetAppDeletionHandler := connect.NewUnaryHandler(
+		DeployServiceGetAppDeletionProcedure,
+		svc.GetAppDeletion,
+		connect.WithSchema(deployServiceMethods.ByName("GetAppDeletion")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceEnsureEnvironmentHandler := connect.NewUnaryHandler(
 		DeployServiceEnsureEnvironmentProcedure,
 		svc.EnsureEnvironment,
@@ -1954,12 +2136,14 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		DeployServiceGetDeploymentProcedure,
 		svc.GetDeployment,
 		connect.WithSchema(deployServiceMethods.ByName("GetDeployment")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceListDeploymentsHandler := connect.NewUnaryHandler(
 		DeployServiceListDeploymentsProcedure,
 		svc.ListDeployments,
 		connect.WithSchema(deployServiceMethods.ByName("ListDeployments")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceUpdateDeploymentHandler := connect.NewUnaryHandler(
@@ -1996,6 +2180,7 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		DeployServiceListRollbackFloorsProcedure,
 		svc.ListRollbackFloors,
 		connect.WithSchema(deployServiceMethods.ByName("ListRollbackFloors")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceScaleHandler := connect.NewUnaryHandler(
@@ -2020,12 +2205,14 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		DeployServiceGetStatusProcedure,
 		svc.GetStatus,
 		connect.WithSchema(deployServiceMethods.ByName("GetStatus")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceStreamLogsHandler := connect.NewServerStreamHandler(
 		DeployServiceStreamLogsProcedure,
 		svc.StreamLogs,
 		connect.WithSchema(deployServiceMethods.ByName("StreamLogs")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceCutReleaseHandler := connect.NewUnaryHandler(
@@ -2044,30 +2231,35 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		DeployServiceListReleasesProcedure,
 		svc.ListReleases,
 		connect.WithSchema(deployServiceMethods.ByName("ListReleases")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceGetReleaseHandler := connect.NewUnaryHandler(
 		DeployServiceGetReleaseProcedure,
 		svc.GetRelease,
 		connect.WithSchema(deployServiceMethods.ByName("GetRelease")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceListPromotionsHandler := connect.NewUnaryHandler(
 		DeployServiceListPromotionsProcedure,
 		svc.ListPromotions,
 		connect.WithSchema(deployServiceMethods.ByName("ListPromotions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceCompareReleasesHandler := connect.NewUnaryHandler(
 		DeployServiceCompareReleasesProcedure,
 		svc.CompareReleases,
 		connect.WithSchema(deployServiceMethods.ByName("CompareReleases")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceGetRolloutHandler := connect.NewUnaryHandler(
 		DeployServiceGetRolloutProcedure,
 		svc.GetRollout,
 		connect.WithSchema(deployServiceMethods.ByName("GetRollout")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceRecordGateHandler := connect.NewUnaryHandler(
@@ -2080,18 +2272,21 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		DeployServiceListGatesProcedure,
 		svc.ListGates,
 		connect.WithSchema(deployServiceMethods.ByName("ListGates")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceGetRunHandler := connect.NewUnaryHandler(
 		DeployServiceGetRunProcedure,
 		svc.GetRun,
 		connect.WithSchema(deployServiceMethods.ByName("GetRun")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceListUsageHandler := connect.NewUnaryHandler(
 		DeployServiceListUsageProcedure,
 		svc.ListUsage,
 		connect.WithSchema(deployServiceMethods.ByName("ListUsage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceRecordBundleHandler := connect.NewUnaryHandler(
@@ -2104,18 +2299,21 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		DeployServiceGetBundleProcedure,
 		svc.GetBundle,
 		connect.WithSchema(deployServiceMethods.ByName("GetBundle")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceGetWorkloadConfigHandler := connect.NewUnaryHandler(
 		DeployServiceGetWorkloadConfigProcedure,
 		svc.GetWorkloadConfig,
 		connect.WithSchema(deployServiceMethods.ByName("GetWorkloadConfig")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceListConvergencesHandler := connect.NewUnaryHandler(
 		DeployServiceListConvergencesProcedure,
 		svc.ListConvergences,
 		connect.WithSchema(deployServiceMethods.ByName("ListConvergences")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceOpenDeployAttemptHandler := connect.NewUnaryHandler(
@@ -2140,36 +2338,42 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		DeployServiceListDeployAttemptsProcedure,
 		svc.ListDeployAttempts,
 		connect.WithSchema(deployServiceMethods.ByName("ListDeployAttempts")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceGetDeployAttemptHandler := connect.NewUnaryHandler(
 		DeployServiceGetDeployAttemptProcedure,
 		svc.GetDeployAttempt,
 		connect.WithSchema(deployServiceMethods.ByName("GetDeployAttempt")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceGetLiveViewHandler := connect.NewUnaryHandler(
 		DeployServiceGetLiveViewProcedure,
 		svc.GetLiveView,
 		connect.WithSchema(deployServiceMethods.ByName("GetLiveView")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceGetEnvironmentShapeHandler := connect.NewUnaryHandler(
 		DeployServiceGetEnvironmentShapeProcedure,
 		svc.GetEnvironmentShape,
 		connect.WithSchema(deployServiceMethods.ByName("GetEnvironmentShape")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceGetProjectTopologyHandler := connect.NewUnaryHandler(
 		DeployServiceGetProjectTopologyProcedure,
 		svc.GetProjectTopology,
 		connect.WithSchema(deployServiceMethods.ByName("GetProjectTopology")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServicePlanDeployHandler := connect.NewUnaryHandler(
 		DeployServicePlanDeployProcedure,
 		svc.PlanDeploy,
 		connect.WithSchema(deployServiceMethods.ByName("PlanDeploy")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceCheckDeployCapacityHandler := connect.NewUnaryHandler(
@@ -2200,6 +2404,7 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		DeployServiceGetDriftProcedure,
 		svc.GetDrift,
 		connect.WithSchema(deployServiceMethods.ByName("GetDrift")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/controlplane.v1.DeployService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2232,6 +2437,16 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceSetRetainedDatabaseRetentionHandler.ServeHTTP(w, r)
 		case DeployServiceGetManagedDatabaseProcedure:
 			deployServiceGetManagedDatabaseHandler.ServeHTTP(w, r)
+		case DeployServiceBeginAppStepUpProcedure:
+			deployServiceBeginAppStepUpHandler.ServeHTTP(w, r)
+		case DeployServiceCompleteAppStepUpProcedure:
+			deployServiceCompleteAppStepUpHandler.ServeHTTP(w, r)
+		case DeployServiceScheduleAppDeletionProcedure:
+			deployServiceScheduleAppDeletionHandler.ServeHTTP(w, r)
+		case DeployServiceCancelAppDeletionProcedure:
+			deployServiceCancelAppDeletionHandler.ServeHTTP(w, r)
+		case DeployServiceGetAppDeletionProcedure:
+			deployServiceGetAppDeletionHandler.ServeHTTP(w, r)
 		case DeployServiceEnsureEnvironmentProcedure:
 			deployServiceEnsureEnvironmentHandler.ServeHTTP(w, r)
 		case DeployServiceCreateDeploymentProcedure:
@@ -2383,6 +2598,26 @@ func (UnimplementedDeployServiceHandler) SetRetainedDatabaseRetention(context.Co
 
 func (UnimplementedDeployServiceHandler) GetManagedDatabase(context.Context, *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetManagedDatabase is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) BeginAppStepUp(context.Context, *connect.Request[v1.BeginAppStepUpRequest]) (*connect.Response[v1.BeginAppStepUpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.BeginAppStepUp is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) CompleteAppStepUp(context.Context, *connect.Request[v1.CompleteAppStepUpRequest]) (*connect.Response[v1.CompleteAppStepUpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.CompleteAppStepUp is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) ScheduleAppDeletion(context.Context, *connect.Request[v1.ScheduleAppDeletionRequest]) (*connect.Response[v1.ScheduleAppDeletionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ScheduleAppDeletion is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) CancelAppDeletion(context.Context, *connect.Request[v1.CancelAppDeletionRequest]) (*connect.Response[v1.CancelAppDeletionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.CancelAppDeletion is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) GetAppDeletion(context.Context, *connect.Request[v1.GetAppDeletionRequest]) (*connect.Response[v1.GetAppDeletionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetAppDeletion is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) EnsureEnvironment(context.Context, *connect.Request[v1.EnsureDeployEnvironmentRequest]) (*connect.Response[v1.EnsureDeployEnvironmentResponse], error) {

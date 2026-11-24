@@ -6,6 +6,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -49,7 +52,16 @@ func TestCreateProjectFromRepo_AuthorizesTheMachineBeforeTheClone(t *testing.T) 
 	clone := func(t *testing.T, r Repository, daemonID, org string) (*cloneStubControlPlane, error) {
 		t.Helper()
 		cp := &cloneStubControlPlane{result: controlplane.CloneRepoResult{ClonedPath: "/home/workspace/projects/w-" + uuid.NewString(), Queued: true}}
-		svc := NewTestProject(t, WithProjectDeps(Deps{Repo: r, Router: &createProjectRowRouter{resolveID: daemonID}, ControlPlane: cp, Orgs: resolver}))
+		// The machine read is Deps.Machines, always set here: a repository that
+		// fails the read fails it there too, and every other one reads the
+		// machine from its own database.
+		var machines DaemonReader
+		if u, ok := r.(unreadableMachines); ok {
+			machines = u
+		} else {
+			machines = store.NewDaemonExtStore(repo.ORM())
+		}
+		svc := NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: r, Machines: machines, Projects: projectaccesstest.For(r), Router: &createProjectRowRouter{resolveID: daemonID}, ControlPlane: cp, Orgs: resolver})))
 		_, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
 			CloneUrl: "https://github.com/acme/w-" + uuid.NewString() + ".git", DaemonId: daemonID, OrgId: &org,
 		}))

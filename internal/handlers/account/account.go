@@ -11,7 +11,6 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -70,14 +69,14 @@ func controlPlaneAccountAlreadyDeleted(err error) bool {
 // failing instead strands an account whose platform half is already deleted.
 const purgeAttempts = 3
 
-// purgeWithRetry runs accountpurge.Purge, retrying only a dead connection.
+// purgeWithRetry runs the Purger, retrying only a dead connection.
 func (s *Service) purgeWithRetry(ctx context.Context, userID string) (int64, error) {
 	var (
 		deleted int64
 		err     error
 	)
 	for attempt := 1; attempt <= purgeAttempts; attempt++ {
-		deleted, err = accountpurge.Purge(ctx, s.deps.SQL, userID)
+		deleted, err = s.deps.Purger.Purge(ctx, userID)
 		if err == nil || !errors.Is(err, driver.ErrBadConn) || ctx.Err() != nil {
 			return deleted, err
 		}

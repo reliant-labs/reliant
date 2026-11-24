@@ -1,14 +1,13 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Chats heading's one menu (restyle §11.5): which project the list shows,
- * how it is sorted, grouped or flat, every project or the active ones, and
- * the archived chats. It replaces the project filter, sort and view buttons
- * that used to sit in a row of their own above the list.
+ * The Chats heading's one menu (restyle §11.5): how the list is sorted,
+ * grouped or flat, every project or the active ones, the archived chats, and
+ * Add / Manage projects. Which projects it shows is the project filter beside
+ * it (Projects/ChatProjectFilter: choose N of M).
  *
- * Its trigger is a hover-only `⋯` on the heading. It keeps the project
- * filter's test id (`project-filter-trigger`): the filter's items live here
- * now, with their own test ids unchanged.
+ * Its trigger is a hover-only `⋯` on the heading. It keeps its old test id
+ * (`project-filter-trigger`), and its label still names what the list shows.
  */
 
 import { MoreHorizontal } from "lucide-react";
@@ -33,13 +32,12 @@ export const CHAT_SORT_OPTIONS: { value: ChatSortOption; label: string }[] = [
 export const SHOW_ALL_PROJECTS_LABEL = "Show every project";
 
 interface ChatListMenuProps {
-  // The project filter.
+  // What the list shows (its label): the project filter is its own control
+  // beside this menu (Projects/ChatProjectFilter).
   filterId: string | null;
   projects: readonly Project[];
-  onFilterChange: (projectId: string | null) => void;
   onAddProject: () => void;
   onManageProjects: () => void;
-  needsYouByProject?: ReadonlyMap<string, number>;
   // Sort and view.
   sortOrder: ChatSortOption;
   onSortChange: (sort: ChatSortOption) => void;
@@ -58,10 +56,8 @@ interface ChatListMenuProps {
 export function ChatListMenu({
   filterId,
   projects,
-  onFilterChange,
   onAddProject,
   onManageProjects,
-  needsYouByProject,
   sortOrder,
   onSortChange,
   viewMode,
@@ -116,35 +112,29 @@ export function ChatListMenu({
       ],
     },
     { selection: "multiple", items: listToggles },
-    ...projectFilterGroups({
-      filterId,
-      projects,
-      onChange: onFilterChange,
-      onAddProject,
-      onManageProjects,
-      needsYouByProject,
-    }),
+    ...projectFilterGroups({ onAddProject, onManageProjects }),
   ];
 
   const showing = projectFilterLabel(filterId, projects);
   return (
     <DropdownMenu
-      align="right"
-      density="compact"
-      label="Chat list options"
-      menuClassName="w-64 max-h-[min(32rem,70vh)] overflow-y-auto"
-      groups={groups}
-      trigger={(props) => (
-        <button
-          type="button"
-          {...props}
-          data-testid="project-filter-trigger"
-          aria-label={`Chat list options. Showing ${showing}`}
-          className={cn(SIDEBAR_ICON_BUTTON, SIDEBAR_HEADING_HOVER_ACTION, "aria-expanded:bg-foreground/[0.08]")}
-        >
-          <MoreHorizontal className="size-4" aria-hidden="true" />
-        </button>
-      )}
+        align="right"
+        density="compact"
+        label="Chat list options"
+        menuClassName="w-64 max-h-[min(32rem,70vh)] overflow-y-auto"
+        groups={groups}
+        trigger={(props) => (
+          <button
+            type="button"
+            {...props}
+            data-testid="project-filter-trigger"
+            aria-label={`Chat list options. Showing ${showing}`}
+            className={cn(SIDEBAR_ICON_BUTTON, SIDEBAR_HEADING_HOVER_ACTION, "aria-expanded:bg-foreground/[0.08]")}
+          >
+            <MoreHorizontal className="size-4" aria-hidden="true" />
+          </button>
+        )}
     />
   );
 }
+

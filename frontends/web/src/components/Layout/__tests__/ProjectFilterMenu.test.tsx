@@ -1,15 +1,31 @@
 /**
- * The sidebar's project filter: "All projects" or one project, plus Add
- * project and Manage projects. Its items are a section of the Chats heading's
- * one menu (ChatListMenu). The project is a filter on the chat list, so
- * choosing one reports the scope and nothing else.
+ * The Chats heading's one menu (ChatListMenu) keeps Add project and Manage
+ * projects; which projects the list shows is the project filter beside it
+ * (Projects/ChatProjectFilter, choose N of M), which opens the project
+ * selector in multi-select mode.
  */
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Project } from "../../../hooks/project-queries";
 import { ChatListMenu } from "../ChatListMenu";
+import { ChatProjectFilterButton } from "../../Projects/ChatProjectFilter";
+import type { ChatProjectFilter } from "../../../hooks/useChatProjectFilter";
+
+// The selector reads the catalog; with none, it lists the plain projects (its fallback).
+vi.mock("@/hooks/project-catalog-queries", () => ({
+  useProjectCatalog: () => ({ catalog: undefined, isLoading: false, error: new Error("no catalog here"), refetch: () => {} }),
+}));
+vi.mock("@/hooks/sidebar-project-queries", () => ({
+  useSidebarProjectPrefs: () => ({ prefs: { pinned: new Set(), hidden: new Set(), showAll: false, filter: [] } }),
+}));
+vi.mock("@/hooks/project-queries", async (original) => ({
+  ...(await original<typeof import("@/hooks/project-queries")>()),
+  useProjects: () => ({ projects, isLoading: false, error: null, refetch: () => {} }),
+}));
+vi.mock("@/components/Apps/startBuilding", () => ({ useStartBuildingApp: () => () => {} }));
+
 import { projectFilterLabel } from "../ProjectFilterMenu";
 
 const project = (id: string, name: string, last_active: string): Project =>
@@ -24,7 +40,6 @@ function renderMenu(
   const props = {
     filterId,
     projects,
-    onFilterChange: vi.fn(),
     onAddProject: vi.fn(),
     onManageProjects: vi.fn(),
     sortOrder: "newest_first" as const,
@@ -39,7 +54,6 @@ function renderMenu(
   return props;
 }
 
-const projectGroup = () => screen.getByRole("group", { name: "Project" });
 
 describe("the project filter, in the Chats menu", () => {
   it("names the scope it shows", () => {
@@ -49,18 +63,11 @@ describe("the project filter, in the Chats menu", () => {
     expect(screen.getByTestId("project-filter-trigger")).toHaveAccessibleName("Chat list options. Showing Beta");
   });
 
-  it("lists All projects first, then projects by recent use, and reports the choice", async () => {
-    const props = renderMenu("b");
+  it("lists no projects of its own: the filter beside it does", async () => {
+    renderMenu("b");
     await userEvent.click(screen.getByTestId("project-filter-trigger"));
-
-    const items = within(projectGroup())
-      .getAllByRole("menuitemradio")
-      .map((item) => item.textContent);
-    expect(items[0]).toContain("All projects");
-    expect(items.slice(1).map((text) => text?.replace(/\d+$/, ""))).toEqual(["Beta", "Alpha"]);
-
-    await userEvent.click(screen.getByTestId("project-filter-all"));
-    expect(props.onFilterChange).toHaveBeenCalledWith(null);
+    expect(screen.queryByRole("group", { name: "Project" })).toBeNull();
+    expect(screen.queryByTestId("project-filter-all")).toBeNull();
   });
 
   it("offers Add project and Manage projects", async () => {
@@ -74,11 +81,15 @@ describe("the project filter, in the Chats menu", () => {
     expect(props.onManageProjects).toHaveBeenCalledTimes(1);
   });
 
-  it("shows how many chats wait on the user in each project", async () => {
-    renderMenu("a", { needsYouByProject: new Map([["b", 2]]) });
-    await userEvent.click(screen.getByTestId("project-filter-trigger"));
-    expect(screen.getByTestId("project-filter-b")).toHaveTextContent("2");
-    expect(screen.getByTestId("project-filter-all")).toHaveTextContent("2");
+  it("the filter beside it opens the selector, choosing several, with chats waiting on the user per project", async () => {
+    const filter: ChatProjectFilter = { mode: "one", ids: ["a"], set: vi.fn(), clear: vi.fn() };
+    render(<ChatProjectFilterButton filter={filter} needsYouByProject={new Map([["b", 2]])} />);
+    expect(screen.getByTestId("chat-project-filter-trigger")).toHaveAccessibleName("Filter chats by project. Showing 1 project");
+    await userEvent.click(screen.getByTestId("chat-project-filter-trigger"));
+    expect(await screen.findByTestId("project-selector-row-b")).toHaveTextContent("2 waiting");
+    expect(screen.getByTestId("project-selector-row-a")).toHaveAttribute("aria-selected", "true");
+    await userEvent.click(screen.getByTestId("project-selector-row-b"));
+    expect(filter.set).toHaveBeenCalledWith(["a", "b"]);
   });
 
   it("holds sort, view and the archived list in the same menu", async () => {

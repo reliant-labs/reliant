@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/daemonmirror"
+	"github.com/reliant-labs/reliant/internal/daemonmirror/daemonmirrortest"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // These run the real SQL. The registry writes in daemon_registry.go carry
@@ -55,7 +58,7 @@ func TestUpsertDaemonIdentity_CreatesNamedRowReadByBothReaders(t *testing.T) {
 	ctx := context.Background()
 	created := time.Date(2026, 10, 7, 14, 41, 36, 0, time.UTC)
 
-	wrote, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{
+	wrote, err := daemonmirrortest.New(t, repo).UpsertDaemonIdentity(ctx, core.DaemonIdentity{
 		DaemonID: "2aab1465", UserID: "u-owner", Name: "default", DaemonType: "managed", CreatedAt: created,
 	})
 	if err != nil || !wrote {
@@ -76,7 +79,7 @@ func TestUpsertDaemonIdentity_CreatesNamedRowReadByBothReaders(t *testing.T) {
 
 	// Re-asserting an unchanged identity is a no-op, not a write: the
 	// snapshot re-asserts every daemon each sweep.
-	wrote, err = repo.UpsertDaemonIdentity(ctx, DaemonIdentity{
+	wrote, err = daemonmirrortest.New(t, repo).UpsertDaemonIdentity(ctx, core.DaemonIdentity{
 		DaemonID: "2aab1465", UserID: "u-owner", Name: "default", DaemonType: "managed", CreatedAt: created,
 	})
 	if err != nil || wrote {
@@ -95,17 +98,17 @@ func TestUpsertDaemonIdentity_NeverRecordsTheIdAsTheName(t *testing.T) {
 	ctx := context.Background()
 	const fresh, named = "46e3682b-33cd-4e88-aecb-52a3a919a354", "7d1c0f2e-9a4b-4c3d-8e5f-0a1b2c3d4e5f"
 
-	if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: fresh, UserID: "u-owner", Name: fresh, DaemonType: "self_hosted"}); err != nil {
+	if _, err := daemonmirrortest.New(t, repo).UpsertDaemonIdentity(ctx, core.DaemonIdentity{DaemonID: fresh, UserID: "u-owner", Name: fresh, DaemonType: "self_hosted"}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	if got := mustGetDaemon(t, repo, fresh); got.Name != "" {
 		t.Errorf("created name = %q, want none: the id is a placeholder", got.Name)
 	}
 
-	if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: named, UserID: "u-owner", Name: "laptop"}); err != nil {
+	if _, err := daemonmirrortest.New(t, repo).UpsertDaemonIdentity(ctx, core.DaemonIdentity{DaemonID: named, UserID: "u-owner", Name: "laptop"}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: named, UserID: "u-owner", Name: strings.ToUpper(named)}); err != nil {
+	if _, err := daemonmirrortest.New(t, repo).UpsertDaemonIdentity(ctx, core.DaemonIdentity{DaemonID: named, UserID: "u-owner", Name: strings.ToUpper(named)}); err != nil {
 		t.Fatalf("re-assert: %v", err)
 	}
 	if got := mustGetDaemon(t, repo, named); got.Name != "laptop" {
@@ -128,7 +131,7 @@ func TestUpsertDaemonIdentity_NamesARowTheGatewayRegistered(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	wrote, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{
+	wrote, err := daemonmirrortest.New(t, repo).UpsertDaemonIdentity(ctx, core.DaemonIdentity{
 		DaemonID: "2aab1465", UserID: "u-intruder", Name: "default", DaemonType: "self_hosted",
 	})
 	if err != nil || !wrote {
@@ -156,7 +159,7 @@ func TestRemoveDaemon_DeletesRowAndLease(t *testing.T) {
 
 	repo, rawDB := registryTestRepo(t)
 	ctx := context.Background()
-	if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: "cda8a89b", UserID: "u-owner", Name: "default", DaemonType: "managed"}); err != nil {
+	if _, err := daemonmirrortest.New(t, repo).UpsertDaemonIdentity(ctx, core.DaemonIdentity{DaemonID: "cda8a89b", UserID: "u-owner", Name: "default", DaemonType: "managed"}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	if err := repo.UpsertDaemonAttachment(ctx, &DaemonAttachment{
@@ -166,7 +169,7 @@ func TestRemoveDaemon_DeletesRowAndLease(t *testing.T) {
 		t.Fatalf("seed attachment: %v", err)
 	}
 
-	userID, removed, err := repo.RemoveDaemon(ctx, "cda8a89b")
+	userID, removed, err := daemonmirrortest.New(t, repo).RemoveDaemon(ctx, "cda8a89b")
 	if err != nil || !removed || userID != "u-owner" {
 		t.Fatalf("RemoveDaemon = %q, %v, %v; want u-owner, true", userID, removed, err)
 	}
@@ -181,7 +184,7 @@ func TestRemoveDaemon_DeletesRowAndLease(t *testing.T) {
 		t.Errorf("attachment lease survived removal")
 	}
 
-	_, removed, err = repo.RemoveDaemon(ctx, "cda8a89b")
+	_, removed, err = daemonmirrortest.New(t, repo).RemoveDaemon(ctx, "cda8a89b")
 	if err != nil || removed {
 		t.Errorf("second RemoveDaemon = %v, %v; want idempotent no-op", removed, err)
 	}
@@ -287,20 +290,20 @@ func TestRemoveDaemon_ReleasesWhatWasBoundToIt(t *testing.T) {
 	repo, rawDB := registryTestRepo(t)
 	ctx := context.Background()
 	for _, id := range []string{"gone-1", "kept-1"} {
-		if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: id, UserID: "test-user", DaemonType: "managed"}); err != nil {
+		if _, err := daemonmirrortest.New(t, repo).UpsertDaemonIdentity(ctx, core.DaemonIdentity{DaemonID: id, UserID: "test-user", DaemonType: "managed"}); err != nil {
 			t.Fatalf("seed %s: %v", id, err)
 		}
 	}
 	seedMachineBindings(t, rawDB, "test-user", "gone-1", "kept-1")
 
-	if _, removed, err := repo.RemoveDaemon(ctx, "gone-1"); err != nil || !removed {
+	if _, removed, err := daemonmirrortest.New(t, repo).RemoveDaemon(ctx, "gone-1"); err != nil || !removed {
 		t.Fatalf("RemoveDaemon = %v, %v; want removed", removed, err)
 	}
 	assertReleased(t, rawDB, "gone-1")
 	assertKept(t, rawDB, "kept-1")
 
 	// Idempotent: a second removal finds no row and tells no one again.
-	if _, removed, err := repo.RemoveDaemon(ctx, "gone-1"); err != nil || removed {
+	if _, removed, err := daemonmirrortest.New(t, repo).RemoveDaemon(ctx, "gone-1"); err != nil || removed {
 		t.Fatalf("second RemoveDaemon = %v, %v; want idempotent no-op", removed, err)
 	}
 	assertReleased(t, rawDB, "gone-1")
@@ -315,16 +318,16 @@ func TestApplyDaemonRegistrySnapshot_ReleasesWhatWasBoundToARemovedRow(t *testin
 	ctx := context.Background()
 	old := time.Now().UTC().Add(-24 * time.Hour)
 	for _, id := range []string{"ghost-1", "listed-1"} {
-		if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: id, UserID: "test-user", DaemonType: "managed", CreatedAt: old}); err != nil {
+		if _, err := daemonmirrortest.New(t, repo).UpsertDaemonIdentity(ctx, core.DaemonIdentity{DaemonID: id, UserID: "test-user", DaemonType: "managed", CreatedAt: old}); err != nil {
 			t.Fatalf("seed %s: %v", id, err)
 		}
 	}
 	seedMachineBindings(t, rawDB, "test-user", "ghost-1", "listed-1")
 
 	now := time.Now().UTC()
-	result, err := repo.ApplyDaemonRegistrySnapshot(ctx, RegistrySnapshotApply{
+	result, err := daemonmirrortest.New(t, repo).ApplyDaemonRegistrySnapshot(ctx, daemonmirror.RegistrySnapshotApply{
 		UserID:            "test-user",
-		Daemons:           []RegistrySnapshotDaemon{{Identity: DaemonIdentity{DaemonID: "listed-1", DaemonType: "managed", CreatedAt: old}}},
+		Daemons:           []daemonmirror.RegistrySnapshotDaemon{{Identity: core.DaemonIdentity{DaemonID: "listed-1", DaemonType: "managed", CreatedAt: old}}},
 		KeepCreatedAfter:  now.Add(-10 * time.Minute),
 		KeepAttachedSince: now.Add(-90 * time.Second),
 	})
@@ -354,7 +357,7 @@ func TestApplyDaemonRegistrySnapshot_ReconcilesOneOwner(t *testing.T) {
 
 	seed := func(id, user string, created time.Time) {
 		t.Helper()
-		if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: id, UserID: user, DaemonType: "managed", CreatedAt: created}); err != nil {
+		if _, err := daemonmirrortest.New(t, repo).UpsertDaemonIdentity(ctx, core.DaemonIdentity{DaemonID: id, UserID: user, DaemonType: "managed", CreatedAt: created}); err != nil {
 			t.Fatalf("seed %s: %v", id, err)
 		}
 	}
@@ -378,13 +381,13 @@ func TestApplyDaemonRegistrySnapshot_ReconcilesOneOwner(t *testing.T) {
 	}
 
 	suspendedAt := now.Add(-15 * 24 * time.Hour)
-	result, err := repo.ApplyDaemonRegistrySnapshot(ctx, RegistrySnapshotApply{
+	result, err := daemonmirrortest.New(t, repo).ApplyDaemonRegistrySnapshot(ctx, daemonmirror.RegistrySnapshotApply{
 		UserID: "u-owner",
-		Daemons: []RegistrySnapshotDaemon{
-			{Identity: DaemonIdentity{DaemonID: "2aab1465", Name: "default", DaemonType: "managed", CreatedAt: longAgo}},
+		Daemons: []daemonmirror.RegistrySnapshotDaemon{
+			{Identity: core.DaemonIdentity{DaemonID: "2aab1465", Name: "default", DaemonType: "managed", CreatedAt: longAgo}},
 			{
-				Identity:  DaemonIdentity{DaemonID: "dea98d67", Name: "test", DaemonType: "managed", CreatedAt: longAgo},
-				Lifecycle: &DaemonLifecycleUpdate{Phase: "suspended", Size: "m", ChangedAt: suspendedAt},
+				Identity:  core.DaemonIdentity{DaemonID: "dea98d67", Name: "test", DaemonType: "managed", CreatedAt: longAgo},
+				Lifecycle: &core.DaemonLifecycleUpdate{Phase: "suspended", Size: "m", ChangedAt: suspendedAt},
 			},
 		},
 		KeepCreatedAfter:  now.Add(-10 * time.Minute),
@@ -419,16 +422,16 @@ func TestApplyDaemonRegistrySnapshot_ReconcilesOneOwner(t *testing.T) {
 	}
 
 	// A second, identical snapshot changes nothing.
-	again, err := repo.ApplyDaemonRegistrySnapshot(ctx, RegistrySnapshotApply{
+	again, err := daemonmirrortest.New(t, repo).ApplyDaemonRegistrySnapshot(ctx, daemonmirror.RegistrySnapshotApply{
 		UserID: "u-owner",
-		Daemons: []RegistrySnapshotDaemon{
-			{Identity: DaemonIdentity{DaemonID: "2aab1465", Name: "default", DaemonType: "managed", CreatedAt: longAgo}},
+		Daemons: []daemonmirror.RegistrySnapshotDaemon{
+			{Identity: core.DaemonIdentity{DaemonID: "2aab1465", Name: "default", DaemonType: "managed", CreatedAt: longAgo}},
 			{
-				Identity:  DaemonIdentity{DaemonID: "dea98d67", Name: "test", DaemonType: "managed", CreatedAt: longAgo},
-				Lifecycle: &DaemonLifecycleUpdate{Phase: "suspended", Size: "m", ChangedAt: suspendedAt},
+				Identity:  core.DaemonIdentity{DaemonID: "dea98d67", Name: "test", DaemonType: "managed", CreatedAt: longAgo},
+				Lifecycle: &core.DaemonLifecycleUpdate{Phase: "suspended", Size: "m", ChangedAt: suspendedAt},
 			},
-			{Identity: DaemonIdentity{DaemonID: "laptop", DaemonType: "managed", CreatedAt: longAgo}},
-			{Identity: DaemonIdentity{DaemonID: "just-registered", DaemonType: "managed", CreatedAt: now}},
+			{Identity: core.DaemonIdentity{DaemonID: "laptop", DaemonType: "managed", CreatedAt: longAgo}},
+			{Identity: core.DaemonIdentity{DaemonID: "just-registered", DaemonType: "managed", CreatedAt: now}},
 		},
 		KeepCreatedAfter:  now.Add(-10 * time.Minute),
 		KeepAttachedSince: now.Add(-90 * time.Second),
@@ -449,12 +452,12 @@ func TestApplyDaemonRegistrySnapshot_EmptySetRemovesEveryGhost(t *testing.T) {
 	ctx := context.Background()
 	longAgo := time.Now().UTC().Add(-30 * 24 * time.Hour)
 	for _, id := range []string{"ghost-a", "ghost-b"} {
-		if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: id, UserID: "u-owner", DaemonType: "self_hosted", CreatedAt: longAgo}); err != nil {
+		if _, err := daemonmirrortest.New(t, repo).UpsertDaemonIdentity(ctx, core.DaemonIdentity{DaemonID: id, UserID: "u-owner", DaemonType: "self_hosted", CreatedAt: longAgo}); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 	}
-	for _, daemons := range [][]RegistrySnapshotDaemon{nil, {}} {
-		if _, err := repo.ApplyDaemonRegistrySnapshot(ctx, RegistrySnapshotApply{
+	for _, daemons := range [][]daemonmirror.RegistrySnapshotDaemon{nil, {}} {
+		if _, err := daemonmirrortest.New(t, repo).ApplyDaemonRegistrySnapshot(ctx, daemonmirror.RegistrySnapshotApply{
 			UserID: "u-owner", Daemons: daemons,
 			KeepCreatedAfter: time.Now().UTC().Add(-10 * time.Minute), KeepAttachedSince: time.Now().UTC(),
 		}); err != nil {

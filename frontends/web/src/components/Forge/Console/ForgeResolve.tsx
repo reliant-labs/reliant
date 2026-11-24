@@ -28,6 +28,10 @@
  * now. A project with neither is not a forge project (or its daemon cannot
  * say), and the screen says so beside the picker.
  *
+ * The console URL it lands on carries the project it resolved as
+ * `?project=`, so the console reads that checkout even when another project
+ * declares the same forge name (consoleHost.ts consoleCheckout).
+ *
  * Every hop is `replace`, so Back does not bounce through the retired URL.
  */
 
@@ -42,7 +46,7 @@ import { fetchProjects, useProject } from "@/hooks/project-queries";
 
 import { ForgeProjectPicker } from "../ForgeProjectPicker";
 import { isForgeShell } from "@/lib/shell";
-import { appsPath } from "@/lib/paths";
+import { projectsHref, withMoreSearch } from "@/lib/paths";
 
 export interface ForgeResolveProps {
   /** A Reliant project id, from the URL. */
@@ -67,7 +71,7 @@ export function ForgeResolve(props: ForgeResolveProps) {
  */
 function ForgeShellResolve({ forgeProject, target }: ForgeResolveProps) {
   const named = forgeProject?.trim() || undefined;
-  return <Redirect href={named ? target(named) : appsPath()} />;
+  return <Redirect href={named ? target(named) : projectsHref("apps")} />;
 }
 
 function ReliantResolve({ project, forgeProject, target }: ForgeResolveProps) {
@@ -143,7 +147,9 @@ function ResolveName({
     if (!persisted && reported) void fetchProjects({ fresh: true }).catch(() => undefined);
   }, [persisted, reported]);
 
-  if (name) return <Redirect href={target(name)} />;
+  // The console names the checkout it was reached through: several of the
+  // person's projects can declare one app name (consoleHost.ts).
+  if (name) return <Redirect href={withMoreSearch(target(name), { project: projectId })} />;
   if (topology.isLoading) return <Resolving />;
   return (
     <PickerScreen

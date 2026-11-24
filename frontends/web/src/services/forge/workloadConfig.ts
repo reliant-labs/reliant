@@ -2,7 +2,7 @@
 
 /** Values never enter a query cache. Only an explicit user action calls this adapter. */
 import type { JsonObject } from "@bufbuild/protobuf";
-import { Code, ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError, type Transport } from "@connectrpc/connect";
 
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
@@ -13,7 +13,7 @@ export interface WorkloadConfig {
   environmentId: string;
   workload: string;
   bundleId: string;
-  /** Verified immutable OCI manifest digest, not a secret fingerprint. Empty on older servers. */
+  /** Verified immutable OCI manifest digest, not a secret fingerprint. Empty when none was recorded. */
   bundleDigest: string;
   releaseVersion: string;
   objects: JsonObject[];
@@ -40,12 +40,13 @@ export function validateWorkloadConfig(result: WorkloadConfig, request: Workload
   return result;
 }
 
-export const getWorkloadConfig: ConfigReader = async (request, signal) => {
+/** Reads one workload's config over `transport` (the caller's scope's, `useTransport(transport)`). */
+export async function getWorkloadConfig(transport: Transport, request: WorkloadConfigRequest, signal: AbortSignal): Promise<WorkloadConfig> {
   const { environmentId, workload, bundleId, releaseVersion, orgId } = request;
   if (!environmentId || !workload || (bundleId !== undefined && !bundleId) || (releaseVersion !== undefined && !releaseVersion) || (bundleId !== undefined && releaseVersion !== undefined)) {
     throw new Error("Choose an environment, workload and at most one nonempty bundle or release selector.");
   }
-  const result = await getControlPlaneClient(DeployService).getWorkloadConfig({ environmentId, workload, bundleId, releaseVersion, ...(orgId ? { orgId } : {}) }, { signal });
+  const result = await getControlPlaneClient(DeployService, transport).getWorkloadConfig({ environmentId, workload, bundleId, releaseVersion, ...(orgId ? { orgId } : {}) }, { signal });
   return validateWorkloadConfig({
     environmentId: result.environmentId,
     workload: result.workload,
@@ -56,7 +57,7 @@ export const getWorkloadConfig: ConfigReader = async (request, signal) => {
     renderedYaml: result.renderedYaml,
     frontendConfigUnsupportedReason: result.frontendConfigUnsupportedReason,
   }, request);
-};
+}
 
 /** Do not echo arbitrary transport details: an intermediary could quote sensitive bytes. */
 export function configReadError(error: unknown): string {

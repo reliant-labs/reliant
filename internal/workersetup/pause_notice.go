@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -17,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // An automation paused for want of an org account (core.TriggerPausedNoOrgAccount;
@@ -193,10 +195,36 @@ func pauseNoticeWorkflowID(n controlplane.OrgAutomationNoOrgAccountNotice) strin
 }
 
 // PauseNoticeStore is what a pause's notice is started from: the pause read
-// back, and what the sweep lists. *db.Repo satisfies it.
+// back, and what the sweep lists. pauseStores satisfies it.
 type PauseNoticeStore interface {
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 	ClaimDuePauseNotices(ctx context.Context, limit int, lease time.Duration) ([]*core.Trigger, error)
+}
+
+// pauseTriggerReads is the one trigger read a pause's notice makes: the pause
+// read back. The repository facade serves it (other areas share it).
+type pauseTriggerReads interface {
+	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
+}
+
+// pauseStores is the production store of a pause's notice: the trigger read
+// joined with the generated TriggerNoticesExtStore, which owns the claim,
+// confirm and refuse writes. Both parts are required by the constructor, so a
+// worker cannot be handed half of it.
+type pauseStores struct {
+	pauseTriggerReads
+	store.TriggerNoticesExtStore
+}
+
+var _ PauseNoticeStore = pauseStores{}
+var _ pauseNoticeConfirmer = pauseStores{}
+
+// newPauseStores joins reads with the notice store over db.
+func newPauseStores(reads pauseTriggerReads, db orm.Context) pauseStores {
+	if reads == nil {
+		panic("workersetup: newPauseStores requires the trigger read")
+	}
+	return pauseStores{pauseTriggerReads: reads, TriggerNoticesExtStore: store.NewTriggerNoticesExtStore(db)}
 }
 
 // pauseNotice is the notice of t's current pause, nil when t is not paused for

@@ -6,6 +6,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestDaemonAttachmentDetectedPorts verifies the heartbeat-driven detected
@@ -29,7 +31,7 @@ func TestDaemonAttachmentDetectedPorts(t *testing.T) {
 	t.Cleanup(clean)
 
 	// No row yet: updating ports must be a silent no-op, not an error.
-	if err := repo.UpdateDaemonAttachmentPorts(ctx, daemonID, []uint32{5174}); err != nil {
+	if err := store.SetDaemonAttachmentPorts(ctx, repo.ORM(), daemonID, []uint32{5174}); err != nil {
 		t.Fatalf("UpdateDaemonAttachmentPorts without row: %v", err)
 	}
 
@@ -60,7 +62,7 @@ func TestDaemonAttachmentDetectedPorts(t *testing.T) {
 
 	// Record ports as the heartbeat handler would.
 	want := []uint32{3000, 5174}
-	if err := repo.UpdateDaemonAttachmentPorts(ctx, daemonID, want); err != nil {
+	if err := store.SetDaemonAttachmentPorts(ctx, repo.ORM(), daemonID, want); err != nil {
 		t.Fatalf("UpdateDaemonAttachmentPorts: %v", err)
 	}
 	if got := freshPorts("after update"); !slices.Equal(got, want) {
@@ -68,7 +70,7 @@ func TestDaemonAttachmentDetectedPorts(t *testing.T) {
 	}
 
 	// A nil update clears the set (dev server stopped).
-	if err := repo.UpdateDaemonAttachmentPorts(ctx, daemonID, nil); err != nil {
+	if err := store.SetDaemonAttachmentPorts(ctx, repo.ORM(), daemonID, nil); err != nil {
 		t.Fatalf("UpdateDaemonAttachmentPorts(nil): %v", err)
 	}
 	if got := freshPorts("after clear"); len(got) != 0 {
@@ -77,7 +79,7 @@ func TestDaemonAttachmentDetectedPorts(t *testing.T) {
 
 	// Re-attachment (new stream) resets ports — a fresh session's listener
 	// set is unknown until its first heartbeat.
-	if err := repo.UpdateDaemonAttachmentPorts(ctx, daemonID, []uint32{8080}); err != nil {
+	if err := store.SetDaemonAttachmentPorts(ctx, repo.ORM(), daemonID, []uint32{8080}); err != nil {
 		t.Fatalf("UpdateDaemonAttachmentPorts pre-re-attach: %v", err)
 	}
 	if err := repo.UpsertDaemonAttachment(ctx, &DaemonAttachment{

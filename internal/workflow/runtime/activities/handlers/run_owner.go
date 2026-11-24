@@ -22,13 +22,13 @@ import (
 // nil means the owner could not be determined, and callers must treat that as
 // a fact worth acting on rather than a value to paper over: a run with no owner
 // is a run the engine cannot attribute, and it should be visible.
-func resolveRunOwner(ctx context.Context, repo RunOwnerReader, parentWorkflowID *string, chatID string) *string {
-	if repo == nil {
+func resolveRunOwner(ctx context.Context, workflows WorkflowLoader, repo RunOwnerReader, parentWorkflowID *string, chatID string) *string {
+	if repo == nil || workflows == nil {
 		return nil
 	}
 
 	if parentWorkflowID != nil && *parentWorkflowID != "" {
-		if parent, err := repo.GetWorkflow(ctx, *parentWorkflowID); err == nil && parent != nil {
+		if parent, err := workflows.LoadWorkflow(ctx, *parentWorkflowID); err == nil && parent != nil {
 			if parent.OwnerUserID != nil && *parent.OwnerUserID != "" {
 				owner := *parent.OwnerUserID
 				return &owner

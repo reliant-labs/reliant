@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/orm"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -14,15 +15,38 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Repository is the slice of *db.Repo read-only sharing uses: the rows it
-// decides on, the one writer of a visibility (with its share event), and the
-// shared lists.
-type Repository interface {
+// Chats reads the chat a visibility decision is made on.
+// store.ChatsWithActivityExtStore satisfies it.
+type Chats interface {
 	GetChat(ctx context.Context, id string) (*core.Chat, error)
+}
+
+// Projects reads the project a visibility decision is made on.
+// store.ProjectExtStore satisfies it.
+type Projects interface {
 	GetProject(ctx context.Context, id string) (*core.Project, error)
+}
+
+// WorkflowDrafts reads the saved workflow a sharing decision is made on.
+// workflowdrafts.Service satisfies it.
+type WorkflowDrafts interface {
+	GetWorkflowDraft(ctx context.Context, id string) (*core.WorkflowDraft, error)
+}
+
+// Shares is the one writer of a visibility (with its share event) and the
+// shared lists. store.ShareEventExtStore satisfies it; its writes must run in
+// a transaction (Deps.Tx), so the visibility and its event land together.
+type Shares interface {
 	ApplyShareChange(ctx context.Context, c core.ShareChange) (bool, error)
 	ListSharedChats(ctx context.Context, f core.SharedChatFilters) ([]*core.Chat, error)
 	ListSharedProjects(ctx context.Context, f core.SharedProjectFilters) ([]*core.Project, error)
+	ListSharedWorkflowDrafts(ctx context.Context, f core.SharedWorkflowDraftFilters) ([]*core.WorkflowDraft, error)
+}
+
+// TxRunner opens the transaction a visibility change runs in. *orm.Client
+// satisfies it.
+type TxRunner interface {
+	RunTx(ctx context.Context, policy orm.TxPolicy, fn func(ctx context.Context) error) error
 }
 
 // OrgResolver names the org a shared list is of: the one the request names,
@@ -39,7 +63,14 @@ type OrgResolver interface {
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
-	Repo   Repository
+	// Chats, Projects and WorkflowDrafts read the rows a decision is made on.
+	Chats          Chats
+	Projects       Projects
+	WorkflowDrafts WorkflowDrafts
+	// Shares writes a visibility and lists what is shared.
+	Shares Shares
+	// Tx opens the transaction a visibility change runs in.
+	Tx TxRunner
 	// Orgs resolves the org a shared list is of. Without one (a deployment
 	// with no control plane) there are no orgs, so nothing is shared and the
 	// lists are empty.
@@ -57,8 +88,20 @@ func (d Deps) validateDeps() error {
 	if d.Config == nil {
 		return fmt.Errorf("sharing: Deps.Config is required")
 	}
-	if d.Repo == nil {
-		return fmt.Errorf("sharing: Deps.Repo is required")
+	if d.Chats == nil {
+		return fmt.Errorf("sharing: Deps.Chats is required")
+	}
+	if d.Projects == nil {
+		return fmt.Errorf("sharing: Deps.Projects is required")
+	}
+	if d.WorkflowDrafts == nil {
+		return fmt.Errorf("sharing: Deps.WorkflowDrafts is required")
+	}
+	if d.Shares == nil {
+		return fmt.Errorf("sharing: Deps.Shares is required")
+	}
+	if d.Tx == nil {
+		return fmt.Errorf("sharing: Deps.Tx is required")
 	}
 	return nil
 }

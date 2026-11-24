@@ -21,7 +21,7 @@ func (s *Service) ValidateProviderAPIKey(ctx context.Context, req *connect.Reque
 	switch provider {
 	case "claude", "codex", "copilot", antigravity.DriverID:
 		name := providerName(string(provider))
-		accounts, err := s.deps.Repo.ListProviderAccounts(ctx, userID)
+		accounts, err := s.deps.Accounts.ListProviderAccounts(ctx, userID)
 		if err != nil {
 			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: "Failed to load " + name + " credentials"}), nil
 		}

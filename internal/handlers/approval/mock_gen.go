@@ -19,7 +19,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=b2efcbaee82fca8618e103b4734b48b7bdd61a5861ab476cd4096493ec685767
+// forge:hash=584e5d116bdbb26f78fe8678a025f586a3eb56e8c2a68edba0c8c44e71883262
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -30,7 +30,6 @@ import (
 type MockRepository struct {
 	contractkit.Recorder
 	RunTxFunc                      func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-	GetChatRowFunc                 func(context.Context, string) (*db.ChatRow, error)
 	CreateChatUpdateFunc           func(context.Context, string, pb.ChatUpdateType, string, string) error
 	GetApprovalFunc                func(context.Context, string) (*db.Approval, error)
 	ListPendingApprovalsByChatFunc func(context.Context, string) ([]*db.Approval, error)
@@ -48,15 +47,6 @@ func (m *MockRepository) RunTx(p0 context.Context, policy orm.TxPolicy, f func(c
 		return m.RunTxFunc(p0, policy, f)
 	}
 	return contractkit.MockNotSet("MockRepository", "RunTx")
-}
-
-// GetChatRow records the call and delegates to GetChatRowFunc when set.
-func (m *MockRepository) GetChatRow(ctx context.Context, id string) (*db.ChatRow, error) {
-	m.Recorder.Record("GetChatRow", ctx, id)
-	if m.GetChatRowFunc != nil {
-		return m.GetChatRowFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetChatRow")
 }
 
 // CreateChatUpdate records the call and delegates to CreateChatUpdateFunc when set.
@@ -133,6 +123,32 @@ func (m *MockRepository) CreateContentBlock(ctx context.Context, block *db.Messa
 
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockChats
+// forge:hash=b516a1dcc6b11514f064ea8bd56b47cab1edd62387c1ddb08745cfe5ddb76430
+
+// MockChats is a test mock for the Chats interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockChats.<Method>Func not set" error.
+type MockChats struct {
+	contractkit.Recorder
+	GetChatRowFunc func(context.Context, string) (*core.ChatRow, error)
+}
+
+// GetChatRow records the call and delegates to GetChatRowFunc when set.
+func (m *MockChats) GetChatRow(ctx context.Context, id string) (*core.ChatRow, error) {
+	m.Recorder.Record("GetChatRow", ctx, id)
+	if m.GetChatRowFunc != nil {
+		return m.GetChatRowFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockChats", "GetChatRow")
+}
+
+// Compile-time check.
+var _ Chats = (*MockChats)(nil)
 
 // forge:section MockSignaler
 // forge:hash=6edcfa0cf6724b6d895aa13359618ed50f22dfb2634e330c2d7366cd044d4dbd

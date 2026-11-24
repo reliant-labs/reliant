@@ -52,14 +52,14 @@ export function ConnectMachineDialog({ chatId, open, onClose, onConnected }: Con
     setError("");
     try {
       await useChatStore.getState().connectChatToMachine(chatId, target);
-      const label = targetLabel ?? options.find((o) => o.value === target)?.label ?? "your machine";
+      const label = targetLabel ?? options.find((o) => o.value === target)?.label ?? "your sandbox";
       toast.success(`Connected to ${label}`, {
         description: "Send a message to continue. The next turn can use this project's files.",
       });
       onConnected?.();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not connect a machine");
+      setError(err instanceof Error ? err.message : "Could not connect a sandbox");
     } finally {
       setConnecting(false);
     }
@@ -70,8 +70,8 @@ export function ConnectMachineDialog({ chatId, open, onClose, onConnected }: Con
       <Modal
         open={open && !showSetup}
         onClose={onClose}
-        title="Connect a machine"
-        description="This chat has no machine, so it can't read or change files in this project. Connecting moves it onto a machine; it can't go back to no machine afterwards."
+        title="Connect an agent sandbox"
+        description="This chat has no sandbox, so it can't read or change files in this project. Connecting moves it onto a sandbox; it can't go back to no sandbox afterwards."
         size="sm"
         footer={
           <div className="flex justify-end gap-2">
@@ -88,12 +88,12 @@ export function ConnectMachineDialog({ chatId, open, onClose, onConnected }: Con
       >
         <div className="px-6 py-4">
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading your machines…</p>
+            <p className="text-sm text-muted-foreground">Loading your sandboxes…</p>
           ) : options.length === 0 ? (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">You don&apos;t have a machine yet.</p>
+              <p className="text-sm text-muted-foreground">You don&apos;t have a sandbox yet.</p>
               <Button variant="outline" onClick={() => setShowSetup(true)}>
-                Add machine
+                Add sandbox
               </Button>
             </div>
           ) : (

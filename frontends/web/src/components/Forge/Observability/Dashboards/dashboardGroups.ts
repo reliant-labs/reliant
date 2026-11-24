@@ -15,9 +15,7 @@
  *   custom      everything a team wrote itself
  *
  * The control plane names the group (`DashboardSummary.group`, from the spec's
- * `group` field, defaulted server-side). A server that predates the field
- * sends none, so `groupOf` falls back to what the key and source say; once
- * every server sends it the fallback only ever sees "custom" dashboards.
+ * `group` field, defaulted server-side).
  */
 
 import type { DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
@@ -50,30 +48,11 @@ export function isDashboardGroup(value: unknown): value is DashboardGroup {
 }
 
 /**
- * The group a dashboard belongs to. The server's word wins; an unknown one
- * is "custom" (the contract's read rule), and only an absent one — an older
- * control plane — is inferred.
+ * The group a dashboard belongs to: the server's word. An unknown or absent
+ * one is "custom" (the contract's read rule); a group is never guessed.
  */
-export function groupOf(d: Pick<DashboardSummary, "group" | "ref" | "source">): DashboardGroup {
-  if (d.group) return isDashboardGroup(d.group) ? d.group : "custom";
-  return inferredGroup(d);
-}
-
-/** What an older server's dashboard most likely is, from its key and source. */
-export function inferredGroup(d: Pick<DashboardSummary, "ref" | "source">): DashboardGroup {
-  const key = d.ref.key.toLowerCase();
-  if (d.source === "builtin") return "platform";
-  if (key.startsWith("selfmon-")) return "platform";
-  if (key.startsWith("product-")) return "product";
-  if (d.source !== "generated") return "custom";
-  if (key === "overview" || key.endsWith("-overview")) return "overview";
-  if (key === "jobs" || key.startsWith("job-") || key.startsWith("cron-") || key.startsWith("cronjob-")) return "jobs";
-  if (key === "workloads") return "platform";
-  if (key === "releases") return "releases";
-  if (key === "frontend" || key.startsWith("frontend-")) return "product";
-  if (key === "custom-metrics") return "custom";
-  // Every other generated dashboard is forge's per-workload one.
-  return "services";
+export function groupOf(d: Pick<DashboardSummary, "group">): DashboardGroup {
+  return isDashboardGroup(d.group) ? d.group : "custom";
 }
 
 /**

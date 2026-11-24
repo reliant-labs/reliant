@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
+
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -175,7 +176,7 @@ func TestLoadRecentMessagesBefore_CompactedThreadReadsOnlyTheWindowsItNeeds(t *t
 
 	leaf, newest := forkCompactionChain(t, h)
 	repo := &windowReadCounter{Repository: h.repo}
-	svc := NewService(repo)
+	svc := New(Deps{Repo: repo})
 
 	if _, _, err := svc.LoadRecentMessagesBefore(context.Background(), leaf, 0, newest-1); err != nil {
 		t.Fatalf("LoadRecentMessagesBefore: %v", err)

@@ -63,8 +63,9 @@ type CreateWorkflowWithThreadOutput struct {
 
 // CreateWorkflowWithThreadActivity creates a workflow and its associated thread atomically
 type CreateWorkflowWithThreadActivity struct {
-	threads *threads.Service
-	repo    CreateWorkflowWithThreadStore
+	threads   *threads.Service
+	repo      CreateWorkflowWithThreadStore
+	workflows WorkflowLoader
 }
 
 // NewCreateWorkflowWithThreadActivity creates a new CreateWorkflowWithThreadActivity.
@@ -73,8 +74,8 @@ type CreateWorkflowWithThreadActivity struct {
 // every spawned run, so leaving the owner unset here would leave a large share
 // of runs without one — and a reader that then fell back to the chat would hide
 // that rather than surface it.
-func NewCreateWorkflowWithThreadActivity(threadsService *threads.Service, repo CreateWorkflowWithThreadStore) *CreateWorkflowWithThreadActivity {
-	return &CreateWorkflowWithThreadActivity{threads: threadsService, repo: repo}
+func NewCreateWorkflowWithThreadActivity(threadsService *threads.Service, repo CreateWorkflowWithThreadStore, workflows WorkflowLoader) *CreateWorkflowWithThreadActivity {
+	return &CreateWorkflowWithThreadActivity{threads: threadsService, repo: repo, workflows: workflows}
 }
 
 // announceThread writes the "thread" chat update for a newly created (or newly
@@ -183,7 +184,7 @@ func (a *CreateWorkflowWithThreadActivity) Execute(ctx context.Context, input Cr
 		SpawnedByNodeID: input.SpawnedByNodeID,
 		LoopIteration:   input.LoopIteration,
 		CreatedAt:       time.Now().UTC(),
-		OwnerUserID:     resolveRunOwner(ctx, a.repo, input.ParentWorkflowID, input.ChatID),
+		OwnerUserID:     resolveRunOwner(ctx, a.workflows, a.repo, input.ParentWorkflowID, input.ChatID),
 	}
 
 	// Build the options for CreateWorkflowWithThread

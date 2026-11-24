@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,7 +11,11 @@ import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
-import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { beforeEach as shellBeforeEach } from "vitest";
+import { ALL_PROJECTS_PICK, useShellLastPick } from "./sidebar/shellProject";
+
+// The project shell (U6b): these tests read the list across every project, as "All projects" shows it, on the chat home where Chats are open.
+shellBeforeEach(() => useShellLastPick.setState({ key: ALL_PROJECTS_PICK }));
 
 // Keeps the trigger wrapper's classes (triggerClassName): the hover-only
 // actions hide and show on it.
@@ -188,7 +192,7 @@ describe("Sidebar selected chat scroll", () => {
     });
     render(
       <QueryClientProvider client={queryClient}>
-        <Sidebar />
+        <Sidebar pathname="/" />
       </QueryClientProvider>
     );
 
@@ -202,131 +206,13 @@ describe("Sidebar selected chat scroll", () => {
     vi.useRealTimers();
   });
 
-  it("stays on the archived tab when expanding an archived workspace group", () => {
-    mockArchivedChatData.push({
-      id: "chat-archived",
-      title: "Archived chat",
-      createdAt: "2024-01-01T00:00:00.000Z",
-      updatedAt: "2024-01-01T00:00:00.000Z",
-      lastMessageAt: "2024-01-01T00:00:00.000Z",
-      unread: false,
-      state: ChatState.ARCHIVED,
-      worktreeId: "worktree-archived",
-      worktreeName: "Archived workspace",
-      projectId: "project-1",
-    });
-    // One project's archive groups by workspace (across projects it groups
-    // by project: Sidebar.projectClarity.test.tsx).
-    useWorkspaceStateStore.setState({ projectFilterId: "project-1" });
-
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Sidebar />
-      </QueryClientProvider>
-    );
-
-    // The active chat is a non-archived one, so the sidebar starts on "Active".
-    fireEvent.click(screen.getByTestId("project-filter-trigger"));
-    fireEvent.click(screen.getByText("Archived chats"));
-
-    const groupHeader = screen.getByText("Archived workspace");
-    expect(screen.queryByText("Archived chat")).not.toBeInTheDocument();
-
-    fireEvent.click(groupHeader);
-
-    // The group expands and the list must NOT snap back to the active tab.
-    expect(screen.getByText("Archived chat")).toBeInTheDocument();
-    expect(screen.queryByText("Selected chat")).not.toBeInTheDocument();
-    useWorkspaceStateStore.setState({ projectFilterId: null });
-  });
-
-  it("reads the archived list only while the Archived tab is open, and pages it on request", () => {
-    mockArchivedChatData.push({
-      id: "chat-archived",
-      title: "Archived chat",
-      createdAt: "2024-01-01T00:00:00.000Z",
-      updatedAt: "2024-01-01T00:00:00.000Z",
-      unread: false,
-      state: ChatState.ARCHIVED,
-      projectId: "project-1",
-    });
-    mockArchivedPaging.hasNextPage = true;
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Sidebar />
-      </QueryClientProvider>
-    );
-
-    // Closed: every render asked for it disabled.
-    expect(mockUseArchivedChats.mock.calls.length).toBeGreaterThan(0);
-    for (const [options] of mockUseArchivedChats.mock.calls) expect(options).toEqual({ enabled: false });
-    expect(screen.queryByTestId("archived-load-more")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByTestId("project-filter-trigger"));
-    fireEvent.click(screen.getByText("Archived chats"));
-    expect(mockUseArchivedChats.mock.calls.at(-1)?.[0]).toEqual({ enabled: true });
-
-    fireEvent.click(screen.getByTestId("archived-load-more"));
-    expect(mockArchivedPaging.fetchNextPage).toHaveBeenCalledTimes(1);
-  });
-
-  it("opens the Archived tab for an archived chat opened from elsewhere", () => {
-    // Opened from the Inbox: in no loaded list, archived by its own detail.
-    useChatStore.setState({ activeChatId: "chat-old" });
-    mockOpenedChat = { id: "chat-old", title: "Old work", state: ChatState.ARCHIVED, projectId: "project-1" };
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Sidebar />
-      </QueryClientProvider>
-    );
-
-    expect(mockUseArchivedChats.mock.calls.at(-1)?.[0]).toEqual({ enabled: true });
-    expect(screen.getByRole("region", { name: "Archived chats" })).toBeInTheDocument();
-  });
-
-  it("closes the list menu after choosing an option, and on Escape", () => {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Sidebar />
-      </QueryClientProvider>
-    );
-
-    // Picking an option is a complete interaction — the menu should dismiss.
-    // The Chats heading then reads "Archived", with Back to the active list.
-    fireEvent.click(screen.getByTestId("project-filter-trigger"));
-    fireEvent.click(screen.getByText("Archived chats"));
-    expect(screen.queryByText("Archived chats")).not.toBeInTheDocument();
-    expect(screen.getByTestId("chat-list-heading")).toHaveTextContent("Archived");
-    fireEvent.click(screen.getByTestId("chat-list-back"));
-    expect(screen.getByTestId("chat-list-heading")).toHaveTextContent("Chats");
-
-    // Sort options dismiss too.
-    fireEvent.click(screen.getByTestId("project-filter-trigger"));
-    fireEvent.click(screen.getByText("Newest first"));
-    expect(screen.queryByText("Newest first")).not.toBeInTheDocument();
-
-    // Escape still dismisses without choosing anything.
-    fireEvent.click(screen.getByTestId("project-filter-trigger"));
-    expect(screen.getByText("Archived chats")).toBeInTheDocument();
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByText("Archived chats")).not.toBeInTheDocument();
-  });
-
   it("closes the view menu after choosing a view mode", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
     render(
       <QueryClientProvider client={queryClient}>
-        <Sidebar />
+        <Sidebar pathname="/" />
       </QueryClientProvider>
     );
 
@@ -343,7 +229,7 @@ describe("Sidebar selected chat scroll", () => {
     });
     render(
       <QueryClientProvider client={queryClient}>
-        <Sidebar />
+        <Sidebar pathname="/" />
       </QueryClientProvider>
     );
 
@@ -353,13 +239,14 @@ describe("Sidebar selected chat scroll", () => {
     const workspaceTitle = screen.getByText("feature/test");
     expect(workspaceTitle).toHaveAttribute("title", "feature/test");
 
-    // The workspace header's New chat and Archive: display:none until the
-    // header is hovered or focused, never a transparent box holding width.
+    // The section heading's New chat and Archive (and, on a project's first
+    // heading, New chat in the project): display:none until the heading is
+    // hovered or focused, never a transparent box holding width.
     const header = workspaceTitle.closest(".group\\/ws") as HTMLElement;
     const hoverOnly = Array.from(header.querySelectorAll("button")).filter(
       (b) => !b.contains(workspaceTitle) && b.querySelector(".lucide-plus, .lucide-archive"),
     );
-    expect(hoverOnly).toHaveLength(2);
+    expect(hoverOnly.length).toBeGreaterThanOrEqual(2);
     for (const button of hoverOnly) {
       expect(button.className).not.toMatch(/opacity-0/);
       const wrapper = button.parentElement!;
@@ -377,57 +264,111 @@ describe("Sidebar selected chat scroll", () => {
     expect(row.querySelector(".lucide-archive")).toBeNull();
   });
 
-  it("renders Codex-style navigation actions and calls their handlers", () => {
+  it("draws the default nav (B): the top level off an area, the footer Inbox, Usage & billing, Help, Settings, each through onNavigate", () => {
+    sessionStorage.clear();
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const onOpenWorkflows = vi.fn();
-    const onOpenChatSearch = vi.fn();
-    const onNavigateToSettings = vi.fn();
-    const onOpenInbox = vi.fn();
+    const onNavigate = vi.fn();
 
     render(
       <QueryClientProvider client={queryClient}>
-        <Sidebar
-          onOpenWorkflows={onOpenWorkflows}
-          onOpenChatSearch={onOpenChatSearch}
-          onNavigateToSettings={onNavigateToSettings}
-          onOpenInbox={onOpenInbox}
-        />
+        <Sidebar pathname="/inbox" onNavigate={onNavigate} />
       </QueryClientProvider>
     );
 
-    expect(screen.getByRole("button", { name: "New chat" })).toBeInTheDocument();
-    // Inbox is in the nav with its badge; its position (before Apps) is pinned in Sidebar.forge-nav.test.tsx.
-    const nav = screen.getByRole("navigation", { name: "Chat sidebar navigation" });
-    expect(nav).toContainElement(screen.getByTestId("sidebar-inbox-button"));
+    // The header (U6, owner): the org row (the brand with no org), then Find,
+    // then the project switcher on a row of its own, then the nav.
+    const nav = screen.getByTestId("nav-top");
+    const header = [screen.getByTestId("org-header-brand"), screen.getByTestId("nav-find"), screen.getByTestId("shell-project-switcher"), nav];
+    for (let i = 1; i < header.length; i++) {
+      expect(header[i - 1].compareDocumentPosition(header[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    // Not beside the org: the project row is its own row.
+    expect(screen.getByTestId("org-header-brand").parentElement!.contains(screen.getByTestId("shell-project-switcher"))).toBe(false);
+    expect(screen.getByTestId("sidebar-home-button")).toHaveTextContent("Overview");
+    expect(within(nav).getByTestId("nav-agents")).toHaveTextContent("Agents");
+    // No chat list off an Agents route: it lives in the Agents drill-in.
+    expect(screen.queryByTestId("sidebar-chats")).toBeNull();
     expect(screen.getByTestId("inbox-badge-count")).toHaveTextContent("2");
-    // No "Projects" page to go to: the project is the chat list's filter.
-    expect(screen.queryByRole("button", { name: "Projects" })).toBeNull();
-    // Unfiltered, the list's heading is just "Chats"; a filter would name its project there.
-    expect(screen.getByTestId("chat-list-heading")).toHaveTextContent(/^Chats$/);
-    expect(screen.queryByTestId("project-filter-label")).toBeNull();
-    expect(screen.getByTestId("project-filter-trigger")).toHaveAccessibleName("Chat list options. Showing All projects");
-    expect(screen.getByRole("button", { name: "Workflows" })).toBeInTheDocument();
-    // Automations and Runs are tabs of the Workflows area now (§1.2), not
-    // sidebar entries of their own.
-    expect(screen.queryByRole("button", { name: "Automations" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Runs" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Workflows" })).toHaveAttribute(
-      "data-onboarding",
-      "workflow-button"
+    expect(screen.getByTestId("sidebar-inbox-button")).toHaveAttribute("aria-current", "page");
+
+    fireEvent.click(within(nav).getByTestId("nav-agents"));
+    fireEvent.click(screen.getByTestId("nav-usage-billing"));
+    fireEvent.click(screen.getByRole("link", { name: "Settings" }));
+    expect(onNavigate.mock.calls.map(([href]) => href)).toEqual(["/", "/usage", "/settings"]);
+    // Help sits right before Settings, and its menu's Keyboard shortcuts goes through onNavigate too.
+    const help = screen.getByTestId("nav-help");
+    expect(help.compareDocumentPosition(screen.getByRole("link", { name: "Settings" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(help);
+    fireEvent.click(screen.getByTestId("help-menu-shortcuts"));
+    expect(onNavigate).toHaveBeenLastCalledWith("/settings/shortcuts");
+  });
+
+  it("on a chat page, drills into Agents: New chat, Workflows, Sandboxes, Connectors, then the chats full height", () => {
+    sessionStorage.clear();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const onNavigate = vi.fn();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar pathname="/" onNavigate={onNavigate} />
+      </QueryClientProvider>
     );
+    expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "agents");
+    expect(screen.queryByTestId("nav-top")).toBeNull();
+    expect(screen.getByTestId("create-chat-button")).toHaveAttribute("href", "/new");
+    expect(screen.getByTestId("nav-workflows")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("nav-sandboxes")).toBeInTheDocument();
+    // AI providers lives in Settings only (U6e).
+    expect(screen.queryByTestId("nav-ai-providers")).toBeNull();
+    expect(screen.getByTestId("sidebar-chats")).toHaveAttribute("data-place", "fill");
+    fireEvent.click(screen.getByTestId("nav-back"));
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "Workflows" }));
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-    fireEvent.click(screen.getByTestId("sidebar-inbox-button"));
+  it("leaves a modified click on a row to the browser (a new tab)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const onNavigate = vi.fn();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar pathname="/" onNavigate={onNavigate} />
+      </QueryClientProvider>
+    );
+    fireEvent.click(screen.getByRole("link", { name: "Settings" }), { metaKey: true });
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
 
-    expect(onOpenInbox).toHaveBeenCalledTimes(1);
-    expect(onOpenWorkflows).toHaveBeenCalledTimes(1);
-    expect(onOpenChatSearch).toHaveBeenCalledTimes(1);
-    expect(onNavigateToSettings).toHaveBeenCalledTimes(1);
+  it("on a settings page, Settings replaces the nav with its sections", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar pathname="/settings/appearance" onNavigate={vi.fn()} />
+      </QueryClientProvider>
+    );
+    expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "settings");
+    expect(screen.getByTestId("nav-settings-appearance")).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByTestId("sidebar-chats")).toBeNull();
+  });
+
+  it("links Home to the summary of every project, current only there", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar pathname="/projects" onNavigate={vi.fn()} />
+      </QueryClientProvider>
+    );
+    const home = screen.getByTestId("sidebar-home-button");
+    expect(home).toHaveAttribute("href", "/projects");
+    expect(home).toHaveAttribute("aria-current", "page");
+  });
+
+  it("marks Settings while a settings page is on screen", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar pathname="/settings/appearance" onNavigate={vi.fn()} />
+      </QueryClientProvider>
+    );
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
   });
 });

@@ -44,22 +44,25 @@ import (
 // older client renders it as a wait and its Resume keeps waiting.
 
 // PersonalFundingStore is what the routing reads and writes of a chat's
-// question (core.PersonalFunding). *db.Repo satisfies it.
+// question (core.PersonalFunding) and of who pays for a thread's calls. The
+// methods are those of the generated ext stores (ChatPersonalFundingExtStore,
+// ThreadFundingExtStore, ChatSelectionExtStore, ChatPersonPickExtStore) and of
+// the thread assignments the repository holds.
 type PersonalFundingStore interface {
 	GetChatPersonalFunding(ctx context.Context, chatID string) (*core.PersonalFunding, error)
-	AskPersonalFunding(ctx context.Context, q core.PersonalFunding, now time.Time) (bool, error)
-	GrantPersonalFunding(ctx context.Context, q core.PersonalFunding, now time.Time) error
-	ClearPersonalFunding(ctx context.Context, chatID string) (bool, error)
-	MarkPersonalFundingAnnounced(ctx context.Context, chatID string) (bool, error)
+	AskChatPersonalFunding(ctx context.Context, q core.PersonalFunding, now time.Time) (bool, error)
+	GrantChatPersonalFunding(ctx context.Context, q core.PersonalFunding, now time.Time) error
+	DeleteChatPersonalFundingRow(ctx context.Context, chatID string) (bool, error)
+	MarkChatPersonalFundingAnnounced(ctx context.Context, chatID string) (bool, error)
 	ProviderAccountOrgs(ctx context.Context, accountID string) (ownerOrg, attributedOrg string, found bool, err error)
 	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
 	LatestServingAccount(ctx context.Context, threadID string) (string, error)
-	// ThreadFunding is who paid for the thread's calls on its current
+	// GetThreadFunding is who paid for the thread's calls on its current
 	// account (thread_funding), and the run's org: the provenance a replaced
 	// or deleted account no longer carries, per thread.
-	ThreadFunding(ctx context.Context, threadID string) (funding, orgID, accountID string, found bool, err error)
-	// RecordThreadFunding records who pays for the thread's calls from now on.
-	RecordThreadFunding(ctx context.Context, threadID, orgID, funding, accountID string) error
+	GetThreadFunding(ctx context.Context, threadID string) (funding, orgID, accountID string, found bool, err error)
+	// PutThreadFunding records who pays for the thread's calls from now on.
+	PutThreadFunding(ctx context.Context, threadID, orgID, funding, accountID string, now time.Time) error
 	// ChatFundingOrder is the order a person chose for the chat
 	// (UpdateChatProviderPolicy, person-only); "" when it inherits.
 	ChatFundingOrder(ctx context.Context, chatID string) (string, error)
@@ -383,7 +386,7 @@ func (r *AccountRouting) replacedOrgFunding(ctx context.Context, spec llmCallSpe
 	if spec.ThreadID == "" {
 		return false
 	}
-	funding, orgID, accountID, found, err := r.Funding.ThreadFunding(ctx, spec.ThreadID)
+	funding, orgID, accountID, found, err := r.Funding.GetThreadFunding(ctx, spec.ThreadID)
 	if err != nil {
 		// Unknown provenance: treat it as the org's, so the call asks or
 		// waits rather than spending without a say.
@@ -407,7 +410,7 @@ func (r *AccountRouting) recordThreadFunding(ctx context.Context, spec llmCallSp
 	if r.Funding == nil || spec.ThreadID == "" || acct == nil || acct.Config.AccountID == "" || acct.Config.Funding == "" {
 		return nil
 	}
-	err := r.Funding.RecordThreadFunding(ctx, spec.ThreadID, spec.OrgID, acct.Config.Funding, acct.Config.AccountID)
+	err := r.Funding.PutThreadFunding(ctx, spec.ThreadID, spec.OrgID, acct.Config.Funding, acct.Config.AccountID, fundingNow())
 	if err == nil {
 		return nil
 	}
@@ -456,7 +459,7 @@ func (r *AccountRouting) decideCallFunding(ctx context.Context, spec llmCallSpec
 		}
 		// Served by the org again: the episode is over.
 		if plan.question != nil {
-			if _, cerr := r.Funding.ClearPersonalFunding(ctx, spec.ChatID); cerr != nil {
+			if _, cerr := r.Funding.DeleteChatPersonalFundingRow(ctx, spec.ChatID); cerr != nil {
 				logging.WarnContext(ctx, "Could not clear the chat's funding question", "chatID", spec.ChatID, "error", cerr)
 			} else if plan.question.State == core.PersonalFundingUsePersonal {
 				notice = orgAccountsBackNotice()
@@ -478,7 +481,7 @@ func (r *AccountRouting) decideCallFunding(ctx context.Context, spec llmCallSpec
 		if !plan.question.Announced && !plan.background {
 			// The first call under the person's answer says whose account
 			// serves, once for the chat.
-			if marked, merr := r.Funding.MarkPersonalFundingAnnounced(ctx, spec.ChatID); merr == nil && marked {
+			if marked, merr := r.Funding.MarkChatPersonalFundingAnnounced(ctx, spec.ChatID); merr == nil && marked {
 				return personalFundingNotice(*plan.question, plan.question.Reason, plan.limit == orgfunding.OnOrgLimitUsePersonal), nil
 			}
 		}
@@ -596,7 +599,7 @@ func (r *AccountRouting) decidePersonalFunding(ctx context.Context, plan funding
 			}
 			q.LeaseUntil = &until
 		}
-		if err := r.Funding.GrantPersonalFunding(ctx, q, now); err != nil {
+		if err := r.Funding.GrantChatPersonalFunding(ctx, q, now); err != nil {
 			// Without the lease on record the next call would ask again
 			// rather than spend: wait.
 			logging.WarnContext(ctx, "Could not record the use of the person's own account; waiting", "chatID", q.ChatID, "error", err)
@@ -604,7 +607,7 @@ func (r *AccountRouting) decidePersonalFunding(ctx context.Context, plan funding
 		}
 		return personalFundingNotice(q, q.Reason, true), nil
 	case orgfunding.OnOrgLimitAsk:
-		if _, err := r.Funding.AskPersonalFunding(ctx, q, now); err != nil {
+		if _, err := r.Funding.AskChatPersonalFunding(ctx, q, now); err != nil {
 			logging.WarnContext(ctx, "Could not record the chat's funding question; waiting", "chatID", q.ChatID, "error", err)
 		}
 	}
@@ -686,7 +689,7 @@ func (r *AccountRouting) recordOrgWait(ctx context.Context, uc usageLimitContext
 		if !orgFundedFirstTier(a) || a.AccountID == "" {
 			continue
 		}
-		if err := r.Funding.RecordThreadFunding(ctx, uc.ThreadID, uc.Scope.OrgID, a.Funding, a.AccountID); err != nil {
+		if err := r.Funding.PutThreadFunding(ctx, uc.ThreadID, uc.Scope.OrgID, a.Funding, a.AccountID, fundingNow()); err != nil {
 			logging.WarnContext(ctx, "Could not record that the thread waits for the org's account", "threadID", uc.ThreadID, "accountID", a.AccountID, "error", err)
 		}
 		return

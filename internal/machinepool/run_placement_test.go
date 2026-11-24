@@ -264,7 +264,7 @@ func TestPlaceRun(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			store := tt.store()
 			waker := &recordingWaker{}
-			got, err := NewRunPlacer(store).WithWaker(waker).PlaceRun(context.Background(), tt.req)
+			got, err := NewRunPlacer(store, store, store).WithWaker(waker).PlaceRun(context.Background(), tt.req)
 			if tt.wantErr != nil {
 				if !errors.Is(err, tt.wantErr) {
 					t.Fatalf("err = %v, want %v", err, tt.wantErr)
@@ -302,7 +302,7 @@ func TestPlaceRun(t *testing.T) {
 // members' load changed in between.
 func TestPlaceRun_IsIdempotent(t *testing.T) {
 	store := newFakeRunStore(memberRow("a", "connected", 0), memberRow("b", "connected", 1))
-	placer := NewRunPlacer(store)
+	placer := NewRunPlacer(store, store, store)
 	first, err := placer.PlaceRun(context.Background(), poolRequest("review"))
 	if err != nil || first.DaemonID != "id-a" {
 		t.Fatalf("first = %+v, %v; want a", first, err)
@@ -333,7 +333,7 @@ func TestPlaceRun_SameChatNeverWaitsOnItsOwnSlot(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			store := newFakeRunStore(memberRow("a", "connected", 0))
 			store.pools["cicd"].MaxRunsPerMember = 1
-			placer := NewRunPlacer(store)
+			placer := NewRunPlacer(store, store, store)
 			first, err := placer.PlaceRun(context.Background(), poolRequest(tt.first))
 			if err != nil || first.DaemonID != "id-a" {
 				t.Fatalf("first = %+v, %v; want a", first, err)
@@ -376,7 +376,7 @@ func (f fakeChats) GetRunPlacementChat(_ context.Context, id string) (*core.RunP
 func TestPlaceRunActivity(t *testing.T) {
 	chats := fakeChats{"chat-1": {ID: "chat-1", UserID: "u", ProjectID: "proj", MachinePoolID: "pool-1", ActiveDaemonID: "id-b"}}
 	store := newFakeRunStore(memberRow("a", "connected", 0), memberRow("b", "connected", 1))
-	act := PlaceRunActivity{Chats: chats, Placer: NewRunPlacer(store)}
+	act := PlaceRunActivity{Chats: chats, Placer: NewRunPlacer(store, store, store)}
 
 	tests := []struct {
 		name     string

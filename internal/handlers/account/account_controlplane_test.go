@@ -3,7 +3,6 @@ package account
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"strings"
 	"testing"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/accountpurge/purgetest"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 )
@@ -23,13 +23,13 @@ import (
 // and passes the client in), so a developer machine with it pointed at
 // PRODUCTION cannot turn a local-purge test into a real account-deletion RPC
 // against the live control plane.
-func newLocalOnlyAccountService(t *testing.T, rawDB *sql.DB) *Service {
-	return NewTestAccount(t, WithAccountDeps(Deps{SQL: rawDB}))
+func newLocalOnlyAccountService(t *testing.T, repo *db.Repo) *Service {
+	return NewTestAccount(t, WithAccountDeps(Deps{Purger: purgetest.New(t, repo)}))
 }
 
 // newAccountService builds the service against a scripted control plane.
-func newAccountService(t *testing.T, rawDB *sql.DB, cp ControlPlane) *Service {
-	return NewTestAccount(t, WithAccountDeps(Deps{SQL: rawDB, ControlPlane: cp}))
+func newAccountService(t *testing.T, repo *db.Repo, cp ControlPlane) *Service {
+	return NewTestAccount(t, WithAccountDeps(Deps{Purger: purgetest.New(t, repo), ControlPlane: cp}))
 }
 
 // stubControlPlane records the deletion call and returns a scripted outcome.
@@ -71,15 +71,14 @@ func (s *stubControlPlane) DeleteCurrentUserAccount(_ context.Context, jwt strin
 // unacceptable failure: every chat and project destroyed, and the billing still
 // running.
 func TestDeleteAccount_ControlPlaneBlockStopsBeforeLocalPurge(t *testing.T) {
-	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
-	_ = repo
 
 	cp := &stubControlPlane{blockers: []controlplane.AccountDeletionBlocker{{
 		Reason: "paid_subscription",
 		Detail: "You have an active paid subscription. Cancel it in Billing first.",
 	}}}
-	svc := newAccountService(t, rawDB, cp)
+	svc := newAccountService(t, repo, cp)
 
 	_, err := svc.DeleteAccount(
 		accountAuthedCtx("u-blocked", "owner@example.com"),
@@ -105,11 +104,11 @@ func TestDeleteAccount_ControlPlaneBlockStopsBeforeLocalPurge(t *testing.T) {
 // local data while the platform account survives is the half-state this
 // ordering exists to prevent.
 func TestDeleteAccount_ControlPlaneErrorAbortsWithNothingDeleted(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
 	cp := &stubControlPlane{err: errors.New("control plane unreachable")}
-	svc := newAccountService(t, rawDB, cp)
+	svc := newAccountService(t, repo, cp)
 
 	_, err := svc.DeleteAccount(
 		accountAuthedCtx("u-err", "owner@example.com"),
@@ -126,11 +125,11 @@ func TestDeleteAccount_ControlPlaneErrorAbortsWithNothingDeleted(t *testing.T) {
 // TestDeleteAccount_ProceedsWhenControlPlaneClears: with no blockers the local
 // purge runs and the deletion succeeds.
 func TestDeleteAccount_ProceedsWhenControlPlaneClears(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
 	cp := &stubControlPlane{}
-	svc := newAccountService(t, rawDB, cp)
+	svc := newAccountService(t, repo, cp)
 
 	_, err := svc.DeleteAccount(
 		accountAuthedCtx("u-ok", "owner@example.com"),
@@ -146,10 +145,10 @@ func TestDeleteAccount_ProceedsWhenControlPlaneClears(t *testing.T) {
 // TestDeleteAccount_WithoutControlPlaneStillPurgesLocally: a self-hosted
 // deployment has no platform account, so deletion must still work.
 func TestDeleteAccount_WithoutControlPlaneStillPurgesLocally(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
-	svc := newLocalOnlyAccountService(t, rawDB)
+	svc := newLocalOnlyAccountService(t, repo)
 
 	if _, err := svc.DeleteAccount(
 		accountAuthedCtx("u-local", "owner@example.com"),
@@ -162,7 +161,7 @@ func TestDeleteAccount_WithoutControlPlaneStillPurgesLocally(t *testing.T) {
 // refund/forfeit sentence is rendered from the control plane's quote, so the
 // preview must carry it verbatim (and forward the caller's own JWT for it).
 func TestPreviewAccountDeletion_CarriesControlPlaneWalletQuote(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
 	cp := &stubControlPlane{quote: &controlplane.AccountDeletionWalletQuote{
@@ -170,7 +169,7 @@ func TestPreviewAccountDeletion_CarriesControlPlaneWalletQuote(t *testing.T) {
 		Destinations:        []controlplane.RefundDestination{{CardBrand: "visa", CardLast4: "1234", AmountCents: 2500}},
 		ForfeitedPromoCents: 700,
 	}}
-	svc := newAccountService(t, rawDB, cp)
+	svc := newAccountService(t, repo, cp)
 
 	req := connect.NewRequest(&reliantv1.PreviewAccountDeletionRequest{})
 	req.Header().Set("Authorization", "Bearer jwt-abc")
@@ -197,11 +196,11 @@ func TestPreviewAccountDeletion_CarriesControlPlaneWalletQuote(t *testing.T) {
 // silently omitted the money line would read as "nothing happens to your
 // balance". It must fail instead.
 func TestPreviewAccountDeletion_FailsWhenWalletQuoteUnavailable(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
 	cp := &stubControlPlane{quoteErr: errors.New("control plane unreachable")}
-	svc := newAccountService(t, rawDB, cp)
+	svc := newAccountService(t, repo, cp)
 
 	_, err := svc.PreviewAccountDeletion(accountAuthedCtx("u-q", "owner@example.com"),
 		connect.NewRequest(&reliantv1.PreviewAccountDeletionRequest{}))
@@ -213,7 +212,7 @@ func TestPreviewAccountDeletion_FailsWhenWalletQuoteUnavailable(t *testing.T) {
 // TestDeleteAccount_ReportsRefundOutcome: the refund the control plane issued,
 // and a refund still owed by support, reach the client.
 func TestDeleteAccount_ReportsRefundOutcome(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
 	cp := &stubControlPlane{result: &controlplane.AccountDeletionResult{
@@ -223,7 +222,7 @@ func TestDeleteAccount_ReportsRefundOutcome(t *testing.T) {
 		ForfeitedPromoCents: 200,
 		RefundPending:       true,
 	}}
-	svc := newAccountService(t, rawDB, cp)
+	svc := newAccountService(t, repo, cp)
 
 	resp, err := svc.DeleteAccount(accountAuthedCtx("u-r", "owner@example.com"), deleteReq("owner@example.com"))
 	if err != nil {
@@ -240,11 +239,11 @@ func TestDeleteAccount_ReportsRefundOutcome(t *testing.T) {
 // control plane cannot confirm a refund with Stripe it deletes nothing and says
 // Unavailable. Reliant must not purge, and must keep the error retryable.
 func TestDeleteAccount_UnconfirmedRefundIsRetryableAndPurgesNothing(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
 	cp := &stubControlPlane{err: connect.NewError(connect.CodeUnavailable, errors.New("refund outcome unknown"))}
-	svc := newAccountService(t, rawDB, cp)
+	svc := newAccountService(t, repo, cp)
 
 	_, err := svc.DeleteAccount(accountAuthedCtx("u-u", "owner@example.com"), deleteReq("owner@example.com"))
 	if svcerr.Code(err) != connect.CodeUnavailable {
@@ -275,11 +274,11 @@ func TestDeleteAccount_ResumesPurgeWhenPlatformAccountAlreadyDeleted(t *testing.
 		}(),
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+			repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 			defer cleanup()
 
 			cp := &stubControlPlane{err: cpErr}
-			svc := newAccountService(t, rawDB, cp)
+			svc := newAccountService(t, repo, cp)
 
 			resp, err := svc.DeleteAccount(accountAuthedCtx("u-resume", "owner@example.com"), deleteReq("owner@example.com"))
 			if err != nil {
@@ -295,11 +294,11 @@ func TestDeleteAccount_ResumesPurgeWhenPlatformAccountAlreadyDeleted(t *testing.
 // TestDeleteAccount_OtherPermissionDeniedStillAborts: only the deleted-account
 // refusal resumes the purge; any other refusal leaves the data alone.
 func TestDeleteAccount_OtherPermissionDeniedStillAborts(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
 	cp := &stubControlPlane{err: connect.NewError(connect.CodePermissionDenied, errors.New("admin role required"))}
-	svc := newAccountService(t, rawDB, cp)
+	svc := newAccountService(t, repo, cp)
 
 	_, err := svc.DeleteAccount(accountAuthedCtx("u-pd", "owner@example.com"), deleteReq("owner@example.com"))
 	if svcerr.Code(err) != connect.CodeInternal {
@@ -311,11 +310,11 @@ func TestDeleteAccount_OtherPermissionDeniedStillAborts(t *testing.T) {
 // dialog is the only way to retry a half-finished deletion, so its preview
 // must load (with no wallet left to quote) rather than fail.
 func TestPreviewAccountDeletion_LoadsWhenPlatformAccountAlreadyDeleted(t *testing.T) {
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
 	cp := &stubControlPlane{quoteErr: accountDeletedErr()}
-	svc := newAccountService(t, rawDB, cp)
+	svc := newAccountService(t, repo, cp)
 
 	resp, err := svc.PreviewAccountDeletion(accountAuthedCtx("u-q", "owner@example.com"),
 		connect.NewRequest(&reliantv1.PreviewAccountDeletionRequest{}))

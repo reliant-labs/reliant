@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -13,8 +16,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // The registry knowing about per-entry tag thinking levels proves nothing on
@@ -261,7 +262,7 @@ func provisionProviderKeys(t *testing.T, ctx context.Context, userID string, pro
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
-	drivers.InitializeAPIKeyProvider(repo)
+	drivers.InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	// No real provider catalog: a fake key would be refused (Copilot answers
 	// 401), and a refused credential is now — correctly — unavailable. These
 	// tests are about the settings resolveLLMCall computes, so every provider

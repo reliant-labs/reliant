@@ -30,13 +30,13 @@ func (s *Service) GetCommandFavorites(
 	}
 
 	// Verify project exists and belongs to user
-	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+	_, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Get favorites from database
-	commandKeys, err := s.deps.Repo.ListCommandFavorites(ctx, userID, projectID)
+	commandKeys, err := s.deps.Favorites.ListCommandFavorites(ctx, userID, projectID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list command favorites"))
 	}

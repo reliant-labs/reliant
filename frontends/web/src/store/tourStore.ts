@@ -199,7 +199,6 @@ export const useTourStore = create<TourState>((set, get) => ({
       lastJourneySetting,
       resumeSetting,
       contextSetting,
-      legacyCurrentStepSetting,
       ...versionSettings
     ] = await Promise.all([
       getTourStorage().get(TOUR_SETTINGS_KEYS.COMPLETED),
@@ -208,7 +207,6 @@ export const useTourStore = create<TourState>((set, get) => ({
       getTourStorage().get(TOUR_SETTINGS_KEYS.LAST_JOURNEY),
       getTourStorage().get(TOUR_SETTINGS_KEYS.RESUME),
       getTourStorage().get(TOUR_SETTINGS_KEYS.JOURNEY_CONTEXT),
-      getTourStorage().get(TOUR_SETTINGS_KEYS.CURRENT_STEP),
       ...versionKeys.map(({ key }) => getTourStorage().get(key)),
     ]);
 
@@ -256,19 +254,6 @@ export const useTourStore = create<TourState>((set, get) => ({
       isInitialized: true,
       isLoading: false,
     });
-
-    // Backwards-compat: a previous version of this store persisted the
-    // current step under TOUR_SETTINGS_KEYS.CURRENT_STEP. That value is no
-    // longer the source of truth (the URL is). Delete it when it is still
-    // there so the row doesn't linger forever — best-effort, swallow
-    // failures. Only when it is there: the read above is served from the
-    // settings cache, while an unconditional delete was an RPC on every
-    // startup that answered NotFound for every user who no longer had it.
-    if (legacyCurrentStepSetting !== undefined) {
-      void getTourStorage().delete(TOUR_SETTINGS_KEYS.CURRENT_STEP).catch(() => {
-        /* ignore */
-      });
-    }
   },
 
   // Per-step progress persists optimistically: the in-memory set is the
@@ -326,11 +311,13 @@ export const useTourStore = create<TourState>((set, get) => ({
     // tour (wizard hook or external) gets consistent side effects.
     // The checklist is Reliant's (settings-backed); a shell with its own
     // storage (the forge shell) has none to update.
+    // Only a journey finished with Finish earns the guide's "Take a tour": an
+    // Exit tour (skipped) or a dismissed picker (no journey) is not taking it.
     const startedIn = generation;
     if (getTourStorage().kind === "settings") try {
       const { useOnboardingChecklistStore } = await import("./onboardingChecklistStore");
       if (startedIn !== generation) return;
-      void useOnboardingChecklistStore.getState().markComplete("take-product-tour");
+      if (journey && outcome === "completed") void useOnboardingChecklistStore.getState().markComplete("take-product-tour");
       void useOnboardingChecklistStore.getState().markWelcomeShown();
     } catch {
       /* ignore */

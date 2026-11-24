@@ -18,8 +18,10 @@ const ENVS = [
   { name: "pr-2", preview: true },
 ];
 
+const items0 = () => buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "staging", envs: ENVS }).items;
+
 describe("buildConsoleNav", () => {
-  it("is Overview, Releases, Observability ›, Data, Storage, Users, then Configure, with Activity pinned last", () => {
+  it("is Overview, Releases, Observability ›, Data, Storage, Auth, then Configure, with Activity pinned last", () => {
     const { items, footer } = buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS });
     expect(items.map((item) => [item.label, item.section ?? ""])).toEqual([
       ["Overview", ""],
@@ -27,7 +29,7 @@ describe("buildConsoleNav", () => {
       ["Observability", ""],
       ["Data", ""],
       ["Storage", ""],
-      ["Users", ""],
+      ["Auth", ""],
       ["Environments", "Configure"],
       ["Secrets", "Configure"],
       ["Domains", "Configure"],
@@ -43,12 +45,16 @@ describe("buildConsoleNav", () => {
     expect(consoleCrumbs("shop", { kind: "storage" }, "staging")).toEqual([{ label: "Storage" }]);
   });
 
-  it("links Users with the scope, lights it on its page, and crumbs it", () => {
-    const { items } = buildConsoleNav({ project: "shop", page: { kind: "users" }, env: "staging", envs: ENVS });
-    const users = items.find((item) => item.label === "Users")!;
-    expect(users.href).toBe("/forge/p/shop/users?env=staging");
-    expect(users.active).toBe(true);
-    expect(items.filter((item) => item.active).map((item) => item.label)).toEqual(["Users"]);
+  it("links Auth with the scope, lights it on both tabs and the old Users page, and crumbs it", () => {
+    for (const page of [{ kind: "auth" }, { kind: "auth", tab: "sign-in" }, { kind: "users" }] as const) {
+      const { items } = buildConsoleNav({ project: "shop", page, env: "staging", envs: ENVS });
+      const auth = items.find((item) => item.label === "Auth")!;
+      // Users is Auth's first tab now (U6d): the link goes straight there.
+      expect(auth.href).toBe("/forge/p/shop/auth?env=staging");
+      expect(auth.active).toBe(true);
+      expect(items.filter((item) => item.active).map((item) => item.label)).toEqual(["Auth"]);
+    }
+    expect(items0().some((item) => item.label === "Users")).toBe(false);
     expect(consoleCrumbs("shop", { kind: "users" }, "staging")).toEqual([{ label: "Users" }]);
   });
 

@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	attachment "github.com/reliant-labs/reliant/internal/handlers/attachment"
 )
 
@@ -33,10 +33,10 @@ func TestAttachment_StoreFailuresOnTheWire(t *testing.T) {
 		{"opaque", errors.New("dial tcp: dsn=postgres://u:secret@h"), connect.CodeInternal},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			repo := &attachment.MockRepository{
-				GetAttachmentFunc: func(context.Context, string) (*db.Attachment, error) { return nil, tc.err },
+			repo := &attachment.MockAttachmentStore{
+				GetAttachmentFunc: func(context.Context, string) (*core.Attachment, error) { return nil, tc.err },
 			}
-			_, client := attachment.NewTestAttachmentServer(t, attachment.WithAttachmentDeps(attachment.Deps{Repo: repo}))
+			_, client := attachment.NewTestAttachmentServer(t, attachment.WithAttachmentDeps(attachment.Deps{Attachments: repo}))
 			_, err := client.GetAttachment(context.Background(), connect.NewRequest(&pb.GetAttachmentRequest{AttachmentId: "a1"}))
 			assertWire(t, err, tc.want)
 			_, err = client.DeleteAttachment(context.Background(), connect.NewRequest(&pb.DeleteAttachmentRequest{AttachmentId: "a1"}))

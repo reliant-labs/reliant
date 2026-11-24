@@ -15,7 +15,7 @@ import (
 func TestGetPlan_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: newPlanRepo()}))
+	svc := plan.NewTestPlan(t, plan.WithPlanDeps(newPlanMocks().Deps()))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetPlanRequest, pb.GetPlanResponse]{
 		{

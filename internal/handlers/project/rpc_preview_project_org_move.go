@@ -52,7 +52,7 @@ func (s *Service) PreviewProjectOrgMove(
 ) (*connect.Response[pb.PreviewProjectOrgMoveResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	projectID, to := req.Msg.GetProjectId(), req.Msg.GetToOrgId()
-	project, err := s.deps.Repo.GetProject(ctx, projectID)
+	project, err := s.deps.ProjectRows.GetProject(ctx, projectID)
 	if err != nil && !errors.Is(err, svcerr.ErrNotFound) {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load the project"))
 	}
@@ -60,11 +60,11 @@ func (s *Service) PreviewProjectOrgMove(
 	if err != nil {
 		return nil, projectMoveRefusal(ctx, err)
 	}
-	blockers, err := s.deps.Repo.ProjectOrgMoveBlockers(ctx, projectID)
+	blockers, err := s.deps.Ledger.ProjectOrgMoveBlockers(ctx, projectID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the project's running work"))
 	}
-	effects, err := s.deps.Repo.ProjectOrgMoveEffects(ctx, projectID, to)
+	effects, err := s.deps.Ledger.ProjectOrgMoveEffects(ctx, projectID, to)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read what the move would change"))
 	}

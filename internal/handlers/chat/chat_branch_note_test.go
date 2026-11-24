@@ -9,12 +9,15 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/stretchr/testify/require"
 )
 
 // branchNoteForkTime is the fork point's timestamp; the note names it, so it is
@@ -34,7 +37,7 @@ func setupBranchNoteSource(t *testing.T, repo *db.Repo, ctx context.Context, pro
 		ID: chatID, UserID: "test-user", Title: "Roofing Management App", ProjectID: projectID,
 		State: db.ChatStateIdle, CreatedAt: branchNoteForkTime, UpdatedAt: branchNoteForkTime,
 	}))
-	_, _, _, err := threads.NewService(repo).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
+	_, _, _, err := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: chatID, ChatID: chatID, WorkflowName: "builtin://agent",
 			Thread: threadID, Status: db.Active(), CreatedAt: branchNoteForkTime,
@@ -79,7 +82,7 @@ func setupBranchNoteSource(t *testing.T, repo *db.Repo, ctx context.Context, pro
 // the branch starts with — the only message the branch's own thread holds.
 func branchNote(t *testing.T, repo *db.Repo, ctx context.Context, sourceChatID, forkPoint string) string {
 	t.Helper()
-	service := &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)}
+	service := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})}
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
 		ChatId: sourceChatID, MessageId: forkPoint,
 	}))
@@ -134,8 +137,8 @@ func TestBranchContextNote_Edges(t *testing.T) {
 	forkPoint := &db.Message{CreatedAt: branchNoteForkTime}
 	source := &db.Chat{ID: "src", Title: "Roofing"}
 	thread := func(id string) *string { return &id }
-	child := func(toolCallID, threadID, sourceChatID string) *db.InheritedSpawnChild {
-		c := &db.InheritedSpawnChild{SourceChatID: sourceChatID}
+	child := func(toolCallID, threadID, sourceChatID string) *core.InheritedSpawnChild {
+		c := &core.InheritedSpawnChild{SourceChatID: sourceChatID}
 		c.ToolCallID = toolCallID
 		if threadID != "" {
 			c.ChildThreadID = thread(threadID)
@@ -148,7 +151,7 @@ func TestBranchContextNote_Edges(t *testing.T) {
 		`The sub-agent spawned before the branch belongs to the original chat. `+
 		`Here it is visible read-only with spawn_status; its results and notifications are not delivered to this chat. `+
 		`Re-spawn anything you need from this chat.`,
-		branchContextNote(source, forkPoint, []*db.InheritedSpawnChild{
+		branchContextNote(source, forkPoint, []*core.InheritedSpawnChild{
 			child("tc-1", "agent-a", "src"),
 			child("tc-2", "agent-a", "src"), // a resumption of the same agent
 		}), "a resumed agent is still one agent")
@@ -157,7 +160,7 @@ func TestBranchContextNote_Edges(t *testing.T) {
 		`The 2 sub-agents spawned before the branch belong to the chats that spawned them. `+
 		`Here they are visible read-only with spawn_status; their results and notifications are not delivered to this chat. `+
 		`Re-spawn anything you need from this chat.`,
-		branchContextNote(source, forkPoint, []*db.InheritedSpawnChild{
+		branchContextNote(source, forkPoint, []*core.InheritedSpawnChild{
 			child("tc-1", "agent-a", "src"),
 			child("tc-2", "", "grandparent"), // child rows never landed: counted by its call
 		}), "agents inherited from an older chat do not belong to the original")

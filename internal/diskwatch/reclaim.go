@@ -24,7 +24,7 @@ func (w *Watcher) Reclaim(ctx context.Context) (freed uint64, summary string, er
 	// while forge's reaper, which does not own them, freed nothing.
 	cfg := w.cacheTrimConfig()
 	var work uint64
-	if r := w.goWorkDirPass(ctx, cfg, true, "disk_guard", w.newPacer(cfg.RatePerSec)); r != nil {
+	if r := w.goWorkDirPass(ctx, cfg, true, "disk_guard", w.newPacer(cfg.RatePerSec), false); r != nil {
 		work = r.Freed
 	}
 	res := w.reaperPass(ctx, w.reaperPolicyPath(w.reaperConfig()), "disk_guard")

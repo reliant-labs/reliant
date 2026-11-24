@@ -27,7 +27,7 @@
  */
 
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import type { Client } from "@connectrpc/connect";
+import type { Client, Transport } from "@connectrpc/connect";
 
 import {
   IdentityDeliveryState as WireDeliveryState,
@@ -43,8 +43,8 @@ import { IdentityService } from "@/gen/controlplane/services/identity/v1/identit
 
 import { getControlPlaneClient } from "../client";
 
-function client() {
-  return getControlPlaneClient(IdentityService);
+function client(transport?: Transport) {
+  return getControlPlaneClient(IdentityService, transport);
 }
 
 function msOf(ts: Timestamp | undefined): number | null {
@@ -92,8 +92,8 @@ export interface IdentityDelivery {
 }
 
 /**
- * Why an environment has no instance. `unknown`: a server that predates the
- * field, which says only `refused`.
+ * Why an environment has no instance. `unknown`: no reason given (the
+ * environment has an instance, or the server named none).
  */
 export type IdentityNotEnabledReason = "not-declared" | "refused" | "pending" | "no-shape" | "unknown";
 
@@ -131,14 +131,14 @@ export interface IdentityStatus {
   exportEnabled: boolean;
   /**
    * Whether the instance can send mail. `none`: invitations and resets are
-   * refused unless the code is handed back (return_code). `unknown`: a server
-   * that predates the field, so the console claims neither.
+   * refused unless the code is handed back (return_code). `unknown`: the
+   * server could not say, so the console claims neither.
    */
   mailDelivery: IdentityMailDelivery;
   /** Why there is no instance, when `hasInstance` is false, and the server's sentence for it. */
   notEnabledReason: IdentityNotEnabledReason;
   notEnabledMessage: string;
-  /** ownerEnvironmentId / sharerEnvironmentIds with names; null / [] from a server that predates them. */
+  /** ownerEnvironmentId / sharerEnvironmentIds with names; null when there is no owner. */
   ownerEnvironment: IdentityEnvironmentRef | null;
   sharerEnvironments: IdentityEnvironmentRef[];
 }
@@ -305,7 +305,7 @@ async function getIdentityStatus(orgId: string, environmentId: string): Promise<
     callerCanManage: r.callerCanManage,
     exportEnabled: r.exportEnabled,
     mailDelivery: MAIL_DELIVERY[r.mailDelivery] ?? "unknown",
-    notEnabledReason: NOT_ENABLED[r.notEnabledReason] ?? (r.refused ? "refused" : "unknown"),
+    notEnabledReason: NOT_ENABLED[r.notEnabledReason] ?? "unknown",
     notEnabledMessage: r.notEnabledMessage,
     ownerEnvironment: r.ownerEnvironment ? mapEnvironment(r.ownerEnvironment) : null,
     sharerEnvironments: r.sharerEnvironments.map(mapEnvironment),
@@ -348,6 +348,21 @@ export const getIdentityStatus = (...args: Parameters<ReturnType<typeof createId
 export const getIdentityUser = (...args: Parameters<ReturnType<typeof createIdentityReadApi>["getUser"]>) => createIdentityReadApi(client()).getUser(...args);
 export const listIdentityUsers = (...args: Parameters<ReturnType<typeof createIdentityReadApi>["listUsers"]>) => createIdentityReadApi(client()).listUsers(...args);
 
+type IdentityReads = ReturnType<typeof createIdentityReadApi>;
+
+/**
+ * The same three reads on `transport`: a TransportScope's (the Identity tab's
+ * context default, IdentityApiContext), or none for the app's. The client is
+ * still resolved per call.
+ */
+export function identityReadsOn(transport?: Transport): IdentityReads {
+  return {
+    getStatus: (...args) => createIdentityReadApi(client(transport)).getStatus(...args),
+    getUser: (...args) => createIdentityReadApi(client(transport)).getUser(...args),
+    listUsers: (...args) => createIdentityReadApi(client(transport)).listUsers(...args),
+  };
+}
+
 function mapCode(c: WirePasswordCode | undefined): IdentityPasswordCode | null {
   if (!c?.code) return null;
   return { code: c.code, expiresAtMs: msOf(c.expiresAt), resetUrl: c.resetUrl };
@@ -362,9 +377,10 @@ function mapCode(c: WirePasswordCode | undefined): IdentityPasswordCode | null {
 export async function inviteIdentityUser(
   orgId: string,
   environmentId: string,
-  args: { email: string; roles: string[]; returnCode?: boolean }
+  args: { email: string; roles: string[]; returnCode?: boolean },
+  transport?: Transport
 ): Promise<{ userId: string; created: boolean; code: IdentityPasswordCode | null }> {
-  const r = await client().inviteUser({
+  const r = await client(transport).inviteUser({
     orgId,
     environmentId,
     email: args.email.trim(),
@@ -378,9 +394,10 @@ export async function inviteIdentityUser(
 export async function setIdentityUserRoles(
   orgId: string,
   environmentId: string,
-  args: { userId: string; roles: string[] }
+  args: { userId: string; roles: string[] },
+  transport?: Transport
 ): Promise<IdentityUser | null> {
-  const r = await client().setUserRoles({ orgId, environmentId, userId: args.userId, roles: args.roles });
+  const r = await client(transport).setUserRoles({ orgId, environmentId, userId: args.userId, roles: args.roles });
   return r.user ? mapUser(r.user) : null;
 }
 
@@ -393,27 +410,28 @@ export async function sendIdentityPasswordReset(
   orgId: string,
   environmentId: string,
   userId: string,
-  opts: { returnCode?: boolean } = {}
+  opts: { returnCode?: boolean } = {},
+  transport?: Transport
 ): Promise<IdentityPasswordCode | null> {
-  const r = await client().sendPasswordReset({ orgId, environmentId, userId, returnCode: opts.returnCode ?? false });
+  const r = await client(transport).sendPasswordReset({ orgId, environmentId, userId, returnCode: opts.returnCode ?? false });
   return mapCode(r.code);
 }
 
-export async function lockIdentityUser(orgId: string, environmentId: string, userId: string): Promise<void> {
-  await client().lockUser({ orgId, environmentId, userId });
+export async function lockIdentityUser(orgId: string, environmentId: string, userId: string, transport?: Transport): Promise<void> {
+  await client(transport).lockUser({ orgId, environmentId, userId });
 }
 
-export async function unlockIdentityUser(orgId: string, environmentId: string, userId: string): Promise<void> {
-  await client().unlockUser({ orgId, environmentId, userId });
+export async function unlockIdentityUser(orgId: string, environmentId: string, userId: string, transport?: Transport): Promise<void> {
+  await client(transport).unlockUser({ orgId, environmentId, userId });
 }
 
-export async function deleteIdentityUser(orgId: string, environmentId: string, userId: string): Promise<void> {
-  await client().deleteUser({ orgId, environmentId, userId });
+export async function deleteIdentityUser(orgId: string, environmentId: string, userId: string, transport?: Transport): Promise<void> {
+  await client(transport).deleteUser({ orgId, environmentId, userId });
 }
 
 /** Ends the user's sign-in sessions; returns how many. Access tokens already issued stay valid until they expire. */
-export async function revokeIdentitySessions(orgId: string, environmentId: string, userId: string): Promise<number> {
-  const r = await client().revokeSessions({ orgId, environmentId, userId });
+export async function revokeIdentitySessions(orgId: string, environmentId: string, userId: string, transport?: Transport): Promise<number> {
+  const r = await client(transport).revokeSessions({ orgId, environmentId, userId });
   return r.sessionsRevoked;
 }
 
@@ -423,13 +441,13 @@ export async function revokeIdentitySessions(orgId: string, environmentId: strin
  * Needs the identity:manage permission. The URL is a bearer credential for
  * every password hash: never log, toast or cache it.
  */
-export async function requestIdentityExport(orgId: string, environmentId: string): Promise<IdentityExportURL> {
-  const r = await client().requestExport({ orgId, environmentId });
+export async function requestIdentityExport(orgId: string, environmentId: string, transport?: Transport): Promise<IdentityExportURL> {
+  const r = await client(transport).requestExport({ orgId, environmentId });
   return { url: r.exportUrl, expiresAtMs: msOf(r.expiresAt) };
 }
 
 /** A fresh signed URL for the export that already exists. The URL is a bearer credential: never log it. */
-export async function getIdentityExportURL(orgId: string, environmentId: string): Promise<IdentityExportURL> {
-  const r = await client().getExportURL({ orgId, environmentId });
+export async function getIdentityExportURL(orgId: string, environmentId: string, transport?: Transport): Promise<IdentityExportURL> {
+  const r = await client(transport).getExportURL({ orgId, environmentId });
   return { url: r.exportUrl, expiresAtMs: msOf(r.expiresAt) };
 }

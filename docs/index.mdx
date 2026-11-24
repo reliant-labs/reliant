@@ -1,27 +1,48 @@
 ---
-title: "Reliant: AI agents and the platform they ship on"
+title: "Reliant: Forge, Cloud, Workflows and Engine"
 sidebarTitle: "Introduction"
-description: "Reliant documentation: AI coding agents and multi-agent workflows, the Forge framework, and hosting with built-in observability, from commit to production."
+description: "Reliant documentation: Forge, the open-source framework that deploys any app with no account; Reliant Cloud for hosting; Reliant Workflows and Autopilot; Reliant Engine, coming soon."
 ---
 
-Reliant and Forge are a pair. **Reliant is the harness**: agents that do the work, workflows that make them reliable, and machines they run on. **Forge is the foundation**: the Go and React app those agents build and run, with tests, deploys and monitoring in place from the first commit. Use Reliant on its own to work in any codebase, or use both to go from a prompt to an app running on a URL. [Reliant hosting](/hosting/overview) runs what you ship, and its telemetry flows back to your agents. [Why Reliant](/getting-started/why-reliant) explains why owning that whole path matters.
+Reliant is four products. Each has one job, and they work best together: Forge builds and ships the app, Reliant Cloud runs it and watches it, Reliant Workflows put agents to work on the code and on what Cloud reports back, and Reliant Engine will put those workflows inside your own product. You can use any of them without the others.
 
 <CardGroup cols={2}>
-  <Card title="Run agents with Reliant" icon="bot" href="/getting-started/quick-start">
-    Chat with agents that read, write and run code in your project, then automate repeatable processes as workflows. Sign in, pick a machine and a model, and run your first workflow.
+  <Card title="Forge" icon="hammer" href="/forge/overview">
+    Forge is guardrails for apps. It is an open-source (Apache-2.0) framework, CLI and MCP server that supercharges any agent harness: Claude Code, Codex, Cursor, a harness you wrote, or CI. It scaffolds Go services, React frontends and SQL migrations into the right places, lints for your architecture and for unsafe migrations, tests against a real Postgres, and builds each release once and promotes it by digest. Use it piece by piece in any repo, in any language, with no rewrite. Deploy any app with no account: in a Vite or Next.js app, or an app with its own Dockerfile, run `npx -y @reliantlabs/forge@latest env deploy prod --claimable` to get a live URL and a claim link that is good for 72 hours.
   </Card>
-  <Card title="Build and ship apps with Forge" icon="rocket" href="/forge/quick-start">
-    Go from a prompt to a deployed app: Go services and a React frontend with a database, environments, hosting and observability already set up.
+  <Card title="Reliant Cloud" icon="cloud" href="/hosting/overview">
+    Reliant Cloud is a hosting and delivery platform: GitLab meets Vercel meets Supabase, powered by Forge. It hosts your app with managed Postgres, static hosting with a CDN, custom domains with HTTPS, preview environments and managed secrets. It monitors what it runs with traces, logs, metrics, alerts, errors grouped into issues tied to the release that caused them, continuous profiling, and opt-in, masked session replay. It manages releases: each one is built once, promoted by digest, judged by its own health check, and kept above a rollback floor that a breaking migration sets. It scans dependencies and images for vulnerabilities, and builds profile-guided binaries from production profiles (`forge pgo pull`). Test reports, code coverage and flaky-test detection are coming, as is automatic weekly profile-guided optimization.
+  </Card>
+  <Card title="Reliant Workflows" icon="bot" href="/workflows/overview">
+    Reliant Workflows is an agent automation platform. A workflow is a YAML pipeline that mixes agents with deterministic steps, approvals and loops, runs on any model, and starts from a schedule, a webhook, a GitHub, Slack, Gmail or Twilio event, or a hosted alert. Workflows power Autopilot, which reviews and security-reviews every pull request, turns a labelled issue into a tested pull request, answers review comments, and investigates alerts into issues an agent can fix. Autopilot never merges or releases on its own today; built-in merge and release workflows are coming.
+  </Card>
+  <Card title="Reliant Engine (coming soon)" icon="cog" href="/getting-started/concepts#reliant-engine-coming-soon">
+    Reliant Engine is coming soon. It will let you embed Reliant Workflows in your own product, white-labelled, so your users run agent workflows inside your app without seeing Reliant. It is not available yet.
   </Card>
 </CardGroup>
 
-## How they fit together
+## Deploy with your agent
 
-Reliant is an agentic development environment (ADE). Like Cursor or Claude Code, it lets you chat with AI agents that read, write, and run code in your project. Unlike them, Reliant adds **programmable workflows**: multi-step, multi-agent processes defined in YAML that reduce the human in the loop and produce higher quality code more consistently. Its servers run the agents, and a [machine](/machines/overview) you choose, your own computer or a Reliant cloud machine, does the hands-on work with your code.
+Install the Forge MCP server:
 
-[Forge](/forge/overview) is what those agents build on. A forge project has a fixed, well-known structure, so an agent does not have to invent how an app is configured, tested, deployed or monitored. It runs `forge scaffold` and gets a service, a database table and a frontend page; `forge env up dev` and gets a running stack; `forge env deploy staging` and gets a release on [Reliant hosting](/hosting/overview) with a managed Postgres and a URL; and `forge obs check` to find out whether the release is healthy. Forge is built into the `reliant` binary, so `reliant forge …` works wherever Reliant does, already signed in as you.
+- Claude Code: `claude mcp add forge -- npx -y @reliantlabs/forge mcp`
+- Codex: `codex mcp add forge -- npx -y @reliantlabs/forge mcp`
+- Cursor: add to `.cursor/mcp.json` (or `~/.cursor/mcp.json`): `{"mcpServers":{"forge":{"command":"npx","args":["-y","@reliantlabs/forge","mcp"]}}}`
+- Gemini CLI: `gemini extensions install https://github.com/reliant-labs/forge`
 
-The two meet in a few places. The **Build an App** workflow scopes an app with you and scaffolds it as a Forge project. **Move to Forge** ports an existing codebase into one. The **Apps** and **Observability** areas of the Reliant app show the releases, environments, logs, traces and alerts of what you deploy. And a workflow can call a deployed Forge app's API, so an agent decides while the app holds the data and enforces the rules.
+Then paste this prompt:
+
+> Deploy this app with Reliant Forge. Run `npx -y @reliantlabs/forge@latest env deploy prod --claimable` (or call the forge MCP server's `deploy_claimable` tool), then give me the live URL and the claim link. The claim link expires in 72 hours; treat it like a password.
+
+No MCP server: `npx -y @reliantlabs/forge@latest env deploy prod --claimable` works on its own. [Deploy your app with a coding agent](/guides/forge/deploy-with-a-coding-agent) walks through it, and [Deploy without an account](/forge/deploy-without-an-account) has the limits.
+
+## How the products fit together
+
+Reliant is also an agentic development environment (ADE). Like Cursor or Claude Code, it lets you chat with AI agents that read, write, and run code in your project. Unlike them, it adds **programmable workflows** (Reliant Workflows): multi-step, multi-agent processes defined in YAML that reduce the human in the loop and produce higher quality code more consistently. Its servers run the agents, and a [machine](/machines/overview) you choose, your own computer or a Reliant cloud machine, does the hands-on work with your code.
+
+[Forge](/forge/overview) is what those agents build on. A forge project has a fixed, well-known structure, so an agent does not have to invent how an app is configured, tested, deployed or monitored. It runs `forge scaffold` and gets a service, a database table and a frontend page; `forge env up dev` and gets a running stack; `forge env deploy staging` and gets a release on [Reliant Cloud](/hosting/overview) with a managed Postgres and a URL; and `forge obs check` to find out whether the release is healthy. Forge is built into the `reliant` binary, so `reliant forge ...` works wherever Reliant does, already signed in as you.
+
+The products meet in a few places. The **Build an App** workflow scopes an app with you and scaffolds it as a Forge project. **Move to Forge** ports an existing codebase into one. The **Apps** and **Observability** areas of the Reliant app show the releases, environments, logs, traces and alerts of what you deploy on Reliant Cloud. And a workflow can call a deployed Forge app's API, so an agent decides while the app holds the data and enforces the rules.
 
 ## Why workflows matter
 
@@ -128,7 +149,7 @@ Workflows are YAML files that live in `.reliant/workflows/` inside your reposito
 
 ## Forge: what you get
 
-Forge gives every project, from the first commit, the things that usually get bolted on late: structured logs, traces and metrics on every boundary, a Postgres schema with generated data access, linters and tests, CI, and `dev`, `staging` and `prod` environments. Deploying is one command to Reliant hosting, which runs your services, workers and jobs with a managed Postgres, publishes frontends as static sites behind a CDN, and supports custom domains. A landing page or docs site with no backend is a complete Forge project too. See the [Forge overview](/forge/overview) for the full picture and [Hosting on Reliant](/hosting/overview) for what it runs; current plans and prices are on the [pricing page](https://reliantlabs.io/pricing).
+Forge gives every project, from the first commit, the things that usually get bolted on late: structured logs, traces and metrics on every boundary, a Postgres schema with generated data access, linters and tests, CI, and `dev`, `staging` and `prod` environments. Deploying is one command to Reliant Cloud, which runs your services, workers and jobs with a managed Postgres, publishes frontends as static sites behind a CDN, and supports custom domains. A landing page or docs site with no backend is a complete Forge project too. See the [Forge overview](/forge/overview) for the full picture and [Reliant Cloud](/hosting/overview) for what it runs; current plans and prices are on the [pricing page](https://reliantlabs.io/pricing).
 
 ## Get started
 
@@ -148,8 +169,8 @@ Forge gives every project, from the first commit, the things that usually get bo
   <Card title="Forge overview" icon="layers" href="/forge/overview">
     What Forge is and what you get
   </Card>
-  <Card title="Hosting & pricing" icon="cloud" href="/hosting/overview">
-    What Reliant hosting runs
+  <Card title="Reliant Cloud & pricing" icon="cloud" href="/hosting/overview">
+    What Reliant Cloud runs
   </Card>
   <Card title="Why Reliant" icon="compass" href="/getting-started/why-reliant">
     One platform from code to production

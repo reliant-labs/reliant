@@ -80,7 +80,35 @@ type OAuthConfig struct {
 	// scope fails at the authorize step with "unsupported scope", before the
 	// user sees anything. Empty uses the default below.
 	Scopes []string
+
+	// AccessTokenIssuer is the control plane that issues this deployment's
+	// `rlat_` access tokens (RELIANT_AUTHORIZATION_SERVER). When it is also
+	// one of AuthorizationServers, the workspace connector accepts the
+	// mcp:oauth access tokens it issues to MCP clients, and the forge
+	// connector its mcp:forge ones: listing it there IS the switch, so a
+	// deployment that only names Supabase is unchanged.
+	AccessTokenIssuer string
 }
+
+// acceptsAccessTokens reports whether an MCP client's control-plane access
+// token (mcp:oauth, or mcp:forge at the forge connector) is accepted:
+// discovery is on and AccessTokenIssuer is one of the advertised
+// authorization servers. Compared with surrounding space and trailing
+// slashes trimmed, since an issuer URL is written either way.
+func (c OAuthConfig) acceptsAccessTokens() bool {
+	issuer := normalizeIssuer(c.AccessTokenIssuer)
+	if !c.Enabled() || issuer == "" {
+		return false
+	}
+	for _, as := range c.AuthorizationServers {
+		if normalizeIssuer(as) == issuer {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeIssuer(s string) string { return strings.TrimRight(strings.TrimSpace(s), "/") }
 
 // defaultScopes is what a client should request.
 //

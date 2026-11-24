@@ -64,7 +64,7 @@ const NAV_CALLS = new Set(["navigate", "redirect", "hardNavigate", "pushState", 
 /** String methods (and predicates) whose argument is matched against, not navigated to. */
 const MATCH_METHODS = new Set(["startsWith", "endsWith", "includes", "indexOf", "lastIndexOf", "match", "test", "split", "replace", "replaceAll", "has", "get"]);
 
-const SKIPPED_DIRS = new Set(["gen", "__tests__", "__preview__", "__fixtures__", "demoData", "test", "mocks", "node_modules"]);
+const SKIPPED_DIRS = new Set(["gen", "__tests__", "__preview__", "__fixtures__", "fixtures", "test", "mocks", "node_modules"]);
 
 /** Properties whose value declares a route, when the object is a route's own options (`createRoute({ path })`). */
 const DECLARATION_KEYS = new Set(["path", "id"]);
@@ -231,12 +231,27 @@ function sameOriginTemplatePath(node: ts.Node): string | null {
   return rest.startsWith("/") && !rest.startsWith("//") ? rest : null;
 }
 
-/** The first segments of every absolute route path declared with `createRoute({ path })`. */
+/**
+ * The first segments of every absolute route path declared with
+ * `createRoute({ path })`, and of the retired pages' paths, which are declared
+ * as data (`RETIRED_PAGES`' `from`, lib/paths/legacy.ts) and mounted as
+ * routes from it (legacyRedirectRoutes.tsx).
+ */
 export function routeRoots(files: string[]): Set<string> {
   const roots = new Set<string>();
   for (const file of files) {
     const sf = parse(file);
     const visit = (node: ts.Node) => {
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === "RETIRED_PAGES" && node.initializer) {
+        const visitTable = (entry: ts.Node) => {
+          if (ts.isPropertyAssignment(entry) && nameOf(entry.name) === "from") {
+            const root = literalText(entry.initializer)?.match(/^\/([^/$?#]+)/)?.[1];
+            if (root) roots.add(root);
+          }
+          ts.forEachChild(entry, visitTable);
+        };
+        visitTable(node.initializer);
+      }
       if (ts.isCallExpression(node) && calleeName(node) === "createRoute") {
         const opts = node.arguments[0];
         if (opts && ts.isObjectLiteralExpression(opts)) {

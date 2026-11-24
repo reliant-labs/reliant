@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,9 +25,11 @@ const settleTimeout = 10 * time.Second
 
 // Recorder is the Service: it builds the decorated runner.
 type Recorder struct {
-	store Store
-	runs  RunLookup
-	now   func() time.Time
+	store     Store
+	runs      RunLookup
+	workflows WorkflowLoader
+	links     PRLinker
+	now       func() time.Time
 }
 
 // New builds the write ledger.
@@ -35,7 +38,7 @@ func New(deps Deps) Service {
 	if now == nil {
 		now = time.Now
 	}
-	return &Recorder{store: deps.Store, runs: deps.Runs, now: now}
+	return &Recorder{store: deps.Store, runs: deps.Runs, workflows: deps.Workflows, links: deps.PRLinks, now: now}
 }
 
 // Wrap returns inner with every mutating call recorded.
@@ -81,7 +84,7 @@ func (d *recorded) RunAuthenticated(ctx context.Context, m *reliantv1.Integratio
 		Status:      core.IntegrationWriteIntent,
 		CreatedAt:   r.now().UTC(),
 	}
-	r.attributeRun(ctx, w, site.RunID)
+	runID := r.attributeRun(ctx, w, site.RunID)
 	if err := r.store.CreateIntegrationWrite(ctx, w); err != nil {
 		slog.WarnContext(ctx, "integration write ledger: could not record intent; the call was not made",
 			"integration", w.Integration, "action", w.Action, "run_id", site.RunID, "error", err)
@@ -93,14 +96,37 @@ func (d *recorded) RunAuthenticated(ctx context.Context, m *reliantv1.Integratio
 	}
 
 	res, err := d.inner.RunAuthenticated(ctx, m, a, params, src, site)
-	r.settle(ctx, w, p, res, err)
+	if out := r.settle(ctx, w, p, res, err); out.Status == core.IntegrationWriteDone {
+		r.linkPR(ctx, w, runID, out.ObjectID)
+	}
 	return res, err
+}
+
+// linkPR links the chat a successful GitHub pr.create was made for to the
+// pull request it opened (chat_pr_links), with the run whose step made it.
+// Best effort, like attribution: the pull request exists whatever happens
+// here, so a failure is logged and nothing else.
+func (r *Recorder) linkPR(ctx context.Context, w *core.IntegrationWrite, runID, number string) {
+	if r.links == nil || w.ChatID == "" || w.Integration != "github" || w.Action != "pr.create" {
+		return
+	}
+	repo, ok := strings.CutPrefix(w.Scope, "github:")
+	n, err := strconv.Atoi(number)
+	if !ok || repo == "" || err != nil || n <= 0 {
+		return
+	}
+	ctx, cancel := settleContext(ctx)
+	defer cancel()
+	if _, err := r.links.LinkRunPR(ctx, w.ChatID, runID, core.PRRef{Provider: core.ChatPRLinkGitHub, Repository: repo, Number: n}); err != nil {
+		slog.WarnContext(ctx, "integration write ledger: could not link the pull request to its chat",
+			"write_id", w.ID, "chat_id", w.ChatID, "error", err)
+	}
 }
 
 // settle completes the intent row from the call's outcome. A failure to settle
 // is logged and nothing else: the call already happened, and an intent row left
 // open still matches its echo by target and content.
-func (r *Recorder) settle(ctx context.Context, w *core.IntegrationWrite, p plan, res *httpaction.Result, callErr error) {
+func (r *Recorder) settle(ctx context.Context, w *core.IntegrationWrite, p plan, res *httpaction.Result, callErr error) core.IntegrationWriteResult {
 	out := core.IntegrationWriteResult{At: r.now().UTC()}
 	switch {
 	case callErr != nil:
@@ -134,6 +160,7 @@ func (r *Recorder) settle(ctx context.Context, w *core.IntegrationWrite, p plan,
 		slog.WarnContext(ctx, "integration write ledger: could not settle a write; its intent row stays open",
 			"write_id", w.ID, "integration", w.Integration, "action", w.Action, "error", err)
 	}
+	return out
 }
 
 // settleContext is the context a row is settled under: the caller's values, but
@@ -142,15 +169,31 @@ func settleContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
 }
 
-// attributeRun fills in the run a call belongs to. Every lookup is best effort:
-// the call's own authentication already resolved the owner, and an unresolved
-// field only makes the echo less attributable, never the call less correct.
-func (r *Recorder) attributeRun(ctx context.Context, w *core.IntegrationWrite, runID string) {
+// loadRun reads runID's workflow row, or nil when there is no reader or no
+// such row: the id is then read as a chat id.
+func (r *Recorder) loadRun(ctx context.Context, runID string) *core.Workflow {
+	if r.workflows == nil {
+		return nil
+	}
+	wf, err := r.workflows.LoadWorkflow(ctx, runID)
+	if err != nil {
+		return nil
+	}
+	return wf
+}
+
+// attributeRun fills in the run a call belongs to, and returns the run's id
+// (workflows.id) when runID names a run row, "" when it names a chat. Every
+// lookup is best effort: the call's own authentication already resolved the
+// owner, and an unresolved field only makes the echo less attributable, never
+// the call less correct.
+func (r *Recorder) attributeRun(ctx context.Context, w *core.IntegrationWrite, runID string) (run string) {
 	if r.runs == nil || runID == "" {
-		return
+		return ""
 	}
 	chatID := runID
-	if wf, err := r.runs.GetWorkflow(ctx, runID); err == nil && wf != nil {
+	if wf := r.loadRun(ctx, runID); wf != nil {
+		run = wf.ID
 		if wf.ChatID != "" {
 			chatID = wf.ChatID
 		}
@@ -177,6 +220,7 @@ func (r *Recorder) attributeRun(ctx context.Context, w *core.IntegrationWrite, r
 	if t, err := r.runs.GetTrigger(ctx, *ev.TriggerID); err == nil && t != nil {
 		w.TriggerName = triggerName(t)
 	}
+	return
 }
 
 // triggerName is the name a workflow knows a trigger by: the declared trigger's

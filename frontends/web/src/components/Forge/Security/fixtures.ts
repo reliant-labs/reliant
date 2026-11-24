@@ -28,13 +28,11 @@ import type {
   Finding,
   ReleaseVulnerabilities,
   ScanState,
-  Severity,
-  SeverityCounts,
   VulnDatabase,
-  VulnFilters,
   VulnerabilityDetail,
 } from "@/services/controlPlane/vulnerabilities/types";
-import { SEVERITY_ORDER } from "@/services/controlPlane/vulnerabilities/types";
+
+import { byServerOrder, countsOf, passes } from "./vulnDataset";
 
 /**
  * A fixed "now", so relative times do not move: the visual harness's and the
@@ -193,12 +191,6 @@ export const FIXTURE_FINDINGS: Finding[] = [
   },
 ];
 
-function countsOf(findings: readonly Finding[]): SeverityCounts {
-  const counts: SeverityCounts = { critical: 0, high: 0, medium: 0, low: 0, negligible: 0, unknown: 0 };
-  for (const f of findings) if (!f.exemption) counts[f.advisory.severity] += 1;
-  return counts;
-}
-
 function artifactsOf(release: string, state: ScanState, scanError = ""): ArtifactSbom[] {
   const scanned = state === "scanned" || state === "stale" ? FIXTURE_NOW - 2 * 3_600_000 : state === "failed" ? FIXTURE_NOW - 3 * DAY : null;
   const sbom = (name: string, source: string, componentCount: number, artifactState: ScanState): ArtifactSbom => ({
@@ -346,24 +338,6 @@ function envSummary(data: ScenarioData, key: "prod" | "staging" | "dev"): EnvVul
     scanState: state,
     failingSinceMs: state === "failed" ? FIXTURE_NOW - 2 * DAY : null,
   };
-}
-
-const SEVERITY_RANK: Record<Severity, number> = { unknown: 1, negligible: 2, low: 3, medium: 4, high: 5, critical: 6 };
-
-function passes(f: Finding, filters: VulnFilters): boolean {
-  if (f.exemption && !filters.includeExempt) return false;
-  if (filters.minSeverity && f.advisory.severity !== "unknown" && SEVERITY_RANK[f.advisory.severity] < SEVERITY_RANK[filters.minSeverity]) return false;
-  if (filters.fixable !== undefined && filters.fixable !== (f.fixState === "fixed")) return false;
-  if (filters.kev !== undefined && filters.kev !== f.advisory.kev) return false;
-  return true;
-}
-
-function byServerOrder(a: Finding, b: Finding): number {
-  return (
-    SEVERITY_ORDER.indexOf(a.advisory.severity) - SEVERITY_ORDER.indexOf(b.advisory.severity) ||
-    Number(b.advisory.kev) - Number(a.advisory.kev) ||
-    a.advisory.id.localeCompare(b.advisory.id)
-  );
 }
 
 function releaseFor(version: string): { key: "prod" | "staging"; releaseId: string } | null {

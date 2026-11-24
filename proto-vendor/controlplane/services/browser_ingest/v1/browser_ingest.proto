@@ -87,6 +87,7 @@ service BrowserIngestService {
   //
   // Requires membership (deploy:read for a machine credential).
   rpc ListKeys(ListKeysRequest) returns (ListKeysResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true

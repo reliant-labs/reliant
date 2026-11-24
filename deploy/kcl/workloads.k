@@ -34,7 +34,12 @@ import forge
 import forge.workloads as fw
 import config_gen
 
-_build = forge.GoBuild {cmd = "./cmd/reliant", output_name = "reliant"}
+# -trimpath is declared here because forge (#2690) passes a GoBuild's flags,
+# and only those, to every go build it runs from it: `forge build`, go-run (the
+# dev migrate job, `-D host_runner=go-run`) and air's $FORGE_GO_BUILD_FLAGS.
+# The Taskfile's GOFLAGS does not reach a process forge launches.
+# scripts/air-build.sh passes -trimpath on its own as well.
+_build = forge.GoBuild {cmd = "./cmd/reliant", output_name = "reliant", flags = ["-trimpath"]}
 
 # ── Facts true of every reliant pod ─────────────────────────────────────────
 
@@ -218,7 +223,7 @@ ALL: [fw.Workload] = [migrate, api_server, temporal_worker, daemon_gateway]
 # is what a host env runs; this is the image a cluster pulls.
 #
 # The Dockerfile's version stamp is five build args (VERSION, COMMIT,
-# BUILD_DATE, BRANCH, COMMIT_TIME). Their values are per build, so the env that
+# BUILD_DATE, BRANCH, COMMIT_TIME). Their values are per commit, so the env that
 # binds this passes them (`server_image_build`), never this declaration. forge
 # passes a DockerBuild only the build_args declared here, plus its own
 # SOURCE_DATE_EPOCH and --provenance=false (reproducible digests); it stamps
@@ -231,16 +236,49 @@ ALL: [fw.Workload] = [migrate, api_server, temporal_worker, daemon_gateway]
 # reliant env runs the server under forge observability (prod runs it from
 # control-plane), so the profiles live there.
 #
-# No `inputs_file` either. At the forge this repo pins, `inputs_file` (like
-# ShellBuild's `inputs`) drives build reuse only for a ShellBuild; a
-# DockerBuild accepts the field and ignores it, so declaring the image's inputs
-# here would claim a reuse that never happens.
-# Every `forge env build` runs the docker build (BuildKit's layer cache is the
-# only reuse). Reported to forge as "DockerBuild ignores inputs_file/inputs".
+# `inputs` lets a `forge env build <env> --release <v>` reuse an earlier
+# release's image instead of running the docker build: forge fingerprints the
+# files these globs select (relative to the project root) together with the
+# whole declaration (build_args included), the Dockerfile's content, the
+# platform and the destination repository, and when all of it equals what an
+# earlier release recorded, and the registry still serves that digest, it
+# tags that digest with the new release. The apt layer is not reproducible, so
+# a rebuild of an unchanged tree would push a new digest and roll every
+# Deployment pinned to the image; reuse is what keeps it the same bytes. A
+# build that does not push, or `--rebuild`, always runs docker.
+#
+# They are what the image is a function of: `COPY . .` sends the whole
+# context, but the only thing the runtime stage takes from it is the binary,
+# which `go build ./cmd/reliant` compiles from go.mod/go.sum, the packages it
+# imports (every one lives under cmd/, internal/, pkg/, gen/, db/ and sdk/go/,
+# the Go SDK go.mod replaces) and the files they go:embed, which sit in those
+# package directories. Test files are excluded, as .dockerignore excludes them
+# from the context. A new top-level directory a package of the binary lives in
+# must be added here, or a change to it would reuse a stale image.
+#
+# Reuse needs build args that are a pure function of the commit: a stamp that
+# varies per build (a wall-clock BUILD_DATE) never matches, and one that
+# carries the release tag would reuse an image stamped with the earlier tag.
+# The release env derives every stamp from the commit (release/main.k).
+server_image_inputs = [
+    "Dockerfile"
+    ".dockerignore"
+    "go.mod"
+    "go.sum"
+    "cmd/**"
+    "internal/**"
+    "pkg/**"
+    "gen/**"
+    "db/**"
+    "sdk/go/**"
+    "!**/*_test.go"
+]
+
 server_image_build = lambda build_args: {str: str} -> forge.DockerBuild {
     forge.DockerBuild {
         dockerfile = "Dockerfile"
         build_args = build_args
+        inputs = server_image_inputs
     }
 }
 
@@ -306,6 +344,30 @@ _VERSION_VARS = {
     COMMIT_TIME = "CommitTime"
 }
 
+_pad2 = lambda n: int -> str {
+    ("0" + str(n))[-2:]
+}
+
+# The RFC 3339 UTC time of a commit time in unix seconds (the COMMIT_TIME
+# stamp, scripts/release-identity.sh --commit-time), the BUILD_DATE a build
+# stamps so that every one of its stamps is a function of the commit. "unknown"
+# (the Dockerfile's default) for 0 or anything that is not a count of seconds.
+# KCL has no epoch conversion, so this is Howard Hinnant's civil_from_days.
+commit_date = lambda commit_time: str -> str {
+    _s = int(commit_time) if commit_time.isdigit() else 0
+    _z = _s // 86400 + 719468
+    _era = _z // 146097
+    _doe = _z - _era * 146097
+    _yoe = (_doe - _doe // 1460 + _doe // 36524 - _doe // 146096) // 365
+    _doy = _doe - (365 * _yoe + _yoe // 4 - _yoe // 100)
+    _mp = (5 * _doy + 2) // 153
+    _day = _doy - (153 * _mp + 2) // 5 + 1
+    _month = _mp + 3 if _mp < 10 else _mp - 9
+    _year = _yoe + _era * 400 + (1 if _month <= 2 else 0)
+    _t = _s % 86400
+    "unknown" if _s == 0 else "${_year}-${_pad2(_month)}-${_pad2(_day)}T${_pad2(_t // 3600)}:${_pad2(_t % 3600 // 60)}:${_pad2(_t % 60)}Z"
+}
+
 reliant_cli_variants = lambda stamp: {str: str} -> [forge.BuildVariant] {
     _ldflags = ["-s", "-w"] + [
         "-X github.com/reliant-labs/reliant/internal/version.${var}=${stamp[key]}"
@@ -323,7 +385,9 @@ reliant_cli = fw.Workload {
     name = "reliant-cli"
     kind = "tool"
     runtime = forge.BuildOnly {build_variants = reliant_cli_variants({})}
-    build = forge.GoBuild {cmd = "./cmd/reliant"}
+    # -trimpath reaches each BuildOnly variant from here (forge #2690), as the
+    # Dockerfile's build passes it.
+    build = forge.GoBuild {cmd = "./cmd/reliant", flags = ["-trimpath"]}
 }
 
 # ── The desktop app ─────────────────────────────────────────────────────────

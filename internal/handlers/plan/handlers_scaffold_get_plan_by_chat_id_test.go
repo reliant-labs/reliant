@@ -10,16 +10,16 @@ import (
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	plan "github.com/reliant-labs/reliant/internal/handlers/plan"
 )
 
 func TestGetPlanByChatId_Generated(t *testing.T) {
 	t.Parallel()
 
-	repo := newPlanRepo()
-	repo.ListPlansByChatIDFunc = func(context.Context, string) ([]*db.Plan, error) { return nil, nil }
-	svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: repo}))
+	repo := newPlanMocks()
+	repo.Plans.ListPlansByChatIDFunc = func(context.Context, string) ([]*core.Plan, error) { return nil, nil }
+	svc := plan.NewTestPlan(t, plan.WithPlanDeps(repo.Deps()))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetPlanByChatIdRequest, pb.GetPlanByChatIdResponse]{
 		{

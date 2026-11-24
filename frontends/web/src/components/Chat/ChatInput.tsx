@@ -13,6 +13,8 @@ import {
 import { ChevronDown, Plus, GitBranch, Layers } from "lucide-react";
 import { useCapability, useSurface } from "../../lib/surfaceContext";
 import { ComposerOptions, type AttachKind, type ComposerOptionsPage } from "./ComposerOptions";
+import { ChatProjectAddPanel, ChatProjectChips } from "./ChatProjectChips";
+import { useChatProjects } from "../../hooks/useChatProjects";
 import { usePriorityFold } from "./composerPriority";
 import { useCoarsePointer } from "./useCoarsePointer";
 import { CodeContextChip } from "./CodeContextChip";
@@ -61,7 +63,6 @@ import {
   patchChatCaches,
   refetchChatSelection,
 } from "../../hooks/chat-queries";
-import { clearLegacyChatParams, peekLegacyChatParams } from "../../lib/legacyChatParams";
 import { pushChatParams } from "../../lib/chatSelection";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { answerQuestion, usePendingQuestions } from "../../hooks/question-queries";
@@ -342,7 +343,14 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     // thread must not answer (or be queued past) another's. Questions on other
     // threads surface in the background-work pill, which navigates to them.
     const pendingQuestionsQuery = usePendingQuestions(chatId || undefined);
-    const questionMainThreadId = useChat(chatId || undefined).data?.workflowId;
+    const chatForProjects = useChat(chatId || undefined).data;
+    const questionMainThreadId = chatForProjects?.workflowId;
+    // The projects this chat works in (hooks/useChatProjects). Nothing for a
+    // new chat (its view shows the draft's), a viewer of a shared chat, a
+    // chat with no machine, or a server that cannot keep them.
+    const chatProjects = useChatProjects(chatId ? chatForProjects : undefined);
+    const showProjectChips =
+      chatProjects.supported && (chatProjects.projects.length > 1 || chatProjects.setUp !== null);
     const pendingQuestion = useMemo(
       () =>
         questionForThread(
@@ -391,9 +399,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     // read the whole composer as an edit.
     const [adoptedFor, setAdoptedFor] = useState<string | null>(null);
     const adoptedKeyRef = useRef<string | null>(null);
-    // A chat the server holds no selection for, seeded from what an older build
-    // kept in this browser; its local copy is deleted once the server has it.
-    const legacyPendingRef = useRef<string | null>(null);
     const selectionQuery = useChatSelection(chatId);
     const selection = chatId ? selectionQuery.data : undefined;
     const selectionRef = useRef(selection);
@@ -934,18 +939,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       // The draft is what this session showed. On open it is only the first
       // paint; the server's copy replaces it.
       const local = opened ? {} : workflowParamsRef.current;
-      let adopted = adoptServerParams(local, opened ? {} : syncedRef.current, serverFlat);
-
-      // A chat the server has no selection for may hold one an older build kept
-      // in this browser. It becomes the chat's selection on the next push, and
-      // is forgotten once the server has it.
-      if (opened && selection === null) {
-        const legacy = peekLegacyChatParams(chatId);
-        if (legacy) {
-          adopted = { params: legacy, synced: {} };
-          legacyPendingRef.current = chatId;
-        }
-      }
+      const adopted = adoptServerParams(local, opened ? {} : syncedRef.current, serverFlat);
       adoptedKeyRef.current = key;
 
       commitSynced(adopted.synced);
@@ -990,10 +984,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         logger.info("[ChatInput] Syncing workflow params", { chatId });
         const result = await pushChatParams(chatId, sentFrom, syncedRef.current, groupNamesRef.current);
         if (!result) return;
-        if (legacyPendingRef.current === chatId) {
-          clearLegacyChatParams(chatId);
-          legacyPendingRef.current = null;
-        }
         commitSynced(applyParamPatch(syncedRef.current, result.pushed));
         // The server's copy is the truth: it may have moved a model off a
         // provider that cannot serve it. Adopt that, keeping any edit made
@@ -1563,6 +1553,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       ...(isPendingChat ? ["workflow"] : []),
       ...(modelInlineAllowed ? ["model"] : []),
       ...(canConfigure ? toolbarParams.map(([name]) => `param:${name}`) : []),
+      // A chat in one project: "+ Project" (more than one: the chip row).
+      ...(chatProjects.supported && !showProjectChips ? ["projects"] : []),
       // Situational, not a control: renders only when someone other than
       // you pays, or the account is near a limit.
       "account",
@@ -2016,8 +2008,10 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   <div className="composer-grid">
                     {/* Armed state, only when there is some: what this send
                         carries beyond its text. No chips, no row. */}
+                    {(hasChips || showProjectChips) && (
+                    <div className="composer-chips mb-1 flex min-w-0 flex-col gap-1 px-1 pt-1">
                     {hasChips && (
-                      <div className="composer-chips mb-1 flex gap-1.5 overflow-x-auto px-1 pt-1" data-testid="composer-chips">
+                      <div className="flex gap-1.5 overflow-x-auto" data-testid="composer-chips">
                         {contexts.map((context) => (
                           <CodeContextChip
                             key={context.id}
@@ -2060,6 +2054,15 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                           />
                         ))}
                       </div>
+                    )}
+                    {/* The chat's projects, once it has more than its own (or
+                        one is being set up): the chips, each removable, and
+                        Add project. With one project the tools row's "+
+                        Project" is all there is. */}
+                    {showProjectChips && (
+                      <ChatProjectChips control={chatProjects} orgId={chatForProjects?.orgId} disabled={disabled} />
+                    )}
+                    </div>
                     )}
 
                     <div className="composer-plus" data-onboarding="chat-controls">
@@ -2160,6 +2163,19 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                           />
                         </div>
                       ))}
+
+                      {/* One project: a small "+ Project" to add another. */}
+                      {chatProjects.supported && !showProjectChips && (
+                        <div {...toolProps("projects")}>
+                          <ChatProjectChips
+                            control={chatProjects}
+                            orgId={chatForProjects?.orgId}
+                            showPrimary={false}
+                            addLabel="Project"
+                            disabled={disabled}
+                          />
+                        </div>
+                      )}
 
                       <div {...toolProps("account")} className="flex items-center gap-1.5">
                         <FundingBadge chatId={chatId} />
@@ -2286,6 +2302,24 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
               setOptionsPage(null);
               command.action();
             }}
+            projects={
+              chatProjects.supported
+                ? {
+                    summary:
+                      chatProjects.projects.length > 1
+                        ? `${chatProjects.projects.length} projects`
+                        : chatProjects.projects[0]?.name ?? "",
+                    renderPage: (onBack) => (
+                      <div className="space-y-3">
+                        <ChatProjectChips control={chatProjects} showAdd={false} disabled={disabled} />
+                        <div className="overflow-hidden rounded-xl border border-border/60">
+                          <ChatProjectAddPanel control={chatProjects} orgId={chatForProjects?.orgId} onClose={onBack} />
+                        </div>
+                      </div>
+                    ),
+                  }
+                : null
+            }
           />
         )}
       </div>

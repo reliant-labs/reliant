@@ -8,7 +8,8 @@ test('New workspace matches every selector, including after the controls wrap', 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await mockAppsBackend(page);
   await page.goto(`/project/${PROJECT.id}`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'New chat', exact: true }).click();
+  // New chat is a link in the one shell's nav (U6), to the new-chat view.
+  await page.getByRole('link', { name: 'New chat', exact: true }).click();
   const controls = page.locator('[data-onboarding="workspace-buttons"]');
   await expect(controls.getByRole('button', { name: 'New workspace', exact: true })).toBeVisible();
   await expect(controls.getByTestId('new-chat-project-chip')).toBeVisible();
@@ -19,7 +20,10 @@ test('New workspace matches every selector, including after the controls wrap', 
     // The pane can be split or resized independently of the viewport. Bound
     // just its controls to exercise wrapping without switching to mobile UI.
     await controls.evaluate((el, value) => { el.style.width = `${value}px`; }, width);
-    const geometry = await controls.evaluate((el) => Array.from(el.querySelectorAll('button')).map((button) => {
+    // Attached-project actions are compact secondary controls, not selectors.
+    // Keep checking all four original controls against New workspace's height.
+    await expect(controls.getByTestId('chat-project-add')).toBeVisible();
+    const geometry = await controls.evaluate((el) => Array.from(el.querySelectorAll('button:not([data-testid="chat-project-add"])')).map((button) => {
       const rect = button.getBoundingClientRect();
       return { label: button.textContent, height: rect.height, top: rect.top };
     }));

@@ -3,12 +3,15 @@ package sharing
 import (
 	"context"
 	"errors"
+	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/chatproto"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -24,6 +27,20 @@ const (
 	// resource's org asked to make it private.
 	ReasonOrgAdminRequired = "org_admin_required"
 )
+
+// applyShareChange sets the visibility and records its share event in one
+// transaction. It reports whether anything changed: a no-op, a missing row, and
+// a row whose owner or org no longer match write nothing. Deciding whether the
+// actor may make the change is the caller's (internal/authz).
+func (s *Service) applyShareChange(ctx context.Context, c core.ShareChange) (bool, error) {
+	var changed bool
+	err := s.deps.Tx.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var err error
+		changed, err = s.deps.Shares.ApplyShareChange(ctx, c)
+		return err
+	})
+	return changed, err
+}
 
 // visibilityFrom is the visibility a request asks for.
 func visibilityFrom(v pb.ResourceVisibility) (core.Visibility, error) {
@@ -97,4 +114,31 @@ func page(limit, offset int32) (int, int) {
 		o = 0
 	}
 	return l, o
+}
+
+// sharedWorkflowDraft is a saved workflow as sharing answers it: what a
+// teammate reads and forks, without the owner's source path, origin or OCC
+// version. viewer marks a viewer's read (decided once, by the caller).
+func sharedWorkflowDraft(w *core.WorkflowDraft, viewer bool) *pb.SharedWorkflowDraft {
+	out := &pb.SharedWorkflowDraft{
+		Id:           w.ID,
+		Slug:         w.Slug,
+		Name:         w.Name,
+		Description:  w.Description,
+		UserId:       w.UserID,
+		OrgId:        derefString(w.OrgID),
+		Status:       pb.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT,
+		Visibility:   chatproto.Visibility(authz.WorkflowVisibility(w)),
+		ViewerAccess: viewer,
+		UpdatedAt:    w.UpdatedAt.UTC().Format(time.RFC3339),
+		Definition:   w.Definition,
+	}
+	if w.Status == core.WorkflowDraftStatusComplete {
+		out.Status = pb.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE
+	}
+	if w.SharedAt != nil {
+		shared := w.SharedAt.UTC().Format(time.RFC3339)
+		out.SharedAt = &shared
+	}
+	return out
 }

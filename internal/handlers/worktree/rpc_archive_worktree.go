@@ -26,7 +26,7 @@ func (s *Service) ArchiveWorktree(
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.getWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -39,7 +39,7 @@ func (s *Service) ArchiveWorktree(
 		return nil, svcerr.FailedPrecondition("worktree is already archived; use delete to permanently remove")
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, worktree.ProjectID)
+	project, err := s.getProject(ctx, worktree.ProjectID)
 	if err != nil {
 		logging.WarnContext(ctx, "Failed to get project for worktree cleanup", "error", err)
 	}

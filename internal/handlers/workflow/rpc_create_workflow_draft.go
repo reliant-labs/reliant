@@ -74,7 +74,7 @@ func (s *Service) CreateWorkflowDraft(
 		UpdatedAt:  now,
 	}
 
-	if err := s.deps.Repo.CreateWorkflowDraft(ctx, draft); err != nil {
+	if err := s.deps.Drafts.CreateWorkflowDraft(ctx, draft); err != nil {
 		// A taken slug is the store's AlreadyExists (db.ErrWorkflowSlugTaken).
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create workflow draft"))
 	}

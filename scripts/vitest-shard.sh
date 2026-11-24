@@ -58,4 +58,7 @@ if ! [ frontends/web/node_modules/.modules.yaml -nt frontends/web/pnpm-lock.yaml
   pnpm install --dir frontends/web --frozen-lockfile --ignore-scripts --config.confirmModulesPurge=false --reporter=silent
 fi
 
-go run ./tools/test-affected run -plan "$plan" -base "$base" -lanes web -web-full reached -web-shard "$shard"
+# -capture: recorded as lane web-affected of a run of forge's test record, as
+# the merge gate records its own web step (scripts/test-capture.sh); the
+# verdict is vitest's.
+go run ./tools/test-affected run -plan "$plan" -base "$base" -lanes web -web-full reached -web-shard "$shard" -capture

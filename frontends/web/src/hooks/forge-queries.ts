@@ -42,9 +42,11 @@ import {
   type QueryClient,
   type UseQueryResult,
 } from "@tanstack/react-query";
+import type { Transport } from "@connectrpc/connect";
 
 import { ForgeDeployJobStatus, ForgeService } from "../gen/reliant/v1/forge_pb";
-import { connectClient } from "../lib/connect";
+import { connectClient, transport as appTransport } from "../lib/connect";
+import { useClient, useTransport } from "../lib/transportScope";
 import { getOrgScope, orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure, type OrgScope } from "../lib/orgScope";
 import {
   appliedPromoteOf,
@@ -137,7 +139,8 @@ import { environments, type ForgeOutcome, type ForgeVerifyReport } from "../serv
 /**
  * The ForgeService client, for the two writes whose generated hook would
  * refetch reads they did not move: VerifyEnv patches the topology it observed,
- * StartDeployPlan changes no environment (see each hook).
+ * StartDeployPlan changes no environment (see each hook). Each hook takes it
+ * from the nearest TransportScope (`useClient`), this one outside every scope.
  */
 const forgeClient = connectClient(ForgeService);
 
@@ -275,6 +278,7 @@ export function useForgeTopology(projectId: string | null | undefined, options?:
  */
 export function useVerifyForgeEnv(projectId: string | null | undefined) {
   const queryClient = useQueryClient();
+  const client = useClient(ForgeService, forgeClient);
 
   const mutation = useMutation<
     { env: string; orgId: string | null; outcome: ForgeOutcome<ForgeVerifyReport> },
@@ -288,7 +292,7 @@ export function useVerifyForgeEnv(projectId: string | null | undefined) {
       return {
         env,
         orgId,
-        outcome: verifyOutcomeOf(await forgeClient.verifyEnv(orgRequest({ projectId: projectId as string, env }, orgId))),
+        outcome: verifyOutcomeOf(await client.verifyEnv(orgRequest({ projectId: projectId as string, env }, orgId))),
       };
     },
     onSuccess: ({ env, orgId, outcome }) => {
@@ -346,6 +350,7 @@ export function useVerifyForgeEnv(projectId: string | null | undefined) {
  */
 export function useCloudEnvironments(forgeProject: string | null | undefined) {
   const org = useOrgScope();
+  const transport = useTransport(appTransport);
   const enabled = !!forgeProject && hasCloudControlPlane() && orgQueryEnabled(org);
   return useQuery<{ availability: CloudAvailability; envs: CloudEnv[]; detail: string }>(
     withOrgFailure(
@@ -355,7 +360,7 @@ export function useCloudEnvironments(forgeProject: string | null | undefined) {
           try {
             return {
               availability: "available" as const,
-              envs: await listProjectEnvironments(forgeProject as string, org.orgId),
+              envs: await listProjectEnvironments(transport, forgeProject as string, org.orgId),
               detail: "",
             };
           } catch (err) {
@@ -402,8 +407,9 @@ export function useCloudEnvironments(forgeProject: string | null | undefined) {
  */
 export function useLiveView(forgeProject: string | null | undefined) {
   const org = useOrgScope();
+  const transport = useTransport(appTransport);
   const enabled = !!forgeProject && hasLiveControlPlane() && orgQueryEnabled(org);
-  return useQuery<LiveViewResult>(withOrgFailure({ ...liveViewQuery(forgeProject ?? "", org.orgId), enabled }, org));
+  return useQuery<LiveViewResult>(withOrgFailure({ ...liveViewQuery(transport, forgeProject ?? "", org.orgId), enabled }, org));
 }
 
 /** How many times the Live read is sent before an unreachable answer is final (liveViewQuery). */
@@ -420,9 +426,9 @@ export interface LiveViewResult {
  * useLiveView and by the queued-deploy watcher (QueuedDeployNotifier), which
  * polls the SAME cache entry while a deploy this session saw queued is on its
  * way out — so a page that is open settles with it, and neither issues a
- * second request.
+ * second request. Read over `transport`, the caller's scope's (`useTransport`).
  */
-export function liveViewQuery(forgeProject: string, orgId: string | null) {
+export function liveViewQuery(transport: Transport, forgeProject: string, orgId: string | null) {
   return {
     queryKey: forgeCloudKeys.liveView(orgId, forgeProject),
     queryFn: async (): Promise<LiveViewResult> => {
@@ -435,7 +441,7 @@ export function liveViewQuery(forgeProject: string, orgId: string | null) {
         try {
           return {
             availability: "available" as const,
-            envs: await getLiveView(forgeProject, orgId),
+            envs: await getLiveView(transport, forgeProject, orgId),
             detail: "",
           };
         } catch (err) {
@@ -479,11 +485,11 @@ export function useInvalidateLiveView() {
  * the workloads page share one request; no poll, since a declaration moves
  * only when somebody builds or deploys, and those paths invalidate it.
  */
-function environmentShapeQuery(environmentId: string, org: OrgScope) {
+function environmentShapeQuery(transport: Transport, environmentId: string, org: OrgScope) {
   return withOrgFailure(
     {
       queryKey: forgeCloudKeys.environmentShape(org.orgId, environmentId),
-      queryFn: () => getEnvironmentShape(environmentId, org.orgId),
+      queryFn: () => getEnvironmentShape(transport, environmentId, org.orgId),
       enabled: environmentId !== "" && hasLiveControlPlane() && orgQueryEnabled(org),
       staleTime: 60_000,
       retry: forgeRetry,
@@ -494,7 +500,8 @@ function environmentShapeQuery(environmentId: string, org: OrgScope) {
 
 export function useEnvironmentShape(environmentId: string | null | undefined) {
   const org = useOrgScope();
-  return useQuery<LiveShape | null>(environmentShapeQuery(environmentId ?? "", org));
+  const transport = useTransport(appTransport);
+  return useQuery<LiveShape | null>(environmentShapeQuery(transport, environmentId ?? "", org));
 }
 
 /**
@@ -518,6 +525,7 @@ export interface EnvironmentShapeEntry {
  */
 export function useEnvironmentShapes(environmentIds: readonly string[]): Map<string, EnvironmentShapeEntry> {
   const org = useOrgScope();
+  const transport = useTransport(appTransport);
   const key = environmentIds.join("\n");
   const combine = useCallback(
     (results: { data?: LiveShape | null; isLoading: boolean; error: unknown }[]) => {
@@ -531,7 +539,7 @@ export function useEnvironmentShapes(environmentIds: readonly string[]): Map<str
     },
     [key]
   );
-  return useQueries({ queries: environmentIds.map((id) => environmentShapeQuery(id, org)), combine });
+  return useQueries({ queries: environmentIds.map((id) => environmentShapeQuery(transport, id, org)), combine });
 }
 
 /**
@@ -545,11 +553,11 @@ export function useEnvironmentShapes(environmentIds: readonly string[]): Map<str
  */
 const CLOUD_STATUS_POLL_MS = 30_000;
 
-function cloudStatusQuery(environmentId: string, org: OrgScope) {
+function cloudStatusQuery(transport: Transport, environmentId: string, org: OrgScope) {
   return withOrgFailure(
     {
       queryKey: forgeCloudKeys.cloudStatus(org.orgId, environmentId),
-      queryFn: () => getEnvironmentStatus(environmentId, org.orgId),
+      queryFn: () => getEnvironmentStatus(transport, environmentId, org.orgId),
       enabled: environmentId !== "" && orgQueryEnabled(org),
       staleTime: 10_000,
       refetchInterval: CLOUD_STATUS_POLL_MS,
@@ -561,7 +569,8 @@ function cloudStatusQuery(environmentId: string, org: OrgScope) {
 
 export function useCloudEnvStatus(environmentId: string | null | undefined) {
   const org = useOrgScope();
-  return useQuery<CloudEnvStatus>(cloudStatusQuery(environmentId ?? "", org));
+  const transport = useTransport(appTransport);
+  return useQuery<CloudEnvStatus>(cloudStatusQuery(transport, environmentId ?? "", org));
 }
 
 /** The same query per environment, for the overview's rows. One cache entry per env, shared with the env page. */
@@ -573,7 +582,8 @@ export interface CloudStatusEntry {
 
 export function useCloudEnvStatuses(environmentIds: string[]): Map<string, CloudStatusEntry> {
   const org = useOrgScope();
-  const results = useQueries({ queries: environmentIds.map((id) => cloudStatusQuery(id, org)) });
+  const transport = useTransport(appTransport);
+  const results = useQueries({ queries: environmentIds.map((id) => cloudStatusQuery(transport, id, org)) });
   // Rebuilt per render on purpose: a handful of entries, and memoising on a
   // freshly-allocated results array would never hit.
   const byId = new Map<string, CloudStatusEntry>();
@@ -587,11 +597,12 @@ export function useCloudEnvStatuses(environmentIds: string[]): Map<string, Cloud
 /** One environment's promotion ledger, newest first. Append-only, so no poll. */
 export function useCloudPromotions(environmentId: string | null | undefined) {
   const org = useOrgScope();
+  const transport = useTransport(appTransport);
   return useQuery<CloudPromotion[]>(
     withOrgFailure(
       {
         queryKey: forgeCloudKeys.cloudPromotions(org.orgId, environmentId ?? ""),
-        queryFn: () => listEnvironmentPromotions(environmentId as string, org.orgId),
+        queryFn: () => listEnvironmentPromotions(transport, environmentId as string, org.orgId),
         enabled: !!environmentId && orgQueryEnabled(org),
         staleTime: 15_000,
         retry: forgeRetry,
@@ -618,13 +629,14 @@ export function useCloudPromotions(environmentId: string | null | undefined) {
  */
 export function useLiveConvergences(environmentId: string | null | undefined) {
   const org = useOrgScope();
+  const transport = useTransport(appTransport);
   // A secondary record (above): an org that failed to resolve leaves it empty
   // rather than showing an error of its own.
   return useQuery<LiveConvergence[]>({
     queryKey: forgeCloudKeys.convergences(org.orgId, environmentId ?? ""),
     queryFn: async () => {
       try {
-        return await listEnvironmentConvergences(environmentId as string, org.orgId);
+        return await listEnvironmentConvergences(transport, environmentId as string, org.orgId);
       } catch {
         return [];
       }
@@ -898,8 +910,9 @@ export function useForgeEnvShape(
  */
 export function useRegisterEnvironment() {
   const invalidateLive = useInvalidateLiveView();
+  const transport = useTransport(appTransport);
   return useMutation<string, Error, RegisterCandidate>({
-    mutationFn: (candidate: RegisterCandidate) => registerEnvironment(candidate),
+    mutationFn: (candidate: RegisterCandidate) => registerEnvironment(transport, candidate),
     retry: false,
     onSuccess: invalidateLive,
   });
@@ -1207,10 +1220,11 @@ export function useStartForgeDeploy(projectId: string | null | undefined) {
  * does, and resolves as `{ kind: "refused" }`.
  */
 export function useStartForgeDeployPlan(projectId: string | null | undefined) {
+  const client = useClient(ForgeService, forgeClient);
   return useMutation<StartDeployResult, Error, { env: string }>({
     mutationFn: async ({ env }) => {
       try {
-        return startDeployPlanResultOf(await forgeClient.startDeployPlan({ projectId: projectId as string, env }));
+        return startDeployPlanResultOf(await client.startDeployPlan({ projectId: projectId as string, env }));
       } catch (error) {
         const refusal = deployRefusalOf(error);
         if (refusal) return { kind: "refused", refusal };
@@ -1284,8 +1298,8 @@ export function useForgeDeployStatus(
  * is fetched.
  *
  * A FAILURE HERE IS USUALLY NOT AN ERROR. control-plane answers Unavailable
- * when no OpenBao is bound, and Unimplemented when the control plane predates
- * the service; both mean "this deployment has no managed store", which is a
+ * when no OpenBao is bound, and Unimplemented when it does not serve the
+ * store; both mean "this deployment has no managed store", which is a
  * state the screen describes rather than a fault it reports. So the hook
  * resolves those into an `availability` the caller can render, and only a
  * genuine transport failure surfaces as `unreachable`.
@@ -1298,6 +1312,7 @@ export function useForgeDeployStatus(
  * They set a secret and come straight back expecting the row to have moved.
  */
 export function managedSecretsQueryOptions(
+  transport: Transport,
   projectId: string | null | undefined,
   env: string | null | undefined,
   target: ManagedStoreTarget | null
@@ -1312,7 +1327,7 @@ export function managedSecretsQueryOptions(
       if (!target) return { availability: "unreachable" as const, secrets: [], protected: false };
       if (target.kind === "none") return { availability: target.availability, secrets: [], protected: false };
       try {
-        return { availability: "available" as const, ...(await listSecrets(target.environmentId)) };
+        return { availability: "available" as const, ...(await listSecrets(transport, target.environmentId)) };
       } catch (err) {
         // The error object itself is NOT propagated into the cache or into any
         // message. Only the classification survives — a Connect error's detail
@@ -1333,7 +1348,8 @@ export function useManagedSecrets(
   env: string | null | undefined,
   target: ManagedStoreTarget | null
 ) {
-  return useQuery(managedSecretsQueryOptions(projectId, env, target));
+  const transport = useTransport(appTransport);
+  return useQuery(managedSecretsQueryOptions(transport, projectId, env, target));
 }
 
 /**
@@ -1350,9 +1366,10 @@ export function useManagedSecretVersions(
   environmentId: string | null | undefined,
   name: string | null | undefined
 ) {
+  const transport = useTransport(appTransport);
   return useQuery<ManagedSecretHistory>({
     queryKey: forgeCloudKeys.managedSecretVersions(projectId ?? "", env ?? "", name ?? ""),
-    queryFn: () => getSecretVersions(environmentId as string, name as string),
+    queryFn: () => getSecretVersions(transport, environmentId as string, name as string),
     enabled: !!projectId && !!env && !!environmentId && !!name,
     staleTime: 5_000,
     retry: forgeRetry,
@@ -1416,9 +1433,10 @@ export function useSetManagedSecret(
   environmentId: string | null | undefined
 ) {
   const invalidate = useInvalidateManagedSecrets(projectId, env);
+  const transport = useTransport(appTransport);
   return useMutation<SetSecretResult, Error, { name: string; value: string; cas?: number }>({
     mutationFn: ({ name, value, cas }) =>
-      setSecret({ environmentId: requireEnvironmentId(environmentId), name, value, cas }),
+      setSecret(transport, { environmentId: requireEnvironmentId(environmentId), name, value, cas }),
     onSuccess: invalidate,
   });
 }
@@ -1446,9 +1464,10 @@ export function useDeleteManagedSecret(
   environmentId: string | null | undefined
 ) {
   const invalidate = useInvalidateManagedSecrets(projectId, env);
+  const transport = useTransport(appTransport);
   return useMutation<void, Error, { name: string; versions?: number[] }>({
     mutationFn: ({ name, versions }) =>
-      deleteSecret({ environmentId: requireEnvironmentId(environmentId), name, versions }),
+      deleteSecret(transport, { environmentId: requireEnvironmentId(environmentId), name, versions }),
     onSuccess: invalidate,
   });
 }
@@ -1459,9 +1478,10 @@ export function useUndeleteManagedSecret(
   environmentId: string | null | undefined
 ) {
   const invalidate = useInvalidateManagedSecrets(projectId, env);
+  const transport = useTransport(appTransport);
   return useMutation<void, Error, { name: string; versions: number[] }>({
     mutationFn: ({ name, versions }) =>
-      undeleteSecret({ environmentId: requireEnvironmentId(environmentId), name, versions }),
+      undeleteSecret(transport, { environmentId: requireEnvironmentId(environmentId), name, versions }),
     onSuccess: invalidate,
   });
 }
@@ -1479,9 +1499,10 @@ export function useDestroyManagedSecret(
   environmentId: string | null | undefined
 ) {
   const invalidate = useInvalidateManagedSecrets(projectId, env);
+  const transport = useTransport(appTransport);
   return useMutation<void, Error, { name: string; versions: number[] }>({
     mutationFn: ({ name, versions }) =>
-      destroySecret({ environmentId: requireEnvironmentId(environmentId), name, versions }),
+      destroySecret(transport, { environmentId: requireEnvironmentId(environmentId), name, versions }),
     onSuccess: invalidate,
   });
 }
@@ -1500,8 +1521,9 @@ function useInvalidateAfterRunStateWrite() {
 
 export function useSetEnvironmentRunState(environmentId: string | null | undefined) {
   const invalidate = useInvalidateAfterRunStateWrite();
+  const transport = useTransport(appTransport);
   return useMutation<void, Error, RunStateRequest>({
-    mutationFn: (state) => setEnvironmentRunState(environmentId ?? "", state),
+    mutationFn: (state) => setEnvironmentRunState(transport, environmentId ?? "", state),
     onSuccess: invalidate,
   });
 }
@@ -1509,8 +1531,9 @@ export function useSetEnvironmentRunState(environmentId: string | null | undefin
 /** Stop or start one hosted workload (its deployment's run state). */
 export function useSetWorkloadRunState() {
   const invalidate = useInvalidateAfterRunStateWrite();
+  const transport = useTransport(appTransport);
   return useMutation<void, Error, { deploymentId: string; state: RunStateRequest }>({
-    mutationFn: ({ deploymentId, state }) => setWorkloadRunState(deploymentId, state),
+    mutationFn: ({ deploymentId, state }) => setWorkloadRunState(transport, deploymentId, state),
     onSuccess: invalidate,
   });
 }
@@ -1522,8 +1545,9 @@ export interface DeleteEnvironmentVars {
 
 export function useDeleteEnvironment(environmentId: string | null | undefined) {
   const invalidate = useInvalidateAfterEnvironmentDelete(environmentId);
+  const transport = useTransport(appTransport);
   return useMutation<void, Error, DeleteEnvironmentVars | void>({
-    mutationFn: (vars) => deleteEnvironment(environmentId ?? "", { keepData: vars?.keepData ?? false }),
+    mutationFn: (vars) => deleteEnvironment(transport, environmentId ?? "", { keepData: vars?.keepData ?? false }),
     onSuccess: invalidate,
   });
 }

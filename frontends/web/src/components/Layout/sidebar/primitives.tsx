@@ -16,7 +16,9 @@ import type React from "react";
 import type { ReactNode } from "react";
 import { ChevronDown, ChevronRight, ChevronsUpDown, GitBranch, Loader2 } from "lucide-react";
 
+import { isForgeShell } from "../../../lib/shell";
 import { cn } from "../../../lib/utils";
+import { ForgeMark } from "../../ForgeShell/ForgeBrand";
 import { BrandMark } from "../../icons/BrandMark";
 import { CHAT_ROW_DOT_CLASS, type ChatRowChip } from "../chatRowStatus";
 
@@ -37,6 +39,14 @@ export function SidebarOrgRow({ children }: { children: ReactNode }) {
 export const SIDEBAR_ORG_TRIGGER =
   "flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-ui text-foreground transition-colors hover:bg-foreground/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
+/**
+ * The brand's mark at the nav's top: Forge's on the forge host (and the demo),
+ * Reliant's everywhere else. One shell, two brands (U6): only the mark moves.
+ */
+export function ShellBrandMark() {
+  return isForgeShell() ? <ForgeMark className="size-5" /> : <BrandMark className="size-5 shrink-0" />;
+}
+
 /** What the org row shows: the mark, the name, and the switcher's chevron when there is a menu. */
 export function SidebarOrgLabel({
   name,
@@ -49,7 +59,7 @@ export function SidebarOrgLabel({
 }) {
   return (
     <>
-      <BrandMark className="size-5 shrink-0" />
+      <ShellBrandMark />
       <span className="min-w-0 flex-1 truncate font-semibold" data-testid={nameTestId}>
         {name}
       </span>
@@ -66,6 +76,7 @@ export function SidebarPrimaryAction({
   label,
   shortcut,
   onClick,
+  href,
   testId,
 }: {
   icon: ReactNode;
@@ -73,21 +84,22 @@ export function SidebarPrimaryAction({
   /** The action's shortcut, formatted (useShortcutLabel). */
   shortcut?: string;
   onClick: () => void;
+  /** The page it opens. Given, it is a link (a modified click opens a new tab) and a plain click runs `onClick`. */
+  href?: string;
   testId?: string;
 }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-testid={testId}
-      // The label alone names the button; the key cap is a visual hint.
-      aria-label={label}
-      className={cn(
-        // --primary-hover is a real colour per scheme with no Tailwind alias.
-        "mx-2 flex h-8 shrink-0 items-center gap-2 rounded-md bg-primary px-2 text-left text-ui font-medium text-primary-foreground transition-colors hover:bg-[hsl(var(--primary-hover))]",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-      )}
-    >
+  const shared = {
+    "data-testid": testId,
+    // The label alone names the action; the key cap is a visual hint.
+    "aria-label": label,
+    className: cn(
+      // --primary-hover is a real colour per scheme with no Tailwind alias.
+      "no-color mx-2 flex h-8 shrink-0 items-center gap-2 rounded-md bg-primary px-2 text-left text-ui font-medium text-primary-foreground transition-colors hover:bg-[hsl(var(--primary-hover))] hover:text-primary-foreground",
+      "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+    ),
+  };
+  const content = (
+    <>
       <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
         {icon}
       </span>
@@ -97,16 +109,42 @@ export function SidebarPrimaryAction({
           {shortcut}
         </kbd>
       )}
+    </>
+  );
+  return href ? (
+    <a {...shared} href={href} onClick={routedClick(onClick)}>
+      {content}
+    </a>
+  ) : (
+    <button type="button" {...shared} onClick={onClick}>
+      {content}
     </button>
   );
 }
 
 // --- Rows -----------------------------------------------------------------
 
+/**
+ * A link's click, kept in the app: a plain click runs `onNavigate`, and a
+ * modified one (new tab, new window) is left to the browser.
+ */
+function routedClick(onNavigate: (() => void) | undefined) {
+  return (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!onNavigate || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    event.preventDefault();
+    onNavigate();
+  };
+}
+
 export interface SidebarRowProps {
   icon: ReactNode;
   label: string;
   onClick?: () => void;
+  /**
+   * The page the row opens. Given, the row is a link (a modified click opens
+   * it in a new tab) and a plain click runs `onClick`.
+   */
+  href?: string;
   /** Quiet trailing text inside the row: a count, a shortcut, a dot. */
   trail?: ReactNode;
   /** A control of its own after the row (it cannot nest in the row's button). */
@@ -131,6 +169,7 @@ export function SidebarRow({
   icon,
   label,
   onClick,
+  href,
   trail,
   action,
   current = false,
@@ -141,45 +180,155 @@ export function SidebarRow({
   className,
   children,
 }: SidebarRowProps) {
+  const content = (
+    <>
+      <span
+        className={cn("flex size-4 shrink-0 items-center justify-center", current ? "text-foreground" : "text-muted-foreground")}
+        aria-hidden="true"
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {trail && <span className="ml-auto flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground">{trail}</span>}
+      {children}
+    </>
+  );
+  const shared = {
+    "aria-current": current ? ("page" as const) : undefined,
+    "aria-expanded": expanded,
+    "aria-label": ariaLabel === null ? undefined : (ariaLabel ?? label),
+    "data-testid": testId,
+    "data-onboarding": onboardingId,
+  };
+  const target = "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left";
   return (
     <div
       className={cn(
         "flex h-[var(--row-h)] min-w-0 items-center rounded-md text-ui text-foreground transition-colors hover:bg-foreground/5",
-        current && "bg-foreground/[0.08]",
+        current && "bg-foreground/[0.08] font-medium",
         className,
       )}
     >
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={!onClick}
-        aria-current={current ? "page" : undefined}
-        aria-expanded={expanded}
-        aria-label={ariaLabel === null ? undefined : (ariaLabel ?? label)}
-        data-testid={testId}
-        data-onboarding={onboardingId}
-        className={cn(
-          "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left disabled:cursor-default disabled:opacity-50",
-          FOCUS_INSET,
-        )}
-      >
-        <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground" aria-hidden="true">
-          {icon}
-        </span>
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-        {trail && (
-          <span className="ml-auto flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground">{trail}</span>
-        )}
-        {children}
-      </button>
+      {href ? (
+        <a {...shared} href={href} onClick={routedClick(onClick)} className={cn(target, "no-color text-foreground", FOCUS_INSET)}>
+          {content}
+        </a>
+      ) : (
+        <button
+          {...shared}
+          type="button"
+          onClick={onClick}
+          disabled={!onClick}
+          className={cn(target, "disabled:cursor-default disabled:opacity-50", FOCUS_INSET)}
+        >
+          {content}
+        </button>
+      )}
       {action && <span className="flex shrink-0 items-center pr-1">{action}</span>}
     </div>
   );
 }
 
-/** The footer block under the list: whitespace above it, no rule. */
+// --- Nested rows ----------------------------------------------------------
+
+/**
+ * How far a nested row's text sits in. Depth 0 is a top-level row (the
+ * project shell's app sections, drawn like the forge console's). Depth 1 lines its icon up under the
+ * parent's label (an app's sections under the app); depth 2 lines its label
+ * up with depth 1's (Errors under Issues); depth 3 steps in once more (a
+ * starred dashboard under Dashboards).
+ */
+const SUB_INDENT = ["pl-2", "pl-8", "pl-14", "pl-16"] as const;
+
+export interface SidebarSubRowProps {
+  label: string;
+  /** Depth under the top-level row, 1–3 (0: a top-level row itself). */
+  depth?: 0 | 1 | 2 | 3;
+  icon?: ReactNode;
+  /** The page the row opens; omitted, the row is a button (a group that opens in place). */
+  href?: string;
+  onClick?: () => void;
+  current?: boolean;
+  /** For a group: whether its rows show. Draws the chevron. */
+  expanded?: boolean;
+  /** Quiet trailing content: a count, a mark. */
+  trail?: ReactNode;
+  /** The accessible name, when the trail is only a hint (a shortcut); defaults to the content. */
+  ariaLabel?: string;
+  testId?: string;
+}
+
+/** A row nested under a nav row: an app's console sections, the Workflows area's tabs. */
+export function SidebarSubRow({
+  label,
+  depth = 1,
+  icon,
+  href,
+  onClick,
+  current = false,
+  expanded,
+  trail,
+  ariaLabel,
+  testId,
+}: SidebarSubRowProps) {
+  const content = (
+    <>
+      {icon && (
+        <span
+          className={cn("flex size-4 shrink-0 items-center justify-center", current ? "text-foreground" : "text-muted-foreground")}
+          aria-hidden="true"
+        >
+          {icon}
+        </span>
+      )}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {trail && <span className="ml-auto flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground">{trail}</span>}
+      {expanded !== undefined && (
+        <ChevronRight
+          className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-90")}
+          aria-hidden="true"
+        />
+      )}
+    </>
+  );
+  const target = cn(
+    "flex h-[var(--row-h)] w-full min-w-0 items-center gap-2 rounded-md pr-2 text-left text-ui transition-colors hover:bg-foreground/5 hover:text-foreground",
+    SUB_INDENT[depth],
+    current ? "bg-foreground/[0.08] font-medium text-foreground" : depth === 0 ? "text-foreground" : "text-foreground/75",
+    FOCUS_INSET,
+  );
+  return href ? (
+    <a
+      href={href}
+      onClick={routedClick(onClick)}
+      aria-current={current ? "page" : undefined}
+      aria-expanded={expanded}
+      aria-label={ariaLabel}
+      data-testid={testId}
+      className={cn(target, "no-color")}
+    >
+      {content}
+    </a>
+  ) : (
+    <button type="button" onClick={onClick} aria-expanded={expanded} aria-label={ariaLabel} data-testid={testId} className={target}>
+      {content}
+    </button>
+  );
+}
+
+/** A quiet label over a run of nested rows ("Configure" in an app's sections). */
+export function SidebarSubLabel({ children, depth = 1 }: { children: ReactNode; depth?: 0 | 1 | 2 }) {
+  return (
+    <div className={cn("mt-3 flex h-7 items-center text-meta font-medium text-muted-foreground", SUB_INDENT[depth])}>
+      {children}
+    </div>
+  );
+}
+
+/** The footer block under the nav: a hairline above it, where the nav scrolls under. */
 export function SidebarFooter({ children }: { children: ReactNode }) {
-  return <div className="shrink-0 space-y-0.5 p-2">{children}</div>;
+  // The hairline is the edge the scrolling nav above passes under.
+  return <div className="shrink-0 space-y-0.5 border-t border-border-subtle p-2">{children}</div>;
 }
 
 // --- The Chats heading ----------------------------------------------------
@@ -328,6 +477,71 @@ export function WorkspaceSubheading({
   );
 }
 
+/**
+ * A section of the chat list (U6d, owner): "project · branch" as one small
+ * heading at the list's left edge, its chats under it at the same edge. The
+ * project and the workspace read at a glance without a deep indent.
+ */
+export function ChatSectionHeading({
+  project,
+  branch,
+  expanded,
+  onToggle,
+  trail,
+  actions,
+  testId,
+  onContextMenu,
+}: {
+  project?: string;
+  branch: string;
+  expanded: boolean;
+  onToggle: () => void;
+  /** At rest: a pin, the needs-you dot. */
+  trail?: ReactNode;
+  /** On hover or focus only: New chat here, Archive, the project's menu. */
+  actions?: ReactNode;
+  testId?: string;
+  onContextMenu?: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <div
+      className="group/ws sticky top-0 z-10 mt-2 flex h-7 items-center gap-1 rounded-md bg-background pl-2 pr-1 text-meta text-muted-foreground first:mt-0"
+      data-testid={testId}
+      onContextMenu={onContextMenu}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className={cn("flex h-full min-w-0 flex-1 items-center gap-1 rounded-md text-left hover:text-foreground", FOCUS_INSET)}
+      >
+        {project && (
+          <>
+            <span className="min-w-0 max-w-[60%] shrink-0 truncate font-medium text-foreground/80" title={project}>
+              {project}
+            </span>
+            <span aria-hidden="true">·</span>
+          </>
+        )}
+        <span className="min-w-0 shrink-[2] truncate" title={branch}>
+          {branch}
+        </span>
+        <ChevronRight
+          className={cn(
+            "size-3 shrink-0 transition-transform",
+            expanded ? "hidden rotate-90 group-hover/ws:block group-focus-within/ws:block" : "block",
+          )}
+          aria-hidden="true"
+        />
+        {trail && <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-1">{trail}</span>}
+      </button>
+      {actions && (
+        <span className="hidden shrink-0 items-center group-hover/ws:flex group-focus-within/ws:flex has-[[aria-expanded=true]]:flex">{actions}</span>
+      )}
+    </div>
+  );
+}
+
 // --- Chat rows ------------------------------------------------------------
 
 export interface ChatRowProps {
@@ -337,7 +551,10 @@ export interface ChatRowProps {
   tooltip?: string;
   current?: boolean;
   unread?: boolean;
-  /** Indented under a project's header, so titles line up with its name. */
+  /**
+   * Under a section heading. Rows sit at the list's one left edge either way
+   * (U6d, owner: no deep indent); kept so callers say where a row is.
+   */
   inProject?: boolean;
   /** The 16px state slot at the left (ChatStateSlot). */
   slot?: ReactNode;
@@ -366,7 +583,7 @@ export function ChatRow({
   tooltip,
   current = false,
   unread = false,
-  inProject = false,
+  inProject: _inProject = false,
   slot,
   suffix,
   glyph,
@@ -376,7 +593,7 @@ export function ChatRow({
   onClick,
   onContextMenu,
 }: ChatRowProps) {
-  const indent = inProject ? "pl-8" : "pl-2";
+  const indent = "pl-2";
   return (
     <div
       data-chat-id={chatId}
