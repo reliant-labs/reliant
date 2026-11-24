@@ -4,14 +4,13 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/resmetrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -277,32 +276,45 @@ func TestHeartbeatCarriesToolCallsInFlight(t *testing.T) {
 	}
 }
 
-// The heartbeat carries the host's load and memory, which the gateway logs
-// for the self-hosted machines it watches; a daemon without a reader (or
-// without /proc) leaves them unset.
+// The heartbeat carries the projection of the daemon's resource sample: the
+// host's load and memory (which the gateway logs for the self-hosted machines
+// it watches), the daemon process's own figures and its cgroup's; a daemon
+// without a projector leaves them unset.
 func TestHeartbeatCarriesMachineStats(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "loadavg"), []byte("12.00 6.00 3.00 1/100 42\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "meminfo"), []byte("MemTotal: 1000 kB\nMemAvailable: 250 kB\n"), 0o644))
+	at := time.UnixMilli(1_763_700_000_000)
+	rss, fds := uint64(64<<20), int64(42)
+	snap := resmetrics.Snapshot{
+		At: at,
+		Host: &resmetrics.HostStats{
+			Load:   &resmetrics.LoadAverage{One: 12, Five: 6, Fifteen: 3},
+			Memory: &resmetrics.HostMemory{Total: 1000 * 1024, Available: 250 * 1024},
+		},
+		Process: &resmetrics.ProcessStats{Goroutines: 7, Memory: &resmetrics.ProcessMemory{RSS: rss}, FDCount: &fds},
+		Cgroup:  &resmetrics.CgroupStats{Pressure: resmetrics.Pressure{Memory: &resmetrics.PSI{Some: resmetrics.PSILine{Avg10: 0.25}}}},
+	}
+	latest := func() resmetrics.Snapshot { return snap }
 
 	for name, tc := range map[string]struct {
-		reader *machinehealth.HostStats
-		want   bool
+		resources *machinehealth.Resources
+		want      bool
 	}{
-		"reader":    {machinehealth.NewHostStats(root, 4), true},
-		"no reader": {nil, false},
+		"projector":    {machinehealth.NewResources(latest, 4), true},
+		"no projector": {nil, false},
 	} {
 		t.Run(name, func(t *testing.T) {
-			d := &daemonClient{timing: sessionTiming{heartbeatInterval: 10 * time.Millisecond}, hostStats: tc.reader}
+			d := &daemonClient{timing: sessionTiming{heartbeatInterval: 10 * time.Millisecond}, resources: tc.resources}
 			s := newTestSession(8)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			go d.runHeartbeats(ctx, s, nil)
 			select {
 			case msg := <-s.sendCh:
-				st := msg.GetHeartbeat().GetMachineStats()
+				hb := msg.GetHeartbeat()
+				st := hb.GetMachineStats()
 				if !tc.want {
 					require.Nil(t, st)
+					require.Nil(t, hb.GetProcessStats())
+					require.Nil(t, hb.GetCgroupStats())
 					return
 				}
 				require.NotNil(t, st)
@@ -310,7 +322,11 @@ func TestHeartbeatCarriesMachineStats(t *testing.T) {
 				assert.Equal(t, 4.0, st.GetCpus())
 				assert.Equal(t, uint64(1000*1024), st.GetMemTotalBytes())
 				assert.Equal(t, uint64(250*1024), st.GetMemAvailableBytes())
-				assert.Positive(t, st.GetSampledAtMs())
+				assert.Equal(t, at.UnixMilli(), st.GetSampledAtMs())
+				assert.Equal(t, rss, hb.GetProcessStats().GetRssBytes())
+				assert.Equal(t, fds, hb.GetProcessStats().GetOpenFds())
+				assert.Equal(t, int64(7), hb.GetProcessStats().GetGoroutines())
+				assert.Equal(t, 0.25, hb.GetCgroupStats().GetMemorySomeAvg10())
 			case <-time.After(5 * time.Second):
 				t.Fatal("no heartbeat")
 			}

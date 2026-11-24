@@ -68,6 +68,7 @@ type (
 	CreateWorktreePRResponse                 = sdk.CreateWorktreePRResponse
 	CreateWorktreeRequest                    = sdk.CreateWorktreeRequest
 	CreateWorktreeResponse                   = sdk.CreateWorktreeResponse
+	DaemonCgroupStats                        = sdk.DaemonCgroupStats
 	DaemonCommandFailed                      = sdk.DaemonCommandFailed
 	DaemonCommandRequest                     = sdk.DaemonCommandRequest
 	DaemonCommandResponse                    = sdk.DaemonCommandResponse
@@ -90,7 +91,9 @@ type (
 	DaemonMessage_TerminalOutput             = sdk.DaemonMessage_TerminalOutput
 	DaemonMessage_TerminalSessionEvent       = sdk.DaemonMessage_TerminalSessionEvent
 	DaemonMessage_ToolResponse               = sdk.DaemonMessage_ToolResponse
+	DaemonProcessStats                       = sdk.DaemonProcessStats
 	DaemonRegister                           = sdk.DaemonRegister
+	DaemonResourceStats                      = sdk.DaemonResourceStats
 	DaemonUpgradeState                       = sdk.DaemonUpgradeState
 	DaemonUpgradeStatus                      = sdk.DaemonUpgradeStatus
 	DeleteChatRequest                        = sdk.DeleteChatRequest
