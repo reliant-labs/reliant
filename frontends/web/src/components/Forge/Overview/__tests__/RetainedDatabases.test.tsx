@@ -34,8 +34,8 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => {
   return {
     ...actual,
     hasCloudControlPlane: () => true,
-    listRetainedDatabases: (...args: unknown[]) => listRetainedDatabases(...args),
-    purgeRetainedDatabase: (...args: unknown[]) => purgeRetainedDatabase(...args),
+    listRetainedDatabases: (_transport: unknown, ...args: unknown[]) => listRetainedDatabases(...args),
+    purgeRetainedDatabase: (_transport: unknown, ...args: unknown[]) => purgeRetainedDatabase(...args),
   };
 });
 
