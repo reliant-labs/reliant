@@ -42,8 +42,14 @@ import { STARTUP_SPINNER_MARKUP } from "./components/icons/StartupSpinnerMark";
 import { prefetchMonaco } from "./lib/monacoManager";
 import { shouldPreloadMonaco } from "./lib/monacoPreload";
 import { isDemoShell } from "./lib/shell";
-import { waitForConfig, isConfigReady } from "./lib/configReady";
+import { waitForConfig, isConfigReady, renderConfigError } from "./lib/configReady";
+import { bootFixtures } from "./lib/fixturesBoot";
 // globalDataStore prefetch is now called from AuthGuard after authentication
+
+// Fixture mode (lib/fixturesConfig.ts): when config.js names a fixture pack,
+// its lazy chunk starts loading now and is installed before the first render
+// below. Without the key this resolves at once and loads nothing.
+const fixtures = bootFixtures();
 
 // CRITICAL: Wait for Electron's host config BEFORE any gRPC/API calls
 // In production Electron builds, RELIANT_CONFIG (the local daemon URL and other
@@ -111,6 +117,16 @@ if (!isDemoShell() && shouldPreloadMonaco(window.location.pathname)) {
 
 // NOTE: Static data prefetch moved to AuthGuard.tsx to run AFTER authentication is ready
 // This prevents 401 errors when prefetch runs before auth token is available
+
+// A fixture page that cannot install its pack stops here, naming why, rather
+// than rendering the app against backends its document never meant to reach.
+try {
+  await fixtures;
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  renderConfigError([`Fixture mode (FIXTURES_SCENARIO) could not start: ${message}`]);
+  throw error;
+}
 
 // NOTE: StrictMode is intentionally disabled to avoid double-mounting effects
 // which causes issues with WebSocket connections and gRPC streams

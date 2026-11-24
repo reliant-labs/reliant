@@ -44,7 +44,7 @@ import { createFixtureTransport } from "../../transport";
 import { APP_LAYER_ANSWERS, appLayerScenarioHandlers, shopAppPack } from "../app";
 import { chatStreamEvents, streamingImpl } from "../handlers/reliant/streaming";
 import { SHOP_READ_ONLY_MESSAGE, shopScenario } from "../index";
-import { DATA_ANCHOR, fixtureJson, packJson } from "../packJson";
+import { DATA_ANCHOR, decodeFixtureJson, packJson } from "../packJson";
 import { HOUR, demoNow, resetDemoNowForTests } from "../shopStory";
 import { CHAT_IDS, PROJECT_IDS, WORKTREE_IDS } from "../workspace";
 
@@ -136,11 +136,22 @@ describe("the app layer", () => {
   });
 
   it("serves the demo pack under it", () => {
-    const scenario = shopAppPack({ now: FIXED_NOW }).scenario;
+    const pack = shopAppPack({ now: FIXED_NOW });
+    expect(pack.extends?.map((layer) => layer.name)).toEqual(["shop"]);
+    const scenario = pack.scenario;
     const resolved = typeof scenario === "function" ? scenario({ now: demoNow, idPrefix: "", id: (s) => s, data: {} }) : scenario;
-    const keys = Object.keys((resolved as { handlers: object }).handlers);
-    for (const key of Object.keys(shopScenario().handlers)) expect(keys).toContain(key);
-    for (const key of Object.keys(appLayerScenarioHandlers())) expect(keys).toContain(key);
+    expect(Object.keys(resolved ?? {}).sort()).toEqual(Object.keys(appLayerScenarioHandlers()).sort());
+    expect(Object.keys(shopScenario().handlers).length).toBeGreaterThan(0);
+  });
+
+  it("answers its five side-effecting reads under readOnly: true, and refuses a write", async () => {
+    const strict = createFixtureTransport({ pack: shopAppPack({ now: FIXED_NOW }), now: demoNow, readOnly: true, readOnlyMessage: SHOP_READ_ONLY_MESSAGE });
+    for (const key of APP_LAYER_ANSWERS) {
+      const method = METHODS.get(key)!;
+      const res = await strict.unary(method as DescMethodUnary, undefined, undefined, undefined, create(method.input, REQUESTS[key] as never), undefined);
+      expectWireSafe(method.output, res.message);
+    }
+    await expect(createClient(ChatService, strict).deleteChat({ chatId: CHAT_IDS.cartTotals })).rejects.toThrow(SHOP_READ_ONLY_MESSAGE);
   });
 
   it("tells the fixture chat's story: the transcript without the client-only failed send, the stream with it", async () => {
@@ -200,9 +211,9 @@ describe("the app layer's data/*.json", () => {
   ];
 
   it.each(FILES)("%s loads strictly", (_name, schema, text) => {
-    expectWireSafe(schema, fixtureJson(schema, text));
+    expectWireSafe(schema, decodeFixtureJson(schema, text));
     // An unknown key is a load error, not a silently dropped field.
-    expect(() => fixtureJson(schema, { ...JSON.parse(text), notAField: true })).toThrow(/notAField/);
+    expect(() => decodeFixtureJson(schema, { ...JSON.parse(text), notAField: true })).toThrow(/notAField/);
   });
 
   it("moves every instant onto the pack clock, and nothing under the harness's", () => {
