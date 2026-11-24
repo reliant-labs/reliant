@@ -200,9 +200,18 @@ async function checkSampleImage(page) {
     return ["the sample image's preview ([data-testid=storage-preview-image]) did not render"];
   }
   const src = (await img.getAttribute("src")) ?? "";
+  if (!src.trim()) return ["the sample image's preview URL is empty"];
   const problems = [];
   if (new URL(src, base).origin !== origin) problems.push(`the sample image's preview URL is not same-origin: ${src}`);
   if (PRESIGNED.test(src)) problems.push(`the sample image's preview URL looks presigned: ${src}`);
+  try {
+    await page.waitForFunction(() => {
+      const image = document.querySelector('[data-testid="storage-preview-image"]');
+      return image?.complete && image.naturalWidth > 0;
+    }, null, { timeout: 15000 });
+  } catch {
+    problems.push(`the sample image's preview did not load: ${src}`);
+  }
   return problems;
 }
 
