@@ -239,12 +239,14 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+SettingsServiceListSettingsProcedure,
 			connect.WithSchema(settingsServiceMethods.ByName("ListSettings")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getSetting: connect.NewClient[v1.GetSettingRequest, v1.GetSettingResponse](
 			httpClient,
 			baseURL+SettingsServiceGetSettingProcedure,
 			connect.WithSchema(settingsServiceMethods.ByName("GetSetting")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateSetting: connect.NewClient[v1.UpdateSettingRequest, v1.UpdateSettingResponse](
@@ -269,6 +271,7 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+SettingsServiceGetShortcutsProcedure,
 			connect.WithSchema(settingsServiceMethods.ByName("GetShortcuts")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateShortcuts: connect.NewClient[v1.UpdateShortcutsRequest, v1.UpdateShortcutsResponse](
@@ -281,6 +284,7 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+SettingsServiceGetPreferencesProcedure,
 			connect.WithSchema(settingsServiceMethods.ByName("GetPreferences")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updatePreferences: connect.NewClient[v1.UpdatePreferencesRequest, v1.UpdatePreferencesResponse](
@@ -299,6 +303,7 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+SettingsServiceGetPromptsProcedure,
 			connect.WithSchema(settingsServiceMethods.ByName("GetPrompts")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		savePrompts: connect.NewClient[v1.SavePromptsRequest, v1.SavePromptsResponse](
@@ -311,6 +316,7 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+SettingsServiceGetProviderStatusesProcedure,
 			connect.WithSchema(settingsServiceMethods.ByName("GetProviderStatuses")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		validateProviderAPIKey: connect.NewClient[v1.ValidateProviderAPIKeyRequest, v1.ValidateProviderAPIKeyResponse](
@@ -359,6 +365,7 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+SettingsServiceGetPrivacySettingsProcedure,
 			connect.WithSchema(settingsServiceMethods.ByName("GetPrivacySettings")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updatePrivacySettings: connect.NewClient[v1.UpdatePrivacySettingsRequest, v1.UpdatePrivacySettingsResponse](
@@ -389,12 +396,14 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+SettingsServiceListInstalledSkillsProcedure,
 			connect.WithSchema(settingsServiceMethods.ByName("ListInstalledSkills")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getInstalledSkillDefinition: connect.NewClient[v1.GetInstalledSkillDefinitionRequest, v1.GetInstalledSkillDefinitionResponse](
 			httpClient,
 			baseURL+SettingsServiceGetInstalledSkillDefinitionProcedure,
 			connect.WithSchema(settingsServiceMethods.ByName("GetInstalledSkillDefinition")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setSkillEnabled: connect.NewClient[v1.SetSkillEnabledRequest, v1.SetSkillEnabledResponse](
@@ -407,6 +416,7 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+SettingsServiceListRecommendedSkillsProcedure,
 			connect.WithSchema(settingsServiceMethods.ByName("ListRecommendedSkills")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		deleteGlobalSkill: connect.NewClient[v1.DeleteGlobalSkillRequest, v1.DeleteGlobalSkillResponse](
@@ -722,12 +732,14 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		SettingsServiceListSettingsProcedure,
 		svc.ListSettings,
 		connect.WithSchema(settingsServiceMethods.ByName("ListSettings")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	settingsServiceGetSettingHandler := connect.NewUnaryHandler(
 		SettingsServiceGetSettingProcedure,
 		svc.GetSetting,
 		connect.WithSchema(settingsServiceMethods.ByName("GetSetting")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	settingsServiceUpdateSettingHandler := connect.NewUnaryHandler(
@@ -752,6 +764,7 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		SettingsServiceGetShortcutsProcedure,
 		svc.GetShortcuts,
 		connect.WithSchema(settingsServiceMethods.ByName("GetShortcuts")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	settingsServiceUpdateShortcutsHandler := connect.NewUnaryHandler(
@@ -764,6 +777,7 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		SettingsServiceGetPreferencesProcedure,
 		svc.GetPreferences,
 		connect.WithSchema(settingsServiceMethods.ByName("GetPreferences")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	settingsServiceUpdatePreferencesHandler := connect.NewUnaryHandler(
@@ -782,6 +796,7 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		SettingsServiceGetPromptsProcedure,
 		svc.GetPrompts,
 		connect.WithSchema(settingsServiceMethods.ByName("GetPrompts")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	settingsServiceSavePromptsHandler := connect.NewUnaryHandler(
@@ -794,6 +809,7 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		SettingsServiceGetProviderStatusesProcedure,
 		svc.GetProviderStatuses,
 		connect.WithSchema(settingsServiceMethods.ByName("GetProviderStatuses")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	settingsServiceValidateProviderAPIKeyHandler := connect.NewUnaryHandler(
@@ -842,6 +858,7 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		SettingsServiceGetPrivacySettingsProcedure,
 		svc.GetPrivacySettings,
 		connect.WithSchema(settingsServiceMethods.ByName("GetPrivacySettings")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	settingsServiceUpdatePrivacySettingsHandler := connect.NewUnaryHandler(
@@ -872,12 +889,14 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		SettingsServiceListInstalledSkillsProcedure,
 		svc.ListInstalledSkills,
 		connect.WithSchema(settingsServiceMethods.ByName("ListInstalledSkills")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	settingsServiceGetInstalledSkillDefinitionHandler := connect.NewUnaryHandler(
 		SettingsServiceGetInstalledSkillDefinitionProcedure,
 		svc.GetInstalledSkillDefinition,
 		connect.WithSchema(settingsServiceMethods.ByName("GetInstalledSkillDefinition")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	settingsServiceSetSkillEnabledHandler := connect.NewUnaryHandler(
@@ -890,6 +909,7 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		SettingsServiceListRecommendedSkillsProcedure,
 		svc.ListRecommendedSkills,
 		connect.WithSchema(settingsServiceMethods.ByName("ListRecommendedSkills")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	settingsServiceDeleteGlobalSkillHandler := connect.NewUnaryHandler(

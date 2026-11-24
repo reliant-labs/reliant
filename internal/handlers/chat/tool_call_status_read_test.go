@@ -7,15 +7,18 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // Status is durable in tool_calls, but before this the read path never
@@ -46,9 +49,11 @@ func TestGetMessage_PopulatesDurableToolCallStatus(t *testing.T) {
 	}))
 
 	svc, err := message.New(message.Deps{
-		Logger: slog.Default(),
-		Config: &typedconfig.Config{},
-		Repo:   repo,
+		Logger:  slog.Default(),
+		Config:  &typedconfig.Config{},
+		Repo:    repo,
+		Chats:   store.NewChatExtStore(repo.ORM()),
+		Senders: store.NewThreadExtStore(repo.ORM()),
 	})
 	require.NoError(t, err)
 	resp, err := svc.GetMessage(ctx, connect.NewRequest(&reliantv1.GetMessageRequest{
@@ -85,7 +90,7 @@ func TestListMessages_PopulatesDurableToolCallStatus(t *testing.T) {
 		UpdatedAt:   time.Now().UTC(),
 	}))
 
-	svc := &Service{deps: Deps{Repo: repo}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}}
 	resp, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
 		ChatId: f.ChatID,
 	}))

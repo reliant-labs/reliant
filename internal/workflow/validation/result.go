@@ -47,6 +47,7 @@ const (
 	CategoryToolTag           Category = "tool_tag"           // a tools-typed input value names a tag outside the vocabulary (an error only when authoring)
 	CategoryTrigger           Category = "trigger"            // triggers: a declared trigger that cannot be activated or cannot run
 	CategoryCredentials       Category = "credentials"        // a credentials: value the daemon refuses (an error only when authoring)
+	CategoryObserve           Category = "observe"            // an observe: block's shape or expressions (always a warning: observability never stops a run)
 )
 
 // Error represents a single validation issue.

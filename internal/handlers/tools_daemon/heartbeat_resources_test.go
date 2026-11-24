@@ -19,13 +19,13 @@ import (
 // heartbeat with no reading (a daemon that predates it) writes nothing.
 func TestRecordResourceStats(t *testing.T) {
 	var writes []string
-	svc := newTestService(&MockRepository{
-		UpdateDaemonAttachmentResourcesFunc: func(_ context.Context, daemonID, statsJSON string) error {
+	svc := newTestServiceWithLeases(&MockRepository{}, &MockAttachments{
+		SetDaemonAttachmentResourcesFunc: func(_ context.Context, daemonID, statsJSON string) error {
 			assert.Equal(t, "daemon-1", daemonID)
 			writes = append(writes, statsJSON)
 			return nil
 		},
-	})
+	}, nil)
 	t.Cleanup(svc.Close)
 	conn := &daemonConnection{daemonID: "daemon-1"}
 	ctx := context.Background()

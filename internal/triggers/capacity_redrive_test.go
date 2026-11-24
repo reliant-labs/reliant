@@ -11,12 +11,19 @@ import (
 
 type capacityRedriveRepo struct {
 	EventRepo
+	idleCapacity
 	events  []*core.TriggerEvent
 	settled []string
 }
 
 func (r *capacityRedriveRepo) ListStalePendingTriggerEvents(context.Context, time.Time, int) ([]*core.TriggerEvent, error) {
 	return r.events, nil
+}
+
+// GetTrigger finds none: the redriver reads a settled event's trigger only
+// to name it on its span.
+func (r *capacityRedriveRepo) GetTrigger(context.Context, string) (*core.Trigger, error) {
+	return nil, core.ErrTriggerNotFound
 }
 func (r *capacityRedriveRepo) SettlePendingTriggerEvent(_ context.Context, id string, _ core.TriggerEventOutcome, _ string, _ *core.TriggerEventDefinition) (bool, error) {
 	r.settled = append(r.settled, id)
@@ -47,14 +54,16 @@ func TestCapacityQueueExpiresButLaunchedStartIsRedriven(t *testing.T) {
 type capacityExpiryRepo struct {
 	*capacityRedriveRepo
 	expiredBefore []time.Time
+	// expired is what the sweep reports it settled.
+	expired []*core.TriggerEvent
 }
 
-func (r *capacityExpiryRepo) ExpirePendingTriggerCapacityEvents(_ context.Context, recordedBefore time.Time, detail string, _ int) (int64, error) {
+func (r *capacityExpiryRepo) ExpirePendingTriggerCapacityEvents(_ context.Context, recordedBefore time.Time, detail string, _ int) ([]*core.TriggerEvent, error) {
 	if detail != capacityExpiredDetail {
-		return 0, nil
+		return nil, nil
 	}
 	r.expiredBefore = append(r.expiredBefore, recordedBefore)
-	return 1, nil
+	return r.expired, nil
 }
 
 // The listing returns one head per scope in priority order, so an expired

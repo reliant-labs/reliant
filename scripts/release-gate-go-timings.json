@@ -180,7 +180,6 @@
   "github.com/reliant-labs/reliant/internal/mcp/catalog": 1,
   "github.com/reliant-labs/reliant/internal/mcp/compat": 1,
   "github.com/reliant-labs/reliant/internal/mcp/protocol": 1,
-  "github.com/reliant-labs/reliant/internal/mcp/serverclient": 1,
   "github.com/reliant-labs/reliant/internal/mcp/service": 1,
   "github.com/reliant-labs/reliant/internal/mcpserver": 2,
   "github.com/reliant-labs/reliant/internal/memtemp": 1,

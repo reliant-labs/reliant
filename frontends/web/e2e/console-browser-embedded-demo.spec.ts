@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
 
-/** Full-product Vite server, selecting its public forge shell (not the static demo bundle). */
-test('forge shell embedded demo keeps Data and Storage routes synthetic', async ({ page }) => {
+/** Full-product Vite server, selecting the demo shell (?shell=demo; the app's own /forge/demo leaves for the demo host). */
+test('demo shell keeps Data and Storage routes synthetic', async ({ page }) => {
   test.skip(!process.env.EMBEDDED_DEMO_PROOF, 'Requires full-product Vite and EMBEDDED_DEMO_PROOF=1');
   await page.setViewportSize({ width: 390, height: 900 });
   const backend: string[] = [];
   page.on('request', (request) => { if (/controlplane\.v1|supabase.*auth\/token/.test(request.url())) backend.push(request.url()); });
-  await page.goto('/forge/demo?shell=forge&browser=data&envs=%5B%22staging%22%5D&db=shop&table=public.users');
+  await page.goto('/forge/demo?shell=demo&browser=data&envs=%5B%22staging%22%5D&db=shop&table=public.users');
   await expect(page.getByTestId('data-grid')).toHaveAttribute('data-state', 'ready', { timeout: 20000 });
   await expect(page.getByText('maya@example.com', { exact: true })).toBeVisible();
   await page.getByTestId('data-row-open').first().click();

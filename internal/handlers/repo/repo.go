@@ -50,7 +50,7 @@ func (s *Service) authorizeRepo(ctx context.Context, repoID, userID string) (*co
 	if err != nil {
 		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to get repo"))
 	}
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, repo.ProjectID, userID)
+	project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, repo.ProjectID, userID)
 	if err != nil {
 		// Someone else's project: the repo is not found, so the answer never
 		// reveals that it exists.
@@ -64,7 +64,7 @@ func (s *Service) authorizeRepo(ctx context.Context, repoID, userID string) (*co
 
 // authorizeProject verifies the caller owns the named project.
 func (s *Service) authorizeProject(ctx context.Context, projectID, userID string) (*db.Project, error) {
-	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
+	project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		// Missing and someone else's are the store's one NotFound.
 		return nil, svcerr.WrapOr(err, svcerr.Internal("database error"))

@@ -26,6 +26,10 @@ export interface InstallRow {
   project_id: string;
   daemon_id: string;
   install_state: ProjectInstallState;
+  /** Where the checkout is (or is landing) on that machine. */
+  path?: string;
+  /** Why the last clone failed, as the machine reported it. */
+  install_error?: string;
 }
 
 /**
@@ -41,6 +45,8 @@ export interface ProjectPlacement {
   /** The project has an install record somewhere, so absence means something. */
   known: boolean;
   stateOn(daemonId: string): PlacementState;
+  /** Why the clone onto this machine failed, when it did and the machine said. */
+  failureOn(daemonId: string): string | undefined;
 }
 
 const STATE_OF_INSTALL: Record<ProjectInstallState, PlacementState> = {
@@ -55,6 +61,7 @@ export function projectPlacement(
   projectId: string | undefined,
 ): ProjectPlacement {
   const byDaemon = new Map<string, PlacementState>();
+  const failures = new Map<string, string>();
   if (projectId) {
     for (const row of installs) {
       if (row.project_id !== projectId) continue;
@@ -63,11 +70,14 @@ export function projectPlacement(
       // holds two, the better state wins.
       const prior = byDaemon.get(row.daemon_id);
       if (!prior || STATE_RANK[state] < STATE_RANK[prior]) byDaemon.set(row.daemon_id, state);
+      const reason = row.install_error?.trim();
+      if (state === "failed" && reason) failures.set(row.daemon_id, reason);
     }
   }
   return {
     known: byDaemon.size > 0,
     stateOn: (daemonId) => byDaemon.get(daemonId) ?? "absent",
+    failureOn: (daemonId) => (byDaemon.get(daemonId) === "failed" ? failures.get(daemonId) : undefined),
   };
 }
 
@@ -91,6 +101,56 @@ export function canChoose(placement: ProjectPlacement, daemonId: string): boolea
 /** Whether the project can be put on another machine: only a repository can be cloned. */
 export function canSetUpElsewhere(project: { remote_url?: string } | null | undefined): boolean {
   return Boolean(project?.remote_url);
+}
+
+/**
+ * The folder to clone the project into on `daemonId`, or undefined to let
+ * the server choose the machine's default projects directory.
+ *
+ * `path` (the project's path) is a folder on the machine the project was
+ * added from. It is reused only on a machine of the same platform as one
+ * that has the checkout there: a second Mac of the same user takes the same
+ * /Users/… path, but a Linux machine cannot create /Users at all. On
+ * 2026-11-23 setting up a project added from a Mac on a Linux build host
+ * failed at once with "mkdir /Users: permission denied", and "Try again"
+ * sent the same path again. A machine of the target's platform that has the
+ * checkout elsewhere names the folder instead; no such machine, the server's
+ * default.
+ *
+ * Nothing to judge by (no other machine has the checkout, or the target's
+ * platform is not reported) keeps `path`, as before.
+ */
+export function setUpPathOn({
+  installs,
+  projectId,
+  path,
+  daemonId,
+  platformOf,
+}: {
+  installs: ReadonlyArray<InstallRow>;
+  projectId: string;
+  path: string | undefined;
+  daemonId: string;
+  platformOf: (daemonId: string) => string | undefined;
+}): string | undefined {
+  const wanted = path?.trim() || undefined;
+  const platform = (id: string) => platformOf(id)?.trim().toLowerCase() || undefined;
+  const target = platform(daemonId);
+  const holders = installs.filter(
+    (row) =>
+      row.project_id === projectId &&
+      row.daemon_id !== daemonId &&
+      row.install_state === ProjectInstallState.INSTALLED,
+  );
+  if (!target || holders.length === 0) return wanted;
+  // The project's path, where a machine like this one (or one of no known
+  // platform) has it.
+  if (wanted && holders.some((row) => (row.path ?? wanted) === wanted && (platform(row.daemon_id) ?? target) === target)) {
+    return wanted;
+  }
+  // Else where a machine of this platform has it.
+  const alike = holders.find((row) => row.path?.trim() && platform(row.daemon_id) === target);
+  return alike?.path?.trim();
 }
 
 export interface PlacementSections<T> {
@@ -144,8 +204,13 @@ export function startBlockedReason({
       return null;
     case "setting_up":
       return `Setting up ${projectName} on ${machineName}. You can send once it's there.`;
-    case "failed":
-      return `Setting up ${projectName} on ${machineName} failed. Try again, or pick a machine it's on.`;
+    case "failed": {
+      // The machine's reason, when it gave one: "Try again" alone reads as
+      // transient, and most clone failures (a path, a credential) are not.
+      const reason = placement.failureOn(daemonId)?.replace(/[.\s]+$/, "");
+      const why = reason ? `: ${reason}.` : ".";
+      return `Setting up ${projectName} on ${machineName} failed${why} Try again, or pick a machine it's on.`;
+    }
     case "absent":
       return `${projectName} isn't set up on ${machineName}. Set it up there, or pick a machine it's on.`;
   }

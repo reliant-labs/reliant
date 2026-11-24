@@ -75,11 +75,11 @@ func (s *Service) cancelChildWorkflowForToolCall(ctx context.Context, toolCallID
 	// link (CreateWorkflowWithThread always sets it, new or resumed), so read
 	// it rather than assuming the two ids coincide.
 	childThreadID := childWorkflowID
-	if wf, wfErr := s.deps.Repo.GetWorkflow(ctx, childWorkflowID); wfErr == nil && wf != nil && wf.Thread != "" {
+	if wf, wfErr := s.deps.Workflows.LoadWorkflow(ctx, childWorkflowID); wfErr == nil && wf != nil && wf.Thread != "" {
 		childThreadID = wf.Thread
 	}
 
-	stopper := rtemporal.NewSpawnStopper(s.deps.Temporal, chatWorkflowIDLookup(s.deps.Repo), s.deps.Repo)
+	stopper := rtemporal.NewSpawnStopper(s.deps.Temporal, chatWorkflowIDLookup(s.deps.Chats), s.deps.Repo)
 	return stopper.StopSpawn(ctx, call.ChatID, rtemporal.SpawnRef{
 		ThreadID:   childThreadID,
 		WorkflowID: childWorkflowID,
@@ -87,9 +87,9 @@ func (s *Service) cancelChildWorkflowForToolCall(ctx context.Context, toolCallID
 	})
 }
 
-// chatReader reads one chat; Repository satisfies it.
+// chatReader reads one chat's own row; Chats satisfies it.
 type chatReader interface {
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetChatRow(ctx context.Context, id string) (*core.ChatRow, error)
 }
 
 // chatWorkflowIDLookup resolves a chat id to the Temporal workflow id driving
@@ -106,7 +106,7 @@ func chatWorkflowIDLookup(repo chatReader) func(ctx context.Context, chatID stri
 		if repo == nil {
 			return "", false
 		}
-		chat, err := repo.GetChat(ctx, chatID)
+		chat, err := repo.GetChatRow(ctx, chatID)
 		if err != nil || chat == nil || chat.WorkflowID == nil || *chat.WorkflowID == "" {
 			return "", false
 		}

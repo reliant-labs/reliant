@@ -187,8 +187,12 @@ PermissionDenied (scope_missing) on the rest. Valid scopes:
 			// The same choice as `reliant auth login`: the browser flow's
 			// callback needs a browser on this machine, the device flow does
 			// not. Prompts go to stderr so stdout carries only the token.
-			flow := chooseLoginFlow(forceDevice, forceBrowser,
-				os.Getenv, //nolint:forbidigo // SSH_*, DISPLAY, RELIANT_DAEMON_TYPE and the agent-shell marker describe the host this process runs on, not configuration of it
+			managed, err := isManagedMachine(cmd)
+			if err != nil {
+				return err
+			}
+			flow := chooseLoginFlow(forceDevice, forceBrowser, managed,
+				os.Getenv, //nolint:forbidigo // SSH_*, DISPLAY/WAYLAND_DISPLAY and the agent-shell marker describe the host's session, not configuration of this process
 				runtime.GOOS)
 			prompts := cmd.ErrOrStderr()
 			if flow.Device {

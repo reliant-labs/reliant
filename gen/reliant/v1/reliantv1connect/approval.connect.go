@@ -83,6 +83,7 @@ func NewApprovalServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+ApprovalServiceListApprovalsByChatProcedure,
 			connect.WithSchema(approvalServiceMethods.ByName("ListApprovalsByChat")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		approve: connect.NewClient[v1.ApproveRequest, v1.ApproveResponse](
@@ -175,6 +176,7 @@ func NewApprovalServiceHandler(svc ApprovalServiceHandler, opts ...connect.Handl
 		ApprovalServiceListApprovalsByChatProcedure,
 		svc.ListApprovalsByChat,
 		connect.WithSchema(approvalServiceMethods.ByName("ListApprovalsByChat")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	approvalServiceApproveHandler := connect.NewUnaryHandler(

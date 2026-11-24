@@ -993,9 +993,9 @@ const file_reliant_v1_model_endpoint_proto_rawDesc = "" +
 	"\x12ModelEndpointRoute\x12$\n" +
 	" MODEL_ENDPOINT_ROUTE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bMODEL_ENDPOINT_ROUTE_DIRECT\x10\x01\x12#\n" +
-	"\x1fMODEL_ENDPOINT_ROUTE_VIA_DAEMON\x10\x022\xdc\x05\n" +
-	"\x14ModelEndpointService\x12e\n" +
-	"\x12ListModelEndpoints\x12%.reliant.v1.ListModelEndpointsRequest\x1a&.reliant.v1.ListModelEndpointsResponse\"\x00\x12h\n" +
+	"\x1fMODEL_ENDPOINT_ROUTE_VIA_DAEMON\x10\x022\xdf\x05\n" +
+	"\x14ModelEndpointService\x12h\n" +
+	"\x12ListModelEndpoints\x12%.reliant.v1.ListModelEndpointsRequest\x1a&.reliant.v1.ListModelEndpointsResponse\"\x03\x90\x02\x01\x12h\n" +
 	"\x13CreateModelEndpoint\x12&.reliant.v1.CreateModelEndpointRequest\x1a'.reliant.v1.CreateModelEndpointResponse\"\x00\x12\xa4\x01\n" +
 	"\x13UpdateModelEndpoint\x12&.reliant.v1.UpdateModelEndpointRequest\x1a'.reliant.v1.UpdateModelEndpointResponse\"<\xa2\xbb\x188:6\n" +
 	"\x06update\x12,\n" +

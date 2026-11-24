@@ -12,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestGenerateFixture_AskUserYieldsToMessage pins an ask_user wait ended by a
@@ -81,7 +82,7 @@ func TestGenerateFixture_AskUserAsyncByDefault(t *testing.T) {
 	assert.False(t, h.LLM.Exhausted())
 	assert.Equal(t, h.LLM.Scripted(), h.LLM.Consumed(), "the loop carried on past the question without waiting")
 
-	asked, err := h.Stack.Repo.ListAsyncQuestionsByChat(h.Ctx, created.Chat.Id)
+	asked, err := store.NewQuestionExtStore(h.Stack.Repo.ORM()).ListAsyncQuestionsByChat(h.Ctx, created.Chat.Id)
 	require.NoError(t, err)
 	require.Len(t, asked, 1, "the question is recorded as async")
 	assert.Equal(t, db.QuestionStatusPending, asked[0].Status, "nothing in the run waits on it or closes it")

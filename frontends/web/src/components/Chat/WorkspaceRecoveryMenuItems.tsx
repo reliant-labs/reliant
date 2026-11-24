@@ -51,7 +51,7 @@ export function WorkspaceRecoveryMenuItems({
   const handleRecreate = async () => {
     onSelect?.();
     try {
-      const result = await recreate.mutateAsync(worktree.id);
+      const result = await recreate.mutateAsync({ worktreeId: worktree.id });
       toast.success(result.message || `Workspace ${workspaceName} recreated`, { duration: 6000 });
     } catch (err) {
       void toast.error(err, { duration: 10000 });

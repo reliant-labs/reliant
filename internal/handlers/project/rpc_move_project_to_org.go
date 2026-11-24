@@ -61,7 +61,7 @@ func (s *Service) MoveProjectToOrg(
 	}
 	// A retried request is the move it made, shown as GetProjectOrgMove
 	// would show it.
-	if prior, err := s.deps.Repo.FindProjectOrgMoveByRequest(ctx, userID, req.Msg.GetRequestKey()); err == nil {
+	if prior, err := s.deps.Ledger.FindProjectOrgMoveByRequest(ctx, userID, req.Msg.GetRequestKey()); err == nil {
 		if !canReadMove(ctx, userID, prior) {
 			return nil, svcerr.NotFound("project move")
 		}
@@ -71,7 +71,7 @@ func (s *Service) MoveProjectToOrg(
 	}
 
 	projectID, to := req.Msg.GetProjectId(), req.Msg.GetToOrgId()
-	project, err := s.deps.Repo.GetProject(ctx, projectID)
+	project, err := s.deps.ProjectRows.GetProject(ctx, projectID)
 	if err != nil && !errors.Is(err, svcerr.ErrNotFound) {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load the project"))
 	}
@@ -83,7 +83,7 @@ func (s *Service) MoveProjectToOrg(
 		return nil, svcerr.WithReason(svcerr.FailedPrecondition(
 			"the project is no longer in the organization you moved it from; reload and try again"), ReasonOrgChanged)
 	}
-	blockers, err := s.deps.Repo.ProjectOrgMoveBlockers(ctx, projectID)
+	blockers, err := s.deps.Ledger.ProjectOrgMoveBlockers(ctx, projectID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the project's running work"))
 	}
@@ -100,7 +100,7 @@ func (s *Service) MoveProjectToOrg(
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to assign the project its organization"))
 		}
 	}
-	move, _, err := s.deps.Repo.InsertProjectOrgMove(ctx, &core.ProjectOrgMove{
+	move, _, err := s.deps.Ledger.InsertProjectOrgMove(ctx, &core.ProjectOrgMove{
 		ID:          uuid.NewString(),
 		ProjectID:   projectID,
 		OwnerUserID: project.UserID,
@@ -135,7 +135,7 @@ func (s *Service) followMove(ctx context.Context, move *core.ProjectOrgMove) (*c
 			return nil, svcerr.Wrap(ctx.Err())
 		case <-time.After(movePoll):
 		}
-		next, err := s.deps.Repo.GetProjectOrgMove(ctx, move.ID)
+		next, err := s.deps.Ledger.GetProjectOrgMove(ctx, move.ID)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the move"))
 		}

@@ -36,6 +36,7 @@ var chatIDNamespace = uuid.MustParse("7d0f3a52-91c4-4b0e-a8f6-3c2e5b19d4a7")
 // signatures match *db.Repo's, so it satisfies it structurally.
 type Repo interface {
 	lineage.LaunchEventReader
+	triggers.OwnerSource
 	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
 	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
@@ -192,13 +193,18 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 				if def.Broken() {
 					detail = triggers.RefusalDetail(def)
 				}
-				res, recErr := d.record(ctx, trigger, ev, nil, def, core.TriggerEventFailed, detail)
+				res, recErr := d.traced(ctx, trigger, ev, recorded, func(ctx context.Context) (*Result, error) {
+					return d.record(ctx, trigger, ev, nil, def, core.TriggerEventFailed, detail)
+				})
 				results, retryable = appendResult(results, retryable, res, recErr)
 			case trigger.WorkflowTrigger != nil:
 				// The workflow could not be READ: retry the dispatch.
 				retryable = append(retryable, fmt.Errorf("resolve trigger %s: %w", trigger.ID, err))
 			default:
-				res, recErr := d.record(ctx, trigger, ev, nil, nil, core.TriggerEventFailed, "trigger config is invalid: "+err.Error())
+				detail := "trigger config is invalid: " + err.Error()
+				res, recErr := d.traced(ctx, trigger, ev, recorded, func(ctx context.Context) (*Result, error) {
+					return d.record(ctx, trigger, ev, nil, nil, core.TriggerEventFailed, detail)
+				})
 				results, retryable = appendResult(results, retryable, res, recErr)
 			}
 			continue
@@ -216,10 +222,34 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 			}
 			chainLoaded = true
 		}
-		res, err := d.fire(ctx, trigger, spec, ev, chain, recorded)
+		res, err := d.traced(ctx, trigger, ev, recorded, func(ctx context.Context) (*Result, error) {
+			return d.fire(ctx, trigger, spec, ev, chain, recorded)
+		})
 		results, retryable = appendResult(results, retryable, res, err)
 	}
 	return results, errors.Join(retryable...)
+}
+
+// traced runs one trigger's firing for ev as a trigger.fire span
+// (triggers.StartFireSpan): each matched trigger's is a trace of its own,
+// linked to the dispatch, and a run it launches links to it. recorded non-nil
+// is a firing resuming an earlier launch.
+func (d *Dispatcher) traced(ctx context.Context, trigger *core.Trigger, ev *core.RunEvent, recorded *core.TriggerEventDefinition, firing func(context.Context) (*Result, error)) (res *Result, err error) {
+	ctx, span := triggers.StartFireSpan(ctx, runevents.TriggerEventKind)
+	span.Trigger(trigger)
+	span.DedupeKey(dedupeKey(trigger.ID, ev.ID))
+	// Same owner only (Dispatch), so the source run is the owner's to see.
+	span.OriginRunID(ev.ChatID)
+	if recorded != nil {
+		span.Resumed()
+	}
+	defer func() {
+		if res != nil {
+			span.Record(triggers.FireVerdict{Outcome: res.Outcome, Detail: res.Detail, ChatID: res.ChatID})
+		}
+		span.End(err)
+	}()
+	return firing(ctx)
 }
 
 func appendResult(results []Result, errs []error, res *Result, err error) ([]Result, []error) {
@@ -343,15 +373,21 @@ func (d *Dispatcher) launchedDefinition(ctx context.Context, t *core.Trigger, ev
 // launch starts launchSpec and turns the launcher's answer into the firing's
 // result, recording a verdict that can never launch.
 func (d *Dispatcher) launch(ctx context.Context, trigger *core.Trigger, ev *core.RunEvent, chain lineage.Lineage, def *core.TriggerEventDefinition, launchEv launch.Event, launchSpec launch.Spec) (*Result, error) {
+	if launchSpec.FiringTraceParent == "" {
+		// The run links to this firing's span (traced).
+		launchSpec.FiringTraceParent = triggers.FireSpanFrom(ctx).TraceParent()
+	}
 	res, launchErr := d.launcher.Launch(ctx, launchEv, launchSpec)
 	switch {
 	case launchErr == nil:
+		triggers.FireSpanFrom(ctx).Record(triggers.FireVerdict{EventID: res.EventID, RunID: res.RunID})
 		return &Result{TriggerID: trigger.ID, Outcome: core.TriggerEventLaunched, ChatID: res.Chat.ID}, nil
 	case errors.Is(launchErr, launch.ErrAlreadyLaunched):
 		out := &Result{TriggerID: trigger.ID, Outcome: core.TriggerEventLaunched, Detail: "already launched"}
 		var already *launch.AlreadyLaunchedError
 		if errors.As(launchErr, &already) {
 			out.ChatID = already.ChatID
+			triggers.FireSpanFrom(ctx).Record(triggers.FireVerdict{EventID: already.EventID})
 		}
 		return out, nil
 	}
@@ -527,12 +563,14 @@ func (d *Dispatcher) record(
 		if err != nil {
 			return nil, fmt.Errorf("load existing event %s: %w", row.DedupeKey, err)
 		}
+		triggers.FireSpanFrom(ctx).Record(triggers.FireVerdict{EventID: stored.ID})
 		out := &Result{TriggerID: trigger.ID, Outcome: stored.Outcome, Detail: stored.OutcomeDetail}
 		if stored.ChatID != nil {
 			out.ChatID = *stored.ChatID
 		}
 		return out, nil
 	}
+	triggers.FireSpanFrom(ctx).Record(triggers.FireVerdict{EventID: row.ID})
 	if outcome != core.TriggerEventSkipped {
 		logging.WarnContext(ctx, "[workflowevent] trigger did not launch",
 			"triggerID", trigger.ID, "runEventID", ev.ID, "outcome", outcome, "detail", detail)

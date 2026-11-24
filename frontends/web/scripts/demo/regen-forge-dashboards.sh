@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regenerate the demo's forge dashboard set,
-# src/components/Forge/Demo/demoData/shop/forge-dashboards.json, from forge's
+# src/fixtures/shop/model/forge-dashboards.json, from forge's
 # own builders for project `shop`:
 #
 #   overview        the file's base overview, extended by obsbuiltin.ExtendOverview
@@ -31,7 +31,7 @@
 set -euo pipefail
 
 web=$(cd "$(dirname "$0")/../.." && pwd)
-out="$web/src/components/Forge/Demo/demoData/shop/forge-dashboards.json"
+out="$web/src/fixtures/shop/model/forge-dashboards.json"
 forge=${1:?usage: $0 <forge checkout> <ref> [<ref>...]}
 shift
 refs=("$@")

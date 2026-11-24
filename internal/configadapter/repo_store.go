@@ -13,9 +13,29 @@ package configadapter
 import (
 	"context"
 
+	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/reliant-labs/reliant/internal/config"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
+
+// NewORMRecordReader reads the stored project config records of db.
+func NewORMRecordReader(db orm.Context) ConfigRecordReader {
+	return ormRecordReader{db: db}
+}
+
+type ormRecordReader struct {
+	db orm.Context
+}
+
+func (r ormRecordReader) GetProjectConfigRecord(ctx context.Context, projectID string) (*core.ProjectConfigRecord, error) {
+	return store.GetProjectConfigRecord(ctx, r.db, projectID)
+}
+
+func (r ormRecordReader) GetProjectMachineConfigRecord(ctx context.Context, projectID, daemonID string) (*core.ProjectConfigRecord, bool, error) {
+	return store.GetProjectMachineConfigRecord(ctx, r.db, projectID, daemonID)
+}
 
 // NewRepoConfigStore creates a StoredConfigStore backed by the stored project config records.
 func NewRepoConfigStore(repo ConfigRecordReader) config.StoredConfigStore {
@@ -46,7 +66,7 @@ func (s *repoConfigStore) GetProjectMachineConfigRecord(ctx context.Context, pro
 	return storedRecord(record), true, nil
 }
 
-func storedRecord(record *db.ProjectConfigRecord) *config.StoredProjectConfigRecord {
+func storedRecord(record *core.ProjectConfigRecord) *config.StoredProjectConfigRecord {
 	return &config.StoredProjectConfigRecord{
 		ProjectID: record.ProjectID,
 		// DaemonID distinguishes a real daemon push from CreateProject's seed

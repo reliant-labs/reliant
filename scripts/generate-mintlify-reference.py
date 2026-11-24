@@ -263,6 +263,16 @@ def wrap_inline_mdx_sensitive_tokens(body: str) -> str:
 # the closing quote of is wrapped whole: `"http://x:1"`, not "`http://x:1"`.
 BARE_URL_RE = re.compile(r"(?P<quote>[\"']?)(?P<url>https?://[^\s<>`|)]+)")
 
+# A URL holding a `<placeholder>` (CLI help's `http://127.0.0.1:<pprof port>/x`).
+# BARE_URL_RE stops at the `<`, so the part before it can look valid; then
+# escape_all_angles turns the `<` into `\<`, the autolink runs on into it, and
+# Mintlify refuses `http://127.0.0.1:\`. The whole URL, placeholder included, is
+# code. Trailing sentence punctuation stays prose.
+PLACEHOLDER_URL_RE = re.compile(
+    r"(?P<quote>[\"']?)(?P<url>https?://(?:[^\s<>`|)]|<[^<>`\n]*>)*?<[^<>`\n]*>"
+    r"(?:[^\s<>`|)]|<[^<>`\n]*>)*?)(?=[,.;:]?(?:\s|$|[`|)]))"
+)
+
 
 def is_valid_url(url: str) -> bool:
     try:
@@ -292,6 +302,9 @@ def code_invalid_bare_urls(body: str) -> str:
             out.append(line)
             continue
         parts = line.split("`")
+        for idx in range(0, len(parts), 2):
+            parts[idx] = PLACEHOLDER_URL_RE.sub(lambda m: f"`{m.group(0)}`", parts[idx])
+        parts = "`".join(parts).split("`")
         for idx in range(0, len(parts), 2):
             parts[idx] = BARE_URL_RE.sub(
                 lambda m: m.group(0) if is_valid_url(m.group("url")) else f"`{m.group(0)}`",

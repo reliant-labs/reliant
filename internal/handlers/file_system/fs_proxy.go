@@ -32,7 +32,7 @@ import (
 // only the NATS router can), and Repo checks the machine is the caller's.
 func (s *Service) wake() machinewake.Service {
 	resumer, _ := s.deps.Router.(machinewake.Resumer)
-	return machinewake.NewInstrumented(machinewake.Deps{Resumer: resumer, Owners: s.deps.Repo})
+	return machinewake.NewInstrumented(machinewake.Deps{Resumer: resumer, Owners: s.deps.Placement})
 }
 
 func (s *Service) getUserID(ctx context.Context) (string, error) {
@@ -75,7 +75,7 @@ func (s *Service) requireProjectBase(ctx context.Context, userID, projectID stri
 	// resolved: a refusal's detail names the project and its remote, and a
 	// request no chat or worktree placed reaches here with nothing else
 	// checking the project id.
-	project, err := s.deps.Repo.GetProject(ctx, projectID)
+	project, err := s.deps.Placement.GetProject(ctx, projectID)
 	if err != nil && !errors.Is(err, svcerr.ErrNotFound) {
 		return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to load the project"))
 	}
@@ -91,7 +91,7 @@ func (s *Service) requireProjectBase(ctx context.Context, userID, projectID stri
 		// lacked a checkout another machine had. A chat or workspace pinned
 		// to a machine without one is still refused: its files are there.
 		machines, _ := s.deps.Router.(daemonplacement.Machines)
-		checkout, err := projectcheckout.ForMachine(ctx, s.deps.Repo, machines, userID, project, target.DaemonID, fsCheckoutPurpose)
+		checkout, err := projectcheckout.ForMachine(ctx, s.deps.Placement, machines, userID, project, target.DaemonID, fsCheckoutPurpose)
 		if err != nil && target.DaemonID == "" && !target.NoMachine {
 			err = s.noCheckoutAnywhere(ctx, userID, project, err)
 		}
@@ -101,7 +101,7 @@ func (s *Service) requireProjectBase(ctx context.Context, userID, projectID stri
 		resolvedOn = checkout.DaemonID
 		return checkout.Path, nil
 	}
-	basePath, err = filepreview.ResolveBasePath(ctx, s.deps.Repo, projectID, worktreeID, chatID, mainCheckout)
+	basePath, err = filepreview.ResolveBasePath(ctx, s.workspaces(), projectID, worktreeID, chatID, mainCheckout)
 	if err != nil {
 		return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to resolve project path"))
 	}
@@ -131,7 +131,7 @@ func (s *Service) noCheckoutAnywhere(ctx context.Context, userID string, project
 	if rerr != nil || machine == "" {
 		return err
 	}
-	if _, onErr := projectcheckout.On(ctx, s.deps.Repo, userID, project, machine, fsCheckoutPurpose); onErr != nil {
+	if _, onErr := projectcheckout.On(ctx, s.deps.Placement, userID, project, machine, fsCheckoutPurpose); onErr != nil {
 		return onErr
 	}
 	// Installed there after all (a row written since Resolve read): the
@@ -182,7 +182,7 @@ func (s *Service) resolveScope(ctx context.Context, userID, projectID string, wo
 // tab, the preview and the terminal share that one rule, so they cannot show
 // two different disks.
 func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (machinewake.Target, error) {
-	ws, err := daemonplacement.WorkspaceDaemon(ctx, s.deps.Repo, userID, projectID, deref(worktreeID), deref(chatID))
+	ws, err := daemonplacement.WorkspaceDaemon(ctx, s.workspaces(), userID, projectID, deref(worktreeID), deref(chatID))
 	switch {
 	case errors.Is(err, daemonplacement.ErrForeignChat):
 		return machinewake.Target{}, svcerr.NotFound("chat")
@@ -464,7 +464,7 @@ func (s *Service) pickerMachine(ctx context.Context, userID, daemonID string) (m
 	if daemonID == "" {
 		return machinewake.Target{}, nil
 	}
-	d, err := s.deps.Repo.GetDaemon(ctx, daemonID)
+	d, err := s.deps.Placement.GetDaemon(ctx, daemonID)
 	if err != nil || !authz.CanWriteMachine(ctx, userID, d) {
 		return machinewake.Target{}, svcerr.NotFound("machine")
 	}

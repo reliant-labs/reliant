@@ -2302,10 +2302,10 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\x1cDAEMON_LIFECYCLE_PHASE_READY\x10\x03\x12%\n" +
 	"!DAEMON_LIFECYCLE_PHASE_SUSPENDING\x10\x04\x12$\n" +
 	" DAEMON_LIFECYCLE_PHASE_SUSPENDED\x10\x05\x12!\n" +
-	"\x1dDAEMON_LIFECYCLE_PHASE_FAILED\x10\x062\x90\x0e\n" +
-	"\x15DaemonRegistryService\x12P\n" +
-	"\vListDaemons\x12\x1e.reliant.v1.ListDaemonsRequest\x1a\x1f.reliant.v1.ListDaemonsResponse\"\x00\x12J\n" +
-	"\tGetDaemon\x12\x1c.reliant.v1.GetDaemonRequest\x1a\x1d.reliant.v1.GetDaemonResponse\"\x00\x12Y\n" +
+	"\x1dDAEMON_LIFECYCLE_PHASE_FAILED\x10\x062\x96\x0e\n" +
+	"\x15DaemonRegistryService\x12S\n" +
+	"\vListDaemons\x12\x1e.reliant.v1.ListDaemonsRequest\x1a\x1f.reliant.v1.ListDaemonsResponse\"\x03\x90\x02\x01\x12M\n" +
+	"\tGetDaemon\x12\x1c.reliant.v1.GetDaemonRequest\x1a\x1d.reliant.v1.GetDaemonResponse\"\x03\x90\x02\x01\x12Y\n" +
 	"\rResolveDaemon\x12 .reliant.v1.ResolveDaemonRequest\x1a!.reliant.v1.ResolveDaemonResponse\"\x03\x90\x02\x01\x12\xc7\x01\n" +
 	"\fResumeDaemon\x12\x1f.reliant.v1.ResumeDaemonRequest\x1a .reliant.v1.ResumeDaemonResponse\"t\xa2\xbb\x18p:n:lreports whether the daemon is routable: this server cannot wake a machine, control-plane's ResumeDaemon does\x12\xd0\x01\n" +
 	"\x12RefreshLocalModels\x12%.reliant.v1.RefreshLocalModelsRequest\x1a&.reliant.v1.RefreshLocalModelsResponse\"k\xa2\xbb\x18g:e:cre-probes the machine's local model servers: refreshes an observed inventory and configures nothing\x12\xa7\x01\n" +

@@ -18,9 +18,11 @@
 // project-wide credential (an App installation token) was rejected: it would
 // let anyone who can read the project's tests read its code.
 //
-// Built by hand, by internal/app's coverage-source wiring
-// (NewCoverageSourceBlobs, providers_api.go): never a node compose.go
-// constructs from Deps.
+// Built by internal/app's CoverageSourceBlobs helper (providers_api.go) and
+// consumed as coverage_source's Blobs: its TokenSource is the hosted-vs-saved
+// choice gitHubTokenSource makes, and it is absent (nil) on a hosted
+// deployment without INTERNAL_SERVICE_SECRET, neither of which a Deps
+// field filled by type can say.
 //
 //forge:provided
 package ghblobs

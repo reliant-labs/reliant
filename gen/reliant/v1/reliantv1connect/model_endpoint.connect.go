@@ -85,6 +85,7 @@ func NewModelEndpointServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+ModelEndpointServiceListModelEndpointsProcedure,
 			connect.WithSchema(modelEndpointServiceMethods.ByName("ListModelEndpoints")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createModelEndpoint: connect.NewClient[v1.CreateModelEndpointRequest, v1.CreateModelEndpointResponse](
@@ -177,6 +178,7 @@ func NewModelEndpointServiceHandler(svc ModelEndpointServiceHandler, opts ...con
 		ModelEndpointServiceListModelEndpointsProcedure,
 		svc.ListModelEndpoints,
 		connect.WithSchema(modelEndpointServiceMethods.ByName("ListModelEndpoints")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	modelEndpointServiceCreateModelEndpointHandler := connect.NewUnaryHandler(

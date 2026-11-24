@@ -18,8 +18,10 @@
 // search box off the provider's rate limit. It holds the action's raw items,
 // so a different acting identity or page projects from the same call.
 //
-// Built by hand, by internal/app's NewInputOptions provider
-// (providers_api.go): never a node compose.go constructs from Deps.
+// Built by internal/app's NewInputOptions provider (providers_api.go): its
+// Types are the builtin catalog (catalogindex.Builtin, fallible, not a node)
+// and its Credentials resolve through the api's APIConnections tokens, so
+// neither Deps field is a graph type forge can fill.
 //
 //forge:provided
 package inputoptions
@@ -79,6 +81,10 @@ type ListRequest struct {
 	// ActingIdentity is "owner" (the default) or "app"; it only feeds the
 	// type's warnings.
 	ActingIdentity string
+	// OrgID is the org the listing is made for, when the caller knows one
+	// (an automation being enabled in its org); "" for a person's own picker,
+	// which names none. It only attributes the integration call's span.
+	OrgID string
 }
 
 // ResolveRequest labels stored values.
@@ -89,6 +95,8 @@ type ResolveRequest struct {
 	Scope          map[string]any
 	Values         []string
 	ActingIdentity string
+	// OrgID is ListRequest.OrgID.
+	OrgID string
 }
 
 // State says whether the caller could list at all.

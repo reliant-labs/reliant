@@ -26,6 +26,9 @@ func (foreignMessageRepo) GetMessage(_ context.Context, id string) (*db.Message,
 	return &db.Message{ID: id, ChatID: "chat-foreign"}, nil
 }
 
-func (foreignMessageRepo) GetChatRow(_ context.Context, id string) (*db.ChatRow, error) {
+// foreignMessageChats reads every chat as another user's.
+type foreignMessageChats struct{ message.Chats }
+
+func (foreignMessageChats) GetChatRow(_ context.Context, id string) (*db.ChatRow, error) {
 	return &db.ChatRow{ID: id, UserID: "someone-else"}, nil
 }

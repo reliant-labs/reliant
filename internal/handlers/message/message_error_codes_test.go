@@ -40,7 +40,7 @@ func TestGetMessage_RepositoryFailureCodes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := message.NewTestMessage(t, message.WithMessageDeps(message.Deps{Repo: failingMessageRepo(tc.err)}))
+			svc := message.NewTestMessage(t, message.WithMessageDeps(message.Deps{Repo: failingMessageRepo(tc.err), Senders: &message.MockSenders{}}))
 			_, err := svc.GetMessage(message.AuthedContext(t), connect.NewRequest(&pb.GetMessageRequest{MessageId: "msg-1"}))
 			require.Equal(t, tc.want, svcerr.Code(err), "err = %v", err)
 			require.NotContains(t, svcerr.ToConnect(err).Message(), "secret")

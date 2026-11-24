@@ -12,13 +12,19 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import { IDS } from './fixtures/base'
-import { CHAT_IDS, CHAT_TITLES, chatWithoutFailedSend } from './fixtures/chat'
+import { CHAT_IDS, CHAT_TITLES, chatWithAttachedProjects, chatWithoutFailedSend } from './fixtures/chat'
 import { stagingDatabaseFixtures } from './fixtures/data'
 import { appCodeCardFixtures, FILTER_PROJECT_IDS, NO_APP_PROJECT_ID, projectsPageSurfaceFixtures, selectorSurfaceFixtures } from './fixtures/projects'
 import { workflowFixtures } from './fixtures/workflows'
 import { installHarness, settle, SHOT, type HarnessOptions } from './harness'
+import { testsFixtures } from './fixtures/tests'
 
 type Viewport = 'desktop' | 'mobile'
+
+/** Every TestsService read answering Unimplemented: a control plane without the service. */
+const TESTS_SERVICE_MISSING = Object.fromEntries(
+  Object.keys(testsFixtures).map((key) => [key, { __error: { code: 'unimplemented', message: 'TestsService is not served here' } }]),
+)
 
 interface Surface {
   name: string
@@ -28,7 +34,24 @@ interface Surface {
   ready: (page: Page) => Locator
   /** After the load, before the capture (opening the chat, say). */
   act?: (page: Page) => Promise<void>
+  /**
+   * After the surface is ready, the pointer parked and the page settled,
+   * right before the capture: puts the pointer (or a finger) where a hover
+   * surface is about (a chart's crosshair and tooltip), or grows the viewport
+   * to a long page's whole height.
+   */
+  beforeShot?: (page: Page) => Promise<void>
   harness?: HarnessOptions
+}
+
+/** Where the two fixture projects are checked out, for the phone's new-chat Project row. */
+const NEW_CHAT_INSTALLS = {
+  'reliant.v1.ProjectService/ListProjectDaemons': {
+    projectDaemons: [
+      { projectId: IDS.project, daemonId: IDS.cloudDaemon, path: '/home/workspace/projects/shopfront', clonedAt: '2026-11-01T00:00:00Z', installState: 'PROJECT_INSTALL_STATE_INSTALLED', installError: '', daemonName: 'cloud-machine' },
+      { projectId: IDS.docsProject, daemonId: 'd-retired-0001', path: '/home/alex/code/docs-site', clonedAt: '2026-11-01T00:00:00Z', installState: 'PROJECT_INSTALL_STATE_INSTALLED', installError: '', daemonName: 'old-laptop' },
+    ],
+  },
 }
 
 const LONG_CHAT_TITLE = 'Refactor cart totals and fix multi-quantity discounts'
@@ -130,6 +153,47 @@ async function mobileChatAtEnd(page: Page, firstLine: string) {
   await scrollToEnd(page)
 }
 
+/**
+ * Rest the pointer at `fraction` of a chart's plot (uPlot's `.u-over`), or tap
+ * there on a touch viewport, and wait for the chart's tooltip: the hover state
+ * the chart surfaces capture.
+ */
+async function pointAtChart(page: Page, chart: Locator, fraction: number) {
+  const plot = chart.locator('.u-over').first()
+  await plot.scrollIntoViewIfNeeded()
+  const box = await plot.boundingBox()
+  if (!box) throw new Error('the chart has no plot to point at')
+  const position = { x: Math.round(box.width * fraction), y: Math.round(box.height / 2) }
+  if (page.viewportSize()!.width <= 768) await plot.tap({ position })
+  else await plot.hover({ position })
+  await expect(page.getByTestId('chart-tooltip')).toBeVisible()
+  await frames(page)
+}
+
+/**
+ * Grow the viewport to the page's whole height, so a long dashboard is one
+ * capture with every panel loaded (panels query only near the viewport, and
+ * the page scrolls inside the shell, not the document). Repeats until the
+ * height stops moving: panels that load can change it.
+ */
+async function fitViewportToContent(page: Page) {
+  const width = page.viewportSize()!.width
+  for (let i = 0; i < 6; i++) {
+    const needed = await page.evaluate(() => {
+      let extra = 0
+      for (const el of Array.from(document.querySelectorAll<HTMLElement>('*'))) {
+        if (el.scrollHeight > el.clientHeight + 1 && getComputedStyle(el).overflowY.match(/auto|scroll/)) extra = Math.max(extra, el.scrollHeight - el.clientHeight)
+      }
+      return Math.ceil(window.innerHeight + extra)
+    })
+    if (needed <= page.viewportSize()!.height) return
+    await page.setViewportSize({ width, height: needed })
+    await settle(page)
+  }
+}
+
+const CHART_HOVER_PATH = '/forge/p/shopfront/observability/dashboards/release/chart-hover'
+
 const TOOLS_LAST_LINE = 'Tax rates now live in'
 const FAILURE_FIRST_LINE = 'Upgrade the Stripe SDK to v18 and fix whatever breaks'
 const APPROVAL_LINE = 'Pushing it needs your approval'
@@ -149,6 +213,19 @@ const SURFACES: Surface[] = [
     on: ['desktop'],
     ready: (page) => page.getByText(FIXTURE_BOTTOM).first(),
     act: openFixtureChat,
+  },
+  {
+    // The fixture chat with a second project attached: the composer lists
+    // both as chips (the attached one removable) and offers Add project.
+    name: 'chat-projects',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByText(FIXTURE_BOTTOM).first(),
+    act: async (page) => {
+      await openFixtureChat(page)
+      await expect(page.getByTestId('chat-project-chips')).toBeVisible()
+    },
+    harness: { fixtures: chatWithAttachedProjects },
   },
   {
     // The fixture chat from its first line: the first turn and its answer.
@@ -469,6 +546,43 @@ const SURFACES: Surface[] = [
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByText('Migrate order confirmation emails', { exact: false }).first(),
   },
+  // The floating Setup Guide (Onboarding/OnboardingChecklist.tsx): open above the chat home's
+  // composer, and collapsed and open on an app's console; then the nav footer's Help menu (sidebar/HelpMenu.tsx).
+  // `ready` waits on the fixture's settled progress, not on the guide alone: its items are detected
+  // from cached queries (chats, workflows) that land at different times, so the guide first shows fewer done.
+  {
+    name: 'shell-setup-guide',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByRole('region', { name: 'Setup guide' }).getByText('6 of 8 done'),
+    harness: { storage: { 'reliant.checklist.panelState': 'expanded' } },
+  },
+  {
+    name: 'shell-setup-guide-app-collapsed',
+    path: '/forge/p/shopfront',
+    on: ['desktop'],
+    ready: (page) => page.getByRole('button', { name: 'Get started, 6 of 8 done' }),
+    harness: { storage: { 'reliant.checklist.panelState': 'collapsed' } },
+  },
+  {
+    name: 'shell-setup-guide-app-expanded',
+    path: '/forge/p/shopfront',
+    on: ['desktop'],
+    ready: (page) => page.getByRole('region', { name: 'Setup guide' }).getByText('6 of 8 done'),
+    harness: { storage: { 'reliant.checklist.panelState': 'expanded' } },
+  },
+  {
+    name: 'shell-help-menu',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByText('Migrate order confirmation emails', { exact: false }).first(),
+    act: async (page) => {
+      // The composer takes focus as the chat home settles, and a menu closes when focus leaves it: open it after.
+      await page.waitForFunction(() => document.activeElement?.tagName === 'TEXTAREA')
+      await page.getByTestId('nav-help').click()
+      await page.getByRole('menuitem', { name: 'Keyboard shortcuts' }).waitFor()
+    },
+  },
   {
     name: 'shell-inbox',
     path: '/inbox',
@@ -605,6 +719,41 @@ const SURFACES: Surface[] = [
     act: openNavDrawer,
   },
   {
+    // The phone's own drawer on its chat list: drilled into Agents, Workflows open. Its rows are
+    // drawn like the top level's (owner, 2026-11-24: same size, colour, indent, and an icon).
+    name: 'shell-m-drawer-agents',
+    path: '/m/chats',
+    on: ['mobile'],
+    ready: (page) => page.getByTestId('nav-workflows-library'),
+    act: async (page) => {
+      await expect(page.getByText('Write the webhooks guide').first()).toBeVisible({ timeout: 20_000 })
+      await openNavDrawer(page)
+      await expect(page.getByTestId('nav-drill-in')).toHaveAttribute('data-area', 'agents')
+      await page.getByTestId('nav-workflows').click()
+    },
+  },
+  {
+    // The phone's new chat: the Project row names the machine the project is on.
+    name: 'mobile-new-chat',
+    path: '/m/new',
+    on: ['mobile'],
+    ready: (page) => page.getByTestId('mobile-new-chat-project').getByText('On cloud-machine'),
+    harness: { fixtures: NEW_CHAT_INSTALLS },
+  },
+  {
+    // Its picker: shopfront is on the cloud machine; docs-site is checked out only on a machine
+    // that is gone, so it offers to set it up where the chat runs.
+    name: 'mobile-new-chat-projects',
+    path: '/m/new',
+    on: ['mobile'],
+    ready: (page) => page.getByText('Which project', { exact: true }),
+    act: async (page) => {
+      await page.getByTestId('mobile-new-chat-project').getByText('On cloud-machine').waitFor()
+      await page.getByTestId('mobile-new-chat-project').getByRole('button').click()
+    },
+    harness: { fixtures: NEW_CHAT_INSTALLS },
+  },
+  {
     name: 'shell-m-drawer-observability',
     path: '/forge/p/shopfront',
     on: ['mobile'],
@@ -639,6 +788,46 @@ const SURFACES: Surface[] = [
     path: '/forge/p/shopfront/observability/dashboards',
     on: ['desktop'],
     ready: (page) => page.getByTestId('dashboards-card-checkout-funnel'),
+  },
+  {
+    // A full time-series chart under the pointer: the crosshair on the
+    // sample, a point on each series, and the tooltip with the sample's time
+    // and both series' values (fixtures/dashboards.ts, chart-hover).
+    name: 'shell-chart-hover',
+    path: CHART_HOVER_PATH,
+    on: ['desktop'],
+    ready: (page) => page.getByRole('group', { name: 'Requests and errors per second' }),
+    beforeShot: (page) => pointAtChart(page, page.getByRole('group', { name: 'Requests and errors per second' }), 0.62),
+  },
+  {
+    // A figure's card sparkline under the pointer (a tap on the phone): the
+    // same crosshair and tooltip as a full chart.
+    name: 'shell-sparkline-hover',
+    path: CHART_HOVER_PATH,
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByTestId('obs-panel-sparkline').first(),
+    beforeShot: (page) => pointAtChart(page, page.getByTestId('obs-panel-sparkline').first(), 0.4),
+  },
+  {
+    // The platform's Sandboxes dashboard (control-plane
+    // deploy/observability/dashboards/sandboxes.json, copied into
+    // fixtures/sandboxes.dashboard.json) through the real DashboardView, every
+    // panel answered in the shape its SQL returns (fixtures/sandboxes.ts),
+    // whole, in one tall capture.
+    name: 'shell-sandboxes-dashboard',
+    path: '/forge/p/shopfront/observability/dashboards/release/sandboxes',
+    on: ['desktop'],
+    ready: (page) => page.getByText('Self-hosted sandboxes: memory available').first(),
+    beforeShot: fitViewportToContent,
+  },
+  {
+    // A gallery card's preview sparkline under the pointer.
+    name: 'shell-dashboards-card-hover',
+    path: '/forge/p/shopfront/observability/dashboards',
+    on: ['desktop'],
+    // The Overview card is above the fold, so its preview has loaded (previews load near the viewport).
+    ready: (page) => page.getByRole('group', { name: 'overview, last 24 hours' }).first().locator('.u-over'),
+    beforeShot: (page) => pointAtChart(page, page.getByRole('group', { name: 'overview, last 24 hours' }).first(), 0.7),
   },
   {
     // The gallery's search, from the URL: `?q=order` keeps the cards that match.
@@ -720,13 +909,21 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByTestId('billing-hosting-tab'),
   },
   {
-    // Tests › Overview as production shows it until control-plane's TestsService is
-    // re-vendored (services/controlPlane/tests/testApi.ts): every read answers
-    // Unimplemented, so the page says so and the nav's Tests group has no badge.
+    // Tests › Overview on the shopfront fixture report (fixtures/tests.ts, answered over
+    // TestsService like every other RPC here): coverage, pass rate, flakes, the last run.
     name: 'shell-tests',
     path: '/forge/p/shopfront/tests',
     on: ['desktop', 'mobile'],
+    ready: (page) => page.getByTestId('tests-headline'),
+  },
+  {
+    // The same page on a control plane that does not serve TestsService (Unimplemented):
+    // "this control plane doesn't store test runs yet", and no nav badge.
+    name: 'shell-tests-not-configured',
+    path: '/forge/p/shopfront/tests',
+    on: ['desktop'],
     ready: (page) => page.getByText("This control plane doesn't store test runs yet").first(),
+    harness: { fixtures: TESTS_SERVICE_MISSING },
   },
 ]
 
@@ -775,6 +972,7 @@ test.describe('visual baseline', () => {
         // row, whose hover actions would otherwise show in some runs only.
         await page.mouse.move(-1, -1)
         await settle(page)
+        if (surface.beforeShot) await surface.beforeShot(page)
 
         if (process.env.VISUAL_FXLOG && server.unknown.size) {
           console.log(`[visual] ${surface.name} (${testInfo.project.name}): no fixture for ${[...server.unknown.keys()].join(', ')}`)

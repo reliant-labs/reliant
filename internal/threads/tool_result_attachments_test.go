@@ -7,11 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // A generated image is persisted as an attachment row and handed to the model
@@ -67,7 +68,7 @@ func TestToolResultAttachments_MaterializeImageBlocks(t *testing.T) {
 	t.Parallel()
 
 	repo := newFakeBlockRepo().withImage("att-image-1")
-	svc := NewService(repo)
+	svc := New(Deps{Repo: repo})
 	timestamp := time.Now().UTC()
 
 	blocks, err := svc.buildToolContentBlocks(context.Background(), "msg-1", SaveMessageOpts{
@@ -106,7 +107,7 @@ func TestToolResultAttachments_PositionsInterleaveWithResults(t *testing.T) {
 	t.Parallel()
 
 	repo := newFakeBlockRepo().withImage("att-a").withImage("att-b")
-	svc := NewService(repo)
+	svc := New(Deps{Repo: repo})
 
 	blocks, err := svc.buildToolContentBlocks(context.Background(), "msg-2", SaveMessageOpts{
 		ToolResults: []ToolResult{
@@ -145,7 +146,7 @@ func TestToolResultAttachments_NoAttachmentsIsUnchanged(t *testing.T) {
 	t.Parallel()
 
 	repo := newFakeBlockRepo()
-	svc := NewService(repo)
+	svc := New(Deps{Repo: repo})
 
 	blocks, err := svc.buildToolContentBlocks(context.Background(), "msg-3", SaveMessageOpts{
 		ToolResults: []ToolResult{{ToolCallID: "toolu_1", Name: "bash", Content: "hello"}},
@@ -190,7 +191,7 @@ func TestToolResultAttachments_UnusableAttachmentIsSkippedNotFatal(t *testing.T)
 		t.Run(tc.name, func(t *testing.T) {
 			repo := newFakeBlockRepo()
 			tc.setup(repo)
-			svc := NewService(repo)
+			svc := New(Deps{Repo: repo})
 
 			blocks, err := svc.buildToolContentBlocks(context.Background(), "msg-4", SaveMessageOpts{
 				ToolResults: []ToolResult{{
@@ -220,7 +221,7 @@ func TestToolResultAttachments_DocumentBecomesADocumentBlock(t *testing.T) {
 		ID: "att-pdf-1", Filename: "report.pdf", MimeType: "application/pdf",
 		AttachmentType: string(attachment.TypeDocument), Content: []byte("%PDF-1.4"),
 	}
-	svc := NewService(repo)
+	svc := New(Deps{Repo: repo})
 	blocks, err := svc.buildToolContentBlocks(context.Background(), "msg-1", SaveMessageOpts{
 		ToolResults: []ToolResult{{ToolCallID: "toolu_1", Name: "view", Content: "PDF file: report.pdf", AttachmentIDs: []string{"att-pdf-1"}}},
 	}, time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC))
@@ -242,7 +243,7 @@ func TestToolResultAttachments_VideoBecomesABlock(t *testing.T) {
 		ID: "att-video-1", Filename: "generated-abc123.mp4", MimeType: "video/mp4",
 		AttachmentType: string(attachment.TypeVideo), Content: []byte("mp4"),
 	}
-	svc := NewService(repo)
+	svc := New(Deps{Repo: repo})
 	blocks, err := svc.buildToolContentBlocks(context.Background(), "msg-1", SaveMessageOpts{
 		ToolResults: []ToolResult{{ToolCallID: "toolu_1", Name: "generate_video", Content: "ok", AttachmentIDs: []string{"att-video-1"}}},
 	}, time.Now().UTC())

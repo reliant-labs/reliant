@@ -16,6 +16,7 @@
  * forge's canonical form.
  */
 
+import type { Transport } from "@connectrpc/connect";
 import type { JsonObject, JsonValue } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
@@ -49,8 +50,8 @@ import type {
 } from "./dashboardTypes";
 import type { Dashboard, Panel } from "./types";
 
-function client() {
-  return getControlPlaneClient(DashboardService);
+function client(transport?: Transport) {
+  return getControlPlaneClient(DashboardService, transport);
 }
 
 function optMs(ts: Timestamp | undefined): number | null {
@@ -196,8 +197,8 @@ export function dashboardToJson(dashboard: Dashboard): JsonObject {
  * dashboards, then workspace ones. No project is the whole org: the field is
  * left off the request, because "" would mean only the project-less ones.
  */
-export async function listDashboards(req: ListDashboardsInput): Promise<DashboardIndex> {
-  const res = await client().listDashboards({
+export async function listDashboards(req: ListDashboardsInput, transport?: Transport): Promise<DashboardIndex> {
+  const res = await client(transport).listDashboards({
     orgId: req.orgId,
     ...(req.projectId === undefined ? {} : { projectId: req.projectId }),
     envId: req.envId,
@@ -205,13 +206,13 @@ export async function listDashboards(req: ListDashboardsInput): Promise<Dashboar
   return { dashboards: res.dashboards.map(mapSummary), canWrite: res.canWrite };
 }
 
-export async function listDashboardTemplates(orgId: string): Promise<DashboardSummary[]> {
-  const res = await client().listDashboardTemplates({ orgId });
+export async function listDashboardTemplates(orgId: string, transport?: Transport): Promise<DashboardSummary[]> {
+  const res = await client(transport).listDashboardTemplates({ orgId });
   return res.templates.map(mapSummary);
 }
 
-export async function getDashboard(req: GetDashboardInput): Promise<DashboardDocument> {
-  const res = await client().getDashboard({
+export async function getDashboard(req: GetDashboardInput, transport?: Transport): Promise<DashboardDocument> {
+  const res = await client(transport).getDashboard({
     orgId: req.orgId,
     ref: refInit(req.ref),
     version: req.version,
@@ -221,8 +222,8 @@ export async function getDashboard(req: GetDashboardInput): Promise<DashboardDoc
   return { summary: mapSummary(res.summary), spec: dashboardFromJson(res.spec), version: res.version, canWrite: res.canWrite };
 }
 
-export async function saveDashboard(req: SaveDashboardInput): Promise<SavedDashboard> {
-  const res = await client().saveDashboard({
+export async function saveDashboard(req: SaveDashboardInput, transport?: Transport): Promise<SavedDashboard> {
+  const res = await client(transport).saveDashboard({
     orgId: req.orgId,
     projectId: req.projectId,
     slug: req.slug,
@@ -235,8 +236,8 @@ export async function saveDashboard(req: SaveDashboardInput): Promise<SavedDashb
   return { summary: mapSummary(res.summary), version: mapVersion(res.version) };
 }
 
-export async function saveDashboardAsCopy(req: SaveAsCopyInput): Promise<SavedDashboard> {
-  const res = await client().saveAsCopy({
+export async function saveDashboardAsCopy(req: SaveAsCopyInput, transport?: Transport): Promise<SavedDashboard> {
+  const res = await client(transport).saveAsCopy({
     orgId: req.orgId,
     from: refInit(req.from),
     projectId: req.projectId,
@@ -249,32 +250,32 @@ export async function saveDashboardAsCopy(req: SaveAsCopyInput): Promise<SavedDa
   return { summary: mapSummary(res.summary), version: mapVersion(res.version) };
 }
 
-export async function listDashboardVersions(orgId: string, ref: DashboardRef): Promise<DashboardVersion[]> {
-  const res = await client().listDashboardVersions({ orgId, ref: refInit(ref), pageSize: 100 });
+export async function listDashboardVersions(orgId: string, ref: DashboardRef, transport?: Transport): Promise<DashboardVersion[]> {
+  const res = await client(transport).listDashboardVersions({ orgId, ref: refInit(ref), pageSize: 100 });
   return res.versions.map(mapVersion);
 }
 
-export async function restoreDashboardVersion(orgId: string, ref: DashboardRef, version: number, baseVersion: number): Promise<SavedDashboard> {
-  const res = await client().restoreDashboardVersion({ orgId, ref: refInit(ref), version, baseVersion });
+export async function restoreDashboardVersion(orgId: string, ref: DashboardRef, version: number, baseVersion: number, transport?: Transport): Promise<SavedDashboard> {
+  const res = await client(transport).restoreDashboardVersion({ orgId, ref: refInit(ref), version, baseVersion });
   if (!res.summary) throw new Error("the control plane answered without the restored dashboard");
   return { summary: mapSummary(res.summary), version: mapVersion(res.version) };
 }
 
-export async function archiveDashboard(orgId: string, ref: DashboardRef): Promise<void> {
-  await client().archiveDashboard({ orgId, ref: refInit(ref) });
+export async function archiveDashboard(orgId: string, ref: DashboardRef, transport?: Transport): Promise<void> {
+  await client(transport).archiveDashboard({ orgId, ref: refInit(ref) });
 }
 
-export async function starDashboard(orgId: string, ref: DashboardRef, starred: boolean): Promise<void> {
-  if (starred) await client().starDashboard({ orgId, ref: refInit(ref) });
-  else await client().unstarDashboard({ orgId, ref: refInit(ref) });
+export async function starDashboard(orgId: string, ref: DashboardRef, starred: boolean, transport?: Transport): Promise<void> {
+  if (starred) await client(transport).starDashboard({ orgId, ref: refInit(ref) });
+  else await client(transport).unstarDashboard({ orgId, ref: refInit(ref) });
 }
 
-export async function recordDashboardView(orgId: string, ref: DashboardRef): Promise<void> {
-  await client().recordDashboardView({ orgId, ref: refInit(ref) });
+export async function recordDashboardView(orgId: string, ref: DashboardRef, transport?: Transport): Promise<void> {
+  await client(transport).recordDashboardView({ orgId, ref: refInit(ref) });
 }
 
-export async function promoteDashboardToCode(orgId: string, ref: DashboardRef, version?: number): Promise<PromotedDashboard> {
-  const res = await client().promoteDashboardToCode({ orgId, ref: refInit(ref), version });
+export async function promoteDashboardToCode(orgId: string, ref: DashboardRef, version?: number, transport?: Transport): Promise<PromotedDashboard> {
+  const res = await client(transport).promoteDashboardToCode({ orgId, ref: refInit(ref), version });
   return {
     path: res.file?.path ?? "",
     content: new TextDecoder().decode(res.file?.content ?? new Uint8Array()),

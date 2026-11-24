@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 )
 
@@ -61,7 +62,7 @@ func (c prChange) change() core.PRRecordChange {
 
 func applyPR(t *testing.T, env *storetest.Env, c core.PRRecordChange) bool {
 	t.Helper()
-	ok, err := env.Repo.ApplyPRRecordChange(context.Background(), c)
+	ok, err := store.ApplyPRRecordChange(context.Background(), env.ORM, c)
 	if err != nil {
 		t.Fatalf("apply %s: %v", c.Delivery.DeliveryKey, err)
 	}
@@ -70,7 +71,7 @@ func applyPR(t *testing.T, env *storetest.Env, c core.PRRecordChange) bool {
 
 func getPR(t *testing.T, env *storetest.Env) *core.PRRecord {
 	t.Helper()
-	rec, err := env.Repo.GetPRRecord(context.Background(), "github", "acme/widgets", 7, []string{"42"})
+	rec, err := store.GetPRRecord(context.Background(), env.ORM, "github", "acme/widgets", 7, []string{"42"})
 	if err != nil || rec == nil {
 		t.Fatalf("get: %v %v", rec, err)
 	}
@@ -116,7 +117,7 @@ func TestPRRecordSnapshotOrdering(t *testing.T) {
 	c := prChange{key: "d5", updated: 10, head: prShaB, full: true}.change()
 	c.PreviousHeadSHA = prShaA
 	applyPR(t, env, c)
-	heads, err := env.Repo.ListPRRecordHeads(ctx, rec.ID)
+	heads, err := store.ListPRRecordHeads(ctx, env.ORM, rec.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,11 +137,11 @@ func TestPRRecordSnapshotOrdering(t *testing.T) {
 		}
 	}
 
-	list, err := env.Repo.ListPRRecords(ctx, core.PRRecordFilter{Provider: "github", Repository: "ACME/widgets", State: core.PRRecordOpen, Limit: 10})
+	list, err := store.ListPRRecords(ctx, env.ORM, core.PRRecordFilter{Provider: "github", Repository: "ACME/widgets", State: core.PRRecordOpen, Limit: 10})
 	if err != nil || len(list) != 1 || list[0].HeadSHA != prShaB {
 		t.Fatalf("list = %+v, %v", list, err)
 	}
-	if n, err := env.Repo.PrunePRRecordDeliveries(ctx, prBase.Add(time.Minute)); err != nil || n != 6 {
+	if n, err := store.PrunePRRecordDeliveries(ctx, env.ORM, prBase.Add(time.Minute)); err != nil || n != 6 {
 		t.Fatalf("prune = %d, %v", n, err)
 	}
 }
@@ -202,7 +203,7 @@ func TestPRRecordSameSecondTransitions(t *testing.T) {
 		if rec.HeadSHA != prShaA {
 			t.Fatalf("head = %s, want the force-push's %s", rec.HeadSHA[:4], prShaA[:4])
 		}
-		heads, err := env.Repo.ListPRRecordHeads(ctx, rec.ID)
+		heads, err := store.ListPRRecordHeads(ctx, env.ORM, rec.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -224,7 +225,7 @@ func TestPRRecordSameSecondTransitions(t *testing.T) {
 			if rec.HeadSHA != prShaC {
 				t.Fatalf("head = %s, want the last push's", rec.HeadSHA)
 			}
-			heads, err := env.Repo.ListPRRecordHeads(ctx, rec.ID)
+			heads, err := store.ListPRRecordHeads(ctx, env.ORM, rec.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -251,7 +252,7 @@ func TestPRRecordConcurrentFirstDeliveries(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if _, err := env.Repo.ApplyPRRecordChange(context.Background(), c); err != nil {
+			if _, err := store.ApplyPRRecordChange(context.Background(), env.ORM, c); err != nil {
 				errs <- err
 			}
 		}()
@@ -283,7 +284,7 @@ func TestPRRecordReviewsAndChecks(t *testing.T) {
 	c2.Reviews[0].ID = prNewID()
 	applyPR(t, env, c2)
 	rec := getPR(t, env)
-	reviews, err := env.Repo.ListPRRecordReviews(ctx, rec.ID, []string{prShaA})
+	reviews, err := store.ListPRRecordReviews(ctx, env.ORM, rec.ID, []string{prShaA})
 	if err != nil || len(reviews) != 1 || reviews[0].ReviewID != "900" || reviews[0].Kind != core.PRReviewPassed {
 		t.Fatalf("reviews = %+v, %v", reviews, err)
 	}
@@ -302,7 +303,7 @@ func TestPRRecordReviewsAndChecks(t *testing.T) {
 	applyPR(t, env, check("k2", 2, "success", &done))
 	applyPR(t, env, check("k1", 1, "failure", &done)) // an older run, delivered late
 	applyPR(t, env, check("k3", 2, "", nil))          // the same run's start, delivered late
-	checks, err := env.Repo.ListPRRecordChecks(ctx, "github", "42", []string{prShaA})
+	checks, err := store.ListPRRecordChecks(ctx, env.ORM, "github", "42", []string{prShaA})
 	if err != nil || len(checks) != 1 || checks[0].CheckRunID != 2 || checks[0].Conclusion != "success" {
 		t.Fatalf("checks = %+v, %v", checks, err)
 	}
@@ -313,7 +314,7 @@ func TestHasFreshIntegrationAccess(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := prBase
-	if err := env.Repo.ReplaceIntegrationAccess(ctx, storetest.SeedUserID, "github", "99", at,
+	if err := store.ReplaceIntegrationAccess(ctx, env.Repo.ORM(), storetest.SeedUserID, "github", "99", at,
 		[]core.IntegrationAccessGrant{{AccountKey: "inst", ResourceKey: "42"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +327,7 @@ func TestHasFreshIntegrationAccess(t *testing.T) {
 		{"43", at.Add(-time.Minute), false},
 		{"42", at.Add(time.Minute), false},
 	} {
-		got, err := env.Repo.HasFreshIntegrationAccess(ctx, storetest.SeedUserID, "github", "inst", tc.resource, tc.after)
+		got, err := store.HasFreshIntegrationAccess(ctx, env.ORM, storetest.SeedUserID, "github", "inst", tc.resource, tc.after)
 		if err != nil || got != tc.want {
 			t.Errorf("%+v: got %v, %v", tc, got, err)
 		}

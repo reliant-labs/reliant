@@ -326,6 +326,13 @@ func (s *Service) BranchChat(
 		if err := s.selections().Copy(txCtx, fromChat.ID, branchChatID, userID); err != nil {
 			return fmt.Errorf("failed to copy the chat's selection to the branch: %w", err)
 		}
+		// ... and works in the same projects. A branch with no machine has
+		// no checkout of any of them to work in.
+		if !noMachine {
+			if err := s.deps.Repo.CopyChatProjects(txCtx, fromChat.ID, branchChatID); err != nil {
+				return err
+			}
+		}
 
 		// Copy plan and tasks from source chat to branched thread
 		if err := s.copyPlanAndTasks(txCtx, sourceChatID, branchWorkflowID); err != nil {
@@ -404,7 +411,7 @@ func (s *Service) createBranchNoteMessage(
 	targetWorktree *db.Worktree,
 	workspaceContext *reliantv1.WorkspaceBranchContext,
 ) error {
-	inherited, err := s.deps.Repo.ListInheritedSpawnChildren(ctx, branchWorkflowID)
+	inherited, err := s.deps.Spawns.ListInheritedSpawnChildren(ctx, branchWorkflowID)
 	if err != nil {
 		return fmt.Errorf("failed to list inherited sub-agents: %w", err)
 	}
@@ -559,7 +566,7 @@ func (s *Service) findOrphanedToolCalls(ctx context.Context, toolCallIDs []strin
 
 	for i, toolCallID := range toolCallIDs {
 		// Check if there's a matching tool_result in the database
-		resultBlock, err := s.deps.Repo.GetToolResultBlock(ctx, toolCallID)
+		resultBlock, err := s.deps.ToolBlocks.FindToolBlock(ctx, toolCallID, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT)
 		if err != nil {
 			logging.WarnContext(ctx, "[BranchChat] Failed to check for tool result", "toolCallID", toolCallID, "error", err)
 			continue

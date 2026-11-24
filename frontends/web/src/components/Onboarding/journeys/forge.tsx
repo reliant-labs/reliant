@@ -22,7 +22,9 @@
  *    dialog), done;
  *  - the demo host, `full`: every step;
  *  - Reliant and the forge shell, 11 steps: no fg-inside, fg-graph,
- *    fg-agent or fg-built.
+ *    fg-agent or fg-built. Their /forge/demo leaves for the demo host
+ *    (Forge/Demo/demoHandoff.ts), `?tour=` kept, so a journey started there
+ *    continues on the demo host's cut.
  *
  * Nothing here needs a daemon, a chat or a signed-in user: every target is
  * sample data, every required action is a URL change or a tour signal, and

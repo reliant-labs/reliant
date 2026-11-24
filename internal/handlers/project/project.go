@@ -188,7 +188,7 @@ func (s *Service) requestMachine(ctx context.Context, userID, projectID, path st
 //     project, and return its relative_path.
 //   - repoID not in the project's repo set -> NotFound.
 func (s *Service) resolveProjectRepo(ctx context.Context, project *db.Project, repoID string) (string, *core.Repo, error) {
-	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
+	repos, err := s.deps.Repos.ListReposByProject(ctx, project.ID)
 	if err != nil {
 		return "", nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
 	}
@@ -215,7 +215,7 @@ func (s *Service) resolveProjectRepo(ctx context.Context, project *db.Project, r
 // is missing and one owned by someone else are the same NotFound (the store's
 // core.ErrProjectNotFound), so the answer never reveals that a project exists.
 func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
-	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID); err != nil {
+	if _, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID); err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("database error"))
 	}
 	return nil

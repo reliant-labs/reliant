@@ -201,7 +201,7 @@ func TestLoadRecentDisplayMessages_ReadsOnlyTheWindowsItNeeds(t *testing.T) {
 
 	leaf, newest := forkCompactionChain(t, h)
 	repo := &windowReadCounter{Repository: h.repo}
-	svc := NewService(repo)
+	svc := New(Deps{Repo: repo})
 
 	if _, err := svc.LoadRecentDisplayMessages(ctx, leaf, newest); err != nil {
 		t.Fatalf("LoadRecentDisplayMessages: %v", err)

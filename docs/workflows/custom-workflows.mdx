@@ -432,8 +432,74 @@ mount and PID namespaces, where the daemon's credential files (`~/.reliant/daemo
 sandbox, the command is refused, never run with credentials. On macOS and Windows only the environment is
 cleaned, so a command there that goes looking can still read those files. Either way the command keeps the
 network and can write its checkout: it is a boundary around your credentials, not around your code.
+
+Claude Code's and Codex's sign-ins (`~/.claude`, `~/.codex`) are hidden the same way. Gemini CLI's
+(`~/.gemini`), Cursor Agent's (`~/.cursor`, `~/.config/cursor`) and Copilot CLI's own (`~/.copilot`) are
+still readable in this release, and the next minor release hides them too. Until then a `credentials: none`
+command on a machine that has any of them prints one line on its stderr before it starts, naming them:
+`<path> will be hidden from credentials: none steps in the next minor release; use credentials: inherit`.
+A step that runs one of these CLIs needs `credentials: inherit`;
+[workflow lint](/workflows/lint#credentials-none-vendor-signin) warns about the ones that do not. Its stdout
+is unchanged, but `output` (stdout and stderr together) carries the line.
+
 Publish a branch with a `git_publish` node, which never gives its credential to a shell. See
 [Run AI agent commands without access to your credentials](/guides/machines/sandbox-agent-commands-credentials-none).
+
+#### Run a third-party agent CLI on Reliant's gateway
+
+A `run` node can run a third-party agent CLI, such as Claude Code, against Reliant's LLM gateway instead
+of a provider key or a person's subscription. Declare `llm_gateway` on the node:
+
+```yaml
+- id: bench
+  type: run
+  timeout: 20m                     # bounds the command, and the key's lifetime
+  args:
+    command: claude -p "fix the failing test" --output-format json
+    credentials: none              # recommended: the command holds no GitHub, git or cloud credential
+    llm_gateway:
+      cli: claude-code             # required: which CLI's environment to set
+      budget_usd: 2                # optional: $5 when left out, at most $50
+      models: [claude-sonnet-4-6, claude-haiku-4-5]   # optional: the first is the CLI's main model
+```
+
+Before the command runs, Reliant mints a **step key**: a short-lived key for the gateway that can call only
+the listed models (all of the gateway's Claude models when `models` is left out), spend at most
+`budget_usd`, and lives for the node's `timeout` (5 minutes when it has none), plus the 30 minutes a run
+step may wait for its machine to come back before the command starts, plus 2 minutes, at most 12 hours. So
+a command held for a machine that is restarting still starts with a live key. The key is paid for from the
+run's organization's Reliant credits.
+
+The machine sets it for this one command only. For `cli: claude-code` the command gets
+`ANTHROPIC_BASE_URL` (the gateway), `ANTHROPIC_AUTH_TOKEN` (the key), `ANTHROPIC_MODEL` and the
+`ANTHROPIC_DEFAULT_OPUS_MODEL` / `_SONNET_MODEL` / `_HAIKU_MODEL` and `ANTHROPIC_SMALL_FAST_MODEL` picks from
+the models, and `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1`. The variables that would make Claude Code
+authenticate or route another way are removed, even when the machine has them: `ANTHROPIC_API_KEY`,
+`CLAUDE_CODE_OAUTH_TOKEN`, the Bedrock and Vertex settings and `ANTHROPIC_CUSTOM_HEADERS`. Claude Code
+prefers `ANTHROPIC_AUTH_TOKEN` over a signed-in subscription, so a machine signed in as a person still
+spends the step key. The node's own `env:` may not set any of these names.
+
+The key is replaced with `[redacted: ANTHROPIC_AUTH_TOKEN]` wherever the command prints it, and it is revoked
+when the step ends, whether the command succeeds, fails, times out or is cancelled. What it spent is on the
+node's output, never the key itself:
+
+- `nodes.bench.llm_gateway.spend_usd`: what Reliant metered for the key as of the step's end.
+- `nodes.bench.llm_gateway.spend_known`: true when that figure is final. False means some calls were
+  still settling when the step ended (or the spend could not be read). `spend_usd` is then not the step's
+  whole cost: it may be low, or zero. Check `spend_known` before you treat `spend_usd` as what the step
+  cost.
+- `key_id`, `billing_org_id`, `models`, `budget_usd`, `expires_at`
+
+The step is refused, and its command is not run, when its machine's daemon is older than step keys (it has
+not registered `run_step.llm_gateway_env`; update it or let it reconnect), when this Reliant cannot issue
+step keys, when the run's owner cannot bill the organization, when the organization's Reliant credits are
+used up, or when none of the requested models is one the gateway serves for the CLI. The refusal is the
+step's `stderr`, with `exit_code` -1. The command cannot run in the background.
+
+The CLI process, and anything it runs, can read the key from its environment and use it or write it to
+disk. It is bounded: one organization, the step's models and budget, the step's lifetime, revoked when the
+step ends. It is not a provider secret, and it cannot be refreshed or extended. `reliant workflow lint`
+warns when the command never runs the CLI the key is for.
 
 **Loop nodes** repeat a sub-workflow while a condition is true:
 

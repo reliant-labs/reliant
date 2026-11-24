@@ -78,14 +78,11 @@ export function OnboardingPage() {
       aria-modal="true"
       aria-label="Onboarding setup"
     >
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(14,165,233,0.32),transparent_32%),radial-gradient(circle_at_78%_12%,rgba(168,85,247,0.28),transparent_30%),radial-gradient(circle_at_52%_88%,rgba(16,185,129,0.22),transparent_34%),linear-gradient(135deg,rgba(2,6,23,0.94),rgba(24,24,27,0.88)_45%,rgba(30,41,59,0.95))] backdrop-blur-xl"
-        aria-hidden="true"
-      />
-      <div className="absolute -left-24 top-10 h-64 w-64 rounded-full bg-sky-400/20 blur-3xl" aria-hidden="true" />
-      <div className="absolute -right-16 top-1/3 h-72 w-72 rounded-full bg-fuchsia-500/20 blur-3xl" aria-hidden="true" />
-      <div className="absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-emerald-400/15 blur-3xl" aria-hidden="true" />
+      {/* Backdrop: the page, with the screen's one brand moment (blue to
+          violet) as two soft glows. Tokens, so light mode gets a light page. */}
+      <div className="absolute inset-0 bg-background" aria-hidden="true" />
+      <div className="absolute -left-24 top-10 h-64 w-64 rounded-full bg-primary/20 blur-3xl" aria-hidden="true" />
+      <div className="absolute -right-16 top-1/3 h-72 w-72 rounded-full bg-brand-violet/15 blur-3xl" aria-hidden="true" />
 
       {/* Electron-only drag strip across the top of the window. Behind the
           card (no z-index bump) so it doesn't steal clicks from the card's
@@ -104,29 +101,28 @@ export function OnboardingPage() {
       <StepFooterProvider>
       <div
         className={cn(
-          "relative w-full rounded-[1.35rem] border border-white/15 bg-background/88 font-sans shadow-[0_28px_90px_rgba(2,6,23,0.55)] backdrop-blur-2xl flex flex-col overflow-hidden",
+          "relative w-full rounded-2xl border border-border bg-card font-sans shadow-2xl flex flex-col overflow-hidden",
           stepMaxWidth(actualStep),
           "transition-[max-width] duration-300",
           "max-h-[calc(100vh-80px)]",
-          "before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/50 before:to-transparent",
           "animate-in fade-in-0 zoom-in-98 duration-300"
         )}
       >
-        <div className="absolute inset-x-0 top-0 h-40 bg-[radial-gradient(circle_at_18%_0%,rgba(14,165,233,0.18),transparent_38%),radial-gradient(circle_at_82%_0%,rgba(168,85,247,0.16),transparent_34%)]" aria-hidden="true" />
-
         {/* Progress bar, plus the way out. The escape hatch lives on this row
             because onboarding suppresses the app Header and renders above
             every other surface — without it, a user whose setup cannot
             complete has no route to settings and no way to sign out. */}
-        <div className="relative flex items-center justify-between gap-4 border-b border-white/10 bg-white/[0.035] px-6 py-4">
+        {/* On a phone the row stacks: side by side, the escape hatch refused to
+            shrink and pushed Sign out past the card's clipped edge. */}
+        <div className="relative flex flex-col gap-3 border-b border-border px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div className="flex-1">
             <ProgressBar steps={progressSteps} currentStepIndex={currentIndex} />
           </div>
-          <OnboardingEscapeHatch className="flex-shrink-0" />
+          <OnboardingEscapeHatch className="sm:flex-shrink-0" />
         </div>
 
         {/* Step content */}
-        <div className="relative flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0)_28%),hsl(var(--surface-modal))]">
+        <div className="relative flex-1 overflow-y-auto">
           <div className="px-8 py-8">
             {StepComponent ? (
               <StepComponent
@@ -152,13 +148,13 @@ export function OnboardingPage() {
 
         {/* Footer: Back on the left, the step's own next move on the right
             (rendered there by StepFooterAction). */}
-        <div className="relative flex items-center justify-between gap-4 border-t border-white/10 bg-background/80 px-6 py-4 backdrop-blur">
+        <div className="relative flex items-center justify-between gap-4 border-t border-border px-6 py-4">
           <div className="flex-shrink-0">
             {!isFirst && (
               <button
                 type="button"
                 onClick={onBack}
-                className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-2 text-sm transition-colors hover:border-sky-400/40 hover:bg-sky-400/10"
+                className="flex items-center gap-1 rounded-md border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-foreground/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <ChevronLeft className="w-4 h-4" /> Back
               </button>

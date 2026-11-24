@@ -20,6 +20,8 @@ type (
 	ArchiveWorktreeRequest                   = sdk.ArchiveWorktreeRequest
 	ArchiveWorktreeResponse                  = sdk.ArchiveWorktreeResponse
 	ArchivedChat                             = sdk.ArchivedChat
+	AttachProjectToChatRequest               = sdk.AttachProjectToChatRequest
+	AttachProjectToChatResponse              = sdk.AttachProjectToChatResponse
 	Attachment                               = sdk.Attachment
 	AutomationDraft                          = sdk.AutomationDraft
 	BackgroundProcessStatus                  = sdk.BackgroundProcessStatus
@@ -40,6 +42,7 @@ type (
 	ChatErrorUpdate                          = sdk.ChatErrorUpdate
 	ChatOrigin                               = sdk.ChatOrigin
 	ChatPlan                                 = sdk.ChatPlan
+	ChatProject                              = sdk.ChatProject
 	ChatSelection                            = sdk.ChatSelection
 	ChatState                                = sdk.ChatState
 	ChatUpdate                               = sdk.ChatUpdate
@@ -103,6 +106,8 @@ type (
 	DeleteWorktreeResponse                   = sdk.DeleteWorktreeResponse
 	DenyRequest                              = sdk.DenyRequest
 	DenyResponse                             = sdk.DenyResponse
+	DetachProjectFromChatRequest             = sdk.DetachProjectFromChatRequest
+	DetachProjectFromChatResponse            = sdk.DetachProjectFromChatResponse
 	DisableWorkflowRequest                   = sdk.DisableWorkflowRequest
 	DisableWorkflowResponse                  = sdk.DisableWorkflowResponse
 	DiscoverWorktreesRequest                 = sdk.DiscoverWorktreesRequest
@@ -225,6 +230,8 @@ type (
 	ListBranchesResponse                     = sdk.ListBranchesResponse
 	ListChatPlansRequest                     = sdk.ListChatPlansRequest
 	ListChatPlansResponse                    = sdk.ListChatPlansResponse
+	ListChatProjectsRequest                  = sdk.ListChatProjectsRequest
+	ListChatProjectsResponse                 = sdk.ListChatProjectsResponse
 	ListChatsRequest                         = sdk.ListChatsRequest
 	ListChatsResponse                        = sdk.ListChatsResponse
 	ListInboxRequest                         = sdk.ListInboxRequest
@@ -548,6 +555,7 @@ const (
 	DaemonUpgradeState_DAEMON_UPGRADE_STATE_CURRENT                            = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_CURRENT
 	DaemonUpgradeState_DAEMON_UPGRADE_STATE_DRAINED                            = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_DRAINED
 	DaemonUpgradeState_DAEMON_UPGRADE_STATE_FAILED                             = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_FAILED
+	DaemonUpgradeState_DAEMON_UPGRADE_STATE_STAGED                             = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_STAGED
 	DaemonUpgradeState_DAEMON_UPGRADE_STATE_UNSPECIFIED                        = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UNSPECIFIED
 	DaemonUpgradeState_DAEMON_UPGRADE_STATE_UPDATING                           = sdk.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UPDATING
 	DiskGuardState_DISK_GUARD_STATE_RECLAIMING                                 = sdk.DiskGuardState_DISK_GUARD_STATE_RECLAIMING

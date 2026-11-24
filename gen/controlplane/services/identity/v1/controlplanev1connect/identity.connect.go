@@ -36,6 +36,9 @@ const (
 	// IdentityServiceGetIdentityStatusProcedure is the fully-qualified name of the IdentityService's
 	// GetIdentityStatus RPC.
 	IdentityServiceGetIdentityStatusProcedure = "/controlplane.v1.IdentityService/GetIdentityStatus"
+	// IdentityServiceListIdentitiesProcedure is the fully-qualified name of the IdentityService's
+	// ListIdentities RPC.
+	IdentityServiceListIdentitiesProcedure = "/controlplane.v1.IdentityService/ListIdentities"
 	// IdentityServiceListUsersProcedure is the fully-qualified name of the IdentityService's ListUsers
 	// RPC.
 	IdentityServiceListUsersProcedure = "/controlplane.v1.IdentityService/ListUsers"
@@ -68,6 +71,12 @@ const (
 	// IdentityServiceGetExportURLProcedure is the fully-qualified name of the IdentityService's
 	// GetExportURL RPC.
 	IdentityServiceGetExportURLProcedure = "/controlplane.v1.IdentityService/GetExportURL"
+	// IdentityServiceImportUsersProcedure is the fully-qualified name of the IdentityService's
+	// ImportUsers RPC.
+	IdentityServiceImportUsersProcedure = "/controlplane.v1.IdentityService/ImportUsers"
+	// IdentityServiceCheckSocialSignInProcedure is the fully-qualified name of the IdentityService's
+	// CheckSocialSignIn RPC.
+	IdentityServiceCheckSocialSignInProcedure = "/controlplane.v1.IdentityService/CheckSocialSignIn"
 )
 
 // IdentityServiceClient is a client for the controlplane.v1.IdentityService service.
@@ -76,6 +85,13 @@ type IdentityServiceClient interface {
 	// apps, deliveries and sharers. Read from the reconciler's rows; it dials no
 	// Zitadel and returns no secret.
 	GetIdentityStatus(context.Context, *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error)
+	// ListIdentities lists the environment's managed identities by name: each
+	// one it declares and each instance the control plane holds for it (a
+	// withdrawn one included, until it is deleted). Read from the reconciler's
+	// rows and the deployed shape; it dials no Zitadel. Admission is
+	// GetIdentityStatus's: any member, or a machine credential with
+	// identity:read.
+	ListIdentities(context.Context, *connect.Request[v1.ListIdentitiesRequest]) (*connect.Response[v1.ListIdentitiesResponse], error)
 	// ListUsers lists the instance's human users with their state and roles.
 	ListUsers(context.Context, *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error)
 	// GetUser reads one human user of the instance by its identity-provider
@@ -120,6 +136,34 @@ type IdentityServiceClient interface {
 	// none; FailedPrecondition where export is not enabled. Needs
 	// identity:manage, as RequestExport does.
 	GetExportURL(context.Context, *connect.Request[v1.GetIdentityExportURLRequest]) (*connect.Response[v1.GetIdentityExportURLResponse], error)
+	// ImportUsers creates or converges 1 to 500 users in the environment's
+	// identity, idempotent by user id: a re-run of the same rows converges and
+	// never duplicates, so re-running a file is how an import resumes. Each
+	// row keeps its id, password hash, verified address and social links.
+	// A row's refusal is its result (conflict, invalid, failed, with a reason);
+	// one row never aborts the rest. dry_run validates and resolves every row
+	// and writes nothing. An existing account is left alone unless
+	// update_existing, and its password hash is overwritten only with
+	// update_passwords.
+	//
+	// The rows carry credentials, so this needs identity:manage held by a
+	// person, as RequestExport does (org admin AND the identity:manage grant);
+	// a machine credential needs the identity:manage scope and its acting
+	// person the grant. The activity records the counts per outcome, never a
+	// row. FailedPrecondition where import is not enabled for the deployment
+	// (identity.import_enabled) or the instance is not ready; Aborted while
+	// another import into the same identity runs.
+	ImportUsers(context.Context, *connect.Request[v1.ImportIdentityUsersRequest]) (*connect.Response[v1.ImportIdentityUsersResponse], error)
+	// CheckSocialSignIn starts one social sign-in per applied provider of the
+	// identity (an intent at the issuer, never completed: it expires there)
+	// and reports each authorize URL the issuer built, with the redirect_uri it
+	// carries beside the callback registered at the provider
+	// (<issuer>/idps/callback). A provider that is pending or whose managed
+	// secret is missing is reported, not started. `forge cloud identity status
+	// --check-social` reads it. Admission is GetIdentityStatus's: any member,
+	// or a machine credential with identity:read. Nothing returned is a secret:
+	// a client id is public and the URL is the one a browser is sent to.
+	CheckSocialSignIn(context.Context, *connect.Request[v1.CheckIdentitySocialSignInRequest]) (*connect.Response[v1.CheckIdentitySocialSignInResponse], error)
 }
 
 // NewIdentityServiceClient constructs a client for the controlplane.v1.IdentityService service. By
@@ -137,12 +181,21 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+IdentityServiceGetIdentityStatusProcedure,
 			connect.WithSchema(identityServiceMethods.ByName("GetIdentityStatus")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		listIdentities: connect.NewClient[v1.ListIdentitiesRequest, v1.ListIdentitiesResponse](
+			httpClient,
+			baseURL+IdentityServiceListIdentitiesProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("ListIdentities")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listUsers: connect.NewClient[v1.ListIdentityUsersRequest, v1.ListIdentityUsersResponse](
 			httpClient,
 			baseURL+IdentityServiceListUsersProcedure,
 			connect.WithSchema(identityServiceMethods.ByName("ListUsers")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getUser: connect.NewClient[v1.GetIdentityUserRequest, v1.GetIdentityUserResponse](
@@ -206,12 +259,25 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(identityServiceMethods.ByName("GetExportURL")),
 			connect.WithClientOptions(opts...),
 		),
+		importUsers: connect.NewClient[v1.ImportIdentityUsersRequest, v1.ImportIdentityUsersResponse](
+			httpClient,
+			baseURL+IdentityServiceImportUsersProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("ImportUsers")),
+			connect.WithClientOptions(opts...),
+		),
+		checkSocialSignIn: connect.NewClient[v1.CheckIdentitySocialSignInRequest, v1.CheckIdentitySocialSignInResponse](
+			httpClient,
+			baseURL+IdentityServiceCheckSocialSignInProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("CheckSocialSignIn")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // identityServiceClient implements IdentityServiceClient.
 type identityServiceClient struct {
 	getIdentityStatus *connect.Client[v1.GetIdentityStatusRequest, v1.GetIdentityStatusResponse]
+	listIdentities    *connect.Client[v1.ListIdentitiesRequest, v1.ListIdentitiesResponse]
 	listUsers         *connect.Client[v1.ListIdentityUsersRequest, v1.ListIdentityUsersResponse]
 	getUser           *connect.Client[v1.GetIdentityUserRequest, v1.GetIdentityUserResponse]
 	inviteUser        *connect.Client[v1.InviteIdentityUserRequest, v1.InviteIdentityUserResponse]
@@ -223,11 +289,18 @@ type identityServiceClient struct {
 	revokeSessions    *connect.Client[v1.RevokeIdentitySessionsRequest, v1.RevokeIdentitySessionsResponse]
 	requestExport     *connect.Client[v1.RequestIdentityExportRequest, v1.RequestIdentityExportResponse]
 	getExportURL      *connect.Client[v1.GetIdentityExportURLRequest, v1.GetIdentityExportURLResponse]
+	importUsers       *connect.Client[v1.ImportIdentityUsersRequest, v1.ImportIdentityUsersResponse]
+	checkSocialSignIn *connect.Client[v1.CheckIdentitySocialSignInRequest, v1.CheckIdentitySocialSignInResponse]
 }
 
 // GetIdentityStatus calls controlplane.v1.IdentityService.GetIdentityStatus.
 func (c *identityServiceClient) GetIdentityStatus(ctx context.Context, req *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error) {
 	return c.getIdentityStatus.CallUnary(ctx, req)
+}
+
+// ListIdentities calls controlplane.v1.IdentityService.ListIdentities.
+func (c *identityServiceClient) ListIdentities(ctx context.Context, req *connect.Request[v1.ListIdentitiesRequest]) (*connect.Response[v1.ListIdentitiesResponse], error) {
+	return c.listIdentities.CallUnary(ctx, req)
 }
 
 // ListUsers calls controlplane.v1.IdentityService.ListUsers.
@@ -285,12 +358,29 @@ func (c *identityServiceClient) GetExportURL(ctx context.Context, req *connect.R
 	return c.getExportURL.CallUnary(ctx, req)
 }
 
+// ImportUsers calls controlplane.v1.IdentityService.ImportUsers.
+func (c *identityServiceClient) ImportUsers(ctx context.Context, req *connect.Request[v1.ImportIdentityUsersRequest]) (*connect.Response[v1.ImportIdentityUsersResponse], error) {
+	return c.importUsers.CallUnary(ctx, req)
+}
+
+// CheckSocialSignIn calls controlplane.v1.IdentityService.CheckSocialSignIn.
+func (c *identityServiceClient) CheckSocialSignIn(ctx context.Context, req *connect.Request[v1.CheckIdentitySocialSignInRequest]) (*connect.Response[v1.CheckIdentitySocialSignInResponse], error) {
+	return c.checkSocialSignIn.CallUnary(ctx, req)
+}
+
 // IdentityServiceHandler is an implementation of the controlplane.v1.IdentityService service.
 type IdentityServiceHandler interface {
 	// GetIdentityStatus reports the environment's identity instance: state, issuer,
 	// apps, deliveries and sharers. Read from the reconciler's rows; it dials no
 	// Zitadel and returns no secret.
 	GetIdentityStatus(context.Context, *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error)
+	// ListIdentities lists the environment's managed identities by name: each
+	// one it declares and each instance the control plane holds for it (a
+	// withdrawn one included, until it is deleted). Read from the reconciler's
+	// rows and the deployed shape; it dials no Zitadel. Admission is
+	// GetIdentityStatus's: any member, or a machine credential with
+	// identity:read.
+	ListIdentities(context.Context, *connect.Request[v1.ListIdentitiesRequest]) (*connect.Response[v1.ListIdentitiesResponse], error)
 	// ListUsers lists the instance's human users with their state and roles.
 	ListUsers(context.Context, *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error)
 	// GetUser reads one human user of the instance by its identity-provider
@@ -335,6 +425,34 @@ type IdentityServiceHandler interface {
 	// none; FailedPrecondition where export is not enabled. Needs
 	// identity:manage, as RequestExport does.
 	GetExportURL(context.Context, *connect.Request[v1.GetIdentityExportURLRequest]) (*connect.Response[v1.GetIdentityExportURLResponse], error)
+	// ImportUsers creates or converges 1 to 500 users in the environment's
+	// identity, idempotent by user id: a re-run of the same rows converges and
+	// never duplicates, so re-running a file is how an import resumes. Each
+	// row keeps its id, password hash, verified address and social links.
+	// A row's refusal is its result (conflict, invalid, failed, with a reason);
+	// one row never aborts the rest. dry_run validates and resolves every row
+	// and writes nothing. An existing account is left alone unless
+	// update_existing, and its password hash is overwritten only with
+	// update_passwords.
+	//
+	// The rows carry credentials, so this needs identity:manage held by a
+	// person, as RequestExport does (org admin AND the identity:manage grant);
+	// a machine credential needs the identity:manage scope and its acting
+	// person the grant. The activity records the counts per outcome, never a
+	// row. FailedPrecondition where import is not enabled for the deployment
+	// (identity.import_enabled) or the instance is not ready; Aborted while
+	// another import into the same identity runs.
+	ImportUsers(context.Context, *connect.Request[v1.ImportIdentityUsersRequest]) (*connect.Response[v1.ImportIdentityUsersResponse], error)
+	// CheckSocialSignIn starts one social sign-in per applied provider of the
+	// identity (an intent at the issuer, never completed: it expires there)
+	// and reports each authorize URL the issuer built, with the redirect_uri it
+	// carries beside the callback registered at the provider
+	// (<issuer>/idps/callback). A provider that is pending or whose managed
+	// secret is missing is reported, not started. `forge cloud identity status
+	// --check-social` reads it. Admission is GetIdentityStatus's: any member,
+	// or a machine credential with identity:read. Nothing returned is a secret:
+	// a client id is public and the URL is the one a browser is sent to.
+	CheckSocialSignIn(context.Context, *connect.Request[v1.CheckIdentitySocialSignInRequest]) (*connect.Response[v1.CheckIdentitySocialSignInResponse], error)
 }
 
 // NewIdentityServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -348,12 +466,21 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		IdentityServiceGetIdentityStatusProcedure,
 		svc.GetIdentityStatus,
 		connect.WithSchema(identityServiceMethods.ByName("GetIdentityStatus")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceListIdentitiesHandler := connect.NewUnaryHandler(
+		IdentityServiceListIdentitiesProcedure,
+		svc.ListIdentities,
+		connect.WithSchema(identityServiceMethods.ByName("ListIdentities")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	identityServiceListUsersHandler := connect.NewUnaryHandler(
 		IdentityServiceListUsersProcedure,
 		svc.ListUsers,
 		connect.WithSchema(identityServiceMethods.ByName("ListUsers")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	identityServiceGetUserHandler := connect.NewUnaryHandler(
@@ -417,10 +544,24 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		connect.WithSchema(identityServiceMethods.ByName("GetExportURL")),
 		connect.WithHandlerOptions(opts...),
 	)
+	identityServiceImportUsersHandler := connect.NewUnaryHandler(
+		IdentityServiceImportUsersProcedure,
+		svc.ImportUsers,
+		connect.WithSchema(identityServiceMethods.ByName("ImportUsers")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceCheckSocialSignInHandler := connect.NewUnaryHandler(
+		IdentityServiceCheckSocialSignInProcedure,
+		svc.CheckSocialSignIn,
+		connect.WithSchema(identityServiceMethods.ByName("CheckSocialSignIn")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.IdentityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IdentityServiceGetIdentityStatusProcedure:
 			identityServiceGetIdentityStatusHandler.ServeHTTP(w, r)
+		case IdentityServiceListIdentitiesProcedure:
+			identityServiceListIdentitiesHandler.ServeHTTP(w, r)
 		case IdentityServiceListUsersProcedure:
 			identityServiceListUsersHandler.ServeHTTP(w, r)
 		case IdentityServiceGetUserProcedure:
@@ -443,6 +584,10 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 			identityServiceRequestExportHandler.ServeHTTP(w, r)
 		case IdentityServiceGetExportURLProcedure:
 			identityServiceGetExportURLHandler.ServeHTTP(w, r)
+		case IdentityServiceImportUsersProcedure:
+			identityServiceImportUsersHandler.ServeHTTP(w, r)
+		case IdentityServiceCheckSocialSignInProcedure:
+			identityServiceCheckSocialSignInHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -454,6 +599,10 @@ type UnimplementedIdentityServiceHandler struct{}
 
 func (UnimplementedIdentityServiceHandler) GetIdentityStatus(context.Context, *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.GetIdentityStatus is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) ListIdentities(context.Context, *connect.Request[v1.ListIdentitiesRequest]) (*connect.Response[v1.ListIdentitiesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.ListIdentities is not implemented"))
 }
 
 func (UnimplementedIdentityServiceHandler) ListUsers(context.Context, *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error) {
@@ -498,4 +647,12 @@ func (UnimplementedIdentityServiceHandler) RequestExport(context.Context, *conne
 
 func (UnimplementedIdentityServiceHandler) GetExportURL(context.Context, *connect.Request[v1.GetIdentityExportURLRequest]) (*connect.Response[v1.GetIdentityExportURLResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.GetExportURL is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) ImportUsers(context.Context, *connect.Request[v1.ImportIdentityUsersRequest]) (*connect.Response[v1.ImportIdentityUsersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.ImportUsers is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) CheckSocialSignIn(context.Context, *connect.Request[v1.CheckIdentitySocialSignInRequest]) (*connect.Response[v1.CheckIdentitySocialSignInResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.CheckSocialSignIn is not implemented"))
 }

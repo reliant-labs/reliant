@@ -15,7 +15,9 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/execfollow"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // ============================================================================
@@ -71,16 +73,16 @@ type runData struct {
 	// Wall clock alone cannot separate a slow unit from a rate-limited one, and
 	// the retry ladder leaves no other trace: it runs inside one activity attempt,
 	// so it produces no message, no step execution and no status change.
-	backoffByThread map[string]db.ProviderBackoff
+	backoffByThread map[string]core.ProviderBackoff
 }
 
 func loadRunData(ctx context.Context, repo *db.Repo, chatID string) (*runData, error) {
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	if err != nil || chat == nil {
 		return nil, fmt.Errorf("execution %q not found (looked up as chat id): %v", chatID, err)
 	}
 
-	workflows, err := repo.ListWorkflowsByChat(ctx, chatID)
+	workflows, err := store.ListChatWorkflows(ctx, repo.ORM(), chatID)
 	if err != nil {
 		return nil, fmt.Errorf("listing workflow executions: %w", err)
 	}
@@ -92,20 +94,20 @@ func loadRunData(ctx context.Context, repo *db.Repo, chatID string) (*runData, e
 		byThread:        map[string]*db.Workflow{},
 		stepsByWF:       map[string][]*db.StepExecution{},
 		blocksByMsg:     map[string][]*db.MessageContentBlock{},
-		backoffByThread: map[string]db.ProviderBackoff{},
+		backoffByThread: map[string]core.ProviderBackoff{},
 	}
 	for _, wf := range workflows {
 		rd.workflowByID[wf.ID] = wf
 		if wf.Thread != "" {
 			rd.byThread[wf.Thread] = wf
 		}
-		steps, serr := repo.GetStepExecutionsByWorkflow(ctx, wf.ID)
+		steps, serr := store.ListWorkflowStepExecutions(ctx, repo.ORM(), wf.ID)
 		if serr == nil {
 			rd.stepsByWF[wf.ID] = steps
 		}
 	}
 
-	msgs, err := repo.ListMessages(ctx, chatID, db.MessageListOptions{})
+	msgs, err := store.ListMessages(ctx, repo.ORM(), chatID, db.MessageListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("listing messages: %w", err)
 	}
@@ -116,7 +118,7 @@ func loadRunData(ctx context.Context, repo *db.Repo, chatID string) (*runData, e
 		ids = append(ids, m.ID)
 	}
 	if len(ids) > 0 {
-		blocks, berr := repo.ListContentBlocksForMessages(ctx, ids)
+		blocks, berr := store.ListContentBlocksForMessages(ctx, repo.ORM(), ids)
 		if berr == nil {
 			for _, b := range blocks {
 				rd.blocksByMsg[b.MessageID] = append(rd.blocksByMsg[b.MessageID], b)
@@ -124,11 +126,11 @@ func loadRunData(ctx context.Context, repo *db.Repo, chatID string) (*runData, e
 		}
 	}
 
-	if qs, qerr := repo.ListQuestionsByChat(ctx, chatID); qerr == nil {
+	if qs, qerr := store.NewQuestionExtStore(repo.ORM()).ListQuestionsByChat(ctx, chatID); qerr == nil {
 		rd.questions = qs
 	}
 
-	if backoff, berr := repo.ProviderBackoffByChat(ctx, chatID); berr == nil {
+	if backoff, berr := store.ListChatProviderBackoff(ctx, repo.ORM(), chatID); berr == nil {
 		rd.backoffByThread = backoff
 	}
 

@@ -16,7 +16,9 @@ service RepoService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   // forge:custom — lists one project's repos after checking the caller owns the project
-  rpc ListRepos(ListReposRequest) returns (ListReposResponse) {}
+  rpc ListRepos(ListReposRequest) returns (ListReposResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc AddRepo(AddRepoRequest) returns (AddRepoResponse) {
     option (forge.v1.method) = {
       activity: {
@@ -41,7 +43,9 @@ service RepoService {
       }
     };
   }
-  rpc GetRepoGitInfo(GetRepoGitInfoRequest) returns (GetRepoGitInfoResponse) {}
+  rpc GetRepoGitInfo(GetRepoGitInfoRequest) returns (GetRepoGitInfoResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // Repo is a git repository nested inside a project.

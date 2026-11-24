@@ -511,6 +511,12 @@ enum DaemonUpgradeState {
   // The restart did not happen as asked; detail says why. What the daemon
   // does next is in detail too.
   DAEMON_UPGRADE_STATE_FAILED = 5;
+  // A daemon that updates itself (`reliant daemon start --auto-update`, on a
+  // person's machine) has downloaded and verified a newer release and keeps
+  // serving until a quiet moment (no tool call or background process
+  // running, no recent activity), when it drains and installs it. A gateway
+  // keeps routing tool requests to it.
+  DAEMON_UPGRADE_STATE_STAGED = 6;
 }
 
 // DiskReport is a machine's view of the filesystems that matter to the work

@@ -165,9 +165,11 @@ func TestBaseDriverStream_GenAISpanErrorVsCancel(t *testing.T) {
 		name      string
 		err       error
 		wantError bool
+		wantType  string
 	}{
-		{"provider error sets error status", errors.New("overloaded"), true},
-		{"cancellation is not an error", context.Canceled, false},
+		{"provider error sets error status", errors.New(`POST "https://api": 529 Overloaded: echoing "my password is hunter2"`), true, "http_529"},
+		{"unclassified provider error", errors.New(`connection reset while sending "my password is hunter2"`), true, telemetry.ErrorTypeError},
+		{"cancellation is not an error", context.Canceled, false, telemetry.ErrorTypeCanceled},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := recordGenAISpans(t)
@@ -176,9 +178,14 @@ func TestBaseDriverStream_GenAISpanErrorVsCancel(t *testing.T) {
 			}
 			s := endedSpans(t, rec, 1)[0]
 			assert.Equal(t, tc.wantError, s.Status().Code == codes.Error)
-			if !tc.wantError {
-				assert.Equal(t, "canceled", genAIAttrs(s)["error.type"].AsString())
+			assert.Equal(t, tc.wantType, genAIAttrs(s)["error.type"].AsString())
+			// The class, never the provider's text: a provider can echo the
+			// prompt into an error. The staff logs keep the text.
+			if tc.wantError {
+				assert.Equal(t, tc.wantType, s.Status().Description)
 			}
+			assert.NotContains(t, s.Status().Description, "hunter2")
+			assert.Empty(t, s.Events(), "no exception event")
 		})
 	}
 }

@@ -45,12 +45,12 @@ vi.mock("@/services/forge/live", async (importOriginal) => ({
 
 vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/secretStore")>()),
-  listSecrets: (...args: unknown[]) => listSecrets(...args),
-  setSecret: (...args: unknown[]) => setSecret(...args),
-  deleteSecret: (...args: unknown[]) => deleteSecret(...args),
-  getSecretVersions: (...args: unknown[]) => getSecretVersions(...args),
-  beginStepUp: (...args: unknown[]) => beginStepUp(...args),
-  completeStepUp: (...args: unknown[]) => completeStepUp(...args),
+  listSecrets: (_transport: unknown, ...args: unknown[]) => listSecrets(...args),
+  setSecret: (_transport: unknown, ...args: unknown[]) => setSecret(...args),
+  deleteSecret: (_transport: unknown, ...args: unknown[]) => deleteSecret(...args),
+  getSecretVersions: (_transport: unknown, ...args: unknown[]) => getSecretVersions(...args),
+  beginStepUp: (_transport: unknown, ...args: unknown[]) => beginStepUp(...args),
+  completeStepUp: (_transport: unknown, ...args: unknown[]) => completeStepUp(...args),
 }));
 
 import { LiveSecretsSection } from "../LiveSecretsSection";

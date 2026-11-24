@@ -577,17 +577,43 @@ func CanWriteMachine(ctx context.Context, userID string, machine *core.Daemon) b
 	return decide(ctx, userID, machineResource(machine))
 }
 
+// workflowResource is the saved workflow as every decision reads it. Its
+// visibility is read only by the shared reads (ReadWorkflowAccess,
+// SharedWorkflowDraftsFor) and WorkflowShareChange: CanReadWorkflow and
+// CanWriteWorkflow decide with deny, which never reads it.
 func workflowResource(w *core.WorkflowDraft) resource {
 	if w == nil {
 		return resource{}
 	}
-	return resource{present: true, ownerUserID: w.UserID, orgID: orgOf(w.OrgID)}
+	return resource{present: true, ownerUserID: w.UserID, orgID: orgOf(w.OrgID), visibility: w.Visibility}
 }
 
 // CanReadWorkflow reports whether userID may see a saved workflow
-// definition, or run it in a chat they may write. nil is false.
+// definition, or run it in a chat they may write: its owner alone, even once
+// it is shared (a viewer reads a shared one only through ReadWorkflowAccess,
+// never by slug, name or launch). nil is false.
 func CanReadWorkflow(ctx context.Context, userID string, workflow *core.WorkflowDraft) bool {
 	return decide(ctx, userID, workflowResource(workflow))
+}
+
+// ReadWorkflowAccess is ReadChatAccess for a saved workflow: the owner, or a
+// viewer of one its owner shared with its org (only on a WithViewerReads
+// context). A viewer reads its definition, read-only; it never runs it.
+func ReadWorkflowAccess(ctx context.Context, userID string, workflow *core.WorkflowDraft) (Access, error) {
+	return readAccess(ctx, userID, workflowResource(workflow))
+}
+
+// SharedWorkflowDraftsFor is SharedChatsFor for saved workflows.
+func SharedWorkflowDraftsFor(ctx context.Context, userID string, workflows []*core.WorkflowDraft) []*core.WorkflowDraft {
+	return Visible(ctx, userID, workflows, func(ctx context.Context, userID string, w *core.WorkflowDraft) bool {
+		return isViewer(ctx, userID, workflowResource(w))
+	})
+}
+
+// WorkflowVisibility is who besides its owner may read a saved workflow,
+// for display.
+func WorkflowVisibility(workflow *core.WorkflowDraft) core.Visibility {
+	return workflowResource(workflow).visibility
 }
 
 // CanWriteWorkflow reports whether userID may change, rename, publish or
@@ -829,7 +855,8 @@ func RequireOrgScope(ctx context.Context, userID, orgID, scope string) error {
 	return ErrMissingOrgScope
 }
 
-// Refusals of a visibility change (ChatShareChange, ProjectShareChange)
+// Refusals of a visibility change (ChatShareChange, ProjectShareChange,
+// WorkflowShareChange)
 // beyond ErrDenied (the call site's NotFound), ErrNotOrgAdmin and
 // ErrMembershipUnavailable.
 var (
@@ -872,6 +899,16 @@ func ProjectShareChange(ctx context.Context, userID string, project *core.Projec
 		id = project.ID
 	}
 	return shareChange(ctx, userID, projectResource(project), core.ShareKindProject, id, to)
+}
+
+// WorkflowShareChange is ChatShareChange for a saved workflow
+// (org-sharing.md §8.5).
+func WorkflowShareChange(ctx context.Context, userID string, workflow *core.WorkflowDraft, to core.Visibility) (core.ShareChange, error) {
+	id := ""
+	if workflow != nil {
+		id = workflow.ID
+	}
+	return shareChange(ctx, userID, workflowResource(workflow), core.ShareKindWorkflow, id, to)
 }
 
 func shareChange(ctx context.Context, userID string, r resource, kind core.ShareKind, id string, to core.Visibility) (core.ShareChange, error) {

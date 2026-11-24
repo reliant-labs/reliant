@@ -14,9 +14,9 @@
  * valid only with the same request.
  */
 
-import { keepPreviousData, useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
 
-import { orgQueryEnabled, useOrgScope, withOrgFailure } from "@/lib/orgScope";
+import { keepPreviousInOrgSegment, orgQueryEnabled, useOrgScope, withOrgFailure } from "@/lib/orgScope";
 import { useTestApi } from "@/services/controlPlane/tests/TestApiContext";
 import { testsRetry, testsRetryDelay } from "@/services/controlPlane/tests/errors";
 import type { CoverageTarget, FlakyFilters, TestRunFilters } from "@/services/controlPlane/tests/types";
@@ -78,7 +78,8 @@ export function useTestRuns(project: string, filters: TestRunFilters | null) {
         initialPageParam: "",
         getNextPageParam: (last: { nextPageToken: string }) => last.nextPageToken || undefined,
         enabled: !!project && !!filters && orgQueryEnabled(org),
-        placeholderData: keepPreviousData,
+        // Only an answer read in this org: every key carries the org as a segment (testKeys.all).
+        placeholderData: keepPreviousInOrgSegment(org.orgId),
         ...LIVE,
       },
       org
@@ -123,7 +124,8 @@ export function useCoverage(project: string, query: CoverageQuery | null) {
         queryKey: testKeys.coverage(org.orgId, project, query ?? { target: { gitCommit: "" }, path: "" }),
         queryFn: ({ signal }: { signal: AbortSignal }) => api.getCoverage({ orgId: org.orgId, project, ...query! }, { signal }),
         enabled: !!project && !!query && orgQueryEnabled(org),
-        placeholderData: keepPreviousData,
+        // Only an answer read in this org: every key carries the org as a segment (testKeys.all).
+        placeholderData: keepPreviousInOrgSegment(org.orgId),
         ...SETTLED,
       },
       org
@@ -178,7 +180,8 @@ export function useFlakyTests(project: string, filters: FlakyFilters | null) {
         initialPageParam: "",
         getNextPageParam: (last: { nextPageToken: string }) => last.nextPageToken || undefined,
         enabled: !!project && !!filters && orgQueryEnabled(org),
-        placeholderData: keepPreviousData,
+        // Only an answer read in this org: every key carries the org as a segment (testKeys.all).
+        placeholderData: keepPreviousInOrgSegment(org.orgId),
         ...LIVE,
       },
       org

@@ -157,7 +157,7 @@ type outageStore struct {
 	db *outageDatabase
 }
 
-func (s outageStore) GetWorkflow(context.Context, string) (*db.Workflow, error) {
+func (s outageStore) LoadWorkflow(context.Context, string) (*db.Workflow, error) {
 	if err := s.db.unavailable("probe"); err != nil {
 		return nil, err
 	}
@@ -249,7 +249,8 @@ func TestDatabaseOutage_RunRidesOutAndCompletes(t *testing.T) {
 	env := suite.NewTestWorkflowEnvironment()
 	env.SetDataConverter(rtemporal.NewFlexibleDataConverter())
 	env.SetTestTimeout(30 * time.Second)
-	registry := NewActivityRegistry(outageStore{wrapperTestRepo: &wrapperTestRepo{}, db: database})
+	storeOverOutage := outageStore{wrapperTestRepo: &wrapperTestRepo{}, db: database}
+	registry := NewActivityRegistry(ActivityRegistryDeps{Store: storeOverOutage, Workflows: storeOverOutage})
 	registry.SetMessageWriter(database)
 	withOutageClock(clock)(registry)
 	registerWrapped(env, registry, "CallLLM", callLLM)
@@ -335,12 +336,12 @@ func TestClassifyError_DatabaseOutageIsRetryable(t *testing.T) {
 }
 
 // hangingProbeStore is a database that accepts the probe's connection and
-// never answers: GetWorkflow returns only when its context ends.
+// never answers: LoadWorkflow returns only when its context ends.
 type hangingProbeStore struct {
 	*wrapperTestRepo
 }
 
-func (hangingProbeStore) GetWorkflow(ctx context.Context, _ string) (*db.Workflow, error) {
+func (hangingProbeStore) LoadWorkflow(ctx context.Context, _ string) (*db.Workflow, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
@@ -351,7 +352,7 @@ func (hangingProbeStore) GetWorkflow(ctx context.Context, _ string) (*db.Workflo
 func TestAwaitDatabase_ProbeNeverOutrunsTheDeadline(t *testing.T) {
 	t.Parallel()
 	w := &ActivityWrapper[types.ActivityInput, *reliantv1.CallLLMOutput]{
-		repo: hangingProbeStore{&wrapperTestRepo{}},
+		workflows: hangingProbeStore{&wrapperTestRepo{}},
 		dbOutage: dbOutagePolicy{
 			rideOut:      dbOutageRideOut,
 			firstBackoff: time.Millisecond,

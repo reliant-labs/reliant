@@ -36,6 +36,9 @@ type Deps struct {
 	// Repo reads an org's triggers and saved workflows and keeps the offers.
 	Repo Repository
 
+	// Offers lists what a takeover offers and keeps its offers.
+	Offers Offers
+
 	// Triggers adopts a trigger as its new owner and renders one for
 	// someone who does not own it. *trigger.Service is it.
 	Triggers TriggerAdopter
@@ -56,6 +59,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("automation_takeover: Deps.Repo is required")
+	}
+	if d.Offers == nil {
+		return fmt.Errorf("automation_takeover: Deps.Offers is required")
 	}
 	if d.Triggers == nil {
 		return fmt.Errorf("automation_takeover: Deps.Triggers is required")

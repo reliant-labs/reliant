@@ -5,8 +5,8 @@
  * control-plane's StorageBrowserService answers (one level per listing with
  * "/" as the delimiter, opaque page tokens sealed to the environment, bucket
  * and prefix, the audited environment's confirmation, preview caps), so the
- * component tests and the dev-only preview (/forge-storage-preview) exercise
- * the real browser against real behaviour.
+ * component tests exercise the real browser against real behaviour. (The
+ * dev-only preview, /forge-storage-preview, renders the shop fixture pack.)
  *
  *   environments  env-prod (prod, AUDITED), env-staging (staging, OPEN),
  *                 env-dev (dev, OPEN)
@@ -34,12 +34,6 @@ import type {
   StorageObjectMeta,
 } from "@/services/controlPlane/storageBrowser/storageBrowserApi";
 import type { StorageBrowserApi } from "@/services/controlPlane/storageBrowser/StorageBrowserApiContext";
-
-export const STORAGE_FIXTURE_ENVS = [
-  { id: "env-prod", name: "prod" },
-  { id: "env-staging", name: "staging" },
-  { id: "env-dev", name: "dev" },
-] as const;
 
 type Method = keyof StorageBrowserApi;
 

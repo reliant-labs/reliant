@@ -208,7 +208,7 @@ func (s *Service) runLeaseRenewer(ctx context.Context, conn *daemonConnection, r
 // leaseMu, which teardownConnection also takes around its release, so a
 // renewal can never land after the row was deliberately removed.
 func (s *Service) renewLease(ctx context.Context, conn *daemonConnection, streamEnded <-chan struct{}) {
-	if s.deps.Repo == nil {
+	if s.deps.Attachments == nil {
 		return
 	}
 	// Its own goroutine, like the state worker: an unrecovered panic here
@@ -231,7 +231,7 @@ func (s *Service) renewLease(ctx context.Context, conn *daemonConnection, stream
 		}
 		renewCtx, cancel := context.WithTimeout(ctx, leaseRenewTimeout)
 		defer cancel()
-		return s.deps.Repo.RenewDaemonAttachment(renewCtx, &db.DaemonAttachment{
+		return s.deps.Attachments.RenewDaemonAttachment(renewCtx, &db.DaemonAttachment{
 			DaemonID:           conn.daemonID,
 			UserID:             conn.userID,
 			Source:             conn.attachSource,
@@ -315,8 +315,8 @@ func (s *Service) applyInboundState(ctx context.Context, conn *daemonConnection,
 		// attachment record so the daemon registry (and the UI behind it)
 		// can surface memory pressure. limit==0 means the daemon has no
 		// cgroup accounting (local/mac) — nothing to record.
-		if hb := m.Heartbeat; hb != nil && hb.MemoryLimitBytes > 0 {
-			if err := s.deps.Repo.UpdateDaemonAttachmentMemory(ctx, conn.daemonID,
+		if hb := m.Heartbeat; hb != nil && hb.MemoryLimitBytes > 0 && s.deps.Attachments != nil {
+			if err := s.deps.Attachments.SetDaemonAttachmentMemory(ctx, conn.daemonID,
 				int64(hb.MemoryUsedBytes), int64(hb.MemoryLimitBytes), hb.MemoryPressure); err != nil {
 				logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon memory telemetry", "error", err, "daemonID", conn.daemonID)
 			}
@@ -351,8 +351,8 @@ func (s *Service) applyInboundState(ctx context.Context, conn *daemonConnection,
 			// the UI and wait_for_machine read it.
 			s.recordMachineHealth(ctx, conn, hb.Health, time.Now().UTC())
 			portsKey := fmt.Sprint(hb.DetectedPorts)
-			if portsKey != conn.lastDetectedPortsKey {
-				if err := s.deps.Repo.UpdateDaemonAttachmentPorts(ctx, conn.daemonID, hb.DetectedPorts); err != nil {
+			if portsKey != conn.lastDetectedPortsKey && s.deps.Attachments != nil {
+				if err := s.deps.Attachments.SetDaemonAttachmentPorts(ctx, conn.daemonID, hb.DetectedPorts); err != nil {
 					logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon detected ports", "error", err, "daemonID", conn.daemonID)
 				} else {
 					conn.lastDetectedPortsKey = portsKey

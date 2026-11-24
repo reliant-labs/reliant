@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/ptr"
-	"github.com/stretchr/testify/require"
 )
 
 // The snapshot no longer replays the chat's tool_call update history; it
@@ -73,7 +74,7 @@ func TestChatSnapshot_ToolCallsAreBoundedToWindowAndLive(t *testing.T) {
 	upsert("toolu_old_backgrounded", core.ToolCallStatusBackgrounded, nil)
 	upsert("toolu_old_pending", core.ToolCallStatusPending, nil)
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshotByID(ctx, fixture.ChatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, fixture.ChatID)
 	require.NoError(t, err)
 
 	require.Equal(t, map[string]string{
@@ -110,7 +111,7 @@ func TestChatSnapshot_InWindowInheritedInFlightCallIsCancelledLikeItsBlock(t *te
 		RequestedAt: now, CreatedAt: now, UpdatedAt: now,
 	}))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshotByID(ctx, fixture.ChatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, fixture.ChatID)
 	require.NoError(t, err)
 
 	var blockStatus *reliantv1.ToolCallStatus

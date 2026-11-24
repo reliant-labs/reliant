@@ -328,9 +328,9 @@ const file_reliant_v1_terminal_proto_rawDesc = "" +
 	"_daemon_id\"R\n" +
 	"\x1cCloseTerminalSessionResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage2\xb7\x02\n" +
-	"\x0fTerminalService\x12c\n" +
-	"\fListSessions\x12'.reliant.v1.ListTerminalSessionsRequest\x1a(.reliant.v1.ListTerminalSessionsResponse\"\x00\x12\xbe\x01\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage2\xba\x02\n" +
+	"\x0fTerminalService\x12f\n" +
+	"\fListSessions\x12'.reliant.v1.ListTerminalSessionsRequest\x1a(.reliant.v1.ListTerminalSessionsResponse\"\x03\x90\x02\x01\x12\xbe\x01\n" +
 	"\fCloseSession\x12'.reliant.v1.CloseTerminalSessionRequest\x1a(.reliant.v1.CloseTerminalSessionResponse\"[\xa2\xbb\x18W:U:Scloses a terminal session on the daemon: interactive transport, not project historyB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (

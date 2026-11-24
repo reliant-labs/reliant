@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
@@ -31,7 +33,7 @@ func shareChat(t *testing.T, env *storetest.Env, id, owner string, org *string, 
 
 func share(t *testing.T, env *storetest.Env, kind core.ShareKind, id, owner, org string) {
 	t.Helper()
-	changed, err := env.Repo.ApplyShareChange(context.Background(), core.ShareChange{
+	changed, err := applyShareChange(env, context.Background(), core.ShareChange{
 		Kind: kind, ResourceID: id, OrgID: org, OwnerUserID: owner, ActorUserID: owner, Action: core.ShareActionShare,
 	})
 	if err != nil || !changed {
@@ -76,7 +78,7 @@ func TestListSharedChats(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := env.Repo.ListSharedChats(ctx, core.SharedChatFilters{OrgID: "acme", ViewerUserID: "alice"})
+	got, err := store.ListSharedChats(ctx, env.ORM, core.SharedChatFilters{OrgID: "acme", ViewerUserID: "alice"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +92,7 @@ func TestListSharedChats(t *testing.T) {
 		}
 	}
 
-	byProject, err := env.Repo.ListSharedChats(ctx, core.SharedChatFilters{OrgID: "acme", ViewerUserID: "alice", ProjectID: strp(other.ID)})
+	byProject, err := store.ListSharedChats(ctx, env.ORM, core.SharedChatFilters{OrgID: "acme", ViewerUserID: "alice", ProjectID: strp(other.ID)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +106,7 @@ func TestListSharedChats(t *testing.T) {
 		"project_id+project_ids": {ProjectID: strp(other.ID), ProjectIDs: []string{storetest.SeedProjectID}},
 	} {
 		f.OrgID, f.ViewerUserID = "acme", "alice"
-		several, err := env.Repo.ListSharedChats(ctx, f)
+		several, err := store.ListSharedChats(ctx, env.ORM, f)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -112,21 +114,21 @@ func TestListSharedChats(t *testing.T) {
 			t.Fatalf("%s: several projects' shared chats = %v, want %v", name, ids, want)
 		}
 	}
-	if none, err := env.Repo.ListSharedChats(ctx, core.SharedChatFilters{
+	if none, err := store.ListSharedChats(ctx, env.ORM, core.SharedChatFilters{
 		OrgID: "acme", ViewerUserID: "alice", ProjectIDs: []string{"proj-nothing-shared"},
 	}); err != nil || len(none) != 0 {
 		t.Fatalf("a project with nothing shared lists %v, %v; want nothing (never every project)", convChatIDs(none), err)
 	}
 	// A present-but-empty ProjectID still narrows to project "" (nothing),
 	// as before ProjectIDs existed; unset is the whole list.
-	if none, err := env.Repo.ListSharedChats(ctx, core.SharedChatFilters{
+	if none, err := store.ListSharedChats(ctx, env.ORM, core.SharedChatFilters{
 		OrgID: "acme", ViewerUserID: "alice", ProjectID: strp(""),
 	}); err != nil || len(none) != 0 {
 		t.Fatalf("a present empty project lists %v, %v; want nothing (never every project)", convChatIDs(none), err)
 	}
 
 	// bob sees carol's and alice's, never his own.
-	bobs, err := env.Repo.ListSharedChats(ctx, core.SharedChatFilters{OrgID: "acme", ViewerUserID: "bob"})
+	bobs, err := store.ListSharedChats(ctx, env.ORM, core.SharedChatFilters{OrgID: "acme", ViewerUserID: "bob"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +136,7 @@ func TestListSharedChats(t *testing.T) {
 		t.Fatalf("bob's shared list = %v", ids)
 	}
 
-	paged, err := env.Repo.ListSharedChats(ctx, core.SharedChatFilters{OrgID: "acme", ViewerUserID: "alice", Limit: 2, Offset: 1})
+	paged, err := store.ListSharedChats(ctx, env.ORM, core.SharedChatFilters{OrgID: "acme", ViewerUserID: "alice", Limit: 2, Offset: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +148,7 @@ func TestListSharedChats(t *testing.T) {
 		"no org":    {ViewerUserID: "alice"},
 		"no viewer": {OrgID: "acme"},
 	} {
-		if got, err := env.Repo.ListSharedChats(ctx, f); err != nil || len(got) != 0 {
+		if got, err := store.ListSharedChats(ctx, env.ORM, f); err != nil || len(got) != 0 {
 			t.Fatalf("%s: %v, %v; want nothing", name, convChatIDs(got), err)
 		}
 	}
@@ -182,7 +184,7 @@ func TestListSharedProjects(t *testing.T) {
 	share(t, env, core.ShareKindProject, "alice-shared", "alice", "acme")
 	share(t, env, core.ShareKindProject, "bob-globex", "bob", "globex")
 
-	got, err := env.Repo.ListSharedProjects(ctx, core.SharedProjectFilters{OrgID: "acme", ViewerUserID: "alice"})
+	got, err := store.ListSharedProjects(ctx, env.ORM, core.SharedProjectFilters{OrgID: "acme", ViewerUserID: "alice"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,8 +198,78 @@ func TestListSharedProjects(t *testing.T) {
 	if want := []string{"carol-shared", "bob-shared"}; !reflect.DeepEqual(ids, want) {
 		t.Fatalf("shared projects = %v, want %v", ids, want)
 	}
-	if got, err := env.Repo.ListSharedProjects(ctx, core.SharedProjectFilters{OrgID: "acme"}); err != nil || len(got) != 0 {
+	if got, err := store.ListSharedProjects(ctx, env.ORM, core.SharedProjectFilters{OrgID: "acme"}); err != nil || len(got) != 0 {
 		t.Fatalf("no viewer: %d rows, %v", len(got), err)
+	}
+}
+
+// The same predicate over saved workflows (org-sharing.md §8.5): only
+// visibility='org' rows of the org, never the viewer's own, a private one, a
+// hidden one or another org's; most recently shared first; paged.
+func TestListSharedWorkflowDrafts(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	base := time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC)
+	add := func(id, owner string, org *string, hidden bool) {
+		t.Helper()
+		d := &core.WorkflowDraft{
+			ID: id, UserID: owner, OrgID: org, Name: id, Slug: id, Definition: "name: " + id,
+			Status: core.WorkflowDraftStatusComplete, IsHidden: hidden, CreatedAt: base, UpdatedAt: base,
+		}
+		if err := store.InsertWorkflowDraft(ctx, env.ORM, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add("bob-shared-old", "bob", strp("acme"), false)
+	add("bob-shared-new", "bob", strp("acme"), false)
+	add("carol-shared", "carol", strp("acme"), false)
+	add("alice-shared", "alice", strp("acme"), false)
+	add("bob-private", "bob", strp("acme"), false)
+	add("bob-hidden", "bob", strp("acme"), true)
+	add("bob-globex", "bob", strp("globex"), false)
+	for i, s := range []struct{ id, owner, org string }{
+		{"bob-shared-old", "bob", "acme"},
+		{"carol-shared", "carol", "acme"},
+		{"bob-shared-new", "bob", "acme"},
+		{"alice-shared", "alice", "acme"},
+		{"bob-hidden", "bob", "acme"},
+		{"bob-globex", "bob", "globex"},
+	} {
+		changed, err := applyShareChange(env, ctx, core.ShareChange{
+			Kind: core.ShareKindWorkflow, ResourceID: s.id, OrgID: s.org, OwnerUserID: s.owner, ActorUserID: s.owner,
+			Action: core.ShareActionShare, At: base.Add(time.Duration(i) * time.Minute),
+		})
+		if err != nil || !changed {
+			t.Fatalf("share %s: changed=%v err=%v", s.id, changed, err)
+		}
+	}
+
+	list := func(f core.SharedWorkflowDraftFilters) []string {
+		t.Helper()
+		got, err := store.ListSharedWorkflowDrafts(ctx, env.ORM, f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := []string{}
+		for _, d := range got {
+			ids = append(ids, d.ID)
+			if d.Visibility != core.VisibilityOrg || d.SharedAt == nil {
+				t.Fatalf("%s: visibility %q shared_at %v", d.ID, d.Visibility, d.SharedAt)
+			}
+		}
+		return ids
+	}
+	if got, want := list(core.SharedWorkflowDraftFilters{OrgID: "acme", ViewerUserID: "alice"}), []string{"bob-shared-new", "carol-shared", "bob-shared-old"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("shared workflows = %v, want %v", got, want)
+	}
+	if got, want := list(core.SharedWorkflowDraftFilters{OrgID: "acme", ViewerUserID: "alice", Limit: 1, Offset: 1}), []string{"carol-shared"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("page = %v, want %v", got, want)
+	}
+	if got := list(core.SharedWorkflowDraftFilters{OrgID: "acme"}); len(got) != 0 {
+		t.Fatalf("no viewer: %v", got)
+	}
+	if got := list(core.SharedWorkflowDraftFilters{ViewerUserID: "alice"}); len(got) != 0 {
+		t.Fatalf("no org: %v", got)
 	}
 }
 
@@ -236,7 +308,7 @@ func TestApplyShareChange(t *testing.T) {
 		if c.ActorUserID == "" {
 			c.ActorUserID = c.OwnerUserID
 		}
-		changed, err := env.Repo.ApplyShareChange(ctx, c)
+		changed, err := applyShareChange(env, ctx, c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -313,7 +385,7 @@ func TestApplyShareChange(t *testing.T) {
 	}
 
 	// A missing row changes nothing.
-	if changed, err := env.Repo.ApplyShareChange(ctx, core.ShareChange{
+	if changed, err := applyShareChange(env, ctx, core.ShareChange{
 		Kind: core.ShareKindChat, ResourceID: "nope", OrgID: "acme", OwnerUserID: "bob", ActorUserID: "bob", Action: core.ShareActionShare,
 	}); err != nil || changed {
 		t.Fatalf("missing chat: changed=%v err=%v", changed, err)
@@ -324,7 +396,7 @@ func TestApplyShareChange(t *testing.T) {
 		{Kind: core.ShareKindChat, ResourceID: "c1", OrgID: "acme", OwnerUserID: "bob", ActorUserID: "bob", Action: "publish"},
 		{Kind: core.ShareKindChat, ResourceID: "c1", OwnerUserID: "bob", ActorUserID: "bob", Action: core.ShareActionShare},
 	} {
-		if _, err := env.Repo.ApplyShareChange(ctx, c); err == nil {
+		if _, err := applyShareChange(env, ctx, c); err == nil {
 			t.Fatalf("%+v: no error", c)
 		}
 	}
@@ -384,7 +456,7 @@ func TestApplyShareChangeRollsBackWithoutItsEvent(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	changed, err := env.Repo.ApplyShareChange(ctx, core.ShareChange{
+	changed, err := applyShareChange(env, ctx, core.ShareChange{
 		Kind: core.ShareKindChat, ResourceID: "c1", OrgID: "acme", OwnerUserID: "bob", ActorUserID: "bob",
 		Action: core.ShareActionShare, At: at.Add(time.Minute),
 	})
@@ -417,7 +489,7 @@ func TestConcurrentShareChangesApplyOnce(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			results[i], errs[i] = env.Repo.ApplyShareChange(ctx, core.ShareChange{
+			results[i], errs[i] = applyShareChange(env, ctx, core.ShareChange{
 				Kind: core.ShareKindChat, ResourceID: "c1", OrgID: "acme", OwnerUserID: "bob", ActorUserID: "bob",
 				Action: core.ShareActionShare, At: at.Add(time.Duration(i+1) * time.Minute),
 			})
@@ -441,4 +513,16 @@ func TestConcurrentShareChangesApplyOnce(t *testing.T) {
 	if applied != 1 || len(ev) != 1 {
 		t.Fatalf("%d applied, %d events; want exactly one of each", applied, len(ev))
 	}
+}
+
+// applyShareChange is how the sharing handler writes a visibility: the change
+// and its share event in one ReadCommitted transaction.
+func applyShareChange(env *storetest.Env, ctx context.Context, c core.ShareChange) (bool, error) {
+	var changed bool
+	err := env.Repo.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var err error
+		changed, err = store.ApplyShareChange(ctx, env.ORM, c)
+		return err
+	})
+	return changed, err
 }

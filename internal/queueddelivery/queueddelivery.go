@@ -39,8 +39,10 @@
 // Run is a NATS JetStream consumer: it creates or updates the durable consumer
 // on DAEMON_EVENTS and consumes its connect events.
 //
-// Built by hand, by internal/app's NewQueuedDeliverer provider
-// (providers_api.go): never a node compose.go constructs from Deps.
+// Built by internal/app's NewQueuedDeliverer provider (providers_api.go): its
+// Machines is the NATSDaemonRouter field of the api's *APIDaemonRouter and its
+// Signaler the Client field of *TemporalClient, fields of graph nodes rather
+// than graph types forge can fill.
 //
 //forge:provided
 package queueddelivery

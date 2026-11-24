@@ -3,6 +3,7 @@ package daemon_registry_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
@@ -85,8 +86,13 @@ func requirePersonRefusal(t *testing.T, err error) {
 
 // poolWriterRepo records every write that reached the store; the test user
 // owns machine d-1 and pool cicd, and nothing else.
-func poolWriterRepo(writes *[]string) *daemon_registry.MockRepository {
-	return &daemon_registry.MockRepository{
+func poolWriterDeps(writes *[]string) daemon_registry.Deps {
+	return daemon_registry.Deps{Repo: &daemon_registry.MockRepository{
+		GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
+			return &db.Daemon{ID: id, UserID: "test-user"}, nil
+		},
+		ListDaemonsByUserIDFunc: func(context.Context, string) ([]*db.Daemon, error) { return nil, nil },
+	}, Pools: &daemon_registry.MockPools{
 		SetDaemonLabelsFunc: func(_ context.Context, userID, id string, _ map[string]string) (bool, error) {
 			if userID != "test-user" || id != "d-1" {
 				return false, nil
@@ -94,10 +100,7 @@ func poolWriterRepo(writes *[]string) *daemon_registry.MockRepository {
 			*writes = append(*writes, "label "+id)
 			return true, nil
 		},
-		GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
-			return &db.Daemon{ID: id, UserID: "test-user"}, nil
-		},
-		PutMachinePoolFunc: func(_ context.Context, p *core.MachinePool) (*core.MachinePool, error) {
+		PutMachinePoolFunc: func(_ context.Context, p *core.MachinePool, _ string, _ time.Time) (*core.MachinePool, error) {
 			*writes = append(*writes, "put "+p.Name+" for "+p.UserID)
 			return p, nil
 		},
@@ -112,8 +115,7 @@ func poolWriterRepo(writes *[]string) *daemon_registry.MockRepository {
 		ListMachinePoolMembersFunc: func(context.Context, *core.MachinePool, string) ([]core.MachinePoolMemberRow, error) {
 			return nil, nil
 		},
-		ListDaemonsByUserIDFunc: func(context.Context, string) ([]*db.Daemon, error) { return nil, nil },
-	}
+	}}
 }
 
 func TestMachinePoolWritesNeedAPerson(t *testing.T) {
@@ -122,7 +124,7 @@ func TestMachinePoolWritesNeedAPerson(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var writes []string
-			svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: poolWriterRepo(&writes)}))
+			svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(poolWriterDeps(&writes)))
 			ctx := tc.ctx(t)
 
 			_, labelErr := svc.SetMachineLabels(ctx, connect.NewRequest(&pb.SetMachineLabelsRequest{DaemonId: "d-1", Labels: map[string]string{"pool": "cicd"}}))
@@ -162,7 +164,7 @@ func TestMachinePoolWritesStayOnTheCallersOwn(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			var writes []string
-			svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: poolWriterRepo(&writes)}))
+			svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(poolWriterDeps(&writes)))
 			_, err := svc.SetMachineLabels(ctx(t), connect.NewRequest(&pb.SetMachineLabelsRequest{DaemonId: "someone-elses", Labels: map[string]string{"pool": "cicd"}}))
 			if svcerr.Code(err) != connect.CodeNotFound {
 				t.Fatalf("labelling another user's machine = %v, want NotFound", err)

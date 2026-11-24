@@ -7,7 +7,7 @@ import { cn } from "../../lib/utils";
 import { useChatStore } from "../../store/chatStore";
 import { resolveChat, useChat, useChatListWithWorkspaces } from "../../hooks/chat-queries";
 import { useChatSearch } from "../../hooks/chat-pull-queries";
-import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { useShellOneProject } from "../../lib/urlState/shellScopeStore";
 import { openChat as openChatInContext } from "../../store/openChat";
 import { toast } from "../../lib/toast-manager";
 import type { Chat, Message } from "../../api/client";
@@ -84,7 +84,7 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // History searches the sidebar's scope: the project filter, or every project.
-  const scope = useWorkspaceStateStore((state) => state.projectFilterId);
+  const scope = useShellOneProject();
   const { data: scopeList } = useChatListWithWorkspaces(scope);
   const chats = scopeList?.chats ?? NO_CHATS;
   // History mode: the most recent chats, or the matches for the query.

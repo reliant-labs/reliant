@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
 	chat "github.com/reliant-labs/reliant/internal/handlers/chat"
 )
@@ -24,7 +25,7 @@ func TestListChatPlans_Generated(t *testing.T) {
 		now := time.Now()
 		return []*db.Plan{{ID: "plan-1", Title: "Ship it", CreatedAt: now, UpdatedAt: now}}, nil
 	}
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &chat.MockMailbox{}, AgentMessages: &chat.MockAgentMessages{}, Messages: &chat.MockMessages{}, ToolBlocks: &chat.MockToolBlocks{}, Senders: &chat.MockSenders{}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListChatPlansRequest, pb.ListChatPlansResponse]{
 		{

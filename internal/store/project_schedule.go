@@ -387,6 +387,13 @@ var purgeProjectOrphanSteps = []struct{ name, sql string }{
 		WHERE recovery_id IN (SELECT id FROM worktree_recoveries WHERE project_id = ?0)`},
 	{"worktree_recoveries", `DELETE FROM worktree_recoveries WHERE project_id = ?0`},
 	{"hosted_http_action_tickets", `DELETE FROM hosted_http_action_tickets WHERE project_id = ?0`},
+	// The chat batches took the links of the project's chats. A link also
+	// names the project its chat was in when it was written: this takes any
+	// whose chat is gone without them. A chat that moved to another project
+	// keeps its links.
+	{"chat_pr_links", `
+		DELETE FROM chat_pr_links l
+		WHERE l.project_id = ?0 AND NOT EXISTS (SELECT 1 FROM chats c WHERE c.id = l.chat_id)`},
 }
 
 // purgeProjectOrphans removes the project's rows that no foreign key

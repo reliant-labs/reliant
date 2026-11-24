@@ -110,6 +110,34 @@ message IdentitySocialStatus {
   google.protobuf.Timestamp applied_at = 3;
 }
 
+// IdentitySocialCheck is one declared social provider's sign-in check
+// (CheckSocialSignIn): the authorize URL the issuer built for a sign-in it
+// started, or why none was started. It carries no secret: a client id is
+// public, and the URL is the one a browser is sent to.
+message IdentitySocialCheck {
+  // google | github
+  string type = 1;
+  // The provider's authorize URL the issuer answered. Empty when no sign-in
+  // was started (see error).
+  string auth_url = 2;
+  // Why no sign-in was started: the provider is not applied, or the issuer
+  // refused. Empty when one was.
+  string error = 3;
+  // The provider's state as IdentitySocialStatus reports it (applied |
+  // pending | secret_missing). Only an applied provider is started.
+  string state = 4;
+  // What the authorize URL carries.
+  string redirect_uri = 5;
+  string client_id = 6;
+  repeated string scopes = 7;
+  // The callback registered at the provider: <issuer>/idps/callback.
+  string expected_redirect_uri = 8;
+  // redirect_uri equals expected_redirect_uri. False on a started sign-in
+  // means the provider will refuse it until the OAuth app lists
+  // redirect_uri, or the issuer's public URL is fixed.
+  bool redirect_uri_matches = 9;
+}
+
 // IdentityPasswordCode is a one-time code that sets a user's password, handed
 // back to an admin who asked for it (return_code) so they can deliver it
 // themselves. It is a credential: it is never logged or audited.
@@ -179,4 +207,76 @@ message IdentityUser {
   // external identity provider) as the instance recorded it. Unset for a user
   // who has never signed in.
   google.protobuf.Timestamp last_sign_in_at = 7;
+  // Whether the instance has VERIFIED `email` (Zitadel's isVerified), as
+  // opposed to an address a user merely typed. An entitlement bound to an
+  // address must read this, never `email` alone.
+  bool email_verified = 8;
+}
+
+// IdentitySummary is one managed identity of an environment, by name: what
+// ListIdentities returns, so a console or CLI can address each one.
+message IdentitySummary {
+  // ManagedIdentity.name ("identity" unless the declaration names another).
+  string name = 1;
+  // Empty until the instance is recorded.
+  string issuer = 2;
+  // UNSPECIFIED when the identity is declared and its instance not yet
+  // recorded.
+  IdentityState state = 3;
+  // Whether the control plane holds an instance for it.
+  bool has_instance = 4;
+}
+
+// ImportIdentityUser is one account carried over from another identity
+// provider by ImportUsers: its id stays the account's id (every token's sub),
+// and its password hash, verified flag and social links come with it.
+//
+// It carries a CREDENTIAL (password_hash). Nothing that handles it logs,
+// audits or returns the hash: results name the id, an outcome and a reason.
+message ImportIdentityUser {
+  // The account's id in the identity: the id the app already keys its rows
+  // by. 1-200 of [A-Za-z0-9._@-]; a malformed one is the row's invalid
+  // result, never the request's error.
+  string id = 1;
+  // The address, and the account's login name.
+  string email = 2;
+  // The source provider's verified flag.
+  bool email_verified = 3;
+  string given_name = 4;
+  string family_name = 5;
+  string display_name = 6;
+  // A modular-crypt or PHC hash: bcrypt ($2a$/$2b$/$2y$, cost 10-16), and
+  // argon2, scrypt or pbkdf2 only where the instance verifies them. There is
+  // no plaintext field. Optional: an account without one signs in another way.
+  string password_hash = 7 [debug_redact = true];
+  // Social accounts that sign in to this account. Each provider must be a
+  // social provider the identity declares, applied on the instance.
+  repeated ImportIdentityLink links = 8;
+  // Written to the account. Keys under "forge." are refused.
+  map<string, string> metadata = 9;
+  // Keys of the identity's console-managed roles. A declared role is refused.
+  repeated string roles = 10;
+}
+
+// ImportIdentityLink is a social account linked to an imported user.
+message ImportIdentityLink {
+  // A declared social provider type: "github" or "google".
+  string provider = 1;
+  // The provider's STABLE id for the person (GitHub's numeric id, Google's
+  // sub), never a login or an address.
+  string provider_user_id = 2;
+  // A display name for the link (a GitHub login). Optional.
+  string provider_user_name = 3;
+}
+
+// ImportIdentityResult is what ImportUsers did with one row. It carries no
+// row content beyond the id.
+message ImportIdentityResult {
+  string id = 1;
+  // created | updated | unchanged | conflict | invalid | failed.
+  string outcome = 2;
+  // Why, for a row that is not created, updated or unchanged
+  // (email_taken_by_other_id, unsupported_hash, provider_not_applied,
+  // link_taken, ...); for unchanged, what an update would change.
+  string reason = 3;
 }

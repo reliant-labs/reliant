@@ -32,8 +32,12 @@ import (
 // (forgecli.AddHostedTools: the CLI's verbs, run in-process). They reach the
 // control plane exactly as the web console does: as the signed-in person, with
 // the person's own bearer, so the control plane's own access rules apply
-// unchanged. Only an OAuth bearer can do that, so a connector credential
-// (`rlat_`, mcp:connector) is refused here.
+// unchanged. Two bearers can do that: the deployment's OAuth JWT, and an MCP
+// client's control-plane access token issued for exactly this endpoint
+// (`rlat_` holding mcp:forge, accepted only while the control plane is a
+// listed authorization server). Every other `rlat_` is refused here: a
+// connector credential (mcp:connector), the workspace connector's mcp:oauth,
+// a CLI token, a daemon's wildcard, and a token with no acting user.
 //
 // WHAT THE GRANT ADDS. Signing in says who is calling; the forge connector
 // grant (connectorgrant.KindForge) says what this connector may reach: one
@@ -64,6 +68,12 @@ type ForgeHTTPDeps struct {
 	// TokenValidator validates OAuth bearer tokens. Required: the endpoint
 	// acts only as a signed-in person.
 	TokenValidator OAuthTokenValidator
+
+	// Credentials introspects an `rlat_` bearer at the control plane. With
+	// it, an MCP client's mcp:forge token issued for this endpoint is
+	// accepted while OAuth.AccessTokenIssuer is a listed authorization
+	// server; nil refuses every `rlat_`.
+	Credentials CredentialIntrospector
 
 	// Bindings resolves which forge connector an OAuth client acts through.
 	Bindings ForgeBindingStore
@@ -128,7 +138,7 @@ func NewForgeHTTPHandler(deps ForgeHTTPDeps) (http.Handler, error) {
 	go limiter.runCleanup(context.Background())
 
 	auth := &forgeAuth{
-		store: deps.Store, tokens: deps.TokenValidator, bindings: deps.Bindings,
+		store: deps.Store, tokens: deps.TokenValidator, credentials: deps.Credentials, bindings: deps.Bindings,
 		oauth: deps.OAuth, consentBase: deps.ConsentBaseURL, logger: logger,
 	}
 	newServer := func(r *http.Request) *mcp.Server {
@@ -180,6 +190,7 @@ func MountForgeOAuthRoutes(mux *http.ServeMux, cfg OAuthConfig) {
 type forgeAuth struct {
 	store       connectorgrant.Store
 	tokens      OAuthTokenValidator
+	credentials CredentialIntrospector
 	bindings    ForgeBindingStore
 	oauth       OAuthConfig
 	consentBase string
@@ -195,29 +206,23 @@ func (a *forgeAuth) middleware(next http.Handler) http.Handler {
 			a.challenge(w, "missing bearer token: sign in to connect Reliant Forge")
 			return
 		}
-		if fat.HasFormat(token) {
-			// A connector credential grants mcp:connector only; it cannot act
-			// as its person at the control plane, which is all these tools do.
-			a.challenge(w, "Reliant Forge signs in with OAuth; a connector credential cannot be used here")
-			return
-		}
-		userID, clientID, err := validateOAuthClient(a.tokens, token)
-		if err != nil || userID == "" {
-			a.challenge(w, "credential is not valid")
-			return
-		}
-		// The client comes from the validated token, never from a header:
-		// a header is the caller's claim, and an application holding a
-		// user's bearer could name another application to borrow its grant.
-		sess, err := resolveForgeForUser(r.Context(), a.store, a.bindings, userID, clientID, a.consentBase)
+		sess, err := a.resolve(r.Context(), token)
 		if err != nil {
+			var mismatch *forgeOrgMismatchError
 			var consent *ConsentError
-			if errors.As(err, &consent) {
+			switch {
+			case errors.As(err, &mismatch):
+				writeConsentRequired(w, &mismatch.consent,
+					"This application was approved for another organization than the one its Reliant Forge connector reads. "+
+						"Open the consent page and choose the organization you approved it for, then retry.")
+			case errors.As(err, &consent):
 				writeConsentRequired(w, consent,
 					"Open the consent page to choose which organization and projects this application may read, then retry.")
-				return
+			case errors.Is(err, errForgeAccessTokenRefused):
+				a.challenge(w, "this access token cannot be used with Reliant Forge: sign in to connect it")
+			default:
+				a.challenge(w, "credential is not valid")
 			}
-			a.challenge(w, "credential is not valid")
 			return
 		}
 		if err := a.store.TouchGrant(r.Context(), sess.GrantID); err != nil {
@@ -244,6 +249,92 @@ func writeConsentRequired(w http.ResponseWriter, consent *ConsentError, descript
 		"consent_url":       consent.ConsentURL,
 	})
 }
+
+// resolve turns a bearer into the forge session it acts through: who is
+// calling and with which OAuth client (identify), then that client's bound,
+// live forge grant (resolveForgeForUser). It is the one resolution both a new
+// request (middleware) and every tool call (boundGrant) run, so the two can
+// never disagree about which bearers are accepted.
+//
+// The client comes from the validated token, never from a header: a header
+// is the caller's claim, and an application holding a user's bearer could
+// name another application to borrow its grant.
+func (a *forgeAuth) resolve(ctx context.Context, token string) (*ForgeSession, error) {
+	caller, err := a.identify(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	sess, err := resolveForgeForUser(ctx, a.store, a.bindings, caller.userID, caller.clientID, a.consentBase)
+	if err != nil {
+		return nil, err
+	}
+	// An access token was approved for one organization, and the control
+	// plane answers it for that organization only; the grant reads one
+	// organization too. When they differ, the tools could only fail (the
+	// control plane's target is never inside the grant), and quietly mixing
+	// the two would make neither choice the one in force: ask again.
+	if caller.accessToken && caller.orgID != sess.OrgID {
+		return nil, &forgeOrgMismatchError{consent: ConsentError{ConsentURL: forgeConsentURL(a.consentBase, caller.clientID)}}
+	}
+	return sess, nil
+}
+
+// forgeCaller is who a forge bearer acts for.
+type forgeCaller struct {
+	userID, clientID string
+	// accessToken is an `rlat_` (mcp:forge); orgID is the organization it
+	// was approved for. An OAuth JWT names no organization.
+	accessToken bool
+	orgID       string
+}
+
+// identify validates token and names its person and OAuth client.
+//
+// An `rlat_` is accepted only as an MCP client's mcp:forge token issued for
+// exactly this endpoint (fat.Principal.IsMCPForgeFor with this endpoint's RFC
+// 9728 `resource`), and only while the control plane that issued it is a
+// listed authorization server (OAuthConfig.acceptsAccessTokens). Every other
+// `rlat_` is errForgeAccessTokenRefused: a connector credential
+// (mcp:connector, which cannot act as its person at the control plane), the
+// workspace connector's mcp:oauth, a CLI token (reliant:api), a daemon's
+// wildcard, a token with no acting user (an org automation or operator), and
+// an mcp:forge token for another resource or none. Anything else is the
+// deployment's OAuth JWT.
+func (a *forgeAuth) identify(ctx context.Context, token string) (forgeCaller, error) {
+	if fat.HasFormat(token) {
+		if a.credentials == nil || !a.oauth.acceptsAccessTokens() {
+			return forgeCaller{}, errForgeAccessTokenRefused
+		}
+		p, err := a.credentials.Introspect(ctx, token)
+		if err != nil || !p.IsMCPForgeFor(a.oauth.resourceURIFor(forgeResource)) {
+			return forgeCaller{}, errForgeAccessTokenRefused
+		}
+		return forgeCaller{userID: p.ActingUserID, clientID: p.ClientID, accessToken: true, orgID: p.OrgID}, nil
+	}
+	userID, clientID, err := validateOAuthClient(a.tokens, token)
+	if err != nil {
+		return forgeCaller{}, err
+	}
+	if userID == "" {
+		return forgeCaller{}, errors.New("token carries no subject")
+	}
+	return forgeCaller{userID: userID, clientID: clientID}, nil
+}
+
+// errForgeAccessTokenRefused is an `rlat_` this endpoint does not accept.
+var errForgeAccessTokenRefused = errors.New("mcpserver: forge: access token not accepted here")
+
+// forgeOrgMismatchError is an access token approved for another
+// organization than its client's forge grant reads: consent, again.
+type forgeOrgMismatchError struct {
+	consent ConsentError
+}
+
+func (e *forgeOrgMismatchError) Error() string {
+	return "the access token's organization is not the forge grant's: " + e.consent.Error()
+}
+
+func (e *forgeOrgMismatchError) Unwrap() error { return &e.consent }
 
 // ForgeBindingStore reads the client bindings a forge caller resolves
 // through: every binding of a user, whatever the state of its grant, so a
@@ -401,15 +492,11 @@ func forgeCallBearer(ctx context.Context, req *mcp.CallToolRequest, sessionToken
 }
 
 // boundGrant is the grant bearer's client is bound to now, resolved exactly
-// as a new request is (validated client, live binding only).
+// as a new request is (resolve: the same bearers, live binding only).
 func (a *forgeAuth) boundGrant(ctx context.Context, bearer string) (string, error) {
-	userID, clientID, err := validateOAuthClient(a.tokens, bearer)
-	if err != nil || userID == "" {
-		return "", errForgeGrantGone
-	}
-	sess, err := resolveForgeForUser(ctx, a.store, a.bindings, userID, clientID, a.consentBase)
+	sess, err := a.resolve(ctx, bearer)
 	if err != nil {
-		return "", err
+		return "", errForgeGrantGone
 	}
 	return sess.GrantID, nil
 }

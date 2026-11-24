@@ -4,13 +4,13 @@
  * The sample shop's story in plain words, for the demo's own pages (Home,
  * How releases work) and the explanations it adds to the console's issues.
  * Every figure comes from the SAME story the console's pages read
- * (demoData/shopStory.ts), so the Home's "checkouts fail" is the open issue
+ * (src/fixtures/shop/shopStory.ts), so the Home's "checkouts fail" is the open issue
  * on Errors and the failed check on Releases. Nothing here invents a number.
  */
 
 import type { Issue } from "@/services/controlPlane/observability/issuesTypes";
 
-import { DEMO_ENV_IDS, DEMO_INCIDENT, RUNNING, type DemoEnvKey } from "../demoData/shopStory";
+import { DEMO_ENV_IDS, DEMO_INCIDENT, RUNNING, type DemoEnvKey } from "@/fixtures/shop/shopStory";
 
 /** What each of the shop's issues means, for someone who never read a stack trace: the demo's `explainIssue`. */
 const SHOP_ISSUE_EXPLANATIONS: Record<string, string> = {

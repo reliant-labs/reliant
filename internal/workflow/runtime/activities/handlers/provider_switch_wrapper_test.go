@@ -54,8 +54,8 @@ type wrapperStore struct {
 	runtime.ActivityStore
 }
 
-func (wrapperStore) GetWorkflow(context.Context, string) (*db.Workflow, error) { return nil, nil }
-func (wrapperStore) EnsureWorkflowRunning(context.Context, string, string)     {}
+func (wrapperStore) LoadWorkflow(context.Context, string) (*db.Workflow, error) { return nil, nil }
+func (wrapperStore) EnsureWorkflowRunning(context.Context, string, string)      {}
 func (wrapperStore) CreateStepExecution(context.Context, *db.StepExecution) error {
 	return nil
 }
@@ -68,7 +68,7 @@ func (wrapperStore) CreateChatUpdate(context.Context, string, reliantv1.ChatUpda
 
 func executeThroughRealWrapper(t *testing.T, probe *holdProbe) error {
 	t.Helper()
-	registry := runtime.NewActivityRegistry(wrapperStore{})
+	registry := runtime.NewActivityRegistry(runtime.ActivityRegistryDeps{Store: wrapperStore{}, Workflows: wrapperStore{}})
 	runtime.RegisterActivity[types.ActivityInput, map[string]interface{}](registry, probe)
 	fn, err := registry.Get(probe.name)
 	require.NoError(t, err)

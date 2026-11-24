@@ -215,6 +215,9 @@ type daemonClient struct {
 	// upgrade is the drain protocol's state: a restart the platform asked
 	// for (upgrade_drain.go).
 	upgrade upgradeDrain
+	// selfUpdate is a person's daemon's own updater (StartOptions.SelfUpdate);
+	// nil when none was wired.
+	selfUpdate SelfUpdate
 }
 
 // currentDaemonID is the daemon's id as the gateway last assigned it.
@@ -290,6 +293,12 @@ type StartOptions struct {
 	// and releases it after Start returns, so a retry runs under the same
 	// claim. Nil: Start acquires and releases its own.
 	DataDirClaim *daemonstate.Lock
+	// SelfUpdate is how this daemon updates itself on a person's machine
+	// (internal/cliupdate, upgrade_self.go): with auto-update on it installs
+	// new releases at quiet moments; without, it still confirms a swap
+	// `reliant update` made and names the update command. Nil: neither. A
+	// managed machine ignores it.
+	SelfUpdate SelfUpdate
 }
 
 // Guards is the daemon's policy for heavy commands (internal/heavyjob), a
@@ -405,6 +414,8 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// And when it drained for a restart the platform asked for, and the
 	// platform did not restart it (upgrade_drain.go).
 	client.armUpgrade(stopRuntime, opts.BootstrapConfig.DataDir, os.Exit)
+	defer client.upgrade.teardownDone.Store(true)
+	client.selfUpdate = opts.SelfUpdate
 	initializeWorktreeActivity(ctx, opts.BootstrapConfig.DataDir)
 
 	// Publish the runtime record before the first dial. Until the gateway acks
@@ -451,6 +462,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// 10s, plus a bounded "what is using it" scan only while a volume is
 	// under pressure.
 	go client.diskWatcher.Run(ctx)
+	// A person's daemon whose owner opted in installs new releases itself,
+	// at quiet moments (upgrade_self.go).
+	client.startSelfUpdate(ctx)
 	// And the reaper that keeps the build caches inside their budget: forge's
 	// storage pass, on a schedule and under pressure, when opts enables it.
 	client.diskWatcher.ConfigureReaper(opts.StorageReaper)
@@ -999,6 +1013,11 @@ func (d *daemonClient) recordStreamStopped(detail string) {
 }
 
 func (d *daemonClient) recordStreamTransition(s daemonstate.Stream, detail string, retrying bool) {
+	if s == daemonstate.StreamConnected {
+		// The gateway accepted this daemon: a binary just swapped in by a
+		// self-update is healthy (selfupdate's revert watchdog stands down).
+		d.selfUpdateConfirm()
+	}
 	if level, attrs, ok := d.transitions.transition(s, summarizeReason(detail)); ok {
 		logging.Log(level, logPrefix+" daemon stream state", attrs...)
 	}
@@ -1476,6 +1495,9 @@ func (d *daemonClient) receiveSession(
 // handleServerMessage dispatches one message that arrived on session s. A
 // request's reply goes back on s while s is open (see reply).
 func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySession, msg *reliantv1.ServerMessage) error {
+	if isActivity(msg) {
+		d.upgrade.markActivity() // an auto-update waits for a quiet moment
+	}
 	switch m := msg.Message.(type) {
 	case *reliantv1.ServerMessage_ToolRequest:
 		if m.ToolRequest == nil {
@@ -1802,6 +1824,14 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 		}
 		return
 	}
+
+	// Admission and the drain transition share a mutex: a command either
+	// contributes to the drain or is refused before it touches the machine.
+	if !d.upgrade.beginCommand() {
+		d.sendCommandFailure(s, req, errors.New("this machine is restarting for an update; retry after the restart"))
+		return
+	}
+	defer d.upgrade.endCommand()
 
 	// Refuse everything while $HOME is not the directory the daemon started
 	// with: whatever the command touches would be the wrong disk.
@@ -2168,6 +2198,8 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 
 	// Before the tool can do anything a restart would cut short.
 	d.results.persistRunning(req.RequestId)
+	// Its end is activity too: an auto-update's idle time starts there.
+	defer d.upgrade.markActivity()
 
 	execCtx, cancel := context.WithCancel(dispatchContext(req))
 	// Registered under both ids. request_id is the transport's correlation key

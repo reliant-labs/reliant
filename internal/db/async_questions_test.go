@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +35,7 @@ func (c *liveGateChat) askAsync(id, rowID, thread string) {
 
 func (c *liveGateChat) inboxQuestionKeys() map[string]int32 {
 	c.t.Helper()
-	items, err := c.repo.ListInboxPending(context.Background(), "test-user")
+	items, err := store.ListInboxPending(context.Background(), c.repo.ORM(), "test-user")
 	require.NoError(c.t, err)
 	keys := map[string]int32{}
 	for _, it := range items {
@@ -68,20 +70,20 @@ func TestAsyncQuestion_IsNoGateOfTheChat(t *testing.T) {
 		`SELECT count(*) FROM pending_input_gates WHERE chat_id = ?`, c.chatID).Scan(ctx, &gates))
 	assert.Zero(t, gates, "an async question is not in pending_input_gates")
 
-	answerable, err := c.repo.ListAnswerablePendingQuestionsByChat(ctx, c.chatID)
+	answerable, err := store.NewQuestionExtStore(c.repo.ORM()).ListAnswerablePendingQuestionsByChat(ctx, c.chatID)
 	require.NoError(t, err)
 	assert.Empty(t, answerable, "the composer and the pill never see an async question")
-	pending, err := c.repo.ListPendingQuestionsByChat(ctx, c.chatID)
+	pending, err := store.NewQuestionExtStore(c.repo.ORM()).ListPendingQuestionsByChat(ctx, c.chatID)
 	require.NoError(t, err)
 	assert.Empty(t, pending, "nor do the reconciler, terminate or spawn_status")
-	byThread, err := c.repo.PendingQuestionsByThread(ctx, c.chatID)
+	byThread, err := store.NewQuestionExtStore(c.repo.ORM()).PendingQuestionsByThread(ctx, c.chatID)
 	require.NoError(t, err)
 	assert.Empty(t, byThread)
 
 	// A blocking question beside it is a gate as before.
 	c.ask("q-blocking", "sa-1", "sa-1")
 	c.expect(activityAwaitingInput, 0)
-	answerable, err = c.repo.ListAnswerablePendingQuestionsByChat(ctx, c.chatID)
+	answerable, err = store.NewQuestionExtStore(c.repo.ORM()).ListAnswerablePendingQuestionsByChat(ctx, c.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"q-blocking"}, questionIDs(answerable))
 
@@ -102,7 +104,7 @@ func TestAsyncQuestion_ListedByListAsyncQuestionsByChat(t *testing.T) {
 	answer := `{"answers":[{"question":"q-async-1?","selected":["Yes"]}]}`
 	require.NoError(t, c.repo.ResolveQuestion(context.Background(), "q-async-1", &answer))
 
-	got, err := c.repo.ListAsyncQuestionsByChat(context.Background(), c.chatID)
+	got, err := store.NewQuestionExtStore(c.repo.ORM()).ListAsyncQuestionsByChat(context.Background(), c.chatID)
 	require.NoError(t, err)
 	require.Equal(t, []string{"q-async-1", "q-async-2"}, questionIDs(got), "async only, answered too, oldest first")
 	assert.True(t, got[0].Async)

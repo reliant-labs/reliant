@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,14 +33,12 @@ func (f *draftAutomationFake) DraftAutomation(_ context.Context, in trigger.Draf
 }
 
 func draftAutomationRepo(id string) *trigger.MockRepository {
-	return &trigger.MockRepository{
-		GetProjectWithUserCheckFunc: func(_ context.Context, projectID, _ string) (*db.Project, error) {
-			if projectID != id {
-				return nil, svcerr.WithMessage(svcerr.ErrNotFound, "project not found")
-			}
-			return &db.Project{ID: id}, nil
-		},
-	}
+	return projectaccesstest.Bound(&trigger.MockRepository{}, func(_ context.Context, projectID, _ string) (*db.Project, error) {
+		if projectID != id {
+			return nil, svcerr.WithMessage(svcerr.ErrNotFound, "project not found")
+		}
+		return &db.Project{ID: id}, nil
+	})
 }
 
 // DraftAutomation proposes; it never creates. The draft comes back as the
@@ -53,8 +53,8 @@ func TestDraftAutomation_Generated(t *testing.T) {
 		Summary: "Every weekday at 9:00, summarise failed CI",
 	}
 	drafter := &draftAutomationFake{draft: draft}
-	svc := trigger.NewTestTrigger(t, trigger.WithTriggerDeps(trigger.Deps{Repo: draftAutomationRepo("proj-1"), Drafter: drafter}))
-	noDrafter := trigger.NewTestTrigger(t, trigger.WithTriggerDeps(trigger.Deps{Repo: draftAutomationRepo("proj-1")}))
+	svc := trigger.NewTestTrigger(t, trigger.WithTriggerDeps(trigger.Deps{Repo: draftAutomationRepo("proj-1"), Projects: projectaccesstest.For(draftAutomationRepo("proj-1")), Drafter: drafter}))
+	noDrafter := trigger.NewTestTrigger(t, trigger.WithTriggerDeps(trigger.Deps{Repo: draftAutomationRepo("proj-1"), Projects: projectaccesstest.For(draftAutomationRepo("proj-1"))}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DraftAutomationRequest, pb.DraftAutomationResponse]{
 		{
@@ -106,13 +106,11 @@ func TestDraftAutomation_Generated(t *testing.T) {
 func TestDraftAutomation_ScopedToTheProjectsOrg(t *testing.T) {
 	t.Parallel()
 	org := "org-acme"
-	repo := &trigger.MockRepository{
-		GetProjectWithUserCheckFunc: func(_ context.Context, projectID, _ string) (*db.Project, error) {
-			return &db.Project{ID: projectID, OrgID: &org}, nil
-		},
-	}
+	repo := projectaccesstest.Bound(&trigger.MockRepository{}, func(_ context.Context, projectID, _ string) (*db.Project, error) {
+		return &db.Project{ID: projectID, OrgID: &org}, nil
+	})
 	drafter := &draftAutomationFake{draft: &pb.AutomationDraft{Summary: "hourly"}}
-	svc := trigger.NewTestTrigger(t, trigger.WithTriggerDeps(trigger.Deps{Repo: repo, Drafter: drafter}))
+	svc := trigger.NewTestTrigger(t, trigger.WithTriggerDeps(trigger.Deps{Repo: repo, Projects: projectaccesstest.For(repo), Drafter: drafter}))
 	_, err := svc.DraftAutomation(trigger.AuthedContext(t), connect.NewRequest(&pb.DraftAutomationRequest{Description: "every hour", ProjectId: "proj-1"}))
 	require.NoError(t, err)
 	assert.Equal(t, org, drafter.got.OrgID)

@@ -943,16 +943,16 @@ const file_services_domain_v1_domain_proto_rawDesc = "" +
 	"\x0f_environment_idB\t\n" +
 	"\a_org_id\"X\n" +
 	"\x1aListDomainBindingsResponse\x12:\n" +
-	"\bbindings\x18\x01 \x03(\v2\x1e.controlplane.v1.DomainBindingR\bbindings2\xa7\x06\n" +
+	"\bbindings\x18\x01 \x03(\v2\x1e.controlplane.v1.DomainBindingR\bbindings2\xb6\x06\n" +
 	"\rDomainService\x12[\n" +
-	"\fCreateDomain\x12$.controlplane.v1.CreateDomainRequest\x1a%.controlplane.v1.CreateDomainResponse\x12R\n" +
-	"\tGetDomain\x12!.controlplane.v1.GetDomainRequest\x1a\".controlplane.v1.GetDomainResponse\x12X\n" +
-	"\vListDomains\x12#.controlplane.v1.ListDomainsRequest\x1a$.controlplane.v1.ListDomainsResponse\x12[\n" +
+	"\fCreateDomain\x12$.controlplane.v1.CreateDomainRequest\x1a%.controlplane.v1.CreateDomainResponse\x12W\n" +
+	"\tGetDomain\x12!.controlplane.v1.GetDomainRequest\x1a\".controlplane.v1.GetDomainResponse\"\x03\x90\x02\x01\x12]\n" +
+	"\vListDomains\x12#.controlplane.v1.ListDomainsRequest\x1a$.controlplane.v1.ListDomainsResponse\"\x03\x90\x02\x01\x12[\n" +
 	"\fDeleteDomain\x12$.controlplane.v1.DeleteDomainRequest\x1a%.controlplane.v1.DeleteDomainResponse\x12[\n" +
 	"\fVerifyDomain\x12$.controlplane.v1.VerifyDomainRequest\x1a%.controlplane.v1.VerifyDomainResponse\x12p\n" +
 	"\x13CreateDomainBinding\x12+.controlplane.v1.CreateDomainBindingRequest\x1a,.controlplane.v1.CreateDomainBindingResponse\x12p\n" +
-	"\x13DeleteDomainBinding\x12+.controlplane.v1.DeleteDomainBindingRequest\x1a,.controlplane.v1.DeleteDomainBindingResponse\x12m\n" +
-	"\x12ListDomainBindings\x12*.controlplane.v1.ListDomainBindingsRequest\x1a+.controlplane.v1.ListDomainBindingsResponseB\xd3\x01\n" +
+	"\x13DeleteDomainBinding\x12+.controlplane.v1.DeleteDomainBindingRequest\x1a,.controlplane.v1.DeleteDomainBindingResponse\x12r\n" +
+	"\x12ListDomainBindings\x12*.controlplane.v1.ListDomainBindingsRequest\x1a+.controlplane.v1.ListDomainBindingsResponse\"\x03\x90\x02\x01B\xd3\x01\n" +
 	"\x13com.controlplane.v1B\vDomainProtoP\x01ZRgithub.com/reliant-labs/reliant/gen/controlplane/services/domain/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (

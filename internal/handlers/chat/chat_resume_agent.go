@@ -159,7 +159,7 @@ func chatRunWorkflowID(chat *db.Chat) string {
 // withdrawQueuedAgentMessage cancels a queued row nothing will deliver, so the
 // composer's refusal — which keeps the text — is the whole story.
 func (s *Service) withdrawQueuedAgentMessage(ctx context.Context, chat *db.Chat, messageID string) {
-	if _, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, messageID, chat.ID); err != nil {
+	if _, err := s.deps.AgentMessages.CancelQueuedAgentMessage(ctx, messageID, chat.ID); err != nil {
 		logging.WarnContext(ctx, "Could not withdraw a message queued to a stopped agent that could not be resumed",
 			"error", err, "chatID", chat.ID, "messageID", messageID)
 	}
@@ -204,7 +204,7 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 		}), nil
 	}
 
-	stopped, err := v2.StoppedSpawnFromDurableState(ctx, s.deps.Repo, chat.ID, threadID)
+	stopped, err := v2.StoppedSpawnFromDurableState(ctx, s.durable(), chat.ID, threadID)
 	if err != nil {
 		return refuse(err, tryAgain)
 	}
@@ -265,7 +265,7 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 	s.refreshChatProvider(ctx, userID, chat, workflowName, inputs)
 	launch.InjectSessionDaemonID(inputs, chat)
 
-	resume := v2.ResumeInputFromDurableState(ctx, s.deps.Repo, chat.ID, workflowID)
+	resume := v2.ResumeInputFromDurableState(ctx, s.durable(), chat.ID, workflowID)
 	resume.ResumeStopped = []v2.SpawnHandoff{*stopped}
 	resume.ResumeAllStopped = true
 	resume.AwaitSpawnsFirst = true

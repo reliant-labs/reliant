@@ -510,10 +510,10 @@ const file_services_browser_ingest_v1_browser_ingest_proto_rawDesc = "" +
 	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
 	"\a_org_id\"H\n" +
 	"\x11RevokeKeyResponse\x123\n" +
-	"\x03key\x18\x01 \x01(\v2!.controlplane.v1.BrowserIngestKeyR\x03key2\x8f\x02\n" +
+	"\x03key\x18\x01 \x01(\v2!.controlplane.v1.BrowserIngestKeyR\x03key2\x94\x02\n" +
 	"\x14BrowserIngestService\x12R\n" +
-	"\tEnsureKey\x12!.controlplane.v1.EnsureKeyRequest\x1a\".controlplane.v1.EnsureKeyResponse\x12O\n" +
-	"\bListKeys\x12 .controlplane.v1.ListKeysRequest\x1a!.controlplane.v1.ListKeysResponse\x12R\n" +
+	"\tEnsureKey\x12!.controlplane.v1.EnsureKeyRequest\x1a\".controlplane.v1.EnsureKeyResponse\x12T\n" +
+	"\bListKeys\x12 .controlplane.v1.ListKeysRequest\x1a!.controlplane.v1.ListKeysResponse\"\x03\x90\x02\x01\x12R\n" +
 	"\tRevokeKey\x12!.controlplane.v1.RevokeKeyRequest\x1a\".controlplane.v1.RevokeKeyResponseB\xe2\x01\n" +
 	"\x13com.controlplane.v1B\x12BrowserIngestProtoP\x01ZZgithub.com/reliant-labs/reliant/gen/controlplane/services/browser_ingest/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 

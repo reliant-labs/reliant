@@ -169,7 +169,17 @@ const ConnectionParam = "connection"
 //
 // Either way the connection must belong to THIS integration, so a token saved
 // for one service can never be pointed at another's host.
+//
+// Every call is one "integration.call <integration>.<action>" span (traced),
+// whoever makes it: the workflow action node, an agent's integration tool, a
+// workflow check, a picker listing its options.
 func (r *Runner) RunAuthenticated(ctx context.Context, m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, params map[string]any, src CredentialSource, site CallSite) (*Result, error) {
+	return traced(WithCallOrg(ctx, src, site.RunID), m, a, func(ctx context.Context) (*Result, error) {
+		return r.runAuthenticated(ctx, m, a, params, src, site)
+	})
+}
+
+func (r *Runner) runAuthenticated(ctx context.Context, m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, params map[string]any, src CredentialSource, site CallSite) (*Result, error) {
 	// The run's org may not allow this integration at all: refused before
 	// any credential is chosen, so no way of authenticating gets around it.
 	if gate, ok := src.(IntegrationGate); ok && site.RunID != "" {

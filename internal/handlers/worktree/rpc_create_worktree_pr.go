@@ -33,7 +33,7 @@ func (s *Service) CreateWorktreePR(
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.getWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -84,6 +84,16 @@ func (s *Service) CreateWorktreePR(
 			return nil, svcerr.FailedPrecondition(errMsg)
 		}
 		return nil, svcerr.Internal(errMsg)
+	}
+
+	// The pull request exists now; linking it to the worktree's chats is
+	// analytics (cost per merged PR), so a failure is logged and the caller
+	// still gets their pull request.
+	if s.deps.PRLinks != nil && prResp.PRURL != "" {
+		if _, err := s.deps.PRLinks.LinkWorktreePR(ctx, userID, worktree.ID, prResp.PRURL); err != nil {
+			s.deps.Logger.WarnContext(ctx, "create worktree PR: could not link the pull request to its chats",
+				"worktree_id", worktree.ID, "error", err)
+		}
 	}
 
 	// Build informative message

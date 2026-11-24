@@ -177,7 +177,9 @@ service ForgeService {
   // invocation reach a determinate outcome", and the report answers "did the
   // deploy work". COMPLETED means forge ran and produced a report — never that
   // the deploy succeeded.
-  rpc GetDeployStatus(GetForgeDeployStatusRequest) returns (GetForgeDeployStatusResponse) {}
+  rpc GetDeployStatus(GetForgeDeployStatusRequest) returns (GetForgeDeployStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ForgeReachability says whether the state described by a report was actually

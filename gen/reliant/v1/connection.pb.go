@@ -2301,11 +2301,11 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\x14ApiKeyConnectionKind\x12'\n" +
 	"#API_KEY_CONNECTION_KIND_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fAPI_KEY_CONNECTION_KIND_API_KEY\x10\x01\x12!\n" +
-	"\x1dAPI_KEY_CONNECTION_KIND_BASIC\x10\x022\xf0\f\n" +
-	"\x11ConnectionService\x12_\n" +
-	"\x10ListIntegrations\x12#.reliant.v1.ListIntegrationsRequest\x1a$.reliant.v1.ListIntegrationsResponse\"\x00\x12\\\n" +
-	"\x0fListConnections\x12\".reliant.v1.ListConnectionsRequest\x1a#.reliant.v1.ListConnectionsResponse\"\x00\x12V\n" +
-	"\rGetConnection\x12 .reliant.v1.GetConnectionRequest\x1a!.reliant.v1.GetConnectionResponse\"\x00\x12\xcf\x01\n" +
+	"\x1dAPI_KEY_CONNECTION_KIND_BASIC\x10\x022\xfc\f\n" +
+	"\x11ConnectionService\x12b\n" +
+	"\x10ListIntegrations\x12#.reliant.v1.ListIntegrationsRequest\x1a$.reliant.v1.ListIntegrationsResponse\"\x03\x90\x02\x01\x12_\n" +
+	"\x0fListConnections\x12\".reliant.v1.ListConnectionsRequest\x1a#.reliant.v1.ListConnectionsResponse\"\x03\x90\x02\x01\x12Y\n" +
+	"\rGetConnection\x12 .reliant.v1.GetConnectionRequest\x1a!.reliant.v1.GetConnectionResponse\"\x03\x90\x02\x01\x12\xcf\x01\n" +
 	"\x16CreateApiKeyConnection\x12).reliant.v1.CreateApiKeyConnectionRequest\x1a*.reliant.v1.CreateApiKeyConnectionResponse\"^\xa2\xbb\x18Z:X\n" +
 	"\x06create\x12>\n" +
 	"\n" +
@@ -2325,8 +2325,8 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\vset_default\x12*\n" +
 	"\n" +
 	"connection\x12\x02id\x1a\x18response.connection.name*\"response.connection.integration_id\x12_\n" +
-	"\x10DeleteConnection\x12#.reliant.v1.DeleteConnectionRequest\x1a$.reliant.v1.DeleteConnectionResponse\"\x00\x12k\n" +
-	"\x14ListConnectionEvents\x12'.reliant.v1.ListConnectionEventsRequest\x1a(.reliant.v1.ListConnectionEventsResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x10DeleteConnection\x12#.reliant.v1.DeleteConnectionRequest\x1a$.reliant.v1.DeleteConnectionResponse\"\x00\x12n\n" +
+	"\x14ListConnectionEvents\x12'.reliant.v1.ListConnectionEventsRequest\x1a(.reliant.v1.ListConnectionEventsResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_connection_proto_rawDescOnce sync.Once
