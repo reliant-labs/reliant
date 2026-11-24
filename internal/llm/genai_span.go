@@ -4,10 +4,11 @@ package llm
 import (
 	"context"
 
+	"github.com/reliant-labs/forge/pkg/observe/genai"
+
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/telemetry"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -43,32 +44,35 @@ func StartGenAISpan(ctx context.Context, provider string, model models.Model, st
 	if requested == "" {
 		requested = string(model.ID)
 	}
-	name := telemetry.GenAIOpChat
-	if requested != "" {
-		name += " " + requested
-	}
-	attrs := []attribute.KeyValue{
-		attribute.String(telemetry.AttrGenAIOperationName, telemetry.GenAIOpChat),
-		attribute.String("gen_ai.provider.name", provider),
-		attribute.String("gen_ai.request.model", requested),
-		attribute.Bool("gen_ai.request.stream", stream),
-	}
+	// forge records gen_ai.request.stream only on a streamed call; reliant
+	// has always said false too, and a reader filtering on it keeps working.
+	extra := []attribute.KeyValue{attribute.Bool(genai.AttrRequestStream, stream)}
 	if model.ID != "" {
-		attrs = append(attrs, attribute.String("reliant.model_id", string(model.ID)))
+		extra = append(extra, attribute.String(attrModelID, string(model.ID)))
 	}
 	// The run the call belongs to — workflow, node, agent, run, chat, user —
 	// so a dashboard can read tokens by workflow without joining to the
 	// workflow's span, which a continue-as-new or a resume puts on another
 	// trace. The worker puts the scope on the activity's ctx
 	// (observability.NewRunScopeWorkerInterceptor); outside a run it is empty.
-	attrs = append(attrs, telemetry.RunScopeFromContext(ctx).GenAIAttributes()...)
-	// Resolved per call, not cached: a package-level tracer taken before the
-	// process installs its provider would stay a no-op.
-	ctx, span := otel.Tracer("reliant.llm").Start(ctx, name,
-		trace.WithSpanKind(trace.SpanKindClient),
-		trace.WithAttributes(attrs...))
+	ctx = genai.WithScope(ctx, telemetry.RunScopeFromContext(ctx).GenAIAttributes()...)
+	ctx, span := genai.StartChat(ctx, genai.Chat{
+		Provider:   provider,
+		Model:      requested,
+		Stream:     stream,
+		Attributes: extra,
+	})
 	return ctx, &GenAISpan{span: span, ctx: ctx, provider: provider, requested: requested}
 }
+
+// Reliant's own attributes of a model call, beside forge's.
+const (
+	// attrModelID is reliant's id for the model (models.Model.ID), which the
+	// requested model (the provider's name for it) does not always equal.
+	attrModelID = "reliant.model_id"
+	// attrToolCalls is how many tool calls the response asked for.
+	attrToolCalls = "reliant.tool_calls"
+)
 
 // Observe records what a streamed event says about the call: the response
 // and its usage, an error, a backoff wait.
@@ -79,7 +83,7 @@ func (s *GenAISpan) Observe(ev DriverEvent) {
 		// is the time to first token. Once per call, retries included.
 		if !s.firstToken {
 			s.firstToken = true
-			s.span.AddEvent(telemetry.EventFirstToken)
+			genai.FirstToken(s.span)
 		}
 	case EventComplete:
 		if ev.Response != nil {
@@ -90,12 +94,12 @@ func (s *GenAISpan) Observe(ev DriverEvent) {
 	case EventRetryWait:
 		s.retries++
 		if ev.Retry != nil {
-			s.span.AddEvent(telemetry.EventRetryWait, trace.WithAttributes(
-				attribute.Int("attempt", ev.Retry.Attempt),
-				attribute.Int("http.response.status_code", ev.Retry.StatusCode),
-				attribute.String("reason", ev.Retry.Reason),
-				attribute.Int64("delay_ms", ev.Retry.Delay.Milliseconds()),
-			))
+			genai.RetryWait(s.span, genai.Retry{
+				Attempt:    ev.Retry.Attempt,
+				StatusCode: ev.Retry.StatusCode,
+				Reason:     ev.Retry.Reason,
+				Delay:      ev.Retry.Delay,
+			})
 		}
 	}
 }
@@ -107,42 +111,37 @@ func (s *GenAISpan) RecordResponse(resp *DriverResponse, servedModel string) {
 		return
 	}
 	u := resp.Usage
-	attrs := []attribute.KeyValue{
-		attribute.Int64("gen_ai.usage.input_tokens", u.InputTokens),
-		attribute.Int64("gen_ai.usage.output_tokens", u.OutputTokens),
-	}
 	if servedModel == "" {
 		servedModel = s.requested
 	}
-	if servedModel != "" {
-		attrs = append(attrs, attribute.String("gen_ai.response.model", servedModel))
+	r := genai.Response{
+		Model: servedModel,
+		ID:    resp.UpstreamRequestID,
+		Usage: genai.Usage{
+			InputTokens:              u.InputTokens,
+			OutputTokens:             u.OutputTokens,
+			CacheReadInputTokens:     u.CacheReadInputTokens,
+			CacheCreationInputTokens: u.CacheCreationInputTokens,
+			ReasoningOutputTokens:    u.ReasoningTokens,
+		},
 	}
 	if resp.FinishReason != "" {
-		attrs = append(attrs, attribute.StringSlice("gen_ai.response.finish_reasons", []string{string(resp.FinishReason)}))
+		r.FinishReasons = []string{string(resp.FinishReason)}
 	}
-	if u.CacheReadInputTokens > 0 {
-		attrs = append(attrs, attribute.Int64("gen_ai.usage.cache_read.input_tokens", u.CacheReadInputTokens))
-	}
-	if u.CacheCreationInputTokens > 0 {
-		attrs = append(attrs, attribute.Int64("gen_ai.usage.cache_creation.input_tokens", u.CacheCreationInputTokens))
-	}
-	if u.ReasoningTokens > 0 {
-		attrs = append(attrs, attribute.Int64("gen_ai.usage.reasoning.output_tokens", u.ReasoningTokens))
-	}
+	var extra []attribute.KeyValue
 	if u.Cost > 0 {
-		// The cost the provider or gateway reported, under forge's name and
-		// the one reliant reported it under first.
-		attrs = append(attrs,
-			attribute.Float64(telemetry.AttrAICostUSD, u.Cost),
-			attribute.Float64(telemetry.AttrReliantCostUSD, u.Cost))
-	}
-	if resp.UpstreamRequestID != "" {
-		attrs = append(attrs, attribute.String("gen_ai.response.id", resp.UpstreamRequestID))
+		// The cost the provider or gateway reported: forge records it as
+		// forge.ai.cost.usd, and reliant keeps the name it reported it under
+		// first beside it.
+		cost := u.Cost
+		r.CostUSD = &cost
+		extra = append(extra, attribute.Float64(telemetry.AttrReliantCostUSD, cost))
 	}
 	if len(resp.ToolCalls) > 0 {
-		attrs = append(attrs, attribute.Int("reliant.tool_calls", len(resp.ToolCalls)))
+		extra = append(extra, attribute.Int(attrToolCalls, len(resp.ToolCalls)))
 	}
-	s.span.SetAttributes(attrs...)
+	genai.SetResponse(s.span, r)
+	s.span.SetAttributes(extra...)
 }
 
 // RecordError records err's class on the span (ErrorType): error.type, and an
@@ -170,7 +169,7 @@ func (s *GenAISpan) RecordError(err error) {
 // End ends the span.
 func (s *GenAISpan) End() {
 	if s.retries > 0 {
-		s.span.SetAttributes(attribute.Int("gen_ai.retries", s.retries))
+		s.span.SetAttributes(attribute.Int(telemetry.AttrGenAIRetries, s.retries))
 	}
 	s.span.End()
 }
