@@ -216,9 +216,9 @@ function MobileNewChatDraft({
   initialMachine,
   onChooseProject,
 }: {
-  /** The machine to start on, when the project was just set up on it. */
+  /** The selected project's placement or the machine it was just set up on. */
   initialMachine: string | null;
-  /** Makes `project` the new chat's project; `daemonId` is where it was just set up. */
+  /** Makes `project` the new chat's project and carries its target machine across the draft reset. */
   onChooseProject: (project: Project, daemonId?: string) => void;
 }) {
   const navigate = useNavigate();
@@ -387,7 +387,10 @@ function MobileNewChatDraft({
     const choice = projectChoices.find((c) => c.project.id === projectId);
     if (!choice || projectId === currentProject?.id || choice.kind === "unavailable" || settingUpProject) return;
     if (choice.kind !== "set-up" || !setUpTarget) {
-      onChooseProject(choice.project);
+      // The old draft's machine need not hold this project. Carry the
+      // selected project's placement into the newly keyed draft instead of
+      // falling back to an unrelated default machine.
+      onChooseProject(choice.project, choice.machineId);
       return;
     }
     const { project } = choice;

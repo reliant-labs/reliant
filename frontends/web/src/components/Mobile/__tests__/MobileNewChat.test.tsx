@@ -587,6 +587,45 @@ describe('MobileNewChat', () => {
       await waitFor(() => expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: 'p3' }), { restoreChat: false, restoreWorkspace: false }))
     })
 
+    it.each(['ready', 'set-up'])('keeps the %s target across a project switch and sends on that machine', async (kind) => {
+      const { useProjectStore } = await import('../../../store/projectStore')
+      const state = useProjectStore.getState()
+      const originalProject = state.currentProject
+      daemonList.current = [
+        { daemonId: 'd-laptop', hostname: 'laptop', status: DaemonStatus.ACTIVE },
+        { daemonId: 'd-other', hostname: 'other', status: DaemonStatus.ACTIVE },
+      ]
+      // Laptop is the default; forge is either on other or must be cloned there.
+      installList.current = [
+        { project_id: 'p1', daemon_id: 'd-laptop', install_state: ProjectInstallState.INSTALLED },
+        { project_id: 'p2', daemon_id: kind === 'ready' ? 'd-other' : 'd-gone', install_state: ProjectInstallState.INSTALLED },
+      ]
+      selectProject.mockImplementation(async (project) => { state.currentProject = project })
+      const view = render(<MobileNewChat />)
+      try {
+        await userEvent.click(screen.getByRole('button', { name: /^Runs on/ }))
+        await userEvent.click(screen.getByRole('button', { name: /^other/ }))
+        await userEvent.click(screen.getByRole('button', { name: /^Project/ }))
+        await userEvent.click(screen.getByText('forge', { selector: 'p' }))
+        await waitFor(() => expect(selectProject).toHaveBeenCalled())
+        view.rerender(<MobileNewChat />)
+        if (kind === 'set-up') {
+          expect(createProjectFromRepo).toHaveBeenCalledWith(expect.objectContaining({ daemonId: 'd-other' }))
+          // The queued clone has landed; refresh the placement query.
+          installList.current = [...installList.current, { project_id: 'p2', daemon_id: 'd-other', install_state: ProjectInstallState.INSTALLED }]
+          view.rerender(<MobileNewChat />)
+        } else {
+          expect(createProjectFromRepo).not.toHaveBeenCalled()
+        }
+        expect(screen.getByRole('button', { name: /^Runs on other/ })).toBeInTheDocument()
+        await userEvent.type(screen.getByLabelText('Message'), 'go')
+        await userEvent.click(screen.getByLabelText('Send'))
+        expect(startChat.mock.calls[0][6]).toEqual({ daemonId: 'd-other', noMachine: undefined })
+      } finally {
+        state.currentProject = originalProject
+      }
+    })
+
     it('stays on the project and says why when the set-up fails', async () => {
       createProjectFromRepo.mockRejectedValueOnce(new Error('clone refused'))
       render(<MobileNewChat />)
