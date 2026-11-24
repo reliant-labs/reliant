@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -20,7 +21,7 @@ func TestQuestionServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo})}))
 	viewertest.RunService(t, f, svc, "reliant.v1.QuestionService", nil)
 }
 
@@ -48,7 +49,7 @@ func TestViewerQuestionsCarryNoResolvedPrompt(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM())}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo})}))
 	list := func(ctx context.Context) map[string]*reliantv1.QuestionInfo {
 		resp, err := svc.ListAsyncQuestions(ctx, connect.NewRequest(&reliantv1.ListAsyncQuestionsRequest{ChatId: f.ChatID}))
 		if err != nil {

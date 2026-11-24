@@ -159,7 +159,7 @@ func chatRunWorkflowID(chat *db.Chat) string {
 // withdrawQueuedAgentMessage cancels a queued row nothing will deliver, so the
 // composer's refusal — which keeps the text — is the whole story.
 func (s *Service) withdrawQueuedAgentMessage(ctx context.Context, chat *db.Chat, messageID string) {
-	if _, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, messageID, chat.ID); err != nil {
+	if _, err := s.deps.AgentMessages.CancelQueuedAgentMessage(ctx, messageID, chat.ID); err != nil {
 		logging.WarnContext(ctx, "Could not withdraw a message queued to a stopped agent that could not be resumed",
 			"error", err, "chatID", chat.ID, "messageID", messageID)
 	}

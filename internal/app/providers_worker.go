@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -380,23 +381,25 @@ type WorkerChatDeps struct {
 //forge:root-only worker
 func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 	svc, err := chat.New(chat.Deps{
-		Logger:      d.Logger,
-		Config:      d.Config,
-		Repo:        d.DB,
-		Workflows:   store.NewWorkflowExtStore(d.DB.ORM()),
-		Worktrees:   store.NewWorktreeExtStore(d.DB.ORM()),
-		ProjectRows: store.NewProjectExtStore(d.DB.ORM()),
-		Questions:   store.NewQuestionExtStore(d.DB.ORM()),
-		Spawns:      store.NewToolCallExtStore(d.DB.ORM()),
-		Selections:  store.NewChatSelectionExtStore(d.DB.ORM()),
-		Messages:    store.NewMessageExtStore(d.DB.ORM()),
-		ToolBlocks:  store.NewMessageContentBlockExtStore(d.DB.ORM()),
-		Senders:     store.NewThreadExtStore(d.DB.ORM()),
-		Backoff:     d.Backoff,
-		Temporal:    d.Temporal.Client,
-		Pause:       d.Pause,
-		Router:      d.Router,
-		LocalModels: local.NewRepoDirectory(d.DB, store.NewModelEndpointExtStore(d.DB.ORM())),
+		Logger:        d.Logger,
+		Config:        d.Config,
+		Repo:          d.DB,
+		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
+		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
+		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
+		Questions:     store.NewQuestionExtStore(d.DB.ORM()),
+		Spawns:        store.NewToolCallExtStore(d.DB.ORM()),
+		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),
+		Messages:      store.NewMessageExtStore(d.DB.ORM()),
+		ToolBlocks:    store.NewMessageContentBlockExtStore(d.DB.ORM()),
+		Senders:       store.NewThreadExtStore(d.DB.ORM()),
+		Backoff:       d.Backoff,
+		Temporal:      d.Temporal.Client,
+		Pause:         d.Pause,
+		Router:        d.Router,
+		LocalModels:   local.NewRepoDirectory(d.DB, store.NewModelEndpointExtStore(d.DB.ORM())),
+		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
+		AgentMessages: store.NewAgentMessageExtStore(d.DB.ORM()),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("chat service: %w", err)
