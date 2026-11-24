@@ -31,9 +31,9 @@ func WithGatewayCall(ctx context.Context, g *GatewayCall) context.Context {
 	return context.WithValue(ctx, gatewayCallKey{}, g)
 }
 
-// ID is the gateway's id for the call's last answered attempt, the one that
-// ended it; "" when the call did not go through the gateway or the gateway
-// sent none.
+// ID is the gateway's id for the call's last attempt; "" when the call did
+// not go through the gateway, the last attempt received no response, or the
+// gateway sent no id.
 func (g *GatewayCall) ID() string {
 	if g == nil {
 		return ""

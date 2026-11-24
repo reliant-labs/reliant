@@ -77,16 +77,16 @@ type genAISpanKey struct{}
 // (telemetry.AttrGatewayCallID) on the chat span ctx carries, and on the
 // call's GatewayCall when the caller asked for one (WithGatewayCall), so the
 // usage ledger's row and the span name the same attempt. Only a driver that
-// routes through the gateway calls it, once per response it gets, success or
-// failure; a later attempt's id replaces an earlier one's, so the span names
-// the attempt that ended the call. An empty id, or a ctx with neither (a key
-// validation), records nothing.
+// routes through the gateway calls it after each attempt, success or failure.
+// A later nonempty id replaces an earlier one's on the span. An empty id clears GatewayCall so an
+// unanswered attempt or missing header cannot inherit an earlier attempt's id.
+// It adds no span attribute; a ctx with neither (a key validation) records nothing.
 func RecordGatewayCallID(ctx context.Context, id string) {
-	if id == "" {
-		return
-	}
 	if g, ok := ctx.Value(gatewayCallKey{}).(*GatewayCall); ok {
 		g.set(id)
+	}
+	if id == "" {
+		return
 	}
 	if s, ok := ctx.Value(genAISpanKey{}).(*GenAISpan); ok {
 		s.span.SetAttributes(attribute.String(telemetry.AttrGatewayCallID, id))

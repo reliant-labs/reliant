@@ -206,6 +206,43 @@ func TestGatewayCallIDNeedsAChatSpan(t *testing.T) {
 	}
 }
 
+// The ledger must never join the final outcome to a refused attempt's bill.
+func TestGatewayCallIDClearedOnRetryWithoutHeader(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		t.Run(fmt.Sprintf("stream=%t", stream), func(t *testing.T) {
+			body := gwChatJSON
+			if stream {
+				body = gwStreamBody
+			}
+			c := newGatewayTestClient(scriptedGateway(t,
+				gwReply{status: http.StatusServiceUnavailable, callID: "refused-call", body: `{"error":{"message":"service unavailable"}}`},
+				gwReply{body: body, stream: stream},
+			))
+			var call llm.GatewayCall
+			ctx := llm.WithGatewayCall(context.Background(), &call)
+			if stream {
+				for ev := range c.StreamResponse(ctx, nil, nil, nil) {
+					require.NotEqual(t, llm.EventError, ev.Type)
+				}
+			} else {
+				_, err := c.SendMessages(ctx, nil, nil, nil)
+				require.NoError(t, err)
+			}
+			assert.Empty(t, call.ID())
+		})
+	}
+}
+
+func TestGatewayCallIDClearedByUnansweredAttempt(t *testing.T) {
+	var call llm.GatewayCall
+	ctx := llm.WithGatewayCall(context.Background(), &call)
+	recordGatewayCallID(ctx, &http.Response{Header: http.Header{"X-Litellm-Call-Id": {"refused-call"}}})
+	require.Equal(t, "refused-call", call.ID())
+	// Both send and stream paths pass nil when no response was received.
+	recordGatewayCallID(ctx, nil)
+	assert.Empty(t, call.ID())
+}
+
 func attrString(s sdktrace.ReadOnlySpan, key string) string {
 	for _, kv := range s.Attributes() {
 		if string(kv.Key) == key {
