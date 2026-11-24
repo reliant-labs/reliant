@@ -732,7 +732,7 @@ func (m *MockPollRepo) GetIntegrationAccessSubject(ctx context.Context, userID s
 var _ PollRepo = (*MockPollRepo)(nil)
 
 // forge:section MockFireRepo
-// forge:hash=bb860505b1a203718dd11d2e44ecf1ff5f375ffdf27ff269068194864599d803
+// forge:hash=6fd3bcb549ddddc0adb37a72a66dc5721c8112f3762ff51f9069a6fe126cf3aa
 
 // MockFireRepo is a test mock for the FireRepo interface.
 //
@@ -755,7 +755,7 @@ type MockFireRepo struct {
 	AbandonFailedWorkflowStartFunc            func(context.Context, string) (bool, error)
 	GetConnectionFunc                         func(context.Context, string, string) (*core.Connection, error)
 	GetIntegrationAccessSubjectFunc           func(context.Context, string, string, time.Time) (string, error)
-	EnqueueTriggerCapacityFunc                func(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) error
+	EnqueueTriggerCapacitySupersedingFunc     func(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) ([]*core.TriggerEvent, error)
 	CanLaunchTriggerCapacityFunc              func(context.Context, string, store.TriggerCapacityScope, store.TriggerCapacityLimits) (bool, error)
 	NextAdmissibleTriggerCapacityEventFunc    func(context.Context, store.TriggerCapacityScope, store.TriggerCapacityLimits) (*core.TriggerEvent, error)
 	BindTriggerCapacityExecutionFunc          func(context.Context, string, string, string) error
@@ -767,7 +767,7 @@ type MockFireRepo struct {
 	FenceUnboundTriggerCapacityStartFunc      func(context.Context, store.TriggerCapacityExecution) (bool, error)
 	ReleaseUnboundTriggerCapacityFunc         func(context.Context, store.TriggerCapacityExecution, string) (bool, error)
 	TriggerCapacityStartFencedFunc            func(context.Context, store.TriggerCapacityExecution) (bool, error)
-	ExpirePendingTriggerCapacityEventsFunc    func(context.Context, time.Time, string, int) (int64, error)
+	ExpirePendingTriggerCapacityEventsFunc    func(context.Context, time.Time, string, int) ([]*core.TriggerEvent, error)
 }
 
 // GetTrigger records the call and delegates to GetTriggerFunc when set.
@@ -887,13 +887,13 @@ func (m *MockFireRepo) GetIntegrationAccessSubject(ctx context.Context, userID s
 	return "", contractkit.MockNotSet("MockFireRepo", "GetIntegrationAccessSubject")
 }
 
-// EnqueueTriggerCapacity records the call and delegates to EnqueueTriggerCapacityFunc when set.
-func (m *MockFireRepo) EnqueueTriggerCapacity(ctx context.Context, ev *core.TriggerEvent, scope store.TriggerCapacityScope) error {
-	m.Recorder.Record("EnqueueTriggerCapacity", ctx, ev, scope)
-	if m.EnqueueTriggerCapacityFunc != nil {
-		return m.EnqueueTriggerCapacityFunc(ctx, ev, scope)
+// EnqueueTriggerCapacitySuperseding records the call and delegates to EnqueueTriggerCapacitySupersedingFunc when set.
+func (m *MockFireRepo) EnqueueTriggerCapacitySuperseding(ctx context.Context, ev *core.TriggerEvent, scope store.TriggerCapacityScope) ([]*core.TriggerEvent, error) {
+	m.Recorder.Record("EnqueueTriggerCapacitySuperseding", ctx, ev, scope)
+	if m.EnqueueTriggerCapacitySupersedingFunc != nil {
+		return m.EnqueueTriggerCapacitySupersedingFunc(ctx, ev, scope)
 	}
-	return contractkit.MockNotSet("MockFireRepo", "EnqueueTriggerCapacity")
+	return nil, contractkit.MockNotSet("MockFireRepo", "EnqueueTriggerCapacitySuperseding")
 }
 
 // CanLaunchTriggerCapacity records the call and delegates to CanLaunchTriggerCapacityFunc when set.
@@ -996,19 +996,19 @@ func (m *MockFireRepo) TriggerCapacityStartFenced(ctx context.Context, e store.T
 }
 
 // ExpirePendingTriggerCapacityEvents records the call and delegates to ExpirePendingTriggerCapacityEventsFunc when set.
-func (m *MockFireRepo) ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) (int64, error) {
+func (m *MockFireRepo) ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) ([]*core.TriggerEvent, error) {
 	m.Recorder.Record("ExpirePendingTriggerCapacityEvents", ctx, recordedBefore, detail, limit)
 	if m.ExpirePendingTriggerCapacityEventsFunc != nil {
 		return m.ExpirePendingTriggerCapacityEventsFunc(ctx, recordedBefore, detail, limit)
 	}
-	return 0, contractkit.MockNotSet("MockFireRepo", "ExpirePendingTriggerCapacityEvents")
+	return nil, contractkit.MockNotSet("MockFireRepo", "ExpirePendingTriggerCapacityEvents")
 }
 
 // Compile-time check.
 var _ FireRepo = (*MockFireRepo)(nil)
 
 // forge:section MockEventFireRepo
-// forge:hash=e030f2e9a5de3c930f7c483d422a7e7d2bf2e189509e7c9dec041db6df1f8c6b
+// forge:hash=2b19aa0779d5259639d39b20126680002a70964b7cf11a6f05934480c3352776
 
 // MockEventFireRepo is a test mock for the EventFireRepo interface.
 //
@@ -1027,7 +1027,7 @@ type MockEventFireRepo struct {
 	ListStalePendingTriggerEventsFunc         func(context.Context, time.Time, int) ([]*core.TriggerEvent, error)
 	GetConnectionFunc                         func(context.Context, string, string) (*core.Connection, error)
 	GetIntegrationAccessSubjectFunc           func(context.Context, string, string, time.Time) (string, error)
-	EnqueueTriggerCapacityFunc                func(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) error
+	EnqueueTriggerCapacitySupersedingFunc     func(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) ([]*core.TriggerEvent, error)
 	CanLaunchTriggerCapacityFunc              func(context.Context, string, store.TriggerCapacityScope, store.TriggerCapacityLimits) (bool, error)
 	NextAdmissibleTriggerCapacityEventFunc    func(context.Context, store.TriggerCapacityScope, store.TriggerCapacityLimits) (*core.TriggerEvent, error)
 	BindTriggerCapacityExecutionFunc          func(context.Context, string, string, string) error
@@ -1039,7 +1039,7 @@ type MockEventFireRepo struct {
 	FenceUnboundTriggerCapacityStartFunc      func(context.Context, store.TriggerCapacityExecution) (bool, error)
 	ReleaseUnboundTriggerCapacityFunc         func(context.Context, store.TriggerCapacityExecution, string) (bool, error)
 	TriggerCapacityStartFencedFunc            func(context.Context, store.TriggerCapacityExecution) (bool, error)
-	ExpirePendingTriggerCapacityEventsFunc    func(context.Context, time.Time, string, int) (int64, error)
+	ExpirePendingTriggerCapacityEventsFunc    func(context.Context, time.Time, string, int) ([]*core.TriggerEvent, error)
 }
 
 // GetTrigger records the call and delegates to GetTriggerFunc when set.
@@ -1123,13 +1123,13 @@ func (m *MockEventFireRepo) GetIntegrationAccessSubject(ctx context.Context, use
 	return "", contractkit.MockNotSet("MockEventFireRepo", "GetIntegrationAccessSubject")
 }
 
-// EnqueueTriggerCapacity records the call and delegates to EnqueueTriggerCapacityFunc when set.
-func (m *MockEventFireRepo) EnqueueTriggerCapacity(ctx context.Context, ev *core.TriggerEvent, scope store.TriggerCapacityScope) error {
-	m.Recorder.Record("EnqueueTriggerCapacity", ctx, ev, scope)
-	if m.EnqueueTriggerCapacityFunc != nil {
-		return m.EnqueueTriggerCapacityFunc(ctx, ev, scope)
+// EnqueueTriggerCapacitySuperseding records the call and delegates to EnqueueTriggerCapacitySupersedingFunc when set.
+func (m *MockEventFireRepo) EnqueueTriggerCapacitySuperseding(ctx context.Context, ev *core.TriggerEvent, scope store.TriggerCapacityScope) ([]*core.TriggerEvent, error) {
+	m.Recorder.Record("EnqueueTriggerCapacitySuperseding", ctx, ev, scope)
+	if m.EnqueueTriggerCapacitySupersedingFunc != nil {
+		return m.EnqueueTriggerCapacitySupersedingFunc(ctx, ev, scope)
 	}
-	return contractkit.MockNotSet("MockEventFireRepo", "EnqueueTriggerCapacity")
+	return nil, contractkit.MockNotSet("MockEventFireRepo", "EnqueueTriggerCapacitySuperseding")
 }
 
 // CanLaunchTriggerCapacity records the call and delegates to CanLaunchTriggerCapacityFunc when set.
@@ -1232,19 +1232,19 @@ func (m *MockEventFireRepo) TriggerCapacityStartFenced(ctx context.Context, e st
 }
 
 // ExpirePendingTriggerCapacityEvents records the call and delegates to ExpirePendingTriggerCapacityEventsFunc when set.
-func (m *MockEventFireRepo) ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) (int64, error) {
+func (m *MockEventFireRepo) ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) ([]*core.TriggerEvent, error) {
 	m.Recorder.Record("ExpirePendingTriggerCapacityEvents", ctx, recordedBefore, detail, limit)
 	if m.ExpirePendingTriggerCapacityEventsFunc != nil {
 		return m.ExpirePendingTriggerCapacityEventsFunc(ctx, recordedBefore, detail, limit)
 	}
-	return 0, contractkit.MockNotSet("MockEventFireRepo", "ExpirePendingTriggerCapacityEvents")
+	return nil, contractkit.MockNotSet("MockEventFireRepo", "ExpirePendingTriggerCapacityEvents")
 }
 
 // Compile-time check.
 var _ EventFireRepo = (*MockEventFireRepo)(nil)
 
 // forge:section MockCapacityStore
-// forge:hash=bc512e7f43ca4cfb440c55f7db388b60b416523fc2ef1695b47e78329ffc7448
+// forge:hash=0349794e1407a9ff032b9481057b8f5b8bb06197d559253fb8f3bbbd7414b94b
 
 // MockCapacityStore is a test mock for the CapacityStore interface.
 //
@@ -1254,7 +1254,7 @@ var _ EventFireRepo = (*MockEventFireRepo)(nil)
 // "MockCapacityStore.<Method>Func not set" error.
 type MockCapacityStore struct {
 	contractkit.Recorder
-	EnqueueTriggerCapacityFunc                func(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) error
+	EnqueueTriggerCapacitySupersedingFunc     func(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) ([]*core.TriggerEvent, error)
 	CanLaunchTriggerCapacityFunc              func(context.Context, string, store.TriggerCapacityScope, store.TriggerCapacityLimits) (bool, error)
 	NextAdmissibleTriggerCapacityEventFunc    func(context.Context, store.TriggerCapacityScope, store.TriggerCapacityLimits) (*core.TriggerEvent, error)
 	BindTriggerCapacityExecutionFunc          func(context.Context, string, string, string) error
@@ -1266,16 +1266,16 @@ type MockCapacityStore struct {
 	FenceUnboundTriggerCapacityStartFunc      func(context.Context, store.TriggerCapacityExecution) (bool, error)
 	ReleaseUnboundTriggerCapacityFunc         func(context.Context, store.TriggerCapacityExecution, string) (bool, error)
 	TriggerCapacityStartFencedFunc            func(context.Context, store.TriggerCapacityExecution) (bool, error)
-	ExpirePendingTriggerCapacityEventsFunc    func(context.Context, time.Time, string, int) (int64, error)
+	ExpirePendingTriggerCapacityEventsFunc    func(context.Context, time.Time, string, int) ([]*core.TriggerEvent, error)
 }
 
-// EnqueueTriggerCapacity records the call and delegates to EnqueueTriggerCapacityFunc when set.
-func (m *MockCapacityStore) EnqueueTriggerCapacity(ctx context.Context, ev *core.TriggerEvent, scope store.TriggerCapacityScope) error {
-	m.Recorder.Record("EnqueueTriggerCapacity", ctx, ev, scope)
-	if m.EnqueueTriggerCapacityFunc != nil {
-		return m.EnqueueTriggerCapacityFunc(ctx, ev, scope)
+// EnqueueTriggerCapacitySuperseding records the call and delegates to EnqueueTriggerCapacitySupersedingFunc when set.
+func (m *MockCapacityStore) EnqueueTriggerCapacitySuperseding(ctx context.Context, ev *core.TriggerEvent, scope store.TriggerCapacityScope) ([]*core.TriggerEvent, error) {
+	m.Recorder.Record("EnqueueTriggerCapacitySuperseding", ctx, ev, scope)
+	if m.EnqueueTriggerCapacitySupersedingFunc != nil {
+		return m.EnqueueTriggerCapacitySupersedingFunc(ctx, ev, scope)
 	}
-	return contractkit.MockNotSet("MockCapacityStore", "EnqueueTriggerCapacity")
+	return nil, contractkit.MockNotSet("MockCapacityStore", "EnqueueTriggerCapacitySuperseding")
 }
 
 // CanLaunchTriggerCapacity records the call and delegates to CanLaunchTriggerCapacityFunc when set.
@@ -1378,12 +1378,12 @@ func (m *MockCapacityStore) TriggerCapacityStartFenced(ctx context.Context, e st
 }
 
 // ExpirePendingTriggerCapacityEvents records the call and delegates to ExpirePendingTriggerCapacityEventsFunc when set.
-func (m *MockCapacityStore) ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) (int64, error) {
+func (m *MockCapacityStore) ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) ([]*core.TriggerEvent, error) {
 	m.Recorder.Record("ExpirePendingTriggerCapacityEvents", ctx, recordedBefore, detail, limit)
 	if m.ExpirePendingTriggerCapacityEventsFunc != nil {
 		return m.ExpirePendingTriggerCapacityEventsFunc(ctx, recordedBefore, detail, limit)
 	}
-	return 0, contractkit.MockNotSet("MockCapacityStore", "ExpirePendingTriggerCapacityEvents")
+	return nil, contractkit.MockNotSet("MockCapacityStore", "ExpirePendingTriggerCapacityEvents")
 }
 
 // Compile-time check.

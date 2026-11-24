@@ -72,6 +72,12 @@ func unmarshalNode(node *yaml.Node) (*reliantv1.Node, error) {
 				return nil, fmt.Errorf("node %s: %s must be true or false: %w", v2node.Id, yamlKeyTolerateFailure, err)
 			}
 			v2node.TolerateFailure = b
+		case yamlKeyObserve:
+			o, err := unmarshalNodeObserve(val)
+			if err != nil {
+				return nil, fmt.Errorf("node %s: %w", v2node.Id, err)
+			}
+			v2node.Observe = o
 		}
 	}
 
@@ -305,6 +311,7 @@ func validateActivityNodeTopLevelKeys(node *yaml.Node, binding generatedNodeBind
 		yamlKeySaveMessage: {},
 		yamlKeyDaemon:      {},
 		yamlKeyOutcome:     {},
+		yamlKeyObserve:     {},
 		yamlKeyArgs:        {},
 	}
 	for key := range binding.argFieldKeys {
@@ -926,6 +933,11 @@ func marshalNode(v2node *reliantv1.Node) (*yaml.Node, error) {
 	// tolerate_failure (node base level) — the node is optional.
 	if v2node.TolerateFailure {
 		m.Content = append(m.Content, scalarNode(yamlKeyTolerateFailure, ""), scalarNode("true", "!!bool"))
+	}
+
+	// observe (node base level) — what the node records when it finishes.
+	if v2node.Observe != nil {
+		m.Content = append(m.Content, scalarNode(yamlKeyObserve, ""), marshalNodeObserve(v2node.Observe))
 	}
 
 	// Marshal args based on generated descriptor binding.
