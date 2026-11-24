@@ -1,9 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * SettingsService and CatalogService: Alex is past onboarding, shares no
- * analytics, has Anthropic and OpenAI connected, and picks from four models
- * with a smart / default / fast tier each.
+ * SettingsService and CatalogService: Alex is past onboarding (the wizard and
+ * the getting-started guide dismissed), shares no analytics, has Anthropic
+ * and OpenAI connected, and picks from four models with a smart / default /
+ * fast tier each.
  */
 import { CatalogService, type ModelInfo } from "@/gen/reliant/v1/catalog_pb";
 import { SettingsService } from "@/gen/reliant/v1/settings_pb";
@@ -28,10 +29,34 @@ const MODELS = [
   model("gpt-5", "GPT-5", "openai", [], true),
 ];
 
+/**
+ * What Alex has saved, server-side. Besides onboarding, each is a value the
+ * app would otherwise write back on a fresh page, which a read-only pack
+ * refuses: the getting-started guide's state and its completed items
+ * (onboardingChecklistStore loadState heals the server from what the page
+ * knows or the data shows), and the appearance page's defaults (it persists
+ * every unset preference when it opens). The theme is not saved, so the
+ * device's (or the screenshot harness's) theme applies.
+ */
+const SAVED_SETTINGS: [key: string, value: string][] = [
+  ["onboarding.wizard.dismissed", "true"],
+  ["onboarding.checklist.panel_state", "dismissed"],
+  // Every item of the guide (components/Onboarding/types.ts ChecklistItemId): with all of them
+  // saved, loadState finds nothing new in the data to complete, so it neither probes nor writes.
+  [
+    "onboarding.checklist.completed_items",
+    JSON.stringify(["add-api-key", "start-chat", "use-custom-workflow", "create-workflow", "take-product-tour", "create-workspace", "create-preset", "install-mcp", "read-docs"]),
+  ],
+  ["appearance.font", "default"],
+  ["appearance.chatFont", "default"],
+  ["appearance.editorFont", "default"],
+  ["appearance.fontSize", "lg"],
+];
+
 export function settingsHandlers() {
   return {
     ...serve(SettingsService, {
-      listSettings: () => ({ settings: [setting("onboarding.wizard.dismissed", "true")], total: 1 }),
+      listSettings: () => ({ settings: SAVED_SETTINGS.map(([key, value]) => setting(key, value)), total: SAVED_SETTINGS.length }),
       getPrivacySettings: () => ({ analyticsEnabled: false, crashReportingEnabled: false }),
       getProviderStatuses: () => ({
         providers: [
