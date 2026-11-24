@@ -733,6 +733,8 @@ github.com/quic-go/quic-go v0.54.0 h1:6s1YB9QotYI6Ospeiguknbp2Znb/jZYjZLRXn9kMQB
 github.com/quic-go/quic-go v0.54.0/go.mod h1:e68ZEaCdyviluZmy44P6Iey98v/Wfz6HCjQEm+l8zTY=
 github.com/reliant-labs/forge v1.10.1-0.20261123064811-54313eead62f h1:l3QCMrqT1rzVgdSfCrAxyU5+ODYT+uT57W3vfpexiko=
 github.com/reliant-labs/forge v1.10.1-0.20261123064811-54313eead62f/go.mod h1:2BYHeysolEErFxjJrOhkasNSDuDcfGs6TFahcpH7Nz8=
+github.com/reliant-labs/reliant/sdk/go v0.0.0-20261124200928-5a25d07f8cfb h1:6A9OSVecv40a4lXix1D3GwDTENtCXH6kVjendAh+OHo=
+github.com/reliant-labs/reliant/sdk/go v0.0.0-20261124200928-5a25d07f8cfb/go.mod h1:mRikw1CXaaClI9qFEdYUzKbBwasvcGmMJT1LbHJaydA=
 github.com/robfig/cron v1.2.0 h1:ZjScXvvxeQ63Dbyxy76Fj3AT3Ut0aKsyd2/tl3DTMuQ=
 github.com/robfig/cron v1.2.0/go.mod h1:JGuDeoQd7Z6yL4zQhZ3OPEVHB7fL6Ka6skscFHfmt2k=
 github.com/robfig/cron/v3 v3.0.1 h1:WdRxkvbJztn8LMz/QEvLN5sBU+xKpSqwwUO1Pjr4qDs=
