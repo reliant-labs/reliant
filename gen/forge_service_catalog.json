@@ -47717,6 +47717,16 @@
               "ProtoType": "[]message",
               "IsOptional": false,
               "MessageType": "reliant.v1.ValidationError"
+            },
+            {
+              "Name": "visibility",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ImportWorkflowRequest": [
@@ -48835,6 +48845,16 @@
               "kind": "message",
               "type_name": "reliant.v1.ValidationError",
               "repeated": true
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.GitPublishArgs": [
@@ -51013,6 +51033,16 @@
               "name": "permissions",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.WorkflowRequirements": [
@@ -51243,6 +51273,11 @@
             "CONFIG_SCOPE_PROJECT",
             "CONFIG_SCOPE_PROJECT_LOCAL"
           ],
+          "reliant.v1.ResourceVisibility": [
+            "RESOURCE_VISIBILITY_UNSPECIFIED",
+            "RESOURCE_VISIBILITY_PRIVATE",
+            "RESOURCE_VISIBILITY_ORG"
+          ],
           "reliant.v1.TriggerOverlapPolicy": [
             "TRIGGER_OVERLAP_POLICY_UNSPECIFIED",
             "TRIGGER_OVERLAP_POLICY_SKIP",
@@ -51266,6 +51301,11 @@
             2,
             3
           ],
+          "reliant.v1.ResourceVisibility": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.TriggerOverlapPolicy": [
             0,
             1,
@@ -51286,6 +51326,10 @@
           "reliant.v1.ConfigScope": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ConfigScope"
+          },
+          "reliant.v1.ResourceVisibility": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ResourceVisibility"
           },
           "reliant.v1.TriggerOverlapPolicy": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
