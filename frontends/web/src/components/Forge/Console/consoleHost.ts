@@ -89,7 +89,9 @@ export function useConsoleReliantProject(
   );
   const match = checkout.kind === "one" ? checkout.project : null;
   useEffect(() => {
-    if (select && match && match.id !== currentProject?.id) void selectProject(match);
+    // Context, not the person's pick: it is not remembered as the last
+    // project (another tab's bare entry would open it).
+    if (select && match && match.id !== currentProject?.id) void selectProject(match, { skipWorkspaceStateSave: true });
   }, [select, match, currentProject?.id, selectProject]);
   return { listed, projectId: match?.id ?? null, candidates: checkout.kind === "several" ? checkout.candidates : null };
 }

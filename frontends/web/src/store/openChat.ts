@@ -190,7 +190,7 @@ async function showNewChat(target: NewChatTarget): Promise<void> {
     if (!isCurrent()) return;
     if (!project) throw new ChatProjectUnavailableError();
     const selected = useProjectStore.getState().selectProject(project, {
-      restoreChat: false,
+      opensChat: true,
       restoreWorkspace: false,
       isCurrent: isLatest,
     });

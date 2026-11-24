@@ -152,6 +152,23 @@ export type _LaunchPlanMatchesSchema = AssertTrue<
 >;
 
 export type IndexSearch = z.infer<typeof indexSearchSchema>;
+/**
+ * `?projects=<id>,<id>`: the chat list's filter of two or more projects
+ * (lib/chatProjectFilter; one project is `/project/<id>`, none is all). It
+ * rides on every chat shell and app console page (retainSearchParams on
+ * their layout routes), so a tab's selection is in its own URL, never shared
+ * with another tab. Comma-separated ids; anything unreadable is no filter,
+ * never a route error.
+ */
+const projectsParam = z
+  .union([z.string(), z.number()])
+  .transform(String)
+  .optional()
+  .catch(undefined);
+
+/** The search keys every chat shell and app console navigation keeps (a navigation that sets one to undefined drops it). */
+export const PROJECTS_CARRIED = ["projects"] as const;
+
 export const indexSearchSchema = z.object({
   plan: launchPlanSchema.optional(),
   "reset-onboarding": z.boolean().optional(),
@@ -178,15 +195,15 @@ export const indexSearchSchema = z.object({
   // onboarding offers on finishing. HomeNewChat applies it and drops it once
   // the chat is created.
   start: z.enum(START_VALUES).optional(),
-  // `?projects=<id>,<id>` is the chat list's filter of two or more projects
-  // (lib/chatProjectFilter; one project is `/project/<id>`, none is all).
-  // Comma-separated ids; anything unreadable is no filter, never a route error.
-  projects: z
-    .union([z.string(), z.number()])
-    .transform(String)
-    .optional()
-    .catch(undefined),
+  projects: projectsParam,
 });
+
+/**
+ * The search the chat shell and the app console carry across every page
+ * (PROJECTS_CARRIED): the chat list's project filter. Validated on their
+ * layout routes, so each tab's selection is its own URL.
+ */
+export const projectsCarrySearchSchema = z.object({ projects: projectsParam });
 
 export const authSearchSchema = z.object({
   redirect: z.string().optional(),
