@@ -10,7 +10,7 @@ import { mobilePathFor, shouldRedirectToMobileNow } from './lib/mobileRedirect'
 import { getIsDev } from './lib/constants'
 import { createWorkflowsAreaRoutes } from './workflowsAreaRoutes'
 import { retainTourParam } from './components/Onboarding/tourParam'
-import { createForgeDemoRedirectRoute, createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
+import { createForgeDemoHandoffRoutes } from './components/Forge/Demo/demoHandoff'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { forgeConsolePages } from './forgeConsolePages'
 import { createRetiredPageRoutes } from './legacyRedirectRoutes'
@@ -988,15 +988,11 @@ const orgOrgScopedRoutes = createOrgScopedRoutes(() => orgAppLayoutRoute, () => 
 // OAuth return at the onboarding context, and the "done — leave for /" hop.
 // See OnboardingRoute.tsx.
 
-// The forge demo console: the console and its Observability views on fixture
-// data, with no daemon, chat or control-plane call (components/Forge/Demo). The
-// forge journey walks it. Public, at the root and outside every guard: it
-// reads nothing of the person's, the journey picker offers it to everyone, and
-// the landing page's `?journey=forge` takes a signed-out visitor straight to
-// it (ForgeShell/ForgeLandingJourney). `/demo`, a landing link's short form,
-// points at it.
-const forgeDemoRoute = createForgeDemoRoute(() => rootRoute)
-const forgeDemoRedirectRoute = createForgeDemoRedirectRoute(() => rootRoute)
+// The forge demo has one home, the demo bundle (demo.reliantlabs.io): `/forge/demo`
+// and `/demo` leave for it, query kept, so the forge journey's steps and the
+// landing page's `?journey=forge` (ForgeShell/ForgeLandingJourney) continue there.
+// Public, at the root and outside every guard (components/Forge/Demo/demoHandoff.ts).
+const [forgeDemoRoute, forgeDemoRedirectRoute] = createForgeDemoHandoffRoutes(() => rootRoute)
 
 const onboardingRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,

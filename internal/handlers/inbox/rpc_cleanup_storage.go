@@ -36,7 +36,7 @@ func (s *Service) CleanupStorage(
 	// The machine must be the caller's: Cleanup only ever acts on worktrees of
 	// projects the caller owns, but naming a stranger's daemon is rejected
 	// outright rather than quietly doing nothing.
-	daemon, err := s.deps.Repo.GetDaemon(ctx, req.Msg.DaemonId)
+	daemon, err := s.deps.Machines.GetDaemon(ctx, req.Msg.DaemonId)
 	if err != nil && !svcerr.IsNotFound(err) {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get machine"))
 	}

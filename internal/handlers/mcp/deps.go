@@ -11,9 +11,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
+// ProjectReader reads a project by id. It checks no owner: every caller
+// decides access on the row it returns. store.ProjectExtStore satisfies it.
+type ProjectReader interface {
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+}
+
 // Repository is the slice of *db.Repo the mcp handlers use.
 type Repository interface {
-	GetProject(ctx context.Context, id string) (*db.Project, error)
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
 
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error

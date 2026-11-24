@@ -180,7 +180,7 @@ func (s *Service) queueBehindBlockingQuestion(ctx context.Context, chat *db.Chat
 	if from == "" {
 		from = thread
 	}
-	if _, err := s.deps.Repo.EnqueueAgentMessageOnce(ctx, &db.AgentMessage{
+	if _, err := s.deps.Mailbox.EnqueueAgentMessageOnce(ctx, &db.AgentMessage{
 		ID:           asyncAnswerMessageID(questionID, thread, body),
 		FromThreadID: from,
 		ChatID:       chat.ID,

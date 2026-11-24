@@ -95,7 +95,7 @@ vi.mock("@/hooks/useAuthMode", () => ({ useAuthMode: () => ({ authMode: "supabas
 
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { setTransport } from "@/lib/connect";
-import { inOrg } from "@/lib/paths/org";
+import { inOrg, orgFreePath } from "@/lib/paths/org";
 import { queryClient } from "@/lib/query-client";
 import { resetShellForTests } from "@/lib/shell";
 import { routeTree } from "@/routes";
@@ -169,7 +169,7 @@ describe.each(HOSTS)("the %s brand", (host) => {
         if (page) expect(await screen.findByTestId(`page-${page}`)).toBeInTheDocument();
         await settle();
         // Where it was opened (or that page's canonical, org form): not the wizard, not a home.
-        expect(h.pathname()).toContain(url === "/apps" ? "projects" : url.split("/")[1]);
+        expect(orgFreePath(h.pathname())).toContain(url === "/apps" ? "projects" : url.split("/")[1]);
         expect(h.pathname()).not.toMatch(/\/onboarding$/);
         expect(world.mounted).not.toContain("OnboardingRoute");
         expect(world.completeOnboarding).not.toHaveBeenCalled();
