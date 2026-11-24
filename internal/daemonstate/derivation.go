@@ -266,6 +266,11 @@ func (d *Derivation) dispatch(ctx context.Context, evt daemonwire.Event) error {
 		// heartbeat re-created it — before renewal could re-create a row
 		// (prod 2026-10-11), until it next reconnected.
 		return nil
+	case daemonwire.EventUpgrade:
+		// For the control plane's fleet roller. The registry holds no
+		// upgrade state: the gateway holding the stream keeps it in memory
+		// and stops routing tool requests to a draining daemon itself.
+		return nil
 	case daemonwire.EventLifecycle:
 		return d.onLifecycle(ctx, evt)
 	case daemonwire.EventRemoved:

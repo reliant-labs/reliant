@@ -142,7 +142,9 @@ func (s *Service) handleIncoming(ctx context.Context, conn *daemonConnection) er
 			conn.daemonToolCallsInFlight.Store(hb.Heartbeat.GetToolCallsInFlight())
 			// Here, not on the state worker: tool requests stop going to a
 			// draining daemon the moment it says so (upgrade.go).
-			conn.recordUpgradeStatus(hb.Heartbeat.GetUpgrade())
+			if conn.recordUpgradeStatus(hb.Heartbeat.GetUpgrade()) {
+				s.publishUpgradeState(conn, hb.Heartbeat.GetUpgrade())
+			}
 			select {
 			case leaseRenew <- struct{}{}:
 			default: // a renewal is already pending; it covers this one
