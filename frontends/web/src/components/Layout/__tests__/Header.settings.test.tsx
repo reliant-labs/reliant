@@ -1,11 +1,16 @@
 /**
- * The Header's Settings button must be there with or without a project.
+ * The Header's Settings button is there only while there is no project.
  *
- * The app's only other Settings link lives in the Sidebar, which renders
- * exclusively inside ModernApp's main app shell — and that shell requires a
- * project. A user with none yet (the first-run state, or a machine that never
- * provisions) would otherwise have no route to /settings at all, and
- * therefore no way to sign out.
+ * With no project yet (the first-run state, or a machine that never
+ * provisions) there is no nav, so the header gear is the only route to
+ * /settings, and so to signing out.
+ *
+ * With a project open there is no header gear: owner decision, 2026-11-24
+ * (the one top bar, Variant A). Settings is the nav's footer row and ⌘,.
+ * A review that asks for "Settings in the header" is answered by that
+ * decision, not by restoring the gear: #3309's pr-fix did, and the owner
+ * reverted it. The tests below hold both halves — no gear, and Settings
+ * still reachable.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -62,6 +67,9 @@ vi.mock("../DaemonStatusDot", () => ({ DaemonStatusDot: () => null }));
 vi.mock("../DetectedPortsChip", () => ({ DetectedPortsChip: () => null }));
 
 import { Header } from "../Header";
+import { hrefOf, hybridNav, type NavCtx } from "../sidebar/navConfig";
+import { defaultShortcuts } from "../../../store/shortcutsData.generated";
+import { settingsPath } from "@/lib/paths";
 import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
 
 describe("Header settings escape hatch", () => {
@@ -96,16 +104,27 @@ describe("Header settings escape hatch", () => {
     expect(onNavigateToSettings).toHaveBeenCalledTimes(1);
   });
 
-  it.each([false, true])("keeps Settings reachable with a project and sidebar expanded=%s", async (expanded) => {
+  it.each([false, true])("has no Settings gear with a project open (owner decision), sidebar expanded=%s", (expanded) => {
     projectState.currentProject = { id: "project-1", name: "Project" };
     useWorkspaceStateStore.setState({ leftSidebarExpanded: expanded });
-    const onNavigateToSettings = vi.fn();
-    // No Sidebar is mounted: the Header must supply its own entry point.
-    render(<Header onNavigateToSettings={onNavigateToSettings} />);
+    render(<Header onNavigateToSettings={vi.fn()} />);
 
-    await userEvent.click(screen.getByTestId("header-settings-button"));
+    expect(screen.queryByTestId("header-settings-button")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Settings" })).toBeNull();
+  });
 
-    expect(onNavigateToSettings).toHaveBeenCalledTimes(1);
+  it("keeps Settings reachable with a project open: the nav's footer row and ⌘,", () => {
+    // The nav's footer, drawn on every page of the shell, ends with Settings.
+    const footerSettings = hybridNav.footer.find((item) => item.id === "settings");
+    expect(footerSettings?.kind).toBe("row");
+    expect(footerSettings && hrefOf(footerSettings, { pathname: "/c/chat-1", search: {} } as NavCtx)).toBe(settingsPath());
+
+    // ⌘, opens Settings on desktop and on the web (bindings.test.ts proves
+    // the chord fires on every surface).
+    const shortcut = defaultShortcuts.toggleSettings;
+    expect(shortcut.handler).toBe("onToggleSettings");
+    expect(shortcut.defaultBinding).toBe("Cmd+,");
+    expect(shortcut.defaultWebBinding).toBe("Cmd+,");
   });
 
   it("leads with the Reliant mark, a link home that stays in the SPA on a plain click", async () => {
