@@ -1,7 +1,7 @@
 -- forge:backward-compatible — a new partial index; no statement of the previous release changes meaning, and the index covers only rows (visibility = 'org') that release never writes.
 
 -- Migration: workflow_drafts_shared_by_org_index
--- Created: 2026-11-22T04:12:38Z
+-- Created: 2026-11-24T16:54:03Z
 --
 -- ListSharedWorkflowDrafts reads an org's shared saved workflows, most
 -- recently shared first (control-plane docs/design/org-sharing.md §8.5), as a
