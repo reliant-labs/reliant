@@ -180,10 +180,11 @@ type ApprovalStatus = reliantv1.ApprovalStatus
 // [Client.Approvals].
 //
 // Reading needs reliant:api. Deciding (Approve, Deny, BatchApprove,
-// BatchDeny) requires an explicitly granted approvals:decide scope on an
-// unbound token, retained for v1 compatibility alongside app sessions.
-// A token bound to a machine is refused as [ErrMachineCredential]; every
-// refusal is also [ErrPermissionDenied].
+// BatchDeny) is refused to every API token, approvals:decide included: an
+// approval means a person said yes, so the server admits only the app's
+// signed-in browser session (reason person_required). A token bound to a
+// machine is refused as [ErrMachineCredential]; every refusal is also
+// [ErrPermissionDenied].
 type ApprovalsClient struct {
 	c         *Client
 	approvals reliantv1connect.ApprovalServiceClient

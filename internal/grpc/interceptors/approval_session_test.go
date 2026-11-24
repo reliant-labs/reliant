@@ -77,10 +77,12 @@ func (decideAuthority) Introspect(_ context.Context, _ string) (*fat.Principal, 
 
 func cookie(name, value string) string { return name + "=" + value }
 
-// TestApprovalDeciderAuthentication covers the browser session path and the
-// v1 compatibility paths: Supabase sessions and explicitly scoped unbound tokens.
-// Identity bearers and credentials sent through the wrong channel stay refused.
-func TestApprovalDeciderAuthentication(t *testing.T) {
+// TestOnlyABrowserSessionDecidesAnApproval is the owner's rule (2026-11-19:
+// approvals need a cookie session; bearer and rlat_ tokens never approve) at
+// the edge: of every way a request can present the same person's credential,
+// only the server-side session id read from the sign-in cookie decides an
+// approval. Supabase sessions keep deciding until the cutover (the bridge).
+func TestOnlyABrowserSessionDecidesAnApproval(t *testing.T) {
 	h := newApprovalHarness(t, false)
 	sid := h.signIn(t, "user-1")
 	identityToken := h.id.Sign(t, "user-1", nil)
@@ -100,7 +102,7 @@ func TestApprovalDeciderAuthentication(t *testing.T) {
 
 		{name: "the identity's access token as a bearer", header: http.Header{"Authorization": {"Bearer " + identityToken}}, cred: auth.CredentialIdentityToken},
 		{name: "the session id as a bearer", header: http.Header{"Authorization": {"Bearer " + sid}}, cred: auth.CredentialIdentityToken},
-		{name: "an unbound rlat_ token explicitly holding approvals:decide", header: http.Header{"Authorization": {"Bearer " + rlat}}, decides: true, cred: auth.CredentialAccessToken},
+		{name: "an rlat_ token holding approvals:decide", header: http.Header{"Authorization": {"Bearer " + rlat}}, cred: auth.CredentialAccessToken},
 		{name: "a bearer beside the session cookie: the bearer counts", header: http.Header{"Authorization": {"Bearer " + identityToken}, "Cookie": {cookie(auth.SecureSessionCookieName, sid)}}, cred: auth.CredentialIdentityToken},
 
 		{name: "the identity's access token as the cookie", header: http.Header{"Cookie": {cookie(auth.SecureSessionCookieName, identityToken)}}, authErr: true},
