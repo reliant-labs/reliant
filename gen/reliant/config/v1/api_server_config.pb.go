@@ -184,9 +184,11 @@ type ApiServerConfig struct {
 	LivenessPaths  string `protobuf:"bytes,24,opt,name=liveness_paths,json=livenessPaths,proto3" json:"liveness_paths,omitempty"`
 	ReadinessPaths string `protobuf:"bytes,25,opt,name=readiness_paths,json=readinessPaths,proto3" json:"readiness_paths,omitempty"`
 	// Organization features the API server gates while they roll out.
-	Orgs          *OrgsConfig `protobuf:"bytes,85,opt,name=orgs,proto3" json:"orgs,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Orgs *OrgsConfig `protobuf:"bytes,85,opt,name=orgs,proto3" json:"orgs,omitempty"`
+	// Chat collaboration (per-person grants on a chat) while it rolls out.
+	ChatCollaboration *ChatCollaborationConfig `protobuf:"bytes,98,opt,name=chat_collaboration,json=chatCollaboration,proto3" json:"chat_collaboration,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ApiServerConfig) Reset() {
@@ -506,6 +508,69 @@ func (x *ApiServerConfig) GetOrgs() *OrgsConfig {
 	return nil
 }
 
+func (x *ApiServerConfig) GetChatCollaboration() *ChatCollaborationConfig {
+	if x != nil {
+		return x.ChatCollaboration
+	}
+	return nil
+}
+
+// ChatCollaborationConfig gates chat collaboration (control-plane
+// docs/design/chat-collaboration.md §12): the per-person grants of
+// chat_members, and later the reply and manage decisions built on them. The
+// rules every config here follows are in config.proto's header.
+type ChatCollaborationConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Lets a chat's owner, and its members at manage, grant a person view,
+	// reply or manage on it (SharingService.SetChatMember). Off by default:
+	// turn it on only once every API server AND worker, and the release a
+	// rollback would return to, read chat_members, so no grant can exist while
+	// an older process could misjudge one (an older release treats every chat
+	// as having no members, which fails closed). Removing a member and listing
+	// them are never gated, so a grant made while it was on can always be
+	// taken back.
+	Enabled       bool `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChatCollaborationConfig) Reset() {
+	*x = ChatCollaborationConfig{}
+	mi := &file_reliant_config_v1_api_server_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChatCollaborationConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChatCollaborationConfig) ProtoMessage() {}
+
+func (x *ChatCollaborationConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_config_v1_api_server_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChatCollaborationConfig.ProtoReflect.Descriptor instead.
+func (*ChatCollaborationConfig) Descriptor() ([]byte, []int) {
+	return file_reliant_config_v1_api_server_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ChatCollaborationConfig) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
 // OrgsConfig gates organization features that need every replica (and the
 // release a rollback would return to) to understand them before anything
 // writes them. The rules every config here follows are in config.proto's
@@ -563,7 +628,7 @@ type OrgsConfig struct {
 
 func (x *OrgsConfig) Reset() {
 	*x = OrgsConfig{}
-	mi := &file_reliant_config_v1_api_server_config_proto_msgTypes[1]
+	mi := &file_reliant_config_v1_api_server_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -575,7 +640,7 @@ func (x *OrgsConfig) String() string {
 func (*OrgsConfig) ProtoMessage() {}
 
 func (x *OrgsConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_api_server_config_proto_msgTypes[1]
+	mi := &file_reliant_config_v1_api_server_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -588,7 +653,7 @@ func (x *OrgsConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrgsConfig.ProtoReflect.Descriptor instead.
 func (*OrgsConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_api_server_config_proto_rawDescGZIP(), []int{1}
+	return file_reliant_config_v1_api_server_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *OrgsConfig) GetConnectionsEnabled() bool {
@@ -630,7 +695,7 @@ var File_reliant_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\x8c5\n" +
+	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xe75\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
@@ -721,11 +786,15 @@ const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x0eLIVENESS_PATHS\x1a\x10/health,/healthz*9Liveness probe paths on the health port (comma-separated)R\rlivenessPaths\x12\x8a\x01\n" +
 	"\x0freadiness_paths\x18\x19 \x01(\tBa\x82\xce\x18]\n" +
 	"\x0fREADINESS_PATHS\x1a\x0e/ready,/readyz*:Readiness probe paths on the health port (comma-separated)R\x0ereadinessPaths\x121\n" +
-	"\x04orgs\x18U \x01(\v2\x1d.reliant.config.v1.OrgsConfigR\x04orgs:\xa0\x02\xbaH\x82\x02\x1av\n" +
+	"\x04orgs\x18U \x01(\v2\x1d.reliant.config.v1.OrgsConfigR\x04orgs\x12Y\n" +
+	"\x12chat_collaboration\x18b \x01(\v2*.reliant.config.v1.ChatCollaborationConfigR\x11chatCollaboration:\xa0\x02\xbaH\x82\x02\x1av\n" +
 	"\x15auth_api_key_required\x12&AUTH_MODE=apikey requires AUTH_API_KEY\x1a5this.auth_mode != 'apikey' || this.auth_api_key != ''\x1a\x87\x01\n" +
 	"\x15jwt_audience_required\x12<JWT_ISSUER requires JWT_AUDIENCE (the identity project's id)\x1a0this.jwt_issuer == '' || this.jwt_audience != ''\xca\xc1\x18\x16\n" +
 	"\areliant\x12\x06server\x12\x03apiJ\x04\b\x05\x10\x06J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x03tlsR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreview\"\xcc\a\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x03tlsR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreview\"\xa9\x01\n" +
+	"\x17ChatCollaborationConfig\x12\x8d\x01\n" +
+	"\aenabled\x18\x01 \x01(\bBs\x82\xce\x18o\n" +
+	"\"RELIANT_CHAT_COLLABORATION_ENABLED*ILet chat owners and managers grant people view, reply or manage on a chatR\aenabled\"\xcc\a\n" +
 	"\n" +
 	"OrgsConfig\x12\x9b\x01\n" +
 	"\x13connections_enabled\x18\x01 \x01(\bBj\x82\xce\x18f\n" +
@@ -751,27 +820,29 @@ func file_reliant_config_v1_api_server_config_proto_rawDescGZIP() []byte {
 	return file_reliant_config_v1_api_server_config_proto_rawDescData
 }
 
-var file_reliant_config_v1_api_server_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_reliant_config_v1_api_server_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_reliant_config_v1_api_server_config_proto_goTypes = []any{
-	(*ApiServerConfig)(nil),     // 0: reliant.config.v1.ApiServerConfig
-	(*OrgsConfig)(nil),          // 1: reliant.config.v1.OrgsConfig
-	(*durationpb.Duration)(nil), // 2: google.protobuf.Duration
+	(*ApiServerConfig)(nil),         // 0: reliant.config.v1.ApiServerConfig
+	(*ChatCollaborationConfig)(nil), // 1: reliant.config.v1.ChatCollaborationConfig
+	(*OrgsConfig)(nil),              // 2: reliant.config.v1.OrgsConfig
+	(*durationpb.Duration)(nil),     // 3: google.protobuf.Duration
 }
 var file_reliant_config_v1_api_server_config_proto_depIdxs = []int32{
-	2, // 0: reliant.config.v1.ApiServerConfig.jwt_jwks_snapshot_max_age:type_name -> google.protobuf.Duration
-	2, // 1: reliant.config.v1.ApiServerConfig.worktree_landed_idle:type_name -> google.protobuf.Duration
-	2, // 2: reliant.config.v1.ApiServerConfig.worktree_reclaim_quiet:type_name -> google.protobuf.Duration
-	2, // 3: reliant.config.v1.ApiServerConfig.worktree_reclaim_grace:type_name -> google.protobuf.Duration
-	2, // 4: reliant.config.v1.ApiServerConfig.worktree_live_shed_idle:type_name -> google.protobuf.Duration
-	2, // 5: reliant.config.v1.ApiServerConfig.payload_blob_gc_horizon:type_name -> google.protobuf.Duration
-	2, // 6: reliant.config.v1.ApiServerConfig.pre_stop_delay:type_name -> google.protobuf.Duration
-	2, // 7: reliant.config.v1.ApiServerConfig.shutdown_timeout:type_name -> google.protobuf.Duration
-	1, // 8: reliant.config.v1.ApiServerConfig.orgs:type_name -> reliant.config.v1.OrgsConfig
-	9, // [9:9] is the sub-list for method output_type
-	9, // [9:9] is the sub-list for method input_type
-	9, // [9:9] is the sub-list for extension type_name
-	9, // [9:9] is the sub-list for extension extendee
-	0, // [0:9] is the sub-list for field type_name
+	3,  // 0: reliant.config.v1.ApiServerConfig.jwt_jwks_snapshot_max_age:type_name -> google.protobuf.Duration
+	3,  // 1: reliant.config.v1.ApiServerConfig.worktree_landed_idle:type_name -> google.protobuf.Duration
+	3,  // 2: reliant.config.v1.ApiServerConfig.worktree_reclaim_quiet:type_name -> google.protobuf.Duration
+	3,  // 3: reliant.config.v1.ApiServerConfig.worktree_reclaim_grace:type_name -> google.protobuf.Duration
+	3,  // 4: reliant.config.v1.ApiServerConfig.worktree_live_shed_idle:type_name -> google.protobuf.Duration
+	3,  // 5: reliant.config.v1.ApiServerConfig.payload_blob_gc_horizon:type_name -> google.protobuf.Duration
+	3,  // 6: reliant.config.v1.ApiServerConfig.pre_stop_delay:type_name -> google.protobuf.Duration
+	3,  // 7: reliant.config.v1.ApiServerConfig.shutdown_timeout:type_name -> google.protobuf.Duration
+	2,  // 8: reliant.config.v1.ApiServerConfig.orgs:type_name -> reliant.config.v1.OrgsConfig
+	1,  // 9: reliant.config.v1.ApiServerConfig.chat_collaboration:type_name -> reliant.config.v1.ChatCollaborationConfig
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_api_server_config_proto_init() }
@@ -785,7 +856,7 @@ func file_reliant_config_v1_api_server_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_config_v1_api_server_config_proto_rawDesc), len(file_reliant_config_v1_api_server_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

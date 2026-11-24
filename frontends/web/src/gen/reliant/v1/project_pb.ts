@@ -2284,8 +2284,10 @@ export type ProjectOrgMoveEffects = Message<"reliant.v1.ProjectOrgMoveEffects"> 
   triggersNeedingSetup: ProjectOrgMoveTriggerSetup[];
 
   /**
-   * The project and chats shared with the source organization: each is made
-   * private, and its viewers there lose it. Share again in the target.
+   * The project and chats shared with the source organization, and the
+   * people granted access to one of its chats: each share is made private and
+   * each grant removed, so its viewers and members there lose it. Share again
+   * in the target.
    *
    * @generated from field: int32 shares_to_clear = 6;
    */

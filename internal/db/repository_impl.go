@@ -74,7 +74,7 @@ func (r *Repo) GetChatRowWithUserCheck(ctx context.Context, id, userID string) (
 	if err != nil {
 		return nil, err
 	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
+	if !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 	}
 	return chat, nil
@@ -92,7 +92,7 @@ func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID strin
 	if err != nil {
 		return nil, err
 	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
+	if !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 	}
 	return chat, nil

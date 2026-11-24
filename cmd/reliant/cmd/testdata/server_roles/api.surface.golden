@@ -49,6 +49,7 @@ RELIANT_API_BASE_URL kind=string flag="" default="" required=false optional=fals
 RELIANT_AUTHORIZATION_SERVER kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_AUTH_KEY kind=string flag="" default="sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_AUTH_URL kind=string flag="" default="https://dash.reliantlabs.io" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_CHAT_COLLABORATION_ENABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_CLIENT_VERSION_ENFORCE kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]

@@ -257,6 +257,12 @@ var purgeSteps = []step{
 	// payloads included, keyed by chat with no foreign key.
 	{"chat_update_heads", `
 		DELETE FROM chat_update_heads WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
+	// Per-person grants (chat-collaboration.md §3.1): the grants the user
+	// holds on other people's chats, and every grant on their own chats
+	// (which chats would cascade, deleted explicitly so a future FK change
+	// cannot silently orphan them).
+	{"chat_members", `
+		DELETE FROM chat_members WHERE user_id = $1 OR chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
 	{"background_process_output", `
 		DELETE FROM background_process_output WHERE process_id IN (
 			SELECT id FROM background_processes WHERE user_id = $1)`},
