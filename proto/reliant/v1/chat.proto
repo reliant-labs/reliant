@@ -1898,6 +1898,11 @@ message WorkflowExecution {
   // Lifecycle, always read as a pair. See WorkflowState / WorkflowStopReason.
   WorkflowState state = 20;
   WorkflowStopReason stop_reason = 21;
+  // What this workflow's nodes recorded with observe: (attributes and
+  // events), oldest first. Only in WORKFLOW_EXECUTION_VIEW_FULL, and never
+  // for a viewer of a shared chat (they are derived from what steps
+  // produced).
+  repeated NodeObservation observations = 22;
 }
 
 // GetThreadWorkflowInputsRequest fetches workflow inputs for a specific thread

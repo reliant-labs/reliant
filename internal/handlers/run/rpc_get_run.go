@@ -3,6 +3,7 @@ package run
 import (
 	"context"
 
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 
 	"connectrpc.com/connect"
@@ -31,7 +32,28 @@ func (s *Service) GetRun(
 	if truncated {
 		rows = rows[:rundiagnostics.RecordLimit]
 	}
-	return connect.NewResponse(&reliantv1.GetRunResponse{
+	resp := &reliantv1.GetRunResponse{
 		Run: runToProto(run), Nodes: rundiagnostics.Nodes(rows), NodesTruncated: truncated,
-	}), nil
+	}
+	resp.Observations, resp.ObservationsTruncated = s.runObservations(ctx, run.ID)
+	return connect.NewResponse(resp), nil
+}
+
+// runObservations is what the run tree's nodes recorded with observe:, newest
+// first, bounded like the node attempts. A failed read leaves them out rather
+// than failing the run's page: observability degrades, it never breaks the
+// read it rides on.
+func (s *Service) runObservations(ctx context.Context, workflowID string) ([]*reliantv1.NodeObservation, bool) {
+	rows, err := s.deps.Repo.ListRunNodeObservations(ctx, workflowID, rundiagnostics.RecordLimit+1)
+	if err != nil {
+		logging.WarnContext(ctx, "[GetRun] Could not read the run's node observations; returning the run without them",
+			"runID", workflowID, "error", err)
+		return nil, false
+	}
+	truncated := len(rows) > rundiagnostics.RecordLimit
+	if truncated {
+		rows = rows[:rundiagnostics.RecordLimit]
+	}
+	out, cut := rundiagnostics.Observations(rows, rundiagnostics.ObservationTextBudget)
+	return out, truncated || cut
 }

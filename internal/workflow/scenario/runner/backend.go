@@ -51,6 +51,7 @@ import (
 	// type into the schema registry. This is the same registration production
 	// relies on for output normalization and CEL typing; without it every
 	// GetOutputDefaults lookup returns nil and mocks stay un-normalized.
+	wfobserve "github.com/reliant-labs/reliant/internal/workflow/observe"
 	_ "github.com/reliant-labs/reliant/internal/workflow/runtime/activities"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -231,6 +232,10 @@ type recorder struct {
 	// it (see recordSaved).
 	saved []scenario.SavedMessage
 
+	// observations is what every node's observe: block recorded, in the
+	// order the nodes finished (see recordObservation).
+	observations []scenario.RecordedObservation
+
 	// routerEvents holds the `outputs` a preset router's scenario event
 	// supplied for its selected workflow, keyed by router path, so the
 	// black-boxed child can return them (see workflowRoutingDecisionOutput).
@@ -360,6 +365,24 @@ func (r *recorder) markReachedExact(id string) {
 // snapshotReached copies what has been reached so far. Used on the
 // non-termination path, where the workflow goroutine is still writing — reading
 // r.reached directly there is a data race.
+// recordObservation records what node's observe: block recorded, when it
+// recorded anything (an attribute, an event, or an expression that failed).
+func (r *recorder) recordObservation(node string, res wfobserve.Result) {
+	if node == "" || !res.HasRecord() {
+		return
+	}
+	o := scenario.RecordedObservation{Node: node, Attributes: res.Attributes, Truncated: res.Truncated}
+	for _, e := range res.Events {
+		o.Events = append(o.Events, scenario.RecordedEvent{Name: e.Name, Attributes: e.Attributes})
+	}
+	for _, e := range res.Errors {
+		o.Errors = append(o.Errors, e.Message)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.observations = append(r.observations, o)
+}
+
 // recordSaved records one saved message under the node that saved it.
 func (r *recorder) recordSaved(node, role, content string) {
 	r.mu.Lock()
@@ -1086,6 +1109,7 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 		// Non-nil even when empty: this backend observes saves, so "none
 		// saved" is a real answer (see scenario.checkMessageExpectations).
 		SavedMessages: append([]scenario.SavedMessage{}, rec.saved...),
+		Observations:  append([]scenario.RecordedObservation(nil), rec.observations...),
 		OnFailure:     onFailure,
 		Finally:       finally,
 	}
@@ -1314,10 +1338,6 @@ var infrastructureActivities = []string{
 	// sub-agent that stopped on an error. A scenario has no durable rows, so
 	// "it is not" — an empty result — is the faithful answer.
 	"LookupStoppedSubAgent",
-	// Records the observe: block of a node the workflow completed itself.
-	// It never influences the run, and a scenario has no store or spans to
-	// record into.
-	"RecordNodeObservation",
 }
 
 // nonTerminatingPrefix starts every message for a run cut off by its
@@ -2184,6 +2204,29 @@ func (r *Runner) registerActivities(
 		)
 	}
 
+	// RecordNodeObservation records the observe: block of a node the
+	// workflow completed itself (compute, join, router, loop, workflow, ...).
+	// It never influences the run; here it evaluates the block through the
+	// runtime's own path and records what it produced, for
+	// expect.observations. Like production, it never returns an error.
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, in types.RecordNodeObservationInput) error {
+			if err := guard.check(); err != nil {
+				return err
+			}
+			id := in.NodePath
+			if id == "" {
+				id = qualifiedNodeID(types.RuntimeContext{StepID: in.StepID, LoopNodeID: in.LoopNodeID})
+			}
+			res, ok := runtime.EvaluateNodeObservation(in.Observe, "", in.Output, in.Attempt, in.DurationMs)
+			if ok {
+				rec.recordObservation(id, res)
+			}
+			return nil
+		},
+		activity.RegisterOptions{Name: types.RecordNodeObservationActivityName},
+	)
+
 	// WorkflowStatus is bookkeeping like the stubs above, except that the
 	// root run's terminal "completed" call carries the graph's verdict: a run
 	// that routed to a node declaring `outcome: failure` finished its graph
@@ -2301,6 +2344,14 @@ func (r *Runner) registerActivities(
 					if err := resolveDelegatedSave(rec, id, activityName, req, out, stepID); err != nil {
 						return nil, err
 					}
+					var observe *types.ObserveRequest
+					if raw, ok := in[types.RunStepObserveKey]; ok && raw != nil {
+						observe = &types.ObserveRequest{}
+						if b, err := json.Marshal(raw); err != nil || json.Unmarshal(b, observe) != nil {
+							observe = nil
+						}
+					}
+					observeMocked(rec, id, activityName, observe, out)
 					rec.recordCompleted(id, out)
 					return out, nil
 				},
@@ -2386,6 +2437,7 @@ func (r *Runner) registerActivities(
 			if err := resolveDelegatedSave(rec, id, activityName, in.Runtime.SaveMessage, out, in.Runtime.StepID); err != nil {
 				return nil, err
 			}
+			observeMocked(rec, id, activityName, in.Runtime.Observe, out)
 			rec.recordCompleted(id, out)
 			return out, nil
 		}
@@ -2473,6 +2525,19 @@ func normalizeOutput(raw map[string]interface{}, activityName string) map[string
 		stopreason.FillDefault(out)
 	}
 	return out
+}
+
+// observeMocked evaluates a node's observe: block over its mocked result,
+// through the runtime's own path (runtime.EvaluateNodeObservation — what the
+// ActivityWrapper runs after a real activity), and records what it produced.
+// Like production, nothing here can fail the node.
+func observeMocked(rec *recorder, node, activityName string, req *types.ObserveRequest, out map[string]interface{}) {
+	if req == nil {
+		return
+	}
+	if res, ok := runtime.EvaluateNodeObservation(req, activityName, out, 1, 0); ok {
+		rec.recordObservation(node, res)
+	}
 }
 
 // resolveDelegatedSave runs a node's delegated save_message against its mocked

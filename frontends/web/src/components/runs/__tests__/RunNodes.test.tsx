@@ -2,7 +2,8 @@ import { create } from "@bufbuild/protobuf";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { RunNodeExecutionSchema } from "@/gen/reliant/v1/run_pb";
-import { RunNodeList, RunNodes } from "../RunNodes";
+import { NodeObservationSchema, ObservedEventSchema } from "@/gen/reliant/v1/common_pb";
+import { RunNodeList, RunNodes, decisionLine, runEntries } from "../RunNodes";
 
 const query = vi.hoisted(() => ({ isLoading: false, isError: false, data: undefined as unknown, refetch: vi.fn() }));
 const hook = vi.hoisted(() => ({ options: undefined as any }));
@@ -48,5 +49,42 @@ describe("run node diagnostics", () => {
   render(<RunNodes workflowId="root" />);
   expect(screen.getByRole("alert")).toHaveTextContent("Could not load node executions");
   query.isError = false;
+ });
+ // What a node recorded with observe: is shown under the attempt it belongs
+ // to: a decision as one line, the rest behind "Observed". A node the
+ // workflow completed itself has no attempt row and gets an entry of its own.
+ it("shows what each node recorded, under its attempt or on its own", () => {
+  const decision = (value: string, reason: string) => create(ObservedEventSchema, { name: "decision", attributes: { name: "cut", value, reason } });
+  render(<RunNodeList truncated={false} observationsTruncated nodes={[
+   create(RunNodeExecutionSchema, { id: "a", nodeId: "world", nodePath: "world", workflowId: "root", status: "completed", attempt: 1, completedAt: "2026-11-24T12:00:01Z" }),
+  ]} observations={[
+   create(NodeObservationSchema, { nodeId: "world", nodePath: "world", workflowId: "root", attempt: 1, createdAt: "2026-11-24T12:00:01Z",
+    attributes: { behind: 0 }, events: [create(ObservedEventSchema, { name: "tick", attributes: { lane: "fast" } })], errors: ["events[1].attributes.x: no such key"] }),
+   create(NodeObservationSchema, { nodeId: "plan", nodePath: "plan", workflowId: "root", attempt: 1, createdAt: "2026-11-24T12:00:02Z",
+    events: [decision("no_cut", "main_unchanged")] }),
+  ]} />);
+  expect(screen.getByText("cut: no_cut (main_unchanged)")).toBeInTheDocument();
+  expect(screen.getByText("plan")).toBeInTheDocument();
+  expect(screen.getByText("recorded")).toBeInTheDocument();
+  expect(screen.getByText("tick")).toBeInTheDocument();
+  expect(screen.getByText("lane")).toBeInTheDocument();
+  expect(screen.getByText(/Expression failed \(the node was unaffected\): events\[1\]/)).toBeInTheDocument();
+  expect(screen.getByText(/Older observations omitted/)).toBeInTheDocument();
+ });
+ it("joins an observation to its attempt by workflow, node, loop scope and attempt, newest first", () => {
+  const nodes = [
+   create(RunNodeExecutionSchema, { id: "b", nodeId: "land", nodePath: "sweep.land", workflowId: "root", loopNodeId: "sweep", loopIteration: 1, attempt: 2, completedAt: "2026-11-24T12:00:05Z" }),
+   create(RunNodeExecutionSchema, { id: "a", nodeId: "land", nodePath: "sweep.land", workflowId: "root", loopNodeId: "sweep", loopIteration: 0, attempt: 1, completedAt: "2026-11-24T12:00:03Z" }),
+  ];
+  const obs = (iteration: number, attempt: number, createdAt: string) => create(NodeObservationSchema, {
+   nodeId: "land", nodePath: "sweep.land", workflowId: "root", loopNodeId: "sweep", loopIteration: iteration, attempt, createdAt });
+  const entries = runEntries(nodes, [obs(1, 2, "2026-11-24T12:00:05Z"), obs(0, 1, "2026-11-24T12:00:03Z"), obs(0, 3, "2026-11-24T12:00:04Z")]);
+  expect(entries.map((e) => e.kind)).toEqual(["node", "observation", "node"]);
+  expect(entries[0].kind === "node" && entries[0].observations).toHaveLength(1);
+  expect(entries[2].kind === "node" && entries[2].observations).toHaveLength(1);
+ });
+ it("reads a decision with or without its name and reason", () => {
+  expect(decisionLine(create(ObservedEventSchema, { name: "decision", attributes: { value: "pass" } }))).toBe("pass");
+  expect(decisionLine(create(ObservedEventSchema, { name: "tick", attributes: { value: "pass" } }))).toBe("");
  });
 });

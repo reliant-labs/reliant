@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -191,4 +192,59 @@ func requireJSON(t *testing.T, got, want string) {
 	if !reflect.DeepEqual(g, w) {
 		t.Fatalf("got %s, want %s", got, want)
 	}
+}
+
+// A run's observations are its own workflow tree's: a sub-workflow's are in,
+// another root run of the same chat's and another chat's are not. Newest
+// first, at most limit.
+func TestListRunNodeObservations_ReadsTheRunTreeOnly(t *testing.T) {
+	env, ctx := storetest.New(t), context.Background()
+	seedWorkflowFamily(t, env) // chat-a: root-a ─ child-a ─ grandchild-a, root-b; chat-b: root-c
+
+	for i, o := range []*core.NodeObservation{
+		observation("in-root", "chat-a", "root-a", "run-a", "plan", 1),
+		observation("in-child", "chat-a", "child-a", "run-a", "review", 1),
+		observation("in-grandchild", "chat-a", "grandchild-a", "run-a", "lint", 1),
+		observation("other-root", "chat-a", "root-b", "run-b", "plan", 1),
+		observation("other-chat", "chat-b", "root-c", "run-c", "plan", 1),
+	} {
+		o.CreatedAt = l2Base.Add(time.Duration(i) * time.Minute)
+		if _, err := store.InsertNodeObservation(ctx, env.ORM, o, 10); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rows, err := store.ListRunNodeObservations(ctx, env.ORM, "root-a", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := observationIDs(rows), []string{"in-grandchild", "in-child", "in-root"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("run tree = %v, want %v", got, want)
+	}
+	rows, err = store.ListRunNodeObservations(ctx, env.ORM, "root-a", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := observationIDs(rows), []string{"in-grandchild", "in-child"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("limited = %v, want the newest %v", got, want)
+	}
+
+	rows, err = store.ListChatNodeObservations(ctx, env.ORM, "chat-a", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := observationIDs(rows), []string{"other-root", "in-grandchild", "in-child", "in-root"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("chat = %v, want %v", got, want)
+	}
+	if _, err := store.ListChatNodeObservations(ctx, env.ORM, "chat-a", 0); err == nil {
+		t.Fatal("a zero limit reads nothing and says so")
+	}
+}
+
+func observationIDs(rows []*core.NodeObservation) []string {
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = r.ID
+	}
+	return out
 }

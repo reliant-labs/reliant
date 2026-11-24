@@ -273,6 +273,14 @@ expect:
       role: assistant
       content_contains: ["Done"]
 
+  # Assert what a node recorded with its observe: block
+  observations:
+    plan:
+      events:
+        - name: decision
+          attributes: {name: cut, value: no_cut, reason: main_unchanged}
+      no_errors: true
+
   # Assert error message content
   error_contains: "CEL evaluation"
 
@@ -281,6 +289,8 @@ expect:
 ```
 
 A node's `messages` come from its `save_message:` block, or from the node itself for a `save_message` node, resolved by the real runtime against each mocked result. `saved: false` asserts it saved nothing; `count` asserts an exact number (a node in a loop saves once per iteration); `content_not_contains` rules text out.
+
+A node's `observations` are what its [`observe:` block](/reference/nodes#common-node-fields) recorded, evaluated by the real runtime over each mocked result. `attributes` and each of `events` match partially: the keys you list must be there with those values. `recorded: false` asserts it recorded nothing. A node inside a loop records once per iteration, and a match in any iteration counts. A failed `observe` expression never fails the node, so `no_errors: true` is how a scenario catches one.
 
 ### Partial Testing
 

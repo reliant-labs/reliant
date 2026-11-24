@@ -135,6 +135,7 @@ func ValidateScenario(scenario *Scenario, workflow *reliantv1.Workflow) *Validat
 		}
 
 		validateMessageExpectations(result, scenario.Expect.Messages, validNodes)
+		validateObservationExpectations(result, scenario.Expect.Observations, validNodes, workflow)
 	}
 
 	// Validate StartAt node
@@ -224,6 +225,64 @@ func validateMessageExpectations(result *ValidationResult, msgs map[string]Messa
 			}
 		}
 	}
+}
+
+// validateObservationExpectations rejects an expect.observations block that
+// cannot fail, as validateMessageExpectations does for messages: an unknown
+// node, a node that can never record (no observe: block of its own and no
+// workflow default), an entry that asserts nothing, and an event with no name.
+func validateObservationExpectations(result *ValidationResult, obs map[string]ObservationExpectation, validNodes map[string]nodeInfo, workflow *reliantv1.Workflow) {
+	if obs == nil {
+		return
+	}
+	if len(obs) == 0 {
+		result.AddError("expect.observations: no nodes listed; key each entry by the id of the node that records")
+		return
+	}
+	nodes := make([]string, 0, len(obs))
+	for n := range obs {
+		nodes = append(nodes, n)
+	}
+	sort.Strings(nodes)
+	for _, nodeRef := range nodes {
+		want := obs[nodeRef]
+		if !isValidNodeRef(nodeRef, validNodes) {
+			result.AddError("expect.observations: unknown node %q (valid nodes: %s)", nodeRef, formatNodeList(validNodes))
+			continue
+		}
+		if info, ok := validNodes[nodeRef]; ok && info.protoNode != nil && info.protoNode.GetObserve() == nil && !anyGraphObserves(workflow) {
+			result.AddError("expect.observations.%s: node never records (it has no observe: block and the workflow declares no observe: defaults)", nodeRef)
+			continue
+		}
+		if want.Recorded == nil && len(want.Attributes) == 0 && len(want.Events) == 0 && !want.NoErrors {
+			result.AddError("expect.observations.%s: asserts nothing; set at least one of recorded, attributes, events, no_errors", nodeRef)
+		}
+		for i, ev := range want.Events {
+			if ev.Name == "" {
+				result.AddError("expect.observations.%s.events[%d].name: required", nodeRef, i)
+			}
+		}
+	}
+}
+
+// anyGraphObserves reports whether the workflow, or an inline body or handler
+// in it, declares observe: defaults (which can reach any of its nodes).
+func anyGraphObserves(wf *reliantv1.Workflow) bool {
+	if wf == nil {
+		return false
+	}
+	if wf.GetObserve() != nil {
+		return true
+	}
+	for _, n := range wf.GetNodes() {
+		if body := n.GetLoop().GetInline(); anyGraphObserves(body) {
+			return true
+		}
+		if body := n.GetWorkflow().GetInline(); anyGraphObserves(body) {
+			return true
+		}
+	}
+	return anyGraphObserves(wf.GetOnFailure()) || anyGraphObserves(wf.GetFinally())
 }
 
 // canSaveMessage reports whether a workflow node can save a message: it is a

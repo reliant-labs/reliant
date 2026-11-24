@@ -86,6 +86,9 @@ type workflowTreeBuilder struct {
 	forkedThreads    map[string]bool
 	childrenByParent map[string][]*db.Workflow
 	stepsByWorkflow  map[string][]*db.ChatStepExecution
+	// observationsByWorkflow is what each workflow's nodes recorded with
+	// observe:, oldest first; nil outside the FULL view.
+	observationsByWorkflow map[string][]*reliantv1.NodeObservation
 	// missingThreads is every workflow thread build found no row for.
 	missingThreads []string
 }
@@ -187,6 +190,7 @@ func (b *workflowTreeBuilder) build(wf *db.Workflow) *reliantv1.WorkflowExecutio
 	// for internal plumbing (model.InternalActivities) — and that is where all
 	// the weight is: 32,013 of that chat's 32,023 steps, against 23 kB for the
 	// ten that remain.
+	proto.Observations = b.observationsByWorkflow[wf.ID]
 	if steps, ok := b.stepsByWorkflow[wf.ID]; ok {
 		proto.Steps = make([]*reliantv1.StepExecution, len(steps))
 		for i, step := range steps {

@@ -268,6 +268,7 @@ func CheckExpectations(expect *Expectation, execution *ExecutionDetails) []strin
 	}
 
 	mismatches = append(mismatches, checkMessageExpectations(expect.Messages, execution.SavedMessages)...)
+	mismatches = append(mismatches, checkObservationExpectations(expect.Observations, execution.Observations)...)
 	mismatches = append(mismatches, checkOnFailureExpectation(expect.OnFailure, execution.OnFailure)...)
 	mismatches = append(mismatches, checkFinallyExpectation(expect.Finally, execution.Finally)...)
 

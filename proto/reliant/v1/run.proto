@@ -7,6 +7,7 @@ import "forge/v1/forge.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "reliant/v1/chat.proto";
+import "reliant/v1/common.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -397,6 +398,12 @@ message GetRunResponse {
   // outputs are never included; command streams are redacted, bounded tails.
   repeated RunNodeExecution nodes = 2;
   bool nodes_truncated = 3;
+  // What the run's nodes recorded with observe: (attributes and events),
+  // newest first, including nested workflows, at most as many as nodes.
+  // Joined to nodes by workflow_id, node_path, loop scope and attempt; a node
+  // the workflow completed itself (compute, join, ...) has no node entry.
+  repeated NodeObservation observations = 4;
+  bool observations_truncated = 5;
 }
 
 // One recorded node attempt, not an aggregate that hides earlier failures.

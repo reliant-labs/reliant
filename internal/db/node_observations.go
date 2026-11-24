@@ -38,3 +38,15 @@ func (r *Repo) RecordNodeObservation(ctx context.Context, obs *NodeObservation, 
 func (r *Repo) ListWorkflowNodeObservations(ctx context.Context, workflowID string) ([]*NodeObservation, error) {
 	return store.ListWorkflowNodeObservations(ctx, r.ORM(), workflowID)
 }
+
+// ListRunNodeObservations returns the observations of one run's workflow tree,
+// newest first, at most limit (store.ListRunNodeObservations).
+func (r *Repo) ListRunNodeObservations(ctx context.Context, workflowID string, limit int) ([]*NodeObservation, error) {
+	return store.ListRunNodeObservations(ctx, r.ORM(), workflowID, limit)
+}
+
+// ListChatNodeObservations returns the observations of every run of one chat,
+// newest first, at most limit (store.ListChatNodeObservations).
+func (r *Repo) ListChatNodeObservations(ctx context.Context, chatID string, limit int) ([]*NodeObservation, error) {
+	return store.ListChatNodeObservations(ctx, r.ORM(), chatID, limit)
+}

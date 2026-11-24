@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/chatproto"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 )
 
 // GetWorkflowExecutions returns the workflow execution tree for a chat
@@ -69,7 +70,8 @@ func (s *Service) GetWorkflowExecutions(
 	// against ~1s. FULL is every step, for the workflow viewer and the CLI.
 	// Either way it is ONE chat-scoped query.
 	var steps []*db.ChatStepExecution
-	if req.Msg.View == reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_FULL {
+	full := req.Msg.View == reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_FULL
+	if full {
 		steps, err = s.deps.Repo.GetStepExecutionsForChat(ctx, req.Msg.ChatId)
 	} else {
 		steps, err = s.deps.Repo.GetBasicStepExecutionsForChat(ctx, req.Msg.ChatId)
@@ -158,6 +160,13 @@ func (s *Service) GetWorkflowExecutions(
 		forkedThreads:    forkedThreads,
 		childrenByParent: childrenByParent,
 		stepsByWorkflow:  stepsByWorkflow,
+	}
+	// What the nodes recorded with observe:, for the workflow viewer and
+	// `reliant workflow status` (FULL). Never for a viewer of a shared chat:
+	// it is derived from what the steps produced, which a viewer is not
+	// shown (chatproto.ElideWorkflowsForViewer clears it as well).
+	if full && !access.Viewer() {
+		tree.observationsByWorkflow = s.chatObservations(ctx, req.Msg.ChatId)
 	}
 
 	// Build tree for each root workflow
@@ -340,4 +349,32 @@ func threadStatusToWorkflowStatus(status db.ThreadStatus) (reliantv1.WorkflowSta
 	default:
 		return reliantv1.WorkflowState_WORKFLOW_STATE_UNSPECIFIED, reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_UNSPECIFIED
 	}
+}
+
+// chatObservationLimit bounds the observations one GetWorkflowExecutions
+// reads: a root run stores at most 2,000 (wfobserve.MaxRowsPerRun).
+const chatObservationLimit = 2000
+
+// chatObservationTextBudget bounds their attributes and events.
+const chatObservationTextBudget = 1 << 20
+
+// chatObservations is what the chat's nodes recorded with observe:, by
+// workflow, oldest first: the newest chatObservationLimit of them. A failed
+// read leaves them out rather than failing the tree: observability degrades,
+// it never breaks the read it rides on.
+func (s *Service) chatObservations(ctx context.Context, chatID string) map[string][]*reliantv1.NodeObservation {
+	rows, err := s.deps.Repo.ListChatNodeObservations(ctx, chatID, chatObservationLimit)
+	if err != nil {
+		logging.WarnContext(ctx, "[WorkflowTree] Could not read the chat's node observations; returning the tree without them",
+			"chatID", chatID, "error", err)
+		return nil
+	}
+	projected, _ := rundiagnostics.Observations(rows, chatObservationTextBudget)
+	out := make(map[string][]*reliantv1.NodeObservation)
+	// Newest first in, oldest first out.
+	for i := len(projected) - 1; i >= 0; i-- {
+		o := projected[i]
+		out[o.GetWorkflowId()] = append(out[o.GetWorkflowId()], o)
+	}
+	return out
 }

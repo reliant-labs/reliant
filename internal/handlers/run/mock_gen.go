@@ -76,7 +76,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=a7cafc03c92fc7aa844384d1a3e3853b1322accd5f4413a8647394b88903aa06
+// forge:hash=e08579853f9b2100cfab5dec3dc7cda13404a9a41114f1b60f51630c0b0ed805
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -88,6 +88,7 @@ type MockRepository struct {
 	contractkit.Recorder
 	AssignUnassignedOrgFunc         func(context.Context, string, string) error
 	ListRunNodeExecutionsFunc       func(context.Context, string, int) ([]*db.StepExecution, error)
+	ListRunNodeObservationsFunc     func(context.Context, string, int) ([]*db.NodeObservation, error)
 	ListProjectsFunc                func(context.Context, db.ProjectFilters) ([]*db.Project, error)
 	ListChildWorkflowsFunc          func(context.Context, string) ([]*db.Workflow, error)
 	ListRootWorkflowsFunc           func(context.Context, string) ([]*db.Workflow, error)
@@ -112,6 +113,15 @@ func (m *MockRepository) ListRunNodeExecutions(ctx context.Context, workflowID s
 		return m.ListRunNodeExecutionsFunc(ctx, workflowID, limit)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListRunNodeExecutions")
+}
+
+// ListRunNodeObservations records the call and delegates to ListRunNodeObservationsFunc when set.
+func (m *MockRepository) ListRunNodeObservations(ctx context.Context, workflowID string, limit int) ([]*db.NodeObservation, error) {
+	m.Recorder.Record("ListRunNodeObservations", ctx, workflowID, limit)
+	if m.ListRunNodeObservationsFunc != nil {
+		return m.ListRunNodeObservationsFunc(ctx, workflowID, limit)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListRunNodeObservations")
 }
 
 // ListProjects records the call and delegates to ListProjectsFunc when set.

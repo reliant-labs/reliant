@@ -115,6 +115,51 @@ func ListWorkflowNodeObservations(ctx context.Context, db orm.Context, workflowI
 	return out, nil
 }
 
+// ListRunNodeObservations returns the observations recorded in one workflow
+// and every workflow under it (the tree ListRunNodeExecutions reads, never a
+// different root run of the same chat), newest first, at most limit.
+func ListRunNodeObservations(ctx context.Context, db orm.Context, workflowID string, limit int) ([]*core.NodeObservation, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("list run node observations: limit must be positive")
+	}
+	var rows []*NodeObservation
+	err := db.Bun().NewRaw(`WITH RECURSIVE tree AS (
+    SELECT id, chat_id FROM workflows WHERE id = ?0
+    UNION ALL SELECT w.id, w.chat_id FROM workflows w JOIN tree t ON w.parent_id = t.id AND w.chat_id = t.chat_id
+)
+SELECT `+columnsOf[NodeObservation]("o")+` FROM node_observations o JOIN tree t ON t.id = o.workflow_id AND t.chat_id = o.chat_id
+ORDER BY o.created_at DESC, o.id DESC LIMIT ?1`, workflowID, limit).Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("list run node observations: %w", err)
+	}
+	return nodeObservationsToCore(rows), nil
+}
+
+// ListChatNodeObservations returns the observations recorded anywhere in one
+// chat, newest first, at most limit.
+func ListChatNodeObservations(ctx context.Context, db orm.Context, chatID string, limit int) ([]*core.NodeObservation, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("list chat node observations: limit must be positive")
+	}
+	var rows []*NodeObservation
+	if err := db.Bun().NewSelect().Model(&rows).
+		Where("chat_id = ?", chatID).
+		OrderExpr("created_at DESC, id DESC").
+		Limit(int64(limit)).
+		Scan(ctx); err != nil {
+		return nil, fmt.Errorf("list chat node observations: %w", err)
+	}
+	return nodeObservationsToCore(rows), nil
+}
+
+func nodeObservationsToCore(rows []*NodeObservation) []*core.NodeObservation {
+	out := make([]*core.NodeObservation, len(rows))
+	for i, r := range rows {
+		out[i] = nodeObservationToCore(r)
+	}
+	return out
+}
+
 func nodeObservationToCore(r *NodeObservation) *core.NodeObservation {
 	o := &core.NodeObservation{
 		ID:            r.ID,

@@ -11,6 +11,7 @@ package reliantv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -525,12 +526,220 @@ func (x *ErrorDetail) GetMetadata() map[string]string {
 	return nil
 }
 
+// NodeObservation is what one node attempt's observe: block recorded when the
+// node finished (dev-docs/design/workflow-observe.md): the attributes and
+// events its expressions produced, already redacted and bounded, and the
+// expressions that failed. It is a list beside a run's node attempts rather
+// than a field of one, because a node the workflow completes itself (compute,
+// join, router, loop, workflow) has no attempt row: a client renders an
+// observation under the attempt with the same workflow_id, node_path, loop
+// scope and attempt, and one with no such attempt as its own entry.
+type NodeObservation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// NodeId is the node's id; NodePath its position in the run ("" at the top
+	// level of a run that predates node paths).
+	NodeId   string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	NodePath string `protobuf:"bytes,2,opt,name=node_path,json=nodePath,proto3" json:"node_path,omitempty"`
+	// LoopNodeId and LoopIteration are the loop scope, unset outside a loop.
+	LoopNodeId    string `protobuf:"bytes,3,opt,name=loop_node_id,json=loopNodeId,proto3" json:"loop_node_id,omitempty"`
+	LoopIteration *int32 `protobuf:"varint,4,opt,name=loop_iteration,json=loopIteration,proto3,oneof" json:"loop_iteration,omitempty"`
+	Attempt       int32  `protobuf:"varint,5,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	// Source is who recorded it: "workflow" (the node's observe: block) or
+	// "model" (an event the model recorded itself).
+	Source string `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
+	// Attributes are the observe.attributes values, typed (bool, number,
+	// string).
+	Attributes *structpb.Struct `protobuf:"bytes,7,opt,name=attributes,proto3" json:"attributes,omitempty"`
+	Events     []*ObservedEvent `protobuf:"bytes,8,rep,name=events,proto3" json:"events,omitempty"`
+	// Errors are the expressions that failed, each a short message for the
+	// author. A failed expression never fails the node.
+	Errors []string `protobuf:"bytes,9,rep,name=errors,proto3" json:"errors,omitempty"`
+	// Truncated reports that a size cap cut what was recorded.
+	Truncated bool `protobuf:"varint,10,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	// CreatedAt is when it was recorded, RFC 3339.
+	CreatedAt string `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// WorkflowId is the workflow row the node ran in (a run's sub-workflows
+	// have their own).
+	WorkflowId    string `protobuf:"bytes,12,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NodeObservation) Reset() {
+	*x = NodeObservation{}
+	mi := &file_reliant_v1_common_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NodeObservation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NodeObservation) ProtoMessage() {}
+
+func (x *NodeObservation) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_common_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NodeObservation.ProtoReflect.Descriptor instead.
+func (*NodeObservation) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_common_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *NodeObservation) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *NodeObservation) GetNodePath() string {
+	if x != nil {
+		return x.NodePath
+	}
+	return ""
+}
+
+func (x *NodeObservation) GetLoopNodeId() string {
+	if x != nil {
+		return x.LoopNodeId
+	}
+	return ""
+}
+
+func (x *NodeObservation) GetLoopIteration() int32 {
+	if x != nil && x.LoopIteration != nil {
+		return *x.LoopIteration
+	}
+	return 0
+}
+
+func (x *NodeObservation) GetAttempt() int32 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
+func (x *NodeObservation) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *NodeObservation) GetAttributes() *structpb.Struct {
+	if x != nil {
+		return x.Attributes
+	}
+	return nil
+}
+
+func (x *NodeObservation) GetEvents() []*ObservedEvent {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+func (x *NodeObservation) GetErrors() []string {
+	if x != nil {
+		return x.Errors
+	}
+	return nil
+}
+
+func (x *NodeObservation) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *NodeObservation) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *NodeObservation) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+// ObservedEvent is one event an observe: block recorded. An event named
+// "decision" with name, value and reason attributes is the convention for a
+// node that chooses something.
+type ObservedEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Attributes    *structpb.Struct       `protobuf:"bytes,2,opt,name=attributes,proto3" json:"attributes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ObservedEvent) Reset() {
+	*x = ObservedEvent{}
+	mi := &file_reliant_v1_common_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObservedEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObservedEvent) ProtoMessage() {}
+
+func (x *ObservedEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_common_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObservedEvent.ProtoReflect.Descriptor instead.
+func (*ObservedEvent) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_common_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ObservedEvent) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ObservedEvent) GetAttributes() *structpb.Struct {
+	if x != nil {
+		return x.Attributes
+	}
+	return nil
+}
+
 var File_reliant_v1_common_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_common_proto_rawDesc = "" +
 	"\n" +
 	"\x17reliant/v1/common.proto\x12\n" +
-	"reliant.v1\"\a\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\"\a\n" +
 	"\x05Empty\"\xbb\x01\n" +
 	"\vErrorDetail\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
@@ -538,7 +747,32 @@ const file_reliant_v1_common_proto_rawDesc = "" +
 	"\bmetadata\x18\x03 \x03(\v2%.reliant.v1.ErrorDetail.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\x95\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbc\x03\n" +
+	"\x0fNodeObservation\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1b\n" +
+	"\tnode_path\x18\x02 \x01(\tR\bnodePath\x12 \n" +
+	"\floop_node_id\x18\x03 \x01(\tR\n" +
+	"loopNodeId\x12*\n" +
+	"\x0eloop_iteration\x18\x04 \x01(\x05H\x00R\rloopIteration\x88\x01\x01\x12\x18\n" +
+	"\aattempt\x18\x05 \x01(\x05R\aattempt\x12\x16\n" +
+	"\x06source\x18\x06 \x01(\tR\x06source\x127\n" +
+	"\n" +
+	"attributes\x18\a \x01(\v2\x17.google.protobuf.StructR\n" +
+	"attributes\x121\n" +
+	"\x06events\x18\b \x03(\v2\x19.reliant.v1.ObservedEventR\x06events\x12\x16\n" +
+	"\x06errors\x18\t \x03(\tR\x06errors\x12\x1c\n" +
+	"\ttruncated\x18\n" +
+	" \x01(\bR\ttruncated\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\v \x01(\tR\tcreatedAt\x12\x1f\n" +
+	"\vworkflow_id\x18\f \x01(\tR\n" +
+	"workflowIdB\x11\n" +
+	"\x0f_loop_iteration\"\\\n" +
+	"\rObservedEvent\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x127\n" +
+	"\n" +
+	"attributes\x18\x02 \x01(\v2\x17.google.protobuf.StructR\n" +
+	"attributes*\x95\x01\n" +
 	"\n" +
 	"PlanStatus\x12\x1b\n" +
 	"\x17PLAN_STATUS_UNSPECIFIED\x10\x00\x12\x17\n" +
@@ -595,7 +829,7 @@ func file_reliant_v1_common_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_reliant_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_reliant_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_reliant_v1_common_proto_goTypes = []any{
 	(PlanStatus)(0),              // 0: reliant.v1.PlanStatus
 	(BackgroundProcessStatus)(0), // 1: reliant.v1.BackgroundProcessStatus
@@ -606,15 +840,21 @@ var file_reliant_v1_common_proto_goTypes = []any{
 	(ResourceVisibility)(0),      // 6: reliant.v1.ResourceVisibility
 	(*Empty)(nil),                // 7: reliant.v1.Empty
 	(*ErrorDetail)(nil),          // 8: reliant.v1.ErrorDetail
-	nil,                          // 9: reliant.v1.ErrorDetail.MetadataEntry
+	(*NodeObservation)(nil),      // 9: reliant.v1.NodeObservation
+	(*ObservedEvent)(nil),        // 10: reliant.v1.ObservedEvent
+	nil,                          // 11: reliant.v1.ErrorDetail.MetadataEntry
+	(*structpb.Struct)(nil),      // 12: google.protobuf.Struct
 }
 var file_reliant_v1_common_proto_depIdxs = []int32{
-	9, // 0: reliant.v1.ErrorDetail.metadata:type_name -> reliant.v1.ErrorDetail.MetadataEntry
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	11, // 0: reliant.v1.ErrorDetail.metadata:type_name -> reliant.v1.ErrorDetail.MetadataEntry
+	12, // 1: reliant.v1.NodeObservation.attributes:type_name -> google.protobuf.Struct
+	10, // 2: reliant.v1.NodeObservation.events:type_name -> reliant.v1.ObservedEvent
+	12, // 3: reliant.v1.ObservedEvent.attributes:type_name -> google.protobuf.Struct
+	4,  // [4:4] is the sub-list for method output_type
+	4,  // [4:4] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_common_proto_init() }
@@ -622,13 +862,14 @@ func file_reliant_v1_common_proto_init() {
 	if File_reliant_v1_common_proto != nil {
 		return
 	}
+	file_reliant_v1_common_proto_msgTypes[2].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_common_proto_rawDesc), len(file_reliant_v1_common_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   3,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

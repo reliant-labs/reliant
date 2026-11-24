@@ -198,28 +198,10 @@ type observedNode struct {
 // and counted. The caller recovers panics.
 func (o nodeObserver) observe(ctx context.Context, n observedNode) {
 	req := n.Request
-	if req == nil || req.Block == nil {
+	res, ok := evaluateObserved(o.evaluator, req, n.Output, n.Attempt, n.DurationMs)
+	if !ok {
 		return
 	}
-	// A node that recorded a skip did not run: there is nothing to observe.
-	if model.IsSkippedOutput(n.Output) {
-		return
-	}
-
-	workflowCtx := req.Workflow
-	res := o.evaluator.Evaluate(req.Block, wfobserve.Scope{
-		Output:   n.Output,
-		Inputs:   req.Inputs,
-		Workflow: &workflowCtx,
-		Iter:     req.Iter,
-		Node: model.ObservedNode{
-			ID:         req.NodeID,
-			Type:       req.NodeType,
-			Path:       req.NodePath,
-			Attempt:    int64(n.Attempt),
-			DurationMs: n.DurationMs,
-		},
-	})
 
 	wfobserve.Annotate(trace.SpanFromContext(ctx), res)
 	rec := o.rec()
@@ -313,4 +295,51 @@ func (o nodeObserver) clock() time.Time {
 		return o.now()
 	}
 	return time.Now()
+}
+
+// evaluateObserved evaluates req's block over a completed node's output, the
+// value the workflow sees as nodes.<id>. ok is false when there is nothing to
+// observe: no block, or a node that recorded a skip (it did not run).
+func evaluateObserved(ev wfobserve.Evaluator, req *types.ObserveRequest, output map[string]interface{}, attempt int32, durationMs int64) (wfobserve.Result, bool) {
+	if req == nil || req.Block == nil || model.IsSkippedOutput(output) {
+		return wfobserve.Result{}, false
+	}
+	workflowCtx := req.Workflow
+	return ev.Evaluate(req.Block, wfobserve.Scope{
+		Output:   output,
+		Inputs:   req.Inputs,
+		Workflow: &workflowCtx,
+		Iter:     req.Iter,
+		Node: model.ObservedNode{
+			ID:         req.NodeID,
+			Type:       req.NodeType,
+			Path:       req.NodePath,
+			Attempt:    int64(attempt),
+			DurationMs: durationMs,
+		},
+	}), true
+}
+
+// EvaluateNodeObservation is what a node's observe: block records over its
+// result, evaluated exactly as production does after the node finishes: the
+// ActivityWrapper over an activity's result (activityName names the activity,
+// whose output is normalized first, as the wrapper does), and the
+// RecordNodeObservation local activity over a node the workflow completed
+// itself (activityName ""). The scenario runner calls it on each mocked
+// result, so a scenario can assert what a run records. ok is false when there
+// is nothing to observe. It never fails.
+func EvaluateNodeObservation(req *types.ObserveRequest, activityName string, output map[string]interface{}, attempt int32, durationMs int64) (res wfobserve.Result, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			res, ok = wfobserve.Result{Errors: []wfobserve.Error{{Kind: telemetry.ObserveErrorPanic, Message: "observing the node panicked"}}}, true
+		}
+	}()
+	if activityName != "" {
+		copied := make(map[string]interface{}, len(output))
+		for k, v := range output {
+			copied[k] = v
+		}
+		output = normalizeActivityOutput(copied, activityName)
+	}
+	return evaluateObserved(wfobserve.Evaluator{}, req, output, attempt, durationMs)
 }

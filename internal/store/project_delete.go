@@ -155,6 +155,11 @@ var chatPurgeSteps = []struct{ name, sql string }{
 	{"chats", `DELETE FROM chats WHERE id = ANY(?0)`},
 }
 
+// projectDeleteWorktreesSQL removes up to ?1 of project ?0's worktrees.
+const projectDeleteWorktreesSQL = `
+		DELETE FROM worktrees WHERE id IN (
+			SELECT id FROM worktrees WHERE project_id = ?0 ORDER BY id LIMIT ?1)`
+
 // DeleteUserProject deletes the user's project and everything it owns. A
 // project that is missing or another user's is left alone, without an error.
 //
@@ -283,9 +288,7 @@ func purgeProjectContents(ctx context.Context, db orm.Context, id string, sizes 
 
 	// Worktrees. Each takes its user_updates with it and clears the threads and
 	// triggers that named it.
-	if err := projectDeleteUntilShort(ctx, db, worktreeBatch, `
-		DELETE FROM worktrees WHERE id IN (
-			SELECT id FROM worktrees WHERE project_id = ?0 ORDER BY id LIMIT ?1)`, id); err != nil {
+	if err := projectDeleteUntilShort(ctx, db, worktreeBatch, projectDeleteWorktreesSQL, id); err != nil {
 		return fmt.Errorf("delete project: worktrees: %w", err)
 	}
 

@@ -5,14 +5,144 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import type { GenEnum, GenFile } from "@bufbuild/protobuf/codegenv2";
-import { enumDesc, fileDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
+import type { JsonObject, Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file reliant/v1/common.proto.
  */
 export const file_reliant_v1_common: GenFile = /*@__PURE__*/
-  fileDesc("ChdyZWxpYW50L3YxL2NvbW1vbi5wcm90bxIKcmVsaWFudC52MSq2AgoXQmFja2dyb3VuZFByb2Nlc3NTdGF0dXMSKQolQkFDS0dST1VORF9QUk9DRVNTX1NUQVRVU19VTlNQRUNJRklFRBAAEiUKIUJBQ0tHUk9VTkRfUFJPQ0VTU19TVEFUVVNfUlVOTklORxABEicKI0JBQ0tHUk9VTkRfUFJPQ0VTU19TVEFUVVNfQ09NUExFVEVEEAISJAogQkFDS0dST1VORF9QUk9DRVNTX1NUQVRVU19GQUlMRUQQAxIkCiBCQUNLR1JPVU5EX1BST0NFU1NfU1RBVFVTX0tJTExFRBAEEi8KK0JBQ0tHUk9VTkRfUFJPQ0VTU19TVEFUVVNfS0lMTEVEX0VYVEVSTkFMTFkQBRIjCh9CQUNLR1JPVU5EX1BST0NFU1NfU1RBVFVTX1NUQUxFEAYqdAoQT3V0cHV0U3RyZWFtVHlwZRIiCh5PVVRQVVRfU1RSRUFNX1RZUEVfVU5TUEVDSUZJRUQQABIdChlPVVRQVVRfU1RSRUFNX1RZUEVfU1RET1VUEAESHQoZT1VUUFVUX1NUUkVBTV9UWVBFX1NUREVSUhACQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM");
+  fileDesc("ChdyZWxpYW50L3YxL2NvbW1vbi5wcm90bxIKcmVsaWFudC52MSLAAgoPTm9kZU9ic2VydmF0aW9uEg8KB25vZGVfaWQYASABKAkSEQoJbm9kZV9wYXRoGAIgASgJEhQKDGxvb3Bfbm9kZV9pZBgDIAEoCRIbCg5sb29wX2l0ZXJhdGlvbhgEIAEoBUgAiAEBEg8KB2F0dGVtcHQYBSABKAUSDgoGc291cmNlGAYgASgJEisKCmF0dHJpYnV0ZXMYByABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EikKBmV2ZW50cxgIIAMoCzIZLnJlbGlhbnQudjEuT2JzZXJ2ZWRFdmVudBIOCgZlcnJvcnMYCSADKAkSEQoJdHJ1bmNhdGVkGAogASgIEhIKCmNyZWF0ZWRfYXQYCyABKAkSEwoLd29ya2Zsb3dfaWQYDCABKAlCEQoPX2xvb3BfaXRlcmF0aW9uIkoKDU9ic2VydmVkRXZlbnQSDAoEbmFtZRgBIAEoCRIrCgphdHRyaWJ1dGVzGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCq2AgoXQmFja2dyb3VuZFByb2Nlc3NTdGF0dXMSKQolQkFDS0dST1VORF9QUk9DRVNTX1NUQVRVU19VTlNQRUNJRklFRBAAEiUKIUJBQ0tHUk9VTkRfUFJPQ0VTU19TVEFUVVNfUlVOTklORxABEicKI0JBQ0tHUk9VTkRfUFJPQ0VTU19TVEFUVVNfQ09NUExFVEVEEAISJAogQkFDS0dST1VORF9QUk9DRVNTX1NUQVRVU19GQUlMRUQQAxIkCiBCQUNLR1JPVU5EX1BST0NFU1NfU1RBVFVTX0tJTExFRBAEEi8KK0JBQ0tHUk9VTkRfUFJPQ0VTU19TVEFUVVNfS0lMTEVEX0VYVEVSTkFMTFkQBRIjCh9CQUNLR1JPVU5EX1BST0NFU1NfU1RBVFVTX1NUQUxFEAYqdAoQT3V0cHV0U3RyZWFtVHlwZRIiCh5PVVRQVVRfU1RSRUFNX1RZUEVfVU5TUEVDSUZJRUQQABIdChlPVVRQVVRfU1RSRUFNX1RZUEVfU1RET1VUEAESHQoZT1VUUFVUX1NUUkVBTV9UWVBFX1NUREVSUhACQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_google_protobuf_struct]);
+
+/**
+ * NodeObservation is what one node attempt's observe: block recorded when the
+ * node finished (dev-docs/design/workflow-observe.md): the attributes and
+ * events its expressions produced, already redacted and bounded, and the
+ * expressions that failed. It is a list beside a run's node attempts rather
+ * than a field of one, because a node the workflow completes itself (compute,
+ * join, router, loop, workflow) has no attempt row: a client renders an
+ * observation under the attempt with the same workflow_id, node_path, loop
+ * scope and attempt, and one with no such attempt as its own entry.
+ *
+ * @generated from message reliant.v1.NodeObservation
+ */
+export type NodeObservation = Message<"reliant.v1.NodeObservation"> & {
+  /**
+   * NodeId is the node's id; NodePath its position in the run ("" at the top
+   * level of a run that predates node paths).
+   *
+   * @generated from field: string node_id = 1;
+   */
+  nodeId: string;
+
+  /**
+   * @generated from field: string node_path = 2;
+   */
+  nodePath: string;
+
+  /**
+   * LoopNodeId and LoopIteration are the loop scope, unset outside a loop.
+   *
+   * @generated from field: string loop_node_id = 3;
+   */
+  loopNodeId: string;
+
+  /**
+   * @generated from field: optional int32 loop_iteration = 4;
+   */
+  loopIteration?: number | undefined;
+
+  /**
+   * @generated from field: int32 attempt = 5;
+   */
+  attempt: number;
+
+  /**
+   * Source is who recorded it: "workflow" (the node's observe: block) or
+   * "model" (an event the model recorded itself).
+   *
+   * @generated from field: string source = 6;
+   */
+  source: string;
+
+  /**
+   * Attributes are the observe.attributes values, typed (bool, number,
+   * string).
+   *
+   * @generated from field: google.protobuf.Struct attributes = 7;
+   */
+  attributes?: JsonObject | undefined;
+
+  /**
+   * @generated from field: repeated reliant.v1.ObservedEvent events = 8;
+   */
+  events: ObservedEvent[];
+
+  /**
+   * Errors are the expressions that failed, each a short message for the
+   * author. A failed expression never fails the node.
+   *
+   * @generated from field: repeated string errors = 9;
+   */
+  errors: string[];
+
+  /**
+   * Truncated reports that a size cap cut what was recorded.
+   *
+   * @generated from field: bool truncated = 10;
+   */
+  truncated: boolean;
+
+  /**
+   * CreatedAt is when it was recorded, RFC 3339.
+   *
+   * @generated from field: string created_at = 11;
+   */
+  createdAt: string;
+
+  /**
+   * WorkflowId is the workflow row the node ran in (a run's sub-workflows
+   * have their own).
+   *
+   * @generated from field: string workflow_id = 12;
+   */
+  workflowId: string;
+};
+
+/**
+ * Describes the message reliant.v1.NodeObservation.
+ * Use `create(NodeObservationSchema)` to create a new message.
+ */
+export const NodeObservationSchema: GenMessage<NodeObservation> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_common, 0);
+
+/**
+ * ObservedEvent is one event an observe: block recorded. An event named
+ * "decision" with name, value and reason attributes is the convention for a
+ * node that chooses something.
+ *
+ * @generated from message reliant.v1.ObservedEvent
+ */
+export type ObservedEvent = Message<"reliant.v1.ObservedEvent"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: google.protobuf.Struct attributes = 2;
+   */
+  attributes?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.ObservedEvent.
+ * Use `create(ObservedEventSchema)` to create a new message.
+ */
+export const ObservedEventSchema: GenMessage<ObservedEvent> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_common, 1);
 
 /**
  * BackgroundProcessStatus tracks the lifecycle of a background process

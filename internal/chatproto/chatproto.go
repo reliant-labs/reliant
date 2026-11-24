@@ -145,12 +145,15 @@ func ElideStepsForViewer(steps []*reliantv1.StepExecution) {
 }
 
 // ElideWorkflowsForViewer is ElideStepsForViewer over every step of every
-// workflow in a run tree.
+// workflow in a run tree. It also drops what the workflows' nodes recorded
+// with observe:, whose attributes and events are derived from what the steps
+// produced; easy to miss, because they are not a step field.
 func ElideWorkflowsForViewer(roots []*reliantv1.WorkflowExecution) {
 	for _, w := range roots {
 		if w == nil {
 			continue
 		}
+		w.Observations = nil
 		ElideStepsForViewer(w.GetSteps())
 		ElideWorkflowsForViewer(w.GetChildren())
 	}

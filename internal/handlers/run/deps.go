@@ -29,6 +29,9 @@ type Repository interface {
 	// their default org (the lazy backfill, orgs.ListScope).
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
+	// ListRunNodeObservations reads what a run tree's nodes recorded with
+	// observe:, newest first.
+	ListRunNodeObservations(ctx context.Context, workflowID string, limit int) ([]*db.NodeObservation, error)
 
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
 	ListChildWorkflows(ctx context.Context, parentID string) ([]*db.Workflow, error)
