@@ -538,7 +538,7 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 	}
 	// Each request below, including the smaller-prefix retries after an
 	// overflow, is a request the provider counted; the meter records each one.
-	meter := newUsageMeter(a.usage, chat.UserID, chat.ID, store.LLMPurposeCompaction)
+	meter := newUsageMeter(a.usage, chat.UserID, chat.ID, store.LLMPurposeCompaction).inProject(chat.ProjectID)
 	for attempt := 1; ; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -775,7 +775,7 @@ func (a *GenerateTitleActivity) generateTitleForChat(ctx context.Context, chat *
 	var consentRefused *personalFundingRefused
 	// The title makes up to titleAttempts requests (an account or provider
 	// that refuses is retried elsewhere); the meter records each.
-	meter := newUsageMeter(a.usage, userID, chatID, store.LLMPurposeTitle)
+	meter := newUsageMeter(a.usage, userID, chatID, store.LLMPurposeTitle).inProject(chat.ProjectID)
 	for range titleAttempts {
 		raw, err = a.requestTitle(ctx, meter, spec, firstMessage)
 		var noConsent *personalFundingRefused

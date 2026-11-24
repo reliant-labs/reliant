@@ -609,7 +609,17 @@ export const newChatSearchSchema = z.object({
 });
 export type NewChatSearch = z.infer<typeof newChatSearchSchema>;
 
+/**
+ * `/m/new`: the draft's context, as desktop `/new` names it, so a refresh,
+ * Back and a shared link keep it.
+ *   project     the project it starts in; it wins over the carried `projects`
+ *               (the chat list's scope, kept for Back to the list)
+ *   machine     the machine it was set up on (a daemon id)
+ *   worktreeId  the workspace; absent: the project's main checkout
+ */
 export const mobileNewChatSearchSchema = z.object({
+  project: idParam,
+  machine: idParam,
   worktreeId: z.string().optional(),
 });
 

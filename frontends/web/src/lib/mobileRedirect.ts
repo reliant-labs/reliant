@@ -25,6 +25,8 @@
  * on a small screen. A redirect with no exit is worse than no redirect.
  */
 
+import { defaultParseSearch, defaultStringifySearch } from "@tanstack/react-router";
+
 /** Below this width the desktop shell's sidebars and panels stop fitting. */
 import {
   encodedSegment,
@@ -149,10 +151,68 @@ export const MOBILE_SETTINGS_SECTION_FOR: Readonly<Record<string, string>> = {
  * destination is built by lib/paths (the outbound side), an id captured from
  * the desktop path carried over byte for byte (encodedSegment), and a
  * settings section's query in URLSearchParams' bytes, as before.
+ *
+ * The shell's scope goes along (the URL is the only view state): the phone
+ * reads the same `?projects=` and `?focus=` the desktop does
+ * (lib/urlState/shellScope.ts), so every twin keeps them. A project's chat
+ * home (`/project/<id>`, where the project switcher lands) is the phone's
+ * chat list scoped to it, and a draft's project, machine and workspace
+ * (`/new?project=&machine=&ws=`) are the phone's draft's.
  */
 export function mobilePathFor(pathname: string, search = ""): string {
   // The mobile tree is not under the org yet (U15): an org page maps as its org-less twin.
   const path = orgFreePath(pathname).replace(/\/+$/, "") || "/";
+  const query = new URLSearchParams(search);
+  // Router-generated URLs quote JSON-looking strings (e.g. an id "123").
+  // Decode those quotes before carrying the values, while accepting raw links too.
+  const parsed = defaultParseSearch(search);
+  for (const [key, value] of Object.entries(parsed)) {
+    if (typeof value === "string") query.set(key, value);
+  }
+
+  // The path names the one project, which ends any scope carried with it.
+  const home = PROJECT_HOME.exec(path);
+  if (home) return `${mobileChatsPath()}${defaultStringifySearch({ projects: decodeSegment(home[1]) })}`;
+
+  const twin = new URL(mobileTwinOf(path, query), "http://twin");
+  if (path === "/new") {
+    for (const [from, to] of NEW_CHAT_PARAMS) {
+      const value = query.get(from);
+      if (value) twin.searchParams.set(to, value);
+    }
+  }
+  for (const key of PROJECTS_CARRIED) {
+    const value = query.get(key);
+    if (value && !twin.searchParams.has(key)) twin.searchParams.set(key, value);
+  }
+  // Match the router's serializer: ordinary strings stay readable, but
+  // JSON-looking ids must stay strings when the destination parses them.
+  return `${twin.pathname}${defaultStringifySearch(Object.fromEntries(twin.searchParams))}`;
+}
+
+/** The shell's scope params every page carries (routeSchemas PROJECTS_CARRIED). */
+const PROJECTS_CARRIED = ["projects", "focus"] as const;
+
+/** The chat home of one project (org-free, no trailing slash). */
+const PROJECT_HOME = /^\/project\/([^/]+)$/;
+
+/** `/new`'s params, as `/m/new` names them. */
+const NEW_CHAT_PARAMS = [
+  ["project", "project"],
+  ["machine", "machine"],
+  ["ws", "worktreeId"],
+] as const;
+
+function decodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+/** The mobile twin of an org-free desktop path, before the scope is carried. */
+function mobileTwinOf(path: string, query: URLSearchParams): string {
   if (path === "/inbox" || path.startsWith("/inbox/")) return mobileInboxPath();
 
   // A chat (a thread of it opens as the chat: the phone picks threads in its own sheet), and a draft.
@@ -176,8 +236,7 @@ export function mobilePathFor(pathname: string, search = ""): string {
   // back (the claim page sends people here to subscribe) keeps it: the mobile
   // twin opens on billing and offers the same return.
   if (path === "/settings/billing") {
-    const q = new URLSearchParams(search);
-    const returnTo = q.get("returnTo");
+    const returnTo = query.get("returnTo");
     if (isSafeReturnTo(returnTo)) {
       return `${mobileSettingsPath()}?${new URLSearchParams({ section: "billing", returnTo })}`;
     }

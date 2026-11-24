@@ -18,6 +18,7 @@ Where to look in code: `internal/telemetry/ai_attrs.go` (gen_ai and `forge.ai.*`
 names), `ai_spans.go` (node, agent turn, tool call), `run_scope.go` (the scope
 and the `reliant.chat.id` family), `run_exec_attrs.go` and `run_exec_span.go`,
 `ai_error_type.go` (the `error.type` vocabulary of the AI spans),
+`gateway_attrs.go` (the LLM gateway's call id on the `chat` span),
 `internal/llm/genai_span.go` and `genai_error_type.go` (the provider call), and
 `internal/workflow/runtime/run_telemetry.go` (the run's own span). #3286 adds
 `integration_attrs.go` and `integration_spans.go`; #3289 adds `trigger_attrs.go`
@@ -153,6 +154,7 @@ new `forge.ai.*` name on its own: that namespace is forge's to extend.
 |---|---|---|
 | `reliant.chat.*` | `run_scope.go` | The chat. Today only `reliant.chat.id`. |
 | `reliant.run.*` | `run_exec_attrs.go` | A run node's command (`run.exec`). |
+| `reliant.gateway.*` | `gateway_attrs.go` | A model call routed through Reliant's LLM gateway. Today only `reliant.gateway.call_id`. |
 | `reliant.integration.*` | `integration_attrs.go` (#3286) | An integration call. |
 | `reliant.trigger.*` | `trigger_attrs.go` (#3289) | A trigger firing, and the join from a run back to it. |
 
@@ -344,6 +346,7 @@ driver's HTTP spans are its children.
 | `GenAIAttributes()` | | The run scope, as above. |
 | `gen_ai.response.model` | string | The model that served it (the requested one when the provider did not say). |
 | `gen_ai.response.id` | string | The provider's request id. |
+| `reliant.gateway.call_id` | string | The LLM gateway's id for the call: LiteLLM's `x-litellm-call-id`, which control-plane's wallet ledger stores as the call's `provider_request_id`. Set only by the `reliant` driver, on every call the gateway answered, failed and streamed ones included; after retries it is the last answered attempt's. Never set on any other provider's call. It is the exact join to the gateway's billed cost; `gen_ai.response.id` is the upstream provider's id, a different value (`dev-docs/design/agent-analytics.md` §3.2, §4). |
 | `gen_ai.response.finish_reasons` | string[] | One value. |
 | `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens` | int | Token counts. |
 | `gen_ai.usage.cache_read.input_tokens`, `gen_ai.usage.cache_creation.input_tokens`, `gen_ai.usage.reasoning.output_tokens` | int | Set only when non-zero. |

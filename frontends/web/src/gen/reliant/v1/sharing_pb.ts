@@ -15,13 +15,15 @@ import type { ResourceVisibility } from "./common_pb";
 import { file_reliant_v1_common } from "./common_pb";
 import type { Project } from "./project_pb";
 import { file_reliant_v1_project } from "./project_pb";
+import type { WorkflowDraftStatus } from "./workflow_pb";
+import { file_reliant_v1_workflow } from "./workflow_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file reliant/v1/sharing.proto.
  */
 export const file_reliant_v1_sharing: GenFile = /*@__PURE__*/
-  fileDesc("ChhyZWxpYW50L3YxL3NoYXJpbmcucHJvdG8SCnJlbGlhbnQudjEidAoYU2V0Q2hhdFZpc2liaWxpdHlSZXF1ZXN0EhgKB2NoYXRfaWQYASABKAlCB7pIBHICEAESPgoKdmlzaWJpbGl0eRgCIAEoDjIeLnJlbGlhbnQudjEuUmVzb3VyY2VWaXNpYmlsaXR5Qgq6SAeCAQQYARgCIkwKGVNldENoYXRWaXNpYmlsaXR5UmVzcG9uc2USHgoEY2hhdBgBIAEoCzIQLnJlbGlhbnQudjEuQ2hhdBIPCgdjaGFuZ2VkGAIgASgIInoKG1NldFByb2plY3RWaXNpYmlsaXR5UmVxdWVzdBIbCgpwcm9qZWN0X2lkGAEgASgJQge6SARyAhABEj4KCnZpc2liaWxpdHkYAiABKA4yHi5yZWxpYW50LnYxLlJlc291cmNlVmlzaWJpbGl0eUIKukgHggEEGAEYAiJVChxTZXRQcm9qZWN0VmlzaWJpbGl0eVJlc3BvbnNlEiQKB3Byb2plY3QYASABKAsyEy5yZWxpYW50LnYxLlByb2plY3QSDwoHY2hhbmdlZBgCIAEoCCLdAQoWTGlzdFNoYXJlZENoYXRzUmVxdWVzdBITCgZvcmdfaWQYASABKAlIAIgBARIXCgpwcm9qZWN0X2lkGAIgASgJSAGIAQESGAoFbGltaXQYAyABKAVCCbpIBhoEGGQoABIXCgZvZmZzZXQYBCABKAVCB7pIBBoCKAASFQoIYXBwX25hbWUYBSABKAlIAogBARIkCgtwcm9qZWN0X2lkcxgGIAMoCUIPukgMkgEJEMgBIgRyAhABQgkKB19vcmdfaWRCDQoLX3Byb2plY3RfaWRCCwoJX2FwcF9uYW1lIjoKF0xpc3RTaGFyZWRDaGF0c1Jlc3BvbnNlEh8KBWNoYXRzGAEgAygLMhAucmVsaWFudC52MS5DaGF0Im4KGUxpc3RTaGFyZWRQcm9qZWN0c1JlcXVlc3QSEwoGb3JnX2lkGAEgASgJSACIAQESGAoFbGltaXQYAiABKAVCCbpIBhoEGGQoABIXCgZvZmZzZXQYAyABKAVCB7pIBBoCKABCCQoHX29yZ19pZCJDChpMaXN0U2hhcmVkUHJvamVjdHNSZXNwb25zZRIlCghwcm9qZWN0cxgBIAMoCzITLnJlbGlhbnQudjEuUHJvamVjdDKgBQoOU2hhcmluZ1NlcnZpY2USqgEKEVNldENoYXRWaXNpYmlsaXR5EiQucmVsaWFudC52MS5TZXRDaGF0VmlzaWJpbGl0eVJlcXVlc3QaJS5yZWxpYW50LnYxLlNldENoYXRWaXNpYmlsaXR5UmVzcG9uc2UiSKK7GEQ6QgoOc2V0X3Zpc2liaWxpdHkSJAoEY2hhdBIHY2hhdF9pZBoTcmVzcG9uc2UuY2hhdC50aXRsZSoKdmlzaWJpbGl0eRK7AQoUU2V0UHJvamVjdFZpc2liaWxpdHkSJy5yZWxpYW50LnYxLlNldFByb2plY3RWaXNpYmlsaXR5UmVxdWVzdBooLnJlbGlhbnQudjEuU2V0UHJvamVjdFZpc2liaWxpdHlSZXNwb25zZSJQorsYTDpKCg5zZXRfdmlzaWJpbGl0eRIsCgdwcm9qZWN0Egpwcm9qZWN0X2lkGhVyZXNwb25zZS5wcm9qZWN0Lm5hbWUqCnZpc2liaWxpdHkSiwEKD0xpc3RTaGFyZWRDaGF0cxIiLnJlbGlhbnQudjEuTGlzdFNoYXJlZENoYXRzUmVxdWVzdBojLnJlbGlhbnQudjEuTGlzdFNoYXJlZENoYXRzUmVzcG9uc2UiL5ACAaK7GCg6JjokcmVhZHMgb25seTogbGlzdHMgd2hhdCBvdGhlcnMgc2hhcmVkEpQBChJMaXN0U2hhcmVkUHJvamVjdHMSJS5yZWxpYW50LnYxLkxpc3RTaGFyZWRQcm9qZWN0c1JlcXVlc3QaJi5yZWxpYW50LnYxLkxpc3RTaGFyZWRQcm9qZWN0c1Jlc3BvbnNlIi+QAgGiuxgoOiY6JHJlYWRzIG9ubHk6IGxpc3RzIHdoYXQgb3RoZXJzIHNoYXJlZEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge, file_reliant_v1_chat, file_reliant_v1_common, file_reliant_v1_project]);
+  fileDesc("ChhyZWxpYW50L3YxL3NoYXJpbmcucHJvdG8SCnJlbGlhbnQudjEidAoYU2V0Q2hhdFZpc2liaWxpdHlSZXF1ZXN0EhgKB2NoYXRfaWQYASABKAlCB7pIBHICEAESPgoKdmlzaWJpbGl0eRgCIAEoDjIeLnJlbGlhbnQudjEuUmVzb3VyY2VWaXNpYmlsaXR5Qgq6SAeCAQQYARgCIkwKGVNldENoYXRWaXNpYmlsaXR5UmVzcG9uc2USHgoEY2hhdBgBIAEoCzIQLnJlbGlhbnQudjEuQ2hhdBIPCgdjaGFuZ2VkGAIgASgIInoKG1NldFByb2plY3RWaXNpYmlsaXR5UmVxdWVzdBIbCgpwcm9qZWN0X2lkGAEgASgJQge6SARyAhABEj4KCnZpc2liaWxpdHkYAiABKA4yHi5yZWxpYW50LnYxLlJlc291cmNlVmlzaWJpbGl0eUIKukgHggEEGAEYAiJVChxTZXRQcm9qZWN0VmlzaWJpbGl0eVJlc3BvbnNlEiQKB3Byb2plY3QYASABKAsyEy5yZWxpYW50LnYxLlByb2plY3QSDwoHY2hhbmdlZBgCIAEoCCLdAQoWTGlzdFNoYXJlZENoYXRzUmVxdWVzdBITCgZvcmdfaWQYASABKAlIAIgBARIXCgpwcm9qZWN0X2lkGAIgASgJSAGIAQESGAoFbGltaXQYAyABKAVCCbpIBhoEGGQoABIXCgZvZmZzZXQYBCABKAVCB7pIBBoCKAASFQoIYXBwX25hbWUYBSABKAlIAogBARIkCgtwcm9qZWN0X2lkcxgGIAMoCUIPukgMkgEJEMgBIgRyAhABQgkKB19vcmdfaWRCDQoLX3Byb2plY3RfaWRCCwoJX2FwcF9uYW1lIjoKF0xpc3RTaGFyZWRDaGF0c1Jlc3BvbnNlEh8KBWNoYXRzGAEgAygLMhAucmVsaWFudC52MS5DaGF0Im4KGUxpc3RTaGFyZWRQcm9qZWN0c1JlcXVlc3QSEwoGb3JnX2lkGAEgASgJSACIAQESGAoFbGltaXQYAiABKAVCCbpIBhoEGGQoABIXCgZvZmZzZXQYAyABKAVCB7pIBBoCKABCCQoHX29yZ19pZCJDChpMaXN0U2hhcmVkUHJvamVjdHNSZXNwb25zZRIlCghwcm9qZWN0cxgBIAMoCzITLnJlbGlhbnQudjEuUHJvamVjdCLSAgoTU2hhcmVkV29ya2Zsb3dEcmFmdBIKCgJpZBgBIAEoCRIMCgRzbHVnGAIgASgJEgwKBG5hbWUYAyABKAkSGAoLZGVzY3JpcHRpb24YBCABKAlIAIgBARIPCgd1c2VyX2lkGAUgASgJEg4KBm9yZ19pZBgGIAEoCRIvCgZzdGF0dXMYByABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXMSMgoKdmlzaWJpbGl0eRgIIAEoDjIeLnJlbGlhbnQudjEuUmVzb3VyY2VWaXNpYmlsaXR5EhUKDXZpZXdlcl9hY2Nlc3MYCSABKAgSFgoJc2hhcmVkX2F0GAogASgJSAGIAQESEgoKdXBkYXRlZF9hdBgLIAEoCRISCgpkZWZpbml0aW9uGAwgASgJQg4KDF9kZXNjcmlwdGlvbkIMCgpfc2hhcmVkX2F0In4KHlNldFdvcmtmbG93RHJhZnRTaGFyaW5nUmVxdWVzdBIcCgt3b3JrZmxvd19pZBgBIAEoCUIHukgEcgIQARI+Cgp2aXNpYmlsaXR5GAIgASgOMh4ucmVsaWFudC52MS5SZXNvdXJjZVZpc2liaWxpdHlCCrpIB4IBBBgBGAIiZQofU2V0V29ya2Zsb3dEcmFmdFNoYXJpbmdSZXNwb25zZRIxCgh3b3JrZmxvdxgBIAEoCzIfLnJlbGlhbnQudjEuU2hhcmVkV29ya2Zsb3dEcmFmdBIPCgdjaGFuZ2VkGAIgASgIInQKH0xpc3RTaGFyZWRXb3JrZmxvd0RyYWZ0c1JlcXVlc3QSEwoGb3JnX2lkGAEgASgJSACIAQESGAoFbGltaXQYAiABKAVCCbpIBhoEGGQoABIXCgZvZmZzZXQYAyABKAVCB7pIBBoCKABCCQoHX29yZ19pZCJWCiBMaXN0U2hhcmVkV29ya2Zsb3dEcmFmdHNSZXNwb25zZRIyCgl3b3JrZmxvd3MYASADKAsyHy5yZWxpYW50LnYxLlNoYXJlZFdvcmtmbG93RHJhZnQyqAgKDlNoYXJpbmdTZXJ2aWNlEqoBChFTZXRDaGF0VmlzaWJpbGl0eRIkLnJlbGlhbnQudjEuU2V0Q2hhdFZpc2liaWxpdHlSZXF1ZXN0GiUucmVsaWFudC52MS5TZXRDaGF0VmlzaWJpbGl0eVJlc3BvbnNlIkiiuxhEOkIKDnNldF92aXNpYmlsaXR5EiQKBGNoYXQSB2NoYXRfaWQaE3Jlc3BvbnNlLmNoYXQudGl0bGUqCnZpc2liaWxpdHkSuwEKFFNldFByb2plY3RWaXNpYmlsaXR5EicucmVsaWFudC52MS5TZXRQcm9qZWN0VmlzaWJpbGl0eVJlcXVlc3QaKC5yZWxpYW50LnYxLlNldFByb2plY3RWaXNpYmlsaXR5UmVzcG9uc2UiUKK7GEw6SgoOc2V0X3Zpc2liaWxpdHkSLAoHcHJvamVjdBIKcHJvamVjdF9pZBoVcmVzcG9uc2UucHJvamVjdC5uYW1lKgp2aXNpYmlsaXR5EosBCg9MaXN0U2hhcmVkQ2hhdHMSIi5yZWxpYW50LnYxLkxpc3RTaGFyZWRDaGF0c1JlcXVlc3QaIy5yZWxpYW50LnYxLkxpc3RTaGFyZWRDaGF0c1Jlc3BvbnNlIi+QAgGiuxgoOiY6JHJlYWRzIG9ubHk6IGxpc3RzIHdoYXQgb3RoZXJzIHNoYXJlZBKUAQoSTGlzdFNoYXJlZFByb2plY3RzEiUucmVsaWFudC52MS5MaXN0U2hhcmVkUHJvamVjdHNSZXF1ZXN0GiYucmVsaWFudC52MS5MaXN0U2hhcmVkUHJvamVjdHNSZXNwb25zZSIvkAIBorsYKDomOiRyZWFkcyBvbmx5OiBsaXN0cyB3aGF0IG90aGVycyBzaGFyZWQS3wEKF1NldFdvcmtmbG93RHJhZnRTaGFyaW5nEioucmVsaWFudC52MS5TZXRXb3JrZmxvd0RyYWZ0U2hhcmluZ1JlcXVlc3QaKy5yZWxpYW50LnYxLlNldFdvcmtmbG93RHJhZnRTaGFyaW5nUmVzcG9uc2Uia6K7GGc6ZQoOc2V0X3Zpc2liaWxpdHkSOgoId29ya2Zsb3cSFnJlc3BvbnNlLndvcmtmbG93LnNsdWcaFnJlc3BvbnNlLndvcmtmbG93Lm5hbWUqC3dvcmtmbG93X2lkKgp2aXNpYmlsaXR5EqMBChhMaXN0U2hhcmVkV29ya2Zsb3dEcmFmdHMSKy5yZWxpYW50LnYxLkxpc3RTaGFyZWRXb3JrZmxvd0RyYWZ0c1JlcXVlc3QaLC5yZWxpYW50LnYxLkxpc3RTaGFyZWRXb3JrZmxvd0RyYWZ0c1Jlc3BvbnNlIiyiuxgoOiY6JHJlYWRzIG9ubHk6IGxpc3RzIHdoYXQgb3RoZXJzIHNoYXJlZEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge, file_reliant_v1_chat, file_reliant_v1_common, file_reliant_v1_project, file_reliant_v1_workflow]);
 
 /**
  * @generated from message reliant.v1.SetChatVisibilityRequest
@@ -254,9 +256,214 @@ export const ListSharedProjectsResponseSchema: GenMessage<ListSharedProjectsResp
   messageDesc(file_reliant_v1_sharing, 7);
 
 /**
+ * SharedWorkflowDraft is a saved workflow as sharing answers it: what a
+ * teammate needs to read and fork it, and nothing of the owner's beyond it
+ * (no source path on the owner's machine, no origin, no OCC version).
+ *
+ * @generated from message reliant.v1.SharedWorkflowDraft
+ */
+export type SharedWorkflowDraft = Message<"reliant.v1.SharedWorkflowDraft"> & {
+  /**
+   * The saved workflow's id (WorkflowListItem.draft_id for its owner).
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * The runtime reference name, unique per owner, not per org.
+   *
+   * @generated from field: string slug = 2;
+   */
+  slug: string;
+
+  /**
+   * Display name.
+   *
+   * @generated from field: string name = 3;
+   */
+  name: string;
+
+  /**
+   * @generated from field: optional string description = 4;
+   */
+  description?: string | undefined;
+
+  /**
+   * The owner: the member who saved and shared it.
+   *
+   * @generated from field: string user_id = 5;
+   */
+  userId: string;
+
+  /**
+   * The organization it belongs to and is shared with.
+   *
+   * @generated from field: string org_id = 6;
+   */
+  orgId: string;
+
+  /**
+   * DRAFT (work in progress, may be invalid) or COMPLETE (runnable).
+   *
+   * @generated from field: reliant.v1.WorkflowDraftStatus status = 7;
+   */
+  status: WorkflowDraftStatus;
+
+  /**
+   * ORG while shared; PRIVATE after it was made private (in a
+   * SetWorkflowDraftSharing answer to its owner).
+   *
+   * @generated from field: reliant.v1.ResourceVisibility visibility = 8;
+   */
+  visibility: ResourceVisibility;
+
+  /**
+   * True when the caller reads it as a VIEWER (a member of its org, not its
+   * owner): read-only, to read and fork.
+   *
+   * @generated from field: bool viewer_access = 9;
+   */
+  viewerAccess: boolean;
+
+  /**
+   * When it was shared (RFC 3339); unset while private.
+   *
+   * @generated from field: optional string shared_at = 10;
+   */
+  sharedAt?: string | undefined;
+
+  /**
+   * When its definition last changed (RFC 3339).
+   *
+   * @generated from field: string updated_at = 11;
+   */
+  updatedAt: string;
+
+  /**
+   * The stored YAML definition, as its owner saved it. A teammate forks it by
+   * saving a copy of their own (WorkflowService.ImportWorkflow).
+   *
+   * @generated from field: string definition = 12;
+   */
+  definition: string;
+};
+
+/**
+ * Describes the message reliant.v1.SharedWorkflowDraft.
+ * Use `create(SharedWorkflowDraftSchema)` to create a new message.
+ */
+export const SharedWorkflowDraftSchema: GenMessage<SharedWorkflowDraft> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_sharing, 8);
+
+/**
+ * @generated from message reliant.v1.SetWorkflowDraftSharingRequest
+ */
+export type SetWorkflowDraftSharingRequest = Message<"reliant.v1.SetWorkflowDraftSharingRequest"> & {
+  /**
+   * The saved workflow's id (WorkflowListItem.draft_id).
+   *
+   * @generated from field: string workflow_id = 1;
+   */
+  workflowId: string;
+
+  /**
+   * ORG or PRIVATE.
+   *
+   * @generated from field: reliant.v1.ResourceVisibility visibility = 2;
+   */
+  visibility: ResourceVisibility;
+};
+
+/**
+ * Describes the message reliant.v1.SetWorkflowDraftSharingRequest.
+ * Use `create(SetWorkflowDraftSharingRequestSchema)` to create a new message.
+ */
+export const SetWorkflowDraftSharingRequestSchema: GenMessage<SetWorkflowDraftSharingRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_sharing, 9);
+
+/**
+ * @generated from message reliant.v1.SetWorkflowDraftSharingResponse
+ */
+export type SetWorkflowDraftSharingResponse = Message<"reliant.v1.SetWorkflowDraftSharingResponse"> & {
+  /**
+   * The saved workflow as the caller now reads it: unset when they read it no
+   * longer (an admin who made it private).
+   *
+   * @generated from field: reliant.v1.SharedWorkflowDraft workflow = 1;
+   */
+  workflow?: SharedWorkflowDraft | undefined;
+
+  /**
+   * False when it already had the visibility asked for.
+   *
+   * @generated from field: bool changed = 2;
+   */
+  changed: boolean;
+};
+
+/**
+ * Describes the message reliant.v1.SetWorkflowDraftSharingResponse.
+ * Use `create(SetWorkflowDraftSharingResponseSchema)` to create a new message.
+ */
+export const SetWorkflowDraftSharingResponseSchema: GenMessage<SetWorkflowDraftSharingResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_sharing, 10);
+
+/**
+ * @generated from message reliant.v1.ListSharedWorkflowDraftsRequest
+ */
+export type ListSharedWorkflowDraftsRequest = Message<"reliant.v1.ListSharedWorkflowDraftsRequest"> & {
+  /**
+   * The organization whose shared workflows to list: one the caller is a
+   * live member of (PERMISSION_DENIED otherwise). Unset: the caller's default
+   * organization.
+   *
+   * @generated from field: optional string org_id = 1;
+   */
+  orgId?: string | undefined;
+
+  /**
+   * At most this many (default and cap 100).
+   *
+   * @generated from field: int32 limit = 2;
+   */
+  limit: number;
+
+  /**
+   * @generated from field: int32 offset = 3;
+   */
+  offset: number;
+};
+
+/**
+ * Describes the message reliant.v1.ListSharedWorkflowDraftsRequest.
+ * Use `create(ListSharedWorkflowDraftsRequestSchema)` to create a new message.
+ */
+export const ListSharedWorkflowDraftsRequestSchema: GenMessage<ListSharedWorkflowDraftsRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_sharing, 11);
+
+/**
+ * @generated from message reliant.v1.ListSharedWorkflowDraftsResponse
+ */
+export type ListSharedWorkflowDraftsResponse = Message<"reliant.v1.ListSharedWorkflowDraftsResponse"> & {
+  /**
+   * @generated from field: repeated reliant.v1.SharedWorkflowDraft workflows = 1;
+   */
+  workflows: SharedWorkflowDraft[];
+};
+
+/**
+ * Describes the message reliant.v1.ListSharedWorkflowDraftsResponse.
+ * Use `create(ListSharedWorkflowDraftsResponseSchema)` to create a new message.
+ */
+export const ListSharedWorkflowDraftsResponseSchema: GenMessage<ListSharedWorkflowDraftsResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_sharing, 12);
+
+/**
  * SharingService is read-only sharing (control-plane
- * docs/design/org-sharing.md): an owner shares a chat or project with the
- * live members of its organization, who can then read it, never change it.
+ * docs/design/org-sharing.md): an owner shares a chat, project or saved
+ * workflow with the live members of its organization, who can then read it,
+ * never change it.
  *
  * Sharing is reachable only through this service and the Chat/Project
  * visibility and viewer_access fields: no existing list (ListChats,
@@ -326,6 +533,43 @@ export const SharingService: GenService<{
     methodKind: "unary";
     input: typeof ListSharedProjectsRequestSchema;
     output: typeof ListSharedProjectsResponseSchema;
+  },
+  /**
+   * SetWorkflowDraftSharing shares a saved workflow (a workflow draft, in
+   * the caller's workflow library) with its organization (ORG) or makes it
+   * private again (PRIVATE), so a live member can publish one for the team to
+   * read and fork (control-plane docs/design/org-sharing.md §8.5). The rules
+   * are SetChatVisibility's: only the owner shares, as a person, and only a
+   * saved workflow that belongs to an org; an admin or owner of its org may
+   * make a member's shared one private, never share it; anyone who cannot
+   * read it is NOT_FOUND.
+   *
+   * Sharing a saved workflow shares its definition, read-only. It never lets
+   * a viewer run it as its owner, change it, or see the owner's runs of it.
+   * Not WorkflowService.SetWorkflowVisibility, which hides a workflow from
+   * its owner's own pickers and shares nothing.
+   *
+   * @generated from rpc reliant.v1.SharingService.SetWorkflowDraftSharing
+   */
+  setWorkflowDraftSharing: {
+    methodKind: "unary";
+    input: typeof SetWorkflowDraftSharingRequestSchema;
+    output: typeof SetWorkflowDraftSharingResponseSchema;
+  },
+  /**
+   * ListSharedWorkflowDrafts lists the saved workflows other members shared
+   * with an organization the caller is a live member of, most recently
+   * shared first: the team's shared workflow library. Never the caller's own
+   * (those are in WorkflowService.ListWorkflows), and never one its owner
+   * hid. Each carries its definition, to read and fork.
+   * forge:custom — SharedWorkflowDraft is a read of workflow_drafts shaped for viewers, not a table
+   *
+   * @generated from rpc reliant.v1.SharingService.ListSharedWorkflowDrafts
+   */
+  listSharedWorkflowDrafts: {
+    methodKind: "unary";
+    input: typeof ListSharedWorkflowDraftsRequestSchema;
+    output: typeof ListSharedWorkflowDraftsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_sharing, 0);
