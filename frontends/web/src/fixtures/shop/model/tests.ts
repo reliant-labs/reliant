@@ -345,7 +345,7 @@ const laneOf = (sha: string, lane: Lane) => report(sha)!.root.lanes[lane] ?? 0;
 
 /** The commit a coverage target reads: a tested commit (by prefix), a release's commit, or an environment's running release. */
 function targetCommit(target: CoverageTarget): string | null {
-  if ("gitCommit" in target) return SHOP_MAIN_COMMITS.find((c) => target.gitCommit.length >= 7 && c.sha.startsWith(target.gitCommit.slice(0, 12)))?.sha ?? null;
+  if ("gitCommit" in target) return SHOP_MAIN_COMMITS.find((c) => target.gitCommit.length >= 7 && c.sha.startsWith(target.gitCommit))?.sha ?? null;
   if ("releaseVersion" in target) return releaseCommit(target.releaseVersion);
   const running = RUNNING[target.environmentId as DemoEnvKey];
   return running ? releaseCommit(running.version) : null;

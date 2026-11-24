@@ -256,6 +256,18 @@ describe("the demo's Tests answers", () => {
     }
   });
 
+  it("resolves coverage using the entire supplied commit prefix", async () => {
+    const sha = commitOf("v1.8.4");
+    for (let length = 7; length <= sha.length; length++) {
+      const target = { gitCommit: sha.slice(0, length) };
+      expect((await api().getCoverage({ ...req, target, path: "" })).gitCommit).toBe(sha);
+      expect((await api().getFileCoverage({ ...req, target, path: SHOP_CHARGE_PATH })).blobId).toBe(SHOP_CHARGE_BLOB);
+    }
+    for (const gitCommit of [sha.slice(0, 6), `${sha.slice(0, 12)}invalid`, `${sha}0`]) {
+      await expect(api().getCoverage({ ...req, target: { gitCommit }, path: "" })).rejects.toMatchObject({ code: 5 });
+    }
+  });
+
   it("browses coverage by commit, release and environment, and serves charge.go's source from the bundle", async () => {
     const root = await api().getCoverage({ ...req, target: { gitCommit: commitOf("v1.8.4") }, path: "" });
     expect(root.children.map((c) => c.path)).toEqual(expect.arrayContaining(["internal/orders", "internal/checkout", "internal/inventory", "cmd/worker", "web/src/checkout"]));
