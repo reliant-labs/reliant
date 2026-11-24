@@ -222,6 +222,13 @@ export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
     command: "forge obs status prod",
     target: tid("obs-alert-CheckoutP95High"),
   },
+  "speed-insights": {
+    title: "Speed insights",
+    body: "How fast each page of your site loads and responds for real visitors, on desktop and mobile. The worst-scoring pages come first, so you know where speeding things up helps people most.",
+    help: "Your agent can query the same page-load measurements before it changes a slow page.",
+    command: "forge obs query prod --sql \"<select>\"",
+    target: tid("speed-insights-routes"),
+  },
   sessions: {
     title: "Sessions",
     body: "Understand what a visitor experienced before something went wrong. Open a session to follow its pages, actions and errors alongside the requests behind them.",
