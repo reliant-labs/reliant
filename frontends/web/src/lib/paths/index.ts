@@ -29,7 +29,7 @@ import { orgRootPath, withOrg, type PathContext } from "./org";
 import { withSearch } from "./search";
 
 export { withOrg, type PathContext } from "./org";
-export { withSearch } from "./search";
+export { withMoreSearch, withSearch } from "./search";
 
 /**
  * A path segment exactly as a URL already carries it, percent-encoded: for a
@@ -128,10 +128,18 @@ export function projectPath(projectId: string, tab?: ProjectPageTab, ctx?: PathC
 /**
  * One app's console (`/o/<org>/apps/<name>`; `/forge/p/<name>` with org
  * links off): `name` is forge.yaml's `name`. The console's own builders
- * (components/Forge/Console/paths.ts consoleBase) spell the same root.
+ * (components/Forge/Console/paths.ts consoleBase) spell the same root. A link
+ * that knows which checkout backs the console adds `?project=<Reliant
+ * project id>` (consoleCheckoutSearch): several of the person's projects can
+ * declare one name, and without it the console asks which.
  */
 export function appPath(name: string, ctx?: PathContext): string {
   return withOrg(`/forge/p/${seg(name)}`, ctx);
+}
+
+/** The search naming the checkout behind an app's console (`?project=`), or none when unknown. */
+export function consoleCheckoutSearch(projectId: string | undefined): { project: string } | undefined {
+  return projectId ? { project: projectId } : undefined;
 }
 
 /** Everything waiting on the person, across every chat and project. */

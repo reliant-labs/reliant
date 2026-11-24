@@ -33,9 +33,16 @@ const navigate = vi.fn()
 const installList = vi.hoisted(() => ({
   current: [] as Array<{ project_id: string; daemon_id: string; install_state: number }>,
 }));
+// The org's projects (the Project row), and the set-up clone it can start.
+const projectList = vi.hoisted(() => ({
+  current: [] as Array<{ id: string; name: string; path: string; remote_url?: string; viewer_access?: boolean }>,
+}));
+const createProjectFromRepo = vi.hoisted(() => vi.fn());
 vi.mock("@/hooks/project-queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
   useProjectDaemonInstalls: () => ({ data: installList.current, isLoading: false }),
+  useProjects: () => ({ projects: projectList.current, isLoading: false }),
+  createProjectFromRepo,
 }));
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, ...props }: { children?: React.ReactNode }) => (
@@ -54,8 +61,9 @@ vi.mock('../../../store/chatStore', () => ({
   }),
 }))
 
+const selectProject = vi.hoisted(() => vi.fn())
 vi.mock('../../../store/projectStore', () => {
-  const state = { currentProject: { id: 'p1', name: 'reliant' } }
+  const state = { currentProject: { id: 'p1', name: 'reliant' }, selectProject }
   return {
     useProjectStore: Object.assign((selector: (s: unknown) => unknown) => selector(state), {
       getState: () => state,
@@ -145,6 +153,8 @@ vi.mock('@/hooks/useOnboardingQueries', () => ({
 }))
 
 const { MobileNewChat } = await import('../MobileNewChat')
+const { ProjectInstallState } = await import('@/gen/reliant/v1/project_pb')
+const { DaemonStatus } = await import('@/gen/reliant/v1/daemon_registry_pb')
 const { ComposeModeProvider } = await import('@/lib/composeMode')
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
@@ -166,6 +176,11 @@ beforeEach(async () => {
   worktreePaging.loadMore = vi.fn()
   capabilityOverrides.current = {}
   installList.current = []
+  projectList.current = []
+  createProjectFromRepo.mockReset()
+  createProjectFromRepo.mockResolvedValue({})
+  selectProject.mockReset()
+  selectProject.mockResolvedValue(undefined)
   daemonList.current = [{ daemonId: 'd-laptop', hostname: 'laptop', status: 1 }]
   startChat.mockReset()
   startChat.mockResolvedValue({ id: 'chat-9' })
@@ -510,5 +525,121 @@ describe('MobileNewChat', () => {
     fireEvent.click(summary)
     expect(input).not.toHaveFocus()
     expect(canvas.scrollTop).toBe(0)
+  })
+  describe('Project row', () => {
+    const PROJECTS = [
+      { id: 'p1', name: 'reliant', path: '/home/u/reliant', remote_url: 'https://github.com/o/reliant' },
+      { id: 'p2', name: 'forge', path: '/home/u/forge', remote_url: 'https://github.com/o/forge' },
+      { id: 'p3', name: 'landing', path: '/home/u/landing', remote_url: 'https://github.com/o/landing' },
+      { id: 'p4', name: 'scratch', path: '/home/u/scratch' },
+    ]
+    beforeEach(() => {
+      projectList.current = PROJECTS
+      installList.current = [
+        { project_id: 'p1', daemon_id: 'd-laptop', install_state: ProjectInstallState.INSTALLED },
+        { project_id: 'p2', daemon_id: 'd-laptop', install_state: ProjectInstallState.INSTALLED },
+        { project_id: 'p3', daemon_id: 'd-gone', install_state: ProjectInstallState.INSTALLED },
+        { project_id: 'p4', daemon_id: 'd-gone', install_state: ProjectInstallState.INSTALLED },
+      ]
+      daemonList.current = [
+        { daemonId: 'd-laptop', hostname: 'laptop', status: DaemonStatus.ACTIVE },
+        { daemonId: 'd-gone', hostname: 'old-box', status: DaemonStatus.DISCONNECTED },
+      ]
+    })
+
+    it('defaults to the current project and names its machine', () => {
+      render(<MobileNewChat />)
+      const row = screen.getByTestId('mobile-new-chat-project')
+      expect(row).toHaveTextContent('Project')
+      expect(row).toHaveTextContent('reliant')
+      expect(row).toHaveTextContent('On laptop')
+    })
+
+    it('lists projects on a connected machine first, then set-up, then the ones that cannot be', async () => {
+      render(<MobileNewChat />)
+      await userEvent.click(screen.getByRole('button', { name: /^Project/ }))
+      const names = ['reliant', 'forge', 'landing', 'scratch'].map((name) => screen.getByText(name, { selector: 'p' }).closest('button')!)
+      expect(names[0]).toHaveAttribute('aria-pressed', 'true')
+      expect(names[1]).toHaveTextContent('On laptop')
+      expect(names[2]).toHaveTextContent('On old-box, not connected · Set up on laptop')
+      expect(names[2]).toBeEnabled()
+      // A folder cannot be cloned onto another machine.
+      expect(names[3]).toBeDisabled()
+      // Sheet order follows readiness.
+      const order = names.map((button) => Array.from(button.parentElement!.children).indexOf(button))
+      expect(order).toEqual([...order].sort((a, b) => a - b))
+    })
+
+    it('makes a ready project the context project, without touching the URL', async () => {
+      render(<MobileNewChat />)
+      await userEvent.click(screen.getByRole('button', { name: /^Project/ }))
+      await userEvent.click(screen.getByText('forge', { selector: 'p' }))
+      expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2' }), { restoreWorkspace: false })
+      expect(createProjectFromRepo).not.toHaveBeenCalled()
+      expect(navigate).not.toHaveBeenCalled()
+    })
+
+    it('sets a project on no connected machine up on the chat\'s machine, then starts in it', async () => {
+      render(<MobileNewChat />)
+      await userEvent.click(screen.getByRole('button', { name: /^Project/ }))
+      await userEvent.click(screen.getByText('landing', { selector: 'p' }))
+      expect(createProjectFromRepo).toHaveBeenCalledWith(expect.objectContaining({ cloneUrl: 'https://github.com/o/landing', daemonId: 'd-laptop', name: 'landing' }))
+      await waitFor(() => expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: 'p3' }), { restoreWorkspace: false }))
+    })
+
+    it.each(['ready', 'set-up'])('keeps the %s target across a project switch and sends on that machine', async (kind) => {
+      const { useProjectStore } = await import('../../../store/projectStore')
+      const state = useProjectStore.getState()
+      const originalProject = state.currentProject
+      daemonList.current = [
+        { daemonId: 'd-laptop', hostname: 'laptop', status: DaemonStatus.ACTIVE },
+        { daemonId: 'd-other', hostname: 'other', status: DaemonStatus.ACTIVE },
+      ]
+      // Laptop is the default; forge is either on other or must be cloned there.
+      installList.current = [
+        { project_id: 'p1', daemon_id: 'd-laptop', install_state: ProjectInstallState.INSTALLED },
+        { project_id: 'p2', daemon_id: kind === 'ready' ? 'd-other' : 'd-gone', install_state: ProjectInstallState.INSTALLED },
+      ]
+      selectProject.mockImplementation(async (project) => { state.currentProject = project })
+      const view = render(<MobileNewChat />)
+      try {
+        await userEvent.click(screen.getByRole('button', { name: /^Runs on/ }))
+        await userEvent.click(screen.getByRole('button', { name: /^other/ }))
+        await userEvent.click(screen.getByRole('button', { name: /^Project/ }))
+        await userEvent.click(screen.getByText('forge', { selector: 'p' }))
+        await waitFor(() => expect(selectProject).toHaveBeenCalled())
+        view.rerender(<MobileNewChat />)
+        if (kind === 'set-up') {
+          expect(createProjectFromRepo).toHaveBeenCalledWith(expect.objectContaining({ daemonId: 'd-other' }))
+          // The queued clone has landed; refresh the placement query.
+          installList.current = [...installList.current, { project_id: 'p2', daemon_id: 'd-other', install_state: ProjectInstallState.INSTALLED }]
+          view.rerender(<MobileNewChat />)
+        } else {
+          expect(createProjectFromRepo).not.toHaveBeenCalled()
+        }
+        expect(screen.getByRole('button', { name: /^Runs on other/ })).toBeInTheDocument()
+        await userEvent.type(screen.getByLabelText('Message'), 'go')
+        await userEvent.click(screen.getByLabelText('Send'))
+        expect(startChat.mock.calls[0][6]).toEqual({ daemonId: 'd-other', noMachine: undefined })
+      } finally {
+        state.currentProject = originalProject
+      }
+    })
+
+    it('stays on the project and says why when the set-up fails', async () => {
+      createProjectFromRepo.mockRejectedValueOnce(new Error('clone refused'))
+      render(<MobileNewChat />)
+      await userEvent.click(screen.getByRole('button', { name: /^Project/ }))
+      await userEvent.click(screen.getByText('landing', { selector: 'p' }))
+      expect(await screen.findByRole('alert')).toBeInTheDocument()
+      expect(selectProject).not.toHaveBeenCalled()
+    })
+
+    it('leaves out a project the person can only read', async () => {
+      projectList.current = [...PROJECTS, { id: 'p5', name: 'shared-ro', path: '/x', remote_url: 'https://github.com/o/x', viewer_access: true }]
+      render(<MobileNewChat />)
+      await userEvent.click(screen.getByRole('button', { name: /^Project/ }))
+      expect(screen.queryByText('shared-ro')).not.toBeInTheDocument()
+    })
   })
 })

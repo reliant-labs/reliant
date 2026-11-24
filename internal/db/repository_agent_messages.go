@@ -60,58 +60,6 @@ func (r *Repo) EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error
 	return nil
 }
 
-// EnqueueAgentMessageOnce is EnqueueAgentMessage for a row whose id the caller
-// does not control: a human send names its row (the client's message id), so a
-// repeat of that send arrives with an id that is already taken. It reports
-// inserted=false, and writes and announces nothing, when the id is. Concurrent
-// repeats are arbitrated by the primary key, not by a read.
-func (r *Repo) EnqueueAgentMessageOnce(ctx context.Context, msg *AgentMessage) (bool, error) {
-	if msg == nil {
-		return false, fmt.Errorf("agent message cannot be nil")
-	}
-	if msg.ID == "" {
-		return false, fmt.Errorf("agent message ID is required")
-	}
-	if msg.ChatID == "" {
-		return false, fmt.Errorf("chat ID is required")
-	}
-	if msg.FromThreadID == "" {
-		return false, fmt.Errorf("from thread ID is required")
-	}
-	if msg.ToThreadID == "" {
-		return false, fmt.Errorf("to thread ID is required")
-	}
-	inserted, err := store.EnqueueAgentMessageOnce(ctx, r.ORM(), msg)
-	if err != nil {
-		return false, err
-	}
-	if inserted {
-		r.announceAgentMailboxChanged(ctx, msg.ChatID)
-	}
-	return inserted, nil
-}
-
-// GetAgentMessage returns the mailbox row with this id in any status, or
-// (nil, nil) when there is none.
-func (r *Repo) GetAgentMessage(ctx context.Context, id string) (*AgentMessage, error) {
-	if id == "" {
-		return nil, fmt.Errorf("message ID cannot be empty")
-	}
-	return store.GetAgentMessage(ctx, r.ORM(), id)
-}
-
-// DeleteUndeliveredAgentMessage removes a row nobody ever read, so a repeat of
-// the send that wrote it can take its id. See core.AgentMessageStore.
-func (r *Repo) DeleteUndeliveredAgentMessage(ctx context.Context, id, chatID string) (bool, error) {
-	if id == "" {
-		return false, fmt.Errorf("message ID cannot be empty")
-	}
-	if chatID == "" {
-		return false, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.DeleteUndeliveredAgentMessage(ctx, r.ORM(), id, chatID)
-}
-
 // EnqueueAgentMessageIfAbsent is EnqueueAgentMessage's conditional sibling,
 // used only by the stranded-background-spawn reconciler sweep to write
 // Synthesized placeholders (a real report later supersedes them via
@@ -229,13 +177,6 @@ func (r *Repo) SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []str
 	return store.SetAgentMessagesDeliveredMessageID(ctx, r.ORM(), ids, deliveredMessageID)
 }
 
-func (r *Repo) CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error) {
-	if toThreadID == "" {
-		return 0, fmt.Errorf("to thread ID cannot be empty")
-	}
-	return store.CountQueuedAgentMessagesForThread(ctx, r.ORM(), toThreadID)
-}
-
 // MarkQueuedAgentMessagesPreempting marks the thread's queued messages that
 // have not yet cut a waiting call short — see core.AgentMessageStore.
 func (r *Repo) MarkQueuedAgentMessagesPreempting(ctx context.Context, toThreadID string, preemptedAt time.Time) (int64, error) {
@@ -243,18 +184,6 @@ func (r *Repo) MarkQueuedAgentMessagesPreempting(ctx context.Context, toThreadID
 		return 0, fmt.Errorf("to thread ID cannot be empty")
 	}
 	return store.MarkQueuedAgentMessagesPreempting(ctx, r.ORM(), toThreadID, preemptedAt)
-}
-
-// CancelQueuedAgentMessage deletes a mailbox row only if it is still
-// queued — see core.AgentMessageStore for the race this guards against.
-func (r *Repo) CancelQueuedAgentMessage(ctx context.Context, id, chatID string) (bool, error) {
-	if id == "" {
-		return false, fmt.Errorf("message ID cannot be empty")
-	}
-	if chatID == "" {
-		return false, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.CancelQueuedAgentMessage(ctx, r.ORM(), id, chatID)
 }
 
 // MarkQueuedAgentMessagesUndeliveredForThread resolves the mailbox of a thread

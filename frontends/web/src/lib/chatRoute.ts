@@ -35,6 +35,7 @@ export type ChatShellRoute =
 
 const CHAT = /^\/c\/([^/]+)(?:\/t\/([^/]+))?\/?$/;
 const PROJECT = /^\/project\/[^/]+\/?$/;
+const PROJECT_ID = /^\/project\/([^/]+)\/?$/;
 
 function decode(segment: string): string {
   try {
@@ -181,6 +182,32 @@ export function latestPathname(): string {
   const r = router();
   if (r) return r.latestLocation?.pathname ?? r.state.location.pathname;
   return typeof window === "undefined" ? "/" : window.location.pathname;
+}
+
+/** Where the tab is going: the router's latest search (ahead of its committed one), else the window's. */
+export function latestSearch(): Record<string, unknown> {
+  const r = router();
+  if (r) return (r.latestLocation?.search ?? r.state.location.search ?? {}) as Record<string, unknown>;
+  return typeof window === "undefined" ? {} : Object.fromEntries(new URLSearchParams(window.location.search));
+}
+
+/**
+ * The project the chat shell's URL names, if any: `/project/<id>`, or the
+ * new-chat view's `?project=`. (A chat's URL names its chat; its project
+ * follows once the chat is known.)
+ */
+export function routeProjectId(): string | null {
+  const pathname = latestPathname();
+  const route = chatShellRouteOf(pathname);
+  if (route?.kind === "home") {
+    const match = PROJECT_ID.exec(orgFreePath(pathname));
+    return match ? decode(match[1]) : null;
+  }
+  if (route?.kind === "new") {
+    const project = latestSearch().project;
+    return typeof project === "string" && project ? project : null;
+  }
+  return null;
 }
 
 /**

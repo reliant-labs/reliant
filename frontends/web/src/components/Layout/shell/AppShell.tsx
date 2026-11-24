@@ -123,6 +123,8 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
                 : cn(
                     "absolute inset-y-0 left-0 z-50 flex h-full shadow-2xl transition-transform duration-200 ease-out motion-reduce:transition-none",
                     shown ? "translate-x-0" : "-translate-x-full",
+                    // A phone's drawer: 44px touch rows, as the phone's own drawer has (Mobile/MobileNavDrawer).
+                    narrow && "[--row-h:2.75rem]",
                   )
             }
             onMouseEnter={!docked && !narrow ? overlay.handleOverlayMouseEnter : undefined}

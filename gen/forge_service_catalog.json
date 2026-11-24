@@ -72,8 +72,8 @@
         "ProcessRuntime",
         "ProcessSettings",
         "Project",
-        "ProjectPurges",
         "Projectaccess",
+        "Projectpurge",
         "ProviderAccount",
         "Providerbackoff",
         "PullRequestRecord",
@@ -108,6 +108,7 @@
         "TriggerRedriver",
         "TriggerScheduleSync",
         "TriggerSenders",
+        "Triggerowner",
         "Usage",
         "UserAuth",
         "UserChain",
@@ -524,8 +525,8 @@
         "ProcessRuntime",
         "ProcessSettings",
         "ProjectPurge",
-        "ProjectPurges",
         "Projectaccess",
+        "Projectpurge",
         "Providerbackoff",
         "RemoteExecutor",
         "RepoUpdateFeed",
@@ -538,6 +539,7 @@
         "TokenAuthority",
         "TriggerDeliveryRelay",
         "TriggerPollers",
+        "Triggerowner",
         "UserUpdateHub",
         "Vault",
         "WorkerCatalogSearch",
@@ -5358,6 +5360,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.ChatService/AttachProjectToChat",
+          "name": "AttachProjectToChat",
+          "input": "reliant.v1.AttachProjectToChatRequest",
+          "output": "reliant.v1.AttachProjectToChatResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.ChatService/BranchChat",
           "name": "BranchChat",
           "input": "reliant.v1.BranchChatRequest",
@@ -5392,6 +5404,16 @@
           "name": "DeleteChat",
           "input": "reliant.v1.DeleteChatRequest",
           "output": "reliant.v1.DeleteChatResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.ChatService/DetachProjectFromChat",
+          "name": "DetachProjectFromChat",
+          "input": "reliant.v1.DetachProjectFromChatRequest",
+          "output": "reliant.v1.DetachProjectFromChatResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -5512,6 +5534,16 @@
           "name": "ListChatPlans",
           "input": "reliant.v1.ListChatPlansRequest",
           "output": "reliant.v1.ListChatPlansResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.ChatService/ListChatProjects",
+          "name": "ListChatProjects",
+          "input": "reliant.v1.ListChatProjectsRequest",
+          "output": "reliant.v1.ListChatProjectsResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -6460,6 +6492,66 @@
               "TargetKind": "chat",
               "Writer": "INTERCEPTOR"
             }
+          },
+          {
+            "Name": "ListChatProjects",
+            "InputType": "ListChatProjectsRequest",
+            "OutputType": "ListChatProjectsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ListChatProjectsRequest",
+            "OutputTypeFQ": "reliant.v1.ListChatProjectsResponse",
+            "InputProtoFile": "reliant/v1/chat.proto",
+            "OutputProtoFile": "reliant/v1/chat.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "AttachProjectToChat",
+            "InputType": "AttachProjectToChatRequest",
+            "OutputType": "AttachProjectToChatResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.AttachProjectToChatRequest",
+            "OutputTypeFQ": "reliant.v1.AttachProjectToChatResponse",
+            "InputProtoFile": "reliant/v1/chat.proto",
+            "OutputProtoFile": "reliant/v1/chat.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "attach_project",
+              "TargetKind": "chat",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "DetachProjectFromChat",
+            "InputType": "DetachProjectFromChatRequest",
+            "OutputType": "DetachProjectFromChatResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.DetachProjectFromChatRequest",
+            "OutputTypeFQ": "reliant.v1.DetachProjectFromChatResponse",
+            "InputProtoFile": "reliant/v1/chat.proto",
+            "OutputProtoFile": "reliant/v1/chat.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "detach_project",
+              "TargetKind": "chat",
+              "Writer": "INTERCEPTOR"
+            }
           }
         ],
         "ProtoFile": "reliant/v1/chat.proto",
@@ -6478,6 +6570,26 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Chat"
+            }
+          ],
+          "AttachProjectToChatRequest": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "AttachProjectToChatResponse": [
+            {
+              "Name": "projects",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ChatProject"
             }
           ],
           "BranchChatRequest": [
@@ -6606,6 +6718,26 @@
               "Name": "permanently_deleted",
               "ProtoType": "bool",
               "IsOptional": false
+            }
+          ],
+          "DetachProjectFromChatRequest": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "DetachProjectFromChatResponse": [
+            {
+              "Name": "projects",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ChatProject"
             }
           ],
           "DismissChatRequest": [
@@ -6922,6 +7054,21 @@
               "Name": "total",
               "ProtoType": "int32",
               "IsOptional": false
+            }
+          ],
+          "ListChatProjectsRequest": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListChatProjectsResponse": [
+            {
+              "Name": "projects",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ChatProject"
             }
           ],
           "ListChatsRequest": [
@@ -7563,6 +7710,11 @@
               "Name": "app_name",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "attached_project_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "StartChatResponse": [
@@ -7773,6 +7925,24 @@
               "name": "worktree_deleted_at",
               "kind": "string",
               "optional": true
+            }
+          ],
+          "reliant.v1.AttachProjectToChatRequest": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "project_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.AttachProjectToChatResponse": [
+            {
+              "name": "projects",
+              "kind": "message",
+              "type_name": "reliant.v1.ChatProject",
+              "repeated": true
             }
           ],
           "reliant.v1.Attachment": [
@@ -8103,6 +8273,33 @@
               "optional": true
             }
           ],
+          "reliant.v1.ChatProject": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "primary",
+              "kind": "bool"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "attached_at",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.ChatSelection": [
             {
               "name": "workflow_name",
@@ -8306,6 +8503,24 @@
             {
               "name": "permanently_deleted",
               "kind": "bool"
+            }
+          ],
+          "reliant.v1.DetachProjectFromChatRequest": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "project_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.DetachProjectFromChatResponse": [
+            {
+              "name": "projects",
+              "kind": "message",
+              "type_name": "reliant.v1.ChatProject",
+              "repeated": true
             }
           ],
           "reliant.v1.DismissChatRequest": [
@@ -8630,6 +8845,20 @@
             {
               "name": "total",
               "kind": "int32"
+            }
+          ],
+          "reliant.v1.ListChatProjectsRequest": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ListChatProjectsResponse": [
+            {
+              "name": "projects",
+              "kind": "message",
+              "type_name": "reliant.v1.ChatProject",
+              "repeated": true
             }
           ],
           "reliant.v1.ListChatsRequest": [
@@ -9416,6 +9645,11 @@
               "name": "app_name",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "attached_project_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.StartChatResponse": [
@@ -9803,6 +10037,8 @@
           "reliant.v1.AdoptChatRequest": "reliant/v1/chat.proto",
           "reliant.v1.AdoptChatResponse": "reliant/v1/chat.proto",
           "reliant.v1.ArchivedChat": "reliant/v1/chat.proto",
+          "reliant.v1.AttachProjectToChatRequest": "reliant/v1/chat.proto",
+          "reliant.v1.AttachProjectToChatResponse": "reliant/v1/chat.proto",
           "reliant.v1.Attachment": "reliant/v1/chat.proto",
           "reliant.v1.BranchChatRequest": "reliant/v1/chat.proto",
           "reliant.v1.BranchChatResponse": "reliant/v1/chat.proto",
@@ -9812,6 +10048,7 @@
           "reliant.v1.Chat": "reliant/v1/chat.proto",
           "reliant.v1.ChatErrorUpdate": "reliant/v1/chat.proto",
           "reliant.v1.ChatPlan": "reliant/v1/chat.proto",
+          "reliant.v1.ChatProject": "reliant/v1/chat.proto",
           "reliant.v1.ChatSelection": "reliant/v1/chat.proto",
           "reliant.v1.ChatUpdate": "reliant/v1/chat.proto",
           "reliant.v1.CompactChatRequest": "reliant/v1/chat.proto",
@@ -9820,6 +10057,8 @@
           "reliant.v1.ContentBlockBody": "reliant/v1/chat.proto",
           "reliant.v1.DeleteChatRequest": "reliant/v1/chat.proto",
           "reliant.v1.DeleteChatResponse": "reliant/v1/chat.proto",
+          "reliant.v1.DetachProjectFromChatRequest": "reliant/v1/chat.proto",
+          "reliant.v1.DetachProjectFromChatResponse": "reliant/v1/chat.proto",
           "reliant.v1.DismissChatRequest": "reliant/v1/chat.proto",
           "reliant.v1.DismissChatResponse": "reliant/v1/chat.proto",
           "reliant.v1.GetChatRequest": "reliant/v1/chat.proto",
@@ -9845,6 +10084,8 @@
           "reliant.v1.ListBranchesResponse": "reliant/v1/chat.proto",
           "reliant.v1.ListChatPlansRequest": "reliant/v1/chat.proto",
           "reliant.v1.ListChatPlansResponse": "reliant/v1/chat.proto",
+          "reliant.v1.ListChatProjectsRequest": "reliant/v1/chat.proto",
+          "reliant.v1.ListChatProjectsResponse": "reliant/v1/chat.proto",
           "reliant.v1.ListChatsRequest": "reliant/v1/chat.proto",
           "reliant.v1.ListChatsResponse": "reliant/v1/chat.proto",
           "reliant.v1.ListMessagesRequest": "reliant/v1/chat.proto",
@@ -54949,18 +55190,6 @@
       "implementation_candidates": []
     },
     {
-      "id": "ProjectPurges",
-      "name": "ProjectPurges",
-      "kind": "provider",
-      "type": "github.com/reliant-labs/reliant/internal/projectpurge.Service",
-      "source": {
-        "path": "internal/app/providers_worker.go",
-        "symbol": "NewProjectPurges"
-      },
-      "methods": [],
-      "implementation_candidates": []
-    },
-    {
       "id": "Projectaccess",
       "name": "Projectaccess",
       "kind": "component",
@@ -54999,6 +55228,43 @@
           "type": "*github.com/reliant-labs/reliant/internal/projectaccess.service",
           "source": {
             "path": "internal/projectaccess/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
+      "id": "Projectpurge",
+      "name": "Projectpurge",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/projectpurge.Service",
+      "source": {
+        "path": "internal/projectpurge/contract.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/projectpurge.MockService",
+          "source": {
+            "path": "internal/projectpurge/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/projectpurge.forgeMiddlewareService",
+          "source": {
+            "path": "internal/projectpurge/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/projectpurge.service",
+          "source": {
+            "path": "internal/projectpurge/service.go",
             "symbol": "service"
           },
           "methods": []
@@ -55596,6 +55862,27 @@
       "implementation_candidates": []
     },
     {
+      "id": "Triggerowner",
+      "name": "Triggerowner",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/triggerowner.Service",
+      "source": {
+        "path": "internal/triggerowner/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/triggerowner.service",
+          "source": {
+            "path": "internal/triggerowner/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "Usage",
       "name": "Usage",
       "kind": "component",
@@ -56070,6 +56357,19 @@
     },
     {
       "consumer": "AutomationTakeover",
+      "field": "Offers",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.Offers",
+      "methods": [],
+      "candidates": [
+        "Triggerowner"
+      ],
+      "providers": [
+        "Triggerowner"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "AutomationTakeover",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.Repository",
       "methods": [],
@@ -56189,6 +56489,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "AgentMessages",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.AgentMessages",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Backoff",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Backoff",
       "methods": [],
@@ -56205,6 +56516,17 @@
       "consumer": "Chat",
       "field": "LocalModels",
       "interface": "github.com/reliant-labs/reliant/internal/llm/drivers/local.Directory",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "Mailbox",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Mailbox",
       "methods": [],
       "candidates": [],
       "providers": [
@@ -57468,6 +57790,17 @@
     },
     {
       "consumer": "PackageCommands",
+      "field": "Favorites",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/package_commands.Favorites",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "PackageCommands",
       "field": "Placement",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/package_commands.Placement",
       "methods": [],
@@ -57800,10 +58133,10 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.ProjectPurges",
       "methods": [],
       "candidates": [
-        "ProjectPurges"
+        "Projectpurge"
       ],
       "providers": [
-        "ProjectPurges"
+        "Projectpurge"
       ],
       "resolution": "composition_expression"
     },
@@ -57873,10 +58206,10 @@
       "interface": "github.com/reliant-labs/reliant/internal/projectpurge.Service",
       "methods": [],
       "candidates": [
-        "ProjectPurges"
+        "Projectpurge"
       ],
       "providers": [
-        "ProjectPurges"
+        "Projectpurge"
       ],
       "resolution": "composition_expression"
     },
@@ -57888,6 +58221,17 @@
       "candidates": [
         "Database"
       ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Projectpurge",
+      "field": "DB",
+      "interface": "github.com/reliant-labs/forge/pkg/orm.Context",
+      "methods": [],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -57997,6 +58341,17 @@
       "consumer": "PullRequestRecord",
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/pull_request_record.Store",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
+      "field": "Mailbox",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.Mailbox",
       "methods": [],
       "candidates": [],
       "providers": [
@@ -59155,6 +59510,19 @@
     },
     {
       "consumer": "Trigger",
+      "field": "Owners",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Owners",
+      "methods": [],
+      "candidates": [
+        "Triggerowner"
+      ],
+      "providers": [
+        "Triggerowner"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
       "field": "Pools",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Pools",
       "methods": [],
@@ -59275,6 +59643,53 @@
         "Vault"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Triggerowner",
+      "field": "Locks",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Locks",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Triggerowner",
+      "field": "Offers",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Offers",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Triggerowner",
+      "field": "OrgReads",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.OrgReads",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Triggerowner",
+      "field": "Triggers",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Triggers",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Triggerowner",
+      "field": "Tx",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.TxRunner",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Usage",
@@ -59466,6 +59881,19 @@
       ],
       "providers": [
         "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerTrigger",
+      "field": "Owners",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Service",
+      "methods": [],
+      "candidates": [
+        "Triggerowner"
+      ],
+      "providers": [
+        "Triggerowner"
       ],
       "resolution": "composition_expression"
     },
@@ -60254,6 +60682,46 @@
       "component": "Trigger.Syncer",
       "source": {
         "path": "internal/handlers/trigger/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Triggerowner.Locks",
+      "source": {
+        "path": "internal/triggerowner/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Triggerowner.Offers",
+      "source": {
+        "path": "internal/triggerowner/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Triggerowner.OrgReads",
+      "source": {
+        "path": "internal/triggerowner/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Triggerowner.Triggers",
+      "source": {
+        "path": "internal/triggerowner/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Triggerowner.Tx",
+      "source": {
+        "path": "internal/triggerowner/service.go",
         "symbol": "New"
       }
     },

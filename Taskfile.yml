@@ -491,7 +491,9 @@ tasks:
 
   ci:
     # The whole local gate: forge's checks (verify-generated, golangci-lint,
-    # buf-lint, migration-safety, go-build, vuln-go, license-check) plus
+    # buf-lint, migration-safety, each frontend's lint/typecheck/build,
+    # go-build, vuln-go, vuln-npm, vuln-sbom, secret-scan, license-check,
+    # flake-check; `forge ci gate --list`) plus
     # forge.yaml's ci.gate.extra_checks (test-affected in place of forge's
     # unit-tests, web, electron, docs-generate, the pin and repo checks), in
     # ONE summary table. Every check runs even if an earlier one failed; a

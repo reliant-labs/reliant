@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import { ProjectFilterRouteSync, useRouteProjectId } from "./ProjectFilterRouteSync";
-import { useProjectStore } from "../../store/projectStore";
+import { chooseProject, useProjectStore } from "../../store/projectStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useChatStore } from "../../store/chatStore";
 
@@ -42,7 +42,7 @@ async function mountShell() {
 it("mounted shell honors Back to All without pushing the filtered URL again", async () => {
   const { router, history } = await mountShell();
   expect(screen.getByTestId("startup-skip").textContent).toBe("false");
-  await act(async () => { await useProjectStore.getState().setProjectFilter("a", { restoreWorkspace: false }); });
+  await act(async () => { await chooseProject("a", { restoreWorkspace: false }); });
   await waitFor(() => expect(router.state.location.pathname).toBe("/project/a"));
   const pushes = vi.spyOn(history, "push");
   await act(async () => { history.back(); });
@@ -53,6 +53,20 @@ it("mounted shell honors Back to All without pushing the filtered URL again", as
   await act(async () => { history.forward(); });
   await waitFor(() => expect(router.state.location.pathname).toBe("/project/a"));
   await act(async () => { history.back(); });
+  await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+  expect(useWorkspaceStateStore.getState().projectFilterId).toBeNull();
+});
+
+it("never moves the URL from a store action: setProjectFilter filters the list only", async () => {
+  const { router } = await mountShell();
+  await act(async () => { await useProjectStore.getState().setProjectFilter("a", { restoreWorkspace: false }); });
+  expect(useWorkspaceStateStore.getState().projectFilterId).toBe("a");
+  expect(router.state.location.pathname).toBe("/");
+});
+
+it("moves a page naming a project that is gone to the home", async () => {
+  const { router } = await mountShell();
+  await act(async () => { await router.navigate({ to: "/project/$projectId", params: { projectId: "gone" } } as never); });
   await waitFor(() => expect(router.state.location.pathname).toBe("/"));
   expect(useWorkspaceStateStore.getState().projectFilterId).toBeNull();
 });
