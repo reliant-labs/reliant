@@ -84,13 +84,15 @@ func (MCPServerStatus) EnumDescriptor() ([]byte, []int) {
 
 // MCPServerConfig represents the configuration for an MCP server
 type MCPServerConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Command       string                 `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
-	Args          []string               `protobuf:"bytes,2,rep,name=args,proto3" json:"args,omitempty"`
-	Env           []string               `protobuf:"bytes,3,rep,name=env,proto3" json:"env,omitempty"`
-	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
-	Url           *string                `protobuf:"bytes,5,opt,name=url,proto3,oneof" json:"url,omitempty"`
-	Headers       map[string]string      `protobuf:"bytes,6,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Command string                 `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
+	Args    []string               `protobuf:"bytes,2,rep,name=args,proto3" json:"args,omitempty"`
+	// KEY=VALUE pairs as the user wrote them: a value may be a literal API key.
+	Env  []string `protobuf:"bytes,3,rep,name=env,proto3" json:"env,omitempty"`
+	Type string   `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
+	Url  *string  `protobuf:"bytes,5,opt,name=url,proto3,oneof" json:"url,omitempty"`
+	// As the user wrote them: a value may be a literal bearer token.
+	Headers       map[string]string `protobuf:"bytes,6,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1750,14 +1752,14 @@ var File_reliant_v1_mcp_proto protoreflect.FileDescriptor
 const file_reliant_v1_mcp_proto_rawDesc = "" +
 	"\n" +
 	"\x14reliant/v1/mcp.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\"\x84\x02\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\"\x8e\x02\n" +
 	"\x0fMCPServerConfig\x12\x18\n" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12\x12\n" +
-	"\x04args\x18\x02 \x03(\tR\x04args\x12\x10\n" +
-	"\x03env\x18\x03 \x03(\tR\x03env\x12\x12\n" +
+	"\x04args\x18\x02 \x03(\tR\x04args\x12\x15\n" +
+	"\x03env\x18\x03 \x03(\tB\x03\x80\x01\x01R\x03env\x12\x12\n" +
 	"\x04type\x18\x04 \x01(\tR\x04type\x12\x15\n" +
-	"\x03url\x18\x05 \x01(\tH\x00R\x03url\x88\x01\x01\x12B\n" +
-	"\aheaders\x18\x06 \x03(\v2(.reliant.v1.MCPServerConfig.HeadersEntryR\aheaders\x1a:\n" +
+	"\x03url\x18\x05 \x01(\tH\x00R\x03url\x88\x01\x01\x12G\n" +
+	"\aheaders\x18\x06 \x03(\v2(.reliant.v1.MCPServerConfig.HeadersEntryB\x03\x80\x01\x01R\aheaders\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x06\n" +
@@ -1905,12 +1907,12 @@ const file_reliant_v1_mcp_proto_rawDesc = "" +
 	"\x19MCP_SERVER_STATUS_HEALTHY\x10\x01\x12\x1f\n" +
 	"\x1bMCP_SERVER_STATUS_UNHEALTHY\x10\x02\x12\"\n" +
 	"\x1eMCP_SERVER_STATUS_DISCONNECTED\x10\x03\x12\x1e\n" +
-	"\x1aMCP_SERVER_STATUS_DISABLED\x10\x042\xd6\n" +
+	"\x1aMCP_SERVER_STATUS_DISABLED\x10\x042\xd0\n" +
 	"\n" +
 	"\n" +
-	"MCPService\x12S\n" +
-	"\vListServers\x12\x1e.reliant.v1.ListServersRequest\x1a\x1f.reliant.v1.ListServersResponse\"\x03\x90\x02\x01\x12M\n" +
-	"\tGetServer\x12\x1c.reliant.v1.GetServerRequest\x1a\x1d.reliant.v1.GetServerResponse\"\x03\x90\x02\x01\x12Y\n" +
+	"MCPService\x12P\n" +
+	"\vListServers\x12\x1e.reliant.v1.ListServersRequest\x1a\x1f.reliant.v1.ListServersResponse\"\x00\x12J\n" +
+	"\tGetServer\x12\x1c.reliant.v1.GetServerRequest\x1a\x1d.reliant.v1.GetServerResponse\"\x00\x12Y\n" +
 	"\x0eGetServerTools\x12!.reliant.v1.GetServerToolsRequest\x1a\".reliant.v1.GetServerToolsResponse\"\x00\x12\x9e\x01\n" +
 	"\rInstallServer\x12 .reliant.v1.InstallServerRequest\x1a!.reliant.v1.InstallServerResponse\"H\xa2\xbb\x18D:B\n" +
 	"\ainstall\x12\x12\n" +

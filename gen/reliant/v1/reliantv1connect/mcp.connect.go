@@ -69,9 +69,17 @@ const (
 type MCPServiceClient interface {
 	// ListServers returns all configured MCP servers with their status
 	// forge:custom — merges the project's three config scopes with the daemon's live server status
+	//
+	// It only reads, but it is deliberately NOT NO_SIDE_EFFECTS: each server's
+	// config.headers and config.env come back as the user stored them, API keys
+	// and bearer tokens included, and NO_SIDE_EFFECTS lets Connect serve the rpc
+	// over HTTP GET, whose responses a cache or proxy may store and replay.
 	ListServers(context.Context, *connect.Request[v1.ListServersRequest]) (*connect.Response[v1.ListServersResponse], error)
 	// GetServer returns detailed information about a specific MCP server
 	// forge:custom — resolves one server across the project's config scopes and the daemon's live status
+	//
+	// Not NO_SIDE_EFFECTS, for the reason ListServers is not: its config carries
+	// the server's stored headers and env, secrets included.
 	GetServer(context.Context, *connect.Request[v1.GetServerRequest]) (*connect.Response[v1.GetServerResponse], error)
 	// GetServerTools returns the list of tools exposed by a specific MCP server
 	GetServerTools(context.Context, *connect.Request[v1.GetServerToolsRequest]) (*connect.Response[v1.GetServerToolsResponse], error)
@@ -106,14 +114,12 @@ func NewMCPServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+MCPServiceListServersProcedure,
 			connect.WithSchema(mCPServiceMethods.ByName("ListServers")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getServer: connect.NewClient[v1.GetServerRequest, v1.GetServerResponse](
 			httpClient,
 			baseURL+MCPServiceGetServerProcedure,
 			connect.WithSchema(mCPServiceMethods.ByName("GetServer")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getServerTools: connect.NewClient[v1.GetServerToolsRequest, v1.GetServerToolsResponse](
@@ -236,9 +242,17 @@ func (c *mCPServiceClient) MoveServerScope(ctx context.Context, req *connect.Req
 type MCPServiceHandler interface {
 	// ListServers returns all configured MCP servers with their status
 	// forge:custom — merges the project's three config scopes with the daemon's live server status
+	//
+	// It only reads, but it is deliberately NOT NO_SIDE_EFFECTS: each server's
+	// config.headers and config.env come back as the user stored them, API keys
+	// and bearer tokens included, and NO_SIDE_EFFECTS lets Connect serve the rpc
+	// over HTTP GET, whose responses a cache or proxy may store and replay.
 	ListServers(context.Context, *connect.Request[v1.ListServersRequest]) (*connect.Response[v1.ListServersResponse], error)
 	// GetServer returns detailed information about a specific MCP server
 	// forge:custom — resolves one server across the project's config scopes and the daemon's live status
+	//
+	// Not NO_SIDE_EFFECTS, for the reason ListServers is not: its config carries
+	// the server's stored headers and env, secrets included.
 	GetServer(context.Context, *connect.Request[v1.GetServerRequest]) (*connect.Response[v1.GetServerResponse], error)
 	// GetServerTools returns the list of tools exposed by a specific MCP server
 	GetServerTools(context.Context, *connect.Request[v1.GetServerToolsRequest]) (*connect.Response[v1.GetServerToolsResponse], error)
@@ -269,14 +283,12 @@ func NewMCPServiceHandler(svc MCPServiceHandler, opts ...connect.HandlerOption) 
 		MCPServiceListServersProcedure,
 		svc.ListServers,
 		connect.WithSchema(mCPServiceMethods.ByName("ListServers")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	mCPServiceGetServerHandler := connect.NewUnaryHandler(
 		MCPServiceGetServerProcedure,
 		svc.GetServer,
 		connect.WithSchema(mCPServiceMethods.ByName("GetServer")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	mCPServiceGetServerToolsHandler := connect.NewUnaryHandler(

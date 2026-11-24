@@ -18916,7 +18916,7 @@
           "output": "reliant.v1.GetServerResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "NO_SIDE_EFFECTS",
+          "idempotency": "UNKNOWN",
           "auth_required": true
         },
         {
@@ -18956,7 +18956,7 @@
           "output": "reliant.v1.ListServersResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "NO_SIDE_EFFECTS",
+          "idempotency": "UNKNOWN",
           "auth_required": true
         },
         {
@@ -19025,8 +19025,7 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "NoSideEffects": true,
-            "Idempotency": "NO_SIDE_EFFECTS",
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
             "InputTypeFQ": "reliant.v1.ListServersRequest",
             "OutputTypeFQ": "reliant.v1.ListServersResponse",
             "InputProtoFile": "reliant/v1/mcp.proto",
@@ -19044,8 +19043,7 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "NoSideEffects": true,
-            "Idempotency": "NO_SIDE_EFFECTS",
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
             "InputTypeFQ": "reliant.v1.GetServerRequest",
             "OutputTypeFQ": "reliant.v1.GetServerResponse",
             "InputProtoFile": "reliant/v1/mcp.proto",
