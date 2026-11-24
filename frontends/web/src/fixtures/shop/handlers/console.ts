@@ -67,7 +67,8 @@ import {
 } from "../shopStory";
 
 const REPO = DEMO_REPO;
-const FORGE_VERSION = "v1.0.17";
+/** The forge every release was cut with (provenance, deploy attempts, recorded test runs). */
+export const FORGE_VERSION = "v1.0.17";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -198,8 +199,8 @@ function provenance(version: string) {
   };
 }
 
-/** A workload's artifact digest in `version`: unchanged since the release that last changed it. */
-const artifactDigest = (workload: string, version: string) => digest(`${workload}@${artifactVersion(workload, version)}`);
+/** A workload's artifact digest in `version`: unchanged since the release that last changed it (Security's SBOMs name it too). */
+export const artifactDigest = (workload: string, version: string) => digest(`${workload}@${artifactVersion(workload, version)}`);
 
 function environment(env: (typeof DEMO_ENVS)[number]) {
   const running = RUNNING[env.id];

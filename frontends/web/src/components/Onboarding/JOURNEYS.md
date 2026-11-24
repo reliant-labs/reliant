@@ -394,7 +394,7 @@ the visitor stays on the console.
 ### Page tours (the demo)
 
 The public demo gives each page one compact, non-modal explanation: what it
-is, why it helps, and how to use it (2–3 sentences). Dismiss leaves an
+is, why it helps, and how to use it (2–3 sentences). Done closes it and leaves an
 accessible `?` restore button. Secondary agent help is a click/tap/keyboard
 disclosure, not hover-only. Deploy yours free is primary (the only button on a phone), Install forge and Sign up free secondary.
 There is no global toast or automatic local multi-stop sequence.
@@ -402,7 +402,8 @@ There is no global toast or automatic local multi-stop sequence.
 A section's first visit this session opens that page's explanation by itself
 on a laptop; a reload, coming back, or a sub-page does not (a phone gets a
 closed "About this page" disclosure instead). `DemoTips` owns `PageEntryTour`,
-with Step 1 of 1, Dismiss and Done inside its callout. There is no full-site
+with Done (and "How an agent helps", where the page has no agent card of its
+own) inside its callout. There is no full-site
 sequence or prerequisite action. `?` replays it. Same-page filters, polling and
 rerenders do not restart it. Legacy `/forge/demo?view=logs&tour=forge:fg-logs`
 explains Logs.
@@ -410,7 +411,8 @@ Phone callouts use a bottom sheet after the drawer closes; their targets scroll
 into view above it. No auth or modal is required to explore.
 
 Copy and a single optional anchor live in `tips/tipCopy.ts`; page mapping is
-`tips/tipKeys.ts`. `DemoTipsAndToast.test.tsx` pins automatic entry, Dismiss /
+`tips/tipKeys.ts`: every page the demo's nav lists has a tip (the pages it does
+not serve, `DEMO_HIDDEN_PAGES`, have none). `DemoTipsAndToast.test.tsx` pins automatic entry, Done /
 restore, current-page legacy links, real navigation and plain-language copy.
 
 | Event | Props |

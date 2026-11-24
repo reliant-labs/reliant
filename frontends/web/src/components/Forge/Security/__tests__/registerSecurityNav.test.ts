@@ -77,16 +77,21 @@ describe("Security ▾", () => {
     expect(activeArea(hybridNav, ctxAt(VULNS))).toBeNull();
   });
 
-  it("puts both rows after More tools in the forge host's grouped nav, which draws no Security group", () => {
+  it("lists both rows in the grouped nav's Security group too, before Configure", () => {
     unregister = registerSecurityNav();
     const items = buildGroupedConsoleNav({ project: "shopfront", page: { kind: "sboms" }, env: "prod", envs: [{ name: "prod", preview: false }] }).items;
     const labels = items.map((item) => item.label);
-    const at = labels.indexOf("Vulnerabilities");
-    expect(at).toBeGreaterThan(-1);
-    expect(labels.slice(at, at + 2)).toEqual(["Vulnerabilities", "SBOMs"]);
-    expect(items[at + 1]!.href).toBe(`${SBOMS}?env=prod`);
-    expect(items[at + 1]!.active).toBe(true);
-    expect(items[at]!.active).toBe(false);
+    expect(labels.indexOf("Security")).toBe(labels.indexOf("Configure") - 1);
+    const group = items.find((item) => item.label === "Security")!;
+    expect(group.children!.map((child) => [child.label, child.href, child.active])).toEqual([
+      ["Vulnerabilities", `${VULNS}?env=prod`, false],
+      ["SBOMs", `${SBOMS}?env=prod`, true],
+    ]);
+  });
+
+  it("draws no Security group in the grouped nav until the rows register", () => {
+    const items = buildGroupedConsoleNav({ project: "shopfront", page: { kind: "overview" }, env: "prod", envs: [{ name: "prod", preview: false }] }).items;
+    expect(items.map((item) => item.label)).not.toContain("Security");
   });
 
   it("is registered by the module that mounts the console's routes", async () => {
