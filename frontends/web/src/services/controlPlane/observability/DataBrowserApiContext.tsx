@@ -6,9 +6,10 @@
  * and BrowseTable.
  *
  * The same shape as ObservabilityApiContext, kept separate because the data
- * browser is not an observability view: component tests and the dev-only
- * preview (/forge-data-preview) hand it the in-memory fixture
- * (Data/__fixtures__/fixtureDataApi.ts), and production never provides
+ * browser is not an observability view: component tests hand it the
+ * in-memory fixture (Data/__fixtures__/fixtureDataApi.ts), and production
+ * (and the dev-only preview, /forge-data-preview, over the shop fixture
+ * pack's transport) never provides
  * anything but the real client, which calls the control plane directly with
  * the user's session (never through the daemon: services/forge/live.ts).
  */

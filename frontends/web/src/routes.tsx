@@ -145,8 +145,8 @@ const SetupSurfacesPreview = lazyRoute(
   () => import('./components/OnboardingFlow/__preview__/SetupSurfacesPreview'), 'default')
 const SecretsPreview = lazyRoute(
   () => import('./components/Forge/Secrets/__preview__/SecretsPreview'), 'default')
-// The whole Forge pane against a fake network (control-plane's real state as
-// fixtures) — see ForgePanePreview for why the fake sits at fetch.
+// The whole forge console over the shop fixture pack's transport (src/fixtures/preview.tsx)
+// — see ForgePanePreview for why the fake sits at the transport.
 const ForgePanePreview = lazyRoute(
   () => import('./components/Forge/__preview__/ForgePanePreview'), 'ForgePanePreview')
 // The Observability tab against in-memory fixtures — every view and state,
@@ -690,9 +690,9 @@ const consolePrimitivesPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><ConsolePrimitivesPreview /></DevOnlyRoute>,
 })
 
-// The Releases list and a release, inside the real console chrome, against the
-// fixture ledger — every state (data, empty, error, loading, a ledger that
-// failed) in every scheme, no backend.
+// The Releases list and a release, in the real console, over the shop fixture
+// pack — every state (data, empty, error, loading, a ledger that failed) in
+// every scheme, no backend.
 const forgeReleasesPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-releases-preview',
@@ -702,9 +702,8 @@ const forgeReleasesPreviewRoute = createRoute({
 // The Observability home, Dashboards and a dashboard, inside the real console
 // chrome, against the fixture app and an in-memory DashboardService — every
 // state in every scheme, no backend.
-// The Overview (with the workloads) and a workload, inside the real console
-// chrome, against the workload fixtures — every state in every scheme, no
-// backend.
+// The Overview (with the workloads) and a workload, in the real console, over
+// the shop fixture pack — every state in every scheme, no backend.
 const forgeWorkloadsPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-workloads-preview',
@@ -712,7 +711,7 @@ const forgeWorkloadsPreviewRoute = createRoute({
 })
 
 // The storage browser (buckets, a level, an object's preview and download),
-// inside the real console chrome, against the fixture buckets — every state
+// inside the real console chrome, over the shop fixture pack — every state
 // in every scheme, no backend.
 const forgeStoragePreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -721,7 +720,7 @@ const forgeStoragePreviewRoute = createRoute({
 })
 
 // The data browser (databases, tables, a grid, a row and its Related), inside
-// the real console chrome, against the fixture shop — every state in every
+// the real console chrome, over the shop fixture pack — every state in every
 // scheme, no backend.
 const forgeDataPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,

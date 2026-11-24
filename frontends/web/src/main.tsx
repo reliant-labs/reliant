@@ -5,6 +5,10 @@ import "./lib/oauthCallbackBoot";
 // import would run AFTER every import below (hoisting), missing all of
 // startup — see lib/browser-log-boot.ts.
 import "./lib/browser-log-boot";
+// A dev fixture preview's page names a control plane (the fixture transport)
+// before anything reads the config; a no-op elsewhere and in production builds
+// — see fixtures/previewBoot.ts.
+import "./fixtures/previewBoot";
 // Next, for the same reason: it checks the runtime config (config.js) before
 // any module that reads it evaluates, and on a document that cannot work it
 // shows what is wrong and stops the boot — see lib/configGuard.ts.
