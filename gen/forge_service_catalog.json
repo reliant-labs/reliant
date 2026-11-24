@@ -26,6 +26,7 @@
         "Chat",
         "ChatUpdateHeadsBackfill",
         "ChatUpdateHub",
+        "Chatprlinks",
         "Connection",
         "Connector",
         "ConnectorGrants",
@@ -504,6 +505,7 @@
         "AgentRuns",
         "ChangeController",
         "ChatUpdateHub",
+        "Chatprlinks",
         "CredentialsAutomationtokens",
         "CredentialsConnectionvault",
         "CredentialsOrgaccounts",
@@ -18916,7 +18918,7 @@
           "output": "reliant.v1.GetServerResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "NO_SIDE_EFFECTS",
+          "idempotency": "UNKNOWN",
           "auth_required": true
         },
         {
@@ -18956,7 +18958,7 @@
           "output": "reliant.v1.ListServersResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "NO_SIDE_EFFECTS",
+          "idempotency": "UNKNOWN",
           "auth_required": true
         },
         {
@@ -19025,8 +19027,7 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "NoSideEffects": true,
-            "Idempotency": "NO_SIDE_EFFECTS",
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
             "InputTypeFQ": "reliant.v1.ListServersRequest",
             "OutputTypeFQ": "reliant.v1.ListServersResponse",
             "InputProtoFile": "reliant/v1/mcp.proto",
@@ -19044,8 +19045,7 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "NoSideEffects": true,
-            "Idempotency": "NO_SIDE_EFFECTS",
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
             "InputTypeFQ": "reliant.v1.GetServerRequest",
             "OutputTypeFQ": "reliant.v1.GetServerResponse",
             "InputProtoFile": "reliant/v1/mcp.proto",
@@ -36975,6 +36975,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.SharingService/ListSharedWorkflowDrafts",
+          "name": "ListSharedWorkflowDrafts",
+          "input": "reliant.v1.ListSharedWorkflowDraftsRequest",
+          "output": "reliant.v1.ListSharedWorkflowDraftsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.SharingService/SetChatVisibility",
           "name": "SetChatVisibility",
           "input": "reliant.v1.SetChatVisibilityRequest",
@@ -36989,6 +36999,16 @@
           "name": "SetProjectVisibility",
           "input": "reliant.v1.SetProjectVisibilityRequest",
           "output": "reliant.v1.SetProjectVisibilityResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.SharingService/SetWorkflowDraftSharing",
+          "name": "SetWorkflowDraftSharing",
+          "input": "reliant.v1.SetWorkflowDraftSharingRequest",
+          "output": "reliant.v1.SetWorkflowDraftSharingResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -37082,6 +37102,47 @@
               "Declared": true,
               "None": "reads only: lists what others shared"
             }
+          },
+          {
+            "Name": "SetWorkflowDraftSharing",
+            "InputType": "SetWorkflowDraftSharingRequest",
+            "OutputType": "SetWorkflowDraftSharingResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.SetWorkflowDraftSharingRequest",
+            "OutputTypeFQ": "reliant.v1.SetWorkflowDraftSharingResponse",
+            "InputProtoFile": "reliant/v1/sharing.proto",
+            "OutputProtoFile": "reliant/v1/sharing.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "set_visibility",
+              "TargetKind": "workflow",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ListSharedWorkflowDrafts",
+            "InputType": "ListSharedWorkflowDraftsRequest",
+            "OutputType": "ListSharedWorkflowDraftsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ListSharedWorkflowDraftsRequest",
+            "OutputTypeFQ": "reliant.v1.ListSharedWorkflowDraftsResponse",
+            "InputProtoFile": "reliant/v1/sharing.proto",
+            "OutputProtoFile": "reliant/v1/sharing.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "reads only: lists what others shared"
+            }
           }
         ],
         "ProtoFile": "reliant/v1/sharing.proto",
@@ -37152,6 +37213,31 @@
               "MessageType": "reliant.v1.Project"
             }
           ],
+          "ListSharedWorkflowDraftsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "limit",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "offset",
+              "ProtoType": "int32",
+              "IsOptional": false
+            }
+          ],
+          "ListSharedWorkflowDraftsResponse": [
+            {
+              "Name": "workflows",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.SharedWorkflowDraft"
+            }
+          ],
           "SetChatVisibilityRequest": [
             {
               "Name": "chat_id",
@@ -37195,6 +37281,31 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Project"
+            },
+            {
+              "Name": "changed",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "SetWorkflowDraftSharingRequest": [
+            {
+              "Name": "workflow_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "visibility",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ],
+          "SetWorkflowDraftSharingResponse": [
+            {
+              "Name": "workflow",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.SharedWorkflowDraft"
             },
             {
               "Name": "changed",
@@ -37474,6 +37585,36 @@
               "repeated": true
             }
           ],
+          "reliant.v1.ListSharedWorkflowDraftsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "limit",
+              "kind": "int32",
+              "validate": {
+                "gte": "0",
+                "lte": "100"
+              }
+            },
+            {
+              "name": "offset",
+              "kind": "int32",
+              "validate": {
+                "gte": "0"
+              }
+            }
+          ],
+          "reliant.v1.ListSharedWorkflowDraftsResponse": [
+            {
+              "name": "workflows",
+              "kind": "message",
+              "type_name": "reliant.v1.SharedWorkflowDraft",
+              "repeated": true
+            }
+          ],
           "reliant.v1.Project": [
             {
               "name": "id",
@@ -37633,6 +37774,85 @@
               "kind": "bool"
             }
           ],
+          "reliant.v1.SetWorkflowDraftSharingRequest": [
+            {
+              "name": "workflow_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            }
+          ],
+          "reliant.v1.SetWorkflowDraftSharingResponse": [
+            {
+              "name": "workflow",
+              "kind": "message",
+              "type_name": "reliant.v1.SharedWorkflowDraft"
+            },
+            {
+              "name": "changed",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.SharedWorkflowDraft": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "slug",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "description",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "user_id",
+              "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.WorkflowDraftStatus"
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            },
+            {
+              "name": "viewer_access",
+              "kind": "bool"
+            },
+            {
+              "name": "shared_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "updated_at",
+              "kind": "string"
+            },
+            {
+              "name": "definition",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.WorktreeSummary": [
             {
               "name": "id",
@@ -37677,12 +37897,17 @@
           "reliant.v1.ListSharedChatsResponse": "reliant/v1/sharing.proto",
           "reliant.v1.ListSharedProjectsRequest": "reliant/v1/sharing.proto",
           "reliant.v1.ListSharedProjectsResponse": "reliant/v1/sharing.proto",
+          "reliant.v1.ListSharedWorkflowDraftsRequest": "reliant/v1/sharing.proto",
+          "reliant.v1.ListSharedWorkflowDraftsResponse": "reliant/v1/sharing.proto",
           "reliant.v1.Project": "reliant/v1/project.proto",
           "reliant.v1.ProviderPolicy": "reliant/v1/chat.proto",
           "reliant.v1.SetChatVisibilityRequest": "reliant/v1/sharing.proto",
           "reliant.v1.SetChatVisibilityResponse": "reliant/v1/sharing.proto",
           "reliant.v1.SetProjectVisibilityRequest": "reliant/v1/sharing.proto",
           "reliant.v1.SetProjectVisibilityResponse": "reliant/v1/sharing.proto",
+          "reliant.v1.SetWorkflowDraftSharingRequest": "reliant/v1/sharing.proto",
+          "reliant.v1.SetWorkflowDraftSharingResponse": "reliant/v1/sharing.proto",
+          "reliant.v1.SharedWorkflowDraft": "reliant/v1/sharing.proto",
           "reliant.v1.WorktreeSummary": "reliant/v1/worktree.proto"
         },
         "Enums": {
@@ -37725,6 +37950,11 @@
             "RESOURCE_VISIBILITY_UNSPECIFIED",
             "RESOURCE_VISIBILITY_PRIVATE",
             "RESOURCE_VISIBILITY_ORG"
+          ],
+          "reliant.v1.WorkflowDraftStatus": [
+            "WORKFLOW_DRAFT_STATUS_UNSPECIFIED",
+            "WORKFLOW_DRAFT_STATUS_DRAFT",
+            "WORKFLOW_DRAFT_STATUS_COMPLETE"
           ],
           "reliant.v1.WorkflowState": [
             "WORKFLOW_STATE_UNSPECIFIED",
@@ -37790,6 +38020,11 @@
             1,
             2
           ],
+          "reliant.v1.WorkflowDraftStatus": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.WorkflowState": [
             0,
             1,
@@ -37837,6 +38072,10 @@
           "reliant.v1.ResourceVisibility": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ResourceVisibility"
+          },
+          "reliant.v1.WorkflowDraftStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "WorkflowDraftStatus"
           },
           "reliant.v1.WorkflowState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -49256,6 +49495,11 @@
               "kind": "bool"
             },
             {
+              "name": "observe",
+              "kind": "message",
+              "type_name": "reliant.v1.NodeObserve"
+            },
+            {
               "name": "secret_refs",
               "kind": "message",
               "type_name": "reliant.v1.NodeSecretRef",
@@ -49358,6 +49602,26 @@
               "oneof": "args"
             }
           ],
+          "reliant.v1.NodeObserve": [
+            {
+              "name": "attributes",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            },
+            {
+              "name": "events",
+              "kind": "message",
+              "type_name": "reliant.v1.ObserveEvent",
+              "repeated": true
+            },
+            {
+              "name": "metrics",
+              "kind": "message",
+              "type_name": "reliant.v1.ObserveMetric",
+              "repeated": true
+            }
+          ],
           "reliant.v1.NodeRouterCandidate": [
             {
               "name": "id",
@@ -49428,6 +49692,54 @@
               "name": "default",
               "kind": "message",
               "type_name": "google.protobuf.Value"
+            }
+          ],
+          "reliant.v1.ObserveEvent": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "when",
+              "kind": "string"
+            },
+            {
+              "name": "each",
+              "kind": "string"
+            },
+            {
+              "name": "attributes",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            }
+          ],
+          "reliant.v1.ObserveMetric": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "value",
+              "kind": "string"
+            },
+            {
+              "name": "unit",
+              "kind": "string"
+            },
+            {
+              "name": "when",
+              "kind": "string"
+            },
+            {
+              "name": "attributes",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
             }
           ],
           "reliant.v1.Position": [
@@ -50508,6 +50820,11 @@
               "name": "check",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowCheck"
+            },
+            {
+              "name": "observe",
+              "kind": "message",
+              "type_name": "reliant.v1.NodeObserve"
             }
           ],
           "reliant.v1.WorkflowAttention": [
@@ -50860,10 +51177,13 @@
           "reliant.v1.ModelInputConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ModelSelector": "reliant/v1/workflow_v2.proto",
           "reliant.v1.Node": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.NodeObserve": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NodeRouterCandidate": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NodeSecretRef": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NumberInputConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ObjectInputConfig": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.ObserveEvent": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.ObserveMetric": "reliant/v1/workflow_v2.proto",
           "reliant.v1.Position": "reliant/v1/workflow_v2.proto",
           "reliant.v1.PresetInputConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.PresetsConfig": "reliant/v1/workflow_v2.proto",
@@ -54351,6 +54671,43 @@
       "implementation_candidates": []
     },
     {
+      "id": "Chatprlinks",
+      "name": "Chatprlinks",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/chatprlinks.Service",
+      "source": {
+        "path": "internal/chatprlinks/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/chatprlinks.MockService",
+          "source": {
+            "path": "internal/chatprlinks/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/chatprlinks.forgeMiddlewareService",
+          "source": {
+            "path": "internal/chatprlinks/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/chatprlinks.service",
+          "source": {
+            "path": "internal/chatprlinks/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "Connection",
       "name": "Connection",
       "kind": "component",
@@ -56843,6 +57200,30 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "Chatprlinks",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/chatprlinks.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chatprlinks",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/chatprlinks.Store",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "Connection",
       "field": "Connections",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/connection.Connections",
@@ -57495,6 +57876,19 @@
     },
     {
       "consumer": "IntegrationsWriteledger",
+      "field": "PRLinks",
+      "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.PRLinker",
+      "methods": [],
+      "candidates": [
+        "Chatprlinks"
+      ],
+      "providers": [
+        "Chatprlinks"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "IntegrationsWriteledger",
       "field": "Runs",
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.RunLookup",
       "methods": [],
@@ -57547,6 +57941,17 @@
       "consumer": "Llmusage",
       "field": "Ledger",
       "interface": "github.com/reliant-labs/reliant/internal/llmusage.Ledger",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Llmusage",
+      "field": "Tools",
+      "interface": "github.com/reliant-labs/reliant/internal/llmusage.ToolLedger",
       "methods": [],
       "candidates": [],
       "providers": [
@@ -58967,6 +59372,20 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "Sharing",
+      "field": "WorkflowDrafts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.WorkflowDrafts",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Workflowdrafts"
+      ],
+      "providers": [
+        "Workflowdrafts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "StateDerivation",
       "field": "Mirror",
       "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.Service",
@@ -60014,6 +60433,19 @@
     },
     {
       "consumer": "WorkerTrigger",
+      "field": "AutomationKeys",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/automationtokens.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsAutomationtokens"
+      ],
+      "providers": [
+        "CredentialsAutomationtokens"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerTrigger",
       "field": "ConnectionVault",
       "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
       "methods": [],
@@ -60232,6 +60664,19 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Worktree",
+      "field": "PRLinks",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.PRLinker",
+      "methods": [],
+      "candidates": [
+        "Chatprlinks"
+      ],
+      "providers": [
+        "Chatprlinks"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Worktree",

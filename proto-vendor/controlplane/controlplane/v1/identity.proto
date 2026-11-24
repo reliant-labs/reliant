@@ -226,3 +226,57 @@ message IdentitySummary {
   // Whether the control plane holds an instance for it.
   bool has_instance = 4;
 }
+
+// ImportIdentityUser is one account carried over from another identity
+// provider by ImportUsers: its id stays the account's id (every token's sub),
+// and its password hash, verified flag and social links come with it.
+//
+// It carries a CREDENTIAL (password_hash). Nothing that handles it logs,
+// audits or returns the hash: results name the id, an outcome and a reason.
+message ImportIdentityUser {
+  // The account's id in the identity: the id the app already keys its rows
+  // by. 1-200 of [A-Za-z0-9._@-]; a malformed one is the row's invalid
+  // result, never the request's error.
+  string id = 1;
+  // The address, and the account's login name.
+  string email = 2;
+  // The source provider's verified flag.
+  bool email_verified = 3;
+  string given_name = 4;
+  string family_name = 5;
+  string display_name = 6;
+  // A modular-crypt or PHC hash: bcrypt ($2a$/$2b$/$2y$, cost 10-16), and
+  // argon2, scrypt or pbkdf2 only where the instance verifies them. There is
+  // no plaintext field. Optional: an account without one signs in another way.
+  string password_hash = 7 [debug_redact = true];
+  // Social accounts that sign in to this account. Each provider must be a
+  // social provider the identity declares, applied on the instance.
+  repeated ImportIdentityLink links = 8;
+  // Written to the account. Keys under "forge." are refused.
+  map<string, string> metadata = 9;
+  // Keys of the identity's console-managed roles. A declared role is refused.
+  repeated string roles = 10;
+}
+
+// ImportIdentityLink is a social account linked to an imported user.
+message ImportIdentityLink {
+  // A declared social provider type: "github" or "google".
+  string provider = 1;
+  // The provider's STABLE id for the person (GitHub's numeric id, Google's
+  // sub), never a login or an address.
+  string provider_user_id = 2;
+  // A display name for the link (a GitHub login). Optional.
+  string provider_user_name = 3;
+}
+
+// ImportIdentityResult is what ImportUsers did with one row. It carries no
+// row content beyond the id.
+message ImportIdentityResult {
+  string id = 1;
+  // created | updated | unchanged | conflict | invalid | failed.
+  string outcome = 2;
+  // Why, for a row that is not created, updated or unchanged
+  // (email_taken_by_other_id, unsupported_hash, provider_not_applied,
+  // link_taken, ...); for unchanged, what an update would change.
+  string reason = 3;
+}

@@ -469,6 +469,9 @@ type WorkerTriggerDeps struct {
 	Pollers         *webhook.Registry
 	Integrations    *IntegrationSettings
 	ControlPlane    *configv1.ControlPlaneConfig
+	// AutomationKeys holds each daemon's delegated automation token;
+	// trigger.New requires it whenever ControlPlane is set (hosted).
+	AutomationKeys automationtokens.Service
 	// Owners re-owns an orphaned trigger; trigger.New requires it.
 	Owners triggerowner.Service
 }
@@ -515,6 +518,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Syncer:         syncer,
 		Fires:          fires,
 		ControlPlane:   hostedControlPlane(d.ControlPlane),
+		AutomationKeys: d.AutomationKeys,
 		Access:         access,
 		Integrations:   d.Integrations.Config,
 		Sealer:         d.Vault,

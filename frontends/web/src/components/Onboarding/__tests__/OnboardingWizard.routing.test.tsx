@@ -8,7 +8,7 @@
  * Runs against the shipped journeys:
  *   workflows: wf-example → wf-edge → … → wf-inputs (the builder, on the
  *              example the first step recorded) → wf-outro-layout (Reliant-only
- *              outro: Make your own, collapses panels)
+ *              outro: Make your own; Finish closes only what it opened)
  * The workflows journey has no required action, so the action-gated tests
  * run on a small fixture journey registered in its place.
  *   forge:     fg-intro → … → fg-done (journeys/forge.tsx; its own test covers it)
@@ -206,10 +206,16 @@ vi.mock("../OnboardingChecklist", () => ({
   OnboardingChecklist: () => null,
 }));
 
-// The workflows outro collapses the workspace panels on completion; observe
-// it rather than drive the real panel stores.
+// The workflows outro closes the panels it opened on completion (never the
+// left nav); observe it rather than drive the real panel stores.
 vi.mock("../journeys/layoutActions", () => ({
-  layoutActions: { collapseAll: vi.fn(), showSidebar: vi.fn(), hideSidebar: vi.fn() },
+  layoutActions: {
+    collapseAll: vi.fn(),
+    showSidebar: vi.fn(),
+    hideSidebar: vi.fn(),
+    showFilesForTour: vi.fn(),
+    hidePanelsTourOpened: vi.fn(),
+  },
 }));
 
 // The first step adds the example and opens it; here it already exists.
@@ -289,7 +295,8 @@ const tourParam = (router: ReturnType<typeof makeRouter>) =>
 describe("journey engine (OnboardingWizard)", () => {
   beforeEach(() => {
     vi.mocked(trackEvent).mockClear();
-    vi.mocked(layoutActions.collapseAll).mockClear();
+    vi.mocked(layoutActions.hidePanelsTourOpened).mockClear();
+    vi.mocked(layoutActions.hideSidebar).mockClear();
     tourStoreState.state.markTourCompleted.mockClear();
     tourStoreState.state.setResumeStep.mockClear();
     localStorage.clear();
@@ -470,7 +477,9 @@ describe("journey engine (OnboardingWizard)", () => {
       await userEvent.click(await screen.findByRole("button", { name: /finish/i }));
       await waitFor(() => expect(router.state.location.pathname).toBe("/project/project-1"));
       expect(tourParam(router)).toBeUndefined();
-      expect(layoutActions.collapseAll).toHaveBeenCalledTimes(1);
+      expect(layoutActions.hidePanelsTourOpened).toHaveBeenCalledTimes(1);
+      // The left nav is the shell's navigation: Finish never closes it.
+      expect(layoutActions.hideSidebar).not.toHaveBeenCalled();
       expect(tourStoreState.state.markTourCompleted).toHaveBeenCalledWith("workflows", "completed");
       expect(trackEvent).toHaveBeenCalledWith("journey_completed", expect.objectContaining({ journey: "workflows" }));
       expect(trackEvent).toHaveBeenCalledWith(
@@ -484,7 +493,7 @@ describe("journey engine (OnboardingWizard)", () => {
       await userEvent.click(await screen.findByTestId("wf-make-your-own"));
       await waitFor(() => expect(router.state.location.pathname).toBe("/workflow/new"));
       expect(tourParam(router)).toBeUndefined();
-      expect(layoutActions.collapseAll).toHaveBeenCalledTimes(1);
+      expect(layoutActions.hidePanelsTourOpened).toHaveBeenCalledTimes(1);
       expect(tourStoreState.state.markTourCompleted).toHaveBeenCalledWith("workflows", "completed");
     });
 

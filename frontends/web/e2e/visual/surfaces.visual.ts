@@ -546,6 +546,43 @@ const SURFACES: Surface[] = [
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByText('Migrate order confirmation emails', { exact: false }).first(),
   },
+  // The floating Setup Guide (Onboarding/OnboardingChecklist.tsx): open above the chat home's
+  // composer, and collapsed and open on an app's console; then the nav footer's Help menu (sidebar/HelpMenu.tsx).
+  // `ready` waits on the fixture's settled progress, not on the guide alone: its items are detected
+  // from cached queries (chats, workflows) that land at different times, so the guide first shows fewer done.
+  {
+    name: 'shell-setup-guide',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByRole('region', { name: 'Setup guide' }).getByText('6 of 8 done'),
+    harness: { storage: { 'reliant.checklist.panelState': 'expanded' } },
+  },
+  {
+    name: 'shell-setup-guide-app-collapsed',
+    path: '/forge/p/shopfront',
+    on: ['desktop'],
+    ready: (page) => page.getByRole('button', { name: 'Get started, 6 of 8 done' }),
+    harness: { storage: { 'reliant.checklist.panelState': 'collapsed' } },
+  },
+  {
+    name: 'shell-setup-guide-app-expanded',
+    path: '/forge/p/shopfront',
+    on: ['desktop'],
+    ready: (page) => page.getByRole('region', { name: 'Setup guide' }).getByText('6 of 8 done'),
+    harness: { storage: { 'reliant.checklist.panelState': 'expanded' } },
+  },
+  {
+    name: 'shell-help-menu',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByText('Migrate order confirmation emails', { exact: false }).first(),
+    act: async (page) => {
+      // The composer takes focus as the chat home settles, and a menu closes when focus leaves it: open it after.
+      await page.waitForFunction(() => document.activeElement?.tagName === 'TEXTAREA')
+      await page.getByTestId('nav-help').click()
+      await page.getByRole('menuitem', { name: 'Keyboard shortcuts' }).waitFor()
+    },
+  },
   {
     name: 'shell-inbox',
     path: '/inbox',

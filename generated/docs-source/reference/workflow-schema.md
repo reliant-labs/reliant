@@ -42,6 +42,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `permissions` | string[] | No | - |
 | `attention` | WorkflowAttention | No | *Explicit human-attention incident correlation for root unattended launch runs, independent of lifecycle and outcome. Absent preserves legacy behavior. See WorkflowAttention below.* |
 | `check` | WorkflowCheck | No | *A GitHub check run the engine owns, one per run an event trigger fires, written as the Reliant App: queued when the firing is recorded, in_progress when the first node starts, and concluded on every ending (success, failure, cancelled, timed_out; never neutral or skipped). `check: <name>` or {name, repository, head_sha, output, timeout}. See WorkflowCheck below.* |
+| `observe` | NodeObserve | No | *The default observe block for every node of this graph ({attributes, events, metrics}, templates over each node's `output` and `node`), merged with a node's own: attributes by key and metrics by name (the node wins), events concatenated. Not inherited by sub-workflows. See the nodes reference, Observability. This release reads and validates it and records nothing yet.* |
 
 ---
 

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatprlinks"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
 	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
@@ -571,6 +572,7 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 		Integrations:    g.IntegrationSettings(),
 		DB:              g.Database(),
 		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		AutomationKeys:  g.CredentialsAutomationtokens(),
 		Owners:          g.Triggerowner(),
 	})
 }
@@ -1119,6 +1121,7 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 		Temporal:       g.TemporalClient().Client,
 		Settler:        g.WorktreeSweep(),
+		PRLinks:        g.Chatprlinks(),
 	})
 }
 
@@ -1643,17 +1646,19 @@ func (g *Graph) newChatUpdateHeadsBackfill() (*ChatUpdateHeadsBackfill, error) {
 }
 
 // newSharing constructs the sharing handler (internal/handlers/sharing):
-// read-only sharing of chats and projects with their org's live members.
+// read-only sharing of chats, projects and saved workflows with their org's
+// live members.
 func (g *Graph) newSharing() (*sharing.Service, error) {
 	o := g.Database().ORM()
 	return sharing.New(sharing.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Chats:    store.NewChatsWithActivityExtStore(o),
-		Projects: store.NewProjectExtStore(o),
-		Shares:   store.NewShareEventExtStore(o),
-		Tx:       o,
-		Orgs:     g.OrgResolver(),
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Chats:          store.NewChatsWithActivityExtStore(o),
+		Projects:       store.NewProjectExtStore(o),
+		WorkflowDrafts: g.Workflowdrafts(),
+		Shares:         store.NewShareEventExtStore(o),
+		Tx:             o,
+		Orgs:           g.OrgResolver(),
 	})
 }
 
@@ -1734,6 +1739,7 @@ func (g *Graph) newLlmusage() (llmusage.Service, error) {
 		Logger: g.Log,
 		Config: g.Cfg,
 		Ledger: store.NewLlmCallUsageExtStore(g.Database().ORM()),
+		Tools:  store.NewToolCallUsageExtStore(g.Database().ORM()),
 		Tx:     g.Database(),
 	})
 	if err != nil {
@@ -1877,6 +1883,7 @@ func (g *Graph) newIntegrationsWriteledger() (writeledger.Service, error) {
 		Store:     g.WriteLedgerStore(),
 		Runs:      g.Database(),
 		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
+		PRLinks:   g.Chatprlinks(),
 		Now:       time.Now, // framework clock
 	})), nil
 }
@@ -1961,4 +1968,17 @@ func (g *Graph) newProjectpurge() (projectpurge.Service, error) {
 	return projectpurge.NewServiceWithForgeMiddleware(projectpurge.New(projectpurge.Deps{
 		DB: g.Database().ORM(), // the project's ORM client
 	})), nil
+}
+
+// newChatprlinks constructs the chatprlinks package (internal/chatprlinks).
+func (g *Graph) newChatprlinks() (chatprlinks.Service, error) {
+	svc, err := chatprlinks.New(chatprlinks.Deps{
+		Store: store.NewChatPrLinkExtStore(g.Database().ORM()),
+		Chats: g.Database(),
+		Now:   time.Now, // framework clock
+	})
+	if err != nil {
+		return nil, err
+	}
+	return chatprlinks.NewServiceWithForgeMiddleware(svc), nil
 }

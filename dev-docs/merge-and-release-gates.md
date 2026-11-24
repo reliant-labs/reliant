@@ -38,7 +38,7 @@ Neither gate keeps a second copy of it.
 | Tier | Command | What it runs | When |
 |---|---|---|---|
 | **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change; golangci-lint over the packages with a changed `.go` file, findings in the changed files (`scripts/golangci-changed.sh`, the merge queue's `golangci (changed)` job, outside the queue); the web `tsc -b` (incremental on state this checkout wrote; `--force` on a first run or copied state) when a web lane is selected or a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint), in the merge queue too; the forge demo bundle's build when the diff reaches its import graph; migration-safety when a migration or forge.yaml changed; electron's tests when electron reads a changed file; the whole lane when the rules cannot scope a change; and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
-| **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, `go vet ./...`, `task test` as three steps (Go `-race -count=1` without `-short`, so every slow test runs, then web and electron in full), `task test:integration` and `task test:e2e`. CI runs them as parallel parts (below) | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
+| **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, the forge demo bundle's size budget (`task demo:bundle-size`), `go vet ./...`, `task test` as three steps (Go `-race -count=1` without `-short`, so every slow test runs, then web and electron in full), `task test:integration` and `task test:e2e`. CI runs them as parallel parts (below) | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
 
 ## The merge gate
 
@@ -355,6 +355,20 @@ slow tests and the race detector (`task test`), golangci-lint and buf lint
 (the unscoped `forge lint`), link errors (`go build ./...`), deferred Go
 packages and vitest files (`task test` runs every one), and the whole
 `forge generate` where the merge gate ran only the generate hooks.
+
+### The demo bundle's size budget (owner, 2026-11-24)
+
+The release gate's `demo-size` step (`task demo:bundle-size`,
+`scripts/demo-bundle-size.sh`) builds the forge demo as forge ships it and
+fails when its initial or total gzip is over
+`frontends/web/scripts/demo/bundle-budget.json`. It **gates releases only**: the
+merge gate builds the demo for its guard (`vite-plugin-demo-bundle.ts`), never
+for its size, and a pull request that moves the demo pastes
+`task demo:bundle-size -- --report-only` (with `--before`, its before and after)
+into its body instead. In CI it runs in the `webbuild` part, after the
+renderer's release build; the RC train runs it in `static`. What it measures,
+today's numbers and how a ceiling moves: `dev-docs/demo-inventory.md`, "Bundle
+size".
 
 ### What the merge gate does not catch
 
@@ -869,7 +883,7 @@ CI splits two parts further than the RC train (control-plane
 of parts:
 
 - **static is three parts**, generate (`npm generate docs`), webbuild
-  (`npm webbuild`) and compile (`npm build typecheck vet`). As one part its
+  (`npm webbuild demo-size`) and compile (`npm build typecheck vet`). As one part its
   slow steps ran one after another (generate 283s, webbuild 223s, vet 107s on
   2026-11-20) and it was one of the three jobs that set the run's ~15 minutes.
   The webbuild part also replaces the separate `web-bundle` job off a pull

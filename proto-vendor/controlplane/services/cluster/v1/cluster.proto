@@ -40,10 +40,12 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/cluster/
 service ClusterService {
   // ListClusters returns every live cluster of the caller's org, by name.
   rpc ListClusters(ListClustersRequest) returns (ListClustersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   // GetCluster returns one cluster of the caller's org.
   rpc GetCluster(GetClusterRequest) returns (GetClusterResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   // RemoveCluster disconnects a BYO cluster, dropping its stored connection

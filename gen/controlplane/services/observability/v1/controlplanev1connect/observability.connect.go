@@ -271,60 +271,70 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+ObservabilityServiceSearchLogsProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("SearchLogs")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listTraces: connect.NewClient[v1.ListTracesRequest, v1.ListTracesResponse](
 			httpClient,
 			baseURL+ObservabilityServiceListTracesProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("ListTraces")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getTrace: connect.NewClient[v1.GetTraceRequest, v1.GetTraceResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetTraceProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetTrace")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listMetrics: connect.NewClient[v1.ListMetricsRequest, v1.ListMetricsResponse](
 			httpClient,
 			baseURL+ObservabilityServiceListMetricsProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("ListMetrics")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getMetric: connect.NewClient[v1.GetMetricRequest, v1.GetMetricResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetMetricProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetMetric")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listMetricExemplars: connect.NewClient[v1.ListMetricExemplarsRequest, v1.ListMetricExemplarsResponse](
 			httpClient,
 			baseURL+ObservabilityServiceListMetricExemplarsProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("ListMetricExemplars")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getServiceGraph: connect.NewClient[v1.GetServiceGraphRequest, v1.GetServiceGraphResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetServiceGraphProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetServiceGraph")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getServiceGraphCatalog: connect.NewClient[v1.GetServiceGraphCatalogRequest, v1.GetServiceGraphCatalogResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetServiceGraphCatalogProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetServiceGraphCatalog")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getServiceOverview: connect.NewClient[v1.GetServiceOverviewRequest, v1.GetServiceOverviewResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetServiceOverviewProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetServiceOverview")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getFlamegraph: connect.NewClient[v1.GetFlamegraphRequest, v1.GetFlamegraphResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetFlamegraphProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetFlamegraph")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		exportPGOProfile: connect.NewClient[v1.ExportPGOProfileRequest, v1.ExportPGOProfileResponse](
@@ -338,60 +348,70 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+ObservabilityServiceQueryPanelProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("QueryPanel")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listAttributeValues: connect.NewClient[v1.ListAttributeValuesRequest, v1.ListAttributeValuesResponse](
 			httpClient,
 			baseURL+ObservabilityServiceListAttributeValuesProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("ListAttributeValues")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getServiceSignals: connect.NewClient[v1.GetServiceSignalsRequest, v1.GetServiceSignalsResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetServiceSignalsProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetServiceSignals")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listWorkloads: connect.NewClient[v1.ListWorkloadsRequest, v1.ListWorkloadsResponse](
 			httpClient,
 			baseURL+ObservabilityServiceListWorkloadsProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("ListWorkloads")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getWorkload: connect.NewClient[v1.GetWorkloadRequest, v1.GetWorkloadResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetWorkloadProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetWorkload")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getManagedDatabaseMetrics: connect.NewClient[v1.GetManagedDatabaseMetricsRequest, v1.GetManagedDatabaseMetricsResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetManagedDatabaseMetricsProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetManagedDatabaseMetrics")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getDashboards: connect.NewClient[v1.GetDashboardsRequest, v1.GetDashboardsResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetDashboardsProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetDashboards")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getReleaseHealth: connect.NewClient[v1.GetReleaseHealthRequest, v1.GetReleaseHealthResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetReleaseHealthProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetReleaseHealth")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getUserActivity: connect.NewClient[v1.GetUserActivityRequest, v1.GetUserActivityResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetUserActivityProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetUserActivity")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listFrontendReplay: connect.NewClient[v1.ListFrontendReplayRequest, v1.ListFrontendReplayResponse](
 			httpClient,
 			baseURL+ObservabilityServiceListFrontendReplayProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("ListFrontendReplay")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -697,60 +717,70 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 		ObservabilityServiceSearchLogsProcedure,
 		svc.SearchLogs,
 		connect.WithSchema(observabilityServiceMethods.ByName("SearchLogs")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceListTracesHandler := connect.NewUnaryHandler(
 		ObservabilityServiceListTracesProcedure,
 		svc.ListTraces,
 		connect.WithSchema(observabilityServiceMethods.ByName("ListTraces")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetTraceHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetTraceProcedure,
 		svc.GetTrace,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetTrace")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceListMetricsHandler := connect.NewUnaryHandler(
 		ObservabilityServiceListMetricsProcedure,
 		svc.ListMetrics,
 		connect.WithSchema(observabilityServiceMethods.ByName("ListMetrics")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetMetricHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetMetricProcedure,
 		svc.GetMetric,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetMetric")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceListMetricExemplarsHandler := connect.NewUnaryHandler(
 		ObservabilityServiceListMetricExemplarsProcedure,
 		svc.ListMetricExemplars,
 		connect.WithSchema(observabilityServiceMethods.ByName("ListMetricExemplars")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetServiceGraphHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetServiceGraphProcedure,
 		svc.GetServiceGraph,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetServiceGraph")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetServiceGraphCatalogHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetServiceGraphCatalogProcedure,
 		svc.GetServiceGraphCatalog,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetServiceGraphCatalog")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetServiceOverviewHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetServiceOverviewProcedure,
 		svc.GetServiceOverview,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetServiceOverview")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetFlamegraphHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetFlamegraphProcedure,
 		svc.GetFlamegraph,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetFlamegraph")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceExportPGOProfileHandler := connect.NewUnaryHandler(
@@ -764,60 +794,70 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 		ObservabilityServiceQueryPanelProcedure,
 		svc.QueryPanel,
 		connect.WithSchema(observabilityServiceMethods.ByName("QueryPanel")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceListAttributeValuesHandler := connect.NewUnaryHandler(
 		ObservabilityServiceListAttributeValuesProcedure,
 		svc.ListAttributeValues,
 		connect.WithSchema(observabilityServiceMethods.ByName("ListAttributeValues")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetServiceSignalsHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetServiceSignalsProcedure,
 		svc.GetServiceSignals,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetServiceSignals")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceListWorkloadsHandler := connect.NewUnaryHandler(
 		ObservabilityServiceListWorkloadsProcedure,
 		svc.ListWorkloads,
 		connect.WithSchema(observabilityServiceMethods.ByName("ListWorkloads")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetWorkloadHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetWorkloadProcedure,
 		svc.GetWorkload,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetWorkload")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetManagedDatabaseMetricsHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetManagedDatabaseMetricsProcedure,
 		svc.GetManagedDatabaseMetrics,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetManagedDatabaseMetrics")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetDashboardsHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetDashboardsProcedure,
 		svc.GetDashboards,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetDashboards")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetReleaseHealthHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetReleaseHealthProcedure,
 		svc.GetReleaseHealth,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetReleaseHealth")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetUserActivityHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetUserActivityProcedure,
 		svc.GetUserActivity,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetUserActivity")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceListFrontendReplayHandler := connect.NewUnaryHandler(
 		ObservabilityServiceListFrontendReplayProcedure,
 		svc.ListFrontendReplay,
 		connect.WithSchema(observabilityServiceMethods.ByName("ListFrontendReplay")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/controlplane.v1.ObservabilityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

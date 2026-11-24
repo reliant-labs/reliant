@@ -33,4 +33,8 @@ type Question struct {
 	// WithdrawnReason is set when the agent withdrew the question
 	// (withdraw_question) instead of the user answering it.
 	WithdrawnReason *string
+	// AnsweredBy is the person who answered; nil on an answered row means
+	// the chat's owner (every row answered before the column), and it is nil
+	// while pending or when the system resolved it.
+	AnsweredBy *string
 }

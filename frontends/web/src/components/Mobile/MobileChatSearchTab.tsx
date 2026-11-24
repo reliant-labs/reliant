@@ -14,7 +14,7 @@
 
 import { Link } from "@tanstack/react-router";
 import { Loader2, MessageSquare, SearchX } from "lucide-react";
-import { useShellOneProject } from "../../lib/urlState/shellScopeStore";
+import { useMobileChatScope } from "./mobileScope";
 import { useChatSearch } from "../../hooks/chat-pull-queries";
 import { relativeTime } from "./relativeTime";
 import {
@@ -28,8 +28,8 @@ import {
 import { mobileChatPath, mobileNewChatPath } from "@/lib/paths";
 
 export function MobileChatSearchTab({ query }: { query: string }) {
-  // The chat list's scope: the /m/projects filter, or every project.
-  const scope = useShellOneProject();
+  // The chat list's scope: the URL's one project (`?projects=`), or every project.
+  const scope = useMobileChatScope();
   const { results, isLoading } = useChatSearch(scope, query);
 
   if (isLoading && results.length === 0) {

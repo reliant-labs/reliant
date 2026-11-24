@@ -31,6 +31,10 @@ const deploy = DeployService.method;
 const obs = ObservabilityService.method;
 const story = consoleScenarioHandlers();
 
+/** The pack's telemetry answers, built at the first answer: building them reads the pack clock, which no module may do at import. */
+let telemetryHandlers: Record<string, unknown> | null = null;
+const telemetry = () => (telemetryHandlers ??= observabilityHandlers(createShopApi()) as Record<string, unknown>);
+
 /** Every read the Releases pages make of the ledger. */
 const LEDGER = [deploy.listReleases, deploy.getRelease, deploy.compareReleases, deploy.listPromotions, deploy.getRollout, deploy.getBundle, deploy.listDeployAttempts, deploy.getDeployAttempt];
 
@@ -54,7 +58,7 @@ export const deliveryOverlays = {
   },
   workloads: {
     /** The worker crash-looping in every environment: the Overview's red row, and a workload worth restarting. */
-    "crash-looping": refining("workloads.crash-looping", obs.listWorkloads, observabilityHandlers(createShopApi()), (list) => {
+    "crash-looping": refining("workloads.crash-looping", obs.listWorkloads, telemetry, (list) => {
       for (const row of list.workloads) {
         if (row.workload !== "worker") continue;
         Object.assign(row, { health: WorkloadHealth.CRASH_LOOPING, healthReason: "CrashLoopBackOff", restartsInWindow: 14n, readyReplicas: 0 });

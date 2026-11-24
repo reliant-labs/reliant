@@ -18,7 +18,7 @@
  *            Inbox bell): data says where it goes, the shell says what it is
  *
  * A config's `footer` holds the rows under the nav's hairline (Usage &
- * billing, Settings). `sectionPages` are pages whose own section list takes the
+ * billing, Help, Settings). `sectionPages` are pages whose own section list takes the
  * nav column on their routes (Settings), reached by a plain link, not a drill-in.
  */
 
@@ -65,7 +65,9 @@ export type NavSlotId =
   /** A row's trail: a dot while a chat waits on the person (Agents). */
   | "chats-need-you"
   /** A row's control: the desktop app's update button (Settings). */
-  | "update-button";
+  | "update-button"
+  /** The footer's Help row: a tour, the docs, keyboard shortcuts (sidebar/HelpMenu). */
+  | "help";
 
 /** A count or a dot after a row's label. */
 export type NavBadge = { type: "count"; value: number; tone?: "danger"; label?: string } | { type: "dot"; label: string };
@@ -85,6 +87,12 @@ interface NavItemBase {
   available?: (ctx: NavCtx) => boolean;
   /** The row's test id, when it is not `nav-<id>` (ids tests and tours already name). */
   testId?: string;
+  /**
+   * The item's tour anchor (`data-tour`, Onboarding/JOURNEYS.md "Anchors"):
+   * on a group, its whole block (the row and, open, its rows). Set only on
+   * the items a journey points at; tourAnchors.test pins each one.
+   */
+  tour?: string;
 }
 
 export interface NavRow extends NavItemBase {
@@ -100,6 +108,13 @@ export interface NavRow extends NavItemBase {
   flatIcon?: ReactNode;
   href: NavHref;
   match?: NavMatch;
+  /**
+   * The kind of console page the row opens, when it always opens one kind
+   * (Services, Usage, Speed insights…). It is what a host that does not serve
+   * a page prunes by (navConfig/prune.ts `withoutPages`); rows that open no
+   * console page, or several kinds, leave it unset.
+   */
+  page?: ConsolePage["kind"];
   /** Leaves the current area for another place (AI providers ↗ in Settings). */
   external?: boolean;
   badge?: NavBadgeOf;
