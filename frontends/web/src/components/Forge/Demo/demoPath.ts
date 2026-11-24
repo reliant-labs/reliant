@@ -1,4 +1,6 @@
 import { forgeDemoPath } from "@/lib/paths";
+
+import type { ConsolePage } from "../Console/paths";
 // Copyright (c) 2025 Reliant Labs
 
 /** The forge demo console's path, the same in both shells (Reliant and forge.reliantlabs.io). */
@@ -23,3 +25,12 @@ export const DEMO_SECTIONS = [DEMO_SECTION_BUILT, DEMO_SECTION_HOME, DEMO_SECTIO
 export type DemoSection = (typeof DEMO_SECTIONS)[number];
 
 export const demoSectionHref = (section: DemoSection) => `${FORGE_DEMO_PATH}?section=${section}`;
+
+/**
+ * Console pages the demo does not serve, because the sample shop has nothing
+ * to show on them: no hosting bill (Usage would only say its costs cannot be
+ * read) and no measured page loads (Speed insights would say no page was
+ * measured). The nav has no row for them (DemoNavExtras), no tip explains
+ * them, and their URLs land on the Overview (demoShellRoutes.tsx).
+ */
+export const DEMO_HIDDEN_PAGES: readonly ConsolePage["kind"][] = ["usage", "speed-insights"];

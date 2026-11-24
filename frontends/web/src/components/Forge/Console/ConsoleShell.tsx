@@ -108,6 +108,16 @@ export interface ConsoleNavInput {
    * own route.
    */
   linkTo?: (target: ConsolePage) => string;
+  /**
+   * Live counts other parts of the console hand the nav for its badges,
+   * keyed by the source's id (e.g. `tests`). Each is read from data a page
+   * already holds (a React Query cache entry its page reads anyway), so a
+   * badge never costs a request of its own. Filled in useConsoleNavModel;
+   * read by a nav item's `badge` (navConfig/types.ts) as
+   * `ctx.console?.navCounts?.<id>`, and by the grouped nav's Tests group.
+   * Absent or 0: no badge.
+   */
+  navCounts?: Readonly<Partial<Record<string, number>>>;
 }
 
 export interface ConsoleNavDashboard {

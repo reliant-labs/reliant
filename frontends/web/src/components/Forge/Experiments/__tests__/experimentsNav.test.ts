@@ -18,7 +18,9 @@ import { buildGroupedConsoleNav } from "../../Console/groupedNav";
 import { consolePageOf, consolePath, type ConsolePage } from "../../Console/paths";
 import { changedFields, evenSplit, formatBp, parsePercent } from "../changeModel";
 
-const labels = (items: SidebarNavItem[]) => items.map((item) => item.label);
+/** Every row and child: the grouped nav lists Experiments inside Analytics. */
+const flat = (items: SidebarNavItem[]): SidebarNavItem[] => items.flatMap((item) => [item, ...flat(item.children ?? [])]);
+const labels = (items: SidebarNavItem[]) => flat(items).map((item) => item.label);
 const input = (page: ConsolePage, experiments?: boolean) => ({ project: "shop", page, env: "prod", envs: [{ name: "prod", preview: false }], experiments });
 
 describe("Experiments in the console", () => {
@@ -34,7 +36,7 @@ describe("Experiments in the console", () => {
     for (const build of [buildConsoleNav, buildGroupedConsoleNav]) {
       expect(labels(build(input({ kind: "overview" })).items)).not.toContain("Experiments");
       expect(labels(build(input({ kind: "overview" }, true)).items)).toContain("Experiments");
-      const open = build(input({ kind: "experiment", changeId: "chg-1" })).items.find((item) => item.label === "Experiments");
+      const open = flat(build(input({ kind: "experiment", changeId: "chg-1" })).items).find((item) => item.label === "Experiments");
       expect(open?.active).toBe(true);
     }
   });
