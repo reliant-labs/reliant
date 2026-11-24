@@ -84,8 +84,8 @@ const (
 	// is around ten thousand rows.
 	projectThinMessageSlice = 2000
 	// projectThinRowSlice is how many rows of a flat table (chat_updates,
-	// user_updates, step_executions) one transaction removes. Nothing hangs
-	// off those rows.
+	// user_updates, step_executions and the others in flatThinSteps) one
+	// transaction removes. Nothing hangs off those rows.
 	projectThinRowSlice = 5000
 	// projectDeleteWorktreeBatch is how many worktrees one transaction removes.
 	projectDeleteWorktreeBatch = 50
@@ -148,6 +148,24 @@ var chatPurgeSteps = []struct{ name, sql string }{
 	{"workflows", `DELETE FROM workflows WHERE chat_id = ANY(?0)`},
 	{"update_stream_counters", `
 		DELETE FROM update_stream_counters WHERE stream_kind = 'chat' AND stream_id = ANY(?0)`},
+	// The per-thread message counts the messages triggers maintain (deleting
+	// the messages above wrote them) and the chats still pending a count.
+	{"chat_thread_message_counts", `DELETE FROM chat_thread_message_counts WHERE chat_id = ANY(?0)`},
+	{"chat_message_counts_pending", `DELETE FROM chat_message_counts_pending WHERE chat_id = ANY(?0)`},
+	{"provider_backoff", `DELETE FROM provider_backoff WHERE chat_id = ANY(?0)`},
+	// (integration_writes, trigger_changes and video_generation_jobs, also
+	// keyed by chat, have no chat_id index: the thinning slices take them for
+	// the whole project, one scan a slice rather than one a chat batch.)
+
+	// Rows whose chat_id is ON DELETE SET NULL: the chats' delete would keep
+	// them with no chat, and the project row's cascade sets their trigger or
+	// project to NULL too, so nothing reaches them afterwards. Before chats.
+	// The bulk of a process's output went in the thinning slices.
+	{"trigger_events", `DELETE FROM trigger_events WHERE chat_id = ANY(?0)`},
+	{"background_process_output", `
+		DELETE FROM background_process_output
+		WHERE process_id IN (SELECT id FROM background_processes WHERE chat_id = ANY(?0))`},
+	{"background_processes", `DELETE FROM background_processes WHERE chat_id = ANY(?0)`},
 
 	// The chats, and what still cascades from them (user_updates, run_events,
 	// chat_selections).
@@ -347,6 +365,26 @@ var flatThinSteps = []struct{ name, sql string }{
 		DELETE FROM step_executions WHERE id IN (
 			SELECT id FROM step_executions WHERE workflow_id IN (
 				SELECT id FROM workflows WHERE chat_id IN (` + projectChatIDs + `)) LIMIT ?1)`},
+	// Keyed by chat with no foreign key and no chat_id index, so they are
+	// taken here, for all the project's chats at once, rather than in each
+	// chat batch: what the chats' agents wrote to integrations, the trigger
+	// edits they made (those of the project's own triggers would also go with
+	// the project row's cascade), and their video generation jobs.
+	{"integration_writes", `
+		DELETE FROM integration_writes WHERE id IN (
+			SELECT id FROM integration_writes WHERE chat_id IN (` + projectChatIDs + `) LIMIT ?1)`},
+	{"trigger_changes", `
+		DELETE FROM trigger_changes WHERE id IN (
+			SELECT id FROM trigger_changes WHERE chat_id IN (` + projectChatIDs + `) LIMIT ?1)`},
+	{"video_generation_jobs", `
+		DELETE FROM video_generation_jobs WHERE tool_call_id IN (
+			SELECT tool_call_id FROM video_generation_jobs WHERE chat_id IN (` + projectChatIDs + `) LIMIT ?1)`},
+	// One row per line a background process printed: a dev server left
+	// running prints hundreds of thousands.
+	{"background_process_output", `
+		DELETE FROM background_process_output WHERE id IN (
+			SELECT id FROM background_process_output WHERE process_id IN (
+				SELECT id FROM background_processes WHERE chat_id IN (` + projectChatIDs + `)) LIMIT ?1)`},
 }
 
 // thinProjectChats removes the bulk stored under the project's chats in
