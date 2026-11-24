@@ -4,6 +4,7 @@
 /** keep_data is sent only to ask for it; false is the unset default, never a field on the wire. */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { transport } from "@/lib/connect";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 const deleteEnvironmentRpc = vi.fn();
@@ -20,8 +21,8 @@ beforeEach(() => {
 
 describe("deleteEnvironment", () => {
   it("omits keep_data when the data is to be deleted", async () => {
-    await deleteEnvironment("env_1");
-    await deleteEnvironment("env_1", { keepData: false });
+    await deleteEnvironment(transport, "env_1");
+    await deleteEnvironment(transport, "env_1", { keepData: false });
     for (const [req] of deleteEnvironmentRpc.mock.calls) {
       expect(req).toEqual({ environmentId: "env_1", force: true });
       expect(req).not.toHaveProperty("keepData");
@@ -29,7 +30,7 @@ describe("deleteEnvironment", () => {
   });
 
   it("sends keep_data only when asked to keep", async () => {
-    await deleteEnvironment("env_1", { keepData: true });
+    await deleteEnvironment(transport, "env_1", { keepData: true });
     expect(deleteEnvironmentRpc).toHaveBeenCalledWith({ environmentId: "env_1", force: true, keepData: true });
   });
 });

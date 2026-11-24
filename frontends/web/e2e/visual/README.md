@@ -43,8 +43,26 @@ the suite refuses rather than compares; `VISUAL_ALLOW_HOST=1 npx playwright
 test -c playwright.visual.config.ts` runs it on the host for debugging, with
 pixels that are not comparable to the baselines.
 
-It is opt-in: no gate runs it, because it needs a production build and a
-browser.
+## Where it gates
+
+- **The merge queue** (owner, 2026-11-24; reliant#3446) runs it, compare only,
+  on the merge group's own commit (main plus the entries ahead of yours),
+  whenever the group reaches the lane's inputs: `frontends/web` sources,
+  styles, assets, build config and lockfile, the `sdk/ts` sources, and this
+  directory (`scripts/ci-lanes.sh`, lane `visual`). It is the queue's
+  `Visual baseline` job (`scripts/visual-gate.sh`), and `CI result` needs it.
+  A capture that differs fails the entry, names the surfaces, and says how to
+  re-capture; the diffs are the run's `visual-results` artifact. So capture on
+  a branch rebased onto current main, and re-capture after any later commit,
+  a pr-fix push included, that moves a surface.
+- **Every night on main** (`.github/workflows/visual-nightly.yml`), the same
+  script: a mismatch opens or updates the one `visual:stale` issue, and the
+  next green run closes it. It catches what moved a surface from outside the
+  queue's paths, and never blocks a merge.
+
+Neither ever re-captures or retries. A surface that differs on a commit whose
+UI did not change is nondeterministic: delete it from `SURFACES` with a
+`flake:removed` issue holding its entry and the diff, never re-run to green.
 
 ## What makes it deterministic
 
@@ -71,7 +89,12 @@ is a red test, not a hang (`harness.visual.ts` proves it). Then
 identical frames. A capture may differ from its baseline by at most
 100 pixels past the default per-pixel threshold (measured noise: under 110
 pixels, each at most 10/255 off, all inside the threshold). The pointer is
-parked off the page so no row shows its hover state. The build's version
+parked off the page so no row shows its hover state; a surface whose subject
+IS a hover state (`shell-chart-hover`, `shell-sparkline-hover`,
+`shell-dashboards-card-hover`: a chart's crosshair and tooltip) puts it back in
+its `beforeShot` step, which runs after the park, right before the capture.
+A long page (`shell-sandboxes-dashboard`) grows the viewport to its whole
+height there instead (`fitViewportToContent`), so it is one capture. The build's version
 string (settings footer) is pinned and masked, so a baseline does not depend
 on the commit that built it: `task test:web:visual` builds with
 `RELEASE_VERSION=0.0.0-visual`, `scripts/visual-docker.sh` refuses a `dist/`

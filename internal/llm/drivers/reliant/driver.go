@@ -567,7 +567,9 @@ func (c *ReliantClient) SendMessages(ctx context.Context, prompts []string, mess
 	)
 	if err := c.retryer().Run(ctx, func(attempt int) (ratelimit.Failure, bool) {
 		var callErr error
+		rawResp = nil
 		openaiResponse, callErr = c.Client.Chat.Completions.New(ctx, params, option.WithResponseInto(&rawResp))
+		recordGatewayCallID(ctx, rawResp)
 		if callErr != nil {
 			return c.failure(attempt, callErr), false
 		}
@@ -629,7 +631,11 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 			attempts = attempt
 			streamResp = nil
 			openaiStream = c.Client.Chat.Completions.NewStreaming(ctx, params, option.WithResponseInto(&streamResp))
-			if hasNext = openaiStream.Next(); hasNext {
+			hasNext = openaiStream.Next()
+			// The headers came with the response, before its first chunk, so
+			// the id is on the span even if the stream fails part way.
+			recordGatewayCallID(ctx, streamResp)
+			if hasNext {
 				return ratelimit.Failure{}, true
 			}
 			return c.failure(attempt, openaiStream.Err()), false
@@ -877,7 +883,7 @@ func (c *ReliantClient) logReliantAPIError(attempts int, apierr *openai.Error, r
 	litellmCallID := ""
 	litellmModelID := ""
 	if apierr.Response != nil {
-		litellmCallID = strings.TrimSpace(apierr.Response.Header.Get("x-litellm-call-id"))
+		litellmCallID = strings.TrimSpace(apierr.Response.Header.Get(gatewayCallIDHeader))
 		litellmModelID = strings.TrimSpace(apierr.Response.Header.Get("x-litellm-model-id"))
 	}
 
@@ -1225,6 +1231,22 @@ func extractFilenameFromPath(path string) string {
 		}
 	}
 	return path
+}
+
+// gatewayCallIDHeader is the gateway's (LiteLLM's) id for one call, sent on
+// every response, error responses included. control-plane's wallet ledger
+// stores the same value as the call's provider_request_id.
+const gatewayCallIDHeader = "x-litellm-call-id"
+
+// recordGatewayCallID puts the gateway's call id from resp, when it sent one,
+// on the call's chat span (llm.RecordGatewayCallID), so the span joins
+// exactly to what the gateway billed. Every call this driver makes goes
+// through the gateway; no other driver reads the header.
+func recordGatewayCallID(ctx context.Context, resp *http.Response) {
+	if resp == nil {
+		return
+	}
+	llm.RecordGatewayCallID(ctx, strings.TrimSpace(resp.Header.Get(gatewayCallIDHeader)))
 }
 
 // extractUpstreamCorrelationHeaders extracts request correlation headers from the HTTP response

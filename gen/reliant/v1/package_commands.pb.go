@@ -1423,17 +1423,17 @@ const file_reliant_v1_package_commands_proto_rawDesc = "" +
 	"\x18PACKAGE_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15PACKAGE_TYPE_MAKEFILE\x10\x01\x12\x14\n" +
 	"\x10PACKAGE_TYPE_NPM\x10\x02\x12\x19\n" +
-	"\x15PACKAGE_TYPE_TASKFILE\x10\x032\x8e\b\n" +
-	"\x16PackageCommandsService\x12a\n" +
-	"\fListCommands\x12&.reliant.v1.ListPackageCommandsRequest\x1a'.reliant.v1.ListPackageCommandsResponse\"\x00\x12\xad\x01\n" +
+	"\x15PACKAGE_TYPE_TASKFILE\x10\x032\x9d\b\n" +
+	"\x16PackageCommandsService\x12d\n" +
+	"\fListCommands\x12&.reliant.v1.ListPackageCommandsRequest\x1a'.reliant.v1.ListPackageCommandsResponse\"\x03\x90\x02\x01\x12\xad\x01\n" +
 	"\n" +
-	"RunCommand\x12$.reliant.v1.RunPackageCommandRequest\x1a%.reliant.v1.RunPackageCommandResponse\"R\xa2\xbb\x18N:L:Jruns a package script on the daemon: dev-loop process control, high volume\x12d\n" +
-	"\rListProcesses\x12'.reliant.v1.ListPackageProcessesRequest\x1a(.reliant.v1.ListPackageProcessesResponse\"\x00\x12[\n" +
+	"RunCommand\x12$.reliant.v1.RunPackageCommandRequest\x1a%.reliant.v1.RunPackageCommandResponse\"R\xa2\xbb\x18N:L:Jruns a package script on the daemon: dev-loop process control, high volume\x12g\n" +
+	"\rListProcesses\x12'.reliant.v1.ListPackageProcessesRequest\x1a(.reliant.v1.ListPackageProcessesResponse\"\x03\x90\x02\x01\x12^\n" +
 	"\n" +
-	"GetProcess\x12$.reliant.v1.GetPackageProcessRequest\x1a%.reliant.v1.GetPackageProcessResponse\"\x00\x12g\n" +
-	"\x0eGetProcessLogs\x12(.reliant.v1.GetPackageProcessLogsRequest\x1a).reliant.v1.GetPackageProcessLogsResponse\"\x00\x12\xaf\x01\n" +
-	"\vKillProcess\x12%.reliant.v1.KillPackageProcessRequest\x1a&.reliant.v1.KillPackageProcessResponse\"Q\xa2\xbb\x18M:K:Istops a package command's process on the daemon: dev-loop process control\x12h\n" +
-	"\x13GetCommandFavorites\x12&.reliant.v1.GetCommandFavoritesRequest\x1a'.reliant.v1.GetCommandFavoritesResponse\"\x00\x12\x98\x01\n" +
+	"GetProcess\x12$.reliant.v1.GetPackageProcessRequest\x1a%.reliant.v1.GetPackageProcessResponse\"\x03\x90\x02\x01\x12j\n" +
+	"\x0eGetProcessLogs\x12(.reliant.v1.GetPackageProcessLogsRequest\x1a).reliant.v1.GetPackageProcessLogsResponse\"\x03\x90\x02\x01\x12\xaf\x01\n" +
+	"\vKillProcess\x12%.reliant.v1.KillPackageProcessRequest\x1a&.reliant.v1.KillPackageProcessResponse\"Q\xa2\xbb\x18M:K:Istops a package command's process on the daemon: dev-loop process control\x12k\n" +
+	"\x13GetCommandFavorites\x12&.reliant.v1.GetCommandFavoritesRequest\x1a'.reliant.v1.GetCommandFavoritesResponse\"\x03\x90\x02\x01\x12\x98\x01\n" +
 	"\x12SetCommandFavorite\x12%.reliant.v1.SetCommandFavoriteRequest\x1a&.reliant.v1.SetCommandFavoriteResponse\"3\xa2\xbb\x18/:-:+per-user UI preference: a favorited commandB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (

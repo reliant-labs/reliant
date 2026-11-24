@@ -947,10 +947,10 @@ const file_reliant_v1_pull_request_record_proto_rawDesc = "" +
 	"\n" +
 	"conclusion\x18\x05 \x01(\tR\n" +
 	"conclusion\x12=\n" +
-	"\fcompleted_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\vcompletedAt2\xfa\x01\n" +
-	"\x18PullRequestRecordService\x12k\n" +
-	"\x14GetPullRequestRecord\x12'.reliant.v1.GetPullRequestRecordRequest\x1a(.reliant.v1.GetPullRequestRecordResponse\"\x00\x12q\n" +
-	"\x16ListPullRequestRecords\x12).reliant.v1.ListPullRequestRecordsRequest\x1a*.reliant.v1.ListPullRequestRecordsResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\fcompleted_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\vcompletedAt2\x80\x02\n" +
+	"\x18PullRequestRecordService\x12n\n" +
+	"\x14GetPullRequestRecord\x12'.reliant.v1.GetPullRequestRecordRequest\x1a(.reliant.v1.GetPullRequestRecordResponse\"\x03\x90\x02\x01\x12t\n" +
+	"\x16ListPullRequestRecords\x12).reliant.v1.ListPullRequestRecordsRequest\x1a*.reliant.v1.ListPullRequestRecordsResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_pull_request_record_proto_rawDescOnce sync.Once

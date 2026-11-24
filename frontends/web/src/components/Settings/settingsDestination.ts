@@ -6,26 +6,30 @@ import {
   type SettingsSection,
   type SettingsTab,
 } from "../../routeSchemas";
+import { settingsSectionHasOtherNavHome } from "./SettingsNavigation";
 
 const STORAGE_KEY = "reliant.settings.lastDestination";
 
 export interface SettingsDestination {
   section: SettingsSection;
-  machineId?: string;
   tab?: SettingsTab;
 }
 
 // Persist navigation, not a URL: checkout/OAuth results, returnTo and notices
 // belong to the visit that supplied them and must never be replayed later.
+//
+// Only a page whose nav is Settings' own sections is a destination. Agent
+// sandboxes (and one machine's page) is Agents › Sandboxes in the nav, so
+// restoring it left Settings with no sections to pick from, on every later
+// open. A saved one, from before, is read as no destination at all; an
+// earlier `machineId` field is ignored for the same reason.
 function destinationFrom(value: unknown): SettingsDestination | undefined {
   if (!value || typeof value !== "object") return undefined;
-  const { section, machineId, tab } = value as Record<string, unknown>;
+  const { section, tab } = value as Record<string, unknown>;
   if (typeof section !== "string" || !isSettingsSection(section)) return undefined;
+  if (settingsSectionHasOtherNavHome(section)) return undefined;
 
   const destination: SettingsDestination = { section };
-  if (section === "machines" && typeof machineId === "string" && machineId.trim()) {
-    destination.machineId = machineId;
-  }
   const tabs: readonly string[] = section === "billing"
     ? BILLING_TAB_IDS
     : section === "ai" ? AI_SETTINGS_TAB_IDS : [];
@@ -50,9 +54,12 @@ export function readSettingsDestination(): SettingsDestination {
   return { section: DEFAULT_SETTINGS_SECTION };
 }
 
+/** Remember `destination`; a page that is not a destination keeps the one before it. */
 export function rememberSettingsDestination(destination: SettingsDestination): void {
+  const saved = destinationFrom(destination);
+  if (!saved) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(destinationFrom(destination)));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
   } catch {
     // Keep explicit navigation working even when persistence is unavailable.
   }

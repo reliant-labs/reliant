@@ -5553,24 +5553,24 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\x0fSkillSourceType\x12!\n" +
 	"\x1dSKILL_SOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17SKILL_SOURCE_TYPE_LOCAL\x10\x01\x12\x19\n" +
-	"\x15SKILL_SOURCE_TYPE_GIT\x10\x022\xb8)\n" +
+	"\x15SKILL_SOURCE_TYPE_GIT\x10\x022\xd6)\n" +
 	"\x0fSettingsService\x12\xb5\x01\n" +
-	"\rCreateSetting\x12 .reliant.v1.CreateSettingRequest\x1a!.reliant.v1.CreateSettingResponse\"_\xa2\xbb\x18[:Y:Wper-user preference: a key/value upsert into the caller's settings, not product history\x12S\n" +
-	"\fListSettings\x12\x1f.reliant.v1.ListSettingsRequest\x1a .reliant.v1.ListSettingsResponse\"\x00\x12M\n" +
+	"\rCreateSetting\x12 .reliant.v1.CreateSettingRequest\x1a!.reliant.v1.CreateSettingResponse\"_\xa2\xbb\x18[:Y:Wper-user preference: a key/value upsert into the caller's settings, not product history\x12V\n" +
+	"\fListSettings\x12\x1f.reliant.v1.ListSettingsRequest\x1a .reliant.v1.ListSettingsResponse\"\x03\x90\x02\x01\x12P\n" +
 	"\n" +
-	"GetSetting\x12\x1d.reliant.v1.GetSettingRequest\x1a\x1e.reliant.v1.GetSettingResponse\"\x00\x12\xb5\x01\n" +
+	"GetSetting\x12\x1d.reliant.v1.GetSettingRequest\x1a\x1e.reliant.v1.GetSettingResponse\"\x03\x90\x02\x01\x12\xb5\x01\n" +
 	"\rUpdateSetting\x12 .reliant.v1.UpdateSettingRequest\x1a!.reliant.v1.UpdateSettingResponse\"_\xa2\xbb\x18[:Y:Wper-user preference: a key/value upsert into the caller's settings, not product history\x12\xb5\x01\n" +
 	"\rDeleteSetting\x12 .reliant.v1.DeleteSettingRequest\x1a!.reliant.v1.DeleteSettingResponse\"_\xa2\xbb\x18[:Y:Wper-user preference: a key/value upsert into the caller's settings, not product history\x12\xc7\x01\n" +
-	"\x13BatchUpsertSettings\x12&.reliant.v1.BatchUpsertSettingsRequest\x1a'.reliant.v1.BatchUpsertSettingsResponse\"_\xa2\xbb\x18[:Y:Wper-user preference: a key/value upsert into the caller's settings, not product history\x12S\n" +
-	"\fGetShortcuts\x12\x1f.reliant.v1.GetShortcutsRequest\x1a .reliant.v1.GetShortcutsResponse\"\x00\x12\x8e\x01\n" +
-	"\x0fUpdateShortcuts\x12\".reliant.v1.UpdateShortcutsRequest\x1a#.reliant.v1.UpdateShortcutsResponse\"2\xa2\xbb\x18.:,:*per-user UI preference: keyboard shortcuts\x12Y\n" +
-	"\x0eGetPreferences\x12!.reliant.v1.GetPreferencesRequest\x1a\".reliant.v1.GetPreferencesResponse\"\x00\x12\x80\x01\n" +
+	"\x13BatchUpsertSettings\x12&.reliant.v1.BatchUpsertSettingsRequest\x1a'.reliant.v1.BatchUpsertSettingsResponse\"_\xa2\xbb\x18[:Y:Wper-user preference: a key/value upsert into the caller's settings, not product history\x12V\n" +
+	"\fGetShortcuts\x12\x1f.reliant.v1.GetShortcutsRequest\x1a .reliant.v1.GetShortcutsResponse\"\x03\x90\x02\x01\x12\x8e\x01\n" +
+	"\x0fUpdateShortcuts\x12\".reliant.v1.UpdateShortcutsRequest\x1a#.reliant.v1.UpdateShortcutsResponse\"2\xa2\xbb\x18.:,:*per-user UI preference: keyboard shortcuts\x12\\\n" +
+	"\x0eGetPreferences\x12!.reliant.v1.GetPreferencesRequest\x1a\".reliant.v1.GetPreferencesResponse\"\x03\x90\x02\x01\x12\x80\x01\n" +
 	"\x11UpdatePreferences\x12$.reliant.v1.UpdatePreferencesRequest\x1a%.reliant.v1.UpdatePreferencesResponse\"\x1e\xa2\xbb\x18\x1a:\x18:\x16per-user UI preference\x12\xa1\x01\n" +
-	"\rSetHiddenItem\x12 .reliant.v1.SetHiddenItemRequest\x1a!.reliant.v1.SetHiddenItemResponse\"K\xa2\xbb\x18G:E:Cper-user UI preference: hides a workflow or preset from the pickers\x12M\n" +
+	"\rSetHiddenItem\x12 .reliant.v1.SetHiddenItemRequest\x1a!.reliant.v1.SetHiddenItemResponse\"K\xa2\xbb\x18G:E:Cper-user UI preference: hides a workflow or preset from the pickers\x12P\n" +
 	"\n" +
-	"GetPrompts\x12\x1d.reliant.v1.GetPromptsRequest\x1a\x1e.reliant.v1.GetPromptsResponse\"\x00\x12\xa6\x01\n" +
-	"\vSavePrompts\x12\x1e.reliant.v1.SavePromptsRequest\x1a\x1f.reliant.v1.SavePromptsResponse\"V\xa2\xbb\x18R:P:Nper-user prompt library, stored as one settings key like the other preferences\x12h\n" +
-	"\x13GetProviderStatuses\x12&.reliant.v1.GetProviderStatusesRequest\x1a'.reliant.v1.GetProviderStatusesResponse\"\x00\x12\xd4\x01\n" +
+	"GetPrompts\x12\x1d.reliant.v1.GetPromptsRequest\x1a\x1e.reliant.v1.GetPromptsResponse\"\x03\x90\x02\x01\x12\xa6\x01\n" +
+	"\vSavePrompts\x12\x1e.reliant.v1.SavePromptsRequest\x1a\x1f.reliant.v1.SavePromptsResponse\"V\xa2\xbb\x18R:P:Nper-user prompt library, stored as one settings key like the other preferences\x12k\n" +
+	"\x13GetProviderStatuses\x12&.reliant.v1.GetProviderStatusesRequest\x1a'.reliant.v1.GetProviderStatusesResponse\"\x03\x90\x02\x01\x12\xd4\x01\n" +
 	"\x16ValidateProviderAPIKey\x12).reliant.v1.ValidateProviderAPIKeyRequest\x1a*.reliant.v1.ValidateProviderAPIKeyResponse\"c\xa2\xbb\x18_:]:[checks a key against its provider and stores nothing; AddProviderAPIKey records the account\x12\xe6\x01\n" +
 	"\x13SyncReliantProvider\x12&.reliant.v1.SyncReliantProviderRequest\x1a'.reliant.v1.SyncReliantProviderResponse\"~\xa2\xbb\x18z:x:vmachine sync: onboarding hydrates the managed Reliant gateway key the control plane mints, not a change a person makes\x12\xe2\x01\n" +
 	"\x12CompleteCodexOAuth\x12%.reliant.v1.CompleteCodexOAuthRequest\x1a&.reliant.v1.CompleteCodexOAuthResponse\"}\xa2\xbb\x18y:w\n" +
@@ -5585,16 +5585,16 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\x16StartCopilotDeviceAuth\x12).reliant.v1.StartCopilotDeviceAuthRequest\x1a*.reliant.v1.StartCopilotDeviceAuthResponse\"q\xa2\xbb\x18m:k:idevice-authorization handshake in flight: PollCopilotDeviceAuth records the account once it is authorized\x12\xeb\x01\n" +
 	"\x15PollCopilotDeviceAuth\x12(.reliant.v1.PollCopilotDeviceAuthRequest\x1a).reliant.v1.PollCopilotDeviceAuthResponse\"}\xa2\xbb\x18y:w\n" +
 	"\aconnect\x12?\n" +
-	"\x10provider_account\x12\x13response.account.id\x1a\x16response.account.label*\x19response.account.provider*\x10response.created\x12e\n" +
-	"\x12GetPrivacySettings\x12%.reliant.v1.GetPrivacySettingsRequest\x1a&.reliant.v1.GetPrivacySettingsResponse\"\x00\x12\xcc\x01\n" +
+	"\x10provider_account\x12\x13response.account.id\x1a\x16response.account.label*\x19response.account.provider*\x10response.created\x12h\n" +
+	"\x12GetPrivacySettings\x12%.reliant.v1.GetPrivacySettingsRequest\x1a&.reliant.v1.GetPrivacySettingsResponse\"\x03\x90\x02\x01\x12\xcc\x01\n" +
 	"\x15UpdatePrivacySettings\x12(.reliant.v1.UpdatePrivacySettingsRequest\x1a).reliant.v1.UpdatePrivacySettingsResponse\"^\xa2\xbb\x18Z:X:Vper-user preference: the analytics and crash-reporting opt-ins, like UpdatePreferences\x12\xb0\x01\n" +
 	"\x10TrackPageVisited\x12#.reliant.v1.TrackPageVisitedRequest\x1a$.reliant.v1.TrackPageVisitedResponse\"Q\xa2\xbb\x18M:K:Ianalytics ping: a page view for the analytics pipeline, not product state\x12\xdc\x01\n" +
 	"\x14TrackOnboardingEvent\x12'.reliant.v1.TrackOnboardingEventRequest\x1a(.reliant.v1.TrackOnboardingEventResponse\"q\xa2\xbb\x18m:k:inever implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented\x12\xc4\x01\n" +
-	"\fInstallSkill\x12\x1f.reliant.v1.InstallSkillRequest\x1a .reliant.v1.InstallSkillResponse\"q\xa2\xbb\x18m:k:inever implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented\x12h\n" +
-	"\x13ListInstalledSkills\x12&.reliant.v1.ListInstalledSkillsRequest\x1a'.reliant.v1.ListInstalledSkillsResponse\"\x00\x12\x80\x01\n" +
-	"\x1bGetInstalledSkillDefinition\x12..reliant.v1.GetInstalledSkillDefinitionRequest\x1a/.reliant.v1.GetInstalledSkillDefinitionResponse\"\x00\x12\xcd\x01\n" +
-	"\x0fSetSkillEnabled\x12\".reliant.v1.SetSkillEnabledRequest\x1a#.reliant.v1.SetSkillEnabledResponse\"q\xa2\xbb\x18m:k:inever implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented\x12n\n" +
-	"\x15ListRecommendedSkills\x12(.reliant.v1.ListRecommendedSkillsRequest\x1a).reliant.v1.ListRecommendedSkillsResponse\"\x00\x12\xd3\x01\n" +
+	"\fInstallSkill\x12\x1f.reliant.v1.InstallSkillRequest\x1a .reliant.v1.InstallSkillResponse\"q\xa2\xbb\x18m:k:inever implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented\x12k\n" +
+	"\x13ListInstalledSkills\x12&.reliant.v1.ListInstalledSkillsRequest\x1a'.reliant.v1.ListInstalledSkillsResponse\"\x03\x90\x02\x01\x12\x83\x01\n" +
+	"\x1bGetInstalledSkillDefinition\x12..reliant.v1.GetInstalledSkillDefinitionRequest\x1a/.reliant.v1.GetInstalledSkillDefinitionResponse\"\x03\x90\x02\x01\x12\xcd\x01\n" +
+	"\x0fSetSkillEnabled\x12\".reliant.v1.SetSkillEnabledRequest\x1a#.reliant.v1.SetSkillEnabledResponse\"q\xa2\xbb\x18m:k:inever implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented\x12q\n" +
+	"\x15ListRecommendedSkills\x12(.reliant.v1.ListRecommendedSkillsRequest\x1a).reliant.v1.ListRecommendedSkillsResponse\"\x03\x90\x02\x01\x12\xd3\x01\n" +
 	"\x11DeleteGlobalSkill\x12$.reliant.v1.DeleteGlobalSkillRequest\x1a%.reliant.v1.DeleteGlobalSkillResponse\"q\xa2\xbb\x18m:k:inever implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented\x12\\\n" +
 	"\x0fGetConfigHealth\x12\".reliant.v1.GetConfigHealthRequest\x1a#.reliant.v1.GetConfigHealthResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 

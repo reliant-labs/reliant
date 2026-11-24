@@ -63,7 +63,7 @@ func (s *Service) UploadScenario(
 		return nil, svcerr.InvalidArgument("invalid scenario YAML: " + err.Error())
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.ProjectRows.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}

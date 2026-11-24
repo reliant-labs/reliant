@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -43,7 +44,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/credwire"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
-	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
@@ -56,7 +56,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/natsutil"
-	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
@@ -71,6 +70,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal/stopnudge"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/triggertools"
@@ -379,23 +379,25 @@ type WorkerChatDeps struct {
 //forge:root-only worker
 func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 	svc, err := chat.New(chat.Deps{
-		Logger:      d.Logger,
-		Config:      d.Config,
-		Repo:        d.DB,
-		Workflows:   store.NewWorkflowExtStore(d.DB.ORM()),
-		Worktrees:   store.NewWorktreeExtStore(d.DB.ORM()),
-		ProjectRows: store.NewProjectExtStore(d.DB.ORM()),
-		Questions:   store.NewQuestionExtStore(d.DB.ORM()),
-		Spawns:      store.NewToolCallExtStore(d.DB.ORM()),
-		Selections:  store.NewChatSelectionExtStore(d.DB.ORM()),
-		Messages:    store.NewMessageExtStore(d.DB.ORM()),
-		ToolBlocks:  store.NewMessageContentBlockExtStore(d.DB.ORM()),
-		Senders:     store.NewThreadExtStore(d.DB.ORM()),
-		Backoff:     d.Backoff,
-		Temporal:    d.Temporal.Client,
-		Pause:       d.Pause,
-		Router:      d.Router,
-		LocalModels: local.NewRepoDirectory(d.DB, store.NewModelEndpointExtStore(d.DB.ORM())),
+		Logger:        d.Logger,
+		Config:        d.Config,
+		Repo:          d.DB,
+		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
+		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
+		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
+		Questions:     store.NewQuestionExtStore(d.DB.ORM()),
+		Spawns:        store.NewToolCallExtStore(d.DB.ORM()),
+		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),
+		Messages:      store.NewMessageExtStore(d.DB.ORM()),
+		ToolBlocks:    store.NewMessageContentBlockExtStore(d.DB.ORM()),
+		Senders:       store.NewThreadExtStore(d.DB.ORM()),
+		Backoff:       d.Backoff,
+		Temporal:      d.Temporal.Client,
+		Pause:         d.Pause,
+		Router:        d.Router,
+		LocalModels:   local.NewRepoDirectory(d.DB, store.NewModelEndpointExtStore(d.DB.ORM())),
+		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
+		AgentMessages: store.NewAgentMessageExtStore(d.DB.ORM()),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("chat service: %w", err)
@@ -467,6 +469,11 @@ type WorkerTriggerDeps struct {
 	Pollers         *webhook.Registry
 	Integrations    *IntegrationSettings
 	ControlPlane    *configv1.ControlPlaneConfig
+	// AutomationKeys holds each daemon's delegated automation token;
+	// trigger.New requires it whenever ControlPlane is set (hosted).
+	AutomationKeys automationtokens.Service
+	// Owners re-owns an orphaned trigger; trigger.New requires it.
+	Owners triggerowner.Service
 }
 
 // NewWorkerTrigger builds the trigger service list_triggers reads through and
@@ -504,11 +511,14 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Repo:           repo,
 		Firings:        store.NewTriggerEventExtStore(repo.ORM()),
 		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()),
+		Owners:         d.Owners,
+		Projects:       projectaccess.NewFromORM(repo.ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(repo.ORM()),
 		Pools:          store.NewMachinePoolExtStore(repo.ORM()),
 		Syncer:         syncer,
 		Fires:          fires,
 		ControlPlane:   hostedControlPlane(d.ControlPlane),
+		AutomationKeys: d.AutomationKeys,
 		Access:         access,
 		Integrations:   d.Integrations.Config,
 		Sealer:         d.Vault,
@@ -747,6 +757,9 @@ func (a *AccountRecorder) Close(context.Context) error {
 // TemporalWorkerDeps is everything the worker's workflows and activities
 // reach.
 type TemporalWorkerDeps struct {
+	// Checks is the record-only workflowcheck the fire and run activities
+	// report to; the WorkflowCheckSyncer writes GitHub.
+	Checks           *RecordOnlyChecks
 	ConnectionVault  connectionvault.Service
 	DB               *db.Repo
 	ProviderAccounts provideraccounts.Service
@@ -788,6 +801,18 @@ type TemporalWorkerDeps struct {
 // orgAdminNotifier is the control plane as the worker's notifier of an org's
 // admins, nil without one (a nil interface, never a nil client in one).
 func orgAdminNotifier(d TemporalWorkerDeps) workersetup.OrgAdminNotifier {
+	if d.Router == nil || d.Router.ControlPlane == nil {
+		return nil
+	}
+	return d.Router.ControlPlane
+}
+
+// stepKeyIssuer is the control plane as the issuer of run steps' LLM gateway
+// step keys, nil without one (a nil interface, never a nil client in one):
+// every run node with llm_gateway is then refused. A control plane the worker
+// cannot sign for answers controlplane.ErrStepKeysUnsupported, which refuses
+// the same way.
+func stepKeyIssuer(d TemporalWorkerDeps) handlers.StepKeyIssuer {
 	if d.Router == nil || d.Router.ControlPlane == nil {
 		return nil
 	}
@@ -930,6 +955,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		OrgAdmins:              orgAdminNotifier(d),
 		TemporalClient:         d.Temporal.Client,
 		Database:               d.DB,
+		Checks:                 d.Checks,
 		ProviderAccounts:       d.ProviderAccounts,
 		Connections:            d.ConnectionVault,
 		OrgAccounts:            d.OrgAccounts,
@@ -945,6 +971,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,
+		StepKeys:               stepKeyIssuer(d),
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},
@@ -1015,13 +1042,11 @@ func (r *TriggerDeliveryRelay) Run(ctx context.Context) error {
 	return r.relay.Run(orgpolicy.WithResolver(authz.WithMembership(ctx, r.membership), r.policies))
 }
 
-// WorkflowCheckSyncerDeps is where workflows' checks are recorded, the
-// credential source whose GitHub broker writes them as the App, and the org
-// policies a write is judged by.
+// WorkflowCheckSyncerDeps is the GitHub-writing checks configuration and the
+// org policies a write is judged by.
 type WorkflowCheckSyncerDeps struct {
-	DB          *db.Repo
-	Credentials *WorkerIntegrationCredentials
-	Policies    *orgpolicy.Resolver
+	Checks   *SyncingChecks
+	Policies *orgpolicy.Resolver
 	// Membership answers whether a check's owner is still a member of its
 	// trigger's org, asked before every write (workflowcheck.ownerMayWrite);
 	// nil is a deployment with no orgs.
@@ -1030,31 +1055,17 @@ type WorkflowCheckSyncerDeps struct {
 
 // NewWorkflowCheckSyncer writes the GitHub check runs workflows' `check:`
 // blocks declare (workflowcheck): every worker runs one; checks are leased
-// with SKIP LOCKED, so they share the queue. Without the GitHub broker (a
-// deployment with no control plane) every write fails with that reason and
-// is retried, so nothing is written as anyone but the App.
+// with SKIP LOCKED, so they share the queue. What it writes with, and why a
+// deployment with no control plane writes nothing, is SyncingChecks.
 //
 //forge:root-only worker
 func NewWorkflowCheckSyncer(d WorkflowCheckSyncerDeps) (*workflowcheck.Syncer, error) {
-	var broker workflowcheck.AppBroker
-	if d.Credentials != nil {
-		if cs, ok := d.Credentials.Source.(connauth.Service); ok {
-			if b, ok := cs.Broker(ghdelegated.BrokerID); ok {
-				broker, _ = b.(workflowcheck.AppBroker)
-			}
-		}
-	}
-	svc := workflowcheck.NewInstrumented(workflowcheck.Deps{
-		Store:  store.NewWorkflowCheckRunExtStore(d.DB.ORM()),
-		GitHub: workflowcheck.NewGitHub(workflowcheck.GitHubDeps{Runner: httpaction.NewRunner(netguard.New()), Broker: broker}),
-		RunURL: workflowcheck.HostedRunURL,
-	})
 	policies := d.Policies
 	var membership authz.Membership = authz.NoOrgs{}
 	if d.Membership != nil {
 		membership = d.Membership
 	}
-	return workflowcheck.NewSyncer(svc, func(ctx context.Context) context.Context {
+	return workflowcheck.NewSyncer(d.Checks.Service, func(ctx context.Context) context.Context {
 		return orgpolicy.WithResolver(authz.WithMembership(ctx, membership), policies)
 	}), nil
 }
@@ -1267,17 +1278,6 @@ const (
 // projectPurgeInterval, until its context ends.
 type ProjectPurge struct {
 	purges projectpurge.Service
-}
-
-// ProjectPurgesDeps is the database the purge service runs over.
-type ProjectPurgesDeps struct {
-	DB *db.Repo
-}
-
-// NewProjectPurges is the project deletion and purge service: the API's
-// project handler schedules and restores through it, the worker's loop purges.
-func NewProjectPurges(d ProjectPurgesDeps) (projectpurge.Service, error) {
-	return projectpurge.NewInstrumented(projectpurge.Deps{DB: d.DB.ORM()}), nil
 }
 
 // ProjectPurgeDeps is the purge service.

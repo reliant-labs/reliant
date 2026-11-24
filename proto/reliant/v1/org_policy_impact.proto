@@ -23,7 +23,9 @@ service OrgPolicyImpactService {
   // providers, automations and models sections, each by the latest model
   // call it made in the last window_days: how many would be refused at their
   // next call, and why. It reads only; nothing is written or enforced.
-  rpc GetPolicyImpact(GetPolicyImpactRequest) returns (GetPolicyImpactResponse) {}
+  rpc GetPolicyImpact(GetPolicyImpactRequest) returns (GetPolicyImpactResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 message GetPolicyImpactRequest {

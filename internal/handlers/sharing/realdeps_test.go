@@ -11,8 +11,11 @@ func realDeps(repo *db.Repo, orgs OrgResolver) Deps {
 	return Deps{
 		Chats:    store.NewChatsWithActivityExtStore(o),
 		Projects: store.NewProjectExtStore(o),
-		Shares:   store.NewShareEventExtStore(o),
-		Tx:       o,
-		Orgs:     orgs,
+		// The Repo reads drafts through the same workflowdrafts service
+		// composition wires.
+		WorkflowDrafts: repo,
+		Shares:         store.NewShareEventExtStore(o),
+		Tx:             o,
+		Orgs:           orgs,
 	}
 }

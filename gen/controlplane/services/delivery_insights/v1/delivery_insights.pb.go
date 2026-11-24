@@ -7,6 +7,7 @@
 package controlplanev1
 
 import (
+	v1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
@@ -23,12 +24,15 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// DeliveryTimeRange is a half-open range [start, end). Both ends are required
-// when the range is present, and end must be after start.
+// DeliveryTimeRange is a half-open range [start, end): when present, either
+// both absolute ends, with end after start, or a window relative to the
+// server's clock (relative, ObservabilityService's TimeRange.relative), which
+// the server resolves when it answers. Never both.
 type DeliveryTimeRange struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Start         *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start,proto3" json:"start,omitempty"`
 	End           *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=end,proto3" json:"end,omitempty"`
+	Relative      *v1.RelativeWindow     `protobuf:"bytes,3,opt,name=relative,proto3" json:"relative,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -73,6 +77,13 @@ func (x *DeliveryTimeRange) GetStart() *timestamppb.Timestamp {
 func (x *DeliveryTimeRange) GetEnd() *timestamppb.Timestamp {
 	if x != nil {
 		return x.End
+	}
+	return nil
+}
+
+func (x *DeliveryTimeRange) GetRelative() *v1.RelativeWindow {
+	if x != nil {
+		return x.Relative
 	}
 	return nil
 }
@@ -932,10 +943,11 @@ var File_services_delivery_insights_v1_delivery_insights_proto protoreflect.File
 
 const file_services_delivery_insights_v1_delivery_insights_proto_rawDesc = "" +
 	"\n" +
-	"5services/delivery_insights/v1/delivery_insights.proto\x12\x0fcontrolplane.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"s\n" +
+	"5services/delivery_insights/v1/delivery_insights.proto\x12\x0fcontrolplane.v1\x1a!controlplane/v1/time_window.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb0\x01\n" +
 	"\x11DeliveryTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
-	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xe2\x01\n" +
+	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\x12;\n" +
+	"\brelative\x18\x03 \x01(\v2\x1f.controlplane.v1.RelativeWindowR\brelative\"\xe2\x01\n" +
 	"\rDeliveryScope\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12A\n" +
 	"\n" +
@@ -1016,10 +1028,10 @@ const file_services_delivery_insights_v1_delivery_insights_proto_rawDesc = "" +
 	"\bfailures\x18\x03 \x01(\x05R\bfailures\x121\n" +
 	"\x06median\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\x06median\x12-\n" +
 	"\x04mean\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x04mean\x12\x18\n" +
-	"\aongoing\x18\x06 \x01(\x05R\aongoing2\xd9\x01\n" +
-	"\x17DeliveryInsightsService\x12[\n" +
-	"\fListReleases\x12$.controlplane.v1.ListReleasesRequest\x1a%.controlplane.v1.ListReleasesResponse\x12a\n" +
-	"\x0eGetDoraMetrics\x12&.controlplane.v1.GetDoraMetricsRequest\x1a'.controlplane.v1.GetDoraMetricsResponseB\xe8\x01\n" +
+	"\aongoing\x18\x06 \x01(\x05R\aongoing2\xe3\x01\n" +
+	"\x17DeliveryInsightsService\x12`\n" +
+	"\fListReleases\x12$.controlplane.v1.ListReleasesRequest\x1a%.controlplane.v1.ListReleasesResponse\"\x03\x90\x02\x01\x12f\n" +
+	"\x0eGetDoraMetrics\x12&.controlplane.v1.GetDoraMetricsRequest\x1a'.controlplane.v1.GetDoraMetricsResponse\"\x03\x90\x02\x01B\xe8\x01\n" +
 	"\x13com.controlplane.v1B\x15DeliveryInsightsProtoP\x01Z]github.com/reliant-labs/reliant/gen/controlplane/services/delivery_insights/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -1048,36 +1060,38 @@ var file_services_delivery_insights_v1_delivery_insights_proto_goTypes = []any{
 	(*ChangeFailureRate)(nil),      // 9: controlplane.v1.ChangeFailureRate
 	(*TimeToRestore)(nil),          // 10: controlplane.v1.TimeToRestore
 	(*timestamppb.Timestamp)(nil),  // 11: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),    // 12: google.protobuf.Duration
+	(*v1.RelativeWindow)(nil),      // 12: controlplane.v1.RelativeWindow
+	(*durationpb.Duration)(nil),    // 13: google.protobuf.Duration
 }
 var file_services_delivery_insights_v1_delivery_insights_proto_depIdxs = []int32{
 	11, // 0: controlplane.v1.DeliveryTimeRange.start:type_name -> google.protobuf.Timestamp
 	11, // 1: controlplane.v1.DeliveryTimeRange.end:type_name -> google.protobuf.Timestamp
-	0,  // 2: controlplane.v1.DeliveryScope.time_range:type_name -> controlplane.v1.DeliveryTimeRange
-	1,  // 3: controlplane.v1.ListReleasesRequest.scope:type_name -> controlplane.v1.DeliveryScope
-	4,  // 4: controlplane.v1.ListReleasesResponse.releases:type_name -> controlplane.v1.ReleaseMarker
-	11, // 5: controlplane.v1.ReleaseMarker.promoted_at:type_name -> google.protobuf.Timestamp
-	1,  // 6: controlplane.v1.GetDoraMetricsRequest.scope:type_name -> controlplane.v1.DeliveryScope
-	11, // 7: controlplane.v1.GetDoraMetricsResponse.window_start:type_name -> google.protobuf.Timestamp
-	11, // 8: controlplane.v1.GetDoraMetricsResponse.window_end:type_name -> google.protobuf.Timestamp
-	7,  // 9: controlplane.v1.GetDoraMetricsResponse.deployment_frequency:type_name -> controlplane.v1.DeploymentFrequency
-	8,  // 10: controlplane.v1.GetDoraMetricsResponse.lead_time:type_name -> controlplane.v1.LeadTime
-	9,  // 11: controlplane.v1.GetDoraMetricsResponse.change_failure_rate:type_name -> controlplane.v1.ChangeFailureRate
-	10, // 12: controlplane.v1.GetDoraMetricsResponse.time_to_restore:type_name -> controlplane.v1.TimeToRestore
-	10, // 13: controlplane.v1.GetDoraMetricsResponse.alert_time_to_restore:type_name -> controlplane.v1.TimeToRestore
-	12, // 14: controlplane.v1.LeadTime.median:type_name -> google.protobuf.Duration
-	12, // 15: controlplane.v1.LeadTime.mean:type_name -> google.protobuf.Duration
-	12, // 16: controlplane.v1.TimeToRestore.median:type_name -> google.protobuf.Duration
-	12, // 17: controlplane.v1.TimeToRestore.mean:type_name -> google.protobuf.Duration
-	2,  // 18: controlplane.v1.DeliveryInsightsService.ListReleases:input_type -> controlplane.v1.ListReleasesRequest
-	5,  // 19: controlplane.v1.DeliveryInsightsService.GetDoraMetrics:input_type -> controlplane.v1.GetDoraMetricsRequest
-	3,  // 20: controlplane.v1.DeliveryInsightsService.ListReleases:output_type -> controlplane.v1.ListReleasesResponse
-	6,  // 21: controlplane.v1.DeliveryInsightsService.GetDoraMetrics:output_type -> controlplane.v1.GetDoraMetricsResponse
-	20, // [20:22] is the sub-list for method output_type
-	18, // [18:20] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	12, // 2: controlplane.v1.DeliveryTimeRange.relative:type_name -> controlplane.v1.RelativeWindow
+	0,  // 3: controlplane.v1.DeliveryScope.time_range:type_name -> controlplane.v1.DeliveryTimeRange
+	1,  // 4: controlplane.v1.ListReleasesRequest.scope:type_name -> controlplane.v1.DeliveryScope
+	4,  // 5: controlplane.v1.ListReleasesResponse.releases:type_name -> controlplane.v1.ReleaseMarker
+	11, // 6: controlplane.v1.ReleaseMarker.promoted_at:type_name -> google.protobuf.Timestamp
+	1,  // 7: controlplane.v1.GetDoraMetricsRequest.scope:type_name -> controlplane.v1.DeliveryScope
+	11, // 8: controlplane.v1.GetDoraMetricsResponse.window_start:type_name -> google.protobuf.Timestamp
+	11, // 9: controlplane.v1.GetDoraMetricsResponse.window_end:type_name -> google.protobuf.Timestamp
+	7,  // 10: controlplane.v1.GetDoraMetricsResponse.deployment_frequency:type_name -> controlplane.v1.DeploymentFrequency
+	8,  // 11: controlplane.v1.GetDoraMetricsResponse.lead_time:type_name -> controlplane.v1.LeadTime
+	9,  // 12: controlplane.v1.GetDoraMetricsResponse.change_failure_rate:type_name -> controlplane.v1.ChangeFailureRate
+	10, // 13: controlplane.v1.GetDoraMetricsResponse.time_to_restore:type_name -> controlplane.v1.TimeToRestore
+	10, // 14: controlplane.v1.GetDoraMetricsResponse.alert_time_to_restore:type_name -> controlplane.v1.TimeToRestore
+	13, // 15: controlplane.v1.LeadTime.median:type_name -> google.protobuf.Duration
+	13, // 16: controlplane.v1.LeadTime.mean:type_name -> google.protobuf.Duration
+	13, // 17: controlplane.v1.TimeToRestore.median:type_name -> google.protobuf.Duration
+	13, // 18: controlplane.v1.TimeToRestore.mean:type_name -> google.protobuf.Duration
+	2,  // 19: controlplane.v1.DeliveryInsightsService.ListReleases:input_type -> controlplane.v1.ListReleasesRequest
+	5,  // 20: controlplane.v1.DeliveryInsightsService.GetDoraMetrics:input_type -> controlplane.v1.GetDoraMetricsRequest
+	3,  // 21: controlplane.v1.DeliveryInsightsService.ListReleases:output_type -> controlplane.v1.ListReleasesResponse
+	6,  // 22: controlplane.v1.DeliveryInsightsService.GetDoraMetrics:output_type -> controlplane.v1.GetDoraMetricsResponse
+	21, // [21:23] is the sub-list for method output_type
+	19, // [19:21] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_services_delivery_insights_v1_delivery_insights_proto_init() }

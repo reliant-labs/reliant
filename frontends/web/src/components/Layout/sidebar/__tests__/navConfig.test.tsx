@@ -11,7 +11,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { inboxPath, newChatPath, projectChatsPath, runsPath, settingsPath } from "@/lib/paths";
+import { inboxPath, machineSettingsPath, newChatPath, projectChatsPath, runsPath, sandboxesPath, settingsPath } from "@/lib/paths";
+
+import { getVisibleSettingsSectionIds, SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME } from "../../../Settings/SettingsNavigation";
 
 import { registerConsoleNavEntry } from "../../../Forge/Console/consoleNavRegistry";
 import { consolePageOf, consolePath, obsOverviewPath, orgPageOf, orgPath } from "../../../Forge/Console/paths";
@@ -79,8 +81,8 @@ describe("the hybrid nav's shape", () => {
     }
   });
 
-  it("has Usage & billing and Settings in the footer, and no footer Inbox", () => {
-    expect(hybridNav.footer.map((item) => item.id)).toEqual(["usage-billing", "settings"]);
+  it("has Usage & billing, Help and Settings in the footer, and no footer Inbox", () => {
+    expect(hybridNav.footer.map((item) => item.id)).toEqual(["usage-billing", "slot-help", "settings"]);
     expect(hybridNav.footer.find((item) => item.id === "settings")?.kind).toBe("row");
   });
 
@@ -264,6 +266,24 @@ describe("Settings", () => {
     expect(screen.getByTestId("nav-settings-ai")).toHaveAttribute("aria-current", "page");
     expect(screen.getByTestId("sidebar-settings-button")).toHaveAttribute("aria-current", "page");
   });
+
+  // Every Settings section's page shows Settings' sections in the nav, except
+  // the ones another area owns, which Settings must then neither light up nor
+  // reopen (SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME). A section moved under
+  // another area without being listed there fails here: that is how bare
+  // /settings came to open Agents › Sandboxes with no way back to Settings.
+  it.each(getVisibleSettingsSectionIds())("%s's page is Settings', or listed as another area's", (section) => {
+    const area = activeArea(hybridNav, ctxAt(settingsPath(section)))?.id ?? null;
+    if (SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME.includes(section)) expect(area).not.toBe("settings");
+    else expect(area).toBe("settings");
+  });
+
+  it.each([sandboxesPath(), machineSettingsPath("d-1")])("leaves %s to Agents › Sandboxes, with Settings unlit", (href) => {
+    renderAt(href);
+    expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "agents");
+    expect(screen.getByTestId("nav-sandboxes")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("sidebar-settings-button")).not.toHaveAttribute("aria-current");
+  });
 });
 
 describe("accordions", () => {
@@ -285,5 +305,28 @@ describe("accordions", () => {
 
     rerender(<NavRenderer config={hybridNav} ctx={ctx(consolePath("shopfront", { kind: "domains" }))} slots={{}} onNavigate={onNavigate} />);
     expect(configure()).toHaveAttribute("aria-expanded", "true");
+  });
+});
+
+describe("the nav's tour anchors", () => {
+  it("anchors Overview and the app's section groups by data-tour (one set, for the demo's journey and the sample tour)", () => {
+    const unregister = registerConsoleNavEntry({ id: "advisories", label: "Advisories", segment: "advisories", after: "more-tools", group: "security" });
+    try {
+      const href = consolePath("shopfront", { kind: "secrets" });
+      const console = { project: "shopfront", page: { kind: "secrets" as const }, env: "prod", envs: [] };
+      const { container } = render(<NavRenderer config={hybridNav} ctx={ctxAt(href, { console })} slots={{}} onNavigate={vi.fn()} />);
+      const anchors = [...container.querySelectorAll("[data-tour]")].map((el) => el.getAttribute("data-tour"));
+      for (const id of ["forge-console-nav", "nav-overview", "nav-observability", "nav-deployments", "nav-tests", "nav-security", "nav-configure"]) {
+        expect(anchors, id).toContain(id);
+      }
+      // A group's anchor holds the group: its row, and its rows while open (Configure, on Secrets).
+      const configure = container.querySelector("[data-tour='nav-configure']")!;
+      expect(configure.querySelector("[data-testid='nav-configure']")).not.toBeNull();
+      expect(configure.querySelector("[data-testid='nav-secrets']")).not.toBeNull();
+      expect(container.querySelector("[data-tour='nav-overview'] [data-testid='sidebar-home-button']")).not.toBeNull();
+      expect(container.querySelector("[data-tour='nav-observability'] [data-testid='nav-observability']")).not.toBeNull();
+    } finally {
+      unregister();
+    }
   });
 });

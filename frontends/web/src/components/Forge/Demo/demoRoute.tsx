@@ -1,8 +1,13 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * `/forge/demo` as a route the app's tree mounts on its root, public, with
- * `/demo` redirecting to it (routes.tsx, on both hosts).
+ * `/forge/demo` and `/demo`, in both route trees.
+ *
+ * The demo has one home, the demo bundle (demo.reliantlabs.io, its shell
+ * demoShellRoutes.tsx): there `/forge/demo` is the demo's own pages
+ * (createForgeDemoRoute) and `/demo` points at it. The app's tree (routes.tsx,
+ * both brands) hands both off to it (demoHandoff.ts), query kept, so a
+ * `?tour=` link carries the forge journey there.
  *
  * The page itself (DemoConsole) is its own lazy chunk, fixtures included, so
  * nobody pays for it until it is opened.
@@ -37,13 +42,13 @@ export function createForgeDemoRoute<TParent extends AnyRoute>(getParentRoute: (
     getParentRoute,
     path: FORGE_DEMO_PATH,
     validateSearch: forgeDemoSearchSchema,
-    // The forge shell's root has no retainTourParam of its own: the demo keeps `?tour=` itself.
+    // The demo shell's root keeps `?tour=` too; the route keeps it wherever it is mounted.
     search: { middlewares: [retainTourParam as never] },
     component: ForgeDemoPage,
   });
 }
 
-/** `/demo` → `/forge/demo`, keeping the query (a `?tour=` from a link). For the forge shell. */
+/** `/demo` → `/forge/demo`, keeping the query (a `?tour=` from a link). */
 export function createForgeDemoRedirectRoute<TParent extends AnyRoute>(getParentRoute: () => TParent) {
   return createRoute({
     getParentRoute,

@@ -145,6 +145,9 @@ older one is refused with `lease_unsupported: true` before anything is committed
 `GIT_TERMINAL_PROMPT=0`, an empty `GH_CONFIG_DIR`. A `git push` or `gh pr merge` from it fails to
 authenticate at once and never prompts. Set it for an agent's shell with `tools_config.tools.shell` (bound, so
 the model is never shown it) and on a `run` node with `credentials: none`.
+A step that runs a vendor agent CLI needs `credentials: inherit`: the sandbox hides Claude Code's, Codex's
+and the GitHub CLI's sign-ins, and from the next minor release Gemini CLI's, Cursor Agent's and Copilot
+CLI's too (until then a `credentials: none` command prints a notice naming them on its stderr).
 
 ```yaml
 tools_config:
@@ -157,6 +160,29 @@ absent (`~/.reliant/daemon.json`, `~/.config/forge`, `~/.git-credentials`, `~/.s
 container engine's socket), sees only its own processes, and has no capabilities. It shares the network and can
 write its working directory, and on macOS and Windows only the environment is scrubbed. Never tell an agent to look
 elsewhere for a token; publish with a `git_publish` node.
+
+### A third-party agent CLI on Reliant's gateway
+
+A `run` node with `llm_gateway` runs its command with a short-lived step key for the LLM gateway, billed to the
+run's organization's Reliant credits: capped to `budget_usd` ($5 by default, $50 at most), to `models` (the first is
+the CLI's main model), and to the node's `timeout` plus the run step's 30-minute machine wait plus 2 minutes (at most 12h),
+then revoked when the step ends. For
+`cli: claude-code` the command gets `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` (and the model variables), and
+`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` and the Bedrock/Vertex settings are removed; the key is redacted from
+its output. The node's `env:` may not set those names. `nodes.<id>.llm_gateway.spend_usd` is what was metered as of
+the step's end; it is final only when `spend_known` is true (false: some calls were still settling, so the figure may be low).
+A machine whose daemon is too old, a deployment that cannot issue keys, or an org out of
+credits refuses the step (exit -1) without running the command.
+
+```yaml
+- id: bench
+  type: run
+  timeout: 20m
+  args:
+    command: claude -p "fix the failing test" --output-format json
+    credentials: none
+    llm_gateway: {cli: claude-code, budget_usd: 2}
+```
 
 ### Threading
 
@@ -921,11 +947,12 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `concurrency` | WorkflowConcurrency | No | *Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), {per_member: K} (K per machine of the trigger's pool), {max_running_per_key: N, key: ...} (N per key, e.g. one run per pull request), or a combination, optionally waiting: latest (only the newest waiting firing per key survives; older ones are recorded skipped, "superseded", never failed), key (a template over `trigger` grouping firings) and priority (a CEL integer over `trigger`: waiting firings run highest first). See WorkflowConcurrency below.* |
 | `on_failure` | Workflow | No | *A finally-style handler: an inline graph ({entry, nodes, edges}) that runs once when a run FAILS (an unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, error_code, attempt}`, `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). The run still ends FAILED; an error in the handler is logged and never recursive. To release something however the run ends, cancel included, use `finally`.* |
 | `finally` | Workflow | No | *A handler for however a run ends: an inline graph ({entry, nodes, edges}) that runs once when a run completes, fails (after on_failure) or is cancelled. Never when it pauses or hands off to a successor run. Its nodes read `run.status` ('completed' \| 'failed' \| 'cancelled'), `failure.*` (empty unless the run failed), `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). It cannot change how the run ended; an error in it is logged and never recursive. Release leases, claims and labels here.* |
-| `requires` | WorkflowRequirements | No | - |
+| `requires` | WorkflowRequirements | No | *What a run needs from outside its definition, checked after its machine is up and before its first node: {tools, integrations, repos, cli_login}. A run missing anything fails at once, naming every missing item with its fix. See WorkflowRequirements below.* |
 | `secrets` | map[string]SecretDeclaration | No | - |
 | `permissions` | string[] | No | - |
 | `attention` | WorkflowAttention | No | *Explicit human-attention incident correlation for root unattended launch runs, independent of lifecycle and outcome. Absent preserves legacy behavior. See WorkflowAttention below.* |
 | `check` | WorkflowCheck | No | *A GitHub check run the engine owns, one per run an event trigger fires, written as the Reliant App: queued when the firing is recorded, in_progress when the first node starts, and concluded on every ending (success, failure, cancelled, timed_out; never neutral or skipped). `check: <name>` or {name, repository, head_sha, output, timeout}. See WorkflowCheck below.* |
+| `observe` | NodeObserve | No | *The default observe block for every node of this graph ({attributes, events, metrics}, templates over each node's `output` and `node`), merged with a node's own: attributes by key and metrics by name (the node wins), events concatenated. Not inherited by sub-workflows. See the nodes reference, Observability. This release reads and validates it and records nothing yet.* |
 
 ## Edge
 

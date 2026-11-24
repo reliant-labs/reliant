@@ -12,7 +12,9 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 service MessageService {
   // GetMessage retrieves a single message by ID with its content blocks
   // forge:custom — authorizes through the message's chat and joins its content blocks
-  rpc GetMessage(GetMessageRequest) returns (GetMessageResponse) {}
+  rpc GetMessage(GetMessageRequest) returns (GetMessageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // GetMessageRequest requests a single message by ID

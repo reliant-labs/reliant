@@ -32,7 +32,7 @@ func (s *Service) ListScenarios(
 		if err := s.projectBelongsToUser(ctx, req.Msg.GetProjectId(), userID); err != nil {
 			return nil, err
 		}
-		project, err := s.deps.Repo.GetProject(ctx, req.Msg.GetProjectId())
+		project, err := s.deps.ProjectRows.GetProject(ctx, req.Msg.GetProjectId())
 		if err == nil && project != nil {
 			hasProject = true
 			projectID = project.ID

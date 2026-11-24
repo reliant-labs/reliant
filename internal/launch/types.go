@@ -200,6 +200,15 @@ type Spec struct {
 	// only; resuming an already-recorded launch never consults it.
 	Guard func(ctx context.Context) (declineReason string, err error)
 
+	// OnChatCreated runs INSIDE the launch transaction, right after a new
+	// chat's row is written and before its run exists, with the row as
+	// written (its machine pin decided). It writes what must exist before the
+	// chat's first turn — StartChat's attached projects. An error refuses the
+	// launch: nothing is written, and Launch returns the error as it is, so a
+	// typed refusal reaches the caller unchanged. It may run more than once
+	// (the transaction retries). New chats only.
+	OnChatCreated func(ctx context.Context, chat *core.Chat) error
+
 	// RecordExecution persists immutable admission identity after Temporal accepts
 	// the idempotent start. A failed write is retried, never treated as free capacity.
 	RecordExecution func(ctx context.Context, eventID, workflowID, firstRunID string) error
@@ -280,6 +289,16 @@ func (e *DeclinedError) Is(target error) bool { return target == ErrDeclined }
 // not a failure: the repo logs it quietly (a trigger waiting for workflow
 // capacity is declined on every poll, and each one was an ERROR and an issue).
 func (e *DeclinedError) TxOutcome() {}
+
+// chatCreatedError carries Spec.OnChatCreated's refusal out of the launch
+// transaction, so Launch returns it unchanged instead of as an InternalError.
+type chatCreatedError struct{ err error }
+
+func (e *chatCreatedError) Error() string { return e.err.Error() }
+func (e *chatCreatedError) Unwrap() error { return e.err }
+
+// TxOutcome: the refusal is the transaction's intended rollback.
+func (e *chatCreatedError) TxOutcome() {}
 
 var _ db.TxOutcome = (*DeclinedError)(nil)
 

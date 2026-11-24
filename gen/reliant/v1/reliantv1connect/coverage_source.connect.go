@@ -63,6 +63,7 @@ func NewCoverageSourceServiceClient(httpClient connect.HTTPClient, baseURL strin
 			httpClient,
 			baseURL+CoverageSourceServiceGetCoverageSourceProcedure,
 			connect.WithSchema(coverageSourceServiceMethods.ByName("GetCoverageSource")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -98,6 +99,7 @@ func NewCoverageSourceServiceHandler(svc CoverageSourceServiceHandler, opts ...c
 		CoverageSourceServiceGetCoverageSourceProcedure,
 		svc.GetCoverageSource,
 		connect.WithSchema(coverageSourceServiceMethods.ByName("GetCoverageSource")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.CoverageSourceService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

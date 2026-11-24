@@ -11,7 +11,7 @@
  *  - telemetry starts for an anonymous visitor (lib/demoTelemetry.ts decides
  *    what it records, and nothing for a browser that opted out);
  *  - every Connect call on this host goes to forge's mock transport with the
- *    `demo` scenario (demoData/demoTransport.ts): sample data, or the demo-data
+ *    shop fixture pack (demoTransport.ts, src/fixtures/shop): sample data, or the demo-data
  *    gateway when DEMO_DATA_SOURCE says so. No real backend is reachable.
  */
 
@@ -26,7 +26,7 @@ export function bootDemoShell(): void {
   // Lazily: the scenario carries the sample data, which only the console needs.
   // Built in a task of its own, after the chunk has evaluated, so neither blocks the first paint for long.
   installShellTransport(
-    import("./demoData/demoTransport").then(async ({ createDemoTransport }) => {
+    import("./demoTransport").then(async ({ createDemoTransport }) => {
       await yieldToMain();
       return createDemoTransport();
     }),
