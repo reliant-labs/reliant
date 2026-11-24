@@ -15,7 +15,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=03d2cfd6cdf972082a4fcb5e4608be07f497cfef8af3dc3a5604bbd8ae543062
+// forge:hash=ec0903e84acdfb4a08e376e537594903042590b6d69b4763e7c6f72b050dd51a
 
 // MockService is a test mock for the Service interface.
 //
@@ -48,6 +48,7 @@ type MockService struct {
 	NotifyOrgKeyRejectedFunc            func(context.Context, OrgKeyRejectedNotice) (bool, error)
 	NotifyOrgAutomationNoOrgAccountFunc func(context.Context, OrgAutomationNoOrgAccountNotice) (bool, error)
 	GetModelListPricesFunc              func(context.Context, []ModelRef) ([]ModelListPrice, time.Time, error)
+	GetConversationTraceFunc            func(context.Context, ConversationTraceQuery) (ConversationTrace, error)
 	MintStepKeyFunc                     func(context.Context, StepKeyRequest) (StepKey, error)
 	RevokeStepKeyFunc                   func(context.Context, string) (StepKeyRevocation, error)
 	HasCoverageBlobFunc                 func(context.Context, string, string, string, string) (CoverageBlob, error)
@@ -259,6 +260,15 @@ func (m *MockService) GetModelListPrices(ctx context.Context, refs []ModelRef) (
 		return m.GetModelListPricesFunc(ctx, refs)
 	}
 	return nil, *new(time.Time), contractkit.MockNotSet("MockService", "GetModelListPrices")
+}
+
+// GetConversationTrace records the call and delegates to GetConversationTraceFunc when set.
+func (m *MockService) GetConversationTrace(ctx context.Context, q ConversationTraceQuery) (ConversationTrace, error) {
+	m.Recorder.Record("GetConversationTrace", ctx, q)
+	if m.GetConversationTraceFunc != nil {
+		return m.GetConversationTraceFunc(ctx, q)
+	}
+	return ConversationTrace{}, contractkit.MockNotSet("MockService", "GetConversationTrace")
 }
 
 // MintStepKey records the call and delegates to MintStepKeyFunc when set.

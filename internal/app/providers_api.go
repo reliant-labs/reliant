@@ -37,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/chat_trace"
 	"github.com/reliant-labs/reliant/internal/handlers/coverage_source"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/handlers/org_policy_impact"
@@ -1652,6 +1653,23 @@ func ProjectOrgMoveFacts(cfg *configv1.ControlPlaneConfig) project.MoveFacts {
 // not hosted or this process has no internal-service secret; never a typed
 // nil in the handler's interface.
 func OrgUsageListPrices(cfg *configv1.ControlPlaneConfig) org_usage.ListPrices {
+	cp := ControlPlaneEndpoint(cfg)
+	if !cp.Hosted() || cp.InternalServiceSecret == "" {
+		return nil
+	}
+	secret := cp.InternalServiceSecret
+	return controlplane.NewInstrumented(controlplane.Deps{
+		ControlPlane: cfg,
+		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
+	})
+}
+
+// ChatTraceSpans is where a chat's Trace tab reads its spans: control-plane's
+// ConversationTraceInternalService, signed as the internal service. nil —
+// every trace is answered without spans, PARTIAL — when the control plane is
+// not hosted or this process has no internal-service secret; never a typed
+// nil in the handler's interface.
+func ChatTraceSpans(cfg *configv1.ControlPlaneConfig) chat_trace.Spans {
 	cp := ControlPlaneEndpoint(cfg)
 	if !cp.Hosted() || cp.InternalServiceSecret == "" {
 		return nil

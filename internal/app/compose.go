@@ -50,6 +50,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/background"
 	"github.com/reliant-labs/reliant/internal/handlers/catalog"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/chat_trace"
 	"github.com/reliant-labs/reliant/internal/handlers/connection"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
 	"github.com/reliant-labs/reliant/internal/handlers/coverage_source"
@@ -1020,6 +1021,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		OrgPolicyImpact:    g.OrgPolicyImpact(),
 		CoverageSource:     g.CoverageSource(),
 		PullRequestRecord:  g.PullRequestRecord(),
+		ChatTrace:          g.ChatTrace(),
 	})
 }
 
@@ -1963,4 +1965,17 @@ func (g *Graph) newProjectpurge() (projectpurge.Service, error) {
 	return projectpurge.NewServiceWithForgeMiddleware(projectpurge.New(projectpurge.Deps{
 		DB: g.Database().ORM(), // the project's ORM client
 	})), nil
+}
+
+// newChatTrace constructs the chat-trace handler (internal/handlers/chat_trace):
+// a chat's Trace/Cost tab, its spans read through control-plane
+// (ChatTraceSpans; nil answers every trace without spans, PARTIAL).
+func (g *Graph) newChatTrace() (*chat_trace.Service, error) {
+	return chat_trace.New(chat_trace.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Store:  g.Database(),
+		Spans:  ChatTraceSpans(g.ServerProcessConfig.GetControlPlane()),
+		Now:    nil, // optional — no provider
+	})
 }
