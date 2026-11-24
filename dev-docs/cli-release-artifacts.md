@@ -7,7 +7,8 @@ names each channel's current release. A self-run daemon or a standalone server
 reads that manifest to learn its upgrade target without our control plane, then
 verifies what it downloads. This is phase R0 of forge's
 `docs/proposals/self-upgrade.md` (§6). Forge's `pkg/selfupdate` (F1, F2) and
-`reliant update` (E2) are the consumers.
+`reliant update` (E2, `dev-docs/self-update.md`) are the consumers;
+`internal/cliupdate` pins the signing values below.
 
 Nothing that already shipped changed: the installers, their update feeds
 (`latest*.yml`, `alpha*.yml`), their URLs and the Homebrew dispatch are as they
@@ -22,6 +23,18 @@ were.
 | `daemon-channels.json` as this release wrote it | yes | `cli/<tag>/` |
 | `reliant-release.sigstore.json`, the signature | yes | `cli/<tag>/` |
 | `daemon-channels.json`, the live manifest | no | bucket root |
+| `reliant_<os>_<arch>.tar.gz.cdx.json`, a CycloneDX SBOM of each archive's binary | yes | no |
+
+The SBOMs are not part of the signed set (below). `cli-sbom` writes them with
+the pinned forge's `forge vuln sbom --file`, which reads the binary's Go build
+info (modules, versions, toolchain) with forge's pinned syft and names the
+archive and the tag as the SBOM's subject, as forge's own releases do. They are
+evidence for a scanner (`forge vuln scan <file>.cdx.json`, grype, Dependency-Track),
+not something a verifier pins: a re-run regenerates and replaces them. After
+`cli-publish` succeeds, `sbom-published` downloads and verifies the retained
+signed set from the GitHub Release before describing it, rather than using the
+rerun's potentially different build artifacts. A missing or corrupt stored set
+fails closed. Unpublished dry runs describe their own `cli-archives` artifact.
 
 For example, `https://downloads.reliantlabs.io/cli/v1.9.0/reliant_linux_arm64.tar.gz`
 and `https://github.com/reliant-labs/reliant/releases/download/v1.9.0/reliant_linux_arm64.tar.gz`.
@@ -192,6 +205,14 @@ contains. Someone who can push a release tag gets their release signed too.
    to hash to the manifest's digest, which must itself be `checksums.txt`'s. The
    signature must be the same bytes in both places. A 200 alone proves nothing.
    It waits for `cli-publish`.
+6. `cli-sbom` describes each archive's binary (`scripts/release-cli.sh sbom`)
+   and keeps the SBOMs as the `cli-sboms` artifact; when `cli-publish`
+   succeeded, it attaches them to the GitHub Release (`store-sbom-github`, which
+   refuses a Release with no signed set). Warn-first: it is
+   `continue-on-error` and nothing needs it, so an SBOM forge cannot write is a
+   warning on the run, never a failed release. Prebuild and dry-run dispatches
+   run it too and attach nothing. `TestReleaseCLISBOMJob` holds those
+   conditions.
 
 ### Recovery: a tag is signed once
 
@@ -242,6 +263,11 @@ Pass criteria:
   the tag for its channel.
 - The `verify-published` step "The CLI archives and the channel manifest are
   live" passes.
+- `cli-sbom` (since the CLI SBOMs landed) is green and the GitHub Release lists
+  six `reliant_*.tar.gz.cdx.json`. `gh release download <tag> -p
+  'reliant_linux_amd64.tar.gz.cdx.json' -O - | jq '.metadata.component'` names
+  the archive and the tag. A yellow `cli-sbom` is not a failed release: read its
+  `::warning::` lines.
 
 If `cli-publish` fails, re-run it. With no signature stored anywhere it signs
 again; otherwise it recovers the stored set and finishes storing it. Fix

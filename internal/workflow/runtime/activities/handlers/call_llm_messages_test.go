@@ -4,10 +4,11 @@ package handlers
 import (
 	"testing"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/models/message"
 )
 
 func TestCallLLMMessageInput(t *testing.T) {

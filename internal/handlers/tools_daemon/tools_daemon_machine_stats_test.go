@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -21,6 +22,8 @@ type machineStatsLine struct {
 }
 
 type machineStatsHarness struct {
+	// ctx is what the stream's context carries (authz membership).
+	ctx    context.Context
 	svc    *Service
 	conn   *daemonConnection
 	now    time.Time
@@ -33,6 +36,7 @@ type machineStatsHarness struct {
 
 func newMachineStatsHarness(t *testing.T) *machineStatsHarness {
 	h := &machineStatsHarness{
+		ctx:    context.Background(),
 		now:    time.Date(2026, 11, 20, 6, 0, 0, 0, time.UTC),
 		labels: map[string]string{"monitor": "platform"},
 	}
@@ -65,7 +69,7 @@ func load(v float64) *float64 { return &v }
 // as the receive loop would, and returns the lines it logged.
 func (h *machineStatsHarness) heartbeat(hb *reliantv1.DaemonHeartbeat) []machineStatsLine {
 	before := len(h.lines)
-	h.svc.applyInboundState(context.Background(), h.conn,
+	h.svc.applyInboundState(h.ctx, h.conn,
 		&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Heartbeat{Heartbeat: hb}}, make(chan struct{}))
 	return h.lines[before:]
 }
@@ -152,6 +156,60 @@ func TestMachineStatsLinesOnlyForSelectedMachines(t *testing.T) {
 			assert.Empty(t, h.heartbeat(fullHeartbeat()))
 		})
 	}
+}
+
+// A machine with no known org — paired with an unbound credential, as the
+// platform's pipeline boxes are — is selected in the org it acts in: its
+// owner's default org. Before, it was never selected, and prod wrote no
+// line for cicd or ovh-build-1.
+func TestMachineStatsLinesForAMachineWithNoKnownOrg(t *testing.T) {
+	h := newMachineStatsHarness(t)
+	h.conn.orgID = ""
+	h.ctx = authz.WithMembership(context.Background(), defaultOrgMembership{def: "org-platform"})
+	lines := h.heartbeat(fullHeartbeat())
+	require.Len(t, lines, 3)
+	assert.Equal(t, "org-platform", lines[0].attrs["org_id"], "the line names the org it was selected in")
+	assert.Equal(t, "org-platform", lines[1].attrs["org_id"])
+
+	for name, ctx := range map[string]context.Context{
+		"owner's default org not watched": authz.WithMembership(context.Background(), defaultOrgMembership{def: "org-customer"}),
+		"no membership wired":             context.Background(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newMachineStatsHarness(t)
+			h.conn.orgID = ""
+			h.ctx = ctx
+			assert.Empty(t, h.heartbeat(fullHeartbeat()))
+		})
+	}
+}
+
+// A failed read of the owner's default org selects nothing and is retried a
+// minute later, like a failed label read.
+func TestMachineStatsDefaultOrgReadError(t *testing.T) {
+	h := newMachineStatsHarness(t)
+	h.conn.orgID = ""
+	m := &failingDefaultOrg{err: errors.New("membership down")}
+	h.ctx = authz.WithMembership(context.Background(), m)
+	assert.Empty(t, h.heartbeat(fullHeartbeat()))
+	m.err = nil
+	h.now = h.now.Add(30 * time.Second)
+	assert.Empty(t, h.heartbeat(fullHeartbeat()), "retried after a minute, not every heartbeat")
+	h.now = h.now.Add(30 * time.Second)
+	assert.Len(t, h.heartbeat(fullHeartbeat()), 3)
+}
+
+type failingDefaultOrg struct{ err error }
+
+func (*failingDefaultOrg) IsMember(context.Context, string, string) (bool, bool, error) {
+	return true, true, nil
+}
+
+func (m *failingDefaultOrg) DefaultOrg(context.Context, string) (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	return "org-platform", nil
 }
 
 // A label added while the machine is connected takes effect within five

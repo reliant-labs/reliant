@@ -653,6 +653,7 @@ type ActivityWrapper[I any, O any] struct {
 	name       string
 	activity   func(ctx context.Context, input I) (O, error)
 	repo       ActivityStore
+	workflows  WorkflowRows
 	workKind   lifecycle.WorkKind
 	// messageWriter supplies the writer for a delegated save_message (see
 	// activity_message_save.go). A func so the registry's writer is read at
@@ -711,6 +712,22 @@ func NewActivityWrapper[I any, O any](
 		messageWriteRetry: defaultMessageWriteRetry(),
 		dbOutage:          defaultDBOutagePolicy(),
 	}
+}
+
+// workflowReader is the wrapper's WorkflowRows as the lifecycle package's
+// WorkflowReader; nil when the wrapper has none, so the check allows.
+func (w *ActivityWrapper[I, O]) workflowReader() lifecycle.WorkflowReader {
+	if w.workflows == nil {
+		return nil
+	}
+	return lifecycleReader{w.workflows}
+}
+
+// lifecycleReader adapts a WorkflowRows to lifecycle.WorkflowReader.
+type lifecycleReader struct{ workflows WorkflowRows }
+
+func (r lifecycleReader) GetWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
+	return r.workflows.LoadWorkflow(ctx, id)
 }
 
 // Execute wraps the typed activity with all middleware functionality.
@@ -999,7 +1016,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// would recreate the very loop the rule exists to break. Temporal records
 	// the activity as failed, the loop unwinds, and the run settles at its
 	// stopped status instead of burning turns.
-	if decision := lifecycle.MayExecuteWork(ctx, w.repo, workflowID, w.workKind); !decision.Allowed {
+	if decision := lifecycle.MayExecuteWork(ctx, w.workflowReader(), workflowID, w.workKind); !decision.Allowed {
 		logging.WarnContext(ctx, "[ActivityWrapper] Refusing to execute activity for a stopped workflow",
 			"activityType", activityType,
 			"workflowID", workflowID,
@@ -2190,6 +2207,7 @@ func deriveRecordedVerdict(outputMap map[string]interface{}, execErr error) reco
 // Similar to tool registry but for Temporal activities
 type ActivityRegistry struct {
 	repo        ActivityStore
+	workflows   WorkflowRows
 	activities  map[string]interface{}  // activity name -> wrapped activity function
 	outputTypes map[string]reflect.Type // activity name -> output type for schema introspection
 	// messageWriter writes a node's delegated save_message; see SetMessageWriter.
@@ -2209,10 +2227,20 @@ type ActivityRegistry struct {
 	stopNudges stopNudgeSource
 }
 
+// ActivityRegistryDeps is what an ActivityRegistry is built from.
+type ActivityRegistryDeps struct {
+	// Store takes every wrapper's liveness, step, node-event and error writes.
+	Store ActivityStore
+	// Workflows reads the run's workflow row for the stopped-run check and
+	// the database-outage probe.
+	Workflows WorkflowRows
+}
+
 // NewActivityRegistry creates a new activity registry
-func NewActivityRegistry(repo ActivityStore) *ActivityRegistry {
+func NewActivityRegistry(deps ActivityRegistryDeps) *ActivityRegistry {
 	return &ActivityRegistry{
-		repo:              repo,
+		repo:              deps.Store,
+		workflows:         deps.Workflows,
 		activities:        make(map[string]interface{}),
 		outputTypes:       make(map[string]reflect.Type),
 		messageWriteRetry: defaultMessageWriteRetry(),
@@ -2303,6 +2331,7 @@ func wrapActivity[TInput any, TOutput any](
 	// - Chat updates dual-write for UI tracking
 	// - Structured logging and observability
 	wrapper := NewActivityWrapper(name, execute, registry.repo)
+	wrapper.workflows = registry.workflows
 	wrapper.workKind = kind
 	wrapper.outlivesHeartbeatRPCFailure = outlivesHeartbeatRPCFailure
 	wrapper.directHeartbeat = registry.directHeartbeat
@@ -2482,7 +2511,7 @@ func (a *ProcessMessageActivity) Execute(ctx context.Context, input ProcessMessa
 }
 
 // Register it
-registry := NewActivityRegistry(repo)
+registry := NewActivityRegistry(ActivityRegistryDeps{Store: repo, Workflows: workflows})
 RegisterActivity(registry, &ProcessMessageActivity{repo: repo, llm: llmClient})
 
 // Register with Temporal worker

@@ -58,7 +58,7 @@ func GetShellEnv(workingDir string) []string {
 	// Blacklist Reliant-specific environment variables that shouldn't propagate to user shells
 	// These are internal to the Reliant backend and Electron processes
 	blacklistedPrefixes := []string{
-		"RELIANT_",       // All Reliant-specific vars (RELIANT_DATA_DIR, RELIANT_LOGS_PATH, etc.)
+		"RELIANT_",       // All Reliant-specific vars (RELIANT_APP_DATA_DIR, RELIANT_USER_CONFIG_DIR, etc.)
 		"API_PORT",       // Backend API port
 		"TEMPORAL_",      // Temporal-specific vars
 		"ELECTRON_",      // Electron-specific vars

@@ -18,6 +18,40 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
+// SpawnCalls maps a chat's child threads to the spawn tool calls that started
+// them, for a reconnect snapshot's cancel reconciliation. store.ToolCallExtStore
+// satisfies it.
+type SpawnCalls interface {
+	SpawnToolCallIDsByChildThread(ctx context.Context, chatID string) (map[string]string, error)
+}
+
+// Heads is a chat's update heads, the snapshot's other-updates: the newest
+// non-message update of each entity. The source says where they were read from
+// (the heads table, or the log for a chat the heads cannot vouch for).
+// store.ChatUpdateExtStore satisfies it.
+type Heads interface {
+	SnapshotUpdateHeads(ctx context.Context, chatID string) ([]core.ChatUpdate, string, error)
+}
+
+// UserLog is a user's update log after a cursor. store.UserUpdateExtStore
+// satisfies it.
+type UserLog interface {
+	UserUpdatesSince(ctx context.Context, userID string, sinceSeq int64, limit int) ([]core.UserUpdate, error)
+}
+
+// OrgFeed is an org's feed of what its members shared (StreamOrgUpdates).
+// store.OrgUpdateExtStore satisfies it.
+type OrgFeed interface {
+	LatestOrgUpdateSequence(ctx context.Context, orgID string) (int64, error)
+	OrgUpdatesSince(ctx context.Context, orgID string, sinceSeq int64, limit int) ([]core.OrgUpdate, error)
+}
+
+// Siblings is the snapshot's rows of threads that are neither the main thread
+// nor a spawn thread. store.MessageExtStore satisfies it.
+type Siblings interface {
+	ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*core.Message, error)
+}
+
 // Repository is everything the streaming handlers read.
 type Repository interface {
 	// Who the chat a subscription is for belongs to, and the trigger that
@@ -30,29 +64,33 @@ type Repository interface {
 	// The compaction watermark: a replay from below it would skip rows.
 	GetChatCompactedThrough(ctx context.Context, chatID string) (int64, error)
 	GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int64, limit int) ([]db.ChatUpdate, error)
-	GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID string) ([]db.ChatUpdate, error)
 	GetLatestUserUpdateSequence(ctx context.Context, userID string) (int64, error)
-	GetUserUpdatesSince(ctx context.Context, userID string, sinceSeq int64, limit int) ([]db.UserUpdate, error)
 
-	// The org of the project or saved workflow a user update is about, which
+	// The org of the saved workflow a user update is about, which
 	// decides whether the user stream delivers it (orgGate).
-	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error)
-
-	// An org's feed of what its members shared (StreamOrgUpdates).
-	LatestOrgUpdateSequence(ctx context.Context, orgID string) (int64, error)
-	OrgUpdatesSince(ctx context.Context, orgID string, sinceSeq int64, limit int) ([]core.OrgUpdate, error)
 
 	// What a chat snapshot is assembled from.
 	ListThreadsByConversation(ctx context.Context, chatID string) ([]*db.Thread, error)
 	CountMessagesInChat(ctx context.Context, chatID string) (int, error)
-	ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*db.Message, error)
 	ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*db.MessageContentBlock, error)
 	ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]*db.ToolCall, error)
-	SpawnToolCallIDsByChildThread(ctx context.Context, chatID string) (map[string]string, error)
 
 	// GetAttachmentsByIDs and GetContextUsage are called directly too; the
 	// roles below already declare them.
 	threads.Repository
-	messageproto.Reader
+	messageproto.ToolCallReader
+}
+
+// Projects reads the org of the project a user update is about (orgGate).
+// store.ProjectExtStore satisfies it.
+type Projects interface {
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+}
+
+// Senders titles the senders of the messages a read assembles (a sender that
+// is another run's main thread is titled by that run).
+// store.ThreadExtStore satisfies it.
+type Senders interface {
+	SenderTitlesByThreadIDs(ctx context.Context, threadIDs []string) (map[string]string, error)
 }

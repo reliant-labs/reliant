@@ -28,7 +28,7 @@ func (s *Service) SetChatVisibility(
 	}
 	// Deciding who may change it reads the row as a viewer could.
 	ctx = authz.WithViewerReads(ctx)
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.GetChatId())
+	chat, err := s.deps.Chats.GetChat(ctx, req.Msg.GetChatId())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -38,7 +38,11 @@ func (s *Service) SetChatVisibility(
 	}
 	changed := false
 	if authz.ChatVisibility(chat) != to {
-		if changed, err = s.deps.Repo.ApplyShareChange(ctx, change); err != nil {
+		// ReadCommitted: the UPDATE's own row lock and its re-checked predicate
+		// (visibility IS [NOT] NULL, owner, org) are what make a concurrent
+		// share and unshare serialize; the event is written only by the one
+		// that changed it.
+		if changed, err = s.applyShareChange(ctx, change); err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to change who can read the chat"))
 		}
 	}
@@ -46,7 +50,7 @@ func (s *Service) SetChatVisibility(
 	// The chat as the caller now reads it: an admin who made it private
 	// reads it no longer.
 	// One decision shapes it (authz.ReadChatAccess).
-	if after, err := s.deps.Repo.GetChat(ctx, chat.ID); err == nil {
+	if after, err := s.deps.Chats.GetChat(ctx, chat.ID); err == nil {
 		if access, denied := authz.ReadChatAccess(ctx, userID, after); denied == nil {
 			resp.Chat = chatproto.Chat(after)
 			if access.Viewer() {

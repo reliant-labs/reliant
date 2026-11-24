@@ -11,7 +11,7 @@
 
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useLocation } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { trackEvent } from "../../lib/analytics";
 import { isPhoneViewport } from "../../lib/mobileRedirect";
 import { useTourStore } from "../../store/tourStore";
@@ -167,6 +167,7 @@ function JourneyStepView({
   nav: TourNavigation;
 }) {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const stepKey = formatTourParam(journey, stepId);
 
   useEffect(() => {
@@ -210,15 +211,20 @@ function JourneyStepView({
   const nextHidden = pending && !step.showNext;
   const noop = () => undefined;
 
-  // The end card's second button: the other journey here, or a link to where it runs.
+  // The end card's second button: the other journey here, or a link to where it
+  // runs — a page of this app in place (after the tour has closed), a URL in a new tab.
   const other = otherJourney(journey);
   const elsewhere = getJourney(other).elsewhere;
+  const openElsewhere = (href: string) => {
+    if (href.startsWith("/") && !href.startsWith("//")) void nav.finish().then(() => navigate({ href }));
+    else window.open(href, "_blank", "noopener");
+  };
   const secondaryAction = !isLast
     ? undefined
     : isJourneyAvailable(other) && firstStepId(other) !== null
       ? { label: "Try the other journey", onClick: () => void nav.finish(other) }
       : elsewhere
-        ? { label: elsewhere.label, onClick: () => window.open(elsewhere.href(), "_blank", "noopener") }
+        ? { label: elsewhere.label, onClick: () => openElsewhere(elsewhere.href()) }
         : undefined;
 
   // The card's own controls: Step X of Y, Back, Next (disabled until a required action is

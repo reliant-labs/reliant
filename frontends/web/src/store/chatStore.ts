@@ -86,6 +86,7 @@ import { useActivityStore, ChatActivity, isBusyActivity } from "./activityStore"
 import { useThreadActivityStore } from "./threadActivityStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
+import { shellProjectNow } from "../lib/urlState/shellScopeStore";
 import { useWorktreeStore } from "./worktreeStore";
 import { useChatParamsStore } from "./chatParamsStore";
 import { useAttachmentStore } from "./attachmentStore";
@@ -119,6 +120,7 @@ import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-q
 import { invalidatePlanTasks } from "../hooks/task-queries";
 import {
   chatKeys,
+  invalidateChatListsHolding,
   seedChatDetail,
   upsertChatInListCache,
   patchChatCaches,
@@ -933,6 +935,12 @@ interface ChatStoreState {
     // Where it runs: a machine (daemonId), no machine by design (noMachine),
     // or neither for default resolution. See lib/chatMachine.ts.
     machine?: { daemonId?: string; noMachine?: boolean },
+    // The app the chat is about (Chat.app_name), when it starts from one, and
+    // the projects attached beside its own (StartChat.attached_project_ids).
+    // Its own project is the context project unless `projectId` names it: a
+    // page whose URL names the project passes it, so a send never races the
+    // store following the URL.
+    about?: { appName?: string; attachedProjectIds?: readonly string[]; projectId?: string },
   ) => Promise<Chat>;
   // First send of an existing PENDING chat (e.g. a branch): StartChat with chatId.
   startExistingChat: (
@@ -1241,8 +1249,7 @@ function applyFirstSend(chat: Chat, projectId: string, orgId: string | null): vo
   // show it without waiting for a stream-triggered list refetch.
   seedChatDetail(chat);
   upsertChatInListCache(projectId, chat, orgId);
-  void queryClient.invalidateQueries({ queryKey: chatKeys.list(projectId, orgId) });
-  void queryClient.invalidateQueries({ queryKey: chatKeys.list(null, orgId) });
+  invalidateChatListsHolding(projectId, orgId);
 
   // Initialize state for the new chat
   useChatStore.getState().initChatState(chat);
@@ -1273,7 +1280,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   // Load the sidebar's chat list — the filter's project, or every project —
   // with singleflight deduplication to prevent parallel API calls.
   loadChats: async () => {
-    const scope = useWorkspaceStateStore.getState().projectFilterId;
+    // The shell's one project (what the sidebar shows), else every project.
+    const scope = shellProjectNow();
 
     // Use singleflight to ensure only one load per scope runs at a time
     return singleflight(`loadChats:${scope ?? "*"}`, async () => {
@@ -1355,8 +1363,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     workflow?: string | null,
     selectedPresets?: Record<string, string>,
     machine?: { daemonId?: string; noMachine?: boolean },
+    about?: { appName?: string; attachedProjectIds?: readonly string[]; projectId?: string },
   ) => {
-    const projectId = useProjectStore.getState().currentProject?.id;
+    const projectId = about?.projectId ?? useProjectStore.getState().currentProject?.id;
     if (!projectId) {
       throw new Error("No project selected");
     }
@@ -1374,13 +1383,19 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // whose response was lost may well have made the chat; sending it again
     // under a new id makes a second one. The composer puts the text back when
     // a start fails, so the user's next send is the same message and must find
-    // the same id: that is what the server recognizes it by.
+    // the same id: that is what the server recognizes it by. The app the chat
+    // is about and its attached projects are part of the request: a retry
+    // after either changed is a different start, under a new id, so it never
+    // gets the old chat back.
+    const attachedProjectIds = [...(about?.attachedProjectIds ?? [])];
     const attemptKey = JSON.stringify([
       "start",
       projectId,
       worktreeId ?? "",
       firstMessage,
       attachmentIds ?? [],
+      about?.appName || "",
+      ...(attachedProjectIds.length > 0 ? [attachedProjectIds] : []),
     ]);
     const chat = await chatActions.startChat({
       project_id: projectId,
@@ -1398,6 +1413,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           : undefined,
       selectedPresets: selectedPresets,
       client_message_id: attemptIdFor(attemptKey),
+      app_name: about?.appName || undefined,
+      ...(attachedProjectIds.length > 0 ? { attached_project_ids: attachedProjectIds } : {}),
     });
     endAttempt(attemptKey);
 

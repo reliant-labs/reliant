@@ -42,7 +42,8 @@ const KIND_ICON: Record<VulnErrorKind, ReactNode> = {
   unavailable: <AlertTriangle className="h-4 w-4" />,
 };
 
-function errorCopy(kind: VulnErrorKind, subject: string): { title: string; body: ReactNode } {
+/** What a failed read means, in words: a title and the sentence under it (VulnError, the Overview card). */
+export function vulnErrorCopy(kind: VulnErrorKind, subject: string): { title: string; body: ReactNode } {
   switch (kind) {
     case "not-configured":
       return {
@@ -71,7 +72,7 @@ function errorCopy(kind: VulnErrorKind, subject: string): { title: string; body:
 /** A failed read, in words. `subject` names what was being read: "the vulnerabilities", "CVE-2026-1234". */
 export function VulnError({ error, subject, onRetry, retrying, testId = "vuln-error" }: { error: unknown; subject: string; onRetry?: () => void; retrying?: boolean; testId?: string }) {
   const kind = vulnErrorKind(error);
-  const copy = errorCopy(kind, subject);
+  const copy = vulnErrorCopy(kind, subject);
   const canRetry = onRetry && (kind === "unavailable" || kind === "bad-token");
   return (
     <div data-testid={testId} data-kind={kind}>

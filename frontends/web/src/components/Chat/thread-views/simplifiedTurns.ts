@@ -166,8 +166,10 @@ const NO_INDEXES: readonly number[] = [];
  * Tools whose media IS the result the user asked for. Their calls stay on
  * screen as rows of their own; any other tool's media (a browser screenshot,
  * a viewed image file) is a record of work and stays in the fold.
+ * present_image is the agent showing the user a picture on purpose, so it is
+ * one of them.
  */
-const SURFACED_MEDIA_TOOLS = new Set(["generate_image", "generate_video"]);
+const SURFACED_MEDIA_TOOLS = new Set(["generate_image", "generate_video", "present_image"]);
 
 export function isSurfacedMediaTool(toolName: string): boolean {
   return SURFACED_MEDIA_TOOLS.has(toolBaseName(toolName).toLowerCase());

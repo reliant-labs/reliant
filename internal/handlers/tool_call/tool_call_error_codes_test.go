@@ -77,6 +77,7 @@ func TestConvertToBackground_DaemonFailureCodes(t *testing.T) {
 			t.Parallel()
 			svc := tool_call.NewTestToolCall(t, tool_call.WithToolCallDeps(tool_call.Deps{
 				Repo:   ownedToolCallRepo(),
+				Chats:  ownedChats(),
 				Router: &toolexectest.Recorder{BackgroundErr: tc.err},
 			}))
 			_, err := svc.ConvertToBackground(tool_call.AuthedContext(t), connect.NewRequest(&pb.ConvertToBackgroundRequest{ToolCallId: "call-1"}))
@@ -97,13 +98,14 @@ func ownedToolCallRepo() *tool_call.MockRepository {
 		GetMessageFunc: func(_ context.Context, id string) (*db.Message, error) {
 			return &db.Message{ID: id, ChatID: "chat-tool-call-codes"}, nil
 		},
-		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
-			return &db.Chat{ID: id, UserID: "test-user"}, nil
-		},
-		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
-			return &db.ChatRow{ID: id, UserID: "test-user"}, nil
-		},
 	}
+}
+
+// ownedChats reads every chat as the test user's.
+func ownedChats() *tool_call.MockChats {
+	return &tool_call.MockChats{GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
+		return &db.ChatRow{ID: id, UserID: "test-user"}, nil
+	}}
 }
 
 func requireClientReads(t *testing.T, err error, want connect.Code) {

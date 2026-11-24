@@ -39,6 +39,9 @@ type approvalExecution struct {
 	// ToolCallID is the run's own tool call the approval is about (an
 	// activation change, a machine start); empty for an approval node.
 	ToolCallID string
+	// ToolName is that tool call's tool; ApprovalCreate decides from it who
+	// may approve (internal/approvalkind). Empty for an approval node.
+	ToolName string
 	// BatchID groups the approvals one step raises together; empty for one
 	// raised on its own.
 	BatchID string
@@ -191,6 +194,11 @@ func executeApprovalSignalFlow(ctx workflow.Context, input approvalExecution) (m
 	}
 	if input.ToolCallID != "" {
 		createInput["tool_call_id"] = input.ToolCallID
+	}
+	// An activity's input is not part of what a replay compares (only its
+	// type is), so adding this key needs no version marker.
+	if input.ToolName != "" {
+		createInput["tool_name"] = input.ToolName
 	}
 	if input.BatchID != "" {
 		createInput["batch_id"] = input.BatchID

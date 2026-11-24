@@ -68,7 +68,7 @@ func (s *Service) EnableWorkflow(
 	// The activations are the project's, in its org: a caller who may not
 	// work in the project (authz: another owner, an org they left, a
 	// credential of another org) enables nothing, before anything is read.
-	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, msg.ProjectId, userID); err != nil {
+	if _, err := s.deps.Projects.GetProjectWithUserCheck(ctx, msg.ProjectId, userID); err != nil {
 		return nil, triggerDBError("get project", err)
 	}
 
@@ -405,7 +405,7 @@ func (s *Service) applyActivationUpdate(ctx context.Context, step *enableStep, r
 			if err := s.restoreActivation(ctx, &prev); err != nil {
 				return err
 			}
-			return s.deps.Repo.SetTriggerWebhookSecret(ctx, prev.ID, prevSecret)
+			return s.deps.WebhookSecrets.SetTriggerWebhookSecret(ctx, prev.ID, prevSecret)
 		}
 	}
 	resp, err := s.UpdateTrigger(ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{Id: prev.ID, Trigger: def}))

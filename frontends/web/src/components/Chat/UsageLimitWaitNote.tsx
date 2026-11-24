@@ -22,7 +22,6 @@
  */
 
 import { useEffect, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
 import Status from "../forge-ui/status";
 import { useChatModelFallback } from "@/hooks/useChatAccountUsage";
 import { useProviderAccounts } from "@/hooks/provider-account-queries";
@@ -33,7 +32,7 @@ import {
   usageLimitResumeLine,
   type UsageLimitWait,
 } from "@/lib/usageLimitWait";
-import * as chatActions from "../../hooks/chat-actions";
+import { useRetryUsageLimitWait } from "@/hooks/chat-service-hooks_gen";
 import { FundingReviewLink } from "./PersonalFundingPrompt";
 
 interface UsageLimitWaitNoteProps {
@@ -55,10 +54,10 @@ function useNow(): number {
 
 export function UsageLimitWaitNote({ chatId, wait, onStop }: UsageLimitWaitNoteProps) {
   const now = useNow();
-  const retry = useMutation({
-    mutationFn: (useModel?: string) =>
-      useModel ? chatActions.retryUsageLimitWait(chatId, useModel) : chatActions.retryUsageLimitWait(chatId),
-  });
+  // Waking the run's timer changes no read: the stream reports what the run
+  // does next. So no refresh (the generated one refetches every mounted
+  // ChatService read).
+  const retry = useRetryUsageLimitWait({ invalidate: false });
   const fallback = useChatModelFallback(chatId);
   const accounts = useProviderAccounts();
   const earliest = earliestResettingAccount(
@@ -88,7 +87,7 @@ export function UsageLimitWaitNote({ chatId, wait, onStop }: UsageLimitWaitNoteP
       )}
       <button
         type="button"
-        onClick={() => retry.mutate(undefined)}
+        onClick={() => retry.mutate({ chatId })}
         disabled={retry.isPending}
         className="text-xs font-medium text-primary-ink hover:underline disabled:no-underline disabled:opacity-60"
       >
@@ -97,7 +96,7 @@ export function UsageLimitWaitNote({ chatId, wait, onStop }: UsageLimitWaitNoteP
       {offer && (
         <button
           type="button"
-          onClick={() => retry.mutate(offer.modelAtDriver)}
+          onClick={() => retry.mutate({ chatId, useModel: offer.modelAtDriver })}
           disabled={retry.isPending}
           className="text-xs font-medium text-primary-ink hover:underline disabled:no-underline disabled:opacity-60"
         >

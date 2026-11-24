@@ -122,13 +122,15 @@ func parseTaskStatus(s string) (int32, bool) {
 
 // CreatePlanTool allows agents to create structured plans with tasks
 type CreatePlanTool struct {
-	repo createPlanStore
+	repo  createPlanStore
+	plans createPlanPlanning
 }
 
 // NewCreatePlanTool creates a new plan creation tool
-func NewCreatePlanTool(repo createPlanStore) Tool {
+func NewCreatePlanTool(repo createPlanStore, plans createPlanPlanning) Tool {
 	return NewToolWrapper(&CreatePlanTool{
-		repo: repo,
+		repo:  repo,
+		plans: plans,
 	})
 }
 
@@ -263,7 +265,7 @@ func (p *CreatePlanTool) RequiresPermission(params CreatePlanParams) (bool, erro
 }
 
 func (p *CreatePlanTool) Execute(rctx *rctx.ToolContext, params CreatePlanParams) (ToolResponse, error) {
-	if p.repo == nil {
+	if p.repo == nil || p.plans == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -293,7 +295,7 @@ func (p *CreatePlanTool) Execute(rctx *rctx.ToolContext, params CreatePlanParams
 	}
 
 	// Check if thread already has a plan (prevent multiple active plans)
-	existingPlan, err := p.repo.GetPlanByThreadID(rctx.Context, threadID)
+	existingPlan, err := p.plans.GetPlanByThreadID(rctx.Context, threadID)
 	if err == nil && existingPlan.Status == int32(db.PlanStatusActive) {
 		return NewTextErrorResponse("Thread already has an active plan. Use update_plan to modify it or complete it first."), nil
 	}
@@ -423,7 +425,7 @@ func (p *CreatePlanTool) Execute(rctx *rctx.ToolContext, params CreatePlanParams
 				DependencyType: depTypeVal,
 				CreatedAt:      time.Now(),
 			}
-			if err := p.repo.CreateTaskDependency(rctx.Context, taskDep); err != nil {
+			if err := p.plans.CreateTaskDependency(rctx.Context, taskDep); err != nil {
 				logging.Error("Failed to create inline dependency", "error", err,
 					"from_task", refTask.ID, "to_task", thisTask.ID)
 				depErrors = append(depErrors, fmt.Sprintf("%s -> %s: %v", refTask.Title, thisTask.Title, err))
@@ -499,13 +501,15 @@ Tasks (%d created):
 
 // UpdatePlanTool allows agents to update existing plans
 type UpdatePlanTool struct {
-	repo updatePlanStore
+	repo  updatePlanStore
+	plans updatePlanPlanning
 }
 
 // NewUpdatePlanTool creates a new plan update tool
-func NewUpdatePlanTool(repo updatePlanStore) Tool {
+func NewUpdatePlanTool(repo updatePlanStore, plans updatePlanPlanning) Tool {
 	return NewToolWrapper[UpdatePlanParams, ToolResponse](&UpdatePlanTool{
-		repo: repo,
+		repo:  repo,
+		plans: plans,
 	})
 }
 
@@ -546,7 +550,7 @@ type UpdatePlanParams struct {
 }
 
 func (u *UpdatePlanTool) Execute(rctx *rctx.ToolContext, params UpdatePlanParams) (ToolResponse, error) {
-	if u.repo == nil {
+	if u.repo == nil || u.plans == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -557,10 +561,10 @@ func (u *UpdatePlanTool) Execute(rctx *rctx.ToolContext, params UpdatePlanParams
 	}
 
 	// Writes bind to THIS thread's plan only — an ancestor's is read-only.
-	plan, err := resolvePlanForWrite(rctx.Context, u.repo, threadID)
+	plan, err := resolvePlanForWrite(rctx.Context, u.plans, threadID)
 	if err != nil {
 		if svcerr.IsNotFound(err) {
-			if inherited, resolveErr := resolvePlanForRead(rctx.Context, u.repo, threadID); resolveErr == nil && inherited.inherited {
+			if inherited, resolveErr := resolvePlanForRead(rctx.Context, u.plans, u.repo, threadID); resolveErr == nil && inherited.inherited {
 				return NewTextErrorResponse(inheritedPlanWriteRefusal(inherited.ownerThreadID)), nil
 			}
 			return NewTextErrorResponse("No plan found for this thread. Use create_plan to create one."), nil
@@ -602,7 +606,7 @@ func (u *UpdatePlanTool) Execute(rctx *rctx.ToolContext, params UpdatePlanParams
 	plan.UpdatedAt = time.Now()
 
 	// Update the plan
-	if err := u.repo.UpdatePlan(rctx.Context, plan); err != nil {
+	if err := u.plans.UpdatePlan(rctx.Context, plan); err != nil {
 		logging.Error("Failed to update plan", "error", err, "plan_id", plan.ID)
 		return NewTextErrorResponse(fmt.Sprintf("Failed to update plan: %v", err)), nil
 	}
@@ -674,13 +678,15 @@ Description:
 
 // GetPlanTool allows agents to retrieve the current plan
 type GetPlanTool struct {
-	repo getPlanStore
+	repo  getPlanStore
+	plans getPlanPlanning
 }
 
 // NewGetPlanTool creates a new plan retrieval tool
-func NewGetPlanTool(repo getPlanStore) Tool {
+func NewGetPlanTool(repo getPlanStore, plans getPlanPlanning) Tool {
 	return NewToolWrapper[GetPlanParams, ToolResponse](&GetPlanTool{
-		repo: repo,
+		repo:  repo,
+		plans: plans,
 	})
 }
 
@@ -710,7 +716,7 @@ type GetPlanParams struct {
 }
 
 func (g *GetPlanTool) Execute(rctx *rctx.ToolContext, params GetPlanParams) (ToolResponse, error) {
-	if g.repo == nil {
+	if g.repo == nil || g.plans == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -722,7 +728,7 @@ func (g *GetPlanTool) Execute(rctx *rctx.ToolContext, params GetPlanParams) (Too
 
 	// Reads walk up to an ancestor's plan — a spawned sub-agent needs to see
 	// the board it was delegated from.
-	resolved, err := resolvePlanForRead(rctx.Context, g.repo, threadID)
+	resolved, err := resolvePlanForRead(rctx.Context, g.plans, g.repo, threadID)
 	if err != nil {
 		if svcerr.IsNotFound(err) {
 			return NewTextErrorResponse("No plan found for this thread. Use create_plan to create one."), nil
@@ -772,7 +778,7 @@ Description:
 	}
 
 	// Add task progress summary
-	stats, err := g.repo.GetTaskStatsByPlan(rctx.Context, plan.ID)
+	stats, err := g.plans.GetTaskStatsByPlan(rctx.Context, plan.ID)
 	if err == nil && stats.Total > 0 {
 		responseText += fmt.Sprintf("\n\nProgress: %d/%d tasks completed", stats.Completed, stats.Total)
 		parts := []string{}

@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
@@ -520,10 +521,10 @@ func TestOwnerIdentityWarningFollowsTheLinkedIdentity(t *testing.T) {
 	assert.Len(t, env.svc.ownerIdentityWarnings(env.ctx, gated, row), 1, "no identity linked yet")
 	assert.Empty(t, env.svc.ownerIdentityWarnings(env.ctx, plain, row))
 
-	require.NoError(t, env.repo.ReplaceIntegrationAccess(env.ctx, env.userID, "github", "225976313", time.Now(),
+	require.NoError(t, store.ReplaceIntegrationAccess(env.ctx, env.repo.ORM(), env.userID, "github", "225976313", time.Now(),
 		[]core.IntegrationAccessGrant{{AccountKey: "1", ResourceKey: "1"}}))
 	assert.Empty(t, env.svc.ownerIdentityWarnings(env.ctx, gated, row), "linked: the same activation now matches")
 
-	require.NoError(t, env.repo.ReplaceIntegrationAccess(env.ctx, env.userID, "github", "", time.Now().Add(time.Minute), nil))
+	require.NoError(t, store.ReplaceIntegrationAccess(env.ctx, env.repo.ORM(), env.userID, "github", "", time.Now().Add(time.Minute), nil))
 	assert.Len(t, env.svc.ownerIdentityWarnings(env.ctx, gated, row), 1, "unlinked again (the token went away): warns again")
 }

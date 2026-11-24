@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { transport } from "@/lib/connect";
 import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -25,7 +26,6 @@ vi.mock("@/services/controlPlane/client", () => ({
 }));
 
 import {
-  DeployEnvironmentKind,
   DeployEnvironmentLifetime,
   DeployEnvironmentSchema,
   DeploymentSchema,
@@ -48,6 +48,11 @@ import {
   listProjectEnvironments,
 } from "../cloudEnvs";
 
+// The placement fields each kind is derived from (environmentKind.ts).
+const PERSISTENT = { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true };
+const SELF_MANAGED = { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY };
+const LOCAL = { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.READABLE };
+
 beforeEach(() => {
   listEnvironments.mockReset();
   getStatus.mockReset();
@@ -57,27 +62,27 @@ beforeEach(() => {
 describe("listProjectEnvironments", () => {
   it("asks for ONE project's environments", async () => {
     listEnvironments.mockResolvedValue({ environments: [] });
-    await listProjectEnvironments("barksocial", null);
+    await listProjectEnvironments(transport, "barksocial", null);
     expect(listEnvironments).toHaveBeenCalledWith({ project: "barksocial" });
   });
 
   it("names the org it is read in, so the answer is that org's", async () => {
     listEnvironments.mockResolvedValue({ environments: [] });
-    await listProjectEnvironments("barksocial", "org-a");
+    await listProjectEnvironments(transport, "barksocial", "org-a");
     expect(listEnvironments).toHaveBeenCalledWith({ project: "barksocial", orgId: "org-a" });
   });
 
   it("drops rows for another project — an old control plane ignores the filter", async () => {
     listEnvironments.mockResolvedValue({
       environments: [
-        create(DeployEnvironmentSchema, { id: "a", name: "prod", project: "barksocial", kind: DeployEnvironmentKind.PERSISTENT }),
-        create(DeployEnvironmentSchema, { id: "b", name: "prod", project: "control-plane", kind: DeployEnvironmentKind.PERSISTENT }),
+        create(DeployEnvironmentSchema, { id: "a", name: "prod", project: "barksocial", ...PERSISTENT }),
+        create(DeployEnvironmentSchema, { id: "b", name: "prod", project: "control-plane", ...PERSISTENT }),
         // A server predating the field sends no project at all.
-        create(DeployEnvironmentSchema, { id: "c", name: "staging", kind: DeployEnvironmentKind.PERSISTENT }),
-        create(DeployEnvironmentSchema, { id: "d", name: "dev", project: "barksocial", kind: DeployEnvironmentKind.LOCAL }),
+        create(DeployEnvironmentSchema, { id: "c", name: "staging", ...PERSISTENT }),
+        create(DeployEnvironmentSchema, { id: "d", name: "dev", project: "barksocial", ...LOCAL }),
       ],
     });
-    const envs = await listProjectEnvironments("barksocial", null);
+    const envs = await listProjectEnvironments(transport, "barksocial", null);
     expect(envs.map((e) => [e.id, e.name, e.kind])).toEqual([
       ["d", "dev", "local"],
       ["a", "prod", "persistent"],
@@ -86,39 +91,26 @@ describe("listProjectEnvironments", () => {
 
   it("reads a self-managed environment as itself, not as an unknown kind", async () => {
     listEnvironments.mockResolvedValue({
-      environments: [create(DeployEnvironmentSchema, { id: "cp", name: "prod", project: "control-plane", kind: DeployEnvironmentKind.SELF_MANAGED })],
+      environments: [create(DeployEnvironmentSchema, { id: "cp", name: "prod", project: "control-plane", ...SELF_MANAGED })],
     });
-    const envs = await listProjectEnvironments("control-plane", null);
+    const envs = await listProjectEnvironments(transport, "control-plane", null);
     expect(envs.map((e) => e.kind)).toEqual(["self_managed"]);
   });
 
-  it("prefers a recognised kind over the placement fields, so today's server reads as it always did", async () => {
-    listEnvironments.mockResolvedValue({
-      environments: [
-        create(DeployEnvironmentSchema, {
-          id: "cp", name: "prod", project: "control-plane", kind: DeployEnvironmentKind.SELF_MANAGED,
-          lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true,
-        }),
-      ],
-    });
-    const envs = await listProjectEnvironments("control-plane", null);
-    expect(envs.map((e) => e.kind)).toEqual(["self_managed"]);
-  });
-
-  // DeployEnvironment.kind leaves the wire with control-plane#3095; every
-  // server since #1349 also sends lifetime, secret_posture and hosted_slot.
-  it("derives each kind from the placement fields when kind is absent", async () => {
+  // control-plane#3095 removed DeployEnvironment.kind; every server since
+  // #1349 sends lifetime, secret_posture and hosted_slot instead.
+  it("derives each kind from the placement fields", async () => {
     listEnvironments.mockResolvedValue({
       environments: [
         create(DeployEnvironmentSchema, { id: "a", name: "a", project: "p", lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.READABLE }),
         create(DeployEnvironmentSchema, { id: "b", name: "b", project: "p", lifetime: DeployEnvironmentLifetime.PREVIEW, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true }),
         create(DeployEnvironmentSchema, { id: "c", name: "c", project: "p", lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true }),
         create(DeployEnvironmentSchema, { id: "d", name: "d", project: "p", lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY }),
-        // Neither kind nor the placement fields: a server older than both.
+        // No placement fields: a row the client cannot place.
         create(DeployEnvironmentSchema, { id: "e", name: "e", project: "p" }),
       ],
     });
-    const envs = await listProjectEnvironments("p", null);
+    const envs = await listProjectEnvironments(transport, "p", null);
     expect(Object.fromEntries(envs.map((e) => [e.id, e.kind]))).toEqual({
       a: "local",
       b: "preview",
@@ -148,7 +140,7 @@ describe("getEnvironmentStatus: a hosted frontend", () => {
         ],
       })
     );
-    const status = await getEnvironmentStatus("env-prod", null);
+    const status = await getEnvironmentStatus(transport, "env-prod", null);
     expect(status.workloads[0]).toMatchObject({
       name: "web",
       tier: "static",
@@ -192,7 +184,7 @@ describe("getEnvironmentStatus", () => {
       })
     );
 
-    const status = await getEnvironmentStatus("env-1", null);
+    const status = await getEnvironmentStatus(transport, "env-1", null);
     expect(getStatus).toHaveBeenCalledWith({ environmentId: "env-1" });
     expect(status.verdict).toBe("degraded");
     expect(status.workloads).toEqual([
@@ -223,7 +215,7 @@ describe("getEnvironmentStatus", () => {
 
   it("reports an empty environment as unknown — never healthy", async () => {
     getStatus.mockResolvedValue(create(GetDeploymentStatusResponseSchema, {}));
-    const status = await getEnvironmentStatus("env-1", null);
+    const status = await getEnvironmentStatus(transport, "env-1", null);
     expect(status.verdict).toBe("unknown");
     expect(status.workloads).toEqual([]);
     expect(status.currentPromotion).toBeNull();

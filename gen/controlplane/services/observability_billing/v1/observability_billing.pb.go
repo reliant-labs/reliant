@@ -2065,12 +2065,12 @@ const file_services_observability_billing_v1_observability_billing_proto_rawDesc
 	"%OBSERVABILITY_QUOTA_STATE_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cOBSERVABILITY_QUOTA_STATE_OK\x10\x01\x12&\n" +
 	"\"OBSERVABILITY_QUOTA_STATE_OVER_100\x10\x02\x12&\n" +
-	"\"OBSERVABILITY_QUOTA_STATE_OVER_150\x10\x032\xec\x05\n" +
-	"\x1bObservabilityBillingService\x12\x88\x01\n" +
-	"\x15GetObservabilityUsage\x126.observability_billing.v1.GetObservabilityUsageRequest\x1a7.observability_billing.v1.GetObservabilityUsageResponse\x12\x8b\x01\n" +
-	"\x16ListObservabilityUsage\x127.observability_billing.v1.ListObservabilityUsageRequest\x1a8.observability_billing.v1.ListObservabilityUsageResponse\x12\x8e\x01\n" +
-	"\x17GetObservabilityStorage\x128.observability_billing.v1.GetObservabilityStorageRequest\x1a9.observability_billing.v1.GetObservabilityStorageResponse\x12\x8b\x01\n" +
-	"\x16GetObservabilityLimits\x127.observability_billing.v1.GetObservabilityLimitsRequest\x1a8.observability_billing.v1.GetObservabilityLimitsResponse\x12\x94\x01\n" +
+	"\"OBSERVABILITY_QUOTA_STATE_OVER_150\x10\x032\x80\x06\n" +
+	"\x1bObservabilityBillingService\x12\x8d\x01\n" +
+	"\x15GetObservabilityUsage\x126.observability_billing.v1.GetObservabilityUsageRequest\x1a7.observability_billing.v1.GetObservabilityUsageResponse\"\x03\x90\x02\x01\x12\x90\x01\n" +
+	"\x16ListObservabilityUsage\x127.observability_billing.v1.ListObservabilityUsageRequest\x1a8.observability_billing.v1.ListObservabilityUsageResponse\"\x03\x90\x02\x01\x12\x93\x01\n" +
+	"\x17GetObservabilityStorage\x128.observability_billing.v1.GetObservabilityStorageRequest\x1a9.observability_billing.v1.GetObservabilityStorageResponse\"\x03\x90\x02\x01\x12\x90\x01\n" +
+	"\x16GetObservabilityLimits\x127.observability_billing.v1.GetObservabilityLimitsRequest\x1a8.observability_billing.v1.GetObservabilityLimitsResponse\"\x03\x90\x02\x01\x12\x94\x01\n" +
 	"\x19UpdateObservabilityLimits\x12:.observability_billing.v1.UpdateObservabilityLimitsRequest\x1a;.observability_billing.v1.UpdateObservabilityLimitsResponseB\xa2\x02\n" +
 	"\x1ccom.observability_billing.v1B\x19ObservabilityBillingProtoP\x01Zjgithub.com/reliant-labs/reliant/gen/controlplane/services/observability_billing/v1;observability_billingv1\xa2\x02\x03OXX\xaa\x02\x17ObservabilityBilling.V1\xca\x02\x17ObservabilityBilling\\V1\xe2\x02#ObservabilityBilling\\V1\\GPBMetadata\xea\x02\x18ObservabilityBilling::V1b\x06proto3"
 

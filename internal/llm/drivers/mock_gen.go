@@ -211,18 +211,17 @@ func (m *MockAccountTokenStore) UpsertProviderAccount(ctx context.Context, u cor
 // Compile-time check.
 var _ AccountTokenStore = (*MockAccountTokenStore)(nil)
 
-// forge:section MockAPIKeyStore
-// forge:hash=5be2dfef34e6cd9e079b2800c25e413c1e4d003c19a616960d07e0000ceede2b
+// forge:section MockAccountStore
+// forge:hash=20a149169115aa7fe22020c0e984cefcd4454d184cd5f296151cbba4d9cbd4f0
 
-// MockAPIKeyStore is a test mock for the APIKeyStore interface.
+// MockAccountStore is a test mock for the AccountStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
 // assert call counts and captured arguments. Set XxxFunc fields to
 // override per-method behaviour; unset methods return the canonical
-// "MockAPIKeyStore.<Method>Func not set" error.
-type MockAPIKeyStore struct {
+// "MockAccountStore.<Method>Func not set" error.
+type MockAccountStore struct {
 	contractkit.Recorder
-	ListSettingsByKeyFunc                    func(context.Context, string, string) ([]*db.Setting, error)
 	ListAccountLimitsFunc                    func(context.Context, string) (map[string]core.LimitState, error)
 	ListProviderAccountsWithSecretsFunc      func(context.Context, string) ([]core.AccountWithSecrets, error)
 	ListOwnedProviderAccountsWithSecretsFunc func(context.Context, core.AccountOwner) ([]core.AccountWithSecrets, error)
@@ -234,95 +233,112 @@ type MockAPIKeyStore struct {
 	UpsertProviderAccountFunc                func(context.Context, core.AccountUpsert) (core.ProviderAccount, bool, error)
 }
 
-// ListSettingsByKey records the call and delegates to ListSettingsByKeyFunc when set.
-func (m *MockAPIKeyStore) ListSettingsByKey(ctx context.Context, userID string, keyPattern string) ([]*db.Setting, error) {
-	m.Recorder.Record("ListSettingsByKey", ctx, userID, keyPattern)
-	if m.ListSettingsByKeyFunc != nil {
-		return m.ListSettingsByKeyFunc(ctx, userID, keyPattern)
-	}
-	return nil, contractkit.MockNotSet("MockAPIKeyStore", "ListSettingsByKey")
-}
-
 // ListAccountLimits records the call and delegates to ListAccountLimitsFunc when set.
-func (m *MockAPIKeyStore) ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error) {
+func (m *MockAccountStore) ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error) {
 	m.Recorder.Record("ListAccountLimits", ctx, userID)
 	if m.ListAccountLimitsFunc != nil {
 		return m.ListAccountLimitsFunc(ctx, userID)
 	}
-	return nil, contractkit.MockNotSet("MockAPIKeyStore", "ListAccountLimits")
+	return nil, contractkit.MockNotSet("MockAccountStore", "ListAccountLimits")
 }
 
 // ListProviderAccountsWithSecrets records the call and delegates to ListProviderAccountsWithSecretsFunc when set.
-func (m *MockAPIKeyStore) ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error) {
+func (m *MockAccountStore) ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error) {
 	m.Recorder.Record("ListProviderAccountsWithSecrets", ctx, userID)
 	if m.ListProviderAccountsWithSecretsFunc != nil {
 		return m.ListProviderAccountsWithSecretsFunc(ctx, userID)
 	}
-	return nil, contractkit.MockNotSet("MockAPIKeyStore", "ListProviderAccountsWithSecrets")
+	return nil, contractkit.MockNotSet("MockAccountStore", "ListProviderAccountsWithSecrets")
 }
 
 // ListOwnedProviderAccountsWithSecrets records the call and delegates to ListOwnedProviderAccountsWithSecretsFunc when set.
-func (m *MockAPIKeyStore) ListOwnedProviderAccountsWithSecrets(ctx context.Context, owner core.AccountOwner) ([]core.AccountWithSecrets, error) {
+func (m *MockAccountStore) ListOwnedProviderAccountsWithSecrets(ctx context.Context, owner core.AccountOwner) ([]core.AccountWithSecrets, error) {
 	m.Recorder.Record("ListOwnedProviderAccountsWithSecrets", ctx, owner)
 	if m.ListOwnedProviderAccountsWithSecretsFunc != nil {
 		return m.ListOwnedProviderAccountsWithSecretsFunc(ctx, owner)
 	}
-	return nil, contractkit.MockNotSet("MockAPIKeyStore", "ListOwnedProviderAccountsWithSecrets")
+	return nil, contractkit.MockNotSet("MockAccountStore", "ListOwnedProviderAccountsWithSecrets")
 }
 
 // ListOwnedAccountLimits records the call and delegates to ListOwnedAccountLimitsFunc when set.
-func (m *MockAPIKeyStore) ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error) {
+func (m *MockAccountStore) ListOwnedAccountLimits(ctx context.Context, owner core.AccountOwner) (map[string]core.LimitState, error) {
 	m.Recorder.Record("ListOwnedAccountLimits", ctx, owner)
 	if m.ListOwnedAccountLimitsFunc != nil {
 		return m.ListOwnedAccountLimitsFunc(ctx, owner)
 	}
-	return nil, contractkit.MockNotSet("MockAPIKeyStore", "ListOwnedAccountLimits")
+	return nil, contractkit.MockNotSet("MockAccountStore", "ListOwnedAccountLimits")
 }
 
 // ListMemberAccountGrants records the call and delegates to ListMemberAccountGrantsFunc when set.
-func (m *MockAPIKeyStore) ListMemberAccountGrants(ctx context.Context, orgID string, userID string) (map[string]time.Time, error) {
+func (m *MockAccountStore) ListMemberAccountGrants(ctx context.Context, orgID string, userID string) (map[string]time.Time, error) {
 	m.Recorder.Record("ListMemberAccountGrants", ctx, orgID, userID)
 	if m.ListMemberAccountGrantsFunc != nil {
 		return m.ListMemberAccountGrantsFunc(ctx, orgID, userID)
 	}
-	return nil, contractkit.MockNotSet("MockAPIKeyStore", "ListMemberAccountGrants")
+	return nil, contractkit.MockNotSet("MockAccountStore", "ListMemberAccountGrants")
 }
 
 // GetProviderAccountWithSecrets records the call and delegates to GetProviderAccountWithSecretsFunc when set.
-func (m *MockAPIKeyStore) GetProviderAccountWithSecrets(ctx context.Context, userID string, accountID string) (*core.AccountWithSecrets, error) {
+func (m *MockAccountStore) GetProviderAccountWithSecrets(ctx context.Context, userID string, accountID string) (*core.AccountWithSecrets, error) {
 	m.Recorder.Record("GetProviderAccountWithSecrets", ctx, userID, accountID)
 	if m.GetProviderAccountWithSecretsFunc != nil {
 		return m.GetProviderAccountWithSecretsFunc(ctx, userID, accountID)
 	}
-	return nil, contractkit.MockNotSet("MockAPIKeyStore", "GetProviderAccountWithSecrets")
+	return nil, contractkit.MockNotSet("MockAccountStore", "GetProviderAccountWithSecrets")
 }
 
 // CompareAndSwapAccountTokens records the call and delegates to CompareAndSwapAccountTokensFunc when set.
-func (m *MockAPIKeyStore) CompareAndSwapAccountTokens(ctx context.Context, userID string, accountID string, expectedRefresh string, next core.AccountTokens) (bool, error) {
+func (m *MockAccountStore) CompareAndSwapAccountTokens(ctx context.Context, userID string, accountID string, expectedRefresh string, next core.AccountTokens) (bool, error) {
 	m.Recorder.Record("CompareAndSwapAccountTokens", ctx, userID, accountID, expectedRefresh, next)
 	if m.CompareAndSwapAccountTokensFunc != nil {
 		return m.CompareAndSwapAccountTokensFunc(ctx, userID, accountID, expectedRefresh, next)
 	}
-	return false, contractkit.MockNotSet("MockAPIKeyStore", "CompareAndSwapAccountTokens")
+	return false, contractkit.MockNotSet("MockAccountStore", "CompareAndSwapAccountTokens")
 }
 
 // PatchProviderAccount records the call and delegates to PatchProviderAccountFunc when set.
-func (m *MockAPIKeyStore) PatchProviderAccount(ctx context.Context, userID string, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
+func (m *MockAccountStore) PatchProviderAccount(ctx context.Context, userID string, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
 	m.Recorder.Record("PatchProviderAccount", ctx, userID, accountID, p)
 	if m.PatchProviderAccountFunc != nil {
 		return m.PatchProviderAccountFunc(ctx, userID, accountID, p)
 	}
-	return *new(core.ProviderAccount), contractkit.MockNotSet("MockAPIKeyStore", "PatchProviderAccount")
+	return *new(core.ProviderAccount), contractkit.MockNotSet("MockAccountStore", "PatchProviderAccount")
 }
 
 // UpsertProviderAccount records the call and delegates to UpsertProviderAccountFunc when set.
-func (m *MockAPIKeyStore) UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error) {
+func (m *MockAccountStore) UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error) {
 	m.Recorder.Record("UpsertProviderAccount", ctx, u)
 	if m.UpsertProviderAccountFunc != nil {
 		return m.UpsertProviderAccountFunc(ctx, u)
 	}
-	return *new(core.ProviderAccount), false, contractkit.MockNotSet("MockAPIKeyStore", "UpsertProviderAccount")
+	return *new(core.ProviderAccount), false, contractkit.MockNotSet("MockAccountStore", "UpsertProviderAccount")
 }
 
 // Compile-time check.
-var _ APIKeyStore = (*MockAPIKeyStore)(nil)
+var _ AccountStore = (*MockAccountStore)(nil)
+
+// forge:section MockSettingsStore
+// forge:hash=a716305505de99cd489e6c2557366ac23680bd7a10800c85abe5c5c3d43429f4
+
+// MockSettingsStore is a test mock for the SettingsStore interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockSettingsStore.<Method>Func not set" error.
+type MockSettingsStore struct {
+	contractkit.Recorder
+	ListSettingsByKeyFunc func(context.Context, string, string) ([]*db.Setting, error)
+}
+
+// ListSettingsByKey records the call and delegates to ListSettingsByKeyFunc when set.
+func (m *MockSettingsStore) ListSettingsByKey(ctx context.Context, userID string, keyPattern string) ([]*db.Setting, error) {
+	m.Recorder.Record("ListSettingsByKey", ctx, userID, keyPattern)
+	if m.ListSettingsByKeyFunc != nil {
+		return m.ListSettingsByKeyFunc(ctx, userID, keyPattern)
+	}
+	return nil, contractkit.MockNotSet("MockSettingsStore", "ListSettingsByKey")
+}
+
+// Compile-time check.
+var _ SettingsStore = (*MockSettingsStore)(nil)

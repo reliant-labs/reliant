@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -42,7 +43,7 @@ func (s *Service) GetMessage(
 	if !ok || userID == "" {
 		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
-	chat, err := s.deps.Repo.GetChatRow(ctx, msg.ChatID)
+	chat, err := s.deps.Chats.GetChatRow(ctx, msg.ChatID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get message"))
 	}
@@ -106,7 +107,7 @@ func (s *Service) GetMessage(
 	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoMessage := messageproto.FromDB(msg, blocks, attachments, &messageproto.Options{
 		ToolCallStatusByCallID: toolCallStatusByCallID,
-		SenderTitlesByThreadID: messageproto.SenderTitles(ctx, s.deps.Repo, []*db.Message{msg}),
+		SenderTitlesByThreadID: messageproto.SenderTitles(ctx, s.deps.Senders, []*db.Message{msg}),
 		ToolBodies:             toolBodies,
 	})
 

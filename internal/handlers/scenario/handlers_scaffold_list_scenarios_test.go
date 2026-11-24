@@ -3,6 +3,8 @@ package scenario_test
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
@@ -19,7 +21,7 @@ import (
 func TestListScenarios_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{})}))
+	svc := scenario.NewTestScenario(t, withDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Drafts: newScenarioDrafts(), Projects: projectaccesstest.For(newScenarioRepo(&fixture{}))}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListScenariosRequest, pb.ListScenariosResponse]{
 		{

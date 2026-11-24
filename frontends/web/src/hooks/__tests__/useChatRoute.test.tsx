@@ -50,9 +50,9 @@ vi.mock("@/store/openChat", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/store/openChat")>();
   return {
     ...actual,
-    applyNewChat: vi.fn(async (target: { projectId?: string; daemonId?: string; worktreeId?: string }) => {
+    applyNewChat: vi.fn(async (target: { projectId?: string; daemonId?: string; worktreeId?: string; appName?: string }) => {
       applied.push(target);
-      markNewChatApplied({ project: target.projectId, machine: target.daemonId, ws: target.worktreeId });
+      markNewChatApplied({ project: target.projectId, machine: target.daemonId, ws: target.worktreeId, app: target.appName });
       const generation = ++hold.latest;
       if (target.projectId && target.projectId === hold.project) {
         await new Promise<void>((resolve) => {
@@ -220,11 +220,22 @@ describe("the URL follows what the app opens and closes by itself", () => {
     expect(opened).toEqual(["a-1"]);
   });
 
-  it("puts the chat the home page restored in the URL, in place", async () => {
+  it("never redirects the home to a chat: one left open is closed", async () => {
     useChatStore.setState({ activeChatId: "r-1" });
     await open("/");
-    await waitFor(() => expect(path()).toBe("/c/r-1"));
+    await waitFor(() => expect(shown().active).toBeNull());
+    expect(path()).toBe("/");
     expect(router.history.length).toBe(1);
+  });
+
+  it("closes the chat on a Back to the home, and stays there", async () => {
+    await open("/");
+    await act(() => router.navigate({ href: "/c/a-1" }));
+    await waitFor(() => expect(shown().active).toBe("a-1"));
+    act(() => router.history.back());
+    await waitFor(() => expect(path()).toBe("/"));
+    await waitFor(() => expect(shown().active).toBeNull());
+    expect(path()).toBe("/");
   });
 
   it("replaces the new-chat view with the chat its first message made", async () => {
@@ -239,7 +250,7 @@ describe("the URL follows what the app opens and closes by itself", () => {
 describe("the new-chat view", () => {
   it("applies its draft context once", async () => {
     await open("/new?project=p-1&machine=d-1");
-    await waitFor(() => expect(applied).toEqual([{ projectId: "p-1", daemonId: "d-1", worktreeId: undefined }]));
+    await waitFor(() => expect(applied).toEqual([{ projectId: "p-1", daemonId: "d-1", worktreeId: undefined, appName: undefined }]));
     // The same context again (a replace that only reorders the search) applies nothing.
     await act(() => router.navigate({ to: "/new", search: { machine: "d-1", project: "p-1" }, replace: true } as never));
     expect(applied).toHaveLength(1);
@@ -308,6 +319,16 @@ describe("the new-chat view", () => {
     await act(async () => hold.release());
     act(() => shellContext.setState({ projectId: "p-4" }));
     await waitFor(() => expect(search().project).toBe("p-4"));
+  });
+});
+
+describe("a new chat about an app", () => {
+  it("applies the app the URL names with the draft, and a change of app applies again", async () => {
+    await open("/new?project=p-1&app=shopfront");
+    await waitFor(() => expect(applied).toEqual([{ projectId: "p-1", daemonId: undefined, worktreeId: undefined, appName: "shopfront" }]));
+    await act(() => router.navigate({ to: "/new", search: { project: "p-1" } } as never));
+    await waitFor(() => expect(applied).toHaveLength(2));
+    expect(applied[1]).toMatchObject({ projectId: "p-1", appName: undefined });
   });
 });
 

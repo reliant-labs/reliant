@@ -14,6 +14,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // One assistant turn that makes N tool calls needing approval (or asks N
@@ -53,7 +54,7 @@ func TestApprovalCreate_WaitsOutAConcurrentChatWriterInOneTransaction(t *testing
 	repo := &attemptCountingRepo{Repo: f.h.Repo()}
 	var out ApprovalCreateOutput
 	assertCreateWaitsOutChatWriter(t, f, repo, func() error {
-		return f.h.ExecuteActivity(NewApprovalCreateActivity(repo).Execute, ApprovalCreateInput{
+		return f.h.ExecuteActivity(NewApprovalCreateActivity(approvalCreateDeps(repo)).Execute, ApprovalCreateInput{
 			ChatID: f.chatID, WorkflowID: f.chatID, TemporalWorkflowID: f.chatID, StepID: "gate", Title: "Turn on the lane?",
 		}, &out)
 	})
@@ -71,7 +72,7 @@ func TestQuestionCreate_WaitsOutAConcurrentChatWriterInOneTransaction(t *testing
 	metadata := `{"type":"ask_user","questions":[{"question":"Which region?","options":[]}]}`
 	var out QuestionCreateOutput
 	assertCreateWaitsOutChatWriter(t, f, repo, func() error {
-		return f.h.ExecuteActivity(NewQuestionCreateActivity(repo).Execute, QuestionCreateInput{
+		return f.h.ExecuteActivity(NewQuestionCreateActivity(repo, store.NewQuestionExtStore(repo.ORM())).Execute, QuestionCreateInput{
 			ChatID: f.chatID, WorkflowID: f.chatID, TemporalWorkflowID: f.chatID, ThreadID: f.chatID, StepID: "ask", Metadata: &metadata,
 		}, &out)
 	})

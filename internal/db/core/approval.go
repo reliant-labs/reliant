@@ -24,4 +24,14 @@ type Approval struct {
 	// tool calls), so they can be decided together. Nil for an approval
 	// raised on its own.
 	BatchID *string `json:"batch_id,omitempty"`
+	// DecidedBy is the person who approved or denied; nil on a decided row
+	// means the chat's owner (every row decided before the column), and it
+	// is nil while pending or when the system resolved it.
+	DecidedBy *string `json:"decided_by,omitempty"`
+	// MinRole is the least chat level that may decide this approval
+	// ("reply", "manage" or "owner"), stamped once at creation by
+	// internal/approvalkind. Nil, or any value approvalkind does not know,
+	// means owner-only (approvalkind.Stored): a row an older worker wrote
+	// fails closed. docs/design/chat-collaboration.md §2.4 (control-plane).
+	MinRole *string `json:"min_role,omitempty"`
 }

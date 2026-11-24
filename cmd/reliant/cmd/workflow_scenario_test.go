@@ -164,3 +164,27 @@ func TestWorkflowScenarioDiscovery_IncludesEmbeddedBuiltinScenarioDirs(t *testin
 		assert.True(t, got[key], "%s is embedded but `scenario list --include-builtins` does not list %s", f, key)
 	}
 }
+
+// A scenario directory a retired workflow left behind (control-plane#3045
+// removed machine-pool-cleanup.yaml and kept its scenarios/) belongs to no
+// workflow. Naming one workflow file runs that workflow's scenarios and only
+// reports the orphan; it used to refuse every workflow in the directory.
+// Running the whole directory still refuses, so the orphan cannot go unseen.
+func TestWorkflowScenarioDiscovery_OrphanDirDoesNotBlockANamedWorkflow(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "denied-loop.yaml"), []byte(deniedLoopWorkflow), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "denied-loop", "scenarios"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "denied-loop", "scenarios", "denied_once.yaml"), []byte(deniedOnceScenario), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "retired", "scenarios"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "retired", "scenarios", "old.yaml"), []byte(deniedOnceScenario), 0o644))
+
+	workflows, err := discoverWorkflowsWithScenarios([]string{filepath.Join(dir, "denied-loop.yaml")}, "", false)
+	require.NoError(t, err)
+	require.Len(t, workflows, 1)
+	assert.Equal(t, "denied-loop", workflows[0].WorkflowName)
+	require.Len(t, workflows[0].Scenarios, 1)
+
+	_, err = discoverWorkflowsWithScenarios([]string{dir}, "", false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "retired/scenarios/: these scenarios belong to no workflow")
+}

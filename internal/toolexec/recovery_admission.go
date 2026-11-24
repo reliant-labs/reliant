@@ -11,8 +11,11 @@ import (
 // ErrRecoveryFinalizing is a daemon's refusal of new work in a worktree while
 // it finalizes that worktree's recovery (a remove or reclone: the short
 // recheck/quarantine/removal window daemonruntime.AcquireWorktreeRecovery
-// leases). Nothing ran, and the caller retries; the web, the agent and the
-// workspace-create workflow already do.
+// leases). Nothing ran, and the caller retries: the web and the agent do, and
+// workspace creation (workspacecreate.Finish) sends each command again until
+// the finalization is over. A command that names no path (worktree.create)
+// is refused while ANY worktree on the machine finalizes, so a caller must
+// not treat the refusal as final.
 //
 // The daemon returns this error itself, and its text crosses the wire as a
 // daemon command's failure text: the message is the wire contract, and every

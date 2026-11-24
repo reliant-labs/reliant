@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // chat_personal_funding: one question per chat, answered by its owner only
@@ -25,33 +26,33 @@ func TestPersonalFunding_OneQuestionPerChat(t *testing.T) {
 
 	q := core.PersonalFunding{ChatID: chatID, UserID: "alice", OrgID: "org-acme", Reason: core.PersonalFundingLimited,
 		Model: "claude-5.5-opus", PersonalProvider: "claude", PersonalAccountLabel: "alice@example.com", OrgResetAt: &reset}
-	asked, err := repo.AskPersonalFunding(ctx, q, now)
+	asked, err := store.AskChatPersonalFunding(ctx, repo.ORM(), q, now)
 	require.NoError(t, err)
 	assert.True(t, asked)
 
 	// Another thread meeting the same case shares the question.
-	asked, err = repo.AskPersonalFunding(ctx, q, now.Add(time.Minute))
+	asked, err = store.AskChatPersonalFunding(ctx, repo.ORM(), q, now.Add(time.Minute))
 	require.NoError(t, err)
 	assert.False(t, asked)
-	got, err := repo.GetChatPersonalFunding(ctx, chatID)
+	got, err := store.GetChatPersonalFunding(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, core.PersonalFundingAsked, got.State)
 	assert.True(t, got.AskedAt.Equal(now), "the first ask's time stands")
 
 	// Only the chat's owner answers.
-	_, err = repo.AnswerPersonalFunding(ctx, chatID, "mallory", core.PersonalFundingUsePersonal, now)
-	assert.ErrorIs(t, err, ErrNoPersonalFundingQuestion)
+	_, err = store.AnswerChatPersonalFunding(ctx, repo.ORM(), chatID, "mallory", core.PersonalFundingUsePersonal, now)
+	assert.ErrorIs(t, err, core.ErrNoPersonalFundingQuestion)
 
 	// keep_waiting holds; the same case does not ask again.
-	ans, err := repo.AnswerPersonalFunding(ctx, chatID, "alice", core.PersonalFundingKeepWaiting, now)
+	ans, err := store.AnswerChatPersonalFunding(ctx, repo.ORM(), chatID, "alice", core.PersonalFundingKeepWaiting, now)
 	require.NoError(t, err)
 	assert.Equal(t, core.PersonalFundingKeepWaiting, ans.State)
-	asked, err = repo.AskPersonalFunding(ctx, q, now.Add(2*time.Minute))
+	asked, err = store.AskChatPersonalFunding(ctx, repo.ORM(), q, now.Add(2*time.Minute))
 	require.NoError(t, err)
 	assert.False(t, asked)
 
 	// use_personal on a limited question leases until the org's reset.
-	ans, err = repo.AnswerPersonalFunding(ctx, chatID, "alice", core.PersonalFundingUsePersonal, now)
+	ans, err = store.AnswerChatPersonalFunding(ctx, repo.ORM(), chatID, "alice", core.PersonalFundingUsePersonal, now)
 	require.NoError(t, err)
 	require.NotNil(t, ans.LeaseUntil)
 	assert.True(t, ans.LeaseUntil.Equal(reset))
@@ -59,27 +60,27 @@ func TestPersonalFunding_OneQuestionPerChat(t *testing.T) {
 	assert.False(t, ans.LeaseActive(reset, ""), "the lease ends at the reset")
 
 	// Announced once.
-	marked, err := repo.MarkPersonalFundingAnnounced(ctx, chatID)
+	marked, err := store.MarkChatPersonalFundingAnnounced(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.True(t, marked)
-	marked, err = repo.MarkPersonalFundingAnnounced(ctx, chatID)
+	marked, err = store.MarkChatPersonalFundingAnnounced(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.False(t, marked)
 
 	// A different case asks anew.
 	q.Reason, q.Model = core.PersonalFundingUnserved, "gpt-5.6-sol"
-	asked, err = repo.AskPersonalFunding(ctx, q, now.Add(time.Hour))
+	asked, err = store.AskChatPersonalFunding(ctx, repo.ORM(), q, now.Add(time.Hour))
 	require.NoError(t, err)
 	assert.True(t, asked)
 
-	cleared, err := repo.ClearPersonalFunding(ctx, chatID)
+	cleared, err := store.DeleteChatPersonalFundingRow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.True(t, cleared)
-	got, err = repo.GetChatPersonalFunding(ctx, chatID)
+	got, err = store.GetChatPersonalFunding(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Nil(t, got)
-	_, err = repo.AnswerPersonalFunding(ctx, chatID, "alice", core.PersonalFundingUsePersonal, now)
-	assert.ErrorIs(t, err, ErrNoPersonalFundingQuestion, "no open question, nothing to answer")
+	_, err = store.AnswerChatPersonalFunding(ctx, repo.ORM(), chatID, "alice", core.PersonalFundingUsePersonal, now)
+	assert.ErrorIs(t, err, core.ErrNoPersonalFundingQuestion, "no open question, nothing to answer")
 }
 
 // LeaseActive per reason.

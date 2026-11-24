@@ -274,7 +274,9 @@ jobs:
   # was one of the three jobs that set the run's wall time (~15 min). The
   # webbuild part is also the renderer's release build on main: the
   # `web-bundle` job runs the same `task build:web:verify` and now runs only on
-  # a ci:run pull request, where no release gate runs. The RC train
+  # a ci:run pull request, where no release gate runs. It also holds the
+  # forge demo bundle to its size budget (demo-size, task demo:bundle-size)
+  # after the renderer's build: release-only. The RC train
   # (control-plane scripts/rc/rl-gate.sh) still runs static whole; assemble
   # takes either.
   #
@@ -439,6 +441,62 @@ jobs:
       - name: task ci:repo-checks
         if: ${{ !cancelled() && matrix.part == 'compile' }}
         run: task ci:repo-checks BASE="${{ needs.lanes.outputs.base }}"
+      # ── The vulnerability scan: REPORT-ONLY (warn-first) ──────────────────
+      # reliant dogfooding the scans forge ships, as forge's own CI does
+      # (forge#2717), on main's pushes and on dispatch. It rides the compile
+      # part, which already runs on main, so it adds no runner, and it runs
+      # after the part's record is written, so it never changes it.
+      #   - `forge ci vuln-scan --go`: govulncheck over every Go module (forge
+      #     builds its pinned govulncheck), ci.vuln_scan.exemptions applied.
+      #     "Does reliant CALL vulnerable Go code."
+      #   - `forge ci vuln-sbom`: forge's pinned syft describes every lockfile
+      #     and manifest (go.mod, the pnpm locks), its pinned grype scans that
+      #     against the vulnerability database, judged by the default vuln_gate
+      #     rule (KEV and fixable criticals block, high warns). "What does
+      #     reliant depend on that is known vulnerable," npm included.
+      #
+      # IT NEVER FAILS MAIN: continue-on-error. Below the vuln-gate lint
+      # rollout (forge.yaml's forge_version under v1.11.0) vuln-sbom prints a
+      # blocking finding and exits 0, and a scan that cannot run exits 78, an
+      # allowed SKIP, turned into a warning here. govulncheck has no warn-first
+      # mode and the pin will cross v1.11.0, so the step as a whole must not
+      # gate: whether a finding blocks main or a release is the owner's call
+      # (dogfood/owner-reliant.md), not this step's. Read its warnings and the
+      # step log; the release record does not look at it.
+      #
+      # THE DATABASE IS FETCHED PER RUN, NEVER CACHED. `forge ci vuln-sbom`
+      # downloads nothing itself (no database = SKIP), so `forge vuln db pull`
+      # fetches it first (~200 MB). It unpacks to ~3.4 GB: an actions/cache
+      # entry of it would take a third of the repository's 10 GB budget and
+      # evict the Go build caches (go-cache's header). It lives in RUNNER_TEMP
+      # and is deleted after the scan.
+      - name: Vulnerability scan (report-only; main and dispatch)
+        if: ${{ !cancelled() && matrix.part == 'compile' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
+        continue-on-error: true
+        env:
+          FORGE_VULN_DB_DIR: ${{ runner.temp }}/vulndb
+        run: |
+          set -uo pipefail
+          warn() { echo "::warning title=Vulnerability scan (report-only)::$*"; }
+          # The forge go.mod pins, built once (scripts/forge.sh runs FORGE_BIN).
+          GOFLAGS=-trimpath go build -o "${RUNNER_TEMP}/forge-pin/forge" github.com/reliant-labs/forge/cmd/forge || { warn "could not build the pinned forge; nothing scanned"; exit 1; }
+          export FORGE_BIN="${RUNNER_TEMP}/forge-pin/forge"
+          status=0
+          scripts/forge.sh ci vuln-scan --go || { rc=$?; warn "forge ci vuln-scan --go exited ${rc}: a called Go vulnerability (or the scan could not run); see the log"; status=1; }
+          if scripts/forge.sh vuln db pull; then
+            rc=0
+            scripts/forge.sh ci vuln-sbom || rc=$?
+            case "${rc}" in
+              0) ;;
+              78) warn "forge ci vuln-sbom could not scan (no scanner or database): an allowed SKIP below the vuln-gate rollout" ;;
+              *) warn "forge ci vuln-sbom exited ${rc}: a blocking finding, or the scan could not run; see the log"; status=1 ;;
+            esac
+          else
+            warn "forge vuln db pull failed: the SBOM scan did not run"
+            status=1
+          fi
+          rm -rf "${FORGE_VULN_DB_DIR}"
+          exit "${status}"
       - name: Locate the part record and logs
         if: ${{ !cancelled() }}
         run: |
@@ -459,6 +517,18 @@ jobs:
           name: release-gate-logs-${{ env.artifact }}
           path: ${{ env.records }}
           retention-days: 7
+          if-no-files-found: ignore
+      # The part's recorded test lanes (forge's test record, which
+      # scripts/release-gate.sh writes in the private checkout), pass or
+      # fail, for test-upload. Main only: nothing else uploads.
+      - name: Keep the recorded test runs (main only)
+        if: ${{ !cancelled() && (matrix.part == 'go' || matrix.part == 'web') && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-runs-${{ env.artifact }}
+          path: ${{ runner.temp }}/release-gate/snap/.forge/tests/runs
+          include-hidden-files: true
+          retention-days: 3
           if-no-files-found: ignore
       # Saves: main only, after the run, whatever it found. One part saves:
       # the key is the archive's, and a second save would only race it.
@@ -515,6 +585,46 @@ jobs:
       - name: Summary
         if: ${{ !cancelled() }}
         run: cat "$(git rev-parse --git-common-dir)/release-gate/${GITHUB_SHA}.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+  # ── Main's test results, to the control plane (best effort) ───────────────
+  # The release gate's parts recorded their test lanes (scripts/test-capture.sh)
+  # and kept them as test-runs-* artifacts; this sends them to the control
+  # plane with `forge test report --upload` (scripts/test-upload.sh), so the
+  # Tests pages show main. It NEVER decides anything: not in CI result's needs
+  # nor the release record's, continue-on-error, and the script exits 0 with a
+  # warning when it cannot upload (no token, a forge without --upload).
+  #
+  # The token is a secret of the `tests-upload` environment, never a
+  # repository secret: reliant is public. Only a push to main of this
+  # repository reaches the job, so a fork's pull request never gets it.
+  test-upload:
+    name: Upload main's test results
+    needs: [release-gate]
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'reliant-labs/reliant' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    environment: tests-upload
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # forge test report measures diff coverage against the merge base.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          go: "true"
+          node: "false"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: test-runs-*
+          merge-multiple: true
+          path: .forge/tests/runs
+      - name: forge test report --upload
+        env:
+          FORGE_CONTROL_PLANE_TOKEN: ${{ secrets.FORGE_CONTROL_PLANE_TOKEN }}
+        run: scripts/test-upload.sh "${GITHUB_SHA}"
 
   # ── The compile cache every Go job restores (main only) ───────────────────
   # Plain -trimpath package compiles only: what a PR can reuse is the compile of

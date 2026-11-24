@@ -45,9 +45,6 @@ const (
 	// ObservabilityServiceListMetricsProcedure is the fully-qualified name of the
 	// ObservabilityService's ListMetrics RPC.
 	ObservabilityServiceListMetricsProcedure = "/controlplane.v1.ObservabilityService/ListMetrics"
-	// ObservabilityServiceQueryMetricProcedure is the fully-qualified name of the
-	// ObservabilityService's QueryMetric RPC.
-	ObservabilityServiceQueryMetricProcedure = "/controlplane.v1.ObservabilityService/QueryMetric"
 	// ObservabilityServiceGetMetricProcedure is the fully-qualified name of the ObservabilityService's
 	// GetMetric RPC.
 	ObservabilityServiceGetMetricProcedure = "/controlplane.v1.ObservabilityService/GetMetric"
@@ -66,6 +63,9 @@ const (
 	// ObservabilityServiceGetFlamegraphProcedure is the fully-qualified name of the
 	// ObservabilityService's GetFlamegraph RPC.
 	ObservabilityServiceGetFlamegraphProcedure = "/controlplane.v1.ObservabilityService/GetFlamegraph"
+	// ObservabilityServiceExportPGOProfileProcedure is the fully-qualified name of the
+	// ObservabilityService's ExportPGOProfile RPC.
+	ObservabilityServiceExportPGOProfileProcedure = "/controlplane.v1.ObservabilityService/ExportPGOProfile"
 	// ObservabilityServiceQueryPanelProcedure is the fully-qualified name of the ObservabilityService's
 	// QueryPanel RPC.
 	ObservabilityServiceQueryPanelProcedure = "/controlplane.v1.ObservabilityService/QueryPanel"
@@ -81,12 +81,12 @@ const (
 	// ObservabilityServiceGetWorkloadProcedure is the fully-qualified name of the
 	// ObservabilityService's GetWorkload RPC.
 	ObservabilityServiceGetWorkloadProcedure = "/controlplane.v1.ObservabilityService/GetWorkload"
+	// ObservabilityServiceGetManagedDatabaseMetricsProcedure is the fully-qualified name of the
+	// ObservabilityService's GetManagedDatabaseMetrics RPC.
+	ObservabilityServiceGetManagedDatabaseMetricsProcedure = "/controlplane.v1.ObservabilityService/GetManagedDatabaseMetrics"
 	// ObservabilityServiceGetDashboardsProcedure is the fully-qualified name of the
 	// ObservabilityService's GetDashboards RPC.
 	ObservabilityServiceGetDashboardsProcedure = "/controlplane.v1.ObservabilityService/GetDashboards"
-	// ObservabilityServiceGetObservabilityUsageProcedure is the fully-qualified name of the
-	// ObservabilityService's GetObservabilityUsage RPC.
-	ObservabilityServiceGetObservabilityUsageProcedure = "/controlplane.v1.ObservabilityService/GetObservabilityUsage"
 	// ObservabilityServiceGetReleaseHealthProcedure is the fully-qualified name of the
 	// ObservabilityService's GetReleaseHealth RPC.
 	ObservabilityServiceGetReleaseHealthProcedure = "/controlplane.v1.ObservabilityService/GetReleaseHealth"
@@ -114,16 +114,6 @@ type ObservabilityServiceClient interface {
 	// ListMetrics returns the metric names the org has, with their type and unit,
 	// so a metric picker has something to offer. Max range 30 days.
 	ListMetrics(context.Context, *connect.Request[v1.ListMetricsRequest]) (*connect.Response[v1.ListMetricsResponse], error)
-	// QueryMetric returns time series for one metric: an aggregation, optional
-	// group-by attribute keys, and a step. Max range 30 days.
-	//
-	// Deprecated: it is a one-series line panel; call QueryPanel instead, which
-	// runs the same evaluator and also returns series_meta, series_total and
-	// warnings. Removed in a follow-up once the console and forge's cloud backend
-	// no longer call it.
-	//
-	// Deprecated: do not use.
-	QueryMetric(context.Context, *connect.Request[v1.QueryMetricRequest]) (*connect.Response[v1.QueryMetricResponse], error)
 	// GetMetric is the metric detail the explorer's side pane opens on: the
 	// catalog entry, the export-interval estimate, whether the metric mixes
 	// temporalities, every attribute key with its distinct-value estimate (and
@@ -150,6 +140,18 @@ type ObservabilityServiceClient interface {
 	// (30 days of aggregates; the raw per-sample tier, used for trace_id, keeps
 	// 72 hours).
 	GetFlamegraph(context.Context, *connect.Request[v1.GetFlamegraphRequest]) (*connect.Response[v1.GetFlamegraphResponse], error)
+	// ExportPGOProfile returns the merged CPU call-edge profile of one or more
+	// services as a gzipped pprof that `go build -pgo=` accepts: what
+	// `forge pgo pull` writes to cmd/<bin>/default.pgo for a hosted env. Read
+	// from the 30-day profile_pgo_edges aggregate (tenant schema v34) through
+	// forge's pkg/profilequery, so a hosted profile is byte-for-byte what the
+	// local ClickStack would give. Max range 30 days. No data in the range is
+	// not an error: edge_count is 0 and pprof is a valid empty profile. A
+	// credential bound to one environment is refused (PermissionDenied): the
+	// aggregate is keyed by the environment name a workload reports, so the
+	// binding cannot be enforced. A profile larger than one response may carry
+	// is refused (ResourceExhausted), never truncated.
+	ExportPGOProfile(context.Context, *connect.Request[v1.ExportPGOProfileRequest]) (*connect.Response[v1.ExportPGOProfileResponse], error)
 	// QueryPanel runs ONE dashboard panel (the Panel message GetDashboards
 	// returns, forge's obsdash panel spec) and returns its data: a time series
 	// per series x group for line panels, a value per series for number panels,
@@ -194,23 +196,21 @@ type ObservabilityServiceClient interface {
 	// image / service.version changes over time, per environment in scope. Max
 	// range 7 days.
 	GetWorkload(context.Context, *connect.Request[v1.GetWorkloadRequest]) (*connect.Response[v1.GetWorkloadResponse], error)
+	// GetManagedDatabaseMetrics returns the health series of the org's managed
+	// Postgres databases (Reliant hosting's ManagedDatabase, a CloudNativePG
+	// cluster per database): connections (active, idle, max), transactions per
+	// second, cache hit ratio, the database instances' CPU and memory, and
+	// storage. The platform's node agent collects them from the database's own
+	// exporter and the kubelet, stamped with the tenant from the namespace the
+	// operator labelled, never from the data. Admission and scoping are every
+	// other read's (QueryScope). Max range 30 days.
+	GetManagedDatabaseMetrics(context.Context, *connect.Request[v1.GetManagedDatabaseMetricsRequest]) (*connect.Response[v1.GetManagedDatabaseMetricsResponse], error)
 	// GetDashboards returns the dashboards for an environment in forge's
 	// dashboard-spec shape (forge.dashboards/v1). In phase 1 the spec is
 	// synthesized from the services seen in the org's data in scope.time_range;
 	// a deployed environment's real spec replaces it once it reaches
 	// control-plane. Max range 30 days.
 	GetDashboards(context.Context, *connect.Request[v1.GetDashboardsRequest]) (*connect.Response[v1.GetDashboardsResponse], error)
-	// GetObservabilityUsage returns the org's month-to-date observability usage
-	// against its included allowance: billed bytes, projected overage, a
-	// per-signal and per-service breakdown, and the quota state the gateway is
-	// enforcing. It is a plain Postgres read of what the hourly meter wrote
-	// (nothing here queries ClickHouse), so it works when the tenant is
-	// unreachable. Membership-checked on org_id.
-	// Deprecated: use observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage.
-	// Kept until deployed clients have migrated; it remains Postgres-only.
-	//
-	// Deprecated: do not use.
-	GetObservabilityUsage(context.Context, *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error)
 	// GetReleaseHealth answers "did this release make things worse": for one
 	// environment and one promotion (default: the environment's current one) it
 	// compares the window before the promotion with the window after, per service,
@@ -271,126 +271,147 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+ObservabilityServiceSearchLogsProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("SearchLogs")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listTraces: connect.NewClient[v1.ListTracesRequest, v1.ListTracesResponse](
 			httpClient,
 			baseURL+ObservabilityServiceListTracesProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("ListTraces")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getTrace: connect.NewClient[v1.GetTraceRequest, v1.GetTraceResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetTraceProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetTrace")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listMetrics: connect.NewClient[v1.ListMetricsRequest, v1.ListMetricsResponse](
 			httpClient,
 			baseURL+ObservabilityServiceListMetricsProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("ListMetrics")),
-			connect.WithClientOptions(opts...),
-		),
-		queryMetric: connect.NewClient[v1.QueryMetricRequest, v1.QueryMetricResponse](
-			httpClient,
-			baseURL+ObservabilityServiceQueryMetricProcedure,
-			connect.WithSchema(observabilityServiceMethods.ByName("QueryMetric")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getMetric: connect.NewClient[v1.GetMetricRequest, v1.GetMetricResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetMetricProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetMetric")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listMetricExemplars: connect.NewClient[v1.ListMetricExemplarsRequest, v1.ListMetricExemplarsResponse](
 			httpClient,
 			baseURL+ObservabilityServiceListMetricExemplarsProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("ListMetricExemplars")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getServiceGraph: connect.NewClient[v1.GetServiceGraphRequest, v1.GetServiceGraphResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetServiceGraphProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetServiceGraph")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getServiceGraphCatalog: connect.NewClient[v1.GetServiceGraphCatalogRequest, v1.GetServiceGraphCatalogResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetServiceGraphCatalogProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetServiceGraphCatalog")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getServiceOverview: connect.NewClient[v1.GetServiceOverviewRequest, v1.GetServiceOverviewResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetServiceOverviewProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetServiceOverview")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getFlamegraph: connect.NewClient[v1.GetFlamegraphRequest, v1.GetFlamegraphResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetFlamegraphProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetFlamegraph")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		exportPGOProfile: connect.NewClient[v1.ExportPGOProfileRequest, v1.ExportPGOProfileResponse](
+			httpClient,
+			baseURL+ObservabilityServiceExportPGOProfileProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("ExportPGOProfile")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		queryPanel: connect.NewClient[v1.QueryPanelRequest, v1.QueryPanelResponse](
 			httpClient,
 			baseURL+ObservabilityServiceQueryPanelProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("QueryPanel")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listAttributeValues: connect.NewClient[v1.ListAttributeValuesRequest, v1.ListAttributeValuesResponse](
 			httpClient,
 			baseURL+ObservabilityServiceListAttributeValuesProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("ListAttributeValues")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getServiceSignals: connect.NewClient[v1.GetServiceSignalsRequest, v1.GetServiceSignalsResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetServiceSignalsProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetServiceSignals")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listWorkloads: connect.NewClient[v1.ListWorkloadsRequest, v1.ListWorkloadsResponse](
 			httpClient,
 			baseURL+ObservabilityServiceListWorkloadsProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("ListWorkloads")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getWorkload: connect.NewClient[v1.GetWorkloadRequest, v1.GetWorkloadResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetWorkloadProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetWorkload")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getManagedDatabaseMetrics: connect.NewClient[v1.GetManagedDatabaseMetricsRequest, v1.GetManagedDatabaseMetricsResponse](
+			httpClient,
+			baseURL+ObservabilityServiceGetManagedDatabaseMetricsProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("GetManagedDatabaseMetrics")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getDashboards: connect.NewClient[v1.GetDashboardsRequest, v1.GetDashboardsResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetDashboardsProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetDashboards")),
-			connect.WithClientOptions(opts...),
-		),
-		getObservabilityUsage: connect.NewClient[v1.GetObservabilityUsageRequest, v1.GetObservabilityUsageResponse](
-			httpClient,
-			baseURL+ObservabilityServiceGetObservabilityUsageProcedure,
-			connect.WithSchema(observabilityServiceMethods.ByName("GetObservabilityUsage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getReleaseHealth: connect.NewClient[v1.GetReleaseHealthRequest, v1.GetReleaseHealthResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetReleaseHealthProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetReleaseHealth")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getUserActivity: connect.NewClient[v1.GetUserActivityRequest, v1.GetUserActivityResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetUserActivityProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("GetUserActivity")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listFrontendReplay: connect.NewClient[v1.ListFrontendReplayRequest, v1.ListFrontendReplayResponse](
 			httpClient,
 			baseURL+ObservabilityServiceListFrontendReplayProcedure,
 			connect.WithSchema(observabilityServiceMethods.ByName("ListFrontendReplay")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -398,27 +419,27 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 
 // observabilityServiceClient implements ObservabilityServiceClient.
 type observabilityServiceClient struct {
-	searchLogs             *connect.Client[v1.SearchLogsRequest, v1.SearchLogsResponse]
-	listTraces             *connect.Client[v1.ListTracesRequest, v1.ListTracesResponse]
-	getTrace               *connect.Client[v1.GetTraceRequest, v1.GetTraceResponse]
-	listMetrics            *connect.Client[v1.ListMetricsRequest, v1.ListMetricsResponse]
-	queryMetric            *connect.Client[v1.QueryMetricRequest, v1.QueryMetricResponse]
-	getMetric              *connect.Client[v1.GetMetricRequest, v1.GetMetricResponse]
-	listMetricExemplars    *connect.Client[v1.ListMetricExemplarsRequest, v1.ListMetricExemplarsResponse]
-	getServiceGraph        *connect.Client[v1.GetServiceGraphRequest, v1.GetServiceGraphResponse]
-	getServiceGraphCatalog *connect.Client[v1.GetServiceGraphCatalogRequest, v1.GetServiceGraphCatalogResponse]
-	getServiceOverview     *connect.Client[v1.GetServiceOverviewRequest, v1.GetServiceOverviewResponse]
-	getFlamegraph          *connect.Client[v1.GetFlamegraphRequest, v1.GetFlamegraphResponse]
-	queryPanel             *connect.Client[v1.QueryPanelRequest, v1.QueryPanelResponse]
-	listAttributeValues    *connect.Client[v1.ListAttributeValuesRequest, v1.ListAttributeValuesResponse]
-	getServiceSignals      *connect.Client[v1.GetServiceSignalsRequest, v1.GetServiceSignalsResponse]
-	listWorkloads          *connect.Client[v1.ListWorkloadsRequest, v1.ListWorkloadsResponse]
-	getWorkload            *connect.Client[v1.GetWorkloadRequest, v1.GetWorkloadResponse]
-	getDashboards          *connect.Client[v1.GetDashboardsRequest, v1.GetDashboardsResponse]
-	getObservabilityUsage  *connect.Client[v1.GetObservabilityUsageRequest, v1.GetObservabilityUsageResponse]
-	getReleaseHealth       *connect.Client[v1.GetReleaseHealthRequest, v1.GetReleaseHealthResponse]
-	getUserActivity        *connect.Client[v1.GetUserActivityRequest, v1.GetUserActivityResponse]
-	listFrontendReplay     *connect.Client[v1.ListFrontendReplayRequest, v1.ListFrontendReplayResponse]
+	searchLogs                *connect.Client[v1.SearchLogsRequest, v1.SearchLogsResponse]
+	listTraces                *connect.Client[v1.ListTracesRequest, v1.ListTracesResponse]
+	getTrace                  *connect.Client[v1.GetTraceRequest, v1.GetTraceResponse]
+	listMetrics               *connect.Client[v1.ListMetricsRequest, v1.ListMetricsResponse]
+	getMetric                 *connect.Client[v1.GetMetricRequest, v1.GetMetricResponse]
+	listMetricExemplars       *connect.Client[v1.ListMetricExemplarsRequest, v1.ListMetricExemplarsResponse]
+	getServiceGraph           *connect.Client[v1.GetServiceGraphRequest, v1.GetServiceGraphResponse]
+	getServiceGraphCatalog    *connect.Client[v1.GetServiceGraphCatalogRequest, v1.GetServiceGraphCatalogResponse]
+	getServiceOverview        *connect.Client[v1.GetServiceOverviewRequest, v1.GetServiceOverviewResponse]
+	getFlamegraph             *connect.Client[v1.GetFlamegraphRequest, v1.GetFlamegraphResponse]
+	exportPGOProfile          *connect.Client[v1.ExportPGOProfileRequest, v1.ExportPGOProfileResponse]
+	queryPanel                *connect.Client[v1.QueryPanelRequest, v1.QueryPanelResponse]
+	listAttributeValues       *connect.Client[v1.ListAttributeValuesRequest, v1.ListAttributeValuesResponse]
+	getServiceSignals         *connect.Client[v1.GetServiceSignalsRequest, v1.GetServiceSignalsResponse]
+	listWorkloads             *connect.Client[v1.ListWorkloadsRequest, v1.ListWorkloadsResponse]
+	getWorkload               *connect.Client[v1.GetWorkloadRequest, v1.GetWorkloadResponse]
+	getManagedDatabaseMetrics *connect.Client[v1.GetManagedDatabaseMetricsRequest, v1.GetManagedDatabaseMetricsResponse]
+	getDashboards             *connect.Client[v1.GetDashboardsRequest, v1.GetDashboardsResponse]
+	getReleaseHealth          *connect.Client[v1.GetReleaseHealthRequest, v1.GetReleaseHealthResponse]
+	getUserActivity           *connect.Client[v1.GetUserActivityRequest, v1.GetUserActivityResponse]
+	listFrontendReplay        *connect.Client[v1.ListFrontendReplayRequest, v1.ListFrontendReplayResponse]
 }
 
 // SearchLogs calls controlplane.v1.ObservabilityService.SearchLogs.
@@ -439,13 +460,6 @@ func (c *observabilityServiceClient) GetTrace(ctx context.Context, req *connect.
 // ListMetrics calls controlplane.v1.ObservabilityService.ListMetrics.
 func (c *observabilityServiceClient) ListMetrics(ctx context.Context, req *connect.Request[v1.ListMetricsRequest]) (*connect.Response[v1.ListMetricsResponse], error) {
 	return c.listMetrics.CallUnary(ctx, req)
-}
-
-// QueryMetric calls controlplane.v1.ObservabilityService.QueryMetric.
-//
-// Deprecated: do not use.
-func (c *observabilityServiceClient) QueryMetric(ctx context.Context, req *connect.Request[v1.QueryMetricRequest]) (*connect.Response[v1.QueryMetricResponse], error) {
-	return c.queryMetric.CallUnary(ctx, req)
 }
 
 // GetMetric calls controlplane.v1.ObservabilityService.GetMetric.
@@ -478,6 +492,11 @@ func (c *observabilityServiceClient) GetFlamegraph(ctx context.Context, req *con
 	return c.getFlamegraph.CallUnary(ctx, req)
 }
 
+// ExportPGOProfile calls controlplane.v1.ObservabilityService.ExportPGOProfile.
+func (c *observabilityServiceClient) ExportPGOProfile(ctx context.Context, req *connect.Request[v1.ExportPGOProfileRequest]) (*connect.Response[v1.ExportPGOProfileResponse], error) {
+	return c.exportPGOProfile.CallUnary(ctx, req)
+}
+
 // QueryPanel calls controlplane.v1.ObservabilityService.QueryPanel.
 func (c *observabilityServiceClient) QueryPanel(ctx context.Context, req *connect.Request[v1.QueryPanelRequest]) (*connect.Response[v1.QueryPanelResponse], error) {
 	return c.queryPanel.CallUnary(ctx, req)
@@ -503,16 +522,14 @@ func (c *observabilityServiceClient) GetWorkload(ctx context.Context, req *conne
 	return c.getWorkload.CallUnary(ctx, req)
 }
 
+// GetManagedDatabaseMetrics calls controlplane.v1.ObservabilityService.GetManagedDatabaseMetrics.
+func (c *observabilityServiceClient) GetManagedDatabaseMetrics(ctx context.Context, req *connect.Request[v1.GetManagedDatabaseMetricsRequest]) (*connect.Response[v1.GetManagedDatabaseMetricsResponse], error) {
+	return c.getManagedDatabaseMetrics.CallUnary(ctx, req)
+}
+
 // GetDashboards calls controlplane.v1.ObservabilityService.GetDashboards.
 func (c *observabilityServiceClient) GetDashboards(ctx context.Context, req *connect.Request[v1.GetDashboardsRequest]) (*connect.Response[v1.GetDashboardsResponse], error) {
 	return c.getDashboards.CallUnary(ctx, req)
-}
-
-// GetObservabilityUsage calls controlplane.v1.ObservabilityService.GetObservabilityUsage.
-//
-// Deprecated: do not use.
-func (c *observabilityServiceClient) GetObservabilityUsage(ctx context.Context, req *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error) {
-	return c.getObservabilityUsage.CallUnary(ctx, req)
 }
 
 // GetReleaseHealth calls controlplane.v1.ObservabilityService.GetReleaseHealth.
@@ -547,16 +564,6 @@ type ObservabilityServiceHandler interface {
 	// ListMetrics returns the metric names the org has, with their type and unit,
 	// so a metric picker has something to offer. Max range 30 days.
 	ListMetrics(context.Context, *connect.Request[v1.ListMetricsRequest]) (*connect.Response[v1.ListMetricsResponse], error)
-	// QueryMetric returns time series for one metric: an aggregation, optional
-	// group-by attribute keys, and a step. Max range 30 days.
-	//
-	// Deprecated: it is a one-series line panel; call QueryPanel instead, which
-	// runs the same evaluator and also returns series_meta, series_total and
-	// warnings. Removed in a follow-up once the console and forge's cloud backend
-	// no longer call it.
-	//
-	// Deprecated: do not use.
-	QueryMetric(context.Context, *connect.Request[v1.QueryMetricRequest]) (*connect.Response[v1.QueryMetricResponse], error)
 	// GetMetric is the metric detail the explorer's side pane opens on: the
 	// catalog entry, the export-interval estimate, whether the metric mixes
 	// temporalities, every attribute key with its distinct-value estimate (and
@@ -583,6 +590,18 @@ type ObservabilityServiceHandler interface {
 	// (30 days of aggregates; the raw per-sample tier, used for trace_id, keeps
 	// 72 hours).
 	GetFlamegraph(context.Context, *connect.Request[v1.GetFlamegraphRequest]) (*connect.Response[v1.GetFlamegraphResponse], error)
+	// ExportPGOProfile returns the merged CPU call-edge profile of one or more
+	// services as a gzipped pprof that `go build -pgo=` accepts: what
+	// `forge pgo pull` writes to cmd/<bin>/default.pgo for a hosted env. Read
+	// from the 30-day profile_pgo_edges aggregate (tenant schema v34) through
+	// forge's pkg/profilequery, so a hosted profile is byte-for-byte what the
+	// local ClickStack would give. Max range 30 days. No data in the range is
+	// not an error: edge_count is 0 and pprof is a valid empty profile. A
+	// credential bound to one environment is refused (PermissionDenied): the
+	// aggregate is keyed by the environment name a workload reports, so the
+	// binding cannot be enforced. A profile larger than one response may carry
+	// is refused (ResourceExhausted), never truncated.
+	ExportPGOProfile(context.Context, *connect.Request[v1.ExportPGOProfileRequest]) (*connect.Response[v1.ExportPGOProfileResponse], error)
 	// QueryPanel runs ONE dashboard panel (the Panel message GetDashboards
 	// returns, forge's obsdash panel spec) and returns its data: a time series
 	// per series x group for line panels, a value per series for number panels,
@@ -627,23 +646,21 @@ type ObservabilityServiceHandler interface {
 	// image / service.version changes over time, per environment in scope. Max
 	// range 7 days.
 	GetWorkload(context.Context, *connect.Request[v1.GetWorkloadRequest]) (*connect.Response[v1.GetWorkloadResponse], error)
+	// GetManagedDatabaseMetrics returns the health series of the org's managed
+	// Postgres databases (Reliant hosting's ManagedDatabase, a CloudNativePG
+	// cluster per database): connections (active, idle, max), transactions per
+	// second, cache hit ratio, the database instances' CPU and memory, and
+	// storage. The platform's node agent collects them from the database's own
+	// exporter and the kubelet, stamped with the tenant from the namespace the
+	// operator labelled, never from the data. Admission and scoping are every
+	// other read's (QueryScope). Max range 30 days.
+	GetManagedDatabaseMetrics(context.Context, *connect.Request[v1.GetManagedDatabaseMetricsRequest]) (*connect.Response[v1.GetManagedDatabaseMetricsResponse], error)
 	// GetDashboards returns the dashboards for an environment in forge's
 	// dashboard-spec shape (forge.dashboards/v1). In phase 1 the spec is
 	// synthesized from the services seen in the org's data in scope.time_range;
 	// a deployed environment's real spec replaces it once it reaches
 	// control-plane. Max range 30 days.
 	GetDashboards(context.Context, *connect.Request[v1.GetDashboardsRequest]) (*connect.Response[v1.GetDashboardsResponse], error)
-	// GetObservabilityUsage returns the org's month-to-date observability usage
-	// against its included allowance: billed bytes, projected overage, a
-	// per-signal and per-service breakdown, and the quota state the gateway is
-	// enforcing. It is a plain Postgres read of what the hourly meter wrote
-	// (nothing here queries ClickHouse), so it works when the tenant is
-	// unreachable. Membership-checked on org_id.
-	// Deprecated: use observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage.
-	// Kept until deployed clients have migrated; it remains Postgres-only.
-	//
-	// Deprecated: do not use.
-	GetObservabilityUsage(context.Context, *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error)
 	// GetReleaseHealth answers "did this release make things worse": for one
 	// environment and one promotion (default: the environment's current one) it
 	// compares the window before the promotion with the window after, per service,
@@ -700,126 +717,147 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 		ObservabilityServiceSearchLogsProcedure,
 		svc.SearchLogs,
 		connect.WithSchema(observabilityServiceMethods.ByName("SearchLogs")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceListTracesHandler := connect.NewUnaryHandler(
 		ObservabilityServiceListTracesProcedure,
 		svc.ListTraces,
 		connect.WithSchema(observabilityServiceMethods.ByName("ListTraces")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetTraceHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetTraceProcedure,
 		svc.GetTrace,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetTrace")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceListMetricsHandler := connect.NewUnaryHandler(
 		ObservabilityServiceListMetricsProcedure,
 		svc.ListMetrics,
 		connect.WithSchema(observabilityServiceMethods.ByName("ListMetrics")),
-		connect.WithHandlerOptions(opts...),
-	)
-	observabilityServiceQueryMetricHandler := connect.NewUnaryHandler(
-		ObservabilityServiceQueryMetricProcedure,
-		svc.QueryMetric,
-		connect.WithSchema(observabilityServiceMethods.ByName("QueryMetric")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetMetricHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetMetricProcedure,
 		svc.GetMetric,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetMetric")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceListMetricExemplarsHandler := connect.NewUnaryHandler(
 		ObservabilityServiceListMetricExemplarsProcedure,
 		svc.ListMetricExemplars,
 		connect.WithSchema(observabilityServiceMethods.ByName("ListMetricExemplars")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetServiceGraphHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetServiceGraphProcedure,
 		svc.GetServiceGraph,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetServiceGraph")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetServiceGraphCatalogHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetServiceGraphCatalogProcedure,
 		svc.GetServiceGraphCatalog,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetServiceGraphCatalog")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetServiceOverviewHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetServiceOverviewProcedure,
 		svc.GetServiceOverview,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetServiceOverview")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetFlamegraphHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetFlamegraphProcedure,
 		svc.GetFlamegraph,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetFlamegraph")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	observabilityServiceExportPGOProfileHandler := connect.NewUnaryHandler(
+		ObservabilityServiceExportPGOProfileProcedure,
+		svc.ExportPGOProfile,
+		connect.WithSchema(observabilityServiceMethods.ByName("ExportPGOProfile")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceQueryPanelHandler := connect.NewUnaryHandler(
 		ObservabilityServiceQueryPanelProcedure,
 		svc.QueryPanel,
 		connect.WithSchema(observabilityServiceMethods.ByName("QueryPanel")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceListAttributeValuesHandler := connect.NewUnaryHandler(
 		ObservabilityServiceListAttributeValuesProcedure,
 		svc.ListAttributeValues,
 		connect.WithSchema(observabilityServiceMethods.ByName("ListAttributeValues")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetServiceSignalsHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetServiceSignalsProcedure,
 		svc.GetServiceSignals,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetServiceSignals")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceListWorkloadsHandler := connect.NewUnaryHandler(
 		ObservabilityServiceListWorkloadsProcedure,
 		svc.ListWorkloads,
 		connect.WithSchema(observabilityServiceMethods.ByName("ListWorkloads")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetWorkloadHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetWorkloadProcedure,
 		svc.GetWorkload,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetWorkload")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	observabilityServiceGetManagedDatabaseMetricsHandler := connect.NewUnaryHandler(
+		ObservabilityServiceGetManagedDatabaseMetricsProcedure,
+		svc.GetManagedDatabaseMetrics,
+		connect.WithSchema(observabilityServiceMethods.ByName("GetManagedDatabaseMetrics")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetDashboardsHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetDashboardsProcedure,
 		svc.GetDashboards,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetDashboards")),
-		connect.WithHandlerOptions(opts...),
-	)
-	observabilityServiceGetObservabilityUsageHandler := connect.NewUnaryHandler(
-		ObservabilityServiceGetObservabilityUsageProcedure,
-		svc.GetObservabilityUsage,
-		connect.WithSchema(observabilityServiceMethods.ByName("GetObservabilityUsage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetReleaseHealthHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetReleaseHealthProcedure,
 		svc.GetReleaseHealth,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetReleaseHealth")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceGetUserActivityHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetUserActivityProcedure,
 		svc.GetUserActivity,
 		connect.WithSchema(observabilityServiceMethods.ByName("GetUserActivity")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityServiceListFrontendReplayHandler := connect.NewUnaryHandler(
 		ObservabilityServiceListFrontendReplayProcedure,
 		svc.ListFrontendReplay,
 		connect.WithSchema(observabilityServiceMethods.ByName("ListFrontendReplay")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/controlplane.v1.ObservabilityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -832,8 +870,6 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 			observabilityServiceGetTraceHandler.ServeHTTP(w, r)
 		case ObservabilityServiceListMetricsProcedure:
 			observabilityServiceListMetricsHandler.ServeHTTP(w, r)
-		case ObservabilityServiceQueryMetricProcedure:
-			observabilityServiceQueryMetricHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetMetricProcedure:
 			observabilityServiceGetMetricHandler.ServeHTTP(w, r)
 		case ObservabilityServiceListMetricExemplarsProcedure:
@@ -846,6 +882,8 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 			observabilityServiceGetServiceOverviewHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetFlamegraphProcedure:
 			observabilityServiceGetFlamegraphHandler.ServeHTTP(w, r)
+		case ObservabilityServiceExportPGOProfileProcedure:
+			observabilityServiceExportPGOProfileHandler.ServeHTTP(w, r)
 		case ObservabilityServiceQueryPanelProcedure:
 			observabilityServiceQueryPanelHandler.ServeHTTP(w, r)
 		case ObservabilityServiceListAttributeValuesProcedure:
@@ -856,10 +894,10 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 			observabilityServiceListWorkloadsHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetWorkloadProcedure:
 			observabilityServiceGetWorkloadHandler.ServeHTTP(w, r)
+		case ObservabilityServiceGetManagedDatabaseMetricsProcedure:
+			observabilityServiceGetManagedDatabaseMetricsHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetDashboardsProcedure:
 			observabilityServiceGetDashboardsHandler.ServeHTTP(w, r)
-		case ObservabilityServiceGetObservabilityUsageProcedure:
-			observabilityServiceGetObservabilityUsageHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetReleaseHealthProcedure:
 			observabilityServiceGetReleaseHealthHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetUserActivityProcedure:
@@ -891,10 +929,6 @@ func (UnimplementedObservabilityServiceHandler) ListMetrics(context.Context, *co
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.ListMetrics is not implemented"))
 }
 
-func (UnimplementedObservabilityServiceHandler) QueryMetric(context.Context, *connect.Request[v1.QueryMetricRequest]) (*connect.Response[v1.QueryMetricResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.QueryMetric is not implemented"))
-}
-
 func (UnimplementedObservabilityServiceHandler) GetMetric(context.Context, *connect.Request[v1.GetMetricRequest]) (*connect.Response[v1.GetMetricResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetMetric is not implemented"))
 }
@@ -919,6 +953,10 @@ func (UnimplementedObservabilityServiceHandler) GetFlamegraph(context.Context, *
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetFlamegraph is not implemented"))
 }
 
+func (UnimplementedObservabilityServiceHandler) ExportPGOProfile(context.Context, *connect.Request[v1.ExportPGOProfileRequest]) (*connect.Response[v1.ExportPGOProfileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.ExportPGOProfile is not implemented"))
+}
+
 func (UnimplementedObservabilityServiceHandler) QueryPanel(context.Context, *connect.Request[v1.QueryPanelRequest]) (*connect.Response[v1.QueryPanelResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.QueryPanel is not implemented"))
 }
@@ -939,12 +977,12 @@ func (UnimplementedObservabilityServiceHandler) GetWorkload(context.Context, *co
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetWorkload is not implemented"))
 }
 
-func (UnimplementedObservabilityServiceHandler) GetDashboards(context.Context, *connect.Request[v1.GetDashboardsRequest]) (*connect.Response[v1.GetDashboardsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetDashboards is not implemented"))
+func (UnimplementedObservabilityServiceHandler) GetManagedDatabaseMetrics(context.Context, *connect.Request[v1.GetManagedDatabaseMetricsRequest]) (*connect.Response[v1.GetManagedDatabaseMetricsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetManagedDatabaseMetrics is not implemented"))
 }
 
-func (UnimplementedObservabilityServiceHandler) GetObservabilityUsage(context.Context, *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetObservabilityUsage is not implemented"))
+func (UnimplementedObservabilityServiceHandler) GetDashboards(context.Context, *connect.Request[v1.GetDashboardsRequest]) (*connect.Response[v1.GetDashboardsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetDashboards is not implemented"))
 }
 
 func (UnimplementedObservabilityServiceHandler) GetReleaseHealth(context.Context, *connect.Request[v1.GetReleaseHealthRequest]) (*connect.Response[v1.GetReleaseHealthResponse], error) {

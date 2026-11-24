@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
@@ -34,7 +35,7 @@ func l6Upsert(user, acct, secret, refresh string) core.AccountUpsert {
 
 func l6Account(t *testing.T, env *storetest.Env, u core.AccountUpsert) core.ProviderAccount {
 	t.Helper()
-	a, _, err := env.Repo.UpsertProviderAccount(context.Background(), u)
+	a, _, err := db.TestAccounts(t, env.Repo).UpsertProviderAccount(context.Background(), u)
 	if err != nil {
 		t.Fatalf("Repo.UpsertProviderAccount(%s): %v", u.IdentityKey, err)
 	}
@@ -100,7 +101,7 @@ func TestProviderAccountSecretsRoundTripSealed(t *testing.T) {
 	if !bytes.Equal(got.Secret, secret) || !bytes.Equal(got.Refresh, refresh) || !bytes.Equal(got.IDToken, idToken) {
 		t.Fatal("GetUserProviderAccountSealed did not return the stored ciphertext byte for byte")
 	}
-	opened, err := env.Repo.GetProviderAccountWithSecrets(ctx, "u1", a.ID)
+	opened, err := db.TestAccounts(t, env.Repo).GetProviderAccountWithSecrets(ctx, "u1", a.ID)
 	if err != nil {
 		t.Fatalf("Repo.GetProviderAccountWithSecrets: %v", err)
 	}
@@ -109,7 +110,7 @@ func TestProviderAccountSecretsRoundTripSealed(t *testing.T) {
 	}
 
 	// A token swap re-seals: new ciphertext, still not plaintext, still opens.
-	ok, err := env.Repo.CompareAndSwapAccountTokens(ctx, "u1", a.ID, "PLAINTEXT-REFRESH", core.AccountTokens{Secret: "NEXT-ACCESS", Refresh: "NEXT-REFRESH"})
+	ok, err := db.TestAccounts(t, env.Repo).CompareAndSwapAccountTokens(ctx, "u1", a.ID, "PLAINTEXT-REFRESH", core.AccountTokens{Secret: "NEXT-ACCESS", Refresh: "NEXT-REFRESH"})
 	if err != nil || !ok {
 		t.Fatalf("CompareAndSwapAccountTokens = %v, %v; want a swap", ok, err)
 	}
@@ -117,7 +118,7 @@ func TestProviderAccountSecretsRoundTripSealed(t *testing.T) {
 	if bytes.Equal(secret2, secret) || bytes.Contains(secret2, []byte("NEXT-ACCESS")) {
 		t.Fatalf("secret_sealed after a swap = %q, want fresh ciphertext", secret2)
 	}
-	opened, err = env.Repo.GetProviderAccountWithSecrets(ctx, "u1", a.ID)
+	opened, err = db.TestAccounts(t, env.Repo).GetProviderAccountWithSecrets(ctx, "u1", a.ID)
 	if err != nil || opened.Secrets.Secret != "NEXT-ACCESS" || opened.Secrets.Refresh != "NEXT-REFRESH" || opened.Secrets.IDToken != "PLAINTEXT-ID" {
 		t.Fatalf("after the swap opened = %+v, %v; want the next tokens and the kept id token", opened, err)
 	}
@@ -137,7 +138,7 @@ func TestProviderAccountReads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListUserProviderAccounts: %v", err)
 	}
-	twin, err := env.Repo.ListProviderAccounts(ctx, "u1")
+	twin, err := db.TestAccounts(t, env.Repo).ListProviderAccounts(ctx, "u1")
 	if err != nil {
 		t.Fatalf("Repo.ListProviderAccounts: %v", err)
 	}
@@ -150,7 +151,7 @@ func TestProviderAccountReads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListUserProviderAccountsSealed: %v", err)
 	}
-	withSecrets, err := env.Repo.ListProviderAccountsWithSecrets(ctx, "u1")
+	withSecrets, err := db.TestAccounts(t, env.Repo).ListProviderAccountsWithSecrets(ctx, "u1")
 	if err != nil {
 		t.Fatalf("Repo.ListProviderAccountsWithSecrets: %v", err)
 	}
@@ -176,7 +177,7 @@ func TestProviderAccountReads(t *testing.T) {
 	if _, err := store.GetOwnerProviderAccountSealed(ctx, env.ORM, core.UserAccountOwner("u1"), other.ID); !errors.Is(err, core.ErrProviderAccountNotFound) {
 		t.Fatalf("another user's account: err = %v, want ErrProviderAccountNotFound", err)
 	}
-	if _, err := env.Repo.GetProviderAccountWithSecrets(ctx, "u1", other.ID); !errors.Is(err, core.ErrProviderAccountNotFound) {
+	if _, err := db.TestAccounts(t, env.Repo).GetProviderAccountWithSecrets(ctx, "u1", other.ID); !errors.Is(err, core.ErrProviderAccountNotFound) {
 		t.Fatalf("Repo: another user's account: err = %v, want ErrProviderAccountNotFound", err)
 	}
 
@@ -184,7 +185,7 @@ func TestProviderAccountReads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListUserIDsWithProviderAccount: %v", err)
 	}
-	twinUsers, err := env.Repo.ListUserIDsWithProviderAccount(ctx, "claude")
+	twinUsers, err := db.TestAccounts(t, env.Repo).ListUserIDsWithProviderAccount(ctx, "claude")
 	if err != nil {
 		t.Fatalf("Repo.ListUserIDsWithProviderAccount: %v", err)
 	}
@@ -215,7 +216,7 @@ func TestProviderAccountLocks(t *testing.T) {
 	ctx := context.Background()
 	a := l6Account(t, env, l6Upsert("u1", "alice", "s1", "r1"))
 	b := l6Account(t, env, l6Upsert("u1", "bob", "s2", "r2"))
-	twin, err := env.Repo.ListProviderAccounts(ctx, "u1")
+	twin, err := db.TestAccounts(t, env.Repo).ListProviderAccounts(ctx, "u1")
 	if err != nil {
 		t.Fatalf("Repo.ListProviderAccounts: %v", err)
 	}
@@ -274,7 +275,7 @@ func TestProviderAccountCredentialWrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InsertProviderAccount: %v", err)
 	}
-	twin, err := env.Repo.ListProviderAccounts(ctx, "u1")
+	twin, err := db.TestAccounts(t, env.Repo).ListProviderAccounts(ctx, "u1")
 	if err != nil || len(twin) != 1 {
 		t.Fatalf("Repo.ListProviderAccounts = %v, %v", twin, err)
 	}
@@ -303,7 +304,7 @@ func TestProviderAccountCredentialWrites(t *testing.T) {
 	if string(secret2) != "ciphertext-2" || !bytes.Equal(refresh2, refresh) {
 		t.Fatal("a rewrite without a refresh token must keep the stored one and write the secret")
 	}
-	twin, _ = env.Repo.ListProviderAccounts(ctx, "u1")
+	twin, _ = db.TestAccounts(t, env.Repo).ListProviderAccounts(ctx, "u1")
 	requireSame(t, "RewriteProviderAccountCredential", rewritten, twin[0])
 	mustExec(t, env, `UPDATE provider_accounts SET needs_reauth_at = now(), needs_reauth_reason = 'expired' WHERE id = $1`, a.ID)
 	if r, err := store.RewriteProviderAccountCredential(ctx, env.ORM, "u1", a.ID, store.ProviderAccountCredential{
@@ -334,7 +335,7 @@ func TestProviderAccountCredentialWrites(t *testing.T) {
 	if ok, err := store.SwapProviderAccountTokens(ctx, env.ORM, "u1", b.ID, next, wSecret, wRefresh); err != nil || ok {
 		t.Fatalf("a second swap on the same witness = %v, %v; want no write", ok, err)
 	}
-	twin, _ = env.Repo.ListProviderAccounts(ctx, "u1")
+	twin, _ = db.TestAccounts(t, env.Repo).ListProviderAccounts(ctx, "u1")
 	for _, tw := range twin {
 		if tw.ID == b.ID && (tw.Plan != "pro" || tw.Email != b.Email || !tw.UpdatedAt.Equal(at)) {
 			t.Fatalf("after the swap the Repository reads %+v", tw)
@@ -355,14 +356,14 @@ func TestProviderAccountStandingWrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PatchUserProviderAccount: %v", err)
 	}
-	twin, _ := env.Repo.ListProviderAccounts(ctx, "u1")
+	twin, _ := db.TestAccounts(t, env.Repo).ListProviderAccounts(ctx, "u1")
 	requireSame(t, "PatchUserProviderAccount", patched, twin[0])
 	if patched.Label != "Work" || patched.PausedAt == nil || patched.NeedsReauthReason != "revoked" || !patched.UpdatedAt.Equal(now) {
 		t.Fatalf("patched = %+v", patched)
 	}
 	// And the Repository's patch reads back through the store.
 	label := "Home"
-	if _, err := env.Repo.PatchProviderAccount(ctx, "u1", a.ID, core.AccountPatch{Label: &label, Paused: ptr(false), NeedsReauth: ptr("")}); err != nil {
+	if _, err := db.TestAccounts(t, env.Repo).PatchProviderAccount(ctx, "u1", a.ID, core.AccountPatch{Label: &label, Paused: ptr(false), NeedsReauth: ptr("")}); err != nil {
 		t.Fatalf("Repo.PatchProviderAccount: %v", err)
 	}
 	meta, _ := store.ListOwnerProviderAccounts(ctx, env.ORM, core.UserAccountOwner("u1"))
@@ -385,7 +386,7 @@ func TestProviderAccountStandingWrites(t *testing.T) {
 	if got := l6IDs(t, env); got != fmt.Sprint([]string{c.ID, a.ID, b.ID}) {
 		t.Fatalf("after SetProviderAccountPriority the Repository orders %s", got)
 	}
-	if err := env.Repo.ReorderProviderAccounts(ctx, "u1", "claude", []string{a.ID, b.ID, c.ID}); err != nil {
+	if err := db.TestAccounts(t, env.Repo).ReorderProviderAccounts(ctx, "u1", "claude", []string{a.ID, b.ID, c.ID}); err != nil {
 		t.Fatalf("Repo.ReorderProviderAccounts: %v", err)
 	}
 	meta, _ = store.ListOwnerProviderAccounts(ctx, env.ORM, core.UserAccountOwner("u1"))
@@ -402,7 +403,7 @@ func TestProviderAccountStandingWrites(t *testing.T) {
 		{ThreadID: "th-1", Provider: "claude", AccountID: b.ID, Reason: "initial", AssignedAt: now},
 		{ThreadID: "th-2", Provider: "claude", AccountID: c.ID, Reason: "initial", AssignedAt: now},
 	} {
-		if _, err := env.Repo.SetThreadAssignment(ctx, as, ""); err != nil {
+		if _, err := db.TestAccounts(t, env.Repo).SetThreadAssignment(ctx, as, ""); err != nil {
 			t.Fatalf("Repo.SetThreadAssignment: %v", err)
 		}
 	}
@@ -422,13 +423,13 @@ func TestProviderAccountStandingWrites(t *testing.T) {
 		}
 		return store.DensifyProviderAccounts(ctx, env.ORM, "u1", "claude")
 	})
-	twin, _ = env.Repo.ListProviderAccounts(ctx, "u1")
+	twin, _ = db.TestAccounts(t, env.Repo).ListProviderAccounts(ctx, "u1")
 	if len(twin) != 2 || twin[0].ID != a.ID || twin[0].Priority != 0 || twin[1].ID != b.ID || twin[1].Priority != 1 ||
 		twin[1].Label != "Merged" || twin[1].PausedAt == nil || !twin[1].UpdatedAt.Equal(before.UpdatedAt) {
 		t.Fatalf("after the merge statements the Repository reads %+v; want alice 0, then bob densified from 5 to 1 with its standing set and updated_at untouched", twin)
 	}
 	for _, th := range []string{"th-1", "th-2"} {
-		got, err := env.Repo.GetThreadAssignment(ctx, th, "claude")
+		got, err := db.TestAccounts(t, env.Repo).GetThreadAssignment(ctx, th, "claude")
 		if err != nil || got == nil || got.AccountID != b.ID {
 			t.Fatalf("thread %s assignment = %+v, %v; want moved to bob", th, got, err)
 		}
@@ -441,14 +442,14 @@ func TestProviderAccountStandingWrites(t *testing.T) {
 	if ok, err := store.DeleteUserProviderAccount(ctx, env.ORM, "u1", a.ID); err != nil || !ok {
 		t.Fatalf("DeleteUserProviderAccount = %v, %v", ok, err)
 	}
-	if _, err := env.Repo.GetProviderAccountWithSecrets(ctx, "u1", a.ID); !errors.Is(err, core.ErrProviderAccountNotFound) {
+	if _, err := db.TestAccounts(t, env.Repo).GetProviderAccountWithSecrets(ctx, "u1", a.ID); !errors.Is(err, core.ErrProviderAccountNotFound) {
 		t.Fatalf("after the delete the Repository reads err = %v", err)
 	}
 }
 
 func l6IDs(t *testing.T, env *storetest.Env) string {
 	t.Helper()
-	all, err := env.Repo.ListProviderAccounts(context.Background(), "u1")
+	all, err := db.TestAccounts(t, env.Repo).ListProviderAccounts(context.Background(), "u1")
 	if err != nil {
 		t.Fatalf("Repo.ListProviderAccounts: %v", err)
 	}
@@ -479,7 +480,7 @@ func TestProviderAccountLimitQueries(t *testing.T) {
 	if err := store.UpsertAccountLimitSnapshot(ctx, env.ORM, snap, now); err != nil {
 		t.Fatalf("UpsertAccountLimitSnapshot: %v", err)
 	}
-	if err := env.Repo.UpsertAccountLimitSnapshot(ctx, core.LimitState{AccountID: b.ID, UserID: "u1", ObservedAt: now, Source: "usage_api"}); err != nil {
+	if err := db.TestAccounts(t, env.Repo).UpsertAccountLimitSnapshot(ctx, core.LimitState{AccountID: b.ID, UserID: "u1", ObservedAt: now, Source: "usage_api"}); err != nil {
 		t.Fatalf("Repo.UpsertAccountLimitSnapshot: %v", err)
 	}
 	// An older snapshot never regresses the state, through either layer.
@@ -506,7 +507,7 @@ func TestProviderAccountLimitQueries(t *testing.T) {
 	if ok, err := store.BenchProviderAccount(ctx, env.ORM, "u1", a.ID, now.Add(2*time.Hour), "5h", true, now); err != nil || !ok {
 		t.Fatalf("BenchProviderAccount = %v, %v", ok, err)
 	}
-	if err := env.Repo.BenchAccount(ctx, core.UserAccountOwner("u1"), a.ID, now.Add(time.Hour), "1h", true); err != nil {
+	if err := db.TestAccounts(t, env.Repo).BenchAccount(ctx, core.UserAccountOwner("u1"), a.ID, now.Add(time.Hour), "1h", true); err != nil {
 		t.Fatalf("Repo.BenchAccount: %v", err)
 	}
 	got, _ = store.GetAccountLimitState(ctx, env.ORM, a.ID)
@@ -526,7 +527,7 @@ func TestProviderAccountLimitQueries(t *testing.T) {
 	}
 	lift := snap
 	lift.ObservedAt = time.Now().UTC().Add(time.Hour)
-	if err := env.Repo.UpsertAccountLimitSnapshot(ctx, lift); err != nil {
+	if err := db.TestAccounts(t, env.Repo).UpsertAccountLimitSnapshot(ctx, lift); err != nil {
 		t.Fatalf("Repo.UpsertAccountLimitSnapshot(lift): %v", err)
 	}
 	got, _ = store.GetAccountLimitState(ctx, env.ORM, a.ID)
@@ -555,14 +556,14 @@ func TestProviderAccountLimitQueries(t *testing.T) {
 	if gotB, _ := store.GetAccountLimitState(ctx, env.ORM, b.ID); gotB.UsageAPINextAt != nil {
 		t.Fatalf("Ensure for a provider not listed scheduled %v", gotB.UsageAPINextAt)
 	}
-	if err := env.Repo.EnsureUsagePollScheduled(ctx, b.ID, now.Add(-2*time.Minute), []string{"claude"}); err != nil {
+	if err := db.TestAccounts(t, env.Repo).EnsureUsagePollScheduled(ctx, b.ID, now.Add(-2*time.Minute), []string{"claude"}); err != nil {
 		t.Fatalf("Repo.EnsureUsagePollScheduled: %v", err)
 	}
 	ids, err := store.LeaseUsagePolls(ctx, env.ORM, now, 1, time.Minute)
 	if err != nil || len(ids) != 1 || ids[0] != b.ID {
 		t.Fatalf("LeaseUsagePolls(limit 1) = %v, %v; want the earliest due (%s)", ids, err, b.ID)
 	}
-	twinIDs, err := env.Repo.LeaseUsagePolls(ctx, now, 10, time.Minute)
+	twinIDs, err := db.TestAccounts(t, env.Repo).LeaseUsagePolls(ctx, now, 10, time.Minute)
 	if err != nil || len(twinIDs) != 1 || twinIDs[0] != a.ID {
 		t.Fatalf("Repo.LeaseUsagePolls = %v, %v; want only the account the store did not lease", twinIDs, err)
 	}
@@ -575,7 +576,7 @@ func TestProviderAccountLimitQueries(t *testing.T) {
 	if ok, err := store.ScheduleUsagePoll(ctx, env.ORM, b.ID, time.Time{}, 0, "", now); err != nil || !ok {
 		t.Fatalf("ScheduleUsagePoll(unschedule) = %v, %v", ok, err)
 	}
-	if got, _ := env.Repo.GetAccountLimits(ctx, b.ID); got.UsageAPINextAt != nil || got.UsageAPIError != "" {
+	if got, _ := db.TestAccounts(t, env.Repo).GetAccountLimits(ctx, b.ID); got.UsageAPINextAt != nil || got.UsageAPIError != "" {
 		t.Fatalf("an unscheduled poll reads %+v", got)
 	}
 
@@ -583,7 +584,7 @@ func TestProviderAccountLimitQueries(t *testing.T) {
 	if ok, err := store.ClaimUsageFetch(ctx, env.ORM, c.ID, now, time.Minute); err != nil || !ok {
 		t.Fatalf("ClaimUsageFetch(first, no limits row) = %v, %v", ok, err)
 	}
-	if ok, err := env.Repo.ClaimUsageFetch(ctx, c.ID, now.Add(30*time.Second), time.Minute); err != nil || ok {
+	if ok, err := db.TestAccounts(t, env.Repo).ClaimUsageFetch(ctx, c.ID, now.Add(30*time.Second), time.Minute); err != nil || ok {
 		t.Fatalf("Repo.ClaimUsageFetch inside the floor = %v, %v; want refused", ok, err)
 	}
 	if ok, err := store.ClaimUsageFetch(ctx, env.ORM, c.ID, now.Add(time.Minute), time.Minute); err != nil || !ok {
@@ -605,7 +606,7 @@ func l6RequireLimitsAgree(t *testing.T, env *storetest.Env, user string, ids []s
 	if err != nil {
 		t.Fatalf("ListUserAccountLimits: %v", err)
 	}
-	twin, err := env.Repo.ListAccountLimits(ctx, user)
+	twin, err := db.TestAccounts(t, env.Repo).ListAccountLimits(ctx, user)
 	if err != nil {
 		t.Fatalf("Repo.ListAccountLimits: %v", err)
 	}
@@ -615,7 +616,7 @@ func l6RequireLimitsAgree(t *testing.T, env *storetest.Env, user string, ids []s
 		if err != nil {
 			t.Fatalf("GetAccountLimitState: %v", err)
 		}
-		tw, err := env.Repo.GetAccountLimits(ctx, id)
+		tw, err := db.TestAccounts(t, env.Repo).GetAccountLimits(ctx, id)
 		if err != nil {
 			t.Fatalf("Repo.GetAccountLimits: %v", err)
 		}
@@ -647,14 +648,14 @@ func TestThreadAssignmentQueries(t *testing.T) {
 	if ok, err := store.InsertThreadAssignment(ctx, env.ORM, lost); err != nil || ok {
 		t.Fatalf("a second first pick = %v, %v; want it to lose", ok, err)
 	}
-	if ok, err := env.Repo.SetThreadAssignment(ctx, lost, ""); err != nil || ok {
+	if ok, err := db.TestAccounts(t, env.Repo).SetThreadAssignment(ctx, lost, ""); err != nil || ok {
 		t.Fatalf("Repo: a second first pick = %v, %v; want it to lose", ok, err)
 	}
 	port, err := store.GetThreadAssignment(ctx, env.ORM, "th-1", "claude")
 	if err != nil {
 		t.Fatalf("GetThreadAssignment: %v", err)
 	}
-	twin, err := env.Repo.GetThreadAssignment(ctx, "th-1", "claude")
+	twin, err := db.TestAccounts(t, env.Repo).GetThreadAssignment(ctx, "th-1", "claude")
 	if err != nil {
 		t.Fatalf("Repo.GetThreadAssignment: %v", err)
 	}
@@ -670,17 +671,17 @@ func TestThreadAssignmentQueries(t *testing.T) {
 	if ok, err := store.ReassignThread(ctx, env.ORM, moved, a.ID); err != nil || !ok {
 		t.Fatalf("ReassignThread = %v, %v", ok, err)
 	}
-	if _, err := env.Repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: "th-1", Provider: "codex", AccountID: a.ID, Reason: "initial", AssignedAt: now.Add(2 * time.Minute)}, ""); err != nil {
+	if _, err := db.TestAccounts(t, env.Repo).SetThreadAssignment(ctx, core.Assignment{ThreadID: "th-1", Provider: "codex", AccountID: a.ID, Reason: "initial", AssignedAt: now.Add(2 * time.Minute)}, ""); err != nil {
 		t.Fatalf("Repo.SetThreadAssignment: %v", err)
 	}
-	if _, err := env.Repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: "th-2", Provider: "claude", AccountID: b.ID, Reason: "initial", AssignedAt: now.Add(-time.Hour)}, ""); err != nil {
+	if _, err := db.TestAccounts(t, env.Repo).SetThreadAssignment(ctx, core.Assignment{ThreadID: "th-2", Provider: "claude", AccountID: b.ID, Reason: "initial", AssignedAt: now.Add(-time.Hour)}, ""); err != nil {
 		t.Fatalf("Repo.SetThreadAssignment: %v", err)
 	}
 	list, err := store.ListThreadAssignments(ctx, env.ORM, "th-1")
 	if err != nil {
 		t.Fatalf("ListThreadAssignments: %v", err)
 	}
-	twinList, err := env.Repo.ListThreadAssignments(ctx, "th-1")
+	twinList, err := db.TestAccounts(t, env.Repo).ListThreadAssignments(ctx, "th-1")
 	if err != nil {
 		t.Fatalf("Repo.ListThreadAssignments: %v", err)
 	}
@@ -693,7 +694,7 @@ func TestThreadAssignmentQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RecentAssignmentCounts: %v", err)
 	}
-	twinCounts, err := env.Repo.RecentAssignmentCounts(ctx, []string{a.ID, b.ID, "none"}, now)
+	twinCounts, err := db.TestAccounts(t, env.Repo).RecentAssignmentCounts(ctx, []string{a.ID, b.ID, "none"}, now)
 	if err != nil {
 		t.Fatalf("Repo.RecentAssignmentCounts: %v", err)
 	}
@@ -722,7 +723,7 @@ func TestThreadAssignmentQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LatestServingProviderAccount: %v", err)
 	}
-	twinID, err := env.Repo.LatestServingAccount(ctx, "th-1")
+	twinID, err := db.TestAccounts(t, env.Repo).LatestServingAccount(ctx, "th-1")
 	if err != nil {
 		t.Fatalf("Repo.LatestServingAccount: %v", err)
 	}

@@ -19,7 +19,7 @@ interface SettingsNavigationProps {
   isCollapsed?: boolean;
 }
 
-interface SectionItem {
+export interface SectionItem {
   id: SettingsSection;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -58,7 +58,17 @@ function isItemActive(item: SectionItem, activeSection: SettingsSection, activeT
   return !item.tabs || item.tabs.includes(resolveAISettingsTab(activeTab));
 }
 
-interface SectionGroup {
+/** Where `item`'s entry goes: its section, and its tab when that is not the section's default. */
+export function settingsItemEntry(item: SectionItem): SettingsNavEntry {
+  return entryOf(item);
+}
+
+/** Whether `item` is the page on screen (its section, and one of its tabs). */
+export function isSettingsItemCurrent(item: SectionItem, activeSection: SettingsSection, activeTab?: SettingsTab): boolean {
+  return isItemActive(item, activeSection, activeTab);
+}
+
+export interface SectionGroup {
   label: string;
   items: SectionItem[];
   /** Folded behind its heading until opened, or until the active section is inside it. */
@@ -124,12 +134,12 @@ const sectionGroups: SectionGroup[] = [
     ],
   },
   {
-    label: "Machines & projects",
+    label: "Sandboxes & projects",
     items: [
       // Not gated on hasControlPlane: self-hosted machines, and the outside
       // AI apps granted access to each (its Access section), exist without
       // one — and Machines is the only place such a grant can be revoked.
-      { id: "machines", label: "Machines", icon: Server },
+      { id: "machines", label: "Agent sandboxes", icon: Server },
       { id: "projects", label: "Projects", icon: FolderOpen },
     ],
   },
@@ -171,10 +181,43 @@ export function showDeveloperSettings(): boolean {
   return import.meta.env.DEV || Boolean(window.RELIANT_CONFIG?.isDev);
 }
 
+/**
+ * Settings sections whose page belongs to another area of the shell's nav.
+ * Agent sandboxes is Agents › Sandboxes too (`sandboxesPath()` is
+ * `/settings/machines`), and on its pages the nav column is Agents', not
+ * Settings'. Settings still lists the section, as a link there.
+ *
+ * One page has one nav home, so Settings neither lights up on these pages nor
+ * reopens them: bare /settings restoring one landed on a page with no
+ * Settings sections in the nav, and every later Settings click landed there
+ * again (settingsDestination.ts). The nav tests check this list against the
+ * nav config, so a section that moves under another area must be added here.
+ */
+export const SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME: readonly SettingsSection[] = ["machines"];
+
+/** Whether `section`'s page is in another nav area, not Settings' (see SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME). */
+export function settingsSectionHasOtherNavHome(section: SettingsSection): boolean {
+  return SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME.includes(section);
+}
+
 /** True if the item should appear in the sidebar for the current build. */
 function isItemVisible(item: SectionItem): boolean {
   if (item.id === "developer") return showDeveloperSettings();
   return true;
+}
+
+/**
+ * The sections as the shell's Settings drill-in lists them (U6c: Settings
+ * replaces the left nav instead of opening a second column): each group's
+ * visible sections, then About.
+ */
+export function settingsNavGroups(): { groups: SectionGroup[]; about: SectionItem } {
+  return {
+    groups: sectionGroups
+      .map((group) => ({ ...group, items: group.items.filter(isItemVisible) }))
+      .filter((group) => group.items.length > 0),
+    about: ABOUT,
+  };
 }
 
 /** Sidebar entries in display order (About last, as the footer); used for keyboard nav. */

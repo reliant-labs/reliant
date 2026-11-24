@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
+
+	"github.com/reliant-labs/reliant/internal/errclass"
 )
 
 func TestFailStepActivity(t *testing.T) {

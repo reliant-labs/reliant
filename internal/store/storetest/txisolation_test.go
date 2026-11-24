@@ -15,11 +15,15 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatselection"
+	"github.com/reliant-labs/reliant/internal/daemonmirror"
+	"github.com/reliant-labs/reliant/internal/daemonmirror/daemonmirrortest"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
+	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -46,7 +50,7 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 	// Warm the probe vault's DEK for the seed user, so the account rows below
 	// begin only their own transaction: a tenant's first seal adds the
 	// vault's detached ones (pinned by their own subtest at the end).
-	if _, _, err := p.Repo.UpsertProviderAccount(context.Background(), core.AccountUpsert{
+	if _, _, err := db.TestAccounts(t, p.Repo).UpsertProviderAccount(context.Background(), core.AccountUpsert{
 		UserID: storetest.SeedUserID, Provider: "openai", AuthKind: core.AuthKindAPIKey,
 		IdentityKey: "iso-warm", Secrets: core.AccountSecrets{Secret: "sk-warm"},
 	}); err != nil {
@@ -84,7 +88,7 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		// An upsert plus a stale-row delete; the 40001 retry is harmless
 		// (no effect outside the database).
 		{"Repo.ReplaceIntegrationAccess", serializable, func(ctx context.Context) error {
-			return p.Repo.ReplaceIntegrationAccess(ctx, storetest.SeedUserID, "github", "", now, nil)
+			return store.ReplaceIntegrationAccess(ctx, p.Repo.ORM(), storetest.SeedUserID, "github", "", now, nil)
 		}},
 
 		// READ COMMITTED: correctness from row/advisory locks or a single
@@ -101,11 +105,11 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 			})
 		}},
 		{"Repo.RemoveDaemon", readCommitted, func(ctx context.Context) error {
-			_, _, err := p.Repo.RemoveDaemon(ctx, "daemon-none")
+			_, _, err := daemonmirrortest.New(t, p.Repo).RemoveDaemon(ctx, "daemon-none")
 			return err
 		}},
 		{"Repo.ApplyDaemonRegistrySnapshot", readCommitted, func(ctx context.Context) error {
-			_, err := p.Repo.ApplyDaemonRegistrySnapshot(ctx, db.RegistrySnapshotApply{UserID: storetest.SeedUserID})
+			_, err := daemonmirrortest.New(t, p.Repo).ApplyDaemonRegistrySnapshot(ctx, daemonmirror.RegistrySnapshotApply{UserID: storetest.SeedUserID})
 			return err
 		}},
 		{"Repo.CreateWorkflowDraft", readCommitted, func(ctx context.Context) error {
@@ -118,7 +122,7 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		// the loser's snapshot predates the wait and it fails with 40001
 		// (TestChatSelectionConcurrentWritersLoseNothing).
 		{"Repo.MutateChatSelection", readCommitted, func(ctx context.Context) error {
-			_, err := p.Repo.MutateChatSelection(ctx, "chat-iso", func(cur *chatselection.Selection) (*chatselection.Selection, error) { return cur, nil })
+			_, err := store.NewChatSelectionExtStore(p.Repo.ORM()).MutateChatSelection(ctx, "chat-iso", func(cur *chatselection.Selection) (*chatselection.Selection, error) { return cur, nil })
 			return err
 		}},
 		{"Repo.MergeWorktreeCleanupMetadata", readCommitted, func(ctx context.Context) error {
@@ -138,18 +142,36 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 			}
 			return err
 		}},
+		// The trigger owner's writes (internal/triggerowner): the trigger's
+		// row lock and the new owner's org lock serialize them, so READ
+		// COMMITTED. The trigger does not exist: the transaction is begun
+		// and the read after its lock answers not found.
+		{"triggerowner.CreateTriggerOffer", readCommitted, func(ctx context.Context) error {
+			err := triggerOwner(p).CreateTriggerOffer(ctx, &core.TriggerOffer{ID: "o-iso", TriggerID: "trg-none", PreviousOwnerUserID: "u"})
+			if errors.Is(err, core.ErrTriggerNotFound) {
+				return nil
+			}
+			return err
+		}},
+		{"triggerowner.AdoptTrigger", readCommitted, func(ctx context.Context) error {
+			err := triggerOwner(p).AdoptTrigger(ctx, &core.Trigger{ID: "trg-none", UserID: "new", ProjectID: storetest.SeedProjectID}, "old", "")
+			if errors.Is(err, core.ErrTriggerNotFound) {
+				return nil
+			}
+			return err
+		}},
 		// The accounts store (AccountStore.inTx): an advisory lock per (user,
 		// provider), then read-then-write; never retried, since it seals
 		// with fresh randomness under the locks it took.
 		{"Repo.UpsertProviderAccount (AccountStore.inTx)", readCommitted, func(ctx context.Context) error {
-			_, _, err := p.Repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+			_, _, err := db.TestAccounts(t, p.Repo).UpsertProviderAccount(ctx, core.AccountUpsert{
 				UserID: storetest.SeedUserID, Provider: "openai", AuthKind: core.AuthKindAPIKey,
 				IdentityKey: "iso-key", Secrets: core.AccountSecrets{Secret: "sk-iso"},
 			})
 			return err
 		}},
 		{"Repo.ReorderProviderAccounts (AccountStore.inTx)", readCommitted, func(ctx context.Context) error {
-			return p.Repo.ReorderProviderAccounts(ctx, storetest.SeedUserID, "gemini", nil)
+			return db.TestAccounts(t, p.Repo).ReorderProviderAccounts(ctx, storetest.SeedUserID, "gemini", nil)
 		}},
 		// The self-hosted token store's rotation (LocalStore.MintForUser with
 		// Rotate): READ COMMITTED as database/sql's BeginTx(nil) was, never
@@ -240,7 +262,7 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		p.Reset()
 		rollback := errors.New("roll the caller back")
 		err := p.Repo.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
-			if err := p.Repo.IntegrationWrites().CreateIntegrationWrite(ctx, &core.IntegrationWrite{
+			if err := writeledger.NewLedger(store.NewIntegrationWriteExtStore(p.Repo.ORM())).CreateIntegrationWrite(ctx, &core.IntegrationWrite{
 				ID: "iw-iso", UserID: "iso-user", ChatID: "iso-chat", Integration: "github", Action: "issue.comment",
 				Actor: core.IntegrationActorOwner, Scope: "github:acme/app", Target: "github:acme/app",
 			}); err != nil {
@@ -262,4 +284,14 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 			t.Fatalf("the ledger entry written inside the rolled-back transaction: %d rows, want 1", n)
 		}
 	})
+}
+
+// triggerOwner is the trigger owner service over the probe's database.
+func triggerOwner(p *storetest.TxProbe) triggerowner.Service {
+	stores := triggerowner.NewStores(p.ORM)
+	svc, err := triggerowner.New(triggerowner.Deps{Tx: p.ORM, Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	if err != nil {
+		panic(err)
+	}
+	return svc
 }

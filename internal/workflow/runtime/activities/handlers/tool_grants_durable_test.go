@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // load_tool's grant is recorded with its result, and only a grant is: the
@@ -38,12 +39,12 @@ func TestExecuteTools_LoadToolGrantIsRecordedAndSurvivesARetry(t *testing.T) {
 	require.Equal(t, []string{tools.ToolSourcegraph}, first.GetGrantedTools())
 	f.execute(t, newMockToolExecutor(), caps, view)
 
-	recorded, err := f.h.Repo().GetToolCallResult(ctx, load.ID)
+	recorded, err := store.FindToolCallResult(ctx, f.h.Repo().ORM(), load.ID)
 	require.NoError(t, err)
 	require.NotNil(t, recorded)
 	assert.Equal(t, []string{tools.ToolSourcegraph}, recorded.GrantedTools, "the grant is recorded with the result")
 	for _, id := range []string{refused.ID, view.ID} {
-		result, err := f.h.Repo().GetToolCallResult(ctx, id)
+		result, err := store.FindToolCallResult(ctx, f.h.Repo().ORM(), id)
 		require.NoError(t, err)
 		require.NotNil(t, result, id)
 		assert.Empty(t, result.GrantedTools, "%s granted nothing, so records nothing", id)

@@ -10,10 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/llm/tools/names"
-	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/llm/tools/names"
+	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
 // codeContextFixture writes a small Go module whose call graph is known by

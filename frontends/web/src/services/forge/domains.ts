@@ -29,7 +29,7 @@
  * here rather than spread into a component.
  */
 
-import { Code, ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError, type Transport } from "@connectrpc/connect";
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
@@ -465,21 +465,21 @@ export function toForgeDomain(msg: DomainMessage): ForgeDomain {
 
 // ── Calls ───────────────────────────────────────────────────────────────────
 
-function client() {
-  return getControlPlaneClient(DomainService);
+function client(transport: Transport) {
+  return getControlPlaneClient(DomainService, transport);
 }
 
 /**
  * Every domain `orgId` holds (null: none named, the active org on the wire),
  * by hostname. The list is deliberately unpaginated server-side.
  */
-export async function listDomains(orgId: string | null): Promise<ForgeDomain[]> {
-  const res = await client().listDomains(orgRequest({}, orgId));
+export async function listDomains(transport: Transport, orgId: string | null): Promise<ForgeDomain[]> {
+  const res = await client(transport).listDomains(orgRequest({}, orgId));
   return (res.domains ?? []).map(toForgeDomain);
 }
 
-export async function getDomain(domainId: string): Promise<ForgeDomain | null> {
-  const res = await client().getDomain({ domainId });
+export async function getDomain(transport: Transport, domainId: string): Promise<ForgeDomain | null> {
+  const res = await client(transport).getDomain({ domainId });
   return res.domain ? toForgeDomain(res.domain) : null;
 }
 
@@ -489,22 +489,22 @@ export async function getDomain(domainId: string): Promise<ForgeDomain | null> {
  *
  * Claiming does NOT lock the name; uniqueness binds at verification.
  */
-export async function createDomain(hostname: string): Promise<ForgeDomain> {
-  const res = await client().createDomain({ hostname: hostname.trim().toLowerCase() });
+export async function createDomain(transport: Transport, hostname: string): Promise<ForgeDomain> {
+  const res = await client(transport).createDomain({ hostname: hostname.trim().toLowerCase() });
   if (!res.domain) throw new Error(`The control plane returned no domain for ${hostname}.`);
   return toForgeDomain(res.domain);
 }
 
-export async function deleteDomain(domainId: string): Promise<void> {
-  await client().deleteDomain({ domainId });
+export async function deleteDomain(transport: Transport, domainId: string): Promise<void> {
+  await client(transport).deleteDomain({ domainId });
 }
 
 /**
  * Check DNS now rather than waiting for the poller. A NUDGE: the reconciler
  * polls regardless, so this changes only latency.
  */
-export async function verifyDomain(domainId: string): Promise<ForgeDomain | null> {
-  const res = await client().verifyDomain({ domainId });
+export async function verifyDomain(transport: Transport, domainId: string): Promise<ForgeDomain | null> {
+  const res = await client(transport).verifyDomain({ domainId });
   return res.domain ? toForgeDomain(res.domain) : null;
 }
 
@@ -514,13 +514,13 @@ export async function verifyDomain(domainId: string): Promise<ForgeDomain | null
  *
  * `target` and `redirectTo` are mutually exclusive; the server refuses both.
  */
-export async function bindDomain(args: {
+export async function bindDomain(transport: Transport, args: {
   domainId: string;
   environmentId: string;
   target?: string;
   redirectTo?: string;
 }): Promise<DomainBinding | null> {
-  const res = await client().createDomainBinding({
+  const res = await client(transport).createDomainBinding({
     domainId: args.domainId,
     environmentId: args.environmentId,
     target: args.target ?? "",
@@ -533,6 +533,6 @@ export async function bindDomain(args: {
  * Stop serving, and KEEP the domain. Its verification survives, so re-binding
  * later costs no DNS work and no new certificate.
  */
-export async function unbindDomain(domainId: string): Promise<void> {
-  await client().deleteDomainBinding({ bindingId: "", domainId });
+export async function unbindDomain(transport: Transport, domainId: string): Promise<void> {
+  await client(transport).deleteDomainBinding({ bindingId: "", domainId });
 }

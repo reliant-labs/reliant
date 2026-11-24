@@ -191,9 +191,9 @@ describe("the forge journey", () => {
     expect(active().slice(-2)).toEqual(["fg-built", "fg-done"]);
   });
 
-  it("finishes on forge's Apps in Reliant and the project picker in the forge shell", () => {
-    expect(forgeJourney.finish?.("reliant")).toEqual({ to: "/forge" });
-    expect(forgeJourney.finish?.("forge")).toEqual({ to: "/apps" });
+  it("finishes on the person's apps (Projects), on either brand", () => {
+    expect(forgeJourney.finish?.("reliant")).toEqual({ to: "/projects", search: { show: "apps" } });
+    expect(forgeJourney.finish?.("forge")).toEqual({ to: "/projects", search: { show: "apps" } });
   });
 
   it("stays on the console when it finishes on the demo host: there is nowhere to go", () => {
@@ -326,7 +326,7 @@ describe("the forge journey", () => {
   });
 
   it("spotlights the anchors the demo renders", () => {
-    expect(step("fg-console").target).toBe("[data-tour='forge-console'] aside");
+    expect(step("fg-console").target).toBe("[data-tour='forge-console-nav'], [data-tour='forge-console'] aside");
     // The console's own row, or the led Traces page's (the demo's console).
     expect(step("fg-trace").target).toBe(`[data-testid='obs-trace-row'][data-trace-id='${DEMO_TRACE_ID}'], [data-testid='lead-trace-row'][data-trace-id='${DEMO_TRACE_ID}']`);
     expect(step("fg-issue").target).toContain(`[data-testid='lead-featured-issue'][data-issue-id='${DEMO_ISSUE_ID}']`);

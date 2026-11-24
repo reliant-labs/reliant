@@ -12,6 +12,8 @@ import {
 } from "./SettingsNavigation";
 import type { AISettingsTab, SettingsTab } from "../../routeSchemas";
 import { cn } from "../../lib/utils";
+import { ShellPageHeader, useShellFrame } from "../Layout/shell/shellFrame";
+import { PageMain } from "@/components/Layout/shell/shellFrame";
 
 const SettingsContent = lazy(() =>
   import("./SettingsContent").then((module) => ({
@@ -38,6 +40,7 @@ export function SettingsViewerTab({ section, tab, onSectionChange, onClose }: Se
   const containerRef = useRef<HTMLDivElement>(null);
   const navigationRef = useRef<HTMLDivElement>(null);
   const chrome = useTitleBarChrome();
+  const { inShell } = useShellFrame();
   const pendingFocus = useRef<SettingsNavEntry | null>(null);
 
   const focusEntry = useCallback((entry: SettingsNavEntry) => {
@@ -110,6 +113,20 @@ export function SettingsViewerTab({ section, tab, onSectionChange, onClose }: Se
     };
   }, [section, tab, navEntries, onSectionChange, focusEntry]);
 
+  const content = (
+    <Suspense
+      fallback={
+        <div className="flex h-full items-center justify-center">
+          <div className="rounded-lg border border-border/50 bg-card px-4 py-3 text-sm text-muted-foreground">
+            Loading settings...
+          </div>
+        </div>
+      }
+    >
+      <SettingsContent activeSection={section} />
+    </Suspense>
+  );
+
   // Detect width and collapse sidebar when narrow
   useEffect(() => {
     const container = containerRef.current;
@@ -129,6 +146,21 @@ export function SettingsViewerTab({ section, tab, onSectionChange, onClose }: Se
       observer.disconnect();
     };
   }, []);
+
+  if (inShell) {
+    // Inside the one shell, Settings' sections ARE the shell's nav: on any
+    // /settings page the left nav drills into them (Layout/sidebar/navConfig,
+    // U6c, owner: Settings replaces the nav, Vercel-style). So the page is a
+    // bar naming it and the section, with no second column.
+    return (
+      <div ref={containerRef} className="flex h-full min-w-0 flex-col bg-background">
+        <ShellPageHeader testId="settings-header">
+          <span className="text-ui font-medium text-foreground">Settings</span>
+        </ShellPageHeader>
+        <PageMain className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background">{content}</PageMain>
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className="flex h-full min-w-0 bg-background">
@@ -156,19 +188,7 @@ export function SettingsViewerTab({ section, tab, onSectionChange, onClose }: Se
       </aside>
 
       {/* Settings Content */}
-      <main className="min-w-0 flex-1 overflow-hidden bg-background">
-        <Suspense
-          fallback={
-            <div className="flex h-full items-center justify-center">
-              <div className="rounded-lg border border-border/50 bg-card px-4 py-3 text-sm text-muted-foreground">
-                Loading settings...
-              </div>
-            </div>
-          }
-        >
-          <SettingsContent activeSection={section} />
-        </Suspense>
-      </main>
+      <PageMain className="min-w-0 flex-1 overflow-hidden bg-background">{content}</PageMain>
     </div>
   );
 }

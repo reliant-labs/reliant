@@ -12,7 +12,9 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // latestApprovalFeedStatus is the status the chat feed's newest update for an
@@ -55,7 +57,7 @@ func TestApproval_ExpiredIsAnnouncedAndExplained(t *testing.T) {
 	chatID, workflowID := createApprovalTestData(t, repo)
 	approvalID := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
 
-	closed, err := repo.ResolvePendingApproval(ctx, approvalID,
+	closed, err := approvalclose.NewFromRepo(repo).ResolvePendingApproval(ctx, approvalID,
 		int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_EXPIRED), "no one answered within 1h", "timeout")
 	require.NoError(t, err)
 	require.True(t, closed)
@@ -69,7 +71,7 @@ func TestApproval_ExpiredIsAnnouncedAndExplained(t *testing.T) {
 	assert.Equal(t, "expired", latestApprovalFeedStatus(t, repo, chatID, approvalID))
 
 	// A second close finds it no longer pending and changes nothing.
-	closed, err = repo.ResolvePendingApproval(ctx, approvalID,
+	closed, err = approvalclose.NewFromRepo(repo).ResolvePendingApproval(ctx, approvalID,
 		int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED), "run ended", "run_ended")
 	require.NoError(t, err)
 	assert.False(t, closed)
@@ -89,7 +91,7 @@ func TestResolvePendingApproval_KeepsADecision(t *testing.T) {
 	chatID, workflowID := createApprovalTestData(t, repo)
 	approvalID := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED))
 
-	closed, err := repo.ResolvePendingApproval(ctx, approvalID,
+	closed, err := approvalclose.NewFromRepo(repo).ResolvePendingApproval(ctx, approvalID,
 		int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_EXPIRED), "timed out", "timeout")
 	require.NoError(t, err)
 	assert.False(t, closed)
@@ -120,7 +122,7 @@ func TestBatchApprove_SkipsResolvedApprovals(t *testing.T) {
 	chatID, workflowID := createApprovalTestData(t, repo)
 	live := createTestApproval(t, repo, chatID, workflowID+"-a", int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
 	stale := createTestApproval(t, repo, chatID, workflowID+"-b", int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
-	_, err := repo.ResolvePendingApproval(ctx, stale, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED), "the run waiting on it finished", "run_ended")
+	_, err := approvalclose.NewFromRepo(repo).ResolvePendingApproval(ctx, stale, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED), "the run waiting on it finished", "run_ended")
 	require.NoError(t, err)
 
 	resp, err := service.BatchApprove(approvalTestCtx(), connect.NewRequest(&reliantv1.BatchApproveRequest{RequestIds: []string{stale, live}}))
@@ -143,12 +145,12 @@ func TestListStaleApprovals_ArchivedChat(t *testing.T) {
 	chatID, workflowID := createApprovalTestData(t, repo)
 	approvalID := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
 
-	stale, err := repo.ListStaleApprovals(ctx, 100)
+	stale, err := store.NewApprovalExtStore(repo.ORM()).ListStaleApprovals(ctx, 100)
 	require.NoError(t, err)
 	assert.NotContains(t, staleIDs(stale), approvalID, "a live run's approval is not stale")
 
 	require.NoError(t, repo.UpdateChatState(ctx, chatID, db.ChatStateArchived, "test"))
-	stale, err = repo.ListStaleApprovals(ctx, 100)
+	stale, err = store.NewApprovalExtStore(repo.ORM()).ListStaleApprovals(ctx, 100)
 	require.NoError(t, err)
 	require.Contains(t, staleIDs(stale), approvalID)
 	for _, s := range stale {
@@ -158,7 +160,7 @@ func TestListStaleApprovals_ArchivedChat(t *testing.T) {
 	}
 }
 
-func staleIDs(stale []db.StaleApproval) []string {
+func staleIDs(stale []store.StaleApproval) []string {
 	ids := make([]string, len(stale))
 	for i, s := range stale {
 		ids[i] = s.ID
@@ -178,7 +180,7 @@ func TestListUnannouncedApprovalResolutions(t *testing.T) {
 	require.NoError(t, repo.UpdateApprovalStatus(ctx, approvalID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), nil, &timeout, nil))
 	require.Equal(t, "pending", latestApprovalFeedStatus(t, repo, chatID, approvalID))
 
-	rows, err := repo.ListUnannouncedApprovalResolutions(ctx, 100)
+	rows, err := store.NewApprovalExtStore(repo.ORM()).ListUnannouncedApprovalResolutions(ctx, 100)
 	require.NoError(t, err)
 	var found *db.Approval
 	for _, r := range rows {
@@ -188,9 +190,9 @@ func TestListUnannouncedApprovalResolutions(t *testing.T) {
 	}
 	require.NotNil(t, found)
 
-	require.NoError(t, repo.AnnounceApprovalResolution(ctx, found))
+	require.NoError(t, approvalclose.NewFromRepo(repo).AnnounceApprovalResolution(ctx, found))
 	assert.Equal(t, "expired", latestApprovalFeedStatus(t, repo, chatID, approvalID), "a legacy timeout is announced as what it was")
-	rows, err = repo.ListUnannouncedApprovalResolutions(ctx, 100)
+	rows, err = store.NewApprovalExtStore(repo.ORM()).ListUnannouncedApprovalResolutions(ctx, 100)
 	require.NoError(t, err)
 	for _, r := range rows {
 		assert.NotEqual(t, approvalID, r.ID)

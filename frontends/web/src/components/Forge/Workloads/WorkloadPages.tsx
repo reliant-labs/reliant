@@ -15,6 +15,8 @@ import { useCallback, useMemo } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { transport as appTransport } from "@/lib/connect";
+import { useTransport } from "@/lib/transportScope";
 import { useForgeDomains } from "@/hooks/forge-domain-queries";
 import { useCloudEnvStatus, useCloudEnvStatuses, useEnvironmentShape, useEnvironmentShapes, useSetWorkloadRunState } from "@/hooks/forge-queries";
 import { useEnvPromotions } from "@/hooks/release-queries";
@@ -22,7 +24,9 @@ import { isPlacedKind, type LiveEnvKind } from "@/services/forge/live";
 import { restartWorkload, type RestartedWorkload } from "@/services/forge/cloudEnvs";
 import type { ForgeHostedWorkload } from "@/services/forge/topology";
 
-import { useForgeConsole } from "../Console/consoleContext";
+import { useShellFrame } from "@/components/Layout/shell/shellFrame";
+
+import { rosterReadFailed, useForgeConsole } from "../Console/consoleContext";
 import { deployStatusUnread } from "../Console/DeployStatusUnread";
 import { ENV_ALL } from "../Console/envScope";
 import { consolePath, withSearch } from "../Console/paths";
@@ -32,13 +36,19 @@ import { rollbackTargets, type RollbackTarget } from "../Promote/rollback";
 import { usePromoteFlow } from "../Promote/usePromoteFlow";
 import { usePromoterNames } from "../Releases/useReleaseData";
 import { promoterOf } from "../Releases/releaseModel";
+import { AppCodeCard } from "../Console/AppCodeCard";
 import { OverviewHome, type HostedByEnv, type OverviewHrefs, type OverviewRollback, type OverviewSearch } from "./OverviewHome";
 import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch, type WorkloadRollback } from "./WorkloadDetail";
 import type { StripEnv } from "./workloadModel";
 import { useObsReadOnly } from "../Observability/obsReadOnly";
+import { ProjectsOverview } from "../Console/ProjectsOverview";
+import { rowForRef, useShellSeveral } from "../../Layout/sidebar/shellProject";
+import { ProjectChats } from "../../Projects/ProjectChats";
+import { NoAppLanding } from "../../Projects/NoAppLanding";
+import { useSelectorCatalog } from "../../Projects/ProjectSelector";
 
 /** The roster's recorded, deployed environments as the Overview's strip needs them: prod first, previews last. */
-function useStripEnvs(): { envs: StripEnv[]; loading: boolean } {
+export function useStripEnvs(): { envs: StripEnv[]; loading: boolean } {
   const { roster, forgeProject } = useForgeConsole();
   const names = usePromoterNames(forgeProject);
   // The declared workloads matter only where nothing is placed to observe
@@ -144,7 +154,7 @@ function useRollback(envs: readonly { id: string; name: string; release: string;
  * on the customer's cluster, but the sites the platform serves for it are
  * deployments GetStatus reports, and the Frontends panel links them.
  */
-function useHostedByEnv(envs: StripEnv[]): { hosted: HostedByEnv; loading: boolean } {
+export function useHostedByEnv(envs: StripEnv[]): { hosted: HostedByEnv; loading: boolean } {
   const statuses = useCloudEnvStatuses(envs.map((candidate) => candidate.id));
   const key = envs.map((candidate) => `${candidate.id}:${statuses.get(candidate.id)?.data ? "1" : "0"}`).join(",");
   const loading = envs.some((candidate) => statuses.get(candidate.id)?.isLoading);
@@ -161,8 +171,29 @@ function useHostedByEnv(envs: StripEnv[]): { hosted: HostedByEnv; loading: boole
   return { hosted, loading };
 }
 
+/**
+ * The project's landing page (U6c: Home and Overview merged into ONE
+ * "Overview"). Several projects in the shell: one row per project
+ * (ProjectsOverview). Nothing deployed: the project's chats and the way to
+ * deploy it (NoAppLanding). Otherwise the summary — health, what needs
+ * attention, the live state, recent releases — with the project's chats.
+ */
 export function OverviewPage() {
-  const { forgeProject, env, roster, href } = useForgeConsole();
+  const { mode: several } = useShellSeveral();
+  const { roster, projectId, forgeProject } = useForgeConsole();
+  const { catalog } = useSelectorCatalog(undefined);
+  if (several) return <ProjectsOverview />;
+  if (!roster.isLoading && !roster.resolvingName && roster.envs.length === 0 && !rosterReadFailed(roster)) {
+    const row = projectId ? rowForRef(catalog, { kind: "project", id: projectId }) : undefined;
+    return <NoAppLanding projectId={projectId} name={row?.name ?? forgeProject} app={forgeProject} />;
+  }
+  return <ProjectOverviewPage />;
+}
+
+function ProjectOverviewPage() {
+  const { forgeProject, env, roster, href, projectId } = useForgeConsole();
+  // In the project shell the Overview is the summary; the full tables are Services' (U6b round 3).
+  const { inShell } = useShellFrame();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as OverviewSearch;
   const onSearch = useSearchUpdater<OverviewSearch>();
@@ -205,6 +236,21 @@ export function OverviewPage() {
         hostedLoading={hostedLoading}
         domains={domains.data}
         domainsHref={href({ kind: "domains" })}
+        chats={projectId ? <ProjectChats projectId={projectId} name={forgeProject} /> : undefined}
+        summary={
+          inShell
+            ? {
+                services: href({ kind: "services" }),
+                service: (name, envName) => href({ kind: "service", name }, env === ENV_ALL && envName ? { env: envName } : {}),
+                // The database's home is Data (U6e: "data and storage got mixed up").
+                data: (envName) => href({ kind: "data" }, envName ? { env: envName } : {}),
+                analytics: href({ kind: "analytics" }),
+                events: href({ kind: "analytics", tab: "events" }),
+              }
+            : undefined
+        }
+        // The app's code (U13); the chats about it are the project's Chats card above.
+        about={<AppCodeCard app={forgeProject} />}
       />
       {dialog}
     </div>
@@ -217,6 +263,7 @@ export function WorkloadPage() {
   const search = useSearch({ strict: false }) as WorkloadDetailSearch & { env?: string };
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const transport = useTransport(appTransport);
   const scoped = roster.envs.find((candidate) => candidate.name === envName) ?? null;
   const live = scoped?.live ?? null;
 
@@ -233,7 +280,7 @@ export function WorkloadPage() {
 
   const restart = useMutation<RestartedWorkload, Error, string>({
     // The environment the PATH names, by its control-plane id: a restart is always "in <env>".
-    mutationFn: (environmentId) => restartWorkload(environmentId, name),
+    mutationFn: (environmentId) => restartWorkload(transport, environmentId, name),
     // The pods roll over the next minute: re-read the workload so the Pods table follows.
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["observability"] }),
   });

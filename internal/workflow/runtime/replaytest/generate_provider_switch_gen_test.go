@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -43,7 +44,7 @@ func TestGenerateFixture_ProviderSwitchWaitingSpawn(t *testing.T) {
 	created := h.StartChat("builtin://agent", "Delegate this work.", map[string]any{"mode": "auto"})
 	thread := runtime.DeterministicWorkflowID(created.WorkflowId, call.ID)
 	h.eventually("the spawned agent's usage wait", func() (bool, string) {
-		marks, err := h.Stack.Repo.ProviderBackoffByChat(h.Ctx, created.Chat.Id)
+		marks, err := providerbackofftest.New(t, h.Stack.Repo).ProviderBackoffByChat(h.Ctx, created.Chat.Id)
 		return err == nil && marks[thread].Waiting(), fmt.Sprintf("markers: %v, error: %v", marks, err)
 	})
 	capacity.Store(true)

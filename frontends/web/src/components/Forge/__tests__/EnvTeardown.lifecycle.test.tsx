@@ -27,10 +27,10 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/forge/cloudEnvs")>();
   return {
     ...actual,
-    setEnvironmentRunState: (...args: unknown[]) => setEnvironmentRunState(...args),
-    deleteEnvironment: (...args: unknown[]) => deleteEnvironment(...args),
+    setEnvironmentRunState: (_transport: unknown, ...args: unknown[]) => setEnvironmentRunState(...args),
+    deleteEnvironment: (_transport: unknown, ...args: unknown[]) => deleteEnvironment(...args),
     hasCloudControlPlane: () => true,
-    listRetainedDatabases: (...args: unknown[]) => listRetainedDatabases(...args),
+    listRetainedDatabases: (_transport: unknown, ...args: unknown[]) => listRetainedDatabases(...args),
   };
 });
 
@@ -39,8 +39,8 @@ vi.mock("@/services/forge/domains", async (importOriginal) => {
   return {
     ...actual,
     hasControlPlane: () => true,
-    listDomains: (...args: unknown[]) => listDomains(...args),
-    unbindDomain: (...args: unknown[]) => unbindDomain(...args),
+    listDomains: (_transport: unknown, ...args: unknown[]) => listDomains(...args),
+    unbindDomain: (_transport: unknown, ...args: unknown[]) => unbindDomain(...args),
   };
 });
 

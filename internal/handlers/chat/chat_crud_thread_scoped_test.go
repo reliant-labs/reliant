@@ -9,11 +9,14 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
-	"github.com/stretchr/testify/require"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // threadScopedFixture is a chat with a main thread and one spawn thread whose
@@ -101,7 +104,7 @@ func TestListMessages_ThreadScoped_ReturnsOnlyThatThread(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 
 	f := seedThreadScopedChat(t, repo, ctx, 3, 5)
-	svc := &Service{deps: Deps{Repo: repo}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}}
 
 	resp, err := svc.ListMessages(ctx, listThreadMessagesReq(f.chatID, f.spawnThread))
 	require.NoError(t, err)
@@ -131,7 +134,7 @@ func TestListMessages_ThreadScoped_UnaffectedByMainThreadVolume(t *testing.T) {
 	// 2 main-thread messages, 250 spawn messages -- past any page size the
 	// chat-wide read would have applied.
 	f := seedThreadScopedChat(t, repo, ctx, 2, 250)
-	svc := &Service{deps: Deps{Repo: repo}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}}
 
 	resp, err := svc.ListMessages(ctx, listThreadMessagesReq(f.chatID, f.spawnThread))
 	require.NoError(t, err)
@@ -150,7 +153,7 @@ func TestListMessages_ThreadScoped_Bounded(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 
 	f := seedThreadScopedChat(t, repo, ctx, 1, 10)
-	svc := &Service{deps: Deps{Repo: repo}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}}
 
 	recent := int32(4)
 	resp, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
@@ -176,7 +179,7 @@ func TestListMessages_ThreadScoped_UnknownThread(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 
 	f := seedThreadScopedChat(t, repo, ctx, 2, 2)
-	svc := &Service{deps: Deps{Repo: repo}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}}
 
 	_, err := svc.ListMessages(ctx, listThreadMessagesReq(f.chatID, uuid.New().String()))
 	require.Error(t, err)
@@ -194,7 +197,7 @@ func TestListMessages_ThreadScoped_ThreadFromAnotherChat(t *testing.T) {
 
 	a := seedThreadScopedChat(t, repo, ctx, 2, 2)
 	b := seedThreadScopedChat(t, repo, ctx, 2, 2)
-	svc := &Service{deps: Deps{Repo: repo}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}}
 
 	_, err := svc.ListMessages(ctx, listThreadMessagesReq(a.chatID, b.spawnThread))
 	require.Error(t, err)
@@ -215,7 +218,7 @@ func TestListMessages_ThreadIDUnset_MatchesChatWideBehavior(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 
 	f := seedThreadScopedChat(t, repo, ctx, 3, 4)
-	svc := &Service{deps: Deps{Repo: repo}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}}
 
 	recent := int32(50)
 	page, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{

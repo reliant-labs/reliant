@@ -17,7 +17,7 @@ import (
 )
 
 // forge:section MockActivityStore
-// forge:hash=0a6049682a37b0eb7ff959ed99a83747a069f7effa1cc5fe0295bd710df51db7
+// forge:hash=8dd5ea3c5abef44b1d154789cb960e2c084e5477bbaf32ee46a74fe57fb57ae8
 
 // MockActivityStore is a test mock for the ActivityStore interface.
 //
@@ -27,20 +27,10 @@ import (
 // "MockActivityStore.<Method>Func not set" error.
 type MockActivityStore struct {
 	contractkit.Recorder
-	GetWorkflowFunc            func(context.Context, string) (*db.Workflow, error)
 	EnsureWorkflowRunningFunc  func(context.Context, string, string)
 	CreateStepExecutionFunc    func(context.Context, *db.StepExecution) error
 	EmitNodeExecutionEventFunc func(context.Context, string, *db.NodeExecutionState) error
 	CreateChatUpdateFunc       func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
-}
-
-// GetWorkflow records the call and delegates to GetWorkflowFunc when set.
-func (m *MockActivityStore) GetWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
-	m.Recorder.Record("GetWorkflow", ctx, id)
-	if m.GetWorkflowFunc != nil {
-		return m.GetWorkflowFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockActivityStore", "GetWorkflow")
 }
 
 // EnsureWorkflowRunning records the call and delegates to EnsureWorkflowRunningFunc when set.
@@ -81,3 +71,29 @@ func (m *MockActivityStore) CreateChatUpdate(ctx context.Context, chatID string,
 
 // Compile-time check.
 var _ ActivityStore = (*MockActivityStore)(nil)
+
+// forge:section MockWorkflowRows
+// forge:hash=cee6ba5909c69aad6956c9f702d31c1afd70e0007752331cb4bd3c3c1c1652fd
+
+// MockWorkflowRows is a test mock for the WorkflowRows interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockWorkflowRows.<Method>Func not set" error.
+type MockWorkflowRows struct {
+	contractkit.Recorder
+	LoadWorkflowFunc func(context.Context, string) (*db.Workflow, error)
+}
+
+// LoadWorkflow records the call and delegates to LoadWorkflowFunc when set.
+func (m *MockWorkflowRows) LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
+	m.Recorder.Record("LoadWorkflow", ctx, id)
+	if m.LoadWorkflowFunc != nil {
+		return m.LoadWorkflowFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowRows", "LoadWorkflow")
+}
+
+// Compile-time check.
+var _ WorkflowRows = (*MockWorkflowRows)(nil)

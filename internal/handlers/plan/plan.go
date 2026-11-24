@@ -6,42 +6,69 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/planproto"
 )
 
-// getChatIDForPlan looks up the chat (conversation) ID for a plan by resolving its thread.
-func (s *Service) getChatIDForPlan(ctx context.Context, plan *db.Plan) (string, error) {
-	thread, err := s.deps.Repo.GetThread(ctx, plan.ThreadID)
+// chatOfPlan resolves the chat a plan belongs to, through the plan's thread.
+func (s *Service) chatOfPlan(ctx context.Context, plan *core.Plan) (*core.ChatRow, error) {
+	thread, err := s.deps.Threads.GetThread(ctx, plan.ThreadID)
 	if err != nil {
-		return "", fmt.Errorf("failed to get thread for plan: %w", err)
+		return nil, svcerr.WrapOr(fmt.Errorf("failed to get thread for plan: %w", err), svcerr.Internal("failed to get chat"))
 	}
-	return thread.ChatID, nil
+	chat, err := s.deps.Chats.GetChatRow(ctx, thread.ChatID)
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+	}
+	return chat, nil
 }
 
-// planBelongsToUser checks if a plan belongs to a user via the thread's chat
-func (s *Service) planBelongsToUser(ctx context.Context, planID string, userID string) error {
+// writablePlan reads a plan and its chat (plan → thread → chat) and refuses a
+// caller who may not write that chat.
+func (s *Service) writablePlan(ctx context.Context, userID, planID string) (*core.Plan, *core.ChatRow, error) {
 	if planID == "" {
-		return svcerr.InvalidArgument("plan_id is required")
+		return nil, nil, svcerr.InvalidArgument("plan_id is required")
 	}
-	plan, err := s.deps.Repo.GetPlan(ctx, planID)
+	plan, err := s.deps.Plans.GetPlan(ctx, planID)
 	if err != nil {
-		return svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
+		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
-
-	chatID, err := s.getChatIDForPlan(ctx, plan)
+	chat, err := s.chatOfPlan(ctx, plan)
 	if err != nil {
-		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+		return nil, nil, err
 	}
-
-	chat, err := s.deps.Repo.GetChatRow(ctx, chatID)
-	if err != nil {
-		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
-	}
-
 	if !authz.CanWriteChat(ctx, userID, chat) {
-		return svcerr.PermissionDenied("access denied")
+		return nil, nil, svcerr.PermissionDenied("access denied")
 	}
+	return plan, chat, nil
+}
 
-	return nil
+// emitPlanTasksRefetch tells the chat's clients to re-read its plan and
+// tasks. It runs after the write has committed and only warns on failure.
+func (s *Service) emitPlanTasksRefetch(ctx context.Context, chatID string) {
+	if err := s.deps.Refetch.EmitChatRefetch(ctx, chatID, core.RefetchPlanTasks); err != nil {
+		logging.WarnContext(ctx, "[PlanService] Failed to emit plan_tasks refetch", "error", err)
+	}
+}
+
+// planToProto is the wire shape of a plan in chatID.
+func planToProto(plan *core.Plan, chatID string) *reliantv1.Plan {
+	out := &reliantv1.Plan{
+		Id:        plan.ID,
+		ChatId:    chatID,
+		Title:     plan.Title,
+		Status:    planproto.PlanStatus(plan.Status),
+		CreatedAt: plan.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt: plan.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+	if plan.Description != nil {
+		out.Description = *plan.Description
+	}
+	if plan.Complexity != nil {
+		out.Complexity = planproto.PlanComplexity(*plan.Complexity)
+	}
+	return out
 }

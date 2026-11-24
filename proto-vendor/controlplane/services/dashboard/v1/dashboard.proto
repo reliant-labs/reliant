@@ -71,6 +71,7 @@ service DashboardService {
   // not listed: product usage needs product events, frontend needs browser
   // telemetry; when that cannot be told, it is listed.
   rpc ListDashboards(ListDashboardsRequest) returns (ListDashboardsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -82,6 +83,7 @@ service DashboardService {
   // older version), a project built-in, or a template. An organization view
   // has no spec: only its summary is returned.
   rpc GetDashboard(GetDashboardRequest) returns (GetDashboardResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -134,6 +136,7 @@ service DashboardService {
   // workspace dashboard these are its saved versions; for a release dashboard,
   // the releases in which its content changed.
   rpc ListDashboardVersions(ListDashboardVersionsRequest) returns (ListDashboardVersionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -212,6 +215,7 @@ service DashboardService {
   // dashboards derived from what forge generates are not templates: every
   // project lists them as built-ins. SaveAsCopy instantiates a template.
   rpc ListDashboardTemplates(ListDashboardTemplatesRequest) returns (ListDashboardTemplatesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true

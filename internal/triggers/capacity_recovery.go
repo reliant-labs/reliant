@@ -8,23 +8,13 @@ import (
 	"go.temporal.io/api/serviceerror"
 )
 
-type capacityStartRecovery interface {
-	TriggerCapacityStartFenced(context.Context, store.TriggerCapacityExecution) (bool, error)
-	FenceUnboundTriggerCapacityStart(context.Context, store.TriggerCapacityExecution) (bool, error)
-	ReleaseUnboundTriggerCapacity(context.Context, store.TriggerCapacityExecution, string) (bool, error)
-}
-
-func recoverMissingCapacityStart(ctx context.Context, repo capacityRepository, descriptions capacityDescriptions, e store.TriggerCapacityExecution) error {
-	recovery, ok := repo.(capacityStartRecovery)
-	if !ok {
-		return nil
-	}
-	fenced, err := recovery.TriggerCapacityStartFenced(ctx, e)
+func recoverMissingCapacityStart(ctx context.Context, repo CapacityStore, descriptions capacityDescriptions, e store.TriggerCapacityExecution) error {
+	fenced, err := repo.TriggerCapacityStartFenced(ctx, e)
 	if err != nil {
 		return err
 	}
 	if !fenced {
-		won, err := recovery.FenceUnboundTriggerCapacityStart(ctx, e)
+		won, err := repo.FenceUnboundTriggerCapacityStart(ctx, e)
 		if err != nil {
 			return err
 		}
@@ -38,7 +28,7 @@ func recoverMissingCapacityStart(ctx context.Context, repo capacityRepository, d
 	if err != nil {
 		var missing *serviceerror.NotFound
 		if errors.As(err, &missing) {
-			_, err = recovery.ReleaseUnboundTriggerCapacity(ctx, e, "start_fenced_and_absent")
+			_, err = repo.ReleaseUnboundTriggerCapacity(ctx, e, "start_fenced_and_absent")
 			return err
 		}
 		return nil

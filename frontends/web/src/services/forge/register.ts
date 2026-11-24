@@ -35,6 +35,7 @@
  */
 
 import type { JsonObject } from "@bufbuild/protobuf";
+import type { Transport } from "@connectrpc/connect";
 
 import { DeployEnvironmentKind } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
@@ -221,7 +222,7 @@ function carriesValueLikeKey(node: unknown): boolean {
  * harmless, and a Register against an env someone else built is refused by the
  * server rather than silently re-declaring it.
  */
-export async function registerEnvironment(candidate: RegisterCandidate): Promise<string> {
+export async function registerEnvironment(transport: Transport, candidate: RegisterCandidate): Promise<string> {
   const kind = kindForWire(candidate.kind);
   if (kind === undefined) {
     // Unreachable through registerCandidate, which refuses an unknown kind.
@@ -232,7 +233,7 @@ export async function registerEnvironment(candidate: RegisterCandidate): Promise
     );
   }
 
-  const res = await getControlPlaneClient(DeployService).ensureEnvironment({
+  const res = await getControlPlaneClient(DeployService, transport).ensureEnvironment({
     spec: {
       project: candidate.project,
       name: candidate.name,

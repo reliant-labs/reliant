@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/chatselection"
@@ -23,7 +24,7 @@ import (
 // not held: it is two words, and a Service built as a struct literal in a test
 // needs no extra wiring.
 func (s *Service) selections() chatselection.Service {
-	return chatselection.NewInstrumented(s.deps.Repo)
+	return chatselection.NewInstrumented(chatselection.Deps{Store: s.deps.Selections})
 }
 
 // recordSelection stores what a send or an edit actually gave the chat's run, so
@@ -75,7 +76,7 @@ func (s *Service) recordSelection(
 	var sel *chatselection.Selection
 	var err error
 	if bound {
-		sel, err = s.deps.Repo.MutateChatSelection(ctx, chat.ID, func(cur *chatselection.Selection) (*chatselection.Selection, error) {
+		sel, err = s.deps.Selections.MutateChatSelection(ctx, chat.ID, func(cur *chatselection.Selection) (*chatselection.Selection, error) {
 			if expectedVersion > 0 && (cur == nil || cur.Version != expectedVersion) {
 				return nil, chatselection.ErrVersionConflict
 			}
@@ -131,7 +132,7 @@ func personPickContext(ctx context.Context, userID string, chat *db.Chat, chosen
 	if !chosen || chat.OrgID == nil || *chat.OrgID == "" || userID != chat.UserID || auth.RequirePerson(ctx, "pick the chat's model") != nil {
 		return ctx
 	}
-	return db.WithPersonPick(ctx, db.PersonPick{UserID: userID, OrgID: *chat.OrgID})
+	return chatselection.WithPersonPick(ctx, chatselection.PersonPick{UserID: userID, OrgID: *chat.OrgID})
 }
 
 // applyMovesToPatch writes each moved model input's value (from effective) into

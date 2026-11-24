@@ -31,12 +31,15 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/google/uuid"
+
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	userconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantgrpc "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/planningtest"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -163,7 +166,7 @@ func newRestartRig(t *testing.T) *restartRig {
 	rig.natsURL = srv.ClientURL()
 	gatewayNATS := rig.connectNATS(t)
 	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{
-		Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: rig.repo,
+		Logger: slog.Default(), Config: &typedconfig.Config{}, Projects: store.NewProjectExtStore(rig.repo.ORM()), Installs: store.NewProjectDaemonExtStore(rig.repo.ORM()), Attachments: store.NewDaemonAttachmentExtStore(rig.repo.ORM()), LocalModels: store.NewDaemonExtStore(rig.repo.ORM()), Repo: rig.repo, Checkouts: store.NewProjectDaemonDetachmentExtStore(rig.repo.ORM()), Pools: store.NewMachinePoolExtStore(rig.repo.ORM()),
 		ResultPublisher: toolexec.NewToolResultPublisher(gatewayNATS),
 	})
 	require.NoError(t, err)
@@ -336,7 +339,7 @@ func (r *restartRig) startWorker(t *testing.T, queue string) *restartWorker {
 	nc := r.connectNATS(t)
 	router := toolexec.NewNATSDaemonRouter(nc, toolexec.WithDatabase(r.repo))
 	// The worker's executor as internal/app's NewRemoteExecutor builds it.
-	factory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: r.repo})
+	factory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: r.repo, Planning: planningtest.New(t, r.repo)})
 	executor := toolexec.NewRemoteExecutor(router)
 	executor.SetServerExecutor(toolexec.NewLocalToolExecutor(factory))
 	executor.SetDaemonClientFactory(toolexec.RemoteDaemonClients(router))

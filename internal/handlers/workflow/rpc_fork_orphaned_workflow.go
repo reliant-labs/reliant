@@ -35,7 +35,7 @@ func (s *Service) ForkOrphanedWorkflow(
 	req *connect.Request[pb.ForkOrphanedWorkflowRequest],
 ) (*connect.Response[pb.ForkOrphanedWorkflowResponse], error) {
 	callerID := auth.MustGetUserID(ctx)
-	src, err := s.deps.Repo.GetWorkflowDraft(ctx, req.Msg.GetWorkflowId())
+	src, err := s.deps.Drafts.GetWorkflowDraft(ctx, req.Msg.GetWorkflowId())
 	if svcerr.IsNotFound(err) {
 		return nil, svcerr.NotFound("workflow")
 	}
@@ -109,7 +109,7 @@ func (s *Service) ForkOrphanedWorkflow(
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	if err := s.deps.Repo.CreateWorkflowDraft(ctx, fork); err != nil {
+	if err := s.deps.Drafts.CreateWorkflowDraft(ctx, fork); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to fork workflow"))
 	}
 	return connect.NewResponse(&pb.ForkOrphanedWorkflowResponse{Id: fork.ID, Slug: slug, Name: title}), nil

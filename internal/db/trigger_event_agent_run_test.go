@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // agent.start_run is a trigger-event kind of its own. The kind CHECK must admit
@@ -117,11 +118,11 @@ func TestCountLiveLaunchedRuns_CountsOnlyLiveRunsOfThatKindAndUser(t *testing.T)
 	launch("test-user", core.TriggerEventKindChatStart, Active())
 	launch("other-user", kind, Active())
 
-	count, err := repo.CountLiveLaunchedRuns(ctx, "test-user", kind)
+	count, err := store.CountLiveLaunchedRuns(ctx, repo.ORM(), "test-user", kind)
 	require.NoError(t, err)
 	assert.Equal(t, 3, count, "pending + running + paused of this user's agent-started runs")
 
-	count, err = repo.CountLiveLaunchedRuns(ctx, "nobody", kind)
+	count, err = store.CountLiveLaunchedRuns(ctx, repo.ORM(), "nobody", kind)
 	require.NoError(t, err)
 	assert.Zero(t, count)
 }

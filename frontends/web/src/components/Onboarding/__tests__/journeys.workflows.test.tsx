@@ -157,15 +157,15 @@ describe("workflows journey: the end", () => {
     expect(_makeOwnRequested()).toBe(false);
   });
 
-  it("the outro shows only in Reliant, offers Make your own, and collapses the panels when done", () => {
+  it("the outro shows only in Reliant, offers Make your own, and closes only the panels it opened when done", () => {
     setTourShell("reliant");
     const outro = step("wf-outro-layout");
-    expect(outro.onComplete).toBe(layoutActions.collapseAll);
+    // Never collapseAll: that hid the left nav, the one shell's navigation.
+    expect(outro.onComplete).toBe(layoutActions.hidePanelsTourOpened);
     expect(outro.targets?.map((t) => t.selector)).toEqual([
       "[data-onboarding='chat-input']",
-      "[aria-label='Toggle Chat Sidebar']",
-      "[aria-label='Toggle File Browser']",
-      "[aria-label='Toggle Terminal']",
+      "[data-tour='header-sidebar-toggle']",
+      "[data-tour='header-panel-toggles']",
     ]);
     setTourShell("forge");
     expect(activeJourneySteps("workflows").map((s) => s.id)).not.toContain("wf-outro-layout");

@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v1.9.1-0.20261121174558-7c571e1f7b46
+forge_version: v1.10.1-0.20261123064811-54313eead62f
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
@@ -82,6 +82,11 @@ lint:
         forgeconv-no-getenv: error
         forge-config-deps: error
         forge-optional-deps-guard: error
+        # The owner's policy for this repo (flaky = delete immediately): a
+        # test the change adds or edits that fails one of its three runs
+        # blocks (`forge test flakes gate`, which scripts/test-flake.sh runs;
+        # forge ci gate's flake-check step). For customers the step warns.
+        flake-check: error
     tracing:
         # internal/logging's ctx-less helpers write through slog without the
         # request's context, so their lines carry no trace_id. Listing them
@@ -94,6 +99,32 @@ lint:
             - call: github.com/reliant-labs/reliant/internal/logging.Error
             - call: github.com/reliant-labs/reliant/internal/logging.Trace
             - call: github.com/reliant-labs/reliant/internal/logging.Log
+# reliant records its own test runs (the merge gate's affected lanes, the
+# release gate's `task test` / `test:web` / `test:integration` / `test:e2e`,
+# and the flake gate, through `forge test capture`; scripts/test-capture.sh)
+# and acts on its flakes as the owner's policy says (flaky = delete
+# immediately): a suspected flake files a flake:suspected issue (today
+# scripts/flake-report.sh's `forge test flakes --issues`) and gets a
+# quarantine PR rather than a suggestion, once the hosted Tests flow acts on
+# these settings (Tests D3b). coverage: true also builds the dev stack's air
+# servers and `go run` migrate instrumented (`forge env up dev`, a local env;
+# scripts/air-build.sh takes $FORGE_GO_BUILD_FLAGS), never a persistent env
+# (demo, desktop, release render byte-identically). Upload stays at its
+# default (in CI): ci.yml's test-upload job, on main, best effort.
+tests:
+    coverage: true
+    flakes:
+        issues: true
+        quarantine: pr
+# `forge vuln patch --verify` (and the vuln-patch workflow, unless its
+# verify_command says otherwise) proves a bumped tree with the merge gate,
+# the gate the merge queue would run on the bump: affected Go/web/electron
+# tests (a go.mod or lockfile change runs the whole lane), go build, scoped
+# forge lint and the generate check, over the dirty tree. Unset, forge would
+# run `task test:short`, which builds and lints nothing.
+vuln:
+    patch:
+        verify: task ci:merge
 database:
     # Prod's Postgres major (Cloud SQL reliant-pg is POSTGRES_16). forge's
     # pgtest boots its embedded test server at this major, so a test run
@@ -190,6 +221,12 @@ upgrade:
           commands:
               - [task, "contract:controlplane:sync"]
 ci:
+    workflows:
+        # Declined (forge v1.10.0 playbook pgo-default-on): reliant's binary
+        # gets PGO from control-plane's ShellBuild `pgo` (forge #2577 +
+        # control-plane #3282), and control-plane's weekly refresh writes
+        # cmd/reliant/default.pgo, so a reliant pgo-refresh.yml would duplicate it.
+        pgo-refresh: false
     vuln_scan:
         # Exemptions only: no scanner is named, so the derived default scanners
         # still run (forge's CIVulnConfig.UsesDefaultScanners).
@@ -259,7 +296,11 @@ ci:
               requires: [task, python3]
               heavy: true
               mutates_tree: true
+            # forge's own row for frontends/web has the same name (one
+            # lint-<frontend> per frontend), and an extra check may not
+            # shadow it silently: this takes it over, unchanged.
             - name: lint-web
+              replaces: lint-web
               dir: frontends/web
               command: [npm, run, lint]
               requires: [npm]

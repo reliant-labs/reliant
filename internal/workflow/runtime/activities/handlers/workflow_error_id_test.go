@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // idCapturingRepo records the entity id each chat_update is written under —

@@ -1,0 +1,21 @@
+package sharing
+
+import (
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
+)
+
+// realDeps is the Deps the composition root builds, over repo's database.
+func realDeps(repo *db.Repo, orgs OrgResolver) Deps {
+	o := repo.ORM()
+	return Deps{
+		Chats:    store.NewChatsWithActivityExtStore(o),
+		Projects: store.NewProjectExtStore(o),
+		// The Repo reads drafts through the same workflowdrafts service
+		// composition wires.
+		WorkflowDrafts: repo,
+		Shares:         store.NewShareEventExtStore(o),
+		Tx:             o,
+		Orgs:           orgs,
+	}
+}

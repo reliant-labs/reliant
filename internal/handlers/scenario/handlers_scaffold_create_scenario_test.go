@@ -3,6 +3,8 @@ package scenario_test
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"connectrpc.com/connect"
@@ -18,7 +20,7 @@ func TestCreateScenario_Generated(t *testing.T) {
 	t.Parallel()
 
 	f := &fixture{}
-	svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(f)}))
+	svc := scenario.NewTestScenario(t, withDeps(scenario.Deps{Repo: newScenarioRepo(f), Drafts: newScenarioDrafts(), Projects: projectaccesstest.For(newScenarioRepo(f))}))
 	def := &pb.ScenarioDefinition{
 		Name:   "drafts",
 		Events: []*pb.SimulatedEvent{{Node: "draft", OutputJson: `{"response_text":"done"}`}},

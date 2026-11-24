@@ -254,6 +254,9 @@ older one is refused with ` + "`lease_unsupported: true`" + ` before anything is
 ` + "`GIT_TERMINAL_PROMPT=0`" + `, an empty ` + "`GH_CONFIG_DIR`" + `. A ` + "`git push`" + ` or ` + "`gh pr merge`" + ` from it fails to
 authenticate at once and never prompts. Set it for an agent's shell with ` + "`tools_config.tools.shell`" + ` (bound, so
 the model is never shown it) and on a ` + "`run`" + ` node with ` + "`credentials: none`" + `.
+A step that runs a vendor agent CLI needs ` + "`credentials: inherit`" + `: the sandbox hides Claude Code's, Codex's
+and the GitHub CLI's sign-ins, and from the next minor release Gemini CLI's, Cursor Agent's and Copilot
+CLI's too (until then a ` + "`credentials: none`" + ` command prints a notice naming them on its stderr).
 
 ` + "```yaml" + `
 tools_config:
@@ -266,6 +269,29 @@ absent (` + "`~/.reliant/daemon.json`, `~/.config/forge`, `~/.git-credentials`, 
 container engine's socket), sees only its own processes, and has no capabilities. It shares the network and can
 write its working directory, and on macOS and Windows only the environment is scrubbed. Never tell an agent to look
 elsewhere for a token; publish with a ` + "`git_publish`" + ` node.
+
+### A third-party agent CLI on Reliant's gateway
+
+A ` + "`run`" + ` node with ` + "`llm_gateway`" + ` runs its command with a short-lived step key for the LLM gateway, billed to the
+run's organization's Reliant credits: capped to ` + "`budget_usd`" + ` ($5 by default, $50 at most), to ` + "`models`" + ` (the first is
+the CLI's main model), and to the node's ` + "`timeout`" + ` plus the run step's 30-minute machine wait plus 2 minutes (at most 12h),
+then revoked when the step ends. For
+` + "`cli: claude-code`" + ` the command gets ` + "`ANTHROPIC_BASE_URL`" + ` and ` + "`ANTHROPIC_AUTH_TOKEN`" + ` (and the model variables), and
+` + "`ANTHROPIC_API_KEY`" + `, ` + "`CLAUDE_CODE_OAUTH_TOKEN`" + ` and the Bedrock/Vertex settings are removed; the key is redacted from
+its output. The node's ` + "`env:`" + ` may not set those names. ` + "`nodes.<id>.llm_gateway.spend_usd`" + ` is what was metered as of
+the step's end; it is final only when ` + "`spend_known`" + ` is true (false: some calls were still settling, so the figure may be low).
+A machine whose daemon is too old, a deployment that cannot issue keys, or an org out of
+credits refuses the step (exit -1) without running the command.
+
+` + "```yaml" + `
+- id: bench
+  type: run
+  timeout: 20m
+  args:
+    command: claude -p "fix the failing test" --output-format json
+    credentials: none
+    llm_gateway: {cli: claude-code, budget_usd: 2}
+` + "```" + `
 
 ### Threading
 

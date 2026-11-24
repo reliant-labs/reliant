@@ -1,5 +1,5 @@
 /**
- * "Connect a machine" (research/NO_MACHINE_CHATS.md §2.3) and the
+ * "Connect an agent sandbox" (research/NO_MACHINE_CHATS.md §2.3) and the
  * request_machine card that opens it (§3).
  *
  * Connecting is SetChatDaemon through chatStore.connectChatToMachine; the
@@ -78,14 +78,14 @@ describe("ConnectMachineDialog", () => {
 
   it("says it is one-way", () => {
     render(<ConnectMachineDialog chatId="chat-1" open onClose={vi.fn()} />);
-    expect(screen.getByRole("dialog")).toHaveTextContent("can't go back to no machine");
+    expect(screen.getByRole("dialog")).toHaveTextContent("can't go back to no sandbox");
   });
 
   it("offers Add machine when the user has none, and connects the chat to the new one", async () => {
     state.daemons = [];
     render(<ConnectMachineDialog chatId="chat-1" open onClose={vi.fn()} />);
     expect(screen.queryByTestId("connect-machine-confirm")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Add machine" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add sandbox" }));
     // The sheet hands back the machine it made; the chat moves onto it.
     fireEvent.click(screen.getByText("Set up your machine"));
     await vi.waitFor(() => expect(store.connectChatToMachine).toHaveBeenCalledWith("chat-1", "new-machine"));
@@ -93,13 +93,13 @@ describe("ConnectMachineDialog", () => {
 });
 
 describe("request_machine card", () => {
-  it("shows the model's reason and opens Connect a machine", () => {
+  it("shows the model's reason and opens Connect an agent sandbox", () => {
     render(<RequestMachineCard chatId="chat-1" reason="Running the tests needs a checkout." />);
     expect(screen.getByTestId("request-machine-card")).toHaveTextContent("This needs a machine");
     expect(screen.getByText("Running the tests needs a checkout.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("request-machine-connect"));
-    expect(screen.getByRole("dialog")).toHaveTextContent("Connect a machine");
+    expect(screen.getByRole("dialog")).toHaveTextContent("Connect an agent sandbox");
   });
 
   it("says the machine is connected once the chat has one, and drops the button", () => {
@@ -117,11 +117,11 @@ describe("request_machine card", () => {
 });
 
 describe("No machine header pill", () => {
-  it("names what the chat can use and opens Connect a machine", () => {
+  it("names what the chat can use and opens Connect an agent sandbox", () => {
     render(<NoMachinePill chatId="chat-1" />);
     const pill = screen.getByTestId("no-machine-pill");
     expect(pill).toHaveTextContent("No machine · web & integrations");
     fireEvent.click(pill);
-    expect(screen.getByRole("dialog")).toHaveTextContent("Connect a machine");
+    expect(screen.getByRole("dialog")).toHaveTextContent("Connect an agent sandbox");
   });
 });

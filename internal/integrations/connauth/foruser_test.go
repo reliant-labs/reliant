@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
@@ -41,7 +42,7 @@ func TestForUserResolvesTheUsersDefaultConnectionAndRecordsTheUse(t *testing.T) 
 	require.NoError(t, err)
 	assert.Equal(t, pat, cred.ConnectionID())
 
-	events, err := e.repo.Connections().ListConnectionEvents(ctx, "alice", pat, 100, 0)
+	events, err := db.TestConnections(e.t, e.repo).ListConnectionEvents(ctx, "alice", pat, 100, 0)
 	require.NoError(t, err)
 	var uses []core.ConnectionEvent
 	for _, ev := range events {

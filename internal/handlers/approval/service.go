@@ -23,6 +23,8 @@ type Deps struct {
 	// Repo reads and resolves approvals, checks the chats that own them,
 	// and writes the denial message a denied step leaves in the chat.
 	Repo Repository
+	// Chats reads the chat an approval belongs to (store.ChatExtStore).
+	Chats Chats
 	// Signals delivers a resolved approval to the workflow parked on it.
 	Signals Signaler
 	// Connections checks the connection a person made to approve an agent's
@@ -42,6 +44,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("approval: Deps.Repo is required")
+	}
+	if d.Chats == nil {
+		return fmt.Errorf("approval: Deps.Chats is required")
 	}
 	if d.Signals == nil {
 		return fmt.Errorf("approval: Deps.Signals is required")

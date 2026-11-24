@@ -36,7 +36,7 @@ func (s *Service) UpdateProviderAccount(
 		}
 		patch.Label = &label
 	}
-	acct, err := s.deps.Store.PatchProviderAccount(ctx, userID, req.Msg.GetAccountId(), patch)
+	acct, err := s.deps.Accounts.PatchProviderAccount(ctx, userID, req.Msg.GetAccountId(), patch)
 	if err != nil {
 		return nil, wrapAccountErr(err)
 	}
@@ -46,7 +46,7 @@ func (s *Service) UpdateProviderAccount(
 			s.wakeChats(ctx, userID, "a "+acct.Provider+" account was un-paused")
 		}
 	}
-	limits, err := s.deps.Store.ListAccountLimits(ctx, userID)
+	limits, err := s.deps.Accounts.ListAccountLimits(ctx, userID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

@@ -134,6 +134,15 @@ const (
 	// ChatServiceMoveChatToProjectProcedure is the fully-qualified name of the ChatService's
 	// MoveChatToProject RPC.
 	ChatServiceMoveChatToProjectProcedure = "/reliant.v1.ChatService/MoveChatToProject"
+	// ChatServiceListChatProjectsProcedure is the fully-qualified name of the ChatService's
+	// ListChatProjects RPC.
+	ChatServiceListChatProjectsProcedure = "/reliant.v1.ChatService/ListChatProjects"
+	// ChatServiceAttachProjectToChatProcedure is the fully-qualified name of the ChatService's
+	// AttachProjectToChat RPC.
+	ChatServiceAttachProjectToChatProcedure = "/reliant.v1.ChatService/AttachProjectToChat"
+	// ChatServiceDetachProjectFromChatProcedure is the fully-qualified name of the ChatService's
+	// DetachProjectFromChat RPC.
+	ChatServiceDetachProjectFromChatProcedure = "/reliant.v1.ChatService/DetachProjectFromChat"
 )
 
 // ChatServiceClient is a client for the reliant.v1.ChatService service.
@@ -304,6 +313,33 @@ type ChatServiceClient interface {
 	// leave_workspace is set: the workspace belongs to the old project and stays
 	// there. Moving a chat to the project it is already in returns it unchanged.
 	MoveChatToProject(context.Context, *connect.Request[v1.MoveChatToProjectRequest]) (*connect.Response[v1.MoveChatToProjectResponse], error)
+	// ListChatProjects lists the projects a chat works in: its primary project
+	// (Chat.project_id) first, then the projects attached to it, oldest first.
+	// The chat's owner only: a viewer of a shared chat is answered as anyone
+	// else who cannot read it (NOT_FOUND).
+	// forge:custom
+	ListChatProjects(context.Context, *connect.Request[v1.ListChatProjectsRequest]) (*connect.Response[v1.ListChatProjectsResponse], error)
+	// AttachProjectToChat attaches another of the caller's projects to a chat,
+	// beside its primary project. The chat's tools can then work in that
+	// project's main checkout (each file, search and shell tool takes a
+	// `project` argument once a chat has more than one).
+	//
+	// Every attached project must be installed on the chat's machine (its pin,
+	// else the machine its primary project's work is placed on). One that is
+	// not is FAILED_PRECONDITION carrying a ProjectCheckoutMissing detail: the
+	// client offers to set the project up on that machine, then attaches again.
+	// Also refused: a project of another org (FAILED_PRECONDITION), an archived
+	// chat or a chat with no machine (FAILED_PRECONDITION), more than 10
+	// attached projects (RESOURCE_EXHAUSTED), another user's chat or project
+	// (NOT_FOUND). Attaching the primary project or one already attached
+	// changes nothing and returns the list.
+	AttachProjectToChat(context.Context, *connect.Request[v1.AttachProjectToChatRequest]) (*connect.Response[v1.AttachProjectToChatResponse], error)
+	// DetachProjectFromChat detaches an attached project from a chat; its
+	// checkout is untouched. The primary project cannot be detached
+	// (FAILED_PRECONDITION: move the chat with MoveChatToProject instead).
+	// Detaching a project that is not attached changes nothing and returns
+	// the list.
+	DetachProjectFromChat(context.Context, *connect.Request[v1.DetachProjectFromChatRequest]) (*connect.Response[v1.DetachProjectFromChatResponse], error)
 }
 
 // NewChatServiceClient constructs a client for the reliant.v1.ChatService service. By default, it
@@ -345,12 +381,14 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceListChatsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("ListChats")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getChat: connect.NewClient[v1.GetChatRequest, v1.GetChatResponse](
 			httpClient,
 			baseURL+ChatServiceGetChatProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetChat")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateChat: connect.NewClient[v1.UpdateChatRequest, v1.UpdateChatResponse](
@@ -369,12 +407,14 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceSearchChatsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("SearchChats")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listArchivedChats: connect.NewClient[v1.ListArchivedChatsRequest, v1.ListArchivedChatsResponse](
 			httpClient,
 			baseURL+ChatServiceListArchivedChatsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("ListArchivedChats")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		sendMessage: connect.NewClient[v1.SendMessageRequest, v1.SendMessageResponse](
@@ -393,6 +433,7 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceListQueuedAgentMessagesProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("ListQueuedAgentMessages")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		cancelQueuedAgentMessage: connect.NewClient[v1.CancelQueuedAgentMessageRequest, v1.CancelQueuedAgentMessageResponse](
@@ -411,18 +452,21 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceListMessagesProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("ListMessages")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getToolResult: connect.NewClient[v1.GetToolResultRequest, v1.GetToolResultResponse](
 			httpClient,
 			baseURL+ChatServiceGetToolResultProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetToolResult")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getContentBlockBodies: connect.NewClient[v1.GetContentBlockBodiesRequest, v1.GetContentBlockBodiesResponse](
 			httpClient,
 			baseURL+ChatServiceGetContentBlockBodiesProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetContentBlockBodies")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateChatState: connect.NewClient[v1.UpdateChatStateRequest, v1.UpdateChatStateResponse](
@@ -483,6 +527,7 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceListBranchesProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("ListBranches")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateWorkflowParams: connect.NewClient[v1.UpdateWorkflowParamsRequest, v1.UpdateWorkflowParamsResponse](
@@ -501,36 +546,42 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceGetChatUpdatesProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetChatUpdates")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listChatPlans: connect.NewClient[v1.ListChatPlansRequest, v1.ListChatPlansResponse](
 			httpClient,
 			baseURL+ChatServiceListChatPlansProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("ListChatPlans")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getWorkflowExecutions: connect.NewClient[v1.GetWorkflowExecutionsRequest, v1.GetWorkflowExecutionsResponse](
 			httpClient,
 			baseURL+ChatServiceGetWorkflowExecutionsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetWorkflowExecutions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listStepExecutions: connect.NewClient[v1.ListStepExecutionsRequest, v1.ListStepExecutionsResponse](
 			httpClient,
 			baseURL+ChatServiceListStepExecutionsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("ListStepExecutions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getWorkflowNodeExecutions: connect.NewClient[v1.GetWorkflowNodeExecutionsRequest, v1.GetWorkflowNodeExecutionsResponse](
 			httpClient,
 			baseURL+ChatServiceGetWorkflowNodeExecutionsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetWorkflowNodeExecutions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getThreadWorkflowInputs: connect.NewClient[v1.GetThreadWorkflowInputsRequest, v1.GetThreadWorkflowInputsResponse](
 			httpClient,
 			baseURL+ChatServiceGetThreadWorkflowInputsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetThreadWorkflowInputs")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setChatDaemon: connect.NewClient[v1.SetChatDaemonRequest, v1.SetChatDaemonResponse](
@@ -543,6 +594,25 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceMoveChatToProjectProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("MoveChatToProject")),
+			connect.WithClientOptions(opts...),
+		),
+		listChatProjects: connect.NewClient[v1.ListChatProjectsRequest, v1.ListChatProjectsResponse](
+			httpClient,
+			baseURL+ChatServiceListChatProjectsProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("ListChatProjects")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		attachProjectToChat: connect.NewClient[v1.AttachProjectToChatRequest, v1.AttachProjectToChatResponse](
+			httpClient,
+			baseURL+ChatServiceAttachProjectToChatProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("AttachProjectToChat")),
+			connect.WithClientOptions(opts...),
+		),
+		detachProjectFromChat: connect.NewClient[v1.DetachProjectFromChatRequest, v1.DetachProjectFromChatResponse](
+			httpClient,
+			baseURL+ChatServiceDetachProjectFromChatProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("DetachProjectFromChat")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -588,6 +658,9 @@ type chatServiceClient struct {
 	getThreadWorkflowInputs   *connect.Client[v1.GetThreadWorkflowInputsRequest, v1.GetThreadWorkflowInputsResponse]
 	setChatDaemon             *connect.Client[v1.SetChatDaemonRequest, v1.SetChatDaemonResponse]
 	moveChatToProject         *connect.Client[v1.MoveChatToProjectRequest, v1.MoveChatToProjectResponse]
+	listChatProjects          *connect.Client[v1.ListChatProjectsRequest, v1.ListChatProjectsResponse]
+	attachProjectToChat       *connect.Client[v1.AttachProjectToChatRequest, v1.AttachProjectToChatResponse]
+	detachProjectFromChat     *connect.Client[v1.DetachProjectFromChatRequest, v1.DetachProjectFromChatResponse]
 }
 
 // StartChat calls reliant.v1.ChatService.StartChat.
@@ -780,6 +853,21 @@ func (c *chatServiceClient) MoveChatToProject(ctx context.Context, req *connect.
 	return c.moveChatToProject.CallUnary(ctx, req)
 }
 
+// ListChatProjects calls reliant.v1.ChatService.ListChatProjects.
+func (c *chatServiceClient) ListChatProjects(ctx context.Context, req *connect.Request[v1.ListChatProjectsRequest]) (*connect.Response[v1.ListChatProjectsResponse], error) {
+	return c.listChatProjects.CallUnary(ctx, req)
+}
+
+// AttachProjectToChat calls reliant.v1.ChatService.AttachProjectToChat.
+func (c *chatServiceClient) AttachProjectToChat(ctx context.Context, req *connect.Request[v1.AttachProjectToChatRequest]) (*connect.Response[v1.AttachProjectToChatResponse], error) {
+	return c.attachProjectToChat.CallUnary(ctx, req)
+}
+
+// DetachProjectFromChat calls reliant.v1.ChatService.DetachProjectFromChat.
+func (c *chatServiceClient) DetachProjectFromChat(ctx context.Context, req *connect.Request[v1.DetachProjectFromChatRequest]) (*connect.Response[v1.DetachProjectFromChatResponse], error) {
+	return c.detachProjectFromChat.CallUnary(ctx, req)
+}
+
 // ChatServiceHandler is an implementation of the reliant.v1.ChatService service.
 type ChatServiceHandler interface {
 	// StartChat starts a chat's root run — the ONE door through which a session
@@ -948,6 +1036,33 @@ type ChatServiceHandler interface {
 	// leave_workspace is set: the workspace belongs to the old project and stays
 	// there. Moving a chat to the project it is already in returns it unchanged.
 	MoveChatToProject(context.Context, *connect.Request[v1.MoveChatToProjectRequest]) (*connect.Response[v1.MoveChatToProjectResponse], error)
+	// ListChatProjects lists the projects a chat works in: its primary project
+	// (Chat.project_id) first, then the projects attached to it, oldest first.
+	// The chat's owner only: a viewer of a shared chat is answered as anyone
+	// else who cannot read it (NOT_FOUND).
+	// forge:custom
+	ListChatProjects(context.Context, *connect.Request[v1.ListChatProjectsRequest]) (*connect.Response[v1.ListChatProjectsResponse], error)
+	// AttachProjectToChat attaches another of the caller's projects to a chat,
+	// beside its primary project. The chat's tools can then work in that
+	// project's main checkout (each file, search and shell tool takes a
+	// `project` argument once a chat has more than one).
+	//
+	// Every attached project must be installed on the chat's machine (its pin,
+	// else the machine its primary project's work is placed on). One that is
+	// not is FAILED_PRECONDITION carrying a ProjectCheckoutMissing detail: the
+	// client offers to set the project up on that machine, then attaches again.
+	// Also refused: a project of another org (FAILED_PRECONDITION), an archived
+	// chat or a chat with no machine (FAILED_PRECONDITION), more than 10
+	// attached projects (RESOURCE_EXHAUSTED), another user's chat or project
+	// (NOT_FOUND). Attaching the primary project or one already attached
+	// changes nothing and returns the list.
+	AttachProjectToChat(context.Context, *connect.Request[v1.AttachProjectToChatRequest]) (*connect.Response[v1.AttachProjectToChatResponse], error)
+	// DetachProjectFromChat detaches an attached project from a chat; its
+	// checkout is untouched. The primary project cannot be detached
+	// (FAILED_PRECONDITION: move the chat with MoveChatToProject instead).
+	// Detaching a project that is not attached changes nothing and returns
+	// the list.
+	DetachProjectFromChat(context.Context, *connect.Request[v1.DetachProjectFromChatRequest]) (*connect.Response[v1.DetachProjectFromChatResponse], error)
 }
 
 // NewChatServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -985,12 +1100,14 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceListChatsProcedure,
 		svc.ListChats,
 		connect.WithSchema(chatServiceMethods.ByName("ListChats")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceGetChatHandler := connect.NewUnaryHandler(
 		ChatServiceGetChatProcedure,
 		svc.GetChat,
 		connect.WithSchema(chatServiceMethods.ByName("GetChat")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceUpdateChatHandler := connect.NewUnaryHandler(
@@ -1009,12 +1126,14 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceSearchChatsProcedure,
 		svc.SearchChats,
 		connect.WithSchema(chatServiceMethods.ByName("SearchChats")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceListArchivedChatsHandler := connect.NewUnaryHandler(
 		ChatServiceListArchivedChatsProcedure,
 		svc.ListArchivedChats,
 		connect.WithSchema(chatServiceMethods.ByName("ListArchivedChats")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceSendMessageHandler := connect.NewUnaryHandler(
@@ -1033,6 +1152,7 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceListQueuedAgentMessagesProcedure,
 		svc.ListQueuedAgentMessages,
 		connect.WithSchema(chatServiceMethods.ByName("ListQueuedAgentMessages")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceCancelQueuedAgentMessageHandler := connect.NewUnaryHandler(
@@ -1051,18 +1171,21 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceListMessagesProcedure,
 		svc.ListMessages,
 		connect.WithSchema(chatServiceMethods.ByName("ListMessages")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceGetToolResultHandler := connect.NewUnaryHandler(
 		ChatServiceGetToolResultProcedure,
 		svc.GetToolResult,
 		connect.WithSchema(chatServiceMethods.ByName("GetToolResult")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceGetContentBlockBodiesHandler := connect.NewUnaryHandler(
 		ChatServiceGetContentBlockBodiesProcedure,
 		svc.GetContentBlockBodies,
 		connect.WithSchema(chatServiceMethods.ByName("GetContentBlockBodies")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceUpdateChatStateHandler := connect.NewUnaryHandler(
@@ -1123,6 +1246,7 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceListBranchesProcedure,
 		svc.ListBranches,
 		connect.WithSchema(chatServiceMethods.ByName("ListBranches")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceUpdateWorkflowParamsHandler := connect.NewUnaryHandler(
@@ -1141,36 +1265,42 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceGetChatUpdatesProcedure,
 		svc.GetChatUpdates,
 		connect.WithSchema(chatServiceMethods.ByName("GetChatUpdates")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceListChatPlansHandler := connect.NewUnaryHandler(
 		ChatServiceListChatPlansProcedure,
 		svc.ListChatPlans,
 		connect.WithSchema(chatServiceMethods.ByName("ListChatPlans")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceGetWorkflowExecutionsHandler := connect.NewUnaryHandler(
 		ChatServiceGetWorkflowExecutionsProcedure,
 		svc.GetWorkflowExecutions,
 		connect.WithSchema(chatServiceMethods.ByName("GetWorkflowExecutions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceListStepExecutionsHandler := connect.NewUnaryHandler(
 		ChatServiceListStepExecutionsProcedure,
 		svc.ListStepExecutions,
 		connect.WithSchema(chatServiceMethods.ByName("ListStepExecutions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceGetWorkflowNodeExecutionsHandler := connect.NewUnaryHandler(
 		ChatServiceGetWorkflowNodeExecutionsProcedure,
 		svc.GetWorkflowNodeExecutions,
 		connect.WithSchema(chatServiceMethods.ByName("GetWorkflowNodeExecutions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceGetThreadWorkflowInputsHandler := connect.NewUnaryHandler(
 		ChatServiceGetThreadWorkflowInputsProcedure,
 		svc.GetThreadWorkflowInputs,
 		connect.WithSchema(chatServiceMethods.ByName("GetThreadWorkflowInputs")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceSetChatDaemonHandler := connect.NewUnaryHandler(
@@ -1183,6 +1313,25 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceMoveChatToProjectProcedure,
 		svc.MoveChatToProject,
 		connect.WithSchema(chatServiceMethods.ByName("MoveChatToProject")),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceListChatProjectsHandler := connect.NewUnaryHandler(
+		ChatServiceListChatProjectsProcedure,
+		svc.ListChatProjects,
+		connect.WithSchema(chatServiceMethods.ByName("ListChatProjects")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceAttachProjectToChatHandler := connect.NewUnaryHandler(
+		ChatServiceAttachProjectToChatProcedure,
+		svc.AttachProjectToChat,
+		connect.WithSchema(chatServiceMethods.ByName("AttachProjectToChat")),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceDetachProjectFromChatHandler := connect.NewUnaryHandler(
+		ChatServiceDetachProjectFromChatProcedure,
+		svc.DetachProjectFromChat,
+		connect.WithSchema(chatServiceMethods.ByName("DetachProjectFromChat")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1263,6 +1412,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceSetChatDaemonHandler.ServeHTTP(w, r)
 		case ChatServiceMoveChatToProjectProcedure:
 			chatServiceMoveChatToProjectHandler.ServeHTTP(w, r)
+		case ChatServiceListChatProjectsProcedure:
+			chatServiceListChatProjectsHandler.ServeHTTP(w, r)
+		case ChatServiceAttachProjectToChatProcedure:
+			chatServiceAttachProjectToChatHandler.ServeHTTP(w, r)
+		case ChatServiceDetachProjectFromChatProcedure:
+			chatServiceDetachProjectFromChatHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1422,4 +1577,16 @@ func (UnimplementedChatServiceHandler) SetChatDaemon(context.Context, *connect.R
 
 func (UnimplementedChatServiceHandler) MoveChatToProject(context.Context, *connect.Request[v1.MoveChatToProjectRequest]) (*connect.Response[v1.MoveChatToProjectResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.MoveChatToProject is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) ListChatProjects(context.Context, *connect.Request[v1.ListChatProjectsRequest]) (*connect.Response[v1.ListChatProjectsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ListChatProjects is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) AttachProjectToChat(context.Context, *connect.Request[v1.AttachProjectToChatRequest]) (*connect.Response[v1.AttachProjectToChatResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.AttachProjectToChat is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) DetachProjectFromChat(context.Context, *connect.Request[v1.DetachProjectFromChatRequest]) (*connect.Response[v1.DetachProjectFromChatResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.DetachProjectFromChat is not implemented"))
 }

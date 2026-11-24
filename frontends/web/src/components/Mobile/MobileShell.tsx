@@ -26,10 +26,12 @@
  * ## 2. A project must be selected
  *
  * The desktop app selects a project from the URL (`/project/$projectId`) or a
- * restored workspace. Mobile has no project route, so it restores the last
- * project (`restoreLastProject`, the desktop's own path) and falls back to the
- * user's first. A chat screen then moves to its chat's own project if that
- * differs (see MobileChatScreen).
+ * restored workspace. Mobile names it in the URL too: the chat list's scope
+ * (`?projects=<id>`) or a new chat's project (`/m/new?project=<id>`), which
+ * `MobileScopeSync` moves the context to. A URL that names none restores the
+ * last project (`restoreLastProject`, the desktop's own path) and falls back
+ * to the user's first. A chat screen then moves to its chat's own project if
+ * that differs (see MobileChatScreen).
  *
  * ## 3. Top-level navigation
  *
@@ -66,15 +68,17 @@ import { MobileLayout } from "./MobileLayout";
 import { MobileNavDrawer } from "./MobileNavDrawer";
 import { MobileNavigationFeedback } from "./MobileNavigationFeedback";
 import { MobileInboxBadgeSync } from "./MobileInboxBadgeSync";
+import { MobileScopeSync } from "./MobileScopeSync";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
 import { useUpdateStreamConnection } from "@/hooks/useUpdateStreamConnection";
 import { useProjectStore } from "../../store/projectStore";
 import { useProjects } from "../../hooks/project-queries";
 import { useChatStore } from "../../store/chatStore";
 import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
+import { navDrawerHeld } from "../Layout/sidebar/navDrawerHold";
 import { onboardingPath } from "@/lib/paths";
 import { isForgeShell } from "@/lib/shell";
-import { forgeBrandHomeTarget, routeRequiresOnboarding } from "@/components/OnboardingFlow/onboardingGate";
+import { homeTarget, routeRequiresOnboarding } from "@/components/OnboardingFlow/onboardingGate";
 
 export function MobileShell() {
   const navigate = useNavigate();
@@ -88,7 +92,9 @@ export function MobileShell() {
     !isUserLoading &&
     (!currentUser || !currentUser.onboardingCompleted) &&
     routeRequiresOnboarding(pathname);
-  const notOnboardedHome = forgeBrandHomeTarget(pathname, isForgeShell());
+  // The phone keeps its home rule (homeTarget): on the forge brand the chat
+  // list sends a person who has not onboarded to their apps.
+  const notOnboardedHome = homeTarget(pathname, "onboard", { forgeBrand: isForgeShell() });
 
   // Same gate the desktop shell applies (see ModernApp), on the same routes:
   // the chats (onboardingGate.ts). A user without a completed setup has no
@@ -122,6 +128,10 @@ export function MobileShell() {
   const initialSelectionAttempted = useRef(false);
   useEffect(() => {
     if (currentProject || projects.length === 0) return;
+    // Read fresh: MobileScopeSync (a child, so its effects run first) may have
+    // just moved the context to the project the URL names, which no restore
+    // may replace.
+    if (useProjectStore.getState().currentProject) return;
     if (initialSelectionAttempted.current) return;
     initialSelectionAttempted.current = true;
     void restoreLastProject({ restoreWorkspace: false });
@@ -141,6 +151,12 @@ export function MobileShell() {
 
   const isDrawerOpen = useMobileDrawerStore((s) => s.isOpen);
   const closeDrawer = useMobileDrawerStore((s) => s.close);
+  // A drill into Agents (or out of Observability) from the shell's drawer lands
+  // on the phone's own screens: open this drawer on the area's rows, so the
+  // nav the person was using stays on screen (U6e; Layout/sidebar/navDrawerHold).
+  useEffect(() => {
+    if (navDrawerHeld()) useMobileDrawerStore.getState().open();
+  }, []);
 
   if (isUserLoading || needsOnboarding) {
     return (
@@ -164,6 +180,7 @@ export function MobileShell() {
         <Outlet />
       </div>
       <MobileNavDrawer isOpen={isDrawerOpen} onClose={closeDrawer} />
+      <MobileScopeSync />
       <MobileInboxBadgeSync />
       <MobileNavigationFeedback />
     </MobileLayout>
