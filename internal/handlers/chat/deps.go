@@ -124,13 +124,8 @@ type Repository interface {
 	ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*db.MessageContentBlock, error)
 	ListMessagesByIDs(ctx context.Context, ids []string) ([]*db.Message, error)
 
-	// The agent mailbox: messages queued for a thread until it can take them.
-	EnqueueAgentMessage(ctx context.Context, msg *db.AgentMessage) error
-	EnqueueAgentMessageOnce(ctx context.Context, msg *db.AgentMessage) (inserted bool, err error)
-	GetAgentMessage(ctx context.Context, id string) (*db.AgentMessage, error)
-	CancelQueuedAgentMessage(ctx context.Context, id, chatID string) (cancelled bool, err error)
-	DeleteUndeliveredAgentMessage(ctx context.Context, id, chatID string) (deleted bool, err error)
-	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
+	// The agent mailbox's queued rows: listed for the pending strip (the
+	// writes and the other reads are the Mailbox and AgentMessages roles).
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
 
 	// Plans and their tasks.
@@ -195,4 +190,21 @@ type Repository interface {
 // store.ThreadExtStore satisfies it.
 type Senders interface {
 	SenderTitlesByThreadIDs(ctx context.Context, threadIDs []string) (map[string]string, error)
+}
+
+// Mailbox queues the messages a send puts in a thread's mailbox and announces
+// each one to the chat's open clients. *agentmailbox.Mailbox satisfies it.
+type Mailbox interface {
+	EnqueueAgentMessage(ctx context.Context, msg *db.AgentMessage) error
+	EnqueueAgentMessageOnce(ctx context.Context, msg *db.AgentMessage) (inserted bool, err error)
+}
+
+// AgentMessages reads and removes mailbox rows: the idempotency checks of a
+// repeated send, the cancel of a queued message, and the queue depth a send
+// gates on. store.AgentMessageExtStore satisfies it.
+type AgentMessages interface {
+	GetAgentMessage(ctx context.Context, id string) (*db.AgentMessage, error)
+	CancelQueuedAgentMessage(ctx context.Context, id, chatID string) (cancelled bool, err error)
+	DeleteUndeliveredAgentMessage(ctx context.Context, id, chatID string) (deleted bool, err error)
+	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
 }

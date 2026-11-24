@@ -29,7 +29,7 @@ export function leaveForDemo({ location }: { location: { searchStr: string } }):
   const href = forgeDemoHref(location.searchStr);
   if (isElectron()) {
     void openExternalLink(href);
-    throw redirect({ href: homePath(), replace: true });
+    throw redirect({ href: homePath({ org: null }), replace: true });
   }
   // An absolute href is a document navigation (router-core's reloadDocument).
   throw redirect({ href, replace: true });

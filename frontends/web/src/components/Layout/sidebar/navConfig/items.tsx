@@ -15,8 +15,29 @@ import {
   Activity,
   ArrowUpRight,
   BarChart3,
+  Bell,
+  BookOpen,
   Boxes,
+  Bug,
+  ChartLine,
+  Flame,
+  GitPullRequest,
+  History,
   Inbox,
+  MonitorPlay,
+  MousePointerClick,
+  Network,
+  Package,
+  PieChart,
+  Puzzle,
+  Route,
+  ScrollText,
+  SlidersHorizontal,
+  Split,
+  TrendingUp,
+  Users,
+  Waypoints,
+  Zap,
   Plug,
   ShieldCheck,
   CreditCard,
@@ -111,6 +132,7 @@ export const previews: NavRow = {
   kind: "row",
   id: "previews",
   label: "Previews",
+  flatIcon: icon(GitPullRequest),
   href: (ctx) => (ctx.app ? withSearch(consolePath(ctx.app, { kind: "environments" }), { env: ctx.console?.env, show: "previews" }) : undefined),
   match: (ctx) => (ctx.page?.kind === "environments" && showsPreviews(ctx)) || isPreviewEnv(ctx),
   available: hasApp,
@@ -212,6 +234,7 @@ export const dashboards: NavGroup = {
       kind: "row",
       id: "dashboards-all",
       label: "All dashboards",
+      flatIcon: icon(LayoutGrid),
       href: (c) => (c.mode !== "one" ? orgPath({ kind: "obs-view", view: "dashboards" }) : consoleHref({ kind: "dashboards" })(c)),
       match: (c) =>
         (c.page?.kind === "obs-view" && c.page.view === "dashboards") ||
@@ -223,6 +246,7 @@ export const dashboards: NavGroup = {
         kind: "row",
         id: `dashboard-${dashboard.dashKind}-${dashboard.key}`,
         label: dashboard.title,
+        flatIcon: icon(ChartLine),
         href: consoleHref({ kind: "dashboard", dashKind: dashboard.dashKind, key: dashboard.key }),
         match: (c) => c.page?.kind === "dashboard" && c.page.dashKind === dashboard.dashKind && c.page.key === dashboard.key,
       }),
@@ -233,11 +257,26 @@ export const dashboards: NavGroup = {
 // ── Observability ───────────────────────────────────────────────────────────
 
 /** One Observability view: the focused app's, or the org-wide page across several projects. */
+/** The flat nav's icon for each Observability view (NavRow `flatIcon`). */
+const OBS_VIEW_ICONS: Record<ObsNavView, typeof Activity> = {
+  graph: Network,
+  rpc: Route,
+  errors: Bug,
+  sessions: MonitorPlay,
+  logs: ScrollText,
+  traces: Waypoints,
+  metrics: ChartLine,
+  profiles: Flame,
+  dashboards: LayoutGrid,
+  alerts: Bell,
+};
+
 function obsRow(view: ObsNavView, extra: Partial<NavRow> = {}): NavRow {
   return {
     kind: "row",
     id: `obs-${view}`,
     label: OBS_NAV_LABELS[view],
+    flatIcon: icon(OBS_VIEW_ICONS[view]),
     href: (ctx) => (ctx.mode !== "one" ? orgPath({ kind: "obs-view", view }) : consoleHref({ kind: "obs-view", view })(ctx)),
     match: (ctx) =>
       (ctx.page?.kind === "obs-view" && ctx.page.view === view) || (ctx.orgPage?.kind === "obs-view" && ctx.orgPage.view === view),
@@ -250,6 +289,7 @@ const speedInsights: NavRow = {
   kind: "row",
   id: "speed-insights",
   label: "Speed insights",
+  flatIcon: icon(Zap),
   href: consoleHref({ kind: "speed-insights" }),
   match: pageIs("speed-insights"),
   available: hasApp,
@@ -289,6 +329,7 @@ export const obsOverview: NavRow = {
   kind: "row",
   id: "obs-overview",
   label: "Overview",
+  flatIcon: icon(LayoutDashboard),
   href: (ctx) =>
     ctx.mode !== "one" ? orgPath({ kind: "observability" }) : ctx.app ? withSearch(obsOverviewPath(ctx.app), { env: ctx.console?.env }) : undefined,
   match: isObsOverview,
@@ -321,11 +362,21 @@ const analyticsTabOf = (ctx: NavCtx): AnalyticsTab | null =>
   ctx.page?.kind === "analytics" ? (ctx.page.tab ?? "overview") : ctx.page?.kind === "events" ? "events" : null;
 
 /** One Analytics tab as a row (Product overview, Users, Product, Acquisition, Events & metrics). */
+/** The flat nav's icon for each Analytics tab (NavRow `flatIcon`). */
+const ANALYTICS_TAB_ICONS: Record<AnalyticsTab, typeof Activity> = {
+  overview: PieChart,
+  users: Users,
+  product: Package,
+  acquisition: TrendingUp,
+  events: MousePointerClick,
+};
+
 function analyticsTabRow(tab: AnalyticsTab): NavRow {
   return {
     kind: "row",
     id: `analytics-${tab}`,
     label: ANALYTICS_TAB_LABELS[tab],
+    flatIcon: icon(ANALYTICS_TAB_ICONS[tab]),
     href: consoleHref({ kind: "analytics", tab }),
     match: (ctx) => analyticsTabOf(ctx) === tab,
     available: hasApp,
@@ -352,6 +403,7 @@ function registeredRows(ctx: NavCtx, group: ConsoleNavGroup): NavRow[] {
       kind: "row" as const,
       id: `registered-${entry.id}`,
       label: entry.label,
+      flatIcon: entry.icon ?? icon(Puzzle),
       href: consoleHref(consoleNavEntryTarget(entry)),
       match: (c: NavCtx) => consoleNavEntryLights(entry, c.page),
     }));
@@ -362,7 +414,10 @@ function registeredRows(ctx: NavCtx, group: ConsoleNavGroup): NavRow[] {
  * the web config's CHANGES_UI, as the console's own navs list it
  * (ConsoleShell experimentsListed), and always while one of its pages is open.
  */
-const experimentsRow = consoleRow("experiments", "Experiments", { kind: "experiments" }, undefined, ["experiments", "experiment"]);
+const experimentsRow: NavRow = {
+  ...consoleRow("experiments", "Experiments", { kind: "experiments" }, undefined, ["experiments", "experiment"]),
+  flatIcon: icon(Split),
+};
 const experimentsShown = (ctx: NavCtx): boolean => changesUIEnabled() || pageIs("experiments", "experiment")(ctx);
 
 const analyticsChildren = (ctx: NavCtx): readonly NavItem[] => [
@@ -398,8 +453,8 @@ export const workflowsGroup: NavGroup = {
   icon: icon(Workflow),
   trail: "workflows-pill",
   children: [
-    { kind: "row", id: "workflows-runs", label: "Runs", href: () => runsPath(), match: (ctx) => workflowsTabForPath(ctx.pathname) === "runs" },
-    { kind: "row", id: "workflows-library", label: "Library", href: () => workflowLibraryPath(), match: (ctx) => workflowsTabForPath(ctx.pathname) === "workflows" },
+    { kind: "row", id: "workflows-runs", label: "Runs", flatIcon: icon(History), href: () => runsPath(), match: (ctx) => workflowsTabForPath(ctx.pathname) === "runs" },
+    { kind: "row", id: "workflows-library", label: "Library", flatIcon: icon(BookOpen), href: () => workflowLibraryPath(), match: (ctx) => workflowsTabForPath(ctx.pathname) === "workflows" },
   ],
 };
 
@@ -483,7 +538,7 @@ function settingsChildren(): readonly NavItem[] {
   for (const group of groups) {
     const rows = group.items.map(settingsRow);
     const id = `settings-group-${group.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-    if (group.collapsible) items.push({ kind: "group", id, label: group.label, children: rows });
+    if (group.collapsible) items.push({ kind: "group", id, label: group.label, flatIcon: icon(SlidersHorizontal), children: rows });
     else items.push(heading(id, group.label), ...rows);
   }
   items.push(settingsRow(about));

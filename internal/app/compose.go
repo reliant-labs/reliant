@@ -34,6 +34,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	"github.com/reliant-labs/reliant/internal/accountpurge"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
@@ -117,6 +118,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/vault"
@@ -569,6 +571,7 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 		Integrations:    g.IntegrationSettings(),
 		DB:              g.Database(),
 		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		Owners:          g.Triggerowner(),
 	})
 }
 
@@ -1121,24 +1124,26 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 // newChat constructs the chat handler (internal/handlers/chat).
 func (g *Graph) newChat() (*chat.Service, error) {
 	return chat.New(chat.Deps{
-		Logger:      g.Log,
-		Config:      g.Cfg,
-		Repo:        g.Database(),
-		Workflows:   store.NewWorkflowExtStore(g.Database().ORM()),
-		Worktrees:   store.NewWorktreeExtStore(g.Database().ORM()),
-		ProjectRows: store.NewProjectExtStore(g.Database().ORM()),
-		Questions:   store.NewQuestionExtStore(g.Database().ORM()),
-		Spawns:      store.NewToolCallExtStore(g.Database().ORM()),
-		Selections:  store.NewChatSelectionExtStore(g.Database().ORM()),
-		Messages:    store.NewMessageExtStore(g.Database().ORM()),
-		ToolBlocks:  store.NewMessageContentBlockExtStore(g.Database().ORM()),
-		Senders:     store.NewThreadExtStore(g.Database().ORM()),
-		Backoff:     g.Providerbackoff(),
-		Temporal:    g.TemporalClient().Client,
-		Pause:       g.PauseService(),
-		Router:      g.APIDaemonRouter().NATSDaemonRouter,
-		LocalModels: local.NewRepoDirectory(g.Database(), store.NewModelEndpointExtStore(g.Database().ORM())),
-		Orgs:        g.OrgResolver(),
+		Logger:        g.Log,
+		Config:        g.Cfg,
+		Repo:          g.Database(),
+		Workflows:     store.NewWorkflowExtStore(g.Database().ORM()),
+		Worktrees:     store.NewWorktreeExtStore(g.Database().ORM()),
+		ProjectRows:   store.NewProjectExtStore(g.Database().ORM()),
+		Questions:     store.NewQuestionExtStore(g.Database().ORM()),
+		Spawns:        store.NewToolCallExtStore(g.Database().ORM()),
+		Selections:    store.NewChatSelectionExtStore(g.Database().ORM()),
+		Messages:      store.NewMessageExtStore(g.Database().ORM()),
+		ToolBlocks:    store.NewMessageContentBlockExtStore(g.Database().ORM()),
+		Senders:       store.NewThreadExtStore(g.Database().ORM()),
+		Backoff:       g.Providerbackoff(),
+		Temporal:      g.TemporalClient().Client,
+		Pause:         g.PauseService(),
+		Router:        g.APIDaemonRouter().NATSDaemonRouter,
+		LocalModels:   local.NewRepoDirectory(g.Database(), store.NewModelEndpointExtStore(g.Database().ORM())),
+		Orgs:          g.OrgResolver(),
+		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.Database()}),
+		AgentMessages: store.NewAgentMessageExtStore(g.Database().ORM()),
 	})
 }
 
@@ -1177,6 +1182,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
+		Owners:         g.Triggerowner(),
 		Firings:        store.NewTriggerEventExtStore(g.Database().ORM()),
 		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(g.Database().ORM()),
@@ -1336,6 +1342,7 @@ func (g *Graph) newPackageCommands() (*package_commands.Service, error) {
 		Config:    g.Cfg,
 		Router:    g.APIDaemonRouter().NATSDaemonRouter,
 		Repo:      g.Database(),
+		Favorites: store.NewCommandFavoriteExtStore(g.Database().ORM()),
 		Placement: daemonplacement.NewRecords(g.Database().ORM()),
 	})
 }
@@ -1451,6 +1458,7 @@ func (g *Graph) newQuestion() (*question.Service, error) {
 		Config:    g.Cfg,
 		Repo:      g.Database(),
 		Questions: store.NewQuestionExtStore(g.Database().ORM()),
+		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.Database()}),
 		Signals:   g.PauseService(),
 		Messages:  g.Chat(),
 	})
@@ -1657,6 +1665,7 @@ func (g *Graph) newAutomationTakeover() (*automation_takeover.Service, error) {
 		Logger:   g.Log,
 		Config:   g.Cfg,
 		Repo:     g.Database(),
+		Offers:   g.Triggerowner(),
 		Triggers: g.Trigger(),
 		Now:      nil, // optional — no provider
 	})
@@ -1765,6 +1774,27 @@ func (g *Graph) newSeatmatch() (seatmatch.Service, error) {
 		return nil, err
 	}
 	return seatmatch.NewServiceWithForgeMiddleware(svc), nil
+}
+
+// newTriggerowner constructs the triggerowner package (internal/triggerowner):
+// the one writer of a trigger's owner after it is created (the takeover).
+func (g *Graph) newTriggerowner() (triggerowner.Service, error) {
+	o := g.Database().ORM()
+	stores := triggerowner.NewStores(o)
+	svc, err := triggerowner.New(triggerowner.Deps{
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Tx:       o,
+		Locks:    stores,
+		Triggers: stores,
+		Offers:   stores,
+		OrgReads: stores,
+		Now:      nil, // optional — no provider
+	})
+	if err != nil {
+		return nil, err
+	}
+	return triggerowner.NewServiceWithForgeMiddleware(svc), nil
 }
 
 // newOrgUsage constructs the org-usage handler (internal/handlers/org_usage):
