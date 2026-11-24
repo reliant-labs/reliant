@@ -69,9 +69,14 @@ type llmUsageCall struct {
 	// (DriverResponse.UpstreamRequestID, the span's gen_ai.response.id); ""
 	// when it sent none.
 	ProviderRequestID string
-	Usage             llm.TokenUsage
-	Err               error
-	Interrupted       bool
+	// GatewayCallID is the LLM gateway's id for the request
+	// (llm.RecordGatewayCallID, the span's reliant.gateway.call_id), which
+	// control-plane's wallet ledger keys the call's cost by; "" when it did
+	// not go through the gateway.
+	GatewayCallID string
+	Usage         llm.TokenUsage
+	Err           error
+	Interrupted   bool
 }
 
 // recordLLMUsage writes the count-only service record of one model request. It
@@ -139,6 +144,7 @@ func recordLLMUsage(ctx context.Context, c llmUsageCall) {
 		AIRunID:           scope.RunID,
 		AIRootRunID:       rootRunID,
 		ProviderRequestID: strings.TrimSpace(c.ProviderRequestID),
+		GatewayCallID:     strings.TrimSpace(c.GatewayCallID),
 		TTFTMs:            c.TTFTMs,
 	}
 	rec.CostUSDNanos, rec.CostBasis = llmUsageCost(rec.AuthMode, c.Usage.Cost)
@@ -212,8 +218,27 @@ type driverRetries struct {
 	// output token (observeEvent); zero until then.
 	firstToken time.Time
 	list       []driverRetry
+	// gateway is the gateway's id for the call (llm.RecordGatewayCallID),
+	// recorded through the ctx watch returns; the last answered attempt's.
+	gateway llm.GatewayCall
 	// now is the clock; newDriverRetries uses time.Now.
 	now func() time.Time
+}
+
+// watch is ctx for the call r observes: the driver records the gateway's id
+// for it (llm.WithGatewayCall) where it records the span's, so the row and the
+// span name the same attempt.
+func (r *driverRetries) watch(ctx context.Context) context.Context {
+	return llm.WithGatewayCall(ctx, &r.gateway)
+}
+
+// gatewayCallID is the gateway's id for the request that ended the call; ""
+// when the call did not go through the gateway.
+func (r *driverRetries) gatewayCallID() string {
+	if r == nil {
+		return ""
+	}
+	return r.gateway.ID()
 }
 
 type driverRetry struct {
@@ -323,7 +348,9 @@ func recordDriverRetries(ctx context.Context, call llmUsageCall, retries *driver
 		c.Err = retriedRequestError{wait: r.wait}
 		c.Interrupted = false
 		// A failed request answered nothing: no request id, no first token.
+		// The gateway's id the call holds is the request that ended it.
 		c.ProviderRequestID = ""
+		c.GatewayCallID = ""
 		c.TTFTMs = nil
 		recordLLMUsage(ctx, c)
 	}
@@ -343,6 +370,7 @@ func (a *CallLLMActivity) recordLLMCallUsage(ctx context.Context, chat *db.Chat,
 		recordDriverRetries(ctx, call, retries)
 		call.LatencyMs = retries.finalLatencyMs(latencyMs)
 		call.TTFTMs = retries.ttftMs()
+		call.GatewayCallID = retries.gatewayCallID()
 	}
 	recordLLMUsage(ctx, call)
 }
@@ -386,7 +414,7 @@ func (m *usageMeter) streamAndAccumulate(ctx context.Context, resolved *resolved
 	m.n++
 	retries := newDriverRetries()
 	callStart := retries.start
-	resp, err := accumulator.StreamAndAccumulateObserving(ctx, resolved.Driver, prompts, messages, available, retries.observeEvent)
+	resp, err := accumulator.StreamAndAccumulateObserving(retries.watch(ctx), resolved.Driver, prompts, messages, available, retries.observeEvent)
 	callLatencyMs := retries.finish().Sub(callStart).Milliseconds()
 	call := llmUsageCall{
 		Recorder: m.recorder, UserID: m.userID, ChatID: m.chatID, ProjectID: m.projectID,
@@ -399,6 +427,7 @@ func (m *usageMeter) streamAndAccumulate(ctx context.Context, resolved *resolved
 	recordDriverRetries(ctx, call, retries)
 	call.LatencyMs = retries.finalLatencyMs(callLatencyMs)
 	call.TTFTMs = retries.ttftMs()
+	call.GatewayCallID = retries.gatewayCallID()
 	call.Err = err
 	if err != nil && ctx.Err() != nil {
 		// A driver that stops because its context ended closes the stream

@@ -676,7 +676,7 @@ func TestPurge_ACallStartedMidPurgeCannotRecreateUsage(t *testing.T) {
 
 // The run-scope columns of a model call (agent-analytics.md §3.2, §4) go with
 // the account: deleting it leaves no row that names the account's projects,
-// runs, workflows, provider requests or costs. They are on llm_call_usage,
+// runs, workflows, provider requests, gateway calls or costs. They are on llm_call_usage,
 // which the purge deletes by user, so this pins that no new column moved them
 // anywhere the purge does not reach.
 func TestPurge_RemovesTheRunScopeOfModelCalls(t *testing.T) {
@@ -694,7 +694,7 @@ func TestPurge_RemovesTheRunScopeOfModelCalls(t *testing.T) {
 		CreatedAt:  time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC),
 		WorkflowID: "wf-run-scope", ThreadID: "thread-run-scope", WorkflowName: "agent", NodeID: "call_llm",
 		Preset: "researcher", ProjectID: "proj-run-scope", AIRunID: "ai-run-scope", AIRootRunID: "ai-root-run-scope",
-		ProviderRequestID: "req-run-scope", TTFTMs: &ttft, CostUSDNanos: &nanos, CostBasis: store.LLMCostBasisReported,
+		ProviderRequestID: "req-run-scope", GatewayCallID: "call-run-scope", TTFTMs: &ttft, CostUSDNanos: &nanos, CostBasis: store.LLMCostBasisReported,
 	})
 	if err != nil || !written {
 		t.Fatalf("RecordLLMCallUsage: written=%v err=%v", written, err)
@@ -707,7 +707,8 @@ func TestPurge_RemovesTheRunScopeOfModelCalls(t *testing.T) {
 	var n int
 	if err := rawDB.QueryRow(`SELECT count(*) FROM llm_call_usage WHERE user_id = $1
 		OR workflow_id = 'wf-run-scope' OR thread_id = 'thread-run-scope' OR project_id = 'proj-run-scope'
-		OR ai_run_id = 'ai-run-scope' OR ai_root_run_id = 'ai-root-run-scope' OR provider_request_id = 'req-run-scope'`,
+		OR ai_run_id = 'ai-run-scope' OR ai_root_run_id = 'ai-root-run-scope' OR provider_request_id = 'req-run-scope'
+		OR gateway_call_id = 'call-run-scope'`,
 		userID).Scan(&n); err != nil {
 		t.Fatalf("count: %v", err)
 	}
