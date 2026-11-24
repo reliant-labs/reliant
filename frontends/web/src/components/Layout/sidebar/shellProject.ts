@@ -35,6 +35,8 @@ import { orgFreePath } from "@/lib/paths/org";
 import {
   appRowKey,
   compareByActivity,
+  ownAppsOf,
+  type AppChipModel,
   type CatalogRow,
   type ProjectCatalog,
   type ProjectCatalogRow,
@@ -94,23 +96,24 @@ export function isChatPage(pathname: string): boolean {
 }
 
 /**
- * The catalog row `ref` names. An app resolves to the project whose code
- * deploys it, when there is one, else to its own app-only row.
+ * The catalog row `ref` names. An app resolves to the project whose own code
+ * deploys it (ownAppsOf: not a parent checkout that merely holds its repo),
+ * else to a project holding it anywhere, else to its own app-only row.
  */
 export function rowForRef(catalog: ProjectCatalog | undefined, ref: ShellProjectRef): CatalogRow | undefined {
   if (!catalog) return undefined;
   if (ref.kind === "project") return catalog.rows.find((row) => row.kind === "project" && row.project.id === ref.id);
-  const owner = catalog.rows.find(
-    (row): row is ProjectCatalogRow => row.kind === "project" && row.apps.some((app) => app.name === ref.name && app.link !== "not_hosted"),
-  );
+  const holds = (apps: readonly AppChipModel[]) => apps.some((app) => app.name === ref.name && app.link !== "not_hosted");
+  const projects = catalog.rows.filter((row): row is ProjectCatalogRow => row.kind === "project");
+  const owner = projects.find((row) => holds(ownAppsOf(row))) ?? projects.find((row) => holds(row.apps));
   return owner ?? catalog.rows.find((row) => row.kind === "app" && row.app.name === ref.name);
 }
 
-/** The project's deployed app: a live app of the project (an app-only row is its app); null when none is deployed. */
+/** The project's deployed app: a live app of its own (an app-only row is its app); null when none is deployed. */
 export function deployedAppOf(row: CatalogRow | undefined): string | null {
   if (!row) return null;
   if (row.kind === "app") return row.app.name;
-  const live = row.apps.find((app) => app.state === "live");
+  const live = ownAppsOf(row).find((app) => app.state === "live");
   if (live) return live.name;
   if (row.partial && row.project.is_forge && row.project.forge_project_name) return row.project.forge_project_name.trim() || null;
   return null;
@@ -118,7 +121,8 @@ export function deployedAppOf(row: CatalogRow | undefined): string | null {
 
 /**
  * The app the nav's sections open for `row`: its deployed app, else the app
- * its forge.yaml names (not deployed yet), else the project's own name. Every
+ * its own forge.yaml names (not deployed yet; a nested repository's app is
+ * not the project's, ownAppsOf), else the project's own name. Every
  * project has the same sections (owner, 2026-11-20); on an app with nothing
  * deployed each page says what it will show and how to deploy.
  */
@@ -126,7 +130,7 @@ export function sectionsAppOf(row: CatalogRow | undefined): string | null {
   if (!row) return null;
   const deployed = deployedAppOf(row);
   if (deployed) return deployed;
-  if (row.kind === "project") return row.apps[0]?.name ?? (row.project.forge_project_name?.trim() || row.name);
+  if (row.kind === "project") return ownAppsOf(row)[0]?.name ?? (row.project.forge_project_name?.trim() || row.name);
   return null;
 }
 
