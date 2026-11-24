@@ -20,15 +20,11 @@
  *      route, each behind that route's REAL interceptor chain, read-only
  *      unless the config says FIXTURES_READ_ONLY = "false".
  *
- * READ-ONLY, INTERIM. Read-only means the fixture transport's `readOnly:
- * true`: only an rpc whose proto declares NO_SIDE_EFFECTS answers (plus the
- * app pack's named `answers`). Most of the reads the app makes at load do not
- * declare it yet (reliant#3435 annotates reliant's; control-plane's arrive by
- * the vendor sync), so until they do the guard takes the deprecated
- * readOnly.ts isDemoRead classifier, the demo's own, and every read only its
- * name heuristic lets through is recorded in the probe's `unannotated`. When
- * that list is empty on every surface, `readOnly` becomes `true` here and
- * the classifier goes.
+ * READ-ONLY means the fixture transport's `readOnly: true`: only an rpc
+ * whose proto declares NO_SIDE_EFFECTS answers, plus the app pack's named
+ * `answers` (shop/app.ts APP_LAYER_ANSWERS) and the demo pack's
+ * (shop/index.ts DEMO_PACK_ANSWERS). Every other rpc is refused, with no name
+ * heuristic: an unannotated read is fixed by annotating its proto.
  *
  * `window.__forgeFixtures` is then the PROBE the harness reads: `started` and
  * `inflight` (an outermost interceptor counts every call; a server stream
@@ -39,8 +35,6 @@
  * boundary refused).
  */
 
-import type { DescMethod } from "@bufbuild/protobuf";
-import { MethodOptions_IdempotencyLevel } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type Interceptor, type StreamResponse } from "@connectrpc/connect";
 
 import { installFixtureTransport } from "@/lib/connect";
@@ -52,8 +46,7 @@ import { SHOP_READ_ONLY_MESSAGE } from "./shop/index";
 import { SHOP_OVERLAYS, type ShopOverlay } from "./shop/overlays";
 import { demoNow } from "./shop/shopStory";
 import { APP_USER } from "./shop/workspace";
-import { isDemoRead } from "./readOnly";
-import { createFixtureTransport, defineFixturePack, fixturePackAnswers, type FixturePack } from "./transport";
+import { createFixtureTransport, defineFixturePack, type FixturePack } from "./transport";
 
 /** What a harness may set on `window.__forgeFixtures` before the page loads. */
 export interface ForgeFixturesInput {
@@ -80,8 +73,6 @@ export interface ForgeFixturesProbe {
   unknown: string[];
   escaped: string[];
   outside: string[];
-  /** Reads answered only because the interim classifier's name heuristic passed them (see READ-ONLY, INTERIM). */
-  unannotated: string[];
 }
 
 declare global {
@@ -161,22 +152,6 @@ export function recordingInterceptor(probe: Pick<ForgeFixturesProbe, "refused" |
   };
 }
 
-/**
- * The interim read-only classifier (see READ-ONLY, INTERIM): the proto's word
- * when it says NO_SIDE_EFFECTS, else isDemoRead's name heuristic, recording
- * each read that only the heuristic passed. `answered` (the pack's `answers`)
- * are the transport's to let through, and are not recorded.
- */
-export function interimReads(probe: Pick<ForgeFixturesProbe, "unannotated">, answered: ReadonlySet<string>): (method: DescMethod) => boolean {
-  return (method) => {
-    if (method.idempotency === MethodOptions_IdempotencyLevel.NO_SIDE_EFFECTS) return true;
-    const read = isDemoRead(method);
-    const key = `${method.parent.typeName}/${method.name}`;
-    if (read && !answered.has(key) && !probe.unannotated.includes(key)) probe.unannotated.push(key);
-    return read;
-  };
-}
-
 /** Install fixture mode for `config` (lib/fixturesBoot.ts calls this). */
 export async function installFixtures(config: RuntimeFixtures): Promise<void> {
   if (!(FIXTURE_SCENARIOS as readonly string[]).includes(config.scenario)) {
@@ -188,7 +163,7 @@ export async function installFixtures(config: RuntimeFixtures): Promise<void> {
 
   const probe: ForgeFixturesProbe = {
     ready: false, scenario: config.scenario, readOnly: config.readOnly, overlays,
-    started: 0, inflight: 0, rpcs: {}, refused: [], unknown: [], escaped: [], outside: [], unannotated: [],
+    started: 0, inflight: 0, rpcs: {}, refused: [], unknown: [], escaped: [], outside: [],
   };
   window.__forgeFixtures = Object.assign(input, probe);
   const live = window.__forgeFixtures as ForgeFixturesProbe;
@@ -207,12 +182,11 @@ export async function installFixtures(config: RuntimeFixtures): Promise<void> {
 
   const counting = countingInterceptor(live);
   const recording = recordingInterceptor(live, SHOP_READ_ONLY_MESSAGE);
-  const reads = interimReads(live, new Set(fixturePackAnswers(pack)));
   installFixtureTransport((_route, interceptors) =>
     createFixtureTransport({
       pack,
       now: demoNow,
-      readOnly: config.readOnly ? reads : false,
+      readOnly: config.readOnly,
       readOnlyMessage: SHOP_READ_ONLY_MESSAGE,
       interceptors: [counting, ...interceptors, recording],
     }),

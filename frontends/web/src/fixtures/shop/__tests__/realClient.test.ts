@@ -25,6 +25,7 @@ import type { ObservabilityApi } from "@/services/controlPlane/observability/Obs
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
 import type { Panel } from "@/services/controlPlane/observability/types";
 
+import { SHOP_READ_ONLY_MESSAGE } from "../index";
 import { DEMO_INCIDENT, DEMO_ORG, RUNNING } from "../shopStory";
 import { installOverWire, uninstallOverWire } from "./overWire";
 
@@ -202,7 +203,9 @@ describe.each(WHEN)("the real client over the shop pack, %s", (_when, at) => {
     }
     await same((api) => api.getIssue({ issueId: DEMO_INCIDENT.issueId, window: day() }));
     await same((api) => api.listOrgMembers(DEMO_ORG));
-    await same((api) => api.getCurrentIssueUser());
+    // The reader is refused: UserService.GetCurrentUser writes on read (control-plane#3513's audit), so it
+    // declares no NO_SIDE_EFFECTS, and the demo pack answers nothing outside DEMO_PACK_ANSWERS.
+    await expect(wire.getCurrentIssueUser()).rejects.toThrow(SHOP_READ_ONLY_MESSAGE);
   });
 
   it("answers the activity feed, an issue's history included", async () => {

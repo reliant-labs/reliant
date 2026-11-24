@@ -17,7 +17,7 @@
  * list is read from surfaces.visual.ts's SURFACES (paths and harness storage),
  * so the two cannot drift; importing that file would register its tests here.
  *
- * Each surface's probe (rpcs, unknown reads, reads passed only by name) is
+ * Each surface's probe (rpcs, refused and unknown reads) is
  * printed as one `[fixture-mode]` JSON line; FIXTURE_MODE_REPORT=<file>
  * also appends them there.
  */
@@ -123,7 +123,6 @@ interface Probe {
   unknown: string[]
   escaped: string[]
   outside: string[]
-  unannotated: string[]
 }
 
 const readProbe = (page: Page) => page.evaluate(() => (window as unknown as { __forgeFixtures?: Probe }).__forgeFixtures ?? null)
@@ -185,7 +184,7 @@ for (const load of surfaceLoads()) {
     const report = {
       path: load.path, storage: load.storage, surfaces: load.surfaces, settled,
       rpcs: probe.rpcs, refused: [...new Set(probe.refused)], escaped: probe.escaped, outside: probe.outside,
-      unknown: [...new Set(probe.unknown)], unannotated: probe.unannotated, pageErrors, offOrigin,
+      unknown: [...new Set(probe.unknown)], pageErrors, offOrigin,
     }
     console.log(`[fixture-mode] ${JSON.stringify(report)}`)
     if (process.env.FIXTURE_MODE_REPORT) appendFileSync(process.env.FIXTURE_MODE_REPORT, `${JSON.stringify(report)}\n`)
