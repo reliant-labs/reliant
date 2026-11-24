@@ -28,6 +28,7 @@ import {
   ListCollapse,
   FolderInput,
   Users,
+  UserPlus,
   Bot,
   ChevronDown,
 } from "lucide-react";
@@ -53,6 +54,8 @@ import { MoveChatToProjectDialog } from "./MoveChatToProjectDialog";
 import { useThreadNavigation } from "./useThreadNavigation";
 import { setChatThreadMode, useChatThreadMode } from "./thread-views/useChatThreadMode";
 import { ShareChatDialog } from "../Sharing/ShareChatDialog";
+import { ChatMembersPanel } from "../Sharing/ChatMembersPanel";
+import { useChatMembers } from "../../hooks/chat-member-queries";
 import { ChatAppTag } from "../Projects/ChatAppTag";
 import { ResourceVisibility } from "../../gen/reliant/v1/common_pb";
 import { hasControlPlane } from "../../services/controlPlane/config";
@@ -168,6 +171,12 @@ export function ChatHeader({
   const isShared = chat?.visibility === ResourceVisibility.ORG;
   // Only the owner shares, and only a chat of an org (SharingService).
   const canShare = hasControlPlane && !isViewer && !!chat?.orgId;
+  // Who has access (chat-collaboration.md §14): offered once the deployment
+  // allows grants, and still while anyone holds one, so a grant can always
+  // be taken back. Viewers see it too: who else is here, and their own leave.
+  const [isMembersOpen, setIsMembersOpen] = useState(false);
+  const chatMembers = useChatMembers(isNewChat ? null : chatId, chat?.orgId).data;
+  const showMembers = !isNewChat && !!chatMembers && (chatMembers.grantsEnabled || chatMembers.memberCount > 0);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
@@ -405,6 +414,20 @@ export function ChatHeader({
                 </button>
               )}
 
+              {showMembers && (
+                <button
+                  onClick={() => {
+                    setIsMembersOpen(true);
+                    setIsMenuOpen(false);
+                  }}
+                  className={menuItemClass}
+                  data-testid="chat-menu-members"
+                >
+                  <UserPlus className="size-4 text-muted-foreground" />
+                  People with access…
+                </button>
+              )}
+
               {workflowExecution && onToggleWorkflowViewer && (
                 <button
                   onClick={() => {
@@ -520,6 +543,15 @@ export function ChatHeader({
       )}
       {canShare && chatId && (
         <ShareChatDialog chatId={chatId} open={isShareOpen} onClose={() => setIsShareOpen(false)} />
+      )}
+      {showMembers && chatId && chat?.orgId && (
+        <ChatMembersPanel
+          chatId={chatId}
+          orgId={chat.orgId}
+          open={isMembersOpen}
+          onClose={() => setIsMembersOpen(false)}
+          sharedWithOrg={isShared}
+        />
       )}
     </>
   );

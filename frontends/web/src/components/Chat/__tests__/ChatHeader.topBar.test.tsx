@@ -53,6 +53,8 @@ vi.mock("../../../store/chatStoreHooks", () => ({
 }));
 vi.mock("../thread-views", () => ({ useThreads: () => [], ThreadTabs: () => null }));
 vi.mock("../../../hooks/run-queries", () => ({ useChildRuns: () => ({ data: undefined }) }));
+// Who has access is its own test (ChatHeader.sharing); no server answers here.
+vi.mock("../../../hooks/chat-member-queries", () => ({ useChatMembers: () => ({ data: undefined }) }));
 vi.mock("../NoMachine", () => ({ NoMachinePill: () => <span>no machine</span> }));
 vi.mock("../WorkspaceRecoveryMenuItems", () => ({ WorkspaceRecoveryMenuItems: () => null }));
 vi.mock("../MoveChatToProjectDialog", () => ({ MoveChatToProjectDialog: () => null }));

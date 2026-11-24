@@ -37208,6 +37208,11 @@
               "Name": "caller_role",
               "ProtoType": "enum",
               "IsOptional": false
+            },
+            {
+              "Name": "grants_enabled",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "ListSharedChatsRequest": [
@@ -37619,6 +37624,10 @@
               "name": "caller_role",
               "kind": "enum",
               "type_name": "reliant.v1.ChatMemberRole"
+            },
+            {
+              "name": "grants_enabled",
+              "kind": "bool"
             }
           ],
           "reliant.v1.ListSharedChatsRequest": [
