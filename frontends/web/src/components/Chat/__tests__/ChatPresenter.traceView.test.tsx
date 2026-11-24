@@ -9,6 +9,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 import { ChatPresenter } from "../ChatPresenter";
+import { useChatViewStore } from "../Trace/chatViewStore";
 
 // ChatPresenter pulls in the full chat stack (input, messages container,
 // header, timeline, workflow viewer). This suite is about the surface gate
@@ -111,6 +112,7 @@ function renderPresenter(chatId = "chat-1") {
 
 beforeEach(() => {
   chatRow.current = { title: "Deploy fix" };
+  useChatViewStore.setState({ traceChatId: null });
 });
 
 describe("ChatPresenter Trace view", () => {
@@ -140,6 +142,14 @@ describe("ChatPresenter Trace view", () => {
     renderPresenter();
     fireEvent.click(screen.getByRole("button", { name: "Trace" }));
     expect(screen.getByTestId("chat-trace-panel")).toHaveAttribute("data-viewer", "true");
+  });
+
+  it("keeps the Trace open across a remount of the presenter", () => {
+    const first = renderPresenter();
+    fireEvent.click(screen.getByRole("button", { name: "Trace" }));
+    first.unmount();
+    renderPresenter();
+    expect(screen.getByTestId("chat-trace-panel")).toBeInTheDocument();
   });
 
   it("opens the next chat on its conversation", () => {
