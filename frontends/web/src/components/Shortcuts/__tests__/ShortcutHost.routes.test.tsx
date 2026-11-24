@@ -9,6 +9,9 @@
  * contributes handlers the way ModernApp does: one spy per workspace handler,
  * registered once it is ready.
  *
+ * The overlays are the app's three, handed in as routes.tsx hands them
+ * (APP_OVERLAYS); one pass mounts the host with none, as the public demo will.
+ *
  * What it pins: shortcuts work off the workspace (palette, new chat, a
  * workspace-only shortcut), exactly one dispatcher lives while moving between
  * the workspace and Settings, every desktop menu id reaches its handler once,
@@ -43,7 +46,9 @@ vi.mock("../../Layout/ChatSearch", () => ({
   ),
 }));
 
-import { ShortcutHost, WORKSPACE_ACTION_TTL_MS } from "../ShortcutHost";
+import { ShortcutHost, WORKSPACE_ACTION_TTL_MS, type ShortcutOverlays } from "../ShortcutHost";
+import { lazyRoute } from "../../../lib/lazyRoute";
+import { SwitchProjectDialog } from "../../Projects/SwitchProjectDialog";
 import {
   useShortcutLayer,
   useSuspendShortcuts,
@@ -138,6 +143,13 @@ function SettingsPage() {
 
 // ── Router ─────────────────────────────────────────────────────────────────
 
+/** The app's overlays, the way routes.tsx hands them to the host. */
+const APP_OVERLAYS: ShortcutOverlays = {
+  projectSwitcher: SwitchProjectDialog,
+  commandPalette: lazyRoute(() => import("../../Layout/CommandPalette"), "CommandPalette"),
+  chatSearch: lazyRoute(() => import("../../Layout/ChatSearch"), "ChatSearch"),
+};
+
 /** Whether the next render is signed in (the session the host reads). */
 let signedIn = true;
 /** Signs the last render out. */
@@ -149,10 +161,10 @@ function renderInSession(ui: ReactElement) {
   return result;
 }
 
-function renderAt(path: string) {
+function renderAt(path: string, overlays: ShortcutOverlays | undefined = APP_OVERLAYS) {
   const root = createRootRoute({
     component: () => (
-      <ShortcutHost>
+      <ShortcutHost overlays={overlays}>
         <Outlet />
       </ShortcutHost>
     ),
@@ -196,8 +208,8 @@ function renderAt(path: string) {
 }
 
 /** Render and wait until the bindings have loaded. */
-async function mountAt(path: string) {
-  const router = renderAt(path);
+async function mountAt(path: string, overlays?: ShortcutOverlays) {
+  const router = renderAt(path, overlays);
   await waitFor(() =>
     expect(useShortcutsStore.getState().registry.size).toBeGreaterThan(0),
   );
@@ -326,6 +338,27 @@ describe.each(["/settings", "/inbox"])("on %s", (path) => {
     await waitFor(() => expect(pathOf(router)).toBe("/project/p1"));
     await waitFor(() => expect(workspace.onFocusTerminal).toHaveBeenCalledOnce());
     expect(workspace.onToggleTerminal).not.toHaveBeenCalled();
+  });
+});
+
+describe("a host with no overlays (the public demo's)", () => {
+  it("leaves the palette's key to the page and opens nothing", async () => {
+    const router = await mountAt("/settings", {});
+
+    const event = press(CMD_SHIFT_P);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(screen.queryByPlaceholderText("Type a command...")).not.toBeInTheDocument();
+    expect(pathOf(router)).toBe("/settings");
+  });
+
+  it("still runs the shortcuts that need no overlay", async () => {
+    const router = await mountAt("/settings", {});
+
+    press(NEW_CHAT_WEB);
+
+    await waitFor(() => expect(pathOf(router)).toBe("/project/p1"));
+    await waitFor(() => expect(workspace.onNewChat).toHaveBeenCalledOnce());
   });
 });
 
@@ -526,7 +559,7 @@ describe("in the workspace", () => {
       });
       return <button onClick={() => setCount((c) => c + 1)}>bump</button>;
     }
-    const root = createRootRoute({ component: () => <ShortcutHost><Outlet /></ShortcutHost> });
+    const root = createRootRoute({ component: () => <ShortcutHost overlays={APP_OVERLAYS}><Outlet /></ShortcutHost> });
     const appLayout = createRoute({ getParentRoute: () => root, id: "_app", component: () => <Outlet /> });
     const index = createRoute({ getParentRoute: () => appLayout, path: "/", component: Counter });
     renderInSession(

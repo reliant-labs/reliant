@@ -31,9 +31,10 @@ import {
   observabilityArea,
   overview,
   securityGroup,
-  settingsSections,
   storage,
 } from "./items";
+// The one importer of Settings' sections: they are the app's (settings.tsx).
+import { settingsSections } from "./settings";
 import { testsGroup } from "./tests";
 import type { NavConfig } from "./types";
 
