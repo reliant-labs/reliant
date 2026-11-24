@@ -18,14 +18,29 @@
  *
  * A tree of its own rather than a brand of the app's (routes.tsx): there is no
  * /auth, /oauth or /claim route here, so nothing on this host can sign in.
- * The console's pages sit under a pathless `_authenticated` layout with NO
- * guard: the pages read their params and search by route id
- * (`/_authenticated/_forge/forge/p/$project/…`, as in routes.tsx), and every RPC they make is answered by the demo's transport
+ * The console's pages, and the demo's own (/forge/demo), sit under a pathless
+ * `_authenticated` layout with NO guard: the pages read their params and
+ * search by route id (`/_authenticated/_forge/forge/p/$project/…`, as in
+ * routes.tsx), and every RPC they make is answered by the demo's transport
  * (demoShellBoot.ts), which refuses writes. No ActiveOrgBinding and no
  * landing-journey handoff: each page offers an optional tour without auto-start.
+ *
+ * THE APP'S SHELL. Every page under that layout is a page of the app's one
+ * shell (Layout/shell/AppShell.tsx): the same frame, nav column, drill-ins and
+ * phone drawer as the signed-in app, with the demo's nav (Forge/Demo/DemoNav,
+ * demoNav.ts) in it. The frame opts into public-preview presentation under
+ * an app layout without claiming authentication. The root explicitly mounts
+ * a signed-out session, also for the deprecated app-bundle mount (`?shell=demo`,
+ * App.tsx). The keyboard host stays signed out and has no overlays (no palette,
+ * no chat search, no project switcher: they are the app's).
  */
 
 import { createRootRoute, createRoute, createRouter, Link, Navigate, Outlet, redirect, useRouterState } from '@tanstack/react-router'
+
+import { Suspense } from 'react'
+
+import { SessionProvider, type SessionAuth } from './lib/session'
+import { lazyRoute } from './lib/lazyRoute'
 
 import { captureForgeEntry } from './components/ForgeShell/forgeEntry'
 import { bootDemoShell } from './components/Forge/Demo/demoShellBoot'
@@ -61,22 +76,44 @@ export const DEMO_HOME = consolePath(FIXTURE_PROJECT, { kind: 'overview' })
 
 const READ_ONLY = { readOnly: true, reason: 'Read-only demo' } as const
 
+/** Public visitors have no credentials, including in the legacy app-bundle mount. */
+export const DEMO_SESSION: SessionAuth = {
+  user: null,
+  isAuthenticated: false,
+  isLoading: false,
+  getToken: async () => null,
+}
+
+/**
+ * The app's shell with the demo's nav (Forge/Demo/DemoShellFrame): its own
+ * chunk, fetched beside the first page's, so it is not in the entry chunk.
+ */
+const DemoShellFrame = lazyRoute(() => import('./components/Forge/Demo/DemoShellFrame'), 'DemoShellFrame')
+
 function DemoRootShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   return (
     <SurfaceProvider surface="desktop">
       {/* Every page's write controls disabled, with this reason (obsReadOnly.tsx). */}
       <ObsReadOnlyProvider value={READ_ONLY}>
-        <div data-shell="demo" data-pathname={pathname} className="contents">
-          <PageVisitTracker firstVisitProps={entry} />
-          <Outlet />
-          {/* No ModalLayer: its modals are Reliant's (API key, upgrade, out of date). */}
-          <Toaster />
-          <NewBuildPrompt />
-          <JourneyTour />
-          <DemoTips />
-          <DemoTourToast />
-        </div>
+        <SessionProvider auth={DEMO_SESSION}>
+          <div data-shell="demo" data-pathname={pathname} className="contents">
+            <PageVisitTracker firstVisitProps={entry} />
+            {/* The app's keyboard host with none of the app's overlays, around the app's frame;
+                the residents below render meanwhile. */}
+            <Suspense fallback={null}>
+              <DemoShellFrame>
+                <Outlet />
+              </DemoShellFrame>
+            </Suspense>
+            {/* No ModalLayer: its modals are Reliant's (API key, upgrade, out of date). */}
+            <Toaster />
+            <NewBuildPrompt />
+            <JourneyTour />
+            <DemoTips />
+            <DemoTourToast />
+          </div>
+        </SessionProvider>
       </ObsReadOnlyProvider>
     </SurfaceProvider>
   )
@@ -169,8 +206,9 @@ export function buildDemoShellTree() {
     component: DemoNotFound,
   })
 
-  // The console, unguarded: the id is the one the shared pages read by. Its
-  // pages read the demo's Observability API from context (DemoConsoleProviders).
+  // The console and the demo's own pages, unguarded: the id is the one the shared
+  // pages read by, and the one the shell's frame turns on under (shellFrame.tsx).
+  // Its pages read the demo's providers from context (DemoConsoleProviders).
   const consoleLayoutRoute = createRoute({
     getParentRoute: () => rootRoute,
     id: '_authenticated',
@@ -190,9 +228,11 @@ export function buildDemoShellTree() {
   return rootRoute.addChildren([
     indexRoute,
     elsewhereRoute,
-    createForgeDemoRoute(() => rootRoute),
     createForgeDemoRedirectRoute(() => rootRoute),
-    consoleLayoutRoute.addChildren([createForgeConsoleRoutes(() => consoleLayoutRoute, forgeConsolePages)]),
+    consoleLayoutRoute.addChildren([
+      createForgeDemoRoute(() => consoleLayoutRoute),
+      createForgeConsoleRoutes(() => consoleLayoutRoute, forgeConsolePages),
+    ]),
   ])
 }
 

@@ -10,10 +10,11 @@ import { demoSession, resetDemoSessionForTests } from "../demoSession";
 import { DEMO_TIPS, DEMO_TIP_KEYS } from "../tips";
 import { DEMO_TRACE_ID } from "@/components/Onboarding/journeys/forge";
 import { isLegacyDemoTourLink } from "@/components/Onboarding/legacyDemoTour";
+import { useNavDrawer } from "@/components/Layout/shell/navDrawer";
 
 function renderDemo(path: string) {
   const root = createRootRoute({ component: () => <><Outlet /><DemoTips /><JourneyTour /></> });
-  const any = createRoute({ getParentRoute: () => root, path: "$", component: () => <main data-testid="page"><h1>Console page</h1><div data-testid="obs-log-row" /><div data-testid="obs-trace-row" /><div data-testid="obs-alerts-firing" /><div data-testid="obs-issue-iss-orders-deadline" /></main>, validateSearch: (s: Record<string, unknown>) => s });
+  const any = createRoute({ getParentRoute: () => root, path: "$", component: () => <div data-testid="page"><header data-testid="forge-console-header" /><main data-testid="forge-console-page"><h1>Console page</h1><div data-testid="obs-log-row" /><div data-testid="obs-trace-row" /><div data-testid="obs-alerts-firing" /><div data-testid="obs-issue-iss-orders-deadline" /></main></div>, validateSearch: (s: Record<string, unknown>) => s });
   const router = createRouter({ routeTree: root.addChildren([any]), history: createMemoryHistory({ initialEntries: [path] }) });
   render(<RouterProvider router={router} />);
   return { router, go: (to: string) => act(async () => { await router.navigate({ href: to }); }) };
@@ -110,20 +111,20 @@ it("a reload in the same session keeps a seen page's tip closed", async () => {
   expect(screen.queryByTestId("tour-callout")).toBeNull();
 });
 it("drawer hides the callout, then closing it reveals the new page without consuming dismissal", async () => {
+  // The shell's nav drawer (a phone's nav): the page's card steps aside while it is open.
   const {go} = renderDemo("/forge/p/shop"); await screen.findByTestId("tour-callout");
-  const trigger = document.createElement("button"); trigger.setAttribute("aria-controls", "drawer-tips-unique"); trigger.setAttribute("aria-expanded", "true");
-  const drawer = document.createElement("aside"); drawer.id="drawer-tips-unique"; drawer.setAttribute("role", "dialog"); drawer.append(document.createElement("nav")); document.body.append(trigger, drawer);
+  const setDrawer = (open: boolean) => act(() => useNavDrawer.getState().setOpen(open));
   try {
-    act(()=>drawer.setAttribute("aria-modal","true"));
+    setDrawer(true);
     await waitFor(()=>expect(screen.queryByTestId("tour-callout")).toBeNull());
     await go("/forge/p/shop/observability/alerts");
     expect(screen.queryByTestId("tour-callout")).toBeNull();
-    act(()=>drawer.removeAttribute("aria-modal"));
+    setDrawer(false);
     expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.alerts.body);
     fireEvent.click(screen.getByTestId("tour-next"));
-    act(()=>drawer.setAttribute("aria-modal","true")); act(()=>drawer.removeAttribute("aria-modal"));
+    setDrawer(true); setDrawer(false);
     expect(screen.queryByTestId("tour-callout")).toBeNull();
-  }finally{drawer.remove();trigger.remove();}
+  }finally{setDrawer(false);}
 });
 it("explicit guided tour links suppress the automatic page card", async () => {
   renderDemo("/forge/p/shop?tour=forge:fg-intro");

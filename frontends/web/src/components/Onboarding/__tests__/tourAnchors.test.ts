@@ -66,7 +66,7 @@ const NAV_TOUR = new RegExp(`(?<![\\w-])tour\\s*:\\s*(${VALUE})`, "g");
  * signed-in tour both point at (demo DI phase 3). Pinned here before any
  * journey names them, so a rename fails now, not when a tour lands on it.
  */
-const SHELL_NAV_ANCHORS = ["forge-console-nav", "nav-overview", "nav-observability", "nav-deployments", "nav-tests", "nav-security", "nav-configure"];
+const SHELL_NAV_ANCHORS = ["forge-console-nav", "nav-drill-in", "nav-overview", "nav-observability", "nav-deployments", "nav-tests", "nav-security", "nav-configure"];
 
 /** For each anchor attribute, every value a non-test source line sets it to. */
 const SET_VALUES: Record<string, string[]> = (() => {
@@ -151,7 +151,7 @@ describe("tour anchors", () => {
     expect(missing).toEqual([]);
   });
 
-  it("the shell nav renders its anchors (navConfig `tour`, NavRenderer's `forge-console-nav`)", () => {
+  it("the shell nav renders its anchors (navConfig `tour`, NavRenderer's `forge-console-nav` and `nav-drill-in`)", () => {
     const missing = SHELL_NAV_ANCHORS.filter((id) => !rendered("data-tour", id));
     expect(missing).toEqual([]);
   });
