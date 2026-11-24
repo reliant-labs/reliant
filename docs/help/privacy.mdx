@@ -115,14 +115,16 @@ Two kinds of request are not recorded: image and video generation (the generatio
 **What a record contains, exactly:**
 
 - which of your chats and runs the call belonged to, and your account ID
-- the provider (for example `anthropic` or `claude`) and the model
+- where in that run it was made, as internal IDs and names: the project, the workflow and the step in it, the agent (and its preset, such as `researcher`), and the run it belongs to
+- the provider (for example `anthropic` or `claude`) and the model, and the ID the provider gave the request (so a record can be matched with the provider's own logs)
 - how the call was paid for: Reliant AI, your own API key, a subscription login, or a local model
 - which of your connected accounts served it (an internal account ID; the key itself is never recorded)
 - who paid for it: an organization (with its own API key, a Claude or ChatGPT team seat it pays for, or its Reliant AI credits) or you (your own subscription or API key, or a local model)
 - the number of input, output, cache-read and cache-write tokens
+- what it cost, when Reliant AI reported a price for it, or that it has no per-call price (a subscription login or a local model)
 - whether it succeeded, was cancelled or failed, and for a failure one of a fixed set of categories (rate limit, usage limit, context length, sign-in, timeout, stalled, network or unknown)
 - what the request was for (a chat turn, summarizing a conversation, titling a chat or drafting an automation)
-- how long it took, which attempt it was, and when it happened. A request that Reliant has to retry is recorded once per attempt, because each attempt is a real request to the provider
+- how long it took, how long until the model's first output, which attempt it was, and when it happened. A request that Reliant has to retry is recorded once per attempt, because each attempt is a real request to the provider
 
 **What it never contains:** your prompt, the model's reply, tool inputs or outputs, file names or paths, the text of an error message, or your API key. The database tables have no column that could hold any of these, and a test fails if one is added.
 
@@ -133,6 +135,25 @@ Two kinds of request are not recorded: image and video generation (the generatio
 **What an organization keeps of calls it pays for:** for a call made on an organization's API key, a team seat it pays for, or its Reliant AI credits, a daily total per day, account, member, provider, model and purpose (token counts, calls and errors, and time taken), so its admins can see what their accounts are used for. It never includes calls on your own accounts. Deleting your account deletes your rows.
 
 **How long we keep it:** each call's record is deleted **90 days** after the call. We keep a daily total per model, provider, payment type and purpose, with no chat or run IDs, until you delete your account. Deleting your account deletes both.
+
+## Tool usage records
+
+Agents' tool calls (running a command, reading a file, calling an integration) are made by our servers too, so we keep the same kind of **usage record** of each tool call a chat or a workflow runs. It is a service record like the model usage records above, and stays on when you turn analytics off.
+
+**What a record contains, exactly:**
+
+- which of your chats, projects and runs the call belonged to, and your account ID
+- where in that run it was made, as internal IDs and names: the workflow and the step in it, the agent (and its preset), and the run it belongs to
+- the name of the tool, when it is one Reliant provides (for example `shell` or an integration action such as `slack__message_post`). For a tool of an MCP server you added, a workflow's own response tool, or a tool name the model made up, only which of those it was, never its name
+- whether it ran on your machine or on our servers
+- whether it succeeded, was cancelled or failed, and for a failure one of a fixed set of categories (refused, invalid input, no workspace, machine offline, could not be delivered, timeout, interrupted, the tool's own error, internal or unknown)
+- how long it took, which attempt it was, and when it happened
+
+**What it never contains:** the tool's inputs or outputs, the command, file names or paths, or the text of an error message. The database table has no column that could hold any of these, and a test fails if one is added.
+
+**Why we keep it, and who can see it:** to show tool and machine error rates, and to run the service. Only you can see your own.
+
+**How long we keep it:** each record is deleted **90 days** after the call. Deleting a project deletes its chats' records; deleting your account deletes all of yours.
 
 ## Telemetry
 

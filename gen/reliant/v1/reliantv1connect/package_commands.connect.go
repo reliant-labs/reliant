@@ -96,6 +96,7 @@ func NewPackageCommandsServiceClient(httpClient connect.HTTPClient, baseURL stri
 			httpClient,
 			baseURL+PackageCommandsServiceListCommandsProcedure,
 			connect.WithSchema(packageCommandsServiceMethods.ByName("ListCommands")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		runCommand: connect.NewClient[v1.RunPackageCommandRequest, v1.RunPackageCommandResponse](
@@ -108,18 +109,21 @@ func NewPackageCommandsServiceClient(httpClient connect.HTTPClient, baseURL stri
 			httpClient,
 			baseURL+PackageCommandsServiceListProcessesProcedure,
 			connect.WithSchema(packageCommandsServiceMethods.ByName("ListProcesses")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getProcess: connect.NewClient[v1.GetPackageProcessRequest, v1.GetPackageProcessResponse](
 			httpClient,
 			baseURL+PackageCommandsServiceGetProcessProcedure,
 			connect.WithSchema(packageCommandsServiceMethods.ByName("GetProcess")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getProcessLogs: connect.NewClient[v1.GetPackageProcessLogsRequest, v1.GetPackageProcessLogsResponse](
 			httpClient,
 			baseURL+PackageCommandsServiceGetProcessLogsProcedure,
 			connect.WithSchema(packageCommandsServiceMethods.ByName("GetProcessLogs")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		killProcess: connect.NewClient[v1.KillPackageProcessRequest, v1.KillPackageProcessResponse](
@@ -132,6 +136,7 @@ func NewPackageCommandsServiceClient(httpClient connect.HTTPClient, baseURL stri
 			httpClient,
 			baseURL+PackageCommandsServiceGetCommandFavoritesProcedure,
 			connect.WithSchema(packageCommandsServiceMethods.ByName("GetCommandFavorites")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setCommandFavorite: connect.NewClient[v1.SetCommandFavoriteRequest, v1.SetCommandFavoriteResponse](
@@ -227,6 +232,7 @@ func NewPackageCommandsServiceHandler(svc PackageCommandsServiceHandler, opts ..
 		PackageCommandsServiceListCommandsProcedure,
 		svc.ListCommands,
 		connect.WithSchema(packageCommandsServiceMethods.ByName("ListCommands")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	packageCommandsServiceRunCommandHandler := connect.NewUnaryHandler(
@@ -239,18 +245,21 @@ func NewPackageCommandsServiceHandler(svc PackageCommandsServiceHandler, opts ..
 		PackageCommandsServiceListProcessesProcedure,
 		svc.ListProcesses,
 		connect.WithSchema(packageCommandsServiceMethods.ByName("ListProcesses")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	packageCommandsServiceGetProcessHandler := connect.NewUnaryHandler(
 		PackageCommandsServiceGetProcessProcedure,
 		svc.GetProcess,
 		connect.WithSchema(packageCommandsServiceMethods.ByName("GetProcess")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	packageCommandsServiceGetProcessLogsHandler := connect.NewUnaryHandler(
 		PackageCommandsServiceGetProcessLogsProcedure,
 		svc.GetProcessLogs,
 		connect.WithSchema(packageCommandsServiceMethods.ByName("GetProcessLogs")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	packageCommandsServiceKillProcessHandler := connect.NewUnaryHandler(
@@ -263,6 +272,7 @@ func NewPackageCommandsServiceHandler(svc PackageCommandsServiceHandler, opts ..
 		PackageCommandsServiceGetCommandFavoritesProcedure,
 		svc.GetCommandFavorites,
 		connect.WithSchema(packageCommandsServiceMethods.ByName("GetCommandFavorites")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	packageCommandsServiceSetCommandFavoriteHandler := connect.NewUnaryHandler(

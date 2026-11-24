@@ -133,7 +133,7 @@ export function OverviewTestsCard({ project, frame }: { project: string; frame: 
               )}
             </div>
           </div>
-          {trend.length >= 2 && <Sparkline values={trend} label={`Coverage of ${data.branch} over its last ${trend.length} commits`} width={112} height={36} />}
+          {trend.length >= 2 && <Sparkline values={trend} format={(v) => `${v.toFixed(1)}%`} label={`Coverage of ${data.branch} over its last ${trend.length} commits`} width={112} height={36} />}
         </div>
         <dl className="grid grid-cols-2 gap-3 border-t border-border-subtle pt-3 text-meta">
           <div className="min-w-0">

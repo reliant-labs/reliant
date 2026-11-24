@@ -14,14 +14,26 @@
  * inventory, routes.tsx createOrgScopedRoutes). Both hosts mount that one
  * tree (U6), so both forward.
  *
+ * An app's console by name, `/forge/p/<app>/…` (and `/apps/<app>/…`, its org
+ * form missing the org), forwards too, to `/o/<org>/apps/<app>/…` (owner,
+ * U18: every console URL names the org). On the org-less page the console
+ * already read the tab's org (the route's scope is "legacy", so requests
+ * carry the tab's org), so the forward changes what the URL says, not what
+ * the page shows. Which org holds an app of that name is the resolver's
+ * (ResolveAppOrgs, U4, design D8); until it ships, the tab's org is the
+ * answer, as it already was.
+ *
  * What does NOT forward, and stays where it is, each for a reason:
  *
  *   - a chat's (`/c/<id>`, and a thread of it): the chat names its own org
  *     (`Chat.org_id`), and its route's loader redirects there
  *     (lib/chatRouteResolve.ts), not into the tab's.
- *   - links that name a resource by id or by app name: `/project/<id>`,
- *     a project's page `/projects/<id>[/settings|/workspaces]`,
- *     `/workflows/runs/<id>`, `/workflows/automations/<id>`, `/forge/p/<app>`,
+ *   - a project's (`/project/<id>`, and its page
+ *     `/projects/<id>[/settings|/workspaces]`): the project names its own org
+ *     (`Project.org_id`), and its routes' loader redirects there
+ *     (lib/projectRouteResolve.ts), not into the tab's.
+ *   - links that name a resource by id or by app name in a way nothing here
+ *     can resolve yet: `/workflows/runs/<id>`, `/workflows/automations/<id>`,
  *     `/forge?project=`, `/forge/env/<env>?forgeProject=`, and the org
  *     Observability with an app in its query. So do saved workflows, by name:
  *     `/workflows/library/<name>` and the builder's `/workflow/<name>` (a
@@ -74,6 +86,9 @@ export function legacyOrgForward(pathname: string, search: Record<string, unknow
   // A built-in workflow's page: org-neutral. A saved workflow's is not (see above).
   const ref = /^\/workflows\/library\/([^/]+)$/.exec(path)?.[1];
   if (ref !== undefined && isBuiltinRef(ref)) return path;
+  // An app's console by name (see the module comment): `/forge/p/<app>/…`,
+  // or `/apps/<app>/…` without its org.
+  if (/^\/(forge\/p|apps)\/[^/]+(\/|$)/.test(path)) return path;
   // The org's Observability, unless the link names an app.
   if (path === "/forge/observability" || /^\/forge\/observability\/[^/]+$/.test(path)) {
     return APP_KEYS.some((key) => search[key] !== undefined && search[key] !== "") ? null : path;

@@ -67,6 +67,7 @@ func NewOrgUsageServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+OrgUsageServiceGetOrgLLMUsageProcedure,
 			connect.WithSchema(orgUsageServiceMethods.ByName("GetOrgLLMUsage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -105,6 +106,7 @@ func NewOrgUsageServiceHandler(svc OrgUsageServiceHandler, opts ...connect.Handl
 		OrgUsageServiceGetOrgLLMUsageProcedure,
 		svc.GetOrgLLMUsage,
 		connect.WithSchema(orgUsageServiceMethods.ByName("GetOrgLLMUsage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.OrgUsageService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

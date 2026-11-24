@@ -335,7 +335,7 @@ func TestVisibilityAndFavoriteQueries(t *testing.T) {
 			t.Fatalf("AddCommandFavorite(%s): %v", k, err)
 		}
 	}
-	if err := env.Repo.AddCommandFavorite(ctx, "u", p, "lint"); err != nil {
+	if err := store.AddCommandFavorite(ctx, env.ORM, "u", p, "lint"); err != nil {
 		t.Fatalf("Repo.AddCommandFavorite: %v", err)
 	}
 	keys, err := store.ListCommandFavorites(ctx, env.ORM, "u", p)
@@ -345,7 +345,7 @@ func TestVisibilityAndFavoriteQueries(t *testing.T) {
 	if err := store.RemoveCommandFavorite(ctx, env.ORM, "u", p, "test"); err != nil {
 		t.Fatalf("RemoveCommandFavorite: %v", err)
 	}
-	if twin, err := env.Repo.ListCommandFavorites(ctx, "u", p); err != nil || len(twin) != 2 {
+	if twin, err := store.ListCommandFavorites(ctx, env.ORM, "u", p); err != nil || len(twin) != 2 {
 		t.Fatalf("Repo.ListCommandFavorites = %v, %v", twin, err)
 	}
 }

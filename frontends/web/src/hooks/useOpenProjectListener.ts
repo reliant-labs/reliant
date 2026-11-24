@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { leaveChatPageFor, useProjectStore } from '../store/projectStore';
+import { chooseProject, useProjectStore } from '../store/projectStore';
 import { useProjects } from "./project-queries";
 import { logger } from '../lib/logger';
 import { beginWorkspaceOpen } from '../lib/openChatInWorkspace';
@@ -13,7 +13,6 @@ import { beginWorkspaceOpen } from '../lib/openChatInWorkspace';
  */
 export function useOpenProjectListener() {
   const { projects, isLoading } = useProjects();
-  const selectProject = useProjectStore((state) => state.selectProject);
   const createProject = useProjectStore((state) => state.createProject);
 
   // Queue for paths received before projects are loaded
@@ -42,8 +41,7 @@ export function useOpenProjectListener() {
         projectId: existingProject.id,
         name: existingProject.name
       });
-      await leaveChatPageFor(existingProject.id);
-      if (isCurrent()) await selectProject(existingProject, { isCurrent });
+      await chooseProject(existingProject.id, { isCurrent });
     } else {
       // Create a new project with name derived from path
       const pathParts = normalizedPath.split('/');
@@ -60,18 +58,16 @@ export function useOpenProjectListener() {
           path: normalizedPath,
         }, { isCurrent });
         // A superseded creation still keeps its row, but must not navigate
-        // or restore over a newer workspace action.
+        // or select over a newer workspace action.
         if (!isCurrent()) return;
-        // createProject sets currentProject, except over a chat's page,
-        // whose chat the URL keeps: leave it for the new project's.
-        if (await leaveChatPageFor(created.id) && isCurrent()) {
-          await selectProject(created, { isCurrent });
-        }
+        // createProject made it current, except over a chat's page, whose
+        // chat the URL keeps: show the new project's chats.
+        await chooseProject(created.id, { isCurrent });
       } catch (error) {
         logger.error('[useOpenProjectListener] Failed to create project', error);
       }
     }
-  }, [projects, selectProject, createProject]);
+  }, [projects, createProject]);
 
   // Process pending path when projects finish loading
   useEffect(() => {

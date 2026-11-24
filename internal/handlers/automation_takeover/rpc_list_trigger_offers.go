@@ -29,7 +29,7 @@ func (s *Service) ListTriggerOffers(
 	if org := strings.TrimSpace(req.Msg.GetOrgId()); org != "" {
 		f.OrgID = &org
 	}
-	offers, err := s.deps.Repo.ListPendingTriggerOffers(ctx, f)
+	offers, err := s.deps.Offers.ListPendingTriggerOffers(ctx, f)
 	if err != nil {
 		return nil, dbError("list trigger offers", err)
 	}

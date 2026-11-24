@@ -680,7 +680,7 @@ type CompactDeps struct {
 type UsageLimitWaitDeps struct {
 	// Store records and clears the wait marker.
 	Store UsageLimitWaitStore
-	// Waits writes and clears the provider-backoff marker.
+	// Waits writes and clears the wait marker.
 	Waits ProviderBackoffMarkers
 	// Threads saves the notice the wait posts to the transcript.
 	Threads MessageSaver

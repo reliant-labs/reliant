@@ -61,7 +61,7 @@ func (s *Service) RunScenario(
 				return nil, svcerr.InvalidArgument("project_id required for project scenarios")
 			}
 
-			project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+			project, err := s.deps.ProjectRows.GetProject(ctx, req.Msg.ProjectId)
 			if err != nil {
 				return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 			}

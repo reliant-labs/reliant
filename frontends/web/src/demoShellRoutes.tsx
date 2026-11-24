@@ -12,6 +12,7 @@
  *   /               → the visual build story (/forge/demo?section=built),
  *                     keeping explicit tour/view links and attribution
  *   /forge/p/<other>/… → the same page of shop (the demo's one project)
+ *   a page the demo does not serve (DEMO_HIDDEN_PAGES: Usage) → the Overview
  *   /forge/p/shop/<no page> → a not-found page
  *   anything else   → the console's overview, keeping the query
  *
@@ -32,8 +33,8 @@ import { demoEntryHref } from './components/Forge/Demo/demoEntry'
 import { DemoTourToast } from './components/Forge/Demo/DemoTourToast'
 import { DemoTips } from './components/Forge/Demo/tips'
 import { createForgeDemoRedirectRoute, createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
-import { consolePath, isObsNavView, withSearch, type ConsolePage } from './components/Forge/Console/paths'
-import { FORGE_DEMO_PATH } from './components/Forge/Demo/demoPath'
+import { consolePageOf, consolePath, isObsNavView, withSearch, type ConsolePage } from './components/Forge/Console/paths'
+import { DEMO_HIDDEN_PAGES, FORGE_DEMO_PATH } from './components/Forge/Demo/demoPath'
 import { FIXTURE_PROJECT } from './components/Forge/Observability/__fixtures__/fixtureApi'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { forgeConsolePages, preloadForgeConsole } from './forgeConsolePages'
@@ -98,6 +99,12 @@ export function consoleTourHref(pathname: string, search: Record<string, unknown
   const { view, ...rest } = search
   const page: ConsolePage = typeof view === 'string' && isObsNavView(view) ? { kind: 'obs-view', view } : { kind: 'overview' }
   return withSearch(consolePath(FIXTURE_PROJECT, page), rest)
+}
+
+/** Whether `pathname` is a console page the demo does not serve (DEMO_HIDDEN_PAGES): it lands on the Overview. */
+export function isHiddenDemoPage(pathname: string): boolean {
+  const page = consolePageOf(pathname)?.page
+  return !!page && DEMO_HIDDEN_PAGES.includes(page.kind)
 }
 
 /** Retired console paths a shared link may still carry; they land on the Overview. */
@@ -171,6 +178,7 @@ export function buildDemoShellTree() {
     beforeLoad: ({ location }) => {
       const other = otherProjectPath(location.pathname)
       if (other !== null) throw redirect({ href: `${other}${location.searchStr}`, replace: true })
+      if (isHiddenDemoPage(location.pathname)) throw redirect({ href: `${DEMO_HOME}${location.searchStr}`, replace: true })
     },
     component: () => (
       <DemoConsoleProviders>

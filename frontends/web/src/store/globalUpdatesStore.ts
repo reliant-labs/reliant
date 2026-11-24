@@ -1029,6 +1029,8 @@ function handleChatConfigChanged(update: UserUpdate) {
     // MoveChatToProject: the chat moved to project_id, onto its main checkout.
     project_id?: string;
     worktree_id?: string;
+    // AttachProjectToChat / DetachProjectFromChat: the projects attached now.
+    attached_project_ids?: string[];
     updated_at: string;
   };
 
@@ -1081,6 +1083,12 @@ function handleChatConfigChanged(update: UserUpdate) {
   // A moved chat leaves one project's list and joins another's.
   if (moved) {
     streamInvalidation.invalidate(chatKeys.lists());
+  }
+  // Its projects changed (attached, detached, or a new primary): the
+  // composer's chips re-read them (hooks/useChatProjects).
+  if (moved || data.attached_project_ids !== undefined) {
+    // Under the registered chatService root (STREAM_INVALIDATED_SCOPES).
+    streamInvalidation.invalidate(chatServiceKeys.listChatProjects({ chatId: chat_id }));
   }
 }
 

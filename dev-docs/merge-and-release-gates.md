@@ -38,7 +38,7 @@ Neither gate keeps a second copy of it.
 | Tier | Command | What it runs | When |
 |---|---|---|---|
 | **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change; golangci-lint over the packages with a changed `.go` file, findings in the changed files (`scripts/golangci-changed.sh`, the merge queue's `golangci (changed)` job, outside the queue); the web `tsc -b` (incremental on state this checkout wrote; `--force` on a first run or copied state) when a web lane is selected or a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint), in the merge queue too; the forge demo bundle's build when the diff reaches its import graph; migration-safety when a migration or forge.yaml changed; electron's tests when electron reads a changed file; the whole lane when the rules cannot scope a change; and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
-| **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, `go vet ./...`, `task test` as three steps (Go `-race -count=1` without `-short`, so every slow test runs, then web and electron in full), `task test:integration` and `task test:e2e`. CI runs them as parallel parts (below) | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
+| **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, the forge demo bundle's size budget (`task demo:bundle-size`), `go vet ./...`, `task test` as three steps (Go `-race -count=1` without `-short`, so every slow test runs, then web and electron in full), `task test:integration` and `task test:e2e`. CI runs them as parallel parts (below) | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
 
 ## The merge gate
 
@@ -355,6 +355,20 @@ slow tests and the race detector (`task test`), golangci-lint and buf lint
 (the unscoped `forge lint`), link errors (`go build ./...`), deferred Go
 packages and vitest files (`task test` runs every one), and the whole
 `forge generate` where the merge gate ran only the generate hooks.
+
+### The demo bundle's size budget (owner, 2026-11-24)
+
+The release gate's `demo-size` step (`task demo:bundle-size`,
+`scripts/demo-bundle-size.sh`) builds the forge demo as forge ships it and
+fails when its initial or total gzip is over
+`frontends/web/scripts/demo/bundle-budget.json`. It **gates releases only**: the
+merge gate builds the demo for its guard (`vite-plugin-demo-bundle.ts`), never
+for its size, and a pull request that moves the demo pastes
+`task demo:bundle-size -- --report-only` (with `--before`, its before and after)
+into its body instead. In CI it runs in the `webbuild` part, after the
+renderer's release build; the RC train runs it in `static`. What it measures,
+today's numbers and how a ceiling moves: `dev-docs/demo-inventory.md`, "Bundle
+size".
 
 ### What the merge gate does not catch
 
@@ -810,8 +824,49 @@ job is setup, then `task <name>`, so CI cannot disagree with a local run.
 | Event | Job | Runs |
 |---|---|---|
 | `pull_request` (each push) | `Review marker`, `CI result` | nothing heavy: a notice whether `pr-review` passed this head, and the verdict, green in about a minute. Label the PR **`ci:run`** to get the merge gate and the path lanes on it too; it is read on the next push (an empty commit will do), because `ci.yml` does not run on `labeled` (a label run would replace the head's `CI result`) |
-| `merge_group` (`merge-queue.yml`) | `Merge gate`, `golangci (changed)` and `vitest (1/4)`..`(4/4)` in parallel, then `CI result` | `Merge gate`: `task ci:merge -- --base <the group's base> --queue --skip-vitest`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, then the five-minute budget check. `golangci (changed)`: `task ci:golangci -- --base <the group's base>`. `vitest`: `scripts/vitest-shard.sh --base <the group's base> --shard <i>/4`. `CI result`: passes only when all three succeeded, from `needs` alone. No path lanes |
+| `merge_group` (`merge-queue.yml`) | `Merge gate`, `golangci (changed)`, `vitest (1/4)`..`(4/4)` and `Visual baseline` in parallel, then `CI result` | `Merge gate`: `task ci:merge -- --base <the group's base> --queue --skip-vitest`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, then the five-minute budget check. `golangci (changed)`: `task ci:golangci -- --base <the group's base>`. `vitest`: `scripts/vitest-shard.sh --base <the group's base> --shard <i>/4`. `Visual baseline`: when `scripts/ci-lanes.sh`'s `visual` lane says the group reaches the web UI, `scripts/visual-gate.sh` (the visual suite in the pinned Playwright image, compare only, on the group's commit; [below](#the-visual-baseline-in-the-queue)); otherwise a pass with a notice saying why. `CI result`: passes only when all four succeeded, from `needs` alone. No other path lanes |
 | push to `main`, nightly, `workflow_dispatch` | `Release gate (<part>)`, the path lanes, then `Release gate` | each part of the gate as its own job, `task release:gate -- --part <part> [--shard I/N] <sha>` (generate, webbuild, compile, lint, go 1/4..4/4, web; `task ci:repo-checks` in compile), then `Release gate` assembles the part records (`scripts/release-gate.sh assemble`) into the one record. On `main` it publishes it as the git note above, so a CI green counts for `task release:tag`. A missing part or shard fails the assembly closed, and so does a red release build, Playwright or electron smoke (no record) |
+
+### The visual baseline in the queue
+
+Owner, 2026-11-24 (reliant#3446). The visual suite (`frontends/web/e2e/visual`)
+was opt-in, and main's baselines went stale two ways: a PR captured on a base
+that lacked another PR's UI change, or a later commit on the PR (a pr-fix push)
+moved pixels after the capture. The next UI PR then inherited dozens of failures
+it did not cause. The merge queue now runs it, compare only
+(`--update-snapshots=none`), on the merge group's own commit, main plus the
+entries ahead, so both kinds fail on the PR that causes them.
+
+- **When.** `scripts/ci-lanes.sh`'s `visual` lane: what the renderer's production
+  build and the suite read (`frontends/web` sources, styles, `public/`, HTML
+  entries, vite/tailwind/postcss/tsconfig, `package.json`, the lockfile and pnpm
+  patches, the `sdk/ts` sources it aliases, `e2e/visual/`, its config and
+  runner), minus unit tests, the other Playwright suites, lint configs and
+  docs, plus the lane's own wiring. A group that reaches none of it passes the
+  job in seconds with a notice.
+- **What it runs.** `scripts/visual-gate.sh`: `task test:web:visual --
+  --update-snapshots=none` (the build with the pinned `RELEASE_VERSION`, then
+  the suite in the pinned image through `visual-docker.sh`, on the hosted
+  runner's docker), then Playwright's JSON report. A capture that differs fails
+  the job with a table of surfaces and what differed, the re-capture commands,
+  and the diffs as the `visual-results` artifact. A lane that compared nothing
+  (no build, no docker, no report, no capture run) fails too: it is never a
+  pass.
+- **Cost.** Its own runner, beside the gate, so a web group pays only what it
+  runs past the gate's other workers. Measured on the hosted runner
+  (2026-11-24, two runs): 371s and 381s from the run's creation to the job's
+  end (install ~8s, build 64-67s, 166 captures in 4.3-4.5 min with 3 workers),
+  166/166 both times. The last 20 web-touching groups' workers ended at a
+  median 374s (p25 312s), so the lane adds a median ~16s and at most ~80s to
+  a web group's wall time. A group it skips spends ~20s on a runner, beside the
+  gate.
+- **Flakes.** `retries: 0`, and nothing re-runs. A surface that differs on a
+  commit whose UI did not move is deleted with a `flake:removed` issue.
+- **The backstop.** `.github/workflows/visual-nightly.yml` runs the same script
+  on main every night and keeps one rolling `visual:stale` issue
+  (`.github/scripts/visual-stale-issue.sh`): a mismatch opens, reopens or
+  comments on it; the next green closes it. It never blocks a merge or a
+  release.
 
 ### Why the release gate runs as parts in CI
 
@@ -828,7 +883,7 @@ CI splits two parts further than the RC train (control-plane
 of parts:
 
 - **static is three parts**, generate (`npm generate docs`), webbuild
-  (`npm webbuild`) and compile (`npm build typecheck vet`). As one part its
+  (`npm webbuild demo-size`) and compile (`npm build typecheck vet`). As one part its
   slow steps ran one after another (generate 283s, webbuild 223s, vet 107s on
   2026-11-20) and it was one of the three jobs that set the run's ~15 minutes.
   The webbuild part also replaces the separate `web-bundle` job off a pull

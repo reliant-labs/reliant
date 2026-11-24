@@ -18,9 +18,12 @@ import (
 // writing: each one's argv is pinned to forge's read-only flag by the
 // daemonruntime tests (`--plan` for the promote preview, `--dry-run` for the
 // deploy preview), which is what makes dispatching one a read.
+// forge.deploy_status runs no forge at all: the daemon answers it from its
+// in-memory registry of started deploys (handleForgeDeployStatus).
 var readOnlyForgeCommands = map[string]string{
-	"forge.promote_plan": "env deploy <env> <release> --plan",
-	"forge.deploy_plan":  "env deploy <env> --dry-run",
+	"forge.promote_plan":  "env deploy <env> <release> --plan",
+	"forge.deploy_plan":   "env deploy <env> --dry-run",
+	"forge.deploy_status": "no forge command: a snapshot of the daemon's deploy registry",
 }
 
 // TestForgeService_NoSideEffectsRPCsOnlyRead holds every ForgeService rpc
@@ -43,6 +46,12 @@ func TestForgeService_NoSideEffectsRPCsOnlyRead(t *testing.T) {
 		"PlanDeploy": func(s *Service) error {
 			_, err := s.PlanDeploy(authedCtx(), connect.NewRequest(&reliantv1.PlanForgeDeployRequest{
 				ProjectId: "p", Env: "prod",
+			}))
+			return err
+		},
+		"GetDeployStatus": func(s *Service) error {
+			_, err := s.GetDeployStatus(authedCtx(), connect.NewRequest(&reliantv1.GetForgeDeployStatusRequest{
+				ProjectId: "p", Handle: "deploy-1",
 			}))
 			return err
 		},

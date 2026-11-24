@@ -1,12 +1,14 @@
 // Copyright (c) 2025 Reliant Labs
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+
+vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { createShopTransport } from "@/fixtures/shop";
+import { installShellTransport } from "@/lib/connect";
 import { DemoTips } from "../tips/DemoTips";
 import { DemoHome } from "../sections/DemoHome";
-import { createDemoApi } from "../demoData/demoApi";
 import { demoEntryHref } from "../demoEntry";
 import { DEMO_TIP_KEYS, demoTipKey } from "../tips/tipKeys";
 import { resetDemoSessionForTests } from "../demoSession";
@@ -15,13 +17,13 @@ function mount(path = "/forge/p/shop/observability/logs?range=6h", entry = false
   const root = createRootRoute({ component: () => <><Outlet /><DemoTips /></> });
   const route = createRoute({ getParentRoute: () => root, path: "$", validateSearch: (s: Record<string, unknown>) => s, component: () => <main>{entry && <DemoHome />}<button>Page action</button></main> });
   const router = createRouter({ routeTree: root.addChildren([route]), history: createMemoryHistory({ initialEntries: [path] }) });
-  // The Home's trace story reads the sample app (its slowest request's timeline).
+  // The Home's trace story reads the sample app (its slowest request's timeline), over the demo's transport.
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><ObservabilityApiProvider api={createDemoApi()}><RouterProvider router={router} /></ObservabilityApiProvider></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
   return router;
 }
-beforeEach(() => resetDemoSessionForTests());
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+beforeEach(() => { resetDemoSessionForTests(); installShellTransport(createShopTransport()); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); installShellTransport(null); });
 
 it("leads bare entry with the Home while preserving explicit legacy URLs", () => {
   expect(demoEntryHref("")).toBe("/forge/demo?section=home");
@@ -76,7 +78,7 @@ it("on a phone the tip is a closed one-line disclosure in the page's flow, hidde
   } finally { drawer.remove(); trigger.remove(); }
 });
 it("every page has an explanation, and none repeats the build-page action", async () => {
-  const paths = ["/forge/p/shop", "/forge/p/shop/releases", "/forge/p/shop/releases/v1", "/forge/p/shop/environments", "/forge/p/shop/environments/prod", "/forge/p/shop/secrets", "/forge/p/shop/domains", "/forge/p/shop/activity", "/forge/p/shop/users", "/forge/p/shop/workloads/prod/api", ...["dashboards","errors","traces","logs","profiles","alerts","sessions","metrics","rpc","graph"].map(view=>`/forge/demo?view=${view}`), "/forge/demo?view=traces&trace=demo"];
+  const paths = ["/forge/p/shop", "/forge/p/shop/releases", "/forge/p/shop/releases/v1", "/forge/p/shop/environments", "/forge/p/shop/environments/prod", "/forge/p/shop/secrets", "/forge/p/shop/domains", "/forge/p/shop/activity", "/forge/p/shop/users", "/forge/p/shop/workloads/prod/api", ...["services", "storage", "data", "security/vulnerabilities", "security/sboms", "tests", "tests/coverage", "tests/runs", "tests/flaky", "analytics", "analytics/events", "events", "observability", "speed-insights"].map((page) => `/forge/p/shop/${page}`), ...["dashboards","errors","traces","logs","profiles","alerts","sessions","metrics","rpc","graph"].map(view=>`/forge/demo?view=${view}`), "/forge/demo?view=traces&trace=demo"];
   const visited = new Set<string>();
   for (const path of paths) {
     cleanup(); resetDemoSessionForTests(); mount(path);

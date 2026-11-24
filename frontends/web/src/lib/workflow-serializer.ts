@@ -140,6 +140,15 @@ function cleanStepForYaml(step: Step): Record<string, unknown> {
     if (Object.keys(saveMessage).length > 0) result.save_message = saveMessage
   }
 
+  // The node base keys every kind may carry, in the order the server writes
+  // them (internal/workflow/yaml/nodes.go, marshalNode).
+  const daemon = daemonSelectorToYaml(step.daemon)
+  if (daemon !== undefined) result.daemon = daemon
+  if (step.outcome) result.outcome = step.outcome
+  if (step.tolerateFailure) result.tolerate_failure = true
+  const observe = observeToYaml(step.observe)
+  if (observe) result.observe = observe
+
   // Handle project config via accessor
   const project = getStepProject(step)
   if (project?.path) {
@@ -160,6 +169,60 @@ function cleanStepForYaml(step: Step): Record<string, unknown> {
   }
 
   return result
+}
+
+// A node's `daemon:` as the server writes it (internal/workflow/yaml/cel.go,
+// marshalCelDaemonSelector): an expression or a lone type or name as a
+// string, anything else as a mapping. A pool never takes the string form: a
+// bare string is a machine name.
+function daemonSelectorToYaml(daemon: Step['daemon']): unknown {
+  const value = daemon?.value
+  if (!value || value.case === undefined) return undefined
+  if (value.case === 'expr') return value.value
+  const ds = value.value
+  if (!ds) return undefined
+  const labels = ds.labels && Object.keys(ds.labels).length > 0 ? ds.labels : undefined
+  if (!ds.id && !ds.name && !labels && !ds.pool && ds.type) return ds.type
+  if (!ds.id && !ds.type && !labels && !ds.pool && ds.name) return ds.name
+  const out: Record<string, unknown> = {}
+  if (ds.id) out.id = ds.id
+  if (ds.name) out.name = ds.name
+  if (ds.type) out.type = ds.type
+  if (labels) out.labels = labels
+  if (ds.pool) out.pool = ds.pool
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+type ObserveBlock = Step['observe']
+
+// An `observe:` block (a node's, or the workflow's defaults) as YAML, its
+// optional keys left out when empty. undefined when it declares nothing.
+function observeToYaml(observe: ObserveBlock): Record<string, unknown> | undefined {
+  if (!observe) return undefined
+  const out: Record<string, unknown> = {}
+  if (observe.attributes && Object.keys(observe.attributes).length > 0) {
+    out.attributes = { ...observe.attributes }
+  }
+  if (observe.events && observe.events.length > 0) {
+    out.events = observe.events.map((event) => {
+      const e: Record<string, unknown> = { name: event.name ?? '' }
+      if (event.when) e.when = event.when
+      if (event.each) e.each = event.each
+      if (event.attributes && Object.keys(event.attributes).length > 0) e.attributes = { ...event.attributes }
+      return e
+    })
+  }
+  if (observe.metrics && observe.metrics.length > 0) {
+    out.metrics = observe.metrics.map((metric) => {
+      const m: Record<string, unknown> = { name: metric.name ?? '', kind: metric.kind ?? '' }
+      if (metric.value) m.value = metric.value
+      if (metric.unit) m.unit = metric.unit
+      if (metric.when) m.when = metric.when
+      if (metric.attributes && Object.keys(metric.attributes).length > 0) m.attributes = { ...metric.attributes }
+      return m
+    })
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 // Convert proto Value to plain JS for YAML serialization
@@ -251,6 +314,10 @@ function cleanWorkflowForYaml(workflow: Workflow): Record<string, unknown> {
   if (workflow.outputs && Object.keys(workflow.outputs).length > 0) {
     result.outputs = workflow.outputs
   }
+
+  // The workflow's observe defaults, merged into every node by the runtime
+  const observe = observeToYaml(workflow.observe)
+  if (observe) result.observe = observe
 
   // Add UI metadata (positions, switches, locked)
   const hasPositions = workflow.ui?.positions && Object.keys(workflow.ui.positions).length > 0
@@ -379,6 +446,7 @@ interface RawWorkflow {
   outputs?: Record<string, string>
   ui?: { positions?: Record<string, { x: number; y: number }>; switches?: unknown; locked?: boolean }
   entry?: string | string[]
+  observe?: unknown
 }
 
 export function deserializeWorkflowFromYAML(yamlString: string): Workflow {
@@ -431,6 +499,8 @@ export function deserializeWorkflowFromYAML(yamlString: string): Workflow {
       : undefined,
     ui: raw.ui ? parseRawUI(raw.ui) : undefined,
   }
+  const observe = parseRawObserve(raw.observe)
+  if (observe) workflow.observe = observe
 
   return workflow
 }
@@ -610,7 +680,79 @@ function parseRawStep(raw: Record<string, unknown>): Step {
     }
   }
 
+  const daemon = parseRawDaemonSelector(raw.daemon)
+  if (daemon) step.daemon = daemon
+  const outcome = parseOptionalString(raw.outcome)
+  if (outcome) step.outcome = outcome
+  if (raw.tolerate_failure === true) step.tolerateFailure = true
+  const observe = parseRawObserve(raw.observe)
+  if (observe) step.observe = observe
+
   return step
+}
+
+// A node's `daemon:` as the server reads it (internal/workflow/yaml/cel.go,
+// unmarshalCelDaemonSelector): an interpolated string is an expression, a
+// known type a type, any other string a name (or id), and a mapping a full
+// selector.
+function parseRawDaemonSelector(raw: unknown): Step['daemon'] {
+  if (typeof raw === 'string') {
+    if (raw === '') return undefined
+    if (raw.includes('{{')) return { value: { case: 'expr', value: raw } }
+    const literal = raw === 'local' || raw === 'cloud' || raw === 'any' ? { type: raw } : { name: raw }
+    return { value: { case: 'literal', value: literal } }
+  }
+  if (!isRecord(raw)) return undefined
+  const literal: Record<string, unknown> = {}
+  for (const key of ['id', 'name', 'type', 'pool'] as const) {
+    const v = parseOptionalString(raw[key])
+    if (v) literal[key] = v
+  }
+  if (isRecord(raw.labels)) {
+    const labels = Object.fromEntries(Object.entries(raw.labels).filter(isStringEntry))
+    if (Object.keys(labels).length > 0) literal.labels = labels
+  }
+  return { value: { case: 'literal', value: literal } }
+}
+
+function parseStringMap(raw: unknown): Record<string, string> | undefined {
+  if (!isRecord(raw)) return undefined
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(raw)) {
+    // A scalar is kept as written: a template, or a literal number or bool.
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      out[key] = String(value)
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+// An `observe:` block, on a node or the workflow. Its shape is the server's
+// to judge on save; this keeps what it says.
+function parseRawObserve(raw: unknown): ObserveBlock {
+  if (!isRecord(raw)) return undefined
+  const observe: Exclude<ObserveBlock, undefined> = {}
+  const attributes = parseStringMap(raw.attributes)
+  if (attributes) observe.attributes = attributes
+  if (Array.isArray(raw.events)) {
+    observe.events = raw.events.filter(isRecord).map((event) => ({
+      name: parseOptionalString(event.name) ?? '',
+      when: parseOptionalString(event.when) ?? '',
+      each: parseOptionalString(event.each) ?? '',
+      attributes: parseStringMap(event.attributes) ?? {},
+    }))
+  }
+  if (Array.isArray(raw.metrics)) {
+    observe.metrics = raw.metrics.filter(isRecord).map((metric) => ({
+      name: parseOptionalString(metric.name) ?? '',
+      kind: parseOptionalString(metric.kind) ?? '',
+      value: metric.value === undefined ? '' : String(metric.value),
+      unit: parseOptionalString(metric.unit) ?? '',
+      when: parseOptionalString(metric.when) ?? '',
+      attributes: parseStringMap(metric.attributes) ?? {},
+    }))
+  }
+  return Object.keys(observe).length > 0 ? observe : undefined
 }
 
 function parseRawEdge(raw: Record<string, unknown>): Edge {

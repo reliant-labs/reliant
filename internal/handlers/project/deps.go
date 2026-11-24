@@ -53,13 +53,31 @@ type DaemonInstalls interface {
 	ListProjectDaemonReposForProjects(ctx context.Context, projectIDs []string) ([]*core.ProjectDaemonRepo, error)
 }
 
+// ProjectReader reads a project by id. It checks no owner: every caller
+// decides the caller's access on the row it returns (authz).
+// store.ProjectExtStore satisfies it.
+type ProjectReader interface {
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+}
+
+// DaemonReader reads a machine by id. It checks no owner: the caller decides
+// whose machine it is (authz.CanWriteMachine). store.DaemonExtStore
+// satisfies it.
+type DaemonReader interface {
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
+}
+
+// RepoLister lists the repos of a project. store.RepoExtStore satisfies it.
+type RepoLister interface {
+	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
+}
+
 // Repository is the slice of *db.Repo the project handlers use.
 type Repository interface {
 	// AssignUnassignedOrg stamps the caller's projects and chats that have
 	// no org with their default org (the lazy backfill, orgs.ListScope).
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	CreateProject(ctx context.Context, project *db.Project) error
-	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*db.Project, error)
 	GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*db.Project, error)
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)

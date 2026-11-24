@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Reliant Labs
+import type { Transport } from "@connectrpc/connect";
 import {
   GraphNodeKind, GraphEdgeKind, GraphEvidenceKind, ObservabilityService,
   type GraphCompleteness, type GraphHistogram,
@@ -34,8 +35,8 @@ function quality(q?: GraphCompleteness): GraphQuality | null {
   } : null;
 }
 
-export async function getServiceGraph(req: GraphRequest, options: { signal?: AbortSignal } = {}): Promise<ServiceGraph> {
-  const res = await obsClient(ObservabilityService).getServiceGraph({
+export async function getServiceGraph(req: GraphRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ServiceGraph> {
+  const res = await obsClient(ObservabilityService, transport).getServiceGraph({
     scope: wireScope(req, req.window, req.services), rpcIds: req.rpcIds, rpcService: req.rpcService ?? "", includeInternal: req.includeInternal, maxEdges: 500,
     edgeKinds: [GraphEdgeKind.SYNC, GraphEdgeKind.DATABASE, GraphEdgeKind.EXTERNAL, GraphEdgeKind.ASYNC_SEND,
       GraphEdgeKind.ASYNC_CONSUME, ...(req.includeInternal ? [GraphEdgeKind.INTERNAL] : []), ...(req.includeDeclared ? [GraphEdgeKind.DECLARED] : [])],
@@ -57,8 +58,8 @@ export async function getServiceGraph(req: GraphRequest, options: { signal?: Abo
   };
 }
 
-export async function getServiceGraphCatalog(req: CatalogRequest, options: { signal?: AbortSignal } = {}): Promise<RPCCatalog> {
-  const res = await obsClient(ObservabilityService).getServiceGraphCatalog({
+export async function getServiceGraphCatalog(req: CatalogRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<RPCCatalog> {
+  const res = await obsClient(ObservabilityService, transport).getServiceGraphCatalog({
     scope: wireScope(req, req.window, req.services), rpcService: req.rpcService ?? "", rpcIds: req.rpcIds ?? [], maxMethods: 500,
   }, options);
   return {

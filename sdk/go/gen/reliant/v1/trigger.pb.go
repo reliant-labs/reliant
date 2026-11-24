@@ -5909,12 +5909,12 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x1fWORKFLOW_TRIGGER_OUTCOME_FAILED\x10\x04\x12(\n" +
 	"$WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED\x10\x05\x12)\n" +
 	"%WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED\x10\x06\x12$\n" +
-	" WORKFLOW_TRIGGER_OUTCOME_UPDATED\x10\a2\xfd\x0e\n" +
+	" WORKFLOW_TRIGGER_OUTCOME_UPDATED\x10\a2\x8c\x0f\n" +
 	"\x0eTriggerService\x12V\n" +
-	"\rCreateTrigger\x12 .reliant.v1.CreateTriggerRequest\x1a!.reliant.v1.CreateTriggerResponse\"\x00\x12M\n" +
+	"\rCreateTrigger\x12 .reliant.v1.CreateTriggerRequest\x1a!.reliant.v1.CreateTriggerResponse\"\x00\x12P\n" +
 	"\n" +
-	"GetTrigger\x12\x1d.reliant.v1.GetTriggerRequest\x1a\x1e.reliant.v1.GetTriggerResponse\"\x00\x12S\n" +
-	"\fListTriggers\x12\x1f.reliant.v1.ListTriggersRequest\x1a .reliant.v1.ListTriggersResponse\"\x00\x12\x8a\x01\n" +
+	"GetTrigger\x12\x1d.reliant.v1.GetTriggerRequest\x1a\x1e.reliant.v1.GetTriggerResponse\"\x03\x90\x02\x01\x12V\n" +
+	"\fListTriggers\x12\x1f.reliant.v1.ListTriggersRequest\x1a .reliant.v1.ListTriggersResponse\"\x03\x90\x02\x01\x12\x8a\x01\n" +
 	"\rUpdateTrigger\x12 .reliant.v1.UpdateTriggerRequest\x1a!.reliant.v1.UpdateTriggerResponse\"4\xa2\xbb\x180:.\n" +
 	"\x06update\x12$\n" +
 	"\atrigger\x12\x02id\x1a\x15response.trigger.name\x12V\n" +
@@ -5924,9 +5924,9 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\atrigger\x12\x02id\x1a\x15response.trigger.name*\aenabled\x12\x86\x01\n" +
 	"\vFireTrigger\x12\x1e.reliant.v1.FireTriggerRequest\x1a\x1f.reliant.v1.FireTriggerResponse\"6\xa2\xbb\x182:0\n" +
 	"\x04fire\x12\r\n" +
-	"\atrigger\x12\x02id*\x19response.fire_workflow_id\x12b\n" +
-	"\x11ListTriggerEvents\x12$.reliant.v1.ListTriggerEventsRequest\x1a%.reliant.v1.ListTriggerEventsResponse\"\x00\x12Y\n" +
-	"\x0eGetLaunchEvent\x12!.reliant.v1.GetLaunchEventRequest\x1a\".reliant.v1.GetLaunchEventResponse\"\x00\x12\xa7\x01\n" +
+	"\atrigger\x12\x02id*\x19response.fire_workflow_id\x12e\n" +
+	"\x11ListTriggerEvents\x12$.reliant.v1.ListTriggerEventsRequest\x1a%.reliant.v1.ListTriggerEventsResponse\"\x03\x90\x02\x01\x12\\\n" +
+	"\x0eGetLaunchEvent\x12!.reliant.v1.GetLaunchEventRequest\x1a\".reliant.v1.GetLaunchEventResponse\"\x03\x90\x02\x01\x12\xa7\x01\n" +
 	"\x12RotateWebhookToken\x12%.reliant.v1.RotateWebhookTokenRequest\x1a&.reliant.v1.RotateWebhookTokenResponse\"B\xa2\xbb\x18>:<\n" +
 	"\x14rotate_webhook_token\x12$\n" +
 	"\atrigger\x12\x02id\x1a\x15response.trigger.name\x12\x89\x01\n" +
@@ -5938,8 +5938,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\adisable\x12\x14\n" +
 	"\bworkflow\x12\bworkflow*\n" +
 	"project_id\x12q\n" +
-	"\x15ResolveTriggerSenders\x12(.reliant.v1.ResolveTriggerSendersRequest\x1a).reliant.v1.ResolveTriggerSendersResponse\"\x03\x90\x02\x01\x12_\n" +
-	"\x10ListReplayEvents\x12#.reliant.v1.ListReplayEventsRequest\x1a$.reliant.v1.ListReplayEventsResponse\"\x00\x12Y\n" +
+	"\x15ResolveTriggerSenders\x12(.reliant.v1.ResolveTriggerSendersRequest\x1a).reliant.v1.ResolveTriggerSendersResponse\"\x03\x90\x02\x01\x12b\n" +
+	"\x10ListReplayEvents\x12#.reliant.v1.ListReplayEventsRequest\x1a$.reliant.v1.ListReplayEventsResponse\"\x03\x90\x02\x01\x12Y\n" +
 	"\rPreviewReplay\x12 .reliant.v1.PreviewReplayRequest\x1a!.reliant.v1.PreviewReplayResponse\"\x03\x90\x02\x01\x12\xa5\x01\n" +
 	"\x0fDraftAutomation\x12\".reliant.v1.DraftAutomationRequest\x1a#.reliant.v1.DraftAutomationResponse\"I\xa2\xbb\x18E:C:AProposes an automation for review; only CreateTrigger persists itB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 

@@ -68,7 +68,7 @@ func bigSkillsJSON() *string {
 func TestScenarioRPCs_ReadOnlyTheScenariosColumn(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	spy := &wholeConfigRowReads{Repo: repo}
-	service := NewTestScenario(t, WithScenarioDeps(Deps{Repo: spy, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(spy), ProjectConfigs: store.NewProjectConfigExtStore(repo.ORM())}))
+	service := NewTestScenario(t, WithScenarioDeps(Deps{Repo: spy, ProjectRows: store.NewProjectExtStore(repo.ORM()), Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(spy), ProjectConfigs: store.NewProjectConfigExtStore(repo.ORM())}))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()

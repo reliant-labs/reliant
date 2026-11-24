@@ -29,7 +29,9 @@ service ProjectService {
 
   // ListProjects lists all projects for the current user
   // forge:custom — scoped to the calling user's projects
-  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse) {}
+  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetProject retrieves a project by ID
   // forge:custom — checks the caller owns the project and reconciles its git flag with the daemon
@@ -137,7 +139,9 @@ service ProjectService {
   }
 
   // GetProjectMetadata returns detailed project metadata
-  rpc GetProjectMetadata(GetProjectMetadataRequest) returns (GetProjectMetadataResponse) {}
+  rpc GetProjectMetadata(GetProjectMetadataRequest) returns (GetProjectMetadataResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // UpdateProjectMetadata updates project metadata
   rpc UpdateProjectMetadata(UpdateProjectMetadataRequest) returns (UpdateProjectMetadataResponse) {
@@ -154,13 +158,19 @@ service ProjectService {
   }
 
   // GetProjectGitInfo returns git repository information for a project
-  rpc GetProjectGitInfo(GetProjectGitInfoRequest) returns (GetProjectGitInfoResponse) {}
+  rpc GetProjectGitInfo(GetProjectGitInfoRequest) returns (GetProjectGitInfoResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetProjectGitBranches lists all git branches for a project
-  rpc GetProjectGitBranches(GetProjectGitBranchesRequest) returns (GetProjectGitBranchesResponse) {}
+  rpc GetProjectGitBranches(GetProjectGitBranchesRequest) returns (GetProjectGitBranchesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetProjectInitStatus returns the initialization status of a project
-  rpc GetProjectInitStatus(GetProjectInitStatusRequest) returns (GetProjectInitStatusResponse) {}
+  rpc GetProjectInitStatus(GetProjectInitStatusRequest) returns (GetProjectInitStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // InitializeProject initializes a project (no-op in V2, projects are initialized on creation)
   rpc InitializeProject(InitializeProjectRequest) returns (InitializeProjectResponse) {
@@ -170,10 +180,14 @@ service ProjectService {
   }
 
   // GetProjectChanges returns recent git changes for a project
-  rpc GetProjectChanges(GetProjectChangesRequest) returns (GetProjectChangesResponse) {}
+  rpc GetProjectChanges(GetProjectChangesRequest) returns (GetProjectChangesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetProjectPrompts retrieves project-scoped prompts
-  rpc GetProjectPrompts(GetProjectPromptsRequest) returns (GetProjectPromptsResponse) {}
+  rpc GetProjectPrompts(GetProjectPromptsRequest) returns (GetProjectPromptsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SaveProjectPrompts saves project-scoped prompts
   rpc SaveProjectPrompts(SaveProjectPromptsRequest) returns (SaveProjectPromptsResponse) {
@@ -205,7 +219,9 @@ service ProjectService {
   // ListProjectDaemonsForDaemon returns the project_daemons rows installed on
   // the given daemon. The ProjectPicker uses this to mark projects that are
   // (or aren't) cloned on the user's currently-active daemon.
-  rpc ListProjectDaemonsForDaemon(ListProjectDaemonsForDaemonRequest) returns (ListProjectDaemonsForDaemonResponse) {}
+  rpc ListProjectDaemonsForDaemon(ListProjectDaemonsForDaemonRequest) returns (ListProjectDaemonsForDaemonResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListProjectDaemons returns every project_daemons row across all the
   // caller's daemons. The ProjectPicker uses this to render badges that name
@@ -213,7 +229,9 @@ service ProjectService {
   // can only answer "installed here or not"). User-scoped: filtered to
   // projects owned by the calling user.
   // forge:custom — joins project_daemons to the calling user's projects
-  rpc ListProjectDaemons(ListProjectDaemonsRequest) returns (ListProjectDaemonsResponse) {}
+  rpc ListProjectDaemons(ListProjectDaemonsRequest) returns (ListProjectDaemonsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // MarkProjectInstalled records that a project has a clone on a daemon.
   // Idempotent — re-running with the same (project, daemon) updates the
@@ -264,7 +282,9 @@ service ProjectService {
   // denormalized with project metadata (name, remote_url) so admin callers
   // can render a "Repositories" table without a follow-up GetProject for each
   // row. Filtered to projects owned by the calling user.
-  rpc ListRepositoriesForDaemon(ListRepositoriesForDaemonRequest) returns (ListRepositoriesForDaemonResponse) {}
+  rpc ListRepositoriesForDaemon(ListRepositoriesForDaemonRequest) returns (ListRepositoriesForDaemonResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // PullProjectOnDaemon runs `git pull` for the project's clone on a daemon.
   // The daemon must currently host the project (project_daemons row must

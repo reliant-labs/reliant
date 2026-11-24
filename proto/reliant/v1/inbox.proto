@@ -21,7 +21,9 @@ service InboxService {
   // ListInbox returns the caller's inbox items in priority order. One round
   // trip. With limit = 0 it returns no items, only the counts, which is the
   // cheap call the nav badge makes.
-  rpc ListInbox(ListInboxRequest) returns (ListInboxResponse) {}
+  rpc ListInbox(ListInboxRequest) returns (ListInboxResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // CleanupStorage starts the "Clean up" action of a storage item and returns
   // at once. For each accepted worktree the machine saves the work to a local

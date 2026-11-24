@@ -48,6 +48,9 @@ import { setTransport } from "../../../lib/connect";
 import { queryClient } from "../../../lib/query-client";
 import { mockTransport } from "../../../lib/test-utils";
 import { indexSearchSchema } from "../../../routeSchemas";
+import { scopeDefault } from "../../../lib/urlState/shellScope";
+import { resetShellScopeForTests } from "../../../lib/urlState/shellScopeStore";
+import { useActiveOrgStore } from "../../../store/activeOrgStore";
 import { useProjectStore } from "../../../store/projectStore";
 import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
 
@@ -276,6 +279,36 @@ describe("the chat list's project filter, choose N of M", () => {
     const router = await mountAt("/");
     await waitFor(() => expect(router.state.location.search).toMatchObject({ projects: "b,e" }));
     await waitFor(() => expect(listed()).toEqual(["Chat in B", "Chat in E"]));
+  });
+
+  it("a reload of the bare home takes this tab's own scope over the remembered choice", async () => {
+    useActiveOrgStore.setState({ userId: "u-tabs" });
+    resetShellScopeForTests();
+    scopeDefault.set({ mode: "many", projectIds: ["a", "c"] });
+    remembered.filter = ["b", "e"];
+    try {
+      const router = await mountAt("/");
+      await waitFor(() => expect(router.state.location.search).toMatchObject({ projects: "a,c" }));
+      await waitFor(() => expect(listed()).toEqual(["Chat in A", "Chat in C"]));
+    } finally {
+      scopeDefault.set(undefined);
+      useActiveOrgStore.setState({ userId: null });
+    }
+  });
+
+  it("a bare home filled with All says so in its URL", async () => {
+    useActiveOrgStore.setState({ userId: "u-tabs" });
+    resetShellScopeForTests();
+    scopeDefault.set({ mode: "all" });
+    remembered.filter = ["b", "e"];
+    try {
+      const router = await mountAt("/");
+      await waitFor(() => expect(router.state.location.search).toMatchObject({ projects: "all" }));
+      await waitFor(() => expect(listed()).toEqual(ALL));
+    } finally {
+      scopeDefault.set(undefined);
+      useActiveOrgStore.setState({ userId: null });
+    }
   });
 
   it("a link to the home with the projects of the URL is not replaced by the persisted single filter", async () => {

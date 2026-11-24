@@ -50,9 +50,10 @@ vi.mock("../globalDataStore", () => ({
     subscribe: vi.fn(() => () => undefined),
   },
 }));
-vi.mock("../../lib/events", () => ({
-  getEventBus: () => ({ on: vi.fn(() => () => undefined) }),
-}));
+vi.mock("../../lib/events", () => {
+  const bus = { on: vi.fn(() => () => undefined), emit: vi.fn() };
+  return { getEventBus: () => bus, initEventBus: () => bus };
+});
 vi.mock("../../hooks/chat-queries", () => ({
   chatKeys: { all: ["chats"] },
   getCachedChatList: () => [],
@@ -63,11 +64,12 @@ vi.mock("../../lib/query-client", () => ({
   },
 }));
 
+vi.mock("../../lib/analytics", () => ({ trackEvent: vi.fn() }));
+
+import { trackEvent } from "../../lib/analytics";
 import { useOnboardingChecklistStore } from "../onboardingChecklistStore";
-import {
-  CHECKLIST_SETTINGS_KEYS,
-  REQUIRED_ITEMS,
-} from "../../components/Onboarding/constants";
+import { CHECKLIST_SETTINGS_KEYS } from "../../components/Onboarding/constants";
+import { activeChecklistItems } from "../../components/Onboarding/checklistItems";
 
 const PANEL_STATE_LOCAL_KEY = "reliant.checklist.panelState";
 
@@ -191,23 +193,88 @@ describe("onboarding checklist — completion", () => {
     readSetting.mockResolvedValue({ status: "missing" });
   });
 
-  it("reports allRequiredComplete once every required item is done", () => {
+  it("reports allComplete once every item that applies here is done", () => {
     useOnboardingChecklistStore.setState({
-      completedItems: new Set(REQUIRED_ITEMS.map((i) => i.id)),
+      completedItems: new Set(activeChecklistItems().map((i) => i.id)),
     } as any);
 
-    expect(useOnboardingChecklistStore.getState().allRequiredComplete()).toBe(
-      true,
+    expect(useOnboardingChecklistStore.getState().allComplete()).toBe(true);
+  });
+
+  it("does not report allComplete while one is outstanding", () => {
+    useOnboardingChecklistStore.setState({
+      completedItems: new Set(activeChecklistItems().slice(1).map((i) => i.id)),
+    } as any);
+
+    expect(useOnboardingChecklistStore.getState().allComplete()).toBe(false);
+  });
+
+  it("sends checklist_step_completed once, with the item's stable id, when an item completes", async () => {
+    await useOnboardingChecklistStore.getState().markComplete("start-chat");
+    await useOnboardingChecklistStore.getState().markComplete("start-chat");
+
+    expect(vi.mocked(trackEvent).mock.calls.filter(([name]) => name === "checklist_step_completed")).toEqual([
+      ["checklist_step_completed", expect.objectContaining({ stepId: "start-chat", stepsCompleted: 1, totalSteps: activeChecklistItems().length })],
+    ]);
+  });
+});
+
+describe("onboarding checklist — retired ids", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    resetStore();
+  });
+
+  function stored(values: Record<string, string>) {
+    readSetting.mockImplementation(async (key: string) =>
+      key in values ? { status: "found", value: values[key] } : { status: "missing" },
+    );
+  }
+
+  it("carries old progress onto the ids that replaced them, and rewrites the row in current ids", async () => {
+    stored({ [CHECKLIST_SETTINGS_KEYS.COMPLETED_ITEMS]: JSON.stringify(["add-api-key", "create-workflow", "read-docs"]) });
+
+    await useOnboardingChecklistStore.getState().loadState();
+
+    expect([...useOnboardingChecklistStore.getState().completedItems].sort()).toEqual(["add-api-key", "run-workflow"]);
+    expect(upsertStringSetting).toHaveBeenCalledWith(
+      CHECKLIST_SETTINGS_KEYS.COMPLETED_ITEMS,
+      JSON.stringify(["add-api-key", "run-workflow"]),
     );
   });
 
-  it("does not report allRequiredComplete while one is outstanding", () => {
-    useOnboardingChecklistStore.setState({
-      completedItems: new Set(REQUIRED_ITEMS.slice(1).map((i) => i.id)),
-    } as any);
+  it("keeps the guide put away for someone who finished the old one", async () => {
+    stored({
+      [CHECKLIST_SETTINGS_KEYS.COMPLETED_ITEMS]: JSON.stringify([
+        "add-api-key",
+        "start-chat",
+        "use-custom-workflow",
+        "create-workflow",
+        "take-product-tour",
+      ]),
+      [CHECKLIST_SETTINGS_KEYS.PANEL_STATE]: "collapsed",
+    });
 
-    expect(useOnboardingChecklistStore.getState().allRequiredComplete()).toBe(
-      false,
+    await useOnboardingChecklistStore.getState().loadState();
+
+    expect(useOnboardingChecklistStore.getState().panelState).toBe("dismissed");
+  });
+
+  it("does not put a revived guide away again from another device's stale mirror", async () => {
+    // The row was migrated (current ids) and the person brought the guide back;
+    // this device's mirror still holds the old, finished list.
+    localStorage.setItem(
+      "reliant.checklist.completedItems",
+      JSON.stringify(["add-api-key", "start-chat", "use-custom-workflow", "create-workflow", "take-product-tour"]),
     );
+    stored({
+      [CHECKLIST_SETTINGS_KEYS.COMPLETED_ITEMS]: JSON.stringify(["add-api-key", "start-chat", "run-workflow", "take-product-tour"]),
+      [CHECKLIST_SETTINGS_KEYS.PANEL_STATE]: "expanded",
+    });
+
+    await useOnboardingChecklistStore.getState().loadState();
+
+    expect(useOnboardingChecklistStore.getState().panelState).toBe("expanded");
   });
 });

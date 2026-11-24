@@ -3605,20 +3605,6 @@ func (r *Repo) DeleteWorkflowScenario(ctx context.Context, id string) error {
 	return store.RemoveWorkflowScenario(ctx, r.ORM(), id)
 }
 
-// ==================== Command Favorites ====================
-
-func (r *Repo) ListCommandFavorites(ctx context.Context, userID, projectID string) ([]string, error) {
-	return store.ListCommandFavorites(ctx, r.ORM(), userID, projectID)
-}
-
-func (r *Repo) AddCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error {
-	return store.AddCommandFavorite(ctx, r.ORM(), userID, projectID, commandKey)
-}
-
-func (r *Repo) RemoveCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error {
-	return store.RemoveCommandFavorite(ctx, r.ORM(), userID, projectID, commandKey)
-}
-
 // ==================== Questions ====================
 
 func (r *Repo) CreateQuestion(ctx context.Context, question *Question) error {

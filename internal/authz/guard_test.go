@@ -28,8 +28,8 @@ var rawComparisonAllowed = map[string]string{
 	"internal/handlers/chat/rpc_update_chat_provider_policy.go:personPickContext":      "consent, not access: only the owner's own pick may spend their own account; the write was already authorized",
 	"internal/launch/launcher.go:recordStartSelection":                                 "consent, not access: only the owner's own start picks the model that may spend their own account; the launch was already authorized",
 	"internal/handlers/chat/rpc_send_message.go:recordPersonTurn":                      "attendance, not access: only the owner's own turn makes their launched chat spend as an attended run; the send was already authorized",
-	"internal/db/trigger_takeover.go:AdoptTrigger":                                     "compare-and-swap: the locked row still has the owner the adoption decided on, no caller",
-	"internal/db/trigger_takeover.go:CreateTriggerOffer":                               "compare-and-swap: the locked row still has the owner the offer was made for, no caller",
+	"internal/triggerowner/service.go:AdoptTrigger":                                    "compare-and-swap: the locked row still has the owner the adoption decided on, no caller",
+	"internal/triggerowner/service.go:CreateTriggerOffer":                              "compare-and-swap: the locked row still has the owner the offer was made for, no caller",
 	"internal/handlers/automation_takeover/takeover.go:offerState":                     "matches a trigger to the owner its offer was made for (adopted or not since), no caller",
 	"internal/handlers/inbox/attention.go:attentionInboxItems":                         "a defensive re-check of rows failingAutomations already passed through authz.Visible, and matching a trigger to an incident of the same owner for display metadata; not an access decision",
 	"internal/handlers/org_usage/rpc_get_org_llm_usage.go:GetOrgLLMUsage":              "a request filter (only this member's calls) over the org rollup the caller was already authorized to read whole (billing:read); not an access decision",
@@ -267,30 +267,34 @@ var shareGuard = struct {
 	},
 	applyCallers: []string{"internal/db/", "internal/store/", "internal/handlers/sharing/"},
 	viewerReadSites: map[string]string{
-		"internal/handlers/chat/rpc_get_chat.go":                   "GetChat (chatproto.ForViewer)",
-		"internal/handlers/chat/rpc_list_chat_plans.go":            "ListChatPlans",
-		"internal/handlers/chat/rpc_list_messages.go":              "ListMessages (messageproto.ElideForViewer)",
-		"internal/handlers/chat/rpc_get_content_block_bodies.go":   "GetContentBlockBodies: input and thinking bodies only, never a tool result",
-		"internal/handlers/chat/rpc_list_step_executions.go":       "ListStepExecutions (chatproto.ElideStepsForViewer)",
-		"internal/handlers/chat/rpc_get_workflow_executions.go":    "GetWorkflowExecutions (chatproto.ElideWorkflowsForViewer)",
-		"internal/handlers/message/rpc_get_message.go":             "GetMessage (messageproto.ElideForViewer)",
-		"internal/handlers/plan/rpc_get_plan_by_chat_id.go":        "GetPlanByChatId: the agent's plan",
-		"internal/handlers/task/rpc_list_tasks.go":                 "ListTasks: the plan's tasks",
-		"internal/handlers/question/rpc_list_pending_questions.go": "ListPendingQuestions for one chat: read-only cards",
-		"internal/handlers/question/rpc_list_async_questions.go":   "ListAsyncQuestions: read-only cards",
-		"internal/handlers/project/rpc_get_project.go":             "GetProject (projectproto.ForViewer, no git check)",
-		"internal/handlers/project/rpc_list_projects_with_apps.go": "ListProjectsWithApps: shared projects in the viewer's shape (projectproto.ForViewer), repos without remotes, no checkouts",
-		"internal/handlers/sharing/rpc_set_chat_visibility.go":     "decides who may change a shared chat",
-		"internal/handlers/sharing/rpc_set_project_visibility.go":  "decides who may change a shared project",
-		"internal/handlers/sharing/rpc_list_shared_chats.go":       "the shared list, in the viewer's shape",
-		"internal/handlers/sharing/rpc_list_shared_projects.go":    "the shared list, in the viewer's shape",
-		"internal/handlers/streaming/rpc_stream_chat_updates.go":   "StreamChatUpdates (messageproto.ViewerChatUpdate; re-reads the row every tick)",
+		"internal/handlers/chat/rpc_get_chat.go":                       "GetChat (chatproto.ForViewer)",
+		"internal/handlers/chat/rpc_list_chat_plans.go":                "ListChatPlans",
+		"internal/handlers/chat/rpc_list_messages.go":                  "ListMessages (messageproto.ElideForViewer)",
+		"internal/handlers/chat/rpc_get_content_block_bodies.go":       "GetContentBlockBodies: input and thinking bodies only, never a tool result",
+		"internal/handlers/chat/rpc_list_step_executions.go":           "ListStepExecutions (chatproto.ElideStepsForViewer)",
+		"internal/handlers/chat/rpc_get_workflow_executions.go":        "GetWorkflowExecutions (chatproto.ElideWorkflowsForViewer)",
+		"internal/handlers/message/rpc_get_message.go":                 "GetMessage (messageproto.ElideForViewer)",
+		"internal/handlers/plan/rpc_get_plan_by_chat_id.go":            "GetPlanByChatId: the agent's plan",
+		"internal/handlers/task/rpc_list_tasks.go":                     "ListTasks: the plan's tasks",
+		"internal/handlers/question/rpc_list_pending_questions.go":     "ListPendingQuestions for one chat: read-only cards",
+		"internal/handlers/question/rpc_list_async_questions.go":       "ListAsyncQuestions: read-only cards",
+		"internal/handlers/project/rpc_get_project.go":                 "GetProject (projectproto.ForViewer, no git check)",
+		"internal/handlers/project/rpc_list_projects_with_apps.go":     "ListProjectsWithApps: shared projects in the viewer's shape (projectproto.ForViewer), repos without remotes, no checkouts",
+		"internal/handlers/sharing/rpc_set_chat_visibility.go":         "decides who may change a shared chat",
+		"internal/handlers/sharing/rpc_set_project_visibility.go":      "decides who may change a shared project",
+		"internal/handlers/sharing/rpc_list_shared_chats.go":           "the shared list, in the viewer's shape",
+		"internal/handlers/sharing/rpc_list_shared_projects.go":        "the shared list, in the viewer's shape",
+		"internal/handlers/sharing/rpc_set_workflow_draft_sharing.go":  "decides who may change a shared saved workflow",
+		"internal/handlers/sharing/rpc_list_shared_workflow_drafts.go": "the shared list of saved workflows (pb.SharedWorkflowDraft: no source path, origin or version)",
+		"internal/handlers/streaming/rpc_stream_chat_updates.go":       "StreamChatUpdates (messageproto.ViewerChatUpdate; re-reads the row every tick)",
 	},
 	shareRPCs: []string{
 		"sharing.proto:ListSharedChats",
 		"sharing.proto:ListSharedProjects",
+		"sharing.proto:ListSharedWorkflowDrafts",
 		"sharing.proto:SetChatVisibility",
 		"sharing.proto:SetProjectVisibility",
+		"sharing.proto:SetWorkflowDraftSharing",
 		"streaming.proto:StreamOrgUpdates",
 	},
 }
@@ -329,7 +333,7 @@ func goSources(t *testing.T, fn func(rel string, src []byte)) {
 
 // TestSharingReachesOnlyWhatIsListed pins where sharing reaches: the one
 // writer of a visibility column is store.ApplyShareChange, only SharingService
-// calls it, the share rpcs are SharingService's four and StreamOrgUpdates, and the read sites that
+// calls it, the share rpcs are SharingService's six and StreamOrgUpdates, and the read sites that
 // serve viewers are exactly shareGuard.viewerReadSites. A new one is a
 // deliberate change here, with its redaction and its viewer-matrix row.
 func TestSharingReachesOnlyWhatIsListed(t *testing.T) {
@@ -371,7 +375,7 @@ func TestSharingReachesOnlyWhatIsListed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rpc := regexp.MustCompile(`(?m)^\s*rpc\s+(Set\w*Visibility|ListShared\w*|StreamOrgUpdates)\s*\(`)
+	rpc := regexp.MustCompile(`(?m)^\s*rpc\s+(Set\w*Visibility|SetWorkflowDraftSharing|ListShared\w*|StreamOrgUpdates)\s*\(`)
 	var found []string
 	for _, p := range protos {
 		src, err := os.ReadFile(p)
@@ -405,8 +409,8 @@ func TestSharingReachesOnlyWhatIsListed(t *testing.T) {
 // decision can disagree with the first (a membership answer expiring, an
 // outage) and must never be what turns a viewer's answer into the owner's.
 func TestViewerReadSitesDecideOnce(t *testing.T) {
-	forbidden := map[string]bool{"CanReadChat": true, "CanReadProject": true}
-	decisions := map[string]bool{"ReadChatAccess": true, "ReadProjectAccess": true}
+	forbidden := map[string]bool{"CanReadChat": true, "CanReadProject": true, "CanReadWorkflow": true}
+	decisions := map[string]bool{"ReadChatAccess": true, "ReadProjectAccess": true, "ReadWorkflowAccess": true}
 	sites := 0
 	goSources(t, func(rel string, src []byte) {
 		if strings.HasPrefix(rel, "internal/authz/") || !bytes.Contains(src, []byte("WithViewerReads(")) {

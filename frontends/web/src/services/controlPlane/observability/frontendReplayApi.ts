@@ -18,6 +18,7 @@
  *  - a self-hosted frontend the release names nowhere gets no row at all.
  */
 
+import type { Transport } from "@connectrpc/connect";
 import {
   FrontendReplaySource as WireSource,
   FrontendReplayState as WireState,
@@ -80,8 +81,8 @@ const SOURCE_OF: Record<WireSource, FrontendReplaySource> = {
 };
 
 /** The scope's frontends and their replay state. */
-export async function listFrontendReplay(req: FrontendReplayRequest, options: { signal?: AbortSignal } = {}): Promise<FrontendReplayList> {
-  const res = await obsClient(ObservabilityService).listFrontendReplay(
+export async function listFrontendReplay(req: FrontendReplayRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<FrontendReplayList> {
+  const res = await obsClient(ObservabilityService, transport).listFrontendReplay(
     { orgId: req.orgId, projectId: req.projectId || undefined, envIds: req.envIds },
     options
   );

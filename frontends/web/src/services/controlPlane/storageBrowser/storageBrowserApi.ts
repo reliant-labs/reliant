@@ -21,7 +21,7 @@
  */
 
 import { timestampMs, type Timestamp } from "@bufbuild/protobuf/wkt";
-import type { Client } from "@connectrpc/connect";
+import type { Client, Transport } from "@connectrpc/connect";
 
 import {
   BucketRuntimeKind,
@@ -33,8 +33,8 @@ import type { AccessConfirmation, AccessPolicyName } from "@/components/Forge/Au
 
 import { getControlPlaneClient } from "../client";
 
-function client() {
-  return getControlPlaneClient(StorageBrowserService);
+function client(transport?: Transport) {
+  return getControlPlaneClient(StorageBrowserService, transport);
 }
 
 export type BucketRuntimeName = "minio" | "s3" | "gcs" | "hosted" | "unknown";
@@ -240,3 +240,20 @@ export const listObjects = (...args: Parameters<ReturnType<typeof createStorageB
 export const getObjectMetadata = (...args: Parameters<ReturnType<typeof createStorageBrowserApi>["getObjectMetadata"]>) => createStorageBrowserApi(client()).getObjectMetadata(...args);
 export const presignObjectDownload = (...args: Parameters<ReturnType<typeof createStorageBrowserApi>["presignObjectDownload"]>) => createStorageBrowserApi(client()).presignObjectDownload(...args);
 export const previewObject = (...args: Parameters<ReturnType<typeof createStorageBrowserApi>["previewObject"]>) => createStorageBrowserApi(client()).previewObject(...args);
+
+type StorageBrowserCalls = ReturnType<typeof createStorageBrowserApi>;
+
+/**
+ * The same five calls on `transport`: a TransportScope's (the storage
+ * browser's context default, StorageBrowserApiContext), or none for the
+ * app's. The client is still resolved per call.
+ */
+export function storageBrowserCallsOn(transport?: Transport): StorageBrowserCalls {
+  return {
+    listBrowsableBuckets: (...args) => createStorageBrowserApi(client(transport)).listBrowsableBuckets(...args),
+    listObjects: (...args) => createStorageBrowserApi(client(transport)).listObjects(...args),
+    getObjectMetadata: (...args) => createStorageBrowserApi(client(transport)).getObjectMetadata(...args),
+    presignObjectDownload: (...args) => createStorageBrowserApi(client(transport)).presignObjectDownload(...args),
+    previewObject: (...args) => createStorageBrowserApi(client(transport)).previewObject(...args),
+  };
+}
