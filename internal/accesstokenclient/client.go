@@ -404,6 +404,12 @@ type OrgMembership struct {
 	// refuses what it gates (fail closed; docs/design/org-provider-accounts.md
 	// §5 there). A set, not a slice, so an OrgMembership stays comparable.
 	OrgScopes OrgScopeSet
+	// DisplayName is the member's name as the org roster shows it, read with
+	// membership. "" when Member is false, when they set none, and from a
+	// control plane that predates the field: a caller renders "" as a neutral
+	// fallback, never as an email or an id (docs/design/chat-collaboration.md
+	// §6.2 there).
+	DisplayName string
 }
 
 // OrgScopeSet is a set of org-administration scopes, held as their names
@@ -445,6 +451,7 @@ func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string)
 		MemberSince    *time.Time `json:"memberSince"`
 		OrgLiveMembers *int32     `json:"orgLiveMembers"`
 		OrgScopes      []string   `json:"orgScopes"`
+		DisplayName    string     `json:"displayName"`
 	}
 	body := map[string]any{"userId": userID}
 	if orgID != "" {
@@ -468,6 +475,7 @@ func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string)
 			m.OrgLiveMembers, m.OrgLiveMembersKnown = *out.OrgLiveMembers, true
 		}
 		m.OrgScopes = NewOrgScopeSet(out.OrgScopes...)
+		m.DisplayName = strings.TrimSpace(out.DisplayName)
 	}
 	return m, nil
 }

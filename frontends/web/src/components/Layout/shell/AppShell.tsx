@@ -39,11 +39,12 @@ import { useSidebarOverlay } from "@/hooks/useSidebarOverlay";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { lazyRoute } from "@/lib/lazyRoute";
 import { runsPath } from "@/lib/paths";
+import { useSignedIn } from "@/lib/session";
 import { cn } from "@/lib/utils";
-import { useAuthStore } from "@/store/authStore";
 import { useShortcutLabel } from "@/store/shortcutsStore";
 import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 
+import { pickerParam } from "../../Onboarding/tourParam";
 import { ResizableSidebar } from "../ResizableSidebar";
 import type { NavigateOptions } from "../sidebar/NavRenderer";
 import { holdNavDrawerOpen, navDrawerHeld, releaseNavDrawerHold } from "../sidebar/navDrawerHold";
@@ -52,6 +53,7 @@ import { ShellFrameContext, shellFrameScope, toggleShellNav, useNavDrawer, useSh
 // The nav and its chat list load with the first shell page, not with the
 // entry chunk every signed-out page pays for.
 const Sidebar = lazyRoute(() => import("../Sidebar"), "Sidebar");
+const SetupGuide = lazyRoute(() => import("../../Onboarding/OnboardingChecklist"), "OnboardingChecklist");
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
@@ -62,7 +64,7 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
     select: (s) => s.matches[s.matches.length - 1]?.pathname ?? s.location.pathname,
   });
   const routeIds = useRouterState({ select: (s) => s.matches.map((match) => match.routeId).join(" ") });
-  const signedIn = useAuthStore((state) => state.user !== null);
+  const signedIn = useSignedIn();
   const inShell = shellFrameScope({ routeIds: routeIds.split(" "), pathname, signedIn });
 
   const expanded = useWorkspaceStateStore((state) => state.leftSidebarExpanded);
@@ -144,9 +146,44 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
         <div role={inShell ? "main" : undefined} className={inShell ? "flex h-full min-w-0 flex-1 flex-col" : "contents"} data-testid={inShell ? "shell-main" : undefined}>
           {children}
         </div>
+        {inShell && (
+          <Suspense fallback={null}>
+            <ShellSetupGuide />
+          </Suspense>
+        )}
       </div>
     </ShellFrameContext.Provider>
   );
+}
+
+/** The journey picker, opened over the page on screen: `?tour=` on its own search (Onboarding/JOURNEYS.md). */
+function useOpenTours(): () => void {
+  const navigate = useNavigate();
+  return useCallback(() => {
+    releaseNavDrawerHold();
+    useNavDrawer.getState().setOpen(false);
+    void navigate({ search: ((prev: Record<string, unknown>) => ({ ...prev, tour: pickerParam("menu") })) as never });
+  }, [navigate]);
+}
+
+/**
+ * The Setup Guide (Onboarding/OnboardingChecklist.tsx) floats over every shell
+ * page, except while a tour is open: the tour's spotlights are the guide then.
+ */
+function ShellSetupGuide() {
+  const navigate = useNavigate();
+  const tourOpen = useRouterState({ select: (s) => (s.location.search as { tour?: unknown }).tour != null });
+  const onOpenTours = useOpenTours();
+  const onNavigate = useCallback(
+    (href: string) => {
+      releaseNavDrawerHold();
+      useNavDrawer.getState().setOpen(false);
+      void navigate({ href });
+    },
+    [navigate],
+  );
+  if (tourOpen) return null;
+  return <SetupGuide onNavigate={onNavigate} onOpenTours={onOpenTours} />;
 }
 
 /** The nav, wired to the router and the keyboard host. */
@@ -172,6 +209,7 @@ function ShellNav() {
     [navigate],
   );
   const onOpenChatSearch = useCallback(() => void shortcutHost?.run("onChatSearch"), [shortcutHost]);
+  const onOpenTours = useOpenTours();
 
   return (
     <>
@@ -202,6 +240,7 @@ function ShellNav() {
         onNavigate={onNavigate}
         onOpenRuns={(search) => void navigate({ to: runsPath(), search: search ?? {} })}
         onOpenChatSearch={onOpenChatSearch}
+        onOpenTours={onOpenTours}
       />
     </>
   );

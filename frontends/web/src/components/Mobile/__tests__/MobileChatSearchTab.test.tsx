@@ -14,14 +14,12 @@ import { mockTransport } from "@/lib/test-utils";
 /** The fake server: `search(projectId, query)` answers the matching chats. */
 const search = vi.fn();
 
-// The chat list's scope (the /m/projects filter): one project here.
-vi.mock("../../../store/workspaceStateStore", () => ({
-  useWorkspaceStateStore: (selector: (s: unknown) => unknown) => selector({ projectFilterId: "proj-1" }),
-}));
 
 // The real Link needs a mounted router; this test only cares about the
 // resolved href, matching the pattern in MobileDaemonScreen.test.tsx.
 vi.mock("@tanstack/react-router", () => ({
+  // The chat list's scope, from the URL (`?projects=`): one project here.
+  useSearch: () => ({ projects: "proj-1" }),
   Link: ({
     children,
     to,

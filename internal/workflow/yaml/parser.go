@@ -138,6 +138,9 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 		case "check":
 			wf.Check, err = unmarshalWorkflowCheck(val)
 
+		case "observe":
+			wf.Observe, err = unmarshalNodeObserve(val)
+
 		case "requires":
 			wf.Requires, err = unmarshalWorkflowRequirements(val)
 
@@ -449,6 +452,9 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 	}
 	if wf.Check != nil {
 		m.Content = append(m.Content, scalarNode("check", ""), marshalWorkflowCheck(wf.Check))
+	}
+	if wf.Observe != nil {
+		m.Content = append(m.Content, scalarNode("observe", ""), marshalNodeObserve(wf.Observe))
 	}
 	if req := marshalWorkflowRequirements(wf.Requires); req != nil {
 		m.Content = append(m.Content, scalarNode("requires", ""), req)

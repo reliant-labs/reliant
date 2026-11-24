@@ -344,7 +344,9 @@ func TestTriggerCapacityExpiredEventBehindHigherPriorityHead(t *testing.T) {
 
 	settled, err := store.ExpirePendingTriggerCapacityEvents(ctx, env.ORM, cutoff, "too old", 10)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), settled)
+	require.Len(t, settled, 1)
+	require.Equal(t, "expired-low", settled[0].ID)
+	require.Equal(t, core.TriggerEventFailed, settled[0].Outcome, "the settled event as it is now")
 	outcome, detail := outcomeOf(t, env, "expired-low")
 	require.Equal(t, core.TriggerEventFailed, outcome)
 	require.Equal(t, "too old", detail)
@@ -355,5 +357,5 @@ func TestTriggerCapacityExpiredEventBehindHigherPriorityHead(t *testing.T) {
 
 	settled, err = store.ExpirePendingTriggerCapacityEvents(ctx, env.ORM, cutoff, "too old", 10)
 	require.NoError(t, err)
-	require.Zero(t, settled, "the sweep is idempotent")
+	require.Empty(t, settled, "the sweep is idempotent")
 }

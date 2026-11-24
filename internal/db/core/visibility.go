@@ -120,6 +120,15 @@ type SharedProjectFilters struct {
 	Offset       int
 }
 
+// SharedWorkflowDraftFilters lists the saved workflows shared with an org
+// that a viewer did not create.
+type SharedWorkflowDraftFilters struct {
+	OrgID        string
+	ViewerUserID string
+	Limit        int
+	Offset       int
+}
+
 // OrgUpdate is one row of an org's feed (org_updates): a coarse event about
 // a chat or project shared with the org. The database writes them
 // (org_feed_* triggers); nothing in Go does.
