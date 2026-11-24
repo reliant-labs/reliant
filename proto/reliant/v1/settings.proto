@@ -26,11 +26,15 @@ service SettingsService {
 
   // ListSettings lists all settings for the current user
   // forge:custom — scoped to the caller and an optional project, never a table-wide list
-  rpc ListSettings(ListSettingsRequest) returns (ListSettingsResponse) {}
+  rpc ListSettings(ListSettingsRequest) returns (ListSettingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetSetting retrieves a setting by key
   // forge:custom — looks a key up in the caller's scope, and answers an empty response when it is unset
-  rpc GetSetting(GetSettingRequest) returns (GetSettingResponse) {}
+  rpc GetSetting(GetSettingRequest) returns (GetSettingResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // UpdateSetting updates an existing setting
   // forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
@@ -65,7 +69,9 @@ service SettingsService {
   // ============================================
 
   // GetShortcuts retrieves user keyboard shortcuts
-  rpc GetShortcuts(GetShortcutsRequest) returns (GetShortcutsResponse) {}
+  rpc GetShortcuts(GetShortcutsRequest) returns (GetShortcutsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // UpdateShortcuts updates user keyboard shortcuts
   rpc UpdateShortcuts(UpdateShortcutsRequest) returns (UpdateShortcutsResponse) {
@@ -75,7 +81,9 @@ service SettingsService {
   }
 
   // GetPreferences retrieves user preferences
-  rpc GetPreferences(GetPreferencesRequest) returns (GetPreferencesResponse) {}
+  rpc GetPreferences(GetPreferencesRequest) returns (GetPreferencesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // UpdatePreferences updates user preferences
   rpc UpdatePreferences(UpdatePreferencesRequest) returns (UpdatePreferencesResponse) {
@@ -96,7 +104,9 @@ service SettingsService {
   // ============================================
 
   // GetPrompts retrieves global user prompts
-  rpc GetPrompts(GetPromptsRequest) returns (GetPromptsResponse) {}
+  rpc GetPrompts(GetPromptsRequest) returns (GetPromptsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SavePrompts saves global user prompts
   rpc SavePrompts(SavePromptsRequest) returns (SavePromptsResponse) {
@@ -110,7 +120,9 @@ service SettingsService {
   // ============================================
 
   // GetProviderStatuses retrieves configuration status of all providers
-  rpc GetProviderStatuses(GetProviderStatusesRequest) returns (GetProviderStatusesResponse) {}
+  rpc GetProviderStatuses(GetProviderStatusesRequest) returns (GetProviderStatusesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ValidateProviderAPIKey validates an API key for a provider
   rpc ValidateProviderAPIKey(ValidateProviderAPIKeyRequest) returns (ValidateProviderAPIKeyResponse) {
@@ -217,7 +229,9 @@ service SettingsService {
   // ============================================
 
   // GetPrivacySettings retrieves user privacy settings
-  rpc GetPrivacySettings(GetPrivacySettingsRequest) returns (GetPrivacySettingsResponse) {}
+  rpc GetPrivacySettings(GetPrivacySettingsRequest) returns (GetPrivacySettingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // UpdatePrivacySettings updates user privacy settings
   rpc UpdatePrivacySettings(UpdatePrivacySettingsRequest) returns (UpdatePrivacySettingsResponse) {
@@ -252,10 +266,14 @@ service SettingsService {
   }
 
   // ListInstalledSkills returns installed skills discovered across project and global Reliant roots.
-  rpc ListInstalledSkills(ListInstalledSkillsRequest) returns (ListInstalledSkillsResponse) {}
+  rpc ListInstalledSkills(ListInstalledSkillsRequest) returns (ListInstalledSkillsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetInstalledSkillDefinition returns full SKILL.md content plus any packaged image assets for a discovered skill summary entry.
-  rpc GetInstalledSkillDefinition(GetInstalledSkillDefinitionRequest) returns (GetInstalledSkillDefinitionResponse) {}
+  rpc GetInstalledSkillDefinition(GetInstalledSkillDefinitionRequest) returns (GetInstalledSkillDefinitionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SetSkillEnabled toggles whether an installed skill definition path participates in discovery.
   rpc SetSkillEnabled(SetSkillEnabledRequest) returns (SetSkillEnabledResponse) {
@@ -265,7 +283,9 @@ service SettingsService {
   }
 
   // ListRecommendedSkills returns backend-defined recommended skills.
-  rpc ListRecommendedSkills(ListRecommendedSkillsRequest) returns (ListRecommendedSkillsResponse) {}
+  rpc ListRecommendedSkills(ListRecommendedSkillsRequest) returns (ListRecommendedSkillsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // DeleteGlobalSkill deletes a skill directory under ~/.reliant/skills.
   rpc DeleteGlobalSkill(DeleteGlobalSkillRequest) returns (DeleteGlobalSkillResponse) {

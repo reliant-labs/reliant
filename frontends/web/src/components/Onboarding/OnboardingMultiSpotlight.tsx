@@ -108,11 +108,13 @@ function computeCutout(
 }
 
 /**
- * Determine which side to place a label based on available space around the target.
+ * Determine which side to place a label based on available space around the
+ * target: the target's own `labelPosition` first, when the label fits there.
  */
 function determineLabelPosition(
   cutout: CutoutRect,
-  labelSize: ElementSize = DEFAULT_LABEL_SIZE
+  labelSize: ElementSize = DEFAULT_LABEL_SIZE,
+  preferred?: "right" | "left" | "above" | "below"
 ): "right" | "left" | "above" | "below" {
   const viewportWidth = window.innerWidth;
   const effectiveViewportBottom = Math.max(
@@ -126,10 +128,12 @@ function determineLabelPosition(
     below: effectiveViewportBottom - (cutout.y + cutout.height),
   };
 
-  if (spaces.right >= labelSize.width + LABEL_GAP) return "right";
-  if (spaces.left >= labelSize.width + LABEL_GAP) return "left";
-  if (spaces.above >= labelSize.height + LABEL_GAP) return "above";
-  if (spaces.below >= labelSize.height + LABEL_GAP) return "below";
+  const fits = (position: keyof typeof spaces) =>
+    spaces[position] >= (position === "right" || position === "left" ? labelSize.width : labelSize.height) + LABEL_GAP;
+  if (preferred && fits(preferred)) return preferred;
+  for (const position of ["right", "left", "above", "below"] as const) {
+    if (fits(position)) return position;
+  }
 
   return Object.entries(spaces).reduce((best, [position, space]) =>
     space > best.space ? { position: position as keyof typeof spaces, space } : best
@@ -414,7 +418,7 @@ export function OnboardingMultiSpotlight({
 
       {/* Label tooltips — one per target */}
       {resolved.map((r, i) => {
-        const labelPosition = determineLabelPosition(r.cutout, labelSizes[i]);
+        const labelPosition = determineLabelPosition(r.cutout, labelSizes[i], r.target.labelPosition);
 
         return (
           <div

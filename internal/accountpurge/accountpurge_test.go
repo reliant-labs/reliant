@@ -120,6 +120,8 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 	      VALUES ($1,$2,$3,'anthropic','m','byok','chat','success',1,$4)`, id("llm"), userID, id("chat"), now)
 	exec(`INSERT INTO llm_call_usage_daily (user_id, day, provider, model, auth_mode, purpose, calls)
 	      VALUES ($1,$2,'anthropic','m','byok','chat',1)`, userID, now)
+	exec(`INSERT INTO tool_call_usage (id, attempt, user_id, chat_id, tool_name, tool_kind, location, outcome, created_at)
+	      VALUES ($1,1,$2,$3,'shell','builtin','daemon','success',$4)`, id("tool"), userID, id("chat"), now)
 	exec(`INSERT INTO user_app_sessions (user_id, first_session_at) VALUES ($1,$2)`, userID, now)
 }
 
@@ -133,6 +135,7 @@ var ownershipCount = map[string]string{
 	"settings":                `SELECT COUNT(*) FROM settings WHERE user_id = $1`,
 	"llm_call_usage":          `SELECT COUNT(*) FROM llm_call_usage WHERE user_id = $1`,
 	"llm_call_usage_daily":    `SELECT COUNT(*) FROM llm_call_usage_daily WHERE user_id = $1`,
+	"tool_call_usage":         `SELECT COUNT(*) FROM tool_call_usage WHERE user_id = $1`,
 	"user_app_sessions":       `SELECT COUNT(*) FROM user_app_sessions WHERE user_id = $1`,
 	"api_keys":                `SELECT COUNT(*) FROM api_keys WHERE user_id = $1`,
 	"provider_accounts":       `SELECT COUNT(*) FROM provider_accounts WHERE user_id = $1`,
@@ -191,7 +194,7 @@ func TestPurge_RemovesEverythingForUser(t *testing.T) {
 	// Includes the join-reached tables (messages, threads, tool_calls,
 	// worktrees) — the ones a user_id-only purge would silently orphan.
 	for _, table := range append([]string{
-		"projects", "chats", "worktrees", "settings", "llm_call_usage", "llm_call_usage_daily",
+		"projects", "chats", "worktrees", "settings", "llm_call_usage", "llm_call_usage_daily", "tool_call_usage",
 		"user_app_sessions", "messages", "threads", "tool_calls",
 		"provider_account_limits", "thread_provider_accounts",
 		"chat_updates", "chat_update_heads",
@@ -671,5 +674,96 @@ func TestPurge_ACallStartedMidPurgeCannotRecreateUsage(t *testing.T) {
 	}
 	if n := countRows(t, rawDB, "llm_call_usage_daily", userID); n != 0 {
 		t.Errorf("llm_call_usage_daily: %d rows after the purge, want 0", n)
+	}
+}
+
+// The run-scope columns of a model call (agent-analytics.md §3.2, §4) go with
+// the account: deleting it leaves no row that names the account's projects,
+// runs, workflows, provider requests or costs. They are on llm_call_usage,
+// which the purge deletes by user, so this pins that no new column moved them
+// anywhere the purge does not reach.
+func TestPurge_RemovesTheRunScopeOfModelCalls(t *testing.T) {
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
+	defer cleanup()
+	ctx := context.Background()
+
+	const userID = "user-run-scope"
+	seedUser(t, rawDB, userID)
+	ttft, nanos := int64(300), int64(4_500_000)
+	written, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, db.LLMCallUsage{
+		ID: "scoped-call", UserID: userID, ChatID: "chat-" + userID, Provider: "reliant", Model: "m",
+		AuthMode: "managed", Purpose: "chat", Outcome: "success", Attempt: 1,
+		CreatedAt:  time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC),
+		WorkflowID: "wf-run-scope", ThreadID: "thread-run-scope", WorkflowName: "agent", NodeID: "call_llm",
+		Preset: "researcher", ProjectID: "proj-run-scope", AIRunID: "ai-run-scope", AIRootRunID: "ai-root-run-scope",
+		ProviderRequestID: "req-run-scope", TTFTMs: &ttft, CostUSDNanos: &nanos, CostBasis: store.LLMCostBasisReported,
+	})
+	if err != nil || !written {
+		t.Fatalf("RecordLLMCallUsage: written=%v err=%v", written, err)
+	}
+
+	if _, err := purger.Purge(ctx, userID); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+
+	var n int
+	if err := rawDB.QueryRow(`SELECT count(*) FROM llm_call_usage WHERE user_id = $1
+		OR workflow_id = 'wf-run-scope' OR thread_id = 'thread-run-scope' OR project_id = 'proj-run-scope'
+		OR ai_run_id = 'ai-run-scope' OR ai_root_run_id = 'ai-root-run-scope' OR provider_request_id = 'req-run-scope'`,
+		userID).Scan(&n); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("llm_call_usage: %d rows still name the purged account's runs, want 0", n)
+	}
+}
+
+// A tool call in flight when its account is deleted finishes afterwards and
+// writes its usage record (tool_call_usage). It takes the model calls' lock
+// and fence, so the record either commits first and goes with the purge, or
+// is refused: none outlives the account.
+func TestPurge_AnInFlightToolCallCannotRecreateUsage(t *testing.T) {
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
+	defer cleanup()
+	ctx := context.Background()
+	at := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC) // fixture data, not a clock
+
+	const userID = "user-tool-in-flight"
+	seedUser(t, rawDB, userID)
+	rec := func(id string) store.ToolCallUsageRecord {
+		return store.ToolCallUsageRecord{
+			ID: id, Attempt: 1, UserID: userID, ChatID: "chat-" + userID, ToolName: "shell",
+			ToolKind: store.ToolKindBuiltin, Location: "daemon", Outcome: store.ToolOutcomeSuccess, CreatedAt: at,
+		}
+	}
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			// The account purge tombstones no chat, so the table's write
+			// admission admits a late write; the fence refuses it.
+			if _, err := llmusagetest.New(t, repo).RecordToolCallUsage(ctx, rec(fmt.Sprintf("late-%d", i))); err != nil {
+				t.Errorf("RecordToolCallUsage: %v", err)
+			}
+		}()
+	}
+	close(start)
+	if _, err := purger.Purge(ctx, userID); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+	wg.Wait()
+	if n := countRows(t, rawDB, "tool_call_usage", userID); n != 0 {
+		t.Errorf("tool_call_usage: %d rows for a purged account, want 0", n)
+	}
+
+	written, err := llmusagetest.New(t, repo).RecordToolCallUsage(ctx, rec("much-later"))
+	if err != nil || written {
+		t.Fatalf("a tool call after the purge: written=%v err=%v, want refused", written, err)
 	}
 }

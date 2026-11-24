@@ -64,6 +64,7 @@ func NewUsageServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+UsageServiceGetLLMUsageProcedure,
 			connect.WithSchema(usageServiceMethods.ByName("GetLLMUsage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -99,6 +100,7 @@ func NewUsageServiceHandler(svc UsageServiceHandler, opts ...connect.HandlerOpti
 		UsageServiceGetLLMUsageProcedure,
 		svc.GetLLMUsage,
 		connect.WithSchema(usageServiceMethods.ByName("GetLLMUsage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.UsageService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

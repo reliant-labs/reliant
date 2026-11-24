@@ -44,7 +44,7 @@ func TestScenarioRPCs_RepositoryFailureCodes(t *testing.T) {
 			t.Parallel()
 			repo := newScenarioRepo(&fixture{})
 			projectaccesstest.Bind(repo, func(context.Context, string, string) (*db.Project, error) { return nil, tc.err })
-			svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+			svc := scenario.NewTestScenario(t, withDeps(scenario.Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
 			projectID := ownProjectID
 			_, err := svc.ListScenarios(scenario.AuthedContext(t), connect.NewRequest(&pb.ListScenariosRequest{ProjectId: &projectID, WorkflowSlug: ownWorkflowSlug}))
 			requireClientReads(t, err, tc.want)
@@ -53,7 +53,7 @@ func TestScenarioRPCs_RepositoryFailureCodes(t *testing.T) {
 			t.Parallel()
 			repo := newScenarioRepo(&fixture{})
 			drafts := &scenario.MockDrafts{GetWorkflowDraftBySlugFunc: func(context.Context, string, string) (*db.WorkflowDraft, error) { return nil, tc.err }}
-			svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: repo, Projects: projectaccesstest.For(repo), Drafts: drafts}))
+			svc := scenario.NewTestScenario(t, withDeps(scenario.Deps{Repo: repo, Projects: projectaccesstest.For(repo), Drafts: drafts}))
 			_, err := svc.CreateScenario(scenario.AuthedContext(t), connect.NewRequest(&pb.CreateScenarioRequest{
 				WorkflowSlug: ownWorkflowSlug, Scenario: &pb.ScenarioDefinition{Name: "s"},
 			}))
@@ -63,7 +63,7 @@ func TestScenarioRPCs_RepositoryFailureCodes(t *testing.T) {
 			t.Parallel()
 			repo := newScenarioRepo(&fixture{})
 			repo.GetWorkflowScenarioFunc = func(context.Context, string) (*db.WorkflowScenario, error) { return nil, tc.err }
-			svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+			svc := scenario.NewTestScenario(t, withDeps(scenario.Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
 			_, err := svc.DeleteScenario(scenario.AuthedContext(t), connect.NewRequest(&pb.DeleteScenarioRequest{ScenarioId: ownScenarioID}))
 			requireClientReads(t, err, tc.want)
 		})
@@ -71,7 +71,7 @@ func TestScenarioRPCs_RepositoryFailureCodes(t *testing.T) {
 			t.Parallel()
 			repo := newScenarioRepo(&fixture{})
 			repo.DeleteWorkflowScenarioFunc = func(context.Context, string) error { return tc.err }
-			svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+			svc := scenario.NewTestScenario(t, withDeps(scenario.Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
 			_, err := svc.DeleteScenario(scenario.AuthedContext(t), connect.NewRequest(&pb.DeleteScenarioRequest{ScenarioId: ownScenarioID}))
 			requireClientReads(t, err, tc.want)
 		})
@@ -104,7 +104,7 @@ func TestUploadScenario_DaemonFailureCodes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{
+			svc := scenario.NewTestScenario(t, withDeps(scenario.Deps{
 				Repo: newScenarioRepo(&fixture{}), Projects: projectaccesstest.For(newScenarioRepo(&fixture{})),
 				Router: failingSender(tc.err),
 			}))
@@ -123,7 +123,7 @@ func TestUploadScenario_DaemonFailureCodes(t *testing.T) {
 func TestUploadScenario_InvalidYAMLKeepsTheParserText(t *testing.T) {
 	t.Parallel()
 
-	svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Projects: projectaccesstest.For(newScenarioRepo(&fixture{})), Router: &scenario.MockSender{}}))
+	svc := scenario.NewTestScenario(t, withDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Projects: projectaccesstest.For(newScenarioRepo(&fixture{})), Router: &scenario.MockSender{}}))
 	_, err := svc.UploadScenario(scenario.AuthedContext(t), connect.NewRequest(&pb.UploadScenarioRequest{
 		ProjectId: ownProjectID, WorkflowSlug: ownWorkflowSlug, Filename: "drafts.yaml", YamlContent: "events: [",
 	}))

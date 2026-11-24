@@ -442,6 +442,7 @@ service BillingService {
   // Canonical current-period organization accounting. Requires billing:read,
   // not billing management. Unknown amounts stay absent; no historical range.
   rpc GetOrganizationCostSummary(GetOrganizationCostSummaryRequest) returns (GetOrganizationCostSummaryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -455,6 +456,7 @@ service BillingService {
   // cutover).
   // forge:custom
   rpc GetStorageUsage(GetStorageUsageRequest) returns (GetStorageUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -465,6 +467,7 @@ service BillingService {
   // ledgers (never live telemetry). Requires billing:read, re-checked at use,
   // and is scoped to the caller's organization. Range is at most 400 days.
   rpc ListOrganizationUsage(ListOrganizationUsageRequest) returns (ListOrganizationUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -479,6 +482,7 @@ service BillingService {
   // org_id (NOT_FOUND otherwise), and environment_ids must be its
   // environments.
   rpc GetProjectCost(GetProjectCostRequest) returns (GetProjectCostResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -487,14 +491,17 @@ service BillingService {
 
   // Read-only catalog.
   rpc ListPlans(ListPlansRequest) returns (ListPlansResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc GetPlan(GetPlanRequest) returns (GetPlanResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
   // Current user subscription / billing portal / invoices.
   rpc GetCurrentUserSubscription(GetCurrentUserSubscriptionRequest) returns (GetCurrentUserSubscriptionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc CreateCurrentUserCheckoutSession(CreateCurrentUserCheckoutSessionRequest) returns (CreateCurrentUserCheckoutSessionResponse) {
@@ -509,6 +516,8 @@ service BillingService {
       activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
     };
   }
+  // Remains POST-only: each invoice carries Stripe's hosted-invoice and PDF
+  // URLs, bearer links that must not be cached as a safe read.
   rpc ListCurrentUserInvoices(ListCurrentUserInvoicesRequest) returns (ListCurrentUserInvoicesResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
@@ -521,6 +530,7 @@ service BillingService {
   // forge:custom — hand-written over the shared org_limit_changes table; it is
   // not an entity list, so it gets no CRUD wiring or admin page.
   rpc ListOrgLimitChanges(ListOrgLimitChangesRequest) returns (ListOrgLimitChangesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -570,6 +580,7 @@ service BillingService {
   // Creates no Stripe object and no database row: the picker can call it on
   // every amount the user clicks.
   rpc GetCurrentUserWalletTopupQuote(GetCurrentUserWalletTopupQuoteRequest) returns (GetCurrentUserWalletTopupQuoteResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -620,7 +631,8 @@ service BillingService {
     };
   }
 
-  // Workspace compute plan (per-user).
+  // Workspace compute plan (per-user). Remains POST-only: the response may
+  // contain a bearer management URL and must not be cached as a safe read.
   rpc GetCurrentUserComputeSubscription(GetCurrentUserComputeSubscriptionRequest) returns (GetCurrentUserComputeSubscriptionResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
@@ -649,6 +661,7 @@ service BillingService {
   // consumption, allowance, the customer's cap, and the current ladder rung
   // per dimension.
   rpc GetCurrentUserInfraOverage(GetCurrentUserInfraOverageRequest) returns (GetCurrentUserInfraOverageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -676,6 +689,7 @@ service BillingService {
 
   // Machine pricing is accepted explicitly for the next billing period only.
   rpc GetMachinePricingReadiness(GetMachinePricingReadinessRequest) returns (GetMachinePricingReadinessResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc AcceptNextMachinePricing(AcceptNextMachinePricingRequest) returns (AcceptNextMachinePricingResponse) {
@@ -709,6 +723,7 @@ service BillingService {
 
   // Independent organization-wide hosted usage funding; never requires a machine plan.
   rpc GetCurrentUserUsageBilling(GetCurrentUserUsageBillingRequest) returns (GetCurrentUserUsageBillingResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   // Explicit PAYG consent. Does not grant funding until verified Stripe reconciliation.
@@ -740,6 +755,7 @@ service BillingService {
   // and only the current agreement's versions are listed, so it is not an
   // entity list and gets no CRUD wiring.
   rpc ListUsageBillingBudgetVersions(ListUsageBillingBudgetVersionsRequest) returns (ListUsageBillingBudgetVersionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -752,6 +768,7 @@ service BillingService {
   // hosting budget at that rate. Hosting only: no machine, AI or observability
   // spend. Requires billing:read, re-checked at use.
   rpc GetOrgHostingUsageSummary(GetOrgHostingUsageSummaryRequest) returns (GetOrgHostingUsageSummaryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -763,6 +780,7 @@ service BillingService {
   // member of org_id may read it; only the founder learns which of their other
   // organizations holds the allowance.
   rpc GetFreeHostingStatus(GetFreeHostingStatusRequest) returns (GetFreeHostingStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -776,6 +794,7 @@ service BillingService {
   // decisions: a user may save a card and never arm auto-recharge, and a
   // compute subscriber already HAS a saved card and only needs the rule.
   rpc GetCurrentUserWalletAutoRecharge(GetCurrentUserWalletAutoRechargeRequest) returns (GetCurrentUserWalletAutoRechargeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc SetCurrentUserWalletAutoRecharge(SetCurrentUserWalletAutoRechargeRequest) returns (SetCurrentUserWalletAutoRechargeResponse) {
@@ -804,6 +823,7 @@ service BillingService {
     };
   }
   rpc GetCurrentUserComputeUsage(GetCurrentUserComputeUsageRequest) returns (GetCurrentUserComputeUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -818,14 +838,17 @@ service BillingService {
   // internal/svcdaemon.checkDaemonSizeAllowed; this RPC reports the same
   // funding facts so the UI can predict it instead of guessing.
   rpc GetCurrentUserComputeEligibility(GetCurrentUserComputeEligibilityRequest) returns (GetCurrentUserComputeEligibilityResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
   // Misc per-org reads that callers expect on the public surface.
   rpc GetUsageSummary(GetUsageSummaryRequest) returns (GetUsageSummaryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc GetInvoicePreview(GetInvoicePreviewRequest) returns (GetInvoicePreviewResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -837,6 +860,7 @@ service BillingService {
   // billing flows use when there is none. Backs reliant/web's
   // BillingEmailRequiredModal.
   rpc GetCurrentUserBillingEmail(GetCurrentUserBillingEmailRequest) returns (GetCurrentUserBillingEmailResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc UpdateBillingEmail(UpdateBillingEmailRequest) returns (UpdateBillingEmailResponse) {

@@ -109,6 +109,8 @@ const (
 	RuleAllowInvalid           = "lint-allow-invalid"
 	RuleAskQuestionType        = "ask-question-not-ask-user"
 	RuleLLMGatewayUnused       = "llm-gateway-cli-unused"
+	RuleCredentialsNoneSignIn  = "credentials-none-vendor-signin"
+	RuleObserveInvalid         = "observe-invalid"
 )
 
 func rule(id string, sev Severity, summary string) Rule {
@@ -141,6 +143,8 @@ var rules = []Rule{
 	rule(RuleAllowInvalid, SeverityError, "A `lint:allow` comment names an unknown rule or gives no reason."),
 	rule(RuleAskQuestionType, SeverityWarning, "An ask_question node's metadata has no \"type\": \"ask_user\", so the app shows the question with no options and `reliant workflow answer` cannot answer it."),
 	rule(RuleLLMGatewayUnused, SeverityWarning, "A run node sets llm_gateway for a CLI its command never runs, so the step pays for a key nothing uses (almost always a copy-paste mistake)."),
+	rule(RuleCredentialsNoneSignIn, SeverityWarning, "A credentials: none run command calls gemini or cursor-agent, whose sign-ins that sandbox hides from the next minor release, so the CLI will run signed out."),
+	rule(RuleObserveInvalid, SeverityError, "An observe: block has the wrong shape or an expression that does not compile in its scope. Validation only warns about observe, so a run is never stopped by it; this is where it is caught."),
 }
 
 // Rules lists every rule, in documentation order.
@@ -234,6 +238,7 @@ func (c *checker) run() {
 		c.checkGraph(g, slotBound)
 	}
 	c.checkWorkflow()
+	c.checkObserve()
 	c.checkApprovalPermission()
 	c.checkSecrets()
 	c.checkScenarios()

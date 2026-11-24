@@ -264,7 +264,7 @@ describe("Sidebar selected chat scroll", () => {
     expect(row.querySelector(".lucide-archive")).toBeNull();
   });
 
-  it("draws the default nav (B): the top level off an area, the footer Inbox, Usage & billing, Settings, each through onNavigate", () => {
+  it("draws the default nav (B): the top level off an area, the footer Inbox, Usage & billing, Help, Settings, each through onNavigate", () => {
     sessionStorage.clear();
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -297,6 +297,12 @@ describe("Sidebar selected chat scroll", () => {
     fireEvent.click(screen.getByTestId("nav-usage-billing"));
     fireEvent.click(screen.getByRole("link", { name: "Settings" }));
     expect(onNavigate.mock.calls.map(([href]) => href)).toEqual(["/", "/usage", "/settings"]);
+    // Help sits right before Settings, and its menu's Keyboard shortcuts goes through onNavigate too.
+    const help = screen.getByTestId("nav-help");
+    expect(help.compareDocumentPosition(screen.getByRole("link", { name: "Settings" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(help);
+    fireEvent.click(screen.getByTestId("help-menu-shortcuts"));
+    expect(onNavigate).toHaveBeenLastCalledWith("/settings/shortcuts");
   });
 
   it("on a chat page, drills into Agents: New chat, Workflows, Sandboxes, Connectors, then the chats full height", () => {

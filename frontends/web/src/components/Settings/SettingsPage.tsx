@@ -11,7 +11,7 @@ import {
   type SettingsTab,
 } from "../../routeSchemas";
 import { readSettingsDestination, rememberSettingsDestination } from "./settingsDestination";
-import { machineSettingsPath, settingsPath } from "@/lib/paths";
+import { settingsPath } from "@/lib/paths";
 import { cn } from "@/lib/utils";
 import { useShellFrame } from "../Layout/shell/shellFrame";
 
@@ -37,27 +37,21 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (hasExplicitDestination) {
-      rememberSettingsDestination({ section, machineId: params.machineId, tab: search.tab });
+      // Agent sandboxes and a machine's page are not remembered: their nav is
+      // Agents', so reopening Settings there would hide Settings' sections.
+      rememberSettingsDestination({ section, tab: search.tab });
       return;
     }
     const destination = readSettingsDestination();
     // Preserve this visit's search (e.g. the unknown-page notice), never saved
     // callback markers. An explicitly supplied tab wins over the remembered one.
     const restoredSearch = { ...search, tab: search.tab ?? destination.tab };
-    if (destination.machineId) {
-      void navigate({
-        to: machineSettingsPath(destination.machineId),
-        search: restoredSearch,
-        replace: true,
-      });
-    } else {
-      void navigate({
-        to: settingsPath(destination.section),
-        search: restoredSearch,
-        replace: true,
-      });
-    }
-  }, [hasExplicitDestination, section, params.machineId, search, navigate]);
+    void navigate({
+      to: settingsPath(destination.section),
+      search: restoredSearch,
+      replace: true,
+    });
+  }, [hasExplicitDestination, section, search, navigate]);
 
   const onSectionChange = useCallback(
     (next: SettingsSection, tab?: AISettingsTab) => {

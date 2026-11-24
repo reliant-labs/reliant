@@ -68,10 +68,16 @@ function AppSections({ app, pathname, search, onNavigate }: { app: string } & Ap
   );
 }
 
+/** The app's Activity row (the grouped nav's last Configure row), for the nav's footer. */
+export function appActivityOf(model: GroupedNavInput, pathname: string) {
+  const configure = appNavFor(model, pathname).items.find((item) => item.label === "Configure");
+  return configure?.children?.find((item) => item.label === "Activity");
+}
+
 /** The app's Activity, for the nav's footer (as in the forge console). */
 export function AppActivityRow({ app, pathname, search, onNavigate }: { app: string } & AppsNavSectionProps) {
   const model = useConsoleNavModel(app, pathname, search);
-  const activity = appNavFor(model, pathname).footer[0];
+  const activity = appActivityOf(model, pathname);
   if (!activity?.href) return null;
   const href = activity.href;
   return (

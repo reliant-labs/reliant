@@ -12,6 +12,7 @@ import { ResourceVisibility } from "../../../gen/reliant/v1/common_pb";
 
 const state = vi.hoisted(() => ({ chat: {} as Record<string, unknown> }));
 
+vi.mock("../../../hooks/useDaemonStatus", () => ({ useDaemonStatus: () => ({ daemons: [], activeDaemon: null, loading: false }) }));
 vi.mock("../../../services/controlPlane/config", () => ({ hasControlPlane: true }));
 vi.mock("../../../hooks/useOnboardingQueries", () => ({
   useDaemonList: () => ({ data: [

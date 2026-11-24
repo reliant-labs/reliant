@@ -23,8 +23,12 @@
  * carries the answer.
  *
  * Writes nothing a page reads (bar seeding the chat's detail cache): a load
- * can be superseded and never commit. The notice for a cross-org redirect is
- * shown when the redirected page commits (takeMovedChatNotice).
+ * can be superseded and never commit. A redirect into another org leaves its
+ * notice ("This chat is in Side, so it opened there.") for the page it lands
+ * on, shown when that page commits (lib/orgArrivalNotice.ts): for the
+ * wrong-org form always, for the org-less form when it moved the tab's org.
+ * It is the arrival's one notice: the generic "Switched to …" is not shown
+ * beside it.
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -33,6 +37,7 @@ import { redirect } from "@tanstack/react-router";
 import type { Chat } from "@/api/client";
 import * as chatActions from "@/hooks/chat-actions";
 import { getChatFromCache, seedChatDetail } from "@/hooks/chat-queries";
+import { noteResourceOrgRedirect } from "@/lib/orgArrivalNotice";
 import { orgLinksEnabled } from "@/lib/orgRoutesFlag";
 import { defaultOrgRoutingDeps, type LocationLike, type OrgRoutingDeps } from "@/lib/orgRouting";
 import { inOrg, orgFreePath } from "@/lib/paths/org";
@@ -74,17 +79,16 @@ export const defaultChatRouteDeps: ChatRouteDeps = {
   },
 };
 
-let movedNotice: { chatId: string; orgName: string } | null = null;
-
-/**
- * The notice for a chat URL that named the wrong org and was redirected into
- * the chat's own, once: for the page that committed on `chatId`.
- */
-export function takeMovedChatNotice(chatId: string): string | null {
-  if (movedNotice?.chatId !== chatId) return null;
-  const { orgName } = movedNotice;
-  movedNotice = null;
+/** The notice for a chat URL redirected into the chat's org. */
+export function movedChatNotice(orgName: string): string {
   return `This chat is in ${orgName}, so it opened there.`;
+}
+
+/** Redirect (replace) to `location`'s page in `org`, leaving the notice for the page it lands on. */
+function redirectIntoOrg(org: MyOrg, location: LocationLike, { always }: { always: boolean }): never {
+  const href = inOrgOf(org, location);
+  noteResourceOrgRedirect(org.id, href, movedChatNotice(org.name || org.slug || org.id), { always });
+  throw redirect({ href, replace: true });
 }
 
 function suffixOf(location: LocationLike): string {
@@ -140,8 +144,7 @@ export async function resolveChatRoute(
     if (org?.id === routeOrg.id) return { kind: "chat", chat };
     // Readable, but in an org the person is not in: not under this one either.
     if (!org) return { kind: "missing", chatId };
-    movedNotice = { chatId, orgName: org.name || org.slug || org.id };
-    throw redirect({ href: inOrgOf(org, location), replace: true });
+    redirectIntoOrg(org, location, { always: true });
   }
 
   // The org-less form: into the chat's org once links carry the org.
@@ -155,5 +158,6 @@ export async function resolveChatRoute(
   }
   const org = chatOrg(chat, mine);
   if (!org) return { kind: "chat", chat };
-  throw redirect({ href: inOrgOf(org, location), replace: true });
+  // Into another org than the tab's: said once the page commits.
+  redirectIntoOrg(org, location, { always: false });
 }

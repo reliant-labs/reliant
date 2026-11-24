@@ -120,6 +120,7 @@ func NewInboxServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+InboxServiceListInboxProcedure,
 			connect.WithSchema(inboxServiceMethods.ByName("ListInbox")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		cleanupStorage: connect.NewClient[v1.CleanupStorageRequest, v1.CleanupStorageResponse](
@@ -266,6 +267,7 @@ func NewInboxServiceHandler(svc InboxServiceHandler, opts ...connect.HandlerOpti
 		InboxServiceListInboxProcedure,
 		svc.ListInbox,
 		connect.WithSchema(inboxServiceMethods.ByName("ListInbox")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	inboxServiceCleanupStorageHandler := connect.NewUnaryHandler(

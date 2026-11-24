@@ -84,6 +84,11 @@ function spyRpcs() {
       "ChatService.ListQueuedAgentMessages": listQueuedAgentMessages,
       "ChatService.GetChat": (req: unknown) => getChat(req as { chatId: string }),
       "ChatService.ListMessages": listMessages,
+      // The attached-project picker added these reads to the real composer.
+      // Answer them so its queries settle instead of retrying missing mocks.
+      "ChatService.ListChatProjects": { response: { projects: [] } },
+      "DaemonRegistryService.ListDaemons": { response: { daemons: [] } },
+      "ProjectService.ListProjectDaemons": { response: {} },
       // The model catalog is app-wide (prefetched once per session), not a
       // chat-open read; answer it empty so the composer can mount.
       "CatalogService.ListModels": { response: {} },

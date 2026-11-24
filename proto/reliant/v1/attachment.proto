@@ -25,7 +25,9 @@ service AttachmentService {
 
   // GetAttachment retrieves an attachment by ID (includes file content)
   // forge:custom — scoped to the caller: another user's attachment answers NotFound
-  rpc GetAttachment(GetAttachmentRequest) returns (GetAttachmentResponse) {}
+  rpc GetAttachment(GetAttachmentRequest) returns (GetAttachmentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // DeleteAttachment removes an attachment by ID
   // forge:custom — checks the caller owns the attachment before it deletes, answering NotFound otherwise

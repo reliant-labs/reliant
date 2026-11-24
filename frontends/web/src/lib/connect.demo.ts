@@ -28,6 +28,11 @@ export const installShellTransport: typeof Real.installShellTransport = (t) => {
   _shell = t;
 };
 
+/** The demo has its shell transport and no fixture mode (lib/fixturesConfig.ts is the app's). */
+export const installFixtureTransport: typeof Real.installFixtureTransport = () => {
+  throw new Error("Fixture mode is the app's (src/fixtures/install.ts); the demo bundle answers every RPC from its shell transport.");
+};
+
 export const setTransport: typeof Real.setTransport = (t) => {
   const previous = _override;
   _override = t;

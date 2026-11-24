@@ -4,7 +4,9 @@ import { defineConfig, devices } from '@playwright/test';
 // the production build, against fixture data, in dark, light and mobile.
 //
 // Its own config, not a project of playwright.config.ts: the CI Playwright
-// lane runs that config, and this suite is opt-in (`task test:web:visual`).
+// lane runs that config, and this suite runs as its own lane
+// (`task test:web:visual`; the merge queue and the nightly run call it through
+// scripts/visual-gate.sh, compare only).
 // Its specs are `*.visual.ts`, so the default config's testMatch never
 // collects them either.
 //
@@ -35,7 +37,13 @@ export default defineConfig({
   // A visual diff that passes on retry is a flake to fix, not a pass.
   retries: 0,
   workers: process.env.VISUAL_WORKERS ? Number(process.env.VISUAL_WORKERS) : 3,
-  reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report-visual' }]],
+  // VISUAL_JSON adds Playwright's JSON report at that path: scripts/visual-gate.sh
+  // (the merge queue and the nightly run) reads it to name the surfaces that differ.
+  reporter: [
+    ['list'],
+    ['html', { open: 'never', outputFolder: 'playwright-report-visual' }],
+    ...(process.env.VISUAL_JSON ? [['json', { outputFile: process.env.VISUAL_JSON }] as const] : []),
+  ],
   outputDir: 'test-results-visual',
   timeout: 90_000,
   expect: { timeout: 20_000 },

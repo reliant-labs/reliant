@@ -5,19 +5,23 @@ import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type Client } from "@connectrpc/connect";
 import { ObservabilityBillingService } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
+import { transport as appTransport } from "@/lib/connect";
+import { useTransport } from "@/lib/transportScope";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 
 export const ObservabilityBillingApiContext = createContext<Client<typeof ObservabilityBillingService> | null>(null);
 export function useObservabilityBillingApi() {
   // Defer transport creation until a query runs: local-only installs and the
   // no-org state must render unavailable rather than throw during render.
+  // The nearest TransportScope's transport, else the app's (lib/transportScope.tsx).
   const override = useContext(ObservabilityBillingApiContext);
+  const transport = useTransport(appTransport);
   const api: Client<typeof ObservabilityBillingService> = override ?? {
-    getObservabilityUsage: (request, options) => getControlPlaneClient(ObservabilityBillingService).getObservabilityUsage(request, options),
-    listObservabilityUsage: (request, options) => getControlPlaneClient(ObservabilityBillingService).listObservabilityUsage(request, options),
-    getObservabilityStorage: (request, options) => getControlPlaneClient(ObservabilityBillingService).getObservabilityStorage(request, options),
-    getObservabilityLimits: (request, options) => getControlPlaneClient(ObservabilityBillingService).getObservabilityLimits(request, options),
-    updateObservabilityLimits: (request, options) => getControlPlaneClient(ObservabilityBillingService).updateObservabilityLimits(request, options),
+    getObservabilityUsage: (request, options) => getControlPlaneClient(ObservabilityBillingService, transport).getObservabilityUsage(request, options),
+    listObservabilityUsage: (request, options) => getControlPlaneClient(ObservabilityBillingService, transport).listObservabilityUsage(request, options),
+    getObservabilityStorage: (request, options) => getControlPlaneClient(ObservabilityBillingService, transport).getObservabilityStorage(request, options),
+    getObservabilityLimits: (request, options) => getControlPlaneClient(ObservabilityBillingService, transport).getObservabilityLimits(request, options),
+    updateObservabilityLimits: (request, options) => getControlPlaneClient(ObservabilityBillingService, transport).updateObservabilityLimits(request, options),
   };
   return api;
 }
@@ -46,8 +50,9 @@ export function useObsBillingDays(orgId: string, month: string) {
     getNextPageParam: (last) => last.nextPageToken || undefined, retry: retryObsBilling });
 }
 export function useObsLimitHistory(orgId: string) {
+  const transport = useTransport(appTransport);
   return useInfiniteQuery({ queryKey: [...obsBillingKey(orgId), "history"], initialPageParam: "", enabled: !!orgId,
-    queryFn: ({ pageParam }) => getControlPlaneClient(BillingService).listOrgLimitChanges({ orgId, pageSize: 50, pageToken: pageParam }),
+    queryFn: ({ pageParam }) => getControlPlaneClient(BillingService, transport).listOrgLimitChanges({ orgId, pageSize: 50, pageToken: pageParam }),
     getNextPageParam: (last) => last.nextPageToken || undefined, retry: retryObsBilling });
 }
 export function useUpdateObsLimits(orgId: string) {

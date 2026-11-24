@@ -71,7 +71,7 @@ func reclone(t *testing.T, svc *project.Service) error {
 	return err
 }
 
-func teardownStore(t *testing.T) (*project.MockRepository, map[string]*db.CheckoutTeardown, *int) {
+func teardownStore(t *testing.T) (*stubRepo, map[string]*db.CheckoutTeardown, *int) {
 	t.Helper()
 	store := onDaemon(t)
 	book := withTeardowns(store)

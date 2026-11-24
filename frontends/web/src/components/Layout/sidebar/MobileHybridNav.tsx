@@ -49,6 +49,7 @@ import {
 import { orgFreePath } from "@/lib/paths/org";
 
 import { InboxNavItem } from "../../inbox/InboxNavItem";
+import { hybridNav } from "./navConfig";
 import { isAtOrBelow } from "./navLocation";
 import type { NavigateOptions, NavSlots } from "./NavRenderer";
 import { SidebarRow, SidebarSubRow } from "./primitives";
@@ -145,7 +146,8 @@ export function MobileHybridNav({
         />
       </div>
       {project}
-      <ShellNavBody shell={shell} pathname={pathname} search={search} slots={slots} onNavigate={onNavigate} />
+      {/* Flat: a drill-in replaces the list here, so its rows are drawn as top-level rows (owner, 2026-11-24). */}
+      <ShellNavBody config={hybridNav} shell={shell} pathname={pathname} search={search} slots={slots} onNavigate={onNavigate} flat />
     </div>
   );
 }

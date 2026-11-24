@@ -135,12 +135,14 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+RunServiceGetRunProcedure,
 			connect.WithSchema(runServiceMethods.ByName("GetRun")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listRuns: connect.NewClient[v1.ListRunsRequest, v1.ListRunsResponse](
 			httpClient,
 			baseURL+RunServiceListRunsProcedure,
 			connect.WithSchema(runServiceMethods.ByName("ListRuns")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		lastRunPerWorkflow: connect.NewClient[v1.LastRunPerWorkflowRequest, v1.LastRunPerWorkflowResponse](
@@ -310,12 +312,14 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		RunServiceGetRunProcedure,
 		svc.GetRun,
 		connect.WithSchema(runServiceMethods.ByName("GetRun")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	runServiceListRunsHandler := connect.NewUnaryHandler(
 		RunServiceListRunsProcedure,
 		svc.ListRuns,
 		connect.WithSchema(runServiceMethods.ByName("ListRuns")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	runServiceLastRunPerWorkflowHandler := connect.NewUnaryHandler(

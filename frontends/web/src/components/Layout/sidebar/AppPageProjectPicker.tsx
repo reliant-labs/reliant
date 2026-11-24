@@ -9,17 +9,16 @@
  */
 
 import { useMemo } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 
 import DropdownMenu, { type MenuGroup } from "@/components/forge-ui/dropdown_menu";
 
 import { consolePath, type ConsolePage } from "../../Forge/Console/paths";
 import { ProjectMark } from "../ProjectMark";
+import { navigateWithFocus } from "../shellScopeNav";
 import { sectionInAnotherApp, sectionsAppOf, useShellLastPick, useShellSeveral } from "./shellProject";
 
 export function AppPageProjectPicker({ app, page }: { app: string; page: ConsolePage }) {
-  const navigate = useNavigate();
   const setFocus = useShellLastPick((state) => state.setFocus);
   const { mode: several, rows } = useShellSeveral();
 
@@ -44,7 +43,8 @@ export function AppPageProjectPicker({ app, page }: { app: string; page: Console
         testId: `app-page-project-${option.key}`,
         onClick: () => {
           setFocus(option.key);
-          void navigate({ href: consolePath(option.app, sectionInAnotherApp(page)) });
+          // In the URL too (`?focus=`), beside the several or All it keeps.
+          navigateWithFocus(consolePath(option.app, sectionInAnotherApp(page)), option.key);
         },
       })),
     },

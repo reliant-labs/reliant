@@ -36,6 +36,7 @@ service UserService {
   // PreviewAccountDeletion reports whether the caller's control-plane account
   // can be deleted, and what they must resolve first if not. Changes nothing.
   rpc PreviewAccountDeletion(PreviewAccountDeletionRequest) returns (PreviewAccountDeletionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}

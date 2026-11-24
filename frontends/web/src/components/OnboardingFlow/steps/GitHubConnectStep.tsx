@@ -40,7 +40,7 @@ function findProjectByPath(projects: Project[], path: string): Project | undefin
   return projects.find((project) => project.path === path);
 }
 
-export function GitHubConnectStep({ plan, updatePlan, onBack, returnTo }: StepProps) {
+export function GitHubConnectStep({ plan, updatePlan, returnTo }: StepProps) {
   const navigate = useNavigate();
 
   const eventBus = useEventBus();
@@ -203,14 +203,8 @@ export function GitHubConnectStep({ plan, updatePlan, onBack, returnTo }: StepPr
           </p>
         </div>
 
+        {/* Back is the wizard footer's (OnboardingPage): a second one here was the same action twice. */}
         <RepoSelector onSelect={handleSelectRepo} analyticsPhase="picker" />
-
-        <button
-          onClick={onBack}
-          className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
-        >
-          Back
-        </button>
       </div>
     );
   }

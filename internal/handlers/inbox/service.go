@@ -25,6 +25,12 @@ type Deps struct {
 	// Repo reads what waits on the caller (pending rows, automation
 	// health, machines and their storage) and records dismissals.
 	Repo Repository
+	// ProjectRows decides an item about a project (a recovery, an
+	// automation) through authz: one of an org the caller has left is not
+	// listed.
+	ProjectRows ProjectReader
+	// Machines reads a machine by id; the handler decides whose it is.
+	Machines DaemonReader
 	// OrgKeys lists the org keys a provider rejected (credentials/orgaccounts).
 	OrgKeys OrgKeys
 	// Items, Firings and Notices are the Inbox's own reads (deps.go).
@@ -70,6 +76,12 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("inbox: Deps.Repo is required")
+	}
+	if d.ProjectRows == nil {
+		return fmt.Errorf("inbox: Deps.ProjectRows is required")
+	}
+	if d.Machines == nil {
+		return fmt.Errorf("inbox: Deps.Machines is required")
 	}
 	if d.OrgKeys == nil {
 		return fmt.Errorf("inbox: Deps.OrgKeys is required")
