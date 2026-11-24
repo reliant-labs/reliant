@@ -1,7 +1,7 @@
 -- forge:backward-compatible — adds a table only this release reads and writes; the previous release never names it, so after a rollback the links simply stop growing.
 
 -- Migration: chat_pr_links
--- Created: 2026-11-24T17:08:18Z
+-- Created: 2026-11-24T20:43:23Z
 --
 -- Which pull requests a chat produced (dev-docs/design/agent-analytics.md
 -- §3.2, decision 10): the join behind cost per merged PR. pr_records mirrors

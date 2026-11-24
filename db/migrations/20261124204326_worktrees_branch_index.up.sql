@@ -1,7 +1,7 @@
 -- forge:backward-compatible — a new index; no statement of the previous release changes meaning.
 
 -- Migration: worktrees_branch_index
--- Created: 2026-11-24T17:08:21Z
+-- Created: 2026-11-24T20:43:26Z
 --
 -- When a pr_records row first appears, its head branch is matched against
 -- worktree branches to infer which chat produced it (chat_pr_links, the
