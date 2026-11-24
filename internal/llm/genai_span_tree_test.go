@@ -54,8 +54,10 @@ type goldenEvent struct {
 	Attrs []string `json:"attrs,omitempty"`
 }
 
+// attrKeys is nil for no attributes, as an event without any reads back from
+// the golden file.
 func attrKeys(kvs []attribute.KeyValue) []string {
-	out := make([]string, 0, len(kvs))
+	var out []string
 	for _, kv := range kvs {
 		out = append(out, string(kv.Key)+":"+kv.Value.Type().String())
 	}
@@ -152,7 +154,7 @@ func goldenTree(spans []sdktrace.ReadOnlySpan) []goldenSpan {
 			Name:   s.Name(),
 			Kind:   s.SpanKind().String(),
 			Parent: names[s.Parent().SpanID()],
-			Attrs:  attrKeys(s.Attributes()),
+			Attrs:  append([]string{}, attrKeys(s.Attributes())...),
 			Links:  len(s.Links()),
 			Status: fmt.Sprintf("%s %s", s.Status().Code, s.Status().Description),
 		}
@@ -164,23 +166,67 @@ func goldenTree(spans []sdktrace.ReadOnlySpan) []goldenSpan {
 	return out
 }
 
+// knownDrops are the attribute keys the golden file has that the span tree no
+// longer carries, each a deliberate, reviewed change: span name, event index
+// (-1 for the span's own attributes) and key.
+//
+//   - A retry with no HTTP status (a reset connection) said
+//     http.response.status_code=0; forge's genai.RetryWait leaves it out. Every
+//     reader treats a missing key and "0" alike (the Backoffs panel of
+//     deploy/observability/spec/project_gen.json: NOT IN (”, '0')).
+var knownDrops = []struct {
+	span  string
+	event int
+	key   string
+}{
+	{"chat claude-x-api", 1, "http.response.status_code:INT64"},
+}
+
+func withoutKnownDrops(spans []goldenSpan) []goldenSpan {
+	drop := func(keys []string, key string) []string {
+		out := keys[:0]
+		for _, k := range keys {
+			if k != key {
+				out = append(out, k)
+			}
+		}
+		return out
+	}
+	for _, d := range knownDrops {
+		for i := range spans {
+			if spans[i].Name != d.span {
+				continue
+			}
+			if d.event < 0 {
+				spans[i].Attrs = drop(spans[i].Attrs, d.key)
+			} else if d.event < len(spans[i].Events) {
+				spans[i].Events[d.event].Attrs = drop(spans[i].Events[d.event].Attrs, d.key)
+			}
+		}
+	}
+	return spans
+}
+
 // The span tree of a scripted turn is the one recorded before reliant adopted
 // forge's pkg/observe/genai (testdata/genai_span_tree.golden.json): the same
-// span names, kinds, parents, attribute keys, events, links and statuses. A
-// key lost is a dashboard that stops drawing.
+// span names, kinds, parents, attribute keys, events, links and statuses, but
+// for knownDrops. A key lost is a dashboard that stops drawing.
 func TestGenAISpanTreeGolden(t *testing.T) {
-	got, err := json.MarshalIndent(goldenTree(recordScriptedTurn(t)), "", "  ")
-	require.NoError(t, err)
-	got = append(got, '\n')
+	got := goldenTree(recordScriptedTurn(t))
 
 	path := filepath.Join("testdata", "genai_span_tree.golden.json")
 	if *updateGolden {
+		out, err := json.MarshalIndent(got, "", "  ")
+		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll("testdata", 0o755))
-		require.NoError(t, os.WriteFile(path, got, 0o644))
+		require.NoError(t, os.WriteFile(path, append(out, '\n'), 0o644))
+		return
 	}
-	want, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
-	assert.JSONEq(t, string(want), string(got))
+	var want []goldenSpan
+	require.NoError(t, json.Unmarshal(raw, &want))
+	assert.Equal(t, withoutKnownDrops(want), got)
 }
 
 // Every AI span — the node, the agent turn, the model call and the tool call,
