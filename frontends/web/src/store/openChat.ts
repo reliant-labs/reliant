@@ -22,7 +22,8 @@ import { resolveMainWorktree, resolveWorktree } from "../hooks/worktree-queries"
 import { useChatStore } from "./chatStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { useProjectStore } from "./projectStore";
-import { useWorkspaceStateStore } from "./workspaceStateStore";
+import { lastProjectOfTab } from "./workspaceStateStore";
+import { shellProjectNow } from "../lib/urlState/shellScopeStore";
 import { useWorktreeStore } from "./worktreeStore";
 import { useNewChatMachineStore } from "./newChatMachineStore";
 import { useNewChatAppStore } from "./newChatAppStore";
@@ -105,13 +106,13 @@ export function leaveSharedChat(chatId: string): boolean {
  * newChatProjectsStore); else the context project, else the last one used.
  */
 export function newChatTargetProjectId(): string | null {
-  const filter = useWorkspaceStateStore.getState().projectFilterId;
+  const filter = shellProjectNow();
   if (filter) return filter;
   const context = useProjectStore.getState().currentProject?.id;
   const several = chatProjectFilterIds();
   if (several.length >= 2) return context && several.includes(context) ? context : several[0];
   if (context) return context;
-  return useWorkspaceStateStore.getState().lastProjectId;
+  return lastProjectOfTab();
 }
 
 /** Where a new chat starts: its project, workspace and machine, and the app it is about. */

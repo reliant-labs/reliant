@@ -100,7 +100,7 @@ import {
   ChatSectionHeading,
 } from "./sidebar/primitives";
 import { OrgHeaderRow, ProjectSwitcherRow } from "./sidebar/ProjectSwitcher";
-import { useShellProject } from "./sidebar/shellProject";
+import { usePublishShellScope, useShellProject } from "./sidebar/shellProject";
 import { FindBox } from "./sidebar/FindBox";
 import type { NavigateOptions, NavSlots } from "./sidebar/NavRenderer";
 import { ShellNavBody } from "./sidebar/ShellNavBody";
@@ -731,6 +731,8 @@ function SidebarComponent({
   // hooks/useChatProjectFilter), or every project's — grouped by project
   // unless it is one.
   const shell = useShellProject(pathname, search);
+  // Every other reader of the scope (the chat list load, the keyboard, a new chat) takes what this shows.
+  usePublishShellScope(shell, search);
   // The bridges of the chat filter of several (URL, remembered choice, org), run once, here.
   const chatProjectFilter = useChatProjectFilter({ sync: { pathname, search } });
   const projectFilterId = shell.mode === "one" ? shell.projectId : null;
@@ -2112,7 +2114,7 @@ function SidebarComponent({
       {/* The header (U6, owner): the org row on the nav's top bar, then Find (the command palette), then the project(s) every row below is about. */}
       <OrgHeaderRow />
       <FindBox />
-      <ProjectSwitcherRow shell={shell} pathname={pathname} onNavigate={go} />
+      <ProjectSwitcherRow shell={shell} pathname={pathname} />
 
       {/* The nav as data (U6c): the variant's rows, or the area the route is in, then the footer.
           On a phone it is a drawer, where every row is drawn as a top-level row (NavRenderer `flat`). */}

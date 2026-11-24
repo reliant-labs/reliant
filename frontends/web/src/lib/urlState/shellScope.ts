@@ -183,10 +183,11 @@ export function dropShellScope({ search, next }: SearchMiddlewareArgs): SearchRe
  * projects never seed another's). Null while signed out, when nothing is
  * read or written.
  */
-function userKey(): string | null {
+export function defaultsOwner(): string | null {
   const { userId, effectiveId } = useActiveOrgStore.getState();
   return userId ? `${userId}.${effectiveId ?? "default"}` : null;
 }
+const userKey = defaultsOwner;
 
 const scopeCodec = {
   parse: (raw: string) => projectsParam.parse(raw),

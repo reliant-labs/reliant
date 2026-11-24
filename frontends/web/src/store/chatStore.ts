@@ -86,6 +86,7 @@ import { useActivityStore, ChatActivity, isBusyActivity } from "./activityStore"
 import { useThreadActivityStore } from "./threadActivityStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
+import { shellProjectNow } from "../lib/urlState/shellScopeStore";
 import { useWorktreeStore } from "./worktreeStore";
 import { useChatParamsStore } from "./chatParamsStore";
 import { useAttachmentStore } from "./attachmentStore";
@@ -1276,7 +1277,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   // Load the sidebar's chat list — the filter's project, or every project —
   // with singleflight deduplication to prevent parallel API calls.
   loadChats: async () => {
-    const scope = useWorkspaceStateStore.getState().projectFilterId;
+    // The shell's one project (what the sidebar shows), else every project.
+    const scope = shellProjectNow();
 
     // Use singleflight to ensure only one load per scope runs at a time
     return singleflight(`loadChats:${scope ?? "*"}`, async () => {
