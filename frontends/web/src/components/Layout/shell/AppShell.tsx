@@ -183,6 +183,8 @@ function ShellNav() {
                 type="button"
                 onClick={toggleShellNav}
                 aria-label="Hide sidebar"
+                // The header's toggle steps aside for this one (Header.tsx), so the tour points here then.
+                data-tour="header-sidebar-toggle"
                 style={noDragRegionStyle}
                 className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >

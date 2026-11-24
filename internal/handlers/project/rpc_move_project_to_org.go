@@ -71,7 +71,7 @@ func (s *Service) MoveProjectToOrg(
 	}
 
 	projectID, to := req.Msg.GetProjectId(), req.Msg.GetToOrgId()
-	project, err := s.deps.Repo.GetProject(ctx, projectID)
+	project, err := s.deps.ProjectRows.GetProject(ctx, projectID)
 	if err != nil && !errors.Is(err, svcerr.ErrNotFound) {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load the project"))
 	}

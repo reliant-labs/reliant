@@ -42,13 +42,22 @@ export interface ConsoleReliantProject {
 
 /**
  * The Reliant project behind `forgeProject`, made the current project once
- * found. `listed` once the project list has answered (or failed): until then a
- * forge name matches nothing only because nothing is loaded yet. The demo
- * shell (lib/shell.ts) has no Reliant projects: the forge name in the URL is
- * the whole scope, and nothing is waited for. Both app hosts have projects
- * (the forge host mounts the one route tree, U6).
+ * found when `select` (the page on screen is this app's console). `listed`
+ * once the project list has answered (or failed): until then a forge name
+ * matches nothing only because nothing is loaded yet. The demo shell
+ * (lib/shell.ts) has no Reliant projects: the forge name in the URL is the
+ * whole scope, and nothing is waited for. Both app hosts have projects (the
+ * forge host mounts the one route tree, U6).
+ *
+ * `select` is false for the shell's nav, which draws an app's sections on
+ * every page: a chat's page among them. There the URL's chat decides the
+ * project, never the app the nav happens to show. Selecting the app's
+ * declaring project from the nav switched the context away from the chat
+ * on screen, and selectProject then moved the URL to that project's chat
+ * (the 2026-11-23 "can't open a chat" incident: a project whose app is
+ * declared by another project could not keep any of its chats open).
  */
-export function useConsoleReliantProject(forgeProject: string): ConsoleReliantProject {
+export function useConsoleReliantProject(forgeProject: string, { select = true }: { select?: boolean } = {}): ConsoleReliantProject {
   const demo = isDemoShell();
   const { projects, isLoading: listing } = useProjects();
   const listed = demo || projects.length > 0 || !listing;
@@ -57,8 +66,8 @@ export function useConsoleReliantProject(forgeProject: string): ConsoleReliantPr
 
   const match = listed && !demo ? projectDeclaring(forgeProject, projects, currentProject) : null;
   useEffect(() => {
-    if (match && match.id !== currentProject?.id) void selectProject(match);
-  }, [match, currentProject?.id, selectProject]);
+    if (select && match && match.id !== currentProject?.id) void selectProject(match);
+  }, [select, match, currentProject?.id, selectProject]);
   return { listed, projectId: match?.id ?? null };
 }
 

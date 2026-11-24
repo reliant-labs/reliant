@@ -8,6 +8,8 @@
 #
 # Usage:
 #   scripts/check-compat.sh proto        buf breaking: this tree's proto vs the base's
+#                                        (an rpc newly declaring NO_SIDE_EFFECTS or
+#                                        IDEMPOTENT is additive, not a break; jq)
 #   scripts/check-compat.sh migrations   a migration declaring forge:breaks-rollback
 #                                        needs the owner's approval label
 #
@@ -114,10 +116,43 @@ case "${1:-}" in
     base_paths=()
     while IFS= read -r p; do base_paths+=("$p"); done < <(git ls-tree --name-only "$base" -- buf.lock proto)
     git archive "$base" -- buf.yaml ${base_paths[@]+"${base_paths[@]}"} | tar -x -C "$old"
-    if out="$(buf breaking --against "$old" 2>&1)"; then
+    # One finding buf's FILE rules report is additive, not a break: an rpc that
+    # declared no idempotency_level now declaring NO_SIDE_EFFECTS or IDEMPOTENT
+    # (RPC_SAME_IDEMPOTENCY_LEVEL). The wire is unchanged: a Connect server also
+    # accepts GET for a NO_SIDE_EFFECTS rpc, and an old client keeps sending POST.
+    # It is matched by rule ID and the exact from/to text of buf's JSON finding,
+    # never by a loose grep. Every other change of the level (dropping or
+    # downgrading NO_SIDE_EFFECTS, IDEMPOTENT to NO_SIDE_EFFECTS, ...) still
+    # refuses, as does any finding that is not a JSON object, or a run that
+    # failed for any reason but findings (buf exits 100 for those).
+    additive='.type == "RPC_SAME_IDEMPOTENCY_LEVEL" and (.message | test("^RPC \"[^\"]+\" on service \"[^\"]+\" changed option \"idempotency_level\" from \"IDEMPOTENCY_UNKNOWN\" to \"(NO_SIDE_EFFECTS|IDEMPOTENT)\"\\.$"))'
+    text='"\(.path):\(.start_line):\(.start_column):\(.message)"'
+    errf="$old.err"; trap 'rm -rf "$old" "$errf"' EXIT
+    rc=0; out="$(buf breaking --against "$old" --error-format json 2>"$errf")" || rc=$?
+    if [ "$rc" = 0 ]; then
       echo "check-compat: proto is wire-compatible with ${base:0:12}"; exit 0
     fi
-    printf '%s\n' "$out" >&2
+    cat "$errf" >&2
+    blocking="$out"
+    if [ "$rc" = 100 ] && command -v jq >/dev/null; then
+      # jq fails on a line that is not a finding object, and then nothing is exempt.
+      if total="$(jq -s 'map(select(.type | type == "string")) | length' <<<"$out" 2>/dev/null)" \
+        && [ "$total" = "$(jq -s length <<<"$out")" ] && [ "$total" -gt 0 ] \
+        && rest="$(jq -r "select(($additive) | not) | $text" <<<"$out")" \
+        && exempt="$(jq -r "select($additive) | $text" <<<"$out")"; then
+        blocking="$rest"
+        if [ -n "$exempt" ]; then
+          echo "check-compat: additive, not breaking: an rpc newly declares NO_SIDE_EFFECTS or IDEMPOTENT (wire-compatible; dev-docs/merge-and-release-gates.md):"
+          sed 's/^/  /' <<<"$exempt"
+        fi
+        if [ -z "$blocking" ]; then
+          echo "check-compat: proto is wire-compatible with ${base:0:12}"; exit 0
+        fi
+      fi
+    elif [ "$rc" = 100 ]; then
+      echo "check-compat: jq is not on PATH, so no finding can be classified as additive" >&2
+    fi
+    printf '%s\n' "$blocking" >&2
     refuse breaking:approved "buf breaking: the proto change is incompatible with ${base:0:12}" \
       "Deprecate instead: keep the field, message, rpc or enum value and mark it [deprecated = true]; when a field truly goes, keep its number and name in 'reserved' and add the replacement beside it (the proto-breaking skill)."
     ;;

@@ -67,7 +67,7 @@ func TestDeleteWorkflow_RecordsADeleteEventForTheSlug(t *testing.T) {
 	t.Parallel()
 	slug := workflowref.Slug("pr-review")
 	store := newAutomationsStore(slug)
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(withAutomations(store.deps(), &retirer{})))
+	svc := workflow.NewTestWorkflow(t, withDeps(withAutomations(store.deps(), &retirer{})))
 	client, events := activityClient(t, svc)
 
 	resp, err := client.DeleteWorkflow(context.Background(), connect.NewRequest(&pb.DeleteWorkflowRequest{ProjectId: "p-1", Name: "pr-review"}))
@@ -88,7 +88,7 @@ func TestImportWorkflow_ConflictRecordsNoEvent(t *testing.T) {
 	t.Parallel()
 	slug := workflowref.Slug("pr-review")
 	store := newAutomationsStore(slug)
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(store.deps()))
+	svc := workflow.NewTestWorkflow(t, withDeps(store.deps()))
 	client, events := activityClient(t, svc)
 
 	resp, err := client.ImportWorkflow(context.Background(), connect.NewRequest(&pb.ImportWorkflowRequest{

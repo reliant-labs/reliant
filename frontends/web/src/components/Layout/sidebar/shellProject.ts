@@ -252,10 +252,13 @@ export function useShellProject(pathname: string, search: Record<string, unknown
   const contextProjectId = useProjectStore((state) => state.currentProject?.id ?? null);
   const filterIds = useChatProjectFilterIds();
   // A choice of several outlives a reload of any page: the filter holds it
-  // only for the tab, the setting for good.
+  // only for the tab, the setting for good. The tab's own choice comes first:
+  // the setting is shared by every tab (and refetched on focus), so reading
+  // it first let a choice made in one tab replace the projects another tab
+  // has open. It only fills in a tab that has no choice of its own.
   const { prefs } = useSidebarProjectPrefs();
   const severalPick = useShellLastPick((state) => state.several);
-  const rememberedKey = (prefs.filter.length >= 2 ? prefs.filter : severalPick).join(",");
+  const rememberedKey = (severalPick.length >= 2 ? severalPick : prefs.filter).join(",");
   useEffect(() => {
     if (lastPick !== SEVERAL_PROJECTS_PICK || filterIds.length >= 2 || !rememberedKey.includes(",")) return;
     useChatProjectFilterStore.getState().setMany(rememberedKey.split(","));

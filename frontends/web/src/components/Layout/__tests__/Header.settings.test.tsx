@@ -1,5 +1,5 @@
 /**
- * The Header's Settings button must be there with no project.
+ * The Header's Settings button must be there with or without a project.
  *
  * The app's only other Settings link lives in the Sidebar, which renders
  * exclusively inside ModernApp's main app shell — and that shell requires a
@@ -11,9 +11,13 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+const projectState = vi.hoisted(() => ({
+  currentProject: null as null | { id: string; name: string },
+}));
+
 vi.mock("../../../store/projectStore", () => ({
   useProjectStore: (selector: (s: unknown) => unknown) =>
-    selector({ currentProject: null }),
+    selector(projectState),
 }));
 
 vi.mock("../../../store/worktreeStore", () => ({
@@ -63,6 +67,7 @@ import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
 describe("Header settings escape hatch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    projectState.currentProject = null;
     // The Header's theme effect reads matchMedia, which jsdom does not
     // implement. Irrelevant to what these tests assert.
     vi.stubGlobal(
@@ -87,6 +92,18 @@ describe("Header settings escape hatch", () => {
 
     const button = screen.getByTestId("header-settings-button");
     await userEvent.click(button);
+
+    expect(onNavigateToSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([false, true])("keeps Settings reachable with a project and sidebar expanded=%s", async (expanded) => {
+    projectState.currentProject = { id: "project-1", name: "Project" };
+    useWorkspaceStateStore.setState({ leftSidebarExpanded: expanded });
+    const onNavigateToSettings = vi.fn();
+    // No Sidebar is mounted: the Header must supply its own entry point.
+    render(<Header onNavigateToSettings={onNavigateToSettings} />);
+
+    await userEvent.click(screen.getByTestId("header-settings-button"));
 
     expect(onNavigateToSettings).toHaveBeenCalledTimes(1);
   });
