@@ -1,9 +1,9 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * What the forge console's pages read from context in the demo shell
- * (demoShellRoutes.tsx wraps its `_authenticated` layout in it), the same
- * providers DemoConsole gives its own panel:
+ * What the forge console's pages read from context in the demo shell:
+ * demoShellRoutes.tsx wraps its `_authenticated` layout in it, and the demo's
+ * own pages (/forge/demo, DemoConsole) are inside it too, with their `section`:
  *
  *  - the Observability views read `useObservabilityApi()`, not the transport:
  *    the demo's API (Forge/Demo/demoData/demoApi.ts: the sample app on the
@@ -21,6 +21,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { createDemoApi } from "@/components/Forge/Demo/demoData/demoApi";
 import { DemoBrowserProviders } from "@/components/Forge/Demo/DemoBrowserProviders";
 import { DemoNavExtras } from "@/components/Forge/Demo/DemoNavExtras";
+import type { DemoSection } from "@/components/Forge/Demo/demoPath";
 import { AskAgentModeProvider } from "@/components/Forge/Observability/AskReliant/askAgentMode";
 import { ObservabilityBillingApiContext } from "@/hooks/observability-billing-queries";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
@@ -36,14 +37,14 @@ const usageApi = {
   updateObservabilityLimits: notInDemo,
 };
 
-export function DemoConsoleProviders({ children }: { children: ReactNode }) {
+export function DemoConsoleProviders({ section, children }: { section?: DemoSection; children: ReactNode }) {
   const api = useMemo(() => createDemoApi(), []);
   return (
     <AskAgentModeProvider mode="handoff" cli="forge" demo>
       <DemoBrowserProviders>
         <ObservabilityApiProvider api={api}>
           <ObservabilityBillingApiContext.Provider value={usageApi}>
-            <DemoNavExtras>{children}</DemoNavExtras>
+            <DemoNavExtras section={section}>{children}</DemoNavExtras>
           </ObservabilityBillingApiContext.Provider>
         </ObservabilityApiProvider>
       </DemoBrowserProviders>

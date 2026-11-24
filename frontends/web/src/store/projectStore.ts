@@ -23,7 +23,7 @@ import { useViewerStore } from "./viewerStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { trackEvent } from "../lib/analytics";
 import { restoreLastWorktree } from "../hooks/worktree-actions";
-import { openChatInWorkspace, beginWorkspaceOpen } from "../lib/openChatInWorkspace";
+import { openChatInWorkspace, beginWorkspaceOpen, observeWorkspaceOpen } from "../lib/openChatInWorkspace";
 import { homePath, projectChatsPath } from "@/lib/paths";
 import { chatShellRouteOf, latestPathname, pathOwnsChat, routeOwnsChat } from "@/lib/chatRoute";
 import { orgFreePath } from "@/lib/paths/org";
@@ -524,7 +524,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   followActiveOrg: async (orgId: string | null) => {
-    const isCurrent = beginWorkspaceOpen();
+    // A chat's URL names the chat on screen, and the route's open brings its
+    // project (and so its org) along (hooks/useChatRoute.ts): the org change
+    // is often that very chat's. Neither leave its project for the org's
+    // most recent one, nor supersede the open in flight.
+    const urlNamesChat = chatShellRouteOf(latestPathname())?.kind === "chat";
+    const isCurrent = urlNamesChat ? observeWorkspaceOpen() : beginWorkspaceOpen();
     let projects: Project[];
     try {
       // The list the server answers for the org requests now name.
@@ -552,7 +557,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       // into the chat's own org): it stays open, and its project is the
       // context, not the new org's most recent one.
       await openChatInWorkspace(linkedChat, { isCurrent, openEntry: "restore" });
-    } else if (current && !inOrg(current)) {
+    } else if (current && !inOrg(current) && !urlNamesChat) {
       // Leave it as a delete leaves the current project, but keep its saved
       // workspace state: switching back restores it.
       useChatStore.getState().clearCurrentChat(null);

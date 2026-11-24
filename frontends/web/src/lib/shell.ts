@@ -87,7 +87,9 @@ export function forgeAppHost(): string {
 
 /**
  * The public demo's hostname in this bundle: DEMO_APP_HOST, else the default.
- * Deprecated: the demo's own build (demo.html) is the supported path.
+ * Where the app's /forge/demo hands off to (demoAppOrigin). Mounting the demo
+ * shell on this host is deprecated: the demo's own build (demo.html) is the
+ * supported path.
  */
 export function demoAppHost(): string {
   let configured = "";
@@ -102,6 +104,11 @@ export function demoAppHost(): string {
 /** The forge host's public origin, for a link into the app from outside it (the public demo's). */
 export function forgeAppOrigin(): string {
   return `https://${forgeAppHost()}`;
+}
+
+/** The public demo's origin, for a link to it from the app (the app's /forge/demo leaves for it). */
+export function demoAppOrigin(): string {
+  return `https://${demoAppHost()}`;
 }
 
 export interface ShellInputs {

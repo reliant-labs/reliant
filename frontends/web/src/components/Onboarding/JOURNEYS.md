@@ -332,7 +332,9 @@ effects are skipped when storage isn't the settings adapter:
 The forge brand does this in `routes.tsx` (`bootForgeTour`,
 ForgeShell/forgeTourBoot.ts, at module load on the forge host), mounts
 `<JourneyTour />` at its root in place of `OnboardingWizard`, and both brands
-mount `/forge/demo` (and `/demo`) as public routes. A landing `?journey=` is handled
+mount `/forge/demo` (and `/demo`) as public routes that leave for the demo
+host, query kept (`Forge/Demo/demoHandoff.ts`): the demo has one home, so a
+journey started there continues on the demo host's cut. A landing `?journey=` is handled
 by ForgeShell/landingJourney.ts:
 - `forge` starts the forge journey: at once for a signed-out visitor (on the
   public demo, instead of the sign-in redirect), on arrival for a signed-in
@@ -352,7 +354,8 @@ Home** (`/forge/demo?section=home`), free to explore:
   built per shell in `journeys/forge.tsx` (`stop`). The root route keeps
   `?tour=` across the console's links (`retainTourParam`), and an older
   `/forge/demo?view=…&tour=…` link is redirected to the console page it names
-  (`consoleTourHref`). Reliant and the forge shell keep `/forge/demo`.
+  (`consoleTourHref`), which is also where Reliant's and the forge shell's
+  `/forge/demo` hand a tour off to.
 - `Forge/Demo/tips` explains each page (below, "Page tours"). Its card opens by
   itself on a section's first visit this session; tips are off while the tour
   is open.

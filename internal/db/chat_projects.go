@@ -28,9 +28,18 @@ func (r *Repo) AttachChatProject(ctx context.Context, cp *core.ChatProject) erro
 	if cp == nil || cp.ChatID == "" || cp.ProjectID == "" {
 		return fmt.Errorf("chat ID and project ID are required")
 	}
-	// READ COMMITTED: the advisory lock, not the snapshot, makes the count
-	// true at the insert.
+	// READ COMMITTED: lock the chat row before checking its current primary.
+	// MoveChatToProject takes the same row lock and removes the destination's
+	// attachment in its transaction, so neither ordering can leave a primary
+	// project attached. Take this before the attachment cap's advisory lock.
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var primary string
+		if err := r.ORM().QueryRow(ctx, `SELECT project_id FROM chats WHERE id = $1 FOR UPDATE`, cp.ChatID).Scan(&primary); err != nil {
+			return fmt.Errorf("lock the chat before attaching a project: %w", err)
+		}
+		if primary == cp.ProjectID {
+			return nil
+		}
 		if err := store.LockChatProjects(ctx, r.ORM(), cp.ChatID); err != nil {
 			return err
 		}

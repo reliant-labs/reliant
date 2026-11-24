@@ -229,6 +229,58 @@ func TestMoveChatToAnAttachedProjectDropsTheAttachment(t *testing.T) {
 	assert.True(t, got[0].GetPrimary())
 }
 
+// A stale handler read must not re-attach a project that has become primary.
+func TestAttachAfterMoveWithStaleChat(t *testing.T) {
+	f := newChatProjectsFixture(t)
+	project := f.installed("forge")
+	stale, err := f.repo.GetChat(f.ctx, f.chatID)
+	require.NoError(t, err)
+	primary, err := f.repo.GetProject(f.ctx, f.primary)
+	require.NoError(t, err)
+	_, err = f.move(&reliantv1.MoveChatToProjectRequest{ChatId: f.chatID, ProjectId: project})
+	require.NoError(t, err)
+	require.NoError(t, f.service.attachProject(f.ctx, moveUser, stale, primary, project))
+	rows, err := f.repo.ListChatProjects(f.ctx, f.chatID)
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+}
+
+func TestChatProjectsOmitsCrossOrgAttachments(t *testing.T) {
+	for _, movedPrimary := range []bool{false, true} {
+		t.Run(fmt.Sprint(movedPrimary), func(t *testing.T) {
+			f := newChatProjectsFixture(t)
+			f.withOrgs()
+			project := f.installed("forge")
+			_, err := f.attach(project)
+			require.NoError(t, err)
+			// Live membership permits both projects; only their orgs differ.
+			f.exec(`UPDATE projects SET org_id = 'acme' WHERE id IN (?, ?)`, f.primary, project)
+			f.exec(`UPDATE chats SET org_id = 'acme' WHERE id = ?`, f.chatID)
+			if movedPrimary {
+				f.exec(`UPDATE projects SET org_id = 'home' WHERE id = ?`, f.primary)
+				f.exec(`UPDATE chats SET org_id = 'home' WHERE id = ?`, f.chatID)
+			} else {
+				f.exec(`UPDATE projects SET org_id = 'home' WHERE id = ?`, project)
+			}
+			assert.Equal(t, []string{"reliant"}, projectNames(f.list()))
+		})
+	}
+}
+
+func TestChatProjectsMachineAndPathFollowChatPin(t *testing.T) {
+	f := newChatProjectsFixture(t)
+	project := f.installed("forge")
+	_, err := f.attach(project)
+	require.NoError(t, err)
+	machine := f.machine(moveUser, "laptop")
+	f.install(project, machine, "/Users/me/forge")
+	f.exec(`UPDATE chats SET active_daemon_id = ? WHERE id = ?`, machine, f.chatID)
+	got := f.list()
+	require.Len(t, got, 2)
+	assert.Equal(t, machine, got[1].GetDaemonId())
+	assert.Equal(t, "/Users/me/forge", got[1].GetPath())
+}
+
 func TestStartChatAttachesProjects(t *testing.T) {
 	e := newStartDaemonEnv(t)
 	machine := e.daemon(t, "test-user")

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestCancelStoppedSpawn pins what a stopped spawn's bookkeeping commits: the
@@ -138,7 +139,7 @@ func TestCancelStoppedSpawnResolvesTheSubtreesQueuedMail(t *testing.T) {
 		"am-ssm-grandchild": core.AgentMessageStatusUndelivered,
 		"am-ssm-root":       core.AgentMessageStatusQueued,
 	} {
-		msg, err := repo.GetAgentMessage(ctx, id)
+		msg, err := store.GetAgentMessage(ctx, repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("GetAgentMessage(%s): %v", id, err)
 		}

@@ -288,7 +288,7 @@ func (s *Service) sendQueuesBehindMailbox(ctx context.Context, prior *priorSend,
 		// where it put it.
 		return prior.mailbox != nil, nil
 	}
-	queued, err := s.deps.Repo.CountQueuedAgentMessagesForThread(ctx, thread)
+	queued, err := s.deps.AgentMessages.CountQueuedAgentMessagesForThread(ctx, thread)
 	if err != nil {
 		return false, fmt.Errorf("count queued mailbox rows for %s: %w", thread, err)
 	}
@@ -813,7 +813,7 @@ func (s *Service) SendMessage(
 					// at graph entry (reliant #2394). Withdraw the row and say
 					// it was not delivered, so the composer keeps the text.
 					if recipient.routed && !recipient.rootReads {
-						if _, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, queuedMsg.ID, chat.ID); err != nil {
+						if _, err := s.deps.AgentMessages.CancelQueuedAgentMessage(ctx, queuedMsg.ID, chat.ID); err != nil {
 							logging.WarnContext(ctx, "Could not withdraw a message whose run ended before it was read",
 								"error", err, "chatID", req.Msg.ChatId, "messageID", queuedMsg.ID)
 						}

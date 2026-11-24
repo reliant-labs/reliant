@@ -119,7 +119,7 @@ func (s *Service) settle(ctx context.Context, o *core.TriggerOffer, status, reas
 		return
 	}
 	if o.Status == core.TriggerOfferPending {
-		if _, err := s.deps.Repo.SettleTriggerOffer(ctx, o.ID, status, reason); err != nil {
+		if _, err := s.deps.Offers.SettleTriggerOffer(ctx, o.ID, status, reason); err != nil {
 			logging.WarnContext(ctx, "[takeover] could not record a dead offer's state; the next read decides it again",
 				"offer_id", o.ID, "status", status, "error", err)
 		}

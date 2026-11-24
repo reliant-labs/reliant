@@ -158,6 +158,15 @@ func (s *Service) chatProjects(ctx context.Context, userID string, chat *db.Chat
 		if err != nil {
 			continue
 		}
+		// Membership in both organizations does not make an attachment
+		// cross-org: project/org moves can leave historical attachment rows.
+		decision, err := s.moveOrg(ctx, userID, chat, primary, project)
+		if err != nil {
+			return nil, err
+		}
+		if decision.crosses || project.ID == chat.ProjectID {
+			continue
+		}
 		// The checkout is the one on the machine the chat's calls run on.
 		machine := chat.ActiveDaemonID
 		if machine == nil {
@@ -166,7 +175,7 @@ func (s *Service) chatProjects(ctx context.Context, userID string, chat *db.Chat
 		out = append(out, &reliantv1.ChatProject{
 			ProjectId:  project.ID,
 			Name:       project.Name,
-			DaemonId:   row.DaemonID,
+			DaemonId:   machine,
 			Path:       s.checkoutPath(ctx, userID, project, machine),
 			AttachedAt: row.CreatedAt.UTC().Format(time.RFC3339),
 		})
