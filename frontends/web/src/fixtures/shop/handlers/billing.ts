@@ -4,7 +4,7 @@
  * BillingService and ObservabilityBillingService for the signed-in app: Alex
  * is on Compute M (62 of 160 machine hours used this period, with a cloud
  * machine running), observability at 6.4 of 10 GB, three paid invoices, and
- * the org's month: shop (about $38 so far, a ~$61 forecast, over prod,
+ * the org's month: shop (a ~$61 forecast, over prod,
  * staging and dev) plus ledger, a small backend and its database, so Usage &
  * billing lists two projects.
  *
@@ -80,7 +80,7 @@ const SHOP_DAILY: [string, string, number][] = [
   ["env-dev", "static_sites", 0.03],
 ];
 
-/** shop's month to date (GetProjectCost): ~$38, a ~$61 forecast, the api in prod the biggest driver. */
+/** shop's month to date (GetProjectCost): summed daily costs, a ~$61 forecast, the api in prod the biggest driver. */
 function shopCost() {
   const start = monthStart();
   const days = Math.floor((demoNow() - start) / DAY) + 1;
@@ -99,7 +99,7 @@ function shopCost() {
   });
   return {
     currency: "USD", generatedAt: tsAgo(5 * MINUTE), periodStart: ts(start), periodEnd: ts(monthStart(1)),
-    measuredThrough: tsAgo(40 * MINUTE), monthToDate: amount(38.12), monthToDateList: amount(listTotal, "list"), samePointLastPeriod: amount(33.4),
+    measuredThrough: tsAgo(40 * MINUTE), monthToDate: amount(listTotal), monthToDateList: amount(listTotal, "list"), samePointLastPeriod: amount(33.4),
     forecast: { amount: amount(61.3), lowUsdNanos: nanos(56.8), highUsdNanos: nanos(66.9), method: "run_rate_and_trailing_7d", measuredHours: 168, unavailableReason: "", list: amount(64.2, "list") },
     lastPeriod: amount(54.75, "invoiced"),
     daily,
