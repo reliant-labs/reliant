@@ -1,0 +1,20 @@
+{
+  "schema": "forge.ci.gate/v1",
+  "ok": false,
+  "exit_code": 1,
+  "error": "unknown tier \"nightly\": use one of pr, queue, main, full",
+  "verdict": "error",
+  "lane": "all",
+  "dirty": false,
+  "wall_ms": 0,
+  "counts": {
+    "pass": 0,
+    "cached": 0,
+    "fail": 0,
+    "skip": 0,
+    "waived": 0,
+    "deferred": 0,
+    "na": 0
+  },
+  "checks": []
+}

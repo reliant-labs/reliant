@@ -1,0 +1,3 @@
+{"service":"api"}
+{"service":"worker"}
+{"schema":"forge.obs.test/v1","ok":false,"exit_code":2,"error":"stream lost","end":true}

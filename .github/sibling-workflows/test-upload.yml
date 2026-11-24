@@ -1,0 +1,81 @@
+# Sends main's recorded test runs to the control plane, best effort.
+#
+# WHY: forge dogfoods the Tests service it ships. Its CI lanes record their
+# runs through `forge test capture` (unit and cli -race shards, the -short
+# tier and the flake gate, the integration steps, web-runtime's Vitest), and
+# on a push to main each recording job keeps its runs as a test-runs-*
+# artifact. This workflow sends them with `forge test report --upload`
+# (scripts/ci-test-upload.sh), so the Tests pages of the hosted "forge"
+# project show main's results, merged coverage and flaky tests. forge has no
+# deployed env, so the runs go to Reliant cloud, forge's default control
+# plane.
+#
+# WHY A WORKFLOW OF ITS OWN: the upload needs a credential, and ci.yml is
+# held to exposing none (internal/ciguard's
+# TestCandidateCIHasNoExposedGitHubCredentials). This runs from the default
+# branch after CI completes, only for a push to main, so the code it checks
+# out and runs is main's own, already merged.
+#
+# WHAT IT NEVER DOES: change a verdict. The job is continue-on-error and the
+# script always exits 0, with a warning when it cannot upload (no token, a
+# control plane that does not record test runs yet). A red main's runs
+# upload too: they are the ones its flaky tests are found in.
+#
+# The token (`tests:write`, minted by the owner) is FORGE_CONTROL_PLANE_TOKEN,
+# a secret of the `tests-upload` environment, never a repository secret:
+# forge is public, and a fork's pull request never reaches this workflow.
+
+name: Test upload
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    name: Upload main's test results
+    if: >-
+      github.repository == 'reliant-labs/forge' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    environment: tests-upload
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+          # forge test report measures diff coverage against the merge base.
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: ./.github/actions/restore-go-caches
+        with:
+          scope: tools
+      # A run whose recording jobs all failed early keeps no artifact; the
+      # script then says there is nothing to report.
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: test-runs-*
+          merge-multiple: true
+          path: .forge/tests/runs
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: forge test report --upload
+        env:
+          FORGE_CONTROL_PLANE_TOKEN: ${{ secrets.FORGE_CONTROL_PLANE_TOKEN }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: scripts/ci-test-upload.sh "$HEAD_SHA"

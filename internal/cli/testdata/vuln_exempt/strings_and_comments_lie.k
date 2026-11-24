@@ -1,0 +1,10 @@
+import forge
+
+# An example in a comment: vuln_gate = forge.VulnPolicy {mode = "enforce"}
+_doc = "vuln_gate = forge.VulnPolicy {mode = \"audit\"} is how you declare it"
+
+bundle = forge.Bundle {
+    delivery_policy = forge.DeliveryPolicy {
+        approvals = forge.Approvals {mode = "enforce"} # } a stray brace in a comment
+    }
+}

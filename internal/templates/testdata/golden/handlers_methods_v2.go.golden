@@ -1,0 +1,42 @@
+
+// Echo implements the Echo RPC.
+// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
+// forge:gen unwired-stub symbol=api.Echo
+func (s *Service) Echo(
+	ctx context.Context,
+	req *pb.EchoRequest,
+) (*pb.EchoResponse, error) {
+	return nil, svcerr.Wrap(svcerr.ScaffoldStub("Echo"))
+}
+
+// Tail implements the Tail server streaming RPC.
+// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
+// forge:gen unwired-stub symbol=api.Tail
+func (s *Service) Tail(
+	ctx context.Context,
+	req *pb.TailRequest,
+	stream apiv1connect.ApiServiceTailServerStream,
+) error {
+	return svcerr.Wrap(svcerr.ScaffoldStub("Tail"))
+}
+
+// Upload implements the Upload client streaming RPC.
+// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
+// forge:gen unwired-stub symbol=api.Upload
+func (s *Service) Upload(
+	ctx context.Context,
+	stream apiv1connect.ApiServiceUploadServerStream,
+) (*pb.UploadResponse, error) {
+	return nil, svcerr.Wrap(svcerr.ScaffoldStub("Upload"))
+}
+
+// Chat implements the Chat bidirectional streaming RPC.
+// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
+// forge:gen unwired-stub symbol=api.Chat
+func (s *Service) Chat(
+	ctx context.Context,
+	stream apiv1connect.ApiServiceChatServerStream,
+) error {
+	return svcerr.Wrap(svcerr.ScaffoldStub("Chat"))
+}
+

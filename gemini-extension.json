@@ -1,0 +1,11 @@
+{
+  "name": "forge",
+  "version": "1.10.0",
+  "description": "Guardrails for apps in any agent harness. Deploy with no account: a live URL plus a claim link.",
+  "mcpServers": {
+    "forge": {
+      "command": "npx",
+      "args": ["-y", "@reliantlabs/forge", "mcp"]
+    }
+  }
+}

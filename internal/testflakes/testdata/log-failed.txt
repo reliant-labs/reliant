@@ -1,0 +1,26 @@
+﻿CI result	UNKNOWN STEP	2026-11-18T21:35:39.6487059Z shell: /usr/bin/bash -e {0}
+CI result	UNKNOWN STEP	2026-11-18T21:35:39.6487448Z env:
+CI result	UNKNOWN STEP	2026-11-18T21:35:39.6487812Z   GOPROXY: https://proxy.golang.org|direct
+CI result	UNKNOWN STEP	2026-11-18T21:35:39.6488317Z   BASE: b38371ffc1e4e631a1f4be0521e0dc650fd161a9
+CI result	UNKNOWN STEP	2026-11-18T21:35:39.6488769Z   JOB_T0: 1795037668
+CI result	UNKNOWN STEP	2026-11-18T21:35:39.6489129Z   GOTOOLCHAIN: local
+CI result	UNKNOWN STEP	2026-11-18T21:35:39.6489544Z   PNPM_HOME: /home/runner/setup-pnpm/node_modules/.bin
+CI result	UNKNOWN STEP	2026-11-18T21:35:39.6490273Z   HEAD_REF: refs/heads/gh-readonly-queue/main/pr-2861-b38371ffc1e4e631a1f4be0521e0dc650fd161a9
+CI result	UNKNOWN STEP	2026-11-18T21:35:39.6494689Z   GH_TOKEN: ***
+CI result	UNKNOWN STEP	2026-11-18T21:35:39.6495024Z ##[endgroup]
+CI result	UNKNOWN STEP	2026-11-18T21:35:39.7326639Z ^[[32mtask: [ci:merge] ./scripts/merge-gate.sh --base b38371ffc1e4e631a1f4be0521e0dc650fd161a9 --queue
+CI result	UNKNOWN STEP	2026-11-18T21:54:47.0837157Z --- FAIL: TestCall_ReadRetriesADeadKeepAliveConnection (package github.com/reliant-labs/reliant/internal/accesstokenclient)
+CI result	UNKNOWN STEP	2026-11-18T21:54:47.0839293Z --- FAIL: TestEveryUserScopedReadIsClassified (package github.com/reliant-labs/reliant/internal/authz)
+CI result	UNKNOWN STEP	2026-11-18T21:54:47.0839891Z 
+CI result	UNKNOWN STEP	2026-11-18T21:54:47.0842648Z !! GATE-HEALTH: wall 1147s exceeds 300s; five-minute target NOT MET. Gate infrastructure/tiering regression, NOT PR blame.
+CI result	UNKNOWN STEP	2026-11-18T21:54:47.0844193Z !! GATE-HEALTH: docs 94s exceeds 60s (not PR blame).
+CI result	UNKNOWN STEP	2026-11-18T21:54:47.0844769Z !! GATE-HEALTH: generate 419s exceeds 60s (not PR blame).
+CI result	UNKNOWN STEP	2026-11-18T21:54:47.0845581Z !! GATE-HEALTH: lint 103s exceeds 60s (not PR blame).
+CI result	UNKNOWN STEP	2026-11-18T21:54:47.0846734Z !! GATE-HEALTH: unbudgeted step pgtest (not PR blame).
+CI result	UNKNOWN STEP	2026-11-18T21:54:47.0847275Z !! GATE-HEALTH: prewarm 411s exceeds 60s (not PR blame).
+CI result	UNKNOWN STEP	2026-11-18T21:54:47.0847822Z !! GATE-HEALTH: test 707s exceeds 120s (not PR blame).
+Test (windows)	Run tests	2026-11-18T21:40:00.0000000Z --- FAIL: TestWindowsOnly (0.01s)
+Test (windows)	Run tests	2026-11-18T21:40:00.0000001Z FAIL	github.com/reliant-labs/reliant/internal/winonly	0.2s
+Test (shard 1)	Run tests	2026-11-18T21:41:00.0000000Z ::error::FAIL internal/sessions TestSessionExpiry
+Test (shard 1)	Run tests	2026-11-18T21:41:00.0000001Z --- FAIL: TestDangling (0.00s)
+Test (shard 2)	Run tests	2026-11-18T21:41:00.0000002Z FAIL	github.com/reliant-labs/reliant/internal/other	0.1s

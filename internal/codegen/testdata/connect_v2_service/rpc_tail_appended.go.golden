@@ -1,0 +1,22 @@
+package items
+
+import (
+	"context"
+
+	pb "example.com/v2app/gen/services/items/v1"
+	itemsv1connect "example.com/v2app/gen/services/items/v1/itemsv1connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+)
+
+// Tail moved elsewhere.
+
+// Tail implements the Tail server streaming RPC.
+// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
+// forge:gen unwired-stub symbol=items.Tail
+func (s *Service) Tail(
+	ctx context.Context,
+	req *pb.TailRequest,
+	stream itemsv1connect.ItemsServiceTailServerStream,
+) error {
+	return svcerr.Wrap(svcerr.ScaffoldStub("Tail"))
+}
