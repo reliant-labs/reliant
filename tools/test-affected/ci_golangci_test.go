@@ -80,11 +80,11 @@ func mqNeeds(v any) []string {
 }
 
 // mqWorkers are the merge queue's workers: the jobs `CI result` needs, each
-// of which must succeed. Every one runs from the start of the group.
-var mqWorkers = []string{"golangci", "merge-gate", "vitest"}
+// of which must succeed. Every one runs from the start of the group. Sorted.
+var mqWorkers = []string{"golangci", "merge-gate", "visual", "vitest"}
 
-// TestMergeQueueGolangciGates: the workers (the merge gate, the lint and the
-// vitest shards) run in parallel, none needing another; the lint lints from
+// TestMergeQueueGolangciGates: the workers (the merge gate, the lint, the
+// vitest shards and the visual baseline) run in parallel, none needing another; the lint lints from
 // the group's base; and `CI result` needs exactly the workers, runs always,
 // and passes only when every one succeeded.
 func TestMergeQueueGolangciGates(t *testing.T) {

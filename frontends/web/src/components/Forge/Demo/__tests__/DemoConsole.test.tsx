@@ -119,6 +119,8 @@ describe("the forge demo console", () => {
     const nav = document.querySelector<HTMLElement>("[data-tour='forge-console'] aside");
     expect(nav).not.toBeNull();
     expect(within(nav!).getByRole("link", { name: /Overview/ })).toHaveAttribute("href", "/forge/p/shop");
+    // Releases sits in the shell's Deployments group (Console/groupedNav.tsx), folded until opened.
+    await userEvent.setup().click(within(nav!).getByRole("button", { name: /Deployments/ }));
     expect(within(nav!).getByRole("link", { name: /Releases/ })).toHaveAttribute("href", "/forge/p/shop/releases");
     expectNothingTouched();
   }, 30_000);

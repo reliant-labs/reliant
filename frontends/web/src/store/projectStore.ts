@@ -18,7 +18,7 @@ import { useWorktreeStore } from "./worktreeStore";
 import { useChatStore } from "./chatStore";
 import { getChatFromCache } from "../hooks/chat-queries";
 import type { Chat } from "../api/client";
-import { useWorkspaceStateStore } from "./workspaceStateStore";
+import { lastProjectOfTab, useWorkspaceStateStore } from "./workspaceStateStore";
 import { useViewerStore } from "./viewerStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { trackEvent } from "../lib/analytics";
@@ -429,7 +429,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   restoreLastProject: async (options) => {
     const isCurrent = beginWorkspaceOpen();
-    const { lastProjectId } = useWorkspaceStateStore.getState();
+    // This tab's, never another tab's live choice (workspaceStateStore lastProjectOfTab).
+    const lastProjectId = lastProjectOfTab();
 
     let projects: Project[];
     try {

@@ -26,6 +26,7 @@ import { JOURNEYS } from "../journeys/registry";
 // The workflows journey's content is registered by the Reliant shells.
 import "../journeys/catalog";
 import { CONTEXTUAL_TIP_DEFINITIONS } from "../contextualTipsRegistry";
+import { DEMO_TIPS } from "../../Forge/Demo/tips/tipCopy";
 import type { AdvanceOn, JourneyPhase, JourneyStep, StepPresentation } from "../types";
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -116,6 +117,8 @@ function stepAnchors(step: JourneyStep): Anchor[] {
 const ANCHORS: Anchor[] = [
   ...Object.values(JOURNEYS).flatMap((journey) => [...journey.steps, ...(journey.outro ?? [])].flatMap(stepAnchors)),
   ...CONTEXTUAL_TIP_DEFINITIONS.flatMap((tip) => anchorsOf(tip.targetSelector, `tip ${tip.id}`)),
+  // The public demo's page tips (Forge/Demo/tips): a renamed anchor leaves the tip in a corner, off its subject.
+  ...Object.entries(DEMO_TIPS).flatMap(([key, tip]) => anchorsOf(tip.target, `demo-tip ${key}`)),
 ];
 
 describe("tour anchors", () => {
@@ -124,6 +127,7 @@ describe("tour anchors", () => {
     expect(where).toContain("wf-outro-layout");
     expect(where).toContain("fg-console");
     expect(where).toContain("tip");
+    expect(where).toContain("demo-tip");
     expect(ANCHORS.length).toBeGreaterThan(20);
   });
 

@@ -9,6 +9,7 @@ import { chatKeys } from "../../hooks/chat-queries";
 import { resetChatProjectFilterForTests, useChatProjectFilterStore } from "../../hooks/useChatProjectFilter";
 import { chatListScope } from "../../lib/chatProjectFilter";
 import { queryClient } from "../../lib/query-client";
+import { publishShellScope, resetShellScopeForTests } from "../../lib/urlState/shellScopeStore";
 import { useChatListPreferencesStore } from "../chatListPreferencesStore";
 import { useChatNavigationStore } from "../chatNavigationStore";
 import { useWorkspaceStateStore } from "../workspaceStateStore";
@@ -38,11 +39,14 @@ describe("chatNavigationStore and a filter of several projects", () => {
     useChatListPreferencesStore.setState({ viewMode: "flat", sortOrder: "alphabetical_asc" });
     useWorkspaceStateStore.setState({ projectFilterId: null, machineFilterIds: null });
     useChatProjectFilterStore.setState({ many: ["p-1", "p-2"] });
+    // What the nav shows (useShellProject publishes it), which the keyboard walks.
+    publishShellScope({ scope: { mode: "many", projectIds: ["p-1", "p-2"] }, focus: null });
   });
 
   afterEach(() => {
     queryClient.clear();
     resetChatProjectFilterForTests();
+    resetShellScopeForTests();
   });
 
   it("walks the chosen projects' list, not every project's", async () => {
