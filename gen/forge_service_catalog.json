@@ -11156,11 +11156,13 @@
           "reliant.v1.CompleteOAuthRequest": [
             {
               "name": "state",
-              "kind": "string"
+              "kind": "string",
+              "redacted": true
             },
             {
               "name": "code",
-              "kind": "string"
+              "kind": "string",
+              "redacted": true
             }
           ],
           "reliant.v1.CompleteOAuthResponse": [
@@ -11310,7 +11312,8 @@
               "name": "fields",
               "kind": "map",
               "map_key_kind": "string",
-              "map_value_kind": "string"
+              "map_value_kind": "string",
+              "redacted": true
             },
             {
               "name": "params",
@@ -19732,7 +19735,8 @@
             {
               "name": "env",
               "kind": "string",
-              "repeated": true
+              "repeated": true,
+              "redacted": true
             },
             {
               "name": "type",
@@ -19747,7 +19751,8 @@
               "name": "headers",
               "kind": "map",
               "map_key_kind": "string",
-              "map_value_kind": "string"
+              "map_value_kind": "string",
+              "redacted": true
             }
           ],
           "reliant.v1.MCPServerInfo": [
