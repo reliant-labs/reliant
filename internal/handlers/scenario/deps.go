@@ -10,11 +10,16 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
+// ProjectReader reads a project by id. It checks no owner: every caller
+// decides access on the row it returns. store.ProjectExtStore satisfies it.
+type ProjectReader interface {
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+}
+
 // Repository is the slice of *db.Repo the scenario handlers use. The
 // last three feed workflowsource.Loader and launch, which resolve the
 // workflows a scenario runs.
 type Repository interface {
-	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetWorkflowScenario(ctx context.Context, id string) (*db.WorkflowScenario, error)
 	ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID string) ([]*db.WorkflowScenario, error)
 	CreateWorkflowScenario(ctx context.Context, scenario *db.WorkflowScenario) error

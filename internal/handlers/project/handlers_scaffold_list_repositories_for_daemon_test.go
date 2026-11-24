@@ -28,7 +28,7 @@ func TestListRepositoriesForDaemon_Generated(t *testing.T) {
 			{ProjectID: "p-2", DaemonID: daemonID, Path: "/theirs"},
 		}, nil
 	}
-	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Installs: installs}))
+	svc := project.NewTestProject(t, withDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Installs: installs}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListRepositoriesForDaemonRequest, pb.ListRepositoriesForDaemonResponse]{
 		{

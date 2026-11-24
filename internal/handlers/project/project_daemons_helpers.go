@@ -175,7 +175,7 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 	// Nor is a project of another org than the machine's: a machine holds
 	// only its organization's projects. Unknown, nothing is healed —
 	// creating a directory is the irreversible direction.
-	machine, err := s.deps.Repo.GetDaemon(ctx, daemonID)
+	machine, err := s.deps.Machines.GetDaemon(ctx, daemonID)
 	if err != nil && !svcerr.IsNotFound(err) {
 		logging.Warn("project-dir-heal: failed to read the machine", "error", err, "userID", userID, "daemonID", daemonID)
 		return nil

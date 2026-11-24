@@ -67,7 +67,7 @@ func deleteFlow(t *testing.T, store *automationsStore, r *retirer, name string) 
 	if r != nil {
 		deps.Automations = r
 	}
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(deps))
+	svc := workflow.NewTestWorkflow(t, withDeps(deps))
 	return svc.DeleteWorkflow(workflow.AuthedContext(t), connect.NewRequest(&pb.DeleteWorkflowRequest{ProjectId: "p-1", Name: name}))
 }
 
