@@ -12,6 +12,10 @@ description: |
   pull request opens only when that holds: a red patch ends the run failed, with the agent's summary, and opens
   nothing. git_publish pushes a vuln-patch/ branch (never the default branch, never a force). Never merges.
 
+  env may instead name a directory (`.`, or a relative path such as `frontends/web`), as `reliant forge vuln
+  patch` itself accepts: the findings are then a fresh scan of that tree (`reliant forge vuln scan <dir>
+  --json`), for a project with no deployed env whose findings forge records.
+
 inputs:
   project:
     type: string
@@ -23,7 +27,10 @@ inputs:
   env:
     type: string
     default: prod
-    description: The env whose current release's findings are patched (`reliant forge vuln list <env>` shows them).
+    description: >-
+      The env whose current release's findings are patched (`reliant forge vuln list <env>` shows them). Or a
+      directory, `.` or a relative path holding a `/` (no `..`), resolved from the forge project: its tree is
+      scanned and the findings that scan reports are patched, as `reliant forge vuln patch <dir>` does.
   advisories:
     type: array
     default: []
@@ -70,15 +77,30 @@ inputs:
       Ask a person to approve before the pull request opens when the agent changed files other than dependency
       manifests and lockfiles (go.mod, package.json, a Dockerfile, …). Off: the verify gate alone decides.
 
+# What a workflow that starts this one by ref routes on. Every ending that opens no pull request,
+# but nothing-to-patch, declares outcome: failure, which fails a run of this workflow but not the
+# parent of a `workflow:` node that runs it: a parent reads result instead.
+outputs:
+  # opened: the pull request is open (pr_url). nothing: no finding to patch, no pull request.
+  # failed: no pull request; the run's last message says why.
+  result: >-
+    {{ nodes.?pr.?is_error.orValue(true) == false ? 'opened'
+       : (nodes.?route.?kind.orValue('') == 'nothing' ? 'nothing' : 'failed') }}
+  pr_url: "{{ nodes.?pr.?is_error.orValue(true) == false ? string(nodes.?pr.?data.?html_url.orValue('')) : '' }}"
+
 entry: [check]
 
 nodes:
   # The env, the project path and every advisory id reach a shell command, so each must be a plain token.
+  # env names a directory exactly when forge's own patch reads it as one (`.`, or it holds a `/`); a
+  # directory is a relative path of plain segments, none starting with `-` and none `..`.
   - id: check
     type: compute
     outputs:
       valid: >-
-        {{ inputs.env.matches('^[A-Za-z0-9][A-Za-z0-9._-]*$')
+        {{ (inputs.env == '.' || inputs.env.contains('/')
+              ? inputs.env.matches('^([.]/)?[A-Za-z0-9_.][A-Za-z0-9._-]*(/[A-Za-z0-9_.][A-Za-z0-9._-]*)*$') && !inputs.env.contains('..')
+              : inputs.env.matches('^[A-Za-z0-9][A-Za-z0-9._-]*$'))
            && inputs.project.matches('^([A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*)?$') && !inputs.project.contains('..')
            && inputs.advisories.all(a, type(a) == string && a.matches('^[A-Za-z0-9][A-Za-z0-9._:-]*$')) }}
       run8: "{{ workflow.id.substring(0, 8) }}"
@@ -87,8 +109,15 @@ nodes:
       # command with an empty interpolation.
       patch_args: >-
         {{ ["'" + inputs.env + "'"] + inputs.advisories.map(a, "'" + string(a) + "'") + ['--no-pr', '--verify', '--json'] }}
+      # Directory mode: env names a tree to scan, not an env whose recorded findings forge lists.
+      dir_mode: "{{ inputs.env == '.' || inputs.env.contains('/') }}"
+      subject: "{{ inputs.env == '.' || inputs.env.contains('/') ? 'directory `' + inputs.env + '`' : 'env `' + inputs.env + '`' }}"
+      # The findings in agent mode: the env's list, or a scan of the directory (`vuln list` takes only an
+      # env; a scan has no --fixable, so plan keeps the fixable findings itself).
       list_args: >-
-        {{ ["'" + inputs.env + "'", '--json'] + (size(inputs.advisories) == 0 ? ['--fixable'] : []) }}
+        {{ inputs.env == '.' || inputs.env.contains('/')
+           ? ['scan', "'" + inputs.env + "'", '--json']
+           : ['list', "'" + inputs.env + "'", '--json'] + (size(inputs.advisories) == 0 ? ['--fixable'] : []) }}
       # The project's gate when nothing names one (agent mode, with no verify_command): the order
       # `forge vuln patch --verify` uses.
       fallback_verify: |
@@ -184,7 +213,8 @@ nodes:
         cd '{{ nodes.where.dir }}' || exit 3
         reliant forge vuln patch {{ nodes.check.patch_args.join(' ') }}
 
-  # In agent mode the patcher never ran: the findings to target come from the env's list instead.
+  # In agent mode the patcher never ran: the findings to target come from the env's list instead, or from
+  # a scan of the directory.
   - id: listing
     type: run
     condition: "inputs.patch_mode == 'agent'"
@@ -192,7 +222,7 @@ nodes:
     args:
       command: |
         cd '{{ nodes.where.dir }}' || exit 3
-        reliant forge vuln list {{ nodes.check.list_args.join(' ') }}
+        reliant forge vuln {{ nodes.check.list_args.join(' ') }}
 
   - id: parsed
     type: compute
@@ -221,7 +251,10 @@ nodes:
                'status': string(f.?status.orValue('')),
                'reason': string(f.?reason.orValue(''))})
            : cel.bind(found, nodes.parsed.doc.?findings.orValue([])
-                 .filter(f, size(inputs.advisories) == 0 || inputs.advisories.exists(a, a == f.id || (has(f.aliases) && f.aliases != null && a in f.aliases))),
+                 .filter(f, size(inputs.advisories) == 0
+                   ? (nodes.check.dir_mode != true || f.?fix_state.orValue('') == 'fixed'
+                      || (has(f.fixed_in) && f.fixed_in != null && size(f.fixed_in) > 0))
+                   : inputs.advisories.exists(a, a == f.id || (has(f.aliases) && f.aliases != null && a in f.aliases))),
                found.map(f, {
                  'id': string(f.id),
                  'names': [string(f.id)] + (has(f.aliases) && f.aliases != null ? f.aliases : []),
@@ -233,7 +266,7 @@ nodes:
                + inputs.advisories
                    .filter(a, !found.exists(f, a == f.id || (has(f.aliases) && f.aliases != null && a in f.aliases)))
                    .map(a, {'id': a, 'names': [a], 'package': '', 'installed': '', 'fixed_in': '', 'status': '',
-                            'reason': 'not among the findings forge vuln list reported'})) }}
+                            'reason': 'not among the findings forge vuln ' + string(nodes.check.list_args[0]) + ' reported'})) }}
       verify_command: >-
         {{ inputs.verify_command != '' ? inputs.verify_command
            : (nodes.parsed.doc.?verify.?command.orValue('') != '' ? nodes.parsed.doc.verify.command : nodes.check.fallback_verify) }}
@@ -267,7 +300,7 @@ nodes:
               : (!(nodes.parsed.code in [0, 1, 2]) ? 'error' : (size(nodes.plan.targets) == 0 ? 'nothing' : 'agent'))) }}
       detail: >-
         {{ nodes.plan.has_doc != true
-           ? (nodes.parsed.ran == true ? '`reliant forge vuln patch`' : '`reliant forge vuln list`') + ' exited ' + string(nodes.parsed.code)
+           ? (nodes.parsed.ran == true ? '`reliant forge vuln patch`' : '`reliant forge vuln ' + string(nodes.check.list_args[0]) + '`') + ' exited ' + string(nodes.parsed.code)
              + ' without a document, so the findings could not be read: ' + nodes.parsed.stderr
            : (nodes.parsed.code == 4 && nodes.parsed.ran == true
               ? 'forge vuln patch refused and changed nothing: ' + nodes.parsed.doc.?refusals.orValue([]).join('; ')
@@ -279,8 +312,8 @@ nodes:
     args:
       role: assistant
       content: >-
-        Nothing to patch in env {{ inputs.env }}{{ size(inputs.advisories) > 0 ? ' for ' + inputs.advisories.join(', ') : '' }}:
-        {{ nodes.parsed.ran == true ? 'forge vuln patch found no finding to bump' : 'forge vuln list reports no fixable finding' }}{{ size(nodes.parsed.doc.?notes.orValue([])) > 0 && nodes.parsed.doc.notes != null ? ' (' + nodes.parsed.doc.notes.join('; ') + ')' : '' }}. No pull request was opened.
+        Nothing to patch in {{ nodes.check.subject }}{{ size(inputs.advisories) > 0 ? ' for ' + inputs.advisories.join(', ') : '' }}:
+        {{ nodes.parsed.ran == true ? 'forge vuln patch found no finding to bump' : 'forge vuln ' + string(nodes.check.list_args[0]) + ' reports no fixable finding' }}{{ size(nodes.parsed.doc.?notes.orValue([])) > 0 && nodes.parsed.doc.notes != null ? ' (' + nodes.parsed.doc.notes.join('; ') + ')' : '' }}. No pull request was opened.
 
   - id: cannot_patch
     type: save_message
@@ -345,7 +378,7 @@ nodes:
         {{ cel.bind(m, string(nodes.?fix.commit_message.orValue('')),
              nodes.route.kind == 'agent' && m != '' ? m
              : 'fix(deps): patch ' + (size(nodes.plan.targets) <= 3 ? nodes.plan.targets.map(x, x.id).join(', ') : string(size(nodes.plan.targets)) + ' vulnerabilities')
-               + '\n\nPatches ' + nodes.plan.targets.map(x, x.id).join(', ') + ' found in env ' + inputs.env + '.') }}
+               + '\n\nPatches ' + nodes.plan.targets.map(x, x.id).join(', ') + ' found in ' + string(nodes.check.subject) + '.') }}
       takeover: >-
         {{ nodes.route.kind != 'agent' ? ''
            : cel.bind(files, nodes.?fix.code_files.orValue([]),
@@ -390,7 +423,7 @@ nodes:
       base: "{{ nodes.repo_info.data.default_branch }}"
       title: "{{ nodes.compose.title }}"
       body: |
-        Patches vulnerabilities forge found in env `{{ inputs.env }}`{{ nodes.parsed.ran == true && nodes.parsed.doc.?release.orValue('') != '' ? ' (release ' + nodes.parsed.doc.release + ')' : '' }}.
+        Patches vulnerabilities forge found in {{ nodes.check.subject }}{{ nodes.parsed.ran == true && nodes.parsed.doc.?release.orValue('') != '' ? ' (release ' + nodes.parsed.doc.release + ')' : '' }}.
 
         {{ nodes.compose.table }}
 
