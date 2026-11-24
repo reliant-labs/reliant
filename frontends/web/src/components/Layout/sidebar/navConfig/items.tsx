@@ -521,8 +521,13 @@ export const usageBilling: NavRow = {
   match: (ctx) => isAt(ctx.pathname, usageBillingPath()),
 };
 
-/** The routes that are Settings (its sections take the column there: navConfig/settings.tsx). */
-export const isSettingsRoute = (ctx: NavCtx) => isAtOrBelow(ctx.pathname, settingsPath());
+/**
+ * Settings' sections take the column here (navConfig/settings.tsx), except
+ * Agent sandboxes: Agents owns that page and must be the only area lit there.
+ * Keep this matcher independent of Settings' modules for the public demo.
+ */
+export const isSettingsRoute = (ctx: NavCtx) =>
+  isAtOrBelow(ctx.pathname, settingsPath()) && !isAtOrBelow(ctx.pathname, sandboxesPath());
 
 /** Settings: a plain link (U6d, owner); bare /settings opens the section last visited. */
 export const settings: NavRow = {
