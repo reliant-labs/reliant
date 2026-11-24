@@ -49,6 +49,8 @@ import {
   setNewChatAttachedProjects,
   getNewChatAttachedProjects,
   useNewChatAttachedProjects,
+  useNewChatSetUpJob,
+  setNewChatSetUpJob,
 } from "@/store/newChatProjectsStore";
 import type { Chat } from "@/types/chat";
 
@@ -146,19 +148,32 @@ function useMachines(enabled: boolean) {
   return { daemons, nameOf };
 }
 
-interface SetUpJob extends ChatProjectSetUp {
+export interface SetUpJob extends ChatProjectSetUp {
   cloneUrl: string;
   path: string;
   /** The machine's row still says an EARLIER clone failed: not this one's answer yet. */
   staleFailure?: boolean;
+  /** Keep the operation pending until the clone request itself completes. */
+  requestPending?: boolean;
 }
 
 /**
  * The set-up of one project on the machine, then `attachNow` once its
  * checkout is there. Shared by the chat and the draft.
  */
-function useSetUpThenAttach(enabled: boolean, attachNow: (projectId: string) => void) {
-  const [job, setJob] = useState<SetUpJob | null>(null);
+function useSetUpThenAttach(enabled: boolean, attachNow: (projectId: string) => void, draft = false) {
+  const [localJob, setLocalJob] = useState<SetUpJob | null>(null);
+  const draftJob = useNewChatSetUpJob();
+  const job = draft ? draftJob : localJob;
+  const jobRef = useRef(job);
+  jobRef.current = job;
+  const setJob = useCallback((update: SetUpJob | null | ((current: SetUpJob | null) => SetUpJob | null)) => {
+    const apply = (current: SetUpJob | null) => typeof update === "function" ? update(current) : update;
+    // Ref updates synchronously: two clicks in one render cannot start two clones.
+    jobRef.current = apply(jobRef.current);
+    if (draft) setNewChatSetUpJob(apply);
+    else setLocalJob(apply);
+  }, [draft]);
   const settingUp = job?.state === "setting_up";
   // While a clone lands, the rows are re-read so the attach follows it.
   const installsQuery = useProjectDaemonInstalls(enabled, settingUp ? 3_000 : false);
@@ -168,7 +183,7 @@ function useSetUpThenAttach(enabled: boolean, attachNow: (projectId: string) => 
   attachRef.current = attachNow;
 
   useEffect(() => {
-    if (!job || job.state !== "setting_up") return;
+    if (!enabled || !job || job.state !== "setting_up" || job.requestPending) return;
     const row = installs.find((r) => r.project_id === job.projectId && r.daemon_id === job.machine.daemonId);
     if (row?.install_state === ProjectInstallState.INSTALLED) {
       setJob(null);
@@ -176,10 +191,10 @@ function useSetUpThenAttach(enabled: boolean, attachNow: (projectId: string) => 
     } else if (row?.install_state === ProjectInstallState.FAILED && !job.staleFailure) {
       setJob({ ...job, state: "failed", error: row.install_error?.trim() || undefined });
     }
-  }, [job, installs]);
+  }, [enabled, job, installs, setJob]);
 
-  const start = useCallback(
-    async (next: SetUpJob) => {
+  const start = async (next: SetUpJob) => {
+      if (jobRef.current?.state === "setting_up") return;
       if (!next.canClone) {
         setJob({ ...next, state: "offer" });
         return;
@@ -190,6 +205,7 @@ function useSetUpThenAttach(enabled: boolean, attachNow: (projectId: string) => 
         state: "setting_up",
         error: undefined,
         staleFailure: prior?.install_state === ProjectInstallState.FAILED,
+        requestPending: true,
       });
       try {
         const path = setUpPathOn({
@@ -208,13 +224,13 @@ function useSetUpThenAttach(enabled: boolean, attachNow: (projectId: string) => 
         // Landed already, or on its way: the effect above attaches it. Read
         // after the clone was queued, a failure on the row is this clone's.
         await installsQuery.refetch();
-        setJob((current) => (current?.projectId === next.projectId ? { ...current, staleFailure: false } : current));
+        setJob((current) => (current?.projectId === next.projectId ? { ...current, staleFailure: false, requestPending: false } : current));
       } catch (err) {
-        setJob({ ...next, state: "failed", error: describeCloneError(err, next.machine.name) });
+        setJob((current) => current?.projectId === next.projectId
+          ? { ...current, state: "failed", requestPending: false, error: describeCloneError(err, next.machine.name) }
+          : current);
       }
-    },
-    [installs, daemons, installsQuery],
-  );
+    };
 
   const setUp: ChatProjectSetUp | null = job
     ? {
@@ -231,6 +247,7 @@ function useSetUpThenAttach(enabled: boolean, attachNow: (projectId: string) => 
     installs,
     setUp,
     job,
+    busy: () => jobRef.current !== null,
     offer: (next: SetUpJob) => setJob(next),
     start,
     confirm: () => {
@@ -303,13 +320,17 @@ export function useChatProjects(chat: ChatLike | undefined, primaryName?: string
 
   const { nameOf: machineName } = useMachines(eligible);
   const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set());
-  const mark = (id: string, on: boolean) =>
+  const pendingRef = useRef(new Set<string>());
+  const mark = (id: string, on: boolean) => {
+    if (on) pendingRef.current.add(id);
+    else pendingRef.current.delete(id);
     setPending((prev) => {
       const next = new Set(prev);
       if (on) next.add(id);
       else next.delete(id);
       return next;
     });
+  };
 
   const list = useMemo((): readonly ChatProject[] => query.data?.projects ?? [], [query.data]);
   const projects = useMemo((): ChatProjectChipModel[] => {
@@ -336,7 +357,7 @@ export function useChatProjects(chat: ChatLike | undefined, primaryName?: string
   const setUpFlow = useSetUpThenAttach(eligible, (projectId) => void attachRef.current(projectId));
 
   attachRef.current = async (projectId: string, name?: string) => {
-    if (!chat) return;
+    if (!chat || pendingRef.current.has(projectId)) return;
     mark(projectId, true);
     try {
       const response = await client.attachProjectToChat({ chatId: chat.id, projectId });
@@ -377,7 +398,7 @@ export function useChatProjects(chat: ChatLike | undefined, primaryName?: string
   };
 
   const add = (project: Project) => {
-    if (!chat || projects.some((p) => p.projectId === project.id) || pending.has(project.id)) return;
+    if (!chat || projects.some((p) => p.projectId === project.id) || pendingRef.current.has(project.id) || setUpFlow.busy()) return;
     if (projects.length - 1 >= MAX_ATTACHED_PROJECTS) {
       tooMany(project.name);
       return;
@@ -398,7 +419,7 @@ export function useChatProjects(chat: ChatLike | undefined, primaryName?: string
       .finally(() => mark(projectId, false));
   };
 
-  const settingUpId = setUpFlow.job?.state === "setting_up" ? setUpFlow.job.projectId : null;
+  const settingUpId = setUpFlow.job?.projectId ?? null;
   const pendingAll = useMemo(() => {
     if (!settingUpId) return pending;
     return new Set([...pending, settingUpId]);
@@ -455,7 +476,7 @@ export function useDraftChatProjects(options: {
     },
     [primaryId],
   );
-  const setUpFlow = useSetUpThenAttach(!!primaryId && !noMachine, addNow);
+  const setUpFlow = useSetUpThenAttach(!!primaryId && !noMachine, addNow, true);
 
   const projects = useMemo((): ChatProjectChipModel[] => {
     if (!primaryId) return [];
@@ -468,7 +489,7 @@ export function useDraftChatProjects(options: {
   }, [primaryId, attachedIds, all]);
 
   const supported = !!primaryId && !noMachine && serverSupport !== false;
-  const settingUpId = setUpFlow.job?.state === "setting_up" ? setUpFlow.job.projectId : null;
+  const settingUpId = setUpFlow.job?.projectId ?? null;
   const pending = useMemo(() => new Set(settingUpId ? [settingUpId] : []), [settingUpId]);
 
   return {
@@ -478,7 +499,7 @@ export function useDraftChatProjects(options: {
     installs: setUpFlow.installs,
     pending,
     add: (project) => {
-      if (!primaryId || project.id === primaryId || attachedIds.includes(project.id)) return;
+      if (!primaryId || project.id === primaryId || getNewChatAttachedProjects(primaryId).includes(project.id) || setUpFlow.busy()) return;
       if (attachedIds.length >= MAX_ATTACHED_PROJECTS) {
         tooMany(project.name);
         return;

@@ -35,7 +35,7 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
 vi.mock("sonner", () => ({ toast: { error: mocks.toastError } }));
 
 import { resetChatProjectsSupportForTests, useChatProjects, useDraftChatProjects } from "../useChatProjects";
-import { getNewChatAttachedProjects, setNewChatAttachedProjects } from "@/store/newChatProjectsStore";
+import { getNewChatAttachedProjects, prepareNewChatProjects, setNewChatAttachedProjects } from "@/store/newChatProjectsStore";
 
 const chat = { id: "c1", projectId: "p-api", activeDaemonId: "d-cicd", noMachine: false, viewerAccess: false };
 const primary = { projectId: "p-api", name: "api", primary: true, daemonId: "d-cicd", path: "/w/api", attachedAt: "" };
@@ -154,8 +154,15 @@ describe("useChatProjects", () => {
     await waitFor(() => expect(result.current.setUp?.state).toBe("offer"));
     expect(result.current.setUp).toMatchObject({ projectName: "docs", machine: { daemonId: "d-cicd", name: "cicd" }, canClone: true });
     expect(mocks.toastError).not.toHaveBeenCalled();
+    expect(result.current.pending.has("p-docs")).toBe(true);
+    act(() => result.current.add(docs));
+    expect(attach).toHaveBeenCalledTimes(1);
 
-    act(() => result.current.confirmSetUp());
+    act(() => {
+      result.current.confirmSetUp();
+      result.current.confirmSetUp();
+    });
+    expect(mocks.createProjectFromRepo).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(mocks.createProjectFromRepo).toHaveBeenCalled());
     expect(mocks.createProjectFromRepo).toHaveBeenCalledWith(
       expect.objectContaining({ cloneUrl: "https://github.com/acme/docs", daemonId: "d-cicd", name: "docs" }),
@@ -214,6 +221,29 @@ describe("setting a project up again after a clone failed there", () => {
 });
 
 describe("useDraftChatProjects", () => {
+  it("keeps setup through a primary switch and remount, without queuing duplicate clones", async () => {
+    prepareNewChatProjects("p-api", [], false);
+    mocks.installs = [{ project_id: "p-docs", daemon_id: "d-laptop", install_state: ProjectInstallState.INSTALLED }];
+    const first = renderHook(() => useDraftChatProjects({ primaryId: "p-api", machineDaemonId: "d-cicd" }), { wrapper });
+    await act(async () => {
+      first.result.current.add(docs);
+      first.result.current.add(docs);
+    });
+    expect(mocks.createProjectFromRepo).toHaveBeenCalledTimes(1);
+    expect(first.result.current.pending.has("p-docs")).toBe(true);
+    first.unmount();
+    prepareNewChatProjects("p-other", [], true);
+    const next = renderHook(() => useDraftChatProjects({ primaryId: "p-other", machineDaemonId: "d-cicd" }), { wrapper });
+    expect(next.result.current.setUp?.state).toBe("setting_up");
+    act(() => next.result.current.add(docs));
+    expect(mocks.createProjectFromRepo).toHaveBeenCalledTimes(1);
+    mocks.installs = [{ project_id: "p-docs", daemon_id: "d-cicd", install_state: ProjectInstallState.INSTALLED }];
+    next.rerender();
+    await waitFor(() => expect(getNewChatAttachedProjects("p-other")).toEqual(["p-docs"]));
+    expect(next.result.current.setUp).toBeNull();
+    expect(getNewChatAttachedProjects("p-api")).toEqual([]);
+  });
+
   it("adds and removes the draft's attached projects, for its primary only", () => {
     mocks.projects = [
       { id: "p-api", name: "api", path: "/w/api" },

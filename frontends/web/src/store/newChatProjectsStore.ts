@@ -20,6 +20,7 @@
  */
 
 import { create } from "zustand";
+import type { SetUpJob } from "@/hooks/useChatProjects";
 
 /** The most projects a chat may have attached (the server refuses an 11th). */
 export const MAX_ATTACHED_PROJECTS = 10;
@@ -29,11 +30,21 @@ interface Draft {
   primaryId: string | null;
   /** Attached projects, in the order chosen; never the primary. */
   attached: readonly string[];
+  setUpJob: SetUpJob | null;
 }
 
 const NONE: readonly string[] = [];
 
-const useDraftStore = create<Draft>(() => ({ primaryId: null, attached: NONE }));
+const useDraftStore = create<Draft>(() => ({ primaryId: null, attached: NONE, setUpJob: null }));
+
+/** Setup belongs to the draft, not the composer instance rendering it. */
+export function useNewChatSetUpJob(): SetUpJob | null {
+  return useDraftStore((draft) => draft.setUpJob);
+}
+
+export function setNewChatSetUpJob(update: (job: SetUpJob | null) => SetUpJob | null): void {
+  useDraftStore.setState((draft) => ({ setUpJob: update(draft.setUpJob) }));
+}
 
 /** `ids` without the primary and repeats, at most MAX_ATTACHED_PROJECTS. */
 function attachable(primaryId: string | null, ids: readonly string[]): string[] {
@@ -62,7 +73,7 @@ export function useNewChatAttachedProjects(primaryId: string | null | undefined)
 
 /** Make `ids` the draft's attached projects for a new chat in `primaryId` (null ends the draft). */
 export function setNewChatAttachedProjects(primaryId: string | null, ids: readonly string[]): void {
-  useDraftStore.setState({ primaryId, attached: primaryId ? attachable(primaryId, ids) : NONE });
+  useDraftStore.setState({ primaryId, attached: primaryId ? attachable(primaryId, ids) : NONE, ...(!primaryId ? { setUpJob: null } : {}) });
 }
 
 /**
@@ -90,5 +101,6 @@ export function prepareNewChatProjects(
     setNewChatAttachedProjects(primaryId, draft.attached);
     return;
   }
+  setNewChatSetUpJob(() => null);
   setNewChatAttachedProjects(primaryId, defaultAttachedProjects(primaryId, filterIds));
 }
