@@ -97,6 +97,7 @@ service ClaimableService {
   // GetClaimableChallenge hands out a fresh proof-of-work challenge for
   // StartClaimableDeploy. Stateless on the server (the challenge is signed and
   // time-boxed), so it creates nothing and is cheap to call.
+  // Remains POST-only: each caller needs a fresh challenge, not a cached nonce.
   rpc GetClaimableChallenge(GetClaimableChallengeRequest) returns (GetClaimableChallengeResponse) {
     option (forge.v1.method) = {auth_required: false};
   }
@@ -109,6 +110,7 @@ service ClaimableService {
   // of work, so forge calls it before any build (`forge env deploy
   // --claimable`) and in the local preview (`--claimable --plan-only`).
   rpc GetClaimableAvailability(GetClaimableAvailabilityRequest) returns (GetClaimableAvailabilityResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: false};
   }
 
