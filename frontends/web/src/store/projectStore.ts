@@ -538,7 +538,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       logger.warn("[ProjectStore] Could not load the new org's projects", { orgId, error });
       return;
     }
-    if (!isCurrent() && !urlNamesChat) return;
+    if (!isCurrent()) return;
     const listed = (id: string) => projects.some((p) => p.id === id);
     // A row names its org; one not stamped yet belongs if the new list has it.
     const inOrg = (project: Project) =>
@@ -567,7 +567,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const next = mostRecentProject(projects);
       if (next && isCurrent()) await get().selectProject(next, { isCurrent });
     }
-    if (!isCurrent() && !urlNamesChat) return;
+    if (!isCurrent()) return;
     // The new org's chats seed activity and the stream's resume point.
     await useChatStore.getState().loadChats();
   },

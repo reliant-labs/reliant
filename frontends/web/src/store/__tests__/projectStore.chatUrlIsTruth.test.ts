@@ -41,6 +41,7 @@ const { useWorktreeStore } = await import("../worktreeStore");
 const { useChatStore } = await import("../chatStore");
 const { useWorkspaceStateStore } = await import("../workspaceStateStore");
 const { seedChatDetail } = await import("../../hooks/chat-queries");
+const { beginWorkspaceOpen } = await import("../../lib/openChatInWorkspace");
 
 import type { Chat } from "../../types/chat";
 
@@ -118,6 +119,40 @@ describe("selecting a project over a chat's URL", () => {
 });
 
 describe("an org change over a chat's URL", () => {
+  it("discards a delayed org fetch after a newer workspace open", async () => {
+    let resolveProjects!: (projects: Project[]) => void;
+    fetchProjects.mockReturnValueOnce(new Promise((resolve) => { resolveProjects = resolve; }));
+    seedChatDetail({ id: openChatId, projectId: chatsProject.id } as Chat);
+    useProjectStore.setState({ currentProject: pickedProject });
+    useWorkspaceStateStore.getState().setProjectFilterId(pickedProject.id);
+
+    const following = useProjectStore.getState().followActiveOrg("org-1");
+    // A newer navigation wins while the old org's request is pending, even
+    // when the URL still names a chat and the old answer could open it.
+    beginWorkspaceOpen();
+    resolveProjects([chatsProject]);
+    await following;
+
+    expect(useWorkspaceStateStore.getState().projectFilterId).toBe(pickedProject.id);
+    expect(useProjectStore.getState().currentProject?.id).toBe(pickedProject.id);
+    expect(selectChat).not.toHaveBeenCalled();
+    expect(clearCurrentChat).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(loadChats).not.toHaveBeenCalled();
+  });
+
+  it("does not load chats if its URL chat open is superseded", async () => {
+    seedChatDetail({ id: openChatId, projectId: chatsProject.id } as Chat);
+    useProjectStore.setState({ currentProject: { ...pickedProject, org_id: "org-2" } });
+    fetchProjects.mockResolvedValueOnce([chatsProject]);
+    selectChat.mockImplementationOnce(() => { beginWorkspaceOpen(); });
+
+    await useProjectStore.getState().followActiveOrg("org-1");
+
+    expect(selectChat).toHaveBeenCalled();
+    expect(loadChats).not.toHaveBeenCalled();
+  });
+
   it("does not leave the chat's project for the new org's most recent one", async () => {
     const otherOrgProject = { id: "p-other", name: "other", path: "/o", org_id: "org-2" } as unknown as Project;
     fetchProjects.mockResolvedValueOnce([otherOrgProject]);
