@@ -210,6 +210,10 @@ describe("org-less paths with the flag on (the Reliant host forwards; R5, R7)", 
     ["/workflows/library/builtin%3A%2F%2Fget-it-right", "/o/side/workflows/library/builtin%3A%2F%2Fget-it-right"],
     ["/workflow/new", "/o/side/workflow/new"],
     ["/forge/observability/logs", "/o/side/observability/logs"],
+    // An app's console by name (U18): the tab's org, which its reads already used.
+    ["/forge/p/shop", "/o/side/apps/shop"],
+    ["/forge/p/shop/releases", "/o/side/apps/shop/releases"],
+    ["/apps/shop", "/o/side/apps/shop"],
   ])("forwards %s into the tab's org: %s", async (from, to) => {
     const h = createOrgRouteHarness(world("reliant", true, { tabOrg: "org-b" }));
     await h.open(from);
@@ -217,7 +221,14 @@ describe("org-less paths with the flag on (the Reliant host forwards; R5, R7)", 
     expect(h.notFound()).toBe(false);
   });
 
-  it.each(["/workflows/library/my-saved-flow", "/workflow/my-saved-flow", "/project/p-1", "/workflows/runs/c-1", "/forge/p/shop"])(
+  it("keeps the query of an app's console link, `?project=` (the checkout) included", async () => {
+    const h = createOrgRouteHarness(world("reliant", true, { tabOrg: "org-b" }));
+    await h.open("/forge/p/shop/releases?project=p-1&env=prod");
+    expect(h.pathname()).toBe("/o/side/apps/shop/releases");
+    expect(h.search()).toMatchObject({ project: "p-1", env: "prod" });
+  });
+
+  it.each(["/workflows/library/my-saved-flow", "/workflow/my-saved-flow", "/project/p-1", "/workflows/runs/c-1"])(
     "leaves %s, which names a resource of its own org, where it is",
     async (path) => {
       const h = createOrgRouteHarness(world("reliant", true, { tabOrg: "org-b" }));
@@ -289,8 +300,8 @@ describe("the one shell's pages", () => {
     { url: "/", forwards: true, leaf: /\/_app\/$/ },
     { url: "/projects", forwards: true, leaf: /_authenticated\/projects$/ },
     { url: "/usage", forwards: true, leaf: /_authenticated\/usage$/ },
-    // An app by name: its own org decides (the resolver, U4), never the tab's.
-    { url: "/forge/p/shop", forwards: false, leaf: /\/forge\/p\/\$project\/$/ },
+    // An app by name: into the tab's org (U18), until the resolver (U4) names the app's own.
+    { url: "/forge/p/shop", forwards: true, leaf: /\/(forge\/p|apps)\/\$project\/$/ },
     { url: "/o/acme/apps/shop", forwards: false, leaf: /\/apps\/\$project\/$/ },
     { url: "/o/acme/usage", forwards: false, leaf: /_authenticated\/usage$/ },
     // Not org-scoped yet (U8).

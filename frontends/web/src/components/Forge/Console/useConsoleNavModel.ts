@@ -19,6 +19,7 @@ import { useDashboard, useDashboardIndex } from "@/hooks/dashboard-queries";
 import { useForgeRoster } from "@/hooks/forge-queries";
 import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
 import { isQueued, queuedOnLabel } from "@/services/forge/live";
+import type { Project } from "@/store/projectStore";
 
 import { displayTitle, hubOf, hubsOf, hubTabLabel } from "../Observability/Dashboards/dashboardHubs";
 import { useConsoleReliantProject } from "./consoleHost";
@@ -36,6 +37,8 @@ export interface ConsoleNavModel extends GroupedNavInput {
   listed: boolean;
   /** The Reliant project declaring the app, once found. */
   projectId: string | null;
+  /** Several checkouts declare the app and the URL's `?project=` names none: the console asks (consoleHost.ts). */
+  candidates: Project[] | null;
   roster: ReturnType<typeof useForgeRoster>;
   /** The roster has answered: `env` is checked against the app's real environments. */
   settled: boolean;
@@ -70,10 +73,18 @@ export function useRouteUsesEnvScope(): boolean {
   return useMatches({ select: (matches) => !matches.some((match) => match.staticData?.envScope === false) });
 }
 
-export function useConsoleNavModel(project: string, pathname: string, search: { env?: unknown }): ConsoleNavModel {
+export function useConsoleNavModel(project: string, pathname: string, search: { env?: unknown; project?: unknown }): ConsoleNavModel {
+  const onConsole = consolePageOf(pathname);
   const page = useMemo<ConsolePage>(() => consolePageOf(pathname)?.page ?? OVERVIEW, [pathname]);
 
-  const { listed, projectId } = useConsoleReliantProject(project);
+  // Only the app's own console makes its project the current one: the shell's
+  // nav draws these sections on every page, a chat's included, where the
+  // URL's chat decides the project (consoleHost.ts).
+  // `?project=`: which checkout backs the console, when several declare the app.
+  const { listed, projectId, candidates } = useConsoleReliantProject(project, {
+    select: onConsole?.project === project,
+    pinned: typeof search.project === "string" ? search.project : null,
+  });
   const roster = useForgeRoster(listed ? projectId : null, project);
 
   const settled = listed && !roster.isLoading && !roster.topology.isLoading;
@@ -177,6 +188,7 @@ export function useConsoleNavModel(project: string, pathname: string, search: { 
     productAnalytics,
     listed,
     projectId,
+    candidates,
     roster,
     settled,
     scope,

@@ -23,6 +23,8 @@ type Deps struct {
 
 	// Repo stores the caller's scenarios and reads the workflows they run against.
 	Repo Repository
+	// ProjectRows reads a project by id; the handler decides access on it.
+	ProjectRows ProjectReader
 	// Projects reads a project the caller may write (owner and org decided
 	// together: projectaccess).
 	Projects projectaccess.Service
@@ -51,6 +53,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.ProjectConfigs == nil {
 		return fmt.Errorf("scenario: Deps.ProjectConfigs is required")
+	}
+	if d.ProjectRows == nil {
+		return fmt.Errorf("scenario: Deps.ProjectRows is required")
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("scenario: Deps.Projects is required")

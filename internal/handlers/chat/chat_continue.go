@@ -233,7 +233,7 @@ func (s *Service) ResumePausedForMachine(ctx context.Context, chatID string) (bo
 // awaitsDelivery reports whether a thread holds input that no turn has read:
 // a queued mailbox row, or a user message that is its latest turn.
 func (s *Service) awaitsDelivery(ctx context.Context, threadID string) (bool, error) {
-	queuedRows, err := s.deps.Repo.CountQueuedAgentMessagesForThread(ctx, threadID)
+	queuedRows, err := s.deps.AgentMessages.CountQueuedAgentMessagesForThread(ctx, threadID)
 	if err != nil {
 		return false, fmt.Errorf("count queued mailbox rows for %s: %w", threadID, err)
 	}

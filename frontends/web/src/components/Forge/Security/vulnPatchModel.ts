@@ -15,7 +15,7 @@
  * whichever checkout the reader touched last.
  *
  * Where the forge project is: the Reliant project declaring its name
- * (Project.forge_project_name, ConsoleLayout's projectDeclaring), and the
+ * (Project.forge_project_name, consoleHost.ts consoleCheckout), and the
  * repository of that project whose scanned forge apps (Repo.forge_apps)
  * include it. `project` is that repository's path in the project plus the
  * app's subpath in the repository; "" is the root.

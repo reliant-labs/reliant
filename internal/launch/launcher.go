@@ -576,6 +576,11 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		if err := l.repo.CreateChat(txCtx, chat); err != nil {
 			return fmt.Errorf("failed to create chat: %w", err)
 		}
+		if spec.OnChatCreated != nil {
+			if err := spec.OnChatCreated(txCtx, chat); err != nil {
+				return &chatCreatedError{err: err}
+			}
+		}
 		if err := l.recordStartSelection(txCtx, userID, chat, workflowName, spec.Params); err != nil {
 			return err
 		}
@@ -622,6 +627,10 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		var declined *DeclinedError
 		if errors.As(err, &declined) {
 			return nil, declined
+		}
+		var created *chatCreatedError
+		if errors.As(err, &created) {
+			return nil, created.err
 		}
 		if errors.Is(err, errEventExists) {
 			// Lost a race with a concurrent launch of the same event.
