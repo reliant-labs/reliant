@@ -135,6 +135,13 @@ describe("the demo shell's routes", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/forge/p/shop"))
   });
 
+  it.each(["/forge/p/shop/usage", "/forge/p/shop/speed-insights", "/forge/p/other/usage"])("sends %s, a page the demo does not serve, to the Overview", async (path) => {
+    const router = renderDemoShell(`${path}?env=prod`)
+    expect(await screen.findByTestId("console-overview")).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe("/forge/p/shop")
+    expect(searchOf(router)).toMatchObject({ env: "prod" })
+  });
+
   it("opens another project's link on shop, the demo's one project, at the same page", async () => {
     const router = renderDemoShell("/forge/p/other/releases?env=prod")
     expect(await screen.findByTestId("console-releases")).toBeInTheDocument()

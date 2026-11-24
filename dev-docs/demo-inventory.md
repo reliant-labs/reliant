@@ -33,6 +33,25 @@ console's unit-test fixtures (`Observability/__fixtures__`);
 `__tests__/coherence.test.ts` fails if one does, or if any page's answer
 contradicts the story.
 
+`model/security.ts` and `model/tests.ts` hold the Security and Tests data in
+the same ledger; `handlers/security.ts` and `handlers/tests.ts` answer the
+control plane's VulnerabilityService and TestsService RPCs from it over the
+demo transport, so the pages' default API clients run unchanged.
+Security: each release's SBOMs for `api`, `worker`, `inventory` and
+`shop-web` (from its lockfile), the findings in the release each environment
+runs, prod's enforced gate and staging's audited one, an exemption with a
+reason and an expiry, and the connect-go advisory v1.8.3's dependency bump
+fixed. Tests: CI's runs on each release commit, the coverage trend with the
+releases marked, maya's failed branch run that reproduced the incident, and
+`TestCreateOrder_RetryOnTimeout`, the flaky test v1.8.3's payment retry
+introduced. The Coverage page's source view reads one bundled file (v1.8.4's
+`internal/orders/charge.go`) and never fetches.
+
+The demo leaves out what the shop has nothing to show on: Usage (a sample app
+has no hosting bill) and Speed insights (no measured page loads). They have no
+nav row and no tip, and their URLs land on the Overview (`DEMO_HIDDEN_PAGES`,
+`Demo/demoPath.ts`).
+
 `handlers/inventory.ts` answers the generated `AppDatabaseService` browse RPCs
 and `IdentityService` reads. Every normal environment declares one database,
 `shop`: the selector must not invent extra connections. The tables are

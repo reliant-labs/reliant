@@ -9,7 +9,7 @@
 
 import { useNavigate } from "@tanstack/react-router";
 
-import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
+import { useShellOneProject } from "@/lib/urlState/shellScopeStore";
 import { chooseProject, useProjectStore } from "@/store/projectStore";
 import { appPath, projectChatsPath } from "@/lib/paths";
 
@@ -17,7 +17,7 @@ import { ProjectSelectorDialog, type ProjectSelection } from "./ProjectSelector"
 
 export function SwitchProjectDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
-  const filterId = useWorkspaceStateStore((s) => s.projectFilterId);
+  const filterId = useShellOneProject();
   const currentId = useProjectStore((s) => s.currentProject?.id ?? null);
   const onSelect = (selection: ProjectSelection) => {
     if (selection.kind === "app") {

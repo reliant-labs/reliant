@@ -555,7 +555,7 @@ tasks:
   # lanes below are the rest, each one task. Every one runs on a laptop too.
 
   ci:lanes:
-    desc: "Which path-selected CI lanes a change reaches (web, playwright, electron, cp_contract): -- --base <rev> | --full"
+    desc: "Which path-selected CI lanes a change reaches (web, playwright, electron, visual, cp_contract): -- --base <rev> | --full"
     cmds:
       - ./scripts/ci-lanes.sh {{.CLI_ARGS}}
 
@@ -643,10 +643,11 @@ tasks:
     # frozen clock, in dark and light at 1440x900 and dark at 390x844,
     # compared with the committed e2e/visual/__screenshots__. It runs in the
     # pinned Playwright Linux image (scripts/visual-docker.sh; needs docker),
-    # so the baselines match on every host. Opt-in: no gate runs it (a
-    # browser and a production build, ~5 minutes on a loaded host). A UI PR
-    # runs it and commits re-captured baselines, so the PR diff is the before
-    # and after. VISUAL_SKIP_BUILD=1 reuses dist/; `-- --update-snapshots`
+    # so the baselines match on every host. A UI PR runs it and commits
+    # re-captured baselines, so the PR diff is the before and after. The
+    # merge queue runs it compare-only when a group reaches the web UI, and
+    # visual-nightly.yml on main (scripts/visual-gate.sh, which calls this
+    # task with --update-snapshots=none; ~5 minutes on a loaded host). VISUAL_SKIP_BUILD=1 reuses dist/; `-- --update-snapshots`
     # re-captures; `-- --grep chat` narrows it. The build pins its version
     # (RELEASE_VERSION) so the settings footer reads the same whatever commit
     # or working tree built it; it must equal VISUAL_RELEASE_VERSION in

@@ -281,7 +281,8 @@ export const TESTS_VIEW_KINDS: Record<TestsView, readonly ConsolePage["kind"][]>
   flaky: ["tests-flaky", "tests-flaky-test"],
 };
 export const TESTS_VIEW_LABELS: Record<TestsView, string> = { overview: "Overview", coverage: "Coverage", runs: "Runs", flaky: "Flaky tests" };
-const TESTS_VIEW_PAGE: Record<TestsView, ConsolePage> = {
+/** The page each Tests view is. */
+export const TESTS_VIEW_PAGE: Record<TestsView, ConsolePage> = {
   overview: { kind: "tests" },
   coverage: { kind: "tests-coverage" },
   runs: { kind: "tests-runs" },

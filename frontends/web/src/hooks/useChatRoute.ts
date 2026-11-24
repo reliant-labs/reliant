@@ -33,7 +33,7 @@ import { useMatch, useRouter } from "@tanstack/react-router";
 
 import { useChatViewOverride } from "@/components/Chat/thread-views/useChatThreadMode";
 import { getChatFromCache } from "@/hooks/chat-queries";
-import { chatShellRouteOf, navigateToChatUrl, newChatAppliedShown, patchNewChatUrl, type ChatShellRoute } from "@/lib/chatRoute";
+import { attachedProjectsOfParam, attachedProjectsParam, chatShellRouteOf, navigateToChatUrl, newChatAppliedShown, patchNewChatUrl, type ChatShellRoute } from "@/lib/chatRoute";
 import type { ChatRouteData } from "@/lib/chatRouteResolve";
 import { followActiveChat } from "@/lib/chatUrlFollow";
 import { isElectron } from "@/lib/constants";
@@ -41,6 +41,7 @@ import { openChatInWorkspace } from "@/lib/openChatInWorkspace";
 import { toast } from "@/lib/toast-manager";
 import { CHAT_PANELS, type ChatPanel, type ChatView, type NewChatSearch } from "@/routeSchemas";
 import { useChatStore } from "@/store/chatStore";
+import { useNewChatAttachedProjects } from "@/store/newChatProjectsStore";
 import { applyNewChat, isNewChatApplied, selectSharedChat } from "@/store/openChat";
 import { useCurrentWorktreeState, useWorkspaceStateStore, type RightSidebarTab } from "@/store/workspaceStateStore";
 
@@ -142,6 +143,7 @@ export function useChatRoute({ ready, panelOpen, setPanelOpen, projectId, worktr
           machine: typeof search.machine === "string" ? search.machine : undefined,
           ws: typeof search.ws === "string" ? search.ws : undefined,
           app: typeof search.app === "string" ? search.app : undefined,
+          with: search.with !== undefined ? attachedProjectsParam(attachedProjectsOfParam(search.with)) : undefined,
         }
       : null;
   const appliedFor = useRef<string | null>(null);
@@ -171,7 +173,13 @@ export function useChatRoute({ ready, panelOpen, setPanelOpen, projectId, worktr
       void newChatAppliedShown().then(settle);
       return;
     }
-    applyNewChat({ projectId: newSearch.project, daemonId: newSearch.machine, worktreeId: newSearch.ws, appName: newSearch.app }).then(
+    applyNewChat({
+      projectId: newSearch.project,
+      daemonId: newSearch.machine,
+      worktreeId: newSearch.ws,
+      appName: newSearch.app,
+      attachedProjectIds: newSearch.with !== undefined ? attachedProjectsOfParam(newSearch.with) : undefined,
+    }).then(
       () => settle(true),
       (error) => {
         void toast.error(error);
@@ -180,15 +188,17 @@ export function useChatRoute({ ready, panelOpen, setPanelOpen, projectId, worktr
     // newSearch is derived from locationKey.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, route?.kind, locationKey]);
-  // The draft's project and workspace as the view shows them (the project
-  // chip, the workspace picker), so a refresh keeps them. Only once the
-  // URL's own context is on screen: before that the view still shows the
-  // last one, which is not what the URL asked for.
+  // The draft's project, workspace and attached projects as the view shows
+  // them (the project chip, the workspace picker, the project chips), so a
+  // refresh or a shared link keeps them. Only once the URL's own context is
+  // on screen: before that the view still shows the last one, which is not
+  // what the URL asked for.
+  const attached = attachedProjectsParam(useNewChatAttachedProjects(projectId));
   useEffect(() => {
     if (!ready || route?.kind !== "new" || shownFor !== locationKey || activeChatId !== null || !projectId) return;
-    if (newSearch?.project === projectId && (newSearch.ws ?? null) === worktreeId) return;
-    patchNewChatUrl({ project: projectId, ws: worktreeId ?? undefined });
-  }, [ready, route?.kind, shownFor, locationKey, activeChatId, projectId, worktreeId, newSearch?.project, newSearch?.ws]);
+    if (newSearch?.project === projectId && (newSearch.ws ?? null) === worktreeId && newSearch.with === attached) return;
+    patchNewChatUrl({ project: projectId, ws: worktreeId ?? undefined, with: attached });
+  }, [ready, route?.kind, shownFor, locationKey, activeChatId, projectId, worktreeId, attached, newSearch?.project, newSearch?.ws, newSearch?.with]);
 
   // ── The home: no chat ─────────────────────────────────────────────────────
   // The home names no chat, so none is open on it: a Back from a chat to the

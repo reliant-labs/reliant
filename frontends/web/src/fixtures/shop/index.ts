@@ -24,16 +24,19 @@ import { createMockTransport, type MockScenario } from "@reliantlabs/forge-web-r
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
 import { isDemoRead } from "../readOnly";
-import { createFixtureTransport, defineFixturePack, type FixturePack } from "../transport";
+import { assertPureFixturePack, createFixtureTransport, defineFixturePack, type FixturePack } from "../transport";
 import { configScenarioHandlers } from "./handlers/config";
 import { consoleScenarioHandlers } from "./handlers/console";
+import { coverageSourceHandlers } from "./handlers/coverageSource";
 import { DEMO_DEFAULT_SERVICES, defaultHandlers, withMessageRequests } from "./handlers/defaults";
 import { inventoryScenarioHandlers } from "./handlers/inventory";
 import { observabilityHandlers } from "./handlers/observability";
 import { organizationScenarioHandlers } from "./handlers/organization";
 import { scopedToDemo } from "./handlers/scope";
+import { securityHandlers } from "./handlers/security";
 import { withSpeedInsights } from "./handlers/speedInsights";
 import { storageScenarioHandlers } from "./handlers/storage";
+import { testsHandlers } from "./handlers/tests";
 import { createShopApi } from "./model/shopApi";
 import { demoNow, pinClock } from "./shopStory";
 
@@ -51,7 +54,7 @@ export function shopScenario(fixtures: ObservabilityApi = createShopApi()): Mock
   // (handlers/defaults.ts). A read naming another project or environment is answered empty
   // first (handlers/scope.ts), defaults included, which is why the pack composes its own
   // defaults rather than declaring them as the pack's `defaults`.
-  const handlers = withSpeedInsights({ ...defaultHandlers(), ...consoleScenarioHandlers(), ...configScenarioHandlers(), ...inventoryScenarioHandlers(), ...storageScenarioHandlers(), ...organizationScenarioHandlers(), ...observabilityHandlers(fixtures) });
+  const handlers = withSpeedInsights({ ...defaultHandlers(), ...consoleScenarioHandlers(), ...configScenarioHandlers(), ...inventoryScenarioHandlers(), ...storageScenarioHandlers(), ...organizationScenarioHandlers(), ...observabilityHandlers(fixtures), ...securityHandlers(), ...testsHandlers(), ...coverageSourceHandlers() });
   return { name: "shop", handlers: withMessageRequests(scopedToDemo(handlers, DEMO_DEFAULT_SERVICES)) as unknown as MockScenario["handlers"] };
 }
 
@@ -89,7 +92,9 @@ export function createShopTransport({ passthrough, ...pack }: ShopTransportOptio
   const served = shopPack(pack);
   if (!passthrough) return createFixtureTransport({ pack: served, now: demoNow, ...readOnly });
   // A fixture transport never reaches a backend (forge's neither), so the gateway rides forge's
-  // mock transport, over the same scenario.
+  // mock transport, over the same scenario. That path reaches live traffic, so a pack that answers
+  // writes from fixtures (`answers`) is refused on it.
+  assertPureFixturePack(served, "createShopTransport({ passthrough })");
   return createMockTransport({
     scenario: { ...shopScenario(), passthrough: "first" },
     fallback: passthrough.fallback,

@@ -97,6 +97,9 @@ export function ConsoleLayout() {
   // same model the shell's nav draws this app's sections from. ──
   const model = useConsoleNavModel(forgeProject, pathname, search);
   const { orgId, page, env, listed, projectId, candidates, roster, envs: navEnvs, alertsFiring, starred, dashboardTitle, optionalViews, scope, platformWide, productAnalytics } = model;
+  // A new object on every render: kept by its counts, so the memoized ConsoleShell is not drawn again for nothing.
+  const testsCount = model.navCounts?.tests;
+  const navCounts = useMemo(() => ({ tests: testsCount }), [testsCount]);
   const pinnedEnv = pinnedEnvOf(page);
   const forgeShell = isForgeShell();
 
@@ -248,6 +251,7 @@ export function ConsoleLayout() {
       dashboardTitle={dashboardTitle}
       optionalViews={optionalViews}
       experiments={changesUIEnabled()}
+      navCounts={navCounts}
       obsOpen={obsOpen}
       onObsOpenChange={setObsOpen}
       scope={scope}

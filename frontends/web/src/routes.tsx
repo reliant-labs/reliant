@@ -393,7 +393,10 @@ const rootRoute = createRootRoute({
   beforeLoad: ({ location }) => forwardIntoOrg(location),
   // Keep `?tour=` across navigations that don't name it (retainTourParam).
   // The root has no search schema, so its middleware type is `{}`-shaped.
-  search: { middlewares: [retainTourParam as never] },
+  // The shell's scope (`?projects=`, `?focus=`) rides on every page the same
+  // way, so the Inbox, Projects and Settings keep the projects a chat or a
+  // console showed, and Back brings back the scope each entry had.
+  search: { middlewares: [retainTourParam as never, retainSearchParams([...PROJECTS_CARRIED]) as never] },
   notFoundComponent: () => <Navigate to={homePath()} search={{}} />,
   errorComponent: RouteErrorFallback,
 })
@@ -602,8 +605,6 @@ const appLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: '_app',
   validateSearch: indexSearchSchema,
-  // The chat list's project filter rides on every chat shell page.
-  search: { middlewares: [retainSearchParams([...PROJECTS_CARRIED])] },
   component: AppLayout,
 })
 
@@ -995,7 +996,6 @@ const orgAppLayoutRoute = createRoute({
   getParentRoute: () => orgLayoutRoute,
   id: '_app',
   validateSearch: indexSearchSchema,
-  search: { middlewares: [retainSearchParams([...PROJECTS_CARRIED])] },
   component: AppLayout,
 })
 
