@@ -170,6 +170,9 @@ func (f *EventFirer) fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		// Launched, but possibly half: the chat committed and Temporal never
 		// started. Launch again resumes it (and is a no-op otherwise).
 	default:
+		// Attribute from the recorded event, not the caller's trigger ID.
+		// Telemetry lookup failures must not change a settled result.
+		span.Trigger(settledTrigger(ctx, f.repo, map[string]*core.Trigger{}, ev))
 		return outputFromEvent(ev), nil
 	}
 	resuming := ev.Outcome == core.TriggerEventLaunched

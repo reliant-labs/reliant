@@ -222,6 +222,59 @@ func TestFireSpan_EventFire(t *testing.T) {
 	})
 }
 
+// Settled retries retain their recorded result, but still attribute their
+// span when the event's trigger can be read. Missing triggers and read errors
+// are telemetry-only: neither may launch again or fail the retry.
+func TestFireSpan_SettledRetry(t *testing.T) {
+	for _, kind := range []core.TriggerEventKind{core.TriggerEventKindSchedule, core.TriggerEventKindWebhook} {
+		for _, outcome := range []core.TriggerEventOutcome{core.TriggerEventSkipped, core.TriggerEventFailed} {
+			for _, lookup := range []string{"found", "deleted", "unavailable"} {
+				t.Run(string(kind)+"/"+string(outcome)+"/"+lookup, func(t *testing.T) {
+					rec := recordFireSpans(t)
+					repo := newFakeRepo()
+					trigger := webhookTrigger(t, "")
+					trigger.OrgID = ptrTo("org-1")
+					if lookup != "deleted" {
+						repo.triggers[trigger.ID] = trigger
+					}
+					if lookup == "unavailable" {
+						repo.getTriggerErr = assert.AnError
+					}
+					ev := pendingEvent(repo, trigger, "settled", nil)
+					ev.Kind, ev.Outcome = kind, outcome
+					ev.OutcomeDetail = "recorded result"
+					launcher := &fakeLauncher{}
+					ctx, cause := causeSpan(t)
+					var out *FireOutput
+					var err error
+					if kind == core.TriggerEventKindSchedule {
+						out, err = NewFirer(repo, launcher).Fire(ctx, FireRequest{TriggerID: trigger.ID, FireWorkflowID: ev.DedupeKey})
+					} else {
+						out, err = NewEventFirer(repo, launcher).Fire(ctx, EventFireInput{TriggerID: trigger.ID, Kind: kind, DedupeKey: ev.DedupeKey})
+					}
+					require.NoError(t, err)
+					assert.Equal(t, outputFromEvent(ev), out)
+					assert.Empty(t, launcher.snapshot())
+					s := oneFireSpan(t, rec, kind)
+					assertRootLinkedTo(t, s, cause)
+					a := fireAttrs(s)
+					assert.Equal(t, ev.ID, a[telemetry.AttrTriggerEventID])
+					assert.Equal(t, string(outcome), a[telemetry.AttrTriggerOutcome])
+					if lookup == "found" {
+						assert.Equal(t, trigger.ID, a[telemetry.AttrTriggerID])
+						assert.Equal(t, trigger.UserID, a[telemetry.AttrUserID])
+						assert.Equal(t, "org-1", a[telemetry.AttrOrgID])
+					} else {
+						assert.Empty(t, a[telemetry.AttrTriggerID])
+						assert.Empty(t, a[telemetry.AttrUserID])
+						assert.Empty(t, a[telemetry.AttrOrgID])
+					}
+				})
+			}
+		}
+	}
+}
+
 // An event the intake settles is a span; an event it hands to a fire is the
 // fire's span, and a duplicate delivery records nothing.
 func TestFireSpan_IntakeSettle(t *testing.T) {

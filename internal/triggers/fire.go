@@ -121,6 +121,9 @@ func (f *Firer) fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		// a capacity order) or for a member of its machine pool (recorded by
 		// recordPoolWait). Both continue; anything settled is the answer.
 		if existing.Outcome != core.TriggerEventLaunched && existing.Outcome != core.TriggerEventPending {
+			// Attribution is best-effort; a deleted trigger or lookup outage
+			// must not change the already recorded result.
+			span.Trigger(settledTrigger(ctx, f.repo, map[string]*core.Trigger{}, existing))
 			return outputFromEvent(existing), nil
 		}
 	case errors.Is(err, core.ErrTriggerEventNotFound):
