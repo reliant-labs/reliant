@@ -57,11 +57,10 @@ type RouterLike = {
 // "sometimes not trigger", with no error anywhere, purely on whether the
 // restore landed after the handoff.
 // A filter of several projects (`?projects=`, hooks/useChatProjectFilter)
-// ends wherever this one is set: one project, or all of them.
-const preserveSearch = (prev: Record<string, unknown>) => {
-  const { projects: _projects, ...rest } = prev;
-  return rest;
-};
+// ends wherever this one is set: one project, or all of them. Set to
+// undefined, not left out: the chat shell's routes keep a `projects` the
+// navigation does not name (retainSearchParams, routes.tsx).
+const preserveSearch = (prev: Record<string, unknown>) => ({ ...prev, projects: undefined });
 function getRouter(): RouterLike | null {
   const r = (globalThis as { __RELIANT_ROUTER?: RouterLike }).__RELIANT_ROUTER;
   return r ?? null;

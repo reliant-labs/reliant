@@ -55,7 +55,7 @@
  * route types (the pages read params without a route id).
  */
 
-import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
+import { createRoute, redirect, retainSearchParams, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
 
 import { usagePath } from './lib/paths'
 import { inOrgOfPath } from './lib/paths/org'
@@ -91,6 +91,8 @@ import {
   forgeLegacySearchSchema,
   forgeOrgObsSearchSchema,
   forgeResolveSearchSchema,
+  PROJECTS_CARRIED,
+  projectsCarrySearchSchema,
 } from './routeSchemas'
 import { registerSecurityNav } from './components/Forge/Security/registerSecurityNav'
 
@@ -190,6 +192,10 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const layoutRoute = createRoute({
     getParentRoute,
     id: '_forge',
+    // The chat list's project filter rides through the console too, so a
+    // tab's selection survives a visit to an app.
+    validateSearch: projectsCarrySearchSchema,
+    search: { middlewares: [retainSearchParams([...PROJECTS_CARRIED])] },
     component: components.layout,
   })
 
