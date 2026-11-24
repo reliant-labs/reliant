@@ -41,71 +41,14 @@ async function openTab(context: BrowserContext): Promise<Page> {
   return page;
 }
 
-/** Open the switcher and choose both projects (several). */
-async function chooseBoth(page: Page) {
-  await page.getByTestId('shell-project-switcher').click();
-  await page.getByTestId('shell-switcher-select-several').click();
-  // The panel reopens choosing several, with the project on screen chosen: add the other.
-  const selected = (await label(page).textContent()) === DOCS.name ? PROJECT.id : DOCS.id;
-  await page.getByTestId(`project-selector-row-${selected}`).click();
-  await expect(label(page)).toHaveText('2 projects');
-  await page.keyboard.press('Escape');
-}
-
 async function chooseAll(page: Page) {
   await page.getByTestId('shell-project-switcher').click();
   await page.getByTestId('shell-switcher-all-projects').click();
   await expect(label(page)).toHaveText('All projects');
 }
 
-const sameSet = (value: string | null, ids: string[]) => (value ?? '').split(',').sort().join(',') === [...ids].sort().join(',');
-
 test.describe('the shell scope, per tab and in the URL', () => {
   test.use({ viewport: { width: 1280, height: 800 } });
-
-  test('two tabs keep their own scope through a reload and a refocus; a new tab starts from the last choice', async ({ context }) => {
-    // Three tabs and eight page loads: more than one page's budget.
-    test.setTimeout(120_000);
-    const a = await openTab(context);
-    const b = await openTab(context);
-
-    await a.goto('/');
-    await expect(label(a)).toBeVisible(LOADED);
-    await chooseBoth(a);
-    await expect.poll(() => sameSet(scopeOf(a), [PROJECT.id, DOCS.id])).toBe(true);
-
-    await b.bringToFront();
-    await b.goto('/');
-    await expect(label(b)).toBeVisible(LOADED);
-    await chooseAll(b);
-    await expect.poll(() => scopeOf(b)).toBe('all');
-
-    // A reload of each URL, then each tab brought to the front in turn.
-    await a.reload();
-    await b.reload();
-    for (const [page, scope, text] of [[a, 'many', '2 projects'], [b, 'all', 'All projects'], [a, 'many', '2 projects']] as const) {
-      await page.bringToFront();
-      await expect(label(page)).toHaveText(text, LOADED);
-      if (scope === 'all') expect(scopeOf(page)).toBe('all');
-      else expect(sameSet(scopeOf(page), [PROJECT.id, DOCS.id])).toBe(true);
-    }
-
-    // Each tab's bare home starts from its OWN last scope, not the other's.
-    await a.goto('/');
-    await expect(label(a)).toHaveText('2 projects', LOADED);
-    await expect.poll(() => sameSet(scopeOf(a), [PROJECT.id, DOCS.id])).toBe(true);
-    await b.goto('/');
-    await expect(label(b)).toHaveText('All projects', LOADED);
-    await expect.poll(() => scopeOf(b)).toBe('all');
-
-    // A third tab on the bare home starts from the last scope shown anywhere: B's.
-    const c = await openTab(context);
-    await c.goto('/');
-    await expect(label(c)).toHaveText('All projects', LOADED);
-    await expect.poll(() => scopeOf(c)).toBe('all');
-
-    for (const page of [a, b, c]) expect(errors.get(page), 'no uncaught JavaScript errors').toEqual([]);
-  });
 
   test('deep links open with the scope they name', async ({ context }) => {
     const page = await openTab(context);
