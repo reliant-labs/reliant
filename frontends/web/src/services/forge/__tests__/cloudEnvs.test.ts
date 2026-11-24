@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { transport } from "@/lib/connect";
 import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -61,13 +62,13 @@ beforeEach(() => {
 describe("listProjectEnvironments", () => {
   it("asks for ONE project's environments", async () => {
     listEnvironments.mockResolvedValue({ environments: [] });
-    await listProjectEnvironments("barksocial", null);
+    await listProjectEnvironments(transport, "barksocial", null);
     expect(listEnvironments).toHaveBeenCalledWith({ project: "barksocial" });
   });
 
   it("names the org it is read in, so the answer is that org's", async () => {
     listEnvironments.mockResolvedValue({ environments: [] });
-    await listProjectEnvironments("barksocial", "org-a");
+    await listProjectEnvironments(transport, "barksocial", "org-a");
     expect(listEnvironments).toHaveBeenCalledWith({ project: "barksocial", orgId: "org-a" });
   });
 
@@ -81,7 +82,7 @@ describe("listProjectEnvironments", () => {
         create(DeployEnvironmentSchema, { id: "d", name: "dev", project: "barksocial", ...LOCAL }),
       ],
     });
-    const envs = await listProjectEnvironments("barksocial", null);
+    const envs = await listProjectEnvironments(transport, "barksocial", null);
     expect(envs.map((e) => [e.id, e.name, e.kind])).toEqual([
       ["d", "dev", "local"],
       ["a", "prod", "persistent"],
@@ -92,7 +93,7 @@ describe("listProjectEnvironments", () => {
     listEnvironments.mockResolvedValue({
       environments: [create(DeployEnvironmentSchema, { id: "cp", name: "prod", project: "control-plane", ...SELF_MANAGED })],
     });
-    const envs = await listProjectEnvironments("control-plane", null);
+    const envs = await listProjectEnvironments(transport, "control-plane", null);
     expect(envs.map((e) => e.kind)).toEqual(["self_managed"]);
   });
 
@@ -109,7 +110,7 @@ describe("listProjectEnvironments", () => {
         create(DeployEnvironmentSchema, { id: "e", name: "e", project: "p" }),
       ],
     });
-    const envs = await listProjectEnvironments("p", null);
+    const envs = await listProjectEnvironments(transport, "p", null);
     expect(Object.fromEntries(envs.map((e) => [e.id, e.kind]))).toEqual({
       a: "local",
       b: "preview",
@@ -139,7 +140,7 @@ describe("getEnvironmentStatus: a hosted frontend", () => {
         ],
       })
     );
-    const status = await getEnvironmentStatus("env-prod", null);
+    const status = await getEnvironmentStatus(transport, "env-prod", null);
     expect(status.workloads[0]).toMatchObject({
       name: "web",
       tier: "static",
@@ -183,7 +184,7 @@ describe("getEnvironmentStatus", () => {
       })
     );
 
-    const status = await getEnvironmentStatus("env-1", null);
+    const status = await getEnvironmentStatus(transport, "env-1", null);
     expect(getStatus).toHaveBeenCalledWith({ environmentId: "env-1" });
     expect(status.verdict).toBe("degraded");
     expect(status.workloads).toEqual([
@@ -214,7 +215,7 @@ describe("getEnvironmentStatus", () => {
 
   it("reports an empty environment as unknown — never healthy", async () => {
     getStatus.mockResolvedValue(create(GetDeploymentStatusResponseSchema, {}));
-    const status = await getEnvironmentStatus("env-1", null);
+    const status = await getEnvironmentStatus(transport, "env-1", null);
     expect(status.verdict).toBe("unknown");
     expect(status.workloads).toEqual([]);
     expect(status.currentPromotion).toBeNull();
