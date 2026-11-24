@@ -10,3 +10,8 @@ import (
 func ledgerOf(repo *db.Repo) *writeledger.Ledger {
 	return writeledger.NewLedger(store.NewIntegrationWriteExtStore(repo.ORM()))
 }
+
+// workflowsOf is the run reader over repo's database.
+func workflowsOf(repo *db.Repo) store.WorkflowExtStore {
+	return store.NewWorkflowExtStore(repo.ORM())
+}

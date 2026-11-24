@@ -22,7 +22,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { CreditCard, FolderOpen, Receipt, Wallet } from "lucide-react";
+import { Activity, CreditCard, FolderOpen, HardDrive, Receipt, Wallet } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
 import Button from "@/components/forge-ui/button";
@@ -30,6 +30,7 @@ import Card from "@/components/forge-ui/card";
 import EmptyState from "@/components/forge-ui/empty_state";
 import Link from "@/components/forge-ui/link";
 import PageHeader from "@/components/forge-ui/page_header";
+import ProgressBar from "@/components/forge-ui/progress_bar";
 import { consolePath } from "@/components/Forge/Console/paths";
 import {
   bucketStarts,
@@ -65,7 +66,8 @@ import {
 } from "@/components/Settings/cloud/billingUtils";
 import { SubscriptionStatus } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { useApps } from "@/hooks/apps-queries";
-import { useOrganizationUsage, useProjectCost } from "@/hooks/organization-usage-queries";
+import { useObsBillingUsage } from "@/hooks/observability-billing-queries";
+import { useOrganizationUsage, useProjectCost, useStorageUsage } from "@/hooks/organization-usage-queries";
 import {
   useComputeSubscription,
   useCreateBillingPortalSession,
@@ -86,6 +88,7 @@ import {
   usageCategoryLabel,
   usageRangeOf,
 } from "./usageBillingModel";
+import { storagePoolView, telemetryView } from "./storageUsageModel";
 
 const LINK = "no-color text-primary-ink hover:underline";
 
@@ -136,6 +139,7 @@ export function UsageBillingView({ nowMs: fixedNow }: { nowMs?: number } = {}) {
           <Headline query={usage} orgId={orgId} range={range} />
           <ProjectBreakdown orgId={orgId} />
           <OrgLevel query={usage} orgId={orgId} range={range} />
+          <StorageAndTelemetry orgId={orgId} />
         </>
       )}
       <BillingSummary />
@@ -414,6 +418,94 @@ function BillingSummary() {
             <p role="alert" className="mt-1 text-meta text-destructive-ink">
               {portalError}
             </p>
+          )}
+        </Card>
+      </div>
+    </section>
+  );
+}
+
+/** A query's pending and failed states in a card; an absent figure is never shown as 0. */
+function QueryState({ query, what }: { query: { isPending: boolean; isError: boolean; refetch: () => unknown }; what: string }) {
+  if (query.isPending) return <p className="mt-1 text-meta text-ink-muted">Loading {what}…</p>;
+  return (
+    <p role="status" className="mt-1 text-meta text-ink-muted">
+      {what[0].toUpperCase() + what.slice(1)} unavailable.{" "}
+      <button type="button" className={LINK} onClick={() => void query.refetch()}>
+        Refresh
+      </button>
+    </p>
+  );
+}
+
+/**
+ * The storage pool (BillingService.GetStorageUsage): everything the org keeps
+ * at rest against 10 GiB free plus its machine plans' disk, by product; and
+ * telemetry, its own monthly ingest meter (GetObservabilityUsage).
+ */
+function StorageAndTelemetry({ orgId }: { orgId: string }) {
+  const storage = useStorageUsage(orgId);
+  const telemetry = useObsBillingUsage(orgId);
+  const pool = storage.data ? storagePoolView(storage.data) : undefined;
+  const obs = telemetry.data ? telemetryView(telemetry.data) : undefined;
+  return (
+    <section className="space-y-3" aria-labelledby="usage-billing-storage" data-testid="usage-billing-storage-section">
+      <h2 id="usage-billing-storage" className="text-section text-ink">
+        Storage and telemetry
+      </h2>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card padding="none" className="min-w-0 px-4 py-3 md:col-span-2" data-testid="usage-billing-storage">
+          <h3 className="flex items-center gap-1.5 text-ui font-medium text-ink-muted">
+            <HardDrive className="h-4 w-4" aria-hidden="true" /> Storage
+          </h3>
+          {isPermissionDenied(storage.error) ? (
+            <BillingPermissionRequired what="this organization's storage" />
+          ) : !pool ? (
+            <QueryState query={storage} what="storage usage" />
+          ) : (
+            <>
+              <div className="mt-0.5 text-2xl font-semibold tabular-nums text-ink" data-testid="usage-billing-storage-total">
+                {pool.headline}
+              </div>
+              {!pool.unmeasured && pool.includedGib > 0 && (
+                <ProgressBar value={pool.usedGib} max={pool.includedGib} size="sm" ariaLabel="Storage pool used" className="mt-2" />
+              )}
+              <p className="mt-1 text-meta text-ink-muted">{pool.includedLine}</p>
+              <ul className="mt-3 divide-y divide-border" data-testid="usage-billing-storage-products">
+                {pool.rows.map((row) => (
+                  <li key={row.key} className="flex items-center justify-between gap-3 py-1.5 text-ui">
+                    <span className="min-w-0 truncate text-ink">{row.label}</span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className={`tabular-nums ${row.measured ? "text-ink" : "text-ink-muted"}`}>{row.amount}</span>
+                      <Badge size="sm" variant={row.basis.tone} label={row.basis.label} />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {!pool.billingActive && (
+                <p className="mt-2 text-meta text-ink-muted" data-testid="usage-billing-storage-note">
+                  Storage pool billing starts later. Products marked Billed are charged today under their current terms.
+                </p>
+              )}
+            </>
+          )}
+        </Card>
+        <Card padding="none" className="min-w-0 px-4 py-3" data-testid="usage-billing-telemetry">
+          <h3 className="flex items-center gap-1.5 text-ui font-medium text-ink-muted">
+            <Activity className="h-4 w-4" aria-hidden="true" /> Telemetry
+          </h3>
+          {isPermissionDenied(telemetry.error) ? (
+            <BillingPermissionRequired what="this organization's telemetry" />
+          ) : !obs ? (
+            <QueryState query={telemetry} what="telemetry usage" />
+          ) : (
+            <>
+              <div className="mt-0.5 text-2xl font-semibold tabular-nums text-ink" data-testid="usage-billing-telemetry-total">
+                {obs.headline}
+              </div>
+              {obs.allowance > 0 && <ProgressBar value={obs.used} max={obs.allowance} size="sm" ariaLabel="Telemetry used this month" className="mt-2" />}
+              <p className="mt-1 text-meta text-ink-muted">Logs, traces and metrics ingested. Separate from the storage pool.</p>
+            </>
           )}
         </Card>
       </div>

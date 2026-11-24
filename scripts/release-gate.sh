@@ -346,11 +346,21 @@ cmd_run() {
   steps_json="[]"
   if [ -n "$part" ]; then read -r -a steps <<<"${PART_STEPS[$part]}"; else steps=("${STEPS[@]}"); fi
   [ -z "$hbase" ] || steps=("${HOTFIX_STEPS[@]}")
+  # The test steps record into ONE run of forge's test record in the private
+  # checkout (.forge/tests/runs/<id>/: test-go as lane unit, test-web as
+  # frontend, integration, e2e; scripts/test-capture.sh). The record never
+  # changes a step's result. On main, ci.yml's test-upload job sends the
+  # parts' runs to the control plane (forge test report --upload).
+  local test_run=""
+  if [ "${FORGE_TESTS:-}" != off ] && [[ " ${steps[*]} " =~ \ (test-go|test-web|integration|e2e|merge)\  ]]; then
+    test_run=$(cd "$snap" && "$forge_sh" test begin 2>/dev/null) && [ -d "$test_run" ] || test_run=""
+    [ -z "$test_run" ] || echo "release-gate: test lanes record into $test_run"
+  fi
   for step in "${steps[@]}"; do
     if [ -n "${RG_ONLY:-}" ] && ! echo ",$RG_ONLY," | grep -q ",$step,"; then continue; fi
     s=$(date +%s)
     echo "release-gate: [$(date -u +%H:%M:%SZ)] $step ..."
-    (cd "$snap" && export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath" FORGE_NO_MERGE_DRIVER=1 RG_GO_SHARD="$shard" RG_HOTFIX_BASE="$hbase" && run_step "$step") >"$L/$step.log" 2>&1
+    (cd "$snap" && export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath" FORGE_NO_MERGE_DRIVER=1 RG_GO_SHARD="$shard" RG_HOTFIX_BASE="$hbase" && { [ -z "$test_run" ] || export FORGE_TEST_RUN="$test_run"; } && run_step "$step") >"$L/$step.log" 2>&1
     rc=$?; e=$(date +%s)
     [ "$rc" = 0 ] || fail=1
     echo "release-gate: $step $([ "$rc" = 0 ] && echo PASS || echo "FAIL (rc $rc; $L/$step.log)") in $((e - s))s"

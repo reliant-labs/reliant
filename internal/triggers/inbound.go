@@ -81,11 +81,6 @@ type IntakeReceipt struct {
 	ReceivedAt              time.Time
 }
 
-type receiptEventRepo interface {
-	TriggerDeliveryEvent(ctx context.Context, id, triggerID, userID string) (*core.TriggerEvent, error)
-	RecordDeliveryTriggerEvent(ctx context.Context, id, token string, event *core.TriggerEvent) (*core.TriggerEvent, bool, error)
-}
-
 // AcceptResult is what Accept recorded.
 type AcceptResult struct {
 	EventID string
@@ -98,7 +93,7 @@ type AcceptResult struct {
 
 // Intake records arrived events and starts their fires.
 type Intake struct {
-	repo      EventRepo
+	repo      IntakeRepo
 	starter   WorkflowStarter
 	taskQueue string
 	workflows WorkflowResolver
@@ -125,7 +120,7 @@ func (in *Intake) WithWorkflows(workflows WorkflowResolver) *Intake {
 }
 
 // NewIntake builds an Intake. taskQueue empty means the shared queue.
-func NewIntake(repo EventRepo, starter WorkflowStarter, taskQueue string) *Intake {
+func NewIntake(repo IntakeRepo, starter WorkflowStarter, taskQueue string) *Intake {
 	if taskQueue == "" {
 		taskQueue = defaultTaskQueue
 	}
@@ -165,15 +160,9 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		// with no hint why.
 		return nil, errors.New("triggers: an inbound event needs a sender")
 	}
-	var receiptRepo receiptEventRepo
 	if receipt := opts.Receipt; receipt != nil {
-		var ok bool
-		receiptRepo, ok = in.repo.(receiptEventRepo)
-		if !ok {
-			return nil, errors.New("triggers: receipt-aware event store is required")
-		}
 		if receipt.EventID != "" {
-			stored, err := receiptRepo.TriggerDeliveryEvent(ctx, receipt.EventID, trigger.ID, trigger.UserID)
+			stored, err := in.repo.TriggerDeliveryEvent(ctx, receipt.EventID, trigger.ID, trigger.UserID)
 			if err != nil {
 				return nil, err
 			}
@@ -265,8 +254,8 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		CreatedAt:     in.now().UTC(),
 	}
 	var created bool
-	if receiptRepo != nil {
-		row, created, err = receiptRepo.RecordDeliveryTriggerEvent(ctx, opts.Receipt.ID, opts.Receipt.LeaseToken, row)
+	if opts.Receipt != nil {
+		row, created, err = in.repo.RecordDeliveryTriggerEvent(ctx, opts.Receipt.ID, opts.Receipt.LeaseToken, row)
 	} else {
 		created, err = in.repo.CreateTriggerEvent(ctx, row)
 		if err == nil && !created {

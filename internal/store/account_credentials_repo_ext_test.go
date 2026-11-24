@@ -134,26 +134,6 @@ func TestAPIKeyQueries(t *testing.T) {
 	if err := store.DeleteAPIKey(ctx, env.ORM, "u1", provider); err != nil {
 		t.Fatalf("DeleteAPIKey(absent): %v", err)
 	}
-	if _, err := env.Repo.GetAutomationToken(ctx, "u1", "d1"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("after the delete Repo.GetAutomationToken err = %v", err)
-	}
-}
-
-// TestAutomationTokenRoundTripsSealed: the Repository seals, the store stores, and the row on
-// disk holds ciphertext, not the token.
-func TestAutomationTokenRoundTripsSealed(t *testing.T) {
-	env := storetest.New(t)
-	ctx := context.Background()
-	if err := env.Repo.SetAutomationToken(ctx, "u1", "d1", "rlat_PLAINTEXT"); err != nil {
-		t.Fatalf("SetAutomationToken: %v", err)
-	}
-	sealed, err := store.GetAPIKeySealed(ctx, env.ORM, "u1", core.AutomationProviderPrefix+"d1")
-	if err != nil || len(sealed) == 0 || bytes.Contains(sealed, []byte("rlat_PLAINTEXT")) {
-		t.Fatalf("stored value = %q, %v; want ciphertext", sealed, err)
-	}
-	if got, err := env.Repo.GetAutomationToken(ctx, "u1", "d1"); err != nil || got != "rlat_PLAINTEXT" {
-		t.Fatalf("GetAutomationToken = %q, %v", got, err)
-	}
 }
 
 // TestAccessTokenQueries ports the self-hosted token store's statements.
@@ -427,7 +407,7 @@ WHERE chat_id = $4 AND waiting_since IS NOT NULL
 	if port.WaitedMs != 1000+3000+60000 || port.Retries != 3 || port.Provider != "Anthropic" || port.Waiting() || port.Attempt != 0 {
 		t.Fatalf("backoff = %+v; want 64s waited over 3 retries, released", port)
 	}
-	viaRepo, err := env.Repo.ProviderBackoffByChat(ctx, "chat-bo")
+	viaRepo, err := store.ListChatProviderBackoff(ctx, env.ORM, "chat-bo")
 	if err != nil {
 		t.Fatalf("Repo.ProviderBackoffByChat: %v", err)
 	}

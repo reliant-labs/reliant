@@ -23,6 +23,7 @@ import (
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -31,8 +32,6 @@ import (
 type Store interface {
 	// ListLLMOrgUsageDaily is the org's rollup of org-funded calls.
 	ListLLMOrgUsageDaily(ctx context.Context, orgID string, from, to time.Time) ([]*db.LLMOrgUsageDay, error)
-	// ProviderAccountNames names the accounts a response groups by.
-	ProviderAccountNames(ctx context.Context, ids []string) (map[string]db.ProviderAccountName, error)
 }
 
 // ListPrices is the list price of each model, from control-plane
@@ -40,6 +39,12 @@ type Store interface {
 // satisfies it.
 type ListPrices interface {
 	GetModelListPrices(ctx context.Context, refs []controlplane.ModelRef) ([]controlplane.ModelListPrice, time.Time, error)
+}
+
+// AccountNames names the provider accounts a usage response groups by; provideraccounts.Service
+// satisfies it.
+type AccountNames interface {
+	ProviderAccountNames(ctx context.Context, ids []string) (map[string]core.ProviderAccountName, error)
 }
 
 // Deps holds dependencies for the org_usage service. Composition
@@ -51,6 +56,8 @@ type Deps struct {
 	Config *config.Config
 	// Store holds the org rollup.
 	Store Store
+	// Accounts names the accounts a response groups by.
+	Accounts AccountNames
 	// Prices is nil when this deployment has no control plane to ask (self
 	// hosted, or no internal-service secret): usage is then shown without
 	// cost estimates.
@@ -74,6 +81,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Store == nil {
 		return fmt.Errorf("org_usage: Deps.Store is required")
+	}
+	if d.Accounts == nil {
+		return fmt.Errorf("org_usage: Deps.Accounts is required")
 	}
 	return nil
 }

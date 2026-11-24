@@ -103,6 +103,23 @@ func startRunTelemetry(ctx workflow.Context, input WorkflowInput, execCtx *Execu
 	return workflow.WithValue(ctx, rootRunIDKey{}, runID)
 }
 
+// nameRunOrg sets org.id on the workflow's own span (RunWorkflow:DynamicWorkflow)
+// once the run's root definition load has named it. Workflow code cannot read
+// the database, so the org arrives in that load's result (LoadedWorkflow.OrgID),
+// which the worker fills from the same chat-owner lookup that stamps every
+// other span of the run. A recorded result is replayed and an attribute is no
+// command, so this is replay-safe; a run whose history predates the field
+// names no org, as before. Tenant export routes a span by its org.id and drops
+// one without it.
+func nameRunOrg(ctx workflow.Context, orgID string) {
+	if orgID == "" {
+		return
+	}
+	if span, ok := temporalotel.SpanFromWorkflowContext(ctx); ok {
+		span.SetAttributes(attribute.String(telemetry.AttrOrgID, orgID))
+	}
+}
+
 // runTelemetryKey holds, for a save_message the workflow writes itself, the
 // telemetry of the run whose node it saves (withRunTelemetry).
 type runTelemetryKey struct{}

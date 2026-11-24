@@ -15,6 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // wholeConfigRowReads is a real repository with one read recorded: the read
@@ -38,7 +39,7 @@ func (r *wholeConfigRowReads) GetProjectConfigRecord(ctx context.Context, projec
 	r.mu.Lock()
 	r.callers = append(r.callers, runtime.FuncForPC(pc).Name())
 	r.mu.Unlock()
-	return r.Repo.GetProjectConfigRecord(ctx, projectID)
+	return store.GetProjectConfigRecord(ctx, r.ORM(), projectID)
 }
 
 func (r *wholeConfigRowReads) reads() []string {
@@ -119,12 +120,12 @@ func TestDaemonConfigSync_StalenessCheckReadsOnlyPushedAt(t *testing.T) {
 		}
 	}
 	require.NoError(t, svc.persistProjectConfigSnapshot(ctx, conn, snapshot(1500, "user: stale"), false))
-	record, err := repo.GetProjectConfigRecord(ctx, projectID)
+	record, err := store.GetProjectConfigRecord(ctx, repo.ORM(), projectID)
 	require.NoError(t, err)
 	require.Equal(t, "user: existing", *record.UserConfigYAML, "a snapshot older than the stored push must not be written")
 
 	require.NoError(t, svc.persistProjectConfigSnapshot(ctx, conn, snapshot(4000, "user: fresh"), false))
-	record, err = repo.GetProjectConfigRecord(ctx, projectID)
+	record, err = store.GetProjectConfigRecord(ctx, repo.ORM(), projectID)
 	require.NoError(t, err)
 	require.Equal(t, "user: fresh", *record.UserConfigYAML, "a newer snapshot must be written")
 	require.Equal(t, int64(4000), record.PushedAt.UnixMilli())

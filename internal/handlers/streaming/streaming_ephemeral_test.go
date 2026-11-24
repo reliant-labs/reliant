@@ -60,7 +60,7 @@ func TestStreamUserUpdates_LiveHeartbeatReachesProjectScopedClientWithoutMovingC
 
 	hub := newChanUserHub()
 	project := catchupProject
-	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub})),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub}))),
 		&reliantv1.StreamUserUpdatesRequest{SinceSeq: 0, ProjectId: &project})
 
 	caughtUp := nextEvent(t, events, "catch-up batch at the latest user sequence", func(ev *reliantv1.UserStreamEvent) bool {
@@ -112,7 +112,7 @@ func TestStreamUserUpdates_LiveHeartbeatAtCursorZero(t *testing.T) {
 
 	hub := newChanUserHub()
 	project := catchupProject
-	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub})),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub}))),
 		&reliantv1.StreamUserUpdatesRequest{SinceSeq: 0, ProjectId: &project})
 	nextEvent(t, events, "sync", func(ev *reliantv1.UserStreamEvent) bool { return ev.GetSync() != nil })
 	<-hub.subscribed
@@ -165,13 +165,13 @@ func TestStreamChatUpdates_DrainedAnnouncementsAreLiveOnlyNotInSnapshot(t *testi
 		ID: chatID, Title: "drained", ProjectID: catchupProject, UserID: raceTestUserID,
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	require.NoError(t, repo.EmitAgentMessagesDrainedUpdate(ctx, chatID, db.AgentMessagesDrainedUpdate{
+	require.NoError(t, db.EmitAgentMessagesDrainedUpdate(ctx, repo, chatID, db.AgentMessagesDrainedUpdate{
 		Thread: chatID, MessageIDs: []string{"historical-agent-msg"},
 	}))
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeApproval, "approval-1", `{"k":"v"}`))
 
 	chatHub := &chanChatHub{subscribed: make(chan struct{}), events: make(chan streaming.UpdateEvent[db.ChatUpdate], 4)}
-	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, ChatUpdates: chatHub})),
+	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, ChatUpdates: chatHub}))),
 		&reliantv1.StreamChatUpdatesRequest{ChatId: chatID})
 
 	snapshot := nextEvent(t, events, "the chat snapshot", func(ev *reliantv1.ChatStreamEvent) bool {
@@ -189,7 +189,7 @@ func TestStreamChatUpdates_DrainedAnnouncementsAreLiveOnlyNotInSnapshot(t *testi
 	<-chatHub.subscribed
 
 	// A drain that happens now must still be delivered live, unchanged.
-	require.NoError(t, repo.EmitAgentMessagesDrainedUpdate(ctx, chatID, db.AgentMessagesDrainedUpdate{
+	require.NoError(t, db.EmitAgentMessagesDrainedUpdate(ctx, repo, chatID, db.AgentMessagesDrainedUpdate{
 		Thread: chatID, MessageIDs: []string{"live-agent-msg"},
 	}))
 	latest, err := repo.GetUpdatesSince(ctx, chatID, snapshot.GetLatestSequence(), 10)
@@ -222,11 +222,11 @@ func TestStreamChatUpdates_DrainedAnnouncementsAreReplayed(t *testing.T) {
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeApproval, "approval-1", `{"k":"v"}`))
 	seen, err := repo.GetLatestUpdateSequence(ctx, chatID)
 	require.NoError(t, err)
-	require.NoError(t, repo.EmitAgentMessagesDrainedUpdate(ctx, chatID, db.AgentMessagesDrainedUpdate{
+	require.NoError(t, db.EmitAgentMessagesDrainedUpdate(ctx, repo, chatID, db.AgentMessagesDrainedUpdate{
 		Thread: chatID, MessageIDs: []string{"missed-agent-msg"},
 	}))
 
-	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
+	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}}))),
 		&reliantv1.StreamChatUpdatesRequest{ChatId: chatID, SinceSeq: seen})
 
 	replay := nextEvent(t, events, "the replay batch", func(ev *reliantv1.ChatStreamEvent) bool {

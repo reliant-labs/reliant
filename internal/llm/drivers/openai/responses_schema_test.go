@@ -52,8 +52,8 @@ func TestResponsesToolSchemaNormalization(t *testing.T) {
 
 	// We only need one tool to reproduce the strictest schema issues.
 	repo := &db.Repo{} // schema generation doesn't touch the repo
-	addTask := llmtools.NewAddTaskTool(repo)
-	updateTask := llmtools.NewUpdateTaskTool(repo)
+	addTask := llmtools.NewAddTaskTool(repo, nil)
+	updateTask := llmtools.NewUpdateTaskTool(repo, nil)
 	// Simulate a malformed/underspecified MCP schema that still must become
 	// a strict root object for OpenAI Responses.
 	brokenMCP := llmtools.NewSchemaOnlyTool(

@@ -111,7 +111,7 @@ func newEnv(t *testing.T) *env {
 		Acquire:    func(context.Context, []string) (worktreereclaim.RecoveryLease, error) { return idleLease{}, nil },
 		ProcessUse: func(context.Context, []string) error { return nil },
 	}}
-	e.sweeper = New(repo, e.sender)
+	e.sweeper = New(stores(repo), e.sender)
 	return e
 }
 
@@ -241,7 +241,7 @@ func TestStorageView_ShowsHeldAndLowDiskPerMachine(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(path, "wip.txt"), []byte("x"), 0o644))
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
 
-	view, err := StorageView(e.ctx, e.repo, e.userID)
+	view, err := StorageView(e.ctx, stores(e.repo), e.userID)
 	require.NoError(t, err)
 	require.Len(t, view, 1, "one entry per machine")
 	assert.Equal(t, e.daemon, view[0].DaemonID)
@@ -254,7 +254,7 @@ func TestStorageView_ShowsHeldAndLowDiskPerMachine(t *testing.T) {
 	_, path2 := e.worktree(t, "held2", true)
 	require.NoError(t, os.WriteFile(filepath.Join(path2, "wip.txt"), []byte("x"), 0o644))
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
-	view, err = StorageView(e.ctx, e.repo, e.userID)
+	view, err = StorageView(e.ctx, stores(e.repo), e.userID)
 	require.NoError(t, err)
 	require.Len(t, view, 1, "still one entry per machine")
 	assert.Len(t, view[0].Held, 2)
@@ -267,7 +267,7 @@ func TestStorageView_HealthyDiskWithNothingHeldHasNoItem(t *testing.T) {
 	e := newEnv(t)
 	e.worktree(t, "fine", true)
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
-	view, err := StorageView(e.ctx, e.repo, e.userID)
+	view, err := StorageView(e.ctx, stores(e.repo), e.userID)
 	require.NoError(t, err)
 	assert.Empty(t, view)
 }
@@ -285,7 +285,7 @@ func TestCleanup_SnapshotsThenRemovesOnlyWhatWasConfirmed(t *testing.T) {
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
 	require.True(t, exists(pathA) && exists(pathB))
 
-	results, freed, err := e.sweeper.Cleanup(e.ctx, e.repo, e.userID, e.daemon, []string{wtA.ID, "not-a-worktree"})
+	results, freed, err := e.sweeper.Cleanup(e.ctx, stores(e.repo), e.userID, e.daemon, []string{wtA.ID, "not-a-worktree"})
 	require.NoError(t, err)
 	byID := map[string]CleanupResult{}
 	for _, r := range results {
@@ -317,7 +317,7 @@ func TestCleanup_OfflineMachineIsRefused(t *testing.T) {
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
 	_, err := e.repo.DB.DB(e.ctx).ExecContext(e.ctx, `DELETE FROM daemon_attachment WHERE daemon_id = $1`, e.daemon)
 	require.NoError(t, err)
-	_, _, err = e.sweeper.Cleanup(e.ctx, e.repo, e.userID, e.daemon, []string{wt.ID})
+	_, _, err = e.sweeper.Cleanup(e.ctx, stores(e.repo), e.userID, e.daemon, []string{wt.ID})
 	assert.ErrorIs(t, err, ErrOffline)
 	assert.True(t, exists(path))
 }
@@ -330,7 +330,7 @@ func TestCleanup_NeverActsOnAnotherUsersWorktree(t *testing.T) {
 	wt, path := e.worktree(t, "mine", true)
 	require.NoError(t, os.WriteFile(filepath.Join(path, "wip.txt"), []byte("x"), 0o644))
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
-	results, _, err := e.sweeper.Cleanup(e.ctx, e.repo, uuid.NewString(), e.daemon, []string{wt.ID})
+	results, _, err := e.sweeper.Cleanup(e.ctx, stores(e.repo), uuid.NewString(), e.daemon, []string{wt.ID})
 	if err == nil {
 		for _, r := range results {
 			assert.NotEqual(t, CleanupRemoved, r.Outcome)

@@ -35,7 +35,7 @@ import {
 } from "react";
 import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { useAuthStore } from "../../store/authStore";
-import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { shellProjectNow } from "../../lib/urlState/shellScopeStore";
 import { openAddProject } from "../../store/addProjectDialogStore";
 import { OPEN_PROJECT_SWITCHER_EVENT } from "../../lib/projectSwitcher";
 import { SwitchProjectDialog } from "../Projects/SwitchProjectDialog";
@@ -218,7 +218,7 @@ function createHostCore(
     if (chatShellRouteOf(live.current.latestPathname())) return;
     const { navigate } = live.current;
     // The chat workspace's URL carries the sidebar's project filter.
-    const projectId = useWorkspaceStateStore.getState().projectFilterId;
+    const projectId = shellProjectNow();
     if (projectId) {
       void navigate({ to: projectChatsPath(projectId), search: {} });
     } else {

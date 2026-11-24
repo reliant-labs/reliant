@@ -157,7 +157,7 @@ describe("OrganizationUsageView", () => {
 
   it("never turns an absent figure into zero", async () => {
     view();
-    // Dev boxes carry seconds and no price; static egress carries usage and no price.
+    // Sandboxes carry seconds and no price; static egress carries usage and no price.
     const machines = await tile("machines");
     expect(machines).toHaveTextContent("n/a");
     expect(machines).toHaveTextContent("Measured, not priced");

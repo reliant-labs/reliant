@@ -9,11 +9,14 @@
  *  - the demo console, `/forge/demo?view=<obs view>&trace=…` (DemoConsole),
  *    which the other shells keep.
  *
- * A page with no tour is null: nothing shows, and an open card closes.
+ * A page with no tour is null: nothing shows, and an open card closes. The
+ * pages the demo does not serve (DEMO_HIDDEN_PAGES) have none, and neither
+ * does Experiments, which the demo's nav does not list.
  */
 
 import { consolePageOf } from "../../Console/paths";
 import { FORGE_DEMO_PATH } from "../demoPath";
+import { PEOPLE_DASHBOARD_KEYS } from "../sections/demoLinks";
 
 export const DEMO_TIP_KEYS = [
   "overview",
@@ -24,7 +27,19 @@ export const DEMO_TIP_KEYS = [
   "secrets",
   "domains",
   "activity",
-  "users",
+  "auth",
+  "services",
+  "storage",
+  "data",
+  "vulnerabilities",
+  "sboms",
+  "tests",
+  "tests-coverage",
+  "tests-runs",
+  "tests-flaky",
+  "analytics",
+  "events",
+  "obs-overview",
   "dashboards",
   "errors",
   "traces",
@@ -36,6 +51,7 @@ export const DEMO_TIP_KEYS = [
   "metrics",
   "rpc",
   "graph",
+  "speed-insights",
   "workload",
 ] as const;
 
@@ -89,10 +105,44 @@ export function demoTipKey(pathname: string, search: Record<string, unknown>): D
       return "domains";
     case "activity":
       return "activity";
+    // The old Users page is Auth's Users tab.
+    case "auth":
     case "users":
-      return "users";
+      return "auth";
+    case "services":
+    case "service":
+      return "services";
+    case "storage":
+      return "storage";
+    case "data":
+      return "data";
+    case "vulnerabilities":
+    case "vulnerability":
+      return "vulnerabilities";
+    case "sboms":
+      return "sboms";
+    case "tests":
+      return "tests";
+    case "tests-coverage":
+      return "tests-coverage";
+    case "tests-runs":
+    case "tests-run":
+      return "tests-runs";
+    case "tests-flaky":
+    case "tests-flaky-test":
+      return "tests-flaky";
+    // Events & metrics is a tab of Analytics, with a tip of its own.
+    case "analytics":
+      return page.tab === "events" ? "events" : "analytics";
+    case "events":
+      return "events";
+    case "obs-overview":
+      return "obs-overview";
+    case "speed-insights":
+      return "speed-insights";
+    // The Product analytics hub's dashboards are Analytics' tabs, not one of the app's dashboards.
     case "dashboard":
-      return "dashboards";
+      return PEOPLE_DASHBOARD_KEYS.includes(page.key) ? "analytics" : "dashboards";
     case "obs-view":
       return obsTip(page.view, search);
     default:
@@ -123,5 +173,5 @@ export function isDemoSectionPage(pathname: string, search: Record<string, unkno
   if (pathname === FORGE_DEMO_PATH || pathname.startsWith(`${FORGE_DEMO_PATH}/`)) return !search.section;
   const page = consolePageOf(pathname)?.page;
   if (!page) return false;
-  return !["workload", "release", "environment", "dashboard"].includes(page.kind);
+  return !["workload", "release", "environment", "dashboard", "service", "vulnerability", "tests-run", "tests-flaky-test"].includes(page.kind);
 }

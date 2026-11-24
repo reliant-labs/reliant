@@ -108,6 +108,9 @@ ON CONFLICT (trigger_id) DO UPDATE SET
 // UpsertTriggerRegistration records a trigger's provider state. An empty
 // Status is core.TriggerRegistrationActive.
 func UpsertTriggerRegistration(ctx context.Context, db orm.Context, reg *core.TriggerRegistration) error {
+	if reg == nil || reg.TriggerID == "" {
+		return errors.New("trigger registration needs a trigger ID")
+	}
 	status := reg.Status
 	if status == "" {
 		status = core.TriggerRegistrationActive

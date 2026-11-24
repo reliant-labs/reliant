@@ -130,7 +130,7 @@ func (f *chatMachineRecovery) count(id string) int {
 
 func (f *chatMachineRecovery) run(selector *activitytypes.DaemonSelector, executor toolexec.ToolExecutor) (ExecuteRunStepOutput, error) {
 	var out ExecuteRunStepOutput
-	act := NewExecuteRunStepActivity(f.h.Repo(), executor, nil)
+	act := NewExecuteRunStepActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), executor, nil)
 	act.machineWait = f.wait
 	err := f.h.ExecuteActivity(act.Execute, ExecuteRunStepInput{
 		ChatID: f.chat, WorkflowID: "live-workflow", StepID: "run", Command: "pwd", Timeout: 5000,
@@ -198,7 +198,7 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	assert.Contains(t, err.Error(), "suspended")
 	assert.Contains(t, err.Error(), "the command never ran")
 	assert.Empty(t, out.Stdout)
-	wake := NewMachineResumeWakeActivity(f.h.Repo(), f.remote)
+	wake := NewMachineResumeWakeActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), f.remote)
 	wakeOut, err := wake.Execute(ctx, MachineResumeWakeInput{ChatID: f.chat})
 	require.NoError(t, err)
 	require.True(t, wakeOut.Waiting || wakeOut.NotComing != "", "nil snapshot must not consider online cicd ready for this chat")
@@ -213,7 +213,7 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	mcp := bound.MCP.EnsureProjectServersLoaded(toolCtx, f.path)
 	require.NotEmpty(t, mcp.Errors)
 	var toolsOut ExecuteToolsOutput
-	err = f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), f.remote).Execute, ExecuteToolsInput{
+	err = f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), toolCallsOf(f.h.Repo()), f.remote).Execute, ExecuteToolsInput{
 		ChatID: f.chat, Thread: f.chat, ProjectPath: f.path,
 		ToolCalls: []message.ToolCall{{ID: uuid.NewString(), Name: "shell", Input: `{"command":"pwd"}`}},
 	}, &toolsOut)

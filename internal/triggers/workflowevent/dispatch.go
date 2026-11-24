@@ -36,6 +36,7 @@ var chatIDNamespace = uuid.MustParse("7d0f3a52-91c4-4b0e-a8f6-3c2e5b19d4a7")
 // signatures match *db.Repo's, so it satisfies it structurally.
 type Repo interface {
 	lineage.LaunchEventReader
+	triggers.OwnerSource
 	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
 	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)

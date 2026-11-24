@@ -332,7 +332,9 @@ effects are skipped when storage isn't the settings adapter:
 The forge brand does this in `routes.tsx` (`bootForgeTour`,
 ForgeShell/forgeTourBoot.ts, at module load on the forge host), mounts
 `<JourneyTour />` at its root in place of `OnboardingWizard`, and both brands
-mount `/forge/demo` (and `/demo`) as public routes. A landing `?journey=` is handled
+mount `/forge/demo` (and `/demo`) as public routes that leave for the demo
+host, query kept (`Forge/Demo/demoHandoff.ts`): the demo has one home, so a
+journey started there continues on the demo host's cut. A landing `?journey=` is handled
 by ForgeShell/landingJourney.ts:
 - `forge` starts the forge journey: at once for a signed-out visitor (on the
   public demo, instead of the sign-in redirect), on arrival for a signed-in
@@ -352,7 +354,8 @@ Home** (`/forge/demo?section=home`), free to explore:
   built per shell in `journeys/forge.tsx` (`stop`). The root route keeps
   `?tour=` across the console's links (`retainTourParam`), and an older
   `/forge/demo?view=…&tour=…` link is redirected to the console page it names
-  (`consoleTourHref`). Reliant and the forge shell keep `/forge/demo`.
+  (`consoleTourHref`), which is also where Reliant's and the forge shell's
+  `/forge/demo` hand a tour off to.
 - `Forge/Demo/tips` explains each page (below, "Page tours"). Its card opens by
   itself on a section's first visit this session; tips are off while the tour
   is open.
@@ -391,7 +394,7 @@ the visitor stays on the console.
 ### Page tours (the demo)
 
 The public demo gives each page one compact, non-modal explanation: what it
-is, why it helps, and how to use it (2–3 sentences). Dismiss leaves an
+is, why it helps, and how to use it (2–3 sentences). Done closes it and leaves an
 accessible `?` restore button. Secondary agent help is a click/tap/keyboard
 disclosure, not hover-only. Deploy yours free is primary (the only button on a phone), Install forge and Sign up free secondary.
 There is no global toast or automatic local multi-stop sequence.
@@ -399,7 +402,8 @@ There is no global toast or automatic local multi-stop sequence.
 A section's first visit this session opens that page's explanation by itself
 on a laptop; a reload, coming back, or a sub-page does not (a phone gets a
 closed "About this page" disclosure instead). `DemoTips` owns `PageEntryTour`,
-with Step 1 of 1, Dismiss and Done inside its callout. There is no full-site
+with Done (and "How an agent helps", where the page has no agent card of its
+own) inside its callout. There is no full-site
 sequence or prerequisite action. `?` replays it. Same-page filters, polling and
 rerenders do not restart it. Legacy `/forge/demo?view=logs&tour=forge:fg-logs`
 explains Logs.
@@ -407,7 +411,8 @@ Phone callouts use a bottom sheet after the drawer closes; their targets scroll
 into view above it. No auth or modal is required to explore.
 
 Copy and a single optional anchor live in `tips/tipCopy.ts`; page mapping is
-`tips/tipKeys.ts`. `DemoTipsAndToast.test.tsx` pins automatic entry, Dismiss /
+`tips/tipKeys.ts`: every page the demo's nav lists has a tip (the pages it does
+not serve, `DEMO_HIDDEN_PAGES`, have none). `DemoTipsAndToast.test.tsx` pins automatic entry, Done /
 restore, current-page legacy links, real navigation and plain-language copy.
 
 | Event | Props |

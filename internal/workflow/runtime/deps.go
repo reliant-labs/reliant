@@ -11,14 +11,17 @@ import (
 )
 
 // ActivityStore is what the ActivityWrapper writes and reads around every
-// activity it runs: the stopped-run check, the liveness write, the step row,
-// the node event and the error event.
+// activity it runs: the liveness write, the step row, the node event and the
+// error event. The stopped-run check reads through WorkflowRows.
 type ActivityStore interface {
-	// GetWorkflow is lifecycle.WorkflowReader: the store is handed to
-	// lifecycle.MayExecuteWork for the stopped-run check.
-	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	EnsureWorkflowRunning(ctx context.Context, workflowID, chatID string)
 	CreateStepExecution(ctx context.Context, exec *db.StepExecution) error
 	EmitNodeExecutionEvent(ctx context.Context, eventType string, state *db.NodeExecutionState) error
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
+}
+
+// WorkflowRows reads a workflow row by id: the stopped-run check and the
+// database-outage probe. store.WorkflowExtStore satisfies it.
+type WorkflowRows interface {
+	LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 }

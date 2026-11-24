@@ -15,7 +15,7 @@ import (
 func TestResumeWorkflow_ClearsPausedForMachineMark(t *testing.T) {
 	repo := newMockPauseRepo()
 	repo.pausedForMachine = map[string]bool{"chat-1": true}
-	ps := NewPauseService(&mockPauseTemporalClient{}, repo)
+	ps := NewPauseService(PauseServiceDeps{Temporal: &mockPauseTemporalClient{}, Store: repo, Workflows: repo})
 
 	require.NoError(t, ps.ResumeWorkflow(context.Background(), "wf-1", "chat-1", nil))
 
@@ -27,7 +27,7 @@ func TestResumeWorkflow_ClearsPausedForMachineMark(t *testing.T) {
 func TestPauseWorkflow_ClearsPausedForMachineMark(t *testing.T) {
 	repo := newMockPauseRepo()
 	repo.pausedForMachine = map[string]bool{"chat-1": true}
-	ps := NewPauseService(&mockPauseTemporalClient{}, repo)
+	ps := NewPauseService(PauseServiceDeps{Temporal: &mockPauseTemporalClient{}, Store: repo, Workflows: repo})
 
 	require.NoError(t, ps.PauseWorkflow(context.Background(), "wf-1", "chat-1", "manual"))
 
@@ -39,7 +39,7 @@ func TestPauseWorkflow_ClearsPausedForMachineMark(t *testing.T) {
 func TestResumeWorkflow_FailedSignalKeepsPausedForMachineMark(t *testing.T) {
 	repo := newMockPauseRepo()
 	repo.pausedForMachine = map[string]bool{"chat-1": true}
-	ps := NewPauseService(&mockPauseTemporalClient{signalErr: assert.AnError}, repo)
+	ps := NewPauseService(PauseServiceDeps{Temporal: &mockPauseTemporalClient{signalErr: assert.AnError}, Store: repo, Workflows: repo})
 
 	require.Error(t, ps.ResumeWorkflow(context.Background(), "wf-1", "chat-1", nil))
 

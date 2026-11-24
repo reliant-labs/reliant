@@ -44,7 +44,7 @@ import {
   type ProjectDaemon as ProtoProjectDaemon,
   type Prompt as ProtoPrompt,
 } from "../gen/reliant/v1/project_pb";
-import type { FileChangeStatus } from "../gen/reliant/v1/common_pb";
+import { ResourceVisibility, type FileChangeStatus } from "../gen/reliant/v1/common_pb";
 import { trackEvent } from "../lib/analytics";
 import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
@@ -96,6 +96,12 @@ export interface Project {
   // shared with them to read, so every write, a run started in it included,
   // is refused.
   viewer_access?: boolean;
+  // "org" when its owner shared it with its org (Project.visibility ORG);
+  // absent while it is private.
+  visibility?: "org";
+  // When it was last shared with its org (Project.shared_at, RFC 3339);
+  // absent while it is private.
+  shared_at?: string;
 }
 
 // ProjectDaemonInfo mirrors the proto ProjectDaemon row — one record per
@@ -160,6 +166,8 @@ export function projectFromProto(proto: ProtoProject): Project {
     forge_project_name: proto.forgeProjectName || undefined,
     org_id: proto.orgId || undefined,
     viewer_access: proto.viewerAccess || undefined,
+    visibility: proto.visibility === ResourceVisibility.ORG ? "org" : undefined,
+    shared_at: proto.visibility === ResourceVisibility.ORG ? proto.sharedAt || undefined : undefined,
   };
 }
 
@@ -218,7 +226,9 @@ export function sameProject(a: Project, b: Project): boolean {
     a.is_forge === b.is_forge &&
     a.forge_project_name === b.forge_project_name &&
     a.org_id === b.org_id &&
-    a.viewer_access === b.viewer_access
+    a.viewer_access === b.viewer_access &&
+    a.visibility === b.visibility &&
+    a.shared_at === b.shared_at
   );
 }
 
@@ -345,6 +355,47 @@ export async function fetchProjects(options: { fresh?: boolean } = {}): Promise<
 /** The project list as the cache holds it now; [] before the first answer. */
 export function getCachedProjects(): Project[] {
   return projectsOf(queryClient.getQueryData<ListProjectsResponse>(projectsKey()));
+}
+
+/**
+ * Whether `projectId` is in the org `orgId`'s project list, read through the
+ * list's shared entry (so the org's page that opens next reuses the answer).
+ * Throws when the list cannot be read.
+ */
+export async function isProjectInOrgList(projectId: string, orgId: string): Promise<boolean> {
+  const response = await queryClient.fetchQuery(
+    projectServiceQueries.listProjects(listProjectsRequest(orgId), { staleTime: PROJECTS_STALE_TIME_MS }),
+  );
+  return response.projects.some((row) => row.id === projectId);
+}
+
+/** Codes GetProject answers for a project that is not there for this caller. */
+const PROJECT_ABSENT = new Set([Code.NotFound, Code.PermissionDenied, Code.InvalidArgument]);
+
+/**
+ * The org a project is in (`Project.org_id`; "" for a row from before orgs),
+ * for a link that names it by id alone (lib/projectRouteResolve.ts), or null
+ * when there is no such project for this caller. From any org's list the
+ * cache holds, else GetProject: it names no org, and the server answers the
+ * project's owner, or a viewer it is shared with, whatever org it is in.
+ * Throws on any other failure.
+ *
+ * GetProject's answer is not cached: the project store reconciles its
+ * selection from every GetProject entry (subscribeToProjectRows), and this
+ * read selects nothing.
+ */
+export async function lookupProjectOrg(projectId: string): Promise<string | null> {
+  for (const [, response] of queryClient.getQueriesData<ListProjectsResponse>({ queryKey: projectServiceKeys.listProjects.all })) {
+    const row = response?.projects.find((project) => project.id === projectId);
+    if (row?.orgId) return row.orgId;
+  }
+  try {
+    const { project } = await client.getProject({ projectId });
+    return project ? (project.orgId ?? "") : null;
+  } catch (error) {
+    if (error instanceof ConnectError && PROJECT_ABSENT.has(error.code)) return null;
+    throw error;
+  }
 }
 
 /**

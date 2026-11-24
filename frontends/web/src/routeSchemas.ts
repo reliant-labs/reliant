@@ -152,6 +152,30 @@ export type _LaunchPlanMatchesSchema = AssertTrue<
 >;
 
 export type IndexSearch = z.infer<typeof indexSearchSchema>;
+/**
+ * `?projects=<id>,<id>`: the chat list's filter of two or more projects
+ * (lib/chatProjectFilter; one project is `/project/<id>`, none is all, and
+ * `all` says so: the shell's All, lib/urlState/shellScope.ts). It
+ * rides on every chat shell and app console page (retainSearchParams on
+ * their layout routes), so a tab's selection is in its own URL, never shared
+ * with another tab. Comma-separated ids; anything unreadable is no filter,
+ * never a route error.
+ */
+const projectsParam = z
+  .union([z.string(), z.number()])
+  .transform(String)
+  .optional()
+  .catch(undefined);
+
+/**
+ * `?focus=<catalog key>`: while several or all projects are in view, which
+ * one's app sections the nav opens (lib/urlState/shellScope.ts focusParam).
+ */
+const focusSearchParam = z.union([z.string(), z.number()]).transform(String).optional().catch(undefined);
+
+/** The search keys every chat shell and app console navigation keeps (a navigation that sets one to undefined drops it). */
+export const PROJECTS_CARRIED = ["projects", "focus"] as const;
+
 export const indexSearchSchema = z.object({
   plan: launchPlanSchema.optional(),
   "reset-onboarding": z.boolean().optional(),
@@ -178,15 +202,16 @@ export const indexSearchSchema = z.object({
   // onboarding offers on finishing. HomeNewChat applies it and drops it once
   // the chat is created.
   start: z.enum(START_VALUES).optional(),
-  // `?projects=<id>,<id>` is the chat list's filter of two or more projects
-  // (lib/chatProjectFilter; one project is `/project/<id>`, none is all).
-  // Comma-separated ids; anything unreadable is no filter, never a route error.
-  projects: z
-    .union([z.string(), z.number()])
-    .transform(String)
-    .optional()
-    .catch(undefined),
+  projects: projectsParam,
+  focus: focusSearchParam,
 });
+
+/**
+ * The search the chat shell and the app console carry across every page
+ * (PROJECTS_CARRIED): the chat list's project filter. Validated on their
+ * layout routes, so each tab's selection is its own URL.
+ */
+export const projectsCarrySearchSchema = z.object({ projects: projectsParam, focus: focusSearchParam });
 
 export const authSearchSchema = z.object({
   redirect: z.string().optional(),
@@ -572,6 +597,15 @@ export const newChatSearchSchema = z.object({
   // set by a screen that starts a chat from an app, so a refresh keeps the
   // tag. Anything but a string is dropped rather than failing the route.
   app: z.string().optional().catch(undefined),
+  // `?with=<id>,<id>`: the projects the draft has attached beside its project
+  // (store/newChatProjectsStore), in the order the person added them, so a
+  // refresh or a shared `/new` link keeps them. Comma-separated ids (a lone
+  // numeric id arrives JSON-parsed); anything unreadable is none.
+  with: z
+    .union([z.string(), z.number()])
+    .transform(String)
+    .optional()
+    .catch(undefined),
 });
 export type NewChatSearch = z.infer<typeof newChatSearchSchema>;
 
@@ -601,6 +635,18 @@ const forgeProjectParam = z.string().optional();
 export const forgeResolveSearchSchema = z.object({
   project: z.string().optional(),
   forgeProject: forgeProjectParam,
+});
+
+/**
+ * Every console page's (`/o/<org>/apps/<name>/…`, `/forge/p/<name>/…`):
+ * `project`, the Reliant project id of the checkout behind the console, when
+ * several of the person's projects declare the app's name
+ * (Console/consoleHost.ts consoleCheckout). The console route retains it, so
+ * the console's own links carry it on. An id is a string, whatever it looks like.
+ */
+export const CONSOLE_CHECKOUT_PARAM = "project";
+export const forgeConsoleCheckoutSearchSchema = z.object({
+  project: z.union([z.string(), z.number().transform(String)]).optional().catch(undefined),
 });
 
 /**

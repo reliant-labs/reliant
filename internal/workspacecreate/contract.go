@@ -38,8 +38,14 @@ type Store interface {
 // FailedCreateStore is the slice of *db.Repo that RemoveFailedCreatesOn reads
 // and records through when a machine connects.
 type FailedCreateStore interface {
-	ListFailedWorktreesForDaemon(ctx context.Context, daemonID string, since time.Time, limit int) ([]*db.Worktree, error)
+	FailedCreateRepo
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
+}
+
+// FailedCreateRepo is FailedCreateStore's worktree and repo half; the
+// machine's checkout rows come from the store beside it.
+type FailedCreateRepo interface {
+	ListFailedWorktreesForDaemon(ctx context.Context, daemonID string, since time.Time, limit int) ([]*db.Worktree, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *db.CleanupMetadata, archived bool) bool) error
 }

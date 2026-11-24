@@ -18,7 +18,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { logger } from "@/lib/logger";
-import { getOrganizationCostSummary, getProjectCost } from "@/services/controlPlane/observability/organizationCostsApi";
+import { getOrganizationCostSummary, getProjectCost, getStorageUsage } from "@/services/controlPlane/observability/organizationCostsApi";
 import { listOrganizationUsage, type OrganizationUsageRequest } from "@/services/controlPlane/observability/organizationUsageApi";
 
 export const organizationUsageKeys = {
@@ -27,6 +27,7 @@ export const organizationUsageKeys = {
   /** The same key OrganizationCostsView reads, so the two views share one cached summary. */
   costSummary: (orgId: string) => ["organization-cost-summary", orgId] as const,
   projectCost: (orgId: string, projectId: string) => ["project-cost", orgId, projectId] as const,
+  storage: (orgId: string) => ["storage-usage", orgId] as const,
 };
 
 /** A billing answer that named another organization than the one asked about, twice. */
@@ -66,6 +67,17 @@ export function useOrganizationUsage(req: OrganizationUsageRequest | null) {
       return forOrg(r.orgId, "ListOrganizationUsage", () => listOrganizationUsage(r));
     },
     enabled: !!req?.orgId,
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
+/** The organization's storage pool by product (BillingService.GetStorageUsage). */
+export function useStorageUsage(orgId: string | null) {
+  return useQuery({
+    queryKey: organizationUsageKeys.storage(orgId ?? ""),
+    queryFn: () => getStorageUsage(orgId as string),
+    enabled: !!orgId,
     staleTime: 60_000,
     retry: false,
   });

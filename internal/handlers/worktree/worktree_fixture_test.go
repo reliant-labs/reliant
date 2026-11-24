@@ -8,6 +8,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	worktree "github.com/reliant-labs/reliant/internal/handlers/worktree"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 )
 
 // The rows of the store ownedWorktreeRepo builds.
@@ -40,20 +41,19 @@ func ownedWorktreeRepo(t *testing.T) *worktree.MockRepository {
 			BaseBranch: "main", Path: "/elsewhere", Status: active,
 		},
 	}
-	return &worktree.MockRepository{
+	return projectaccesstest.Bound(&worktree.MockRepository{
 		GetWorktreeFunc: func(_ context.Context, id string) (*db.Worktree, error) {
 			if w, ok := worktrees[id]; ok {
 				return &w, nil
 			}
 			return nil, core.ErrWorktreeNotFound
 		},
-		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
-			if id == ownProjectID && userID == "test-user" {
-				return &db.Project{ID: id, UserID: userID, Name: "proj", Path: "/work", IsGitRepo: true}, nil
-			}
-			return nil, core.ErrProjectNotFound
-		},
-	}
+	}, func(_ context.Context, id, userID string) (*db.Project, error) {
+		if id == ownProjectID && userID == "test-user" {
+			return &db.Project{ID: id, UserID: userID, Name: "proj", Path: "/work", IsGitRepo: true}, nil
+		}
+		return nil, core.ErrProjectNotFound
+	})
 }
 
 // newOwnedWorktreeService is the Service over ownedWorktreeRepo. It has no
@@ -61,5 +61,5 @@ func ownedWorktreeRepo(t *testing.T) *worktree.MockRepository {
 // built on it is answered before any command is sent.
 func newOwnedWorktreeService(t *testing.T) *worktree.Service {
 	t.Helper()
-	return worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: ownedWorktreeRepo(t)}))
+	return worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.WithReadRoles(worktree.Deps{Repo: ownedWorktreeRepo(t)})))
 }

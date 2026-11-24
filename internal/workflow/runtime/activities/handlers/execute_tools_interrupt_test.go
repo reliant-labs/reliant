@@ -9,11 +9,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/toolexec"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // THE FOUNDATION OF THREAD INTERRUPT (specs/thread-interrupt.md)
@@ -156,7 +157,7 @@ func TestInterrupt_ContextCancellationDoesNotClaimCompletedSiblings(t *testing.T
 	ctx := context.Background()
 
 	finishedID := "toolu_" + uuid.New().String()
-	activityInstance := NewExecuteToolsActivity(f.h.Repo(), newBlockingToolExecutor())
+	activityInstance := NewExecuteToolsActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), toolCallsOf(f.h.Repo()), newBlockingToolExecutor())
 
 	// Temporal's TestActivityEnvironment exposes no way to cancel a running
 	// activity's context from outside, and calling into activity code with a

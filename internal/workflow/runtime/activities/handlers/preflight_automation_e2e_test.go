@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
 	"github.com/reliant-labs/reliant/internal/daemonquery"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -124,7 +125,9 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 	t.Cleanup(nc.Close)
 
 	userID, daemonID := "user-"+uuid.NewString(), "daemon-"+uuid.NewString()
-	require.NoError(t, repo.SetAutomationToken(ctx, userID, daemonID, "rlat_stored"))
+	tokens, err := automationtokens.New(automationtokens.Deps{DB: repo.ORM(), Sealer: db.NewTestVault(t, repo)})
+	require.NoError(t, err)
+	require.NoError(t, tokens.SetAutomationToken(ctx, userID, daemonID, "rlat_stored"))
 	auth.SetUserJWT(userID, "") // unattended: no JWT
 
 	// A managed machine the control plane has parked: its record is the
@@ -163,7 +166,7 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 	router := toolexec.NewNATSDaemonRouter(nc,
 		toolexec.WithDatabase(repo),
 		toolexec.WithDaemonResumer(controlplane.New(controlplane.Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: cpSrv.URL}})),
-		toolexec.WithControlPlaneCredentials(automationcred.New(automationcred.Deps{Keys: repo})))
+		toolexec.WithControlPlaneCredentials(automationcred.New(automationcred.Deps{Keys: tokens})))
 
 	projectID, chatID := uuid.NewString(), uuid.NewString()
 	require.NoError(t, repo.CreateProject(ctx, &db.Project{ID: projectID, UserID: userID, Name: "p", Path: "/tmp/p",
@@ -188,7 +191,7 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 }
 
 func newFastPollPreflight(repo *db.Repo, router toolexec.DaemonRouter) *PreflightDaemonCheckActivity {
-	a := NewPreflightDaemonCheckActivity(repo, toolexec.NewRemoteExecutor(router))
+	a := NewPreflightDaemonCheckActivity(repo, workspaceRowsOf(repo), toolexec.NewRemoteExecutor(router))
 	a.pollInterval = 20 * time.Millisecond
 	return a
 }

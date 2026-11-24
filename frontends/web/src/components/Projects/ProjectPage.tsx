@@ -14,7 +14,8 @@
  *   Workspaces   the workspaces (git worktrees) its chats work in — Settings
  *                → Workspaces' own content (WorkspacesBody).
  *   Settings     the per-project controls of Settings → Projects: rename,
- *                hide, remove, its machines, and the move to another org.
+ *                hide, remove, its machines, sharing it with its org
+ *                (ProjectSharingSection), and the move to another org.
  *
  * The project comes from the org's catalog (useProjectCatalog), the same
  * answer the Projects list shows, so a project of another org is never shown
@@ -40,7 +41,7 @@ import { useProjectCatalog } from "@/hooks/project-catalog-queries";
 import { useSidebarProjectPrefs } from "@/hooks/sidebar-project-queries";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { logger } from "@/lib/logger";
-import { appPath, projectChatsPath, projectPath, projectsPath, type ProjectPageTab } from "@/lib/paths";
+import { appPath, consoleCheckoutSearch, projectChatsPath, projectPath, projectsPath, type ProjectPageTab } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { toast } from "@/lib/toast-manager";
@@ -51,6 +52,7 @@ import { useProjectStore, type Project } from "@/store/projectStore";
 
 import { AppSectionEmptyState } from "../Forge/Console/AppSectionEmptyState";
 import { AreaShell } from "../Layout/AreaShell";
+import { ProjectSharingSection } from "../Sharing/ProjectSharingSection";
 import { sectionsAppOf } from "../Layout/sidebar/shellProject";
 import { WorkspacesBody } from "../Settings/BranchesSection";
 import { MoveProjectOrgDialog } from "../Settings/projects/MoveProjectOrgDialog";
@@ -285,7 +287,7 @@ function AppsPanel({ row, hostedAppsState }: { row: ProjectCatalogRow; hostedApp
       ) : (
         <ul className="divide-y divide-border-subtle">
           {row.apps.map((app) => (
-            <AppRow key={`${app.repoId ?? ""}/${app.subpath ?? ""}/${app.name}`} app={app} repoName={row.repos.find((r) => r.id === app.repoId)?.name} />
+            <AppRow key={`${app.repoId ?? ""}/${app.subpath ?? ""}/${app.name}`} app={app} projectId={row.key} repoName={row.repos.find((r) => r.id === app.repoId)?.name} />
           ))}
         </ul>
       )}
@@ -293,14 +295,14 @@ function AppsPanel({ row, hostedAppsState }: { row: ProjectCatalogRow; hostedApp
   );
 }
 
-function AppRow({ app, repoName }: { app: AppChipModel; repoName?: string }) {
+function AppRow({ app, projectId, repoName }: { app: AppChipModel; projectId: string; repoName?: string }) {
   const deployed = app.hosted?.lastDeployedAt;
   const where = [repoName, app.subpath ? `${app.subpath}/` : ""].filter(Boolean).join(" · ");
   return (
     <li className="flex flex-col gap-1.5 px-4 py-3" data-testid="project-app" data-app={app.name}>
       <div className="flex min-w-0 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <AppChip app={app} />
+          <AppChip app={app} projectId={projectId} />
           {app.isStaticSite && (
             <span className="inline-flex items-center gap-1 text-meta text-muted-foreground">
               <Globe className="h-3 w-3" aria-hidden="true" />
@@ -309,7 +311,7 @@ function AppRow({ app, repoName }: { app: AppChipModel; repoName?: string }) {
           )}
         </div>
         {app.hosted && (
-          <Link to={appPath(app.name)} className="shrink-0 text-meta font-medium text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <Link to={appPath(app.name)} search={consoleCheckoutSearch(projectId) as never} className="shrink-0 text-meta font-medium text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             Open console
           </Link>
         )}
@@ -400,7 +402,7 @@ function CodePanel({ row }: { row: ProjectCatalogRow }) {
                   {apps.length > 0 && (
                     <span className="flex flex-wrap items-center gap-1">
                       {apps.map((app) => (
-                        <AppChip key={`${app.subpath ?? ""}/${app.name}`} app={app} />
+                        <AppChip key={`${app.subpath ?? ""}/${app.name}`} app={app} projectId={row.key} />
                       ))}
                     </span>
                   )}
@@ -511,6 +513,7 @@ function ProjectSettings({ project }: { project: Project }) {
         onSetHidden={writable ? setHidden : undefined}
       />
       <ProjectMachines project={project} />
+      <ProjectSharingSection project={project} />
       {canSwitchOrg && <ProjectMoveSection project={project} onMove={() => setMoving(true)} />}
       {moving && <MoveProjectOrgDialog project={project} isOpen={moving} onClose={() => setMoving(false)} />}
       <RemoveProjectModal

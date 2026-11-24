@@ -58,9 +58,10 @@ func RunEventDispatchWorkflow(ctx workflow.Context, input DispatchInput) (*Dispa
 	return &out, nil
 }
 
-// RunEventReader loads the event a dispatch is for.
+// RunEventReader loads the event a dispatch is for. store.RunEventExtStore
+// satisfies it.
 type RunEventReader interface {
-	GetRunEvent(ctx context.Context, id string) (*core.RunEvent, error)
+	LoadRunEvent(ctx context.Context, id string) (*core.RunEvent, error)
 }
 
 // Activity is the DispatchRunEvent activity's receiver.
@@ -76,7 +77,7 @@ func NewActivity(events RunEventReader, dispatcher *Dispatcher) *Activity {
 
 // Dispatch is the DispatchRunEvent activity.
 func (a *Activity) Dispatch(ctx context.Context, input DispatchInput) (*DispatchOutput, error) {
-	ev, err := a.events.GetRunEvent(ctx, input.RunEventID)
+	ev, err := a.events.LoadRunEvent(ctx, input.RunEventID)
 	if errors.Is(err, core.ErrRunEventNotFound) {
 		// Pruned, or its chat was deleted (the row cascades). Nothing to do.
 		return &DispatchOutput{}, nil
@@ -91,7 +92,8 @@ func (a *Activity) Dispatch(ctx context.Context, input DispatchInput) (*Dispatch
 	return &DispatchOutput{Results: results}, nil
 }
 
-// RelayStore is the outbox surface the relay drives. *db.Repo satisfies it.
+// RelayStore is the outbox surface the relay drives. store.RunEventExtStore
+// satisfies it.
 type RelayStore interface {
 	ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, max int) ([]*core.RunEvent, error)
 	MarkRunEventDispatched(ctx context.Context, id string, at time.Time) error

@@ -12,9 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
@@ -43,7 +45,7 @@ func TestSignalRunOnPendingRunIsNotDelivered(t *testing.T) {
 		WorkflowName: &workflowName, State: db.ChatStateIdle, WorkflowID: &chatID,
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	threadsSvc := threads.NewService(repo)
+	threadsSvc := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	_, _, _, err := threadsSvc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: chatID, ChatID: chatID, WorkflowName: workflowName, Thread: chatID,
@@ -54,12 +56,15 @@ func TestSignalRunOnPendingRunIsNotDelivered(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	chats := &Service{deps: Deps{Repo: repo}, threads: threadsSvc}
+	chats := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, threads: threadsSvc}
 	runs, err := run.New(run.Deps{
-		Logger: slog.Default(),
-		Config: &typedconfig.Config{},
-		Repo:   repo,
-		Chats:  chats,
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Repo:      repo,
+		Workflows: store.NewWorkflowExtStore(repo.ORM()),
+		ChatRows:  store.NewChatExtStore(repo.ORM()),
+		ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()),
+		Chats:     chats,
 	})
 	require.NoError(t, err)
 

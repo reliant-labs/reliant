@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
-	"github.com/stretchr/testify/require"
 )
 
 // TestEnrichMessageUpdate_CarriesSpawnChildWorkflowID covers the LIVE path.

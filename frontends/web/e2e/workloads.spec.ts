@@ -2,9 +2,9 @@ import { test, expect, type Page } from '@playwright/test';
 import { devHarnessPresent } from './devHarness';
 
 // Smoke for the console's Overview and a workload's page, against the
-// dev-only fixture harness (/forge-workloads-preview): the real OverviewHome
-// and WorkloadDetail inside the real console chrome, fed by the fixtures in
-// components/Forge/Workloads/__fixtures__. No backend, no session.
+// dev-only fixture harness (/forge-workloads-preview): the real console's
+// pages over the shop fixture pack (src/fixtures/shop), with the worker
+// crash-looping (the `crash-looping` overlay). No backend, no session.
 //
 // The harness only exists in a DEV build (DevOnlyRoute), so against CI's
 // `vite preview` of a production build the route redirects to / and this
@@ -24,23 +24,23 @@ test.describe('console overview and workload page', () => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
 
-    await openHarness(page, '?env=prod');
+    await openHarness(page, '?env=prod&case=crash-looping');
     await expect(page.getByTestId('overview')).toHaveAttribute('data-state', 'ready');
-    await expect(page.getByTestId('overview-env-prod')).toHaveAttribute('aria-pressed', 'true');
-    const worker = page.getByTestId('overview-service-reliant-temporal-worker');
+    await expect(page.getByTestId('overview-env-prod')).toHaveAttribute('aria-current', 'page');
+    const worker = page.getByTestId('overview-service-worker');
     await expect(worker).toContainText('Crash-looping');
 
     // The whole row is the link to the workload, in its environment.
-    await worker.getByRole('link', { name: 'reliant-temporal-worker' }).click();
+    await worker.getByRole('link', { name: 'worker' }).click();
     const detail = page.getByTestId('workload-detail');
     await expect(detail).toHaveAttribute('data-state', 'ready');
-    await expect(detail.getByRole('heading', { level: 1 })).toHaveText('reliant-temporal-worker');
+    await expect(detail.getByRole('heading', { level: 1 })).toHaveText('worker');
 
     // Restart names its environment, confirms, and Cancel leaves everything as it was.
     const restart = page.getByTestId('workload-restart');
     await expect(restart).toHaveText(/Restart in prod/);
     await restart.click();
-    const dialog = page.getByRole('dialog', { name: 'Restart reliant-temporal-worker in prod?' });
+    const dialog = page.getByRole('dialog', { name: 'Restart worker in prod?' });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Restart in prod' })).toBeVisible();
     await dialog.getByRole('button', { name: 'Cancel' }).click();

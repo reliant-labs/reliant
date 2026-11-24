@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/oauth2"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
 	"golang.org/x/sync/singleflight"
@@ -26,7 +26,7 @@ const refreshWindow = 60 * time.Second
 type tokenStore interface {
 	GetOwnedConnection(ctx context.Context, owner core.ConnectionOwner, id string) (*core.Connection, error)
 	GetOwnedSecrets(ctx context.Context, owner core.ConnectionOwner, id string) (map[string]core.ConnectionSecret, error)
-	WithOwnedSecretsLock(ctx context.Context, owner core.ConnectionOwner, id string, fn func(*db.SecretsTx) error) error
+	WithOwnedSecretsLock(ctx context.Context, owner core.ConnectionOwner, id string, fn func(*connectionvault.SecretsTx) error) error
 	AppendConnectionEvent(ctx context.Context, ev core.ConnectionEvent) error
 }
 
@@ -150,7 +150,7 @@ func (s *TokenSource) refreshAfterRejection(ctx context.Context, owner core.Conn
 	s.Forget(connectionID)
 	if conn.AuthKind != core.ConnectionAuthOAuth2 {
 		var marked error
-		if err := s.store.WithOwnedSecretsLock(ctx, conn.Owner(), conn.ID, func(tx *db.SecretsTx) error {
+		if err := s.store.WithOwnedSecretsLock(ctx, conn.Owner(), conn.ID, func(tx *connectionvault.SecretsTx) error {
 			marked = s.markNeedsReauth(ctx, tx, conn, "rejected")
 			return nil
 		}); err != nil {
@@ -342,7 +342,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 	}
 	var result refreshed
 	var permanent error
-	err = s.store.WithOwnedSecretsLock(ctx, conn.Owner(), conn.ID, func(tx *db.SecretsTx) error {
+	err = s.store.WithOwnedSecretsLock(ctx, conn.Owner(), conn.ID, func(tx *connectionvault.SecretsTx) error {
 		secrets := tx.Secrets()
 		access := secrets[core.SecretFieldAccessToken]
 		// Another worker may have refreshed while we waited for the lock: use
@@ -463,7 +463,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 
 // markNeedsReauth records the permanent failure inside the refresh transaction
 // and returns the typed error. status_reason is a class, never the provider's body.
-func (s *TokenSource) markNeedsReauth(ctx context.Context, tx *db.SecretsTx, conn *core.Connection, reason string) error {
+func (s *TokenSource) markNeedsReauth(ctx context.Context, tx *connectionvault.SecretsTx, conn *core.Connection, reason string) error {
 	if err := tx.MarkStatus(ctx, core.ConnectionStatusNeedsReauth, reason); err != nil {
 		return err
 	}

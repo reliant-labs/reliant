@@ -2559,7 +2559,7 @@ const file_reliant_v1_forge_proto_rawDesc = "" +
 	")FORGE_DEPLOY_REFUSAL_REASON_GUARD_REFUSED\x10\x03\x12/\n" +
 	"+FORGE_DEPLOY_REFUSAL_REASON_ALREADY_RUNNING\x10\x04\x12*\n" +
 	"&FORGE_DEPLOY_REFUSAL_REASON_PLAN_STALE\x10\x05\x123\n" +
-	"/FORGE_DEPLOY_REFUSAL_REASON_PLAN_UNACKNOWLEDGED\x10\x062\xcd\v\n" +
+	"/FORGE_DEPLOY_REFUSAL_REASON_PLAN_UNACKNOWLEDGED\x10\x062\xd0\v\n" +
 	"\fForgeService\x12Z\n" +
 	"\vGetTopology\x12#.reliant.v1.GetForgeTopologyRequest\x1a$.reliant.v1.GetForgeTopologyResponse\"\x00\x12\xf1\x01\n" +
 	"\tVerifyEnv\x12!.reliant.v1.VerifyForgeEnvRequest\x1a\".reliant.v1.VerifyForgeEnvResponse\"\x9c\x01\xa2\xbb\x18\x97\x01:\x94\x01:\x91\x01reconciles an environment against its live cluster and reports drift: changes nothing, but calls out to the cluster, so it is not NO_SIDE_EFFECTS\x12Z\n" +
@@ -2577,8 +2577,8 @@ const file_reliant_v1_forge_proto_rawDesc = "" +
 	"\vStartDeploy\x12#.reliant.v1.StartForgeDeployRequest\x1a$.reliant.v1.StartForgeDeployResponse\"L\xa2\xbb\x18H:F\n" +
 	"\x06deploy\x12\x1a\n" +
 	"\arelease\x12\x0frelease_version\x1a\x03env*\n" +
-	"project_id*\x0fresponse.handle\x12f\n" +
-	"\x0fGetDeployStatus\x12'.reliant.v1.GetForgeDeployStatusRequest\x1a(.reliant.v1.GetForgeDeployStatusResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"project_id*\x0fresponse.handle\x12i\n" +
+	"\x0fGetDeployStatus\x12'.reliant.v1.GetForgeDeployStatusRequest\x1a(.reliant.v1.GetForgeDeployStatusResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_forge_proto_rawDescOnce sync.Once

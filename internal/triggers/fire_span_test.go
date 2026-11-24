@@ -260,14 +260,17 @@ func TestFireSpan_RedriveSettles(t *testing.T) {
 	trigger := webhookTrigger(t, "")
 	trigger.OrgID = ptrTo("org-1")
 	repo.triggers[trigger.ID] = trigger
+	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
 	ancient := pendingEvent(repo, trigger, "ancient", nil)
-	ancient.CreatedAt = time.Now().Add(-48 * time.Hour)
+	ancient.CreatedAt = now.Add(-48 * time.Hour)
 	orphan := pendingEvent(repo, trigger, "orphan", nil)
 	orphan.TriggerID = nil
-	orphan.CreatedAt = time.Now().Add(-5 * time.Minute)
+	orphan.CreatedAt = now.Add(-5 * time.Minute)
 	ctx, cause := causeSpan(t)
 
-	require.NoError(t, NewRedriver(repo, &recordingStarter{}, "").RedriveOnce(ctx))
+	redriver := NewRedriver(repo, &recordingStarter{}, "")
+	redriver.now = func() time.Time { return now }
+	require.NoError(t, redriver.RedriveOnce(ctx))
 
 	byEvent := map[string]map[attribute.Key]string{}
 	for _, s := range fireSpans(rec, core.TriggerEventKindWebhook) {

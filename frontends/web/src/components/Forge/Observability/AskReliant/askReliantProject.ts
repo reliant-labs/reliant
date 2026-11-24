@@ -5,7 +5,7 @@
  *
  * The console addresses a forge project by name; a chat belongs to a Reliant
  * project, the checkout a daemon can reach. The mapping is the project's
- * persisted `forge_project_name` (ConsoleLayout's `projectDeclaring`), which
+ * persisted `forge_project_name` (consoleHost.ts `consoleCheckout`), which
  * the console already resolves into `ForgeConsole.projectId`. This turns that
  * answer into a decision:
  *

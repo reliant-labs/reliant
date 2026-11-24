@@ -11,21 +11,31 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// RunStore is what placing a workflow's run reads and writes beside Store.
-// *db.Repo implements it.
-type RunStore interface {
+// RunPools is what placing a workflow's run reads of pools beside Store.
+// store.MachinePoolExtStore implements it.
+type RunPools interface {
 	Store
 	GetMachinePoolByName(ctx context.Context, userID, name string) (*core.MachinePool, error)
 	// ListChatHeldPoolMembers is the members of poolID on which chatID
 	// already holds a live run (a trigger placed the chat there, or a live
 	// placement of one of its runs is there): each holds the chat's one slot.
 	ListChatHeldPoolMembers(ctx context.Context, poolID, chatID string) ([]string, error)
+}
+
+// RunPlacements reads and records where a run was placed.
+// store.RunMachinePlacementExtStore implements it.
+type RunPlacements interface {
 	// GetRunMachinePlacement is core.ErrRunMachinePlacementNotFound when
 	// nothing is recorded.
 	GetRunMachinePlacement(ctx context.Context, workflowID, scope string) (*core.RunMachinePlacement, error)
 	// RecordRunMachinePlacement records p unless its (workflow, scope)
 	// already has one, and returns the placement recorded.
 	RecordRunMachinePlacement(ctx context.Context, p *core.RunMachinePlacement) (*core.RunMachinePlacement, error)
+}
+
+// TxRunner runs fn in one transaction; the stores above join it through ctx.
+// *db.Repo implements it.
+type TxRunner interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, fn func(ctx context.Context) error) error
 }
 
@@ -35,12 +45,14 @@ type RunStore interface {
 // moves.
 type RunPlacer struct {
 	*Placer
-	runs RunStore
+	pools      RunPools
+	placements RunPlacements
+	tx         TxRunner
 }
 
-// NewRunPlacer builds a RunPlacer over store.
-func NewRunPlacer(store RunStore) *RunPlacer {
-	return &RunPlacer{Placer: NewPlacer(store), runs: store}
+// NewRunPlacer builds a RunPlacer over its stores.
+func NewRunPlacer(pools RunPools, placements RunPlacements, tx TxRunner) *RunPlacer {
+	return &RunPlacer{Placer: NewPlacer(pools), pools: pools, placements: placements, tx: tx}
 }
 
 // WithWaker lets the RunPlacer act on a Wake decision.
@@ -91,7 +103,7 @@ func (p *RunPlacer) PlaceRun(ctx context.Context, req RunRequest) (PlaceRunOutpu
 	if err := req.validate(); err != nil {
 		return PlaceRunOutput{}, err
 	}
-	recorded, err := p.runs.GetRunMachinePlacement(ctx, req.WorkflowID, req.Scope)
+	recorded, err := p.placements.GetRunMachinePlacement(ctx, req.WorkflowID, req.Scope)
 	switch {
 	case err == nil:
 		return p.answerRecorded(ctx, req, recorded), nil
@@ -112,13 +124,13 @@ func (r RunRequest) validate() error {
 }
 
 func (p *RunPlacer) placeOnPool(ctx context.Context, req RunRequest) (PlaceRunOutput, error) {
-	row, err := p.runs.GetMachinePoolByName(ctx, req.UserID, req.Pool)
+	row, err := p.pools.GetMachinePoolByName(ctx, req.UserID, req.Pool)
 	if err != nil {
 		return PlaceRunOutput{}, fmt.Errorf("machine pool %q: %w", req.Pool, err)
 	}
 	pool := PoolFromCore(row)
 	for attempt := 1; attempt <= runPlaceAttempts; attempt++ {
-		members, err := membersOf(ctx, p.runs, row, req.ProjectID)
+		members, err := membersOf(ctx, p.pools, row, req.ProjectID)
 		if err != nil {
 			return PlaceRunOutput{}, err
 		}
@@ -157,7 +169,7 @@ func (p *RunPlacer) placeOnPool(ctx context.Context, req RunRequest) (PlaceRunOu
 // heldMembers is the set of pool's members on which the run's chat already
 // holds a live run: its trigger's member, and its runs' live placements.
 func (p *RunPlacer) heldMembers(ctx context.Context, req RunRequest, pool Pool) (map[string]bool, error) {
-	ids, err := p.runs.ListChatHeldPoolMembers(ctx, pool.ID, req.ChatID)
+	ids, err := p.pools.ListChatHeldPoolMembers(ctx, pool.ID, req.ChatID)
 	if err != nil {
 		return nil, fmt.Errorf("read the members chat %s holds in pool %s: %w", req.ChatID, pool.Name, err)
 	}
@@ -215,7 +227,7 @@ func preferHeld(pool Pool, members []Member, held map[string]bool) (Member, bool
 // keeps that slot.
 func (p *RunPlacer) chatSlotGuard(pool Pool, member Member, req RunRequest) func(ctx context.Context) (string, error) {
 	return func(ctx context.Context) (string, error) {
-		if err := p.runs.LockMachinePool(ctx, pool.ID); err != nil {
+		if err := p.pools.LockMachinePool(ctx, pool.ID); err != nil {
 			return "", fmt.Errorf("lock machine pool %s: %w", pool.Name, err)
 		}
 		if pool.MaxRunsPerMember <= 0 {
@@ -228,7 +240,7 @@ func (p *RunPlacer) chatSlotGuard(pool Pool, member Member, req RunRequest) func
 		if held[member.DaemonID] {
 			return "", nil
 		}
-		n, err := p.runs.CountMachinePoolMemberLiveRuns(ctx, pool.ID, member.DaemonID)
+		n, err := p.pools.CountMachinePoolMemberLiveRuns(ctx, pool.ID, member.DaemonID)
 		if err != nil {
 			return "", err
 		}
@@ -265,7 +277,7 @@ var errMemberBusy = errors.New(MemberBusy)
 // (workflow, scope): that one is the answer.
 func (p *RunPlacer) record(ctx context.Context, req RunRequest, pool Pool, m Member, guard func(context.Context) (string, error)) (PlaceRunOutput, error) {
 	var stored *core.RunMachinePlacement
-	err := p.runs.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+	err := p.tx.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		if guard != nil {
 			reason, err := guard(ctx)
 			switch {
@@ -278,7 +290,7 @@ func (p *RunPlacer) record(ctx context.Context, req RunRequest, pool Pool, m Mem
 			}
 		}
 		var err error
-		stored, err = p.runs.RecordRunMachinePlacement(ctx, &core.RunMachinePlacement{
+		stored, err = p.placements.RecordRunMachinePlacement(ctx, &core.RunMachinePlacement{
 			WorkflowID: req.WorkflowID, Scope: req.Scope, UserID: req.UserID, ChatID: req.ChatID,
 			MachinePoolID: pool.ID, Selector: pool.Selector, DaemonID: m.DaemonID,
 		})
@@ -325,8 +337,8 @@ func (p *RunPlacer) answerRecorded(ctx context.Context, req RunRequest, rec *cor
 	out := PlaceRunOutput{DaemonID: rec.DaemonID}
 	var rows []core.MachinePoolMemberRow
 	out.PoolID, out.PoolName = rec.MachinePoolID, req.Pool
-	if row, err := p.runs.GetMachinePoolByName(ctx, req.UserID, req.Pool); err == nil {
-		rows, _ = p.runs.ListMachinePoolMembers(ctx, row, req.ProjectID)
+	if row, err := p.pools.GetMachinePoolByName(ctx, req.UserID, req.Pool); err == nil {
+		rows, _ = p.pools.ListMachinePoolMembers(ctx, row, req.ProjectID)
 	}
 	for _, r := range rows {
 		if r.DaemonID == rec.DaemonID {

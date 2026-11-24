@@ -21,7 +21,7 @@ func (a *WorkflowStatusActivity) ensureAutomationFailureMessage(ctx context.Cont
 	if err != nil || chat == nil {
 		return
 	}
-	rows, err := a.repo.ListRunNodeExecutions(ctx, input.WorkflowID, rundiagnostics.RecordLimit)
+	rows, err := a.workflows.ListRunNodeExecutions(ctx, input.WorkflowID, rundiagnostics.RecordLimit)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not read failed automation nodes", "chat_id", input.ChatID, "error", err)
 	}
@@ -37,7 +37,7 @@ func (a *WorkflowStatusActivity) ensureAutomationFailureMessage(ctx context.Cont
 	if detail == "" {
 		detail = "Workflow declared failure without a recorded node error."
 	}
-	if err := a.repo.SetLaunchEventRunFailureDetail(ctx, input.ChatID, detail); err != nil {
+	if err := a.runs.SetLaunchEventRunFailureDetail(ctx, input.ChatID, detail); err != nil {
 		logging.WarnContext(ctx, "Could not record automation failure detail", "chat_id", input.ChatID, "error", err)
 	}
 	if automationTrigger(chat) == "" {

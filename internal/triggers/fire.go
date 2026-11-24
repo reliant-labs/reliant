@@ -33,7 +33,7 @@ var chatIDNamespace = uuid.MustParse("2b2e5f21-6c3d-4f8a-9c41-7e5a0d9b3c66")
 
 // Firer executes one scheduled fire. It is the FireTrigger activity.
 type Firer struct {
-	repo      Repo
+	repo      FireRepo
 	launcher  Launcher
 	workflows WorkflowResolver
 	now       func() time.Time
@@ -58,7 +58,8 @@ func (f *Firer) WithCapacityWake(starter WorkflowStarter, taskQueue string) *Fir
 }
 
 // NewFirer builds the fire activity's receiver.
-func NewFirer(repo Repo, launcher Launcher) *Firer {
+func NewFirer(repo FireRepo, launcher Launcher) *Firer {
+	requireCapacity("NewFirer", repo)
 	return &Firer{repo: repo, launcher: launcher, now: time.Now}
 }
 
@@ -302,7 +303,7 @@ func (f *Firer) fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 				OccurredAt: req.ScheduledAt, Payload: ev.Payload, Sender: ev.Sender,
 			}.Root())
 		})
-		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, row, limits, &spec); err != nil {
+		if err := prepareCapacity(ctx, f.repo, f.repo, f.capacity, trigger, row, limits, &spec); err != nil {
 			if capacitySettled(err) {
 				return f.recordSkip(ctx, rec, err.Error())
 			}
@@ -314,12 +315,8 @@ func (f *Firer) fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	}
 
 	if existing != nil && existing.CapacityOrder != nil && existing.Outcome == core.TriggerEventLaunched && spec.RecordExecution == nil {
-		if repo, ok := f.repo.(capacityRepository); ok {
-			spec.RecordExecution = repo.BindTriggerCapacityExecution
-			spec.PrepareExecution = repo.PrepareTriggerCapacityExecution
-		} else {
-			return nil, errors.New("admitted retry storage unavailable")
-		}
+		spec.RecordExecution = f.repo.BindTriggerCapacityExecution
+		spec.PrepareExecution = f.repo.PrepareTriggerCapacityExecution
 	}
 	res, launchErr := launchOnPool(ctx, f.pools, f.launcher, trigger, ev, spec, resuming, catalog)
 	switch {
@@ -449,7 +446,7 @@ func (f *Firer) previousRunBlocks(ctx context.Context, triggerID string) (string
 		return "", nil
 	}
 
-	statuses, err := f.repo.GetRootWorkflowStatusForChats(ctx, []string{*prev.ChatID})
+	statuses, err := f.repo.RootWorkflowStatusForChats(ctx, []string{*prev.ChatID})
 	if err != nil {
 		return "", fmt.Errorf("load root workflow status for chat %s: %w", *prev.ChatID, err)
 	}
@@ -658,13 +655,7 @@ func (f *Firer) recordOutcome(
 			return nil, fmt.Errorf("load existing event for fire %s: %w", req.FireWorkflowID, err)
 		}
 		if stored.Outcome == core.TriggerEventPending && stored.CapacityOrder != nil {
-			settler, ok := f.repo.(interface {
-				SettlePendingTriggerEvent(context.Context, string, core.TriggerEventOutcome, string, *core.TriggerEventDefinition) (bool, error)
-			})
-			if !ok {
-				return nil, errors.New("capacity queue settlement unavailable")
-			}
-			if _, err := settler.SettlePendingTriggerEvent(ctx, stored.ID, outcome, detail, rec.def); err != nil {
+			if _, err := f.repo.SettlePendingTriggerEvent(ctx, stored.ID, outcome, detail, rec.def); err != nil {
 				return nil, err
 			}
 			stored, err = f.repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, req.FireWorkflowID)

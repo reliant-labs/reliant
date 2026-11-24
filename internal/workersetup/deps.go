@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -46,25 +47,21 @@ type OrgKeyNoticeStore interface {
 	ConfirmOrgKeyNotice(ctx context.Context, orgID, accountID string, markedAt time.Time) error
 }
 
+// AccountStore is the accounts half of the routing's store: credentials/provideraccounts.Service
+// satisfies it.
+type AccountStore interface {
+	AccountAssignmentStore
+	PatchOwnedProviderAccount(ctx context.Context, owner core.AccountOwner, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
+	ClearOtherThreadAssignments(ctx context.Context, userID, threadID, provider string) error
+	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
+	LatestServingAccount(ctx context.Context, threadID string) (string, error)
+}
+
 // AccountRoutingStore is what accountRouting wires: the router's store, the
 // credential marker, and the per-user routing mode setting.
 type AccountRoutingStore interface {
-	AccountAssignmentStore
-	ClearOtherThreadAssignments(ctx context.Context, userID, threadID, provider string) error
-	AccountCredentialStore
 	GetSettingValue(ctx context.Context, userID, key string) (string, bool)
-	// The chat's question before it moves from its org's accounts to the
-	// person's own (org-provider-accounts §10).
-	GetChatPersonalFunding(ctx context.Context, chatID string) (*core.PersonalFunding, error)
-	AskPersonalFunding(ctx context.Context, q core.PersonalFunding, now time.Time) (bool, error)
-	GrantPersonalFunding(ctx context.Context, q core.PersonalFunding, now time.Time) error
-	ClearPersonalFunding(ctx context.Context, chatID string) (bool, error)
-	MarkPersonalFundingAnnounced(ctx context.Context, chatID string) (bool, error)
-	ProviderAccountOrgs(ctx context.Context, accountID string) (ownerOrg, attributedOrg string, found bool, err error)
-	ThreadFunding(ctx context.Context, threadID string) (funding, orgID, accountID string, found bool, err error)
-	RecordThreadFunding(ctx context.Context, threadID, orgID, funding, accountID string) error
-	ChatFundingOrder(ctx context.Context, chatID string) (string, error)
-	ChatPersonPickDriver(ctx context.Context, chatID, orgID string) (string, error)
-	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
-	LatestServingAccount(ctx context.Context, threadID string) (string, error)
+	// ORM is the handle the funding stores (the chat's question before it moves
+	// from its org's accounts to the person's own, org-provider-accounts §10) bind.
+	ORM() *orm.Client
 }

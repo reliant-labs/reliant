@@ -12,8 +12,9 @@
 // This package stores and resolves decisions. Enforcement happens at the
 // daemon's command dispatch; see internal/daemonpolicy.
 //
-// Built by hand, by internal/app's NewConnectorGrants provider
-// (providers_api.go): never a node compose.go constructs from Deps.
+// Built by internal/app's NewConnectorGrants provider (providers_api.go)
+// until forge types a //forge:contract interface constructor correctly: it
+// emits a *connectorgrant.Store node (a pointer to an interface).
 //
 //forge:provided
 package connectorgrant

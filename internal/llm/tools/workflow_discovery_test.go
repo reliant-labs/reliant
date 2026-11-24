@@ -9,9 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // listWorkflowsRow pulls one workflow's row out of the rendered markdown table.

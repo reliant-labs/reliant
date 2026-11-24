@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -146,6 +147,9 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 		return nil, lookupFailed(err,
 			fmt.Sprintf("thread %s does not exist - must be created before saving messages", opts.Thread),
 			fmt.Sprintf("reading thread %s's latest context window", opts.Thread))
+	}
+	if s.messages == nil || s.senders == nil {
+		return nil, fmt.Errorf("threads: Deps.Messages and Deps.Senders are required to save a message")
 	}
 
 	// Handle new context sequence (for compaction)
@@ -424,9 +428,9 @@ func (s *Service) checkExistingMessage(ctx context.Context, opts SaveMessageOpts
 	var err error
 
 	if opts.WorkflowID != nil && *opts.WorkflowID != "" {
-		existingMsg, err = s.repo.GetMessageByWorkflowAndActivityID(ctx, opts.ChatID, *opts.WorkflowID, *opts.ActivityID)
+		existingMsg, err = s.messages.FindMessageByActivity(ctx, opts.ChatID, *opts.WorkflowID, *opts.ActivityID)
 	} else {
-		existingMsg, err = s.repo.GetMessageByActivityID(ctx, opts.ChatID, *opts.ActivityID)
+		existingMsg, err = s.messages.FindMessageByActivity(ctx, opts.ChatID, "", *opts.ActivityID)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to check for existing message: %w", err)
@@ -487,7 +491,7 @@ func (s *Service) checkExistingMessage(ctx context.Context, opts SaveMessageOpts
 // matches on activity id in checkExistingMessage above, which keeps its
 // delete-and-recreate behavior for a half-written attempt.
 func (s *Service) checkExistingMessageByID(ctx context.Context, opts SaveMessageOpts, cw *db.ContextWindow) (*SaveMessageResult, error) {
-	existing, err := s.repo.FindMessage(ctx, opts.MessageID)
+	existing, err := s.messages.FindMessage(ctx, opts.MessageID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check for existing message by id: %w", err)
 	}
@@ -932,7 +936,7 @@ func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts,
 		updateData.TokenCount = &opts.TokenCount
 	}
 	if opts.SenderThreadID != "" {
-		title := s.repo.SenderTitle(ctx, opts.SenderThreadID)
+		title := s.senderTitle(ctx, opts.SenderThreadID)
 		updateData.Sender = db.NewMessageSenderPayload(opts.SenderThreadID, title, opts.SenderKind, opts.SenderSubject)
 	}
 
@@ -961,4 +965,20 @@ func displayStylePtrIfNonZero(i int32) *reliantv1.DisplayStyle {
 	}
 	value := reliantv1.DisplayStyle(i)
 	return &value
+}
+
+// senderTitle is the heading for a message from threadID: its title, or the
+// run's for another run's untitled main thread. Best-effort: an untitled
+// sender degrades a card's heading, never the transcript, so a failed lookup
+// is no title rather than an error.
+func (s *Service) senderTitle(ctx context.Context, threadID string) *string {
+	titles, err := s.senders.SenderTitlesByThreadIDs(ctx, []string{threadID})
+	if err != nil {
+		return nil
+	}
+	title, ok := titles[threadID]
+	if !ok {
+		return nil
+	}
+	return &title
 }

@@ -27,7 +27,7 @@ func (s *Service) DeleteProviderAccount(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.deps.Store.DeleteProviderAccount(ctx, userID, acct.ID); err != nil {
+	if err := s.deps.Accounts.DeleteProviderAccount(ctx, userID, acct.ID); err != nil {
 		return nil, wrapAccountErr(err)
 	}
 	s.afterChange(ctx, userID, acct.Provider)

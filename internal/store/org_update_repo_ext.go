@@ -37,6 +37,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 
@@ -50,6 +51,9 @@ import (
 // LatestOrgUpdateSequence is the highest sequence number an org's feed holds,
 // 0 for an org with none.
 func LatestOrgUpdateSequence(ctx context.Context, db orm.Context, orgID string) (int64, error) {
+	if orgID == "" {
+		return 0, fmt.Errorf("org ID cannot be empty")
+	}
 	var seq int64
 	err := db.Bun().NewSelect().Model((*OrgUpdate)(nil)).
 		ColumnExpr("COALESCE(MAX(sequence_number), 0)").
@@ -61,6 +65,9 @@ func LatestOrgUpdateSequence(ctx context.Context, db orm.Context, orgID string) 
 // OrgUpdatesSince is an org's feed after sinceSeq, ascending, at most limit
 // rows.
 func OrgUpdatesSince(ctx context.Context, db orm.Context, orgID string, sinceSeq int64, limit int) ([]core.OrgUpdate, error) {
+	if orgID == "" {
+		return nil, fmt.Errorf("org ID cannot be empty")
+	}
 	rows, err := ListOrgUpdate(ctx, db,
 		orm.WhereEq(OrgUpdateFieldOrgID, orgID),
 		orm.WhereGt(OrgUpdateFieldSequenceNumber, sinceSeq),

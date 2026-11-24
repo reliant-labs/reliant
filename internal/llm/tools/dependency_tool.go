@@ -15,11 +15,12 @@ import (
 
 // AddDependencyTool allows agents to create typed dependencies between tasks
 type AddDependencyTool struct {
-	repo addDependencyStore
+	repo  addDependencyStore
+	plans addDependencyPlanning
 }
 
-func NewAddDependencyTool(repo addDependencyStore) Tool {
-	return NewToolWrapper(&AddDependencyTool{repo: repo})
+func NewAddDependencyTool(repo addDependencyStore, plans addDependencyPlanning) Tool {
+	return NewToolWrapper(&AddDependencyTool{repo: repo, plans: plans})
 }
 
 func (t *AddDependencyTool) Name() string { return "add_dependency" }
@@ -72,7 +73,7 @@ func parseDependencyType(s string) (int32, bool) {
 }
 
 func (t *AddDependencyTool) Execute(rctx *rctx.ToolContext, params AddDependencyParams) (ToolResponse, error) {
-	if t.repo == nil {
+	if t.repo == nil || t.plans == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -117,7 +118,7 @@ func (t *AddDependencyTool) Execute(rctx *rctx.ToolContext, params AddDependency
 		CreatedAt:      time.Now(),
 	}
 
-	if err := t.repo.CreateTaskDependency(rctx.Context, dep); err != nil {
+	if err := t.plans.CreateTaskDependency(rctx.Context, dep); err != nil {
 		logging.Error("Failed to create dependency", "error", err)
 		return NewTextErrorResponse(fmt.Sprintf("Failed to create dependency: %v", err)), nil
 	}
@@ -150,7 +151,7 @@ func (t *AddDependencyTool) resolveTask(rctx *rctx.ToolContext, taskRef string) 
 	position := 0
 	extra := ""
 	if n, _ := fmt.Sscanf(taskRef, "%d%s", &position, &extra); n == 1 && extra == "" {
-		plan, err := t.repo.GetPlanByThreadID(rctx.Context, rctx.Thread)
+		plan, err := t.plans.GetPlanByThreadID(rctx.Context, rctx.Thread)
 		if err != nil {
 			return "", nil, err
 		}
@@ -159,7 +160,7 @@ func (t *AddDependencyTool) resolveTask(rctx *rctx.ToolContext, taskRef string) 
 		if position < 1 {
 			return "", nil, fmt.Errorf("task position %d is out of range: task numbering starts at 1", position)
 		}
-		task, err := t.repo.GetTaskByPosition(rctx.Context, plan.ID, position-1)
+		task, err := t.plans.GetTaskByPosition(rctx.Context, plan.ID, position-1)
 		if err != nil {
 			return "", nil, err
 		}
@@ -176,11 +177,12 @@ func (t *AddDependencyTool) resolveTask(rctx *rctx.ToolContext, taskRef string) 
 
 // RemoveDependencyTool allows agents to remove dependencies between tasks
 type RemoveDependencyTool struct {
-	repo removeDependencyStore
+	repo  removeDependencyStore
+	plans removeDependencyPlanning
 }
 
-func NewRemoveDependencyTool(repo removeDependencyStore) Tool {
-	return NewToolWrapper(&RemoveDependencyTool{repo: repo})
+func NewRemoveDependencyTool(repo removeDependencyStore, plans removeDependencyPlanning) Tool {
+	return NewToolWrapper(&RemoveDependencyTool{repo: repo, plans: plans})
 }
 
 func (t *RemoveDependencyTool) Name() string { return "remove_dependency" }
@@ -202,7 +204,7 @@ func (t *RemoveDependencyTool) RequiresPermission(params RemoveDependencyParams)
 }
 
 func (t *RemoveDependencyTool) Execute(rctx *rctx.ToolContext, params RemoveDependencyParams) (ToolResponse, error) {
-	if t.repo == nil {
+	if t.repo == nil || t.plans == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -215,7 +217,7 @@ func (t *RemoveDependencyTool) Execute(rctx *rctx.ToolContext, params RemoveDepe
 		return NewTextErrorResponse(fmt.Sprintf("Invalid dependency type: %s. Must be one of: blocks, related, parallel_with", params.Type)), nil
 	}
 
-	if err := t.repo.DeleteTaskDependencyByPair(rctx.Context, params.FromTask, params.ToTask, removeDepType); err != nil {
+	if err := t.plans.DeleteTaskDependencyByPair(rctx.Context, params.FromTask, params.ToTask, removeDepType); err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to remove dependency: %v", err)), nil
 	}
 
@@ -230,11 +232,12 @@ func (t *RemoveDependencyTool) Execute(rctx *rctx.ToolContext, params RemoveDepe
 
 // ListReadyTasksTool lists tasks that are ready to work on (no unresolved blockers)
 type ListReadyTasksTool struct {
-	repo listReadyTasksStore
+	repo  listReadyTasksStore
+	plans listReadyTasksPlanning
 }
 
-func NewListReadyTasksTool(repo listReadyTasksStore) Tool {
-	return NewToolWrapper(&ListReadyTasksTool{repo: repo})
+func NewListReadyTasksTool(repo listReadyTasksStore, plans listReadyTasksPlanning) Tool {
+	return NewToolWrapper(&ListReadyTasksTool{repo: repo, plans: plans})
 }
 
 func (t *ListReadyTasksTool) Name() string { return "list_ready_tasks" }
@@ -261,7 +264,7 @@ func (t *ListReadyTasksTool) RequiresPermission(params ListReadyTasksParams) (bo
 }
 
 func (t *ListReadyTasksTool) Execute(rctx *rctx.ToolContext, params ListReadyTasksParams) (ToolResponse, error) {
-	if t.repo == nil {
+	if t.repo == nil || t.plans == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -272,7 +275,7 @@ func (t *ListReadyTasksTool) Execute(rctx *rctx.ToolContext, params ListReadyTas
 
 	// A read: walk up to the ancestor's plan so a sub-agent can see what is
 	// ready on the board it was spawned from.
-	resolved, err := resolvePlanForRead(rctx.Context, t.repo, threadID)
+	resolved, err := resolvePlanForRead(rctx.Context, t.plans, t.repo, threadID)
 	if err != nil {
 		if svcerr.IsNotFound(err) {
 			return NewTextErrorResponse("No plan found for this thread."), nil
@@ -293,7 +296,7 @@ func (t *ListReadyTasksTool) Execute(rctx *rctx.ToolContext, params ListReadyTas
 	}
 
 	// Get all dependencies for the plan
-	allDeps, err := t.repo.ListDependenciesByPlan(rctx.Context, plan.ID)
+	allDeps, err := t.plans.ListDependenciesByPlan(rctx.Context, plan.ID)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to list dependencies: %v", err)), nil
 	}

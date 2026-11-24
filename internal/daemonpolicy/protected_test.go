@@ -50,6 +50,43 @@ func TestProtectedCredentials_NamesTheStoresTheReviewNamed(t *testing.T) {
 	assert.NotContains(t, got, "/home/u/.reliant", "nor does ~/.reliant: it holds worktrees and releases")
 }
 
+// The deprecated-readable tier (owner, 2026-11-23): Gemini CLI's, Cursor
+// Agent's and Copilot CLI's sign-ins are named, and are still readable this
+// release, so none of them may be in the hidden list yet.
+func TestDeprecatedReadableCredentials_NamesTheVendorSignInsAndHidesNoneYet(t *testing.T) {
+	tier := deprecatedReadableCredentials("/home/u")
+	assert.ElementsMatch(t, []string{
+		"/home/u/.gemini",
+		"/home/u/.cursor",
+		"/home/u/.config/cursor",
+		"/home/u/.copilot",
+	}, paths(tier))
+	for _, c := range tier {
+		assert.True(t, c.Dir, "%s holds a sign-in as a whole", c.Path)
+	}
+
+	hidden := paths(protectedCredentials("/home/u", "/home/u/.config/forge/credentials.json", "/home/u/.reliant-data"))
+	for _, p := range paths(tier) {
+		assert.NotContains(t, hidden, p, "deprecated-readable this release: a credentials-none command still reads it")
+	}
+	assert.Contains(t, hidden, "/home/u/.claude", "the tiers are separate: Claude's sign-in stays hidden")
+
+	assert.Empty(t, deprecatedReadableCredentials(""))
+}
+
+// Each store is in one tier: the next minor MOVES the deprecated-readable
+// entries into protectedHome, and a copy left behind would keep printing the
+// notice for a path that is already hidden.
+func TestDeprecatedReadableHome_IsDisjointFromProtectedHome(t *testing.T) {
+	hidden := map[string]bool{}
+	for _, e := range protectedHome {
+		hidden[e.rel] = true
+	}
+	for _, e := range deprecatedReadableHome {
+		assert.False(t, hidden[e.rel], "%s is in both tiers", e.rel)
+	}
+}
+
 func TestProtectedCredentials_HonoursFORGE_HOME(t *testing.T) {
 	cs := protectedCredentials("/home/u", "/srv/forge/credentials.json", "")
 	assert.Contains(t, paths(cs), "/srv/forge/credentials.json")

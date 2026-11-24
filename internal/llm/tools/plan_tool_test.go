@@ -8,9 +8,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/planningtest"
 )
 
 // A thread that never called create_plan must be told to call it. This used to
@@ -28,27 +30,27 @@ func TestPlanTools_MissingPlanErrorNamesTheRemedy(t *testing.T) {
 
 	// The store must report a missing plan as svcerr.NotFound so every caller's
 	// errors.Is branch fires.
-	_, err := repo.GetPlanByThreadID(ctx.Context, chatID)
+	_, err := planningtest.New(t, repo).GetPlanByThreadID(ctx.Context, chatID)
 	require.Error(t, err)
 	require.True(t, svcerr.IsNotFound(err),
 		"missing plan must be svcerr.NotFound; the tool layer branches on it")
 
 	t.Run("list_tasks", func(t *testing.T) {
-		resp, err := (&ListTasksTool{repo: repo}).Execute(ctx, ListTasksParams{})
+		resp, err := (&ListTasksTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, ListTasksParams{})
 		require.NoError(t, err)
 		assert.Contains(t, resp.Content, "create_plan")
 		assert.NotContains(t, resp.Content, "no plans found for thread")
 	})
 
 	t.Run("add_task", func(t *testing.T) {
-		resp, err := (&AddTaskTool{repo: repo}).Execute(ctx, AddTaskParams{Title: "orphan task"})
+		resp, err := (&AddTaskTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, AddTaskParams{Title: "orphan task"})
 		require.NoError(t, err)
 		assert.Contains(t, resp.Content, "create_plan")
 		assert.NotContains(t, resp.Content, "no plans found for thread")
 	})
 
 	t.Run("update_task by ordinal", func(t *testing.T) {
-		resp, err := (&UpdateTaskTool{repo: repo}).Execute(ctx, UpdateTaskParams{
+		resp, err := (&UpdateTaskTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, UpdateTaskParams{
 			TaskID: "1",
 			Status: "completed",
 		})
@@ -67,7 +69,7 @@ func TestCreatePlan_InlineDependencies(t *testing.T) {
 	createTestChat(t, repo, chatID)
 	ctx := createTestContext(t, chatID)
 
-	tool := &CreatePlanTool{repo: repo}
+	tool := &CreatePlanTool{repo: repo, plans: planningtest.New(t, repo)}
 
 	t.Run("creates dependencies from position references", func(t *testing.T) {
 		params := CreatePlanParams{
@@ -103,10 +105,10 @@ func TestCreatePlan_InlineDependencies(t *testing.T) {
 		assert.NotContains(t, text, "Dependency warnings")
 
 		// Verify dependencies were actually persisted
-		plan, err := repo.GetPlanByThreadID(ctx.Context, chatID)
+		plan, err := planningtest.New(t, repo).GetPlanByThreadID(ctx.Context, chatID)
 		require.NoError(t, err)
 
-		deps, err := repo.ListDependenciesByPlan(ctx.Context, plan.ID)
+		deps, err := planningtest.New(t, repo).ListDependenciesByPlan(ctx.Context, plan.ID)
 		require.NoError(t, err)
 		assert.Len(t, deps, 4)
 
@@ -129,7 +131,7 @@ func TestCreatePlan_InlineDependencies_Validation(t *testing.T) {
 		chatID := uuid.New().String()
 		createTestChat(t, repo, chatID)
 		ctx := createTestContext(t, chatID)
-		tool := &CreatePlanTool{repo: repo}
+		tool := &CreatePlanTool{repo: repo, plans: planningtest.New(t, repo)}
 
 		params := CreatePlanParams{
 			Title:       "Out of Range Test",
@@ -155,7 +157,7 @@ func TestCreatePlan_InlineDependencies_Validation(t *testing.T) {
 		chatID := uuid.New().String()
 		createTestChat(t, repo, chatID)
 		ctx := createTestContext(t, chatID)
-		tool := &CreatePlanTool{repo: repo}
+		tool := &CreatePlanTool{repo: repo, plans: planningtest.New(t, repo)}
 
 		params := CreatePlanParams{
 			Title:       "Self Ref Test",
@@ -179,7 +181,7 @@ func TestCreatePlan_InlineDependencies_Validation(t *testing.T) {
 		chatID := uuid.New().String()
 		createTestChat(t, repo, chatID)
 		ctx := createTestContext(t, chatID)
-		tool := &CreatePlanTool{repo: repo}
+		tool := &CreatePlanTool{repo: repo, plans: planningtest.New(t, repo)}
 
 		params := CreatePlanParams{
 			Title:       "Invalid Type Test",
@@ -204,7 +206,7 @@ func TestCreatePlan_InlineDependencies_Validation(t *testing.T) {
 		chatID := uuid.New().String()
 		createTestChat(t, repo, chatID)
 		ctx := createTestContext(t, chatID)
-		tool := &CreatePlanTool{repo: repo}
+		tool := &CreatePlanTool{repo: repo, plans: planningtest.New(t, repo)}
 
 		params := CreatePlanParams{
 			Title:       "Zero Position Test",
@@ -234,7 +236,7 @@ func TestCreatePlan_NoDependencies_BackwardsCompat(t *testing.T) {
 	chatID := uuid.New().String()
 	createTestChat(t, repo, chatID)
 	ctx := createTestContext(t, chatID)
-	tool := &CreatePlanTool{repo: repo}
+	tool := &CreatePlanTool{repo: repo, plans: planningtest.New(t, repo)}
 
 	params := CreatePlanParams{
 		Title:       "Simple Plan",
@@ -265,7 +267,7 @@ func TestCreatePlan_TaskMetadata(t *testing.T) {
 	chatID := uuid.New().String()
 	createTestChat(t, repo, chatID)
 	ctx := createTestContext(t, chatID)
-	tool := &CreatePlanTool{repo: repo}
+	tool := &CreatePlanTool{repo: repo, plans: planningtest.New(t, repo)}
 
 	params := CreatePlanParams{
 		Title:       "Plan with Metadata",
@@ -299,7 +301,7 @@ func TestCreatePlan_TaskMetadata(t *testing.T) {
 	assert.Contains(t, text, "Tasks (2 created)")
 
 	// Verify metadata was stored
-	plan, err := repo.GetPlanByThreadID(ctx.Context, chatID)
+	plan, err := planningtest.New(t, repo).GetPlanByThreadID(ctx.Context, chatID)
 	require.NoError(t, err)
 
 	tasks, err := repo.ListTasksByPlan(ctx.Context, plan.ID)
@@ -332,7 +334,7 @@ func TestCreatePlan_ParallelWithDependency(t *testing.T) {
 	chatID := uuid.New().String()
 	createTestChat(t, repo, chatID)
 	ctx := createTestContext(t, chatID)
-	tool := &CreatePlanTool{repo: repo}
+	tool := &CreatePlanTool{repo: repo, plans: planningtest.New(t, repo)}
 
 	params := CreatePlanParams{
 		Title:       "Parallel Tasks Plan",
@@ -359,9 +361,9 @@ func TestCreatePlan_ParallelWithDependency(t *testing.T) {
 	assert.Contains(t, text, "Frontend work parallel_with Backend work")
 
 	// Verify in DB
-	plan, err := repo.GetPlanByThreadID(ctx.Context, chatID)
+	plan, err := planningtest.New(t, repo).GetPlanByThreadID(ctx.Context, chatID)
 	require.NoError(t, err)
-	deps, err := repo.ListDependenciesByPlan(ctx.Context, plan.ID)
+	deps, err := planningtest.New(t, repo).ListDependenciesByPlan(ctx.Context, plan.ID)
 	require.NoError(t, err)
 	assert.Len(t, deps, 3)
 
@@ -383,7 +385,7 @@ func TestCreatePlan_MixedValidAndInvalidDeps(t *testing.T) {
 	chatID := uuid.New().String()
 	createTestChat(t, repo, chatID)
 	ctx := createTestContext(t, chatID)
-	tool := &CreatePlanTool{repo: repo}
+	tool := &CreatePlanTool{repo: repo, plans: planningtest.New(t, repo)}
 
 	params := CreatePlanParams{
 		Title:       "Mixed Deps Test",

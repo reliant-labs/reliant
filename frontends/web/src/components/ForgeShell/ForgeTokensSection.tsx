@@ -8,10 +8,11 @@
  * button, and never again.
  *
  * Every scope the server accepts on an unbound token is offered, grouped by
- * product (FORGE_TOKEN_SCOPE_GROUPS). sourcemaps:write is the exception to
- * "a token acts as you": it is a registry-only ORGANIZATION token, so picking
- * it clears every other scope, and it is minted and listed through the org
- * token rpcs, which need the admin role.
+ * product (FORGE_TOKEN_SCOPE_GROUPS). sourcemaps:write and tests:write are the
+ * exceptions to "a token acts as you": each is an upload-only ORGANIZATION
+ * token (ORG_TOKEN_ONLY_SCOPES), so picking one clears every other scope, and
+ * it is minted and listed through the org token rpcs, which need the admin
+ * role.
  */
 
 import { useState } from "react";

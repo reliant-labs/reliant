@@ -60,7 +60,7 @@ func TestRecordStartSelection_PersonPickMatrix(t *testing.T) {
 
 			pick, err := store.GetChatPersonPick(ctx, repo.ORM(), chat.ID)
 			require.NoError(t, err)
-			driver, err := repo.ChatPersonPickDriver(ctx, chat.ID, org)
+			driver, err := store.ChatPersonPickDriver(ctx, repo.ORM(), chat.ID, org)
 			require.NoError(t, err)
 			if tc.pick {
 				require.NotNil(t, pick, "the owner's own start is their pick")

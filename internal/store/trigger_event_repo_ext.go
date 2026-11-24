@@ -45,10 +45,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/uptrace/bun/dialect/pgdialect"
+
 	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -560,6 +561,9 @@ func InboxTriggerFiringsSQL() (recentOutcomes, sinceLastSuccess string) {
 // (newest first, with their runs), keyed by trigger id. A trigger with no
 // firings has no entry; triggers belonging to other users never appear.
 func RecentTriggerFirings(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, errors.New("user ID cannot be empty")
+	}
 	return triggerFiringsByTrigger(ctx, db, "list recent trigger firings", recentTriggerFiringsFullSQL, userID, triggerIDs, perTrigger)
 }
 
@@ -567,6 +571,9 @@ func RecentTriggerFirings(ctx context.Context, db orm.Context, userID string, tr
 // Payload is empty and Sender and Origin are nil. It is for a reader that
 // judges health and never shows an event (the Inbox).
 func RecentTriggerOutcomes(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
 	return triggerFiringsByTrigger(ctx, db, "list recent trigger outcomes", recentTriggerFiringsOutcomesSQL, userID, triggerIDs, perTrigger)
 }
 
@@ -669,6 +676,9 @@ ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
 // registered attention-managed launched chats before both the cutoff and cap.
 // RecentTriggerOutcomes and FiringsSinceLastSuccess remain diagnostic reads.
 func FiringsSinceLastUnmanagedSuccess(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
 	return triggerFiringsByTrigger(ctx, db, "list unmanaged firings since last success", firingsSinceLastUnmanagedSuccessSQL, userID, triggerIDs, perTrigger)
 }
 

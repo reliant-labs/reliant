@@ -12,7 +12,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -70,7 +70,7 @@ func (s *Service) RenameMachine(
 	if d.DaemonType != nil {
 		typ = *d.DaemonType
 	}
-	if _, err := s.deps.Repo.UpsertDaemonIdentity(ctx, db.DaemonIdentity{
+	if _, err := s.deps.Mirror.UpsertDaemonIdentity(ctx, core.DaemonIdentity{
 		DaemonID: daemonID, UserID: userID, Name: name, DaemonType: typ, CreatedAt: d.CreatedAt,
 	}); err != nil {
 		logging.WarnContext(ctx, "[DaemonRegistry] machine renamed at the control plane; the registry row takes the name at the next snapshot",

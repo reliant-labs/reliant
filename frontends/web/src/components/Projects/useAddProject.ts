@@ -32,7 +32,7 @@ import { capabilities } from "../../services/controlPlane/capabilities";
 import type { GitRepo } from "../../services/controlPlane/git";
 import { openNewChat } from "../../store/openChat";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { shellProjectNow } from "../../lib/urlState/shellScopeStore";
 import { addProjectLead } from "./addProjectActions";
 import type { AddProjectAction } from "./picker/addProjectActionModel";
 import { isCloudDaemon } from "./picker/format";
@@ -58,7 +58,7 @@ function isAlreadyExistsError(error: unknown): boolean {
  * the default machine would open a chat there instead.
  */
 export async function openAddedProject(project: Pick<Project, "id">, daemonId?: string): Promise<void> {
-  const filter = useWorkspaceStateStore.getState().projectFilterId;
+  const filter = shellProjectNow();
   if (filter && filter !== project.id) {
     await useProjectStore.getState().setProjectFilter(project.id);
   }

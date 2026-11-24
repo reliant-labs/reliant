@@ -16,6 +16,8 @@ dist-ssr
 data/
 # The forge demo's recorded fixtures (scripts/demo/capture-forge-scaffold.sh) are committed.
 !src/components/Forge/Demo/howBuilt/data/
+# The shop fixture pack's static JSON (src/fixtures/shop/packJson.ts) is committed.
+!src/fixtures/shop/data/
 
 # Environment files
 .env

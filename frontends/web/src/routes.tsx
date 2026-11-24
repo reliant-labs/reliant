@@ -2,15 +2,16 @@ import { useEffect } from 'react'
 // The workflows journey's content and Reliant's end-of-tour landing (the demo bundle leaves them out).
 import './components/Onboarding/journeys/catalog'
 import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
+import { OrgArrivalNotice } from './components/Orgs/OrgArrivalNotice'
 import { followActiveOrg } from './components/Orgs/followActiveOrg'
-import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate, type AnyRoute } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, Outlet, Navigate, retainSearchParams, useRouterState, useNavigate, type AnyRoute } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
 import { mobilePathFor, shouldRedirectToMobileNow } from './lib/mobileRedirect'
 import { getIsDev } from './lib/constants'
 import { createWorkflowsAreaRoutes } from './workflowsAreaRoutes'
 import { retainTourParam } from './components/Onboarding/tourParam'
-import { createForgeDemoRedirectRoute, createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
+import { createForgeDemoHandoffRoutes } from './components/Forge/Demo/demoHandoff'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { forgeConsolePages } from './forgeConsolePages'
 import { createRetiredPageRoutes } from './legacyRedirectRoutes'
@@ -30,6 +31,7 @@ import {
   connectionOAuthCallbackSearchSchema,
   githubOAuthCallbackSearchSchema,
   indexSearchSchema,
+  PROJECTS_CARRIED,
   mobileNewChatSearchSchema,
   oauthCallbackSearchSchema,
   onboardingSearchSchema,
@@ -143,8 +145,8 @@ const SetupSurfacesPreview = lazyRoute(
   () => import('./components/OnboardingFlow/__preview__/SetupSurfacesPreview'), 'default')
 const SecretsPreview = lazyRoute(
   () => import('./components/Forge/Secrets/__preview__/SecretsPreview'), 'default')
-// The whole Forge pane against a fake network (control-plane's real state as
-// fixtures) — see ForgePanePreview for why the fake sits at fetch.
+// The whole forge console over the shop fixture pack's transport (src/fixtures/preview.tsx)
+// — see ForgePanePreview for why the fake sits at the transport.
 const ForgePanePreview = lazyRoute(
   () => import('./components/Forge/__preview__/ForgePanePreview'), 'ForgePanePreview')
 // The Observability tab against in-memory fixtures — every view and state,
@@ -336,6 +338,9 @@ function RootShell() {
       <AutomationDialogHost />
       <AnonSignInNudge />
       <Toaster />
+      {/* A URL that moved this tab into another org says so, once
+          (lib/orgArrivalNotice.ts): after the Toaster, which must have subscribed. */}
+      <OrgArrivalNotice />
       <NewBuildPrompt />
       {/* The forced upgrade when this build is below the reliant API's
           published minimum (lib/clientMinimum.ts). */}
@@ -388,7 +393,10 @@ const rootRoute = createRootRoute({
   beforeLoad: ({ location }) => forwardIntoOrg(location),
   // Keep `?tour=` across navigations that don't name it (retainTourParam).
   // The root has no search schema, so its middleware type is `{}`-shaped.
-  search: { middlewares: [retainTourParam as never] },
+  // The shell's scope (`?projects=`, `?focus=`) rides on every page the same
+  // way, so the Inbox, Projects and Settings keep the projects a chat or a
+  // console showed, and Back brings back the scope each entry had.
+  search: { middlewares: [retainTourParam as never, retainSearchParams([...PROJECTS_CARRIED]) as never] },
   notFoundComponent: () => <Navigate to={homePath()} search={{}} />,
   errorComponent: RouteErrorFallback,
 })
@@ -682,9 +690,9 @@ const consolePrimitivesPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><ConsolePrimitivesPreview /></DevOnlyRoute>,
 })
 
-// The Releases list and a release, inside the real console chrome, against the
-// fixture ledger — every state (data, empty, error, loading, a ledger that
-// failed) in every scheme, no backend.
+// The Releases list and a release, in the real console, over the shop fixture
+// pack — every state (data, empty, error, loading, a ledger that failed) in
+// every scheme, no backend.
 const forgeReleasesPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-releases-preview',
@@ -694,9 +702,8 @@ const forgeReleasesPreviewRoute = createRoute({
 // The Observability home, Dashboards and a dashboard, inside the real console
 // chrome, against the fixture app and an in-memory DashboardService — every
 // state in every scheme, no backend.
-// The Overview (with the workloads) and a workload, inside the real console
-// chrome, against the workload fixtures — every state in every scheme, no
-// backend.
+// The Overview (with the workloads) and a workload, in the real console, over
+// the shop fixture pack — every state in every scheme, no backend.
 const forgeWorkloadsPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-workloads-preview',
@@ -704,7 +711,7 @@ const forgeWorkloadsPreviewRoute = createRoute({
 })
 
 // The storage browser (buckets, a level, an object's preview and download),
-// inside the real console chrome, against the fixture buckets — every state
+// inside the real console chrome, over the shop fixture pack — every state
 // in every scheme, no backend.
 const forgeStoragePreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -713,7 +720,7 @@ const forgeStoragePreviewRoute = createRoute({
 })
 
 // The data browser (databases, tables, a grid, a row and its Related), inside
-// the real console chrome, against the fixture shop — every state in every
+// the real console chrome, over the shop fixture pack — every state in every
 // scheme, no backend.
 const forgeDataPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -801,6 +808,14 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
     component: App,
   })
 
+  // A project URL's loader finds the project's org: a project in another org
+  // redirects there, and one that is not the person's is not found
+  // (lib/projectRouteResolve.ts). Loaded on demand, like the chat's below.
+  const projectLoader = async ({ params, location, context }: { params: { projectId: string }; location: LocationLike; context: unknown }) => {
+    const { resolveProjectRoute } = await import('./lib/projectRouteResolve')
+    return resolveProjectRoute(params.projectId, location, { orgRoute: (context as { orgRoute?: OrgRouteState }).orgRoute })
+  }
+
   // Project routes — the URL carries the sidebar's project filter.
   // `/project/$projectId` shows one project (App reads the param via useParams
   // and calls setProjectFilter); `/` shows every project. `/project` (no id)
@@ -808,6 +823,7 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
   const projectRoute = createRoute({
     getParentRoute: appParent,
     path: 'project/$projectId',
+    loader: projectLoader,
     component: App,
   })
 
@@ -923,11 +939,13 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
   const projectSettingsRoute = createRoute({
     getParentRoute: authParent,
     path: '/projects/$projectId/settings',
+    loader: projectLoader,
     component: ProjectSettingsPage,
   })
   const projectWorkspacesRoute = createRoute({
     getParentRoute: authParent,
     path: '/projects/$projectId/workspaces',
+    loader: projectLoader,
     component: ProjectWorkspacesPage,
   })
 
@@ -938,6 +956,7 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
   const projectHomeRoute = createRoute({
     getParentRoute: authParent,
     path: '/projects/$projectId',
+    loader: projectLoader,
     component: ProjectHomePage,
   })
 
@@ -988,15 +1007,11 @@ const orgOrgScopedRoutes = createOrgScopedRoutes(() => orgAppLayoutRoute, () => 
 // OAuth return at the onboarding context, and the "done — leave for /" hop.
 // See OnboardingRoute.tsx.
 
-// The forge demo console: the console and its Observability views on fixture
-// data, with no daemon, chat or control-plane call (components/Forge/Demo). The
-// forge journey walks it. Public, at the root and outside every guard: it
-// reads nothing of the person's, the journey picker offers it to everyone, and
-// the landing page's `?journey=forge` takes a signed-out visitor straight to
-// it (ForgeShell/ForgeLandingJourney). `/demo`, a landing link's short form,
-// points at it.
-const forgeDemoRoute = createForgeDemoRoute(() => rootRoute)
-const forgeDemoRedirectRoute = createForgeDemoRedirectRoute(() => rootRoute)
+// The forge demo has one home, the demo bundle (demo.reliantlabs.io): `/forge/demo`
+// and `/demo` leave for it, query kept, so the forge journey's steps and the
+// landing page's `?journey=forge` (ForgeShell/ForgeLandingJourney) continue there.
+// Public, at the root and outside every guard (components/Forge/Demo/demoHandoff.ts).
+const [forgeDemoRoute, forgeDemoRedirectRoute] = createForgeDemoHandoffRoutes(() => rootRoute)
 
 const onboardingRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,

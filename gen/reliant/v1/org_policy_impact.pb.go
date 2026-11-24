@@ -260,9 +260,9 @@ const file_reliant_v1_org_policy_impact_proto_rawDesc = "" +
 	"\x12PolicyImpactReason\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x14\n" +
 	"\x05chats\x18\x02 \x01(\x05R\x05chats\x12 \n" +
-	"\vautomations\x18\x03 \x01(\x05R\vautomations2v\n" +
-	"\x16OrgPolicyImpactService\x12\\\n" +
-	"\x0fGetPolicyImpact\x12\".reliant.v1.GetPolicyImpactRequest\x1a#.reliant.v1.GetPolicyImpactResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\vautomations\x18\x03 \x01(\x05R\vautomations2y\n" +
+	"\x16OrgPolicyImpactService\x12_\n" +
+	"\x0fGetPolicyImpact\x12\".reliant.v1.GetPolicyImpactRequest\x1a#.reliant.v1.GetPolicyImpactResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_org_policy_impact_proto_rawDescOnce sync.Once
