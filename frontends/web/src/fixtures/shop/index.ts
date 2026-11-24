@@ -24,7 +24,7 @@ import { createMockTransport, type MockScenario } from "@reliantlabs/forge-web-r
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
 import { isDemoRead } from "../readOnly";
-import { createFixtureTransport, defineFixturePack, type FixturePack } from "../transport";
+import { assertPureFixturePack, createFixtureTransport, defineFixturePack, type FixturePack } from "../transport";
 import { configScenarioHandlers } from "./handlers/config";
 import { consoleScenarioHandlers } from "./handlers/console";
 import { coverageSourceHandlers } from "./handlers/coverageSource";
@@ -90,7 +90,9 @@ export function createShopTransport({ passthrough, ...pack }: ShopTransportOptio
   const served = shopPack(pack);
   if (!passthrough) return createFixtureTransport({ pack: served, now: demoNow, ...readOnly });
   // A fixture transport never reaches a backend (forge's neither), so the gateway rides forge's
-  // mock transport, over the same scenario.
+  // mock transport, over the same scenario. That path reaches live traffic, so a pack that answers
+  // writes from fixtures (`answers`) is refused on it.
+  assertPureFixturePack(served, "createShopTransport({ passthrough })");
   return createMockTransport({
     scenario: { ...shopScenario(), passthrough: "first" },
     fallback: passthrough.fallback,
