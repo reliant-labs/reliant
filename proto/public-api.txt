@@ -74,6 +74,7 @@ withhold AttachmentService        # not part of the first public surface
 withhold AutomationTakeoverService # org-admin takeover of a departed member's automations; person-only
 withhold BackgroundService        # daemon-facing wiring
 withhold CatalogService           # not part of the first public surface
+withhold ChatTraceService         # the web Trace/Cost tab; not part of the first public surface
 withhold ConnectionService        # not part of the first public surface
 withhold ConnectorService         # not part of the first public surface
 withhold CoverageSourceService    # the Tests pages read a covered file's source as a person (their own GitHub token); person-only
