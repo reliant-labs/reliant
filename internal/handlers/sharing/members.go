@@ -51,20 +51,22 @@ func (s *Service) changeMember(ctx context.Context, chatID, targetID string, rol
 	// Deciding who may change it reads the row as a reader could, so a
 	// viewer who may not change it is told so rather than NotFound.
 	ctx = authz.WithViewerReads(ctx)
-	chat, err := s.deps.Chats.GetChat(ctx, chatID)
-	if err != nil {
-		return "", svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
-	}
-	change, err := authz.ChatMemberChange(ctx, userID, chat, targetID, role)
-	if err != nil {
-		return "", memberRefusal(ctx, err)
-	}
 	var action core.ShareAction
-	// ReadCommitted: ApplyChatMemberChange locks the chat's row (FOR UPDATE)
-	// before it reads or counts the members, so concurrent changes of one
-	// chat serialize on that lock and the cap is counted under it.
-	err = s.deps.Tx.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		var err error
+	// ReadCommitted: take the same chat lock as every member writer BEFORE
+	// reading the chat and deciding from the actor's current grant. A waiting
+	// manager therefore observes any revocation/demotion that committed first.
+	err := s.deps.Tx.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := s.deps.Members.LockChatMembers(ctx, chatID); err != nil {
+			return err
+		}
+		chat, err := s.deps.Chats.GetChat(ctx, chatID)
+		if err != nil {
+			return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+		}
+		change, err := authz.ChatMemberChange(ctx, userID, chat, targetID, role)
+		if err != nil {
+			return memberRefusal(ctx, err)
+		}
 		action, err = s.deps.Members.ApplyChatMemberChange(ctx, change)
 		return err
 	})

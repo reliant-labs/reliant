@@ -42,6 +42,7 @@ type Shares interface {
 // store.ChatMemberExtStore satisfies it; ApplyChatMemberChange must run in a
 // transaction (Deps.Tx), so the grant and its event land together.
 type Members interface {
+	LockChatMembers(ctx context.Context, chatID string) error
 	ApplyChatMemberChange(ctx context.Context, c core.ChatMemberChange) (core.ShareAction, error)
 	GetChatMember(ctx context.Context, chatID, userID string) (*core.ChatMember, error)
 	ListChatMembers(ctx context.Context, chatID string) ([]*core.ChatMember, error)

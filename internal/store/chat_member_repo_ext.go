@@ -140,6 +140,18 @@ func chatMemberToCore(r *ChatMember) *core.ChatMember {
 	}
 }
 
+// LockChatMembers locks the chat before the caller reads and authorizes a
+// membership change. It must run in the same transaction as the decision and
+// ApplyChatMemberChange, so a revocation cannot pass an in-flight decision.
+func LockChatMembers(ctx context.Context, db orm.Context, chatID string) error {
+	var locked string
+	err := db.Bun().NewRaw(`SELECT id FROM chats WHERE id = ? FOR UPDATE`, chatID).Scan(ctx, &locked)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil // The subsequent authorized read returns NotFound.
+	}
+	return err
+}
+
 // ApplyChatMemberChange applies one change of one person's grant on a chat
 // and records it in share_events, as one unit: run it inside a transaction
 // (db.RunTx) so the two land together. It returns the share action recorded

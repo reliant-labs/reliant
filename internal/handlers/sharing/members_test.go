@@ -210,6 +210,60 @@ func TestChatMembers(t *testing.T) {
 	}
 }
 
+// beforeMemberLock deterministically commits a competing change immediately
+// before this request acquires its lock, without sleeps or scheduling races.
+type beforeMemberLock struct {
+	Members
+	before func()
+}
+
+func (m beforeMemberLock) LockChatMembers(ctx context.Context, chatID string) error {
+	m.before()
+	return m.Members.LockChatMembers(ctx, chatID)
+}
+
+func TestChatMemberDecisionAfterLock(t *testing.T) {
+	for _, demote := range []bool{false, true} {
+		t.Run(map[bool]string{false: "revoke", true: "demote"}[demote], func(t *testing.T) {
+			svc, _, f := membersFixture(t)
+			_, err := setMember(svc, f.Owner, f.PrivateChatID, f.ViewerID, manage)
+			require.NoError(t, err)
+			waiting := *svc
+			locked := false
+			waiting.deps.Members = beforeMemberLock{Members: svc.deps.Members, before: func() {
+				locked = true
+				if demote {
+					_, err = setMember(svc, f.Owner, f.PrivateChatID, f.ViewerID, view)
+				} else {
+					_, err = removeMember(svc, f.Owner, f.PrivateChatID, f.ViewerID)
+				}
+				require.NoError(t, err)
+			}}
+			_, err = setMember(&waiting, f.Viewer, f.PrivateChatID, f.ViewerID, manage)
+			require.True(t, locked)
+			if demote {
+				requireRefusal(t, err, connect.CodePermissionDenied, ReasonNeedsManage)
+			} else {
+				requireRefusal(t, err, connect.CodeNotFound, "")
+			}
+			require.Len(t, events(t, f, core.ShareKindChat, f.PrivateChatID), 2)
+		})
+	}
+}
+
+func TestListChatMembersRequiresPerson(t *testing.T) {
+	svc, _, f := membersFixture(t)
+	_, err := setMember(svc, f.Owner, f.PrivateChatID, f.ViewerID, manage)
+	require.NoError(t, err)
+	for _, kind := range []auth.Credential{auth.CredentialAccessToken, auth.CredentialOAuthClient, auth.CredentialUnknown} {
+		for _, userID := range []string{f.OwnerID, f.ViewerID} {
+			resp, err := listMembers(svc, f.ContextAs(userID, kind), f.PrivateChatID)
+			requireRefusal(t, err, connect.CodePermissionDenied, auth.ReasonPersonRequired)
+			assert.Nil(t, resp)
+		}
+	}
+}
+
 // Granting is off until chat_collaboration.enabled; removing never is, so a
 // grant made while it was on can always be taken back, and listing reads
 // what exists.

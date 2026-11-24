@@ -23,6 +23,9 @@ func (s *Service) ListChatMembers(
 	req *connect.Request[pb.ListChatMembersRequest],
 ) (*connect.Response[pb.ListChatMembersResponse], error) {
 	userID := auth.MustGetUserID(ctx)
+	if err := auth.RequirePerson(ctx, "list who has access to this chat"); err != nil {
+		return nil, err
+	}
 	ctx = authz.WithViewerReads(ctx)
 	chat, err := s.deps.Chats.GetChat(ctx, req.Msg.GetChatId())
 	if err != nil {
