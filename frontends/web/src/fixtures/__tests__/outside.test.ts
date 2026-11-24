@@ -21,9 +21,13 @@ describe("classifyOutside", () => {
     expect(kind("https://other.supabase.co/auth/v1/user")).toBe("refused");
   });
 
-  it("allows health only on the page or configured API origin, for GETs", () => {
-    const ctx = { ...CTX, apiOrigin: "https://api.preview.test" };
+  it("allows health only on the page or a configured backend origin, for GETs", () => {
+    const ctx = { ...CTX, backendOrigins: ["https://api.preview.test", "https://cp.preview.test", "https://gw.preview.test"] };
     expect(kind("https://api.preview.test/health", "GET", ctx)).toBe("health");
+    expect(kind("https://cp.preview.test/healthz", "GET", ctx)).toBe("health");
+    expect(kind("https://gw.preview.test/readyz", "GET", ctx)).toBe("health");
+    expect(kind("https://other.preview.test/health", "GET", ctx)).toBe("refused");
+    expect(kind("https://api.preview.test.attacker.test/health", "GET", ctx)).toBe("refused");
     expect(kind("https://api.preview.test/health", "POST", ctx)).toBe("refused");
     expect(kind("https://api.preview.test:8443/health", "GET", ctx)).toBe("refused");
     expect(kind("http://api.preview.test/health", "GET", ctx)).toBe("refused");
@@ -107,6 +111,27 @@ describe("installOutside", () => {
 
     await fetch("/config.js");
     expect(real).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers the configured backends' health probes from config.js, and blocks another origin's", async () => {
+    setRuntimeConfig({ API_URL: "https://api.visual.invalid", CONTROL_PLANE_API_URL: "https://cp.visual.invalid", GATEWAY_URL: "https://gw.visual.invalid" });
+    const real = vi.fn();
+    window.fetch = real as unknown as typeof window.fetch;
+    const blocked = vi.fn();
+    restore = installOutside({ user: { id: "u", email: "e@x.test", name: "N" }, now: Date.UTC(2026, 10, 18), onBlocked: blocked });
+
+    for (const url of ["https://api.visual.invalid/health", "https://cp.visual.invalid/healthz", "https://gw.visual.invalid/readyz"]) {
+      const res = await fetch(url);
+      expect(res.status, url).toBe(200);
+      expect(await res.json()).toEqual({ status: "ok" });
+    }
+    await expect(fetch("https://other.visual.invalid/health")).rejects.toThrow(/network outside the page is off/);
+    await expect(fetch("https://api.visual.invalid.attacker.test/health")).rejects.toThrow(/network outside the page is off/);
+    expect(blocked.mock.calls).toEqual([
+      ["refused", "GET https://other.visual.invalid/health"],
+      ["refused", "GET https://api.visual.invalid.attacker.test/health"],
+    ]);
+    expect(real).not.toHaveBeenCalled();
   });
 
   it("records cross-origin health and telemetry lookalikes without fetching them", async () => {

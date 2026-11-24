@@ -8,7 +8,7 @@
  *
  *   - no RPC escaped: none reached fetch (`escaped`), and the browser sent no
  *     request off the page's origin;
- *   - no write refused at load (`refused`), but those KNOWN_REFUSALS names;
+ *   - no write refused at load (`refused`) but exactly those KNOWN_REFUSALS names;
  *   - no page error;
  *   - no fetch outside the allowed set (`outside`).
  *
@@ -48,16 +48,39 @@ const CONFIG = {
 }
 
 /**
- * Writes a load is KNOWN to make, by path, each with why it is not the pack's
- * to fix. Asserted exactly: when the app stops making one, this test fails
- * until its entry goes.
+ * Writes the app is KNOWN to make on load, by rpc, in surfaces.visual.ts's
+ * shape (the visual harness's own table): each says why, and names the
+ * SURFACES (by `name`) whose load makes it. A load expects an rpc when any of
+ * its surfaces is named. Asserted exactly: a load that stops making one
+ * fails until its name goes, and a new write fails until it is named here.
+ * Every one stays refused: a fixture transport never answers a write.
  */
-const KNOWN_REFUSALS: Record<string, { rpcs: string[]; why: string }> = {
-  '/settings/appearance': {
-    rpcs: ['reliant.v1.SettingsService/BatchUpsertSettings'],
-    why: 'ColorSchemeSelector saves the colour scheme every time the page opens (settingsSync.setSetting, not setSettingIfChanged): an app write on read, fixed in the app (P2.2), not in the pack',
+const KNOWN_REFUSALS: Record<string, { why: string; surfaces: string[] }> = {
+  // reliant#3458. The chat workspace selects a project on load.
+  'reliant.v1.ProjectService/TouchProject': {
+    why: 'projectStore touches the selected project on every selection, fire-and-forget (hooks/project-queries touchProject; reliant#3458)',
+    surfaces: [
+      'home-sidebar', 'chat-detailed', 'chat-filter-heading', 'chat-list', 'chat', 'chat-tools', 'chat-failure',
+      'mobile-new-chat', 'workflows', 'runs', 'shell-workflows', 'shell-connectors-mcp', 'shell-agents-no-sandbox',
+    ],
+  },
+  // ForgeService/GetTopology (reliant#3444, a read that writes) is not here:
+  // the interim read classifier lets it through by name and no layer answers
+  // it, so it is `unknown`, not refused. Under `readOnly: true` it joins this
+  // table on the surfaces that call it.
+  // reliant#3458.
+  'reliant.v1.SettingsService/BatchUpsertSettings': {
+    why: 'ColorSchemeSelector saves the colour scheme every time the appearance page opens (settingsSync.setSetting, not setSettingIfChanged; reliant#3458)',
+    surfaces: ['settings-appearance'],
   },
 }
+
+/** The writes a load of these surfaces is known to make, sorted. */
+const knownRefusals = (surfaces: readonly string[]) =>
+  Object.entries(KNOWN_REFUSALS)
+    .filter(([, entry]) => entry.surfaces.some((name) => surfaces.includes(name)))
+    .map(([rpc]) => rpc)
+    .sort()
 
 interface Load {
   path: string
@@ -169,14 +192,13 @@ for (const load of surfaceLoads()) {
 
     expect.soft(report.escaped, 'rpcs that reached fetch').toEqual([])
     expect.soft(offOrigin, 'requests the browser sent off the page origin').toEqual([])
-    const known = KNOWN_REFUSALS[load.path]
-    // These routes mount the chat workspace, which records opening its project.
-    // Keep the write refused (never grant a fixture transport write permission).
-    const touchesProject = ['/', '/m/chats', '/m/new', '/m/workflows', '/m/runs', '/workflows', '/workflows/library', '/workflows/runs', `/project/${IDS.project}`].includes(new URL(load.path, origin).pathname)
-      || new URL(load.path, origin).pathname.startsWith('/m/chats/')
-      || load.path === '/connectors?tab=mcp'
-    const expectedRefusals = [...(known?.rpcs ?? []), ...(touchesProject ? ['reliant.v1.ProjectService/TouchProject'] : [])]
-    expect.soft(report.refused, known ? `writes refused at load (known: ${known.why})` : 'writes refused at load (TouchProject only on chat workspace routes)').toEqual(expectedRefusals)
+    // A known write can land after the page goes quiet (a project is selected
+    // once its list arrives), so the set is polled up to its expected value.
+    const expected = knownRefusals(load.surfaces)
+    const refusedNow = async () => [...new Set((await readProbe(page))?.refused ?? [])].sort()
+    await expect
+      .poll(refusedNow, { message: `writes refused at load (known: ${expected.map((rpc) => `${rpc}: ${KNOWN_REFUSALS[rpc].why}`).join('; ') || 'none'})`, timeout: 10_000 })
+      .toEqual(expected)
     expect.soft(report.outside, 'fetches outside the allowed set').toEqual([])
     expect.soft(pageErrors, 'page errors').toEqual([])
     expect(probe.started, 'the app made no rpc at all').toBeGreaterThan(0)

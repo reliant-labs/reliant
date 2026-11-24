@@ -13,8 +13,10 @@
  *              with a fake session for the pack's user (written to
  *              localStorage before the app reads it), until the session
  *              port (phase 3) replaces it.
- *   health     GET `/health`, `/healthz`, `/readyz` on the page or configured
- *              API origin: "ok", answered locally (never sent).
+ *   health     GET `/health`, `/healthz`, `/readyz` on the page's origin or a
+ *              backend origin config.js names (API_URL, CONTROL_PLANE_API_URL,
+ *              GATEWAY_URL): "ok", answered locally (never sent). The same
+ *              path on any other origin is refused.
  *   telemetry  the same-origin dev log sink and OTLP ingest (`/_otel`,
  *              `/v1/traces|logs|metrics`), and OTLP signal paths beneath the
  *              configured OTEL_ENDPOINT, for POSTs only: 204, nothing sent.
@@ -40,8 +42,12 @@ const OTLP_PATH = /^\/v1\/(?:traces|logs|metrics)$/;
 export interface OutsideContext {
   /** The page's origin. */
   origin: string;
-  /** The configured API's origin: its GET health probe is answered locally. */
-  apiOrigin?: string | null;
+  /**
+   * The backend origins config.js names (API_URL, CONTROL_PLANE_API_URL,
+   * GATEWAY_URL): their GET health probes are answered locally. No other
+   * cross-origin health probe is.
+   */
+  backendOrigins?: readonly string[];
   /** The configured Supabase project's origin, if any. */
   supabaseOrigin: string | null;
   /** The configured telemetry ingest's origin, if any. */
@@ -71,7 +77,9 @@ export function outsideContext(): OutsideContext {
   }
   return {
     origin,
-    apiOrigin: originOf(config.API_URL, origin),
+    backendOrigins: [config.API_URL, config.CONTROL_PLANE_API_URL, config.GATEWAY_URL]
+      .map((url) => originOf(url.trim(), origin))
+      .filter((o): o is string => o !== null && o !== "null"),
     supabaseOrigin: originOf(config.SUPABASE_URL, origin),
     telemetryOrigin: telemetry?.origin ?? null,
     telemetryPath: telemetry?.pathname.replace(/\/+$/, "") ?? "",
@@ -82,7 +90,8 @@ export function outsideContext(): OutsideContext {
 export function classifyOutside(url: URL, method: string, ctx: OutsideContext): OutsideKind {
   if (RPC_PATH.test(url.pathname)) return "rpc";
   if (ctx.supabaseOrigin && url.origin === ctx.supabaseOrigin && url.pathname.startsWith("/auth/v1/")) return "auth";
-  if (method === "GET" && (url.origin === ctx.origin || url.origin === ctx.apiOrigin) && HEALTH_PATH.test(url.pathname)) return "health";
+  const healthOrigin = url.origin === ctx.origin || (ctx.backendOrigins ?? []).includes(url.origin);
+  if (method === "GET" && healthOrigin && HEALTH_PATH.test(url.pathname)) return "health";
   const prefix = ctx.telemetryPath ?? "";
   const configuredSignal = url.origin === ctx.telemetryOrigin
     && url.pathname.startsWith(`${prefix}/`)
