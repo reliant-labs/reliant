@@ -16,7 +16,7 @@
  */
 
 import { useEffect, useMemo, type ReactNode } from "react";
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useNavigate } from "@tanstack/react-router";
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useNavigate, useRouterState } from "@tanstack/react-router";
 
 import { createForgeConsoleRoutes } from "@/forgeConsoleRoutes";
 import { latency, logged } from "@/fixtures/overlay";
@@ -171,6 +171,7 @@ export function PreviewControls({
   defaultCase,
   scheme,
   dark,
+  children,
 }: {
   base: string;
   cases: readonly { id: string; label: string }[];
@@ -178,6 +179,8 @@ export function PreviewControls({
   defaultCase: string;
   scheme: string;
   dark: boolean;
+  /** The harness's own pickers, before the case (a view, a page). */
+  children?: ReactNode;
 }) {
   const navigate = useNavigate();
   useEffect(() => {
@@ -187,6 +190,7 @@ export function PreviewControls({
   const go = (next: Record<string, unknown>) => void navigate({ to: base, search: (prev: Record<string, unknown>) => ({ ...prev, ...next }), replace: true });
   return (
     <div className="fixed bottom-3 right-3 z-50 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border bg-surface/95 px-3 py-2 shadow" data-testid="preview-controls">
+      {children}
       <select data-testid="preview-case" value={caseId} onChange={(e) => go({ case: e.target.value === defaultCase ? undefined : e.target.value })} className={CONTROL}>
         {cases.map((c) => (
           <option key={c.id} value={c.id}>
@@ -206,6 +210,27 @@ export function PreviewControls({
       </button>
     </div>
   );
+}
+
+/** The harness's own query keys, which never reach the console. */
+const HARNESS_KEYS = ["case", "scheme", "dark", "desktop"];
+
+/**
+ * `path` with this page's query string, minus the harness's own keys and
+ * `omit`, as the console's URL: the console's search keys (`trace`, `range`,
+ * `f`, …) pass through untouched, so a console link's query works here too.
+ */
+export function withPageSearch(path: string, omit: readonly string[] = [], search: string = window.location.search): string {
+  const params = new URLSearchParams(search);
+  for (const key of [...HARNESS_KEYS, ...omit]) params.delete(key);
+  const query = params.toString();
+  return query ? `${path}${path.includes("?") ? "&" : "?"}${query}` : path;
+}
+
+/** This page's raw query string, re-rendering on every change of it (the pickers navigate it). */
+export function usePageSearch(): URLSearchParams {
+  const searchStr = useRouterState({ select: (state) => state.location.searchStr });
+  return useMemo(() => new URLSearchParams(searchStr), [searchStr]);
 }
 
 /** The router parses `dark=1` as JSON, so it arrives as a number. */

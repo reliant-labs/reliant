@@ -149,8 +149,9 @@ const SecretsPreview = lazyRoute(
 // — see ForgePanePreview for why the fake sits at the transport.
 const ForgePanePreview = lazyRoute(
   () => import('./components/Forge/__preview__/ForgePanePreview'), 'ForgePanePreview')
-// The Observability tab against in-memory fixtures — every view and state,
-// no backend. Also what the Playwright smoke drives (e2e/observability.spec.ts).
+// The Observability views in the real console over the shop fixture pack —
+// every view and state, no backend. Also what the Playwright smoke drives
+// (e2e/observability.spec.ts).
 const ObservabilityPreview = lazyRoute(
   () => import('./components/Forge/Observability/__preview__/ObservabilityPreview'), 'default')
 const ObservabilityBillingPreview = lazyRoute(
@@ -699,9 +700,6 @@ const forgeReleasesPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><ReleasesPreview /></DevOnlyRoute>,
 })
 
-// The Observability home, Dashboards and a dashboard, inside the real console
-// chrome, against the fixture app and an in-memory DashboardService — every
-// state in every scheme, no backend.
 // The Overview (with the workloads) and a workload, in the real console, over
 // the shop fixture pack — every state in every scheme, no backend.
 const forgeWorkloadsPreviewRoute = createRoute({
@@ -728,14 +726,16 @@ const forgeDataPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><DataPreview /></DevOnlyRoute>,
 })
 
+// The Dashboards index and a dashboard, in the real console, over the shop
+// fixture pack — every state in every scheme, no backend.
 const forgeDashboardsPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-dashboards-preview',
   component: () => <DevOnlyRoute><DashboardsPreview /></DevOnlyRoute>,
 })
 
-// The metrics explorer, inside the real console chrome, against the explorer's
-// fixture app — every state in every scheme, no backend.
+// The metrics explorer, in the real console, over the shop fixture pack —
+// every state in every scheme, no backend.
 const forgeMetricsPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-metrics-preview',
