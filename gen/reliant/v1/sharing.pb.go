@@ -422,7 +422,12 @@ type ListChatMembersResponse struct {
 	// The level the caller reads the chat at: VIEW for a viewer (a VIEW grant,
 	// or any member of the organization a chat is shared with), REPLY or
 	// MANAGE for a member holding that grant, UNSPECIFIED for the owner.
-	CallerRole    ChatMemberRole `protobuf:"varint,4,opt,name=caller_role,json=callerRole,proto3,enum=reliant.v1.ChatMemberRole" json:"caller_role,omitempty"`
+	CallerRole ChatMemberRole `protobuf:"varint,4,opt,name=caller_role,json=callerRole,proto3,enum=reliant.v1.ChatMemberRole" json:"caller_role,omitempty"`
+	// Whether this deployment lets anyone grant access to a chat
+	// (ApiServerConfig chat_collaboration.enabled), so a client offers
+	// SetChatMember only when it would be accepted. False from a server that
+	// predates it, which is the same answer: granting is off.
+	GrantsEnabled bool `protobuf:"varint,5,opt,name=grants_enabled,json=grantsEnabled,proto3" json:"grants_enabled,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -483,6 +488,13 @@ func (x *ListChatMembersResponse) GetCallerRole() ChatMemberRole {
 		return x.CallerRole
 	}
 	return ChatMemberRole_CHAT_MEMBER_ROLE_UNSPECIFIED
+}
+
+func (x *ListChatMembersResponse) GetGrantsEnabled() bool {
+	if x != nil {
+		return x.GrantsEnabled
+	}
+	return false
 }
 
 type SetChatVisibilityRequest struct {
@@ -978,13 +990,14 @@ const file_reliant_v1_sharing_proto_rawDesc = "" +
 	"\x18RemoveChatMemberResponse\x12\x18\n" +
 	"\achanged\x18\x01 \x01(\bR\achanged\":\n" +
 	"\x16ListChatMembersRequest\x12 \n" +
-	"\achat_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06chatId\"\xcf\x01\n" +
+	"\achat_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06chatId\"\xf6\x01\n" +
 	"\x17ListChatMembersResponse\x12\"\n" +
 	"\rowner_user_id\x18\x01 \x01(\tR\vownerUserId\x120\n" +
 	"\amembers\x18\x02 \x03(\v2\x16.reliant.v1.ChatMemberR\amembers\x12!\n" +
 	"\fmember_count\x18\x03 \x01(\x05R\vmemberCount\x12;\n" +
 	"\vcaller_role\x18\x04 \x01(\x0e2\x1a.reliant.v1.ChatMemberRoleR\n" +
-	"callerRole\"\x88\x01\n" +
+	"callerRole\x12%\n" +
+	"\x0egrants_enabled\x18\x05 \x01(\bR\rgrantsEnabled\"\x88\x01\n" +
 	"\x18SetChatVisibilityRequest\x12 \n" +
 	"\achat_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06chatId\x12J\n" +
 	"\n" +

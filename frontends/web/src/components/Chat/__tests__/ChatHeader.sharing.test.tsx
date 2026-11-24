@@ -10,7 +10,10 @@ import userEvent from "@testing-library/user-event";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 import { ResourceVisibility } from "../../../gen/reliant/v1/common_pb";
 
-const state = vi.hoisted(() => ({ chat: {} as Record<string, unknown> }));
+const state = vi.hoisted(() => ({
+  chat: {} as Record<string, unknown>,
+  members: undefined as Record<string, unknown> | undefined,
+}));
 
 vi.mock("../../../hooks/useDaemonStatus", () => ({ useDaemonStatus: () => ({ daemons: [], activeDaemon: null, loading: false }) }));
 vi.mock("../../../services/controlPlane/config", () => ({ hasControlPlane: true }));
@@ -49,6 +52,10 @@ vi.mock("../../../hooks/run-queries", () => ({ useChildRuns: () => ({ data: unde
 vi.mock("../NoMachine", () => ({ NoMachinePill: () => <span>no machine</span> }));
 vi.mock("../WorkspaceRecoveryMenuItems", () => ({ WorkspaceRecoveryMenuItems: () => null }));
 vi.mock("../MoveChatToProjectDialog", () => ({ MoveChatToProjectDialog: () => null }));
+vi.mock("../../../hooks/chat-member-queries", () => ({ useChatMembers: () => ({ data: state.members }) }));
+vi.mock("../../Sharing/ChatMembersPanel", () => ({
+  ChatMembersPanel: ({ open }: { open: boolean }) => (open ? <div role="dialog">members panel</div> : null),
+}));
 vi.mock("../../Sharing/ShareChatDialog", () => ({
   ShareChatDialog: ({ open }: { open: boolean }) => (open ? <div role="dialog">share dialog</div> : null),
 }));
@@ -68,6 +75,7 @@ async function openMenu() {
 
 beforeEach(() => {
   state.chat = { id: "chat-1", title: "Deploy fix", orgId: "acme", visibility: ResourceVisibility.PRIVATE, worktreeId: "wt-1" };
+  state.members = undefined;
 });
 
 describe("ChatHeader machine", () => {
@@ -116,5 +124,33 @@ describe("ChatHeader sharing", () => {
     expect(screen.queryByTestId("chat-menu-share")).not.toBeInTheDocument();
     expect(screen.queryByText("no machine")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy chat ID" })).toBeInTheDocument();
+  });
+});
+
+describe("ChatHeader members", () => {
+  it("offers who has access once the deployment allows grants", async () => {
+    state.members = { grantsEnabled: true, memberCount: 0 };
+    const user = await openMenu();
+    await user.click(screen.getByTestId("chat-menu-members"));
+    expect(screen.getByRole("dialog")).toHaveTextContent("members panel");
+  });
+
+  it("offers nothing while grants are off and no one holds one, or the server cannot say", async () => {
+    state.members = { grantsEnabled: false, memberCount: 0 };
+    await openMenu();
+    expect(screen.queryByTestId("chat-menu-members")).not.toBeInTheDocument();
+  });
+
+  it("still offers it with grants off while someone holds one, so it can be taken back", async () => {
+    state.members = { grantsEnabled: false, memberCount: 2 };
+    await openMenu();
+    expect(screen.getByTestId("chat-menu-members")).toBeInTheDocument();
+  });
+
+  it("offers it to a viewer, who may see who else is here and leave", async () => {
+    state.chat = { ...state.chat, viewerAccess: true, userId: "dana" };
+    state.members = { grantsEnabled: true, memberCount: 1 };
+    await openMenu();
+    expect(screen.getByTestId("chat-menu-members")).toBeInTheDocument();
   });
 });

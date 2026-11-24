@@ -44,6 +44,9 @@ func (s *Service) ListChatMembers(
 		MemberCount: int32(len(members)),
 		// The level the caller reads at, as the decision found it.
 		CallerRole: roleProto(access.Role()),
+		// The rollout gate SetChatMember checks, so a client offers a grant
+		// only when it would be accepted.
+		GrantsEnabled: GrantsAllowed(s.deps.Collaboration),
 	}
 	var least core.ChatMemberRole // the lowest level the caller may see listed; "" lists nobody
 	switch access {

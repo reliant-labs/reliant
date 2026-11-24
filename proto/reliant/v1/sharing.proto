@@ -227,6 +227,11 @@ message ListChatMembersResponse {
   // or any member of the organization a chat is shared with), REPLY or
   // MANAGE for a member holding that grant, UNSPECIFIED for the owner.
   ChatMemberRole caller_role = 4;
+  // Whether this deployment lets anyone grant access to a chat
+  // (ApiServerConfig chat_collaboration.enabled), so a client offers
+  // SetChatMember only when it would be accepted. False from a server that
+  // predates it, which is the same answer: granting is off.
+  bool grants_enabled = 5;
 }
 
 message SetChatVisibilityRequest {
