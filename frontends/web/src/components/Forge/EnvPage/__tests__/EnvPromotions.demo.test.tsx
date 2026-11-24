@@ -4,7 +4,7 @@
  * The environment page's Promotions card on the public demo's data: the real
  * ReleasesApi (services/forge/releases.ts) over the demo's mock transport, so
  * what renders here is what demo visitors see on shop's staging page — every
- * kind of ledger row, from consoleScenario.ts.
+ * kind of ledger row, from handlers/console.ts.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,8 +24,8 @@ import { installShellTransport, setTransport } from "@/lib/connect";
 import { createTestQueryClient } from "@/test/renderWithQuery";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
-import { DEMO_PROJECT } from "../../Demo/demoData/consoleScenario";
-import { createDemoTransport } from "../../Demo/demoData/demoTransport";
+import { DEMO_PROJECT } from "@/fixtures/shop/handlers/console";
+import { createDemoTransport } from "../../Demo/demoTransport";
 import { createWorkloadsFixtureApi } from "../../Workloads/__fixtures__/workloadFixtures";
 import { EnvPromotions, PROMOTIONS_SHOWN } from "../EnvPromotions";
 

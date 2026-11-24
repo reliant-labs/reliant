@@ -15,6 +15,8 @@ import { useCallback, useMemo } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { transport as appTransport } from "@/lib/connect";
+import { useTransport } from "@/lib/transportScope";
 import { useForgeDomains } from "@/hooks/forge-domain-queries";
 import { useCloudEnvStatus, useCloudEnvStatuses, useEnvironmentShape, useEnvironmentShapes, useSetWorkloadRunState } from "@/hooks/forge-queries";
 import { useEnvPromotions } from "@/hooks/release-queries";
@@ -261,6 +263,7 @@ export function WorkloadPage() {
   const search = useSearch({ strict: false }) as WorkloadDetailSearch & { env?: string };
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const transport = useTransport(appTransport);
   const scoped = roster.envs.find((candidate) => candidate.name === envName) ?? null;
   const live = scoped?.live ?? null;
 
@@ -277,7 +280,7 @@ export function WorkloadPage() {
 
   const restart = useMutation<RestartedWorkload, Error, string>({
     // The environment the PATH names, by its control-plane id: a restart is always "in <env>".
-    mutationFn: (environmentId) => restartWorkload(environmentId, name),
+    mutationFn: (environmentId) => restartWorkload(transport, environmentId, name),
     // The pods roll over the next minute: re-read the workload so the Pods table follows.
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["observability"] }),
   });

@@ -5,13 +5,19 @@
  *
  * Every hook in hooks/observability-queries.ts calls through this context, so
  * the area can render against something other than control-plane: component
- * tests hand it an in-memory fake, and the dev-only preview route
- * (/forge-observability-preview) hands it fixtures, which is what makes the
- * screens lookable-at and Playwright-testable without a backend. The default
- * is the real client; production never provides anything else.
+ * tests hand it an in-memory fake. The default is the real client, on the
+ * nearest TransportScope's transport when there is one (the console over a
+ * fixture pack) and on the app's otherwise; production never provides
+ * anything else, and neither do the dev-only previews
+ * (/forge-observability-preview, …), which run the real client over the shop
+ * fixture pack's transport.
  */
 
 import { createContext, useContext, type ReactNode } from "react";
+import type { Transport } from "@connectrpc/connect";
+
+import { transport as appTransport } from "@/lib/connect";
+import { useTransport } from "@/lib/transportScope";
 
 import { currentOrgId } from "../orgs";
 import * as activity from "./activityApi";
@@ -107,79 +113,109 @@ export interface ObservabilityApi {
   listDashboardDatabases: typeof appDatabase.listDashboardDatabases;
 }
 
-export const controlPlaneObservabilityApi: ObservabilityApi = {
-  // The active org (the switcher's choice, else the person's default).
-  currentOrgId,
-  searchLogs: rpc.searchLogs,
-  listTraces: rpc.listTraces,
-  getTrace: rpc.getTrace,
-  queryPanel: rpc.queryPanel,
-  getServiceOverview: rpc.getServiceOverview,
-  getServiceGraph: graph.getServiceGraph,
-  getServiceGraphCatalog: graph.getServiceGraphCatalog,
-  getFlamegraph: rpc.getFlamegraph,
-  getServiceSignals: rpc.getServiceSignals,
-  getObservabilityUsage: rpc.getObservabilityUsage,
-  listAttributeValues: rpc.listAttributeValues,
-  listMetricCatalog: metrics.listMetricCatalog,
-  getMetric: metrics.getMetric,
-  listMetricExemplars: metrics.listMetricExemplars,
-  listWorkloads: rpc.listWorkloads,
-  getWorkload: rpc.getWorkload,
-  listAlerts: alerting.listAlerts,
-  listAlertHistory: alerting.listAlertHistory,
-  listSilences: alerting.listSilences,
-  createSilence: alerting.createSilence,
-  expireSilence: alerting.expireSilence,
-  listReceivers: alerting.listReceivers,
-  createReceiver: alerting.createReceiver,
-  updateReceiver: alerting.updateReceiver,
-  deleteReceiver: alerting.deleteReceiver,
-  testReceiver: alerting.testReceiver,
-  listNotifications: alerting.listNotifications,
-  markNotificationsRead: alerting.markNotificationsRead,
-  listReleases: delivery.listReleases,
-  getDoraMetrics: delivery.getDoraMetrics,
-  getReleaseHealth: delivery.getReleaseHealth,
-  listIssues: issues.listIssues,
-  getIssue: issues.getIssue,
-  listIssueEvents: issues.listIssueEvents,
-  updateIssueStatus: issues.updateIssueStatus,
-  listIssueTimeline: issues.listIssueTimeline,
-  addIssueComment: issues.addIssueComment,
-  updateIssueComment: issues.updateIssueComment,
-  deleteIssueComment: issues.deleteIssueComment,
-  assignIssue: issues.assignIssue,
-  linkIssueChat: issues.linkIssueChat,
-  listOrgMembers: members.listOrgMembers,
-  getCurrentIssueUser: members.getCurrentIssueUser,
-  listActivity: activity.listActivity,
-  listSessions: rum.listSessions,
-  getSession: rum.getSession,
-  getSessionTimeline: rum.getSessionTimeline,
-  getSessionReplay: rum.getSessionReplay,
-  listFrontendReplay: frontendReplay.listFrontendReplay,
-  listDashboards: dashboards.listDashboards,
-  listDashboardTemplates: dashboards.listDashboardTemplates,
-  getDashboard: dashboards.getDashboard,
-  saveDashboard: dashboards.saveDashboard,
-  saveDashboardAsCopy: dashboards.saveDashboardAsCopy,
-  listDashboardVersions: dashboards.listDashboardVersions,
-  restoreDashboardVersion: dashboards.restoreDashboardVersion,
-  archiveDashboard: dashboards.archiveDashboard,
-  starDashboard: dashboards.starDashboard,
-  recordDashboardView: dashboards.recordDashboardView,
-  promoteDashboardToCode: dashboards.promoteDashboardToCode,
-  queryDatabasePanel: appDatabase.queryDatabasePanel,
-  listDashboardDatabases: appDatabase.listDashboardDatabases,
-};
+/**
+ * The real client on `transport`: a TransportScope's (lib/transportScope.tsx),
+ * or undefined for the app's. Each method hands it to its RPC function, which
+ * passes it to obsClient / getControlPlaneClient.
+ */
+function apiOn(transport: Transport | undefined): ObservabilityApi {
+  return {
+    // The active org (the switcher's choice, else the person's default): the app's, in a scope too.
+    currentOrgId,
+    searchLogs: (req, options) => rpc.searchLogs(req, options, transport),
+    listTraces: (req, options) => rpc.listTraces(req, options, transport),
+    getTrace: (req, options) => rpc.getTrace(req, options, transport),
+    queryPanel: (req, options) => rpc.queryPanel(req, options, transport),
+    getServiceOverview: (req, options) => rpc.getServiceOverview(req, options, transport),
+    getServiceGraph: (req, options) => graph.getServiceGraph(req, options, transport),
+    getServiceGraphCatalog: (req, options) => graph.getServiceGraphCatalog(req, options, transport),
+    getFlamegraph: (req, options) => rpc.getFlamegraph(req, options, transport),
+    getServiceSignals: (req, options) => rpc.getServiceSignals(req, options, transport),
+    getObservabilityUsage: (orgId) => rpc.getObservabilityUsage(orgId, transport),
+    listAttributeValues: (req, options) => rpc.listAttributeValues(req, options, transport),
+    listMetricCatalog: (req, options) => metrics.listMetricCatalog(req, options, transport),
+    getMetric: (req, options) => metrics.getMetric(req, options, transport),
+    listMetricExemplars: (req, options) => metrics.listMetricExemplars(req, options, transport),
+    listWorkloads: (req, options) => rpc.listWorkloads(req, options, transport),
+    getWorkload: (req, options) => rpc.getWorkload(req, options, transport),
+    listAlerts: (orgId, envId) => alerting.listAlerts(orgId, envId, transport),
+    listAlertHistory: (orgId, opts) => alerting.listAlertHistory(orgId, opts, transport),
+    listSilences: (orgId, includeExpired) => alerting.listSilences(orgId, includeExpired, transport),
+    createSilence: (orgId, input) => alerting.createSilence(orgId, input, transport),
+    expireSilence: (orgId, id) => alerting.expireSilence(orgId, id, transport),
+    listReceivers: (orgId) => alerting.listReceivers(orgId, transport),
+    createReceiver: (orgId, input) => alerting.createReceiver(orgId, input, transport),
+    updateReceiver: (orgId, input) => alerting.updateReceiver(orgId, input, transport),
+    deleteReceiver: (orgId, id) => alerting.deleteReceiver(orgId, id, transport),
+    testReceiver: (orgId, id) => alerting.testReceiver(orgId, id, transport),
+    listNotifications: (orgId, opts) => alerting.listNotifications(orgId, opts, transport),
+    markNotificationsRead: (orgId, ids) => alerting.markNotificationsRead(orgId, ids, transport),
+    listReleases: (req) => delivery.listReleases(req, transport),
+    getDoraMetrics: (req) => delivery.getDoraMetrics(req, transport),
+    getReleaseHealth: (req, options) => delivery.getReleaseHealth(req, options, transport),
+    listIssues: (req, options) => issues.listIssues(req, options, transport),
+    getIssue: (req, options) => issues.getIssue(req, options, transport),
+    listIssueEvents: (req, options) => issues.listIssueEvents(req, options, transport),
+    updateIssueStatus: (req) => issues.updateIssueStatus(req, transport),
+    listIssueTimeline: (req) => issues.listIssueTimeline(req, transport),
+    addIssueComment: (req) => issues.addIssueComment(req, transport),
+    updateIssueComment: (req) => issues.updateIssueComment(req, transport),
+    deleteIssueComment: (req) => issues.deleteIssueComment(req, transport),
+    assignIssue: (req) => issues.assignIssue(req, transport),
+    linkIssueChat: (req) => issues.linkIssueChat(req, transport),
+    listOrgMembers: (orgId) => members.listOrgMembers(orgId, transport),
+    getCurrentIssueUser: () => members.getCurrentIssueUser(transport),
+    listActivity: (req) => activity.listActivity(req, transport),
+    listSessions: (req, options) => rum.listSessions(req, options, transport),
+    getSession: (req, options) => rum.getSession(req, options, transport),
+    getSessionTimeline: (req, options) => rum.getSessionTimeline(req, options, transport),
+    getSessionReplay: (req, options) => rum.getSessionReplay(req, options, transport),
+    listFrontendReplay: (req, options) => frontendReplay.listFrontendReplay(req, options, transport),
+    listDashboards: (req) => dashboards.listDashboards(req, transport),
+    listDashboardTemplates: (orgId) => dashboards.listDashboardTemplates(orgId, transport),
+    getDashboard: (req) => dashboards.getDashboard(req, transport),
+    saveDashboard: (req) => dashboards.saveDashboard(req, transport),
+    saveDashboardAsCopy: (req) => dashboards.saveDashboardAsCopy(req, transport),
+    listDashboardVersions: (orgId, ref) => dashboards.listDashboardVersions(orgId, ref, transport),
+    restoreDashboardVersion: (orgId, ref, version, baseVersion) => dashboards.restoreDashboardVersion(orgId, ref, version, baseVersion, transport),
+    archiveDashboard: (orgId, ref) => dashboards.archiveDashboard(orgId, ref, transport),
+    starDashboard: (orgId, ref, starred) => dashboards.starDashboard(orgId, ref, starred, transport),
+    recordDashboardView: (orgId, ref) => dashboards.recordDashboardView(orgId, ref, transport),
+    promoteDashboardToCode: (orgId, ref, version) => dashboards.promoteDashboardToCode(orgId, ref, version, transport),
+    queryDatabasePanel: (req, options) => appDatabase.queryDatabasePanel(req, options, transport),
+    listDashboardDatabases: (environmentId, options) => appDatabase.listDashboardDatabases(environmentId, options, transport),
+  };
+}
 
-const ObservabilityApiContext = createContext<ObservabilityApi>(controlPlaneObservabilityApi);
+/** The real client on the app's transport (lib/connect.ts): production's, outside every scope. */
+export const controlPlaneObservabilityApi: ObservabilityApi = apiOn(undefined);
+
+const scopedApis = new WeakMap<Transport, ObservabilityApi>();
+
+/**
+ * The real client on `transport`, memoized per transport so a context default
+ * keeps its identity across renders. The app's transport is
+ * controlPlaneObservabilityApi itself.
+ */
+export function observabilityApiOf(transport: Transport): ObservabilityApi {
+  if (transport === appTransport) return controlPlaneObservabilityApi;
+  let api = scopedApis.get(transport);
+  if (!api) {
+    api = apiOn(transport);
+    scopedApis.set(transport, api);
+  }
+  return api;
+}
+
+const ObservabilityApiContext = createContext<ObservabilityApi | null>(null);
 
 export function ObservabilityApiProvider({ api, children }: { api: ObservabilityApi; children: ReactNode }) {
   return <ObservabilityApiContext.Provider value={api}>{children}</ObservabilityApiContext.Provider>;
 }
 
+/** The provided api, else the real client on the nearest TransportScope's transport, else on the app's. */
 export function useObservabilityApi(): ObservabilityApi {
-  return useContext(ObservabilityApiContext);
+  const provided = useContext(ObservabilityApiContext);
+  const transport = useTransport(appTransport);
+  return provided ?? observabilityApiOf(transport);
 }

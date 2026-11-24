@@ -225,7 +225,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=58d51eadee50c50e60ad016ea5c25549094d1e0a9afa0ea4ece6ced72ebfd77e
+// forge:hash=4098fa500a987c40af0a60fcef3dfbed68c962fecb1580d56c9739addd40c7b0
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -251,6 +251,10 @@ type MockRepository struct {
 	SetChatPausedForMachineFunc                              func(context.Context, string, bool) (bool, error)
 	SetChatQueuedForMachineFunc                              func(context.Context, string, bool) (bool, error)
 	MoveChatToProjectFunc                                    func(context.Context, db.ChatMove) (bool, error)
+	ListChatProjectsFunc                                     func(context.Context, string) ([]*db.ChatProject, error)
+	AttachChatProjectFunc                                    func(context.Context, *db.ChatProject) error
+	DetachChatProjectFunc                                    func(context.Context, string, string) error
+	CopyChatProjectsFunc                                     func(context.Context, string, string) error
 	ListThreadsByConversationFunc                            func(context.Context, string) ([]*db.Thread, error)
 	ReviveThreadFunc                                         func(context.Context, string) (int64, error)
 	ListForkedThreadIDsFunc                                  func(context.Context, []string) ([]string, error)
@@ -514,6 +518,42 @@ func (m *MockRepository) MoveChatToProject(ctx context.Context, p1 db.ChatMove) 
 		return m.MoveChatToProjectFunc(ctx, p1)
 	}
 	return false, contractkit.MockNotSet("MockRepository", "MoveChatToProject")
+}
+
+// ListChatProjects records the call and delegates to ListChatProjectsFunc when set.
+func (m *MockRepository) ListChatProjects(ctx context.Context, chatID string) ([]*db.ChatProject, error) {
+	m.Recorder.Record("ListChatProjects", ctx, chatID)
+	if m.ListChatProjectsFunc != nil {
+		return m.ListChatProjectsFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListChatProjects")
+}
+
+// AttachChatProject records the call and delegates to AttachChatProjectFunc when set.
+func (m *MockRepository) AttachChatProject(ctx context.Context, cp *db.ChatProject) error {
+	m.Recorder.Record("AttachChatProject", ctx, cp)
+	if m.AttachChatProjectFunc != nil {
+		return m.AttachChatProjectFunc(ctx, cp)
+	}
+	return contractkit.MockNotSet("MockRepository", "AttachChatProject")
+}
+
+// DetachChatProject records the call and delegates to DetachChatProjectFunc when set.
+func (m *MockRepository) DetachChatProject(ctx context.Context, chatID string, projectID string) error {
+	m.Recorder.Record("DetachChatProject", ctx, chatID, projectID)
+	if m.DetachChatProjectFunc != nil {
+		return m.DetachChatProjectFunc(ctx, chatID, projectID)
+	}
+	return contractkit.MockNotSet("MockRepository", "DetachChatProject")
+}
+
+// CopyChatProjects records the call and delegates to CopyChatProjectsFunc when set.
+func (m *MockRepository) CopyChatProjects(ctx context.Context, fromChatID string, toChatID string) error {
+	m.Recorder.Record("CopyChatProjects", ctx, fromChatID, toChatID)
+	if m.CopyChatProjectsFunc != nil {
+		return m.CopyChatProjectsFunc(ctx, fromChatID, toChatID)
+	}
+	return contractkit.MockNotSet("MockRepository", "CopyChatProjects")
 }
 
 // ListThreadsByConversation records the call and delegates to ListThreadsByConversationFunc when set.

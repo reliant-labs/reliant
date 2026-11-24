@@ -459,11 +459,11 @@ const file_reliant_v1_attachment_proto_rawDesc = "" +
 	"\x1bCreateFileReferenceResponse\x126\n" +
 	"\n" +
 	"attachment\x18\x01 \x01(\v2\x16.reliant.v1.AttachmentR\n" +
-	"attachment2\xa0\x05\n" +
+	"attachment2\xa3\x05\n" +
 	"\x11AttachmentService\x12\xb0\x01\n" +
 	"\x10UploadAttachment\x12#.reliant.v1.UploadAttachmentRequest\x1a$.reliant.v1.UploadAttachmentResponse\"Q\xa2\xbb\x18M:K:Istages an image for the composer: the message that sends it is the record\x12\xc1\x01\n" +
-	"\x13CreateFileReference\x12&.reliant.v1.CreateFileReferenceRequest\x1a'.reliant.v1.CreateFileReferenceResponse\"Y\xa2\xbb\x18U:S:Qstages a file's content for the composer: the message that sends it is the record\x12V\n" +
-	"\rGetAttachment\x12 .reliant.v1.GetAttachmentRequest\x1a!.reliant.v1.GetAttachmentResponse\"\x00\x12\xbb\x01\n" +
+	"\x13CreateFileReference\x12&.reliant.v1.CreateFileReferenceRequest\x1a'.reliant.v1.CreateFileReferenceResponse\"Y\xa2\xbb\x18U:S:Qstages a file's content for the composer: the message that sends it is the record\x12Y\n" +
+	"\rGetAttachment\x12 .reliant.v1.GetAttachmentRequest\x1a!.reliant.v1.GetAttachmentResponse\"\x03\x90\x02\x01\x12\xbb\x01\n" +
 	"\x10DeleteAttachment\x12#.reliant.v1.DeleteAttachmentRequest\x1a$.reliant.v1.DeleteAttachmentResponse\"\\\xa2\xbb\x18X:V:Tremoves an attachment staged for the composer: draft state of a message not yet sentB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (

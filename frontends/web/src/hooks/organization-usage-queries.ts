@@ -13,11 +13,16 @@
  * answer for any other organization never enters the cache. The read asks
  * once more, and if the second answer is foreign too it fails like any other
  * read (forOrg).
+ *
+ * Each read goes over the nearest TransportScope's transport, else the app's
+ * (lib/transportScope.tsx).
  */
 
 import { useQuery } from "@tanstack/react-query";
 
+import { transport as appTransport } from "@/lib/connect";
 import { logger } from "@/lib/logger";
+import { useTransport } from "@/lib/transportScope";
 import { getOrganizationCostSummary, getProjectCost, getStorageUsage } from "@/services/controlPlane/observability/organizationCostsApi";
 import { listOrganizationUsage, type OrganizationUsageRequest } from "@/services/controlPlane/observability/organizationUsageApi";
 
@@ -60,11 +65,12 @@ export async function forOrg<T extends { orgId: string }>(orgId: string, rpc: st
 }
 
 export function useOrganizationUsage(req: OrganizationUsageRequest | null) {
+  const transport = useTransport(appTransport);
   return useQuery({
     queryKey: req ? organizationUsageKeys.usage(req) : ["organization-usage", "disabled"],
     queryFn: () => {
       const r = req as OrganizationUsageRequest;
-      return forOrg(r.orgId, "ListOrganizationUsage", () => listOrganizationUsage(r));
+      return forOrg(r.orgId, "ListOrganizationUsage", () => listOrganizationUsage(r, transport));
     },
     enabled: !!req?.orgId,
     staleTime: 60_000,
@@ -74,9 +80,10 @@ export function useOrganizationUsage(req: OrganizationUsageRequest | null) {
 
 /** The organization's storage pool by product (BillingService.GetStorageUsage). */
 export function useStorageUsage(orgId: string | null) {
+  const transport = useTransport(appTransport);
   return useQuery({
     queryKey: organizationUsageKeys.storage(orgId ?? ""),
-    queryFn: () => getStorageUsage(orgId as string),
+    queryFn: () => getStorageUsage(orgId as string, transport),
     enabled: !!orgId,
     staleTime: 60_000,
     retry: false,
@@ -84,9 +91,10 @@ export function useStorageUsage(orgId: string | null) {
 }
 
 export function useOrganizationCostSummary(orgId: string | null) {
+  const transport = useTransport(appTransport);
   return useQuery({
     queryKey: organizationUsageKeys.costSummary(orgId ?? ""),
-    queryFn: () => forOrg(orgId as string, "GetOrganizationCostSummary", () => getOrganizationCostSummary(orgId as string)),
+    queryFn: () => forOrg(orgId as string, "GetOrganizationCostSummary", () => getOrganizationCostSummary(orgId as string, transport)),
     enabled: !!orgId,
     staleTime: 60_000,
     retry: false,
@@ -95,9 +103,10 @@ export function useOrganizationCostSummary(orgId: string | null) {
 
 /** One project's hosting cost this month (BillingService.GetProjectCost): the project shell's Usage page. */
 export function useProjectCost(orgId: string | null | undefined, projectId: string | null | undefined) {
+  const transport = useTransport(appTransport);
   return useQuery({
     queryKey: organizationUsageKeys.projectCost(orgId ?? "", projectId ?? ""),
-    queryFn: () => getProjectCost(orgId as string, projectId as string),
+    queryFn: () => getProjectCost(orgId as string, projectId as string, undefined, transport),
     enabled: !!orgId && !!projectId,
     staleTime: 60_000,
     retry: false,

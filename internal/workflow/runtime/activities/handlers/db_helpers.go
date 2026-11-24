@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authortag"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -138,6 +140,17 @@ func convertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, rep
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert messages: %w", err)
 	}
+
+	// Name each human turn's author once the chat has more than one
+	// (internal/authortag). Here, while msgs is still one-to-one with the
+	// rows that carry the author, and before repair adds or drops anything.
+	// A history with no recorded author comes back untouched, byte for byte.
+	//
+	// The owner's rows carry no name (NULL means the owner), so their turns
+	// render authortag.FallbackOwnerName until the send path, which records
+	// authors, also supplies the owner's display name
+	// (chat-collaboration.md §6.2). Until then no row has an author.
+	msgs = authortag.Render(msgs, authorTurns(dbMessages), "")
 
 	if violations := ValidateToolPairing(msgs); len(violations) > 0 {
 		logging.WarnContext(ctx, "[ToolPairing] Loaded history violates the tool-call/tool-result invariant; repairing in memory",
@@ -370,4 +383,25 @@ func recoverPersistedToolResults(ctx context.Context, repo ToolResultRecoverySto
 		"messageCountBefore", len(msgs),
 		"messageCountAfter", len(out))
 	return out
+}
+
+// authorTurns describes each loaded row's authorship for authortag.Render, in
+// order. A human turn is a user-role row no agent sent (no sender) that the
+// transcript shows; a HIDDEN row is LLM-only text (a mailbox envelope, an
+// agent's result, an async answer shown on its question card), never a turn a
+// person typed into the chat.
+func authorTurns(rows []*db.Message) []authortag.Turn {
+	turns := make([]authortag.Turn, len(rows))
+	for i, m := range rows {
+		hidden := m.DisplayStyle != nil && *m.DisplayStyle == reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN
+		turns[i].Human = m.Role == reliantv1.MessageRole_MESSAGE_ROLE_USER &&
+			m.SenderKind == nil && m.SenderThreadID == nil && !hidden
+		if m.AuthorUserID != nil {
+			turns[i].AuthorUserID = *m.AuthorUserID
+		}
+		if m.AuthorName != nil {
+			turns[i].AuthorName = *m.AuthorName
+		}
+	}
+	return turns
 }

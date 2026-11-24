@@ -115,6 +115,18 @@ const EXPECTED_CODES: ReadonlySet<Code> = new Set([
 const PROBED_SERVICES: ReadonlySet<string> = new Set(["reliant.v1.ProviderAccountService"]);
 
 /**
+ * The same, per procedure, on a service the server does serve: the chat's
+ * attached projects (hooks/useChatProjects.ts). An older server answers them
+ * with Unimplemented, and the composer then shows the primary project only.
+ * That is not an app older than the server, so no update prompt.
+ */
+const PROBED_PROCEDURES: ReadonlySet<string> = new Set([
+  "reliant.v1.ChatService/ListChatProjects",
+  "reliant.v1.ChatService/AttachProjectToChat",
+  "reliant.v1.ChatService/DetachProjectFromChat",
+]);
+
+/**
  * Deletes for which NotFound means "already gone" — the state the caller asked
  * for, so a success in all but status code. Every startup deleted a retired
  * tour key (`onboarding.current_step`) that most users no longer had, and each
@@ -196,6 +208,12 @@ export function classifyRpcFailure(error: unknown, ctx: RpcFailureContext): RpcF
   }
   if (EXPECTED_CODES.has(error.code)) return "expected";
   if (error.code === Code.Unimplemented && PROBED_SERVICES.has(ctx.serviceTypeName)) {
+    return "expected";
+  }
+  if (
+    error.code === Code.Unimplemented &&
+    PROBED_PROCEDURES.has(`${ctx.serviceTypeName}/${ctx.methodName ?? ""}`)
+  ) {
     return "expected";
   }
   if (error.code === Code.Unavailable && isDaemonConnectingError(error)) {

@@ -39,10 +39,14 @@ service TaskService {
   rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse) {}
 
   // GetTask retrieves a task by ID
-  rpc GetTask(GetTaskRequest) returns (GetTaskResponse) {}
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListTasks lists tasks (optionally filtered by plan)
-  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse) {}
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // UpdateTask updates an existing task; update_mask names the fields it writes
   rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse) {
@@ -107,7 +111,9 @@ service TaskService {
 
   // ListReadyTasks lists tasks that are ready to work on (no unresolved blockers)
   // forge:query-scope Task
-  rpc ListReadyTasks(ListReadyTasksRequest) returns (ListReadyTasksResponse) {}
+  rpc ListReadyTasks(ListReadyTasksRequest) returns (ListReadyTasksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // Task represents a task in the system

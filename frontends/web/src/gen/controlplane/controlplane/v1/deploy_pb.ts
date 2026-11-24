@@ -3138,7 +3138,11 @@ export type DeploySourceAttestation = Message<"controlplane.v1.DeploySourceAttes
 
   /**
    * WRITE-ONLY, and empty on every read. The raw OIDC JWT the server
-   * verifies; see DeploySourceProvenance.attestation.
+   * verifies; see DeploySourceProvenance.attestation. forge:secret records
+   * that no read returns it, so the reads that carry this message can still
+   * declare NO_SIDE_EFFECTS.
+   *
+   * forge:secret
    *
    * @generated from field: string token = 4;
    */

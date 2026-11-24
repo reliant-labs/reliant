@@ -1930,8 +1930,10 @@ message DeploySourceAttestation {
   string subject = 2;
   string run_id = 3;
   // WRITE-ONLY, and empty on every read. The raw OIDC JWT the server
-  // verifies; see DeploySourceProvenance.attestation.
-  string token = 4;
+  // verifies; see DeploySourceProvenance.attestation. forge:secret records
+  // that no read returns it, so the reads that carry this message can still
+  // declare NO_SIDE_EFFECTS.
+  string token = 4; // forge:secret
 }
 
 // DeployBundle is one rendered, content-addressed deploy artifact: the whole

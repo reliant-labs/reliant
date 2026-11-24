@@ -4945,9 +4945,9 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x19WORKTREE_STATUS_ABANDONED\x10\x03\x12\x1b\n" +
 	"\x17WORKTREE_STATUS_MERGING\x10\x04\x12\x1c\n" +
 	"\x18WORKTREE_STATUS_CREATING\x10\x05\x12\x1a\n" +
-	"\x16WORKTREE_STATUS_FAILED\x10\x062\xfc\x1d\n" +
-	"\x0fWorktreeService\x12q\n" +
-	"\x16ListWorktreeRecoveries\x12).reliant.v1.ListWorktreeRecoveriesRequest\x1a*.reliant.v1.ListWorktreeRecoveriesResponse\"\x00\x12\xcd\x01\n" +
+	"\x16WORKTREE_STATUS_FAILED\x10\x062\x85\x1e\n" +
+	"\x0fWorktreeService\x12t\n" +
+	"\x16ListWorktreeRecoveries\x12).reliant.v1.ListWorktreeRecoveriesRequest\x1a*.reliant.v1.ListWorktreeRecoveriesResponse\"\x03\x90\x02\x01\x12\xcd\x01\n" +
 	"\x17RestoreWorktreeRecovery\x12*.reliant.v1.RestoreWorktreeRecoveryRequest\x1a+.reliant.v1.RestoreWorktreeRecoveryResponse\"Y\xa2\xbb\x18U:S\n" +
 	"\arestore\x12 \n" +
 	"\x11worktree_recovery\x12\vrecovery_id*\x14response.worktree_id*\x10target_daemon_id\x12\xba\x01\n" +
@@ -4958,9 +4958,9 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x06create\x128\n" +
 	"\bworktree\x12\x14response.worktree.id\x1a\x16response.worktree.name*\n" +
 	"project_id*\x18response.worktree.branch\x12V\n" +
-	"\rListWorktrees\x12 .reliant.v1.ListWorktreesRequest\x1a!.reliant.v1.ListWorktreesResponse\"\x00\x12n\n" +
-	"\x15ListArchivedWorktrees\x12(.reliant.v1.ListArchivedWorktreesRequest\x1a).reliant.v1.ListArchivedWorktreesResponse\"\x00\x12P\n" +
-	"\vGetWorktree\x12\x1e.reliant.v1.GetWorktreeRequest\x1a\x1f.reliant.v1.GetWorktreeResponse\"\x00\x12\x98\x01\n" +
+	"\rListWorktrees\x12 .reliant.v1.ListWorktreesRequest\x1a!.reliant.v1.ListWorktreesResponse\"\x00\x12q\n" +
+	"\x15ListArchivedWorktrees\x12(.reliant.v1.ListArchivedWorktreesRequest\x1a).reliant.v1.ListArchivedWorktreesResponse\"\x03\x90\x02\x01\x12S\n" +
+	"\vGetWorktree\x12\x1e.reliant.v1.GetWorktreeRequest\x1a\x1f.reliant.v1.GetWorktreeResponse\"\x03\x90\x02\x01\x12\x98\x01\n" +
 	"\x0eUpdateWorktree\x12!.reliant.v1.UpdateWorktreeRequest\x1a\".reliant.v1.UpdateWorktreeResponse\"?\xa2\xbb\x18;:9\n" +
 	"\x06update\x12/\n" +
 	"\bworktree\x12\vworktree_id\x1a\x16response.worktree.name\x12\xb7\x01\n" +

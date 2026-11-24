@@ -26,11 +26,15 @@ service PlanService {
   rpc CreatePlan(CreatePlanRequest) returns (CreatePlanResponse) {}
 
   // GetPlan retrieves a plan by ID
-  rpc GetPlan(GetPlanRequest) returns (GetPlanResponse) {}
+  rpc GetPlan(GetPlanRequest) returns (GetPlanResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetPlanByChatId retrieves a plan by chat ID
   // forge:query-scope Plan
-  rpc GetPlanByChatId(GetPlanByChatIdRequest) returns (GetPlanByChatIdResponse) {}
+  rpc GetPlanByChatId(GetPlanByChatIdRequest) returns (GetPlanByChatIdResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // UpdatePlan updates an existing plan; update_mask names the fields it writes
   rpc UpdatePlan(UpdatePlanRequest) returns (UpdatePlanResponse) {
@@ -61,11 +65,15 @@ service PlanService {
 
   // ListPlanTasks lists all tasks for a plan
   // forge:query-scope Plan
-  rpc ListPlanTasks(ListPlanTasksRequest) returns (ListPlanTasksResponse) {}
+  rpc ListPlanTasks(ListPlanTasksRequest) returns (ListPlanTasksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListPlansByProject lists all plans for a project (cross-workflow sharing)
   // forge:query-scope Plan
-  rpc ListPlansByProject(ListPlansByProjectRequest) returns (ListPlansByProjectResponse) {}
+  rpc ListPlansByProject(ListPlansByProjectRequest) returns (ListPlansByProjectResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // Plan represents a plan in the system

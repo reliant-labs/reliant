@@ -127,6 +127,14 @@ func ApplyPRRecordChange(ctx context.Context, db orm.Context, c core.PRRecordCha
 			if res.Applied {
 				d.Outcome = core.PRDeliveryApplied
 			}
+			// The pull request's first appearance links it to the chats that
+			// produced it (chat_pr_links): the repository id for the links
+			// written before it, and the head_ref fallback.
+			if res.Created {
+				if err := linkRecordedPR(tx, db, *c.Snapshot); err != nil {
+					return err
+				}
+			}
 			if c.Snapshot.HeadSHA != "" {
 				h := core.PRRecordHead{
 					ID: c.HeadID, RecordID: res.RecordID, HeadSHA: c.Snapshot.HeadSHA,
@@ -185,6 +193,9 @@ type PRRecordApplied struct {
 	Applied bool
 	// Tied is true when the snapshot was exactly as new as the record's.
 	Tied bool
+	// Created is true when this snapshot created the record: the pull
+	// request's first appearance.
+	Created bool
 }
 
 // ApplyPRRecordSnapshot applies a pull request snapshot to its record, in one
@@ -207,6 +218,7 @@ func ApplyPRRecordSnapshot(ctx context.Context, db orm.Context, s core.PRRecordS
 	var out struct {
 		ID, HeadSHA string
 		Tied        bool
+		Created     bool
 	}
 	err = db.Bun().NewRaw(`INSERT INTO pr_records AS r (`+prRecordColumns+`)
 		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15::jsonb, ?16, ?17, ?18, ?20, ?19, ?19, ?19)
@@ -222,13 +234,13 @@ func ApplyPRRecordSnapshot(ctx context.Context, db orm.Context, s core.PRRecordS
 			observed_at = GREATEST(r.observed_at, EXCLUDED.observed_at), updated_at = EXCLUDED.observed_at
 		WHERE EXCLUDED.snapshot_full AND (r.snapshot_at < EXCLUDED.snapshot_at
 			OR (r.snapshot_at = EXCLUDED.snapshot_at AND NOT r.snapshot_full))
-		RETURNING r.id, r.head_sha`,
+		RETURNING r.id, r.head_sha, (r.xmax = 0)`,
 		s.ID, s.Provider, s.AccountKey, s.RepositoryID, s.Repository, s.Number, s.State, s.Draft,
 		s.HeadSHA, s.HeadRef, s.BaseRef, s.BaseSHA, s.AuthorID, s.AuthorLogin, s.Title, string(labels),
 		s.MergedAt, s.MergeCommit, s.SnapshotAt.UTC(), s.ObservedAt.UTC(), s.Full).
-		Scan(ctx, &out.ID, &out.HeadSHA)
+		Scan(ctx, &out.ID, &out.HeadSHA, &out.Created)
 	if err == nil {
-		return PRRecordApplied{RecordID: out.ID, HeadSHA: out.HeadSHA, Applied: true}, nil
+		return PRRecordApplied{RecordID: out.ID, HeadSHA: out.HeadSHA, Applied: true, Created: out.Created}, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return PRRecordApplied{}, fmt.Errorf("apply pr record snapshot: %w", err)

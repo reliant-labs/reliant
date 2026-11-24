@@ -8,7 +8,8 @@
  * setting, which every tab shares and re-reads on focus. The shell used to
  * read the shared setting FIRST, so choosing projects in one tab replaced the
  * projects another tab had open the next time it re-read the setting. The
- * setting now only fills in a tab with no choice of its own.
+ * nav never reads it now: it only fills a tab's first empty home
+ * (hooks/useChatProjectFilter, after the tab's own default).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -60,24 +61,22 @@ afterEach(() => {
 
 describe("two tabs choosing several projects", () => {
   it("this tab keeps its own choice when another tab's choice reaches the shared setting", () => {
-    // This tab chose p1 + p2 (its own copy); the other tab then chose p3 + p4.
-    useShellLastPick.setState({ key: SEVERAL_PROJECTS_PICK, several: ["p1", "p2"] });
+    // This tab chose p1 + p2 (its URL); the other tab then chose p3 + p4.
     shared.filter = ["p3", "p4"];
 
-    const { result } = renderHook(() => useShellProject("/", {}));
+    const { result } = renderHook(() => useShellProject("/", { projects: "p1,p2" }));
 
     expect(result.current.mode).toBe("many");
     expect([...result.current.ids].sort()).toEqual(["p1", "p2"]);
-    expect([...useChatProjectFilterStore.getState().many].sort()).toEqual(["p1", "p2"]);
   });
 
-  it("a tab with no choice of its own fills in from the shared setting", () => {
+  it("an open tab never takes the shared setting, re-read on focus: it only fills a tab's first empty home", () => {
     useShellLastPick.setState({ key: SEVERAL_PROJECTS_PICK, several: [] });
     shared.filter = ["p3", "p4"];
 
     const { result } = renderHook(() => useShellProject("/", {}));
 
-    expect(result.current.mode).toBe("many");
-    expect([...result.current.ids].sort()).toEqual(["p3", "p4"]);
+    expect(result.current.mode).toBe("one");
+    expect(useChatProjectFilterStore.getState().many).toEqual([]);
   });
 });

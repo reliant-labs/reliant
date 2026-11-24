@@ -23,6 +23,9 @@
  *     it (holdMemberships) to keep a navigation loading.
  *   - OrganizationService.ListMembers is the probe for an org-scoped RPC:
  *     every request's `org_id`, as received, is recorded in `wireOrgs`.
+ *   - ChatService.GetChat answers `world.chats`; ProjectService.ListProjects
+ *     answers `world.projects` in the org it names, and GetProject (which
+ *     names no org) any of them.
  *
  * A test file using it mocks two modules (vi.mock is per file, so the
  * harness cannot): the control-plane config, so the app has orgs at all (it
@@ -50,7 +53,9 @@ import {
   OrganizationService,
 } from "@/gen/controlplane/services/organization/v1/organization_pb";
 import { ChatSchema, ChatService, GetChatResponseSchema } from "@/gen/reliant/v1/chat_pb";
+import { GetProjectResponseSchema, ListProjectsResponseSchema, ProjectSchema, ProjectService } from "@/gen/reliant/v1/project_pb";
 import { setTransport } from "@/lib/connect";
+import { resetOrgArrivalNoticeForTests, useOrgArrivalNotice } from "@/lib/orgArrivalNotice";
 import { orgOfPath } from "@/lib/paths/org";
 import { queryClient } from "@/lib/query-client";
 import { ORG_ROUTE_ID, useRouteOrgScope, type OrgRouteState } from "@/lib/routeOrg";
@@ -76,6 +81,13 @@ export interface WorldChat {
   projectId?: string;
 }
 
+/** A project the person may read (GetProject answers it; ListProjects lists it in its org). */
+export interface WorldProject {
+  id: string;
+  /** `Project.org_id`; "" for a project from before orgs. */
+  orgId: string;
+}
+
 export interface OrgRouteWorld {
   /**
    * Which host the page load is on: the app host or the forge host. Both
@@ -99,6 +111,8 @@ export interface OrgRouteWorld {
   chats?: WorldChat[];
   /** GetChat fails with this instead of answering. */
   chatError?: Error;
+  /** The projects ListProjects and GetProject answer; any other id is NotFound. */
+  projects?: WorldProject[];
 }
 
 export interface OrgRouteHarness {
@@ -109,6 +123,10 @@ export interface OrgRouteHarness {
   membershipCalls: () => number;
   /** Every chat id GetChat was asked for, in order. */
   chatReads: string[];
+  /** Every project id GetProject was asked for, in order. */
+  projectReads: string[];
+  /** Every notice a URL's arrival in an org queued (lib/orgArrivalNotice.ts), in order. */
+  notices: string[];
   /** Load `url` as a fresh page load would, following every redirect. */
   open: (url: string) => Promise<void>;
   /** Reload the page on screen: a fresh page load of the committed URL. */
@@ -138,6 +156,8 @@ export interface OrgRouteHarness {
   search: () => Record<string, unknown>;
 }
 
+let stopRecordingNotices: (() => void) | null = null;
+
 const deferred = () => {
   let release!: () => void;
   const promise = new Promise<void>((resolve) => {
@@ -150,6 +170,8 @@ export function createOrgRouteHarness(world: OrgRouteWorld): OrgRouteHarness {
   const user = world.user === undefined ? "alice" : world.user;
   const wireOrgs: string[] = [];
   const chatReads: string[] = [];
+  const projectReads: string[] = [];
+  const notices: string[] = [];
   let calls = 0;
   let hold: Promise<void> | null = null;
 
@@ -159,6 +181,11 @@ export function createOrgRouteHarness(world: OrgRouteWorld): OrgRouteHarness {
   localStorage.clear();
   if (user && world.tabOrg) sessionStorage.setItem(`reliant.activeOrg.${user}`, world.tabOrg);
   queryClient.clear();
+  resetOrgArrivalNoticeForTests();
+  stopRecordingNotices?.();
+  stopRecordingNotices = useOrgArrivalNotice.subscribe(({ notice }, prev) => {
+    if (notice && notice.id !== prev.notice?.id) notices.push(notice.message);
+  });
   // A failed membership list is an answer, not something to retry for seconds.
   queryClient.setDefaultOptions({ ...queryClient.getDefaultOptions(), queries: { ...queryClient.getDefaultOptions().queries, retry: false } });
   useAuthStore.setState({
@@ -208,6 +235,19 @@ export function createOrgRouteHarness(world: OrgRouteWorld): OrgRouteHarness {
             });
           },
         });
+        const projectOf = (project: WorldProject) => create(ProjectSchema, { id: project.id, name: project.id, ...(project.orgId ? { orgId: project.orgId } : {}) });
+        service(ProjectService, {
+          listProjects: (req) =>
+            create(ListProjectsResponseSchema, {
+              projects: (world.projects ?? []).filter((p) => req.orgId === undefined || p.orgId === req.orgId).map(projectOf),
+            }),
+          getProject: (req) => {
+            projectReads.push(req.projectId);
+            const project = world.projects?.find((p) => p.id === req.projectId);
+            if (!project) throw new ConnectError("project not found", Code.NotFound);
+            return create(GetProjectResponseSchema, { project: projectOf(project) });
+          },
+        });
       },
       { transport: { interceptors: [orgInterceptor] } },
     ),
@@ -245,6 +285,8 @@ export function createOrgRouteHarness(world: OrgRouteWorld): OrgRouteHarness {
     },
     wireOrgs,
     chatReads,
+    projectReads,
+    notices,
     membershipCalls: () => calls,
     open: async (url) => {
       await load(url);

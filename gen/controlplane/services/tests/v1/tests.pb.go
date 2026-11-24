@@ -307,6 +307,60 @@ func (TestCaseStatus) EnumDescriptor() ([]byte, []int) {
 	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{4}
 }
 
+// TestQuarantineMode is forge.yaml `tests.flakes.quarantine`.
+type TestQuarantineMode int32
+
+const (
+	// Treated as SUGGEST.
+	TestQuarantineMode_TEST_QUARANTINE_MODE_UNSPECIFIED TestQuarantineMode = 0
+	// Show the quarantine command; never make one (the default).
+	TestQuarantineMode_TEST_QUARANTINE_MODE_SUGGEST TestQuarantineMode = 1
+	// Open the quarantine pull request (a `ci/quarantine/...` file) through
+	// the project's GitHub connection.
+	TestQuarantineMode_TEST_QUARANTINE_MODE_PR TestQuarantineMode = 2
+)
+
+// Enum value maps for TestQuarantineMode.
+var (
+	TestQuarantineMode_name = map[int32]string{
+		0: "TEST_QUARANTINE_MODE_UNSPECIFIED",
+		1: "TEST_QUARANTINE_MODE_SUGGEST",
+		2: "TEST_QUARANTINE_MODE_PR",
+	}
+	TestQuarantineMode_value = map[string]int32{
+		"TEST_QUARANTINE_MODE_UNSPECIFIED": 0,
+		"TEST_QUARANTINE_MODE_SUGGEST":     1,
+		"TEST_QUARANTINE_MODE_PR":          2,
+	}
+)
+
+func (x TestQuarantineMode) Enum() *TestQuarantineMode {
+	p := new(TestQuarantineMode)
+	*p = x
+	return p
+}
+
+func (x TestQuarantineMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TestQuarantineMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_tests_v1_tests_proto_enumTypes[5].Descriptor()
+}
+
+func (TestQuarantineMode) Type() protoreflect.EnumType {
+	return &file_services_tests_v1_tests_proto_enumTypes[5]
+}
+
+func (x TestQuarantineMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TestQuarantineMode.Descriptor instead.
+func (TestQuarantineMode) EnumDescriptor() ([]byte, []int) {
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{5}
+}
+
 // TestFlakeState is a test's flake state (forge pkg/testreport).
 type TestFlakeState int32
 
@@ -361,11 +415,11 @@ func (x TestFlakeState) String() string {
 }
 
 func (TestFlakeState) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_tests_v1_tests_proto_enumTypes[5].Descriptor()
+	return file_services_tests_v1_tests_proto_enumTypes[6].Descriptor()
 }
 
 func (TestFlakeState) Type() protoreflect.EnumType {
-	return &file_services_tests_v1_tests_proto_enumTypes[5]
+	return &file_services_tests_v1_tests_proto_enumTypes[6]
 }
 
 func (x TestFlakeState) Number() protoreflect.EnumNumber {
@@ -374,7 +428,7 @@ func (x TestFlakeState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TestFlakeState.Descriptor instead.
 func (TestFlakeState) EnumDescriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{5}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{6}
 }
 
 // TestFlakeSignal is what detected a flake event.
@@ -421,11 +475,11 @@ func (x TestFlakeSignal) String() string {
 }
 
 func (TestFlakeSignal) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_tests_v1_tests_proto_enumTypes[6].Descriptor()
+	return file_services_tests_v1_tests_proto_enumTypes[7].Descriptor()
 }
 
 func (TestFlakeSignal) Type() protoreflect.EnumType {
-	return &file_services_tests_v1_tests_proto_enumTypes[6]
+	return &file_services_tests_v1_tests_proto_enumTypes[7]
 }
 
 func (x TestFlakeSignal) Number() protoreflect.EnumNumber {
@@ -434,7 +488,7 @@ func (x TestFlakeSignal) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TestFlakeSignal.Descriptor instead.
 func (TestFlakeSignal) EnumDescriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{6}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{7}
 }
 
 // TestFlakeVerdict classifies one failure (forge pkg/testreport.Verdict).
@@ -500,11 +554,11 @@ func (x TestFlakeVerdict) String() string {
 }
 
 func (TestFlakeVerdict) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_tests_v1_tests_proto_enumTypes[7].Descriptor()
+	return file_services_tests_v1_tests_proto_enumTypes[8].Descriptor()
 }
 
 func (TestFlakeVerdict) Type() protoreflect.EnumType {
-	return &file_services_tests_v1_tests_proto_enumTypes[7]
+	return &file_services_tests_v1_tests_proto_enumTypes[8]
 }
 
 func (x TestFlakeVerdict) Number() protoreflect.EnumNumber {
@@ -513,7 +567,7 @@ func (x TestFlakeVerdict) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TestFlakeVerdict.Descriptor instead.
 func (TestFlakeVerdict) EnumDescriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{7}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{8}
 }
 
 // TestEvidenceStatus is how complete a release's test evidence is.
@@ -557,11 +611,11 @@ func (x TestEvidenceStatus) String() string {
 }
 
 func (TestEvidenceStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_tests_v1_tests_proto_enumTypes[8].Descriptor()
+	return file_services_tests_v1_tests_proto_enumTypes[9].Descriptor()
 }
 
 func (TestEvidenceStatus) Type() protoreflect.EnumType {
-	return &file_services_tests_v1_tests_proto_enumTypes[8]
+	return &file_services_tests_v1_tests_proto_enumTypes[9]
 }
 
 func (x TestEvidenceStatus) Number() protoreflect.EnumNumber {
@@ -570,7 +624,7 @@ func (x TestEvidenceStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TestEvidenceStatus.Descriptor instead.
 func (TestEvidenceStatus) EnumDescriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{8}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{9}
 }
 
 // TestCoverageNodeKind is what a GetCoverage child is.
@@ -613,11 +667,11 @@ func (x TestCoverageNodeKind) String() string {
 }
 
 func (TestCoverageNodeKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_tests_v1_tests_proto_enumTypes[9].Descriptor()
+	return file_services_tests_v1_tests_proto_enumTypes[10].Descriptor()
 }
 
 func (TestCoverageNodeKind) Type() protoreflect.EnumType {
-	return &file_services_tests_v1_tests_proto_enumTypes[9]
+	return &file_services_tests_v1_tests_proto_enumTypes[10]
 }
 
 func (x TestCoverageNodeKind) Number() protoreflect.EnumNumber {
@@ -626,7 +680,7 @@ func (x TestCoverageNodeKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TestCoverageNodeKind.Descriptor instead.
 func (TestCoverageNodeKind) EnumDescriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{9}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{10}
 }
 
 // TestKey identifies one test: (language, package, name). Subtests are
@@ -864,6 +918,65 @@ func (x *TestRunCI) GetAttempt() int32 {
 	return 0
 }
 
+// TestFlakePolicy is forge.yaml `tests.flakes`: what the product does about
+// a flaky test on the project's behalf. Both are off by default; forge,
+// control-plane and reliant turn both on, and then act at SUSPECTED.
+type TestFlakePolicy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// `tests.flakes.issues: true`: file or update one `flake:suspected` issue
+	// per suspected or flaky test, and close it when the test leaves those
+	// states.
+	Issues bool `protobuf:"varint,1,opt,name=issues,proto3" json:"issues,omitempty"`
+	// `tests.flakes.quarantine`.
+	Quarantine    TestQuarantineMode `protobuf:"varint,2,opt,name=quarantine,proto3,enum=controlplane.v1.TestQuarantineMode" json:"quarantine,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TestFlakePolicy) Reset() {
+	*x = TestFlakePolicy{}
+	mi := &file_services_tests_v1_tests_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TestFlakePolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestFlakePolicy) ProtoMessage() {}
+
+func (x *TestFlakePolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_services_tests_v1_tests_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestFlakePolicy.ProtoReflect.Descriptor instead.
+func (*TestFlakePolicy) Descriptor() ([]byte, []int) {
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *TestFlakePolicy) GetIssues() bool {
+	if x != nil {
+		return x.Issues
+	}
+	return false
+}
+
+func (x *TestFlakePolicy) GetQuarantine() TestQuarantineMode {
+	if x != nil {
+		return x.Quarantine
+	}
+	return TestQuarantineMode_TEST_QUARANTINE_MODE_UNSPECIFIED
+}
+
 // TestStatementCoverage is covered over instrumented statements. With
 // granularity "line" (LCOV, Cobertura) a line counts as one statement.
 type TestStatementCoverage struct {
@@ -878,7 +991,7 @@ type TestStatementCoverage struct {
 
 func (x *TestStatementCoverage) Reset() {
 	*x = TestStatementCoverage{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[3]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -890,7 +1003,7 @@ func (x *TestStatementCoverage) String() string {
 func (*TestStatementCoverage) ProtoMessage() {}
 
 func (x *TestStatementCoverage) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[3]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -903,7 +1016,7 @@ func (x *TestStatementCoverage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestStatementCoverage.ProtoReflect.Descriptor instead.
 func (*TestStatementCoverage) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{3}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *TestStatementCoverage) GetStatements() int64 {
@@ -943,7 +1056,7 @@ type TestDiffCoverage struct {
 
 func (x *TestDiffCoverage) Reset() {
 	*x = TestDiffCoverage{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[4]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -955,7 +1068,7 @@ func (x *TestDiffCoverage) String() string {
 func (*TestDiffCoverage) ProtoMessage() {}
 
 func (x *TestDiffCoverage) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[4]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -968,7 +1081,7 @@ func (x *TestDiffCoverage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestDiffCoverage.ProtoReflect.Descriptor instead.
 func (*TestDiffCoverage) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{4}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *TestDiffCoverage) GetBaseSha() string {
@@ -1013,7 +1126,7 @@ type TestLanguageCoverage struct {
 
 func (x *TestLanguageCoverage) Reset() {
 	*x = TestLanguageCoverage{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[5]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1025,7 +1138,7 @@ func (x *TestLanguageCoverage) String() string {
 func (*TestLanguageCoverage) ProtoMessage() {}
 
 func (x *TestLanguageCoverage) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[5]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1038,7 +1151,7 @@ func (x *TestLanguageCoverage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestLanguageCoverage.ProtoReflect.Descriptor instead.
 func (*TestLanguageCoverage) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{5}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *TestLanguageCoverage) GetLang() string {
@@ -1092,7 +1205,7 @@ type TestCoverage struct {
 
 func (x *TestCoverage) Reset() {
 	*x = TestCoverage{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[6]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1104,7 +1217,7 @@ func (x *TestCoverage) String() string {
 func (*TestCoverage) ProtoMessage() {}
 
 func (x *TestCoverage) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[6]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1117,7 +1230,7 @@ func (x *TestCoverage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestCoverage.ProtoReflect.Descriptor instead.
 func (*TestCoverage) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{6}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *TestCoverage) GetGranularity() string {
@@ -1204,7 +1317,7 @@ type TestCommitReport struct {
 
 func (x *TestCommitReport) Reset() {
 	*x = TestCommitReport{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[7]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1216,7 +1329,7 @@ func (x *TestCommitReport) String() string {
 func (*TestCommitReport) ProtoMessage() {}
 
 func (x *TestCommitReport) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[7]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1229,7 +1342,7 @@ func (x *TestCommitReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestCommitReport.ProtoReflect.Descriptor instead.
 func (*TestCommitReport) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{7}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *TestCommitReport) GetGitCommit() string {
@@ -1325,7 +1438,7 @@ type TestRunSummary struct {
 
 func (x *TestRunSummary) Reset() {
 	*x = TestRunSummary{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[8]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1337,7 +1450,7 @@ func (x *TestRunSummary) String() string {
 func (*TestRunSummary) ProtoMessage() {}
 
 func (x *TestRunSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[8]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1350,7 +1463,7 @@ func (x *TestRunSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestRunSummary.ProtoReflect.Descriptor instead.
 func (*TestRunSummary) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{8}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *TestRunSummary) GetRunId() string {
@@ -1519,7 +1632,7 @@ type TestReleaseMarker struct {
 
 func (x *TestReleaseMarker) Reset() {
 	*x = TestReleaseMarker{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[9]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1531,7 +1644,7 @@ func (x *TestReleaseMarker) String() string {
 func (*TestReleaseMarker) ProtoMessage() {}
 
 func (x *TestReleaseMarker) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[9]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1544,7 +1657,7 @@ func (x *TestReleaseMarker) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestReleaseMarker.ProtoReflect.Descriptor instead.
 func (*TestReleaseMarker) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{9}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *TestReleaseMarker) GetReleaseVersion() string {
@@ -1582,7 +1695,7 @@ type TestCoveragePoint struct {
 
 func (x *TestCoveragePoint) Reset() {
 	*x = TestCoveragePoint{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[10]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1594,7 +1707,7 @@ func (x *TestCoveragePoint) String() string {
 func (*TestCoveragePoint) ProtoMessage() {}
 
 func (x *TestCoveragePoint) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[10]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1607,7 +1720,7 @@ func (x *TestCoveragePoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestCoveragePoint.ProtoReflect.Descriptor instead.
 func (*TestCoveragePoint) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{10}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *TestCoveragePoint) GetGitCommit() string {
@@ -1654,7 +1767,7 @@ type TestPackageCoverage struct {
 
 func (x *TestPackageCoverage) Reset() {
 	*x = TestPackageCoverage{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[11]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1666,7 +1779,7 @@ func (x *TestPackageCoverage) String() string {
 func (*TestPackageCoverage) ProtoMessage() {}
 
 func (x *TestPackageCoverage) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[11]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1679,7 +1792,7 @@ func (x *TestPackageCoverage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestPackageCoverage.ProtoReflect.Descriptor instead.
 func (*TestPackageCoverage) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{11}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *TestPackageCoverage) GetPath() string {
@@ -1735,7 +1848,7 @@ type TestQuarantine struct {
 
 func (x *TestQuarantine) Reset() {
 	*x = TestQuarantine{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[12]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1747,7 +1860,7 @@ func (x *TestQuarantine) String() string {
 func (*TestQuarantine) ProtoMessage() {}
 
 func (x *TestQuarantine) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[12]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1760,7 +1873,7 @@ func (x *TestQuarantine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestQuarantine.ProtoReflect.Descriptor instead.
 func (*TestQuarantine) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{12}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *TestQuarantine) GetPath() string {
@@ -1834,7 +1947,7 @@ type TestFlake struct {
 
 func (x *TestFlake) Reset() {
 	*x = TestFlake{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[13]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1846,7 +1959,7 @@ func (x *TestFlake) String() string {
 func (*TestFlake) ProtoMessage() {}
 
 func (x *TestFlake) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[13]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1859,7 +1972,7 @@ func (x *TestFlake) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestFlake.ProtoReflect.Descriptor instead.
 func (*TestFlake) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{13}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *TestFlake) GetTest() *TestKey {
@@ -1959,7 +2072,7 @@ type TestFlakeEvent struct {
 
 func (x *TestFlakeEvent) Reset() {
 	*x = TestFlakeEvent{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[14]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1971,7 +2084,7 @@ func (x *TestFlakeEvent) String() string {
 func (*TestFlakeEvent) ProtoMessage() {}
 
 func (x *TestFlakeEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[14]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1984,7 +2097,7 @@ func (x *TestFlakeEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestFlakeEvent.ProtoReflect.Descriptor instead.
 func (*TestFlakeEvent) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{14}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *TestFlakeEvent) GetSignal() TestFlakeSignal {
@@ -2053,7 +2166,7 @@ type TestUploadPart struct {
 
 func (x *TestUploadPart) Reset() {
 	*x = TestUploadPart{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[15]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2065,7 +2178,7 @@ func (x *TestUploadPart) String() string {
 func (*TestUploadPart) ProtoMessage() {}
 
 func (x *TestUploadPart) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[15]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2078,7 +2191,7 @@ func (x *TestUploadPart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestUploadPart.ProtoReflect.Descriptor instead.
 func (*TestUploadPart) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{15}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *TestUploadPart) GetData() []byte {
@@ -2142,14 +2255,25 @@ type RecordTestRunRequest struct {
 	// The org this request acts in (docs/orgs.md). Unset: the caller's default
 	// org. A person must be a member of it; a machine credential may name only
 	// its own org.
-	OrgId         *string `protobuf:"bytes,18,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	OrgId *string `protobuf:"bytes,18,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// The project's forge.yaml `tests.flakes`, as the forge that captured the
+	// run read it. It travels with every upload because these settings are
+	// forge.yaml, never written through this API. The daily flake sweep acts
+	// on the newest ingested default-branch run's policy: unset (an older
+	// forge) is the default, which files no issue and opens no pull request.
+	FlakePolicy *TestFlakePolicy `protobuf:"bytes,19,opt,name=flake_policy,json=flakePolicy,proto3" json:"flake_policy,omitempty"`
+	// The Go module path of the project's root go.mod, when it has one. A
+	// flake issue's title and a quarantine entry's path name a package
+	// relative to it (forge internal/testflakes IssueTitle and EntryPath), so
+	// without it the sweep files nothing for the project's Go tests.
+	GoModule      string `protobuf:"bytes,20,opt,name=go_module,json=goModule,proto3" json:"go_module,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RecordTestRunRequest) Reset() {
 	*x = RecordTestRunRequest{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[16]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2161,7 +2285,7 @@ func (x *RecordTestRunRequest) String() string {
 func (*RecordTestRunRequest) ProtoMessage() {}
 
 func (x *RecordTestRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[16]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2174,7 +2298,7 @@ func (x *RecordTestRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordTestRunRequest.ProtoReflect.Descriptor instead.
 func (*RecordTestRunRequest) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{16}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RecordTestRunRequest) GetProject() string {
@@ -2303,6 +2427,20 @@ func (x *RecordTestRunRequest) GetOrgId() string {
 	return ""
 }
 
+func (x *RecordTestRunRequest) GetFlakePolicy() *TestFlakePolicy {
+	if x != nil {
+		return x.FlakePolicy
+	}
+	return nil
+}
+
+func (x *RecordTestRunRequest) GetGoModule() string {
+	if x != nil {
+		return x.GoModule
+	}
+	return ""
+}
+
 type RecordTestRunResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	RunId string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
@@ -2324,7 +2462,7 @@ type RecordTestRunResponse struct {
 
 func (x *RecordTestRunResponse) Reset() {
 	*x = RecordTestRunResponse{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[17]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2336,7 +2474,7 @@ func (x *RecordTestRunResponse) String() string {
 func (*RecordTestRunResponse) ProtoMessage() {}
 
 func (x *RecordTestRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[17]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2349,7 +2487,7 @@ func (x *RecordTestRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordTestRunResponse.ProtoReflect.Descriptor instead.
 func (*RecordTestRunResponse) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{17}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *RecordTestRunResponse) GetRunId() string {
@@ -2424,7 +2562,7 @@ type GetTestSummaryRequest struct {
 
 func (x *GetTestSummaryRequest) Reset() {
 	*x = GetTestSummaryRequest{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[18]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2436,7 +2574,7 @@ func (x *GetTestSummaryRequest) String() string {
 func (*GetTestSummaryRequest) ProtoMessage() {}
 
 func (x *GetTestSummaryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[18]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2449,7 +2587,7 @@ func (x *GetTestSummaryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTestSummaryRequest.ProtoReflect.Descriptor instead.
 func (*GetTestSummaryRequest) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{18}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetTestSummaryRequest) GetProject() string {
@@ -2527,7 +2665,7 @@ type GetTestSummaryResponse struct {
 
 func (x *GetTestSummaryResponse) Reset() {
 	*x = GetTestSummaryResponse{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[19]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2539,7 +2677,7 @@ func (x *GetTestSummaryResponse) String() string {
 func (*GetTestSummaryResponse) ProtoMessage() {}
 
 func (x *GetTestSummaryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[19]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2552,7 +2690,7 @@ func (x *GetTestSummaryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTestSummaryResponse.ProtoReflect.Descriptor instead.
 func (*GetTestSummaryResponse) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{19}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetTestSummaryResponse) GetBranch() string {
@@ -2664,7 +2802,7 @@ type TestHostHealth struct {
 
 func (x *TestHostHealth) Reset() {
 	*x = TestHostHealth{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[20]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2676,7 +2814,7 @@ func (x *TestHostHealth) String() string {
 func (*TestHostHealth) ProtoMessage() {}
 
 func (x *TestHostHealth) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[20]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2689,7 +2827,7 @@ func (x *TestHostHealth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestHostHealth.ProtoReflect.Descriptor instead.
 func (*TestHostHealth) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{20}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *TestHostHealth) GetSignature() string {
@@ -2747,7 +2885,7 @@ type ListTestRunsRequest struct {
 
 func (x *ListTestRunsRequest) Reset() {
 	*x = ListTestRunsRequest{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[21]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2759,7 +2897,7 @@ func (x *ListTestRunsRequest) String() string {
 func (*ListTestRunsRequest) ProtoMessage() {}
 
 func (x *ListTestRunsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[21]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2772,7 +2910,7 @@ func (x *ListTestRunsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTestRunsRequest.ProtoReflect.Descriptor instead.
 func (*ListTestRunsRequest) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{21}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ListTestRunsRequest) GetProject() string {
@@ -2867,7 +3005,7 @@ type ListTestRunsResponse struct {
 
 func (x *ListTestRunsResponse) Reset() {
 	*x = ListTestRunsResponse{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[22]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2879,7 +3017,7 @@ func (x *ListTestRunsResponse) String() string {
 func (*ListTestRunsResponse) ProtoMessage() {}
 
 func (x *ListTestRunsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[22]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2892,7 +3030,7 @@ func (x *ListTestRunsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTestRunsResponse.ProtoReflect.Descriptor instead.
 func (*ListTestRunsResponse) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{22}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ListTestRunsResponse) GetRuns() []*TestRunSummary {
@@ -2931,7 +3069,7 @@ type GetTestRunRequest struct {
 
 func (x *GetTestRunRequest) Reset() {
 	*x = GetTestRunRequest{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[23]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2943,7 +3081,7 @@ func (x *GetTestRunRequest) String() string {
 func (*GetTestRunRequest) ProtoMessage() {}
 
 func (x *GetTestRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[23]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2956,7 +3094,7 @@ func (x *GetTestRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTestRunRequest.ProtoReflect.Descriptor instead.
 func (*GetTestRunRequest) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{23}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetTestRunRequest) GetProject() string {
@@ -3004,7 +3142,7 @@ type TestFailure struct {
 
 func (x *TestFailure) Reset() {
 	*x = TestFailure{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[24]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3016,7 +3154,7 @@ func (x *TestFailure) String() string {
 func (*TestFailure) ProtoMessage() {}
 
 func (x *TestFailure) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[24]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3029,7 +3167,7 @@ func (x *TestFailure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestFailure.ProtoReflect.Descriptor instead.
 func (*TestFailure) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{24}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *TestFailure) GetTest() *TestKey {
@@ -3099,7 +3237,7 @@ type TestTiming struct {
 
 func (x *TestTiming) Reset() {
 	*x = TestTiming{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[25]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3111,7 +3249,7 @@ func (x *TestTiming) String() string {
 func (*TestTiming) ProtoMessage() {}
 
 func (x *TestTiming) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[25]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3124,7 +3262,7 @@ func (x *TestTiming) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestTiming.ProtoReflect.Descriptor instead.
 func (*TestTiming) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{25}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *TestTiming) GetTest() *TestKey {
@@ -3160,7 +3298,7 @@ type GetTestRunResponse struct {
 
 func (x *GetTestRunResponse) Reset() {
 	*x = GetTestRunResponse{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[26]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3172,7 +3310,7 @@ func (x *GetTestRunResponse) String() string {
 func (*GetTestRunResponse) ProtoMessage() {}
 
 func (x *GetTestRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[26]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3185,7 +3323,7 @@ func (x *GetTestRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTestRunResponse.ProtoReflect.Descriptor instead.
 func (*GetTestRunResponse) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{26}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetTestRunResponse) GetRun() *TestRunSummary {
@@ -3262,7 +3400,7 @@ type GetCoverageRequest struct {
 
 func (x *GetCoverageRequest) Reset() {
 	*x = GetCoverageRequest{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[27]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3274,7 +3412,7 @@ func (x *GetCoverageRequest) String() string {
 func (*GetCoverageRequest) ProtoMessage() {}
 
 func (x *GetCoverageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[27]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3287,7 +3425,7 @@ func (x *GetCoverageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCoverageRequest.ProtoReflect.Descriptor instead.
 func (*GetCoverageRequest) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{27}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *GetCoverageRequest) GetProject() string {
@@ -3422,7 +3560,7 @@ type TestCoverageNode struct {
 
 func (x *TestCoverageNode) Reset() {
 	*x = TestCoverageNode{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[28]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3434,7 +3572,7 @@ func (x *TestCoverageNode) String() string {
 func (*TestCoverageNode) ProtoMessage() {}
 
 func (x *TestCoverageNode) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[28]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3447,7 +3585,7 @@ func (x *TestCoverageNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestCoverageNode.ProtoReflect.Descriptor instead.
 func (*TestCoverageNode) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{28}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *TestCoverageNode) GetPath() string {
@@ -3525,7 +3663,7 @@ type GetCoverageResponse struct {
 
 func (x *GetCoverageResponse) Reset() {
 	*x = GetCoverageResponse{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[29]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3537,7 +3675,7 @@ func (x *GetCoverageResponse) String() string {
 func (*GetCoverageResponse) ProtoMessage() {}
 
 func (x *GetCoverageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[29]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3550,7 +3688,7 @@ func (x *GetCoverageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCoverageResponse.ProtoReflect.Descriptor instead.
 func (*GetCoverageResponse) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{29}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GetCoverageResponse) GetGitCommit() string {
@@ -3621,7 +3759,7 @@ type GetFileCoverageRequest struct {
 
 func (x *GetFileCoverageRequest) Reset() {
 	*x = GetFileCoverageRequest{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[30]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3633,7 +3771,7 @@ func (x *GetFileCoverageRequest) String() string {
 func (*GetFileCoverageRequest) ProtoMessage() {}
 
 func (x *GetFileCoverageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[30]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3646,7 +3784,7 @@ func (x *GetFileCoverageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFileCoverageRequest.ProtoReflect.Descriptor instead.
 func (*GetFileCoverageRequest) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{30}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetFileCoverageRequest) GetProject() string {
@@ -3752,7 +3890,7 @@ type TestLineCoverage struct {
 
 func (x *TestLineCoverage) Reset() {
 	*x = TestLineCoverage{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[31]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3764,7 +3902,7 @@ func (x *TestLineCoverage) String() string {
 func (*TestLineCoverage) ProtoMessage() {}
 
 func (x *TestLineCoverage) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[31]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3777,7 +3915,7 @@ func (x *TestLineCoverage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestLineCoverage.ProtoReflect.Descriptor instead.
 func (*TestLineCoverage) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{31}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *TestLineCoverage) GetLine() int32 {
@@ -3845,7 +3983,7 @@ type GetFileCoverageResponse struct {
 
 func (x *GetFileCoverageResponse) Reset() {
 	*x = GetFileCoverageResponse{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[32]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3857,7 +3995,7 @@ func (x *GetFileCoverageResponse) String() string {
 func (*GetFileCoverageResponse) ProtoMessage() {}
 
 func (x *GetFileCoverageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[32]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3870,7 +4008,7 @@ func (x *GetFileCoverageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFileCoverageResponse.ProtoReflect.Descriptor instead.
 func (*GetFileCoverageResponse) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{32}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *GetFileCoverageResponse) GetGitCommit() string {
@@ -3960,7 +4098,7 @@ type GetReleaseTestsRequest struct {
 
 func (x *GetReleaseTestsRequest) Reset() {
 	*x = GetReleaseTestsRequest{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[33]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3972,7 +4110,7 @@ func (x *GetReleaseTestsRequest) String() string {
 func (*GetReleaseTestsRequest) ProtoMessage() {}
 
 func (x *GetReleaseTestsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[33]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3985,7 +4123,7 @@ func (x *GetReleaseTestsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetReleaseTestsRequest.ProtoReflect.Descriptor instead.
 func (*GetReleaseTestsRequest) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{33}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *GetReleaseTestsRequest) GetProject() string {
@@ -4034,7 +4172,7 @@ type GetReleaseTestsResponse struct {
 
 func (x *GetReleaseTestsResponse) Reset() {
 	*x = GetReleaseTestsResponse{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[34]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4046,7 +4184,7 @@ func (x *GetReleaseTestsResponse) String() string {
 func (*GetReleaseTestsResponse) ProtoMessage() {}
 
 func (x *GetReleaseTestsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[34]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4059,7 +4197,7 @@ func (x *GetReleaseTestsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetReleaseTestsResponse.ProtoReflect.Descriptor instead.
 func (*GetReleaseTestsResponse) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{34}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *GetReleaseTestsResponse) GetReleaseId() string {
@@ -4158,7 +4296,7 @@ type ListFlakyTestsRequest struct {
 
 func (x *ListFlakyTestsRequest) Reset() {
 	*x = ListFlakyTestsRequest{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[35]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4170,7 +4308,7 @@ func (x *ListFlakyTestsRequest) String() string {
 func (*ListFlakyTestsRequest) ProtoMessage() {}
 
 func (x *ListFlakyTestsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[35]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4183,7 +4321,7 @@ func (x *ListFlakyTestsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFlakyTestsRequest.ProtoReflect.Descriptor instead.
 func (*ListFlakyTestsRequest) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{35}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ListFlakyTestsRequest) GetProject() string {
@@ -4247,7 +4385,7 @@ type ListFlakyTestsResponse struct {
 
 func (x *ListFlakyTestsResponse) Reset() {
 	*x = ListFlakyTestsResponse{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[36]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4259,7 +4397,7 @@ func (x *ListFlakyTestsResponse) String() string {
 func (*ListFlakyTestsResponse) ProtoMessage() {}
 
 func (x *ListFlakyTestsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[36]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4272,7 +4410,7 @@ func (x *ListFlakyTestsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFlakyTestsResponse.ProtoReflect.Descriptor instead.
 func (*ListFlakyTestsResponse) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{36}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ListFlakyTestsResponse) GetTests() []*TestFlake {
@@ -4305,7 +4443,7 @@ type GetTestRequest struct {
 
 func (x *GetTestRequest) Reset() {
 	*x = GetTestRequest{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[37]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4317,7 +4455,7 @@ func (x *GetTestRequest) String() string {
 func (*GetTestRequest) ProtoMessage() {}
 
 func (x *GetTestRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[37]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4330,7 +4468,7 @@ func (x *GetTestRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTestRequest.ProtoReflect.Descriptor instead.
 func (*GetTestRequest) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{37}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *GetTestRequest) GetProject() string {
@@ -4372,7 +4510,7 @@ type TestOutcome struct {
 
 func (x *TestOutcome) Reset() {
 	*x = TestOutcome{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[38]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4384,7 +4522,7 @@ func (x *TestOutcome) String() string {
 func (*TestOutcome) ProtoMessage() {}
 
 func (x *TestOutcome) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[38]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4397,7 +4535,7 @@ func (x *TestOutcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestOutcome.ProtoReflect.Descriptor instead.
 func (*TestOutcome) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{38}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *TestOutcome) GetRunId() string {
@@ -4480,7 +4618,7 @@ type TestFailureSignature struct {
 
 func (x *TestFailureSignature) Reset() {
 	*x = TestFailureSignature{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[39]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4492,7 +4630,7 @@ func (x *TestFailureSignature) String() string {
 func (*TestFailureSignature) ProtoMessage() {}
 
 func (x *TestFailureSignature) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[39]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4505,7 +4643,7 @@ func (x *TestFailureSignature) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestFailureSignature.ProtoReflect.Descriptor instead.
 func (*TestFailureSignature) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{39}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *TestFailureSignature) GetSignature() string {
@@ -4566,7 +4704,7 @@ type GetTestResponse struct {
 
 func (x *GetTestResponse) Reset() {
 	*x = GetTestResponse{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[40]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4578,7 +4716,7 @@ func (x *GetTestResponse) String() string {
 func (*GetTestResponse) ProtoMessage() {}
 
 func (x *GetTestResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[40]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4591,7 +4729,7 @@ func (x *GetTestResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTestResponse.ProtoReflect.Descriptor instead.
 func (*GetTestResponse) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{40}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *GetTestResponse) GetFlake() *TestFlake {
@@ -4639,7 +4777,7 @@ type HasCoverageBlobRequest struct {
 
 func (x *HasCoverageBlobRequest) Reset() {
 	*x = HasCoverageBlobRequest{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[41]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4651,7 +4789,7 @@ func (x *HasCoverageBlobRequest) String() string {
 func (*HasCoverageBlobRequest) ProtoMessage() {}
 
 func (x *HasCoverageBlobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[41]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4664,7 +4802,7 @@ func (x *HasCoverageBlobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HasCoverageBlobRequest.ProtoReflect.Descriptor instead.
 func (*HasCoverageBlobRequest) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{41}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *HasCoverageBlobRequest) GetProject() string {
@@ -4702,7 +4840,7 @@ type HasCoverageBlobResponse struct {
 
 func (x *HasCoverageBlobResponse) Reset() {
 	*x = HasCoverageBlobResponse{}
-	mi := &file_services_tests_v1_tests_proto_msgTypes[42]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4714,7 +4852,7 @@ func (x *HasCoverageBlobResponse) String() string {
 func (*HasCoverageBlobResponse) ProtoMessage() {}
 
 func (x *HasCoverageBlobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_tests_v1_tests_proto_msgTypes[42]
+	mi := &file_services_tests_v1_tests_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4727,7 +4865,7 @@ func (x *HasCoverageBlobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HasCoverageBlobResponse.ProtoReflect.Descriptor instead.
 func (*HasCoverageBlobResponse) Descriptor() ([]byte, []int) {
-	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{42}
+	return file_services_tests_v1_tests_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *HasCoverageBlobResponse) GetPresent() bool {
@@ -4766,7 +4904,12 @@ const file_services_tests_v1_tests_proto_rawDesc = "" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x17\n" +
 	"\arun_url\x18\x03 \x01(\tR\x06runUrl\x12\x18\n" +
-	"\aattempt\x18\x04 \x01(\x05R\aattempt\"k\n" +
+	"\aattempt\x18\x04 \x01(\x05R\aattempt\"n\n" +
+	"\x0fTestFlakePolicy\x12\x16\n" +
+	"\x06issues\x18\x01 \x01(\bR\x06issues\x12C\n" +
+	"\n" +
+	"quarantine\x18\x02 \x01(\x0e2#.controlplane.v1.TestQuarantineModeR\n" +
+	"quarantine\"k\n" +
 	"\x15TestStatementCoverage\x12\x1e\n" +
 	"\n" +
 	"statements\x18\x01 \x01(\x03R\n" +
@@ -4904,7 +5047,7 @@ const file_services_tests_v1_tests_proto_rawDesc = "" +
 	"\x0eTestUploadPart\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\x12@\n" +
 	"\bencoding\x18\x02 \x01(\x0e2$.controlplane.v1.TestPayloadEncodingR\bencoding\x12\x16\n" +
-	"\x06format\x18\x03 \x01(\tR\x06format\"\xfa\x05\n" +
+	"\x06format\x18\x03 \x01(\tR\x06format\"\xdc\x06\n" +
 	"\x14RecordTestRunRequest\x12\x18\n" +
 	"\aproject\x18\x01 \x01(\tR\aproject\x12\x1d\n" +
 	"\n" +
@@ -4927,7 +5070,9 @@ const file_services_tests_v1_tests_proto_rawDesc = "" +
 	"\aresults\x18\x0f \x01(\v2\x1f.controlplane.v1.TestUploadPartR\aresults\x12;\n" +
 	"\bcoverage\x18\x10 \x01(\v2\x1f.controlplane.v1.TestUploadPartR\bcoverage\x123\n" +
 	"\x04diff\x18\x11 \x01(\v2\x1f.controlplane.v1.TestUploadPartR\x04diff\x12\x1a\n" +
-	"\x06org_id\x18\x12 \x01(\tH\x01R\x05orgId\x88\x01\x01B\x11\n" +
+	"\x06org_id\x18\x12 \x01(\tH\x01R\x05orgId\x88\x01\x01\x12C\n" +
+	"\fflake_policy\x18\x13 \x01(\v2 .controlplane.v1.TestFlakePolicyR\vflakePolicy\x12\x1b\n" +
+	"\tgo_module\x18\x14 \x01(\tR\bgoModuleB\x11\n" +
 	"\x0f_environment_idB\t\n" +
 	"\a_org_id\"\x93\x02\n" +
 	"\x15RecordTestRunResponse\x12\x15\n" +
@@ -5206,7 +5351,11 @@ const file_services_tests_v1_tests_proto_rawDesc = "" +
 	"\x1cTEST_CASE_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15TEST_CASE_STATUS_PASS\x10\x01\x12\x19\n" +
 	"\x15TEST_CASE_STATUS_FAIL\x10\x02\x12\x19\n" +
-	"\x15TEST_CASE_STATUS_SKIP\x10\x03*\xe8\x01\n" +
+	"\x15TEST_CASE_STATUS_SKIP\x10\x03*y\n" +
+	"\x12TestQuarantineMode\x12$\n" +
+	" TEST_QUARANTINE_MODE_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cTEST_QUARANTINE_MODE_SUGGEST\x10\x01\x12\x1b\n" +
+	"\x17TEST_QUARANTINE_MODE_PR\x10\x02*\xe8\x01\n" +
 	"\x0eTestFlakeState\x12 \n" +
 	"\x1cTEST_FLAKE_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18TEST_FLAKE_STATE_HEALTHY\x10\x01\x12\x1e\n" +
@@ -5239,18 +5388,18 @@ const file_services_tests_v1_tests_proto_rawDesc = "" +
 	"#TEST_COVERAGE_NODE_KIND_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fTEST_COVERAGE_NODE_KIND_PACKAGE\x10\x01\x12%\n" +
 	"!TEST_COVERAGE_NODE_KIND_DIRECTORY\x10\x02\x12 \n" +
-	"\x1cTEST_COVERAGE_NODE_KIND_FILE\x10\x032\xc7\a\n" +
+	"\x1cTEST_COVERAGE_NODE_KIND_FILE\x10\x032\xef\a\n" +
 	"\fTestsService\x12^\n" +
-	"\rRecordTestRun\x12%.controlplane.v1.RecordTestRunRequest\x1a&.controlplane.v1.RecordTestRunResponse\x12a\n" +
-	"\x0eGetTestSummary\x12&.controlplane.v1.GetTestSummaryRequest\x1a'.controlplane.v1.GetTestSummaryResponse\x12[\n" +
-	"\fListTestRuns\x12$.controlplane.v1.ListTestRunsRequest\x1a%.controlplane.v1.ListTestRunsResponse\x12U\n" +
+	"\rRecordTestRun\x12%.controlplane.v1.RecordTestRunRequest\x1a&.controlplane.v1.RecordTestRunResponse\x12f\n" +
+	"\x0eGetTestSummary\x12&.controlplane.v1.GetTestSummaryRequest\x1a'.controlplane.v1.GetTestSummaryResponse\"\x03\x90\x02\x01\x12`\n" +
+	"\fListTestRuns\x12$.controlplane.v1.ListTestRunsRequest\x1a%.controlplane.v1.ListTestRunsResponse\"\x03\x90\x02\x01\x12Z\n" +
 	"\n" +
-	"GetTestRun\x12\".controlplane.v1.GetTestRunRequest\x1a#.controlplane.v1.GetTestRunResponse\x12X\n" +
-	"\vGetCoverage\x12#.controlplane.v1.GetCoverageRequest\x1a$.controlplane.v1.GetCoverageResponse\x12d\n" +
-	"\x0fGetFileCoverage\x12'.controlplane.v1.GetFileCoverageRequest\x1a(.controlplane.v1.GetFileCoverageResponse\x12d\n" +
-	"\x0fGetReleaseTests\x12'.controlplane.v1.GetReleaseTestsRequest\x1a(.controlplane.v1.GetReleaseTestsResponse\x12a\n" +
-	"\x0eListFlakyTests\x12&.controlplane.v1.ListFlakyTestsRequest\x1a'.controlplane.v1.ListFlakyTestsResponse\x12L\n" +
-	"\aGetTest\x12\x1f.controlplane.v1.GetTestRequest\x1a .controlplane.v1.GetTestResponse\x12i\n" +
+	"GetTestRun\x12\".controlplane.v1.GetTestRunRequest\x1a#.controlplane.v1.GetTestRunResponse\"\x03\x90\x02\x01\x12]\n" +
+	"\vGetCoverage\x12#.controlplane.v1.GetCoverageRequest\x1a$.controlplane.v1.GetCoverageResponse\"\x03\x90\x02\x01\x12i\n" +
+	"\x0fGetFileCoverage\x12'.controlplane.v1.GetFileCoverageRequest\x1a(.controlplane.v1.GetFileCoverageResponse\"\x03\x90\x02\x01\x12i\n" +
+	"\x0fGetReleaseTests\x12'.controlplane.v1.GetReleaseTestsRequest\x1a(.controlplane.v1.GetReleaseTestsResponse\"\x03\x90\x02\x01\x12f\n" +
+	"\x0eListFlakyTests\x12&.controlplane.v1.ListFlakyTestsRequest\x1a'.controlplane.v1.ListFlakyTestsResponse\"\x03\x90\x02\x01\x12Q\n" +
+	"\aGetTest\x12\x1f.controlplane.v1.GetTestRequest\x1a .controlplane.v1.GetTestResponse\"\x03\x90\x02\x01\x12i\n" +
 	"\x0fHasCoverageBlob\x12'.controlplane.v1.HasCoverageBlobRequest\x1a(.controlplane.v1.HasCoverageBlobResponse\"\x03\x90\x02\x01B\xd1\x01\n" +
 	"\x13com.controlplane.v1B\n" +
 	"TestsProtoP\x01ZQgithub.com/reliant-labs/reliant/gen/controlplane/services/tests/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
@@ -5267,183 +5416,187 @@ func file_services_tests_v1_tests_proto_rawDescGZIP() []byte {
 	return file_services_tests_v1_tests_proto_rawDescData
 }
 
-var file_services_tests_v1_tests_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
-var file_services_tests_v1_tests_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
+var file_services_tests_v1_tests_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
+var file_services_tests_v1_tests_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
 var file_services_tests_v1_tests_proto_goTypes = []any{
 	(TestPayloadEncoding)(0),        // 0: controlplane.v1.TestPayloadEncoding
 	(TestRunSource)(0),              // 1: controlplane.v1.TestRunSource
 	(TestRunOutcome)(0),             // 2: controlplane.v1.TestRunOutcome
 	(TestRunIngestState)(0),         // 3: controlplane.v1.TestRunIngestState
 	(TestCaseStatus)(0),             // 4: controlplane.v1.TestCaseStatus
-	(TestFlakeState)(0),             // 5: controlplane.v1.TestFlakeState
-	(TestFlakeSignal)(0),            // 6: controlplane.v1.TestFlakeSignal
-	(TestFlakeVerdict)(0),           // 7: controlplane.v1.TestFlakeVerdict
-	(TestEvidenceStatus)(0),         // 8: controlplane.v1.TestEvidenceStatus
-	(TestCoverageNodeKind)(0),       // 9: controlplane.v1.TestCoverageNodeKind
-	(*TestKey)(nil),                 // 10: controlplane.v1.TestKey
-	(*TestTotals)(nil),              // 11: controlplane.v1.TestTotals
-	(*TestRunCI)(nil),               // 12: controlplane.v1.TestRunCI
-	(*TestStatementCoverage)(nil),   // 13: controlplane.v1.TestStatementCoverage
-	(*TestDiffCoverage)(nil),        // 14: controlplane.v1.TestDiffCoverage
-	(*TestLanguageCoverage)(nil),    // 15: controlplane.v1.TestLanguageCoverage
-	(*TestCoverage)(nil),            // 16: controlplane.v1.TestCoverage
-	(*TestCommitReport)(nil),        // 17: controlplane.v1.TestCommitReport
-	(*TestRunSummary)(nil),          // 18: controlplane.v1.TestRunSummary
-	(*TestReleaseMarker)(nil),       // 19: controlplane.v1.TestReleaseMarker
-	(*TestCoveragePoint)(nil),       // 20: controlplane.v1.TestCoveragePoint
-	(*TestPackageCoverage)(nil),     // 21: controlplane.v1.TestPackageCoverage
-	(*TestQuarantine)(nil),          // 22: controlplane.v1.TestQuarantine
-	(*TestFlake)(nil),               // 23: controlplane.v1.TestFlake
-	(*TestFlakeEvent)(nil),          // 24: controlplane.v1.TestFlakeEvent
-	(*TestUploadPart)(nil),          // 25: controlplane.v1.TestUploadPart
-	(*RecordTestRunRequest)(nil),    // 26: controlplane.v1.RecordTestRunRequest
-	(*RecordTestRunResponse)(nil),   // 27: controlplane.v1.RecordTestRunResponse
-	(*GetTestSummaryRequest)(nil),   // 28: controlplane.v1.GetTestSummaryRequest
-	(*GetTestSummaryResponse)(nil),  // 29: controlplane.v1.GetTestSummaryResponse
-	(*TestHostHealth)(nil),          // 30: controlplane.v1.TestHostHealth
-	(*ListTestRunsRequest)(nil),     // 31: controlplane.v1.ListTestRunsRequest
-	(*ListTestRunsResponse)(nil),    // 32: controlplane.v1.ListTestRunsResponse
-	(*GetTestRunRequest)(nil),       // 33: controlplane.v1.GetTestRunRequest
-	(*TestFailure)(nil),             // 34: controlplane.v1.TestFailure
-	(*TestTiming)(nil),              // 35: controlplane.v1.TestTiming
-	(*GetTestRunResponse)(nil),      // 36: controlplane.v1.GetTestRunResponse
-	(*GetCoverageRequest)(nil),      // 37: controlplane.v1.GetCoverageRequest
-	(*TestCoverageNode)(nil),        // 38: controlplane.v1.TestCoverageNode
-	(*GetCoverageResponse)(nil),     // 39: controlplane.v1.GetCoverageResponse
-	(*GetFileCoverageRequest)(nil),  // 40: controlplane.v1.GetFileCoverageRequest
-	(*TestLineCoverage)(nil),        // 41: controlplane.v1.TestLineCoverage
-	(*GetFileCoverageResponse)(nil), // 42: controlplane.v1.GetFileCoverageResponse
-	(*GetReleaseTestsRequest)(nil),  // 43: controlplane.v1.GetReleaseTestsRequest
-	(*GetReleaseTestsResponse)(nil), // 44: controlplane.v1.GetReleaseTestsResponse
-	(*ListFlakyTestsRequest)(nil),   // 45: controlplane.v1.ListFlakyTestsRequest
-	(*ListFlakyTestsResponse)(nil),  // 46: controlplane.v1.ListFlakyTestsResponse
-	(*GetTestRequest)(nil),          // 47: controlplane.v1.GetTestRequest
-	(*TestOutcome)(nil),             // 48: controlplane.v1.TestOutcome
-	(*TestFailureSignature)(nil),    // 49: controlplane.v1.TestFailureSignature
-	(*GetTestResponse)(nil),         // 50: controlplane.v1.GetTestResponse
-	(*HasCoverageBlobRequest)(nil),  // 51: controlplane.v1.HasCoverageBlobRequest
-	(*HasCoverageBlobResponse)(nil), // 52: controlplane.v1.HasCoverageBlobResponse
-	nil,                             // 53: controlplane.v1.TestLanguageCoverage.LanesEntry
-	nil,                             // 54: controlplane.v1.TestCoverage.LanesEntry
-	nil,                             // 55: controlplane.v1.TestCoveragePoint.LanesPercentEntry
-	nil,                             // 56: controlplane.v1.TestPackageCoverage.LanesEntry
-	nil,                             // 57: controlplane.v1.TestCoverageNode.LanesEntry
-	nil,                             // 58: controlplane.v1.TestLineCoverage.HitsEntry
-	(*timestamppb.Timestamp)(nil),   // 59: google.protobuf.Timestamp
+	(TestQuarantineMode)(0),         // 5: controlplane.v1.TestQuarantineMode
+	(TestFlakeState)(0),             // 6: controlplane.v1.TestFlakeState
+	(TestFlakeSignal)(0),            // 7: controlplane.v1.TestFlakeSignal
+	(TestFlakeVerdict)(0),           // 8: controlplane.v1.TestFlakeVerdict
+	(TestEvidenceStatus)(0),         // 9: controlplane.v1.TestEvidenceStatus
+	(TestCoverageNodeKind)(0),       // 10: controlplane.v1.TestCoverageNodeKind
+	(*TestKey)(nil),                 // 11: controlplane.v1.TestKey
+	(*TestTotals)(nil),              // 12: controlplane.v1.TestTotals
+	(*TestRunCI)(nil),               // 13: controlplane.v1.TestRunCI
+	(*TestFlakePolicy)(nil),         // 14: controlplane.v1.TestFlakePolicy
+	(*TestStatementCoverage)(nil),   // 15: controlplane.v1.TestStatementCoverage
+	(*TestDiffCoverage)(nil),        // 16: controlplane.v1.TestDiffCoverage
+	(*TestLanguageCoverage)(nil),    // 17: controlplane.v1.TestLanguageCoverage
+	(*TestCoverage)(nil),            // 18: controlplane.v1.TestCoverage
+	(*TestCommitReport)(nil),        // 19: controlplane.v1.TestCommitReport
+	(*TestRunSummary)(nil),          // 20: controlplane.v1.TestRunSummary
+	(*TestReleaseMarker)(nil),       // 21: controlplane.v1.TestReleaseMarker
+	(*TestCoveragePoint)(nil),       // 22: controlplane.v1.TestCoveragePoint
+	(*TestPackageCoverage)(nil),     // 23: controlplane.v1.TestPackageCoverage
+	(*TestQuarantine)(nil),          // 24: controlplane.v1.TestQuarantine
+	(*TestFlake)(nil),               // 25: controlplane.v1.TestFlake
+	(*TestFlakeEvent)(nil),          // 26: controlplane.v1.TestFlakeEvent
+	(*TestUploadPart)(nil),          // 27: controlplane.v1.TestUploadPart
+	(*RecordTestRunRequest)(nil),    // 28: controlplane.v1.RecordTestRunRequest
+	(*RecordTestRunResponse)(nil),   // 29: controlplane.v1.RecordTestRunResponse
+	(*GetTestSummaryRequest)(nil),   // 30: controlplane.v1.GetTestSummaryRequest
+	(*GetTestSummaryResponse)(nil),  // 31: controlplane.v1.GetTestSummaryResponse
+	(*TestHostHealth)(nil),          // 32: controlplane.v1.TestHostHealth
+	(*ListTestRunsRequest)(nil),     // 33: controlplane.v1.ListTestRunsRequest
+	(*ListTestRunsResponse)(nil),    // 34: controlplane.v1.ListTestRunsResponse
+	(*GetTestRunRequest)(nil),       // 35: controlplane.v1.GetTestRunRequest
+	(*TestFailure)(nil),             // 36: controlplane.v1.TestFailure
+	(*TestTiming)(nil),              // 37: controlplane.v1.TestTiming
+	(*GetTestRunResponse)(nil),      // 38: controlplane.v1.GetTestRunResponse
+	(*GetCoverageRequest)(nil),      // 39: controlplane.v1.GetCoverageRequest
+	(*TestCoverageNode)(nil),        // 40: controlplane.v1.TestCoverageNode
+	(*GetCoverageResponse)(nil),     // 41: controlplane.v1.GetCoverageResponse
+	(*GetFileCoverageRequest)(nil),  // 42: controlplane.v1.GetFileCoverageRequest
+	(*TestLineCoverage)(nil),        // 43: controlplane.v1.TestLineCoverage
+	(*GetFileCoverageResponse)(nil), // 44: controlplane.v1.GetFileCoverageResponse
+	(*GetReleaseTestsRequest)(nil),  // 45: controlplane.v1.GetReleaseTestsRequest
+	(*GetReleaseTestsResponse)(nil), // 46: controlplane.v1.GetReleaseTestsResponse
+	(*ListFlakyTestsRequest)(nil),   // 47: controlplane.v1.ListFlakyTestsRequest
+	(*ListFlakyTestsResponse)(nil),  // 48: controlplane.v1.ListFlakyTestsResponse
+	(*GetTestRequest)(nil),          // 49: controlplane.v1.GetTestRequest
+	(*TestOutcome)(nil),             // 50: controlplane.v1.TestOutcome
+	(*TestFailureSignature)(nil),    // 51: controlplane.v1.TestFailureSignature
+	(*GetTestResponse)(nil),         // 52: controlplane.v1.GetTestResponse
+	(*HasCoverageBlobRequest)(nil),  // 53: controlplane.v1.HasCoverageBlobRequest
+	(*HasCoverageBlobResponse)(nil), // 54: controlplane.v1.HasCoverageBlobResponse
+	nil,                             // 55: controlplane.v1.TestLanguageCoverage.LanesEntry
+	nil,                             // 56: controlplane.v1.TestCoverage.LanesEntry
+	nil,                             // 57: controlplane.v1.TestCoveragePoint.LanesPercentEntry
+	nil,                             // 58: controlplane.v1.TestPackageCoverage.LanesEntry
+	nil,                             // 59: controlplane.v1.TestCoverageNode.LanesEntry
+	nil,                             // 60: controlplane.v1.TestLineCoverage.HitsEntry
+	(*timestamppb.Timestamp)(nil),   // 61: google.protobuf.Timestamp
 }
 var file_services_tests_v1_tests_proto_depIdxs = []int32{
-	13, // 0: controlplane.v1.TestLanguageCoverage.combined:type_name -> controlplane.v1.TestStatementCoverage
-	53, // 1: controlplane.v1.TestLanguageCoverage.lanes:type_name -> controlplane.v1.TestLanguageCoverage.LanesEntry
-	13, // 2: controlplane.v1.TestCoverage.combined:type_name -> controlplane.v1.TestStatementCoverage
-	54, // 3: controlplane.v1.TestCoverage.lanes:type_name -> controlplane.v1.TestCoverage.LanesEntry
-	13, // 4: controlplane.v1.TestCoverage.only_e2e:type_name -> controlplane.v1.TestStatementCoverage
-	15, // 5: controlplane.v1.TestCoverage.languages:type_name -> controlplane.v1.TestLanguageCoverage
-	14, // 6: controlplane.v1.TestCoverage.diff:type_name -> controlplane.v1.TestDiffCoverage
-	11, // 7: controlplane.v1.TestCommitReport.totals:type_name -> controlplane.v1.TestTotals
-	16, // 8: controlplane.v1.TestCommitReport.coverage:type_name -> controlplane.v1.TestCoverage
-	59, // 9: controlplane.v1.TestCommitReport.updated_at:type_name -> google.protobuf.Timestamp
-	1,  // 10: controlplane.v1.TestRunSummary.source:type_name -> controlplane.v1.TestRunSource
-	12, // 11: controlplane.v1.TestRunSummary.ci:type_name -> controlplane.v1.TestRunCI
-	59, // 12: controlplane.v1.TestRunSummary.started_at:type_name -> google.protobuf.Timestamp
-	59, // 13: controlplane.v1.TestRunSummary.finished_at:type_name -> google.protobuf.Timestamp
-	2,  // 14: controlplane.v1.TestRunSummary.outcome:type_name -> controlplane.v1.TestRunOutcome
-	3,  // 15: controlplane.v1.TestRunSummary.ingest_state:type_name -> controlplane.v1.TestRunIngestState
-	11, // 16: controlplane.v1.TestRunSummary.totals:type_name -> controlplane.v1.TestTotals
-	59, // 17: controlplane.v1.TestRunSummary.created_at:type_name -> google.protobuf.Timestamp
-	59, // 18: controlplane.v1.TestReleaseMarker.cut_at:type_name -> google.protobuf.Timestamp
-	59, // 19: controlplane.v1.TestCoveragePoint.at:type_name -> google.protobuf.Timestamp
-	55, // 20: controlplane.v1.TestCoveragePoint.lanes_percent:type_name -> controlplane.v1.TestCoveragePoint.LanesPercentEntry
-	13, // 21: controlplane.v1.TestPackageCoverage.combined:type_name -> controlplane.v1.TestStatementCoverage
-	56, // 22: controlplane.v1.TestPackageCoverage.lanes:type_name -> controlplane.v1.TestPackageCoverage.LanesEntry
-	59, // 23: controlplane.v1.TestQuarantine.expires_at:type_name -> google.protobuf.Timestamp
-	10, // 24: controlplane.v1.TestFlake.test:type_name -> controlplane.v1.TestKey
-	5,  // 25: controlplane.v1.TestFlake.state:type_name -> controlplane.v1.TestFlakeState
-	6,  // 26: controlplane.v1.TestFlake.signals:type_name -> controlplane.v1.TestFlakeSignal
-	59, // 27: controlplane.v1.TestFlake.first_seen_at:type_name -> google.protobuf.Timestamp
-	59, // 28: controlplane.v1.TestFlake.last_event_at:type_name -> google.protobuf.Timestamp
-	59, // 29: controlplane.v1.TestFlake.quarantined_at:type_name -> google.protobuf.Timestamp
-	22, // 30: controlplane.v1.TestFlake.quarantine:type_name -> controlplane.v1.TestQuarantine
-	6,  // 31: controlplane.v1.TestFlakeEvent.signal:type_name -> controlplane.v1.TestFlakeSignal
-	7,  // 32: controlplane.v1.TestFlakeEvent.verdict:type_name -> controlplane.v1.TestFlakeVerdict
-	59, // 33: controlplane.v1.TestFlakeEvent.at:type_name -> google.protobuf.Timestamp
-	0,  // 34: controlplane.v1.TestUploadPart.encoding:type_name -> controlplane.v1.TestPayloadEncoding
-	1,  // 35: controlplane.v1.RecordTestRunRequest.source:type_name -> controlplane.v1.TestRunSource
-	12, // 36: controlplane.v1.RecordTestRunRequest.ci:type_name -> controlplane.v1.TestRunCI
-	59, // 37: controlplane.v1.RecordTestRunRequest.started_at:type_name -> google.protobuf.Timestamp
-	59, // 38: controlplane.v1.RecordTestRunRequest.finished_at:type_name -> google.protobuf.Timestamp
-	25, // 39: controlplane.v1.RecordTestRunRequest.results:type_name -> controlplane.v1.TestUploadPart
-	25, // 40: controlplane.v1.RecordTestRunRequest.coverage:type_name -> controlplane.v1.TestUploadPart
-	25, // 41: controlplane.v1.RecordTestRunRequest.diff:type_name -> controlplane.v1.TestUploadPart
-	3,  // 42: controlplane.v1.RecordTestRunResponse.ingest_state:type_name -> controlplane.v1.TestRunIngestState
-	17, // 43: controlplane.v1.GetTestSummaryResponse.latest:type_name -> controlplane.v1.TestCommitReport
-	20, // 44: controlplane.v1.GetTestSummaryResponse.coverage_trend:type_name -> controlplane.v1.TestCoveragePoint
-	19, // 45: controlplane.v1.GetTestSummaryResponse.release_markers:type_name -> controlplane.v1.TestReleaseMarker
-	18, // 46: controlplane.v1.GetTestSummaryResponse.last_run:type_name -> controlplane.v1.TestRunSummary
-	21, // 47: controlplane.v1.GetTestSummaryResponse.low_coverage_packages:type_name -> controlplane.v1.TestPackageCoverage
-	30, // 48: controlplane.v1.GetTestSummaryResponse.host_health:type_name -> controlplane.v1.TestHostHealth
-	1,  // 49: controlplane.v1.ListTestRunsRequest.source:type_name -> controlplane.v1.TestRunSource
-	2,  // 50: controlplane.v1.ListTestRunsRequest.outcome:type_name -> controlplane.v1.TestRunOutcome
-	18, // 51: controlplane.v1.ListTestRunsResponse.runs:type_name -> controlplane.v1.TestRunSummary
-	10, // 52: controlplane.v1.TestFailure.test:type_name -> controlplane.v1.TestKey
-	7,  // 53: controlplane.v1.TestFailure.verdict:type_name -> controlplane.v1.TestFlakeVerdict
-	10, // 54: controlplane.v1.TestTiming.test:type_name -> controlplane.v1.TestKey
-	18, // 55: controlplane.v1.GetTestRunResponse.run:type_name -> controlplane.v1.TestRunSummary
-	34, // 56: controlplane.v1.GetTestRunResponse.failures:type_name -> controlplane.v1.TestFailure
-	10, // 57: controlplane.v1.GetTestRunResponse.retry_passes:type_name -> controlplane.v1.TestKey
-	35, // 58: controlplane.v1.GetTestRunResponse.slowest:type_name -> controlplane.v1.TestTiming
-	9,  // 59: controlplane.v1.TestCoverageNode.kind:type_name -> controlplane.v1.TestCoverageNodeKind
-	13, // 60: controlplane.v1.TestCoverageNode.combined:type_name -> controlplane.v1.TestStatementCoverage
-	57, // 61: controlplane.v1.TestCoverageNode.lanes:type_name -> controlplane.v1.TestCoverageNode.LanesEntry
-	14, // 62: controlplane.v1.TestCoverageNode.diff:type_name -> controlplane.v1.TestDiffCoverage
-	16, // 63: controlplane.v1.GetCoverageResponse.coverage:type_name -> controlplane.v1.TestCoverage
-	38, // 64: controlplane.v1.GetCoverageResponse.children:type_name -> controlplane.v1.TestCoverageNode
-	58, // 65: controlplane.v1.TestLineCoverage.hits:type_name -> controlplane.v1.TestLineCoverage.HitsEntry
-	16, // 66: controlplane.v1.GetFileCoverageResponse.coverage:type_name -> controlplane.v1.TestCoverage
-	41, // 67: controlplane.v1.GetFileCoverageResponse.lines:type_name -> controlplane.v1.TestLineCoverage
-	8,  // 68: controlplane.v1.GetReleaseTestsResponse.status:type_name -> controlplane.v1.TestEvidenceStatus
-	17, // 69: controlplane.v1.GetReleaseTestsResponse.report:type_name -> controlplane.v1.TestCommitReport
-	10, // 70: controlplane.v1.GetReleaseTestsResponse.new_failures:type_name -> controlplane.v1.TestKey
-	23, // 71: controlplane.v1.GetReleaseTestsResponse.new_flakes:type_name -> controlplane.v1.TestFlake
-	5,  // 72: controlplane.v1.ListFlakyTestsRequest.state:type_name -> controlplane.v1.TestFlakeState
-	23, // 73: controlplane.v1.ListFlakyTestsResponse.tests:type_name -> controlplane.v1.TestFlake
-	4,  // 74: controlplane.v1.TestOutcome.status:type_name -> controlplane.v1.TestCaseStatus
-	59, // 75: controlplane.v1.TestOutcome.at:type_name -> google.protobuf.Timestamp
-	7,  // 76: controlplane.v1.TestFailureSignature.verdict:type_name -> controlplane.v1.TestFlakeVerdict
-	59, // 77: controlplane.v1.TestFailureSignature.first_seen_at:type_name -> google.protobuf.Timestamp
-	59, // 78: controlplane.v1.TestFailureSignature.last_seen_at:type_name -> google.protobuf.Timestamp
-	23, // 79: controlplane.v1.GetTestResponse.flake:type_name -> controlplane.v1.TestFlake
-	48, // 80: controlplane.v1.GetTestResponse.outcomes:type_name -> controlplane.v1.TestOutcome
-	24, // 81: controlplane.v1.GetTestResponse.events:type_name -> controlplane.v1.TestFlakeEvent
-	49, // 82: controlplane.v1.GetTestResponse.signatures:type_name -> controlplane.v1.TestFailureSignature
-	13, // 83: controlplane.v1.TestLanguageCoverage.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
-	13, // 84: controlplane.v1.TestCoverage.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
-	13, // 85: controlplane.v1.TestPackageCoverage.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
-	13, // 86: controlplane.v1.TestCoverageNode.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
-	26, // 87: controlplane.v1.TestsService.RecordTestRun:input_type -> controlplane.v1.RecordTestRunRequest
-	28, // 88: controlplane.v1.TestsService.GetTestSummary:input_type -> controlplane.v1.GetTestSummaryRequest
-	31, // 89: controlplane.v1.TestsService.ListTestRuns:input_type -> controlplane.v1.ListTestRunsRequest
-	33, // 90: controlplane.v1.TestsService.GetTestRun:input_type -> controlplane.v1.GetTestRunRequest
-	37, // 91: controlplane.v1.TestsService.GetCoverage:input_type -> controlplane.v1.GetCoverageRequest
-	40, // 92: controlplane.v1.TestsService.GetFileCoverage:input_type -> controlplane.v1.GetFileCoverageRequest
-	43, // 93: controlplane.v1.TestsService.GetReleaseTests:input_type -> controlplane.v1.GetReleaseTestsRequest
-	45, // 94: controlplane.v1.TestsService.ListFlakyTests:input_type -> controlplane.v1.ListFlakyTestsRequest
-	47, // 95: controlplane.v1.TestsService.GetTest:input_type -> controlplane.v1.GetTestRequest
-	51, // 96: controlplane.v1.TestsService.HasCoverageBlob:input_type -> controlplane.v1.HasCoverageBlobRequest
-	27, // 97: controlplane.v1.TestsService.RecordTestRun:output_type -> controlplane.v1.RecordTestRunResponse
-	29, // 98: controlplane.v1.TestsService.GetTestSummary:output_type -> controlplane.v1.GetTestSummaryResponse
-	32, // 99: controlplane.v1.TestsService.ListTestRuns:output_type -> controlplane.v1.ListTestRunsResponse
-	36, // 100: controlplane.v1.TestsService.GetTestRun:output_type -> controlplane.v1.GetTestRunResponse
-	39, // 101: controlplane.v1.TestsService.GetCoverage:output_type -> controlplane.v1.GetCoverageResponse
-	42, // 102: controlplane.v1.TestsService.GetFileCoverage:output_type -> controlplane.v1.GetFileCoverageResponse
-	44, // 103: controlplane.v1.TestsService.GetReleaseTests:output_type -> controlplane.v1.GetReleaseTestsResponse
-	46, // 104: controlplane.v1.TestsService.ListFlakyTests:output_type -> controlplane.v1.ListFlakyTestsResponse
-	50, // 105: controlplane.v1.TestsService.GetTest:output_type -> controlplane.v1.GetTestResponse
-	52, // 106: controlplane.v1.TestsService.HasCoverageBlob:output_type -> controlplane.v1.HasCoverageBlobResponse
-	97, // [97:107] is the sub-list for method output_type
-	87, // [87:97] is the sub-list for method input_type
-	87, // [87:87] is the sub-list for extension type_name
-	87, // [87:87] is the sub-list for extension extendee
-	0,  // [0:87] is the sub-list for field type_name
+	5,  // 0: controlplane.v1.TestFlakePolicy.quarantine:type_name -> controlplane.v1.TestQuarantineMode
+	15, // 1: controlplane.v1.TestLanguageCoverage.combined:type_name -> controlplane.v1.TestStatementCoverage
+	55, // 2: controlplane.v1.TestLanguageCoverage.lanes:type_name -> controlplane.v1.TestLanguageCoverage.LanesEntry
+	15, // 3: controlplane.v1.TestCoverage.combined:type_name -> controlplane.v1.TestStatementCoverage
+	56, // 4: controlplane.v1.TestCoverage.lanes:type_name -> controlplane.v1.TestCoverage.LanesEntry
+	15, // 5: controlplane.v1.TestCoverage.only_e2e:type_name -> controlplane.v1.TestStatementCoverage
+	17, // 6: controlplane.v1.TestCoverage.languages:type_name -> controlplane.v1.TestLanguageCoverage
+	16, // 7: controlplane.v1.TestCoverage.diff:type_name -> controlplane.v1.TestDiffCoverage
+	12, // 8: controlplane.v1.TestCommitReport.totals:type_name -> controlplane.v1.TestTotals
+	18, // 9: controlplane.v1.TestCommitReport.coverage:type_name -> controlplane.v1.TestCoverage
+	61, // 10: controlplane.v1.TestCommitReport.updated_at:type_name -> google.protobuf.Timestamp
+	1,  // 11: controlplane.v1.TestRunSummary.source:type_name -> controlplane.v1.TestRunSource
+	13, // 12: controlplane.v1.TestRunSummary.ci:type_name -> controlplane.v1.TestRunCI
+	61, // 13: controlplane.v1.TestRunSummary.started_at:type_name -> google.protobuf.Timestamp
+	61, // 14: controlplane.v1.TestRunSummary.finished_at:type_name -> google.protobuf.Timestamp
+	2,  // 15: controlplane.v1.TestRunSummary.outcome:type_name -> controlplane.v1.TestRunOutcome
+	3,  // 16: controlplane.v1.TestRunSummary.ingest_state:type_name -> controlplane.v1.TestRunIngestState
+	12, // 17: controlplane.v1.TestRunSummary.totals:type_name -> controlplane.v1.TestTotals
+	61, // 18: controlplane.v1.TestRunSummary.created_at:type_name -> google.protobuf.Timestamp
+	61, // 19: controlplane.v1.TestReleaseMarker.cut_at:type_name -> google.protobuf.Timestamp
+	61, // 20: controlplane.v1.TestCoveragePoint.at:type_name -> google.protobuf.Timestamp
+	57, // 21: controlplane.v1.TestCoveragePoint.lanes_percent:type_name -> controlplane.v1.TestCoveragePoint.LanesPercentEntry
+	15, // 22: controlplane.v1.TestPackageCoverage.combined:type_name -> controlplane.v1.TestStatementCoverage
+	58, // 23: controlplane.v1.TestPackageCoverage.lanes:type_name -> controlplane.v1.TestPackageCoverage.LanesEntry
+	61, // 24: controlplane.v1.TestQuarantine.expires_at:type_name -> google.protobuf.Timestamp
+	11, // 25: controlplane.v1.TestFlake.test:type_name -> controlplane.v1.TestKey
+	6,  // 26: controlplane.v1.TestFlake.state:type_name -> controlplane.v1.TestFlakeState
+	7,  // 27: controlplane.v1.TestFlake.signals:type_name -> controlplane.v1.TestFlakeSignal
+	61, // 28: controlplane.v1.TestFlake.first_seen_at:type_name -> google.protobuf.Timestamp
+	61, // 29: controlplane.v1.TestFlake.last_event_at:type_name -> google.protobuf.Timestamp
+	61, // 30: controlplane.v1.TestFlake.quarantined_at:type_name -> google.protobuf.Timestamp
+	24, // 31: controlplane.v1.TestFlake.quarantine:type_name -> controlplane.v1.TestQuarantine
+	7,  // 32: controlplane.v1.TestFlakeEvent.signal:type_name -> controlplane.v1.TestFlakeSignal
+	8,  // 33: controlplane.v1.TestFlakeEvent.verdict:type_name -> controlplane.v1.TestFlakeVerdict
+	61, // 34: controlplane.v1.TestFlakeEvent.at:type_name -> google.protobuf.Timestamp
+	0,  // 35: controlplane.v1.TestUploadPart.encoding:type_name -> controlplane.v1.TestPayloadEncoding
+	1,  // 36: controlplane.v1.RecordTestRunRequest.source:type_name -> controlplane.v1.TestRunSource
+	13, // 37: controlplane.v1.RecordTestRunRequest.ci:type_name -> controlplane.v1.TestRunCI
+	61, // 38: controlplane.v1.RecordTestRunRequest.started_at:type_name -> google.protobuf.Timestamp
+	61, // 39: controlplane.v1.RecordTestRunRequest.finished_at:type_name -> google.protobuf.Timestamp
+	27, // 40: controlplane.v1.RecordTestRunRequest.results:type_name -> controlplane.v1.TestUploadPart
+	27, // 41: controlplane.v1.RecordTestRunRequest.coverage:type_name -> controlplane.v1.TestUploadPart
+	27, // 42: controlplane.v1.RecordTestRunRequest.diff:type_name -> controlplane.v1.TestUploadPart
+	14, // 43: controlplane.v1.RecordTestRunRequest.flake_policy:type_name -> controlplane.v1.TestFlakePolicy
+	3,  // 44: controlplane.v1.RecordTestRunResponse.ingest_state:type_name -> controlplane.v1.TestRunIngestState
+	19, // 45: controlplane.v1.GetTestSummaryResponse.latest:type_name -> controlplane.v1.TestCommitReport
+	22, // 46: controlplane.v1.GetTestSummaryResponse.coverage_trend:type_name -> controlplane.v1.TestCoveragePoint
+	21, // 47: controlplane.v1.GetTestSummaryResponse.release_markers:type_name -> controlplane.v1.TestReleaseMarker
+	20, // 48: controlplane.v1.GetTestSummaryResponse.last_run:type_name -> controlplane.v1.TestRunSummary
+	23, // 49: controlplane.v1.GetTestSummaryResponse.low_coverage_packages:type_name -> controlplane.v1.TestPackageCoverage
+	32, // 50: controlplane.v1.GetTestSummaryResponse.host_health:type_name -> controlplane.v1.TestHostHealth
+	1,  // 51: controlplane.v1.ListTestRunsRequest.source:type_name -> controlplane.v1.TestRunSource
+	2,  // 52: controlplane.v1.ListTestRunsRequest.outcome:type_name -> controlplane.v1.TestRunOutcome
+	20, // 53: controlplane.v1.ListTestRunsResponse.runs:type_name -> controlplane.v1.TestRunSummary
+	11, // 54: controlplane.v1.TestFailure.test:type_name -> controlplane.v1.TestKey
+	8,  // 55: controlplane.v1.TestFailure.verdict:type_name -> controlplane.v1.TestFlakeVerdict
+	11, // 56: controlplane.v1.TestTiming.test:type_name -> controlplane.v1.TestKey
+	20, // 57: controlplane.v1.GetTestRunResponse.run:type_name -> controlplane.v1.TestRunSummary
+	36, // 58: controlplane.v1.GetTestRunResponse.failures:type_name -> controlplane.v1.TestFailure
+	11, // 59: controlplane.v1.GetTestRunResponse.retry_passes:type_name -> controlplane.v1.TestKey
+	37, // 60: controlplane.v1.GetTestRunResponse.slowest:type_name -> controlplane.v1.TestTiming
+	10, // 61: controlplane.v1.TestCoverageNode.kind:type_name -> controlplane.v1.TestCoverageNodeKind
+	15, // 62: controlplane.v1.TestCoverageNode.combined:type_name -> controlplane.v1.TestStatementCoverage
+	59, // 63: controlplane.v1.TestCoverageNode.lanes:type_name -> controlplane.v1.TestCoverageNode.LanesEntry
+	16, // 64: controlplane.v1.TestCoverageNode.diff:type_name -> controlplane.v1.TestDiffCoverage
+	18, // 65: controlplane.v1.GetCoverageResponse.coverage:type_name -> controlplane.v1.TestCoverage
+	40, // 66: controlplane.v1.GetCoverageResponse.children:type_name -> controlplane.v1.TestCoverageNode
+	60, // 67: controlplane.v1.TestLineCoverage.hits:type_name -> controlplane.v1.TestLineCoverage.HitsEntry
+	18, // 68: controlplane.v1.GetFileCoverageResponse.coverage:type_name -> controlplane.v1.TestCoverage
+	43, // 69: controlplane.v1.GetFileCoverageResponse.lines:type_name -> controlplane.v1.TestLineCoverage
+	9,  // 70: controlplane.v1.GetReleaseTestsResponse.status:type_name -> controlplane.v1.TestEvidenceStatus
+	19, // 71: controlplane.v1.GetReleaseTestsResponse.report:type_name -> controlplane.v1.TestCommitReport
+	11, // 72: controlplane.v1.GetReleaseTestsResponse.new_failures:type_name -> controlplane.v1.TestKey
+	25, // 73: controlplane.v1.GetReleaseTestsResponse.new_flakes:type_name -> controlplane.v1.TestFlake
+	6,  // 74: controlplane.v1.ListFlakyTestsRequest.state:type_name -> controlplane.v1.TestFlakeState
+	25, // 75: controlplane.v1.ListFlakyTestsResponse.tests:type_name -> controlplane.v1.TestFlake
+	4,  // 76: controlplane.v1.TestOutcome.status:type_name -> controlplane.v1.TestCaseStatus
+	61, // 77: controlplane.v1.TestOutcome.at:type_name -> google.protobuf.Timestamp
+	8,  // 78: controlplane.v1.TestFailureSignature.verdict:type_name -> controlplane.v1.TestFlakeVerdict
+	61, // 79: controlplane.v1.TestFailureSignature.first_seen_at:type_name -> google.protobuf.Timestamp
+	61, // 80: controlplane.v1.TestFailureSignature.last_seen_at:type_name -> google.protobuf.Timestamp
+	25, // 81: controlplane.v1.GetTestResponse.flake:type_name -> controlplane.v1.TestFlake
+	50, // 82: controlplane.v1.GetTestResponse.outcomes:type_name -> controlplane.v1.TestOutcome
+	26, // 83: controlplane.v1.GetTestResponse.events:type_name -> controlplane.v1.TestFlakeEvent
+	51, // 84: controlplane.v1.GetTestResponse.signatures:type_name -> controlplane.v1.TestFailureSignature
+	15, // 85: controlplane.v1.TestLanguageCoverage.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
+	15, // 86: controlplane.v1.TestCoverage.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
+	15, // 87: controlplane.v1.TestPackageCoverage.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
+	15, // 88: controlplane.v1.TestCoverageNode.LanesEntry.value:type_name -> controlplane.v1.TestStatementCoverage
+	28, // 89: controlplane.v1.TestsService.RecordTestRun:input_type -> controlplane.v1.RecordTestRunRequest
+	30, // 90: controlplane.v1.TestsService.GetTestSummary:input_type -> controlplane.v1.GetTestSummaryRequest
+	33, // 91: controlplane.v1.TestsService.ListTestRuns:input_type -> controlplane.v1.ListTestRunsRequest
+	35, // 92: controlplane.v1.TestsService.GetTestRun:input_type -> controlplane.v1.GetTestRunRequest
+	39, // 93: controlplane.v1.TestsService.GetCoverage:input_type -> controlplane.v1.GetCoverageRequest
+	42, // 94: controlplane.v1.TestsService.GetFileCoverage:input_type -> controlplane.v1.GetFileCoverageRequest
+	45, // 95: controlplane.v1.TestsService.GetReleaseTests:input_type -> controlplane.v1.GetReleaseTestsRequest
+	47, // 96: controlplane.v1.TestsService.ListFlakyTests:input_type -> controlplane.v1.ListFlakyTestsRequest
+	49, // 97: controlplane.v1.TestsService.GetTest:input_type -> controlplane.v1.GetTestRequest
+	53, // 98: controlplane.v1.TestsService.HasCoverageBlob:input_type -> controlplane.v1.HasCoverageBlobRequest
+	29, // 99: controlplane.v1.TestsService.RecordTestRun:output_type -> controlplane.v1.RecordTestRunResponse
+	31, // 100: controlplane.v1.TestsService.GetTestSummary:output_type -> controlplane.v1.GetTestSummaryResponse
+	34, // 101: controlplane.v1.TestsService.ListTestRuns:output_type -> controlplane.v1.ListTestRunsResponse
+	38, // 102: controlplane.v1.TestsService.GetTestRun:output_type -> controlplane.v1.GetTestRunResponse
+	41, // 103: controlplane.v1.TestsService.GetCoverage:output_type -> controlplane.v1.GetCoverageResponse
+	44, // 104: controlplane.v1.TestsService.GetFileCoverage:output_type -> controlplane.v1.GetFileCoverageResponse
+	46, // 105: controlplane.v1.TestsService.GetReleaseTests:output_type -> controlplane.v1.GetReleaseTestsResponse
+	48, // 106: controlplane.v1.TestsService.ListFlakyTests:output_type -> controlplane.v1.ListFlakyTestsResponse
+	52, // 107: controlplane.v1.TestsService.GetTest:output_type -> controlplane.v1.GetTestResponse
+	54, // 108: controlplane.v1.TestsService.HasCoverageBlob:output_type -> controlplane.v1.HasCoverageBlobResponse
+	99, // [99:109] is the sub-list for method output_type
+	89, // [89:99] is the sub-list for method input_type
+	89, // [89:89] is the sub-list for extension type_name
+	89, // [89:89] is the sub-list for extension extendee
+	0,  // [0:89] is the sub-list for field type_name
 }
 
 func init() { file_services_tests_v1_tests_proto_init() }
@@ -5451,36 +5604,36 @@ func file_services_tests_v1_tests_proto_init() {
 	if File_services_tests_v1_tests_proto != nil {
 		return
 	}
-	file_services_tests_v1_tests_proto_msgTypes[6].OneofWrappers = []any{}
-	file_services_tests_v1_tests_proto_msgTypes[8].OneofWrappers = []any{}
-	file_services_tests_v1_tests_proto_msgTypes[11].OneofWrappers = []any{}
-	file_services_tests_v1_tests_proto_msgTypes[16].OneofWrappers = []any{}
-	file_services_tests_v1_tests_proto_msgTypes[18].OneofWrappers = []any{}
-	file_services_tests_v1_tests_proto_msgTypes[21].OneofWrappers = []any{}
+	file_services_tests_v1_tests_proto_msgTypes[7].OneofWrappers = []any{}
+	file_services_tests_v1_tests_proto_msgTypes[9].OneofWrappers = []any{}
+	file_services_tests_v1_tests_proto_msgTypes[12].OneofWrappers = []any{}
+	file_services_tests_v1_tests_proto_msgTypes[17].OneofWrappers = []any{}
+	file_services_tests_v1_tests_proto_msgTypes[19].OneofWrappers = []any{}
 	file_services_tests_v1_tests_proto_msgTypes[22].OneofWrappers = []any{}
 	file_services_tests_v1_tests_proto_msgTypes[23].OneofWrappers = []any{}
-	file_services_tests_v1_tests_proto_msgTypes[27].OneofWrappers = []any{
+	file_services_tests_v1_tests_proto_msgTypes[24].OneofWrappers = []any{}
+	file_services_tests_v1_tests_proto_msgTypes[28].OneofWrappers = []any{
 		(*GetCoverageRequest_GitCommit)(nil),
 		(*GetCoverageRequest_ReleaseVersion)(nil),
 		(*GetCoverageRequest_EnvironmentId)(nil),
 	}
-	file_services_tests_v1_tests_proto_msgTypes[30].OneofWrappers = []any{
+	file_services_tests_v1_tests_proto_msgTypes[31].OneofWrappers = []any{
 		(*GetFileCoverageRequest_GitCommit)(nil),
 		(*GetFileCoverageRequest_ReleaseVersion)(nil),
 		(*GetFileCoverageRequest_EnvironmentId)(nil),
 	}
-	file_services_tests_v1_tests_proto_msgTypes[33].OneofWrappers = []any{}
 	file_services_tests_v1_tests_proto_msgTypes[34].OneofWrappers = []any{}
 	file_services_tests_v1_tests_proto_msgTypes[35].OneofWrappers = []any{}
-	file_services_tests_v1_tests_proto_msgTypes[37].OneofWrappers = []any{}
-	file_services_tests_v1_tests_proto_msgTypes[41].OneofWrappers = []any{}
+	file_services_tests_v1_tests_proto_msgTypes[36].OneofWrappers = []any{}
+	file_services_tests_v1_tests_proto_msgTypes[38].OneofWrappers = []any{}
+	file_services_tests_v1_tests_proto_msgTypes[42].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_tests_v1_tests_proto_rawDesc), len(file_services_tests_v1_tests_proto_rawDesc)),
-			NumEnums:      10,
-			NumMessages:   49,
+			NumEnums:      11,
+			NumMessages:   50,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

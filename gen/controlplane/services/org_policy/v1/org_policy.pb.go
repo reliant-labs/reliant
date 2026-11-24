@@ -1105,13 +1105,13 @@ const file_services_org_policy_v1_org_policy_proto_rawDesc = "" +
 	"\x1cListOrgPolicyDenialsResponse\x12=\n" +
 	"\x06counts\x18\x01 \x03(\v2%.controlplane.v1.OrgPolicyDenialCountR\x06counts\x12#\n" +
 	"\rrefused_total\x18\x02 \x01(\x03R\frefusedTotal\x12#\n" +
-	"\raudited_total\x18\x03 \x01(\x03R\fauditedTotal2\x9c\x04\n" +
-	"\x10OrgPolicyService\x12[\n" +
-	"\fGetOrgPolicy\x12$.controlplane.v1.GetOrgPolicyRequest\x1a%.controlplane.v1.GetOrgPolicyResponse\x12d\n" +
-	"\x0fUpdateOrgPolicy\x12'.controlplane.v1.UpdateOrgPolicyRequest\x1a(.controlplane.v1.UpdateOrgPolicyResponse\x12g\n" +
-	"\x10PreviewOrgPolicy\x12(.controlplane.v1.PreviewOrgPolicyRequest\x1a).controlplane.v1.PreviewOrgPolicyResponse\x12g\n" +
-	"\x10GetMyPolicyUsage\x12(.controlplane.v1.GetMyPolicyUsageRequest\x1a).controlplane.v1.GetMyPolicyUsageResponse\x12s\n" +
-	"\x14ListOrgPolicyDenials\x12,.controlplane.v1.ListOrgPolicyDenialsRequest\x1a-.controlplane.v1.ListOrgPolicyDenialsResponseB\xda\x01\n" +
+	"\raudited_total\x18\x03 \x01(\x03R\fauditedTotal2\xb0\x04\n" +
+	"\x10OrgPolicyService\x12`\n" +
+	"\fGetOrgPolicy\x12$.controlplane.v1.GetOrgPolicyRequest\x1a%.controlplane.v1.GetOrgPolicyResponse\"\x03\x90\x02\x01\x12d\n" +
+	"\x0fUpdateOrgPolicy\x12'.controlplane.v1.UpdateOrgPolicyRequest\x1a(.controlplane.v1.UpdateOrgPolicyResponse\x12l\n" +
+	"\x10PreviewOrgPolicy\x12(.controlplane.v1.PreviewOrgPolicyRequest\x1a).controlplane.v1.PreviewOrgPolicyResponse\"\x03\x90\x02\x01\x12l\n" +
+	"\x10GetMyPolicyUsage\x12(.controlplane.v1.GetMyPolicyUsageRequest\x1a).controlplane.v1.GetMyPolicyUsageResponse\"\x03\x90\x02\x01\x12x\n" +
+	"\x14ListOrgPolicyDenials\x12,.controlplane.v1.ListOrgPolicyDenialsRequest\x1a-.controlplane.v1.ListOrgPolicyDenialsResponse\"\x03\x90\x02\x01B\xda\x01\n" +
 	"\x13com.controlplane.v1B\x0eOrgPolicyProtoP\x01ZVgithub.com/reliant-labs/reliant/gen/controlplane/services/org_policy/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (

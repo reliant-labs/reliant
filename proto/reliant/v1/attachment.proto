@@ -25,7 +25,9 @@ service AttachmentService {
   }
 
   // GetAttachment retrieves an attachment by ID (includes file content)
-  rpc GetAttachment(GetAttachmentRequest) returns (GetAttachmentResponse) {}
+  rpc GetAttachment(GetAttachmentRequest) returns (GetAttachmentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // DeleteAttachment removes an attachment by ID
   rpc DeleteAttachment(DeleteAttachmentRequest) returns (DeleteAttachmentResponse) {

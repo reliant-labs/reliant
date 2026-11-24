@@ -16,7 +16,14 @@
  *   - the test seam (`setTransport`);
  *   - a shell's own transport (`installShellTransport`): the public demo
  *     host answers every RPC from forge's mock transport and reaches no
- *     real backend at all (Forge/Demo/demoData/demoTransport.ts).
+ *     real backend at all (Forge/Demo/demoTransport.ts);
+ *   - fixture mode's transports (`installFixtureTransport`): one fixture
+ *     transport per route, each behind that route's REAL interceptor chain,
+ *     so a fixture pack answers exactly what the live path would have sent
+ *     (lib/fixturesConfig.ts, src/fixtures/install.ts).
+ *
+ * Precedence, highest first: the test seam, a shell's transport, fixture
+ * mode, forge's mock mode (VITE_MOCK_API), the live routes.
  *
  * The interceptor chain every route runs is `buildInterceptors` in
  * `api/transport.ts`: forge's runtime interceptors (error normalization, auth)
@@ -51,7 +58,7 @@
  * is the guard.
  */
 
-import { createClient, type Client, type Transport } from "@connectrpc/connect";
+import { createClient, type Client, type Interceptor, type Transport } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import type { DescMethod, DescService } from "@bufbuild/protobuf";
 import { buildInterceptors, setCurrentBaseURL, type TransportBackend } from "@/api/transport";
@@ -313,6 +320,37 @@ export function installShellTransport(t: Transport | Promise<Transport> | null):
 }
 
 /**
+ * Builds fixture mode's transport for one route, given that route's real
+ * interceptor chain (`buildInterceptors`), which it must run.
+ */
+export type FixtureTransportFactory = (route: TransportRoute, interceptors: Interceptor[]) => Transport;
+
+let _fixtures: { make: FixtureTransportFactory; built: Map<TransportRoute, Transport> } | null = null;
+
+/**
+ * Fixture mode: answer every route from `make`'s transport (null turns it
+ * off), installed once at boot by src/fixtures/install.ts, before any client
+ * is used. Each route's transport is built on first use with that route's
+ * interceptors (auth, org header, error normalization, …), exactly the chain
+ * the live transport runs; no base URL is consulted. Below the test seam and
+ * a shell's transport, above mock mode and the live routes.
+ */
+export function installFixtureTransport(make: FixtureTransportFactory | null): void {
+  _fixtures = make ? { make, built: new Map() } : null;
+}
+
+function fixtureTransportFor(route: TransportRoute): Transport | null {
+  if (!_fixtures) return null;
+  let built = _fixtures.built.get(route);
+  if (!built) {
+    const spec = ROUTES[route];
+    built = _fixtures.make(route, buildInterceptors({ withAuth: spec.withAuth, backend: spec.backend }));
+    _fixtures.built.set(route, built);
+  }
+  return built;
+}
+
+/**
  * Test seam: send EVERY route to `t` (null restores the real routing).
  * `renderWithTransport` in src/lib/test-utils and the generated hook tests
  * call it; production code never does.
@@ -326,14 +364,18 @@ export function setTransport(t: Transport | null): () => void {
 }
 
 /**
- * The app's transport: every route, behind the test seam and mock mode.
+ * The app's transport: every route, behind the test seam, a shell's
+ * transport, fixture mode and mock mode, in that order.
  * `createClient(Service, transport)` is what connectClient() does.
  */
 export const transport: Transport = routed((method) => {
   if (_override) return _override;
   if (_shell) return _shell;
+  const route = routeFor(method.parent.typeName, method.name);
+  const fixtures = fixtureTransportFor(route);
+  if (fixtures) return fixtures;
   if (MOCK_MODE === "true" || MOCK_MODE === "hybrid") return mockTransport();
-  return transportFor(routeFor(method.parent.typeName, method.name));
+  return transportFor(route);
 });
 
 const _clients = new WeakMap<DescService, Client<DescService>>();

@@ -98,12 +98,14 @@ func NewTaskServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+TaskServiceGetTaskProcedure,
 			connect.WithSchema(taskServiceMethods.ByName("GetTask")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listTasks: connect.NewClient[v1.ListTasksRequest, v1.ListTasksResponse](
 			httpClient,
 			baseURL+TaskServiceListTasksProcedure,
 			connect.WithSchema(taskServiceMethods.ByName("ListTasks")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateTask: connect.NewClient[v1.UpdateTaskRequest, v1.UpdateTaskResponse](
@@ -134,6 +136,7 @@ func NewTaskServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+TaskServiceListReadyTasksProcedure,
 			connect.WithSchema(taskServiceMethods.ByName("ListReadyTasks")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -229,12 +232,14 @@ func NewTaskServiceHandler(svc TaskServiceHandler, opts ...connect.HandlerOption
 		TaskServiceGetTaskProcedure,
 		svc.GetTask,
 		connect.WithSchema(taskServiceMethods.ByName("GetTask")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	taskServiceListTasksHandler := connect.NewUnaryHandler(
 		TaskServiceListTasksProcedure,
 		svc.ListTasks,
 		connect.WithSchema(taskServiceMethods.ByName("ListTasks")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	taskServiceUpdateTaskHandler := connect.NewUnaryHandler(
@@ -265,6 +270,7 @@ func NewTaskServiceHandler(svc TaskServiceHandler, opts ...connect.HandlerOption
 		TaskServiceListReadyTasksProcedure,
 		svc.ListReadyTasks,
 		connect.WithSchema(taskServiceMethods.ByName("ListReadyTasks")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.TaskService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

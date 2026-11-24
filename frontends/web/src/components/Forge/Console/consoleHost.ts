@@ -20,17 +20,30 @@ import { useAuthStore } from "@/store/authStore";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
 /**
- * The Reliant project that declares `forgeProject`: the current one when it
- * does (two checkouts of one repo both declare it), else the first that does.
+ * Which of the person's checkouts backs the console of `forgeProject`:
+ *
+ *   one       the project the URL's `?project=` names, when it declares the
+ *             app; else the only project that does.
+ *   several   no `?project=` (or one naming no checkout of this app), and
+ *             several projects declare the name: two checkouts of one repo,
+ *             or two repos whose forge.yaml share a name. The console asks
+ *             (ConsoleCheckoutPicker) rather than guess: the current project
+ *             is the tab's history, not the URL, so it must not decide.
+ *   none      no project declares it. Still a scope: the pages read the
+ *             control plane by the name, with no daemon.
  */
-export function projectDeclaring(
-  forgeProject: string,
-  projects: readonly Project[],
-  current: Project | null
-): Project | null {
-  const declares = (project: Project) => (project.forge_project_name ?? "").trim() === forgeProject;
-  if (current && declares(current)) return current;
-  return projects.find(declares) ?? null;
+export type ConsoleCheckout =
+  | { kind: "one"; project: Project }
+  | { kind: "several"; candidates: Project[] }
+  | { kind: "none" };
+
+export function consoleCheckout(forgeProject: string, projects: readonly Project[], pinned?: string | null): ConsoleCheckout {
+  const declaring = projects.filter((project) => (project.forge_project_name ?? "").trim() === forgeProject);
+  const named = pinned ? declaring.find((project) => project.id === pinned) : undefined;
+  if (named) return { kind: "one", project: named };
+  if (declaring.length === 1) return { kind: "one", project: declaring[0]! };
+  if (declaring.length > 1) return { kind: "several", candidates: declaring };
+  return { kind: "none" };
 }
 
 export interface ConsoleReliantProject {
@@ -38,10 +51,13 @@ export interface ConsoleReliantProject {
   listed: boolean;
   /** The Reliant project declaring the forge app, once found. */
   projectId: string | null;
+  /** Several checkouts declare the app and the URL names none of them: the console asks which. */
+  candidates: Project[] | null;
 }
 
 /**
- * The Reliant project behind `forgeProject`, made the current project once
+ * The Reliant project behind `forgeProject` (consoleCheckout; `pinned` is
+ * the URL's `?project=`), made the current project once
  * found when `select` (the page on screen is this app's console). `listed`
  * once the project list has answered (or failed): until then a forge name
  * matches nothing only because nothing is loaded yet. The demo shell
@@ -57,18 +73,27 @@ export interface ConsoleReliantProject {
  * (the 2026-11-23 "can't open a chat" incident: a project whose app is
  * declared by another project could not keep any of its chats open).
  */
-export function useConsoleReliantProject(forgeProject: string, { select = true }: { select?: boolean } = {}): ConsoleReliantProject {
+export function useConsoleReliantProject(
+  forgeProject: string,
+  { select = true, pinned }: { select?: boolean; pinned?: string | null } = {},
+): ConsoleReliantProject {
   const demo = isDemoShell();
   const { projects, isLoading: listing } = useProjects();
   const listed = demo || projects.length > 0 || !listing;
   const currentProject = useProjectStore((state) => state.currentProject);
   const selectProject = useProjectStore((state) => state.selectProject);
 
-  const match = listed && !demo ? projectDeclaring(forgeProject, projects, currentProject) : null;
+  const checkout = useMemo(
+    () => (listed && !demo ? consoleCheckout(forgeProject, projects, pinned) : ({ kind: "none" } as const)),
+    [listed, demo, forgeProject, projects, pinned]
+  );
+  const match = checkout.kind === "one" ? checkout.project : null;
   useEffect(() => {
-    if (select && match && match.id !== currentProject?.id) void selectProject(match);
+    // Context, not the person's pick: it is not remembered as the last
+    // project (another tab's bare entry would open it).
+    if (select && match && match.id !== currentProject?.id) void selectProject(match, { skipWorkspaceStateSave: true });
   }, [select, match, currentProject?.id, selectProject]);
-  return { listed, projectId: match?.id ?? null };
+  return { listed, projectId: match?.id ?? null, candidates: checkout.kind === "several" ? checkout.candidates : null };
 }
 
 export interface ConsoleUser {

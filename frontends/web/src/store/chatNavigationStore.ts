@@ -29,6 +29,8 @@
 
 import { navigateToChatUrl } from "../lib/chatRoute";
 import { chatListScope } from "../lib/chatProjectFilter";
+import { idsOfScope } from "../lib/urlState/shellScope";
+import { oneProjectOf, shellScopeNow } from "../lib/urlState/shellScopeStore";
 import { create } from "zustand";
 import { ChatState } from "../gen/reliant/v1/chat_pb";
 import { isWorkspaceClosed, workspaceOfChat } from "../lib/chatWorkspace";
@@ -101,9 +103,9 @@ async function getOrderedChatList(): Promise<Chat[]> {
   // renders from — so navigation order matches the sidebar exactly.
   // The sidebar's scope: the chat filter's projects (one, or several: the
   // list it reads for `?projects=`), or every project.
-  const { chatProjectFilterIds } = await import("../hooks/useChatProjectFilter");
-  const projectFilterId = useWorkspaceStateStore.getState().projectFilterId;
-  const scope = chatListScope(chatProjectFilterIds());
+  const shown = shellScopeNow();
+  const projectFilterId = oneProjectOf(shown);
+  const scope = chatListScope(idsOfScope(shown));
   const chats = getCachedChatList(scope);
   const mainWorktrees = getCachedListMainWorktrees(scope);
   const { sortOrder, viewMode, filters } = useChatListPreferencesStore.getState();
