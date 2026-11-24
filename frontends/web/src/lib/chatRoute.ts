@@ -58,10 +58,24 @@ export function chatShellRouteOf(pathname: string): ChatShellRoute | null {
 /** The org-less prefixes of the pages that name the open chat: a chat (and its threads), and the new-chat view. */
 export const CHAT_SHELL_PREFIXES: readonly string[] = [chatPath("", { org: null }), newChatPath({ org: null })];
 
-/** Whether `pathname` names the open chat itself: a chat, a thread, or the new-chat view. */
+const MOBILE_CHAT = /^\/m\/chats\/([^/]+)\/?$/;
+
+/**
+ * The phone's own chat pages (`/m/chats/<id>`, `/m/new`): they name the open
+ * chat too, but are not the desktop chat shell's pages, so chatShellRouteOf
+ * (whose kinds drive the desktop's own chat navigation) does not read them.
+ */
+export function mobileChatRouteOf(pathname: string): { kind: "new" } | { kind: "chat"; chatId: string } | null {
+  const path = orgFreePath(pathname);
+  if (path === "/m/new" || path === "/m/new/") return { kind: "new" };
+  const chat = MOBILE_CHAT.exec(path);
+  return chat ? { kind: "chat", chatId: decode(chat[1]) } : null;
+}
+
+/** Whether `pathname` names the open chat itself: a chat, a thread, or the new-chat view (the phone's included). */
 export function pathOwnsChat(pathname: string): boolean {
   const route = chatShellRouteOf(pathname);
-  return route?.kind === "chat" || route?.kind === "new";
+  return route?.kind === "chat" || route?.kind === "new" || mobileChatRouteOf(pathname) !== null;
 }
 
 interface RouterLike {
