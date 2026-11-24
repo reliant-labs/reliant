@@ -49,11 +49,17 @@ vi.mock('@tanstack/react-router', () => ({
     <a {...props}>{children}</a>
   ),
   useNavigate: () => navigate,
-  // No `worktreeId` — exercises the default (main worktree) path. The
-  // group-header "new chat in this workspace" override is covered in
+  // No `worktreeId` by default — exercises the default (main worktree) path.
+  // The group-header "new chat in this workspace" override is covered in
   // MobileChatList's own tests.
-  useSearch: () => ({}),
+  useSearch: () => routeSearch.current,
 }))
+// The page's URL search (`?project=`, `?machine=`, `?projects=`).
+const routeSearch = vi.hoisted(() => ({ current: {} as Record<string, unknown> }))
+/** Applies the navigation a pick made to the URL, as the router would. */
+function followNavigation(call = navigate.mock.calls.at(-1)?.[0] as { search: (prev: Record<string, unknown>) => Record<string, unknown> }) {
+  routeSearch.current = call.search(routeSearch.current)
+}
 
 vi.mock('../../../store/chatStore', () => ({
   useChatStore: Object.assign(vi.fn(), {
@@ -186,6 +192,7 @@ beforeEach(async () => {
   startChat.mockResolvedValue({ id: 'chat-9' })
   selectChat.mockReset()
   navigate.mockReset()
+  routeSearch.current = {}
 })
 
 describe('MobileNewChat', () => {
@@ -570,13 +577,19 @@ describe('MobileNewChat', () => {
       expect(order).toEqual([...order].sort((a, b) => a - b))
     })
 
-    it('makes a ready project the context project, without touching the URL', async () => {
+    it('puts a picked project in the URL (a push), never in the store', async () => {
+      routeSearch.current = { projects: 'p1', worktreeId: 'wt-main' }
       render(<MobileNewChat />)
       await userEvent.click(screen.getByRole('button', { name: /^Project/ }))
       await userEvent.click(screen.getByText('forge', { selector: 'p' }))
-      expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2' }), { restoreWorkspace: false })
+      expect(navigate).toHaveBeenCalledTimes(1)
+      const call = navigate.mock.calls[0][0]
+      expect(call).toMatchObject({ to: '/m/new' })
+      expect(call.replace).toBeUndefined()
+      // The list's scope stays for Back to it; the old project's workspace goes.
+      expect(call.search(routeSearch.current)).toEqual({ projects: 'p1', project: 'p2', machine: 'd-laptop', worktreeId: undefined })
+      expect(selectProject).not.toHaveBeenCalled()
       expect(createProjectFromRepo).not.toHaveBeenCalled()
-      expect(navigate).not.toHaveBeenCalled()
     })
 
     it('sets a project on no connected machine up on the chat\'s machine, then starts in it', async () => {
@@ -584,13 +597,30 @@ describe('MobileNewChat', () => {
       await userEvent.click(screen.getByRole('button', { name: /^Project/ }))
       await userEvent.click(screen.getByText('landing', { selector: 'p' }))
       expect(createProjectFromRepo).toHaveBeenCalledWith(expect.objectContaining({ cloneUrl: 'https://github.com/o/landing', daemonId: 'd-laptop', name: 'landing' }))
-      await waitFor(() => expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: 'p3' }), { restoreWorkspace: false }))
+      await waitFor(() => expect(navigate).toHaveBeenCalled())
+      expect(navigate.mock.calls[0][0].search({})).toMatchObject({ project: 'p3', machine: 'd-laptop' })
+    })
+
+    it('starts in the URL\'s project: ?project= over the scope, the scope over the context', async () => {
+      routeSearch.current = { projects: 'p2', project: 'p3' }
+      const view = render(<MobileNewChat />)
+      expect(screen.getByTestId('mobile-new-chat-project')).toHaveTextContent('landing')
+      routeSearch.current = { projects: 'p2' }
+      view.rerender(<MobileNewChat />)
+      expect(screen.getByTestId('mobile-new-chat-project')).toHaveTextContent('forge')
+      // The store has not followed (it is still p1): the send names the URL's project.
+      await userEvent.type(screen.getByLabelText('Message'), 'go')
+      await userEvent.click(screen.getByLabelText('Send'))
+      expect(startChat.mock.calls[0][7]).toEqual({ projectId: 'p2' })
+    })
+
+    it('passes over a ?project= that is not listed', () => {
+      routeSearch.current = { project: 'p-gone' }
+      render(<MobileNewChat />)
+      expect(screen.getByTestId('mobile-new-chat-project')).toHaveTextContent('reliant')
     })
 
     it.each(['ready', 'set-up'])('keeps the %s target across a project switch and sends on that machine', async (kind) => {
-      const { useProjectStore } = await import('../../../store/projectStore')
-      const state = useProjectStore.getState()
-      const originalProject = state.currentProject
       daemonList.current = [
         { daemonId: 'd-laptop', hostname: 'laptop', status: DaemonStatus.ACTIVE },
         { daemonId: 'd-other', hostname: 'other', status: DaemonStatus.ACTIVE },
@@ -600,30 +630,28 @@ describe('MobileNewChat', () => {
         { project_id: 'p1', daemon_id: 'd-laptop', install_state: ProjectInstallState.INSTALLED },
         { project_id: 'p2', daemon_id: kind === 'ready' ? 'd-other' : 'd-gone', install_state: ProjectInstallState.INSTALLED },
       ]
-      selectProject.mockImplementation(async (project) => { state.currentProject = project })
       const view = render(<MobileNewChat />)
-      try {
-        await userEvent.click(screen.getByRole('button', { name: /^Runs on/ }))
-        await userEvent.click(screen.getByRole('button', { name: /^other/ }))
-        await userEvent.click(screen.getByRole('button', { name: /^Project/ }))
-        await userEvent.click(screen.getByText('forge', { selector: 'p' }))
-        await waitFor(() => expect(selectProject).toHaveBeenCalled())
+      await userEvent.click(screen.getByRole('button', { name: /^Runs on/ }))
+      await userEvent.click(screen.getByRole('button', { name: /^other/ }))
+      await userEvent.click(screen.getByRole('button', { name: /^Project/ }))
+      await userEvent.click(screen.getByText('forge', { selector: 'p' }))
+      await waitFor(() => expect(navigate).toHaveBeenCalled())
+      followNavigation()
+      expect(routeSearch.current).toMatchObject({ project: 'p2', machine: 'd-other' })
+      view.rerender(<MobileNewChat />)
+      if (kind === 'set-up') {
+        expect(createProjectFromRepo).toHaveBeenCalledWith(expect.objectContaining({ daemonId: 'd-other' }))
+        // The queued clone has landed; refresh the placement query.
+        installList.current = [...installList.current, { project_id: 'p2', daemon_id: 'd-other', install_state: ProjectInstallState.INSTALLED }]
         view.rerender(<MobileNewChat />)
-        if (kind === 'set-up') {
-          expect(createProjectFromRepo).toHaveBeenCalledWith(expect.objectContaining({ daemonId: 'd-other' }))
-          // The queued clone has landed; refresh the placement query.
-          installList.current = [...installList.current, { project_id: 'p2', daemon_id: 'd-other', install_state: ProjectInstallState.INSTALLED }]
-          view.rerender(<MobileNewChat />)
-        } else {
-          expect(createProjectFromRepo).not.toHaveBeenCalled()
-        }
-        expect(screen.getByRole('button', { name: /^Runs on other/ })).toBeInTheDocument()
-        await userEvent.type(screen.getByLabelText('Message'), 'go')
-        await userEvent.click(screen.getByLabelText('Send'))
-        expect(startChat.mock.calls[0][6]).toEqual({ daemonId: 'd-other', noMachine: undefined })
-      } finally {
-        state.currentProject = originalProject
+      } else {
+        expect(createProjectFromRepo).not.toHaveBeenCalled()
       }
+      expect(screen.getByRole('button', { name: /^Runs on other/ })).toBeInTheDocument()
+      await userEvent.type(screen.getByLabelText('Message'), 'go')
+      await userEvent.click(screen.getByLabelText('Send'))
+      expect(startChat.mock.calls[0][6]).toEqual({ daemonId: 'd-other', noMachine: undefined })
+      expect(startChat.mock.calls[0][7]).toEqual({ projectId: 'p2' })
     })
 
     it('stays on the project and says why when the set-up fails', async () => {
@@ -632,7 +660,7 @@ describe('MobileNewChat', () => {
       await userEvent.click(screen.getByRole('button', { name: /^Project/ }))
       await userEvent.click(screen.getByText('landing', { selector: 'p' }))
       expect(await screen.findByRole('alert')).toBeInTheDocument()
-      expect(selectProject).not.toHaveBeenCalled()
+      expect(navigate).not.toHaveBeenCalled()
     })
 
     it('leaves out a project the person can only read', async () => {
