@@ -65,6 +65,7 @@ const { useShellCurrentProject } = await import("../useShellCurrentProject");
 const { SEVERAL_PROJECTS_PICK, useShellLastPick, useShellProject } = await import("../shellProject");
 const { useChatProjectFilterStore } = await import("@/hooks/useChatProjectFilter");
 const { useProjectStore } = await import("@/store/projectStore");
+const { publishShellScope, resetShellScopeForTests } = await import("@/lib/urlState/shellScopeStore");
 
 /** The page's project and the nav's, on the same route. */
 function renderBoth() {
@@ -78,6 +79,7 @@ beforeEach(() => {
   useProjectStore.setState({ currentProject: null });
 });
 afterEach(() => {
+  resetShellScopeForTests();
   useShellLastPick.setState({ key: null, several: [], focus: null });
   useChatProjectFilterStore.setState({ many: [] });
   useProjectStore.setState({ currentProject: null });
@@ -104,8 +106,10 @@ describe("useShellCurrentProject", () => {
   });
 
   it("follows the URL's choice of several: the focused project among them", () => {
-    useChatProjectFilterStore.setState({ many: ["p3", "p4"] });
+    location.search = { projects: "p3,p4", focus: "p4" };
     useShellLastPick.setState({ key: SEVERAL_PROJECTS_PICK, several: ["p3", "p4"], focus: "p4" });
+    // What the nav on screen publishes for that URL.
+    publishShellScope({ scope: { mode: "many", projectIds: ["p3", "p4"] }, focus: "p4" });
 
     const { result } = renderBoth();
 
@@ -140,5 +144,16 @@ describe("useShellCurrentProject", () => {
 
     expect(result.current.nav.key).toBe("app:storefront");
     expect(result.current.page).toBeNull();
+  });
+
+  it("is the one project the nav on screen shows, over its own resolution", () => {
+    useShellLastPick.setState({ key: "p2", focus: "p2" });
+    const { result, rerender } = renderBoth();
+    expect(result.current.page?.id).toBe("p2");
+
+    // The sidebar published another project (its route's, say): the page takes the nav's.
+    publishShellScope({ scope: { mode: "one", projectId: "p4" }, focus: null });
+    rerender();
+    expect(result.current.page?.id).toBe("p4");
   });
 });

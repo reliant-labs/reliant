@@ -13,9 +13,10 @@
  *
  * The URL is the truth on the chat home: a refresh or a shared link keeps the
  * choice, and arriving at `/` without the param is every project, as arriving
- * there from `/project/<id>` always was. The choice is also remembered in the
- * person's `sidebar.projects` setting (`filter`, per org), so a new tab that
- * opens on the bare home starts with the last choice.
+ * there from `/project/<id>` always was (`?projects=all` says so out loud).
+ * A tab's first bare home is filled from the tab's own default, else the
+ * last scope any tab showed, else the person's `sidebar.projects` setting
+ * (`filter`, per org), which a choice of several is also remembered in.
  *
  * `useChatProjectFilter({ sync: { pathname, search } })` runs the URL,
  * remembered-choice and org bridges, from the page's location: the sidebar
@@ -32,7 +33,9 @@ import { chatShellRouteOf } from "@/lib/chatRoute";
 import { orgFreePath } from "@/lib/paths/org";
 import { formatProjectsParam, normalizeProjectIds, parseProjectsParam, sameProjectSet } from "@/lib/chatProjectFilter";
 import { useOrgScope } from "@/lib/orgScope";
-import { chooseProject, useProjectStore } from "@/store/projectStore";
+import { fillScope, seededScope } from "@/lib/urlState/shellScopeStore";
+import { ALL_PROJECTS_PARAM } from "@/lib/urlState/shellScope";
+import { chooseProject, syncProjectFilterUrl, useProjectStore } from "@/store/projectStore";
 import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 
 import { useProjects } from "./project-queries";
@@ -75,7 +78,7 @@ export function useChatProjectFilterIds(): readonly string[] {
 }
 
 type RouterLike = {
-  state: { location: { pathname: string } };
+  state: { location: { pathname: string; search?: unknown } };
   navigate: (opts: { to: string; search?: unknown; replace?: boolean }) => unknown;
 };
 
@@ -142,9 +145,9 @@ export function useChatProjectFilter(options: { sync?: ChatProjectFilterLocation
           void chooseProject(null);
           return;
         }
-        if (isChatShellPath(pathname)) {
-          // Every project: the page drops the param, in place.
-          void router?.navigate({ to: router.state.location.pathname, search: dropProjects, replace: true });
+        // Every project: the page drops the param, in place (the console carries it too).
+        if (router && router.state.location.search && "projects" in (router.state.location.search as object)) {
+          void router.navigate({ to: router.state.location.pathname, search: dropProjects, replace: true });
         }
         return;
       }
@@ -155,9 +158,10 @@ export function useChatProjectFilter(options: { sync?: ChatProjectFilterLocation
       if (isChatHomePath(pathname)) {
         // From `/project/<id>` (one project) to the home naming several.
         void router?.navigate({ to: homePath(), search: withProjects(ids) });
-      } else if (isChatShellPath(pathname)) {
-        // A chat or the new-chat view stays on screen: its URL names the projects.
-        void router?.navigate({ to: router.state.location.pathname, search: withProjects(ids), replace: true });
+      } else if (router) {
+        // Any other page stays on screen: its URL names the projects (a chat,
+        // the new-chat view, an app's console carry them on).
+        void router.navigate({ to: router.state.location.pathname, search: withProjects(ids), replace: true });
       }
     },
     [],
@@ -221,20 +225,37 @@ export function useChatProjectFilter(options: { sync?: ChatProjectFilterLocation
     }
   }, [sync, org.orgId]);
 
-  // A new tab on the bare home starts with the remembered choice, once the
+  // The first bare home of a tab (its URL names nothing) is filled, once the
   // setting and the project list have loaded (a project since removed is
-  // left out).
+  // left out): this tab's own last scope, else the last one any tab showed
+  // (lib/urlState/shellScopeStore.ts seededScope), else the person's
+  // remembered choice of several. Never another tab's choice once this one
+  // has its own, and never a page whose URL names a scope.
   const firstPath = useRef(pathname);
+  const firstNamesScope = useRef(options.sync?.search.projects !== undefined);
   const remembered = prefs.prefs.filter;
   const prefsSettled = prefs.writable || prefs.loadFailed;
   useEffect(() => {
     if (!sync || restoredThisTab || !prefsSettled || projectsLoading) return;
     restoredThisTab = true;
-    if (orgFreePath(firstPath.current) !== "/" || paramKey || useWorkspaceStateStore.getState().projectFilterId) return;
-    const known = new Set(projects.map((p) => p.id));
-    const ids = remembered.filter((id) => known.has(id));
-    if (ids.length > 0) apply(ids);
-  }, [sync, prefsSettled, projectsLoading, projects, remembered, paramKey, apply]);
+    if (orgFreePath(firstPath.current) !== "/" || firstNamesScope.current || useWorkspaceStateStore.getState().projectFilterId) return;
+    const filled = fillScope({
+      tabDefault: seededScope().scope,
+      setting: remembered,
+      listed: new Set(projects.map((p) => p.id)),
+      contextProjectId: null,
+    });
+    if (!filled || filled === "wait") return;
+    if (filled.mode === "one") {
+      // The project's chats: `/project/<id>` (ProjectFilterRouteSync filters to it).
+      syncProjectFilterUrl(filled.projectId);
+    } else if (filled.mode === "many") {
+      apply(filled.projectIds);
+    } else {
+      const router = getRouter();
+      void router?.navigate({ to: homePath(), search: (prev: Record<string, unknown>) => ({ ...prev, projects: ALL_PROJECTS_PARAM }), replace: true });
+    }
+  }, [sync, prefsSettled, projectsLoading, projects, remembered, apply]);
 
   return useMemo(() => ({ ...state, set, clear }), [state, set, clear]);
 }

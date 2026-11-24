@@ -91,7 +91,6 @@ import {
   forgeLegacySearchSchema,
   forgeOrgObsSearchSchema,
   forgeResolveSearchSchema,
-  PROJECTS_CARRIED,
   projectsCarrySearchSchema,
   CONSOLE_CHECKOUT_PARAM,
   forgeConsoleCheckoutSearchSchema,
@@ -194,10 +193,10 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const layoutRoute = createRoute({
     getParentRoute,
     id: '_forge',
-    // The chat list's project filter rides through the console too, so a
-    // tab's selection survives a visit to an app.
+    // The chat list's project filter rides through the console too (the
+    // root's retainSearchParams, routes.tsx), so a tab's selection survives
+    // a visit to an app.
     validateSearch: projectsCarrySearchSchema,
-    search: { middlewares: [retainSearchParams([...PROJECTS_CARRIED])] },
     component: components.layout,
   })
 

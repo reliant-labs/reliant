@@ -11,7 +11,10 @@
  *  - an agent card on Errors, Traces, Alerts and Releases ("put an agent on
  *    it"), and the sample shop's issues explained in plain words;
  *  - the environments in promotion order (dev, staging, prod), and on a phone
- *    the tour, Install Forge and the telemetry notice in the drawer.
+ *    the tour, Install Forge and the telemetry notice in the drawer;
+ *  - no Usage or Speed insights row: the sample shop has nothing to show on
+ *    them (DEMO_HIDDEN_PAGES; demoShellRoutes.tsx sends their URLs to the
+ *    Overview).
  *
  * The guided tour walks this same console: its steps open the console's own
  * pages and ring the led pages' rows and cards.
@@ -23,12 +26,13 @@ import { Hammer, Home } from "lucide-react";
 import type { ProductAnalyticsHub } from "../Console/groupedNav";
 import { LedConsoleProvider, type LedConsoleHost } from "../Console/ledConsole";
 import { DemoDrawerActions } from "./DemoScreenActions";
-import { DEMO_SECTION_AGENTS, DEMO_SECTION_BUILT, DEMO_SECTION_HOME, DEMO_SECTION_RELEASES, demoSectionHref, type DemoSection } from "./demoPath";
+import { DEMO_HIDDEN_PAGES, DEMO_SECTION_AGENTS, DEMO_SECTION_BUILT, DEMO_SECTION_HOME, DEMO_SECTION_RELEASES, demoSectionHref, type DemoSection } from "./demoPath";
 import { PageAgentStrip } from "./sections/AgentCards";
 import { PEOPLE_DASHBOARD_KEYS } from "./sections/demoLinks";
 import { explainShopIssue } from "./sections/shopFacts";
 
 export const DEMO_ENV_ORDER = ["dev", "staging", "prod"] as const;
+
 
 const icon = (Icon: typeof Home) => <Icon className="h-4 w-4" aria-hidden="true" />;
 
@@ -75,6 +79,7 @@ export function DemoNavExtras({ section, children }: { section?: DemoSection; ch
       releasesExplainer: { href: demoSectionHref(DEMO_SECTION_RELEASES), label: "How releases work" },
       envOrder: DEMO_ENV_ORDER,
       drawerAppendix: <DemoDrawerActions />,
+      hiddenPages: DEMO_HIDDEN_PAGES,
     }),
     [section]
   );

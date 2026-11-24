@@ -45,6 +45,7 @@ import {
   type WireTiming,
 } from "@/services/controlPlane/tests/wire";
 
+import { runMatchesFilters } from "./runFilterFixture";
 import { FIXTURE_COMMIT, FIXTURE_LAST_RUN, FIXTURE_NOW, FIXTURE_RELEASES, fixtureSummaryResponse, type TestsScenario } from "./fixtures";
 
 const MINUTE = 60_000;
@@ -180,20 +181,7 @@ export function fixtureRuns(): WireRunSummary[] {
 }
 
 function matches(r: WireRunSummary, filters: RunsRequest["filters"]): boolean {
-  const SOURCE = { ci: WireRunSource.CI, local: WireRunSource.LOCAL, env: WireRunSource.ENV, confirm: WireRunSource.CONFIRM } as const;
-  const OUTCOME = { passed: WireRunOutcome.PASSED, failed: WireRunOutcome.FAILED, undetermined: WireRunOutcome.UNDETERMINED } as const;
-  if (filters.environmentId && r.environmentId !== filters.environmentId) return false;
-  if (filters.branch && r.branch !== filters.branch) return false;
-  if (filters.gitCommit && !r.gitCommit.startsWith(filters.gitCommit)) return false;
-  if (filters.releaseVersion && !(filters.releaseVersion === FIXTURE_RELEASES[1] && r.gitCommit === releaseCommit())) return false;
-  if (filters.lane && r.lane !== filters.lane) return false;
-  if (filters.source && r.source !== SOURCE[filters.source]) return false;
-  if (filters.outcome) {
-    // What the page shows: a run still being ingested is undetermined, whatever it will be.
-    const outcome = r.ingestState === WireIngestState.INGESTED ? r.outcome : WireRunOutcome.UNDETERMINED;
-    if ((outcome === WireRunOutcome.UNSPECIFIED ? WireRunOutcome.UNDETERMINED : outcome) !== OUTCOME[filters.outcome]) return false;
-  }
-  return true;
+  return runMatchesFilters(r, filters, (version) => (version === FIXTURE_RELEASES[1] ? releaseCommit() : null));
 }
 
 /** ListTestRuns: the scenario's runs that match, in two pages when there are more than the first holds. */

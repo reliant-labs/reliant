@@ -11,6 +11,10 @@
 import { createRouterTransport } from "@connectrpc/connect";
 import { describe, expect, it, vi } from "vitest";
 
+import { TestsService } from "@/gen/controlplane/services/tests/v1/tests_pb";
+import { VulnerabilityService } from "@/gen/controlplane/services/vulnerability/v1/vulnerability_pb";
+import { CoverageSourceService } from "@/gen/reliant/v1/coverage_source_pb";
+
 import { createShopTransport, shopPack } from "../shop";
 import { DEMO_DEFAULT_SERVICES } from "../shop/handlers/defaults";
 import { assertPureFixturePack, checkFixturePack, fixturePackAnswers } from "../transport";
@@ -27,7 +31,9 @@ describe("the shop pack (the public demo's)", () => {
   const pack = shopPack({ now: FIXED_NOW });
 
   it("answers every read with a message that survives the wire", async () => {
-    expect(await checkFixturePack(pack, { services: DEMO_DEFAULT_SERVICES, now: () => FIXED_NOW })).toEqual([]);
+    // Story-only services have explicit handlers, not generated demo defaults.
+    const services = [...DEMO_DEFAULT_SERVICES, VulnerabilityService, TestsService, CoverageSourceService];
+    expect(await checkFixturePack(pack, { services, now: () => FIXED_NOW })).toEqual([]);
   });
 
   it("answers no write from fixtures, in any layer it extends", () => {
