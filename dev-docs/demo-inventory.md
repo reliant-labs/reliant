@@ -102,6 +102,53 @@ Working deep links (once the reviewed demo release is deployed):
 - `/forge/p/shop/releases/v1.8.3?env=prod`
 - `/forge/p/shop/workloads/dev/api?env=dev&tab=config`
 
+## Bundle size
+
+The demo bundle has a size budget, `frontends/web/scripts/demo/bundle-budget.json`.
+`frontends/web/scripts/demo/bundle-size.mjs` measures a build from its
+`DEMO_BUNDLE_REPORT` and its `index.html`:
+
+- **initial**: the entry script plus every `modulepreload` and stylesheet link
+  in the built `index.html`, the build's own `assets/` files only (not the
+  host's `/config.js`). This is what the first page load fetches.
+- **total**: every JS and CSS file the build emits.
+
+Gzip is level 9, and brotli uses zlib's defaults. The budget caps initial gzip
+and total gzip.
+
+```sh
+task demo:bundle-size                                   # build, measure, fail over budget
+task demo:bundle-size -- --report-only                  # the table alone, for a PR body
+task demo:bundle-size -- --report-only --json-out /tmp/before.json   # on main, then on the branch:
+task demo:bundle-size -- --report-only --before /tmp/before.json     # before, after, and the change
+```
+
+It builds the demo as forge ships it (`WEB_BUILD_TARGET=demo`) into a temporary
+directory, so `dist-demo/` is left alone. **It gates the release gate only**
+(its `demo-size` step). It never runs in the merge gate or the merge queue. A
+PR that moves the demo pastes its before/after table into the body. The bundle
+guard (`vite-plugin-demo-bundle.ts`) is separate and unchanged: it decides which
+modules may be in the bundle, and this script measures only its size.
+
+Main 355d77cbc, 2026-11-24 (clean `pnpm install --frozen-lockfile`):
+
+| | Initial raw | Initial gzip | Initial brotli | Total JS+CSS raw | Total gzip |
+|---|---|---|---|---|---|
+| main 355d77cbc | 1,778.0 KiB (34 files) | **484.4 KiB** | 414.6 KiB | 20,029.4 KiB (287 files) | **5,064.0 KiB** |
+| budget | | ≤ 510 KiB | | | ≤ 5,120 KiB |
+
+`vite build --mode demo` measures 0.1 KiB more initial gzip (484.5 KiB),
+because `import.meta.env.MODE` differs.
+
+**Moving a ceiling.** Each ceiling is the baseline plus a small margin: initial
+gzip about +5% and total gzip about +56 KiB, rounded up to 10 KiB. The budget
+file records the baseline commit, its numbers and the rule. To move a ceiling,
+measure main, apply the rule, update the baseline and both ceilings together,
+and give the reason in the PR. Do not raise a ceiling just to let one change
+through. The phase-3 plan (reliant#3462) first proposed 645 / 5,080 KiB from
+main 49556b0ba (621.3 / 5,026.7 KiB). On 2026-11-24 the ceilings were
+re-derived from 355d77cbc under the same rule.
+
 ## Follow-up integration dependencies
 
 This change is independently buildable against main. At implementation time,
