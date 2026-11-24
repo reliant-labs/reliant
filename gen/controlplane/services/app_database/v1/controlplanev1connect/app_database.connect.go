@@ -140,6 +140,7 @@ func NewAppDatabaseServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			httpClient,
 			baseURL+AppDatabaseServiceListDashboardDatabasesProcedure,
 			connect.WithSchema(appDatabaseServiceMethods.ByName("ListDashboardDatabases")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listBrowsableDatabases: connect.NewClient[v1.ListBrowsableDatabasesRequest, v1.ListBrowsableDatabasesResponse](
@@ -153,14 +154,12 @@ func NewAppDatabaseServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			httpClient,
 			baseURL+AppDatabaseServiceDescribeDatabaseProcedure,
 			connect.WithSchema(appDatabaseServiceMethods.ByName("DescribeDatabase")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		browseTable: connect.NewClient[v1.BrowseTableRequest, v1.BrowseTableResponse](
 			httpClient,
 			baseURL+AppDatabaseServiceBrowseTableProcedure,
 			connect.WithSchema(appDatabaseServiceMethods.ByName("BrowseTable")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -289,6 +288,7 @@ func NewAppDatabaseServiceHandler(svc AppDatabaseServiceHandler, opts ...connect
 		AppDatabaseServiceListDashboardDatabasesProcedure,
 		svc.ListDashboardDatabases,
 		connect.WithSchema(appDatabaseServiceMethods.ByName("ListDashboardDatabases")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	appDatabaseServiceListBrowsableDatabasesHandler := connect.NewUnaryHandler(
@@ -302,14 +302,12 @@ func NewAppDatabaseServiceHandler(svc AppDatabaseServiceHandler, opts ...connect
 		AppDatabaseServiceDescribeDatabaseProcedure,
 		svc.DescribeDatabase,
 		connect.WithSchema(appDatabaseServiceMethods.ByName("DescribeDatabase")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	appDatabaseServiceBrowseTableHandler := connect.NewUnaryHandler(
 		AppDatabaseServiceBrowseTableProcedure,
 		svc.BrowseTable,
 		connect.WithSchema(appDatabaseServiceMethods.ByName("BrowseTable")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/controlplane.v1.AppDatabaseService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

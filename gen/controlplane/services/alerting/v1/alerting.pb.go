@@ -9,6 +9,7 @@ package controlplanev1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -1507,7 +1508,11 @@ type ListAlertHistoryRequest struct {
 	// Defaults to 24h ago.
 	Since *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=since,proto3" json:"since,omitempty"`
 	// Default 200, max 1000.
-	Limit         int32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	Limit int32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	// The history of the last `lookback` before the server's now, instead of a
+	// fixed since: a client that polls "the last day" sends the same request
+	// every time. Ignored when since is set. At most 366 days.
+	Lookback      *durationpb.Duration `protobuf:"bytes,5,opt,name=lookback,proto3" json:"lookback,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1568,6 +1573,13 @@ func (x *ListAlertHistoryRequest) GetLimit() int32 {
 		return x.Limit
 	}
 	return 0
+}
+
+func (x *ListAlertHistoryRequest) GetLookback() *durationpb.Duration {
+	if x != nil {
+		return x.Lookback
+	}
+	return nil
 }
 
 type ListAlertHistoryResponse struct {
@@ -1944,7 +1956,7 @@ var File_services_alerting_v1_alerting_proto protoreflect.FileDescriptor
 
 const file_services_alerting_v1_alerting_proto_rawDesc = "" +
 	"\n" +
-	"#services/alerting/v1/alerting.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8f\x03\n" +
+	"#services/alerting/v1/alerting.proto\x12\x0fcontrolplane.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8f\x03\n" +
 	"\bReceiver\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
 	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\x12\n" +
@@ -2067,12 +2079,13 @@ const file_services_alerting_v1_alerting_proto_rawDesc = "" +
 	"\x02at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9f\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd6\x01\n" +
 	"\x17ListAlertHistoryRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1a\n" +
 	"\x06env_id\x18\x02 \x01(\tH\x00R\x05envId\x88\x01\x01\x120\n" +
 	"\x05since\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x05since\x12\x14\n" +
-	"\x05limit\x18\x04 \x01(\x05R\x05limitB\t\n" +
+	"\x05limit\x18\x04 \x01(\x05R\x05limit\x125\n" +
+	"\blookback\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\blookbackB\t\n" +
 	"\a_env_id\"O\n" +
 	"\x18ListAlertHistoryResponse\x123\n" +
 	"\x06events\x18\x01 \x03(\v2\x1b.controlplane.v1.AlertEventR\x06events\"\xa1\x04\n" +
@@ -2116,20 +2129,20 @@ const file_services_alerting_v1_alerting_proto_rawDesc = "" +
 	"\x13RECEIVER_TYPE_EMAIL\x10\x03\x12\x1b\n" +
 	"\x17RECEIVER_TYPE_PAGERDUTY\x10\x04\x12\x1f\n" +
 	"\x1bRECEIVER_TYPE_RELIANT_INAPP\x10\x05\x12\x1b\n" +
-	"\x17RECEIVER_TYPE_AUTOPILOT\x10\x062\xb8\t\n" +
-	"\x0fAlertingService\x12^\n" +
-	"\rListReceivers\x12%.controlplane.v1.ListReceiversRequest\x1a&.controlplane.v1.ListReceiversResponse\x12a\n" +
+	"\x17RECEIVER_TYPE_AUTOPILOT\x10\x062\xd1\t\n" +
+	"\x0fAlertingService\x12c\n" +
+	"\rListReceivers\x12%.controlplane.v1.ListReceiversRequest\x1a&.controlplane.v1.ListReceiversResponse\"\x03\x90\x02\x01\x12a\n" +
 	"\x0eCreateReceiver\x12&.controlplane.v1.CreateReceiverRequest\x1a'.controlplane.v1.CreateReceiverResponse\x12a\n" +
 	"\x0eUpdateReceiver\x12&.controlplane.v1.UpdateReceiverRequest\x1a'.controlplane.v1.UpdateReceiverResponse\x12a\n" +
 	"\x0eDeleteReceiver\x12&.controlplane.v1.DeleteReceiverRequest\x1a'.controlplane.v1.DeleteReceiverResponse\x12[\n" +
 	"\fTestReceiver\x12$.controlplane.v1.TestReceiverRequest\x1a%.controlplane.v1.TestReceiverResponse\x12^\n" +
-	"\rCreateSilence\x12%.controlplane.v1.CreateSilenceRequest\x1a&.controlplane.v1.CreateSilenceResponse\x12[\n" +
-	"\fListSilences\x12$.controlplane.v1.ListSilencesRequest\x1a%.controlplane.v1.ListSilencesResponse\x12^\n" +
-	"\rExpireSilence\x12%.controlplane.v1.ExpireSilenceRequest\x1a&.controlplane.v1.ExpireSilenceResponse\x12U\n" +
+	"\rCreateSilence\x12%.controlplane.v1.CreateSilenceRequest\x1a&.controlplane.v1.CreateSilenceResponse\x12`\n" +
+	"\fListSilences\x12$.controlplane.v1.ListSilencesRequest\x1a%.controlplane.v1.ListSilencesResponse\"\x03\x90\x02\x01\x12^\n" +
+	"\rExpireSilence\x12%.controlplane.v1.ExpireSilenceRequest\x1a&.controlplane.v1.ExpireSilenceResponse\x12Z\n" +
 	"\n" +
-	"ListAlerts\x12\".controlplane.v1.ListAlertsRequest\x1a#.controlplane.v1.ListAlertsResponse\x12g\n" +
-	"\x10ListAlertHistory\x12(.controlplane.v1.ListAlertHistoryRequest\x1a).controlplane.v1.ListAlertHistoryResponse\x12j\n" +
-	"\x11ListNotifications\x12).controlplane.v1.ListNotificationsRequest\x1a*.controlplane.v1.ListNotificationsResponse\x12v\n" +
+	"ListAlerts\x12\".controlplane.v1.ListAlertsRequest\x1a#.controlplane.v1.ListAlertsResponse\"\x03\x90\x02\x01\x12l\n" +
+	"\x10ListAlertHistory\x12(.controlplane.v1.ListAlertHistoryRequest\x1a).controlplane.v1.ListAlertHistoryResponse\"\x03\x90\x02\x01\x12o\n" +
+	"\x11ListNotifications\x12).controlplane.v1.ListNotificationsRequest\x1a*.controlplane.v1.ListNotificationsResponse\"\x03\x90\x02\x01\x12v\n" +
 	"\x15MarkNotificationsRead\x12-.controlplane.v1.MarkNotificationsReadRequest\x1a..controlplane.v1.MarkNotificationsReadResponseB\xd7\x01\n" +
 	"\x13com.controlplane.v1B\rAlertingProtoP\x01ZTgithub.com/reliant-labs/reliant/gen/controlplane/services/alerting/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
@@ -2188,6 +2201,7 @@ var file_services_alerting_v1_alerting_proto_goTypes = []any{
 	nil,                                   // 37: controlplane.v1.Notification.LabelsEntry
 	nil,                                   // 38: controlplane.v1.Notification.AnnotationsEntry
 	(*timestamppb.Timestamp)(nil),         // 39: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),           // 40: google.protobuf.Duration
 }
 var file_services_alerting_v1_alerting_proto_depIdxs = []int32{
 	0,  // 0: controlplane.v1.Receiver.type:type_name -> controlplane.v1.ReceiverType
@@ -2217,41 +2231,42 @@ var file_services_alerting_v1_alerting_proto_depIdxs = []int32{
 	36, // 24: controlplane.v1.AlertEvent.labels:type_name -> controlplane.v1.AlertEvent.LabelsEntry
 	39, // 25: controlplane.v1.AlertEvent.at:type_name -> google.protobuf.Timestamp
 	39, // 26: controlplane.v1.ListAlertHistoryRequest.since:type_name -> google.protobuf.Timestamp
-	23, // 27: controlplane.v1.ListAlertHistoryResponse.events:type_name -> controlplane.v1.AlertEvent
-	37, // 28: controlplane.v1.Notification.labels:type_name -> controlplane.v1.Notification.LabelsEntry
-	38, // 29: controlplane.v1.Notification.annotations:type_name -> controlplane.v1.Notification.AnnotationsEntry
-	39, // 30: controlplane.v1.Notification.starts_at:type_name -> google.protobuf.Timestamp
-	39, // 31: controlplane.v1.Notification.received_at:type_name -> google.protobuf.Timestamp
-	26, // 32: controlplane.v1.ListNotificationsResponse.notifications:type_name -> controlplane.v1.Notification
-	2,  // 33: controlplane.v1.AlertingService.ListReceivers:input_type -> controlplane.v1.ListReceiversRequest
-	4,  // 34: controlplane.v1.AlertingService.CreateReceiver:input_type -> controlplane.v1.CreateReceiverRequest
-	6,  // 35: controlplane.v1.AlertingService.UpdateReceiver:input_type -> controlplane.v1.UpdateReceiverRequest
-	8,  // 36: controlplane.v1.AlertingService.DeleteReceiver:input_type -> controlplane.v1.DeleteReceiverRequest
-	10, // 37: controlplane.v1.AlertingService.TestReceiver:input_type -> controlplane.v1.TestReceiverRequest
-	14, // 38: controlplane.v1.AlertingService.CreateSilence:input_type -> controlplane.v1.CreateSilenceRequest
-	16, // 39: controlplane.v1.AlertingService.ListSilences:input_type -> controlplane.v1.ListSilencesRequest
-	18, // 40: controlplane.v1.AlertingService.ExpireSilence:input_type -> controlplane.v1.ExpireSilenceRequest
-	21, // 41: controlplane.v1.AlertingService.ListAlerts:input_type -> controlplane.v1.ListAlertsRequest
-	24, // 42: controlplane.v1.AlertingService.ListAlertHistory:input_type -> controlplane.v1.ListAlertHistoryRequest
-	27, // 43: controlplane.v1.AlertingService.ListNotifications:input_type -> controlplane.v1.ListNotificationsRequest
-	29, // 44: controlplane.v1.AlertingService.MarkNotificationsRead:input_type -> controlplane.v1.MarkNotificationsReadRequest
-	3,  // 45: controlplane.v1.AlertingService.ListReceivers:output_type -> controlplane.v1.ListReceiversResponse
-	5,  // 46: controlplane.v1.AlertingService.CreateReceiver:output_type -> controlplane.v1.CreateReceiverResponse
-	7,  // 47: controlplane.v1.AlertingService.UpdateReceiver:output_type -> controlplane.v1.UpdateReceiverResponse
-	9,  // 48: controlplane.v1.AlertingService.DeleteReceiver:output_type -> controlplane.v1.DeleteReceiverResponse
-	11, // 49: controlplane.v1.AlertingService.TestReceiver:output_type -> controlplane.v1.TestReceiverResponse
-	15, // 50: controlplane.v1.AlertingService.CreateSilence:output_type -> controlplane.v1.CreateSilenceResponse
-	17, // 51: controlplane.v1.AlertingService.ListSilences:output_type -> controlplane.v1.ListSilencesResponse
-	19, // 52: controlplane.v1.AlertingService.ExpireSilence:output_type -> controlplane.v1.ExpireSilenceResponse
-	22, // 53: controlplane.v1.AlertingService.ListAlerts:output_type -> controlplane.v1.ListAlertsResponse
-	25, // 54: controlplane.v1.AlertingService.ListAlertHistory:output_type -> controlplane.v1.ListAlertHistoryResponse
-	28, // 55: controlplane.v1.AlertingService.ListNotifications:output_type -> controlplane.v1.ListNotificationsResponse
-	30, // 56: controlplane.v1.AlertingService.MarkNotificationsRead:output_type -> controlplane.v1.MarkNotificationsReadResponse
-	45, // [45:57] is the sub-list for method output_type
-	33, // [33:45] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	40, // 27: controlplane.v1.ListAlertHistoryRequest.lookback:type_name -> google.protobuf.Duration
+	23, // 28: controlplane.v1.ListAlertHistoryResponse.events:type_name -> controlplane.v1.AlertEvent
+	37, // 29: controlplane.v1.Notification.labels:type_name -> controlplane.v1.Notification.LabelsEntry
+	38, // 30: controlplane.v1.Notification.annotations:type_name -> controlplane.v1.Notification.AnnotationsEntry
+	39, // 31: controlplane.v1.Notification.starts_at:type_name -> google.protobuf.Timestamp
+	39, // 32: controlplane.v1.Notification.received_at:type_name -> google.protobuf.Timestamp
+	26, // 33: controlplane.v1.ListNotificationsResponse.notifications:type_name -> controlplane.v1.Notification
+	2,  // 34: controlplane.v1.AlertingService.ListReceivers:input_type -> controlplane.v1.ListReceiversRequest
+	4,  // 35: controlplane.v1.AlertingService.CreateReceiver:input_type -> controlplane.v1.CreateReceiverRequest
+	6,  // 36: controlplane.v1.AlertingService.UpdateReceiver:input_type -> controlplane.v1.UpdateReceiverRequest
+	8,  // 37: controlplane.v1.AlertingService.DeleteReceiver:input_type -> controlplane.v1.DeleteReceiverRequest
+	10, // 38: controlplane.v1.AlertingService.TestReceiver:input_type -> controlplane.v1.TestReceiverRequest
+	14, // 39: controlplane.v1.AlertingService.CreateSilence:input_type -> controlplane.v1.CreateSilenceRequest
+	16, // 40: controlplane.v1.AlertingService.ListSilences:input_type -> controlplane.v1.ListSilencesRequest
+	18, // 41: controlplane.v1.AlertingService.ExpireSilence:input_type -> controlplane.v1.ExpireSilenceRequest
+	21, // 42: controlplane.v1.AlertingService.ListAlerts:input_type -> controlplane.v1.ListAlertsRequest
+	24, // 43: controlplane.v1.AlertingService.ListAlertHistory:input_type -> controlplane.v1.ListAlertHistoryRequest
+	27, // 44: controlplane.v1.AlertingService.ListNotifications:input_type -> controlplane.v1.ListNotificationsRequest
+	29, // 45: controlplane.v1.AlertingService.MarkNotificationsRead:input_type -> controlplane.v1.MarkNotificationsReadRequest
+	3,  // 46: controlplane.v1.AlertingService.ListReceivers:output_type -> controlplane.v1.ListReceiversResponse
+	5,  // 47: controlplane.v1.AlertingService.CreateReceiver:output_type -> controlplane.v1.CreateReceiverResponse
+	7,  // 48: controlplane.v1.AlertingService.UpdateReceiver:output_type -> controlplane.v1.UpdateReceiverResponse
+	9,  // 49: controlplane.v1.AlertingService.DeleteReceiver:output_type -> controlplane.v1.DeleteReceiverResponse
+	11, // 50: controlplane.v1.AlertingService.TestReceiver:output_type -> controlplane.v1.TestReceiverResponse
+	15, // 51: controlplane.v1.AlertingService.CreateSilence:output_type -> controlplane.v1.CreateSilenceResponse
+	17, // 52: controlplane.v1.AlertingService.ListSilences:output_type -> controlplane.v1.ListSilencesResponse
+	19, // 53: controlplane.v1.AlertingService.ExpireSilence:output_type -> controlplane.v1.ExpireSilenceResponse
+	22, // 54: controlplane.v1.AlertingService.ListAlerts:output_type -> controlplane.v1.ListAlertsResponse
+	25, // 55: controlplane.v1.AlertingService.ListAlertHistory:output_type -> controlplane.v1.ListAlertHistoryResponse
+	28, // 56: controlplane.v1.AlertingService.ListNotifications:output_type -> controlplane.v1.ListNotificationsResponse
+	30, // 57: controlplane.v1.AlertingService.MarkNotificationsRead:output_type -> controlplane.v1.MarkNotificationsReadResponse
+	46, // [46:58] is the sub-list for method output_type
+	34, // [34:46] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_services_alerting_v1_alerting_proto_init() }

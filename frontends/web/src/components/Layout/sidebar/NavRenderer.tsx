@@ -103,7 +103,19 @@ export function NavRenderer({ config, ctx, slots, onNavigate, flat = false }: Na
 
   function renderItems(items: readonly NavItem[], depth: Depth, where: "nav" | "footer" | "drill"): ReactNode[] {
     const out: ReactNode[] = [];
-    for (const item of visibleItems(items, ctx)) out.push(renderItem(item, depth, where));
+    for (const item of visibleItems(items, ctx)) {
+      const rendered = renderItem(item, depth, where);
+      // A tour anchor (NavItem `tour`): a group carries it on its own block; anything else in a box of its own.
+      out.push(
+        item.tour && item.kind !== "group" ? (
+          <div key={item.id} data-tour={item.tour}>
+            {rendered}
+          </div>
+        ) : (
+          rendered
+        ),
+      );
+    }
     return out;
   }
 
@@ -168,7 +180,7 @@ export function NavRenderer({ config, ctx, slots, onNavigate, flat = false }: Na
         const badge = item.badge?.(ctx);
         const groupSlot = slot(item.trail, { place: "row", depth: rowDepth(depth) });
         return (
-          <div key={item.id} data-testid={`${testId}-group`}>
+          <div key={item.id} data-testid={`${testId}-group`} data-tour={item.tour}>
             <SidebarSubRow
               label={item.label}
               depth={rowDepth(depth)}
