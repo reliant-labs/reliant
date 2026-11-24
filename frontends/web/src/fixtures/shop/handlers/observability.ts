@@ -89,7 +89,7 @@ import forgeDashboardsRaw from "../model/forge-dashboards.json?raw";
 import { createShopApi } from "../model/shopApi";
 import { completed } from "./defaults";
 import { alertingHandlers } from "./alerting";
-import { billingHandlers } from "./billing";
+import { observabilityBillingHandlers } from "./observabilityBilling";
 import { dashboardsHandlers } from "./dashboards";
 import { deliveryHandlers } from "./delivery";
 import { issuesHandlers, wireIssue } from "./issues";
@@ -243,7 +243,7 @@ export function observabilityHandlers(fixtures: ObservabilityApi = createShopApi
     ...rumHandlers(fixtures),
     ...dashboardsHandlers(fixtures),
     // The demo has no billing: answered as a control plane without the billing API.
-    ...billingHandlers(),
+    ...observabilityBillingHandlers(),
   };
 }
 

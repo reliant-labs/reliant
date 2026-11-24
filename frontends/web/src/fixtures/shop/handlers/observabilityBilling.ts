@@ -17,6 +17,6 @@ const notInDemo = () => {
   throw new ConnectError("The demo has no observability billing.", Code.Unimplemented);
 };
 
-export function billingHandlers(): MockHandlers {
+export function observabilityBillingHandlers(): MockHandlers {
   return Object.fromEntries(ObservabilityBillingService.methods.map((m) => [`${ObservabilityBillingService.typeName}/${m.name}`, notInDemo]));
 }

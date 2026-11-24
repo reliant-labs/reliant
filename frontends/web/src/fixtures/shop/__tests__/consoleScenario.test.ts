@@ -263,7 +263,7 @@ describe("every console read is answered; every write is refused", () => {
 
   it("answers observability usage as a control plane without billing does: Unimplemented", async () => {
     const t = (await import("@/lib/connect")).transport;
-    // The demo has no billing: its reads answer as a control plane without the billing API (handlers/billing.ts).
+    // The demo has no billing: its reads answer as a control plane without the billing API (handlers/observabilityBilling.ts).
     const billing = createClient(ObservabilityBillingService, t) as unknown as Record<string, (req: object) => Promise<unknown>>;
     for (const method of methodsOf(ObservabilityBillingService).filter((m) => isDemoRead(m))) {
       await expect(billing[method.localName]({ orgId: "org-acme" }), method.name).rejects.toSatisfy((err: unknown) => ConnectError.from(err).code === Code.Unimplemented);

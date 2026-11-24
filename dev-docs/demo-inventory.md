@@ -26,7 +26,7 @@ the wire, and in the demo shell (the only place `/forge/demo` runs; the app's
 leaves for it) the console's real client (`controlPlaneObservabilityApi`)
 decodes it, so no page reads the model directly.
 `__tests__/realClient.test.ts` holds every read the real client makes to the
-model's answer. `handlers/billing.ts` answers observability billing
+model's answer. `handlers/observabilityBilling.ts` answers observability billing
 Unimplemented: the demo has none. `handlers/console.ts` answers Releases, Environments, Secrets, Domains
 and Activity from the same ledger. Nothing under `src/fixtures/` imports the
 console's unit-test fixtures (`Observability/__fixtures__`);
