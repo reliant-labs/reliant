@@ -71,7 +71,12 @@ is a red test, not a hang (`harness.visual.ts` proves it). Then
 identical frames. A capture may differ from its baseline by at most
 100 pixels past the default per-pixel threshold (measured noise: under 110
 pixels, each at most 10/255 off, all inside the threshold). The pointer is
-parked off the page so no row shows its hover state. The build's version
+parked off the page so no row shows its hover state; a surface whose subject
+IS a hover state (`shell-chart-hover`, `shell-sparkline-hover`,
+`shell-dashboards-card-hover`: a chart's crosshair and tooltip) puts it back in
+its `beforeShot` step, which runs after the park, right before the capture.
+A long page (`shell-sandboxes-dashboard`) grows the viewport to its whole
+height there instead (`fitViewportToContent`), so it is one capture. The build's version
 string (settings footer) is pinned and masked, so a baseline does not depend
 on the commit that built it: `task test:web:visual` builds with
 `RELEASE_VERSION=0.0.0-visual`, `scripts/visual-docker.sh` refuses a `dist/`

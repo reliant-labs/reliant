@@ -56,9 +56,21 @@
  * value lies outside the axis is not drawn (the axis follows the series, never
  * the exemplars); `onExemplarsPlaced` reports which were, so the caller can show
  * the rest elsewhere.
+ *
+ * ── HOVER: THE SAMPLE UNDER THE POINTER ─────────────────────────────────────
+ *
+ * Every chart, a sparkline included, reads the sample under the pointer: the
+ * crosshair snaps to it, each series' point there is marked, and a tooltip
+ * (ChartTooltip) states its time and each series' value in the chart's unit,
+ * through the same formatter as the axis. The mouse drives uPlot's own cursor;
+ * a finger taps or drags along the plot (vertical swipes still scroll the
+ * page); the keyboard focuses the figure and steps with the arrow keys, Home
+ * and End, and Escape clears, with the sample announced in a live region.
+ * The state and the gestures are useChartHover's, the arithmetic chartHover's,
+ * shared with LiveState/Sparkline.
  */
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import "./uplot-theme.css";
@@ -68,7 +80,10 @@ import { cn } from "@/lib/utils";
 import { useStructurallyStable } from "@/lib/useStructurallyStable";
 
 import { formatValue, type ValueUnit } from "../format";
-import { chartToken } from "./chartPalette";
+import { ChartTooltip } from "./ChartTooltip";
+import { describeSample, formatSampleTime, indexAtFraction, nearestIndex, sampleRows, type SampleAnchor } from "./chartHover";
+import { chartToken, tokenColor } from "./chartPalette";
+import { useChartHover } from "./useChartHover";
 
 /**
  * A STATUS colour, for a series, band or marker that is one: errors in
@@ -177,7 +192,7 @@ export interface UPlotChartProps {
   height: number;
   /** The figure's accessible name ("Request rate for api"). */
   label: string;
-  /** A sparkline: no axes, legend or cursor. */
+  /** A sparkline: no axes or legend. It still reads the sample under the pointer (a crosshair and a tooltip). */
   compact?: boolean;
   className?: string;
   /**
@@ -258,7 +273,9 @@ export function UPlotChart({
   const cursorCallback = useRef(onCursor);
   cursorCallback.current = onCursor;
   const chartRef = useRef<uPlot | null>(null);
-  const hasCursorListener = !!onCursor;
+  const figureRef = useRef<HTMLElement>(null);
+  const captionId = useId();
+  const hintId = useId();
   const themeVersion = useThemeVersion();
   const inherited = useContext(ObsChartMarkersContext);
   const markers = useMemo(
@@ -272,6 +289,63 @@ export function UPlotChart({
     () => timeExtent(timestamps, markers, requestedStart === undefined || requestedEnd === undefined ? undefined : { startSec: requestedStart, endSec: requestedEnd }),
     [timestamps, markers, requestedStart, requestedEnd]
   );
+
+  // ── Hover: one highlighted sample, from the mouse (uPlot's cursor), a finger or the keys.
+  const hasSample = useCallback((index: number) => series.some((s) => isPresent(s.values[index])), [series]);
+  const plotRect = useCallback((): DOMRect | null => {
+    const chart = chartRef.current;
+    const plot = chart?.over ?? hostRef.current;
+    return plot ? plot.getBoundingClientRect() : null;
+  }, []);
+  const anchorOf = useCallback(
+    (index: number): SampleAnchor | null => {
+      const rect = plotRect();
+      const sec = timestamps[index];
+      if (!rect || sec === undefined) return null;
+      const chart = chartRef.current;
+      const x = chart?.over ? chart.valToPos(sec, "x") : ((sec - extent[0]) / (extent[1] - extent[0] || 1)) * rect.width;
+      return { x: rect.left + x, top: rect.top, bottom: rect.bottom };
+    },
+    [plotRect, timestamps, extent]
+  );
+  const indexAt = useCallback(
+    (clientX: number): number | null => {
+      const rect = plotRect();
+      if (!rect || rect.width <= 0) return null;
+      const left = clientX - rect.left;
+      const chart = chartRef.current;
+      if (chart?.over) return nearestIndex(timestamps, chart.posToVal(Math.min(Math.max(left, 0), rect.width), "x"));
+      return indexAtFraction(timestamps, extent, left / rect.width);
+    },
+    [plotRect, timestamps, extent]
+  );
+  // The keys and a finger move uPlot's cursor too, so its crosshair, points and legend follow.
+  const mirrorCursor = useCallback(
+    (index: number | null) => {
+      const chart = chartRef.current;
+      if (!chart?.over || typeof chart.setCursor !== "function") return;
+      const sec = index === null ? undefined : timestamps[index];
+      if (sec === undefined) chart.setCursor({ left: -10, top: -10 });
+      else chart.setCursor({ left: chart.valToPos(sec, "x"), top: chart.over.clientHeight / 2 });
+    },
+    [timestamps]
+  );
+  const { hover, show: showSample, bind: hoverBind, plotStyle } = useChartHover({
+    rootRef: figureRef,
+    length: timestamps.length,
+    hasSample,
+    anchorOf,
+    indexAt,
+    onSelect: mirrorCursor,
+    nativeMouse: () => !!chartRef.current?.over,
+  });
+  const showSampleRef = useRef(showSample);
+  showSampleRef.current = showSample;
+  const heldRef = useRef(hover);
+  heldRef.current = hover;
+  const mirrorRef = useRef(mirrorCursor);
+  mirrorRef.current = mirrorCursor;
+
   const annotationCounts = [
     markers.length ? `${markers.length} release${markers.length === 1 ? "" : "s"}` : "",
     shown.length ? `${shown.length} alert${shown.length === 1 ? "" : "s"}` : "",
@@ -312,7 +386,17 @@ export function UPlotChart({
       // A calendar date is its UTC midnight: read in the browser's zone it is
       // the previous evening for anyone west of Greenwich.
       ...(calendar ? { tzDate: (ts: number) => uPlot.tzDate(new Date(ts * 1000), calendar.timezone) } : {}),
-      cursor: compact ? { show: false } : { drag: { x: false, y: false } },
+      cursor: {
+        drag: { x: false, y: false },
+        // A sparkline is a vertical rule only; a full chart keeps its horizontal guide.
+        y: !compact,
+        // The crosshair sits on the sample it reads, not between two.
+        move: (u: uPlot, left: number, top: number): [number, number] => {
+          if (left < 0) return [left, top];
+          const x = (u.data[0] as ArrayLike<number>)[u.posToIdx(left)];
+          return x === undefined ? [left, top] : [u.valToPos(x, "x"), top];
+        },
+      },
       focus: { alpha: 0.2 },
       legend: { show: legend ?? !compact },
       // The x axis reaches a marker in the last (or first) bucket's span: a
@@ -331,20 +415,27 @@ export function UPlotChart({
           : {}),
       },
       bands: stacked && !barred ? stackBands(series, strokes) : undefined,
-      hooks:
-        markers.length || shown.length || exemplars || hasCursorListener
-          ? {
-              setCursor: hasCursorListener ? [(u: uPlot) => cursorCallback.current?.(u.cursor.idx ?? null)] : [],
-              // Bands go under the series (drawAxes runs before the series
-              // paint); markers over them.
-              drawAxes: shown.length ? [(u: uPlot) => drawBands(u, shown, palette)] : [],
-              draw: [
-                ...(markers.length ? [(u: uPlot) => drawMarkers(u, markers, palette)] : []),
-                ...(exemplars ? [layoutExemplars] : []),
-              ],
-              ready: exemplars ? [layoutExemplars] : [],
-            }
-          : undefined,
+      hooks: {
+        setCursor: [
+          (u: uPlot) => {
+            const idx = u.cursor.idx ?? null;
+            cursorCallback.current?.(idx);
+            showSampleRef.current(idx, "pointer");
+            // The mouse left, but the keys or a finger hold a sample (a tap is followed by
+            // the mouse reported back where it was): put uPlot's crosshair back on it.
+            const held = heldRef.current;
+            if (idx === null && held && held.via !== "pointer") requestAnimationFrame(() => mirrorRef.current(held.index));
+          },
+        ],
+        // Bands go under the series (drawAxes runs before the series
+        // paint); markers over them.
+        drawAxes: shown.length ? [(u: uPlot) => drawBands(u, shown, palette)] : [],
+        draw: [
+          ...(markers.length ? [(u: uPlot) => drawMarkers(u, markers, palette)] : []),
+          ...(exemplars ? [layoutExemplars] : []),
+        ],
+        ready: exemplars ? [layoutExemplars] : [],
+      },
       axes: compact
         ? [{ show: false }, { show: false }]
         : [
@@ -423,7 +514,7 @@ export function UPlotChart({
       chart?.destroy();
       if (chartRef.current === chart) chartRef.current = null;
     };
-  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers, shown, legend, area, stacked, barred, hasCursorListener, exemplars, extent, calendar]);
+  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers, shown, legend, area, stacked, barred, exemplars, extent, calendar]);
 
   // Highlight without a rebuild: uPlot dims every other series in place.
   // Re-applied after a rebuild too (a new chart starts unfocused).
@@ -441,10 +532,24 @@ export function UPlotChart({
   const bucket = calendar ? bucketName(calendar.bucketSeconds) : "";
   const calendarNote = calendar ? `${bucket ? `${bucket} buckets` : "Buckets"}: ${calendar.timezone} calendar dates` : "";
   const caption = [describeSeries(series, unit), describeMarkers(markers), describeBands(shown), calendarNote && `${calendarNote}.`].filter(Boolean).join(" ");
+  const sampleSec = hover ? timestamps[hover.index] : undefined;
+  const sampleTime = sampleSec === undefined ? "" : formatSampleTime(sampleSec, calendar);
+  const rows = useMemo(
+    () => (hover ? sampleRows(series, hover.index, unit, (i) => tokenColor(series[i]!.color ?? (series[i]!.tone ? TONE_VAR[series[i]!.tone!] : chartToken(i)))) : []),
+    [hover, series, unit]
+  );
+  const interactive = timestamps.length > 0;
 
   return (
-    <figure className={cn("obs-uplot", exemplars && "relative", className)} aria-label={label} role="group">
-      <div ref={hostRef} aria-hidden="true" style={{ minHeight: height }} />
+    <figure
+      ref={figureRef}
+      className={cn("obs-uplot", exemplars && "relative", className)}
+      aria-label={label}
+      role="group"
+      {...(interactive ? { ...hoverBind, "aria-describedby": `${captionId} ${hintId}` } : {})}
+      data-testid="chart-figure"
+    >
+      <div ref={hostRef} aria-hidden="true" style={{ minHeight: height, ...plotStyle }} />
       {exemplars && layout && layout.dots.length > 0 && (
         <div
           className="pointer-events-none absolute"
@@ -485,7 +590,20 @@ export function UPlotChart({
           {annotationSummary}
         </p>
       )}
-      <figcaption className="sr-only">{caption}</figcaption>
+      <figcaption id={captionId} className="sr-only">
+        {caption}
+      </figcaption>
+      {interactive && (
+        <>
+          <span id={hintId} className="sr-only">
+            Left and right arrow keys read each sample.
+          </span>
+          <p className="sr-only" aria-live="polite" aria-atomic="true" data-testid="chart-sample-live">
+            {hover?.via === "keyboard" && sampleTime ? describeSample(sampleTime, rows) : ""}
+          </p>
+        </>
+      )}
+      {hover && sampleTime && <ChartTooltip anchor={hover.anchor} time={sampleTime} rows={rows} />}
     </figure>
   );
 }
@@ -626,6 +744,10 @@ export function timeExtent(
   const min = Math.min(first, ...markers.map((m) => m.timeSec), ...(window ? [window.startSec] : []));
   const max = Math.max(last, ...markers.map((m) => m.timeSec), ...(window ? [window.endSec] : []));
   return min === max ? [min - 30, max + 30] : [min, max];
+}
+
+function isPresent(value: number | null | undefined): value is number {
+  return value !== null && value !== undefined && Number.isFinite(value);
 }
 
 function presentCount(values: ArrayLike<number | null | undefined>): number {

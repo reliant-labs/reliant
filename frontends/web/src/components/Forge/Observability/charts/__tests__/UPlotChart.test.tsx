@@ -11,12 +11,19 @@
  *              as placed, so the caller can show it elsewhere.
  *
  * Without either prop the chart is what it was.
+ *
+ *   hover      every chart, a sparkline included, reads one sample: from
+ *              uPlot's cursor (the mouse), a finger, or the arrow keys on the
+ *              focused figure, with a tooltip of the sample's time and each
+ *              series' value in the chart's unit, and a keyboard highlight
+ *              announced in a live region.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { formatSampleTime } from "../chartHover";
 import { isolatedIndexes, timeExtent, placeExemplars, stackValues, UPlotChart, type ChartExemplar, type ChartSeries } from "../UPlotChart";
 
 interface Built {
@@ -294,7 +301,8 @@ describe("exemplars on the chart", () => {
   it("draws no layer, and no extra hooks, for a chart that passes none", () => {
     render(<UPlotChart timestamps={TIMES} series={line} height={220} label="plain" />);
     expect(screen.queryByTestId("chart-exemplar-layer")).not.toBeInTheDocument();
-    expect(last().opts.hooks).toBeUndefined();
+    // Only the cursor hook every chart has (the hover read-out): nothing laid out or drawn over the plot.
+    expect(Object.keys(last().opts.hooks).filter((k) => last().opts.hooks[k].length)).toEqual(["setCursor"]);
   });
 
   it("places dots on an area chart against the zero-based axis", () => {
@@ -364,5 +372,129 @@ describe("a day bucket in a short window (the empty-dashboards audit's workflow 
     render(<UPlotChart timestamps={TIMES.slice(0, 3)} series={[series("many", [7, 8, 9])]} height={120} label="plain" />);
     expect(last().opts.tzDate).toBeUndefined();
     expect(screen.queryByTestId("chart-bucket-note")).toBeNull();
+  });
+});
+
+describe("hover: the sample under the pointer", () => {
+  // jsdom has no PointerEvent, so fireEvent.pointer* would build a bare Event
+  // without coordinates or a pointer type. A MouseEvent carries clientX.
+  beforeAll(() => {
+    if (typeof window.PointerEvent === "function") return;
+    class PointerEventShim extends MouseEvent {
+      pointerType: string;
+      constructor(type: string, init: PointerEventInit = {}) {
+        super(type, init);
+        this.pointerType = init.pointerType ?? "mouse";
+      }
+    }
+    vi.stubGlobal("PointerEvent", PointerEventShim);
+  });
+  afterAll(() => vi.unstubAllGlobals());
+
+  const twoSeries = [series("Requests", [10, 12, null, 14, 15]), series("Errors", [1, 2, null, 0, 3], { tone: "destructive" })];
+  const tooltip = () => screen.queryByTestId("chart-tooltip");
+
+  it("lets a sparkline keep uPlot's cursor (a vertical rule, no horizontal guide), snapped to the sample", () => {
+    render(<UPlotChart timestamps={TIMES} series={[series("Requests", [10, 12, 13, 14, 15])]} unit="rate" height={36} label="Requests over the window" compact />);
+    const { cursor } = last().opts;
+    expect(cursor.show).not.toBe(false);
+    expect(cursor.y).toBe(false);
+    // The rule moves onto the nearest sample's x, and a hidden cursor (left < 0) stays hidden.
+    const u = { data: [TIMES], posToIdx: () => 2, valToPos: (v: number) => (v - 1000) / 2 };
+    expect(cursor.move(u, 131, 9)).toEqual([60, 9]);
+    expect(cursor.move(u, -10, -10)).toEqual([-10, -10]);
+  });
+
+  it("shows the sample uPlot's cursor lands on: its time and each series' value in the chart's unit", () => {
+    const onCursor = vi.fn();
+    render(<UPlotChart timestamps={TIMES} series={twoSeries} unit="rate" height={200} label="Traffic" onCursor={onCursor} />);
+    act(() => last().opts.hooks.setCursor[0]({ cursor: { idx: 1 } }));
+    expect(onCursor).toHaveBeenCalledWith(1);
+    expect(screen.getByTestId("chart-tooltip-time")).toHaveTextContent(formatSampleTime(TIMES[1]!));
+    const rows = screen.getAllByTestId("chart-tooltip-row");
+    expect(rows.map((r) => r.textContent)).toEqual(["Requests12/s", "Errors2/s"]);
+    // A mouse hover is not announced: the live region speaks for the keyboard.
+    expect(screen.getByTestId("chart-sample-live")).toHaveTextContent("");
+
+    act(() => last().opts.hooks.setCursor[0]({ cursor: { idx: null } }));
+    expect(tooltip()).toBeNull();
+  });
+
+  it("is focusable and named, steps through samples with the arrow keys (skipping gaps), and announces each", () => {
+    render(<UPlotChart timestamps={TIMES} series={twoSeries} unit="rate" height={36} label="Requests over the window" compact />);
+    const figure = screen.getByRole("group", { name: "Requests over the window" });
+    expect(figure).toHaveAttribute("tabindex", "0");
+    expect(figure.getAttribute("aria-describedby")).toBeTruthy();
+
+    figure.focus();
+    fireEvent.keyDown(figure, { key: "ArrowLeft" });
+    // From no highlight: the latest sample.
+    expect(screen.getByTestId("chart-tooltip-time")).toHaveTextContent(formatSampleTime(TIMES[4]!));
+    expect(screen.getByTestId("chart-sample-live")).toHaveTextContent(`${formatSampleTime(TIMES[4]!)}: Requests 15/s, Errors 3/s.`);
+
+    fireEvent.keyDown(figure, { key: "ArrowLeft" });
+    fireEvent.keyDown(figure, { key: "ArrowLeft" });
+    // Sample 2 is empty in both series: the second step lands on sample 1.
+    expect(screen.getByTestId("chart-tooltip-time")).toHaveTextContent(formatSampleTime(TIMES[1]!));
+
+    fireEvent.keyDown(figure, { key: "Home" });
+    expect(screen.getByTestId("chart-tooltip-time")).toHaveTextContent(formatSampleTime(TIMES[0]!));
+    fireEvent.keyDown(figure, { key: "End" });
+    expect(screen.getByTestId("chart-tooltip-time")).toHaveTextContent(formatSampleTime(TIMES[4]!));
+
+    fireEvent.keyDown(figure, { key: "Escape" });
+    expect(tooltip()).toBeNull();
+    expect(screen.getByTestId("chart-sample-live")).toHaveTextContent("");
+  });
+
+  it("leaves Escape to the page when nothing is highlighted, and clears on blur", () => {
+    const outer = vi.fn();
+    render(
+      <div onKeyDown={(e) => outer(e.key)}>
+        <UPlotChart timestamps={TIMES} series={twoSeries} unit="rate" height={36} label="chart" compact />
+      </div>
+    );
+    const figure = screen.getByRole("group", { name: "chart" });
+    fireEvent.keyDown(figure, { key: "Escape" });
+    expect(outer).toHaveBeenCalledWith("Escape");
+    fireEvent.keyDown(figure, { key: "End" });
+    expect(tooltip()).not.toBeNull();
+    fireEvent.blur(figure);
+    expect(tooltip()).toBeNull();
+  });
+
+  it("follows a finger along the plot and keeps the highlight after it lifts, until a tap elsewhere", () => {
+    render(
+      <div>
+        <UPlotChart timestamps={TIMES} series={twoSeries} unit="rate" height={36} label="chart" compact />
+        <button type="button">elsewhere</button>
+      </div>
+    );
+    const figure = screen.getByRole("group", { name: "chart" });
+    const plot = figure.firstElementChild as HTMLElement;
+    // Vertical swipes scroll the page; horizontal drags are the chart's.
+    expect(plot.style.touchAction).toBe("pan-y");
+    vi.spyOn(plot, "getBoundingClientRect").mockReturnValue({ left: 100, top: 0, width: 400, height: 36, right: 500, bottom: 36, x: 100, y: 0, toJSON: () => ({}) });
+
+    fireEvent.pointerDown(plot, { pointerType: "touch", clientX: 100 });
+    expect(screen.getByTestId("chart-tooltip-time")).toHaveTextContent(formatSampleTime(TIMES[0]!));
+    fireEvent.pointerMove(plot, { pointerType: "touch", clientX: 400 });
+    expect(screen.getByTestId("chart-tooltip-time")).toHaveTextContent(formatSampleTime(TIMES[3]!));
+    fireEvent.pointerLeave(plot, { pointerType: "touch" });
+    expect(tooltip()).not.toBeNull();
+
+    // After a tap the browser may report the mouse back off the chart (uPlot's cursor leaves): the finger's sample stays.
+    act(() => last().opts.hooks.setCursor[0]({ cursor: { idx: null } }));
+    expect(screen.getByTestId("chart-tooltip-time")).toHaveTextContent(formatSampleTime(TIMES[3]!));
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "elsewhere" }), { pointerType: "touch" });
+    expect(tooltip()).toBeNull();
+  });
+
+  it("formats a calendar bucket's sample as its UTC date", () => {
+    const day = Date.UTC(2026, 9, 29) / 1000;
+    render(<UPlotChart timestamps={[day, day + 86_400]} series={[series("runs", [3, 4])]} height={120} label="runs" calendar={{ timezone: "UTC", bucketSeconds: 86_400 }} />);
+    fireEvent.keyDown(screen.getByRole("group", { name: "runs" }), { key: "Home" });
+    expect(screen.getByTestId("chart-tooltip-time")).toHaveTextContent(formatSampleTime(day, { timezone: "UTC" }));
   });
 });
