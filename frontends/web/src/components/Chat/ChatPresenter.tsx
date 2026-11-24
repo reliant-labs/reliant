@@ -44,6 +44,8 @@ import { QueuedMessages } from "./QueuedMessages";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { InterleavedTimeline } from "./thread-views";
 import { WorkflowViewerPanel } from "../workflow/WorkflowViewerPanel";
+import { ChatTracePanel } from "./Trace/ChatTracePanel";
+import type { ChatView } from "./Trace/ChatViewTabs";
 
 import type { Message } from "../../api/client";
 import type { Approval } from "../../gen/reliant/v1/approval_pb";
@@ -188,6 +190,15 @@ export const ChatPresenter = memo(function ChatPresenter({
   // Where the top bar lets the timeline render the prompt scrolled away from.
   const [pinnedPromptSlot, setPinnedPromptSlot] = useState<HTMLElement | null>(null);
   const selectedThreadId = controlledThreadId !== undefined ? controlledThreadId : localThreadId;
+  // The chat's view: the conversation, or its Trace (timing and cost). Held
+  // as the chat whose Trace is open, so opening another chat shows its
+  // conversation without an effect resetting it a frame late.
+  const [traceChatId, setTraceChatId] = useState<string | null>(null);
+  const chatView: ChatView = chatId && traceChatId === chatId ? "trace" : "chat";
+  const handleChatViewChange = useCallback(
+    (view: ChatView) => setTraceChatId(view === "trace" ? chatId : null),
+    [chatId],
+  );
   const setSelectedThreadId = onSelectThread ?? setLocalThreadId;
 
   // Background-work pill reveals a running command in the Commands tab, which
@@ -755,7 +766,17 @@ export const ChatPresenter = memo(function ChatPresenter({
           isWorkflowViewerOpen={isWorkflowViewerOpen}
           hideTitle={hideChatTitle}
           pinnedPromptSlotRef={setPinnedPromptSlot}
+          view={chatView}
+          onViewChange={handleChatViewChange}
         />}
+
+        {/* The Trace view takes the column: the transcript, its catch-up
+            overlay and the composer band unmount until "Chat" brings them
+            back. A viewer reads the trace in its viewer shape. */}
+        {chatView === "trace" && chatId ? (
+          <ChatTracePanel chatId={chatId} viewerChat={isViewer} />
+        ) : (
+        <>
 
         {/* Inline Workflow Viewer Panel - shown when in inline mode */}
         {isInlineWorkflowViewerOpen && workflowExecution && projectId && (
@@ -1022,6 +1043,8 @@ export const ChatPresenter = memo(function ChatPresenter({
           </>
           )}
         </div>
+        </>
+        )}
       </div>
       
       {/* Side Panel Workflow Viewer - resizable panel beside chat */}

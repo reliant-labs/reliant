@@ -13,6 +13,7 @@
       "BackgroundService",
       "CatalogService",
       "ChatService",
+      "ChatTraceService",
       "ConnectionService",
       "ConnectorService",
       "DaemonRegistryService",
