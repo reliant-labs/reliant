@@ -257,6 +257,40 @@ done
 [ "$(ls "$fx/sbom" | wc -l)" = 6 ] || fail "sbom wrote $(ls "$fx/sbom")"
 grep -q -- '--artifact reliant_darwin_arm64.tar.gz --release v1.2.6$' "$FORGE_CALLS" || fail "forge was not asked for the archive as subject: $(cat "$FORGE_CALLS")"
 echo "ok: each archive gets an SBOM of its own binary, named for the archive and the release"
+# A rerun builds different bytes, but cli-publish recovers the original signed
+# set. Published SBOMs must read that set, not the rerun's cli-archives artifact.
+printf 'rebuilt linux-amd64\n' > "$fx/backend/backend-linux-amd64/reliant-backend"
+bash "$src" package "$fx/backend" "$fx/rebuilt" 2> /dev/null
+! cmp -s "$fx/rebuilt/reliant_linux_amd64.tar.gz" "$fx/gh/v1.2.6/reliant_linux_amd64.tar.gz" || fail "rerun fixture did not rebuild different bytes"
+bash "$src" sbom-published v1.2.6 "$fx/sbom-published" 2> "$fx/err" || fail "sbom-published: $(cat "$fx/err")"
+for t in $targets; do
+  a="reliant_${t%-*}_${t#*-}.tar.gz"
+  jq -e --arg t "$t" '.read == "binary \($t)"' "$fx/sbom-published/$a.cdx.json" > /dev/null || fail "published SBOM described rebuilt $a"
+done
+! bash "$src" sbom-published v1.2.9 "$fx/sbom-absent" 2> /dev/null || fail "published SBOM fell back without a signed set"
+[ ! -e "$fx/sbom-absent" ] || fail "missing signed set wrote SBOMs"
+cp "$fx/gh/v1.2.6/reliant_linux_amd64.tar.gz" "$fx/published-keep"
+printf x >> "$fx/gh/v1.2.6/reliant_linux_amd64.tar.gz"
+! bash "$src" sbom-published v1.2.6 "$fx/sbom-corrupt" 2> /dev/null || fail "published SBOM accepted a corrupt signed set"
+[ ! -e "$fx/sbom-corrupt" ] || fail "corrupt signed set wrote SBOMs"
+cp "$fx/published-keep" "$fx/gh/v1.2.6/reliant_linux_amd64.tar.gz"
+# Hold the workflow routing too: published releases never describe this run's
+# artifact; dry runs still do. No YAML dependency is needed for this narrow check.
+python3 - "$(dirname "$src")/../.github/workflows/release.yml" << 'PY'
+import pathlib
+import sys
+job = pathlib.Path(sys.argv[1]).read_text().split('  cli-sbom:', 1)[1].split('\n  # ===', 1)[0]
+steps = job.split('\n      - name:')[1:]
+for command, condition in [
+    ('actions/download-artifact@', "needs.cli-publish.result != 'success'"),
+    ('scripts/release-cli.sh sbom ', "needs.cli-publish.result != 'success'"),
+    ('scripts/release-cli.sh sbom-published ', "needs.cli-publish.result == 'success'"),
+]:
+    matches = [s for s in steps if command in s]
+    assert len(matches) == 1 and 'if: ' + condition in matches[0], command
+assert job.index('scripts/release-cli.sh sbom-published ') < job.index('scripts/release-cli.sh store-sbom-github ')
+PY
+echo "ok: published SBOMs describe retained bytes on reruns; missing or corrupt signed sets fail closed"
 ! bash "$src" sbom v1.2.6 "$fx/v1" "$fx/sbom-bad" 2> /dev/null || fail "sbom described a tampered set"
 ! FORGE_SBOM_FAIL=1 bash "$src" sbom v1.2.6 "$fx/dist" "$fx/sbom-part" 2> "$fx/err" || fail "sbom passed with an archive forge could not describe"
 grep -q '::warning::no SBOM for reliant_windows_arm64.tar.gz: syft: cannot read it' "$fx/err" || fail "the missing SBOM is not named: $(cat "$fx/err")"

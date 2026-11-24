@@ -66,6 +66,10 @@
 #       and gets no SBOM, and the command exits 1 once every other one is
 #       written. Not part of the signed set.
 #
+#   release-cli.sh sbom-published <tag> <out-dir>
+#       Download and verify the GitHub Release's retained signed set, then
+#       describe those archives. No fallback to this run's rebuilt binaries.
+#
 #   release-cli.sh store-sbom-github <tag> <sbom-dir>
 #       Attach <sbom-dir>'s <archive>.cdx.json files to the GitHub Release, once
 #       it holds the tag's signed set. SBOMs are evidence, unsigned and
@@ -438,6 +442,22 @@ cmd_sbom() {
   [ "$missing" = 0 ] || die "not every archive has an SBOM; the release ships the ones written"
 }
 
+# Published SBOMs must describe the retained signed set, never a rerun's build.
+# Require GitHub's set: unlike recover, absence is an error, not permission to
+# fall back to freshly built archives (or to access R2 credentials here).
+cmd_sbom_published() {
+  [ $# -eq 2 ] || die "usage: sbom-published <tag> <out-dir>"
+  local tag="$1" out="$2" stored
+  check_tag "$tag"
+  gh_signed "$tag" || die "the GitHub Release $tag has no $SIGNATURE"
+  stored="$(mktemp -d)"
+  # shellcheck disable=SC2064 # expand now: stored is local
+  trap "rm -rf '$stored'" EXIT
+  gh_get_set "$tag" "$stored"
+  check_set "$tag" "$stored"
+  cmd_sbom "$tag" "$stored" "$out"
+}
+
 cmd_store_sbom_github() {
   [ $# -eq 2 ] || die "usage: store-sbom-github <tag> <sbom-dir>"
   local tag="$1" dir="$2" name
@@ -531,6 +551,7 @@ case "$sub" in
   store-r2) cmd_store_r2 "$@" ;;
   publish-root) cmd_publish_root "$@" ;;
   sbom) cmd_sbom "$@" ;;
+  sbom-published) cmd_sbom_published "$@" ;;
   store-sbom-github) cmd_store_sbom_github "$@" ;;
   verify-published) cmd_verify_published "$@" ;;
   *) die "usage: release-cli.sh package|verify|predicate|manifest|fetch-manifest|recover|store-github|store-r2|publish-root|sbom|store-sbom-github|verify-published ... (see the header)" ;;

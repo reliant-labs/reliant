@@ -30,7 +30,11 @@ the pinned forge's `forge vuln sbom --file`, which reads the binary's Go build
 info (modules, versions, toolchain) with forge's pinned syft and names the
 archive and the tag as the SBOM's subject, as forge's own releases do. They are
 evidence for a scanner (`forge vuln scan <file>.cdx.json`, grype, Dependency-Track),
-not something a verifier pins: a re-run regenerates and replaces them.
+not something a verifier pins: a re-run regenerates and replaces them. After
+`cli-publish` succeeds, `sbom-published` downloads and verifies the retained
+signed set from the GitHub Release before describing it, rather than using the
+rerun's potentially different build artifacts. A missing or corrupt stored set
+fails closed. Unpublished dry runs describe their own `cli-archives` artifact.
 
 For example, `https://downloads.reliantlabs.io/cli/v1.9.0/reliant_linux_arm64.tar.gz`
 and `https://github.com/reliant-labs/reliant/releases/download/v1.9.0/reliant_linux_arm64.tar.gz`.

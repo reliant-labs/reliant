@@ -2024,16 +2024,27 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      # Only unpublished runs describe this run's build. A publisher may have
+      # recovered older signed bytes instead of publishing these archives.
       - name: Download the CLI archives
+        if: needs.cli-publish.result != 'success'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: cli-archives
           path: cli-dist
 
-      - name: Describe each archive
+      - name: Describe the unpublished archives
+        if: needs.cli-publish.result != 'success'
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: bash scripts/release-cli.sh sbom "$VERSION" cli-dist cli-sbom
+
+      - name: Describe the published signed archives
+        if: needs.cli-publish.result == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: bash scripts/release-cli.sh sbom-published "$VERSION" cli-sbom
 
       - name: Upload the SBOMs
         if: ${{ !cancelled() }}
