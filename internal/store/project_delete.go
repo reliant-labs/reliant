@@ -141,6 +141,7 @@ var chatPurgeSteps = []struct{ name, sql string }{
 	{"step_executions", `
 		DELETE FROM step_executions
 		WHERE workflow_id IN (SELECT id FROM workflows WHERE chat_id = ANY(?0))`},
+	{"node_observations", `DELETE FROM node_observations WHERE chat_id = ANY(?0)`},
 	{"workflow_checkpoints", `DELETE FROM workflow_checkpoints WHERE chat_id = ANY(?0)`},
 	{"questions", `DELETE FROM questions WHERE chat_id = ANY(?0)`},
 	{"chat_updates", `DELETE FROM chat_updates WHERE chat_id = ANY(?0)`},
@@ -347,6 +348,9 @@ var flatThinSteps = []struct{ name, sql string }{
 		DELETE FROM step_executions WHERE id IN (
 			SELECT id FROM step_executions WHERE workflow_id IN (
 				SELECT id FROM workflows WHERE chat_id IN (` + projectChatIDs + `)) LIMIT ?1)`},
+	{"node_observations", `
+		DELETE FROM node_observations WHERE id IN (
+			SELECT id FROM node_observations WHERE chat_id IN (` + projectChatIDs + `) LIMIT ?1)`},
 }
 
 // thinProjectChats removes the bulk stored under the project's chats in

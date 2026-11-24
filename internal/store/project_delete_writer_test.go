@@ -183,6 +183,11 @@ var workflowContentWrites = []struct {
 			VALUES ($1,$2,'step','act',$3)`, workflow+"-s", workflow, projectDeleteWriterNow)
 		return err
 	}},
+	{"node_observations", func(ctx context.Context, tx *sql.Tx, chat, workflow string) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO node_observations (id, chat_id, workflow_id, step_id, created_at)
+			VALUES ($1,$2,$3,'step',$4)`, workflow+"-o", chat, workflow, projectDeleteWriterNow)
+		return err
+	}},
 }
 
 func assertNoWorkflowContentOf(t *testing.T, env *storetest.Env, chat, workflow string) {
@@ -192,6 +197,7 @@ func assertNoWorkflowContentOf(t *testing.T, env *storetest.Env, chat, workflow 
 		{`SELECT count(*) FROM workflow_checkpoints WHERE chat_id = $1`, chat},
 		{`SELECT count(*) FROM questions WHERE chat_id = $1`, chat},
 		{`SELECT count(*) FROM step_executions WHERE workflow_id = $1`, workflow},
+		{`SELECT count(*) FROM node_observations WHERE chat_id = $1`, chat},
 	} {
 		var n int
 		if err := env.SQL.QueryRowContext(context.Background(), q.sql, q.arg).Scan(&n); err != nil {

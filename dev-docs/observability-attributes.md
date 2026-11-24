@@ -134,6 +134,8 @@ new `forge.ai.*` name on its own: that namespace is forge's to extend.
 | `reliant.run.*` | `run_exec_attrs.go` | A run node's command (`run.exec`). |
 | `reliant.integration.*` | `integration_attrs.go` (#3286) | An integration call. |
 | `reliant.trigger.*` | `trigger_attrs.go` (#3289) | A trigger firing, and the join from a run back to it. |
+| `reliant.observe.*` | `observe_attrs.go` | What a node's `observe:` block declared, on its `workflow.node` span. The keys after the prefix are the author's ([Observed attributes](#observed-attributes-a-nodes-observe-block)). |
+| `reliant.node.*` | `observe_attrs.go` | How the node's own record went: today `reliant.node.observe.errors` and `.truncated`. |
 
 `reliant.cost_usd` and `reliant.model_id` and `reliant.tool_calls` on the `chat`
 span are older, flat `reliant.*` names, kept as they are.
@@ -284,6 +286,45 @@ activity's result.
 | Parent | The run span; in a spawned sub-agent, the sub-agent's. |
 | Attributes | The run scope's `SpanAttributes()`, and `gen_ai.conversation.id` (the chat, beside `reliant.chat.id`) so a per-chat read keyed on the conversation finds the node itself. No `gen_ai.agent.*`: a node is not an agent. |
 | Status | Error when the activity fails, described by its [class](#errortype-on-the-ai-spans) (`timeout`, `error`); a cancellation is `error.type=canceled`, no status. |
+
+### Observed attributes: a node's `observe:` block
+
+A workflow node, of any kind, may declare an `observe:` block, and the workflow one
+that supplies defaults (`docs/reference/nodes.mdx`; the design is
+[`design/workflow-observe.md`](design/workflow-observe.md)). For a node that
+dispatches an activity, the worker evaluates the block after the node's
+`save_message` and puts what it produced on this span
+(`internal/workflow/observe`, `Annotate`). Nodes the workflow completes itself
+(`compute`, `join`, `router`, `loop`, `workflow`) are not observed yet; that is
+the design's next step.
+
+| Attribute or event | Type | Meaning |
+|---|---|---|
+| `reliant.observe.<key>` | string, int, double or bool | One per key of the block's `attributes:`, named by the author. |
+| span event `<name>` | event | One per event the block emitted (`each:` emits one per element), with the author's event name and attribute keys, unprefixed. `decision` (attributes `name`, `value`, `reason`) is the recommended convention; nothing enforces it. |
+| `reliant.node.observe.errors` | int | How many of the block's expressions failed. Set only when one did. The messages are in the stored row, never on the span. |
+| `reliant.node.observe.truncated` | bool | A cap cut the block: a count, the 50 ms evaluation budget, or the stored row's 8 KiB. Set only when true. |
+
+An author's expression can produce anything, so the values are held to the
+rules at one choke point, `wfobserve.SafeForExport`: a bool or a number goes as it
+is, a string only when it is code-shaped (`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$`:
+one token, no space, slash, `#` or `@`), and any other string as
+`[withheld:<n>b]`, its length only (rules 2, 3 and 5). The full value, with
+credential shapes masked, is in the tenant's own `node_observations` row, which
+the run view reads. No error text and no status is ever set from the block: an
+expression that fails is counted (`reliant.observe.errors`) and its message is
+stored. The span keeps the run scope's `org.id` and chat, so a decision joins to
+its run and conversation with nothing written by the author.
+
+The block's metrics are OpenTelemetry instruments on the meter
+`github.com/reliant-labs/reliant/internal/workflow/observe`, never span data:
+
+| Metric | Kind | Attributes |
+|---|---|---|
+| `reliant.observed.<name>` | the author's: counter, histogram or gauge (float64), with the author's unit | `forge.ai.workflow.name`, `forge.ai.node.id`, `forge.ai.node.type`, and at most four author keys whose values are a bool, an integer or a code-shaped string (anything else is `other`). Never `org.id` or a user, chat, run or thread id. Past 64 attribute sets per metric, or 4,096 per process, a new set is recorded as `overflow=true`. |
+| `reliant.observe.errors` | counter | `kind`: `eval`, `budget`, `panic`, `kind_conflict`, `write`. |
+| `reliant.observe.overflow` | counter | `metric`: the full metric name whose point overflowed. |
+| `reliant.observe.dropped` | counter | `reason`: `row_cap` (the root run already stored 2,000 observations) or `write_failed`. The span and metrics of a dropped observation were still emitted. |
 
 ## `invoke_agent <agent>`
 

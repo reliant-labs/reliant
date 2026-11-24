@@ -16,7 +16,8 @@ import (
 // whose first batch of chats held 33k messages could not delete inside a 10s
 // request, and every attempt rolled the whole batch back (prod, 2026-11-18).
 // So the bulk under a project's chats — messages with their content blocks,
-// tool calls and results, chat_updates, user_updates, step_executions — goes
+// tool calls and results, chat_updates, user_updates, step_executions,
+// node_observations — goes
 // in row-bounded slices before the chat batches run, each slice its own
 // transaction, and nothing of it is left behind. A thread and context window
 // of ANOTHER project forked at a thinned message lose the pointer, rather
@@ -37,7 +38,7 @@ func TestDeleteUserProjectThinsALargeChatInRowBoundedSlices(t *testing.T) {
 		thinnedMessage  = "thin-chat-msg-05"
 		workflowOfChat  = "thin-chat-wf"
 		messagesInChat  = 10
-		minThinningTxns = 4 + 3*4 // ceil(10/3) message slices; 12/4 + one short slice per flat table
+		minThinningTxns = 4 + 4*4 // ceil(10/3) message slices; 12/4 + one short slice per flat table (4)
 	)
 
 	exec := func(query string, args ...any) {
@@ -98,6 +99,8 @@ func TestDeleteUserProjectThinsALargeChatInRowBoundedSlices(t *testing.T) {
 		      VALUES ($1,'owner',$2,$3,$4,1,1,$4,'{}',$5)`, fmt.Sprintf("%s-uu-%02d", chat, i), 1000+i, project, chat, now)
 		exec(`INSERT INTO step_executions (id, workflow_id, step_id, activity_name, created_at)
 		      VALUES ($1,$2,'step','CallLLM',$3)`, fmt.Sprintf("%s-step-%02d", chat, i), workflowOfChat, now)
+		exec(`INSERT INTO node_observations (id, chat_id, workflow_id, step_id, attempt, created_at)
+		      VALUES ($1,$2,$3,'step',$4,$5)`, fmt.Sprintf("%s-obs-%02d", chat, i), chat, workflowOfChat, i+1, now)
 	}
 
 	// A chat of another project, forked at one of the messages being thinned.
@@ -113,6 +116,7 @@ func TestDeleteUserProjectThinsALargeChatInRowBoundedSlices(t *testing.T) {
 		"chat_updates":           `SELECT count(*) FROM chat_updates WHERE chat_id = $1`,
 		"user_updates":           `SELECT count(*) FROM user_updates WHERE chat_id = $1 OR id LIKE $1 || '-%'`,
 		"step_executions":        `SELECT count(*) FROM step_executions WHERE id LIKE $1 || '-%'`,
+		"node_observations":      `SELECT count(*) FROM node_observations WHERE chat_id = $1`,
 		// The delivery record goes with its message, as in the chat batch,
 		// rather than staying as a delivered record naming no message.
 		"agent_messages": `SELECT count(*) FROM agent_messages WHERE chat_id = $1`,
