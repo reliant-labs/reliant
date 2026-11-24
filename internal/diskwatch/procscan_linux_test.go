@@ -5,6 +5,7 @@ import (
 	"errors"
 	"go/build"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -91,8 +92,8 @@ func startHelper(t *testing.T, argv0, dir string, env ...string) int {
 // scanOnly scans the real /proc entry of pid alone, through a root that holds
 // just that entry. What the rest of the host runs is not this test's subject,
 // and the full scan rightly fails on a host where the kernel withholds one of
-// this user's processes from it (a GitHub runner's `systemd --user`: reading
-// its cwd is EACCES), which would fail the test for a process it never made.
+// this user's processes from it for a reason the scan cannot explain, which
+// would fail the test for a process it never made.
 func scanOnly(t *testing.T, pid int) procSnapshot {
 	t.Helper()
 	root := t.TempDir()
@@ -104,7 +105,7 @@ func scanOnly(t *testing.T, pid int) procSnapshot {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := scanProcRoot(root, os.Geteuid(), boot)
+	s, err := scanProcRoot(root, reader{euid: os.Geteuid()}, boot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +193,7 @@ func fakeProc(t *testing.T, root string, pid int, comm, cwd string) string {
 func TestScanProcRoot_UnreadableProcessFailsTheScan(t *testing.T) {
 	root := t.TempDir()
 	fakeProc(t, root, 10, "go", "/tmp/go-build1")
-	s, err := scanProcRoot(root, os.Geteuid(), time.Unix(0, 0))
+	s, err := scanProcRoot(root, reader{euid: os.Geteuid()}, time.Unix(0, 0))
 	if err != nil {
 		t.Fatalf("a fully readable scan failed: %v", err)
 	}
@@ -228,10 +229,10 @@ func TestScanProcRoot_UnreadableProcessFailsTheScan(t *testing.T) {
 			root := t.TempDir()
 			fakeProc(t, root, 10, "go", "/tmp/go-build1")
 			tc.breakIt(t, fakeProc(t, root, 11, "sleep", "/"))
-			if _, err := scanProcRoot(root, os.Geteuid(), time.Unix(0, 0)); err == nil {
+			if _, err := scanProcRoot(root, reader{euid: os.Geteuid()}, time.Unix(0, 0)); err == nil {
 				t.Fatal("a scan that could not read one of this user's processes succeeded")
 			}
-			_, err := scanProcRoot(root, os.Geteuid()+1, time.Unix(0, 0))
+			_, err := scanProcRoot(root, reader{euid: os.Geteuid() + 1}, time.Unix(0, 0))
 			if tc.otherUserOK && err != nil {
 				t.Fatalf("another user's unreadable descriptors failed the scan: %v", err)
 			}
@@ -273,7 +274,7 @@ func TestScanProcRoot_ExitedProcessIsNotIncomplete(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if _, err := scanProcRoot(root, os.Geteuid(), time.Unix(0, 0)); err != nil {
+		if _, err := scanProcRoot(root, reader{euid: os.Geteuid()}, time.Unix(0, 0)); err != nil {
 			t.Fatalf("a process whose %v vanished failed the scan: %v", gone, err)
 		}
 	}
@@ -357,7 +358,7 @@ func TestScanProcRoot_PidReplacedMidReadIsReadAgain(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	s, err := scanProcRoot(root, os.Geteuid(), time.Unix(0, 0))
+	s, err := scanProcRoot(root, reader{euid: os.Geteuid()}, time.Unix(0, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +381,7 @@ func TestScanProcRoot_PidExitedMidReadHoldsNothing(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	s, err := scanProcRoot(root, os.Geteuid(), time.Unix(0, 0))
+	s, err := scanProcRoot(root, reader{euid: os.Geteuid()}, time.Unix(0, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -400,7 +401,110 @@ func TestScanProcRoot_PidReplacedOnEveryReadFailsTheScan(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	if _, err := scanProcRoot(root, os.Geteuid(), time.Unix(0, 0)); !errors.Is(err, errProcReplaced) {
+	if _, err := scanProcRoot(root, reader{euid: os.Geteuid()}, time.Unix(0, 0)); !errors.Is(err, errProcReplaced) {
 		t.Fatalf("scan error = %v, want %v", err, errProcReplaced)
+	}
+}
+
+// fakeStatus writes the fake process at dir a /proc/<pid>/status with the
+// given Uid line (real, effective, saved, filesystem) and permitted set.
+func fakeStatus(t *testing.T, dir, uids, capPrm string) {
+	t.Helper()
+	body := "Name:\tsystemd\nUid:\t" + uids + "\nGid:\t1\t1\t1\t1\nCapInh:\t0000000000000000\nCapPrm:\t" + capPrm + "\nCapEff:\t" + capPrm + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "status"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// withhold makes reading the fake process's environment fail EACCES, as the
+// kernel's ptrace read check refuses a capability holder's references to its
+// own user. root reads a mode-000 file, so the test needs another user.
+func withhold(t *testing.T, dir string) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a mode-000 file: no EACCES to explain")
+	}
+	if err := os.Chmod(filepath.Join(dir, "environ"), 0); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// reliant#3522: a lingering `systemd --user` (CAP_WAKE_ALARM in its
+// permitted set) refuses its cwd, fds and environment to its own user, and
+// that one refusal failed every scan on the host, so no work directory was
+// ever proven dead. A refusal explained by status (every uid ours, a
+// permitted set beyond the reader's) no longer fails the scan: the process
+// is recorded as a capability holder, with its start time, and contributes
+// its command line as any process does.
+func TestScanProcRoot_CapabilityHolderIsExplained(t *testing.T) {
+	uid := strconv.Itoa(os.Geteuid())
+	ours := uid + "\t" + uid + "\t" + uid + "\t" + uid
+	build := func(t *testing.T) (root, dir string) {
+		root = t.TempDir()
+		fakeProc(t, root, 10, "go", "/tmp/go-build1")
+		dir = fakeProc(t, root, 11, "systemd", "/")
+		if err := os.WriteFile(filepath.Join(dir, "cmdline"), []byte("/lib/systemd/systemd\x00--user\x00GOTMPDIR=/x/gotmp-5-5\x00"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		withhold(t, dir)
+		return root, dir
+	}
+
+	root, dir := build(t)
+	fakeStatus(t, dir, ours, "0000000800000000")
+	s, err := scanProcRoot(root, reader{euid: os.Geteuid()}, time.Unix(0, 0))
+	if err != nil {
+		t.Fatalf("a capability holder's refusal failed the scan: %v", err)
+	}
+	if want := (procStart{PID: 11, Comm: "systemd", Start: time.Unix(5, 0)}); len(s.capHolders) != 1 || s.capHolders[0] != want {
+		t.Errorf("capHolders = %v, want %v", s.capHolders, want)
+	}
+	if !s.names["go-build1"] || !s.names["gotmp-5-5"] || len(s.goStarts) != 1 {
+		t.Errorf("scan = %+v, want the go command's go-build1, the holder's command line, and one go command", s)
+	}
+
+	// Everything else unreadable still fails the proof.
+	for _, tc := range []struct {
+		name   string
+		as     reader
+		status func(t *testing.T, dir string)
+	}{
+		{"permitted set within the reader's", reader{euid: os.Geteuid(), capEff: 0x0000000800000000},
+			func(t *testing.T, dir string) { fakeStatus(t, dir, ours, "0000000800000000") }},
+		{"no capability at all", reader{euid: os.Geteuid()},
+			func(t *testing.T, dir string) { fakeStatus(t, dir, ours, "0000000000000000") }},
+		{"a uid not ours (setuid)", reader{euid: os.Geteuid()},
+			func(t *testing.T, dir string) { fakeStatus(t, dir, uid+"\t"+uid+"\t0\t"+uid, "0000000800000000") }},
+		{"no status", reader{euid: os.Geteuid()}, func(*testing.T, string) {}},
+		{"unreadable status", reader{euid: os.Geteuid()},
+			func(t *testing.T, dir string) { replace(t, filepath.Join(dir, "status"), false) }},
+		{"status with no CapPrm", reader{euid: os.Geteuid()}, func(t *testing.T, dir string) {
+			if err := os.WriteFile(filepath.Join(dir, "status"), []byte("Uid:\t"+ours+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, dir := build(t)
+			tc.status(t, dir)
+			_, err := scanProcRoot(root, tc.as, time.Unix(0, 0))
+			if err == nil {
+				t.Fatal("an unexplained refusal did not fail the scan")
+			}
+			if !errors.Is(err, fs.ErrPermission) {
+				t.Errorf("err = %v, want it to name the refusal", err)
+			}
+		})
+	}
+}
+
+func TestReadCapEff(t *testing.T) {
+	dir := t.TempDir()
+	fakeStatus(t, dir, "1\t1\t1\t1", "000001ffffffffff")
+	if c, err := readCapEff(dir); err != nil || c != 0x000001ffffffffff {
+		t.Fatalf("readCapEff = %x, %v; want 1ffffffffff", c, err)
+	}
+	if c, err := readCapEff(filepath.Join(procRoot, "self")); err != nil {
+		t.Fatalf("this process's own CapEff: %x, %v", c, err)
 	}
 }

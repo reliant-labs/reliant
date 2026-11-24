@@ -29,10 +29,23 @@ func scanProcesses() (procSnapshot, error) {
 	if err != nil {
 		return procSnapshot{}, err
 	}
-	return scanProcRoot(procRoot, os.Geteuid(), boot)
+	caps, err := readCapEff(filepath.Join(procRoot, "self"))
+	if err != nil {
+		return procSnapshot{}, fmt.Errorf("reading this process's capabilities: %w", err)
+	}
+	return scanProcRoot(procRoot, reader{euid: os.Geteuid(), capEff: caps}, boot)
 }
 
-// scanProcRoot is scanProcesses over the /proc at root, as the user euid.
+// reader is who reads /proc: the user whose processes' references it must
+// read (euid), and its effective capability set, which the kernel compares
+// with a process's permitted set before it hands over that process's
+// references (capabilityHolder).
+type reader struct {
+	euid   int
+	capEff uint64
+}
+
+// scanProcRoot is scanProcesses over the /proc at root, as the reader as.
 //
 // The snapshot is a proof only if it is complete for every process that can
 // hold this user's work directories: this user's own (those whose /proc
@@ -46,12 +59,18 @@ func scanProcesses() (procSnapshot, error) {
 // a process contributes what /proc shows everyone: its command line and,
 // when it is a go command or a linker, its start time.
 //
+// One exception is explained rather than failed: a process of this user's
+// that holds a capability the reader lacks (capabilityHolder), whose
+// references the kernel refuses to its own user. It contributes its command
+// line and start time, and it is recorded as a capability holder: a work
+// directory born at or before its start is kept (procSnapshot.capHolders).
+//
 // A pid names a process only while it lives: one that exits mid-read can be
 // replaced by another under the same pid, and reads either side of the
 // replacement would mix the two. So each process is read between two reads
 // of its start time (readProcess), and what it held counts only when both
 // name the same process.
-func scanProcRoot(root string, euid int, boot time.Time) (procSnapshot, error) {
+func scanProcRoot(root string, as reader, boot time.Time) (procSnapshot, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return procSnapshot{}, err
@@ -63,7 +82,7 @@ func scanProcRoot(root string, euid int, boot time.Time) (procSnapshot, error) {
 		if err != nil || pid <= 0 {
 			continue
 		}
-		p, err := readProcessStable(filepath.Join(root, e.Name()), euid)
+		p, err := readProcessStable(filepath.Join(root, e.Name()), as)
 		if errors.Is(err, errProcExited) {
 			continue // holds nothing, and no process took its pid
 		}
@@ -78,6 +97,9 @@ func scanProcRoot(root string, euid int, boot time.Time) (procSnapshot, error) {
 			s.names[n] = true
 		}
 		at := boot.Add(time.Duration(p.start) * time.Second / clockTicks)
+		if p.capHolder {
+			s.capHolders = append(s.capHolders, procStart{PID: pid, Comm: p.comm, Start: at})
+		}
 		isGo, isLink := creatorKinds(p.comm, p.exe, p.cmdline)
 		if isGo {
 			s.goStarts = append(s.goStarts, procStart{PID: pid, Comm: p.comm, Start: at})
@@ -107,11 +129,11 @@ const pidReadAttempts = 3
 // readProcessStable is readProcess, read again when the pid's process was
 // replaced mid-read: the replacement is a live process like any other, and
 // is judged by a read of its own.
-func readProcessStable(dir string, euid int) (procInfo, error) {
+func readProcessStable(dir string, as reader) (procInfo, error) {
 	var err error
 	for range pidReadAttempts {
 		var p procInfo
-		if p, err = readProcess(dir, euid); !errors.Is(err, errProcReplaced) {
+		if p, err = readProcess(dir, as); !errors.Is(err, errProcReplaced) {
 			return p, err
 		}
 	}
@@ -125,9 +147,13 @@ type procInfo struct {
 	exe     string
 	cmdline []byte
 	refs    procSnapshot // its references (names only)
+	// capHolder: one of the reader's processes whose references the kernel
+	// refused because it holds a capability the reader lacks
+	// (capabilityHolder). refs then has its command line alone.
+	capHolder bool
 }
 
-// readProcess reads one process's /proc entry at dir, as the user euid: its
+// readProcess reads one process's /proc entry at dir, as the reader as: its
 // identity (command name and start time) and every reference it holds.
 //
 // The start time is read first and again last. Between two reads that agree,
@@ -138,7 +164,7 @@ type procInfo struct {
 // exited (errProcExited) and nothing read counts; when it finds another
 // process, the reads may mix the two (errProcReplaced), and the replacement
 // must be read afresh.
-func readProcess(dir string, euid int) (procInfo, error) {
+func readProcess(dir string, as reader) (procInfo, error) {
 	comm, start, err := readStat(dir)
 	if gone(err) {
 		return procInfo{}, errProcExited
@@ -149,7 +175,17 @@ func readProcess(dir string, euid int) (procInfo, error) {
 		return procInfo{}, err
 	}
 	p := procInfo{comm: comm, start: start}
-	if err := p.read(dir, euid); err != nil {
+	if err := p.read(dir, as); err != nil {
+		if gone(err) {
+			// Its status vanished while a refusal was explained: an exit,
+			// or another process taking its pid, only if stat agrees.
+			switch _, again, serr := readStat(dir); {
+			case gone(serr):
+				return procInfo{}, errProcExited
+			case serr == nil && again != start:
+				return procInfo{}, errProcReplaced
+			}
+		}
 		return procInfo{}, err
 	}
 	_, again, err := readStat(dir)
@@ -164,10 +200,11 @@ func readProcess(dir string, euid int) (procInfo, error) {
 	return p, nil
 }
 
-// read fills in p's command line and, for one of euid's processes, its
+// read fills in p's command line and, for one of the reader's processes, its
 // references. Whatever is gone is skipped: readProcess decides afterwards
 // whether that was the process exiting or another taking its pid.
-func (p *procInfo) read(dir string, euid int) error {
+func (p *procInfo) read(dir string, as reader) error {
+	euid := as.euid
 	// Whose references /proc gives this user is told by who owns them, not
 	// the process: a non-dumpable process of this user's (a sandbox,
 	// ssh-agent) has root's, and is withheld from its own user too.
@@ -188,10 +225,80 @@ func (p *procInfo) read(dir string, euid int) error {
 	p.refs.addRefs(string(cmdline))
 	if own {
 		if p.exe, err = readRefs(&p.refs, dir); err != nil {
-			return fmt.Errorf("(%s): %w", p.comm, err)
+			if !errors.Is(err, fs.ErrPermission) {
+				return fmt.Errorf("(%s): %w", p.comm, err)
+			}
+			if xerr := capabilityHolder(dir, as); xerr != nil {
+				// The error names the refusal first, as it always has.
+				return fmt.Errorf("(%s): %w; %w", p.comm, err, xerr)
+			}
+			p.exe, p.capHolder = "", true
 		}
 	}
 	return nil
+}
+
+// capabilityHolder explains a refusal of one of the reader's processes'
+// references (EACCES/EPERM) by that process's world-readable status, and
+// returns nil only when the explanation holds: every uid it has is the
+// reader's, and its permitted capability set is not a subset of the reader's
+// effective set. That is the kernel's ptrace read check refusing what the
+// uids would grant (cap_ptrace_access_check): a process that may gain a
+// capability its reader does not have keeps its references from its own user.
+// A lingering `systemd --user` holding CAP_WAKE_ALARM is one (reliant#3522).
+//
+// Any other refusal is unexplained (hidepid, an LSM, a /proc we cannot
+// trust) and the error says why. An error for which gone is true means the
+// status vanished: readProcess tells an exit from the rest.
+func capabilityHolder(dir string, as reader) error {
+	b, err := os.ReadFile(filepath.Join(dir, "status"))
+	if err != nil {
+		return fmt.Errorf("explaining the refusal: reading status: %w", err)
+	}
+	var uids []string
+	prm, havePrm := uint64(0), false
+	for _, line := range strings.Split(string(b), "\n") {
+		k, v, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "Uid":
+			uids = strings.Fields(v)
+		case "CapPrm":
+			if prm, err = strconv.ParseUint(strings.TrimSpace(v), 16, 64); err != nil {
+				return fmt.Errorf("explaining the refusal: malformed CapPrm %q", strings.TrimSpace(v))
+			}
+			havePrm = true
+		}
+	}
+	if len(uids) != 4 || !havePrm {
+		return errors.New("explaining the refusal: status has no Uid or CapPrm")
+	}
+	for _, u := range uids {
+		if u != strconv.Itoa(as.euid) {
+			return fmt.Errorf("unexplained refusal: uids %v are not all %d", uids, as.euid)
+		}
+	}
+	if prm&^as.capEff == 0 {
+		return fmt.Errorf("unexplained refusal: its permitted capabilities %016x are within ours %016x", prm, as.capEff)
+	}
+	return nil
+}
+
+// readCapEff reads the effective capability set from the status at dir
+// (/proc/self for this process).
+func readCapEff(dir string) (uint64, error) {
+	b, err := os.ReadFile(filepath.Join(dir, "status"))
+	if err != nil {
+		return 0, err
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(line, "CapEff:"); ok {
+			return strconv.ParseUint(strings.TrimSpace(v), 16, 64)
+		}
+	}
+	return 0, errors.New("status has no CapEff")
 }
 
 // readRefs adds every reference one of this user's processes holds to s: its

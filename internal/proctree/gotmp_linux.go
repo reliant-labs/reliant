@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"syscall"
+	"time"
 )
 
 // Each command's own GOTMPDIR.
@@ -25,8 +26,11 @@ import (
 // So every command the daemon starts gets a GOTMPDIR of its own,
 // <temp dir>/reliant-gotmp-<uid>/gotmp-<daemon pid>-<n>, and the daemon removes
 // it when the command's cgroup proves its processes are all gone: ownership is
-// a fact, not a guess from an mtime. One without a cgroup, or one the command
-// left processes running in, stays; the daemon's go_work_dirs pass removes it
+// a fact, not a guess from an mtime: at once when the cgroup is empty as the
+// command returns, else when a bounded watcher sees it empty (a killed
+// command's processes still exiting; releaseGoTmp). One without a cgroup, or
+// one the command left processes running in for longer than the watcher
+// waits, stays; the daemon's go_work_dirs pass removes it
 // once no live process holds it, which every one of its processes does in its
 // environment (internal/diskwatch, gowork.go). That pass runs every 10
 // minutes whatever RELIANT_STORAGE_REAPER says, so a daemon without cgroup
@@ -83,13 +87,76 @@ func (t *Tree) prepareGoTmp(cmd *exec.Cmd) {
 // cgroup: an escaped descendant that has not started its build yet would
 // find its GOTMPDIR gone and fail ("go: creating work dir: … no such file").
 // An empty root costs an inode; the pass removes it on its /proc proof.
-func (t *Tree) releaseGoTmp() {
+//
+// A cgroup still populated when its command returns is usually a killed
+// command whose processes are still exiting: SIGKILL is delivered, but a
+// go build's dozens of compilers and linkers take a moment to be reaped.
+// Its root is handed to a watcher (watchGoTmp) that removes it once the
+// cgroup empties, so it does not wait for the go_work_dirs pass (reliant#3522:
+// 2,800 roots, 20 GiB, on one host). watched closes when that watcher stops;
+// nil when there is none.
+func (t *Tree) releaseGoTmp() (watched <-chan struct{}) {
 	dir := t.goTmp
-	if dir == "" || t.dir == "" || !cgroupProvenEmpty(t.dir) {
-		return
+	if dir == "" || t.dir == "" {
+		return nil
 	}
-	t.goTmp = ""
-	go func() { _ = os.RemoveAll(dir) }()
+	if cgroupProvenEmpty(t.dir) {
+		t.goTmp = ""
+		go func() { _ = os.RemoveAll(dir) }()
+		return nil
+	}
+	done, ok := watchGoTmp(t.dir, dir)
+	if ok {
+		t.goTmp = ""
+	}
+	return done
+}
+
+var (
+	// goTmpWatchFor bounds how long a watcher waits for a cgroup to empty:
+	// a command that left a process running for longer (a daemon it
+	// started) leaves its root to the go_work_dirs pass.
+	goTmpWatchFor = 5 * time.Minute
+	// goTmpWatchPoll is how often a watcher reads the cgroup.
+	goTmpWatchPoll = time.Second
+	// goTmpWatchers bounds the watchers at once; a root that finds none
+	// free is left to the go_work_dirs pass.
+	goTmpWatchers = make(chan struct{}, 64)
+)
+
+// watchGoTmp removes root, in the background, once the cgroup at cgroup is
+// proven empty, polling for at most goTmpWatchFor. ok is false when every
+// watcher is busy: root is then left where it is. done closes when the
+// watcher stops, whether it removed root or gave up. Nothing waits for it:
+// a daemon that exits first leaves root to the next daemon's pass.
+func watchGoTmp(cgroup, root string) (done <-chan struct{}, ok bool) {
+	pool, poll, wait := goTmpWatchers, goTmpWatchPoll, goTmpWatchFor
+	select {
+	case pool <- struct{}{}:
+	default:
+		return nil, false
+	}
+	ch := make(chan struct{})
+	go func() {
+		defer close(ch)
+		defer func() { <-pool }()
+		tick := time.NewTicker(poll)
+		defer tick.Stop()
+		deadline := time.NewTimer(wait)
+		defer deadline.Stop()
+		for {
+			if cgroupProvenEmpty(cgroup) {
+				_ = os.RemoveAll(root)
+				return
+			}
+			select {
+			case <-tick.C:
+			case <-deadline.C:
+				return
+			}
+		}
+	}()
+	return ch, true
 }
 
 // cgroupProvenEmpty reports whether the cgroup at dir is gone (Release

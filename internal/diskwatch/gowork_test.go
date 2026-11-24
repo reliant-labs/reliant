@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,6 +74,66 @@ func TestTrimGoWorkDirs_RemovesOnlyProvenDead(t *testing.T) {
 	}
 	if a.OldestCreator == "" {
 		t.Error("the audit does not name the live go command that kept a directory")
+	}
+}
+
+// reliant#3522: a live process whose references the kernel withholds (a
+// capability holder) can hold only the work directories born at or before it
+// started. Those are kept; every younger one is judged as before, so a
+// `systemd --user` that has lingered since boot keeps nothing.
+func TestTrimGoWorkDirs_CapabilityHolderKeepsOnlyWhatPredatesIt(t *testing.T) {
+	m := newTrimMachine(t, 100*GiB, CacheTrimConfig{})
+	births := map[string]time.Time{}
+	base := commandGoTmpBasePrefix + itoa(os.Getuid())
+	mk := func(rel string, born time.Duration) string {
+		t.Helper()
+		p := filepath.Join(m.tmpdir, base, rel)
+		writeFile(t, filepath.Join(p, "go-build9", "b001", "a.out"), 4096, m.now.Add(-born))
+		births[p] = m.now.Add(-born)
+		return p
+	}
+	predates := mk("gotmp-1-1", time.Hour)
+	younger := mk("gotmp-1-2", 20*time.Minute)
+	m.w.trim.birth = func(p string) time.Time { return births[p] }
+	holder := procStart{PID: 20256, Comm: "systemd", Start: m.now.Add(-30 * time.Minute)}
+	m.w.trim.procs = func() (procSnapshot, error) {
+		return procSnapshot{capHolders: []procStart{holder}}, nil
+	}
+
+	m.w.TrimCaches(context.Background(), false)
+	if !exists(predates) || exists(younger) {
+		t.Errorf("born before the holder started exists=%v (want true); after exists=%v (want false)", exists(predates), exists(younger))
+	}
+	a := lastWorkDirAudit(t, m.w)
+	if a.Proof != "proc_scan" || a.KeptCapabilityHolder != 1 || a.Removed != 1 || a.Error != "" {
+		t.Errorf("audit = %+v, want a proc_scan proof that kept 1 for the holder and removed 1", a)
+	}
+	if !strings.Contains(a.CapabilityHolders, "pid 20256 (systemd)") {
+		t.Errorf("audit capability_holders = %q, want the holder named", a.CapabilityHolders)
+	}
+
+	// A holder lingering since boot shields nothing younger than itself.
+	holder.Start = m.now.Add(-48 * time.Hour)
+	m.w.TrimCaches(context.Background(), false)
+	if exists(predates) {
+		t.Error("a root born after the holder started outlived the pass")
+	}
+}
+
+func TestCapHolderShields(t *testing.T) {
+	born := time.Unix(1000, 0)
+	s := procSnapshot{capHolders: []procStart{{PID: 1, Start: born.Add(-time.Minute)}}}
+	if _, ok := s.capHolderShields(born); ok {
+		t.Error("a holder that started before the directory was born shields it")
+	}
+	s.capHolders = append(s.capHolders, procStart{PID: 2, Start: born.Add(time.Hour)}, procStart{PID: 3, Start: born.Add(time.Minute)})
+	if h, ok := s.capHolderShields(born); !ok || h.PID != 3 {
+		t.Errorf("capHolderShields = %+v %v, want the oldest holder started at or after the birth (pid 3)", h, ok)
+	}
+	// Within a clock tick before the birth is not before it.
+	s.capHolders = []procStart{{PID: 4, Start: born.Add(-creatorSlack / 2)}}
+	if _, ok := s.capHolderShields(born); !ok {
+		t.Error("a holder within creatorSlack of the birth does not shield it")
 	}
 }
 
