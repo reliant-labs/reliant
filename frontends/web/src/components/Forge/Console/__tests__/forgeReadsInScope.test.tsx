@@ -30,6 +30,7 @@ import { DomainService } from "@/gen/controlplane/services/domain/v1/domain_pb";
 import { SecretStoreService } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
 import { useForgeRoster } from "@/hooks/forge-queries";
 import { setTransport } from "@/lib/connect";
+import { createAppQueryClient } from "@/lib/query-client";
 import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
 import { createShopTransport } from "@/fixtures/shop";
 import { DEMO_PROJECT } from "@/fixtures/shop/handlers/scope";
@@ -100,8 +101,8 @@ function ConsoleHarness({ page, env, children }: { page: ConsolePage; env: strin
 function renderInScope(page: ConsolePage, ui: ReactNode, { env = "prod", params = {}, search = {} }: { env?: string; params?: Record<string, string>; search?: Record<string, unknown> } = {}) {
   route.params = params;
   route.search = { env, ...search };
-  // A scope per render, so no page answers from another's cache.
-  const scope = createTransportScope({ id: "sample", transport: createShopTransport(), readOnly: true });
+  // A scope per render, so no page answers from another's cache; the app's query defaults, as the tour's scope has.
+  const scope = createTransportScope({ id: "sample", transport: createShopTransport(), queryClient: createAppQueryClient(), readOnly: true });
   return render(
     <TransportScopeProvider scope={scope}>
       <ConsoleHarness page={page} env={env}>
