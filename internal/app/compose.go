@@ -681,7 +681,7 @@ func (g *Graph) newWriteLedgerPrune() (*WriteLedgerPrune, error) {
 }
 
 func (g *Graph) newProjectPurge() (*ProjectPurge, error) {
-	return NewProjectPurge(ProjectPurgeDeps{Purges: g.ProjectPurges()})
+	return NewProjectPurge(ProjectPurgeDeps{Purges: g.Projectpurge()})
 }
 
 func (g *Graph) newLedgerRetention() (*LedgerRetention, error) {
@@ -1385,7 +1385,7 @@ func (g *Graph) newProject() (*project.Service, error) {
 	o := g.Database().ORM()
 	return project.New(project.Deps{
 		Projects:       g.Projectaccess(),
-		Purges:         g.ProjectPurges(),
+		Purges:         g.Projectpurge(),
 		ProjectConfigs: store.NewProjectConfigExtStore(o),
 		Logger:         g.Log,
 		Config:         g.Cfg,
@@ -1857,12 +1857,6 @@ func (g *Graph) newProjectaccess() (projectaccess.Service, error) {
 	})), nil
 }
 
-// newProjectPurges constructs the ProjectPurges provider (NewProjectPurges, internal/app/providers_worker.go).
-func (g *Graph) newProjectPurges() (projectpurge.Service, error) {
-	return NewProjectPurges(ProjectPurgesDeps{
-		DB: g.Database(),
-	})
-}
 func (g *Graph) newCredentialsAutomationtokens() (automationtokens.Service, error) {
 	svc, err := automationtokens.New(automationtokens.Deps{DB: g.Database().ORM(), Sealer: g.Vault()})
 	if err != nil {
@@ -1907,4 +1901,11 @@ func (g *Graph) newChangeController() (tools.ChangeController, error) {
 		DB:           g.Database(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 	}), nil
+}
+
+// newProjectpurge constructs the projectpurge package (internal/projectpurge).
+func (g *Graph) newProjectpurge() (projectpurge.Service, error) {
+	return projectpurge.NewServiceWithForgeMiddleware(projectpurge.New(projectpurge.Deps{
+		DB: g.Database().ORM(), // the project's ORM client
+	})), nil
 }
