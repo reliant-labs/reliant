@@ -27,8 +27,8 @@ vi.mock("@/components/Forge/Console/useConsoleNavModel", async (importOriginal) 
 }));
 // The header's org row and switcher read the org and the catalog: their own tests.
 vi.mock("@/components/Layout/sidebar/ProjectSwitcher", () => ({
-  OrgHeaderRow: () => <div data-testid="org-row" />,
-  ProjectSwitcherRow: () => <div data-testid="project-row" />,
+  OrgHeaderRow: () => { throw new Error("Public demo must not mount live org controls"); },
+  ProjectSwitcherRow: () => { throw new Error("Public demo must not mount live project controls"); },
 }));
 vi.mock("@/lib/changesFeature", () => ({ changesUIEnabled: () => false }));
 
@@ -61,8 +61,8 @@ describe("the demo's nav", () => {
     expect(screen.getByTestId("nav-demo-built")).toHaveAttribute("href", "/forge/demo?section=built");
     // No Find: the demo's keyboard host has no palette.
     expect(screen.queryByTestId("nav-find")).toBeNull();
-    expect(screen.getByTestId("org-row")).toBeInTheDocument();
-    expect(screen.getByTestId("project-row")).toBeInTheDocument();
+    expect(screen.getByTestId("demo-project-label")).toHaveTextContent("shop");
+    expect(screen.queryByTestId("shell-project-switcher")).toBeNull();
     // The phone's actions are the drawer's only.
     expect(screen.queryByTestId("demo-drawer-actions")).toBeNull();
   });

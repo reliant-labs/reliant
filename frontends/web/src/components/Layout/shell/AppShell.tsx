@@ -95,10 +95,13 @@ export interface AppShellFrameProps {
    * onboarding; a host with nothing to set up (the public demo) passes none.
    */
   guide?: ComponentType<ShellGuideProps>;
+  /** Public, read-only hosts may draw the frame without impersonating an authenticated session.
+   * This affects presentation only: it grants no session or keyboard-host capabilities. */
+  publicPreview?: boolean;
   children: ReactNode;
 }
 
-export function AppShellFrame({ nav, guide, children }: AppShellFrameProps) {
+export function AppShellFrame({ nav, guide, publicPreview = false, children }: AppShellFrameProps) {
   // The RENDERED matches, like the keyboard host: mid-navigation the location
   // already names the destination while the page on screen is still the old one.
   const pathname = useRouterState({
@@ -106,7 +109,7 @@ export function AppShellFrame({ nav, guide, children }: AppShellFrameProps) {
   });
   const routeIds = useRouterState({ select: (s) => s.matches.map((match) => match.routeId).join(" ") });
   const signedIn = useSignedIn();
-  const inShell = shellFrameScope({ routeIds: routeIds.split(" "), pathname, signedIn });
+  const inShell = shellFrameScope({ routeIds: routeIds.split(" "), pathname, signedIn: signedIn || publicPreview });
 
   const expanded = useWorkspaceStateStore((state) => state.leftSidebarExpanded);
   const narrow = useNarrowViewport();

@@ -4,9 +4,9 @@
  * The public demo's nav body, in the app's own frame (demoShellRoutes.tsx
  * mounts AppShellFrame with `nav={DemoNav}`): the shell's one nav column
  * (Layout/sidebar/ShellNavColumn.tsx) with the demo's config (demoNav.ts)
- * and the demo's slots. The org row, the project switcher, the renderer, the
- * drill-in and the phone's drawer are the app's; the demo chooses only the
- * config and what its slots draw.
+ * and the demo's slots. The renderer, drill-in and phone drawer are the
+ * app's; the scope header is static, so no live account/project controls
+ * (or their token-dependent hooks) mount on this public host.
  *
  *  - No Find: the demo's keyboard host has no command palette to open.
  *  - One app: every page of the demo is the sample shop's (a link to another
@@ -30,6 +30,8 @@ import { consolePageOf, consolePath } from "../Console/paths";
 import { FIXTURE_PROJECT } from "../Observability/__fixtures__/fixtureApi";
 import { DemoDrawerActions } from "./DemoScreenActions";
 import { demoNav } from "./demoNav";
+import { SidebarOrgLabel, SidebarOrgRow } from "@/components/Layout/sidebar/primitives";
+import { ForgeBrand } from "@/components/ForgeShell/ForgeBrand";
 
 /** Where the shell reads its scope: a console page's own path, else (a page of the demo's own) shop's Overview. */
 const SHOP_HOME = consolePath(FIXTURE_PROJECT, { kind: "overview" });
@@ -40,7 +42,8 @@ export function DemoNav({ pathname, search, onNavigate }: ShellNavProps) {
   const narrow = useNarrowViewport();
   const slots = useMemo<NavSlots>(() => ({ "host-actions": () => (narrow ? <DemoDrawerActions /> : null) }), [narrow]);
   return (
-    <ShellNavColumn config={demoNav} slots={slots} shell={shell} pathname={pathname} search={search} onNavigate={onNavigate} flat={narrow} find={false} />
+    <ShellNavColumn config={demoNav} slots={slots} shell={shell} pathname={pathname} search={search} onNavigate={onNavigate} flat={narrow} find={false}
+      header={<><SidebarOrgRow><ForgeBrand /></SidebarOrgRow><div data-testid="demo-project-label"><SidebarOrgLabel name="shop" /></div></>} />
   );
 }
 

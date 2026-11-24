@@ -42,13 +42,15 @@ export interface ShellNavColumnProps {
    * leaves it out rather than draw a box that does nothing.
    */
   find?: boolean;
+  /** Public hosts supply non-interactive scope chrome instead of live account/project controls. */
+  header?: ReactNode;
   /** The column's root: the keyboard focuses it ("focus the sidebar"). */
   ref?: Ref<HTMLDivElement>;
   /** The host's own layers over the column: context menus, dialogs. */
   children?: ReactNode;
 }
 
-export function ShellNavColumn({ config, slots, shell, pathname, search, onNavigate, flat, find = true, ref, children }: ShellNavColumnProps) {
+export function ShellNavColumn({ config, slots, shell, pathname, search, onNavigate, flat, find = true, header, ref, children }: ShellNavColumnProps) {
   return (
     <div
       ref={ref}
@@ -60,9 +62,9 @@ export function ShellNavColumn({ config, slots, shell, pathname, search, onNavig
       tabIndex={-1}
     >
       {/* The header (U6, owner): the org row on the nav's top bar, then Find (the command palette), then the project(s) every row below is about. */}
-      <OrgHeaderRow />
+      {header === undefined ? <OrgHeaderRow /> : header}
       {find && <FindBox />}
-      <ProjectSwitcherRow shell={shell} pathname={pathname} />
+      {header === undefined && <ProjectSwitcherRow shell={shell} pathname={pathname} />}
 
       {/* The nav as data (U6c): the config's rows, or the area the route is in, then the footer.
           On a phone it is a drawer, where every row is drawn as a top-level row (NavRenderer `flat`). */}

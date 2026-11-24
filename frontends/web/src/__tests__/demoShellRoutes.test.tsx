@@ -28,7 +28,13 @@ vi.mock("@/components/Onboarding/JourneyTour", () => ({ JourneyTour: () => <div 
 vi.mock("@/components/Forge/Demo/DemoConsole", () => ({ DemoConsole: () => <main data-testid="demo-console" /> }));
 // The shell's frame and keyboard host are the app's, real; the demo's nav body
 // (its own test: Forge/Demo/__tests__/DemoNav.test.tsx) reads the catalog and the console model.
-vi.mock("@/components/Forge/Demo/DemoNav", () => ({ DemoNav: ({ pathname }: { pathname: string }) => <nav data-testid="demo-nav" data-pathname={pathname} /> }));
+vi.mock("@/components/Forge/Demo/DemoNav", async () => {
+  const { useSession } = await import("@/lib/session");
+  return { DemoNav: ({ pathname }: { pathname: string }) => {
+    const session = useSession();
+    return <nav data-testid="demo-nav" data-pathname={pathname} data-signed-in={session.signedIn} data-user={session.user?.id ?? "anonymous"} />;
+  } };
+});
 // The console's pages, one test id each; the layouts pass through.
 vi.mock("@/forgeConsolePages", async () => {
   const { Outlet } = await import("@tanstack/react-router");
@@ -138,14 +144,16 @@ describe("the demo shell's routes", () => {
     ["/forge/p/shop", "console-overview"],
     ["/forge/p/shop/observability/traces", "console-observabilityView"],
     ["/forge/demo?section=home", "demo-console"],
-  ])("draws %s in the app's shell, with the demo's nav and the visitor signed in", async (path, testId) => {
+  ])("draws %s in the public-preview shell without authenticating the visitor", async (path, testId) => {
     renderDemoShell(path);
     const page = await screen.findByTestId(testId);
-    // The frame is on (shellFrame.tsx: signed in, under an app layout): the page in its one main region, the nav beside it.
+    // Public-preview presentation only: the page in its one main region, the nav beside it.
     expect(await screen.findByTestId("shell-nav")).toBeInTheDocument();
     expect(screen.getByTestId("shell-main")).toContainElement(page);
     expect(document.querySelector("[data-shell-frame]")).not.toBeNull();
     expect(await screen.findByTestId("demo-nav")).toHaveAttribute("data-pathname", path.split("?")[0]);
+    expect(screen.getByTestId("demo-nav")).toHaveAttribute("data-signed-in", "false");
+    expect(screen.getByTestId("demo-nav")).toHaveAttribute("data-user", "anonymous");
     // No Setup Guide: the demo has nothing to set up.
     expect(screen.queryByTestId("setup-guide")).toBeNull();
   });

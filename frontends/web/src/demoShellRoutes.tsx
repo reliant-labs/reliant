@@ -28,12 +28,10 @@
  * THE APP'S SHELL. Every page under that layout is a page of the app's one
  * shell (Layout/shell/AppShell.tsx): the same frame, nav column, drill-ins and
  * phone drawer as the signed-in app, with the demo's nav (Forge/Demo/DemoNav,
- * demoNav.ts) in it. The frame turns on for a signed-in session under an app
- * layout (shellFrame.tsx shellFrameScope), so the root mounts the session as
- * the sample shop's person (fixtures/shop/user.ts APP_USER, a fixed session:
- * no token, nothing to sign out of) — here, not in demoBundle/DemoRoot.tsx,
- * so the deprecated mount of this tree in the app bundle (`?shell=demo`,
- * App.tsx) is in the shell too. The keyboard host has no overlays (no palette,
+ * demoNav.ts) in it. The frame opts into public-preview presentation under
+ * an app layout without claiming authentication. The root explicitly mounts
+ * a signed-out session, also for the deprecated app-bundle mount (`?shell=demo`,
+ * App.tsx). The keyboard host stays signed out and has no overlays (no palette,
  * no chat search, no project switcher: they are the app's).
  */
 
@@ -41,9 +39,8 @@ import { createRootRoute, createRoute, createRouter, Link, Navigate, Outlet, red
 
 import { Suspense } from 'react'
 
-import { fixedSession, SessionProvider } from './lib/session'
+import { SessionProvider, type SessionAuth } from './lib/session'
 import { lazyRoute } from './lib/lazyRoute'
-import { APP_USER } from './fixtures/shop/user'
 
 import { captureForgeEntry } from './components/ForgeShell/forgeEntry'
 import { bootDemoShell } from './components/Forge/Demo/demoShellBoot'
@@ -79,8 +76,13 @@ export const DEMO_HOME = consolePath(FIXTURE_PROJECT, { kind: 'overview' })
 
 const READ_ONLY = { readOnly: true, reason: 'Read-only demo' } as const
 
-/** The demo's visitor: the sample shop's person, signed in, with no token (lib/session fixedSession). */
-export const DEMO_SESSION = fixedSession(APP_USER)
+/** Public visitors have no credentials, including in the legacy app-bundle mount. */
+export const DEMO_SESSION: SessionAuth = {
+  user: null,
+  isAuthenticated: false,
+  isLoading: false,
+  getToken: async () => null,
+}
 
 /**
  * The app's shell with the demo's nav (Forge/Demo/DemoShellFrame): its own

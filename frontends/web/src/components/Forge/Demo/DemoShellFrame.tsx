@@ -23,7 +23,7 @@ import { DemoNav } from "./DemoNav";
 export function DemoShellFrame({ children }: { children: ReactNode }) {
   return (
     <ShortcutHost>
-      <AppShellFrame nav={DemoNav}>{children}</AppShellFrame>
+      <AppShellFrame nav={DemoNav} publicPreview>{children}</AppShellFrame>
     </ShortcutHost>
   );
 }
