@@ -11,8 +11,8 @@
  *    api.ts, its mappers and the read scheduler run as in production, and
  *    DEMO_DATA_SOURCE=remote swaps the data with no code change.
  *
- * Elsewhere (Reliant's and the forge shell's /forge/demo) the real client
- * would reach the real control plane, so those shells keep the fixtures.
+ * Without a control-plane URL (tests, a fixtures-only build) every read is a
+ * fixture. The app's own /forge/demo leaves for the demo host (demoHandoff.ts).
  */
 
 import { hasControlPlane } from "@/services/controlPlane/config";
