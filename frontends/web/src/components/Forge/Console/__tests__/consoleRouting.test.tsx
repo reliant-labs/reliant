@@ -451,7 +451,7 @@ describe("redirects from the retired URLs", () => {
     const router = renderAt("/forge/env/e2e?forgeProject=barkshop&tab=releases");
     await landsOn(router, "/forge/p/barkshop/releases", { env: "e2e" });
     // The console selects the project that declares it, over the current one.
-    await waitFor(() => expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-b" })));
+    await waitFor(() => expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-b" }), { skipWorkspaceStateSave: true }));
     expect(screen.getByTestId("page")).toHaveAttribute("data-env", "e2e");
   });
 
@@ -762,7 +762,7 @@ describe("several checkouts declare one app: ?project= names which", () => {
     await user.click(await screen.findByTestId("console-checkout-project-b2"));
     await waitFor(() => expect(router.state.location.search).toMatchObject({ project: "project-b2" }));
     expect((await screen.findByTestId("page")).dataset.projectId).toBe("project-b2");
-    expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-b2" }));
+    expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-b2" }), { skipWorkspaceStateSave: true });
   });
 
   it("opens the checkout ?project= names", async () => {

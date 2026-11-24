@@ -574,7 +574,7 @@ describe('MobileNewChat', () => {
       render(<MobileNewChat />)
       await userEvent.click(screen.getByRole('button', { name: /^Project/ }))
       await userEvent.click(screen.getByText('forge', { selector: 'p' }))
-      expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2' }), { restoreChat: false, restoreWorkspace: false })
+      expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2' }), { restoreWorkspace: false })
       expect(createProjectFromRepo).not.toHaveBeenCalled()
       expect(navigate).not.toHaveBeenCalled()
     })
@@ -584,7 +584,7 @@ describe('MobileNewChat', () => {
       await userEvent.click(screen.getByRole('button', { name: /^Project/ }))
       await userEvent.click(screen.getByText('landing', { selector: 'p' }))
       expect(createProjectFromRepo).toHaveBeenCalledWith(expect.objectContaining({ cloneUrl: 'https://github.com/o/landing', daemonId: 'd-laptop', name: 'landing' }))
-      await waitFor(() => expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: 'p3' }), { restoreChat: false, restoreWorkspace: false }))
+      await waitFor(() => expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: 'p3' }), { restoreWorkspace: false }))
     })
 
     it.each(['ready', 'set-up'])('keeps the %s target across a project switch and sends on that machine', async (kind) => {

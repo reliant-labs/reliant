@@ -4,7 +4,7 @@ import './components/Onboarding/journeys/catalog'
 import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
 import { OrgArrivalNotice } from './components/Orgs/OrgArrivalNotice'
 import { followActiveOrg } from './components/Orgs/followActiveOrg'
-import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate, type AnyRoute } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, Outlet, Navigate, retainSearchParams, useRouterState, useNavigate, type AnyRoute } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
 import { mobilePathFor, shouldRedirectToMobileNow } from './lib/mobileRedirect'
@@ -31,6 +31,7 @@ import {
   connectionOAuthCallbackSearchSchema,
   githubOAuthCallbackSearchSchema,
   indexSearchSchema,
+  PROJECTS_CARRIED,
   mobileNewChatSearchSchema,
   oauthCallbackSearchSchema,
   onboardingSearchSchema,
@@ -601,6 +602,8 @@ const appLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: '_app',
   validateSearch: indexSearchSchema,
+  // The chat list's project filter rides on every chat shell page.
+  search: { middlewares: [retainSearchParams([...PROJECTS_CARRIED])] },
   component: AppLayout,
 })
 
@@ -992,6 +995,7 @@ const orgAppLayoutRoute = createRoute({
   getParentRoute: () => orgLayoutRoute,
   id: '_app',
   validateSearch: indexSearchSchema,
+  search: { middlewares: [retainSearchParams([...PROJECTS_CARRIED])] },
   component: AppLayout,
 })
 
