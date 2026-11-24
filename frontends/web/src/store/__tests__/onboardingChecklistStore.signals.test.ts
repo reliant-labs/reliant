@@ -80,6 +80,19 @@ function catalog(init: Parameters<typeof create<typeof ListProjectsWithAppsRespo
 }
 
 describe("Setup Guide signals", () => {
+  it("merges pending detection with achievements earned while it awaited reads", async () => {
+    unsubscribe();
+    catalog({
+      hostedAppsState: HostedAppsState.OK,
+      unlinkedApps: [create(HostedAppSchema, { name: "site", lastDeployedAt: "2026-11-20T10:00:00Z" })],
+    });
+    // Detection finds the app and then yields at its tour import.
+    const pending = useOnboardingChecklistStore.getState().detectCompletedItems();
+    await useOnboardingChecklistStore.getState().markComplete("start-chat");
+    await pending;
+    expect(done()).toEqual(new Set(["deploy-app", "start-chat"]));
+  });
+
   it("connect-machine: the daemon list holds a usable machine, not a disconnected one", () => {
     queryClient.setQueryData(DAEMON_LIST_QUERY_KEY, create(ListDaemonsResponseSchema, {
       daemons: [create(DaemonInfoSchema, { status: DaemonStatus.DISCONNECTED })],

@@ -524,7 +524,12 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       found("take-product-tour", Object.values(useTourStore.getState().journeys ?? {}).some(journeyCompleted));
 
       if (startedIn !== generation) return;
-      const added = [...newItems].filter((id) => !completedItems.has(id));
+      // Other detectors and live completion signals may have committed while
+      // these reads were pending. Achievements are monotonic: merge with the
+      // current set, never replace it with the pre-await snapshot.
+      const currentItems = get().completedItems;
+      const added = [...newItems].filter((id) => !currentItems.has(id));
+      for (const id of currentItems) newItems.add(id);
       if (added.length > 0) {
         set({ completedItems: newItems });
         for (const id of added) {

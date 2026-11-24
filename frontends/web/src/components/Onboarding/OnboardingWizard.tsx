@@ -96,9 +96,9 @@ export function OnboardingWizard() {
   // Detect persisted achievements on load and when a journey finishes in this
   // session, without waiting for the wizard to remount.
   useEffect(() => {
-    if (!checklistInitialized) return;
+    if (!isInitialized) return;
     void detectCompletedItems();
-  }, [checklistInitialized, journeys, detectCompletedItems]);
+  }, [isInitialized, journeys, detectCompletedItems]);
 
   // Keep the other completion signals subscribed while the checklist is ready.
   useEffect(() => {

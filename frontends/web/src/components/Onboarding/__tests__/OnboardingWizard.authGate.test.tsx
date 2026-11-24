@@ -222,8 +222,27 @@ describe("OnboardingWizard — authentication gate", () => {
     await waitFor(() => expect(detect).toHaveBeenCalled());
   });
 
+  it.each(["tour", "checklist"])("waits for %s hydration before detecting achievements", async (loading) => {
+    tourStoreState.state.isInitialized = loading !== "tour";
+    const checklist = useOnboardingChecklistStore.getState();
+    checklist.isInitialized = loading !== "checklist";
+    const detect = checklist.detectCompletedItems;
+    const router = makeRouter(["/auth"]);
+    const view = render(<RouterProvider router={router} />);
+    await screen.findByTestId("login");
+    expect(detect).not.toHaveBeenCalled();
+
+    tourStoreState.state.isInitialized = true;
+    checklist.isInitialized = true;
+    view.rerender(<RouterProvider router={router} />);
+    await act(async () => { await router.invalidate(); });
+    await waitFor(() => expect(detect).toHaveBeenCalledTimes(1));
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    tourStoreState.state.isInitialized = true;
+    useOnboardingChecklistStore.getState().isInitialized = true;
     authState.current = { user: null };
   });
 
