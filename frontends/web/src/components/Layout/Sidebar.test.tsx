@@ -326,6 +326,29 @@ describe("Sidebar selected chat scroll", () => {
     expect(onNavigate).toHaveBeenCalledTimes(1);
   });
 
+  it("lists the Inbox in the Agents drill-in too, under New chat, with its badge and the Inbox's route", () => {
+    sessionStorage.clear();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const onNavigate = vi.fn();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar pathname="/" onNavigate={onNavigate} />
+      </QueryClientProvider>
+    );
+    const drill = screen.getByTestId("nav-drill-in");
+    const inbox = within(drill).getByTestId("sidebar-inbox-button");
+    expect(screen.getByTestId("nav-slot-agents-inbox")).toContainElement(inbox);
+    expect(screen.queryByTestId("nav-slot-inbox")).toBeNull();
+    expect(inbox).toHaveAttribute("href", "/inbox");
+    // Not the page on screen: a chat is.
+    expect(inbox).not.toHaveAttribute("aria-current");
+    expect(within(inbox).getByTestId("inbox-badge-count")).toHaveTextContent("2");
+    expect(screen.getByTestId("create-chat-button").compareDocumentPosition(inbox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(inbox.compareDocumentPosition(screen.getByTestId("nav-workflows")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(inbox);
+    expect(onNavigate).toHaveBeenLastCalledWith("/inbox");
+  });
+
   it("leaves a modified click on a row to the browser (a new tab)", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const onNavigate = vi.fn();
