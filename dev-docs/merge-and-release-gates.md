@@ -810,8 +810,43 @@ job is setup, then `task <name>`, so CI cannot disagree with a local run.
 | Event | Job | Runs |
 |---|---|---|
 | `pull_request` (each push) | `Review marker`, `CI result` | nothing heavy: a notice whether `pr-review` passed this head, and the verdict, green in about a minute. Label the PR **`ci:run`** to get the merge gate and the path lanes on it too; it is read on the next push (an empty commit will do), because `ci.yml` does not run on `labeled` (a label run would replace the head's `CI result`) |
-| `merge_group` (`merge-queue.yml`) | `Merge gate`, `golangci (changed)` and `vitest (1/4)`..`(4/4)` in parallel, then `CI result` | `Merge gate`: `task ci:merge -- --base <the group's base> --queue --skip-vitest`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, then the five-minute budget check. `golangci (changed)`: `task ci:golangci -- --base <the group's base>`. `vitest`: `scripts/vitest-shard.sh --base <the group's base> --shard <i>/4`. `CI result`: passes only when all three succeeded, from `needs` alone. No path lanes |
+| `merge_group` (`merge-queue.yml`) | `Merge gate`, `golangci (changed)`, `vitest (1/4)`..`(4/4)` and `Visual baseline` in parallel, then `CI result` | `Merge gate`: `task ci:merge -- --base <the group's base> --queue --skip-vitest`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, then the five-minute budget check. `golangci (changed)`: `task ci:golangci -- --base <the group's base>`. `vitest`: `scripts/vitest-shard.sh --base <the group's base> --shard <i>/4`. `Visual baseline`: when `scripts/ci-lanes.sh`'s `visual` lane says the group reaches the web UI, `scripts/visual-gate.sh` (the visual suite in the pinned Playwright image, compare only, on the group's commit; [below](#the-visual-baseline-in-the-queue)); otherwise a pass with a notice saying why. `CI result`: passes only when all four succeeded, from `needs` alone. No other path lanes |
 | push to `main`, nightly, `workflow_dispatch` | `Release gate (<part>)`, the path lanes, then `Release gate` | each part of the gate as its own job, `task release:gate -- --part <part> [--shard I/N] <sha>` (generate, webbuild, compile, lint, go 1/4..4/4, web; `task ci:repo-checks` in compile), then `Release gate` assembles the part records (`scripts/release-gate.sh assemble`) into the one record. On `main` it publishes it as the git note above, so a CI green counts for `task release:tag`. A missing part or shard fails the assembly closed, and so does a red release build, Playwright or electron smoke (no record) |
+
+### The visual baseline in the queue
+
+Owner, 2026-11-24 (reliant#3446). The visual suite (`frontends/web/e2e/visual`)
+was opt-in, and main's baselines went stale two ways: a PR captured on a base
+that lacked another PR's UI change, or a later commit on the PR (a pr-fix push)
+moved pixels after the capture. The next UI PR then inherited dozens of failures
+it did not cause. The merge queue now runs it, compare only
+(`--update-snapshots=none`), on the merge group's own commit, main plus the
+entries ahead, so both kinds fail on the PR that causes them.
+
+- **When.** `scripts/ci-lanes.sh`'s `visual` lane: what the renderer's production
+  build and the suite read (`frontends/web` sources, styles, `public/`, HTML
+  entries, vite/tailwind/postcss/tsconfig, `package.json`, the lockfile and pnpm
+  patches, the `sdk/ts` sources it aliases, `e2e/visual/`, its config and
+  runner), minus unit tests, the other Playwright suites, lint configs and
+  docs, plus the lane's own wiring. A group that reaches none of it passes the
+  job in seconds with a notice.
+- **What it runs.** `scripts/visual-gate.sh`: `task test:web:visual --
+  --update-snapshots=none` (the build with the pinned `RELEASE_VERSION`, then
+  the suite in the pinned image through `visual-docker.sh`, on the hosted
+  runner's docker), then Playwright's JSON report. A capture that differs fails
+  the job with a table of surfaces and what differed, the re-capture commands,
+  and the diffs as the `visual-results` artifact. A lane that compared nothing
+  (no build, no docker, no report, no capture run) fails too: it is never a
+  pass.
+- **Cost.** Its own runner, beside the gate, so a web group pays only what it
+  runs past the gate (measured in the PR that added it, reliant#3446).
+- **Flakes.** `retries: 0`, and nothing re-runs. A surface that differs on a
+  commit whose UI did not move is deleted with a `flake:removed` issue.
+- **The backstop.** `.github/workflows/visual-nightly.yml` runs the same script
+  on main every night and keeps one rolling `visual:stale` issue
+  (`.github/scripts/visual-stale-issue.sh`): a mismatch opens, reopens or
+  comments on it; the next green closes it. It never blocks a merge or a
+  release.
 
 ### Why the release gate runs as parts in CI
 
