@@ -36,6 +36,9 @@ vi.mock("../../api/fileSystem", () => ({
 vi.mock("../../hooks/project-queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../hooks/project-queries")>()),
   createProjectFromRepo: apiMocks.createProjectFromRepo,
+  // The checkout panel reads installs to choose a path on this machine.
+  // Keep that query local too: these tests have no other installed copies.
+  useProjectDaemonInstalls: () => ({ data: [] }),
 }));
 vi.mock("../../hooks/useDaemonStatus", () => ({
   useDaemonStatus: () => ({

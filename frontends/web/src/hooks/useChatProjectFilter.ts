@@ -31,7 +31,7 @@ import { homePath } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
 import { formatProjectsParam, normalizeProjectIds, parseProjectsParam, sameProjectSet } from "@/lib/chatProjectFilter";
 import { useOrgScope } from "@/lib/orgScope";
-import { useProjectStore } from "@/store/projectStore";
+import { leaveChatPageFor, useProjectStore } from "@/store/projectStore";
 import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 
 import { useProjects } from "./project-queries";
@@ -127,8 +127,9 @@ export function useChatProjectFilter(options: { sync?: ChatProjectFilterLocation
       const pathname = router?.state.location.pathname ?? "";
       if (ids.length === 1) {
         useChatProjectFilterStore.getState().setMany([]);
-        // The single-project filter old builds read: `/project/<id>`.
-        void useProjectStore.getState().setProjectFilter(ids[0]);
+        // The single-project filter old builds read: `/project/<id>`. From a
+        // chat's page, its chats: the URL's chat wins over a selection.
+        void leaveChatPageFor(ids[0]).then(() => useProjectStore.getState().setProjectFilter(ids[0]));
         return;
       }
       if (ids.length === 0) {

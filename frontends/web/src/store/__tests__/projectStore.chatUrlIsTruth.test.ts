@@ -6,9 +6,9 @@
  *
  * selectProject over `/c/<id>` used to move the URL to the selected project's
  * remembered chat whenever the project changed, whoever selected it. Only a
- * person's own switch (setProjectFilter: the switcher's filter, ⌘K, the cycle
- * shortcut) may do that now; a background selection (a page's context, an
- * org change, a fallback) leaves the chat the URL names on screen.
+ * person's own switch (leaving the chat page before selecting a project)
+ * may do that now; a background selection (a page's context, an org change,
+ * a fallback) leaves the chat the URL names on screen.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -108,11 +108,12 @@ describe("selecting a project over a chat's URL", () => {
     expect(selectChat).not.toHaveBeenCalled();
   });
 
-  it("a person's own switch (setProjectFilter) still takes the URL to that project's chat", async () => {
+  it("setProjectFilter moves only the list while the chat's URL owns the pane", async () => {
     await useProjectStore.getState().setProjectFilter(pickedProject.id);
 
-    expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ href: `/c/${remembered.id}` }));
-    expect(useProjectStore.getState().currentProject?.id).toBe(pickedProject.id);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(selectChat).not.toHaveBeenCalled();
+    expect(useWorkspaceStateStore.getState().projectFilterId).toBe(pickedProject.id);
   });
 });
 

@@ -16,7 +16,8 @@ import {
 } from "../hooks/project-queries";
 import { useWorktreeStore } from "./worktreeStore";
 import { useChatStore } from "./chatStore";
-import { resolveChat } from "../hooks/chat-queries";
+import { getChatFromCache, resolveChat } from "../hooks/chat-queries";
+import type { Chat } from "../api/client";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
 import { useViewerStore } from "./viewerStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
@@ -24,14 +25,7 @@ import { trackEvent } from "../lib/analytics";
 import { restoreLastWorktree } from "../hooks/worktree-actions";
 import { openChatInWorkspace, beginWorkspaceOpen, observeWorkspaceOpen } from "../lib/openChatInWorkspace";
 import { homePath, projectChatsPath } from "@/lib/paths";
-import {
-  chatShellRouteOf,
-  latestPathname,
-  navigateToChatUrl,
-  navigateToNewChatUrl,
-  pathOwnsChat,
-  routeOwnsChat,
-} from "@/lib/chatRoute";
+import { chatShellRouteOf, latestPathname, pathOwnsChat, routeOwnsChat } from "@/lib/chatRoute";
 import { orgFreePath } from "@/lib/paths/org";
 
 // Lazy router accessor — importing from ../routes at module-init time creates
@@ -146,6 +140,42 @@ export function syncProjectFilterUrl(projectId: string | null) {
   }
 }
 
+/**
+ * The chat the URL names (`/c/<id>`, either form), once the route knows it
+ * (its loader seeds the chat cache: lib/chatRouteResolve.ts), when it is one
+ * of the person's own. Null on any other page, before the chat is known, and
+ * for another member's shared chat: its project is not the person's, so it
+ * names no context.
+ */
+function ownChatOfUrl(): Chat | null {
+  const route = chatShellRouteOf(latestPathname());
+  if (route?.kind !== "chat") return null;
+  const chat = getChatFromCache(route.chatId);
+  return chat && chat.projectId && !chat.viewerAccess ? chat : null;
+}
+
+/**
+ * A person chose to work in `projectId` (the project selector, the sidebar's
+ * project filter, the cycle shortcut, opening a folder): on a page that names
+ * the open chat, go to that project's chats first — a push, so Back returns
+ * to the chat. The URL wins over every project selection, so selecting from
+ * the chat's page would leave its chat (and its project) on screen. Call it
+ * before the selection. Resolves true only after reaching that project's
+ * chats; a rejected or blocked navigation leaves the chat's context intact.
+ */
+export async function leaveChatPageFor(projectId: string): Promise<boolean> {
+  try {
+    const router = getRouter();
+    if (!router || !routeOwnsChat()) return false;
+    const destination = projectChatsPath(projectId);
+    await router.navigate({ to: destination, search: preserveSearch });
+    return router.state.location.pathname === destination;
+  } catch (err) {
+    logger.warn("[ProjectStore] Failed to leave the chat's page", err);
+    return false;
+  }
+}
+
 export type { Project };
 
 /** The most recently used project of a list (by last_active), if any. */
@@ -180,16 +210,6 @@ export interface SelectProjectOptions {
    * view (the new-chat project chip).
    */
   restoreChat?: boolean;
-  /**
-   * A person switched projects while a chat's URL (`/c/<id>`, `/new`) is on
-   * screen: move the URL to the new project's last chat, or its new-chat
-   * view. Only a person's own switch sets this (setProjectFilter). Every
-   * other selection (a page's background context, a fallback, an org
-   * change) leaves a chat's URL alone: the URL is the authority for the
-   * open chat, and a selection made behind it must never navigate away from
-   * the chat the person opened.
-   */
-  leaveChatUrl?: boolean;
   /** Continue the caller's logical navigation rather than starting a new one. */
   isCurrent?: () => boolean;
 }
@@ -214,14 +234,16 @@ interface ProjectStore {
   /**
    * Set the sidebar's project filter (null: All projects) and reflect it in
    * the URL. Filtering to a project other than the context one also moves the
-   * context there, reopening that project's last chat.
+   * context there, reopening that project's last chat. Not over a chat's URL
+   * (`/c/<id>`): there it moves only the list, and the URL's chat and its
+   * project stay (a person's pick leaves the page first: leaveChatPageFor).
    */
   setProjectFilter: (projectId: string | null, options?: Pick<SelectProjectOptions, "restoreWorkspace">) => Promise<void>;
   restoreLastProject: (options?: Pick<SelectProjectOptions, "restoreWorkspace">) => Promise<boolean>;
   /** Re-read the current project from the server (after a git init, a new workspace). */
   refreshCurrentProject: () => Promise<void>;
-  /** Create a project and make it current. */
-  createProject: (data: Partial<Project>) => Promise<Project>;
+  /** Create a project and make it current, continuing an optional caller's navigation. */
+  createProject: (data: Partial<Project>, options?: Pick<SelectProjectOptions, "isCurrent">) => Promise<Project>;
   updateProject: (id: string, data: Partial<Project>) => Promise<void>;
   /** Delete a project; deleting the current one moves to the most recent other one. */
   deleteProject: (id: string) => Promise<void>;
@@ -238,22 +260,36 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   currentProject: null,
 
   selectProject: async (project: Project, options?: SelectProjectOptions) => {
+    const restoreChat = options?.restoreChat ?? true;
+
+    // The URL names a chat of the person's (`/c/<id>`): it wins. Its project
+    // is the context, so a selection that would bring another context along
+    // (restoreChat: the console's project, a restore, the org follow) never
+    // moves the URL or the chat on screen. A caller opening a chat of its
+    // own passes restoreChat: false (openChatInWorkspace); a person choosing
+    // another project leaves the chat's page first (leaveChatPageFor).
+    const linkedChat = restoreChat ? ownChatOfUrl() : null;
+    if (linkedChat) {
+      if (get().currentProject?.id === linkedChat.projectId) return;
+      // Its context is not in place yet (the route's open was superseded):
+      // bring the chat's own project and workspace, not this one.
+      await openChatInWorkspace(linkedChat, { isCurrent: options?.isCurrent, openEntry: "restore" });
+      return;
+    }
+
     const isLatest = options?.isCurrent ?? beginWorkspaceOpen();
     if (!isLatest()) return;
     const isCurrent = () => isLatest() && get().currentProject?.id === project.id;
     const prevProjectId = get().currentProject?.id ?? null;
     const isProjectSwitch = prevProjectId !== null && prevProjectId !== project.id;
-    const restoreChat = options?.restoreChat ?? true;
 
     // The open chat belongs to the project being left: show the new project's
     // own last chat (restored below) or its new-chat view, never another
     // project's chat in this project's context.
     //
-    // When the URL names the open chat (`/c/<id>`, `/new`; lib/chatRoute.ts)
-    // and the person switched projects (leaveChatUrl), the URL moves instead,
-    // once that chat is known (below): a push to it, so Back returns to the
-    // chat being left. Nothing is restored over a chat URL otherwise (a first
-    // selection, a reload, a background selection): the URL's chat is the one.
+    // Never over a URL that names the open chat (`/c/<id>`, `/new`;
+    // lib/chatRoute.ts): the URL's chat is the one, and a store action never
+    // navigates (the URL is the authority; the stores follow it).
     const urlOwnsChat = routeOwnsChat();
     if (isProjectSwitch && restoreChat && !urlOwnsChat) {
       useChatStore.getState().clearCurrentChat(null);
@@ -328,19 +364,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       
       // Restore active chat from workspace state
       const worktreeState = useWorkspaceStateStore.getState().getWorktreeState(project.id, currentWorktreeId);
-      const restoreOverUrl = urlOwnsChat && isProjectSwitch && options?.leaveChatUrl === true;
-      if (restoreChat && (!urlOwnsChat || restoreOverUrl)) {
+      if (restoreChat && !routeOwnsChat()) {
         const chat = worktreeState.activeChatId
           ? await resolveChat(worktreeState.activeChatId)
           : undefined;
         if (!isCurrent()) return;
         if (chat) {
-          if (restoreOverUrl) navigateToChatUrl(chat.id, { orgId: chat.orgId });
           await openChatInWorkspace(chat, { isCurrent, openEntry: "restore" });
           if (!isCurrent()) return;
-        } else if (restoreOverUrl) {
-          navigateToNewChatUrl({ project: project.id });
-          useChatStore.getState().clearCurrentChat(null);
         }
       }
       
@@ -381,8 +412,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         syncProjectFilterUrl(null);
         return;
       }
-      // The person's own switch: over a chat's URL, that project's chat follows.
-      await get().selectProject(project, { ...options, leaveChatUrl: true, isCurrent });
+      await get().selectProject(project, { ...options, isCurrent });
     }
     if (!isCurrent()) return;
 
@@ -439,8 +469,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
   },
 
-  createProject: async (data: Partial<Project>) => {
-    const isCurrent = beginWorkspaceOpen();
+  createProject: async (data: Partial<Project>, options) => {
+    const isCurrent = options?.isCurrent ?? beginWorkspaceOpen();
     const project = await createProjectRpc({
       name: data.name || "",
       path: data.path || "",
@@ -521,7 +551,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
 
     const current = get().currentProject;
-    if (current && !inOrg(current) && !urlNamesChat) {
+    const linkedChat = ownChatOfUrl();
+    if (current && !inOrg(current) && linkedChat && listed(linkedChat.projectId)) {
+      // The URL names a chat of the new org (the chat route moves a link
+      // into the chat's own org): it stays open, and its project is the
+      // context, not the new org's most recent one.
+      await openChatInWorkspace(linkedChat, { isCurrent, openEntry: "restore" });
+    } else if (current && !inOrg(current) && !urlNamesChat) {
       // Leave it as a delete leaves the current project, but keep its saved
       // workspace state: switching back restores it.
       useChatStore.getState().clearCurrentChat(null);
