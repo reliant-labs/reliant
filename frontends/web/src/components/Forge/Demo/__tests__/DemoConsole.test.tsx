@@ -24,8 +24,8 @@ const startAskReliantChat = vi.hoisted(() => vi.fn());
 vi.mock("@/components/Forge/Observability/AskReliant/startAskReliantChat", () => ({ startAskReliantChat }));
 // Every read of the demo's sample data, to see the scope the panel asked for.
 const fixtureCalls = vi.hoisted(() => [] as { rpc: string; request: unknown }[]);
-vi.mock("../demoData/shop/shopApi", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../demoData/shop/shopApi")>();
+vi.mock("@/fixtures/shop/model/shopApi", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/fixtures/shop/model/shopApi")>();
   return {
     ...actual,
     createShopApi: (now?: number) => {

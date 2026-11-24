@@ -24,7 +24,7 @@ import { PRIVACY_POLICY_URL } from "@/lib/privacyLinks";
 import { browserOptedOut, demoTelemetry, demoTelemetryNotice } from "@/lib/demoTelemetry";
 import { DeployYoursButton, SignUpLink, InstallForgeLink } from "./DemoCta";
 import { useConsoleDrawerOpen } from "./DemoCorner";
-import { useDemoDataStatus } from "./demoData/demoDataStatus";
+import { useDemoDataStatus } from "./demoDataStatus";
 import { consolePath } from "../Console/paths";
 import { FIXTURE_PROJECT } from "../Observability/__fixtures__/fixtureApi";
 

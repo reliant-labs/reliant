@@ -7,7 +7,7 @@ Its default Connect transport answers from browser-local mock scenarios.
 ## One synthetic shop, one story
 
 Every answer the demo gives comes from one module,
-`components/Forge/Demo/demoData/shopStory.ts`: the cast (jon, maya, priya, and
+`fixtures/shop/shopStory.ts` (the shop fixture pack, `src/fixtures/shop/`): the cast (jon, maya, priya, and
 CI as `github-actions`), shop's customers, its services (`api`, `worker`,
 `inventory` and the static storefront `shop-web`; Postgres, NATS and the
 payment provider are dependencies, never services), the release ledger (each
@@ -16,17 +16,17 @@ incident (prod's v1.8.3 payment timeouts on api), the traffic model every
 aggregate is computed from (`demoStats`), and the database's tables. `demoNow()`
 anchors every relative time to the page load.
 
-`demoData/shop/shopApi.ts` assembles the demo's `ObservabilityApi` from one
+`fixtures/shop/model/shopApi.ts` assembles the demo's `ObservabilityApi` from one
 module per area (telemetry via `busyApp.ts`, graph, workloads, panels,
 delivery, issues and release health, alerting, sessions, dashboards, metrics);
-both the demo console (`demoApi.ts`) and the wire scenario (`demoScenario.ts`)
-read it. `consoleScenario.ts` answers Releases, Environments, Secrets, Domains
-and Activity from the same ledger. Nothing under `demoData/` imports the
+both the demo console (`Forge/Demo/demoApi.ts`) and the wire handlers (`handlers/observability.ts`)
+read it. `handlers/console.ts` answers Releases, Environments, Secrets, Domains
+and Activity from the same ledger. Nothing under `src/fixtures/` imports the
 console's unit-test fixtures (`Observability/__fixtures__`);
 `__tests__/coherence.test.ts` fails if one does, or if any page's answer
 contradicts the story.
 
-`inventoryScenario.ts` answers the generated `AppDatabaseService` browse RPCs
+`handlers/inventory.ts` answers the generated `AppDatabaseService` browse RPCs
 and `IdentityService` reads. Every normal environment declares one database,
 `shop`: the selector must not invent extra connections. The tables are
 `public.customers`, `public.products`, `public.stock`, `public.orders` and
@@ -42,7 +42,7 @@ paging and optional counts. They never evaluate SQL or call a backend. Prod
 requires a matching confirmation and nonempty reason, to demonstrate the audited
 workflow; `demo-local-read` identifies a synthetic read, not an audit server row.
 
-`configScenario.ts` answers `GetWorkloadConfig` with immutable **fake** bundle
+`handlers/config.ts` answers `GetWorkloadConfig` with immutable **fake** bundle
 identities/digests. YAML and objects are projections of the same redacted tree.
 The fixed `[withheld]` markers reveal neither values nor secret-derived hashes.
 Bundle selectors are scoped to their environment, and historical release reads

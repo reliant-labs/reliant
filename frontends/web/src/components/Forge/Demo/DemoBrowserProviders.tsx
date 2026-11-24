@@ -4,7 +4,7 @@ import { DataBrowserApiProvider } from "@/services/controlPlane/observability/Da
 import { StorageBrowserApiProvider } from "@/services/controlPlane/storageBrowser/StorageBrowserApiContext";
 import { IdentityApiProvider } from "@/services/controlPlane/identity/IdentityApiContext";
 import { createFixtureReader, FixtureReaderProvider } from "../AuditedAccess/readerSession";
-import { createDemoBrowserApis } from "./demoData/browserApis";
+import { createDemoBrowserApis } from "./browserApis";
 
 /** Used by both the embedded demo panel and the demo host's deep-linked pages. */
 export function DemoBrowserProviders({ children }: { children: ReactNode }) {
