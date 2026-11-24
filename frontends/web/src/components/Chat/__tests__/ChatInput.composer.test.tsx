@@ -92,6 +92,29 @@ vi.mock("../../../hooks/attachment-queries", async (importActual) => ({
 vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => <span data-testid="inline-workflow" /> }));
 vi.mock("../../../store/chatStoreHooks", () => ({ useActiveChatId: () => undefined }));
 
+// The chat's projects (hooks/useChatProjects), as each test sets them: by
+// default a chat that cannot have more (a new chat, or an older server).
+const chatProjects = vi.hoisted(() => {
+  const none = {
+    projects: [] as Array<{ projectId: string; name: string; primary: boolean }>,
+    supported: false,
+    installs: [],
+    pending: new Set<string>(),
+    add: () => {},
+    remove: () => {},
+    setUp: null,
+    confirmSetUp: () => {},
+    dismissSetUp: () => {},
+  };
+  return { none, current: none, seen: [] as unknown[] };
+});
+vi.mock("../../../hooks/useChatProjects", () => ({
+  useChatProjects: (chat: unknown) => {
+    chatProjects.seen.push(chat);
+    return chatProjects.current;
+  },
+}));
+
 import { ChatInput } from "../ChatInput";
 
 const PROJECT_ID = "p-composer";
@@ -442,6 +465,52 @@ describe("⊕ sheet", () => {
     const row = screen.getByTestId("options-workflow-row");
     expect(row.tagName).not.toBe("BUTTON");
     expect(row).toHaveTextContent("Set when the chat began");
+  });
+});
+
+describe("the chat's projects", () => {
+  const primary = { projectId: "p-api", name: "api", primary: true };
+  const docs = { projectId: "p-docs", name: "docs", primary: false };
+  afterEach(() => {
+    chatProjects.current = chatProjects.none;
+    chatProjects.seen = [];
+  });
+
+  it("adds nothing to the composer where the chat cannot have more projects", () => {
+    renderWithQuery(<ChatInput onSend={vi.fn()} chatId="chat-started" />);
+    expect(screen.queryByTestId("chat-project-chips")).toBeNull();
+    expect(screen.queryByTestId("composer-chips")).toBeNull();
+  });
+
+  it("reads them for an existing chat only", () => {
+    renderWithQuery(<ChatInput onSend={vi.fn()} />);
+    expect(chatProjects.seen.every((chat) => chat === undefined)).toBe(true);
+  });
+
+  it("is one small \"+ Project\" in the tools row while the chat has only its own", () => {
+    chatProjects.current = { ...chatProjects.none, supported: true, projects: [primary] };
+    renderWithQuery(<ChatInput onSend={vi.fn()} chatId="chat-started" />);
+    const tools = screen.getByTestId("composer-tools");
+    expect(within(tools).getByTestId("chat-project-add")).toHaveTextContent("Project");
+    expect(within(tools).queryAllByTestId(/^chat-project-chip-/)).toHaveLength(0);
+  });
+
+  it("shows every project as a chip once another is attached, the attached one removable", () => {
+    const remove = vi.fn();
+    chatProjects.current = { ...chatProjects.none, supported: true, projects: [primary, docs], remove };
+    renderWithQuery(<ChatInput onSend={vi.fn()} chatId="chat-started" />);
+    expect(within(screen.getByTestId("composer-tools")).queryByTestId("chat-project-add")).toBeNull();
+    const chips = screen.getAllByTestId(/^chat-project-chip-/);
+    expect(chips.map((chip) => chip.textContent)).toEqual(["api", "docs"]);
+    fireEvent.click(screen.getByRole("button", { name: "Remove docs from this chat" }));
+    expect(remove).toHaveBeenCalledWith("p-docs");
+  });
+
+  it("lists them in the ⊕ sheet too, for a composer too narrow for the row", () => {
+    chatProjects.current = { ...chatProjects.none, supported: true, projects: [primary, docs] };
+    renderWithQuery(<ChatInput onSend={vi.fn()} chatId="chat-started" />);
+    fireEvent.click(screen.getByRole("button", { name: "Chat options" }));
+    expect(screen.getByTestId("options-projects-row")).toHaveTextContent("2 projects");
   });
 });
 

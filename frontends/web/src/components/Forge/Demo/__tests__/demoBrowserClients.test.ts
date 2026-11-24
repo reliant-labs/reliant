@@ -37,8 +37,8 @@ describe("the demo's browser reads, on the real clients over the shop transport"
       expect((await identity.listUsers(DEMO_ORG, "env-staging", {}, "")).users[0]?.email).toBe("jon@example.com");
       expect((await identity.listUsers(DEMO_ORG, "env-staging", { query: "lena.fischer" }, "")).users[0]?.userId).toBe(demoSubjects()[0]);
       expect((await identity.getUser!(DEMO_ORG, "env-staging", demoSubjects()[0]))?.userId).toBe(demoSubjects()[0]);
-      await expect(identity.listUsers("foreign-org", "env-staging", {}, "")).rejects.toMatchObject({ code: Code.NotFound });
-      // Another environment is answered empty (fixtures/shop/handlers/scope.ts): never shop's identity.
+      // Another org or environment is answered empty (fixtures/shop/handlers/scope.ts): never shop's identity.
+      expect((await identity.listUsers("foreign-org", "env-staging", {}, "")).users).toEqual([]);
       expect(await identity.getStatus(DEMO_ORG, "foreign-env")).toMatchObject({ hasInstance: false, issuer: "", apps: [] });
       // Every write is refused by the transport's read-only guard, before the pack sees it.
       await expect(identity.deleteUser(DEMO_ORG, "env-staging", demoSubjects()[0])).rejects.toMatchObject({ code: Code.PermissionDenied });

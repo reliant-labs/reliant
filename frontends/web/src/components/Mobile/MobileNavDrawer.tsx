@@ -167,7 +167,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
         }}
       >
         <div className="flex min-h-[56px] shrink-0 items-center justify-between px-2 pl-4">
-          <span className="text-xl font-semibold tracking-tight">Menu</span>
+          <span className="text-section">Menu</span>
           <button
             type="button"
             onClick={onClose}
@@ -204,9 +204,10 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-ink">
                     <FolderOpen className="h-4 w-4" />
                   </span>
+                  {/* The rows' scale (text-ui), so the header and the rows under it read as one nav. */}
                   <div className="min-w-0 flex-1">
-                    <div className="text-xs text-muted-foreground">Project</div>
-                    <div className="truncate text-sm font-medium text-foreground">{currentProject?.name ?? "Select a project"}</div>
+                    <div className="text-meta text-muted-foreground">Project</div>
+                    <div className="truncate text-ui font-medium text-foreground">{currentProject?.name ?? "Select a project"}</div>
                   </div>
                 </Link>
               </div>

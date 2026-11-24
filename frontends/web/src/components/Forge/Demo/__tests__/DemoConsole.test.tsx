@@ -1,17 +1,18 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * `/forge/demo` through its real route (createForgeDemoRoute, as both shells
- * mount it): it renders the console and every Observability view the forge
- * journey visits on fixture data, under a demo banner, and the whole walk —
- * a trace, its logs, its flamegraph, an issue, its Ask-an-agent sheet, the
- * firing alert — touches no transport, no fetch, no project list and no chat.
+ * `/forge/demo` through its real route (createForgeDemoRoute, as the demo
+ * shell mounts it): it renders the console and every Observability view the
+ * forge journey visits on fixture data, and the whole walk — a trace, its
+ * logs, its flamegraph, an issue, its Ask-an-agent sheet, the firing alert —
+ * touches no transport, no fetch, no project list and no chat.
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Transport } from "@connectrpc/connect";
 
 const fetchProjects = vi.hoisted(() => vi.fn(async () => []));
@@ -42,6 +43,7 @@ vi.mock("@tanstack/react-virtual", async () => (await import("../../Observabilit
 import { tourEvents } from "@/components/Onboarding/tourEvents";
 import { setTransport } from "@/lib/connect";
 import { resetShellForTests } from "@/lib/shell";
+import { ObsReadOnlyProvider } from "../../Observability/obsReadOnly";
 
 import { FIXTURE_TRACE_ID } from "../../Observability/__fixtures__/fixtureApi";
 import { createForgeDemoRoute } from "../demoRoute";
@@ -56,7 +58,17 @@ function recordingTransport(calls: string[]): Transport {
 }
 
 function renderDemo(path: string) {
-  const rootRoute = createRootRoute({ component: () => <Outlet /> });
+  // The demo shell's root: one query client, every write control off (demoShellRoutes.tsx).
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });
+  const rootRoute = createRootRoute({
+    component: () => (
+      <QueryClientProvider client={queryClient}>
+        <ObsReadOnlyProvider value={{ readOnly: true, reason: "Read-only demo" }}>
+          <Outlet />
+        </ObsReadOnlyProvider>
+      </QueryClientProvider>
+    ),
+  });
   const router = createRouter({
     routeTree: rootRoute.addChildren([createForgeDemoRoute(() => rootRoute)]),
     history: createMemoryHistory({ initialEntries: [path] }),
@@ -78,6 +90,7 @@ describe("the forge demo console", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    resetShellForTests("demo");
     rpcCalls.length = 0;
     fixtureCalls.length = 0;
     setTransport(recordingTransport(rpcCalls));
@@ -87,6 +100,7 @@ describe("the forge demo console", () => {
   });
 
   afterEach(() => {
+    resetShellForTests();
     setTransport(null);
     fetchSpy.mockRestore();
   });
@@ -98,41 +112,14 @@ describe("the forge demo console", () => {
     expect(startAskReliantChat).not.toHaveBeenCalled();
   };
 
-  it("renders the console's overview on fixture data, under the demo banner", async () => {
+  it("renders the console's overview on fixture data, every nav row on the sample app's console", async () => {
     renderDemo("/forge/demo?view=overview");
-    expect(await screen.findByTestId("forge-demo-banner", {}, { timeout: 15_000 })).toHaveTextContent("Demo data");
-    expect(screen.getByTestId("forge-demo-banner")).toHaveTextContent("Sample data from a made-up app called shop. Nothing here touches your projects.");
-    // The notice belongs to the document flow, not a translucent sticky layer
-    // that paints over filters and chart actions as the page scrolls.
-    expect(screen.getByTestId("forge-demo-banner")).toHaveClass("bg-surface");
-    expect(screen.getByTestId("forge-demo-banner").className).not.toMatch(/sticky|fixed|bg-warning-surface/);
-    expect(await screen.findByTestId("obs-overview")).toBeInTheDocument();
-    // The console's nav (the journey's first spotlight), every row kept on the demo.
+    expect(await screen.findByTestId("obs-overview", {}, { timeout: 15_000 })).toBeInTheDocument();
+    // The console's nav (the journey's first spotlight): every row opens shop's console page.
     const nav = document.querySelector<HTMLElement>("[data-tour='forge-console'] aside");
     expect(nav).not.toBeNull();
-    expect(within(nav!).getByRole("link", { name: /Overview/ })).toHaveAttribute("href", "/forge/demo");
-    expect(within(nav!).getByRole("link", { name: /Releases/ })).toHaveAttribute("href", "/forge/demo");
-    expectNothingTouched();
-  }, 30_000);
-
-  it("opens How this app was built from the banner, on the recorded run, and goes back to the console", async () => {
-    const router = renderDemo("/forge/demo?view=overview");
-    fireEvent.click(await screen.findByTestId("forge-demo-how-built", {}, { timeout: 15_000 }));
-    await waitFor(() => expect(search(router).section).toBe("built"));
-    expect(await screen.findByTestId("scaffold-replay", {}, { timeout: 15_000 })).toBeInTheDocument();
-    expect(screen.getByTestId("scaffold-headline")).toHaveTextContent(/\d+ lines of API definitions/);
-    expect(screen.queryByTestId("obs-overview")).toBeNull();
-    // Already open: the banner no longer offers it.
-    expect(screen.queryByTestId("forge-demo-how-built")).toBeNull();
-    fireEvent.click(screen.getByTestId("how-built-back"));
-    await waitFor(() => expect(search(router).section).toBeUndefined());
-    expect(await screen.findByTestId("obs-overview")).toBeInTheDocument();
-    // It is also last on the page, after the console's view.
-    const link = screen.getByTestId("how-built-link");
-    expect(screen.getByTestId("obs-overview").compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    fireEvent.click(link);
-    await waitFor(() => expect(search(router).section).toBe("built"));
-    expect(await screen.findByTestId("scaffold-replay")).toBeInTheDocument();
+    expect(within(nav!).getByRole("link", { name: /Overview/ })).toHaveAttribute("href", "/forge/p/shop");
+    expect(within(nav!).getByRole("link", { name: /Releases/ })).toHaveAttribute("href", "/forge/p/shop/releases");
     expectNothingTouched();
   }, 30_000);
 
@@ -141,7 +128,8 @@ describe("the forge demo console", () => {
     const router = renderDemo("/forge/demo?view=traces");
     await screen.findAllByTestId("obs-trace-row", {}, { timeout: 15_000 });
     const scopes = () => fixtureCalls.filter((c) => c.rpc === "ListTraces").map((c) => (c.request as { envIds: string[] }).envIds);
-    expect(scopes()).toContainEqual([]);
+    // It opens on prod, as the console's pages do (Console/envScope DEFAULT_ENV).
+    expect(scopes()).toContainEqual(["env-prod"]);
     // What the console's environment picker writes (DemoConsole's onEnvChange): the name.
     fixtureCalls.length = 0;
     await router.navigate({ to: "/forge/demo", search: { view: "traces", envs: ["staging"] } as never });
@@ -209,7 +197,7 @@ describe("the forge demo console", () => {
     expect(within(sheet).getByTestId("ask-agent-prompt").textContent).not.toMatch(/workspace/i);
     // Copy puts exactly what is shown on the clipboard.
     await user.click(within(sheet).getByTestId("ask-agent-copy-cmd-0"));
-    expect(writeText).toHaveBeenLastCalledWith("reliant forge obs issue iss-orders-deadline prod");
+    expect(writeText).toHaveBeenLastCalledWith("forge obs issue iss-orders-deadline prod");
     await user.click(within(sheet).getByTestId("ask-agent-copy-prompt"));
     expect(writeText).toHaveBeenLastCalledWith(within(sheet).getByTestId("ask-agent-prompt").textContent);
     expect(copied).toHaveBeenCalledWith({ what: "command" });
@@ -219,7 +207,6 @@ describe("the forge demo console", () => {
     // F7: the firing alert.
     await router.navigate({ to: "/forge/demo", search: { view: "alerts" } as never });
     expect(await screen.findByTestId("obs-alerts-firing")).toBeInTheDocument();
-    expect(screen.getByTestId("forge-demo-banner")).toBeInTheDocument();
 
     offOpened();
     offCopied();
@@ -244,16 +231,10 @@ describe("the forge demo console", () => {
     expectNothingTouched();
   }, 30_000);
 
-  describe("on the demo host", () => {
-    beforeEach(() => resetShellForTests("demo"));
-    afterEach(() => resetShellForTests());
-
+  describe("its own pages", () => {
     it("draws no banner (the action row says it once), and lists How it was built as a nav row", async () => {
       renderDemo("/forge/demo?view=overview");
       expect(await screen.findByTestId("obs-overview", {}, { timeout: 15_000 })).toBeInTheDocument();
-      expect(screen.queryByTestId("forge-demo-banner")).toBeNull();
-      // Not repeated as a button under every view.
-      expect(screen.queryByTestId("how-built-link")).toBeNull();
       const row = screen.getByRole("link", { name: "How it was built" });
       expect(row).toHaveAttribute("href", "/forge/demo?section=built");
       expectNothingTouched();

@@ -47,6 +47,13 @@ type OrgResolver interface {
 	LiveMembersFresh(ctx context.Context, userID, orgID string) (n int, known bool, err error)
 }
 
+// Owners re-owns an orphaned trigger in place (AdoptAs), only while
+// previousOwner still owns it; with offerID it accepts that offer.
+// internal/triggerowner's Service satisfies it.
+type Owners interface {
+	AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner, offerID string, reads ...db.OrgRead) error
+}
+
 type Repository interface {
 	triggers.OwnerSource
 	// DefaultConnection is the owner's default login for an integration: an
@@ -70,9 +77,6 @@ type Repository interface {
 	// lock, only while every org the handler's decision read still holds.
 	CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
 	UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
-	// AdoptTrigger re-owns an orphaned trigger in place (AdoptAs), only
-	// while previousOwner still owns it; with offerID it accepts that offer.
-	AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner, offerID string, reads ...db.OrgRead) error
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
 	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error

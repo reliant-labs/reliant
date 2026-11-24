@@ -568,6 +568,109 @@ service ChatService {
       }
     };
   }
+
+  // ListChatProjects lists the projects a chat works in: its primary project
+  // (Chat.project_id) first, then the projects attached to it, oldest first.
+  // The chat's owner only: a viewer of a shared chat is answered as anyone
+  // else who cannot read it (NOT_FOUND).
+  // forge:custom
+  rpc ListChatProjects(ListChatProjectsRequest) returns (ListChatProjectsResponse) {}
+
+  // AttachProjectToChat attaches another of the caller's projects to a chat,
+  // beside its primary project. The chat's tools can then work in that
+  // project's main checkout (each file, search and shell tool takes a
+  // `project` argument once a chat has more than one).
+  //
+  // Every attached project must be installed on the chat's machine (its pin,
+  // else the machine its primary project's work is placed on). One that is
+  // not is FAILED_PRECONDITION carrying a ProjectCheckoutMissing detail: the
+  // client offers to set the project up on that machine, then attaches again.
+  // Also refused: a project of another org (FAILED_PRECONDITION), an archived
+  // chat or a chat with no machine (FAILED_PRECONDITION), more than 10
+  // attached projects (RESOURCE_EXHAUSTED), another user's chat or project
+  // (NOT_FOUND). Attaching the primary project or one already attached
+  // changes nothing and returns the list.
+  rpc AttachProjectToChat(AttachProjectToChatRequest) returns (AttachProjectToChatResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "attach_project"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+        }
+        detail: ["project_id"]
+      }
+    };
+  }
+
+  // DetachProjectFromChat detaches an attached project from a chat; its
+  // checkout is untouched. The primary project cannot be detached
+  // (FAILED_PRECONDITION: move the chat with MoveChatToProject instead).
+  // Detaching a project that is not attached changes nothing and returns
+  // the list.
+  rpc DetachProjectFromChat(DetachProjectFromChatRequest) returns (DetachProjectFromChatResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "detach_project"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+        }
+        detail: ["project_id"]
+      }
+    };
+  }
+}
+
+// ChatProject is a project a chat works in: its primary project, or one
+// attached to it (AttachProjectToChat).
+message ChatProject {
+  string project_id = 1;
+  // The project's name, as the model is told it and passes it in a tool's
+  // `project` argument.
+  string name = 2;
+  // True for the chat's primary project (Chat.project_id), which is listed
+  // first and cannot be detached.
+  bool primary = 3;
+  // The machine the project's checkout is on for this chat: for an attached
+  // project the machine it was attached on, for the primary the chat's pin.
+  // Unset when not known.
+  optional string daemon_id = 4;
+  // The project's checkout path on daemon_id; empty when not known.
+  string path = 5;
+  // When the project was attached (RFC 3339); empty for the primary.
+  string attached_at = 6;
+}
+
+message ListChatProjectsRequest {
+  string chat_id = 1;
+}
+
+// ListChatProjectsResponse lists the primary project first.
+message ListChatProjectsResponse {
+  repeated ChatProject projects = 1;
+}
+
+message AttachProjectToChatRequest {
+  string chat_id = 1;
+  string project_id = 2;
+}
+
+// AttachProjectToChatResponse is the chat's projects after the attach, as
+// ListChatProjects lists them.
+message AttachProjectToChatResponse {
+  repeated ChatProject projects = 1;
+}
+
+message DetachProjectFromChatRequest {
+  string chat_id = 1;
+  string project_id = 2;
+}
+
+// DetachProjectFromChatResponse is the chat's projects after the detach, as
+// ListChatProjects lists them.
+message DetachProjectFromChatResponse {
+  repeated ChatProject projects = 1;
 }
 
 // Chat represents a conversation
@@ -955,6 +1058,15 @@ message StartChatRequest {
   // was never deployed. Ignored when chat_id names an existing chat, whose
   // tag was fixed when it was created.
   optional string app_name = 24;
+
+  // Projects to attach to the new chat beside project_id
+  // (AttachProjectToChat), written with the chat before its first turn. Each
+  // must be the caller's, of the chat's org and installed on the machine the
+  // chat starts on; one that is not refuses the whole start with
+  // AttachProjectToChat's error, and nothing is created. project_id itself
+  // and repeats are ignored. Ignored when chat_id names an existing chat
+  // (attach to it instead).
+  repeated string attached_project_ids = 25;
 }
 
 // StartChatResponse returns the started chat and the ids of its root run.

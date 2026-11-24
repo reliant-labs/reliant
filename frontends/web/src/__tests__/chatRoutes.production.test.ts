@@ -22,10 +22,11 @@ vi.mock("@/lib/lazyRoute", async (importOriginal) => ({
 import { ConnectError, Code } from "@connectrpc/connect";
 
 import { chatShellRouteOf } from "@/lib/chatRoute";
-import { takeMovedChatNotice, type ChatRouteData } from "@/lib/chatRouteResolve";
+import type { ChatRouteData } from "@/lib/chatRouteResolve";
 import { setTransport } from "@/lib/connect";
 import { resetShellForTests } from "@/lib/shell";
 import { routeTree } from "@/routes";
+import { useActiveOrgStore } from "@/store/activeOrgStore";
 import { createOrgRouteHarness, type OrgRouteWorld } from "@/test/orgRouteHarness";
 
 const ACME = { id: "org-a", slug: "acme", name: "Acme" };
@@ -119,9 +120,22 @@ describe.each(FLAGS)("web.org_routes %s", (flag) => {
     expect(h.search()).toMatchObject({ view: "detailed" });
     expect(h.orgRoute()).toEqual({ kind: "member", org: { id: "org-b", slug: "side" } });
     expect(chatId(h)).toBe("b-1");
-    expect(takeMovedChatNotice("b-1")).toBe("This chat is in Side, so it opened there.");
-    // Once.
-    expect(takeMovedChatNotice("b-1")).toBeNull();
+    // One notice: the chat's, never a second "Switched to Side" beside it.
+    expect(h.notices).toEqual(["This chat is in Side, so it opened there."]);
+  });
+
+  it("says so for a link into the wrong org even when the tab is in the chat's org already", async () => {
+    const h = createOrgRouteHarness(world(flag, { tabOrg: "org-b" }));
+    await h.open("/o/acme/c/b-1");
+    expect(h.pathname()).toBe("/o/side/c/b-1");
+    expect(h.notices).toEqual(["This chat is in Side, so it opened there."]);
+  });
+
+  it("says nothing for a chat opened in the tab's own org", async () => {
+    const h = createOrgRouteHarness(world(flag, { tabOrg: "org-a" }));
+    await h.open("/o/acme/c/a-1");
+    await h.navigate("/o/acme/c/a-2");
+    expect(h.notices).toEqual([]);
   });
 
   it("puts a chat from before orgs in its owner's default org", async () => {
@@ -208,6 +222,21 @@ describe("the org-less chat URL", () => {
     await h.open(from);
     expect(h.pathname()).toBe(to);
     expect(h.notFound()).toBe(false);
+  });
+
+  it("says once that the redirect moved the tab into the chat's org", async () => {
+    const h = createOrgRouteHarness(world(true, { tabOrg: "org-a" }));
+    await h.open("/c/b-1");
+    expect(h.pathname()).toBe("/o/side/c/b-1");
+    expect(useActiveOrgStore.getState().chosenId).toBe("org-b");
+    expect(h.notices).toEqual(["This chat is in Side, so it opened there."]);
+  });
+
+  it("says nothing when the chat is in the tab's org", async () => {
+    const h = createOrgRouteHarness(world(true, { tabOrg: "org-b" }));
+    await h.open("/c/b-1");
+    expect(h.pathname()).toBe("/o/side/c/b-1");
+    expect(h.notices).toEqual([]);
   });
 
   it("keeps the search across the redirect", async () => {

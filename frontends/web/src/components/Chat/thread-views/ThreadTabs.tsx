@@ -218,10 +218,18 @@ export const ThreadTabs = memo(function ThreadTabs({
           type="button"
           aria-label={`Thread: ${selected?.name ?? "All"}`}
           data-contextual-tip="spawned-thread-item"
-          className="inline-flex h-8 max-w-[14rem] shrink-0 items-center gap-1.5 rounded-lg px-2 text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          // Narrower than xl it shares the app bar with the chat title: a count, or a short name.
+          className="inline-flex h-8 max-w-[8rem] shrink-0 items-center gap-1.5 rounded-lg px-2 text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring xl:max-w-[14rem]"
         >
           {selected ? threadMark(selected) : isAnyActive ? <ActivityPulse /> : <GitBranch className="size-3.5 shrink-0" />}
-          <span className="truncate">{selected ? selected.name : `${visibleThreads.length} threads`}</span>
+          <span className="truncate">
+            {selected ? selected.name : (
+              <>
+                {visibleThreads.length}
+                <span className="hidden xl:inline"> threads</span>
+              </>
+            )}
+          </span>
           <ChevronDown className="size-3.5 shrink-0 opacity-70" aria-hidden="true" />
         </button>
       )}

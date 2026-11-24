@@ -151,7 +151,7 @@ describe("public demo inventory wire reads", () => {
     const api = createDemoApi({ wire: false });
     const deploy = createClient(DeployService, transport());
     for (const environmentId of ["env-dev", "env-staging", "env-prod"]) {
-      const req = { orgId: "org-demo", projectId: "shop", envIds: [environmentId], filters: [], window: { startMs: Date.now() - 3_600_000, endMs: Date.now() } };
+      const req = { orgId: "org-acme", projectId: "shop", envIds: [environmentId], filters: [], window: { startMs: Date.now() - 3_600_000, endMs: Date.now() } };
       const list = await api.listWorkloads(req);
       const detail = await api.getWorkload({ ...req, workload: "api" });
       const config = await deploy.getWorkloadConfig({ environmentId, workload: "api" });

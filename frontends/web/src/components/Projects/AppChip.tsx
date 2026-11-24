@@ -21,7 +21,7 @@ import { Link } from "@tanstack/react-router";
 import { Globe, Lock } from "lucide-react";
 
 import Tooltip from "@/components/forge-ui/tooltip";
-import { appPath } from "@/lib/paths";
+import { appPath, consoleCheckoutSearch } from "@/lib/paths";
 import { cn } from "@/lib/utils";
 import { chipStateLabel, linkLabel, type AppChipModel, type AppChipState } from "@/services/projects/catalog";
 
@@ -29,6 +29,8 @@ export interface AppChipProps {
   app: AppChipModel;
   /** Link into the app's console (default). False inside a row that is itself the control. */
   interactive?: boolean;
+  /** The Reliant project (checkout) the chip sits in: the console it opens reads that one (`?project=`). */
+  projectId?: string;
   className?: string;
 }
 
@@ -61,7 +63,7 @@ export function AppChipDetails({ app }: { app: AppChipModel }) {
   );
 }
 
-export function AppChip({ app, interactive = true, className }: AppChipProps) {
+export function AppChip({ app, interactive = true, projectId, className }: AppChipProps) {
   const label = `${app.name}: ${chipStateLabel(app.state).toLowerCase()}${app.isStaticSite ? ", static site" : ""}`;
   const body = (
     <>
@@ -80,6 +82,7 @@ export function AppChip({ app, interactive = true, className }: AppChipProps) {
       {linked ? (
         <Link
           to={appPath(app.name)}
+          search={consoleCheckoutSearch(projectId) as never}
           aria-label={label}
           data-testid="app-chip"
           data-app-state={app.state}

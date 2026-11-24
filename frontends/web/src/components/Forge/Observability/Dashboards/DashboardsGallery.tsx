@@ -206,7 +206,16 @@ function GalleryCard({ item, project, envIds, href, onStar }: { item: GalleryIte
           <StarButton starred={d.starred} title={item.title} onToggle={() => onStar(d)} />
         </span>
       </div>
-      <div className="mx-4 mt-2 h-20" data-testid={`dashboards-card-${item.id}-preview`}>
+      {/* Above the card's stretched link, so the preview reads the sample under the pointer
+          (UPlotChart's hover). A mouse click still opens the dashboard; a tap moves the crosshair. */}
+      <div
+        className={cn("relative z-10 mx-4 mt-2 h-20", href && "cursor-pointer")}
+        data-testid={`dashboards-card-${item.id}-preview`}
+        onClick={(event) => {
+          if ((event.nativeEvent as PointerEvent).pointerType !== "mouse") return;
+          event.currentTarget.closest("li")?.querySelector<HTMLAnchorElement>("a[href]")?.click();
+        }}
+      >
         <CardPreview dashboard={d} project={project} envIds={envIds} enabled={near} />
       </div>
       <div className="mt-auto flex min-w-0 items-center gap-2 px-4 pb-3 pt-3 text-meta text-ink-muted">

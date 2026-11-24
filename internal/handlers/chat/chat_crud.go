@@ -109,6 +109,9 @@ func (s *Service) startChat(
 		if spec.OrgID, spec.DefaultOrgID, err = s.newChatOrgs(ctx, userID, msg.ProjectId, msg.GetOrgId()); err != nil {
 			return nil, err
 		}
+		// Attached projects are written with the chat, against the machine
+		// it was pinned to, before its first turn (chat_projects.go).
+		spec.OnChatCreated = s.attachStartProjects(userID, msg.GetAttachedProjectIds())
 	}
 
 	// A chat with no machine by design: there is nothing to choose, validate

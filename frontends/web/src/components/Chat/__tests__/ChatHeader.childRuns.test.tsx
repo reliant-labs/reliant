@@ -17,6 +17,10 @@ const state = vi.hoisted(() => ({
   hasMore: false,
 }));
 
+vi.mock("../../../hooks/useDaemonStatus", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/useDaemonStatus")>()),
+  useDaemonStatus: () => ({ daemons: [], activeDaemon: null, loading: false }),
+}));
 vi.mock("../../../services/controlPlane/config", () => ({ hasControlPlane: true }));
 vi.mock("../thread-views/useChatThreadMode", () => ({
   useChatThreadMode: () => ({ mode: "detailed", preference: "auto" }),

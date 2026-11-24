@@ -74,7 +74,7 @@ func (m *MockQuestions) PendingQuestionsByThread(ctx context.Context, chatID str
 var _ Questions = (*MockQuestions)(nil)
 
 // forge:section MockRepository
-// forge:hash=5c94c8d9f0221729b1320310d9258b5532b30a025193dc98fa779e4d0f9d61fe
+// forge:hash=4fbd9b8482b8e7e761341187ddf50b3ff5c84391a819c683f3652e77a9ef4ac5
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -84,14 +84,13 @@ var _ Questions = (*MockQuestions)(nil)
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	GetChatFunc                 func(context.Context, string) (*db.Chat, error)
-	GetChatRowFunc              func(context.Context, string) (*db.ChatRow, error)
-	GetQuestionByIDFunc         func(context.Context, string) (*db.Question, error)
-	EnqueueAgentMessageOnceFunc func(context.Context, *db.AgentMessage) (bool, error)
-	EmitUserRefetchFunc         func(context.Context, string, db.RefetchType, db.RefetchOpts) error
-	ResolveQuestionFunc         func(context.Context, string, *string) error
-	EmitQuestionUpdateFunc      func(context.Context, string, db.QuestionUpdate) error
-	SaveMessageToThreadFunc     func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
+	GetChatFunc             func(context.Context, string) (*db.Chat, error)
+	GetChatRowFunc          func(context.Context, string) (*db.ChatRow, error)
+	GetQuestionByIDFunc     func(context.Context, string) (*db.Question, error)
+	EmitUserRefetchFunc     func(context.Context, string, db.RefetchType, db.RefetchOpts) error
+	ResolveQuestionFunc     func(context.Context, string, *string) error
+	EmitQuestionUpdateFunc  func(context.Context, string, db.QuestionUpdate) error
+	SaveMessageToThreadFunc func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
 }
 
 // GetChat records the call and delegates to GetChatFunc when set.
@@ -119,15 +118,6 @@ func (m *MockRepository) GetQuestionByID(ctx context.Context, id string) (*db.Qu
 		return m.GetQuestionByIDFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetQuestionByID")
-}
-
-// EnqueueAgentMessageOnce records the call and delegates to EnqueueAgentMessageOnceFunc when set.
-func (m *MockRepository) EnqueueAgentMessageOnce(ctx context.Context, msg *db.AgentMessage) (bool, error) {
-	m.Recorder.Record("EnqueueAgentMessageOnce", ctx, msg)
-	if m.EnqueueAgentMessageOnceFunc != nil {
-		return m.EnqueueAgentMessageOnceFunc(ctx, msg)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "EnqueueAgentMessageOnce")
 }
 
 // EmitUserRefetch records the call and delegates to EmitUserRefetchFunc when set.
@@ -230,3 +220,29 @@ func (m *MockMessenger) SendAgentMessage(ctx context.Context, req *connect.Reque
 
 // Compile-time check.
 var _ Messenger = (*MockMessenger)(nil)
+
+// forge:section MockMailbox
+// forge:hash=14b04a3c05accbc1a182b8c3ea7bd3ce6b18faa0fcaedccb0b1310140fed42e5
+
+// MockMailbox is a test mock for the Mailbox interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockMailbox.<Method>Func not set" error.
+type MockMailbox struct {
+	contractkit.Recorder
+	EnqueueAgentMessageOnceFunc func(context.Context, *db.AgentMessage) (bool, error)
+}
+
+// EnqueueAgentMessageOnce records the call and delegates to EnqueueAgentMessageOnceFunc when set.
+func (m *MockMailbox) EnqueueAgentMessageOnce(ctx context.Context, msg *db.AgentMessage) (bool, error) {
+	m.Recorder.Record("EnqueueAgentMessageOnce", ctx, msg)
+	if m.EnqueueAgentMessageOnceFunc != nil {
+		return m.EnqueueAgentMessageOnceFunc(ctx, msg)
+	}
+	return false, contractkit.MockNotSet("MockMailbox", "EnqueueAgentMessageOnce")
+}
+
+// Compile-time check.
+var _ Mailbox = (*MockMailbox)(nil)
