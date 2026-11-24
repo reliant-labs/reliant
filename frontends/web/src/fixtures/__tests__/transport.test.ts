@@ -23,6 +23,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { ListObjectsRequestSchema, ListObjectsResponseSchema, StorageBrowserService } from "@/gen/controlplane/services/storage_browser/v1/storage_browser_pb";
 import { StreamingService } from "@/gen/reliant/v1/streaming_pb";
+import { ToolsDaemonService } from "@/gen/reliant/v1/tools_daemon_pb";
 
 import { fail, pending, withEmptyReads } from "../overlay";
 import { isDemoRead } from "../readOnly";
@@ -174,6 +175,45 @@ describe("createFixtureTransport: server streams stay open until aborted", () =>
   it("and a finite stream simply ends", async () => {
     const transport = createFixtureTransport({ scenario: { [USER_UPDATES]: () => [{ event: { case: "heartbeat", value: {} } }, {}] } });
     expect((await drain(streaming(transport).streamUserUpdates({}))).length).toBe(2);
+  });
+});
+
+describe("createFixtureTransport: bidi routes", () => {
+  it("responds before requests end and propagates cancellation to the route context", async () => {
+    let releaseRequests!: () => void;
+    const requestsDone = new Promise<void>((resolve) => { releaseRequests = resolve; });
+    let observeAbort!: () => void;
+    const aborted = new Promise<void>((resolve) => { observeAbort = resolve; });
+    const transport = createFixtureTransport({
+      routes: (router) => router.service(ToolsDaemonService, {
+        async *connectDaemon(requests, ctx) {
+          ctx.signal.addEventListener("abort", observeAbort, { once: true });
+          for await (const request of requests) {
+            expect(isMessage(request, ToolsDaemonService.method.connectDaemon.input)).toBe(true);
+            yield {};
+            await pending(ctx.signal);
+          }
+        },
+      }),
+    });
+    async function* requests() {
+      yield {};
+      await requestsDone;
+    }
+    const abort = new AbortController();
+    const iterator = createClient(ToolsDaemonService, transport)
+      .connectDaemon(requests(), { signal: abort.signal })[Symbol.asyncIterator]();
+    try {
+      // This cannot resolve if route input is collected before dispatch.
+      expect((await iterator.next()).done).toBe(false);
+      const next = iterator.next();
+      cancel(abort);
+      expect(await code(next)).toBe(Code.Canceled);
+      await aborted;
+    } finally {
+      cancel(abort);
+      releaseRequests();
+    }
   });
 });
 

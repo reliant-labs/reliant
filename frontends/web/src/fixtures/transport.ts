@@ -135,8 +135,13 @@ export interface FixtureContext<D extends FixtureDataMap = FixtureDataMap> {
 
 /**
  * Typed `ServiceImpl` registrations, exactly as for Connect's
- * `createRouterTransport`: `(router) => router.service(Svc, impl)`. The
- * per-registration handler options are not used.
+ * `createRouterTransport`: `(router) => router.service(Svc, impl)`. Stream
+ * routes return AsyncIterable responses; client/bidi routes receive an
+ * AsyncIterable request stream and observe cancellation through ctx.signal.
+ * Only scenario handlers use collected requests and shorthand stream answers
+ * (arrays, promises or single messages). Collecting route requests would break
+ * interactive bidi handlers that respond before the request stream ends.
+ * The per-registration handler options are not used.
  */
 export type FixtureRoutes<D extends FixtureDataMap = FixtureDataMap> = (
   router: ConnectRouter,
