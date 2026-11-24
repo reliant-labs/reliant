@@ -1,4 +1,5 @@
 -- forge:backward-compatible — adds a new table, its indexes and a write-admission trigger; the previous release never reads or writes the table.
+-- forge:replaces 20261124202455_tool_call_usage.up.sql
 
 -- Migration: tool_call_usage
 -- Created: 2026-11-24T20:24:55Z, re-versioned 2026-11-24T22:26:27Z
