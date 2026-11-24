@@ -523,6 +523,25 @@ const (
 // reads what a viewer reads.
 func (a Access) Viewer() bool { return a != AccessOwner }
 
+// AtLeast reports whether a reads at least as much as b, in the order
+// Owner > Manage > Reply > Viewer > None. The constants' own values are not
+// in that order, so never compare them directly.
+func (a Access) AtLeast(b Access) bool { return a.rank() >= b.rank() }
+
+func (a Access) rank() int {
+	switch a {
+	case AccessOwner:
+		return 4
+	case AccessManage:
+		return 3
+	case AccessReply:
+		return 2
+	case AccessViewer:
+		return 1
+	}
+	return 0
+}
+
 // Role is the grant level the access was read through: view for a viewer
 // (a view grant, or none on a shared row), reply or manage for a member, and
 // empty for the owner and no access.
@@ -616,6 +635,17 @@ func ChatVisibility[C chatRecord](chat C) core.Visibility {
 // test (control-plane docs/design/chat-collaboration.md §4.1). nil is false.
 func CanOwnChat[C chatRecord](ctx context.Context, userID string, chat C) bool {
 	return decide(ctx, userID, chatResource(chat))
+}
+
+// IsChatOwner reports whether userID is chat's owner by the row alone: which
+// side of a collaboration a caller ALREADY authorized to act in chat is on —
+// its owner, or a member whose message runs as the owner's (control-plane
+// docs/design/chat-collaboration.md §5.1) — and whether a stored answer about
+// a chat was given by its owner. It decides no access: ask CanOwnChat,
+// CanReplyChat or CanManageChat for that. nil is false.
+func IsChatOwner[C chatRecord](userID string, chat C) bool {
+	r := chatResource(chat)
+	return r.present && userID != "" && r.ownerUserID == userID
 }
 
 // CanReplyChat reports whether userID may act in chat as a reply member:

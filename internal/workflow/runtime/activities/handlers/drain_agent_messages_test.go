@@ -833,6 +833,53 @@ func TestDrainAgentMessages_HumanMessageStillPlainVisible(t *testing.T) {
 	assert.Equal(t, "hey, please also check the other file", *bodyBlocks[0].Content)
 }
 
+// A chat member's message queued into a running thread drains as theirs
+// (control-plane docs/design/chat-collaboration.md §6.1): the saved body keeps
+// the author and the name it was sent under, and the model's envelope names
+// them, never "user". The owner's queued message drains with the bytes it
+// always had.
+func TestDrainAgentMessages_AMembersMessageKeepsItsAuthor(t *testing.T) {
+	t.Parallel()
+
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+	at := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	dana, name := "member-dana", "Dana"
+	for i, m := range []*db.AgentMessage{
+		{Body: "the owner's", CreatedAt: at},
+		{Body: "the member's", CreatedAt: at.Add(time.Second), AuthorUserID: &dana, AuthorName: &name},
+	} {
+		m.ID, m.ChatID, m.FromThreadID, m.ToThreadID = uuid.New().String(), chatID, chatID, chatID
+		m.Kind, m.Status = core.AgentMessageKindHumanMessage, core.AgentMessageStatusQueued
+		require.NoError(t, h.Repo().EnqueueAgentMessage(ctx, m), "message %d", i)
+	}
+
+	act := newDrainTestActivity(h)
+	var output DrainAgentMessagesOutput
+	require.NoError(t, h.ExecuteActivity(act.Execute, DrainAgentMessagesInput{ChatID: chatID, Thread: chatID}, &output))
+	require.Equal(t, 2, output.Count)
+
+	msgs, err := h.Repo().ListMessages(ctx, chatID, db.MessageListOptions{})
+	require.NoError(t, err)
+	require.Len(t, msgs, 3, "the envelope, then both bodies")
+	envelope, err := h.Repo().ListContentBlocks(ctx, msgs[0].ID)
+	require.NoError(t, err)
+	assert.Contains(t, *envelope[0].Content, `1. <message from="user" queued_at=`, "the owner's line keeps its bytes")
+	assert.Contains(t, *envelope[0].Content, `2. <message from="Dana" queued_at=`, "the member is named")
+	assert.Nil(t, msgs[1].AuthorUserID, "the owner's body keeps author_user_id NULL")
+	require.NotNil(t, msgs[2].AuthorUserID)
+	assert.Equal(t, dana, *msgs[2].AuthorUserID)
+	require.NotNil(t, msgs[2].AuthorName)
+	assert.Equal(t, name, *msgs[2].AuthorName)
+}
+
 // A message another run sent (send_to_run) to a running thread queues as that
 // run's and drains attributed to it: the owner's repro was pr-fix's hand-off
 // ("[pr-fix] Your PR … is stuck") stored with no sender and shown as the

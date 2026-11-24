@@ -40,7 +40,7 @@ func (s *Service) GetChat(
 	// A viewer reads the chat, never the owner's composer, workspace or run
 	// recovery: no selection read, no Temporal describe.
 	if access.Viewer() {
-		return connect.NewResponse(&reliantv1.GetChatResponse{Chat: chatproto.ForViewer(chatToProto(chat))}), nil
+		return connect.NewResponse(&reliantv1.GetChatResponse{Chat: chatproto.ForMember(chatToProto(chat), access.Role())}), nil
 	}
 
 	// Ghost detection (DB says running, but Temporal lost it) is advisory

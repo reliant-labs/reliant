@@ -49,6 +49,26 @@ const (
 	// parallel that names none of them. FailedPrecondition; the message lists
 	// them, and the caller resends naming one (target thread).
 	RunRecipientAmbiguous = "run_recipient_ambiguous"
+	// ChatPersonallyFunded: a chat member's send to a chat its owner put on
+	// their own AI account (a live personal-funding lease, a personal_first
+	// funding order, or a provider the owner picked). FailedPrecondition;
+	// nothing was queued, and only the owner can send until the chat is back
+	// on the organization's accounts (control-plane
+	// docs/design/chat-collaboration.md §5.3).
+	ChatPersonallyFunded = "chat_personally_funded"
+	// NeedsManage: a chat member's request asked for something their level
+	// does not cover and a manager's does (a reply that sets the workflow,
+	// the mode, a parameter or a preset). PermissionDenied; resend without
+	// it (chat-collaboration.md §5.2).
+	NeedsManage = "needs_manage"
+	// NeedsOwner: a chat member's request asked for something only the
+	// chat's owner may do (a system-role message). PermissionDenied.
+	NeedsOwner = "needs_owner"
+	// ReplyQueueFull: a chat member already has the most undelivered queued
+	// messages one person may hold in someone else's chat.
+	// ResourceExhausted; send again once the run has read some
+	// (chat-collaboration.md §7).
+	ReplyQueueFull = "reply_queue_full"
 	// StaleRevision: a save raced a newer revision of the same definition.
 	// Aborted; reload and retry.
 	StaleRevision = "stale_revision"

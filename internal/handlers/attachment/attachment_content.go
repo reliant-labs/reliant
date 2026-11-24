@@ -3,11 +3,13 @@ package attachment
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // AttachmentContentPathPrefix is where AttachmentContentHandler is mounted.
@@ -38,7 +40,7 @@ func AttachmentContentHandler(repo ContentReader, authenticate func(*http.Reques
 			return
 		}
 		att, err := repo.GetAttachment(r.Context(), id)
-		if err != nil || att == nil || !authz.CanAccessPersonal(userID, att.UserID) || att.Content == nil {
+		if err != nil || att == nil || !canRead(r.Context(), repo, userID, att) || att.Content == nil {
 			http.NotFound(w, r)
 			return
 		}
@@ -65,4 +67,17 @@ func parseAttachmentContentPath(path string) (string, bool) {
 		return "", false
 	}
 	return id, true
+}
+
+// canRead reports whether userID may read att: its uploader, or the owner of
+// a chat a member attached it to their own message in (control-plane
+// docs/design/chat-collaboration.md §6.4), whose agent and money it was sent
+// to. Never another member of that chat, and never a viewer. Deleting stays
+// the uploader's alone. A lookup that fails refuses.
+func canRead(ctx context.Context, r ContentReader, userID string, att *core.Attachment) bool {
+	if authz.CanAccessPersonal(userID, att.UserID) {
+		return true
+	}
+	ok, err := r.AttachedInChatOwnedBy(ctx, att.ID, userID)
+	return err == nil && ok
 }

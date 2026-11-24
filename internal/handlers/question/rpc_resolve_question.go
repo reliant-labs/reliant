@@ -47,7 +47,10 @@ func (s *Service) ResolveQuestion(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get question"))
 	}
-	if !authz.CanOwnChat(ctx, userID, chat) {
+	// With collaboration on, a chat's reply and manage members answer too
+	// (control-plane docs/design/chat-collaboration.md §2.3); a view-level
+	// member, an org-wide viewer and everyone else are NotFound.
+	if !s.mayAnswer(ctx, userID, chat) {
 		return nil, svcerr.NotFound("question")
 	}
 
@@ -55,10 +58,28 @@ func (s *Service) ResolveQuestion(
 		return nil, svcerr.FailedPrecondition("question already resolved")
 	}
 
+	// A member's answer drives the owner's run as their message would, so it
+	// meets the same funding rule (§5.3), and it is recorded as theirs: the
+	// question's answered_by, and the author of any message it saves (§6.1).
+	// The owner's answer leaves answered_by NULL, which means the owner.
+	var answeredBy *string
+	if !authz.IsChatOwner(userID, chat) {
+		if s.deps.Replies == nil {
+			return nil, svcerr.NotFound("question")
+		}
+		if err := s.deps.Replies.MemberReplyRefusal(ctx, chat, userID); err != nil {
+			return nil, err
+		}
+		answeredBy = &userID
+	}
+	if s.deps.Replies != nil {
+		ctx = db.WithMessageAuthor(ctx, s.deps.Replies.ReplyAuthor(ctx, chat, userID))
+	}
+
 	// Nothing waits on an async question: its answer is a message to the
 	// thread that asked.
 	if question.Async {
-		return s.resolveAsyncQuestion(ctx, chat, question, req.Msg.GetResponseData())
+		return s.resolveAsyncQuestion(ctx, chat, question, req.Msg.GetResponseData(), answeredBy)
 	}
 
 	// Resolve the question in the database
@@ -67,8 +88,14 @@ func (s *Service) ResolveQuestion(
 		responseData = req.Msg.ResponseData
 	}
 
-	if err := s.deps.Repo.ResolveQuestion(ctx, question.ID, responseData); err != nil {
+	// Only a pending question resolves: of two people answering at once,
+	// the one whose answer lands first is the one recorded and signalled.
+	resolved, err := s.deps.Repo.ResolveQuestionBy(ctx, question.ID, responseData, answeredBy)
+	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve question"))
+	}
+	if !resolved {
+		return nil, svcerr.FailedPrecondition("question already resolved")
 	}
 
 	// Emit question update (resolved)
@@ -100,6 +127,15 @@ func (s *Service) ResolveQuestion(
 	return connect.NewResponse(&reliantv1.ResolveQuestionResponse{
 		Success: true,
 	}), nil
+}
+
+// mayAnswer reports whether userID may answer chat's questions: its owner,
+// and with chat collaboration on a member holding reply or manage.
+func (s *Service) mayAnswer(ctx context.Context, userID string, chat *db.Chat) bool {
+	if s.deps.Collaboration.GetEnabled() {
+		return authz.CanReplyChat(ctx, userID, chat)
+	}
+	return authz.CanOwnChat(ctx, userID, chat)
 }
 
 // signalQuestion sends a signal to the workflow using PauseService.SignalWithRecovery

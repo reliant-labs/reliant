@@ -12,6 +12,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -85,7 +86,13 @@ func (s *Service) resumeFailedQuestionWorkflow(
 	// Resolve the DB question (so it is no longer pending regardless of outcome)
 	// and persist the messages so the resumed run reads them at its next LLM
 	// boundary.
-	if err := s.deps.Repo.ResolveQuestion(ctx, question.ID, &responseData); err != nil {
+	// A chat member's message is their answer (questions.answered_by;
+	// chat-collaboration.md §6.1); the owner's leaves it NULL.
+	var answeredBy *string
+	if sender, ok := auth.GetUserIDFromContext(ctx); ok && !authz.IsChatOwner(sender, chat) {
+		answeredBy = &sender
+	}
+	if _, err := s.deps.Repo.ResolveQuestionBy(ctx, question.ID, &responseData, answeredBy); err != nil {
 		logging.WarnContext(ctx, "Failed to resolve question during resume", "error", err, "questionID", question.ID)
 	}
 	if err := s.deps.Repo.EmitQuestionUpdate(ctx, question.ChatID, db.QuestionUpdate{

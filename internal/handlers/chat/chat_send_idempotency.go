@@ -12,6 +12,8 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
@@ -51,6 +53,17 @@ func parseClientMessageID(raw string) (string, error) {
 		return "", svcerr.InvalidArgument("client_message_id must be a UUID")
 	}
 	return id.String(), nil
+}
+
+// storedClientID is the id a send's message is stored under in chat: the
+// client's id for the owner, and for a chat member the id derived from theirs
+// (memberMessageID, chat-collaboration.md §6.3). raw was vetted at the door.
+func storedClientID(ctx context.Context, chat *db.Chat, raw string) string {
+	id := canonicalClientMessageID(raw)
+	if sender, ok := auth.GetUserIDFromContext(ctx); ok && !authz.IsChatOwner(sender, chat) {
+		return memberMessageID(sender, id)
+	}
+	return id
 }
 
 // canonicalClientMessageID is parseClientMessageID for a value the handler

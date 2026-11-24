@@ -86,10 +86,12 @@ func (s *Service) StreamChatUpdates(
 	if denied != nil {
 		return svcerr.NotFound("chat")
 	}
+	// A reply or manage member reads what a viewer reads, plus the whole of
+	// the questions they may answer (chat-collaboration.md §11.1).
 	viewer := access.Viewer()
 	var out chatSender = stream
 	if viewer {
-		out = viewerChatSender{stream}
+		out = viewerChatSender{out: stream, member: access.AtLeast(authz.AccessReply)}
 	}
 
 	logging.DebugContext(ctx, LOG_PREFIX_STREAM_CHAT+" Opening chat stream",
@@ -273,7 +275,7 @@ func (s *Service) StreamChatUpdates(
 				return svcerr.Unavailable("could not re-check access to the chat")
 			}
 			chat = refreshed
-			if !stillReadable(ctx, userID, chat) {
+			if !stillReadable(ctx, userID, chat, access) {
 				logging.InfoContext(ctx, LOG_PREFIX_STREAM_CHAT+" Caller may no longer read the chat; ending its stream",
 					"userID", userID, "chatID", shortID(chatID))
 				return svcerr.NotFound("chat")
@@ -428,12 +430,16 @@ func (s *Service) sendSingleChatUpdate(update db.ChatUpdate, latestSeq int64, se
 }
 
 // stillReadable is whether an open chat stream may go on: the read decision
-// again, on the row as it is now. It only ever ends a stream; the stream's
-// shape is the one decided at its open, so a later answer can never turn a
-// viewer's frames into the owner's.
-func stillReadable(ctx context.Context, userID string, chat *db.ChatRow) bool {
-	_, denied := authz.ReadChatAccess(ctx, userID, chat)
-	return denied == nil
+// again, on the row as it is now, at no lower a level than the stream opened
+// at. It only ever ends a stream; the stream's shape is the one decided at
+// its open, so a later answer can never turn a viewer's frames into the
+// owner's. A revoke ends it, and so does a demotion (a manage or reply member
+// made a viewer, or removed from a chat the org can still view): the client
+// reopens into the poorer shape (chat-collaboration.md §11.1). A promotion
+// does not: the stream is poorer than allowed until the next open.
+func stillReadable(ctx context.Context, userID string, chat *db.ChatRow, opened authz.Access) bool {
+	now, denied := authz.ReadChatAccess(ctx, userID, chat)
+	return denied == nil && now.AtLeast(opened)
 }
 
 // chatSender is where a chat stream's frames go: the stream itself, or, for
@@ -446,26 +452,39 @@ type chatSender interface {
 // docs/design/org-sharing.md §5.1): the snapshot's transcript without tool
 // results and its runs without outputs, and each update through
 // messageproto.ViewerChatUpdate, the same rule the viewer's reads apply.
-// Streaming deltas are the model's own output and pass as they are.
-type viewerChatSender struct{ out chatSender }
+// Streaming deltas are the model's own output and pass as they are. A
+// member's stream (member) is shaped by messageproto.MemberChatUpdate.
+type viewerChatSender struct {
+	out    chatSender
+	member bool
+}
 
 func (v viewerChatSender) Send(ev *reliantv1.ChatStreamEvent) error {
+	if v.member {
+		return v.out.Send(shapeChatEvent(ev, messageproto.MemberChatUpdate))
+	}
 	return v.out.Send(viewerChatEvent(ev))
 }
 
 // viewerChatEvent reshapes ev for a viewer, in place.
 func viewerChatEvent(ev *reliantv1.ChatStreamEvent) *reliantv1.ChatStreamEvent {
+	return shapeChatEvent(ev, messageproto.ViewerChatUpdate)
+}
+
+// shapeChatEvent reshapes ev for someone who is not the chat's owner, in
+// place, each update through shape.
+func shapeChatEvent(ev *reliantv1.ChatStreamEvent, shape func(reliantv1.ChatUpdateType, string) string) *reliantv1.ChatStreamEvent {
 	switch e := ev.GetEvent().(type) {
 	case *reliantv1.ChatStreamEvent_Snapshot:
 		snap := e.Snapshot
 		messageproto.ElideForViewer(snap.GetMessages())
 		for _, u := range snap.GetOtherUpdates() {
-			u.DataJson = messageproto.ViewerChatUpdate(u.GetUpdateType(), u.GetDataJson())
+			u.DataJson = shape(u.GetUpdateType(), u.GetDataJson())
 		}
 		messageproto.ElideWorkflowStatesForViewer(snap.GetActiveWorkflows())
 	case *reliantv1.ChatStreamEvent_Updates:
 		for _, u := range e.Updates.GetUpdates() {
-			u.DataJson = messageproto.ViewerChatUpdate(u.GetUpdateType(), u.GetDataJson())
+			u.DataJson = shape(u.GetUpdateType(), u.GetDataJson())
 		}
 	case *reliantv1.ChatStreamEvent_UserUpdates:
 		// Never sent to a viewer (the focus filter is off); if one were,

@@ -103,6 +103,10 @@ type fundingPlan struct {
 	// background is a call that is not a turn of the chat (llmCallSpec.
 	// Background): it reads consent and never records any.
 	background bool
+	// collaborator is a call that answers a chat member
+	// (llmCallSpec.Collaborator): org-funded accounts only, and a hold
+	// names why to the member.
+	collaborator bool
 }
 
 // orgFundedFirstTier reports whether a is paid for by the org and preferred.
@@ -203,6 +207,18 @@ func (r *AccountRouting) fundingPlanFor(ctx context.Context, spec llmCallSpec, a
 	}
 	if spec.backgroundLease && plan.consentsOnLimit() {
 		plan.leased = true
+	}
+	if spec.Collaborator {
+		// A member's message is the org's to fund, never the owner's: no
+		// lease, no pick and no order the owner chose reach it, and an org
+		// limit waits (chat-collaboration.md §5.3 rule 2). The scope already
+		// leaves the owner's own accounts out; this keeps the plan from ever
+		// steering to one.
+		plan.order = orgfunding.OrderOrgOnly
+		plan.limit = orgfunding.OnOrgLimitWait
+		plan.personPick = ""
+		plan.leased = false
+		plan.collaborator = true
 	}
 	return plan
 }
@@ -331,10 +347,29 @@ func (e *personalFundingRefused) Error() string {
 // without their say: the turn's usage-limit wait (fundingHold), a background
 // call's personalFundingRefused.
 func (p fundingPlan) hold(providerDriver, why string) error {
+	if p.collaborator {
+		why = collaboratorHoldWhy
+	}
 	if p.background {
 		return &personalFundingRefused{Provider: providerDriver, Why: why}
 	}
 	return fundingHold(providerDriver, why)
+}
+
+// collaboratorHoldWhy is the reason a member's message waits: a person in
+// the chat reads it on the run's wait.
+const collaboratorHoldWhy = "waiting for the organization's accounts; collaborators' messages never use a personal account"
+
+// collaboratorHold is the refusal of a call that answers a chat member when
+// no org-funded account can serve it (chat-collaboration.md §5.3 rule 2): the
+// turn parks in the usage-limit wait with a reason a member can read, and a
+// background call (a title, a compaction) is refused so it falls back.
+func collaboratorHold(spec llmCallSpec, selector models.ModelSelector) error {
+	_, driver, _ := strings.Cut(selector.ID, "@")
+	if spec.Background {
+		return &personalFundingRefused{Provider: driver, Why: collaboratorHoldWhy}
+	}
+	return fundingHold(driver, collaboratorHoldWhy)
 }
 
 // fundingHold is the refusal of a call that would move to the person's own
@@ -571,6 +606,11 @@ func orgTierLimitedFor(avail models.AvailableDrivers, modelID string, now time.T
 // announce is whether this call serves on the lease it grants and so says so;
 // a grant made for a later retry leaves the notice to the call that serves.
 func (r *AccountRouting) decidePersonalFunding(ctx context.Context, plan fundingPlan, q core.PersonalFunding, providerDriver string, now time.Time, announce bool) (string, error) {
+	if plan.collaborator {
+		// The owner is never asked, and no lease granted, on a chat
+		// member's behalf (chat-collaboration.md §5.3): it waits.
+		return "", plan.hold(providerDriver, collaboratorHoldWhy)
+	}
 	why := map[string]string{
 		core.PersonalFundingLimited:  "rate-limited",
 		core.PersonalFundingUnusable: "unavailable",

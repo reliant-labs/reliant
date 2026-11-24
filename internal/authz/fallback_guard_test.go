@@ -27,6 +27,7 @@ var absentFallbackAllowed = map[string]string{
 	"internal/handlers/terminal/terminal_ws.go:workingDirMayAppear:err != nil || wt == nil":                                                                 "whether a working directory may still appear on disk; no access decision",
 	"internal/handlers/terminal/terminal_ws.go:isMainCheckout:worktreeID == \"\"":                                                                           "the main checkout has no worktree id; no access decision",
 	"internal/handlers/tools_daemon/tools_daemon_reconcile.go:projectRemoteEmpty:project.RemoteURL == nil || strings.TrimSpace(*project.RemoteURL) == \"\"": "whether a project's remote is still to be backfilled; no access decision",
+	"internal/workflow/runtime/activities/handlers/llm_request.go:collaboratorSpan:err != nil || event == nil":                                              "true RESTRICTS: an unreadable launch puts the call in a chat member's span, org-funded accounts only (chat-collaboration §5.3); no access decision",
 	"internal/daemonplacement/workspace.go:isPlaceholderLabel:label == \"\" || strings.EqualFold(label, daemonID) || uuidPattern.MatchString(label)":        "whether a machine's name is worth showing a person; no access decision",
 }
 

@@ -371,6 +371,12 @@ func (r *Repo) saveMessageToThread(ctx context.Context, chatID, thread string, r
 				msg.SenderSubject = &origin.Subject
 			}
 		}
+		// A human message names its author when the send path put one on
+		// ctx (WithMessageAuthor): a collaborator's id and name, or the
+		// owner's name alone (chat-collaboration.md §6.1).
+		if reliantv1.MessageRole(role) == reliantv1.MessageRole_MESSAGE_ROLE_USER {
+			msg.AuthorUserID, msg.AuthorName = AuthorColumns(ctx)
+		}
 
 		if once {
 			// Under SERIALIZABLE a repeat whose twin committed after this
@@ -2182,6 +2188,12 @@ func (r *Repo) GetAttachment(ctx context.Context, id string) (*Attachment, error
 	return store.GetAttachment(ctx, r.ORM(), id)
 }
 
+// AttachedInChatOwnedBy reports whether a chat member attached attachment
+// id to their own message in a chat ownerID owns (store.AttachedInChatOwnedBy).
+func (r *Repo) AttachedInChatOwnedBy(ctx context.Context, id, ownerID string) (bool, error) {
+	return store.AttachedInChatOwnedBy(ctx, r.ORM(), id, ownerID)
+}
+
 func (r *Repo) GetAttachmentsByIDs(ctx context.Context, ids []string) ([]*Attachment, error) {
 	return store.GetAttachmentsByIDs(ctx, r.ORM(), ids)
 }
@@ -3638,6 +3650,24 @@ func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *str
 	}
 
 	return nil
+}
+
+// ResolveQuestionBy resolves a PENDING question as answeredBy's answer
+// (questions.answered_by; nil for the chat's owner) and reports whether it
+// did: false when it was already resolved, so of two people answering at once
+// exactly one wins (control-plane docs/design/chat-collaboration.md §7).
+func (r *Repo) ResolveQuestionBy(ctx context.Context, id string, responseData, answeredBy *string) (bool, error) {
+	if id == "" {
+		return false, fmt.Errorf("question ID cannot be empty")
+	}
+	resolved, err := store.ResolveQuestionBy(ctx, r.ORM(), id, responseData, time.Now().UTC(), answeredBy)
+	if err != nil || !resolved {
+		return false, err
+	}
+	if q, err := r.GetQuestionByID(ctx, id); err == nil && q != nil {
+		_ = r.emitChatActivityIfChanged(ctx, q.ChatID)
+	}
+	return true, nil
 }
 
 // ==================== Helper Functions ====================

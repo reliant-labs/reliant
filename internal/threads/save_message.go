@@ -105,6 +105,12 @@ type SaveMessageOpts struct {
 	// SenderSubject is the sending agent's one-line subject (spawn_send's
 	// `subject`); empty when it gave none.
 	SenderSubject string
+	// AuthorUserID and AuthorName name the person who wrote a human message
+	// (messages.author_user_id / author_name): a collaborator's id and
+	// display name, or the owner's name alone. Empty records nothing (the
+	// owner). The mailbox drain copies them from the queued row.
+	AuthorUserID string
+	AuthorName   string
 
 	// Context window control
 	// When true, creates a new context window with incremented sequence.
@@ -289,6 +295,8 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 		SenderThreadID:    ptr.StringIfNotEmpty(opts.SenderThreadID),
 		SenderKind:        senderKindPtrIfNonZero(opts.SenderKind),
 		SenderSubject:     ptr.StringIfNotEmpty(opts.SenderSubject),
+		AuthorUserID:      ptr.StringIfNotEmpty(opts.AuthorUserID),
+		AuthorName:        ptr.StringIfNotEmpty(opts.AuthorName),
 		TokenCount:        ptr.IntIfPositive(opts.TokenCount),
 		Cost:              ptr.Float64IfPositive(opts.Cost),
 		WorkflowID:        opts.WorkflowID,

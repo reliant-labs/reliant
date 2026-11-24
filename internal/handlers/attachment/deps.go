@@ -15,10 +15,15 @@ type AttachmentStore interface {
 	InsertAttachment(ctx context.Context, a *core.Attachment) error
 	GetAttachment(ctx context.Context, id string) (*core.Attachment, error)
 	RemoveAttachment(ctx context.Context, id string) error
+	// AttachedInChatOwnedBy reports whether a chat member attached the
+	// attachment to their own message in a chat ownerID owns
+	// (chat-collaboration.md §6.4).
+	AttachedInChatOwnedBy(ctx context.Context, id, ownerID string) (bool, error)
 }
 
-// ContentReader reads an attachment for AttachmentContentHandler. It is the
-// one method of AttachmentStore that route needs.
+// ContentReader reads an attachment for AttachmentContentHandler: the two
+// methods of AttachmentStore that route needs.
 type ContentReader interface {
 	GetAttachment(ctx context.Context, id string) (*core.Attachment, error)
+	AttachedInChatOwnedBy(ctx context.Context, id, ownerID string) (bool, error)
 }

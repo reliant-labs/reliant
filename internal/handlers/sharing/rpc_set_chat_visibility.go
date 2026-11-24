@@ -54,7 +54,7 @@ func (s *Service) SetChatVisibility(
 		if access, denied := authz.ReadChatAccess(ctx, userID, after); denied == nil {
 			resp.Chat = chatproto.Chat(after)
 			if access.Viewer() {
-				resp.Chat = chatproto.ForViewer(resp.Chat)
+				resp.Chat = chatproto.ForMember(resp.Chat, access.Role())
 			}
 		}
 	}

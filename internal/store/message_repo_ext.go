@@ -709,3 +709,27 @@ func int64ToIntPtr(i *int64) *int {
 // bind or scan.
 type MessageExtra struct {
 }
+
+// LatestHumanTurnAuthor is the author of chatID's latest message the send
+// path stamped with one (control-plane docs/design/chat-collaboration.md
+// §5.3): a chat member's id, or "" for the owner's own (author_user_id NULL,
+// author_name set) and for a chat with no stamped message. Model output, tool
+// results, agent and workflow messages carry no stamp, so they never end a
+// member's span. One probe of idx_messages_chat_author, whose predicate the
+// WHERE repeats.
+func LatestHumanTurnAuthor(ctx context.Context, db orm.Context, chatID string) (string, error) {
+	if chatID == "" {
+		return "", fmt.Errorf("chat ID cannot be empty")
+	}
+	var author sql.NullString
+	err := db.QueryRow(ctx, `SELECT author_user_id FROM messages
+WHERE chat_id = $1 AND (author_user_id IS NOT NULL OR author_name IS NOT NULL)
+ORDER BY created_at DESC LIMIT 1`, chatID).Scan(&author)
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, orm.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read the chat's latest author: %w", err)
+	}
+	return author.String, nil
+}

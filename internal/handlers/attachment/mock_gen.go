@@ -16,7 +16,7 @@ import (
 )
 
 // forge:section MockAttachmentStore
-// forge:hash=bb3ff339e49742d06865dc661699175c91f5ea2139ca4b64fa2b7157e3073a64
+// forge:hash=c1255becd1c25ca50d4f7ea77c6946f35eba2e518d11962e17e4a078205f2933
 
 // MockAttachmentStore is a test mock for the AttachmentStore interface.
 //
@@ -26,9 +26,10 @@ import (
 // "MockAttachmentStore.<Method>Func not set" error.
 type MockAttachmentStore struct {
 	contractkit.Recorder
-	InsertAttachmentFunc func(context.Context, *core.Attachment) error
-	GetAttachmentFunc    func(context.Context, string) (*core.Attachment, error)
-	RemoveAttachmentFunc func(context.Context, string) error
+	InsertAttachmentFunc      func(context.Context, *core.Attachment) error
+	GetAttachmentFunc         func(context.Context, string) (*core.Attachment, error)
+	RemoveAttachmentFunc      func(context.Context, string) error
+	AttachedInChatOwnedByFunc func(context.Context, string, string) (bool, error)
 }
 
 // InsertAttachment records the call and delegates to InsertAttachmentFunc when set.
@@ -58,11 +59,20 @@ func (m *MockAttachmentStore) RemoveAttachment(ctx context.Context, id string) e
 	return contractkit.MockNotSet("MockAttachmentStore", "RemoveAttachment")
 }
 
+// AttachedInChatOwnedBy records the call and delegates to AttachedInChatOwnedByFunc when set.
+func (m *MockAttachmentStore) AttachedInChatOwnedBy(ctx context.Context, id string, ownerID string) (bool, error) {
+	m.Recorder.Record("AttachedInChatOwnedBy", ctx, id, ownerID)
+	if m.AttachedInChatOwnedByFunc != nil {
+		return m.AttachedInChatOwnedByFunc(ctx, id, ownerID)
+	}
+	return false, contractkit.MockNotSet("MockAttachmentStore", "AttachedInChatOwnedBy")
+}
+
 // Compile-time check.
 var _ AttachmentStore = (*MockAttachmentStore)(nil)
 
 // forge:section MockContentReader
-// forge:hash=2583b9ed341ec936e83a715453af0f1f92fd3d9956aa6610461a6e7ccfcbcd0d
+// forge:hash=c99ecb40bbb9a8ce4a078872d1a92a5f144600585316da54c27b8db21ef6689a
 
 // MockContentReader is a test mock for the ContentReader interface.
 //
@@ -72,7 +82,8 @@ var _ AttachmentStore = (*MockAttachmentStore)(nil)
 // "MockContentReader.<Method>Func not set" error.
 type MockContentReader struct {
 	contractkit.Recorder
-	GetAttachmentFunc func(context.Context, string) (*core.Attachment, error)
+	GetAttachmentFunc         func(context.Context, string) (*core.Attachment, error)
+	AttachedInChatOwnedByFunc func(context.Context, string, string) (bool, error)
 }
 
 // GetAttachment records the call and delegates to GetAttachmentFunc when set.
@@ -82,6 +93,15 @@ func (m *MockContentReader) GetAttachment(ctx context.Context, id string) (*core
 		return m.GetAttachmentFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockContentReader", "GetAttachment")
+}
+
+// AttachedInChatOwnedBy records the call and delegates to AttachedInChatOwnedByFunc when set.
+func (m *MockContentReader) AttachedInChatOwnedBy(ctx context.Context, id string, ownerID string) (bool, error) {
+	m.Recorder.Record("AttachedInChatOwnedBy", ctx, id, ownerID)
+	if m.AttachedInChatOwnedByFunc != nil {
+		return m.AttachedInChatOwnedByFunc(ctx, id, ownerID)
+	}
+	return false, contractkit.MockNotSet("MockContentReader", "AttachedInChatOwnedBy")
 }
 
 // Compile-time check.

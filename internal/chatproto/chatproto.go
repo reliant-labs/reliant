@@ -125,6 +125,27 @@ func ForViewer(out *reliantv1.Chat) *reliantv1.Chat {
 	return out
 }
 
+// ForMember is ForViewer with the caller's level recorded
+// (Chat.access_level; control-plane docs/design/chat-collaboration.md §12):
+// role is the grant the caller read the chat through (authz.Access.Role),
+// "" for an org-wide viewer, which is VIEW. viewer_access stays true at every
+// level, so a client that predates collaboration shows the chat read-only.
+func ForMember(out *reliantv1.Chat, role core.ChatMemberRole) *reliantv1.Chat {
+	out = ForViewer(out)
+	if out == nil {
+		return nil
+	}
+	level := reliantv1.ChatAccessLevel_CHAT_ACCESS_LEVEL_VIEW
+	switch role {
+	case core.ChatMemberReply:
+		level = reliantv1.ChatAccessLevel_CHAT_ACCESS_LEVEL_REPLY
+	case core.ChatMemberManage:
+		level = reliantv1.ChatAccessLevel_CHAT_ACCESS_LEVEL_MANAGE
+	}
+	out.AccessLevel = &level
+	return out
+}
+
 // ElideStepsForViewer leaves every resolved value out of steps, in place: what
 // each step produced (its output and its error, which embed the output of
 // commands that ran on the owner's machine) and what it was given

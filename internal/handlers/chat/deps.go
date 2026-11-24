@@ -14,6 +14,7 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
@@ -96,6 +97,9 @@ type Repository interface {
 	SetChatAdopted(ctx context.Context, chatID, userID string, adopted bool) (bool, error)
 	// RecordChatPersonTurn marks a launched chat attended from a person's send on.
 	RecordChatPersonTurn(ctx context.Context, chatID, userID string) error
+	// ResolveQuestionBy resolves a pending question as answeredBy's answer
+	// (nil for the owner), false when it was already resolved.
+	ResolveQuestionBy(ctx context.Context, id string, responseData, answeredBy *string) (bool, error)
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)
 	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
@@ -212,4 +216,37 @@ type AgentMessages interface {
 	CancelQueuedAgentMessage(ctx context.Context, id, chatID string) (cancelled bool, err error)
 	DeleteUndeliveredAgentMessage(ctx context.Context, id, chatID string) (deleted bool, err error)
 	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
+	// CountQueuedHumanMessagesByAuthor counts a chat member's undelivered
+	// queued messages in a chat: the per-author queue cap.
+	CountQueuedHumanMessagesByAuthor(ctx context.Context, chatID, authorUserID string) (int64, error)
+}
+
+// MemberDirectory answers who a person is in an org: their display name,
+// recorded on the messages they send (chat-collaboration.md §6.2).
+// *orgs.Resolver satisfies it.
+type MemberDirectory interface {
+	Membership(ctx context.Context, userID, orgID string) (accesstokenclient.OrgMembership, bool, error)
+}
+
+// FundingLeases reads a chat's personal-funding question and lease
+// (chat_personal_funding). store.ChatPersonalFundingExtStore satisfies it.
+type FundingLeases interface {
+	GetChatPersonalFunding(ctx context.Context, chatID string) (*core.PersonalFunding, error)
+}
+
+// PersonPicks reads the provider the owner picked for a chat in the composer
+// (chat_person_picks), "" for none. store.ChatPersonPickExtStore satisfies it.
+type PersonPicks interface {
+	ChatPersonPickDriver(ctx context.Context, chatID, orgID string) (string, error)
+}
+
+// SettingsReader reads a person's user-level setting. *db.Repo satisfies it.
+type SettingsReader interface {
+	GetSettingValue(ctx context.Context, userID, key string) (string, bool)
+}
+
+// AttachmentUploaders maps attachment ids to who uploaded them, without the
+// bytes. store.AttachmentExtStore satisfies it.
+type AttachmentUploaders interface {
+	AttachmentUploaders(ctx context.Context, ids []string) (map[string]string, error)
 }

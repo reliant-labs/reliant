@@ -28,7 +28,9 @@ type Repository interface {
 	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	GetQuestionByID(ctx context.Context, id string) (*db.Question, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
-	ResolveQuestion(ctx context.Context, id string, responseData *string) error
+	// ResolveQuestionBy resolves a pending question as answeredBy's answer
+	// (nil for the owner), false when it was already resolved.
+	ResolveQuestionBy(ctx context.Context, id string, responseData, answeredBy *string) (bool, error)
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 	SaveMessageToThread(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32) (*db.Message, error)
 }
@@ -51,4 +53,14 @@ type Messenger interface {
 // to the chat's open clients. *agentmailbox.Mailbox satisfies it.
 type Mailbox interface {
 	EnqueueAgentMessageOnce(ctx context.Context, msg *db.AgentMessage) (bool, error)
+}
+
+// ReplyGate is what the question service asks the chat service about a
+// person answering in someone else's chat (control-plane
+// docs/design/chat-collaboration.md §5.3, §6.1): whether a member's answer is
+// refused, and who an answer's message is recorded as from. The chat service
+// satisfies it.
+type ReplyGate interface {
+	MemberReplyRefusal(ctx context.Context, chat *db.Chat, sender string) error
+	ReplyAuthor(ctx context.Context, chat *db.Chat, sender string) db.MessageAuthor
 }

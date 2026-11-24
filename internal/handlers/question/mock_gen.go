@@ -74,7 +74,7 @@ func (m *MockQuestions) PendingQuestionsByThread(ctx context.Context, chatID str
 var _ Questions = (*MockQuestions)(nil)
 
 // forge:section MockRepository
-// forge:hash=4fbd9b8482b8e7e761341187ddf50b3ff5c84391a819c683f3652e77a9ef4ac5
+// forge:hash=8d0be8e8819f04d2b112896bd105635f684f52ec497c5934f2e050aa75ed1210
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -88,7 +88,7 @@ type MockRepository struct {
 	GetChatRowFunc          func(context.Context, string) (*db.ChatRow, error)
 	GetQuestionByIDFunc     func(context.Context, string) (*db.Question, error)
 	EmitUserRefetchFunc     func(context.Context, string, db.RefetchType, db.RefetchOpts) error
-	ResolveQuestionFunc     func(context.Context, string, *string) error
+	ResolveQuestionByFunc   func(context.Context, string, *string, *string) (bool, error)
 	EmitQuestionUpdateFunc  func(context.Context, string, db.QuestionUpdate) error
 	SaveMessageToThreadFunc func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
 }
@@ -129,13 +129,13 @@ func (m *MockRepository) EmitUserRefetch(ctx context.Context, userID string, ref
 	return contractkit.MockNotSet("MockRepository", "EmitUserRefetch")
 }
 
-// ResolveQuestion records the call and delegates to ResolveQuestionFunc when set.
-func (m *MockRepository) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
-	m.Recorder.Record("ResolveQuestion", ctx, id, responseData)
-	if m.ResolveQuestionFunc != nil {
-		return m.ResolveQuestionFunc(ctx, id, responseData)
+// ResolveQuestionBy records the call and delegates to ResolveQuestionByFunc when set.
+func (m *MockRepository) ResolveQuestionBy(ctx context.Context, id string, responseData *string, answeredBy *string) (bool, error) {
+	m.Recorder.Record("ResolveQuestionBy", ctx, id, responseData, answeredBy)
+	if m.ResolveQuestionByFunc != nil {
+		return m.ResolveQuestionByFunc(ctx, id, responseData, answeredBy)
 	}
-	return contractkit.MockNotSet("MockRepository", "ResolveQuestion")
+	return false, contractkit.MockNotSet("MockRepository", "ResolveQuestionBy")
 }
 
 // EmitQuestionUpdate records the call and delegates to EmitQuestionUpdateFunc when set.
@@ -246,3 +246,39 @@ func (m *MockMailbox) EnqueueAgentMessageOnce(ctx context.Context, msg *db.Agent
 
 // Compile-time check.
 var _ Mailbox = (*MockMailbox)(nil)
+
+// forge:section MockReplyGate
+// forge:hash=358f86e02a6acfbe765b3faaa203cb5c3328589b741638a99ab844f4595d2395
+
+// MockReplyGate is a test mock for the ReplyGate interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockReplyGate.<Method>Func not set" error.
+type MockReplyGate struct {
+	contractkit.Recorder
+	MemberReplyRefusalFunc func(context.Context, *db.Chat, string) error
+	ReplyAuthorFunc        func(context.Context, *db.Chat, string) db.MessageAuthor
+}
+
+// MemberReplyRefusal records the call and delegates to MemberReplyRefusalFunc when set.
+func (m *MockReplyGate) MemberReplyRefusal(ctx context.Context, chat *db.Chat, sender string) error {
+	m.Recorder.Record("MemberReplyRefusal", ctx, chat, sender)
+	if m.MemberReplyRefusalFunc != nil {
+		return m.MemberReplyRefusalFunc(ctx, chat, sender)
+	}
+	return contractkit.MockNotSet("MockReplyGate", "MemberReplyRefusal")
+}
+
+// ReplyAuthor records the call and delegates to ReplyAuthorFunc when set.
+func (m *MockReplyGate) ReplyAuthor(ctx context.Context, chat *db.Chat, sender string) db.MessageAuthor {
+	m.Recorder.Record("ReplyAuthor", ctx, chat, sender)
+	if m.ReplyAuthorFunc != nil {
+		return m.ReplyAuthorFunc(ctx, chat, sender)
+	}
+	return *new(db.MessageAuthor)
+}
+
+// Compile-time check.
+var _ ReplyGate = (*MockReplyGate)(nil)

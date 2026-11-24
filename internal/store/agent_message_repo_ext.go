@@ -66,7 +66,7 @@ import (
 // agentMessageColumns is the column list the passthrough reads scan, in
 // scanAgentMessage's order.
 const agentMessageColumns = `id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
-    status, created_at, delivered_at, delivered_message_id, attachments, synthesized, subject, display_style, author_user_id`
+    status, created_at, delivered_at, delivered_message_id, attachments, synthesized, subject, display_style, author_user_id, author_name`
 
 // insertAgentMessageSQL is the insert every enqueue shares; each appends its
 // own conflict clause. attachments is NULL for none (see
@@ -76,8 +76,9 @@ const agentMessageColumns = `id, chat_id, from_thread_id, to_thread_id, kind, bo
 const insertAgentMessageSQL = `
 INSERT INTO agent_messages (
     id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
-    status, created_at, attachments, synthesized, subject, display_style, author_user_id
-) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9::jsonb, ?10, ?11, ?12, ?13)`
+    status, created_at, attachments, synthesized, subject, display_style,
+    author_user_id, author_name
+) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9::jsonb, ?10, ?11, ?12, ?13, ?14)`
 
 func agentMessageInsertArgs(msg *core.AgentMessage) ([]any, error) {
 	attachments, err := agentMessageAttachments(msg.Attachments)
@@ -85,7 +86,8 @@ func agentMessageInsertArgs(msg *core.AgentMessage) ([]any, error) {
 		return nil, err
 	}
 	return []any{msg.ID, msg.ChatID, msg.FromThreadID, msg.ToThreadID, msg.Kind, msg.Body, msg.ToolCallID,
-		msg.Status, msg.CreatedAt, attachments, msg.Synthesized, msg.Subject, msg.DisplayStyle, msg.AuthorUserID}, nil
+		msg.Status, msg.CreatedAt, attachments, msg.Synthesized, msg.Subject, msg.DisplayStyle,
+		msg.AuthorUserID, msg.AuthorName}, nil
 }
 
 // EnqueueAgentMessage queues msg.
@@ -531,7 +533,7 @@ func scanAgentMessage(rows *sql.Rows) (*core.AgentMessage, error) {
 	)
 	if err := rows.Scan(&msg.ID, &msg.ChatID, &msg.FromThreadID, &msg.ToThreadID, &msg.Kind, &msg.Body, &msg.ToolCallID,
 		&msg.Status, &msg.CreatedAt, &msg.DeliveredAt, &msg.DeliveredMessageID, &attachments, &msg.Synthesized,
-		&msg.Subject, &msg.DisplayStyle, &msg.AuthorUserID); err != nil {
+		&msg.Subject, &msg.DisplayStyle, &msg.AuthorUserID, &msg.AuthorName); err != nil {
 		return nil, err
 	}
 	msg.Attachments = agentMessageAttachmentIDs(attachments)
@@ -556,6 +558,7 @@ func agentMessageFromRow(row *AgentMessage) *core.AgentMessage {
 		Subject:            row.Subject,
 		DisplayStyle:       row.DisplayStyle,
 		AuthorUserID:       row.AuthorUserID,
+		AuthorName:         row.AuthorName,
 	}
 }
 
@@ -612,4 +615,19 @@ func rowsTouched(res sql.Result, err error) (bool, error) {
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type AgentMessageExtra struct {
+}
+
+// CountQueuedHumanMessagesByAuthor counts the undelivered human messages
+// authorUserID has queued in chatID (agent_messages.author_user_id): the
+// bound on one chat member, so one person cannot bury the owner's own
+// follow-ups (control-plane docs/design/chat-collaboration.md §7). The owner's
+// rows carry no author and are never counted.
+func CountQueuedHumanMessagesByAuthor(ctx context.Context, db orm.Context, chatID, authorUserID string) (int64, error) {
+	if chatID == "" || authorUserID == "" {
+		return 0, fmt.Errorf("chat ID and author cannot be empty")
+	}
+	var n int64
+	err := db.QueryRow(ctx, `SELECT count(*) FROM agent_messages
+WHERE chat_id = $1 AND author_user_id = $2 AND status = 1`, chatID, authorUserID).Scan(&n)
+	return n, err
 }

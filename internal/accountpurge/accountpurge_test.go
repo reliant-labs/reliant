@@ -755,3 +755,53 @@ func TestPurge_RemovesChatGrants(t *testing.T) {
 		t.Errorf("the purge removed another person's grant on another person's chat")
 	}
 }
+
+// What a purged user wrote, answered or queued in someone else's chat as a
+// member stays in that chat's history, still not the owner's (its author id
+// is kept, never NULL, which would mean the owner), but the name it was
+// written under goes (control-plane docs/design/chat-collaboration.md §6.1).
+// The bystander's own rows are untouched.
+func TestPurge_KeepsAMembersWordsAndForgetsTheirName(t *testing.T) {
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
+	defer cleanup()
+	ctx := context.Background()
+	const victim, bystander = "user-deleted", "user-retained"
+	seedUser(t, rawDB, victim)
+	seedUser(t, rawDB, bystander)
+	now := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	// In the bystander's chat: the victim's message, the bystander's own
+	// (named, author_user_id NULL), the victim's queued message and answer.
+	mustExec(t, rawDB, `INSERT INTO messages (id, chat_id, ordinal, thread_id, context_window_id, role, created_at, updated_at, seq, author_user_id, author_name)
+		VALUES ('member-msg', 'chat-user-retained', 2, 'thread-user-retained', 'cw-user-retained', 1, $2, $2, 2, $1, 'Dana'),
+		       ('owner-msg', 'chat-user-retained', 3, 'thread-user-retained', 'cw-user-retained', 1, $2, $2, 3, NULL, 'Alex')`, victim, now)
+	mustExec(t, rawDB, `INSERT INTO agent_messages (id, chat_id, from_thread_id, to_thread_id, kind, body, status, created_at, author_user_id, author_name)
+		VALUES ('member-queued', 'chat-user-retained', 'thread-user-retained', 'thread-user-retained', 4, 'hi', 1, $2, $1, 'Dana')`, victim, now)
+	mustExec(t, rawDB, `INSERT INTO questions (id, chat_id, workflow_id, thread_id, step_id, status, answered_by, created_at)
+		VALUES ('member-answer', 'chat-user-retained', 'wf', 'thread-user-retained', 's', 2, $1, $2)`, victim, now)
+
+	if _, err := purger.Purge(ctx, victim); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+	var author, name, ownerName sql.NullString
+	if err := rawDB.QueryRowContext(ctx, `SELECT author_user_id, author_name FROM messages WHERE id = 'member-msg'`).Scan(&author, &name); err != nil {
+		t.Fatalf("the member's message in another's chat must stay: %v", err)
+	}
+	if author.String != victim || name.Valid {
+		t.Errorf("member's message: author %q name %v, want the id kept and the name cleared", author.String, name)
+	}
+	if err := rawDB.QueryRowContext(ctx, `SELECT author_name FROM messages WHERE id = 'owner-msg'`).Scan(&ownerName); err != nil || ownerName.String != "Alex" {
+		t.Errorf("the bystander's own name changed: %v %v", ownerName, err)
+	}
+	var queuedAuthor, queuedName sql.NullString
+	if err := rawDB.QueryRowContext(ctx, `SELECT author_user_id, author_name FROM agent_messages WHERE id = 'member-queued'`).Scan(&queuedAuthor, &queuedName); err != nil {
+		t.Fatalf("the member's queued message must stay: %v", err)
+	}
+	if queuedAuthor.String != victim || queuedName.Valid {
+		t.Errorf("queued message: author %q name %v, want the id kept and the name cleared", queuedAuthor.String, queuedName)
+	}
+	var answeredBy sql.NullString
+	if err := rawDB.QueryRowContext(ctx, `SELECT answered_by FROM questions WHERE id = 'member-answer'`).Scan(&answeredBy); err != nil || answeredBy.String != victim {
+		t.Errorf("an answer in another's chat must stay theirs, never the owner's (NULL): %v %v", answeredBy, err)
+	}
+}

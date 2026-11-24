@@ -35,6 +35,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -242,6 +243,14 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM) *Harness {
 // RemoteExecutor over a router it controls (see machineStartingRouter).
 func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.ToolExecutor) *Harness {
 	t.Helper()
+	return buildHarness(t, llmScript, executor, "")
+}
+
+// buildHarness is newHarnessWith, with the scenario project in orgID when it
+// is not "" (newCollabHarness): every caller then acts as a live member of
+// it, through a person's session, and chat collaboration is on.
+func buildHarness(t *testing.T, llmScript *ScriptedLLM, executor toolexec.ToolExecutor, orgID string) *Harness {
+	t.Helper()
 	s := requireStack(t)
 
 	userID := "replayfix-user-" + shortID()
@@ -249,6 +258,11 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 	projectPath := t.TempDir()
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+	var projectOrg *string
+	if orgID != "" {
+		projectOrg = &orgID
+		ctx = collabContext(ctx, s)
+	}
 
 	now := time.Now().UTC()
 	require.NoError(t, s.Repo.CreateProject(ctx, &db.Project{
@@ -256,6 +270,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		Name:       "replayfix-" + t.Name(),
 		Path:       projectPath,
 		UserID:     userID,
+		OrgID:      projectOrg,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 		LastActive: now,
@@ -355,10 +370,13 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 	// still schedules the greenfield probe (StartChat asks for it on every
 	// first turn); the worker above has no router either, so the activity
 	// settles as skipped_no_daemon_router without touching a filesystem.
-	chatSvc, err := chat.New(chat.Deps{
+	chatDeps := chat.Deps{
 		Logger:        slog.Default(),
 		Config:        &typedconfig.Config{},
 		Repo:          s.Repo,
+		Workflows:     store.NewWorkflowExtStore(s.Repo.ORM()),
+		Worktrees:     store.NewWorktreeExtStore(s.Repo.ORM()),
+		ProjectRows:   store.NewProjectExtStore(s.Repo.ORM()),
 		Questions:     store.NewQuestionExtStore(s.Repo.ORM()),
 		Spawns:        store.NewToolCallExtStore(s.Repo.ORM()),
 		Selections:    store.NewChatSelectionExtStore(s.Repo.ORM()),
@@ -370,7 +388,16 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		Senders:       store.NewThreadExtStore(s.Repo.ORM()),
 		Temporal:      s.Temporal,
 		Pause:         pause,
-	})
+	}
+	if orgID != "" {
+		chatDeps.Collaboration = &configv1.ChatCollaborationConfig{Enabled: true}
+		chatDeps.Members = collabDirectory{}
+		chatDeps.FundingLeases = store.NewChatPersonalFundingExtStore(s.Repo.ORM())
+		chatDeps.PersonPicks = store.NewChatPersonPickExtStore(s.Repo.ORM())
+		chatDeps.Settings = s.Repo
+		chatDeps.Attachments = store.NewAttachmentExtStore(s.Repo.ORM())
+	}
+	chatSvc, err := chat.New(chatDeps)
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
 		Logger:    slog.Default(),

@@ -8247,6 +8247,12 @@
               "name": "app_name",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "access_level",
+              "kind": "enum",
+              "type_name": "reliant.v1.ChatAccessLevel",
+              "optional": true
             }
           ],
           "reliant.v1.ChatErrorUpdate": [
@@ -10179,6 +10185,12 @@
             "AGENT_MESSAGE_KIND_HUMAN_MESSAGE",
             "AGENT_MESSAGE_KIND_RUN_MESSAGE"
           ],
+          "reliant.v1.ChatAccessLevel": [
+            "CHAT_ACCESS_LEVEL_UNSPECIFIED",
+            "CHAT_ACCESS_LEVEL_VIEW",
+            "CHAT_ACCESS_LEVEL_REPLY",
+            "CHAT_ACCESS_LEVEL_MANAGE"
+          ],
           "reliant.v1.ChatActivity": [
             "CHAT_ACTIVITY_IDLE",
             "CHAT_ACTIVITY_RUNNING",
@@ -10313,6 +10325,12 @@
             5,
             6
           ],
+          "reliant.v1.ChatAccessLevel": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.ChatActivity": [
             0,
             1,
@@ -10441,6 +10459,10 @@
           "reliant.v1.AgentMessageKind": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "AgentMessageKind"
+          },
+          "reliant.v1.ChatAccessLevel": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ChatAccessLevel"
           },
           "reliant.v1.ChatActivity": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -37654,6 +37676,12 @@
               "name": "app_name",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "access_level",
+              "kind": "enum",
+              "type_name": "reliant.v1.ChatAccessLevel",
+              "optional": true
             }
           ],
           "reliant.v1.ChatMember": [
@@ -38192,6 +38220,12 @@
           "reliant.v1.WorktreeSummary": "reliant/v1/worktree.proto"
         },
         "Enums": {
+          "reliant.v1.ChatAccessLevel": [
+            "CHAT_ACCESS_LEVEL_UNSPECIFIED",
+            "CHAT_ACCESS_LEVEL_VIEW",
+            "CHAT_ACCESS_LEVEL_REPLY",
+            "CHAT_ACCESS_LEVEL_MANAGE"
+          ],
           "reliant.v1.ChatActivity": [
             "CHAT_ACTIVITY_IDLE",
             "CHAT_ACTIVITY_RUNNING",
@@ -38267,6 +38301,12 @@
           ]
         },
         "EnumNumbers": {
+          "reliant.v1.ChatAccessLevel": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.ChatActivity": [
             0,
             1,
@@ -38342,6 +38382,10 @@
           ]
         },
         "EnumGoRefs": {
+          "reliant.v1.ChatAccessLevel": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ChatAccessLevel"
+          },
           "reliant.v1.ChatActivity": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ChatActivity"
@@ -57258,6 +57302,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "Attachments",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.AttachmentUploaders",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Backoff",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Backoff",
       "methods": [],
@@ -57267,6 +57322,17 @@
       ],
       "providers": [
         "Providerbackoff"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "FundingLeases",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.FundingLeases",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -57289,6 +57355,19 @@
       "candidates": [],
       "providers": [
         "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "Members",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.MemberDirectory",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
       ],
       "resolution": "composition_expression"
     },
@@ -57326,6 +57405,17 @@
       ],
       "providers": [
         "PauseService"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "PersonPicks",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.PersonPicks",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -57397,6 +57487,19 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Senders",
       "methods": [],
       "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "Settings",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.SettingsReader",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],
@@ -59139,6 +59242,20 @@
       "candidates": [],
       "providers": [
         "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
+      "field": "Replies",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.ReplyGate",
+      "methods": [],
+      "candidates": [
+        "Chat",
+        "WorkerChat"
+      ],
+      "providers": [
+        "Chat"
       ],
       "resolution": "composition_expression"
     },

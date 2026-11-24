@@ -1463,6 +1463,13 @@ func (r *Repo) EmitNodeExecutionEvent(ctx context.Context, eventType string, sta
 	return r.CreateChatUpdate(ctx, state.ChatID, UpdateTypeNodeExecution, entityID, string(eventJSON))
 }
 
+// LatestHumanTurnAuthor is who wrote chatID's latest message the send path
+// stamped with an author: a chat member's id, or "" for the owner's own and
+// for a chat with none (chat-collaboration.md §5.3).
+func (r *Repo) LatestHumanTurnAuthor(ctx context.Context, chatID string) (string, error) {
+	return store.LatestHumanTurnAuthor(ctx, r.ORM(), chatID)
+}
+
 // RecordChatPersonTurn records that a person sent a message into chatID: from this turn on,
 // its calls are attended (org-provider-accounts §11.1, I2).
 func (r *Repo) RecordChatPersonTurn(ctx context.Context, chatID, userID string) error {

@@ -194,6 +194,24 @@ type step struct {
 // here can only ever under-delete (leaving the user's own rows), never reach
 // another user's data.
 var purgeSteps = []step{
+	// --- Depth 0: what the user wrote in other people's chats. ---
+
+	// A chat member's messages, answers and queued messages in someone
+	// else's chat are that chat's history and stay (control-plane
+	// docs/design/chat-collaboration.md §6.1), still attributed to "not the
+	// owner": author_user_id keeps the opaque id, as share_events and
+	// chat_members.granted_by do, and is never set NULL, which would mean
+	// the chat's owner wrote them. Only the display name they were written
+	// under is personal, and goes: the transcript names them "a member" from
+	// here on. questions.answered_by and approvals.decided_by hold an id and
+	// nothing else, and stay for the same reason. Rows in the user's own
+	// chats are deleted below with the chats.
+	{"messages_author_name", `
+		UPDATE messages SET author_name = NULL
+		WHERE author_user_id = $1 AND author_user_id IS NOT NULL AND author_name IS NOT NULL`},
+	{"agent_messages_author_name", `
+		UPDATE agent_messages SET author_name = NULL WHERE author_user_id = $1 AND author_name IS NOT NULL`},
+
 	// --- Depth 1: rows that RESTRICT the deletion of messages/threads. ---
 
 	// Content blocks and tool-call results hang off messages by CASCADE, but

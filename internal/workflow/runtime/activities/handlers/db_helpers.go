@@ -146,11 +146,12 @@ func convertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, rep
 	// rows that carry the author, and before repair adds or drops anything.
 	// A history with no recorded author comes back untouched, byte for byte.
 	//
-	// The owner's rows carry no name (NULL means the owner), so their turns
-	// render authortag.FallbackOwnerName until the send path, which records
-	// authors, also supplies the owner's display name
-	// (chat-collaboration.md §6.2). Until then no row has an author.
-	msgs = authortag.Render(msgs, authorTurns(dbMessages), "")
+	// The owner's rows carry their display name (author_name, with
+	// author_user_id NULL) once collaboration is on; ownerNameFor picks the
+	// one the owner's turns render under, from rows that can no longer
+	// change (chat-collaboration.md §6.2).
+	turns := authorTurns(dbMessages)
+	msgs = authortag.Render(msgs, turns, ownerNameFor(dbMessages, turns))
 
 	if violations := ValidateToolPairing(msgs); len(violations) > 0 {
 		logging.WarnContext(ctx, "[ToolPairing] Loaded history violates the tool-call/tool-result invariant; repairing in memory",
@@ -404,4 +405,23 @@ func authorTurns(rows []*db.Message) []authortag.Turn {
 		}
 	}
 	return turns
+}
+
+// ownerNameFor is the name the owner's turns render under: the stored name
+// of the latest owner turn at or before the first collaborator's turn (the
+// threshold), else "" (authortag.FallbackOwnerName). Only rows up to the
+// threshold are read, and history only grows after it, so the name a turn was
+// sent with never changes when the owner later renames or names themselves
+// for the first time (prompt cache).
+func ownerNameFor(rows []*db.Message, turns []authortag.Turn) string {
+	name := ""
+	for i, t := range turns {
+		if t.AuthorUserID != "" {
+			break
+		}
+		if t.Human && rows[i].AuthorName != nil && strings.TrimSpace(*rows[i].AuthorName) != "" {
+			name = *rows[i].AuthorName
+		}
+	}
+	return name
 }

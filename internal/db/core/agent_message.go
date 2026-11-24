@@ -150,6 +150,10 @@ type AgentMessage struct {
 	// row. The drain copies it to the saved message (messages.author_user_id),
 	// so the author survives the mailbox. docs/design/chat-collaboration.md §6.1.
 	AuthorUserID *string
+	// AuthorName is that author's display name at send time, set for a
+	// collaborator and, once collaboration is on, for the owner; the drain
+	// copies it to messages.author_name. Never an email or an id.
+	AuthorName *string
 }
 
 // SpawnReportOutcome is what EnqueueSpawnReport did with a real terminal report.

@@ -67,6 +67,7 @@ func (s *Service) resolveAsyncQuestion(
 	chat *db.Chat,
 	question *db.Question,
 	responseData string,
+	answeredBy *string,
 ) (*connect.Response[reliantv1.ResolveQuestionResponse], error) {
 	answer := formatAsyncAnswer(question.Metadata, responseData)
 
@@ -82,10 +83,16 @@ func (s *Service) resolveAsyncQuestion(
 	if responseData != "" {
 		stored = &responseData
 	}
-	if err := s.deps.Repo.ResolveQuestion(ctx, question.ID, stored); err != nil {
+	resolved, err := s.deps.Repo.ResolveQuestionBy(ctx, question.ID, stored, answeredBy)
+	if err != nil {
 		// Delivered but still pending: an answer sent again finds the
 		// message already queued and resolves it then.
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve question"))
+	}
+	if !resolved {
+		// Someone else's answer resolved it first. Theirs is the one the
+		// question records; this one was delivered as a message beside it.
+		return nil, svcerr.FailedPrecondition("question already resolved")
 	}
 
 	toolCallID := ""
@@ -180,6 +187,8 @@ func (s *Service) queueBehindBlockingQuestion(ctx context.Context, chat *db.Chat
 	if from == "" {
 		from = thread
 	}
+	// The person who answered rides the row (chat-collaboration.md §6.1).
+	authorUserID, authorName := db.AuthorColumns(ctx)
 	if _, err := s.deps.Mailbox.EnqueueAgentMessageOnce(ctx, &db.AgentMessage{
 		ID:           asyncAnswerMessageID(questionID, thread, body),
 		FromThreadID: from,
@@ -190,6 +199,8 @@ func (s *Service) queueBehindBlockingQuestion(ctx context.Context, chat *db.Chat
 		Status:       core.AgentMessageStatusQueued,
 		CreatedAt:    time.Now(),
 		DisplayStyle: db.QueuedDisplayStyle(ctx),
+		AuthorUserID: authorUserID,
+		AuthorName:   authorName,
 	}); err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to queue the answer"))
 	}

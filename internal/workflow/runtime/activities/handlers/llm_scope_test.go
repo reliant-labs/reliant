@@ -34,6 +34,20 @@ type attendanceStore struct {
 	stamps     map[string]core.UnattendedFunding
 	triggerErr error // returned by GetTrigger when set
 	err        error // returned by every read when set
+	// authors is each chat's latest stamped author (LatestHumanTurnAuthor):
+	// a member's id, or "" for the owner's own; authorErr fails that read.
+	authors   map[string]string
+	authorErr error
+}
+
+func (s *attendanceStore) LatestHumanTurnAuthor(_ context.Context, chatID string) (string, error) {
+	if s.err != nil {
+		return "", s.err
+	}
+	if s.authorErr != nil {
+		return "", s.authorErr
+	}
+	return s.authors[chatID], nil
 }
 
 func (s *attendanceStore) GetTrigger(_ context.Context, id string) (*core.Trigger, error) {
@@ -151,10 +165,75 @@ func TestChatAttendance(t *testing.T) {
 	})
 }
 
+// A call that answers a chat member's message draws on org-funded accounts
+// only (control-plane docs/design/chat-collaboration.md §5.3 rule 2): from the
+// member's message to the owner's next one, through the chat's agent-started
+// runs, failing closed, and whoever launched the run.
+func TestChatAttendance_CollaboratorSpan(t *testing.T) {
+	personal := string(core.TriggerEventKindChatStart)
+	started := string(core.TriggerEventKindAgentStartRun)
+	scheduled := string(core.TriggerEventKindSchedule)
+	for _, tc := range []struct {
+		name  string
+		chat  *db.Chat
+		store *attendanceStore
+		want  bool
+	}{
+		{"a chat nobody else wrote in is the owner's", chatOf("c", personal, nil), &attendanceStore{}, false},
+		{"the owner's latest message is the owner's", chatOf("c", personal, nil),
+			&attendanceStore{authors: map[string]string{"c": ""}}, false},
+		{"a member's latest message opens the span", chatOf("c", personal, nil),
+			&attendanceStore{authors: map[string]string{"c": "dana"}}, true},
+		{"the owner's id as the author is the owner's", chatOf("c", personal, nil),
+			&attendanceStore{authors: map[string]string{"c": "u1"}}, false},
+		{"an unreadable author fails closed", chatOf("c", personal, nil),
+			&attendanceStore{authorErr: errors.New("db down")}, true},
+		{"a chat in no org has no members", &db.Chat{ID: "c", UserID: "u1", LaunchKind: personal},
+			&attendanceStore{authors: map[string]string{"c": "dana"}}, false},
+		{"a run an agent started in a member's span is in it",
+			chatOf("child", started, nil), &attendanceStore{
+				chats:   map[string]*db.Chat{"root": chatOf("root", personal, nil)},
+				parents: map[string]string{"child": "root"},
+				authors: map[string]string{"root": "dana"},
+			}, true},
+		{"a run an agent started after the owner spoke is not",
+			chatOf("child", started, nil), &attendanceStore{
+				chats:   map[string]*db.Chat{"root": chatOf("root", personal, nil)},
+				parents: map[string]string{"child": "root"},
+				authors: map[string]string{"root": ""},
+			}, false},
+		{"a member's message in an automation's chat is the org's too",
+			chatOf("c", scheduled, strPtr("t1")), &attendanceStore{authors: map[string]string{"c": "dana"}}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			who := chatAttendance(context.Background(), tc.store, tc.chat)
+			assert.Equal(t, tc.want, who.collaborator)
+			if tc.want {
+				assert.False(t, who.anySource, "a member's span never spends any source")
+				spec := llmCallSpec{UserID: "u1", OrgID: chatOrgID(tc.chat), Attended: who.attended, UnattendedAnySource: who.anySource, Collaborator: who.collaborator}
+				assert.True(t, spec.scope().OrgFundedOnly(), "a member's span draws on org-funded accounts only")
+			}
+		})
+	}
+
+	t.Run("the owner's own next message ends the span", func(t *testing.T) {
+		store := &attendanceStore{authors: map[string]string{"c": "dana"}}
+		chat := chatOf("c", personal, nil)
+		require.True(t, chatAttendance(context.Background(), store, chat).collaborator)
+		store.authors["c"] = ""
+		who := chatAttendance(context.Background(), store, chat)
+		assert.False(t, who.collaborator)
+		assert.True(t, who.attended)
+	})
+}
+
 func TestLLMCallSpecScope(t *testing.T) {
 	assert.Equal(t, drivers.PersonalScope("u1"), llmCallSpec{UserID: "u1"}.scope(), "no org: the personal scope, attended")
 	assert.Equal(t, drivers.PersonalScope("u1"), llmCallSpec{UserID: "u1", Attended: false}.scope(), "no org stays attended")
 	assert.Equal(t, drivers.Scope{UserID: "u1", OrgID: "o1"}, llmCallSpec{UserID: "u1", OrgID: "o1"}.scope())
+	member := llmCallSpec{UserID: "u1", OrgID: "o1", Attended: true, Collaborator: true}.scope()
+	assert.True(t, member.OrgFundedOnly(), "a member's span is org-funded only")
+	assert.True(t, member.Attended, "and stays attended: org policy and tools treat the owner's chat as a person's")
 }
 
 // scopeRecorder records the scope of every account read of a call.

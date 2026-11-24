@@ -346,6 +346,18 @@ func ViewerChatUpdate(t reliantv1.ChatUpdateType, data string) string {
 	}
 }
 
+// MemberChatUpdate is what a chat's reply or manage member is sent of one
+// chat update's data (control-plane docs/design/chat-collaboration.md §11.1):
+// a viewer's shape — no tool result, no run output, no raw error text — plus
+// the whole of every question, whose card they answer from. Everything a
+// viewer is withheld from but a question, a member is withheld from too.
+func MemberChatUpdate(t reliantv1.ChatUpdateType, data string) string {
+	if viewerChatUpdates[t] == viewerQuestion {
+		return data
+	}
+	return ViewerChatUpdate(t, data)
+}
+
 // viewerRule is how a chat update of one type is shaped for a viewer.
 type viewerRule uint8
 
