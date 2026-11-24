@@ -73,7 +73,7 @@ export function rumHandlers(fixtures: ObservabilityApi = createShopApi()): MockH
     },
     getSessionReplay: async (req) => {
       const page = await fixtures.getSessionReplay({ ...modelScope(req.scope), sessionId: req.sessionId, maxBytes: req.maxBytes, pageToken: req.pageToken });
-      const events = page.events.map((e, index) => ({ time: ts(e.timestamp), index, chunks: 1, data: utf8.encode(JSON.stringify(e)) }));
+      const events = page.events.map((e) => ({ time: ts(e.timestamp), index: Number(e.index), chunks: 1, data: utf8.encode(JSON.stringify(e)) }));
       // An event the model could not read stays one the client cannot read either.
       for (let i = 0; i < page.unreadable; i++) events.push({ time: ts(0), index: events.length, chunks: 1, data: new Uint8Array([0]) });
       return { events, nextPageToken: page.nextPageToken, resumeToken: page.resumeToken };

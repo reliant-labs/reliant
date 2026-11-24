@@ -13,7 +13,10 @@
  * client does send (`limit`s it fills in), on both sides.
  */
 
+import { createClient, type Transport } from "@connectrpc/connect";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+import { RumService } from "@/gen/controlplane/services/rum/v1/rum_pb";
 
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 
@@ -71,6 +74,7 @@ function withoutDefaults(received: unknown, expected: unknown): unknown {
 describe.each(WHEN)("the real client over the shop pack, %s", (_when, at) => {
   let wire: ObservabilityApi;
   let model: ObservabilityApi;
+  let transport: Transport;
   let now = 0;
   const scope = (envIds: string[] = []) => ({ orgId: DEMO_ORG, projectId: "shop", envIds, filters: [] });
   const hour = () => ({ startMs: now - HOUR, endMs: now });
@@ -90,7 +94,7 @@ describe.each(WHEN)("the real client over the shop pack, %s", (_when, at) => {
   }
 
   beforeAll(() => {
-    ({ wire, model, now } = installOverWire(at));
+    ({ wire, model, transport, now } = installOverWire(at));
   });
   afterAll(uninstallOverWire);
 
@@ -227,6 +231,33 @@ describe.each(WHEN)("the real client over the shop pack, %s", (_when, at) => {
       if (s.hasReplay) await same((api) => api.getSessionReplay({ ...scope(), sessionId: s.sessionId }));
     }
     await same((api) => api.listFrontendReplay({ orgId: DEMO_ORG, projectId: "shop", envIds: [] }));
+  });
+
+  it("preserves the recording's event counter across replay pages and resumes", async () => {
+    const list = await model.listSessions({ ...scope(), window: day(), hasReplay: true, hasError: false, userId: "", pathContains: "", pageSize: 100 });
+    const sessionId = list.sessions[0].sessionId;
+    const client = createClient(RumService, transport);
+    let pageToken = "";
+    let count = 0;
+    let pages = 0;
+    do {
+      const request = { ...scope(), sessionId, pageToken };
+      const expected = await model.getSessionReplay(request);
+      const encoded = await client.getSessionReplay({ scope: scope(), sessionId, pageToken });
+      expect(encoded.events.length).toBeGreaterThan(0);
+      expect(encoded.events.map((e) => e.index)).toEqual(expected.events.map((e) => e.index));
+      expect(encoded.events.map((e) => e.index)).toEqual(expected.events.map((_, i) => count + i));
+      await same((api) => api.getSessionReplay(request));
+      count += expected.events.length;
+      pages++;
+      if (expected.nextPageToken) {
+        // A resume read and a next-page read must retain the same original counters.
+        const resumed = await client.getSessionReplay({ scope: scope(), sessionId, pageToken: expected.resumeToken });
+        expect(resumed.events[0].index).toBe(count);
+      }
+      pageToken = expected.nextPageToken;
+    } while (pageToken);
+    expect(pages).toBeGreaterThan(1);
   });
 
   it("refuses every write, as the demo does", async () => {
