@@ -14,6 +14,7 @@ import { createRoute, redirect, type AnyRoute } from "@tanstack/react-router";
 
 import { isElectron } from "@/lib/constants";
 import { openExternalLink } from "@/lib/open-link";
+import { homePath } from "@/lib/paths";
 import { demoAppOrigin } from "@/lib/shell";
 
 import { FORGE_DEMO_PATH } from "./demoPath";
@@ -28,7 +29,7 @@ export function leaveForDemo({ location }: { location: { searchStr: string } }):
   const href = forgeDemoHref(location.searchStr);
   if (isElectron()) {
     void openExternalLink(href);
-    throw redirect({ href: "/", replace: true });
+    throw redirect({ href: homePath({ org: null }), replace: true });
   }
   // An absolute href is a document navigation (router-core's reloadDocument).
   throw redirect({ href, replace: true });

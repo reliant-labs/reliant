@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { defaultStringifySearch } from "@tanstack/react-router";
+import { defaultParseSearch, defaultStringifySearch } from "@tanstack/react-router";
 
 /**
  * `path` with `search` as its query string, in the router's own encoding
@@ -22,6 +22,16 @@ export function withSearch(path: string, search: Record<string, unknown> = {}): 
   if (hrefs.size >= HREF_LIMIT) hrefs.clear();
   hrefs.set(key, href);
   return href;
+}
+
+/**
+ * `href` (a path, maybe with a query) with `search` merged into its query, in
+ * the router's encoding: what withSearch does for a path that already has one.
+ */
+export function withMoreSearch(href: string, search: Record<string, unknown>): string {
+  const at = href.indexOf("?");
+  if (at < 0) return withSearch(href, search);
+  return withSearch(href.slice(0, at), { ...defaultParseSearch(href.slice(at)), ...search });
 }
 
 /** withSearch's answers, by entries. A console visit builds a few hundred distinct hrefs. */
