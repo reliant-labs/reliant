@@ -86,7 +86,8 @@ projects and settings render too. It serves two surfaces:
 
 - the visual harness, `e2e/visual`;
 - the hosted preview env, `deploy/kcl/preview`. See `preview-env.md` for what it
-  declares and how it is (not yet) deployed.
+  declares, where it is hosted (a control-plane prod frontend), and the tests
+  that prove its sign-in code is inert.
 
 The demo bundle never loads that layer, and its bundle guard fails if it does.
 

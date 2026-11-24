@@ -27,19 +27,23 @@ one renders them.
 `fixtures = forge.Fixtures` needs a forge with forge#2719; until reliant's
 pin includes it, this env does not render.
 
-Deploying is not a chat's job. Nothing deploys this env today, and where the
-preview is hosted is an open owner decision (dev-docs/preview-env.md).
+WHERE IT IS HOSTED. The owner's decision: the preview is a frontend in
+control-plane's prod beside reliant-web and forge-demo, built from the pinned
+reliant and promoted by digest with each prod release. This env is the
+declaration that frontend copies, the subject of the render tests, and a local
+target. It is not deployed from here. See dev-docs/preview-env.md.
 """
 
 import forge
 import frontend_config_gen as fcg
 import ..dev_sign_in as dsi
+import ..fixtures_guard as fg
 
 # What config.js carries besides the fixture switch (on the frontend below):
 # the app's own keys, typed by its schema, so AUTH_MODE = "cloud" still has
-# to name every origin it needs. Every origin is a fake one under .invalid (RFC 6761: it
-# never resolves), so a request that escaped the page's answers could reach
-# nothing; outside.ts throws on them first.
+# to name every origin it needs. Every origin is a fake one under .invalid
+# (RFC 6761: it never resolves), so a request that escaped the page's answers
+# could reach nothing; outside.ts throws on them first.
 _app_config = fcg.reliantWebConfigRuntime(fcg.ReliantWebConfig {
     # The managed deployment's code path: Supabase sessions, the control
     # plane's billing, managed machines and the console, as app.reliantlabs.io.
@@ -55,6 +59,8 @@ _app_config = fcg.reliantWebConfigRuntime(fcg.ReliantWebConfig {
     # No browser telemetry from sample data.
     otel_endpoint = ""
     otel_replay = "false"
+    # A link, but an origin all the same: fixtures_guard.k refuses any live one.
+    download_base_url = "https://downloads.preview.invalid"
 })
 
 _web = forge.Frontend {
@@ -80,10 +86,12 @@ _web = forge.Frontend {
     runtime = forge.OnHosted {}
 }
 
-output = forge.render(dsi.only_in_dev("preview", forge.Bundle {
+# fixtures_guard.k refuses the render if a fixture-mode frontend names a live
+# origin: the build still carries the real sign-in and API code.
+output = forge.render(dsi.only_in_dev("preview", fg.inert_when_fixtures(forge.Bundle {
     project = "reliant"
     env = "preview"
     # Reliant cloud: needed by OnHosted.
     control_plane = forge.ControlPlane {}
     frontends = [_web]
-}))
+})))
