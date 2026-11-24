@@ -17,12 +17,19 @@
  * this file, so reliant's generated services stay out of it (the demo bundle
  * guard fails otherwise; __tests__/appLayer.test.ts pins the boundary).
  */
-import type { MockHandlers, MockScenario } from "@reliantlabs/forge-web-runtime/mock-transport";
+import type { MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport";
 
-import { defineFixturePack, type FixtureContext, type FixturePack, type FixtureScenario } from "../transport";
+import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
+import { UserService } from "@/gen/controlplane/services/user/v1/user_pb";
+import { ProjectService } from "@/gen/reliant/v1/project_pb";
+import { StreamingService } from "@/gen/reliant/v1/streaming_pb";
+import { WorktreeService } from "@/gen/reliant/v1/worktree_pb";
+
+import { defineFixturePack, type FixturePack } from "../transport";
 import { accountScenarioHandlers } from "./handlers/account";
 import { billingScenarioHandlers } from "./handlers/billing";
 import { reliantScenarioHandlers } from "./handlers/reliant";
+import { streamingImpl } from "./handlers/reliant/streaming";
 import { shopPack, type ShopPackOptions } from "./index";
 
 /**
@@ -47,10 +54,10 @@ import { shopPack, type ShopPackOptions } from "./index";
  * None of the twelve machine-waking reads (FileSystemService, the
  * WorktreeService git reads) is answered here.
  *
- * TODO(P2.1a): pass this as `shopAppPack`'s `answers` once
- * src/fixtures/transport.ts takes the option (branch
- * refactor/fixture-transport-router). Until then the deprecated isDemoRead
- * classifier lets all five through by their names.
+ * They are the app pack's `answers`, so a read-only fixture transport lets
+ * exactly these five through without the deprecated isDemoRead classifier.
+ * Only a pure fixture transport honours them (fixture mode is one; the
+ * demo's gateway passthrough is not, and never serves this pack).
  */
 export const APP_LAYER_ANSWERS = [
   "reliant.v1.ProjectService/GetProject",
@@ -60,31 +67,31 @@ export const APP_LAYER_ANSWERS = [
   "controlplane.v1.BillingService/GetCurrentUserReliantOverview",
 ] as const;
 
+/** The services APP_LAYER_ANSWERS names, so the transport checks each name against the proto. */
+const ANSWERED_SERVICES = [ProjectService, WorktreeService, UserService, BillingService];
+
 /** The app layer's own answers, "pkg.Service/Method" keyed. */
 export function appLayerScenarioHandlers(): MockHandlers {
   return { ...reliantScenarioHandlers(), ...billingScenarioHandlers(), ...accountScenarioHandlers() };
 }
 
-const handlersOf = (scenario: FixtureScenario | undefined): MockScenario["handlers"] =>
-  !scenario ? {} : typeof (scenario as Partial<MockScenario>).name === "string" ? (scenario as MockScenario).handlers : (scenario as MockScenario["handlers"]);
-
 /**
  * The app pack: the demo pack with the app layer on top (an app-layer answer
  * wins), its clock pinned to `now` when given (shopPack's rule: before
  * anything reads the pack). Serve it on the pack clock:
- * `createFixtureTransport({ pack: shopAppPack({ now }), now: demoNow, readOnly })`.
+ * `createFixtureTransport({ pack: shopAppPack({ now }), now: demoNow, readOnly: true })`.
  *
- * The layers are composed here, as one scenario, until the local fixture
- * transport takes a pack's `extends` (P2.1a); then this becomes
- * `defineFixturePack({ name: "shop-app", extends: [shopPack({ now })], scenario: appLayerScenarioHandlers })`.
+ * The open streams are routes, not scenario handlers: a route gets the
+ * call's HandlerContext, so a stream ends when the page drops it (a route
+ * beats a scenario handler in the same layer).
  */
 export function shopAppPack(options: ShopPackOptions = {}): FixturePack {
-  const base = shopPack(options);
   return defineFixturePack({
     name: "shop-app",
-    scenario: (ctx: FixtureContext) => {
-      const baseScenario = typeof base.scenario === "function" ? base.scenario(ctx) : base.scenario;
-      return { name: "shop-app", handlers: { ...handlersOf(baseScenario), ...appLayerScenarioHandlers() } };
-    },
+    extends: [shopPack(options)],
+    scenario: appLayerScenarioHandlers,
+    routes: (router) => router.service(StreamingService, streamingImpl),
+    answers: APP_LAYER_ANSWERS,
+    services: ANSWERED_SERVICES,
   });
 }
