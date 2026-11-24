@@ -136,7 +136,8 @@ export async function resolveProjectRoute(
     if (!org) return { kind: "missing", projectId };
     redirectIntoOrg(org, location, { always: true });
   }
-  // The org-less form: into the project's org, said once the page commits if that moved the tab.
-  if (!org) return { kind: "project", projectId };
+  // The org-less form must not expose a project outside the person's memberships either.
+  if (!org) return { kind: "missing", projectId };
+  // Into the project's org, said once the page commits if that moved the tab.
   redirectIntoOrg(org, location, { always: false });
 }

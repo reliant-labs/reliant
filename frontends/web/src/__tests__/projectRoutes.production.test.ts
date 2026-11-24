@@ -101,15 +101,21 @@ describe("an org-less project URL", () => {
     expect(h.pathname()).toBe("/o/acme/projects/old");
   });
 
-  it("opens a project it cannot place where it is: unknown, or in an org that is not the person's", async () => {
+  it.each(PAGES)("does not expose %s outside the person's memberships, even when shared", async (template) => {
+    const h = createOrgRouteHarness(world(true, { tabOrg: "org-a" }));
+    const url = page(template, "px");
+    await h.open(url);
+    expect(h.pathname()).toBe(url);
+    expect(data(h)).toEqual({ kind: "missing", projectId: "px" });
+    expect(useActiveOrgStore.getState().chosenId).toBe("org-a");
+    expect(h.notices).toEqual([]);
+  });
+
+  it("shows an unknown project as not found, in place", async () => {
     const h = createOrgRouteHarness(world(true, { tabOrg: "org-a" }));
     await h.open("/project/nope");
     expect(h.pathname()).toBe("/project/nope");
     expect(data(h)).toEqual({ kind: "missing", projectId: "nope" });
-
-    await h.open("/projects/px");
-    expect(h.pathname()).toBe("/projects/px");
-    expect(data(h)).toEqual({ kind: "project", projectId: "px" });
   });
 
   it("opens where it is for a visitor who is not signed in", async () => {
