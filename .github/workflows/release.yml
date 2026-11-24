@@ -1988,6 +1988,70 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ============================================================================
+  # SBOMs: a CycloneDX SBOM per CLI archive, beside the signed set
+  # ============================================================================
+  # The pinned forge's `forge vuln sbom --file` (its pinned syft) describes the
+  # binary in each reliant_<os>_<arch>.tar.gz, its Go modules and toolchain,
+  # named for the archive and the tag; the GitHub Release gets
+  # <archive>.cdx.json beside each archive, as forge's own releases do
+  # (forge#2691). The server image's SBOM is control-plane's release cut's.
+  # These are evidence, outside the signed set: unsigned, never on R2, and a
+  # re-run replaces them (scripts/release-cli.sh sbom / store-sbom-github).
+  #
+  # WARN-FIRST, like an SBOM at any forge cut: nothing needs this job and it is
+  # continue-on-error, so it never fails or delays the release, and an archive
+  # forge cannot describe is a warning. A prebuild or dry-run dispatch keeps
+  # them as the cli-sboms artifact and attaches nothing.
+  cli-sbom:
+    name: CLI SBOMs
+    needs: [prepare, cli-archives, cli-publish]
+    if: always() && needs.cli-archives.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    permissions:
+      contents: write # gh release view/upload of the SBOMs
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 1
+
+      # scripts/forge.sh builds the forge forge.yaml pins with it (go install).
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Download the CLI archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cli-archives
+          path: cli-dist
+
+      - name: Describe each archive
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: bash scripts/release-cli.sh sbom "$VERSION" cli-dist cli-sbom
+
+      - name: Upload the SBOMs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cli-sboms
+          path: cli-sbom/*.cdx.json
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Attach the SBOMs to the GitHub Release
+        if: ${{ !cancelled() && needs.cli-publish.result == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: bash scripts/release-cli.sh store-sbom-github "$VERSION" cli-sbom
+
+  # ============================================================================
   # VERIFY: the release is downloadable, as a client sees it
   # ============================================================================
   # A green build has not meant "released": v1.8.1 failed late and v1.8.6's
