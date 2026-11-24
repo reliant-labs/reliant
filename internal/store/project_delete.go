@@ -145,6 +145,9 @@ var chatPurgeSteps = []struct{ name, sql string }{
 	{"questions", `DELETE FROM questions WHERE chat_id = ANY(?0)`},
 	{"chat_updates", `DELETE FROM chat_updates WHERE chat_id = ANY(?0)`},
 	{"chat_update_heads", `DELETE FROM chat_update_heads WHERE chat_id = ANY(?0)`},
+	// The chats' tool calls' usage records (tool_call_usage): a project's
+	// deletion takes them, as an account's does (accountpurge).
+	{"tool_call_usage", `DELETE FROM tool_call_usage WHERE chat_id = ANY(?0)`},
 	{"workflows", `DELETE FROM workflows WHERE chat_id = ANY(?0)`},
 	{"update_stream_counters", `
 		DELETE FROM update_stream_counters WHERE stream_kind = 'chat' AND stream_id = ANY(?0)`},
@@ -347,6 +350,10 @@ var flatThinSteps = []struct{ name, sql string }{
 		DELETE FROM step_executions WHERE id IN (
 			SELECT id FROM step_executions WHERE workflow_id IN (
 				SELECT id FROM workflows WHERE chat_id IN (` + projectChatIDs + `)) LIMIT ?1)`},
+	// One row per tool call: a long chat holds as many as it has messages.
+	{"tool_call_usage", `
+		DELETE FROM tool_call_usage WHERE (id, attempt) IN (
+			SELECT id, attempt FROM tool_call_usage WHERE chat_id IN (` + projectChatIDs + `) LIMIT ?1)`},
 }
 
 // thinProjectChats removes the bulk stored under the project's chats in

@@ -146,6 +146,16 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 			"cache_write_tokens": "bigint", "latency_ms_total": "bigint", "updated_at": "timestamp with time zone",
 		},
 		"llm_usage_purged_users": {"user_id": "text", "purged_at": "timestamp with time zone"},
+		// The tool calls' ledger (agent-analytics.md §3.5): ids, the run's names,
+		// closed-set labels, a shipped tool's name and counts. No tool input,
+		// output, command, file name or error text.
+		"tool_call_usage": {
+			"id": "text", "attempt": "integer", "user_id": "text", "org_id": "text", "chat_id": "text",
+			"project_id": "text", "workflow_id": "text", "thread_id": "text", "workflow_name": "text",
+			"node_id": "text", "preset": "text", "ai_run_id": "text", "ai_root_run_id": "text",
+			"tool_name": "text", "tool_kind": "text", "location": "text", "outcome": "text", "error_class": "text",
+			"duration_ms": "bigint", "created_at": "timestamp with time zone",
+		},
 	}
 	for table, cols := range want {
 		rows, err := raw.Query(`SELECT column_name, data_type FROM information_schema.columns
@@ -179,6 +189,24 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 	_, err = raw.Exec(`INSERT INTO llm_org_usage_daily (day, org_id, account_id, user_id, provider, model, funding, purpose)
 		VALUES (current_date, 'o', 'a', 'u', 'p', 'm', 'org_key', 'chat')`)
 	assert.NoError(t, err)
+
+	// The tool ledger's labels are closed sets too, and only a tool Reliant
+	// ships is named: an MCP tool's name is the user's own.
+	insertTool := func(id, name, kind, outcome, class string) error {
+		_, err := raw.Exec(`INSERT INTO tool_call_usage (id, attempt, user_id, chat_id, tool_name, tool_kind, location, outcome, error_class)
+			VALUES ($1, 1, 'u', 'c', $2, $3, 'daemon', $4, $5)`, id, name, kind, outcome, class)
+		return err
+	}
+	assert.Error(t, insertTool("t1", "shell", "builtin", "error", "exit status 1: rm -rf /home/me"),
+		"free text in error_class must be refused by the schema")
+	assert.Error(t, insertTool("t2", "mcp__acme-internal__deploy", "mcp", "success", ""),
+		"an MCP tool's name must not be recorded")
+	assert.Error(t, insertTool("t3", "", "builtin", "success", ""), "a shipped tool is named")
+	assert.Error(t, insertTool("t4", "shell", "builtin", "success", "tool_error"), "a success has no error class")
+	assert.Error(t, insertTool("t5", "shell", "builtin", "error", ""), "an error has a class")
+	assert.Error(t, insertTool("t6", "shell", "plugin", "success", ""), "tool_kind is a closed set")
+	assert.NoError(t, insertTool("t7", "", "mcp", "error", "tool_error"))
+	assert.NoError(t, insertTool("t8", "shell", "builtin", "cancelled", ""))
 }
 
 func TestLLMUsageDaily_RollupSumsPerUserModelProviderAuthModeAndDay(t *testing.T) {

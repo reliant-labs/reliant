@@ -57556,6 +57556,17 @@
     },
     {
       "consumer": "Llmusage",
+      "field": "Tools",
+      "interface": "github.com/reliant-labs/reliant/internal/llmusage.ToolLedger",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Llmusage",
       "field": "Tx",
       "interface": "github.com/reliant-labs/reliant/internal/llmusage.TxRunner",
       "methods": [],
