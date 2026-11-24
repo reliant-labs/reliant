@@ -458,7 +458,7 @@ func (s *Service) CreateProject(
 		ProjectID: project.ID,
 		DaemonID:  config.SeedDaemonID,
 	}
-	if err := s.deps.Repo.UpsertProjectConfigRecord(ctx, seedRecord); err != nil {
+	if err := s.deps.ProjectConfigs.UpsertProjectConfigRecord(ctx, seedRecord); err != nil {
 		logging.ErrorContext(ctx, "Failed to seed project config record", "error", err, "project_id", project.ID)
 	}
 
@@ -582,7 +582,7 @@ func (s *Service) resolveCreateTarget(ctx context.Context, userID, pinned string
 		logging.InfoContext(ctx, "No daemon resolvable for new project; will rely on pending-command + reconcile", "error", err)
 		return createTarget{}, nil
 	}
-	machine, err := s.deps.Repo.GetDaemon(ctx, id)
+	machine, err := s.deps.Machines.GetDaemon(ctx, id)
 	switch {
 	case err != nil && !svcerr.IsNotFound(err):
 		return createTarget{}, svcerr.WrapOr(err, svcerr.Internal("failed to read the machine the project would be created on"))

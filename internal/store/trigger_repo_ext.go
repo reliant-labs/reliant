@@ -166,6 +166,9 @@ func ListAllTriggers(ctx context.Context, db orm.Context) ([]*core.Trigger, erro
 // transaction, serializing the overlap check with the launch it guards across
 // concurrent fires. A missing trigger is core.ErrTriggerNotFound.
 func LockTrigger(ctx context.Context, db orm.Context, id string) error {
+	if id == "" {
+		return errors.New("trigger ID cannot be empty")
+	}
 	var locked string
 	if err := db.Bun().NewRaw(`SELECT id FROM triggers WHERE id = ?0 FOR UPDATE`, id).Scan(ctx, &locked); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -261,6 +264,9 @@ func SetTriggerWebhookTokenHash(ctx context.Context, db orm.Context, id string, 
 // the owner's tenant; nil clears it. A missing trigger is
 // core.ErrTriggerNotFound.
 func SetTriggerWebhookSecret(ctx context.Context, db orm.Context, id string, sealed []byte) error {
+	if id == "" {
+		return errors.New("trigger ID cannot be empty")
+	}
 	return writeTrigger(ctx, db, &Trigger{ID: id, WebhookSecretSealed: sealed}, "webhook secret", TriggerFieldWebhookSecretSealed)
 }
 
@@ -305,6 +311,9 @@ func GetTriggerWebhookCredentials(ctx context.Context, db orm.Context, id string
 // the row version it writes, so a binding committed after the reconciler
 // read its snapshot is neither dropped nor overwritten with the old one.
 func SetTriggerProjection(ctx context.Context, db orm.Context, id string, p core.TriggerProjection) error {
+	if id == "" {
+		return errors.New("trigger ID cannot be empty")
+	}
 	cfg := string(triggerConfigJSON(p.Config))
 	res, err := db.Bun().NewUpdate().Model((*Trigger)(nil)).
 		Set(projectionConfigSQL, cfg, cfg, core.ActivationInstallationKey, core.ActivationInstallationKey,

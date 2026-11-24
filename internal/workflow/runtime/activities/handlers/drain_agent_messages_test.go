@@ -17,11 +17,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
 func newDrainTestActivity(h *IdempotencyTestHelper) *DrainAgentMessagesActivity {
-	return NewDrainAgentMessagesActivity(h.Repo(), threads.New(threads.Deps{Repo: h.Repo()}))
+	return NewDrainAgentMessagesActivity(h.Repo(), threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}))
 }
 
 func enqueueDrainTestMessage(t *testing.T, repo *db.Repo, chatID, fromThreadID, toThreadID, body string, createdAt time.Time) {
@@ -433,7 +434,7 @@ func TestDrainAgentMessages_OrderingInvariant(t *testing.T) {
 
 	// The assistant turn that is mid-flight: it has emitted a tool call and
 	// is waiting on execute_tools to save the matching tool_result.
-	saveMsgActivity := NewSaveMessageActivity(h.Repo())
+	saveMsgActivity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 	var assistantOut SaveMessageOutput
 	err = h.ExecuteActivity(saveMsgActivity.Execute, &SaveMessageInput{
 		ChatID: chatID,
@@ -516,7 +517,7 @@ func TestDrainAgentMessages_OrderingInvariant(t *testing.T) {
 	// Finally, replicate the exact check call_llm.go performs before ever
 	// building a provider request: convert to message.Message and validate
 	// the tool-pairing invariant holds.
-	llmMsgs, err := LoadMessagesForLLM(ctx, h.Repo(), chatID, thread, nil)
+	llmMsgs, err := LoadMessagesForLLM(ctx, h.Repo(), toolCallsOf(h.Repo()), chatID, thread, nil)
 	require.NoError(t, err)
 	violations := ValidateToolPairing(llmMsgs)
 	assert.Empty(t, violations, "history must pass the tool-pairing invariant after the drain")
@@ -547,7 +548,7 @@ func TestDrainAgentMessages_BeforeToolResults_WouldBreakInvariant(t *testing.T) 
 
 	h.CreateTestUserMessage(ctx, chatID, thread)
 
-	saveMsgActivity := NewSaveMessageActivity(h.Repo())
+	saveMsgActivity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 	var assistantOut SaveMessageOutput
 	err = h.ExecuteActivity(saveMsgActivity.Execute, &SaveMessageInput{
 		ChatID: chatID,
@@ -581,7 +582,7 @@ func TestDrainAgentMessages_BeforeToolResults_WouldBreakInvariant(t *testing.T) 
 	}, &toolOut)
 	require.NoError(t, err)
 
-	llmMsgs, err := LoadMessagesForLLM(ctx, h.Repo(), chatID, thread, nil)
+	llmMsgs, err := LoadMessagesForLLM(ctx, h.Repo(), toolCallsOf(h.Repo()), chatID, thread, nil)
 	require.NoError(t, err)
 	violations := ValidateToolPairing(llmMsgs)
 	// LoadMessagesForLLM repairs in memory, so this proves repair had to
@@ -698,7 +699,7 @@ func TestDrainAgentMessages_CompletionHiddenBodyPlusVisibleNotification(t *testi
 	// being present there is what proves the orchestrator still learns what
 	// its sub-agent produced. HIDDEN is a DISPLAY concern only — it must
 	// not strip the message from model history.
-	llmMsgs, err := LoadMessagesForLLM(ctx, h.Repo(), chatID, chatID, nil)
+	llmMsgs, err := LoadMessagesForLLM(ctx, h.Repo(), toolCallsOf(h.Repo()), chatID, chatID, nil)
 	require.NoError(t, err)
 
 	var llmText []string

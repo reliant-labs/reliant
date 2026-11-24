@@ -17,8 +17,34 @@ import (
 	projectaccess "github.com/reliant-labs/reliant/internal/projectaccess"
 )
 
+// forge:section MockProjectReader
+// forge:hash=f9b4085c70c8d6169fcb271bef837b5099665899a29a3c69622f2265067c12e6
+
+// MockProjectReader is a test mock for the ProjectReader interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProjectReader.<Method>Func not set" error.
+type MockProjectReader struct {
+	contractkit.Recorder
+	GetProjectFunc func(context.Context, string) (*db.Project, error)
+}
+
+// GetProject records the call and delegates to GetProjectFunc when set.
+func (m *MockProjectReader) GetProject(ctx context.Context, id string) (*db.Project, error) {
+	m.Recorder.Record("GetProject", ctx, id)
+	if m.GetProjectFunc != nil {
+		return m.GetProjectFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReader", "GetProject")
+}
+
+// Compile-time check.
+var _ ProjectReader = (*MockProjectReader)(nil)
+
 // forge:section MockRepository
-// forge:hash=7b3ab80a1175854960ca52735f14465217713d2eb6412dc17e72f560ef6bfa93
+// forge:hash=b9c11b501509543f6aef313036242d42ed118fba2451c468784be3fce610fccc
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -28,23 +54,10 @@ import (
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	GetProjectFunc                   func(context.Context, string) (*db.Project, error)
 	ListProjectsFunc                 func(context.Context, db.ProjectFilters) ([]*db.Project, error)
-	GetProjectConfigRecordFunc       func(context.Context, string) (*db.ProjectConfigRecord, error)
-	GetProjectMCPConfigsJSONFunc     func(context.Context, string) (*string, error)
-	UpsertProjectConfigRecordFunc    func(context.Context, *db.ProjectConfigRecord) error
 	EmitUserRefetchFunc              func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
-}
-
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockRepository) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetProject")
 }
 
 // ListProjects records the call and delegates to ListProjectsFunc when set.
@@ -54,33 +67,6 @@ func (m *MockRepository) ListProjects(ctx context.Context, filters db.ProjectFil
 		return m.ListProjectsFunc(ctx, filters)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListProjects")
-}
-
-// GetProjectConfigRecord records the call and delegates to GetProjectConfigRecordFunc when set.
-func (m *MockRepository) GetProjectConfigRecord(ctx context.Context, projectID string) (*db.ProjectConfigRecord, error) {
-	m.Recorder.Record("GetProjectConfigRecord", ctx, projectID)
-	if m.GetProjectConfigRecordFunc != nil {
-		return m.GetProjectConfigRecordFunc(ctx, projectID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetProjectConfigRecord")
-}
-
-// GetProjectMCPConfigsJSON records the call and delegates to GetProjectMCPConfigsJSONFunc when set.
-func (m *MockRepository) GetProjectMCPConfigsJSON(ctx context.Context, projectID string) (*string, error) {
-	m.Recorder.Record("GetProjectMCPConfigsJSON", ctx, projectID)
-	if m.GetProjectMCPConfigsJSONFunc != nil {
-		return m.GetProjectMCPConfigsJSONFunc(ctx, projectID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetProjectMCPConfigsJSON")
-}
-
-// UpsertProjectConfigRecord records the call and delegates to UpsertProjectConfigRecordFunc when set.
-func (m *MockRepository) UpsertProjectConfigRecord(ctx context.Context, record *db.ProjectConfigRecord) error {
-	m.Recorder.Record("UpsertProjectConfigRecord", ctx, record)
-	if m.UpsertProjectConfigRecordFunc != nil {
-		return m.UpsertProjectConfigRecordFunc(ctx, record)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpsertProjectConfigRecord")
 }
 
 // EmitUserRefetch records the call and delegates to EmitUserRefetchFunc when set.
@@ -112,6 +98,52 @@ func (m *MockRepository) ListProjectDaemonsForProject(ctx context.Context, proje
 
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockProjectConfigs
+// forge:hash=a4be06a24c381c4b654a160041ecbd3263e1129de879b9ff5ada169f2fb3eb97
+
+// MockProjectConfigs is a test mock for the ProjectConfigs interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProjectConfigs.<Method>Func not set" error.
+type MockProjectConfigs struct {
+	contractkit.Recorder
+	GetProjectConfigRecordFunc    func(context.Context, string) (*core.ProjectConfigRecord, error)
+	GetProjectMCPConfigsJSONFunc  func(context.Context, string) (*string, error)
+	UpsertProjectConfigRecordFunc func(context.Context, *core.ProjectConfigRecord) error
+}
+
+// GetProjectConfigRecord records the call and delegates to GetProjectConfigRecordFunc when set.
+func (m *MockProjectConfigs) GetProjectConfigRecord(ctx context.Context, projectID string) (*core.ProjectConfigRecord, error) {
+	m.Recorder.Record("GetProjectConfigRecord", ctx, projectID)
+	if m.GetProjectConfigRecordFunc != nil {
+		return m.GetProjectConfigRecordFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectConfigs", "GetProjectConfigRecord")
+}
+
+// GetProjectMCPConfigsJSON records the call and delegates to GetProjectMCPConfigsJSONFunc when set.
+func (m *MockProjectConfigs) GetProjectMCPConfigsJSON(ctx context.Context, projectID string) (*string, error) {
+	m.Recorder.Record("GetProjectMCPConfigsJSON", ctx, projectID)
+	if m.GetProjectMCPConfigsJSONFunc != nil {
+		return m.GetProjectMCPConfigsJSONFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectConfigs", "GetProjectMCPConfigsJSON")
+}
+
+// UpsertProjectConfigRecord records the call and delegates to UpsertProjectConfigRecordFunc when set.
+func (m *MockProjectConfigs) UpsertProjectConfigRecord(ctx context.Context, rec *core.ProjectConfigRecord) error {
+	m.Recorder.Record("UpsertProjectConfigRecord", ctx, rec)
+	if m.UpsertProjectConfigRecordFunc != nil {
+		return m.UpsertProjectConfigRecordFunc(ctx, rec)
+	}
+	return contractkit.MockNotSet("MockProjectConfigs", "UpsertProjectConfigRecord")
+}
+
+// Compile-time check.
+var _ ProjectConfigs = (*MockProjectConfigs)(nil)
 
 // forge:section MockRouter
 // forge:hash=773bbdc611a3063762ccd959be303a950cd8b06aa41356c8b571004d94d2cefc

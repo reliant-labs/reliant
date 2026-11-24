@@ -33,13 +33,17 @@ service QuestionService {
   // first, each naming the thread that asked it. A chat with several spawned
   // agents can have one question pending per thread, so a client must pick
   // the one for the thread it is showing rather than "the chat's question".
-  rpc ListPendingQuestions(ListPendingQuestionsRequest) returns (ListPendingQuestionsResponse) {}
+  rpc ListPendingQuestions(ListPendingQuestionsRequest) returns (ListPendingQuestionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // ListAsyncQuestions lists every async question in a chat (ask_user without
   // blocking: true), answered or not, oldest first. An async question never
   // blocks its thread, so ListPendingQuestions leaves it out; this is what the
   // chat timeline renders it from. Answer one with ResolveQuestion, like any
   // other question: the answer is delivered to the asking thread as a message.
-  rpc ListAsyncQuestions(ListAsyncQuestionsRequest) returns (ListAsyncQuestionsResponse) {}
+  rpc ListAsyncQuestions(ListAsyncQuestionsRequest) returns (ListAsyncQuestionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 message ResolveQuestionRequest {

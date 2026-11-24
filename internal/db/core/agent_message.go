@@ -145,6 +145,11 @@ type AgentMessage struct {
 	// is never overwritten. The column is the contract -- never infer this from
 	// Body. See dev-docs/incidents/2026-10-04-spawn-report-collision.md.
 	Synthesized bool
+	// AuthorUserID is the human who queued a HUMAN message when that is not
+	// the chat's owner; nil means the owner, and for every agent-to-agent
+	// row. The drain copies it to the saved message (messages.author_user_id),
+	// so the author survives the mailbox. docs/design/chat-collaboration.md §6.1.
+	AuthorUserID *string
 }
 
 // SpawnReportOutcome is what EnqueueSpawnReport did with a real terminal report.

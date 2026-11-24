@@ -203,6 +203,26 @@ func sweepOrgKeyNotices(ctx context.Context, store OrgKeyNoticeStore, q orgKeyNo
 	return started
 }
 
+// noticeSweeps is the notice sweeps this worker can run: none without
+// Temporal (there is nothing to start them on), the rejected-key sweep only
+// with the org accounts store (credentials/orgaccounts), and the pause-notice
+// sweep only with the database. Each store is checked on its own: a worker
+// given a database but no org accounts store used to run the key sweep over a
+// nil store and panic on its first tick.
+func noticeSweeps(cfg *Config, q orgKeyNoticeQueue) []func(context.Context) {
+	if q.starter == nil {
+		return nil
+	}
+	var sweeps []func(context.Context)
+	if cfg.OrgAccounts != nil {
+		sweeps = append(sweeps, func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.OrgAccounts, q) })
+	}
+	if cfg.Database != nil {
+		sweeps = append(sweeps, func(ctx context.Context) { sweepPauseNotices(ctx, newPauseStores(cfg.Database, cfg.Database.ORM()), q) })
+	}
+	return sweeps
+}
+
 // runNoticeSweeps runs each sweep at once and every interval until ctx ends.
 func runNoticeSweeps(ctx context.Context, interval time.Duration, sweeps ...func(context.Context)) {
 	t := time.NewTicker(interval)

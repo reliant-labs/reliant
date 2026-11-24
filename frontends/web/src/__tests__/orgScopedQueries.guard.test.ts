@@ -42,6 +42,8 @@ for (const [path, mod] of Object.entries(import.meta.glob("../gen/**/*_pb.ts", {
 const ALLOWED: Record<string, string> = {
   "hooks/forge-queries.ts#liveViewQuery":
     "A builder, not a read: useLiveView adds `enabled` on the tab's org scope, and QueuedDeployNotifier reads in the org a watched reading was taken in.",
+  "hooks/project-queries.ts#isProjectInOrgList":
+    "Reads in the org it is handed, never the tab's: a project route's loader passes the org its org layout resolved, or for an org-less URL the tab's org resolved from the membership list (lib/projectRouteResolve.ts), so there is always an org and nothing to wait for.",
 };
 
 const analysis = new OrgScopeAnalysis(SRC, pbModules);

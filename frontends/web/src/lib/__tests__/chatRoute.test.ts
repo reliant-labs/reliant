@@ -10,10 +10,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useActiveOrgStore } from "@/store/activeOrgStore";
 import { setRuntimeConfig } from "@/test/runtimeConfig";
+import { mobileChatPath, mobileChatsPath, mobileNewChatPath } from "@/lib/paths";
 
 import {
   CHAT_SHELL_PREFIXES,
   chatShellRouteOf,
+  mobileChatRouteOf,
   navigateToChatUrl,
   navigateToNewChatUrl,
   patchNewChatUrl,
@@ -50,6 +52,15 @@ describe("chatShellRouteOf", () => {
     expect(pathOwnsChat("/")).toBe(false);
     expect(pathOwnsChat("/project/p-1")).toBe(false);
     expect(CHAT_SHELL_PREFIXES).toEqual(["/c/", "/new"]);
+  });
+
+  it("owns the open chat on the phone's chat page and new-chat view too, without making them chat-shell pages", () => {
+    expect(pathOwnsChat(mobileChatPath("c-1"))).toBe(true);
+    expect(pathOwnsChat(mobileNewChatPath())).toBe(true);
+    expect(mobileChatRouteOf("/m/chats/c%201")).toEqual({ kind: "chat", chatId: "c 1" });
+    expect(pathOwnsChat(mobileChatsPath())).toBe(false);
+    expect(pathOwnsChat("/m/projects")).toBe(false);
+    expect(chatShellRouteOf(mobileChatPath("c-1"))).toBeNull();
   });
 });
 

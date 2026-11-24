@@ -129,14 +129,12 @@ func NewStorageBrowserServiceClient(httpClient connect.HTTPClient, baseURL strin
 			httpClient,
 			baseURL+StorageBrowserServiceListObjectsProcedure,
 			connect.WithSchema(storageBrowserServiceMethods.ByName("ListObjects")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getObjectMetadata: connect.NewClient[v1.GetObjectMetadataRequest, v1.GetObjectMetadataResponse](
 			httpClient,
 			baseURL+StorageBrowserServiceGetObjectMetadataProcedure,
 			connect.WithSchema(storageBrowserServiceMethods.ByName("GetObjectMetadata")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		presignObjectDownload: connect.NewClient[v1.PresignObjectDownloadRequest, v1.PresignObjectDownloadResponse](
@@ -149,7 +147,6 @@ func NewStorageBrowserServiceClient(httpClient connect.HTTPClient, baseURL strin
 			httpClient,
 			baseURL+StorageBrowserServicePreviewObjectProcedure,
 			connect.WithSchema(storageBrowserServiceMethods.ByName("PreviewObject")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -265,14 +262,12 @@ func NewStorageBrowserServiceHandler(svc StorageBrowserServiceHandler, opts ...c
 		StorageBrowserServiceListObjectsProcedure,
 		svc.ListObjects,
 		connect.WithSchema(storageBrowserServiceMethods.ByName("ListObjects")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	storageBrowserServiceGetObjectMetadataHandler := connect.NewUnaryHandler(
 		StorageBrowserServiceGetObjectMetadataProcedure,
 		svc.GetObjectMetadata,
 		connect.WithSchema(storageBrowserServiceMethods.ByName("GetObjectMetadata")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	storageBrowserServicePresignObjectDownloadHandler := connect.NewUnaryHandler(
@@ -285,7 +280,6 @@ func NewStorageBrowserServiceHandler(svc StorageBrowserServiceHandler, opts ...c
 		StorageBrowserServicePreviewObjectProcedure,
 		svc.PreviewObject,
 		connect.WithSchema(storageBrowserServiceMethods.ByName("PreviewObject")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/controlplane.v1.StorageBrowserService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

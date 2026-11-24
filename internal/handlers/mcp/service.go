@@ -27,9 +27,13 @@ type Deps struct {
 	// MCP configuration (the project config record) in step with what the
 	// daemon writes to disk.
 	Repo Repository
+	// ProjectRows reads a project by id; the handler decides access on it.
+	ProjectRows ProjectReader
 	// Projects reads a project the caller may write (owner and org decided
 	// together: projectaccess).
 	Projects projectaccess.Service
+	// ProjectConfigs is the stored project config record.
+	ProjectConfigs ProjectConfigs
 	// Router runs the user's MCP servers and reads and writes their config
 	// files on the user's daemon, which owns the filesystem. The API server
 	// always has one; in a composition without one, listing answers from the
@@ -50,6 +54,12 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("mcp: Deps.Repo is required")
+	}
+	if d.ProjectConfigs == nil {
+		return fmt.Errorf("mcp: Deps.ProjectConfigs is required")
+	}
+	if d.ProjectRows == nil {
+		return fmt.Errorf("mcp: Deps.ProjectRows is required")
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("mcp: Deps.Projects is required")

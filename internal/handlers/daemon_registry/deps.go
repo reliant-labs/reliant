@@ -22,8 +22,6 @@ type Repository interface {
 	ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error)
 
 	SetDefaultDaemon(ctx context.Context, userID, daemonID string) error
-	// UpsertDaemonIdentity writes a renamed machine's name onto its row.
-	UpsertDaemonIdentity(ctx context.Context, id db.DaemonIdentity) (bool, error)
 }
 
 // Pools reads and writes machine labels and pools
@@ -34,6 +32,12 @@ type Pools interface {
 	PutMachinePool(ctx context.Context, p *core.MachinePool, newID string, now time.Time) (*core.MachinePool, error)
 	DeleteMachinePoolByName(ctx context.Context, userID, name string) error
 	ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error)
+}
+
+// Mirror writes a renamed machine's name onto its registry row.
+// daemonmirror.Service satisfies it.
+type Mirror interface {
+	UpsertDaemonIdentity(ctx context.Context, id core.DaemonIdentity) (bool, error)
 }
 
 // MachineNames renames a machine at the control plane, which owns the name.

@@ -37,7 +37,7 @@ func runWrappedFailure(t *testing.T, fn func(context.Context, string) (string, e
 	t.Helper()
 	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
-	registry := NewActivityRegistry(&wrapperTestRepo{})
+	registry := NewActivityRegistry(ActivityRegistryDeps{Store: &wrapperTestRepo{}, Workflows: &wrapperTestRepo{}})
 	env.RegisterActivityWithOptions(wrapActivity(registry, "CallLLM", fn, lifecycle.AgentWork, false),
 		activity.RegisterOptions{Name: "CallLLM"})
 	_, err := env.ExecuteActivity("CallLLM", "input")

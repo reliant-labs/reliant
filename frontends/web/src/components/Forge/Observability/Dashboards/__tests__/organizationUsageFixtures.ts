@@ -57,7 +57,7 @@ function base(granularity: OrganizationUsageGranularity, groupBy: OrganizationUs
   };
 }
 
-/** 30 days by category: managed LLM settled, hosting list-priced, dev boxes and static egress unpriced, observability unavailable. */
+/** 30 days by category: managed LLM settled, hosting list-priced, sandboxes and static egress unpriced, observability unavailable. */
 export function usageByCategory(): ListOrganizationUsageResponse {
   return create(ListOrganizationUsageResponseSchema, {
     ...base(OrganizationUsageGranularity.DAY, OrganizationUsageGroupBy.CATEGORY, "2026-09-26T00:00:00Z", "2026-10-26T00:00:00Z"),

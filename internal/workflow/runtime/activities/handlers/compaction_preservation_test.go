@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -117,7 +118,7 @@ func TestCompactionOverflow_PreservesUnprocessedContinuation(t *testing.T) {
 	for _, counts := range []bool{false, true} {
 		t.Run(fmt.Sprintf("counts=%t", counts), func(t *testing.T) {
 			driver := &fitSummarizer{limit: 6000, withCounts: counts}
-			activity := NewCompactActivity(nil, driver.resolver())
+			activity := NewCompactActivity(CompactDeps{DriverResolver: driver.resolver()})
 			history := preservationHistory()
 			summary, err := activity.generateCompactionSummary(context.Background(), &db.Chat{ID: "chat", UserID: "user"}, "thread", "", types.FailoverPolicy{}, history, nil)
 			require.NoError(t, err)
@@ -171,15 +172,15 @@ func TestCompactionOverflow_SaveReloadAndSkip(t *testing.T) {
 				})
 				require.NoError(t, err)
 			}
-			before, err := LoadMessagesForLLM(ctx, h.Repo(), chatID, thread, nil)
+			before, err := LoadMessagesForLLM(ctx, h.Repo(), toolCallsOf(h.Repo()), chatID, thread, nil)
 			require.NoError(t, err)
 			input := CompactInput{ChatID: chatID, Thread: thread}.V3()
 			input.Node.GetCompact().Force = &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}}
 			driver := &fitSummarizer{limit: limit}
-			compact := NewCompactActivity(h.Repo(), driver.resolver())
+			compact := NewCompactActivity(CompactDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()})
 			var out CompactOutput
 			require.NoError(t, h.ExecuteActivity(compact.Execute, input, &out))
-			after, err := LoadMessagesForLLM(ctx, h.Repo(), chatID, thread, nil)
+			after, err := LoadMessagesForLLM(ctx, h.Repo(), toolCallsOf(h.Repo()), chatID, thread, nil)
 			require.NoError(t, err)
 			seq, err := h.Repo().GetMaxSequenceForThread(ctx, thread)
 			require.NoError(t, err)
@@ -208,7 +209,7 @@ func TestCompactionOverflow_SaveReloadAndSkip(t *testing.T) {
 func TestCompactionOverflow_HardMinimumIsNonDestructive(t *testing.T) {
 	t.Parallel()
 	driver := &fitSummarizer{limit: 1}
-	compact := NewCompactActivity(nil, driver.resolver())
+	compact := NewCompactActivity(CompactDeps{DriverResolver: driver.resolver()})
 	history := preservationHistory()
 	summary, err := compact.generateCompactionSummary(context.Background(), &db.Chat{ID: "chat", UserID: "user"}, "thread", "", types.FailoverPolicy{}, history, nil)
 	require.Error(t, err)

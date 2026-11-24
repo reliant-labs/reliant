@@ -38,7 +38,7 @@ const (
 // machine of the chat the panel is beside (chatID, "" for none), else the
 // project-aware default.
 func (s *Service) workspace(ctx context.Context, userID, worktreeID, chatID string) (path, daemonID string, err error) {
-	worktree, err := s.deps.Repo.GetWorktree(ctx, worktreeID)
+	worktree, err := s.deps.Placement.GetWorktree(ctx, worktreeID)
 	if err != nil {
 		return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -46,7 +46,7 @@ func (s *Service) workspace(ctx context.Context, userID, worktreeID, chatID stri
 	if _, err := s.deps.Projects.GetProjectWithUserCheck(ctx, worktree.ProjectID, userID); err != nil {
 		return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
-	ws, err := daemonplacement.WorkspaceDaemon(ctx, s.deps.Repo, userID, worktree.ProjectID, worktree.ID, chatID)
+	ws, err := daemonplacement.WorkspaceDaemon(ctx, s.workspaces(), userID, worktree.ProjectID, worktree.ID, chatID)
 	if errors.Is(err, daemonplacement.ErrForeignChat) {
 		return "", "", svcerr.NotFound("chat")
 	}
@@ -69,7 +69,7 @@ func (s *Service) workspace(ctx context.Context, userID, worktreeID, chatID stri
 	// machine without this project. Only "the user has no machine at all"
 	// leaves the dispatch to report that, as default resolution would.
 	if machines, ok := s.deps.Router.(daemonplacement.Machines); ok {
-		daemonID, err := daemonplacement.ProjectDefaultDaemonID(ctx, s.deps.Repo, machines, userID, worktree.ProjectID)
+		daemonID, err := daemonplacement.ProjectDefaultDaemonID(ctx, s.deps.Placement, machines, userID, worktree.ProjectID)
 		switch {
 		case err == nil:
 			return worktree.Path, daemonID, nil
@@ -88,7 +88,7 @@ func (s *Service) requestedMachine(ctx context.Context, userID string, daemonID 
 	if daemonID == nil || *daemonID == "" {
 		return "", nil
 	}
-	d, err := s.deps.Repo.GetDaemon(ctx, *daemonID)
+	d, err := s.deps.Placement.GetDaemon(ctx, *daemonID)
 	if err != nil || !authz.CanWriteMachine(ctx, userID, d) {
 		return "", svcerr.NotFound("machine")
 	}

@@ -10,11 +10,16 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
+// ProjectReader reads a project by id. It checks no owner: every caller
+// decides access on the row it returns. store.ProjectExtStore satisfies it.
+type ProjectReader interface {
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+}
+
 // Repository is the slice of *db.Repo the scenario handlers use. The
 // last three feed workflowsource.Loader and launch, which resolve the
 // workflows a scenario runs.
 type Repository interface {
-	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetWorkflowScenario(ctx context.Context, id string) (*db.WorkflowScenario, error)
 	ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID string) ([]*db.WorkflowScenario, error)
 	CreateWorkflowScenario(ctx context.Context, scenario *db.WorkflowScenario) error
@@ -34,6 +39,13 @@ type Drafts interface {
 	GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error)
 	GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
 	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
+}
+
+// ProjectConfigs reads the synced project scenarios column of a project's
+// config record, and nothing else from it. It returns svcerr.NotFound when the
+// project has no record. store.ProjectConfigExtStore satisfies it.
+type ProjectConfigs interface {
+	GetProjectScenariosJSON(ctx context.Context, projectID string) (*string, error)
 }
 
 // Sender runs a command on the machine holding a project's checkout.

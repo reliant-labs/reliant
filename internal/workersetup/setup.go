@@ -71,6 +71,10 @@ type Config struct {
 	// Required dependencies
 	TemporalClient client.Client
 	Database       *db.Repo
+	// Checks records what a workflow's `check:` fire and run activities
+	// report (workflowcheck), never writing GitHub; nil builds the
+	// record-only one over Database.
+	Checks workflowcheck.Service
 	// ProviderAccounts holds the accounts, limit state and thread assignments the call_llm
 	// routing reads and writes (credentials/provideraccounts).
 	ProviderAccounts AccountStore
@@ -261,13 +265,17 @@ func sdkClient(c client.Client) client.Client {
 
 func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// Create activity registry
-	registry := v2.NewActivityRegistry(cfg.Database)
+	var workflows v2.WorkflowRows
+	if cfg.Database != nil {
+		workflows = store.NewWorkflowExtStore(cfg.Database.ORM())
+	}
+	registry := v2.NewActivityRegistry(v2.ActivityRegistryDeps{Store: cfg.Database, Workflows: workflows})
 	if cfg.StopNudges != nil {
 		registry.SetStopNudges(cfg.StopNudges)
 	}
 
 	// Create threads service
-	threadsService := threads.New(threads.Deps{Repo: cfg.Database})
+	threadsService := threads.New(threads.Deps{Repo: cfg.Database, Messages: store.NewMessageExtStore(cfg.Database.ORM()), Senders: store.NewThreadExtStore(cfg.Database.ORM())})
 
 	// Create activity dependencies
 	activityDeps := v2activities.NewActivities(
@@ -297,11 +305,12 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
 	if cfg.Database != nil {
-		usage, err := llmusage.NewInstrumented(llmusage.Deps{Ledger: store.NewLlmCallUsageExtStore(cfg.Database.ORM()), Tx: cfg.Database})
+		usage, err := llmusage.NewInstrumented(llmusage.Deps{Ledger: store.NewLlmCallUsageExtStore(cfg.Database.ORM()), Tools: store.NewToolCallUsageExtStore(cfg.Database.ORM()), Tx: cfg.Database})
 		if err != nil {
 			return nil, nil, fmt.Errorf("llm usage ledger: %w", err)
 		}
 		activityDeps.LLMUsage = usage
+		activityDeps.ToolUsage = usage
 		backoff, err := providerbackoff.NewInstrumented(providerbackoff.Deps{Markers: store.NewProviderBackoffExtStore(cfg.Database.ORM()), Tx: cfg.Database, Activity: cfg.Database})
 		if err != nil {
 			return nil, nil, fmt.Errorf("provider backoff markers: %w", err)
@@ -359,9 +368,11 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// A workflow's `check:` (workflowcheck): an event fire opens the check
 	// and the run reports its start and end through these activities. They
 	// only record; the worker's check syncer writes GitHub.
-	var checks workflowcheck.Service
+	checks := cfg.Checks
 	if cfg.Database != nil {
-		checks = workflowcheck.NewInstrumented(workflowcheck.Deps{Store: store.NewWorkflowCheckRunExtStore(cfg.Database.ORM())})
+		if checks == nil {
+			checks = workflowcheck.NewInstrumented(workflowcheck.Deps{Store: store.NewWorkflowCheckRunExtStore(cfg.Database.ORM())})
+		}
 		reports := workflowcheck.Activities{Service: checks}
 		w.RegisterActivityWithOptions(reports.Started, activity.RegisterOptions{Name: workflowcheck.StartedActivityName})
 		w.RegisterActivityWithOptions(reports.Ended, activity.RegisterOptions{Name: workflowcheck.EndedActivityName})
@@ -382,9 +393,9 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	if cfg.TriggerPollers != nil {
 		if repo := cfg.Database; repo != nil {
 			poller := triggers.NewTriggerPoller(
-				triggerPollRepo{Repo: repo, connections: cfg.Connections},
+				triggerPollRepo{Stores: triggers.NewStores(repo), connections: cfg.Connections},
 				cfg.TriggerPollers,
-				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}),
+				triggers.NewIntake(triggers.NewStores(repo), cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations).WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}),
 				cfg.TriggerCredentials,
 			).WithAutoPause(triggerAutoPause(cfg)).WithDeliveryInbox(cfg.TriggerPollInbox)
 			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
@@ -429,7 +440,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 	pauses := pauseNotices{admins: pauseAdmins}
 	if cfg.Database != nil {
-		pauses.store = cfg.Database
+		pauses.store = newPauseStores(cfg.Database, cfg.Database.ORM())
 	}
 	w.RegisterActivityWithOptions(pauses.Notify, activity.RegisterOptions{
 		Name: NotifyOrgAutomationNoOrgAccountActivityName,
@@ -471,11 +482,9 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// Rejected org keys whose notice never started (a Temporal outage at the
 	// rejection), and paused automations whose email was never delivered, are
 	// started here, where the notices' workflows run.
-	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil && cfg.Database != nil {
+	if sweeps := noticeSweeps(cfg, orgKeyNoticeQueueFor(cfg)); len(sweeps) > 0 {
 		out.background = append(out.background, func(ctx context.Context) {
-			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval,
-				func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.OrgAccounts, q) },
-				func(ctx context.Context) { sweepPauseNotices(ctx, cfg.Database, q) })
+			runNoticeSweeps(ctx, OrgKeyNoticeSweepInterval, sweeps...)
 		})
 	}
 	return out, registry, nil
@@ -601,7 +610,7 @@ func triggerAutoPause(cfg *Config) *triggers.AutoPause {
 	pause := triggers.NewAutoPause(cfg.Database, schedules)
 	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil {
 		// A pause for want of an org account emails the org's admins.
-		pause = pause.WithNoOrgAccountPause(noOrgAccountPauseNotifier(cfg.Database, q))
+		pause = pause.WithNoOrgAccountPause(noOrgAccountPauseNotifier(newPauseStores(cfg.Database, cfg.Database.ORM()), q))
 	}
 	return pause
 }
@@ -640,7 +649,7 @@ type TriggerConnections interface {
 }
 
 type triggerPollRepo struct {
-	*db.Repo
+	triggers.Stores
 	connections TriggerConnections
 }
 

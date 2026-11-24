@@ -55,7 +55,7 @@
  * route types (the pages read params without a route id).
  */
 
-import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
+import { createRoute, redirect, retainSearchParams, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
 
 import { usagePath } from './lib/paths'
 import { inOrgOfPath } from './lib/paths/org'
@@ -91,6 +91,9 @@ import {
   forgeLegacySearchSchema,
   forgeOrgObsSearchSchema,
   forgeResolveSearchSchema,
+  projectsCarrySearchSchema,
+  CONSOLE_CHECKOUT_PARAM,
+  forgeConsoleCheckoutSearchSchema,
 } from './routeSchemas'
 import { registerSecurityNav } from './components/Forge/Security/registerSecurityNav'
 
@@ -190,6 +193,10 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const layoutRoute = createRoute({
     getParentRoute,
     id: '_forge',
+    // The chat list's project filter rides through the console too (the
+    // root's retainSearchParams, routes.tsx), so a tab's selection survives
+    // a visit to an app.
+    validateSearch: projectsCarrySearchSchema,
     component: components.layout,
   })
 
@@ -248,6 +255,10 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const consoleRoute = createRoute({
     getParentRoute: () => layoutRoute,
     path: (inOrg ? '/apps/$project' : '/forge/p/$project') as '/forge/p/$project',
+    // Which checkout backs the console (`?project=`), carried by every link
+    // inside it: a page change must not drop the person's choice.
+    validateSearch: forgeConsoleCheckoutSearchSchema,
+    search: { middlewares: [retainSearchParams([CONSOLE_CHECKOUT_PARAM])] },
     component: components.console,
   })
   const overviewRoute = createRoute({

@@ -45,7 +45,7 @@ func (a *ExecuteToolsActivity) settleInterruptedCall(ctx context.Context, rtx Ru
 	}
 
 	content := NotRunInterruptedToolResultContent
-	existing, err := a.repo.GetToolCall(ctx, call.ID)
+	existing, err := a.toolCalls.FindToolCall(ctx, call.ID)
 	if err != nil && !svcerr.IsNotFound(err) {
 		activity.GetLogger(ctx).Warn("[ExecuteTools] Interrupted turn: could not read the call's row; answering it as of unknown effect",
 			"tool_call_id", call.ID,
@@ -58,6 +58,8 @@ func (a *ExecuteToolsActivity) settleInterruptedCall(ctx context.Context, rtx Ru
 			return a.buildToolResult(call.ID, call.Name, content, "", true, nil, nil)
 		}
 		if existing.Status == core.ToolCallStatusBackgrounded {
+			// It ran, and was counted, on the dispatch that backgrounded it.
+			noteToolReplayed(ctx)
 			if recorded, err := a.findToolCallResult(ctx, call.ID); err == nil && recorded != nil {
 				return a.buildToolResult(call.ID, call.Name, recorded.Content, "", recorded.IsError, nil, nil)
 			}

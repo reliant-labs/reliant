@@ -172,6 +172,7 @@ func NewAccessTokenServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			httpClient,
 			baseURL+AccessTokenServiceListTokensProcedure,
 			connect.WithSchema(accessTokenServiceMethods.ByName("ListTokens")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		revokeToken: connect.NewClient[v1.RevokeTokenRequest, v1.RevokeTokenResponse](
@@ -190,6 +191,7 @@ func NewAccessTokenServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			httpClient,
 			baseURL+AccessTokenServiceListMyTokensProcedure,
 			connect.WithSchema(accessTokenServiceMethods.ByName("ListMyTokens")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		revokeMyToken: connect.NewClient[v1.RevokeMyTokenRequest, v1.RevokeMyTokenResponse](
@@ -214,6 +216,7 @@ func NewAccessTokenServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			httpClient,
 			baseURL+AccessTokenServiceListMyCLILoginsProcedure,
 			connect.WithSchema(accessTokenServiceMethods.ByName("ListMyCLILogins")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		revokeMyCLILogin: connect.NewClient[v1.RevokeMyCLILoginRequest, v1.RevokeMyCLILoginResponse](
@@ -232,6 +235,7 @@ func NewAccessTokenServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			httpClient,
 			baseURL+AccessTokenServiceListOrgMemberGrantsProcedure,
 			connect.WithSchema(accessTokenServiceMethods.ByName("ListOrgMemberGrants")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateOrgMemberGrants: connect.NewClient[v1.UpdateOrgMemberGrantsRequest, v1.UpdateOrgMemberGrantsResponse](
@@ -404,6 +408,7 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 		AccessTokenServiceListTokensProcedure,
 		svc.ListTokens,
 		connect.WithSchema(accessTokenServiceMethods.ByName("ListTokens")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	accessTokenServiceRevokeTokenHandler := connect.NewUnaryHandler(
@@ -422,6 +427,7 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 		AccessTokenServiceListMyTokensProcedure,
 		svc.ListMyTokens,
 		connect.WithSchema(accessTokenServiceMethods.ByName("ListMyTokens")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	accessTokenServiceRevokeMyTokenHandler := connect.NewUnaryHandler(
@@ -446,6 +452,7 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 		AccessTokenServiceListMyCLILoginsProcedure,
 		svc.ListMyCLILogins,
 		connect.WithSchema(accessTokenServiceMethods.ByName("ListMyCLILogins")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	accessTokenServiceRevokeMyCLILoginHandler := connect.NewUnaryHandler(
@@ -464,6 +471,7 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 		AccessTokenServiceListOrgMemberGrantsProcedure,
 		svc.ListOrgMemberGrants,
 		connect.WithSchema(accessTokenServiceMethods.ByName("ListOrgMemberGrants")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	accessTokenServiceUpdateOrgMemberGrantsHandler := connect.NewUnaryHandler(

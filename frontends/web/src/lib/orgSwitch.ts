@@ -1,5 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
+import { expectOwnOrgSwitch } from "@/lib/orgArrivalNotice";
 import { orgOfPath, orgSwitchPath } from "@/lib/paths/org";
 import { orgSegment, type RouteOrg } from "@/lib/routeOrg";
 import { chooseActiveOrg } from "@/store/activeOrgStore";
@@ -27,6 +28,8 @@ export function switchTabOrg(org: RouteOrg): void {
   const router = (globalThis as { __RELIANT_ROUTER?: RouterLike }).__RELIANT_ROUTER;
   const pathname = router?.state.location.pathname ?? "";
   if (router && orgOfPath(pathname) !== null) {
+    // The person's own choice: the page it commits says nothing about it (lib/orgArrivalNotice.ts).
+    expectOwnOrgSwitch(org.id);
     void router.navigate({ href: orgSwitchPath(pathname, orgSegment(org)) });
     return;
   }

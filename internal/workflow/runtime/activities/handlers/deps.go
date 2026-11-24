@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	core "github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -39,6 +40,35 @@ import (
 // satisfies it.
 type WorkflowLoader interface {
 	LoadWorkflow(ctx context.Context, id string) (*core.Workflow, error)
+}
+
+// WorkspaceRows is the project, worktree, repo and daemon rows the activities
+// read by id: where a chat runs, which repos its project holds, and the
+// registration of the machine it reaches. Like the reads it replaces it takes
+// no owner; each activity reached it from a chat it already holds.
+// NewWorkspaceRows builds it over the generated ext stores.
+type WorkspaceRows interface {
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+	WorktreeOwnerReader
+	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
+}
+
+type workspaceRows struct {
+	store.ProjectExtStore
+	store.WorktreeExtStore
+	store.RepoExtStore
+	store.DaemonExtStore
+}
+
+// NewWorkspaceRows is the WorkspaceRows over the generated ext stores of db.
+func NewWorkspaceRows(db orm.Context) WorkspaceRows {
+	return workspaceRows{
+		ProjectExtStore:  store.NewProjectExtStore(db),
+		WorktreeExtStore: store.NewWorktreeExtStore(db),
+		RepoExtStore:     store.NewRepoExtStore(db),
+		DaemonExtStore:   store.NewDaemonExtStore(db),
+	}
 }
 
 // RunOwnerReader is what resolveRunOwner reads after the parent run: the chat.
@@ -98,22 +128,22 @@ type BindingDescriber interface {
 // and the project or worktree it runs in.
 type RunExecutorContextStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	GetProject(ctx context.Context, id string) (*db.Project, error)
-	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	// Installs is each machine's checkout of the project.
 	daemonplacement.Installs
 }
 
-// ToolResultRecoveryStore is what recoverPersistedToolResults reads.
+// ToolResultRecoveryStore is what recoverPersistedToolResults reads: the result
+// of the call a given assistant message carries. store.ToolCallResultExtStore
+// satisfies it.
 type ToolResultRecoveryStore interface {
-	GetToolCallResultForMessage(ctx context.Context, toolCallID string, messageID string) (*db.ToolCallResult, error)
+	FindToolCallResultForMessage(ctx context.Context, toolCallID string, messageID string) (*core.ToolCallResult, error)
 }
 
 // MessageRepairStore is what ConvertAndRepairMessages reads: messageconv's
-// conversion, then the persisted tool results the repair recovers.
+// conversion. The persisted tool results the repair recovers come from a
+// ToolResultRecoveryStore beside it.
 type MessageRepairStore interface {
 	messageconv.Store
-	ToolResultRecoveryStore
 }
 
 // LLMHistoryStore is what LoadMessagesForLLM reads: the thread's current
@@ -121,6 +151,30 @@ type MessageRepairStore interface {
 type LLMHistoryStore interface {
 	threads.Repository
 	MessageRepairStore
+}
+
+// ToolCalls is the tool-call records the tool-execution path reads and
+// writes: a call by id (nil when none), the result recorded for it, and the
+// result write. Each takes the transaction the ctx carries. NewToolCalls
+// builds it over the generated ext stores.
+type ToolCalls interface {
+	FindToolCall(ctx context.Context, id string) (*core.ToolCall, error)
+	FindToolCallResult(ctx context.Context, toolCallID string) (*core.ToolCallResult, error)
+	UpsertToolCallResult(ctx context.Context, chatID string, result *core.ToolCallResult) error
+	ToolResultRecoveryStore
+}
+
+type toolCalls struct {
+	store.ToolCallExtStore
+	store.ToolCallResultExtStore
+}
+
+// NewToolCalls is the ToolCalls over the generated ext stores of db.
+func NewToolCalls(db orm.Context) ToolCalls {
+	return toolCalls{
+		ToolCallExtStore:       store.NewToolCallExtStore(db),
+		ToolCallResultExtStore: store.NewToolCallResultExtStore(db),
+	}
 }
 
 // WorkflowErrorWriter is what WriteWorkflowError writes, and all the
@@ -140,6 +194,9 @@ type ChatTransitioner interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error
 	LoadWorkflowStore
+	// ProjectWorktreeReader is where the completed workflow's definition is
+	// found.
+	ProjectWorktreeReader
 }
 
 // ============================================================================
@@ -282,12 +339,9 @@ type CreateWorkflowWithThreadStore interface {
 // forwards the store to repo.AdoptFromDaemon and workspacecreate.
 type CreateWorktreeStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	GetProject(ctx context.Context, id string) (*db.Project, error)
-	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	repopkg.AdoptStore
 	workspacecreate.Store
-	WorktreeOwnerReader
 	// Installs is each machine's checkout of the project: the owner's is
 	// the source of a workspace's repos.
 	daemonplacement.Installs
@@ -296,9 +350,7 @@ type CreateWorktreeStore interface {
 // DeleteWorktreeStore is what DeleteWorktreeActivity reads and writes.
 type DeleteWorktreeStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	GetProject(ctx context.Context, id string) (*db.Project, error)
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
-	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	ArchiveWorktree(ctx context.Context, id string) error
 	// Installs is each machine's checkout of the project: the owner's is
 	// the source of a workspace's repos.
@@ -336,10 +388,6 @@ type EnqueueAgentMessageStore interface {
 // ExecuteRunStepStore is what ExecuteRunStepActivity reads and writes.
 type ExecuteRunStepStore interface {
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
-	// GetDaemon reads the command machine's registration: a run node with
-	// llm_gateway runs only on one that registered
-	// daemon.CapabilityRunStepEnv.
-	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	RunExecutorContextStore
 }
 
@@ -356,12 +404,7 @@ type WorktreeReviver interface {
 type ExecuteToolsStore interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	GetProject(ctx context.Context, id string) (*db.Project, error)
-	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
-	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	GetContextUsage(ctx context.Context, chatID string, thread string) (*db.ContextUsage, error)
-	GetToolCall(ctx context.Context, id string) (*db.ToolCall, error)
-	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 	// CreateAttachment is persistToolMedia's: a tool result's images and PDFs
 	// reach the model as attachment rows.
@@ -404,12 +447,11 @@ type GenerateTitleStore interface {
 	CreateUserUpdate(ctx context.Context, update *db.UserUpdate) error
 }
 
-// GitPublishStore is what GitPublishActivity reads. GetDaemon is the
-// machine's registration, whose capabilities say whether it enforces a lease.
+// GitPublishStore is what GitPublishActivity reads beside its WorkspaceRows
+// (the machine's registration, whose capabilities say whether it enforces a
+// lease, and the workspace's owner).
 type GitPublishStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
-	WorktreeOwnerReader
 }
 
 // LoadPresetParamsStore is what LoadPresetParamsActivity reads: the run's
@@ -426,8 +468,6 @@ type LoadPresetParamsStore interface {
 // the catalog the run's machine synced (workflowsource.MachineStore).
 type LoadWorkflowStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	GetProject(ctx context.Context, id string) (*db.Project, error)
-	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
 	workflowsource.Store
 	workflowsource.MachineStore
@@ -436,12 +476,17 @@ type LoadWorkflowStore interface {
 	PinProjectCatalog(ctx context.Context, scope db.CatalogPinScope) (string, error)
 }
 
+// ProjectWorktreeReader reads where a chat runs: its project, or the worktree
+// it runs in (LoadWorkflowActivity, resolveRunExecutorContext). WorkspaceRows
+// satisfies it.
+type ProjectWorktreeReader interface {
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+}
+
 // MachineResumeWakeStore is what MachineResumeWakeActivity reads and writes.
 type MachineResumeWakeStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	// GetWorktree finds the chat's workspace owner (runMachineSelector).
-	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
-	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 }
@@ -450,9 +495,6 @@ type MachineResumeWakeStore interface {
 // writes.
 type PreflightDaemonCheckStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	// GetWorktree finds the chat's workspace owner (runMachineSelector).
-	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
-	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	QueueChatForMachine(ctx context.Context, chatID string, machine *db.QueuedMachine) (bool, error)
 	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
@@ -483,7 +525,6 @@ type QuestionResolveStore interface {
 // threads.Service and its attachments.
 type SaveMessageStore interface {
 	CreateAttachment(ctx context.Context, attachment *db.Attachment) error
-	threads.Repository
 }
 
 // ThreadStatusStore is what ThreadStatusActivity writes.
@@ -606,4 +647,41 @@ type WorkflowStatusStore interface {
 	runevents.Store
 	ChatTransitioner
 	TransitionMessageWriter
+}
+
+// MessageSaver writes a message through the threads service: the allocation
+// of its order, its content blocks and the idempotency checks of a retried
+// activity. *threads.Service satisfies it.
+type MessageSaver interface {
+	SaveMessage(ctx context.Context, opts threads.SaveMessageOpts) (*threads.SaveMessageResult, error)
+}
+
+// SaveMessageDeps is what a SaveMessageActivity is built from.
+type SaveMessageDeps struct {
+	// Store is what the activity reads and writes besides the message.
+	Store SaveMessageStore
+	// Threads saves the message.
+	Threads MessageSaver
+}
+
+// CompactDeps is what a CompactActivity is built from.
+type CompactDeps struct {
+	// Store is what the activity reads and writes.
+	Store CompactStore
+	// Threads saves the compaction summary message.
+	Threads MessageSaver
+	// ToolResults recovers the tool results the history lost.
+	ToolResults ToolResultRecoveryStore
+	// DriverResolver picks the model driver that writes the summary.
+	DriverResolver drivers.DriverResolver
+}
+
+// UsageLimitWaitDeps is what a UsageLimitWaitActivity is built from.
+type UsageLimitWaitDeps struct {
+	// Store records and clears the wait marker.
+	Store UsageLimitWaitStore
+	// Waits writes and clears the wait marker.
+	Waits ProviderBackoffMarkers
+	// Threads saves the notice the wait posts to the transcript.
+	Threads MessageSaver
 }

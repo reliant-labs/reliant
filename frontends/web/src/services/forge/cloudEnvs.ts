@@ -32,7 +32,7 @@
  * (services/forge/__tests__/noLocalSecretReads.test.ts).
  */
 
-import { Code, ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError, type Transport } from "@connectrpc/connect";
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
@@ -310,8 +310,8 @@ export function toCloudEnvStatus(msg: GetDeploymentStatusResponse): CloudEnvStat
 // in the request, so a cached answer is always the org its key says
 // (lib/orgScope). The writes act in the active org (api/orgInterceptor).
 
-function client() {
-  return getControlPlaneClient(DeployService);
+function client(transport: Transport) {
+  return getControlPlaneClient(DeployService, transport);
 }
 
 /**
@@ -325,8 +325,8 @@ function client() {
  * Filtering on the response field makes that impossible: an old server's rows
  * carry no project, so they match nothing.
  */
-export async function listProjectEnvironments(project: string, orgId: string | null): Promise<CloudEnv[]> {
-  const res = await client().listEnvironments(orgRequest({ project }, orgId));
+export async function listProjectEnvironments(transport: Transport, project: string, orgId: string | null): Promise<CloudEnv[]> {
+  const res = await client(transport).listEnvironments(orgRequest({ project }, orgId));
   return (res.environments ?? [])
     .map(toCloudEnv)
     .filter((env) => env.id !== "" && env.name !== "" && env.project === project)
@@ -338,25 +338,26 @@ export async function listProjectEnvironments(project: string, orgId: string | n
  * list's one read. An environment with no project predates the project
  * dimension and names no app, so it is dropped here.
  */
-export async function listOrgEnvironments(orgId: string | null): Promise<CloudEnv[]> {
-  const res = await client().listEnvironments(orgRequest({}, orgId));
+export async function listOrgEnvironments(transport: Transport, orgId: string | null): Promise<CloudEnv[]> {
+  const res = await client(transport).listEnvironments(orgRequest({}, orgId));
   return (res.environments ?? [])
     .map(toCloudEnv)
     .filter((env) => env.id !== "" && env.name !== "" && env.project !== "");
 }
 
 /** The control plane's observation of one environment — a database read, no cluster hop. */
-export async function getEnvironmentStatus(environmentId: string, orgId: string | null): Promise<CloudEnvStatus> {
-  return toCloudEnvStatus(await client().getStatus(orgRequest({ environmentId }, orgId)));
+export async function getEnvironmentStatus(transport: Transport, environmentId: string, orgId: string | null): Promise<CloudEnvStatus> {
+  return toCloudEnvStatus(await client(transport).getStatus(orgRequest({ environmentId }, orgId)));
 }
 
 /** The environment's promotion ledger, newest first. */
 export async function listEnvironmentPromotions(
+  transport: Transport,
   environmentId: string,
   orgId: string | null,
   limit = 25
 ): Promise<CloudPromotion[]> {
-  const res = await client().listPromotions(orgRequest({ environmentId, limit }, orgId));
+  const res = await client(transport).listPromotions(orgRequest({ environmentId, limit }, orgId));
   return (res.promotions ?? []).map(toCloudPromotion);
 }
 
@@ -374,8 +375,8 @@ function runStateEnum(state: RunStateRequest): DeployRunState {
  * deployment is not entitled — nothing is written then. The caller shows
  * `cloudErrorDetail(err)` verbatim.
  */
-export async function setEnvironmentRunState(environmentId: string, state: RunStateRequest): Promise<void> {
-  await client().setEnvironmentRunState({ environmentId, runState: runStateEnum(state) });
+export async function setEnvironmentRunState(transport: Transport, environmentId: string, state: RunStateRequest): Promise<void> {
+  await client(transport).setEnvironmentRunState({ environmentId, runState: runStateEnum(state) });
 }
 
 /**
@@ -383,8 +384,8 @@ export async function setEnvironmentRunState(environmentId: string, state: RunSt
  * suspended), which DeployService.Scale carries. Not a replica count — forge's
  * tiers carry none, and replicas are declared in KCL.
  */
-export async function setWorkloadRunState(deploymentId: string, state: RunStateRequest): Promise<void> {
-  await client().scale({ deploymentId, runState: runStateEnum(state) });
+export async function setWorkloadRunState(transport: Transport, deploymentId: string, state: RunStateRequest): Promise<void> {
+  await client(transport).scale({ deploymentId, runState: runStateEnum(state) });
 }
 
 /** What the control plane echoes for a restart: the environment it happened IN, so no caller can misread where. */
@@ -401,8 +402,8 @@ export interface RestartedWorkload {
  * The release and declared spec do not change; the control plane audits it.
  * A self-managed or local environment answers FailedPrecondition.
  */
-export async function restartWorkload(environmentId: string, workload: string): Promise<RestartedWorkload> {
-  const res = await client().restartWorkload({ environmentId, workload });
+export async function restartWorkload(transport: Transport, environmentId: string, workload: string): Promise<RestartedWorkload> {
+  const res = await client(transport).restartWorkload({ environmentId, workload });
   return {
     environmentId: res.environmentId,
     environmentName: res.environmentName,
@@ -429,13 +430,13 @@ export interface DeleteEnvironmentOptions {
  * Refused (FailedPrecondition) while a custom domain is bound to it, force or
  * not: see isDomainBoundRefusal.
  */
-export async function deleteEnvironment(environmentId: string, options: DeleteEnvironmentOptions = {}): Promise<void> {
+export async function deleteEnvironment(transport: Transport, environmentId: string, options: DeleteEnvironmentOptions = {}): Promise<void> {
   // keep_data is sent only to ASK for it. Unset and false are the same
   // request (delete the data), which is also what a server that does not know
   // the field does with it. A server that drops a keep=true is caught after
   // the fact: the caller confirms the databases were kept through
   // listRetainedDatabases (Overview/keptDataChecks.ts), never trusts it.
-  await client().deleteEnvironment({ environmentId, force: true, ...(options.keepData ? { keepData: true } : {}) });
+  await client(transport).deleteEnvironment({ environmentId, force: true, ...(options.keepData ? { keepData: true } : {}) });
 }
 
 /** True when the control plane does not serve the rpc at all (an older release, or a deployment without it). */
@@ -493,8 +494,8 @@ export interface RetainedDatabase {
 }
 
 /** Every retained database of the org (`orgId`, null for none), across its apps. */
-export async function listRetainedDatabases(orgId: string | null): Promise<RetainedDatabase[]> {
-  const res = await client().listRetainedDatabases(orgRequest({}, orgId));
+export async function listRetainedDatabases(transport: Transport, orgId: string | null): Promise<RetainedDatabase[]> {
+  const res = await client(transport).listRetainedDatabases(orgRequest({}, orgId));
   return (res.retainedDatabases ?? [])
     .filter((row) => row.id !== "")
     .map((row) => ({
@@ -513,8 +514,8 @@ export async function listRetainedDatabases(orgId: string | null): Promise<Retai
  * control plane records the request and its converger performs it; the row
  * stays listed until the volumes are actually gone.
  */
-export async function purgeRetainedDatabase(id: string): Promise<void> {
-  await client().deleteRetainedDatabase({ id });
+export async function purgeRetainedDatabase(transport: Transport, id: string): Promise<void> {
+  await client(transport).deleteRetainedDatabase({ id });
 }
 
 /** True when the control plane refused for a reason the user can act on (billing, permission). */

@@ -98,7 +98,7 @@ func TestDeliveryInboxReplayCannotWidenSignedTwilioRoutes(t *testing.T) {
 	registry := NewRegistry()
 	require.NoError(t, registry.Register(NewTwilioProvider()))
 	receiver := NewEventsReceiver(EventsOptions{
-		Store: f.Repo, Inbox: f.Repo, Intake: f.intake, Registry: registry, PublicURL: twPublic, ConnectionSecrets: secrets,
+		Store: NewStores(f.Repo), Inbox: NewStores(f.Repo), Intake: f.intake, Registry: registry, PublicURL: twPublic, ConnectionSecrets: secrets,
 	})
 	receiver.now = f.relay.now
 	mux := http.NewServeMux()

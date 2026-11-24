@@ -19,7 +19,10 @@ import (
 )
 
 // listNoWorktreeRepo knows no worktree.
-type listNoWorktreeRepo struct{ package_commands.Repository }
+type listNoWorktreeRepo struct {
+	package_commands.Repository
+	package_commands.Placement
+}
 
 func (listNoWorktreeRepo) GetWorktree(context.Context, string) (*db.Worktree, error) {
 	return nil, core.ErrWorktreeNotFound
@@ -29,7 +32,7 @@ func (listNoWorktreeRepo) GetWorktree(context.Context, string) (*db.Worktree, er
 func TestListProcesses_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := package_commands.NewTestPackageCommands(t, package_commands.WithPackageCommandsDeps(package_commands.Deps{Repo: listNoWorktreeRepo{}, Projects: projectaccesstest.For(listNoWorktreeRepo{})}))
+	svc := package_commands.NewTestPackageCommands(t, package_commands.WithPackageCommandsDeps(package_commands.Deps{Repo: listNoWorktreeRepo{}, Placement: listNoWorktreeRepo{}, Projects: projectaccesstest.For(listNoWorktreeRepo{})}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListPackageProcessesRequest, pb.ListPackageProcessesResponse]{
 		{

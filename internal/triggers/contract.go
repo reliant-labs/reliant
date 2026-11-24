@@ -28,9 +28,39 @@ import (
 // ProjectionStore and ProjectionSyncer, and WorkflowResolver beside the two
 // resolvers that implement it.
 
+// OwnerSource is what resolving an activation's owner reads: the owner's
+// connection and the GitHub identity the access refresher recorded. It is a
+// required part of Repo and EventRepo, so a store that cannot resolve owners
+// does not compile (it used to be asserted at run time, and a store without it
+// silently gave every owner no GitHub id, which an `owner.github_id` filter
+// reads as nobody).
+type OwnerSource interface {
+	// GetConnection returns the user's connection; a foreign id is an error.
+	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
+	// GetIntegrationAccessSubject is the user's id at the provider as the
+	// access refresher last recorded it, or "" when none is fresh.
+	GetIntegrationAccessSubject(ctx context.Context, userID, integrationID string, freshAfter time.Time) (string, error)
+}
+
+// ReceiptStore records an authenticated delivery's event together with its
+// receipt link. Intake requires it: a receipt-bearing Accept used to fail at
+// run time with "receipt-aware event store is required".
+type ReceiptStore interface {
+	TriggerDeliveryEvent(ctx context.Context, id, triggerID, userID string) (*core.TriggerEvent, error)
+	RecordDeliveryTriggerEvent(ctx context.Context, id, token string, event *core.TriggerEvent) (stored *core.TriggerEvent, created bool, err error)
+}
+
+// IntakeRepo is what Intake needs: the inbound event repository and the
+// delivery receipts, both required.
+type IntakeRepo interface {
+	EventRepo
+	ReceiptStore
+}
+
 // Repo is the slice of the repository this package reads and writes. The
 // signatures match *db.Repo exactly.
 type Repo interface {
+	OwnerSource
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 	ListAllTriggers(ctx context.Context) ([]*core.Trigger, error)
 	// LockTrigger row-locks the trigger until the surrounding transaction ends.
@@ -45,7 +75,7 @@ type Repo interface {
 	// GetDaemon reports a missing row as svcerr.NotFound.
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 
-	GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error)
+	RootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error)
 	// ListRootWorkflows is a chat's root workflows, newest first.
 	ListRootWorkflows(ctx context.Context, chatID string) ([]*core.Workflow, error)
 	// AbandonFailedWorkflowStart stops a PENDING root whose start is
@@ -56,6 +86,7 @@ type Repo interface {
 // EventRepo is what the inbound path — intake, event fire and redriver —
 // reads and writes. *db.Repo satisfies it.
 type EventRepo interface {
+	OwnerSource
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
@@ -108,8 +139,6 @@ type PollRepo interface {
 	EventRepo
 	GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error)
 	UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error
-	// GetConnection returns the user's connection; a foreign id is an error.
-	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
 }
 
 // FireRepo is what the scheduled firer needs: the trigger repository and the
@@ -133,7 +162,9 @@ type EventFireRepo interface {
 // Redriver require: a store missing any of it does not compile, instead of a
 // capped trigger quietly skipping admission. Stores satisfies it.
 type CapacityStore interface {
-	EnqueueTriggerCapacity(ctx context.Context, ev *core.TriggerEvent, scope store.TriggerCapacityScope) error
+	// EnqueueTriggerCapacitySuperseding enrolls ev and returns the waiting
+	// events it superseded (`waiting: latest`), settled skipped.
+	EnqueueTriggerCapacitySuperseding(ctx context.Context, ev *core.TriggerEvent, scope store.TriggerCapacityScope) ([]*core.TriggerEvent, error)
 	CanLaunchTriggerCapacity(ctx context.Context, eventID string, scope store.TriggerCapacityScope, limits store.TriggerCapacityLimits) (bool, error)
 	NextAdmissibleTriggerCapacityEvent(ctx context.Context, scope store.TriggerCapacityScope, limits store.TriggerCapacityLimits) (*core.TriggerEvent, error)
 	BindTriggerCapacityExecution(ctx context.Context, eventID, workflowID, firstRunID string) error
@@ -146,8 +177,9 @@ type CapacityStore interface {
 	ReleaseUnboundTriggerCapacity(ctx context.Context, e store.TriggerCapacityExecution, reason string) (bool, error)
 	TriggerCapacityStartFenced(ctx context.Context, e store.TriggerCapacityExecution) (bool, error)
 	// ExpirePendingTriggerCapacityEvents settles as failed the waiting events
-	// recorded before recordedBefore, independently of the queue heads.
-	ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) (int64, error)
+	// recorded before recordedBefore, independently of the queue heads, and
+	// returns them as settled.
+	ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) ([]*core.TriggerEvent, error)
 }
 
 // CapacityDescriber is the Temporal read that reconciles occupied slots: the

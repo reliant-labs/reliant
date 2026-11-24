@@ -213,11 +213,11 @@ function ChoiceCard({
       className={cn(
         "group relative flex min-h-[180px] min-w-0 flex-col items-start gap-3 overflow-hidden rounded-xl border-2 p-5 text-left transition-all",
         primary
-          ? "border-primary/40 bg-[linear-gradient(135deg,rgba(56,189,248,0.18),rgba(168,85,247,0.18))]"
+          ? "border-primary/40 bg-primary/10"
           : "border-border/50 bg-background",
         !disabled && (primary
-          ? "hover:border-primary hover:shadow-[0_18px_40px_-20px_rgba(56,189,248,0.55)]"
-          : "hover:border-primary/50 hover:bg-muted/40"),
+          ? "hover:border-primary hover:bg-primary/15"
+          : "hover:border-primary/50 hover:bg-foreground/5"),
         disabled && (busy ? "cursor-wait" : "cursor-not-allowed opacity-60"),
       )}
     >

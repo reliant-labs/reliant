@@ -1470,11 +1470,11 @@ const file_reliant_v1_preset_proto_rawDesc = "" +
 	"\x13presets_by_workflow\x18\x01 \x03(\v2A.reliant.v1.GetDefaultPresetsBatchResponse.PresetsByWorkflowEntryR\x11presetsByWorkflow\x1ah\n" +
 	"\x16PresetsByWorkflowEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x128\n" +
-	"\x05value\x18\x02 \x01(\v2\".reliant.v1.WorkflowDefaultPresetsR\x05value:\x028\x012\xc4\b\n" +
-	"\rPresetService\x12P\n" +
-	"\vListPresets\x12\x1e.reliant.v1.ListPresetsRequest\x1a\x1f.reliant.v1.ListPresetsResponse\"\x00\x12J\n" +
-	"\tGetPreset\x12\x1c.reliant.v1.GetPresetRequest\x1a\x1d.reliant.v1.GetPresetResponse\"\x00\x12q\n" +
-	"\x16ListPresetsForWorkflow\x12).reliant.v1.ListPresetsForWorkflowRequest\x1a*.reliant.v1.ListPresetsForWorkflowResponse\"\x00\x12\x85\x01\n" +
+	"\x05value\x18\x02 \x01(\v2\".reliant.v1.WorkflowDefaultPresetsR\x05value:\x028\x012\xd3\b\n" +
+	"\rPresetService\x12S\n" +
+	"\vListPresets\x12\x1e.reliant.v1.ListPresetsRequest\x1a\x1f.reliant.v1.ListPresetsResponse\"\x03\x90\x02\x01\x12M\n" +
+	"\tGetPreset\x12\x1c.reliant.v1.GetPresetRequest\x1a\x1d.reliant.v1.GetPresetResponse\"\x03\x90\x02\x01\x12t\n" +
+	"\x16ListPresetsForWorkflow\x12).reliant.v1.ListPresetsForWorkflowRequest\x1a*.reliant.v1.ListPresetsForWorkflowResponse\"\x03\x90\x02\x01\x12\x85\x01\n" +
 	"\fCreatePreset\x12\x1f.reliant.v1.CreatePresetRequest\x1a .reliant.v1.CreatePresetResponse\"2\xa2\xbb\x18.:,\n" +
 	"\x06create\x12\"\n" +
 	"\x06preset\x12\x12response.preset.id\x1a\x04name\x12\x95\x01\n" +
@@ -1487,9 +1487,9 @@ const file_reliant_v1_preset_proto_rawDesc = "" +
 	"\x10SetDefaultPreset\x12#.reliant.v1.SetDefaultPresetRequest\x1a$.reliant.v1.SetDefaultPresetResponse\"N\xa2\xbb\x18J:H\n" +
 	"\x12set_default_preset\x12\x19\n" +
 	"\bworkflow\x12\rworkflow_name*\vpreset_name*\n" +
-	"group_name\x12_\n" +
-	"\x10GetDefaultPreset\x12#.reliant.v1.GetDefaultPresetRequest\x1a$.reliant.v1.GetDefaultPresetResponse\"\x00\x12q\n" +
-	"\x16GetDefaultPresetsBatch\x12).reliant.v1.GetDefaultPresetsBatchRequest\x1a*.reliant.v1.GetDefaultPresetsBatchResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"group_name\x12b\n" +
+	"\x10GetDefaultPreset\x12#.reliant.v1.GetDefaultPresetRequest\x1a$.reliant.v1.GetDefaultPresetResponse\"\x03\x90\x02\x01\x12t\n" +
+	"\x16GetDefaultPresetsBatch\x12).reliant.v1.GetDefaultPresetsBatchRequest\x1a*.reliant.v1.GetDefaultPresetsBatchResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_preset_proto_rawDescOnce sync.Once

@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -152,9 +153,9 @@ func TestExecuteTools_GitWorktreeAddRunsWithASuggestion(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	repo := h.Repo()
-	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(repo), repo, cfgpkg.DefaultParsedConfigCacheBytes)
+	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(configadapter.NewORMRecordReader(repo.ORM())), store.NewProjectConfigExtStore(repo.ORM()), cfgpkg.DefaultParsedConfigCacheBytes)
 	executor := &shellOutputExecutor{echo: "Preparing worktree (new branch 'x')\n"}
-	activity := NewExecuteToolsActivity(h.Repo(), executor).WithToolCallResults(testToolCallResults(h.Repo())).WithConfigProvider(provider)
+	activity := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), executor).WithConfigProvider(provider)
 
 	run := func(command string) *message.ToolResult {
 		t.Helper()
@@ -185,7 +186,7 @@ func TestExecuteTools_GitWorktreeAddRunsWithASuggestion(t *testing.T) {
 	assert.Contains(t, out.Suggestion, "worktree tool")
 
 	memory := worktreeRootMemory
-	require.NoError(t, h.Repo().UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	require.NoError(t, store.UpsertProjectConfigRecord(ctx, h.Repo().ORM(), &db.ProjectConfigRecord{
 		ProjectID: project.ID, DaemonID: "daemon-1", GlobalMemoryMD: &memory,
 	}))
 	got = run("git worktree add ~/src/rl-agent-worktrees/reliant-x -b x origin/main")

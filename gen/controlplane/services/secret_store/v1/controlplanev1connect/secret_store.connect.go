@@ -169,18 +169,21 @@ func NewSecretStoreServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			httpClient,
 			baseURL+SecretStoreServiceListSecretAccessProcedure,
 			connect.WithSchema(secretStoreServiceMethods.ByName("ListSecretAccess")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listSecrets: connect.NewClient[v1.ListSecretsRequest, v1.ListSecretsResponse](
 			httpClient,
 			baseURL+SecretStoreServiceListSecretsProcedure,
 			connect.WithSchema(secretStoreServiceMethods.ByName("ListSecrets")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getSecretVersions: connect.NewClient[v1.GetSecretVersionsRequest, v1.GetSecretVersionsResponse](
 			httpClient,
 			baseURL+SecretStoreServiceGetSecretVersionsProcedure,
 			connect.WithSchema(secretStoreServiceMethods.ByName("GetSecretVersions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setSecret: connect.NewClient[v1.SetSecretRequest, v1.SetSecretResponse](
@@ -389,18 +392,21 @@ func NewSecretStoreServiceHandler(svc SecretStoreServiceHandler, opts ...connect
 		SecretStoreServiceListSecretAccessProcedure,
 		svc.ListSecretAccess,
 		connect.WithSchema(secretStoreServiceMethods.ByName("ListSecretAccess")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	secretStoreServiceListSecretsHandler := connect.NewUnaryHandler(
 		SecretStoreServiceListSecretsProcedure,
 		svc.ListSecrets,
 		connect.WithSchema(secretStoreServiceMethods.ByName("ListSecrets")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	secretStoreServiceGetSecretVersionsHandler := connect.NewUnaryHandler(
 		SecretStoreServiceGetSecretVersionsProcedure,
 		svc.GetSecretVersions,
 		connect.WithSchema(secretStoreServiceMethods.ByName("GetSecretVersions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	secretStoreServiceSetSecretHandler := connect.NewUnaryHandler(

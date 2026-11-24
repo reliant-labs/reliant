@@ -46,6 +46,11 @@ type Deps struct {
 	// Selections stores each chat's composer selection (chatselection.Store;
 	// store.ChatSelectionExtStore satisfies it).
 	Selections chatselection.Store
+	// Mailbox queues messages for a thread and announces them (Mailbox,
+	// deps.go).
+	Mailbox Mailbox
+	// AgentMessages reads and removes mailbox rows (AgentMessages, deps.go).
+	AgentMessages AgentMessages
 	// Messages answers the send's idempotency checks (Messages, deps.go).
 	Messages Messages
 	// ToolBlocks reads tool-result blocks for the branch repair and
@@ -77,6 +82,13 @@ type Deps struct {
 	// lists ignore org_id.
 	// forge:optional-dep
 	Orgs OrgResolver
+
+	// Workflows, Worktrees and ProjectRows are the by-id reads the run
+	// lifecycle and the launcher make (store.WorkflowExtStore,
+	// WorktreeExtStore, ProjectExtStore).
+	Workflows   launch.WorkflowLoader
+	Worktrees   launch.WorktreeReader
+	ProjectRows launch.ProjectReader
 }
 
 // Temporal is the slice of the Temporal client the chat handlers use, and
@@ -132,6 +144,12 @@ func (d Deps) validateDeps() error {
 	if d.Selections == nil {
 		return fmt.Errorf("chat: Deps.Selections is required")
 	}
+	if d.Mailbox == nil {
+		return fmt.Errorf("chat: Deps.Mailbox is required")
+	}
+	if d.AgentMessages == nil {
+		return fmt.Errorf("chat: Deps.AgentMessages is required")
+	}
 	if d.Messages == nil {
 		return fmt.Errorf("chat: Deps.Messages is required")
 	}
@@ -181,7 +199,7 @@ func New(deps Deps) (*Service, error) {
 	}
 	return &Service{
 		deps:    deps,
-		runs:    runs.New(runs.Deps{Repo: deps.Repo, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
+		runs:    runs.New(runs.Deps{Repo: deps.Repo, Workflows: deps.Workflows, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
 		threads: threads.New(threads.Deps{Repo: deps.Repo, Signaler: deps.Temporal, ToolCanceler: deps.Router}),
 	}, nil
 }
@@ -196,7 +214,7 @@ func New(deps Deps) (*Service, error) {
 // disagree.
 func (s *Service) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
+		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Workflows: s.deps.Workflows, Worktrees: s.deps.Worktrees, ProjectRows: s.deps.ProjectRows, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
 	})
 	return s.launcherImpl
 }

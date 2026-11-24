@@ -159,9 +159,13 @@ func registerNodeTypeActivities() {
 // This function registers activity instances with their runtime dependencies.
 func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	var workflowRuns handlers.WorkflowRuns
+	var toolCalls handlers.ToolCalls
 	var questionsByStep handlers.QuestionsByStep
+	var workspaceRows handlers.WorkspaceRows
 	if deps.Repo != nil {
+		workspaceRows = handlers.NewWorkspaceRows(deps.Repo.ORM())
 		workflowRuns = handlers.NewWorkflowRuns(deps.Repo.ORM())
+		toolCalls = handlers.NewToolCalls(deps.Repo.ORM())
 		questionsByStep = store.NewQuestionExtStore(deps.Repo.ORM())
 	}
 
@@ -169,7 +173,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// MESSAGE PROCESSING ACTIVITIES
 	// ========================================================================
 
-	saveMessage := handlers.NewSaveMessageActivity(deps.Repo)
+	saveMessage := handlers.NewSaveMessageActivity(handlers.SaveMessageDeps{Store: deps.Repo, Threads: deps.Threads})
 	v2.RegisterActivity(registry, saveMessage)
 	// A node's save_message is written by the worker that executes the node,
 	// through the same write path as the SaveMessage activity.
@@ -184,7 +188,13 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	if deps.Repo != nil {
 		stoppedAgents = store.NewToolCallExtStore(deps.Repo.ORM())
 	}
-	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: deps.Repo, Spawns: spawnTree, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderBackoff(deps.ProviderBackoff))
+	// The projects attached to a chat, which its tools can run in (a nil
+	// *db.Repo here would be a non-nil interface that panics).
+	var chatProjects handlers.ChatProjectLister
+	if deps.Repo != nil {
+		chatProjects = deps.Repo
+	}
+	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: deps.Repo, Spawns: spawnTree, Threads: deps.Threads, ToolResults: toolCalls, Hub: deps.StreamingHub, ToolsFactory: deps.ToolsFactory, ConfigProvider: deps.ConfigProvider, DriverResolver: deps.DriverResolver, MCPBinder: deps.MCPBinder}).WithModelEndpoints(modelEndpoints).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderBackoff(deps.ProviderBackoff).WithChatProjects(chatProjects))
 
 	// ========================================================================
 	// TOOL EXECUTION ACTIVITIES
@@ -194,11 +204,9 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// provider CallLLM offered them from (cached per config version on the
 	// worker), not by re-reading the whole config row per call.
 	var reviver handlers.WorktreeReviver
-	var toolResults handlers.ToolCallResults
 	var approvalsLookup handlers.ApprovalLookup
 	var capacitySlots handlers.TriggerCapacitySlotStore
 	if deps.Repo != nil {
-		toolResults = store.NewToolCallResultExtStore(deps.Repo.ORM())
 		approvalsLookup = store.NewApprovalExtStore(deps.Repo.ORM())
 		capacitySlots = handlers.NewTriggerCapacitySlots(deps.Repo.ORM())
 	}
@@ -209,15 +217,15 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	if deps.Repo != nil {
 		runFunding = handlers.NewRunFundingStore(deps.Repo.ORM(), deps.Repo)
 	}
-	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor).WithToolCallResults(toolResults).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
-	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor).WithToolCallResults(toolResults).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, workspaceRows, toolCalls, deps.ToolExecutor).WithRunFunding(runFunding).WithToolUsage(deps.ToolUsage).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter).WithChatProjects(chatProjects))
+	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, workspaceRows, toolCalls, deps.ToolExecutor).WithRunFunding(runFunding).WithToolUsage(deps.ToolUsage).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter).WithChatProjects(chatProjects))
 	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger).WithHostedExecutor(deps.HostedActions).WithSecretResolver(deps.SecretResolver))
 
 	// ========================================================================
 	// CONTEXT MANAGEMENT ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewCompactActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
+	v2.RegisterActivity(registry, handlers.NewCompactActivity(handlers.CompactDeps{Store: deps.Repo, Threads: deps.Threads, ToolResults: toolCalls, DriverResolver: deps.DriverResolver}).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
 	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderPreferences(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewDraftAutomationActivity(deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderPreferences(deps.Repo))
 
@@ -231,7 +239,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	}
 
 	v2.RegisterActivity(registry, handlers.NewApprovalCreateActivity(handlers.ApprovalCreateDeps{Repo: deps.Repo, Approvals: approvalsLookup}))
-	v2.RegisterActivity(registry, handlers.NewAutomationApprovalActivity(deps.ToolsFactory).WithExecutionStore(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewAutomationApprovalActivity(deps.ToolsFactory).WithExecutionStore(deps.Repo, workspaceRows))
 	v2.RegisterActivity(registry, handlers.NewApprovalResolveActivity(approvals))
 
 	// ========================================================================
@@ -245,7 +253,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// RUN STEP ACTIVITIES
 	// ========================================================================
 
-	runStep := handlers.NewExecuteRunStepActivity(deps.Repo, deps.ToolExecutor, deps.RunExecutor).WithDaemonRouter(deps.DaemonRouter)
+	runStep := handlers.NewExecuteRunStepActivity(deps.Repo, workspaceRows, deps.ToolExecutor, deps.RunExecutor).WithDaemonRouter(deps.DaemonRouter)
 	if deps.StepKeys != nil {
 		runStep = runStep.WithStepKeys(deps.StepKeys)
 	}
@@ -260,9 +268,9 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// WORKTREE ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewCreateWorktreeActivity(deps.Repo, deps.DaemonRouter))
-	v2.RegisterActivity(registry, handlers.NewGitPublishActivity(deps.Repo, deps.DaemonRouter, deps.Connections).WithLedger(deps.WriteLedger))
-	v2.RegisterActivity(registry, handlers.NewDeleteWorktreeActivity(deps.Repo, deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewCreateWorktreeActivity(deps.Repo, workspaceRows, deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewGitPublishActivity(deps.Repo, workspaceRows, deps.DaemonRouter, deps.Connections).WithLedger(deps.WriteLedger))
+	v2.RegisterActivity(registry, handlers.NewDeleteWorktreeActivity(deps.Repo, workspaceRows, deps.DaemonRouter))
 
 	// ========================================================================
 	// WORKFLOW MANAGEMENT ACTIVITIES
@@ -276,14 +284,14 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 		attention = handlers.NewAttentionRecorder(deps.Repo.ORM())
 		checkpoints = store.NewWorkflowCheckpointExtStore(deps.Repo.ORM())
 	}
-	v2.RegisterActivity(registry, handlers.NewLoadWorkflowActivity(deps.Repo))
-	v2.RegisterActivity(registry, handlers.NewPreflightDaemonCheckActivity(deps.Repo, deps.ToolExecutor))
-	v2.RegisterActivity(registry, handlers.NewPreflightRequirementsActivity(deps.Repo, deps.ToolExecutor, deps.Connections).WithDaemonRouter(deps.DaemonRouter))
-	v2.RegisterActivity(registry, handlers.NewMachineResumeWakeActivity(deps.Repo, deps.ToolExecutor))
+	v2.RegisterActivity(registry, handlers.NewLoadWorkflowActivity(deps.Repo, workspaceRows))
+	v2.RegisterActivity(registry, handlers.NewPreflightDaemonCheckActivity(deps.Repo, workspaceRows, deps.ToolExecutor))
+	v2.RegisterActivity(registry, handlers.NewPreflightRequirementsActivity(deps.Repo, workspaceRows, deps.ToolExecutor, deps.Connections).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewMachineResumeWakeActivity(deps.Repo, workspaceRows, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewGreenfieldProbeActivity(deps.Repo, deps.DaemonRouter))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(handlers.WorkflowStatusDeps{Repo: deps.Repo, Runs: runRecords, Workflows: workflowRuns, Attention: attention}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewThreadStatusActivity(deps.Repo))
-	v2.RegisterLifecycleActivity(registry, handlers.NewUsageLimitWaitActivity(deps.Repo, deps.ProviderBackoff))
+	v2.RegisterLifecycleActivity(registry, handlers.NewUsageLimitWaitActivity(handlers.UsageLimitWaitDeps{Store: deps.Repo, Waits: deps.ProviderBackoff, Threads: deps.Threads}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewTriggerCapacitySlotActivity(handlers.TriggerCapacitySlotDeps{Slots: capacitySlots}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowCheckpointActivity(handlers.WorkflowCheckpointDeps{Checkpoints: checkpoints}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowErrorActivity(deps.Repo))

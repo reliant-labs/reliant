@@ -41,9 +41,11 @@ export function normalizeProjectIds(ids: Iterable<unknown>): string[] {
 /**
  * The `?projects=` search value, read: comma-separated ids. The router's
  * default parser JSON-parses a value it can, so a lone number or an array
- * arrives as one; anything else is no filter.
+ * arrives as one; anything else is no filter. `all` is every project, said
+ * out loud (the shell's All: lib/urlState/shellScope.ts), so no filter too.
  */
 export function parseProjectsParam(value: unknown): string[] {
+  if (value === "all") return [];
   if (typeof value === "string") return normalizeProjectIds(value.split(","));
   if (Array.isArray(value)) return normalizeProjectIds(value.map((v) => (typeof v === "number" ? String(v) : v)));
   if (typeof value === "number") return normalizeProjectIds([String(value)]);

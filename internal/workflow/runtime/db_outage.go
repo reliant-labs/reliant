@@ -206,14 +206,14 @@ func (w *ActivityWrapper[I, O]) awaitDatabase(ctx context.Context, workflowID, a
 	return databaseUnavailableError(activityType, cause, back)
 }
 
-// databaseAnswers probes the database through the store the wrapper already
-// holds (and so through the same pool and PgBouncer the activity used). Any
-// answer counts, a missing row included; only an outage or a probe that
-// timed out does not.
+// databaseAnswers probes the database through the workflow reader the
+// wrapper already holds (and so through the same pool and PgBouncer the
+// activity used). Any answer counts, a missing row included; only an outage
+// or a probe that timed out does not.
 func (w *ActivityWrapper[I, O]) databaseAnswers(ctx context.Context, workflowID string) bool {
 	probeCtx, cancel := context.WithTimeout(ctx, dbProbeTimeout)
 	defer cancel()
-	_, err := w.repo.GetWorkflow(probeCtx, workflowID)
+	_, err := w.workflows.LoadWorkflow(probeCtx, workflowID)
 	if err == nil {
 		return true
 	}

@@ -240,7 +240,7 @@ export function OrganizationUsageView({ orgId, nowMs: fixedNow, scope = "organiz
                 {(usage) => <TopDrivers usage={usage} categories={HOSTED} title="Environments (hosting and observability)" basis="list_equivalent" empty="No priced hosting usage in range." />}
               </Loaded>
             </div>
-            <p className="mt-3 text-xs text-ink-muted">A breakdown by individual deployment or dev box is not available from the billing history yet.</p>
+            <p className="mt-3 text-xs text-ink-muted">A breakdown by individual deployment or sandbox is not available from the billing history yet.</p>
           </UsagePanel>
           <Loaded query={byCategoryView} orgId={orgId} what="spend rate">
             {(usage) => <SpendRatePanel usage={usage} monthToDate={mtdView.data?.orgId === orgId ? mtdView.data : undefined} nowMs={nowMs} />}

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   setChatThreadMode: vi.fn(),
 }));
 
+vi.mock("../../../hooks/useDaemonStatus", () => ({ useDaemonStatus: () => ({ daemons: [], activeDaemon: null, loading: false }) }));
 vi.mock("../thread-views/useChatThreadMode", () => ({
   useChatThreadMode: () => ({ mode: mocks.mode, preference: "auto" }),
   setChatThreadMode: mocks.setChatThreadMode,

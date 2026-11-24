@@ -116,7 +116,7 @@ func (s *Service) settleArchived(ctx context.Context, userID string, worktree *d
 	if s.deps.Settler == nil || worktree.Path == "" || projectPath == "" {
 		return
 	}
-	archived, err := s.deps.Repo.GetWorktree(ctx, worktree.ID)
+	archived, err := s.getWorktree(ctx, worktree.ID)
 	if err != nil || archived == nil {
 		return
 	}
@@ -184,7 +184,7 @@ func (s *Service) sendToMachine(ctx context.Context, userID string, target machi
 // either up is the failure it is: a deadline stays a deadline, an outage is
 // Internal.
 func (s *Service) worktreeBelongsToUser(ctx context.Context, worktreeID string, userID string) error {
-	worktree, err := s.deps.Repo.GetWorktree(ctx, worktreeID)
+	worktree, err := s.getWorktree(ctx, worktreeID)
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -192,7 +192,7 @@ func (s *Service) worktreeBelongsToUser(ctx context.Context, worktreeID string, 
 		return svcerr.NotFound("worktree")
 	}
 
-	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, worktree.ProjectID, userID); err != nil {
+	if _, err := s.deps.Projects.GetProjectWithUserCheck(ctx, worktree.ProjectID, userID); err != nil {
 		if svcerr.IsNotFound(err) {
 			return svcerr.NotFound("worktree")
 		}
@@ -205,7 +205,7 @@ func (s *Service) worktreeBelongsToUser(ctx context.Context, worktreeID string, 
 // projectBelongsToUser checks if a project belongs to a user. Missing and
 // someone else's are the store's one NotFound (core.ErrProjectNotFound).
 func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
-	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID); err != nil {
+	if _, err := s.deps.Projects.GetProjectWithUserCheck(ctx, projectID, userID); err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
@@ -324,7 +324,7 @@ func (s *Service) ownerCheckout(ctx context.Context, userID string, project *db.
 // laptop with no checkout, whose "not here" used to surface as "project has
 // no git repos" for a project that is one.
 func (s *Service) listProjectRepos(ctx context.Context, userID string, project *db.Project, place func() (placed, error)) ([]*core.Repo, error) {
-	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
+	repos, err := s.listRepos(ctx, project.ID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
 	}
@@ -389,7 +389,7 @@ func (s *Service) repoDiscoveryError(ctx context.Context, userID string, target 
 // Returns the resolved absolute path and the resolved repo (nil when falling
 // through to legacy single-repo behavior with no Repo rows).
 func (s *Service) resolveRepoPath(ctx context.Context, worktree *db.Worktree, repoID string) (string, *core.Repo, error) {
-	repos, err := s.deps.Repo.ListReposByProject(ctx, worktree.ProjectID)
+	repos, err := s.listRepos(ctx, worktree.ProjectID)
 	if err != nil {
 		return "", nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
 	}

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 )
@@ -11,6 +12,9 @@ import (
 // (user_app_sessions, one row per user). A concurrent call on another replica
 // inserts nothing and reports false, so exactly one caller sees true.
 func RecordFirstAppSession(ctx context.Context, db orm.Context, userID string) (bool, error) {
+	if userID == "" {
+		return false, errors.New("user_id cannot be empty")
+	}
 	result, err := db.Bun().NewRaw(`
  INSERT INTO user_app_sessions (user_id) VALUES (?)
  ON CONFLICT (user_id) DO NOTHING`, userID).Exec(ctx)

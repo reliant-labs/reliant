@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -120,7 +121,7 @@ func TestMCPErrorsOnTheWire(t *testing.T) {
 	t.Parallel()
 
 	repo := ownedProjectRepo(t, `{}`)
-	_, client := mcp.NewTestMCPServer(t, mcp.WithMCPDeps(mcp.Deps{Repo: repo, Projects: projectaccesstest.For(repo)}))
+	_, client := mcp.NewTestMCPServer(t, withDeps(mcp.Deps{Repo: repo, Projects: projectaccesstest.For(repo), ProjectConfigs: repo}))
 	_, err := client.ListServers(context.Background(), connect.NewRequest(&reliantv1.ListServersRequest{ProjectId: "p-2"}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))

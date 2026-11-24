@@ -431,6 +431,35 @@ Use ` + "`save_message`" + ` to capture output without a separate save_message n
     content: "{{output.response_text}}"
 ` + "```" + `
 
+### Observability (` + "`observe`" + `)
+
+Any node can declare what it records when it finishes: attributes on its span, span events, and metrics, each a template over the node's own result. A workflow-level ` + "`observe:`" + ` is the default for every node of that graph: attributes merge by key and metrics by name (the node wins), and events are concatenated, defaults first.
+
+` + "```yaml" + `
+- id: plan
+  type: compute
+  outputs:
+    cut: "{{ inputs.ready }}"
+    hold: "{{ inputs.ready ? '' : 'not_ready' }}"   # why it did not cut, as a code
+  observe:
+    attributes:
+      attempt: "{{ node.attempt }}"
+    events:
+      - name: decision         # the recommended convention: name, value, reason
+        attributes:
+          name: cut
+          value: "{{ output.cut ? 'cut' : 'no_cut' }}"
+          reason: "{{ output.hold }}"
+    metrics:
+      - name: rc_train.ticks
+        kind: counter          # counter, histogram or gauge
+        attributes: { decision: "{{ output.cut ? 'cut' : 'no_cut' }}" }
+` + "```" + `
+
+An expression sees ` + "`output`" + ` (this node's result), ` + "`inputs`" + `, ` + "`trigger`" + `, ` + "`workflow`" + `, ` + "`iter`" + ` and ` + "`node`" + ` (` + "`id`" + `, ` + "`type`" + `, ` + "`path`" + `, ` + "`attempt`" + `, ` + "`duration_ms`" + `); not ` + "`nodes`" + `, so a value computed from other nodes becomes one of this node's outputs first. An event's optional ` + "`when:`" + ` (raw CEL) gates it, and ` + "`each:`" + ` emits one event per element of a list, bound to ` + "`item`" + `. A metric's ` + "`value`" + ` is optional for a counter and required for a histogram or gauge. Names and keys are lower-case and dotted (` + "`rc_train.ticks`" + `). Recording never fails, retries or delays the node, and validation only warns about an ` + "`observe`" + ` expression; ` + "`reliant workflow lint`" + ` reports it as an error (` + "`observe-invalid`" + `).
+
+This release reads and validates ` + "`observe`" + ` and records nothing yet. A server that predates it refuses a file that uses it, so add ` + "`observe`" + ` to a workflow only once every server and CLI that reads the file runs this release or later.
+
 ---
 
 `)

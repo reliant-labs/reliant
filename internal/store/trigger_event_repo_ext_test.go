@@ -239,7 +239,7 @@ func TestTriggerEventQueries(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListStalePendingTriggerEvents(%d): %v", limit, err)
 		}
-		twin, err := env.Repo.ListStalePendingTriggerEvents(ctx, cutoff, limit)
+		twin, err := store.ListStalePendingTriggerEvents(ctx, env.ORM, cutoff, limit)
 		if err != nil {
 			t.Fatalf("Repo.ListStalePendingTriggerEvents(%d): %v", limit, err)
 		}
@@ -263,7 +263,7 @@ func TestTriggerEventQueries(t *testing.T) {
 	if settled, err := store.SettlePendingTriggerEvent(ctx, env.ORM, "ev-pending-1", core.TriggerEventSkipped, "filtered", nil); err != nil || !settled {
 		t.Fatalf("SettlePendingTriggerEvent = %v, %v; want settled", settled, err)
 	}
-	if settled, err := env.Repo.SettlePendingTriggerEvent(ctx, "ev-pending-1", core.TriggerEventFailed, "again", nil); err != nil || settled {
+	if settled, err := store.SettlePendingTriggerEvent(ctx, env.ORM, "ev-pending-1", core.TriggerEventFailed, "again", nil); err != nil || settled {
 		t.Fatalf("Repo.SettlePendingTriggerEvent(settled) = %v, %v; want not applied", settled, err)
 	}
 	if claimed, err := env.Repo.ClaimPendingTriggerEvent(ctx, "ev-pending-2", map[string]any{"start": "y"}, nil); err != nil || !claimed {
@@ -381,17 +381,17 @@ func TestTriggerFiringQueries(t *testing.T) {
 		if err != nil {
 			t.Fatalf("RecentTriggerFirings(%d): %v", per, err)
 		}
-		twin, err := env.Repo.RecentTriggerFirings(ctx, storetest.SeedUserID, triggerIDs, per)
+		viaExt, err := store.NewTriggerEventExtStore(env.ORM).RecentTriggerFirings(ctx, storetest.SeedUserID, triggerIDs, per)
 		if err != nil {
-			t.Fatalf("Repo.RecentTriggerFirings(%d): %v", per, err)
+			t.Fatalf("TriggerEventExtStore.RecentTriggerFirings(%d): %v", per, err)
 		}
-		sameValue(t, "RecentTriggerFirings", port, twin)
+		sameValue(t, "RecentTriggerFirings", port, viaExt)
 
 		port, err = store.FiringsSinceLastSuccess(ctx, env.ORM, storetest.SeedUserID, triggerIDs, per)
 		if err != nil {
 			t.Fatalf("FiringsSinceLastSuccess(%d): %v", per, err)
 		}
-		twin, err = env.Repo.FiringsSinceLastSuccess(ctx, storetest.SeedUserID, triggerIDs, per)
+		twin, err := env.Repo.FiringsSinceLastSuccess(ctx, storetest.SeedUserID, triggerIDs, per)
 		if err != nil {
 			t.Fatalf("Repo.FiringsSinceLastSuccess(%d): %v", per, err)
 		}

@@ -105,6 +105,9 @@ type IntegrationSettings struct {
 	GitHubAppSlug string
 	// GitHubBot is that App's bot as GitHub names it in a webhook's sender.
 	GitHubBot github.OurBot
+	// PRRecordRepositories are the repositories PR records are kept for
+	// (RELIANT_PR_RECORD_REPOSITORIES); empty keeps none.
+	PRRecordRepositories []string
 }
 
 // Integrations is the shared IntegrationsConfig, trimmed as every reader of
@@ -124,6 +127,8 @@ func Integrations(cfg *configv1.IntegrationsConfig) IntegrationSettings {
 		},
 		GitHubAppSlug: strings.TrimSpace(cfg.GetGithubAppSlug()),
 		GitHubBot:     github.BotFrom(cfg.GetGithubBotUserId(), cfg.GetGithubBotLogin()),
+
+		PRRecordRepositories: cfg.GetPrRecordRepositories(),
 	}
 }
 

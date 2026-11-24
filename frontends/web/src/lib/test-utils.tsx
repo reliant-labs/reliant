@@ -21,6 +21,12 @@
 //     in page tests; the production providers do too much (telemetry,
 //     auth bridge, event bus) for a hermetic unit test.
 //
+//   - renderWithSession(ui, { session }): wraps the UI in lib/session's
+//     SessionProvider, signed in as TEST_SESSION_USER by default (`session:
+//     null` is signed out), and returns setSession() to sign in or out
+//     mid-test. Use it for anything that reads useSignedIn() / useSession()
+//     (the shell's frame, the keyboard host) instead of seeding the auth store.
+//
 // See the `frontend-testing` skill for recipes and anti-patterns.
 
 import { create, type DescMessage } from "@bufbuild/protobuf";
@@ -32,6 +38,7 @@ import {
 import { render, type RenderOptions, type RenderResult } from "@testing-library/react";
 
 import { setTransport } from "@/lib/connect";
+import { fixedSession, SessionProvider, type SessionAuth, type SessionUser } from "@/lib/session";
 
 import type {
   Transport,
@@ -198,4 +205,37 @@ export function renderWithTransport(
     ...renderOptions,
   });
   return { ...result, queryClient: client };
+}
+
+/** The signed-in user `renderWithSession` uses by default. */
+export const TEST_SESSION_USER: SessionUser = { id: "u1", email: "ada@example.com", name: "Ada" };
+
+const SIGNED_OUT: SessionAuth = { user: null, isAuthenticated: false, isLoading: false, getToken: async () => null };
+
+export interface RenderWithSessionOptions extends Omit<RenderOptions, "wrapper"> {
+  /** The session the tree reads; null is signed out. Default: TEST_SESSION_USER, signed in. */
+  session?: SessionAuth | null;
+}
+
+/**
+ * renderWithSession wraps the UI in a SessionProvider, so whatever reads
+ * useSignedIn() / useSession() sees `session`. setSession() swaps it and
+ * re-renders, which is how a test signs out (or in) mid-way.
+ */
+export function renderWithSession(
+  ui: ReactElement,
+  { session = fixedSession(TEST_SESSION_USER), ...renderOptions }: RenderWithSessionOptions = {},
+): RenderResult & { setSession: (next: SessionAuth | null) => void } {
+  let current = session ?? SIGNED_OUT;
+  const result = render(ui, {
+    wrapper: ({ children }) => <SessionProvider auth={current}>{children}</SessionProvider>,
+    ...renderOptions,
+  });
+  return {
+    ...result,
+    setSession: (next) => {
+      current = next ?? SIGNED_OUT;
+      result.rerender(ui);
+    },
+  };
 }

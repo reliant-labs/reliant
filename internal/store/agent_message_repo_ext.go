@@ -66,16 +66,18 @@ import (
 // agentMessageColumns is the column list the passthrough reads scan, in
 // scanAgentMessage's order.
 const agentMessageColumns = `id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
-    status, created_at, delivered_at, delivered_message_id, attachments, synthesized, subject, display_style`
+    status, created_at, delivered_at, delivered_message_id, attachments, synthesized, subject, display_style, author_user_id`
 
 // insertAgentMessageSQL is the insert every enqueue shares; each appends its
 // own conflict clause. attachments is NULL for none (see
-// agentMessageAttachments).
+// agentMessageAttachments). author_user_id is NULL for the chat's owner and
+// for every agent-to-agent row; it is how a queued human message keeps its
+// author until the drain saves it.
 const insertAgentMessageSQL = `
 INSERT INTO agent_messages (
     id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
-    status, created_at, attachments, synthesized, subject, display_style
-) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9::jsonb, ?10, ?11, ?12)`
+    status, created_at, attachments, synthesized, subject, display_style, author_user_id
+) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9::jsonb, ?10, ?11, ?12, ?13)`
 
 func agentMessageInsertArgs(msg *core.AgentMessage) ([]any, error) {
 	attachments, err := agentMessageAttachments(msg.Attachments)
@@ -83,7 +85,7 @@ func agentMessageInsertArgs(msg *core.AgentMessage) ([]any, error) {
 		return nil, err
 	}
 	return []any{msg.ID, msg.ChatID, msg.FromThreadID, msg.ToThreadID, msg.Kind, msg.Body, msg.ToolCallID,
-		msg.Status, msg.CreatedAt, attachments, msg.Synthesized, msg.Subject, msg.DisplayStyle}, nil
+		msg.Status, msg.CreatedAt, attachments, msg.Synthesized, msg.Subject, msg.DisplayStyle, msg.AuthorUserID}, nil
 }
 
 // EnqueueAgentMessage queues msg.
@@ -236,6 +238,9 @@ func requireSlotHeldBySameSpawn(ctx context.Context, db orm.Context, msg *core.A
 // GetAgentMessage returns the row with this id, whatever its status, or
 // (nil, nil) when there is none.
 func GetAgentMessage(ctx context.Context, db orm.Context, id string) (*core.AgentMessage, error) {
+	if id == "" {
+		return nil, fmt.Errorf("message ID cannot be empty")
+	}
 	row, err := GetAgentMessageByID(ctx, db, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -252,6 +257,12 @@ func GetAgentMessage(ctx context.Context, db orm.Context, id string) (*core.Agen
 // fresh send and has to be able to take its id. A queued or delivered row is
 // never touched.
 func DeleteUndeliveredAgentMessage(ctx context.Context, db orm.Context, id, chatID string) (bool, error) {
+	if id == "" {
+		return false, fmt.Errorf("message ID cannot be empty")
+	}
+	if chatID == "" {
+		return false, fmt.Errorf("chat ID cannot be empty")
+	}
 	res, err := db.Bun().NewDelete().Model((*AgentMessage)(nil)).
 		Where("id = ?", id).
 		Where("chat_id = ?", chatID).
@@ -263,6 +274,9 @@ func DeleteUndeliveredAgentMessage(ctx context.Context, db orm.Context, id, chat
 // ListQueuedAgentMessagesForThread returns the thread's queued messages in
 // the order they were sent — delivery order is load-bearing.
 func ListQueuedAgentMessagesForThread(ctx context.Context, db orm.Context, toThreadID string) ([]*core.AgentMessage, error) {
+	if toThreadID == "" {
+		return nil, fmt.Errorf("to thread ID cannot be empty")
+	}
 	rows, err := db.Query(ctx, `SELECT `+agentMessageColumns+`
 FROM agent_messages
 WHERE to_thread_id = $1 AND status = 1
@@ -284,6 +298,9 @@ ORDER BY created_at ASC`, toThreadID)
 
 // CountQueuedAgentMessagesForThread counts the thread's queued messages.
 func CountQueuedAgentMessagesForThread(ctx context.Context, db orm.Context, toThreadID string) (int64, error) {
+	if toThreadID == "" {
+		return 0, fmt.Errorf("to thread ID cannot be empty")
+	}
 	var n int64
 	err := db.QueryRow(ctx, `SELECT count(*) FROM agent_messages WHERE to_thread_id = $1 AND status = 1`, toThreadID).Scan(&n)
 	return n, err
@@ -368,6 +385,12 @@ func SetAgentMessagesDeliveredMessageID(ctx context.Context, db orm.Context, ids
 // untouched, means it was already delivered (or never existed, or belongs to
 // another chat).
 func CancelQueuedAgentMessage(ctx context.Context, db orm.Context, id, chatID string) (bool, error) {
+	if id == "" {
+		return false, fmt.Errorf("message ID cannot be empty")
+	}
+	if chatID == "" {
+		return false, fmt.Errorf("chat ID cannot be empty")
+	}
 	res, err := db.Bun().NewDelete().Model((*AgentMessage)(nil)).
 		Where("id = ?", id).
 		Where("chat_id = ?", chatID).
@@ -508,7 +531,7 @@ func scanAgentMessage(rows *sql.Rows) (*core.AgentMessage, error) {
 	)
 	if err := rows.Scan(&msg.ID, &msg.ChatID, &msg.FromThreadID, &msg.ToThreadID, &msg.Kind, &msg.Body, &msg.ToolCallID,
 		&msg.Status, &msg.CreatedAt, &msg.DeliveredAt, &msg.DeliveredMessageID, &attachments, &msg.Synthesized,
-		&msg.Subject, &msg.DisplayStyle); err != nil {
+		&msg.Subject, &msg.DisplayStyle, &msg.AuthorUserID); err != nil {
 		return nil, err
 	}
 	msg.Attachments = agentMessageAttachmentIDs(attachments)
@@ -532,6 +555,7 @@ func agentMessageFromRow(row *AgentMessage) *core.AgentMessage {
 		Synthesized:        row.Synthesized,
 		Subject:            row.Subject,
 		DisplayStyle:       row.DisplayStyle,
+		AuthorUserID:       row.AuthorUserID,
 	}
 }
 
