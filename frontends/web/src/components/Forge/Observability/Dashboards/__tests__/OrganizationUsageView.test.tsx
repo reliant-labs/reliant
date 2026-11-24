@@ -5,6 +5,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { transport as appTransport } from "@/lib/connect";
 import type { OrganizationUsageRequest } from "@/services/controlPlane/observability/organizationUsageApi";
 
 import { OrganizationUsageView } from "../OrganizationUsageView";
@@ -57,7 +58,8 @@ describe("OrganizationUsageView", () => {
     expect(new Set(day.map((req) => req.groupBy))).toEqual(new Set(["category", "env", "model"]));
     expect(day[0]).toMatchObject({ startMs: Date.parse("2026-09-26T00:00:00Z"), endMs: Date.parse("2026-10-26T00:00:00Z") });
     expect(calls).toContainEqual({ orgId: ORG, startMs: Date.parse("2026-10-01T00:00:00Z"), endMs: Date.parse("2026-11-01T00:00:00Z"), granularity: "month", groupBy: "category" });
-    expect(getSummary).toHaveBeenCalledWith(ORG);
+    // Outside a TransportScope the read goes over the app's transport.
+    expect(getSummary).toHaveBeenCalledWith(ORG, appTransport);
   });
 
   it("renders every panel from a populated response, each figure with its basis", async () => {
@@ -269,7 +271,8 @@ describe("OrganizationUsageView", () => {
     await user.click(within(screen.getByTestId("usage-range")).getByRole("button", { name: "12 months" }));
     await waitFor(() =>
       expect(listUsage).toHaveBeenCalledWith(
-        expect.objectContaining({ granularity: "month", groupBy: "env", startMs: Date.parse("2025-11-01T00:00:00Z"), endMs: Date.parse("2026-11-01T00:00:00Z") })
+        expect.objectContaining({ granularity: "month", groupBy: "env", startMs: Date.parse("2025-11-01T00:00:00Z"), endMs: Date.parse("2026-11-01T00:00:00Z") }),
+        appTransport
       )
     );
   });
