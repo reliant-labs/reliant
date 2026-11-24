@@ -32,8 +32,8 @@ func TestListProjectsWithApps_Generated(t *testing.T) {
 
 	// project.NewTestProject (helpers_gen_test.go) returns the
 	// project *Service wired with stubbed dependencies. Override one
-	// with project.WithProjectDeps(...), or per-row via Case.Setup.
-	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: &project.MockRepository{
+	// with withDeps(...), or per-row via Case.Setup.
+	svc := project.NewTestProject(t, withDeps(project.Deps{Repo: &project.MockRepository{
 		ListProjectsFunc:                  func(context.Context, db.ProjectFilters) ([]*db.Project, error) { return nil, nil },
 		ListReposByProjectsFunc:           func(context.Context, []string) ([]*core.Repo, error) { return nil, nil },
 		ListRepoForgeAppsByProjectsFunc:   func(context.Context, []string) ([]core.RepoForgeApp, error) { return nil, nil },

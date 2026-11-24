@@ -3,12 +3,13 @@
 /**
  * The one app the demo has data for: project `shop`, environments
  * env-dev / env-staging / env-prod. Every answer the demo transport gives is
- * about it, and a read that names another project or environment gets an
+ * about it, and a read that names another org, project or environment gets an
  * EMPTY answer — never shop's data, and never the generated defaults' made-up
  * rows (scopedToDemo).
  *
  * What "names" means: a string field, or a repeated one, whose name says it
- * selects a project (`project`, `project_id`, `project_name`, `project_slug`,
+ * selects an org (`org_id`, plural `org_ids`, including prefixed fields),
+ * which must be shopStory's DEMO_ORG, or a project (`project`, `project_id`, `project_name`, `project_slug`,
  * or any of those after a prefix: `parent_project_id`), an environment by id
  * (ending `environment_id` / `env_id`, plural `_ids`) or an environment by
  * name (ending `environment` / `environment_name` / `env` / `env_name`,
@@ -21,6 +22,8 @@
 import { create, isMessage, type DescMessage, type DescMethod, type DescService, type Message } from "@bufbuild/protobuf";
 
 import type { MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport";
+
+import { DEMO_ORG } from "../shopStory";
 
 export const DEMO_PROJECT = "shop";
 
@@ -51,6 +54,7 @@ const ENV_NAME_FIELD = /(^|_)(environment|env)(_name)?s?$/;
 /** Whether one selector value is outside the demo, judged by its field's name; false for a field that is no selector. */
 function foreignSelector(fieldName: string, value: string): boolean {
   if (value === "") return false;
+  if (/(^|_)org_ids?$/.test(fieldName)) return value !== DEMO_ORG;
   if (PROJECT_FIELD.test(fieldName)) return !inDemoProject(value);
   if (ENV_ID_FIELD.test(fieldName)) return !demoEnvId(value);
   if (ENV_NAME_FIELD.test(fieldName)) return !demoEnvName(value);

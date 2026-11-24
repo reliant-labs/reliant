@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Code } from "@connectrpc/connect";
 import { createDemoBrowserApis } from "../browserApis";
 import { demoSubjects } from "@/fixtures/shop/handlers/inventory";
+import { DEMO_ORG } from "@/fixtures/shop/shopStory";
 
 const request = { environmentId: "env-staging", database: "shop", table: "public.customers", columns: [], filters: [], sort: [], limit: 25, offset: 0, count: "estimated" as const };
 describe("isolated demo browser clients", () => {
@@ -10,13 +11,13 @@ describe("isolated demo browser clients", () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network forbidden"));
     try {
       const { data, storage, identity } = createDemoBrowserApis();
-      expect(await identity.currentOrgId()).toBe("demo-org");
-      expect((await identity.listUsers("demo-org", "env-staging", {}, "")).users[0]?.email).toBe("jon@example.com");
-      expect((await identity.listUsers("demo-org", "env-staging", { query: "lena.fischer" }, "")).users[0]?.userId).toBe(demoSubjects()[0]);
-      expect((await identity.getUser("demo-org", "env-staging", demoSubjects()[0]))?.userId).toBe(demoSubjects()[0]);
+      expect(await identity.currentOrgId()).toBe(DEMO_ORG);
+      expect((await identity.listUsers(DEMO_ORG, "env-staging", {}, "")).users[0]?.email).toBe("jon@example.com");
+      expect((await identity.listUsers(DEMO_ORG, "env-staging", { query: "lena.fischer" }, "")).users[0]?.userId).toBe(demoSubjects()[0]);
+      expect((await identity.getUser(DEMO_ORG, "env-staging", demoSubjects()[0]))?.userId).toBe(demoSubjects()[0]);
       await expect(identity.listUsers("foreign-org", "env-staging", {}, "")).rejects.toMatchObject({ code: Code.NotFound });
-      await expect(identity.getStatus("demo-org", "foreign-env")).rejects.toMatchObject({ code: Code.NotFound });
-      await expect(identity.deleteUser("demo-org", "env-staging", demoSubjects()[0])).rejects.toMatchObject({ code: Code.PermissionDenied });
+      await expect(identity.getStatus(DEMO_ORG, "foreign-env")).rejects.toMatchObject({ code: Code.NotFound });
+      await expect(identity.deleteUser(DEMO_ORG, "env-staging", demoSubjects()[0])).rejects.toMatchObject({ code: Code.PermissionDenied });
       expect((await data.describeDatabase(request)).tables.map((table) => table.name)).toContain("customers");
       expect((await data.browseTable(request)).rows.flat()).toContain("lena.fischer@example.com");
       expect((await storage.listBrowsableBuckets("env-staging")).buckets[0]?.name).toBe("uploads");
