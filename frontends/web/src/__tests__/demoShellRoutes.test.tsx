@@ -43,7 +43,7 @@ vi.mock("@/demoBundle/DemoConsoleProviders", () => ({ DemoConsoleProviders: ({ c
 // ("Cannot load …metricsTypes.ts … after the environment was torn down"),
 // intermittently. DemoConsole is mocked above, so nothing here reads that data:
 // the transport is mocked too, and nothing loads after teardown.
-vi.mock("@/components/Forge/Demo/demoData/demoTransport", () => ({ createDemoTransport: () => ({}) }));
+vi.mock("@/components/Forge/Demo/demoTransport", () => ({ createDemoTransport: () => ({}) }));
 
 import { getTourShell, getTourStorage } from "@/components/Onboarding/tourShell";
 import { resetDemoSessionForTests } from "@/components/Forge/Demo/demoSession";

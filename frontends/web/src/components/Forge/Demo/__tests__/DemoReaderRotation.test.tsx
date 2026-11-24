@@ -10,8 +10,8 @@ import { createDataFixtureApi } from "../../Data/__fixtures__/fixtureDataApi";
 import { createStorageFixtureApi } from "../../Storage/__fixtures__/fixtureStorageApi";
 import { getReaderSession, setReaderPrincipal } from "../../AuditedAccess/readerSession";
 
-const seam = vi.hoisted(() => ({ apis: {} as ReturnType<typeof import("../demoData/browserApis").createDemoBrowserApis> }));
-vi.mock("../demoData/browserApis", () => ({ createDemoBrowserApis: () => seam.apis }));
+const seam = vi.hoisted(() => ({ apis: {} as ReturnType<typeof import("../browserApis").createDemoBrowserApis> }));
+vi.mock("../browserApis", () => ({ createDemoBrowserApis: () => seam.apis }));
 vi.mock("@tanstack/react-router", async (original) => ({ ...await original<typeof import("@tanstack/react-router")>(), useNavigate: () => vi.fn() }));
 beforeEach(() => setReaderPrincipal("production-a", true));
 

@@ -49,7 +49,7 @@ import { OBS_VIEW_LABELS, OBS_VIEWS, viewOf, type ObsNavigate, type ObsSearch, t
 import { FIXTURE_DECLARED } from "../Observability/__fixtures__/fixtureAlerting";
 import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../Observability/__fixtures__/fixtureApi";
 import { ObsReadOnlyProvider, type ObsReadOnly } from "../Observability/obsReadOnly";
-import { createDemoApi } from "./demoData/demoApi";
+import { createDemoApi } from "./demoApi";
 import { DemoBrowserProviders } from "./DemoBrowserProviders";
 import { DataBrowser } from "../Data/DataBrowser";
 import type { DataSearch } from "../Data/dataUrl-model";

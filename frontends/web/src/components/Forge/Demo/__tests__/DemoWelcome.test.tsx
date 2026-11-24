@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { DemoTips } from "../tips/DemoTips";
 import { DemoHome } from "../sections/DemoHome";
-import { createDemoApi } from "../demoData/demoApi";
+import { createDemoApi } from "../demoApi";
 import { demoEntryHref } from "../demoEntry";
 import { DEMO_TIP_KEYS, demoTipKey } from "../tips/tipKeys";
 import { resetDemoSessionForTests } from "../demoSession";
