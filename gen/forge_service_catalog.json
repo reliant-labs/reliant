@@ -49,6 +49,7 @@
         "HTTPRoutes",
         "Inbox",
         "InputOptions",
+        "Insights",
         "IntegrationSettings",
         "LLMUsageRetention",
         "Llmusage",
@@ -226,6 +227,13 @@
         {
           "component": "Inbox",
           "service": "reliant.v1.InboxService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "Insights",
+          "service": "reliant.v1.InsightsService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -19087,6 +19095,886 @@
           "reliant.v1.TriggerHealthStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "TriggerHealthStatus"
+          }
+        }
+      }
+    },
+    {
+      "name": "reliant.v1.InsightsService",
+      "proto_file": "reliant/v1/insights.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.InsightsService/GetMemberInsights",
+          "name": "GetMemberInsights",
+          "input": "reliant.v1.GetMemberInsightsRequest",
+          "output": "reliant.v1.GetMemberInsightsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.InsightsService/GetMyInsights",
+          "name": "GetMyInsights",
+          "input": "reliant.v1.GetMyInsightsRequest",
+          "output": "reliant.v1.GetMyInsightsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.InsightsService/GetTeamInsights",
+          "name": "GetTeamInsights",
+          "input": "reliant.v1.GetTeamInsightsRequest",
+          "output": "reliant.v1.GetTeamInsightsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.InsightsService/ListDrillDownAudit",
+          "name": "ListDrillDownAudit",
+          "input": "reliant.v1.ListDrillDownAuditRequest",
+          "output": "reliant.v1.ListDrillDownAuditResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "InsightsService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "GetTeamInsights",
+            "InputType": "GetTeamInsightsRequest",
+            "OutputType": "GetTeamInsightsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.GetTeamInsightsRequest",
+            "OutputTypeFQ": "reliant.v1.GetTeamInsightsResponse",
+            "InputProtoFile": "reliant/v1/insights.proto",
+            "OutputProtoFile": "reliant/v1/insights.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only: the org's insights totals; changes nothing"
+            }
+          },
+          {
+            "Name": "GetMemberInsights",
+            "InputType": "GetMemberInsightsRequest",
+            "OutputType": "GetMemberInsightsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetMemberInsightsRequest",
+            "OutputTypeFQ": "reliant.v1.GetMemberInsightsResponse",
+            "InputProtoFile": "reliant/v1/insights.proto",
+            "OutputProtoFile": "reliant/v1/insights.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "records the drill-down in the insights audit; changes nothing else"
+            }
+          },
+          {
+            "Name": "GetMyInsights",
+            "InputType": "GetMyInsightsRequest",
+            "OutputType": "GetMyInsightsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.GetMyInsightsRequest",
+            "OutputTypeFQ": "reliant.v1.GetMyInsightsResponse",
+            "InputProtoFile": "reliant/v1/insights.proto",
+            "OutputProtoFile": "reliant/v1/insights.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only: the caller's own insights totals; changes nothing"
+            }
+          },
+          {
+            "Name": "ListDrillDownAudit",
+            "InputType": "ListDrillDownAuditRequest",
+            "OutputType": "ListDrillDownAuditResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ListDrillDownAuditRequest",
+            "OutputTypeFQ": "reliant.v1.ListDrillDownAuditResponse",
+            "InputProtoFile": "reliant/v1/insights.proto",
+            "OutputProtoFile": "reliant/v1/insights.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only: the insights drill-down audit; changes nothing"
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/insights.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "GetMemberInsightsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "user_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "start_date",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "end_date",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "group_by",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ],
+          "GetMemberInsightsResponse": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "user_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "group_by",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "model_calls",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.InsightsModelSection"
+            },
+            {
+              "Name": "tool_calls",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.InsightsToolSection"
+            },
+            {
+              "Name": "as_of",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "note",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "audit_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetMyInsightsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "start_date",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "end_date",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "group_by",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ],
+          "GetMyInsightsResponse": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "group_by",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "model_calls",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.InsightsModelSection"
+            },
+            {
+              "Name": "tool_calls",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.InsightsToolSection"
+            },
+            {
+              "Name": "as_of",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "note",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetTeamInsightsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "start_date",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "end_date",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "group_by",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ],
+          "GetTeamInsightsResponse": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "group_by",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "model_calls",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.InsightsModelSection"
+            },
+            {
+              "Name": "tool_calls",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.InsightsToolSection"
+            },
+            {
+              "Name": "min_contributors",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "as_of",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "note",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListDrillDownAuditRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "page_size",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "page_token",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListDrillDownAuditResponse": [
+            {
+              "Name": "events",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.InsightsDrillDownEvent"
+            },
+            {
+              "Name": "scope",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "next_page_token",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.GetMemberInsightsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "user_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "start_date",
+              "kind": "string",
+              "validate": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            },
+            {
+              "name": "end_date",
+              "kind": "string",
+              "validate": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            },
+            {
+              "name": "group_by",
+              "kind": "enum",
+              "type_name": "reliant.v1.InsightsGroupBy"
+            }
+          ],
+          "reliant.v1.GetMemberInsightsResponse": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "user_id",
+              "kind": "string"
+            },
+            {
+              "name": "group_by",
+              "kind": "enum",
+              "type_name": "reliant.v1.InsightsGroupBy"
+            },
+            {
+              "name": "model_calls",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsModelSection"
+            },
+            {
+              "name": "tool_calls",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsToolSection"
+            },
+            {
+              "name": "as_of",
+              "kind": "string"
+            },
+            {
+              "name": "note",
+              "kind": "string"
+            },
+            {
+              "name": "audit_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.GetMyInsightsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "start_date",
+              "kind": "string",
+              "validate": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            },
+            {
+              "name": "end_date",
+              "kind": "string",
+              "validate": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            },
+            {
+              "name": "group_by",
+              "kind": "enum",
+              "type_name": "reliant.v1.InsightsGroupBy"
+            }
+          ],
+          "reliant.v1.GetMyInsightsResponse": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "group_by",
+              "kind": "enum",
+              "type_name": "reliant.v1.InsightsGroupBy"
+            },
+            {
+              "name": "model_calls",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsModelSection"
+            },
+            {
+              "name": "tool_calls",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsToolSection"
+            },
+            {
+              "name": "as_of",
+              "kind": "string"
+            },
+            {
+              "name": "note",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.GetTeamInsightsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "start_date",
+              "kind": "string",
+              "validate": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            },
+            {
+              "name": "end_date",
+              "kind": "string",
+              "validate": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            },
+            {
+              "name": "group_by",
+              "kind": "enum",
+              "type_name": "reliant.v1.InsightsGroupBy"
+            }
+          ],
+          "reliant.v1.GetTeamInsightsResponse": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "group_by",
+              "kind": "enum",
+              "type_name": "reliant.v1.InsightsGroupBy"
+            },
+            {
+              "name": "model_calls",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsModelSection"
+            },
+            {
+              "name": "tool_calls",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsToolSection"
+            },
+            {
+              "name": "min_contributors",
+              "kind": "int32"
+            },
+            {
+              "name": "as_of",
+              "kind": "string"
+            },
+            {
+              "name": "note",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.InsightsCost": [
+            {
+              "name": "org_funded_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "personally_funded_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "unrecorded_funding_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "reported_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "reported_usd_nanos",
+              "kind": "int64",
+              "optional": true
+            },
+            {
+              "name": "estimated_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "estimated_usd_nanos",
+              "kind": "int64",
+              "optional": true
+            },
+            {
+              "name": "unpriced_calls",
+              "kind": "int64"
+            }
+          ],
+          "reliant.v1.InsightsDrillDownEvent": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "actor_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "subject_user_id",
+              "kind": "string"
+            },
+            {
+              "name": "start_date",
+              "kind": "string"
+            },
+            {
+              "name": "end_date",
+              "kind": "string"
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.InsightsLatency": [
+            {
+              "name": "count",
+              "kind": "int64"
+            },
+            {
+              "name": "avg_ms",
+              "kind": "double"
+            },
+            {
+              "name": "p50_ms",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "p95_ms",
+              "kind": "double",
+              "optional": true
+            }
+          ],
+          "reliant.v1.InsightsModelBucket": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "stats",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsModelStats"
+            }
+          ],
+          "reliant.v1.InsightsModelSection": [
+            {
+              "name": "buckets",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsModelBucket",
+              "repeated": true
+            },
+            {
+              "name": "other",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsModelStats",
+              "optional": true
+            },
+            {
+              "name": "other_groups",
+              "kind": "int32"
+            },
+            {
+              "name": "totals",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsModelStats"
+            }
+          ],
+          "reliant.v1.InsightsModelStats": [
+            {
+              "name": "calls",
+              "kind": "int64"
+            },
+            {
+              "name": "retried_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "error_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "cancelled_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "input_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "output_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "cache_read_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "cache_write_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "latency",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsLatency"
+            },
+            {
+              "name": "time_to_first_token",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsLatency"
+            },
+            {
+              "name": "cost",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsCost"
+            }
+          ],
+          "reliant.v1.InsightsToolBucket": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "stats",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsToolStats"
+            }
+          ],
+          "reliant.v1.InsightsToolSection": [
+            {
+              "name": "buckets",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsToolBucket",
+              "repeated": true
+            },
+            {
+              "name": "other",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsToolStats",
+              "optional": true
+            },
+            {
+              "name": "other_groups",
+              "kind": "int32"
+            },
+            {
+              "name": "totals",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsToolStats"
+            }
+          ],
+          "reliant.v1.InsightsToolStats": [
+            {
+              "name": "calls",
+              "kind": "int64"
+            },
+            {
+              "name": "retried_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "error_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "cancelled_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "duration",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsLatency"
+            }
+          ],
+          "reliant.v1.ListDrillDownAuditRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "page_size",
+              "kind": "int32",
+              "validate": {
+                "gte": "0",
+                "lte": "500"
+              }
+            },
+            {
+              "name": "page_token",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ListDrillDownAuditResponse": [
+            {
+              "name": "events",
+              "kind": "message",
+              "type_name": "reliant.v1.InsightsDrillDownEvent",
+              "repeated": true
+            },
+            {
+              "name": "scope",
+              "kind": "enum",
+              "type_name": "reliant.v1.ListDrillDownAuditScope"
+            },
+            {
+              "name": "next_page_token",
+              "kind": "string"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.GetMemberInsightsRequest": "reliant/v1/insights.proto",
+          "reliant.v1.GetMemberInsightsResponse": "reliant/v1/insights.proto",
+          "reliant.v1.GetMyInsightsRequest": "reliant/v1/insights.proto",
+          "reliant.v1.GetMyInsightsResponse": "reliant/v1/insights.proto",
+          "reliant.v1.GetTeamInsightsRequest": "reliant/v1/insights.proto",
+          "reliant.v1.GetTeamInsightsResponse": "reliant/v1/insights.proto",
+          "reliant.v1.InsightsCost": "reliant/v1/insights.proto",
+          "reliant.v1.InsightsDrillDownEvent": "reliant/v1/insights.proto",
+          "reliant.v1.InsightsLatency": "reliant/v1/insights.proto",
+          "reliant.v1.InsightsModelBucket": "reliant/v1/insights.proto",
+          "reliant.v1.InsightsModelSection": "reliant/v1/insights.proto",
+          "reliant.v1.InsightsModelStats": "reliant/v1/insights.proto",
+          "reliant.v1.InsightsToolBucket": "reliant/v1/insights.proto",
+          "reliant.v1.InsightsToolSection": "reliant/v1/insights.proto",
+          "reliant.v1.InsightsToolStats": "reliant/v1/insights.proto",
+          "reliant.v1.ListDrillDownAuditRequest": "reliant/v1/insights.proto",
+          "reliant.v1.ListDrillDownAuditResponse": "reliant/v1/insights.proto"
+        },
+        "Enums": {
+          "reliant.v1.InsightsGroupBy": [
+            "INSIGHTS_GROUP_BY_UNSPECIFIED",
+            "INSIGHTS_GROUP_BY_DAY",
+            "INSIGHTS_GROUP_BY_PROJECT",
+            "INSIGHTS_GROUP_BY_WORKFLOW",
+            "INSIGHTS_GROUP_BY_PRESET",
+            "INSIGHTS_GROUP_BY_MODEL",
+            "INSIGHTS_GROUP_BY_PROVIDER",
+            "INSIGHTS_GROUP_BY_PURPOSE",
+            "INSIGHTS_GROUP_BY_TOOL",
+            "INSIGHTS_GROUP_BY_TOOL_KIND"
+          ],
+          "reliant.v1.ListDrillDownAuditScope": [
+            "LIST_DRILL_DOWN_AUDIT_SCOPE_UNSPECIFIED",
+            "LIST_DRILL_DOWN_AUDIT_SCOPE_ORG",
+            "LIST_DRILL_DOWN_AUDIT_SCOPE_SELF"
+          ]
+        },
+        "EnumNumbers": {
+          "reliant.v1.InsightsGroupBy": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          "reliant.v1.ListDrillDownAuditScope": [
+            0,
+            1,
+            2
+          ]
+        },
+        "EnumGoRefs": {
+          "reliant.v1.InsightsGroupBy": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "InsightsGroupBy"
+          },
+          "reliant.v1.ListDrillDownAuditScope": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ListDrillDownAuditScope"
           }
         }
       }
@@ -55536,6 +56424,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "Insights",
+      "name": "Insights",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/insights.Service",
+      "source": {
+        "path": "internal/handlers/insights/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "IntegrationSettings",
       "name": "IntegrationSettings",
       "kind": "provider",
@@ -58190,6 +59090,32 @@
       ],
       "providers": [
         "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Insights",
+      "field": "Members",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/insights.MemberStore",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Insights",
+      "field": "Team",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/insights.TeamStore",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },

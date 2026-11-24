@@ -233,6 +233,15 @@ export type ScenarioRpcHandlers =
     "reliant.v1.InboxService/RestoreInboxItem"?: (req: import("@/gen/reliant/v1/inbox_pb").RestoreInboxItemRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/inbox_pb").RestoreInboxItemResponseSchema>>;
   }
 
+  // forge:section reliant.v1.InsightsService
+  // forge:hash=a34b2bc164a4279a1b8f155d3ecbe283b67e60c1d9b00643a1d1255ec9195e15
+  & {
+    "reliant.v1.InsightsService/GetTeamInsights"?: (req: import("@/gen/reliant/v1/insights_pb").GetTeamInsightsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/insights_pb").GetTeamInsightsResponseSchema>>;
+    "reliant.v1.InsightsService/GetMemberInsights"?: (req: import("@/gen/reliant/v1/insights_pb").GetMemberInsightsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/insights_pb").GetMemberInsightsResponseSchema>>;
+    "reliant.v1.InsightsService/GetMyInsights"?: (req: import("@/gen/reliant/v1/insights_pb").GetMyInsightsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/insights_pb").GetMyInsightsResponseSchema>>;
+    "reliant.v1.InsightsService/ListDrillDownAudit"?: (req: import("@/gen/reliant/v1/insights_pb").ListDrillDownAuditRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/insights_pb").ListDrillDownAuditResponseSchema>>;
+  }
+
   // forge:section reliant.v1.MCPService
   // forge:hash=12a5d5a7b2e2b36735a42be99487765ddd19cb69b5c23e9a1bcf1a4f683eb344
   & {

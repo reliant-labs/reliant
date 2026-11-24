@@ -1,0 +1,317 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// InsightsService is Agents › Insights (dev-docs/design/agent-analytics.md
+// §3.6, PR C1): an organization's agent work in numbers, read from the
+// insights rollups that are written when each model and tool call happens, so
+// a chart outlives the 90-day call ledgers.
+//
+// Three views, and who may read each:
+//
+//   - The TEAM view (GetTeamInsights) is for every live member of the org. It
+//     never names a person: it reads the team rollups, which have no user
+//     column, and a breakdown bucket with fewer than five contributing
+//     members is merged into "other" (the small-group floor, decision D5).
+//   - The MEMBER drill-down (GetMemberInsights) is one member's numbers, for
+//     an owner or admin of the org only, by a fresh read of their role, from
+//     a person signed in to the app (never a CLI login, an access token or an
+//     agent). Every drill-down is recorded (ListDrillDownAudit).
+//   - MY ANALYTICS (GetMyInsights) is the caller's own numbers in the org:
+//     what an admin's drill-down would show about them.
+//
+// Cost counts org-funded calls only (decision D6). A call paid from a
+// member's own subscription or key counts as a call, with its cost blank,
+// never zero, and is counted in personally_funded_calls so the page can say
+// "personally funded". Reported cost (what the LLM gateway charged) and
+// estimated cost (list price at the call) are separate figures and are never
+// added together.
+//
+// Nothing here is transcript content: counts, ids and closed-set labels only.
+service InsightsService {
+  // GetTeamInsights is the org's totals over a UTC date range, by one
+  // dimension. Any live member of the org may read it (their role is read
+  // from control-plane at the call). No response names a person, and no
+  // bucket is shown that fewer than five members contributed to: those are
+  // merged into `other`, and further buckets are merged until `other` has at
+  // least five contributors too (or holds everything).
+  rpc GetTeamInsights(GetTeamInsightsRequest) returns (GetTeamInsightsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      activity: {none: "read-only: the org's insights totals; changes nothing"}
+    };
+  }
+
+  // GetMemberInsights is one member's totals in the org, for the org's owners
+  // and admins only. The role is read from control-plane at the call, and
+  // only a person signed in to the app may ask (reason human_only otherwise).
+  // Each call records who looked, at whom and over which days before it
+  // answers; when the record cannot be written, nothing is answered.
+  rpc GetMemberInsights(GetMemberInsightsRequest) returns (GetMemberInsightsResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "records the drill-down in the insights audit; changes nothing else"}
+    };
+  }
+
+  // GetMyInsights is the caller's own totals in the org ("My analytics"):
+  // exactly what an admin's drill-down would show about them.
+  rpc GetMyInsights(GetMyInsightsRequest) returns (GetMyInsightsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      activity: {none: "read-only: the caller's own insights totals; changes nothing"}
+    };
+  }
+
+  // ListDrillDownAudit is the record of member drill-downs in the org, newest
+  // first. An owner or admin (role read fresh, a person signed in to the app)
+  // sees every record of the org; any other member sees only the records of
+  // drill-downs into themselves.
+  rpc ListDrillDownAudit(ListDrillDownAuditRequest) returns (ListDrillDownAuditResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      activity: {none: "read-only: the insights drill-down audit; changes nothing"}
+    };
+  }
+}
+
+// InsightsGroupBy is the dimension an insights response is bucketed by. The
+// shared dimensions bucket both model and tool calls; the others only the
+// source they belong to, and the other source's section is then empty.
+enum InsightsGroupBy {
+  // Treated as INSIGHTS_GROUP_BY_DAY.
+  INSIGHTS_GROUP_BY_UNSPECIFIED = 0;
+  // key: a UTC day, "YYYY-MM-DD". Both sources.
+  INSIGHTS_GROUP_BY_DAY = 1;
+  // key: the project id; "" for calls with no project, or whose project was
+  // deleted. Both sources.
+  INSIGHTS_GROUP_BY_PROJECT = 2;
+  // key: the workflow name; "" for calls outside a workflow run. Both sources.
+  INSIGHTS_GROUP_BY_WORKFLOW = 3;
+  // key: the preset; "" when none. Both sources.
+  INSIGHTS_GROUP_BY_PRESET = 4;
+  // key: the model id as recorded. Model calls only.
+  INSIGHTS_GROUP_BY_MODEL = 5;
+  // key: the provider id. Model calls only.
+  INSIGHTS_GROUP_BY_PROVIDER = 6;
+  // key: "chat", "compaction", "title" or "draft_automation". Model calls only.
+  INSIGHTS_GROUP_BY_PURPOSE = 7;
+  // key: the tool's name; "" for an MCP or response tool, whose name is not
+  // recorded. Tool calls only.
+  INSIGHTS_GROUP_BY_TOOL = 8;
+  // key: "builtin", "integration", "mcp", "response" or "unknown". Tool calls
+  // only.
+  INSIGHTS_GROUP_BY_TOOL_KIND = 9;
+}
+
+// InsightsCost is the cost of a bucket's ORG-FUNDED calls. Calls paid from a
+// member's own account are never priced here: their cost is blank, not zero.
+// Reported and estimated cost are separate and must never be added together.
+message InsightsCost {
+  // Calls the org paid for: its own API keys, seats and Reliant credits.
+  int64 org_funded_calls = 1;
+  // Calls paid from a member's own subscription or key, or run on their own
+  // hardware. They count as calls; their cost is not shown anywhere.
+  int64 personally_funded_calls = 2;
+  // Calls whose funding was not recorded (before funding was recorded, or by
+  // a release that did not record it). Not priced here.
+  int64 unrecorded_funding_calls = 3;
+  // Org-funded calls whose cost the LLM gateway reported.
+  int64 reported_calls = 4;
+  // USD nanos (1e-9 USD) the gateway reported for reported_calls. Absent,
+  // never zero, when reported_calls is 0.
+  optional int64 reported_usd_nanos = 5;
+  // Org-funded calls priced at list price at the time of the call.
+  int64 estimated_calls = 6;
+  // USD nanos of the list-price estimate for estimated_calls. Absent, never
+  // zero, when estimated_calls is 0. An estimate: never add it to
+  // reported_usd_nanos.
+  optional int64 estimated_usd_nanos = 7;
+  // Org-funded calls with no per-call price (a seat the org pays for, a
+  // local model).
+  int64 unpriced_calls = 8;
+}
+
+// InsightsLatency is a duration distribution, from the rollups' latency
+// histograms (each bucket half a power of two wide, so a percentile is within
+// about 19% of the true value).
+message InsightsLatency {
+  // Calls with a measured duration.
+  int64 count = 1;
+  // 0 when count is 0.
+  double avg_ms = 2;
+  // Absent when count is 0.
+  optional double p50_ms = 3;
+  optional double p95_ms = 4;
+}
+
+// InsightsModelStats is the sum of a bucket's model calls. Counts are per
+// attempt: a retried call is counted once per attempt, and retried_calls is
+// the attempts beyond the first.
+message InsightsModelStats {
+  int64 calls = 1;
+  int64 retried_calls = 2;
+  int64 error_calls = 3;
+  int64 cancelled_calls = 4;
+  int64 input_tokens = 5;
+  int64 output_tokens = 6;
+  int64 cache_read_tokens = 7;
+  int64 cache_write_tokens = 8;
+  InsightsLatency latency = 9;
+  // Time to first token, for calls that streamed one.
+  InsightsLatency time_to_first_token = 10;
+  InsightsCost cost = 11;
+}
+
+// InsightsToolStats is the sum of a bucket's tool calls, counted per attempt
+// like InsightsModelStats.
+message InsightsToolStats {
+  int64 calls = 1;
+  int64 retried_calls = 2;
+  int64 error_calls = 3;
+  int64 cancelled_calls = 4;
+  InsightsLatency duration = 5;
+}
+
+message InsightsModelBucket {
+  // The group, per group_by (see InsightsGroupBy).
+  string key = 1;
+  InsightsModelStats stats = 2;
+}
+
+message InsightsToolBucket {
+  string key = 1;
+  InsightsToolStats stats = 2;
+}
+
+// InsightsModelSection is a response's model calls.
+message InsightsModelSection {
+  // One bucket per group with calls; a group with none is absent. By day:
+  // oldest first. Otherwise: most calls first, then key.
+  repeated InsightsModelBucket buckets = 1;
+  // The team view's merged groups (the small-group floor); absent when
+  // nothing was merged, and always absent in a member's own numbers.
+  optional InsightsModelStats other = 2;
+  // Groups merged into other.
+  int32 other_groups = 3;
+  // Sum over every bucket and other.
+  InsightsModelStats totals = 4;
+}
+
+message InsightsToolSection {
+  repeated InsightsToolBucket buckets = 1;
+  optional InsightsToolStats other = 2;
+  int32 other_groups = 3;
+  InsightsToolStats totals = 4;
+}
+
+message GetTeamInsightsRequest {
+  // The organization: control-plane's organizations.id.
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  // First UTC day of the range, "YYYY-MM-DD", inclusive.
+  string start_date = 2 [(buf.validate.field).string.pattern = "^\\d{4}-\\d{2}-\\d{2}$"];
+  // Last UTC day of the range, "YYYY-MM-DD", inclusive. The range is at most
+  // 400 days.
+  string end_date = 3 [(buf.validate.field).string.pattern = "^\\d{4}-\\d{2}-\\d{2}$"];
+  // Unset means day.
+  InsightsGroupBy group_by = 4;
+}
+
+message GetTeamInsightsResponse {
+  string org_id = 1;
+  // The request's group_by with the default applied.
+  InsightsGroupBy group_by = 2;
+  InsightsModelSection model_calls = 3;
+  InsightsToolSection tool_calls = 4;
+  // The small-group floor applied: a bucket needs at least this many
+  // contributing members to be shown on its own.
+  int32 min_contributors = 5;
+  // RFC 3339 UTC time the totals were read; the current UTC day is still
+  // accumulating.
+  string as_of = 6;
+  // Human-readable account of what is and is not included, for display.
+  string note = 7;
+}
+
+message GetMemberInsightsRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The member looked at: control-plane's user id.
+  string user_id = 2 [(buf.validate.field).string.min_len = 1];
+  string start_date = 3 [(buf.validate.field).string.pattern = "^\\d{4}-\\d{2}-\\d{2}$"];
+  string end_date = 4 [(buf.validate.field).string.pattern = "^\\d{4}-\\d{2}-\\d{2}$"];
+  InsightsGroupBy group_by = 5;
+}
+
+message GetMemberInsightsResponse {
+  string org_id = 1;
+  string user_id = 2;
+  InsightsGroupBy group_by = 3;
+  InsightsModelSection model_calls = 4;
+  InsightsToolSection tool_calls = 5;
+  string as_of = 6;
+  string note = 7;
+  // The id of the audit record this drill-down wrote.
+  string audit_id = 8;
+}
+
+message GetMyInsightsRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string start_date = 2 [(buf.validate.field).string.pattern = "^\\d{4}-\\d{2}-\\d{2}$"];
+  string end_date = 3 [(buf.validate.field).string.pattern = "^\\d{4}-\\d{2}-\\d{2}$"];
+  InsightsGroupBy group_by = 4;
+}
+
+message GetMyInsightsResponse {
+  string org_id = 1;
+  InsightsGroupBy group_by = 2;
+  InsightsModelSection model_calls = 3;
+  InsightsToolSection tool_calls = 4;
+  string as_of = 5;
+  string note = 6;
+}
+
+// InsightsDrillDownEvent is one recorded member drill-down.
+message InsightsDrillDownEvent {
+  string id = 1;
+  // Who looked: an owner or admin of the org at the time.
+  string actor_user_id = 2;
+  // Whose numbers were read.
+  string subject_user_id = 3;
+  // The days read, "YYYY-MM-DD", inclusive.
+  string start_date = 4;
+  string end_date = 5;
+  // RFC 3339 UTC time of the drill-down.
+  string created_at = 6;
+}
+
+// ListDrillDownAuditScope says which records a ListDrillDownAudit answer holds.
+enum ListDrillDownAuditScope {
+  LIST_DRILL_DOWN_AUDIT_SCOPE_UNSPECIFIED = 0;
+  // Every drill-down in the org: the caller is an owner or admin.
+  LIST_DRILL_DOWN_AUDIT_SCOPE_ORG = 1;
+  // Only drill-downs into the caller.
+  LIST_DRILL_DOWN_AUDIT_SCOPE_SELF = 2;
+}
+
+message ListDrillDownAuditRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  // At most 500; unset or 0 means 100.
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 500
+  }];
+  // The next_page_token of the previous page.
+  string page_token = 3;
+}
+
+message ListDrillDownAuditResponse {
+  repeated InsightsDrillDownEvent events = 1;
+  ListDrillDownAuditScope scope = 2;
+  // Empty on the last page.
+  string next_page_token = 3;
+}

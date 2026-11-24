@@ -59,6 +59,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/handlers/forge"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
+	"github.com/reliant-labs/reliant/internal/handlers/insights"
 	"github.com/reliant-labs/reliant/internal/handlers/mcp"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
 	"github.com/reliant-labs/reliant/internal/handlers/model_endpoint"
@@ -1023,6 +1024,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		OrgPolicyImpact:    g.OrgPolicyImpact(),
 		CoverageSource:     g.CoverageSource(),
 		PullRequestRecord:  g.PullRequestRecord(),
+		Insights:           g.Insights(),
 	})
 }
 
@@ -1982,4 +1984,18 @@ func (g *Graph) newChatprlinks() (chatprlinks.Service, error) {
 		return nil, err
 	}
 	return chatprlinks.NewServiceWithForgeMiddleware(svc), nil
+}
+
+// newInsights constructs the insights handler (internal/handlers/insights):
+// Agents › Insights over the insights rollups. The team view's store and the
+// member store are the same repository, held as two narrow interfaces so the
+// team view cannot reach a member's rows.
+func (g *Graph) newInsights() (*insights.Service, error) {
+	return insights.New(insights.Deps{
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Team:    g.Database(),
+		Members: g.Database(),
+		Now:     nil, // optional — no provider
+	})
 }
