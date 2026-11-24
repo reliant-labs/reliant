@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
+import { transport as appTransport } from "@/lib/connect";
 import { getOrganizationCostSummary } from "@/services/controlPlane/observability/organizationCostsApi";
 import { OrganizationCostsView, OrganizationCostSummaryContent } from "../OrganizationCostsView";
 import { organizationCostFixture } from "./organizationCostFixtures";
@@ -22,7 +23,8 @@ describe("OrganizationCostsView", () => {
     getSummary.mockImplementation(() => new Promise(() => undefined));
     view();
     expect(screen.getByRole("status")).toHaveTextContent("Loading organization costs");
-    expect(getSummary).toHaveBeenCalledWith("org-example");
+    // Outside a TransportScope the read goes over the app's transport.
+    expect(getSummary).toHaveBeenCalledWith("org-example", appTransport);
     expect(screen.getByText(/All projects and environments/)).toBeInTheDocument();
   });
 
@@ -86,7 +88,7 @@ describe("OrganizationCostsView", () => {
     const { rerender, client } = view();
     await screen.findByText("USD 12.34");
     rerender(<QueryClientProvider client={client}><OrganizationCostsView orgId="org-next" /></QueryClientProvider>);
-    await waitFor(() => expect(getSummary).toHaveBeenCalledWith("org-next"));
+    await waitFor(() => expect(getSummary).toHaveBeenCalledWith("org-next", appTransport));
     expect(screen.queryByText("USD 12.34")).not.toBeInTheDocument();
   });
 
