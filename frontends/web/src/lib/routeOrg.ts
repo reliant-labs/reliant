@@ -4,6 +4,7 @@ import { create } from "zustand";
 
 import { chooseActiveOrg, learnOrgSegments, useActiveOrgStore } from "@/store/activeOrgStore";
 import { currentSessionOwner } from "./auth/sessionOwner";
+import { announceOrgArrival } from "./orgArrivalNotice";
 
 /**
  * THE ORG THE PAGE ON SCREEN IS IN: the one authority for every org-scoped
@@ -45,7 +46,8 @@ import { currentSessionOwner } from "./auth/sessionOwner";
  *
  * Entering a member org also updates the tab's org (the mirror code outside
  * the org tree reads): written here, at commit, and never by a load that might
- * not commit.
+ * not commit. When a URL moved the tab into another org that way, the person
+ * is told once (lib/orgArrivalNotice.ts).
  */
 
 /** The org layout's path, and so its route id, in every tree that mounts it. */
@@ -156,7 +158,7 @@ export function commitRouteOrgScope(scope: RouteOrgScope): void {
 }
 
 interface RouterLike {
-  state?: { matches?: readonly MatchLike[]; pendingMatches?: readonly MatchLike[] };
+  state?: { matches?: readonly MatchLike[]; pendingMatches?: readonly MatchLike[]; location?: { pathname: string } };
   invalidate?: () => Promise<unknown>;
 }
 
@@ -172,11 +174,18 @@ export function resolveRouteOrgAfterAccountTransition(): void {
   if (getRouteOrgScope().kind !== "legacy" || pendingOrg) void router?.invalidate?.();
 }
 
-/** The scope of the router's committed matches (the global registry's router, routes.tsx). */
+/**
+ * The scope of the router's committed matches (the global registry's router,
+ * routes.tsx), and the notice when entering it moved the tab's org
+ * (lib/orgArrivalNotice.ts).
+ */
 function syncFromRouter(): void {
   const router = (globalThis as { __RELIANT_ROUTER?: RouterLike }).__RELIANT_ROUTER;
   if (!router?.state) return;
-  commitRouteOrgScope(routeOrgScopeOfMatches(router.state.matches));
+  const scope = routeOrgScopeOfMatches(router.state.matches);
+  const chosenBefore = useActiveOrgStore.getState().chosenId;
+  commitRouteOrgScope(scope);
+  if (scope.kind === "member") announceOrgArrival(scope.org.id, chosenBefore, router.state.location?.pathname ?? "");
 }
 
 /**

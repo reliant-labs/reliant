@@ -15,11 +15,12 @@
  *
  * ── NO DAEMON, NO CHAT, NO CONTROL PLANE ────────────────────────────────────
  *
- * Everything it reads comes from the demo's providers (DemoConsoleProviders,
- * as the console's pages): the Observability API on shop's story, the
- * Data, Storage and Identity APIs on forge's mock transport, and "Ask an
- * agent" in handoff mode. Writes are refused visibly (the shell root's
- * ObsReadOnlyProvider) and underneath (readOnlyApi, the demo transport). A
+ * Everything it reads is the shop fixture pack (src/fixtures/shop) on the
+ * demo's transport, with the demo's providers (DemoConsoleProviders, as the
+ * console's pages): the Observability views on the console's REAL client,
+ * the Data, Storage and Identity APIs, and "Ask an agent" in handoff mode.
+ * Writes are refused visibly (the shell root's ObsReadOnlyProvider) and
+ * underneath (the demo transport's read-only guard). A
  * test (Demo/__tests__/DemoConsole.test.tsx) walks every view and asserts
  * that no transport, fetch, project list or chat start was touched.
  *

@@ -12,7 +12,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import { IDS } from './fixtures/base'
-import { CHAT_IDS, CHAT_TITLES, chatWithoutFailedSend } from './fixtures/chat'
+import { CHAT_IDS, CHAT_TITLES, chatWithAttachedProjects, chatWithoutFailedSend } from './fixtures/chat'
 import { stagingDatabaseFixtures } from './fixtures/data'
 import { appCodeCardFixtures, FILTER_PROJECT_IDS, NO_APP_PROJECT_ID, projectsPageSurfaceFixtures, selectorSurfaceFixtures } from './fixtures/projects'
 import { workflowFixtures } from './fixtures/workflows'
@@ -34,6 +34,13 @@ interface Surface {
   ready: (page: Page) => Locator
   /** After the load, before the capture (opening the chat, say). */
   act?: (page: Page) => Promise<void>
+  /**
+   * After the surface is ready, the pointer parked and the page settled,
+   * right before the capture: puts the pointer (or a finger) where a hover
+   * surface is about (a chart's crosshair and tooltip), or grows the viewport
+   * to a long page's whole height.
+   */
+  beforeShot?: (page: Page) => Promise<void>
   harness?: HarnessOptions
 }
 
@@ -146,6 +153,47 @@ async function mobileChatAtEnd(page: Page, firstLine: string) {
   await scrollToEnd(page)
 }
 
+/**
+ * Rest the pointer at `fraction` of a chart's plot (uPlot's `.u-over`), or tap
+ * there on a touch viewport, and wait for the chart's tooltip: the hover state
+ * the chart surfaces capture.
+ */
+async function pointAtChart(page: Page, chart: Locator, fraction: number) {
+  const plot = chart.locator('.u-over').first()
+  await plot.scrollIntoViewIfNeeded()
+  const box = await plot.boundingBox()
+  if (!box) throw new Error('the chart has no plot to point at')
+  const position = { x: Math.round(box.width * fraction), y: Math.round(box.height / 2) }
+  if (page.viewportSize()!.width <= 768) await plot.tap({ position })
+  else await plot.hover({ position })
+  await expect(page.getByTestId('chart-tooltip')).toBeVisible()
+  await frames(page)
+}
+
+/**
+ * Grow the viewport to the page's whole height, so a long dashboard is one
+ * capture with every panel loaded (panels query only near the viewport, and
+ * the page scrolls inside the shell, not the document). Repeats until the
+ * height stops moving: panels that load can change it.
+ */
+async function fitViewportToContent(page: Page) {
+  const width = page.viewportSize()!.width
+  for (let i = 0; i < 6; i++) {
+    const needed = await page.evaluate(() => {
+      let extra = 0
+      for (const el of Array.from(document.querySelectorAll<HTMLElement>('*'))) {
+        if (el.scrollHeight > el.clientHeight + 1 && getComputedStyle(el).overflowY.match(/auto|scroll/)) extra = Math.max(extra, el.scrollHeight - el.clientHeight)
+      }
+      return Math.ceil(window.innerHeight + extra)
+    })
+    if (needed <= page.viewportSize()!.height) return
+    await page.setViewportSize({ width, height: needed })
+    await settle(page)
+  }
+}
+
+const CHART_HOVER_PATH = '/forge/p/shopfront/observability/dashboards/release/chart-hover'
+
 const TOOLS_LAST_LINE = 'Tax rates now live in'
 const FAILURE_FIRST_LINE = 'Upgrade the Stripe SDK to v18 and fix whatever breaks'
 const APPROVAL_LINE = 'Pushing it needs your approval'
@@ -165,6 +213,19 @@ const SURFACES: Surface[] = [
     on: ['desktop'],
     ready: (page) => page.getByText(FIXTURE_BOTTOM).first(),
     act: openFixtureChat,
+  },
+  {
+    // The fixture chat with a second project attached: the composer lists
+    // both as chips (the attached one removable) and offers Add project.
+    name: 'chat-projects',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByText(FIXTURE_BOTTOM).first(),
+    act: async (page) => {
+      await openFixtureChat(page)
+      await expect(page.getByTestId('chat-project-chips')).toBeVisible()
+    },
+    harness: { fixtures: chatWithAttachedProjects },
   },
   {
     // The fixture chat from its first line: the first turn and its answer.
@@ -692,6 +753,46 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByTestId('dashboards-card-checkout-funnel'),
   },
   {
+    // A full time-series chart under the pointer: the crosshair on the
+    // sample, a point on each series, and the tooltip with the sample's time
+    // and both series' values (fixtures/dashboards.ts, chart-hover).
+    name: 'shell-chart-hover',
+    path: CHART_HOVER_PATH,
+    on: ['desktop'],
+    ready: (page) => page.getByRole('group', { name: 'Requests and errors per second' }),
+    beforeShot: (page) => pointAtChart(page, page.getByRole('group', { name: 'Requests and errors per second' }), 0.62),
+  },
+  {
+    // A figure's card sparkline under the pointer (a tap on the phone): the
+    // same crosshair and tooltip as a full chart.
+    name: 'shell-sparkline-hover',
+    path: CHART_HOVER_PATH,
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByTestId('obs-panel-sparkline').first(),
+    beforeShot: (page) => pointAtChart(page, page.getByTestId('obs-panel-sparkline').first(), 0.4),
+  },
+  {
+    // The platform's Sandboxes dashboard (control-plane
+    // deploy/observability/dashboards/sandboxes.json, copied into
+    // fixtures/sandboxes.dashboard.json) through the real DashboardView, every
+    // panel answered in the shape its SQL returns (fixtures/sandboxes.ts),
+    // whole, in one tall capture.
+    name: 'shell-sandboxes-dashboard',
+    path: '/forge/p/shopfront/observability/dashboards/release/sandboxes',
+    on: ['desktop'],
+    ready: (page) => page.getByText('Self-hosted sandboxes: memory available').first(),
+    beforeShot: fitViewportToContent,
+  },
+  {
+    // A gallery card's preview sparkline under the pointer.
+    name: 'shell-dashboards-card-hover',
+    path: '/forge/p/shopfront/observability/dashboards',
+    on: ['desktop'],
+    // The Overview card is above the fold, so its preview has loaded (previews load near the viewport).
+    ready: (page) => page.getByRole('group', { name: 'overview, last 24 hours' }).first().locator('.u-over'),
+    beforeShot: (page) => pointAtChart(page, page.getByRole('group', { name: 'overview, last 24 hours' }).first(), 0.7),
+  },
+  {
     // The gallery's search, from the URL: `?q=order` keeps the cards that match.
     name: 'shell-dashboards-search',
     path: '/forge/p/shopfront/observability/dashboards?q=order',
@@ -834,6 +935,7 @@ test.describe('visual baseline', () => {
         // row, whose hover actions would otherwise show in some runs only.
         await page.mouse.move(-1, -1)
         await settle(page)
+        if (surface.beforeShot) await surface.beforeShot(page)
 
         if (process.env.VISUAL_FXLOG && server.unknown.size) {
           console.log(`[visual] ${surface.name} (${testInfo.project.name}): no fixture for ${[...server.unknown.keys()].join(', ')}`)

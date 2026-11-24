@@ -451,7 +451,7 @@ describe("redirects from the retired URLs", () => {
     const router = renderAt("/forge/env/e2e?forgeProject=barkshop&tab=releases");
     await landsOn(router, "/forge/p/barkshop/releases", { env: "e2e" });
     // The console selects the project that declares it, over the current one.
-    await waitFor(() => expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-b" })));
+    await waitFor(() => expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-b" }), { skipWorkspaceStateSave: true }));
     expect(screen.getByTestId("page")).toHaveAttribute("data-env", "e2e");
   });
 
@@ -525,6 +525,8 @@ describe("the environment scope", () => {
     await landsOn(router, "/forge/p/alpha/releases", { env: "all" });
     expect(window.localStorage.getItem("forge.console.env.alpha")).toBe("all");
 
+    // Activity is Configure's last row, as in the shell's nav.
+    await user.click(screen.getByRole("button", { name: "Configure" }));
     await user.click(screen.getByRole("link", { name: "Activity" }));
     await landsOn(router, "/forge/p/alpha/activity", { env: "all" });
   });
@@ -640,6 +642,7 @@ describe("the nav", () => {
     const router = renderAt("/forge/p/alpha/observability/graph?env=e2e&declared=true&internal=true&rpcId=acme.v1.OrdersService%2FGetOrder&rpcService=acme.v1.OrdersService");
     await screen.findByTestId("page");
     expect(router.state.location.search).toMatchObject({ env: "e2e", declared: true, internal: true, rpcId: "acme.v1.OrdersService/GetOrder", rpcService: "acme.v1.OrdersService" });
+    await user.click(screen.getByRole("button", { name: "Configure" }));
     await user.click(screen.getByRole("link", { name: "Secrets" }));
     await landsOn(router, "/forge/p/alpha/secrets", { env: "e2e" });
     expect(router.state.location.search).toEqual({ env: "e2e" });
@@ -672,13 +675,13 @@ describe("the nav", () => {
     expect(screen.getByRole("link", { name: /Alerts/ })).toHaveTextContent("2");
   });
 
-  it("is the led console's grouped nav, with each view under its group in the breadcrumb", async () => {
+  it("is the led console's grouped nav, in the shell's groups, with each view under its group in the breadcrumb", async () => {
     renderAt("/forge/p/alpha/observability/errors?env=prod");
     await screen.findByTestId("page");
     const nav = screen.getByRole("navigation", { name: "alpha" });
-    for (const row of ["Overview", "Issues", "Performance", "Sessions", "Releases", "More tools"]) expect(within(nav).getByText(row)).toBeInTheDocument();
-    // The console's own "Observability" parent is gone; its views sit in their groups.
-    expect(within(nav).queryByText("Observability")).toBeNull();
+    for (const row of ["Overview", "Dashboards", "Observability", "Analytics", "Deployments", "Tests", "Data", "Storage", "Auth", "Configure"]) expect(within(nav).getAllByText(row).length).toBeGreaterThan(0);
+    // The open page's group is unfolded.
+    expect(within(nav).getByRole("button", { name: /^Observability/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("link", { name: "Errors" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("Performance & issues›Errors");
   });
@@ -762,7 +765,7 @@ describe("several checkouts declare one app: ?project= names which", () => {
     await user.click(await screen.findByTestId("console-checkout-project-b2"));
     await waitFor(() => expect(router.state.location.search).toMatchObject({ project: "project-b2" }));
     expect((await screen.findByTestId("page")).dataset.projectId).toBe("project-b2");
-    expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-b2" }));
+    expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-b2" }), { skipWorkspaceStateSave: true });
   });
 
   it("opens the checkout ?project= names", async () => {

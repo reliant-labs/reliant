@@ -7,7 +7,7 @@ Its default Connect transport answers from browser-local mock scenarios.
 ## One synthetic shop, one story
 
 Every answer the demo gives comes from one module,
-`components/Forge/Demo/demoData/shopStory.ts`: the cast (jon, maya, priya, and
+`fixtures/shop/shopStory.ts` (the shop fixture pack, `src/fixtures/shop/`): the cast (jon, maya, priya, and
 CI as `github-actions`), shop's customers, its services (`api`, `worker`,
 `inventory` and the static storefront `shop-web`; Postgres, NATS and the
 payment provider are dependencies, never services), the release ledger (each
@@ -16,17 +16,43 @@ incident (prod's v1.8.3 payment timeouts on api), the traffic model every
 aggregate is computed from (`demoStats`), and the database's tables. `demoNow()`
 anchors every relative time to the page load.
 
-`demoData/shop/shopApi.ts` assembles the demo's `ObservabilityApi` from one
-module per area (telemetry via `busyApp.ts`, graph, workloads, panels,
-delivery, issues and release health, alerting, sessions, dashboards, metrics);
-both the demo console (`demoApi.ts`) and the wire scenario (`demoScenario.ts`)
-read it. `consoleScenario.ts` answers Releases, Environments, Secrets, Domains
-and Activity from the same ledger. Nothing under `demoData/` imports the
+`fixtures/shop/model/shopApi.ts` assembles the story's model, in the shape of
+the console's `ObservabilityApi`, from one module per area (telemetry via
+`busyApp.ts`, graph, workloads, panels, delivery, issues and release health,
+alerting, sessions, dashboards, metrics). It is the authoring format, not what
+pages read: the handlers (`handlers/observability.ts`, `alerting.ts`,
+`delivery.ts`, `issues.ts`, `user.ts`, `rum.ts`, `dashboards.ts`) encode it on
+the wire, and in the demo shell (the only place `/forge/demo` runs; the app's
+leaves for it) the console's real client (`controlPlaneObservabilityApi`)
+decodes it, so no page reads the model directly.
+`__tests__/realClient.test.ts` holds every read the real client makes to the
+model's answer. `handlers/observabilityBilling.ts` answers observability billing
+Unimplemented: the demo has none. `handlers/console.ts` answers Releases, Environments, Secrets, Domains
+and Activity from the same ledger. Nothing under `src/fixtures/` imports the
 console's unit-test fixtures (`Observability/__fixtures__`);
 `__tests__/coherence.test.ts` fails if one does, or if any page's answer
 contradicts the story.
 
-`inventoryScenario.ts` answers the generated `AppDatabaseService` browse RPCs
+`model/security.ts` and `model/tests.ts` hold the Security and Tests data in
+the same ledger; `handlers/security.ts` and `handlers/tests.ts` answer the
+control plane's VulnerabilityService and TestsService RPCs from it over the
+demo transport, so the pages' default API clients run unchanged.
+Security: each release's SBOMs for `api`, `worker`, `inventory` and
+`shop-web` (from its lockfile), the findings in the release each environment
+runs, prod's enforced gate and staging's audited one, an exemption with a
+reason and an expiry, and the connect-go advisory v1.8.3's dependency bump
+fixed. Tests: CI's runs on each release commit, the coverage trend with the
+releases marked, maya's failed branch run that reproduced the incident, and
+`TestCreateOrder_RetryOnTimeout`, the flaky test v1.8.3's payment retry
+introduced. The Coverage page's source view reads one bundled file (v1.8.4's
+`internal/orders/charge.go`) and never fetches.
+
+The demo leaves out what the shop has nothing to show on: Usage (a sample app
+has no hosting bill) and Speed insights (no measured page loads). They have no
+nav row and no tip, and their URLs land on the Overview (`DEMO_HIDDEN_PAGES`,
+`Demo/demoPath.ts`).
+
+`handlers/inventory.ts` answers the generated `AppDatabaseService` browse RPCs
 and `IdentityService` reads. Every normal environment declares one database,
 `shop`: the selector must not invent extra connections. The tables are
 `public.customers`, `public.products`, `public.stock`, `public.orders` and
@@ -42,7 +68,7 @@ paging and optional counts. They never evaluate SQL or call a backend. Prod
 requires a matching confirmation and nonempty reason, to demonstrate the audited
 workflow; `demo-local-read` identifies a synthetic read, not an audit server row.
 
-`configScenario.ts` answers `GetWorkloadConfig` with immutable **fake** bundle
+`handlers/config.ts` answers `GetWorkloadConfig` with immutable **fake** bundle
 identities/digests. YAML and objects are projections of the same redacted tree.
 The fixed `[withheld]` markers reveal neither values nor secret-derived hashes.
 Bundle selectors are scoped to their environment, and historical release reads

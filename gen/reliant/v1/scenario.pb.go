@@ -1437,9 +1437,9 @@ const file_reliant_v1_scenario_proto_rawDesc = "" +
 	"scenarioId\"W\n" +
 	"\x16ExportScenarioResponse\x12!\n" +
 	"\fyaml_content\x18\x01 \x01(\tR\vyamlContent\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename2\xa7\x06\n" +
-	"\x0fScenarioService\x12V\n" +
-	"\rListScenarios\x12 .reliant.v1.ListScenariosRequest\x1a!.reliant.v1.ListScenariosResponse\"\x00\x12Y\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename2\xaa\x06\n" +
+	"\x0fScenarioService\x12Y\n" +
+	"\rListScenarios\x12 .reliant.v1.ListScenariosRequest\x1a!.reliant.v1.ListScenariosResponse\"\x03\x90\x02\x01\x12Y\n" +
 	"\x0eCreateScenario\x12!.reliant.v1.CreateScenarioRequest\x1a\".reliant.v1.CreateScenarioResponse\"\x00\x12\xc0\x01\n" +
 	"\vRunScenario\x12\x1e.reliant.v1.RunScenarioRequest\x1a\x1f.reliant.v1.RunScenarioResponse\"p\xa2\xbb\x18l:j:ha simulated test run of a workflow: nothing in the project changes beyond the scenario's own last result\x12\x8c\x01\n" +
 	"\x0eDeleteScenario\x12!.reliant.v1.DeleteScenarioRequest\x1a\".reliant.v1.DeleteScenarioResponse\"3\xa2\xbb\x18/:-\n" +

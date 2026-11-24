@@ -95,12 +95,14 @@ func NewTriggerServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+TriggerServiceGetTriggerProcedure,
 			connect.WithSchema(triggerServiceMethods.ByName("GetTrigger")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listTriggers: connect.NewClient[v1.ListTriggersRequest, v1.ListTriggersResponse](
 			httpClient,
 			baseURL+TriggerServiceListTriggersProcedure,
 			connect.WithSchema(triggerServiceMethods.ByName("ListTriggers")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		fireTrigger: connect.NewClient[v1.FireTriggerRequest, v1.FireTriggerResponse](
@@ -113,12 +115,14 @@ func NewTriggerServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+TriggerServiceListTriggerEventsProcedure,
 			connect.WithSchema(triggerServiceMethods.ByName("ListTriggerEvents")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getLaunchEvent: connect.NewClient[v1.GetLaunchEventRequest, v1.GetLaunchEventResponse](
 			httpClient,
 			baseURL+TriggerServiceGetLaunchEventProcedure,
 			connect.WithSchema(triggerServiceMethods.ByName("GetLaunchEvent")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -197,12 +201,14 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 		TriggerServiceGetTriggerProcedure,
 		svc.GetTrigger,
 		connect.WithSchema(triggerServiceMethods.ByName("GetTrigger")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	triggerServiceListTriggersHandler := connect.NewUnaryHandler(
 		TriggerServiceListTriggersProcedure,
 		svc.ListTriggers,
 		connect.WithSchema(triggerServiceMethods.ByName("ListTriggers")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	triggerServiceFireTriggerHandler := connect.NewUnaryHandler(
@@ -215,12 +221,14 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 		TriggerServiceListTriggerEventsProcedure,
 		svc.ListTriggerEvents,
 		connect.WithSchema(triggerServiceMethods.ByName("ListTriggerEvents")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	triggerServiceGetLaunchEventHandler := connect.NewUnaryHandler(
 		TriggerServiceGetLaunchEventProcedure,
 		svc.GetLaunchEvent,
 		connect.WithSchema(triggerServiceMethods.ByName("GetLaunchEvent")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.TriggerService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

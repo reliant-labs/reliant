@@ -74,7 +74,7 @@ export function MobileChatScreen() {
       // restore nor the project's last chat may run over it (the restore would
       // select the project's remembered chat, mark it read and move the update
       // stream's single chat subscription off the chat on screen).
-      await useProjectStore.getState().selectProject(project, { restoreWorkspace: false, restoreChat: false });
+      await useProjectStore.getState().selectProject(project, { restoreWorkspace: false, opensChat: true });
     })();
   }, [chatId, chatProjectId]);
 

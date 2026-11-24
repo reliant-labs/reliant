@@ -42,7 +42,9 @@ service TokenService {
     };
   }
   // ListTokens returns the caller's live tokens of one kind (or all kinds).
-  rpc ListTokens(ListTokensRequest) returns (ListTokensResponse) {}
+  rpc ListTokens(ListTokensRequest) returns (ListTokensResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // RevokeToken revokes one of the caller's tokens, immediately.
   //
   // For a token bound to a daemon this also disconnects that daemon: its

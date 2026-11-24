@@ -5,7 +5,8 @@
  * shell mounts it): it renders the console and every Observability view the
  * forge journey visits on fixture data, and the whole walk — a trace, its
  * logs, its flamegraph, an issue, its Ask-an-agent sheet, the firing alert —
- * touches no transport, no fetch, no project list and no chat.
+ * touches no fetch, no project list and no chat. The console's real client
+ * reads the shop pack over the demo's transport, and nothing else.
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,8 +25,8 @@ const startAskReliantChat = vi.hoisted(() => vi.fn());
 vi.mock("@/components/Forge/Observability/AskReliant/startAskReliantChat", () => ({ startAskReliantChat }));
 // Every read of the demo's sample data, to see the scope the panel asked for.
 const fixtureCalls = vi.hoisted(() => [] as { rpc: string; request: unknown }[]);
-vi.mock("../demoData/shop/shopApi", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../demoData/shop/shopApi")>();
+vi.mock("@/fixtures/shop/model/shopApi", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/fixtures/shop/model/shopApi")>();
   return {
     ...actual,
     createShopApi: (now?: number) => {
@@ -37,10 +38,17 @@ vi.mock("../demoData/shop/shopApi", async (importOriginal) => {
     },
   };
 });
+// The demo bundle configures a control plane (config.demo.ts), so the console's real clients run.
+vi.mock("@/services/controlPlane/config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/config")>()),
+  CONTROL_PLANE_API_URL: "https://cp.test",
+  hasControlPlane: true,
+}));
 vi.mock("uplot", async () => (await import("../../Observability/__tests__/obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("../../Observability/__tests__/obsMocks")).obsMocks.virtual());
 
 import { tourEvents } from "@/components/Onboarding/tourEvents";
+import { createShopTransport } from "@/fixtures/shop";
 import { setTransport } from "@/lib/connect";
 import { resetShellForTests } from "@/lib/shell";
 import { ObsReadOnlyProvider } from "../../Observability/obsReadOnly";
@@ -48,13 +56,13 @@ import { ObsReadOnlyProvider } from "../../Observability/obsReadOnly";
 import { FIXTURE_TRACE_ID } from "../../Observability/__fixtures__/fixtureApi";
 import { createForgeDemoRoute } from "../demoRoute";
 
-/** Every RPC any client in the app makes goes through the routed transport; this one records and refuses. */
-function recordingTransport(calls: string[]): Transport {
-  const refuse = (method: { parent: { typeName: string }; name: string }) => {
-    calls.push(`${method.parent.typeName}/${method.name}`);
-    return Promise.reject(new Error(`the demo called ${method.parent.typeName}/${method.name}`));
-  };
-  return { unary: refuse, stream: refuse } as unknown as Transport;
+/** What the demo shell installs (demoShellBoot.ts): the shop pack's transport, every read through it, recorded. */
+function shopTransport(calls: string[]): Transport {
+  const shop = createShopTransport();
+  return {
+    unary: (method, ...rest) => (calls.push(`${method.parent.typeName}/${method.name}`), shop.unary(method, ...rest)),
+    stream: (method, ...rest) => (calls.push(`${method.parent.typeName}/${method.name}`), shop.stream(method, ...rest)),
+  } as Transport;
 }
 
 function renderDemo(path: string) {
@@ -86,14 +94,14 @@ describe("the forge demo console", () => {
     await import("../DemoConsole");
   }, 120_000);
 
-  const rpcCalls: string[] = [];
+  const shopCalls: string[] = [];
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     resetShellForTests("demo");
-    rpcCalls.length = 0;
+    shopCalls.length = 0;
     fixtureCalls.length = 0;
-    setTransport(recordingTransport(rpcCalls));
+    setTransport(shopTransport(shopCalls));
     fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("the demo fetched"));
     fetchProjects.mockClear();
     startAskReliantChat.mockClear();
@@ -106,7 +114,6 @@ describe("the forge demo console", () => {
   });
 
   const expectNothingTouched = () => {
-    expect(rpcCalls).toEqual([]);
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(fetchProjects).not.toHaveBeenCalled();
     expect(startAskReliantChat).not.toHaveBeenCalled();
@@ -119,6 +126,8 @@ describe("the forge demo console", () => {
     const nav = document.querySelector<HTMLElement>("[data-tour='forge-console'] aside");
     expect(nav).not.toBeNull();
     expect(within(nav!).getByRole("link", { name: /Overview/ })).toHaveAttribute("href", "/forge/p/shop");
+    // Releases sits in the shell's Deployments group (Console/groupedNav.tsx), folded until opened.
+    await userEvent.setup().click(within(nav!).getByRole("button", { name: /Deployments/ }));
     expect(within(nav!).getByRole("link", { name: /Releases/ })).toHaveAttribute("href", "/forge/p/shop/releases");
     expectNothingTouched();
   }, 30_000);
@@ -237,6 +246,9 @@ describe("the forge demo console", () => {
       expect(await screen.findByTestId("obs-overview", {}, { timeout: 15_000 })).toBeInTheDocument();
       const row = screen.getByRole("link", { name: "How it was built" });
       expect(row).toHaveAttribute("href", "/forge/demo?section=built");
+      // The overview's reads went to the shop pack, through the console's real client.
+      expect(shopCalls).toEqual(expect.arrayContaining(["controlplane.v1.ObservabilityService/GetServiceOverview"]));
+      expect(fixtureCalls.map((c) => c.rpc)).toContain("GetServiceOverview");
       expectNothingTouched();
     }, 30_000);
 

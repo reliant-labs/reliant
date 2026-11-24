@@ -199,7 +199,7 @@ export function MobileNewChat() {
     setMachineOffer(daemonId ? { projectId: project.id, daemonId } : null);
     useProjectStore
       .getState()
-      .selectProject(project, { restoreChat: false, restoreWorkspace: false })
+      .selectProject(project, { restoreWorkspace: false })
       .catch((error: unknown) => logger.warn("[MobileNewChat] Project switch failed", { projectId: project.id, error }));
   };
   return (

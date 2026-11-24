@@ -159,6 +159,7 @@ export async function startChat(request: StartChatRequest & { builder_test?: boo
     builderTest: request.builder_test || undefined,
     clientMessageId: request.client_message_id,
     appName: request.app_name || undefined,
+    attachedProjectIds: request.attached_project_ids ?? [],
   });
   return chatOf(response);
 }
