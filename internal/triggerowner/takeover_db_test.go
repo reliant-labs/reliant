@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package db
+package triggerowner_test
 
 import (
 	"context"
@@ -12,16 +12,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/triggerowner"
 )
 
 // takeoverTrigger is a schedule trigger of creator in acme.
-func takeoverTrigger(t *testing.T, repo *Repo, creator string) *core.Trigger {
+func takeoverTrigger(t *testing.T, repo *db.Repo, creator string) *core.Trigger {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
 	acme := "acme"
-	project := &Project{ID: uuid.NewString(), UserID: creator, OrgID: &acme, Name: "p", Path: t.TempDir(), CreatedAt: now, UpdatedAt: now, LastActive: now}
+	project := &db.Project{ID: uuid.NewString(), UserID: creator, OrgID: &acme, Name: "p", Path: t.TempDir(), CreatedAt: now, UpdatedAt: now, LastActive: now}
 	require.NoError(t, repo.CreateProject(ctx, project))
 	trig := &core.Trigger{
 		ID: uuid.NewString(), UserID: creator, OrgID: &acme, ProjectID: project.ID, Name: "nightly",
@@ -44,7 +46,8 @@ func offerFor(trig *core.Trigger, offeree string, at time.Time) *core.TriggerOff
 // completes (none fails the one-pending index), and exactly one stays
 // pending, every other superseded.
 func TestCreateTriggerOffer_ConcurrentOffersLeaveExactlyOnePending(t *testing.T) {
-	repo := NewTestRepo(t)
+	repo := db.NewTestRepo(t)
+	owner := ownerOf(t, repo)
 	trig := takeoverTrigger(t, repo, "cora-"+uuid.NewString()[:8])
 	at := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
 
@@ -57,7 +60,7 @@ func TestCreateTriggerOffer_ConcurrentOffersLeaveExactlyOnePending(t *testing.T)
 		go func() {
 			defer wg.Done()
 			<-start
-			errs[i] = repo.CreateTriggerOffer(context.Background(), offerFor(trig, "member-"+uuid.NewString()[:6], at))
+			errs[i] = owner.CreateTriggerOffer(context.Background(), offerFor(trig, "member-"+uuid.NewString()[:6], at))
 		}()
 	}
 	close(start)
@@ -66,7 +69,7 @@ func TestCreateTriggerOffer_ConcurrentOffersLeaveExactlyOnePending(t *testing.T)
 		require.NoError(t, err, "offer %d", i)
 	}
 
-	pending, err := repo.ListPendingTriggerOffers(context.Background(), core.TriggerOfferFilters{TriggerIDs: []string{trig.ID}})
+	pending, err := owner.ListPendingTriggerOffers(context.Background(), core.TriggerOfferFilters{TriggerIDs: []string{trig.ID}})
 	require.NoError(t, err)
 	assert.Len(t, pending, 1, "exactly one offer stays pending")
 	var superseded int
@@ -79,12 +82,21 @@ func TestCreateTriggerOffer_ConcurrentOffersLeaveExactlyOnePending(t *testing.T)
 // An offer is made for the owner it was decided on: once the trigger changed
 // hands it is refused and nothing is stored.
 func TestCreateTriggerOffer_RefusedOnceTheOwnerChanged(t *testing.T) {
-	repo := NewTestRepo(t)
+	repo := db.NewTestRepo(t)
+	owner := ownerOf(t, repo)
 	trig := takeoverTrigger(t, repo, "cora-"+uuid.NewString()[:8])
 	o := offerFor(trig, "bob", time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC))
 	o.PreviousOwnerUserID = "someone-else"
-	assert.ErrorIs(t, repo.CreateTriggerOffer(context.Background(), o), core.ErrTriggerOwnerChanged)
-	pending, err := repo.ListPendingTriggerOffers(context.Background(), core.TriggerOfferFilters{TriggerIDs: []string{trig.ID}})
+	assert.ErrorIs(t, owner.CreateTriggerOffer(context.Background(), o), core.ErrTriggerOwnerChanged)
+	pending, err := owner.ListPendingTriggerOffers(context.Background(), core.TriggerOfferFilters{TriggerIDs: []string{trig.ID}})
 	require.NoError(t, err)
 	assert.Empty(t, pending)
+}
+
+func ownerOf(t *testing.T, repo *db.Repo) triggerowner.Service {
+	t.Helper()
+	stores := triggerowner.NewStores(repo.ORM())
+	svc, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	require.NoError(t, err)
+	return svc
 }

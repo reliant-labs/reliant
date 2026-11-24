@@ -106,7 +106,12 @@ watched by default and a customer cannot push lines into tenant zero:
 
 1. its org is in the gateway's `MACHINE_STATS_ORGS` (comma-separated org ids;
    empty is off). control-plane's prod env sets tenant zero's org id
-   (`daemon_gateway_env_overrides` in `deploy/kcl/prod/main.k`).
+   (`daemon_gateway_env_overrides` in `deploy/kcl/prod/main.k`). The org is the
+   one the machine acts in: its recorded org, else its owner's default org
+   (`authz.MachineScopeFor`). A machine paired with an unbound credential
+   records none; the platform's pipeline boxes are paired that way, and until
+   2026-11-23 reading only the recorded org selected none of them, so the
+   self-hosted section of the dashboard and these alerts read nothing.
 2. it carries the durable machine label `MACHINE_STATS_LABEL` (default
    `monitor=platform`): set it in Settings → Machines, with
    `DaemonRegistryService.SetMachineLabels`, or declare it from the box

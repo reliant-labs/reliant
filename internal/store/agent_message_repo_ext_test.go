@@ -133,7 +133,7 @@ func TestAgentMessageDrain(t *testing.T) {
 	if err := store.SetAgentMessagesDeliveredMessageID(ctx, env.ORM, claimed, "mb-envelope"); err != nil {
 		t.Fatalf("SetAgentMessagesDeliveredMessageID: %v", err)
 	}
-	delivered, err := env.Repo.GetAgentMessage(ctx, "m-1")
+	delivered, err := store.GetAgentMessage(ctx, env.Repo.ORM(), "m-1")
 	if err != nil || delivered.Status != core.AgentMessageStatusDelivered || !delivered.DeliveredAt.Equal(deliveredAt) ||
 		delivered.DeliveredMessageID == nil || *delivered.DeliveredMessageID != "mb-envelope" {
 		t.Fatalf("Repo.GetAgentMessage after drain = %+v, %v", delivered, err)
@@ -183,16 +183,16 @@ func TestAgentMessageDrain(t *testing.T) {
 	if inserted, err := store.EnqueueAgentMessageOnce(ctx, env.ORM, mailMsg("m-4", "mb-chat", "mb-parent", "mb-child", core.AgentMessageKindHumanMessage, base)); err != nil || !inserted {
 		t.Fatalf("EnqueueAgentMessageOnce(reused id) = %v, %v; want inserted", inserted, err)
 	}
-	if inserted, err := env.Repo.EnqueueAgentMessageOnce(ctx, mailMsg("m-4", "mb-chat", "mb-parent", "mb-child", core.AgentMessageKindHumanMessage, base)); err != nil || inserted {
-		t.Fatalf("Repo.EnqueueAgentMessageOnce(taken id) = %v, %v; want false", inserted, err)
+	if inserted, err := store.EnqueueAgentMessageOnce(ctx, env.Repo.ORM(), mailMsg("m-4", "mb-chat", "mb-parent", "mb-child", core.AgentMessageKindHumanMessage, base)); err != nil || inserted {
+		t.Fatalf("store.EnqueueAgentMessageOnce(taken id, Repo.ORM()) = %v, %v; want false", inserted, err)
 	}
 }
 
 func mustMail(t *testing.T, env *storetest.Env, id string) *core.AgentMessage {
 	t.Helper()
-	m, err := env.Repo.GetAgentMessage(context.Background(), id)
+	m, err := store.GetAgentMessage(context.Background(), env.Repo.ORM(), id)
 	if err != nil || m == nil {
-		t.Fatalf("Repo.GetAgentMessage(%s) = %v, %v", id, m, err)
+		t.Fatalf("store.GetAgentMessage(%s, Repo.ORM()) = %v, %v", id, m, err)
 	}
 	return m
 }
@@ -225,8 +225,8 @@ func TestAgentMessageCancelAndClaim(t *testing.T) {
 	if ok, err := store.CancelQueuedAgentMessage(ctx, env.ORM, "h-3", "cl-chat"); err != nil || !ok {
 		t.Fatalf("CancelQueuedAgentMessage = %v, %v; want true", ok, err)
 	}
-	if ok, err := env.Repo.CancelQueuedAgentMessage(ctx, "h-3", "cl-chat"); err != nil || ok {
-		t.Fatalf("Repo.CancelQueuedAgentMessage(gone) = %v, %v; want false", ok, err)
+	if ok, err := store.CancelQueuedAgentMessage(ctx, env.Repo.ORM(), "h-3", "cl-chat"); err != nil || ok {
+		t.Fatalf("store.CancelQueuedAgentMessage(gone, Repo.ORM()) = %v, %v; want false", ok, err)
 	}
 
 	// Claim one, then the rest of the human queue: oldest first, and never

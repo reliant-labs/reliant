@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // seedAgentMessageThreads creates a chat with a parent and a child thread --
@@ -120,7 +122,7 @@ func TestMarkAgentMessagesDelivered_RemovesFromQueueAndRecordsDelivery(t *testin
 	require.Len(t, queued, 1, "delivered messages must drop out of the queue")
 	require.Equal(t, "m-3", queued[0].ID)
 
-	count, err := repo.CountQueuedAgentMessagesForThread(ctx, childThreadID)
+	count, err := store.CountQueuedAgentMessagesForThread(ctx, repo.ORM(), childThreadID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count)
 }
@@ -160,14 +162,14 @@ func TestCountQueuedAgentMessagesForThread_OnlyCountsQueued(t *testing.T) {
 	chatID, parentThreadID, childThreadID := seedAgentMessageThreads(t, repo, ctx)
 	base := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
 
-	count, err := repo.CountQueuedAgentMessagesForThread(ctx, childThreadID)
+	count, err := store.CountQueuedAgentMessagesForThread(ctx, repo.ORM(), childThreadID)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), count, "an empty inbox counts zero")
 
 	enqueueTestAgentMessage(t, repo, ctx, "m-a", chatID, parentThreadID, childThreadID, "a", base)
 	enqueueTestAgentMessage(t, repo, ctx, "m-b", chatID, parentThreadID, childThreadID, "b", base.Add(time.Minute))
 
-	count, err = repo.CountQueuedAgentMessagesForThread(ctx, childThreadID)
+	count, err = store.CountQueuedAgentMessagesForThread(ctx, repo.ORM(), childThreadID)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), count)
 
@@ -175,7 +177,7 @@ func TestCountQueuedAgentMessagesForThread_OnlyCountsQueued(t *testing.T) {
 	_, markErr := repo.MarkAgentMessagesDelivered(ctx, []string{"m-a"}, time.Now().UTC(), deliveredMessageID)
 	require.NoError(t, markErr)
 
-	count, err = repo.CountQueuedAgentMessagesForThread(ctx, childThreadID)
+	count, err = store.CountQueuedAgentMessagesForThread(ctx, repo.ORM(), childThreadID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count, "a delivered row must not be counted as queued")
 }
