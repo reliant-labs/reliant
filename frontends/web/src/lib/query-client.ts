@@ -3,9 +3,10 @@ import { shouldRetryQuery } from "./queryRetry";
 
 /**
  * A QueryClient with the app's defaults. The app has one (`queryClient`
- * below); a transport scope (lib/transportScope.tsx) builds its own from the
- * same factory, so a scoped subtree caches and retries exactly as the rest of
- * the app does.
+ * below); a transport scope that should cache and retry exactly as the rest
+ * of the app does passes its own from the same factory:
+ * `createTransportScope({ ..., queryClient: createAppQueryClient() })`
+ * (lib/transportScope.tsx).
  */
 export function createAppQueryClient(): QueryClient {
   return new QueryClient({
