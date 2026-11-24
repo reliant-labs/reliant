@@ -51,7 +51,7 @@ reliant.WebhookBearer(token))` delivers with the trigger's own credential.
 | `Runs` | `Start`, `Get`, `List`, `LastPerWorkflow`, `Signal`, `Cancel`, `Pause`\*, `Resume`\*, `Interrupt`\*, `CancelWithResult`, `PauseWithResult`\*, `ResumeWithResult`\*, `Follow`, `Status`, `Nodes`, `ContentBlockBodies` |
 | `Gates` | `Pending`, `Answer` |
 | `Inbox` | `List` (filters: project, kinds, automation; follows truncation), `Counts`, `Dismiss`, `Restore` |
-| `Approvals` | `List` (by chat), `ListForRun`, `Approve`, `Deny`, `BatchApprove`, `BatchDeny` (these four are refused to every token: only a person signed in to the app decides) |
+| `Approvals` | `List` (by chat), `ListForRun`, `Approve`, `Deny`, `BatchApprove`, `BatchDeny` (these four require an explicitly granted `approvals:decide` scope on an unbound token) |
 | `Triggers` | `Get`, `List`, `Fire`, `Events`, `LaunchEvent` |
 | `NewWebhook` | `POST /hooks/{id}` with a bearer token, a path token or an HMAC signature |
 | `reliant/follow` | the follow engine, if you have your own source of updates |
@@ -82,11 +82,10 @@ which rpcs are public). Approval gates are reported by `Gates.Pending`.
 
 ### Deciding approvals
 
-`Approvals.Approve`, `Deny`, `BatchApprove` and `BatchDeny` are refused to every
-API token, `approvals:decide` included (owner decision 2026-11-19: an approval
-means a person said yes, so it needs the app's signed-in browser session). The
-server answers `ErrPermissionDenied` with reason `person_required`; a token bound
-to a machine gets `ErrMachineCredential`. Decide approvals in the Reliant app.
+`Approvals.Approve`, `Deny`, `BatchApprove` and `BatchDeny` require an unbound
+API token explicitly granted `approvals:decide`, retained for v1 compatibility
+alongside app sessions. `reliant:api` alone does not grant this permission.
+A token bound to a machine gets `ErrMachineCredential` regardless of its scopes.
 
 For an rpc this package does not wrap, build a generated client from the
 authenticated HTTP client:

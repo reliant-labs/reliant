@@ -5,10 +5,10 @@
 > (`CredentialBrowserSession`: a server-side session id read from the
 > `__Host-reliant_session` cookie, which forge's `authn.Method.IsBrowserSession`
 > also confirms), the **Supabase session** below until the cutover (R8), and the
-> self-host shared key. Every `rlat_` token is refused, `approvals:decide`
-> included, and so is the managed identity's token as a bearer, a session id
-> sent as a bearer, and any token sent as the cookie (owner decision
-> 2026-11-19). `internal/grpc/interceptors/approval_session_test.go` is the
+> self-host shared key. For v1 compatibility, unbound `rlat_` tokens explicitly
+> granted `approvals:decide` also succeed. Machine-bound tokens, the managed
+> identity's token as a bearer, a session id sent as a bearer, and any token
+> sent as the cookie are refused. `internal/grpc/interceptors/approval_session_test.go` is the
 > matrix. The checks below still verify the Supabase half until it is removed.
 
 `ApprovalService.Approve`, `Deny`, `BatchApprove` and `BatchDeny` refuse any

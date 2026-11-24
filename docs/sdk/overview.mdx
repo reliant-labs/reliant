@@ -61,7 +61,7 @@ Everything else needs `reliant:api`. A narrow token that reaches any other proce
 | `Runs.Signal`, `Cancel`, `Pause`, `Resume`, `Interrupt` (and the `WithResult` forms) | the matching `*Run` procedure | `runs:control` |
 | `Runs.Follow`, `FollowSession`, `Status`, `StatusSession` | `GetRun` plus the session's updates and workflow tree | `reliant:api` |
 | `Gates.Pending`, `Gates.Answer`, `Approvals.*` except deciding | questions and approvals | `reliant:api` |
-| `Approvals.Approve`, `Deny`, `BatchApprove`, `BatchDeny` | deciding an approval | refused to every token, `approvals:decide` included: only a person signed in to the Reliant app decides an approval |
+| `Approvals.Approve`, `Deny`, `BatchApprove`, `BatchDeny` | deciding an approval | requires an explicitly granted `approvals:decide` scope on an unbound token; machine-bound tokens are always refused |
 | `Inbox.*` | the inbox | `reliant:api` |
 | `Triggers.Get`, `List`, `Events`, `LaunchEvent` | trigger reads | `reliant:api` |
 | `Triggers.Fire` | `GetTrigger`, then `FireTrigger` | `reliant:api` (see below) |
