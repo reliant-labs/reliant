@@ -66,7 +66,7 @@ import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
 import { consoleNavEntries, consoleNavEntryLights, consoleNavEntryTarget, type ConsoleNavEntry, type ConsoleNavGroup } from "../../../Forge/Console/consoleNavRegistry";
 import { ANALYTICS_TAB_LABELS, ANALYTICS_TABS, authPath, consolePath, obsOverviewPath, OBS_NAV_LABELS, orgPath, type AnalyticsTab, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
-import { isSettingsItemCurrent, settingsItemEntry, settingsNavGroups, type SectionItem } from "../../../Settings/SettingsNavigation";
+import { isSettingsItemCurrent, SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME, settingsItemEntry, settingsNavGroups, type SectionItem } from "../../../Settings/SettingsNavigation";
 import type { SettingsTab } from "../../../../routeSchemas";
 import { isAt, isAtOrBelow } from "../navLocation";
 import { isChatPage } from "../shellProject";
@@ -545,7 +545,14 @@ function settingsChildren(): readonly NavItem[] {
   return items;
 }
 
-const isSettingsRoute = (ctx: NavCtx) => isAtOrBelow(ctx.pathname, settingsPath());
+/**
+ * Settings' pages, less the sections whose page another area owns (Agent
+ * sandboxes is Agents › Sandboxes): there Agents takes the nav column and
+ * only Sandboxes is lit, whichever order the areas are checked in.
+ */
+const isSettingsRoute = (ctx: NavCtx) =>
+  isAtOrBelow(ctx.pathname, settingsPath()) &&
+  !SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME.some((section) => isAtOrBelow(ctx.pathname, settingsPath(section)));
 
 /** Settings: a plain link (U6d, owner); bare /settings opens the section last visited. */
 export const settings: NavRow = {

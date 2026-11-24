@@ -11,7 +11,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { inboxPath, newChatPath, projectChatsPath, runsPath, settingsPath } from "@/lib/paths";
+import { inboxPath, machineSettingsPath, newChatPath, projectChatsPath, runsPath, sandboxesPath, settingsPath } from "@/lib/paths";
+
+import { getVisibleSettingsSectionIds, SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME } from "../../../Settings/SettingsNavigation";
 
 import { registerConsoleNavEntry } from "../../../Forge/Console/consoleNavRegistry";
 import { consolePageOf, consolePath, obsOverviewPath, orgPageOf, orgPath } from "../../../Forge/Console/paths";
@@ -263,6 +265,24 @@ describe("Settings", () => {
     expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "settings");
     expect(screen.getByTestId("nav-settings-ai")).toHaveAttribute("aria-current", "page");
     expect(screen.getByTestId("sidebar-settings-button")).toHaveAttribute("aria-current", "page");
+  });
+
+  // Every Settings section's page shows Settings' sections in the nav, except
+  // the ones another area owns, which Settings must then neither light up nor
+  // reopen (SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME). A section moved under
+  // another area without being listed there fails here: that is how bare
+  // /settings came to open Agents › Sandboxes with no way back to Settings.
+  it.each(getVisibleSettingsSectionIds())("%s's page is Settings', or listed as another area's", (section) => {
+    const area = activeArea(hybridNav, ctxAt(settingsPath(section)))?.id ?? null;
+    if (SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME.includes(section)) expect(area).not.toBe("settings");
+    else expect(area).toBe("settings");
+  });
+
+  it.each([sandboxesPath(), machineSettingsPath("d-1")])("leaves %s to Agents › Sandboxes, with Settings unlit", (href) => {
+    renderAt(href);
+    expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "agents");
+    expect(screen.getByTestId("nav-sandboxes")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("sidebar-settings-button")).not.toHaveAttribute("aria-current");
   });
 });
 
