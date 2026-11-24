@@ -21,7 +21,9 @@ enum PackageType {
 // workspace's checkout — never on the api-server, which has no user files.
 service PackageCommandsService {
   // ListCommands returns available commands for a directory
-  rpc ListCommands(ListPackageCommandsRequest) returns (ListPackageCommandsResponse) {}
+  rpc ListCommands(ListPackageCommandsRequest) returns (ListPackageCommandsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // RunCommand executes a package command
   rpc RunCommand(RunPackageCommandRequest) returns (RunPackageCommandResponse) {
@@ -31,13 +33,19 @@ service PackageCommandsService {
   }
 
   // ListProcesses returns processes for a worktree
-  rpc ListProcesses(ListPackageProcessesRequest) returns (ListPackageProcessesResponse) {}
+  rpc ListProcesses(ListPackageProcessesRequest) returns (ListPackageProcessesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetProcess returns a specific process
-  rpc GetProcess(GetPackageProcessRequest) returns (GetPackageProcessResponse) {}
+  rpc GetProcess(GetPackageProcessRequest) returns (GetPackageProcessResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetProcessLogs returns the logs for a process
-  rpc GetProcessLogs(GetPackageProcessLogsRequest) returns (GetPackageProcessLogsResponse) {}
+  rpc GetProcessLogs(GetPackageProcessLogsRequest) returns (GetPackageProcessLogsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // KillProcess terminates a process
   rpc KillProcess(KillPackageProcessRequest) returns (KillPackageProcessResponse) {
@@ -47,7 +55,9 @@ service PackageCommandsService {
   }
 
   // GetCommandFavorites returns the list of favorited command keys for a project
-  rpc GetCommandFavorites(GetCommandFavoritesRequest) returns (GetCommandFavoritesResponse) {}
+  rpc GetCommandFavorites(GetCommandFavoritesRequest) returns (GetCommandFavoritesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SetCommandFavorite adds or removes a command from favorites
   rpc SetCommandFavorite(SetCommandFavoriteRequest) returns (SetCommandFavoriteResponse) {

@@ -1567,19 +1567,19 @@ const file_reliant_v1_connector_proto_rawDesc = "" +
 	"\rConnectorKind\x12\x1e\n" +
 	"\x1aCONNECTOR_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CONNECTOR_KIND_WORKSPACE\x10\x01\x12\x18\n" +
-	"\x14CONNECTOR_KIND_FORGE\x10\x022\xd5\a\n" +
+	"\x14CONNECTOR_KIND_FORGE\x10\x022\xe1\a\n" +
 	"\x10ConnectorService\x12\\\n" +
-	"\x0fCreateConnector\x12\".reliant.v1.CreateConnectorRequest\x1a#.reliant.v1.CreateConnectorResponse\"\x00\x12Y\n" +
-	"\x0eListConnectors\x12!.reliant.v1.ListConnectorsRequest\x1a\".reliant.v1.ListConnectorsResponse\"\x00\x12{\n" +
+	"\x0fCreateConnector\x12\".reliant.v1.CreateConnectorRequest\x1a#.reliant.v1.CreateConnectorResponse\"\x00\x12\\\n" +
+	"\x0eListConnectors\x12!.reliant.v1.ListConnectorsRequest\x1a\".reliant.v1.ListConnectorsResponse\"\x03\x90\x02\x01\x12{\n" +
 	"\x0fRevokeConnector\x12\".reliant.v1.RevokeConnectorRequest\x1a#.reliant.v1.RevokeConnectorResponse\"\x1f\xa2\xbb\x18\x1b:\x19\n" +
 	"\x06revoke\x12\x0f\n" +
-	"\tconnector\x12\x02id\x12n\n" +
-	"\x15ListConnectorActivity\x12(.reliant.v1.ListConnectorActivityRequest\x1a).reliant.v1.ListConnectorActivityResponse\"\x00\x12e\n" +
-	"\x12ListAvailableTools\x12%.reliant.v1.ListAvailableToolsRequest\x1a&.reliant.v1.ListAvailableToolsResponse\"\x00\x12\x99\x01\n" +
+	"\tconnector\x12\x02id\x12q\n" +
+	"\x15ListConnectorActivity\x12(.reliant.v1.ListConnectorActivityRequest\x1a).reliant.v1.ListConnectorActivityResponse\"\x03\x90\x02\x01\x12h\n" +
+	"\x12ListAvailableTools\x12%.reliant.v1.ListAvailableToolsRequest\x1a&.reliant.v1.ListAvailableToolsResponse\"\x03\x90\x02\x01\x12\x99\x01\n" +
 	"\x0fAuthorizeClient\x12\".reliant.v1.AuthorizeClientRequest\x1a#.reliant.v1.AuthorizeClientResponse\"=\xa2\xbb\x189:7\n" +
 	"\tauthorize\x12*\n" +
-	"\x10connector_client\x12\tclient_id\x1a\vclient_name\x12n\n" +
-	"\x15ListAuthorizedClients\x12(.reliant.v1.ListAuthorizedClientsRequest\x1a).reliant.v1.ListAuthorizedClientsResponse\"\x00\x12\xa7\x01\n" +
+	"\x10connector_client\x12\tclient_id\x1a\vclient_name\x12q\n" +
+	"\x15ListAuthorizedClients\x12(.reliant.v1.ListAuthorizedClientsRequest\x1a).reliant.v1.ListAuthorizedClientsResponse\"\x03\x90\x02\x01\x12\xa7\x01\n" +
 	"\x19RevokeClientAuthorization\x12,.reliant.v1.RevokeClientAuthorizationRequest\x1a-.reliant.v1.RevokeClientAuthorizationResponse\"-\xa2\xbb\x18):'\n" +
 	"\x06revoke\x12\x1d\n" +
 	"\x10connector_client\x12\tclient_idB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"

@@ -991,12 +991,12 @@ const file_reliant_v1_plan_proto_rawDesc = "" +
 	"\x1bPLAN_COMPLEXITY_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16PLAN_COMPLEXITY_SIMPLE\x10\x01\x12\x1c\n" +
 	"\x18PLAN_COMPLEXITY_MODERATE\x10\x02\x12\x1b\n" +
-	"\x17PLAN_COMPLEXITY_COMPLEX\x10\x032\xb1\x05\n" +
+	"\x17PLAN_COMPLEXITY_COMPLEX\x10\x032\xbd\x05\n" +
 	"\vPlanService\x12M\n" +
 	"\n" +
-	"CreatePlan\x12\x1d.reliant.v1.CreatePlanRequest\x1a\x1e.reliant.v1.CreatePlanResponse\"\x00\x12D\n" +
-	"\aGetPlan\x12\x1a.reliant.v1.GetPlanRequest\x1a\x1b.reliant.v1.GetPlanResponse\"\x00\x12\\\n" +
-	"\x0fGetPlanByChatId\x12\".reliant.v1.GetPlanByChatIdRequest\x1a#.reliant.v1.GetPlanByChatIdResponse\"\x00\x12\x81\x01\n" +
+	"CreatePlan\x12\x1d.reliant.v1.CreatePlanRequest\x1a\x1e.reliant.v1.CreatePlanResponse\"\x00\x12G\n" +
+	"\aGetPlan\x12\x1a.reliant.v1.GetPlanRequest\x1a\x1b.reliant.v1.GetPlanResponse\"\x03\x90\x02\x01\x12_\n" +
+	"\x0fGetPlanByChatId\x12\".reliant.v1.GetPlanByChatIdRequest\x1a#.reliant.v1.GetPlanByChatIdResponse\"\x03\x90\x02\x01\x12\x81\x01\n" +
 	"\n" +
 	"UpdatePlan\x12\x1d.reliant.v1.UpdatePlanRequest\x1a\x1e.reliant.v1.UpdatePlanResponse\"4\xa2\xbb\x180:.\n" +
 	"\x06update\x12$\n" +
@@ -1004,9 +1004,9 @@ const file_reliant_v1_plan_proto_rawDesc = "" +
 	"\n" +
 	"DeletePlan\x12\x1d.reliant.v1.DeletePlanRequest\x1a\x1e.reliant.v1.DeletePlanResponse\"\x1f\xa2\xbb\x18\x1b:\x19\n" +
 	"\x06delete\x12\x0f\n" +
-	"\x04plan\x12\aplan_id\x12V\n" +
-	"\rListPlanTasks\x12 .reliant.v1.ListPlanTasksRequest\x1a!.reliant.v1.ListPlanTasksResponse\"\x00\x12e\n" +
-	"\x12ListPlansByProject\x12%.reliant.v1.ListPlansByProjectRequest\x1a&.reliant.v1.ListPlansByProjectResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x04plan\x12\aplan_id\x12Y\n" +
+	"\rListPlanTasks\x12 .reliant.v1.ListPlanTasksRequest\x1a!.reliant.v1.ListPlanTasksResponse\"\x03\x90\x02\x01\x12h\n" +
+	"\x12ListPlansByProject\x12%.reliant.v1.ListPlansByProjectRequest\x1a&.reliant.v1.ListPlansByProjectResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_plan_proto_rawDescOnce sync.Once

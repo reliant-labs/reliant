@@ -250,6 +250,7 @@ func NewForgeServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+ForgeServiceGetDeployStatusProcedure,
 			connect.WithSchema(forgeServiceMethods.ByName("GetDeployStatus")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -503,6 +504,7 @@ func NewForgeServiceHandler(svc ForgeServiceHandler, opts ...connect.HandlerOpti
 		ForgeServiceGetDeployStatusProcedure,
 		svc.GetDeployStatus,
 		connect.WithSchema(forgeServiceMethods.ByName("GetDeployStatus")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.ForgeService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
