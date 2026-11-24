@@ -82,6 +82,12 @@ type RunLookup interface {
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 }
 
+// PRLinker records that a chat's run opened a pull request
+// (chat_pr_links). chatprlinks.Service satisfies it.
+type PRLinker interface {
+	LinkRunPR(ctx context.Context, chatID, runID string, pr core.PRRef) (int, error)
+}
+
 // Deps are the Recorder's collaborators.
 type Deps struct {
 	Store Store
@@ -89,6 +95,9 @@ type Deps struct {
 	// Workflows reads the run a call names. nil treats every run id as the
 	// chat id, as a run whose row is missing is treated.
 	Workflows WorkflowLoader
+	// PRLinks links the chat a GitHub pr.create was made for to the pull
+	// request it opened. nil links nothing.
+	PRLinks PRLinker
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
 }

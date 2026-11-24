@@ -82,8 +82,8 @@ const ensureEnvironment = vi.fn();
 
 vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/secretStore")>()),
-  listSecrets: (...args: unknown[]) => listSecrets(...(args as [])),
-  setSecret: (...args: unknown[]) => setSecret(...(args as [])),
+  listSecrets: (_transport: unknown, ...args: unknown[]) => listSecrets(...(args as [])),
+  setSecret: (_transport: unknown, ...args: unknown[]) => setSecret(...(args as [])),
   getSecretVersions: () => Promise.resolve({ summary: null, versions: [] }),
 }));
 

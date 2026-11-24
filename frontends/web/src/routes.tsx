@@ -57,7 +57,8 @@ import { GlobalUpdateHandler } from './components/Settings/GlobalUpdateHandler'
 import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
 import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
-import { ShortcutHost } from './components/Shortcuts/ShortcutHost'
+import { ShortcutHost, type ShortcutOverlays } from './components/Shortcuts/ShortcutHost'
+import { SwitchProjectDialog } from './components/Projects/SwitchProjectDialog'
 import { AppShellFrame } from './components/Layout/shell/AppShell'
 import { PageVisitTracker } from './components/PageVisitTracker'
 import { JourneyTour } from './components/Onboarding/JourneyTour'
@@ -115,6 +116,20 @@ if (forgeBrand) bootForgeTour()
 // lazyRouteComponent directly: after a deploy a tab can ask for a chunk that
 // no longer exists, and lazyRoute reloads from an effect where TanStack would
 // reload during render.
+// The app's own pieces of the one shell, handed to it as seams so the shell
+// never imports them (a host without them, the public demo, wears it too).
+// The nav and its chat list load with the first shell page, not with the
+// entry chunk every signed-out page pays for (Layout/shell/AppShell.tsx).
+const AppNav = lazyRoute(() => import('./components/Layout/Sidebar'), 'Sidebar')
+// The keyboard host's overlays (Shortcuts/ShortcutHost.tsx). The palette and
+// chat search load on first open (and are warmed once the host is live);
+// the project switcher stays static, as it always was.
+const APP_OVERLAYS: ShortcutOverlays = {
+  projectSwitcher: SwitchProjectDialog,
+  commandPalette: lazyRoute(() => import('./components/Layout/CommandPalette'), 'CommandPalette'),
+  chatSearch: lazyRoute(() => import('./components/Layout/ChatSearch'), 'ChatSearch'),
+}
+
 const AuthScreen = lazyRoute(
   () => import('./components/AuthScreen'), 'AuthScreen')
 const OAuthCallback = lazyRoute(
@@ -145,12 +160,13 @@ const SetupSurfacesPreview = lazyRoute(
   () => import('./components/OnboardingFlow/__preview__/SetupSurfacesPreview'), 'default')
 const SecretsPreview = lazyRoute(
   () => import('./components/Forge/Secrets/__preview__/SecretsPreview'), 'default')
-// The whole Forge pane against a fake network (control-plane's real state as
-// fixtures) — see ForgePanePreview for why the fake sits at fetch.
+// The whole forge console over the shop fixture pack's transport (src/fixtures/preview.tsx)
+// — see ForgePanePreview for why the fake sits at the transport.
 const ForgePanePreview = lazyRoute(
   () => import('./components/Forge/__preview__/ForgePanePreview'), 'ForgePanePreview')
-// The Observability tab against in-memory fixtures — every view and state,
-// no backend. Also what the Playwright smoke drives (e2e/observability.spec.ts).
+// The Observability views in the real console over the shop fixture pack —
+// every view and state, no backend. Also what the Playwright smoke drives
+// (e2e/observability.spec.ts).
 const ObservabilityPreview = lazyRoute(
   () => import('./components/Forge/Observability/__preview__/ObservabilityPreview'), 'default')
 const ObservabilityBillingPreview = lazyRoute(
@@ -323,10 +339,10 @@ function RootShell() {
     <>
       <ActiveOrgBinding onSwitch={followActiveOrg} />
       <PageVisitTracker firstVisitProps={forgeEntry} />
-      <ShortcutHost>
+      <ShortcutHost overlays={APP_OVERLAYS}>
         {/* The one shell: one nav around every app page, above the outlet so
             moving between pages never remounts it (Layout/shell/AppShell.tsx). */}
-        <AppShellFrame>
+        <AppShellFrame nav={AppNav}>
           <Outlet />
         </AppShellFrame>
       </ShortcutHost>
@@ -690,21 +706,17 @@ const consolePrimitivesPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><ConsolePrimitivesPreview /></DevOnlyRoute>,
 })
 
-// The Releases list and a release, inside the real console chrome, against the
-// fixture ledger — every state (data, empty, error, loading, a ledger that
-// failed) in every scheme, no backend.
+// The Releases list and a release, in the real console, over the shop fixture
+// pack — every state (data, empty, error, loading, a ledger that failed) in
+// every scheme, no backend.
 const forgeReleasesPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-releases-preview',
   component: () => <DevOnlyRoute><ReleasesPreview /></DevOnlyRoute>,
 })
 
-// The Observability home, Dashboards and a dashboard, inside the real console
-// chrome, against the fixture app and an in-memory DashboardService — every
-// state in every scheme, no backend.
-// The Overview (with the workloads) and a workload, inside the real console
-// chrome, against the workload fixtures — every state in every scheme, no
-// backend.
+// The Overview (with the workloads) and a workload, in the real console, over
+// the shop fixture pack — every state in every scheme, no backend.
 const forgeWorkloadsPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-workloads-preview',
@@ -712,7 +724,7 @@ const forgeWorkloadsPreviewRoute = createRoute({
 })
 
 // The storage browser (buckets, a level, an object's preview and download),
-// inside the real console chrome, against the fixture buckets — every state
+// inside the real console chrome, over the shop fixture pack — every state
 // in every scheme, no backend.
 const forgeStoragePreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -721,7 +733,7 @@ const forgeStoragePreviewRoute = createRoute({
 })
 
 // The data browser (databases, tables, a grid, a row and its Related), inside
-// the real console chrome, against the fixture shop — every state in every
+// the real console chrome, over the shop fixture pack — every state in every
 // scheme, no backend.
 const forgeDataPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -729,14 +741,16 @@ const forgeDataPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><DataPreview /></DevOnlyRoute>,
 })
 
+// The Dashboards index and a dashboard, in the real console, over the shop
+// fixture pack — every state in every scheme, no backend.
 const forgeDashboardsPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-dashboards-preview',
   component: () => <DevOnlyRoute><DashboardsPreview /></DevOnlyRoute>,
 })
 
-// The metrics explorer, inside the real console chrome, against the explorer's
-// fixture app — every state in every scheme, no backend.
+// The metrics explorer, in the real console, over the shop fixture pack —
+// every state in every scheme, no backend.
 const forgeMetricsPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-metrics-preview',

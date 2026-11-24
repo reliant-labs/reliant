@@ -1014,10 +1014,10 @@ const file_reliant_v1_background_proto_rawDesc = "" +
 	"\texit_code\x18\x05 \x01(\x05H\x01R\bexitCode\x88\x01\x01B\t\n" +
 	"\a_statusB\f\n" +
 	"\n" +
-	"_exit_code2\xf1\x03\n" +
-	"\x11BackgroundService\x12j\n" +
-	"\rListProcesses\x12*.reliant.v1.ListBackgroundProcessesRequest\x1a+.reliant.v1.ListBackgroundProcessesResponse\"\x00\x12_\n" +
-	"\x10GetProcessOutput\x12#.reliant.v1.GetProcessOutputRequest\x1a$.reliant.v1.GetProcessOutputResponse\"\x00\x12\xa8\x01\n" +
+	"_exit_code2\xf7\x03\n" +
+	"\x11BackgroundService\x12m\n" +
+	"\rListProcesses\x12*.reliant.v1.ListBackgroundProcessesRequest\x1a+.reliant.v1.ListBackgroundProcessesResponse\"\x03\x90\x02\x01\x12b\n" +
+	"\x10GetProcessOutput\x12#.reliant.v1.GetProcessOutputRequest\x1a$.reliant.v1.GetProcessOutputResponse\"\x03\x90\x02\x01\x12\xa8\x01\n" +
 	"\vKillProcess\x12\x1e.reliant.v1.KillProcessRequest\x1a\x1f.reliant.v1.KillProcessResponse\"X\xa2\xbb\x18T:R:Pstops a background process on the daemon; process lifecycle, not project history\x12d\n" +
 	"\x13StreamProcessOutput\x12&.reliant.v1.StreamProcessOutputRequest\x1a\x1e.reliant.v1.ProcessOutputEvent\"\x03\x90\x02\x010\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 

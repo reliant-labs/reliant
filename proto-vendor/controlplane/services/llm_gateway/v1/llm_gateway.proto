@@ -24,9 +24,11 @@ service LLMGatewayService {
     };
   }
   rpc ListLLMKeys(ListLLMKeysRequest) returns (ListLLMKeysResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc GetLLMKey(GetLLMKeyRequest) returns (GetLLMKeyResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc RevokeLLMKey(RevokeLLMKeyRequest) returns (RevokeLLMKeyResponse) {
@@ -42,9 +44,11 @@ service LLMGatewayService {
     };
   }
   rpc GetLLMSpend(GetLLMSpendRequest) returns (GetLLMSpendResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc ListAvailableModels(ListAvailableModelsRequest) returns (ListAvailableModelsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 }

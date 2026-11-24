@@ -305,6 +305,20 @@ export function catalogFromResponse(response: WireListProjectsWithAppsResponse):
   return { orgId: response.orgId, rows, hostedAppsState: state };
 }
 
+/** Whether a project of the person's own (not one shared with them) has a git remote: a repository they brought. */
+export function catalogHasOwnRepo(catalog: ProjectCatalog): boolean {
+  return catalog.rows.some(
+    (row) => row.kind === "project" && !row.shared && (!!row.project.remote_url || row.repos.some((r) => r.remote !== "")),
+  );
+}
+
+/** Whether any app in the catalog has been deployed (`lastDeployedAt`). */
+export function catalogHasDeployedApp(catalog: ProjectCatalog): boolean {
+  return catalog.rows.some((row) =>
+    row.kind === "app" ? !!row.app.hosted?.lastDeployedAt : row.apps.some((app) => !!app.hosted?.lastDeployedAt),
+  );
+}
+
 /**
  * A catalog of plain projects (ListProjects' rows), for when the server
  * cannot answer ListProjectsWithApps (an older server): every project, no

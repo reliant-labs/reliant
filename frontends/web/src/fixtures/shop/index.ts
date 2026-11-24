@@ -24,15 +24,17 @@ import { createMockTransport, type MockScenario } from "@reliantlabs/forge-web-r
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
 import { isDemoRead } from "../readOnly";
-import { createFixtureTransport, defineFixturePack, type FixturePack } from "../transport";
+import { assertPureFixturePack, createFixtureTransport, defineFixturePack, type CreateFixtureTransportOptions, type FixturePack } from "../transport";
 import { configScenarioHandlers } from "./handlers/config";
 import { consoleScenarioHandlers } from "./handlers/console";
 import { coverageSourceHandlers } from "./handlers/coverageSource";
 import { DEMO_DEFAULT_SERVICES, defaultHandlers, withMessageRequests } from "./handlers/defaults";
 import { inventoryScenarioHandlers } from "./handlers/inventory";
 import { observabilityHandlers } from "./handlers/observability";
+import { organizationScenarioHandlers } from "./handlers/organization";
 import { scopedToDemo } from "./handlers/scope";
 import { securityHandlers } from "./handlers/security";
+import { withSpeedInsights } from "./handlers/speedInsights";
 import { storageScenarioHandlers } from "./handlers/storage";
 import { testsHandlers } from "./handlers/tests";
 import { createShopApi } from "./model/shopApi";
@@ -40,6 +42,13 @@ import { demoNow, pinClock } from "./shopStory";
 
 /** What a refused write says. */
 export const SHOP_READ_ONLY_MESSAGE = "This is a demo. Changes are turned off.";
+
+/**
+ * How the pack is served: on the pack clock, writes refused. Every transport
+ * over the shop pack takes these (createShopTransport, the dev previews'
+ * `<FixturePreview serve={SHOP_SERVE}>`).
+ */
+export const SHOP_SERVE = { now: demoNow, readOnly: isDemoRead, readOnlyMessage: SHOP_READ_ONLY_MESSAGE } satisfies Omit<CreateFixtureTransportOptions, "pack">;
 
 /**
  * The pack's scenario over `fixtures` (a model-level ObservabilityApi; the
@@ -52,7 +61,7 @@ export function shopScenario(fixtures: ObservabilityApi = createShopApi()): Mock
   // (handlers/defaults.ts). A read naming another project or environment is answered empty
   // first (handlers/scope.ts), defaults included, which is why the pack composes its own
   // defaults rather than declaring them as the pack's `defaults`.
-  const handlers = { ...defaultHandlers(), ...consoleScenarioHandlers(), ...configScenarioHandlers(), ...inventoryScenarioHandlers(), ...storageScenarioHandlers(), ...observabilityHandlers(fixtures), ...securityHandlers(), ...testsHandlers(), ...coverageSourceHandlers() };
+  const handlers = withSpeedInsights({ ...defaultHandlers(), ...consoleScenarioHandlers(), ...configScenarioHandlers(), ...inventoryScenarioHandlers(), ...storageScenarioHandlers(), ...organizationScenarioHandlers(), ...observabilityHandlers(fixtures), ...securityHandlers(), ...testsHandlers(), ...coverageSourceHandlers() });
   return { name: "shop", handlers: withMessageRequests(scopedToDemo(handlers, DEMO_DEFAULT_SERVICES)) as unknown as MockScenario["handlers"] };
 }
 
@@ -86,11 +95,13 @@ export interface ShopTransportOptions extends ShopPackOptions {
 
 /** A transport serving the shop pack, read-only. */
 export function createShopTransport({ passthrough, ...pack }: ShopTransportOptions = {}): Transport {
-  const readOnly = { readOnly: isDemoRead, readOnlyMessage: SHOP_READ_ONLY_MESSAGE };
+  const readOnly = { readOnly: SHOP_SERVE.readOnly, readOnlyMessage: SHOP_SERVE.readOnlyMessage };
   const served = shopPack(pack);
-  if (!passthrough) return createFixtureTransport({ pack: served, now: demoNow, ...readOnly });
+  if (!passthrough) return createFixtureTransport({ ...SHOP_SERVE, pack: served });
   // A fixture transport never reaches a backend (forge's neither), so the gateway rides forge's
-  // mock transport, over the same scenario.
+  // mock transport, over the same scenario. That path reaches live traffic, so a pack that answers
+  // writes from fixtures (`answers`) is refused on it.
+  assertPureFixturePack(served, "createShopTransport({ passthrough })");
   return createMockTransport({
     scenario: { ...shopScenario(), passthrough: "first" },
     fallback: passthrough.fallback,

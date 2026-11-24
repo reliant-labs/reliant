@@ -17,8 +17,8 @@ var errCapacityUnwired = errors.New("test: capacity store not wired")
 // silent no-op.
 type unwiredCapacity struct{}
 
-func (unwiredCapacity) EnqueueTriggerCapacity(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) error {
-	return errCapacityUnwired
+func (unwiredCapacity) EnqueueTriggerCapacitySuperseding(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) ([]*core.TriggerEvent, error) {
+	return nil, errCapacityUnwired
 }
 func (unwiredCapacity) CanLaunchTriggerCapacity(context.Context, string, store.TriggerCapacityScope, store.TriggerCapacityLimits) (bool, error) {
 	return false, errCapacityUnwired
@@ -55,8 +55,8 @@ func (unwiredCapacity) TriggerCapacityStartFenced(context.Context, store.Trigger
 }
 
 // Expiry is the one quiet method: a redrive pass over a fake with no capacity rows has nothing to expire.
-func (unwiredCapacity) ExpirePendingTriggerCapacityEvents(context.Context, time.Time, string, int) (int64, error) {
-	return 0, nil
+func (unwiredCapacity) ExpirePendingTriggerCapacityEvents(context.Context, time.Time, string, int) ([]*core.TriggerEvent, error) {
+	return nil, nil
 }
 
 // idleCapacity is a CapacityStore with no occupied slots and nothing to

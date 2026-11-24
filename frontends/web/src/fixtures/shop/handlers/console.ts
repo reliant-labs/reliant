@@ -75,7 +75,8 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 /** `ms` ago, from this page load. */
-const ago = (ms: number, now = demoNow()): Timestamp => timestampFromMs(now - ms);
+// Whole ms: a fractional one (a phase's share of a build) makes Timestamp.nanos a non-integer, which does not encode.
+const ago = (ms: number, now = demoNow()): Timestamp => timestampFromMs(Math.round(now - ms));
 
 export { DEMO_ENVS, DEMO_PROJECT, DEMO_RELEASES, RUNNING };
 
@@ -798,7 +799,16 @@ export function consoleScenarioHandlers(): MockHandlers {
           const scope = req.scope;
           if (!forProject(scope?.projectId) || scope?.envIds.some((id) => !envIdOf(id))) return { events: [] };
           const envs = scope?.envIds.length ? new Set(scope.envIds) : null;
-          return { events: activity().filter((e) => !envs || (e.env && envs.has(String(e.env.id)))) };
+          // An issue's history and a target's feed narrow by what they name (activityApi.ts listActivity).
+          return {
+            events: activity().filter(
+              (e) =>
+                (!envs || (e.env && envs.has(String(e.env.id)))) &&
+                (!req.targetKind || e.target?.kind === req.targetKind) &&
+                (!req.targetId || e.target?.id === req.targetId) &&
+                (!req.verb || e.verb === req.verb),
+            ),
+          };
         },
       }),
     ),

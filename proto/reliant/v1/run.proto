@@ -64,7 +64,9 @@ service RunService {
   }
 
   // GetRun returns one run's current state.
-  rpc GetRun(GetRunRequest) returns (GetRunResponse) {}
+  rpc GetRun(GetRunRequest) returns (GetRunResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListRuns lists runs, newest first.
   //
@@ -72,7 +74,9 @@ service RunService {
   // every root run the caller owns, narrowed by the filters on the request and
   // paged by page_token. With one of them it lists that session's runs or that
   // run's children.
-  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse) {}
+  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // LastRunPerWorkflow returns the most recent root run of each workflow the
   // caller has run, one Run per workflow name. It is the Library's "last run"

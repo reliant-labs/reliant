@@ -2353,7 +2353,7 @@ streamLoop:
 	if streamInterrupted {
 		usageErr = nil
 	}
-	a.recordLLMCallUsage(ctx, chat, usageProvider(resolved, driver), resolvedModelID, resolved, llmLatencyMs, streamState.usage, streamErr, streamInterrupted, streamState.retries)
+	a.recordLLMCallUsage(ctx, chat, usageProvider(resolved, driver), resolvedModelID, resolved, llmLatencyMs, streamState.usage, streamState.upstreamRequestID, streamErr, streamInterrupted, streamState.retries)
 	a.logLLMUsage(ctx, chat, driver, llmLatencyMs, streamState.usage, usageErr, shape, shapeDiff)
 	a.trackLLMCallCompleted(ctx, chat, driver, rtx.WorkflowID, rtx.StepID, llmLatencyMs, streamState.usage, usageErr)
 
@@ -3382,10 +3382,12 @@ func (a *CallLLMActivity) processStreamEvent(ctx context.Context, chatID string,
 	// sends is proof the provider answered. Recording on the one and releasing on
 	// the other keeps the marker true at every instant, at two writes per backoff
 	// episode rather than one per delta.
+	if state.retries != nil {
+		// The ledger's view of the call's requests: each retry, and when
+		// the answering one produced its first token.
+		state.retries.observeEvent(event)
+	}
 	if event.Type == llm.EventRetryWait {
-		if state.retries != nil && event.Retry != nil {
-			state.retries.observe(*event.Retry)
-		}
 		a.recordProviderBackoff(ctx, chatID, thread, event.Retry, state)
 		return nil
 	}

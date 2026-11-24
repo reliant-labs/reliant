@@ -526,7 +526,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
       </div>
 
       <div className="space-y-3">
-        <div className="space-y-4 rounded-xl border border-border/50 bg-muted/30 p-4">
+        <div className="space-y-4 rounded-xl border border-border/60 bg-background p-4">
           <div className="flex items-start gap-3">
             <KeyRound className="mt-0.5 h-4 w-4 text-primary-ink" />
             <div>
@@ -790,17 +790,13 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
       {validationResult && (
         <div
           data-error-code={validationResult.code}
-          className={cn(
-            "flex items-center gap-2 rounded-lg border p-3 text-sm",
-            validationResult.valid
-              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600"
-              : "border-red-500/20 bg-red-500/10 text-red-600",
-          )}
+          // Status is the icon and its ink, never a tinted card (web-styling).
+          className="flex items-center gap-2 rounded-md border border-border p-3 text-sm text-foreground"
         >
           {validationResult.valid ? (
-            <CheckCircle2 className="h-4 w-4" />
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-success-ink" />
           ) : (
-            <XCircle className="h-4 w-4" />
+            <XCircle className="h-4 w-4 shrink-0 text-destructive-ink" />
           )}
           {validationResult.message}
         </div>

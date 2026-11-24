@@ -97,12 +97,14 @@ func NewPlanServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+PlanServiceGetPlanProcedure,
 			connect.WithSchema(planServiceMethods.ByName("GetPlan")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getPlanByChatId: connect.NewClient[v1.GetPlanByChatIdRequest, v1.GetPlanByChatIdResponse](
 			httpClient,
 			baseURL+PlanServiceGetPlanByChatIdProcedure,
 			connect.WithSchema(planServiceMethods.ByName("GetPlanByChatId")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updatePlan: connect.NewClient[v1.UpdatePlanRequest, v1.UpdatePlanResponse](
@@ -121,12 +123,14 @@ func NewPlanServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+PlanServiceListPlanTasksProcedure,
 			connect.WithSchema(planServiceMethods.ByName("ListPlanTasks")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listPlansByProject: connect.NewClient[v1.ListPlansByProjectRequest, v1.ListPlansByProjectResponse](
 			httpClient,
 			baseURL+PlanServiceListPlansByProjectProcedure,
 			connect.WithSchema(planServiceMethods.ByName("ListPlansByProject")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -217,12 +221,14 @@ func NewPlanServiceHandler(svc PlanServiceHandler, opts ...connect.HandlerOption
 		PlanServiceGetPlanProcedure,
 		svc.GetPlan,
 		connect.WithSchema(planServiceMethods.ByName("GetPlan")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	planServiceGetPlanByChatIdHandler := connect.NewUnaryHandler(
 		PlanServiceGetPlanByChatIdProcedure,
 		svc.GetPlanByChatId,
 		connect.WithSchema(planServiceMethods.ByName("GetPlanByChatId")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	planServiceUpdatePlanHandler := connect.NewUnaryHandler(
@@ -241,12 +247,14 @@ func NewPlanServiceHandler(svc PlanServiceHandler, opts ...connect.HandlerOption
 		PlanServiceListPlanTasksProcedure,
 		svc.ListPlanTasks,
 		connect.WithSchema(planServiceMethods.ByName("ListPlanTasks")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	planServiceListPlansByProjectHandler := connect.NewUnaryHandler(
 		PlanServiceListPlansByProjectProcedure,
 		svc.ListPlansByProject,
 		connect.WithSchema(planServiceMethods.ByName("ListPlansByProject")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.PlanService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

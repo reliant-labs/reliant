@@ -120,6 +120,7 @@ func NewConnectorServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+ConnectorServiceListConnectorsProcedure,
 			connect.WithSchema(connectorServiceMethods.ByName("ListConnectors")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		revokeConnector: connect.NewClient[v1.RevokeConnectorRequest, v1.RevokeConnectorResponse](
@@ -132,12 +133,14 @@ func NewConnectorServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+ConnectorServiceListConnectorActivityProcedure,
 			connect.WithSchema(connectorServiceMethods.ByName("ListConnectorActivity")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listAvailableTools: connect.NewClient[v1.ListAvailableToolsRequest, v1.ListAvailableToolsResponse](
 			httpClient,
 			baseURL+ConnectorServiceListAvailableToolsProcedure,
 			connect.WithSchema(connectorServiceMethods.ByName("ListAvailableTools")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		authorizeClient: connect.NewClient[v1.AuthorizeClientRequest, v1.AuthorizeClientResponse](
@@ -150,6 +153,7 @@ func NewConnectorServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+ConnectorServiceListAuthorizedClientsProcedure,
 			connect.WithSchema(connectorServiceMethods.ByName("ListAuthorizedClients")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		revokeClientAuthorization: connect.NewClient[v1.RevokeClientAuthorizationRequest, v1.RevokeClientAuthorizationResponse](
@@ -268,6 +272,7 @@ func NewConnectorServiceHandler(svc ConnectorServiceHandler, opts ...connect.Han
 		ConnectorServiceListConnectorsProcedure,
 		svc.ListConnectors,
 		connect.WithSchema(connectorServiceMethods.ByName("ListConnectors")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	connectorServiceRevokeConnectorHandler := connect.NewUnaryHandler(
@@ -280,12 +285,14 @@ func NewConnectorServiceHandler(svc ConnectorServiceHandler, opts ...connect.Han
 		ConnectorServiceListConnectorActivityProcedure,
 		svc.ListConnectorActivity,
 		connect.WithSchema(connectorServiceMethods.ByName("ListConnectorActivity")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	connectorServiceListAvailableToolsHandler := connect.NewUnaryHandler(
 		ConnectorServiceListAvailableToolsProcedure,
 		svc.ListAvailableTools,
 		connect.WithSchema(connectorServiceMethods.ByName("ListAvailableTools")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	connectorServiceAuthorizeClientHandler := connect.NewUnaryHandler(
@@ -298,6 +305,7 @@ func NewConnectorServiceHandler(svc ConnectorServiceHandler, opts ...connect.Han
 		ConnectorServiceListAuthorizedClientsProcedure,
 		svc.ListAuthorizedClients,
 		connect.WithSchema(connectorServiceMethods.ByName("ListAuthorizedClients")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	connectorServiceRevokeClientAuthorizationHandler := connect.NewUnaryHandler(

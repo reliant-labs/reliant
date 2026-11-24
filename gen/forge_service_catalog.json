@@ -26,6 +26,7 @@
         "Chat",
         "ChatUpdateHeadsBackfill",
         "ChatUpdateHub",
+        "Chatprlinks",
         "Connection",
         "Connector",
         "ConnectorGrants",
@@ -504,6 +505,7 @@
         "AgentRuns",
         "ChangeController",
         "ChatUpdateHub",
+        "Chatprlinks",
         "CredentialsAutomationtokens",
         "CredentialsConnectionvault",
         "CredentialsOrgaccounts",
@@ -528,12 +530,14 @@
         "Projectaccess",
         "Projectpurge",
         "Providerbackoff",
+        "RecordOnlyChecks",
         "RemoteExecutor",
         "RepoUpdateFeed",
         "RunLauncher",
         "RunLifecycle",
         "StoredConfigProvider",
         "StreamingHub",
+        "SyncingChecks",
         "TemporalClient",
         "TemporalWorker",
         "TokenAuthority",
@@ -900,7 +904,7 @@
           "output": "reliant.v1.ListApprovalsByChatResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         }
       ],
@@ -918,7 +922,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListApprovalsByChatRequest",
             "OutputTypeFQ": "reliant.v1.ListApprovalsByChatResponse",
             "InputProtoFile": "reliant/v1/approval.proto",
@@ -1511,7 +1516,7 @@
           "output": "reliant.v1.GetAttachmentResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -1578,7 +1583,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetAttachmentRequest",
             "OutputTypeFQ": "reliant.v1.GetAttachmentResponse",
             "InputProtoFile": "reliant/v1/attachment.proto",
@@ -3197,7 +3203,7 @@
           "output": "reliant.v1.GetProcessOutputResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -3217,7 +3223,7 @@
           "output": "reliant.v1.ListBackgroundProcessesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -3245,7 +3251,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListBackgroundProcessesRequest",
             "OutputTypeFQ": "reliant.v1.ListBackgroundProcessesResponse",
             "InputProtoFile": "reliant/v1/background.proto",
@@ -3262,7 +3269,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetProcessOutputRequest",
             "OutputTypeFQ": "reliant.v1.GetProcessOutputResponse",
             "InputProtoFile": "reliant/v1/background.proto",
@@ -3698,7 +3706,7 @@
           "output": "reliant.v1.GetCELCompletionsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -3708,7 +3716,7 @@
           "output": "reliant.v1.GetCatalogEntryResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -3718,7 +3726,7 @@
           "output": "reliant.v1.ListAvailableModelsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -3728,7 +3736,7 @@
           "output": "reliant.v1.ListCatalogIntegrationsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -3748,7 +3756,7 @@
           "output": "reliant.v1.ListModelsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -3758,7 +3766,7 @@
           "output": "reliant.v1.ListModelsByProviderResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -3768,7 +3776,7 @@
           "output": "reliant.v1.ListNodesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -3778,7 +3786,7 @@
           "output": "reliant.v1.ListToolsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -3788,7 +3796,7 @@
           "output": "reliant.v1.SearchCatalogResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         }
       ],
@@ -3806,7 +3814,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListModelsRequest",
             "OutputTypeFQ": "reliant.v1.ListModelsResponse",
             "InputProtoFile": "reliant/v1/catalog.proto",
@@ -3823,7 +3832,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListModelsByProviderRequest",
             "OutputTypeFQ": "reliant.v1.ListModelsByProviderResponse",
             "InputProtoFile": "reliant/v1/catalog.proto",
@@ -3840,7 +3850,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListAvailableModelsRequest",
             "OutputTypeFQ": "reliant.v1.ListAvailableModelsResponse",
             "InputProtoFile": "reliant/v1/catalog.proto",
@@ -3857,7 +3868,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListToolsRequest",
             "OutputTypeFQ": "reliant.v1.ListToolsResponse",
             "InputProtoFile": "reliant/v1/catalog.proto",
@@ -3874,7 +3886,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListNodesRequest",
             "OutputTypeFQ": "reliant.v1.ListNodesResponse",
             "InputProtoFile": "reliant/v1/catalog.proto",
@@ -3891,7 +3904,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetCELCompletionsRequest",
             "OutputTypeFQ": "reliant.v1.GetCELCompletionsResponse",
             "InputProtoFile": "reliant/v1/catalog.proto",
@@ -3908,7 +3922,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.SearchCatalogRequest",
             "OutputTypeFQ": "reliant.v1.SearchCatalogResponse",
             "InputProtoFile": "reliant/v1/catalog.proto",
@@ -3925,7 +3940,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetCatalogEntryRequest",
             "OutputTypeFQ": "reliant.v1.GetCatalogEntryResponse",
             "InputProtoFile": "reliant/v1/catalog.proto",
@@ -3942,7 +3958,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListCatalogIntegrationsRequest",
             "OutputTypeFQ": "reliant.v1.ListCatalogIntegrationsResponse",
             "InputProtoFile": "reliant/v1/catalog.proto",
@@ -5436,7 +5453,7 @@
           "output": "reliant.v1.GetChatResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5446,7 +5463,7 @@
           "output": "reliant.v1.GetChatUpdatesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5456,7 +5473,7 @@
           "output": "reliant.v1.GetContentBlockBodiesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5466,7 +5483,7 @@
           "output": "reliant.v1.GetThreadWorkflowInputsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5476,7 +5493,7 @@
           "output": "reliant.v1.GetToolResultResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5486,7 +5503,7 @@
           "output": "reliant.v1.GetWorkflowExecutionsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5496,7 +5513,7 @@
           "output": "reliant.v1.GetWorkflowNodeExecutionsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5516,7 +5533,7 @@
           "output": "reliant.v1.ListArchivedChatsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5526,7 +5543,7 @@
           "output": "reliant.v1.ListBranchesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5536,7 +5553,7 @@
           "output": "reliant.v1.ListChatPlansResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5546,7 +5563,7 @@
           "output": "reliant.v1.ListChatProjectsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5556,7 +5573,7 @@
           "output": "reliant.v1.ListChatsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5566,7 +5583,7 @@
           "output": "reliant.v1.ListMessagesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5576,7 +5593,7 @@
           "output": "reliant.v1.ListQueuedAgentMessagesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5586,7 +5603,7 @@
           "output": "reliant.v1.ListStepExecutionsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5656,7 +5673,7 @@
           "output": "reliant.v1.SearchChatsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -5859,7 +5876,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListChatsRequest",
             "OutputTypeFQ": "reliant.v1.ListChatsResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -5877,7 +5895,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetChatRequest",
             "OutputTypeFQ": "reliant.v1.GetChatResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -5938,7 +5957,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.SearchChatsRequest",
             "OutputTypeFQ": "reliant.v1.SearchChatsResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -5955,7 +5975,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListArchivedChatsRequest",
             "OutputTypeFQ": "reliant.v1.ListArchivedChatsResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -6010,7 +6031,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListQueuedAgentMessagesRequest",
             "OutputTypeFQ": "reliant.v1.ListQueuedAgentMessagesResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -6066,7 +6088,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListMessagesRequest",
             "OutputTypeFQ": "reliant.v1.ListMessagesResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -6083,7 +6106,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetToolResultRequest",
             "OutputTypeFQ": "reliant.v1.GetToolResultResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -6101,7 +6125,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetContentBlockBodiesRequest",
             "OutputTypeFQ": "reliant.v1.GetContentBlockBodiesResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -6301,7 +6326,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListBranchesRequest",
             "OutputTypeFQ": "reliant.v1.ListBranchesResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -6356,7 +6382,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetChatUpdatesRequest",
             "OutputTypeFQ": "reliant.v1.GetChatUpdatesResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -6373,7 +6400,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListChatPlansRequest",
             "OutputTypeFQ": "reliant.v1.ListChatPlansResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -6390,7 +6418,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetWorkflowExecutionsRequest",
             "OutputTypeFQ": "reliant.v1.GetWorkflowExecutionsResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -6408,7 +6437,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListStepExecutionsRequest",
             "OutputTypeFQ": "reliant.v1.ListStepExecutionsResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -6425,7 +6455,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetWorkflowNodeExecutionsRequest",
             "OutputTypeFQ": "reliant.v1.GetWorkflowNodeExecutionsResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -6442,7 +6473,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetThreadWorkflowInputsRequest",
             "OutputTypeFQ": "reliant.v1.GetThreadWorkflowInputsResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -6502,7 +6534,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListChatProjectsRequest",
             "OutputTypeFQ": "reliant.v1.ListChatProjectsResponse",
             "InputProtoFile": "reliant/v1/chat.proto",
@@ -10527,7 +10560,7 @@
           "output": "reliant.v1.GetConnectionResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -10537,7 +10570,7 @@
           "output": "reliant.v1.ListConnectionEventsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -10547,7 +10580,7 @@
           "output": "reliant.v1.ListConnectionsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -10557,7 +10590,7 @@
           "output": "reliant.v1.ListIntegrationsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -10615,7 +10648,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListIntegrationsRequest",
             "OutputTypeFQ": "reliant.v1.ListIntegrationsResponse",
             "InputProtoFile": "reliant/v1/connection.proto",
@@ -10633,7 +10667,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListConnectionsRequest",
             "OutputTypeFQ": "reliant.v1.ListConnectionsResponse",
             "InputProtoFile": "reliant/v1/connection.proto",
@@ -10651,7 +10686,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetConnectionRequest",
             "OutputTypeFQ": "reliant.v1.GetConnectionResponse",
             "InputProtoFile": "reliant/v1/connection.proto",
@@ -10814,7 +10850,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListConnectionEventsRequest",
             "OutputTypeFQ": "reliant.v1.ListConnectionEventsResponse",
             "InputProtoFile": "reliant/v1/connection.proto",
@@ -11720,7 +11757,7 @@
           "output": "reliant.v1.ListAuthorizedClientsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -11730,7 +11767,7 @@
           "output": "reliant.v1.ListAvailableToolsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -11740,7 +11777,7 @@
           "output": "reliant.v1.ListConnectorActivityResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -11750,7 +11787,7 @@
           "output": "reliant.v1.ListConnectorsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -11810,7 +11847,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListConnectorsRequest",
             "OutputTypeFQ": "reliant.v1.ListConnectorsResponse",
             "InputProtoFile": "reliant/v1/connector.proto",
@@ -11848,7 +11886,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListConnectorActivityRequest",
             "OutputTypeFQ": "reliant.v1.ListConnectorActivityResponse",
             "InputProtoFile": "reliant/v1/connector.proto",
@@ -11865,7 +11904,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListAvailableToolsRequest",
             "OutputTypeFQ": "reliant.v1.ListAvailableToolsResponse",
             "InputProtoFile": "reliant/v1/connector.proto",
@@ -11903,7 +11943,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListAuthorizedClientsRequest",
             "OutputTypeFQ": "reliant.v1.ListAuthorizedClientsResponse",
             "InputProtoFile": "reliant/v1/connector.proto",
@@ -12528,7 +12569,7 @@
           "output": "reliant.v1.GetCoverageSourceResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         }
       ],
@@ -12546,7 +12587,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetCoverageSourceRequest",
             "OutputTypeFQ": "reliant.v1.GetCoverageSourceResponse",
             "InputProtoFile": "reliant/v1/coverage_source.proto",
@@ -12694,7 +12736,7 @@
           "output": "reliant.v1.GetDaemonResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -12704,7 +12746,7 @@
           "output": "reliant.v1.ListDaemonsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -12812,7 +12854,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListDaemonsRequest",
             "OutputTypeFQ": "reliant.v1.ListDaemonsResponse",
             "InputProtoFile": "reliant/v1/daemon_registry.proto",
@@ -12829,7 +12872,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetDaemonRequest",
             "OutputTypeFQ": "reliant.v1.GetDaemonResponse",
             "InputProtoFile": "reliant/v1/daemon_registry.proto",
@@ -16084,7 +16128,7 @@
           "output": "reliant.v1.GetForgeDeployStatusResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -16376,7 +16420,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetForgeDeployStatusRequest",
             "OutputTypeFQ": "reliant.v1.GetForgeDeployStatusResponse",
             "InputProtoFile": "reliant/v1/forge.proto",
@@ -17450,7 +17495,7 @@
           "output": "reliant.v1.ListInboxResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -17488,7 +17533,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListInboxRequest",
             "OutputTypeFQ": "reliant.v1.ListInboxResponse",
             "InputProtoFile": "reliant/v1/inbox.proto",
@@ -18902,7 +18948,7 @@
           "output": "reliant.v1.ListRecommendedResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -19094,7 +19140,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListRecommendedRequest",
             "OutputTypeFQ": "reliant.v1.ListRecommendedResponse",
             "InputProtoFile": "reliant/v1/mcp.proto",
@@ -19998,7 +20045,7 @@
           "output": "reliant.v1.GetMessageResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         }
       ],
@@ -20017,7 +20064,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetMessageRequest",
             "OutputTypeFQ": "reliant.v1.GetMessageResponse",
             "InputProtoFile": "reliant/v1/message.proto",
@@ -20476,7 +20524,7 @@
           "output": "reliant.v1.ListModelEndpointsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -20515,7 +20563,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListModelEndpointsRequest",
             "OutputTypeFQ": "reliant.v1.ListModelEndpointsResponse",
             "InputProtoFile": "reliant/v1/model_endpoint.proto",
@@ -21022,7 +21071,7 @@
           "output": "reliant.v1.GetPolicyImpactResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         }
       ],
@@ -21040,7 +21089,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetPolicyImpactRequest",
             "OutputTypeFQ": "reliant.v1.GetPolicyImpactResponse",
             "InputProtoFile": "reliant/v1/org_policy_impact.proto",
@@ -21202,7 +21252,7 @@
           "output": "reliant.v1.ListOrgProviderAccountsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -21212,7 +21262,7 @@
           "output": "reliant.v1.ListOrgProviderWorkspacesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -21291,7 +21341,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListOrgProviderAccountsRequest",
             "OutputTypeFQ": "reliant.v1.ListOrgProviderAccountsResponse",
             "InputProtoFile": "reliant/v1/org_provider_account.proto",
@@ -21437,7 +21488,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListOrgProviderWorkspacesRequest",
             "OutputTypeFQ": "reliant.v1.ListOrgProviderWorkspacesResponse",
             "InputProtoFile": "reliant/v1/org_provider_account.proto",
@@ -22377,7 +22429,7 @@
           "output": "reliant.v1.GetOrgLLMUsageResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         }
       ],
@@ -22395,7 +22447,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetOrgLLMUsageRequest",
             "OutputTypeFQ": "reliant.v1.GetOrgLLMUsageResponse",
             "InputProtoFile": "reliant/v1/org_usage.proto",
@@ -22774,7 +22827,7 @@
           "output": "reliant.v1.GetCommandFavoritesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -22784,7 +22837,7 @@
           "output": "reliant.v1.GetPackageProcessResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -22794,7 +22847,7 @@
           "output": "reliant.v1.GetPackageProcessLogsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -22814,7 +22867,7 @@
           "output": "reliant.v1.ListPackageCommandsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -22824,7 +22877,7 @@
           "output": "reliant.v1.ListPackageProcessesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -22862,7 +22915,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListPackageCommandsRequest",
             "OutputTypeFQ": "reliant.v1.ListPackageCommandsResponse",
             "InputProtoFile": "reliant/v1/package_commands.proto",
@@ -22898,7 +22952,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListPackageProcessesRequest",
             "OutputTypeFQ": "reliant.v1.ListPackageProcessesResponse",
             "InputProtoFile": "reliant/v1/package_commands.proto",
@@ -22915,7 +22970,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetPackageProcessRequest",
             "OutputTypeFQ": "reliant.v1.GetPackageProcessResponse",
             "InputProtoFile": "reliant/v1/package_commands.proto",
@@ -22932,7 +22988,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetPackageProcessLogsRequest",
             "OutputTypeFQ": "reliant.v1.GetPackageProcessLogsResponse",
             "InputProtoFile": "reliant/v1/package_commands.proto",
@@ -22968,7 +23025,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetCommandFavoritesRequest",
             "OutputTypeFQ": "reliant.v1.GetCommandFavoritesResponse",
             "InputProtoFile": "reliant/v1/package_commands.proto",
@@ -23644,7 +23702,7 @@
           "output": "reliant.v1.GetPlanResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -23654,7 +23712,7 @@
           "output": "reliant.v1.GetPlanByChatIdResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -23664,7 +23722,7 @@
           "output": "reliant.v1.ListPlanTasksResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -23674,7 +23732,7 @@
           "output": "reliant.v1.ListPlansByProjectResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -23726,7 +23784,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetPlanRequest",
             "OutputTypeFQ": "reliant.v1.GetPlanResponse",
             "InputProtoFile": "reliant/v1/plan.proto",
@@ -23743,7 +23802,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetPlanByChatIdRequest",
             "OutputTypeFQ": "reliant.v1.GetPlanByChatIdResponse",
             "InputProtoFile": "reliant/v1/plan.proto",
@@ -23804,7 +23864,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListPlanTasksRequest",
             "OutputTypeFQ": "reliant.v1.ListPlanTasksResponse",
             "InputProtoFile": "reliant/v1/plan.proto",
@@ -23821,7 +23882,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListPlansByProjectRequest",
             "OutputTypeFQ": "reliant.v1.ListPlansByProjectResponse",
             "InputProtoFile": "reliant/v1/plan.proto",
@@ -24406,7 +24468,7 @@
           "output": "reliant.v1.GetDefaultPresetResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -24416,7 +24478,7 @@
           "output": "reliant.v1.GetDefaultPresetsBatchResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -24426,7 +24488,7 @@
           "output": "reliant.v1.GetPresetResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -24436,7 +24498,7 @@
           "output": "reliant.v1.ListPresetsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -24446,7 +24508,7 @@
           "output": "reliant.v1.ListPresetsForWorkflowResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -24484,7 +24546,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListPresetsRequest",
             "OutputTypeFQ": "reliant.v1.ListPresetsResponse",
             "InputProtoFile": "reliant/v1/preset.proto",
@@ -24501,7 +24564,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetPresetRequest",
             "OutputTypeFQ": "reliant.v1.GetPresetResponse",
             "InputProtoFile": "reliant/v1/preset.proto",
@@ -24518,7 +24582,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListPresetsForWorkflowRequest",
             "OutputTypeFQ": "reliant.v1.ListPresetsForWorkflowResponse",
             "InputProtoFile": "reliant/v1/preset.proto",
@@ -24619,7 +24684,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetDefaultPresetRequest",
             "OutputTypeFQ": "reliant.v1.GetDefaultPresetResponse",
             "InputProtoFile": "reliant/v1/preset.proto",
@@ -24636,7 +24702,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetDefaultPresetsBatchRequest",
             "OutputTypeFQ": "reliant.v1.GetDefaultPresetsBatchResponse",
             "InputProtoFile": "reliant/v1/preset.proto",
@@ -25334,7 +25401,7 @@
           "output": "reliant.v1.GetProjectChangesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -25344,7 +25411,7 @@
           "output": "reliant.v1.GetProjectGitBranchesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -25354,7 +25421,7 @@
           "output": "reliant.v1.GetProjectGitInfoResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -25364,7 +25431,7 @@
           "output": "reliant.v1.GetProjectInitStatusResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -25374,7 +25441,7 @@
           "output": "reliant.v1.GetProjectMetadataResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -25394,7 +25461,7 @@
           "output": "reliant.v1.GetProjectPromptsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -25434,7 +25501,7 @@
           "output": "reliant.v1.ListProjectDaemonsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -25444,7 +25511,7 @@
           "output": "reliant.v1.ListProjectDaemonsForDaemonResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -25464,7 +25531,7 @@
           "output": "reliant.v1.ListProjectsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -25484,7 +25551,7 @@
           "output": "reliant.v1.ListRepositoriesForDaemonResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -25645,7 +25712,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListProjectsRequest",
             "OutputTypeFQ": "reliant.v1.ListProjectsResponse",
             "InputProtoFile": "reliant/v1/project.proto",
@@ -25803,7 +25871,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetProjectMetadataRequest",
             "OutputTypeFQ": "reliant.v1.GetProjectMetadataResponse",
             "InputProtoFile": "reliant/v1/project.proto",
@@ -25841,7 +25910,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetProjectGitInfoRequest",
             "OutputTypeFQ": "reliant.v1.GetProjectGitInfoResponse",
             "InputProtoFile": "reliant/v1/project.proto",
@@ -25858,7 +25928,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetProjectGitBranchesRequest",
             "OutputTypeFQ": "reliant.v1.GetProjectGitBranchesResponse",
             "InputProtoFile": "reliant/v1/project.proto",
@@ -25875,7 +25946,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetProjectInitStatusRequest",
             "OutputTypeFQ": "reliant.v1.GetProjectInitStatusResponse",
             "InputProtoFile": "reliant/v1/project.proto",
@@ -25911,7 +25983,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetProjectChangesRequest",
             "OutputTypeFQ": "reliant.v1.GetProjectChangesResponse",
             "InputProtoFile": "reliant/v1/project.proto",
@@ -25928,7 +26001,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetProjectPromptsRequest",
             "OutputTypeFQ": "reliant.v1.GetProjectPromptsResponse",
             "InputProtoFile": "reliant/v1/project.proto",
@@ -25987,7 +26061,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListProjectDaemonsForDaemonRequest",
             "OutputTypeFQ": "reliant.v1.ListProjectDaemonsForDaemonResponse",
             "InputProtoFile": "reliant/v1/project.proto",
@@ -26005,7 +26080,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListProjectDaemonsRequest",
             "OutputTypeFQ": "reliant.v1.ListProjectDaemonsResponse",
             "InputProtoFile": "reliant/v1/project.proto",
@@ -26062,7 +26138,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListRepositoriesForDaemonRequest",
             "OutputTypeFQ": "reliant.v1.ListRepositoriesForDaemonResponse",
             "InputProtoFile": "reliant/v1/project.proto",
@@ -28978,7 +29055,7 @@
           "output": "reliant.v1.GetChatProviderAccountResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -28988,7 +29065,7 @@
           "output": "reliant.v1.GetPersonalFundingQuestionResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -28998,7 +29075,7 @@
           "output": "reliant.v1.ListProviderAccountsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -29057,7 +29134,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListProviderAccountsRequest",
             "OutputTypeFQ": "reliant.v1.ListProviderAccountsResponse",
             "InputProtoFile": "reliant/v1/provider_account.proto",
@@ -29177,7 +29255,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetChatProviderAccountRequest",
             "OutputTypeFQ": "reliant.v1.GetChatProviderAccountResponse",
             "InputProtoFile": "reliant/v1/provider_account.proto",
@@ -29195,7 +29274,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetPersonalFundingQuestionRequest",
             "OutputTypeFQ": "reliant.v1.GetPersonalFundingQuestionResponse",
             "InputProtoFile": "reliant/v1/provider_account.proto",
@@ -29885,7 +29965,7 @@
           "output": "reliant.v1.GetPullRequestRecordResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -29895,7 +29975,7 @@
           "output": "reliant.v1.ListPullRequestRecordsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         }
       ],
@@ -29913,7 +29993,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetPullRequestRecordRequest",
             "OutputTypeFQ": "reliant.v1.GetPullRequestRecordResponse",
             "InputProtoFile": "reliant/v1/pull_request_record.proto",
@@ -29930,7 +30011,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListPullRequestRecordsRequest",
             "OutputTypeFQ": "reliant.v1.ListPullRequestRecordsResponse",
             "InputProtoFile": "reliant/v1/pull_request_record.proto",
@@ -30325,7 +30407,7 @@
           "output": "reliant.v1.ListAsyncQuestionsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -30335,7 +30417,7 @@
           "output": "reliant.v1.ListPendingQuestionsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -30384,7 +30466,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListPendingQuestionsRequest",
             "OutputTypeFQ": "reliant.v1.ListPendingQuestionsResponse",
             "InputProtoFile": "reliant/v1/question.proto",
@@ -30401,7 +30484,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListAsyncQuestionsRequest",
             "OutputTypeFQ": "reliant.v1.ListAsyncQuestionsResponse",
             "InputProtoFile": "reliant/v1/question.proto",
@@ -30620,7 +30704,7 @@
           "output": "reliant.v1.GetRepoGitInfoResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -30630,7 +30714,7 @@
           "output": "reliant.v1.ListReposResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -30677,7 +30761,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListReposRequest",
             "OutputTypeFQ": "reliant.v1.ListReposResponse",
             "InputProtoFile": "reliant/v1/repo.proto",
@@ -30736,7 +30821,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetRepoGitInfoRequest",
             "OutputTypeFQ": "reliant.v1.GetRepoGitInfoResponse",
             "InputProtoFile": "reliant/v1/repo.proto",
@@ -31112,7 +31198,7 @@
           "output": "reliant.v1.GetRunResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -31142,7 +31228,7 @@
           "output": "reliant.v1.ListRunsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -31240,7 +31326,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetRunRequest",
             "OutputTypeFQ": "reliant.v1.GetRunResponse",
             "InputProtoFile": "reliant/v1/run.proto",
@@ -31257,7 +31344,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListRunsRequest",
             "OutputTypeFQ": "reliant.v1.ListRunsResponse",
             "InputProtoFile": "reliant/v1/run.proto",
@@ -32455,7 +32543,7 @@
           "output": "reliant.v1.ListScenariosResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -32494,7 +32582,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListScenariosRequest",
             "OutputTypeFQ": "reliant.v1.ListScenariosResponse",
             "InputProtoFile": "reliant/v1/scenario.proto",
@@ -33290,7 +33379,7 @@
           "output": "reliant.v1.GetInstalledSkillDefinitionResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -33300,7 +33389,7 @@
           "output": "reliant.v1.GetPreferencesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -33310,7 +33399,7 @@
           "output": "reliant.v1.GetPrivacySettingsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -33320,7 +33409,7 @@
           "output": "reliant.v1.GetPromptsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -33330,7 +33419,7 @@
           "output": "reliant.v1.GetProviderStatusesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -33340,7 +33429,7 @@
           "output": "reliant.v1.GetSettingResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -33350,7 +33439,7 @@
           "output": "reliant.v1.GetShortcutsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -33370,7 +33459,7 @@
           "output": "reliant.v1.ListInstalledSkillsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -33380,7 +33469,7 @@
           "output": "reliant.v1.ListRecommendedSkillsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -33390,7 +33479,7 @@
           "output": "reliant.v1.ListSettingsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -33559,7 +33648,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListSettingsRequest",
             "OutputTypeFQ": "reliant.v1.ListSettingsResponse",
             "InputProtoFile": "reliant/v1/settings.proto",
@@ -33577,7 +33667,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetSettingRequest",
             "OutputTypeFQ": "reliant.v1.GetSettingResponse",
             "InputProtoFile": "reliant/v1/settings.proto",
@@ -33653,7 +33744,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetShortcutsRequest",
             "OutputTypeFQ": "reliant.v1.GetShortcutsResponse",
             "InputProtoFile": "reliant/v1/settings.proto",
@@ -33689,7 +33781,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetPreferencesRequest",
             "OutputTypeFQ": "reliant.v1.GetPreferencesResponse",
             "InputProtoFile": "reliant/v1/settings.proto",
@@ -33744,7 +33837,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetPromptsRequest",
             "OutputTypeFQ": "reliant.v1.GetPromptsResponse",
             "InputProtoFile": "reliant/v1/settings.proto",
@@ -33780,7 +33874,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetProviderStatusesRequest",
             "OutputTypeFQ": "reliant.v1.GetProviderStatusesResponse",
             "InputProtoFile": "reliant/v1/settings.proto",
@@ -33938,7 +34033,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetPrivacySettingsRequest",
             "OutputTypeFQ": "reliant.v1.GetPrivacySettingsResponse",
             "InputProtoFile": "reliant/v1/settings.proto",
@@ -34031,7 +34127,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListInstalledSkillsRequest",
             "OutputTypeFQ": "reliant.v1.ListInstalledSkillsResponse",
             "InputProtoFile": "reliant/v1/settings.proto",
@@ -34048,7 +34145,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetInstalledSkillDefinitionRequest",
             "OutputTypeFQ": "reliant.v1.GetInstalledSkillDefinitionResponse",
             "InputProtoFile": "reliant/v1/settings.proto",
@@ -34084,7 +34182,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListRecommendedSkillsRequest",
             "OutputTypeFQ": "reliant.v1.ListRecommendedSkillsResponse",
             "InputProtoFile": "reliant/v1/settings.proto",
@@ -36862,7 +36961,7 @@
           "output": "reliant.v1.ListSharedChatsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -36870,6 +36969,16 @@
           "name": "ListSharedProjects",
           "input": "reliant.v1.ListSharedProjectsRequest",
           "output": "reliant.v1.ListSharedProjectsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.SharingService/ListSharedWorkflowDrafts",
+          "name": "ListSharedWorkflowDrafts",
+          "input": "reliant.v1.ListSharedWorkflowDraftsRequest",
+          "output": "reliant.v1.ListSharedWorkflowDraftsResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -36890,6 +36999,16 @@
           "name": "SetProjectVisibility",
           "input": "reliant.v1.SetProjectVisibilityRequest",
           "output": "reliant.v1.SetProjectVisibilityResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.SharingService/SetWorkflowDraftSharing",
+          "name": "SetWorkflowDraftSharing",
+          "input": "reliant.v1.SetWorkflowDraftSharingRequest",
+          "output": "reliant.v1.SetWorkflowDraftSharingResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -36952,7 +37071,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListSharedChatsRequest",
             "OutputTypeFQ": "reliant.v1.ListSharedChatsResponse",
             "InputProtoFile": "reliant/v1/sharing.proto",
@@ -36971,9 +37091,51 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListSharedProjectsRequest",
             "OutputTypeFQ": "reliant.v1.ListSharedProjectsResponse",
+            "InputProtoFile": "reliant/v1/sharing.proto",
+            "OutputProtoFile": "reliant/v1/sharing.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "reads only: lists what others shared"
+            }
+          },
+          {
+            "Name": "SetWorkflowDraftSharing",
+            "InputType": "SetWorkflowDraftSharingRequest",
+            "OutputType": "SetWorkflowDraftSharingResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.SetWorkflowDraftSharingRequest",
+            "OutputTypeFQ": "reliant.v1.SetWorkflowDraftSharingResponse",
+            "InputProtoFile": "reliant/v1/sharing.proto",
+            "OutputProtoFile": "reliant/v1/sharing.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "set_visibility",
+              "TargetKind": "workflow",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ListSharedWorkflowDrafts",
+            "InputType": "ListSharedWorkflowDraftsRequest",
+            "OutputType": "ListSharedWorkflowDraftsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ListSharedWorkflowDraftsRequest",
+            "OutputTypeFQ": "reliant.v1.ListSharedWorkflowDraftsResponse",
             "InputProtoFile": "reliant/v1/sharing.proto",
             "OutputProtoFile": "reliant/v1/sharing.proto",
             "Activity": {
@@ -37051,6 +37213,31 @@
               "MessageType": "reliant.v1.Project"
             }
           ],
+          "ListSharedWorkflowDraftsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "limit",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "offset",
+              "ProtoType": "int32",
+              "IsOptional": false
+            }
+          ],
+          "ListSharedWorkflowDraftsResponse": [
+            {
+              "Name": "workflows",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.SharedWorkflowDraft"
+            }
+          ],
           "SetChatVisibilityRequest": [
             {
               "Name": "chat_id",
@@ -37094,6 +37281,31 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Project"
+            },
+            {
+              "Name": "changed",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "SetWorkflowDraftSharingRequest": [
+            {
+              "Name": "workflow_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "visibility",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ],
+          "SetWorkflowDraftSharingResponse": [
+            {
+              "Name": "workflow",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.SharedWorkflowDraft"
             },
             {
               "Name": "changed",
@@ -37373,6 +37585,36 @@
               "repeated": true
             }
           ],
+          "reliant.v1.ListSharedWorkflowDraftsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "limit",
+              "kind": "int32",
+              "validate": {
+                "gte": "0",
+                "lte": "100"
+              }
+            },
+            {
+              "name": "offset",
+              "kind": "int32",
+              "validate": {
+                "gte": "0"
+              }
+            }
+          ],
+          "reliant.v1.ListSharedWorkflowDraftsResponse": [
+            {
+              "name": "workflows",
+              "kind": "message",
+              "type_name": "reliant.v1.SharedWorkflowDraft",
+              "repeated": true
+            }
+          ],
           "reliant.v1.Project": [
             {
               "name": "id",
@@ -37532,6 +37774,85 @@
               "kind": "bool"
             }
           ],
+          "reliant.v1.SetWorkflowDraftSharingRequest": [
+            {
+              "name": "workflow_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            }
+          ],
+          "reliant.v1.SetWorkflowDraftSharingResponse": [
+            {
+              "name": "workflow",
+              "kind": "message",
+              "type_name": "reliant.v1.SharedWorkflowDraft"
+            },
+            {
+              "name": "changed",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.SharedWorkflowDraft": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "slug",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "description",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "user_id",
+              "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.WorkflowDraftStatus"
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            },
+            {
+              "name": "viewer_access",
+              "kind": "bool"
+            },
+            {
+              "name": "shared_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "updated_at",
+              "kind": "string"
+            },
+            {
+              "name": "definition",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.WorktreeSummary": [
             {
               "name": "id",
@@ -37576,12 +37897,17 @@
           "reliant.v1.ListSharedChatsResponse": "reliant/v1/sharing.proto",
           "reliant.v1.ListSharedProjectsRequest": "reliant/v1/sharing.proto",
           "reliant.v1.ListSharedProjectsResponse": "reliant/v1/sharing.proto",
+          "reliant.v1.ListSharedWorkflowDraftsRequest": "reliant/v1/sharing.proto",
+          "reliant.v1.ListSharedWorkflowDraftsResponse": "reliant/v1/sharing.proto",
           "reliant.v1.Project": "reliant/v1/project.proto",
           "reliant.v1.ProviderPolicy": "reliant/v1/chat.proto",
           "reliant.v1.SetChatVisibilityRequest": "reliant/v1/sharing.proto",
           "reliant.v1.SetChatVisibilityResponse": "reliant/v1/sharing.proto",
           "reliant.v1.SetProjectVisibilityRequest": "reliant/v1/sharing.proto",
           "reliant.v1.SetProjectVisibilityResponse": "reliant/v1/sharing.proto",
+          "reliant.v1.SetWorkflowDraftSharingRequest": "reliant/v1/sharing.proto",
+          "reliant.v1.SetWorkflowDraftSharingResponse": "reliant/v1/sharing.proto",
+          "reliant.v1.SharedWorkflowDraft": "reliant/v1/sharing.proto",
           "reliant.v1.WorktreeSummary": "reliant/v1/worktree.proto"
         },
         "Enums": {
@@ -37624,6 +37950,11 @@
             "RESOURCE_VISIBILITY_UNSPECIFIED",
             "RESOURCE_VISIBILITY_PRIVATE",
             "RESOURCE_VISIBILITY_ORG"
+          ],
+          "reliant.v1.WorkflowDraftStatus": [
+            "WORKFLOW_DRAFT_STATUS_UNSPECIFIED",
+            "WORKFLOW_DRAFT_STATUS_DRAFT",
+            "WORKFLOW_DRAFT_STATUS_COMPLETE"
           ],
           "reliant.v1.WorkflowState": [
             "WORKFLOW_STATE_UNSPECIFIED",
@@ -37689,6 +38020,11 @@
             1,
             2
           ],
+          "reliant.v1.WorkflowDraftStatus": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.WorkflowState": [
             0,
             1,
@@ -37736,6 +38072,10 @@
           "reliant.v1.ResourceVisibility": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ResourceVisibility"
+          },
+          "reliant.v1.WorkflowDraftStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "WorkflowDraftStatus"
           },
           "reliant.v1.WorkflowState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -39735,7 +40075,7 @@
           "output": "reliant.v1.GetTaskResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -39745,7 +40085,7 @@
           "output": "reliant.v1.ListReadyTasksResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -39755,7 +40095,7 @@
           "output": "reliant.v1.ListTasksResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -39817,7 +40157,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetTaskRequest",
             "OutputTypeFQ": "reliant.v1.GetTaskResponse",
             "InputProtoFile": "reliant/v1/task.proto",
@@ -39835,7 +40176,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListTasksRequest",
             "OutputTypeFQ": "reliant.v1.ListTasksResponse",
             "InputProtoFile": "reliant/v1/task.proto",
@@ -39938,7 +40280,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListReadyTasksRequest",
             "OutputTypeFQ": "reliant.v1.ListReadyTasksResponse",
             "InputProtoFile": "reliant/v1/task.proto",
@@ -40528,7 +40871,7 @@
           "output": "reliant.v1.ListTerminalSessionsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         }
       ],
@@ -40546,7 +40889,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListTerminalSessionsRequest",
             "OutputTypeFQ": "reliant.v1.ListTerminalSessionsResponse",
             "InputProtoFile": "reliant/v1/terminal.proto",
@@ -40737,7 +41081,7 @@
           "output": "reliant.v1.ListTokensResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -40796,7 +41140,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListTokensRequest",
             "OutputTypeFQ": "reliant.v1.ListTokensResponse",
             "InputProtoFile": "reliant/v1/token.proto",
@@ -43929,7 +44274,7 @@
           "output": "reliant.v1.GetLaunchEventResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -43939,7 +44284,7 @@
           "output": "reliant.v1.GetTriggerResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -43949,7 +44294,7 @@
           "output": "reliant.v1.ListReplayEventsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -43959,7 +44304,7 @@
           "output": "reliant.v1.ListTriggerEventsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -43969,7 +44314,7 @@
           "output": "reliant.v1.ListTriggersResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -44061,7 +44406,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetTriggerRequest",
             "OutputTypeFQ": "reliant.v1.GetTriggerResponse",
             "InputProtoFile": "reliant/v1/trigger.proto",
@@ -44079,7 +44425,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListTriggersRequest",
             "OutputTypeFQ": "reliant.v1.ListTriggersResponse",
             "InputProtoFile": "reliant/v1/trigger.proto",
@@ -44184,7 +44531,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListTriggerEventsRequest",
             "OutputTypeFQ": "reliant.v1.ListTriggerEventsResponse",
             "InputProtoFile": "reliant/v1/trigger.proto",
@@ -44201,7 +44549,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetLaunchEventRequest",
             "OutputTypeFQ": "reliant.v1.GetLaunchEventResponse",
             "InputProtoFile": "reliant/v1/trigger.proto",
@@ -44299,7 +44648,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListReplayEventsRequest",
             "OutputTypeFQ": "reliant.v1.ListReplayEventsResponse",
             "InputProtoFile": "reliant/v1/trigger.proto",
@@ -46367,7 +46717,7 @@
           "output": "reliant.v1.GetLLMUsageResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         }
       ],
@@ -46385,7 +46735,8 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetLLMUsageRequest",
             "OutputTypeFQ": "reliant.v1.GetLLMUsageResponse",
             "InputProtoFile": "reliant/v1/usage.proto",
@@ -46758,7 +47109,7 @@
           "output": "reliant.v1.GetWorkflowResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -46778,7 +47129,7 @@
           "output": "reliant.v1.ListWorkflowsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -46837,7 +47188,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListWorkflowsRequest",
             "OutputTypeFQ": "reliant.v1.ListWorkflowsResponse",
             "InputProtoFile": "reliant/v1/workflow.proto",
@@ -46876,7 +47228,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetWorkflowRequest",
             "OutputTypeFQ": "reliant.v1.GetWorkflowResponse",
             "InputProtoFile": "reliant/v1/workflow.proto",
@@ -49142,6 +49495,11 @@
               "kind": "bool"
             },
             {
+              "name": "observe",
+              "kind": "message",
+              "type_name": "reliant.v1.NodeObserve"
+            },
+            {
               "name": "secret_refs",
               "kind": "message",
               "type_name": "reliant.v1.NodeSecretRef",
@@ -49244,6 +49602,26 @@
               "oneof": "args"
             }
           ],
+          "reliant.v1.NodeObserve": [
+            {
+              "name": "attributes",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            },
+            {
+              "name": "events",
+              "kind": "message",
+              "type_name": "reliant.v1.ObserveEvent",
+              "repeated": true
+            },
+            {
+              "name": "metrics",
+              "kind": "message",
+              "type_name": "reliant.v1.ObserveMetric",
+              "repeated": true
+            }
+          ],
           "reliant.v1.NodeRouterCandidate": [
             {
               "name": "id",
@@ -49314,6 +49692,54 @@
               "name": "default",
               "kind": "message",
               "type_name": "google.protobuf.Value"
+            }
+          ],
+          "reliant.v1.ObserveEvent": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "when",
+              "kind": "string"
+            },
+            {
+              "name": "each",
+              "kind": "string"
+            },
+            {
+              "name": "attributes",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            }
+          ],
+          "reliant.v1.ObserveMetric": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "value",
+              "kind": "string"
+            },
+            {
+              "name": "unit",
+              "kind": "string"
+            },
+            {
+              "name": "when",
+              "kind": "string"
+            },
+            {
+              "name": "attributes",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
             }
           ],
           "reliant.v1.Position": [
@@ -50394,6 +50820,11 @@
               "name": "check",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowCheck"
+            },
+            {
+              "name": "observe",
+              "kind": "message",
+              "type_name": "reliant.v1.NodeObserve"
             }
           ],
           "reliant.v1.WorkflowAttention": [
@@ -50746,10 +51177,13 @@
           "reliant.v1.ModelInputConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ModelSelector": "reliant/v1/workflow_v2.proto",
           "reliant.v1.Node": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.NodeObserve": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NodeRouterCandidate": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NodeSecretRef": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NumberInputConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ObjectInputConfig": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.ObserveEvent": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.ObserveMetric": "reliant/v1/workflow_v2.proto",
           "reliant.v1.Position": "reliant/v1/workflow_v2.proto",
           "reliant.v1.PresetInputConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.PresetsConfig": "reliant/v1/workflow_v2.proto",
@@ -51083,7 +51517,7 @@
           "output": "reliant.v1.GetWorktreeResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -51143,7 +51577,7 @@
           "output": "reliant.v1.ListArchivedWorktreesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -51153,7 +51587,7 @@
           "output": "reliant.v1.ListWorktreeRecoveriesResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -51292,7 +51726,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListWorktreeRecoveriesRequest",
             "OutputTypeFQ": "reliant.v1.ListWorktreeRecoveriesResponse",
             "InputProtoFile": "reliant/v1/worktree.proto",
@@ -51393,7 +51828,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.ListArchivedWorktreesRequest",
             "OutputTypeFQ": "reliant.v1.ListArchivedWorktreesResponse",
             "InputProtoFile": "reliant/v1/worktree.proto",
@@ -51411,7 +51847,8 @@
             "AuthRequired": true,
             "Errors": null,
             "Custom": true,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.GetWorktreeRequest",
             "OutputTypeFQ": "reliant.v1.GetWorktreeResponse",
             "InputProtoFile": "reliant/v1/worktree.proto",
@@ -54234,6 +54671,43 @@
       "implementation_candidates": []
     },
     {
+      "id": "Chatprlinks",
+      "name": "Chatprlinks",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/chatprlinks.Service",
+      "source": {
+        "path": "internal/chatprlinks/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/chatprlinks.MockService",
+          "source": {
+            "path": "internal/chatprlinks/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/chatprlinks.forgeMiddlewareService",
+          "source": {
+            "path": "internal/chatprlinks/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/chatprlinks.service",
+          "source": {
+            "path": "internal/chatprlinks/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "Connection",
       "name": "Connection",
       "kind": "component",
@@ -55369,6 +55843,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "RecordOnlyChecks",
+      "name": "RecordOnlyChecks",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.RecordOnlyChecks",
+      "source": {
+        "path": "internal/app/variant_record_only_checks.go",
+        "symbol": "NewRecordOnlyChecks"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "ReliantKeySweep",
       "name": "ReliantKeySweep",
       "kind": "provider",
@@ -55593,6 +56079,18 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewStreamingHub"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "SyncingChecks",
+      "name": "SyncingChecks",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.SyncingChecks",
+      "source": {
+        "path": "internal/app/variant_syncing_checks.go",
+        "symbol": "NewSyncingChecks"
       },
       "methods": [],
       "implementation_candidates": []
@@ -56702,6 +57200,30 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "Chatprlinks",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/chatprlinks.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chatprlinks",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/chatprlinks.Store",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "Connection",
       "field": "Connections",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/connection.Connections",
@@ -57354,6 +57876,19 @@
     },
     {
       "consumer": "IntegrationsWriteledger",
+      "field": "PRLinks",
+      "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.PRLinker",
+      "methods": [],
+      "candidates": [
+        "Chatprlinks"
+      ],
+      "providers": [
+        "Chatprlinks"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "IntegrationsWriteledger",
       "field": "Runs",
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.RunLookup",
       "methods": [],
@@ -57406,6 +57941,17 @@
       "consumer": "Llmusage",
       "field": "Ledger",
       "interface": "github.com/reliant-labs/reliant/internal/llmusage.Ledger",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Llmusage",
+      "field": "Tools",
+      "interface": "github.com/reliant-labs/reliant/internal/llmusage.ToolLedger",
       "methods": [],
       "candidates": [],
       "providers": [
@@ -58826,6 +59372,20 @@
       "resolution": "unresolved"
     },
     {
+      "consumer": "Sharing",
+      "field": "WorkflowDrafts",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.WorkflowDrafts",
+      "methods": [],
+      "candidates": [
+        "Database",
+        "Workflowdrafts"
+      ],
+      "providers": [
+        "Workflowdrafts"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "StateDerivation",
       "field": "Mirror",
       "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.Service",
@@ -59873,6 +60433,19 @@
     },
     {
       "consumer": "WorkerTrigger",
+      "field": "AutomationKeys",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/automationtokens.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsAutomationtokens"
+      ],
+      "providers": [
+        "CredentialsAutomationtokens"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerTrigger",
       "field": "ConnectionVault",
       "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
       "methods": [],
@@ -60091,6 +60664,19 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Worktree",
+      "field": "PRLinks",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.PRLinker",
+      "methods": [],
+      "candidates": [
+        "Chatprlinks"
+      ],
+      "providers": [
+        "Chatprlinks"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Worktree",

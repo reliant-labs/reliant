@@ -30,6 +30,8 @@ type Deps struct {
 
 	// Ledger holds the per-call rows and their daily rollups.
 	Ledger Ledger
+	// Tools holds the tool calls' rows (agent-analytics.md §3.5).
+	Tools ToolLedger
 	// Tx opens the transaction a call's row and rollup are written in.
 	Tx TxRunner
 }
@@ -43,10 +45,47 @@ type service struct {
 //
 // forge:constructor
 func New(deps Deps) (Service, error) {
-	if deps.Ledger == nil || deps.Tx == nil {
-		return nil, errors.New("llmusage: Deps.Ledger and Deps.Tx are required")
+	if deps.Ledger == nil || deps.Tools == nil || deps.Tx == nil {
+		return nil, errors.New("llmusage: Deps.Ledger, Deps.Tools and Deps.Tx are required")
 	}
 	return &service{deps: deps}, nil
+}
+
+// RecordToolCallUsage writes one tool call's record, (rec.ID, rec.Attempt):
+// a repeated write of the same attempt changes nothing, and a user whose
+// account was purged is refused (false, nil). Reports whether anything was
+// written.
+func (s *service) RecordToolCallUsage(ctx context.Context, rec store.ToolCallUsageRecord) (bool, error) {
+	var written bool
+	err := s.deps.Tx.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var err error
+		written, err = s.deps.Tools.RecordToolCallUsage(ctx, rec)
+		return err
+	})
+	if err != nil {
+		return false, fmt.Errorf("record tool call usage: %w", err)
+	}
+	return written, nil
+}
+
+// PruneToolCallUsage deletes the tool calls' rows older than Retention at
+// now, in batches, and returns how many.
+func (s *service) PruneToolCallUsage(ctx context.Context, now time.Time) (int64, error) {
+	cutoff := now.Add(-Retention)
+	var total int64
+	for {
+		n, err := s.deps.Tools.PruneToolCallUsage(orm.Detached(ctx), cutoff, pruneBatch)
+		total += n
+		if err != nil {
+			return total, fmt.Errorf("prune tool call usage: %w", err)
+		}
+		if n < pruneBatch {
+			return total, nil
+		}
+		if err := ctx.Err(); err != nil {
+			return total, err
+		}
+	}
 }
 
 // RecordLLMCallUsage writes one provider request and its rollup. A request is

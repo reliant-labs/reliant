@@ -162,7 +162,9 @@ type EventFireRepo interface {
 // Redriver require: a store missing any of it does not compile, instead of a
 // capped trigger quietly skipping admission. Stores satisfies it.
 type CapacityStore interface {
-	EnqueueTriggerCapacity(ctx context.Context, ev *core.TriggerEvent, scope store.TriggerCapacityScope) error
+	// EnqueueTriggerCapacitySuperseding enrolls ev and returns the waiting
+	// events it superseded (`waiting: latest`), settled skipped.
+	EnqueueTriggerCapacitySuperseding(ctx context.Context, ev *core.TriggerEvent, scope store.TriggerCapacityScope) ([]*core.TriggerEvent, error)
 	CanLaunchTriggerCapacity(ctx context.Context, eventID string, scope store.TriggerCapacityScope, limits store.TriggerCapacityLimits) (bool, error)
 	NextAdmissibleTriggerCapacityEvent(ctx context.Context, scope store.TriggerCapacityScope, limits store.TriggerCapacityLimits) (*core.TriggerEvent, error)
 	BindTriggerCapacityExecution(ctx context.Context, eventID, workflowID, firstRunID string) error
@@ -175,8 +177,9 @@ type CapacityStore interface {
 	ReleaseUnboundTriggerCapacity(ctx context.Context, e store.TriggerCapacityExecution, reason string) (bool, error)
 	TriggerCapacityStartFenced(ctx context.Context, e store.TriggerCapacityExecution) (bool, error)
 	// ExpirePendingTriggerCapacityEvents settles as failed the waiting events
-	// recorded before recordedBefore, independently of the queue heads.
-	ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) (int64, error)
+	// recorded before recordedBefore, independently of the queue heads, and
+	// returns them as settled.
+	ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) ([]*core.TriggerEvent, error)
 }
 
 // CapacityDescriber is the Temporal read that reconciles occupied slots: the

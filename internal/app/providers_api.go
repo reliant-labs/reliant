@@ -1463,7 +1463,7 @@ func (b *ChatUpdateHeadsBackfill) pass(ctx context.Context) {
 // deletes only what has aged out, so an hour keeps the backlog small.
 const llmUsageRetentionInterval = time.Hour
 
-// LLMUsageRetention deletes per-call LLM usage rows older than
+// LLMUsageRetention deletes per-call LLM and tool usage rows older than
 // llmusage.Retention. The daily rollup is kept. Every replica runs it;
 // the delete is idempotent and skips rows another replica is deleting.
 type LLMUsageRetention struct{ ledger llmusage.Service }
@@ -1489,6 +1489,11 @@ func (l *LLMUsageRetention) Run(ctx context.Context) error {
 			logging.WarnContext(ctx, "pruning LLM call usage failed", "deleted", n, "error", err)
 		} else if n > 0 {
 			logging.InfoContext(ctx, "pruned LLM call usage past retention", "deleted", n)
+		}
+		if n, err := l.ledger.PruneToolCallUsage(ctx, time.Now()); err != nil {
+			logging.WarnContext(ctx, "pruning tool call usage failed", "deleted", n, "error", err)
+		} else if n > 0 {
+			logging.InfoContext(ctx, "pruned tool call usage past retention", "deleted", n)
 		}
 		if _, err := l.ledger.PruneLLMUsagePurgeFences(ctx, time.Now()); err != nil {
 			logging.WarnContext(ctx, "pruning LLM usage purge fences failed", "error", err)

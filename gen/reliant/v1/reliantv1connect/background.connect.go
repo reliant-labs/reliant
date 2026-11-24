@@ -77,12 +77,14 @@ func NewBackgroundServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+BackgroundServiceListProcessesProcedure,
 			connect.WithSchema(backgroundServiceMethods.ByName("ListProcesses")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getProcessOutput: connect.NewClient[v1.GetProcessOutputRequest, v1.GetProcessOutputResponse](
 			httpClient,
 			baseURL+BackgroundServiceGetProcessOutputProcedure,
 			connect.WithSchema(backgroundServiceMethods.ByName("GetProcessOutput")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		killProcess: connect.NewClient[v1.KillProcessRequest, v1.KillProcessResponse](
@@ -153,12 +155,14 @@ func NewBackgroundServiceHandler(svc BackgroundServiceHandler, opts ...connect.H
 		BackgroundServiceListProcessesProcedure,
 		svc.ListProcesses,
 		connect.WithSchema(backgroundServiceMethods.ByName("ListProcesses")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	backgroundServiceGetProcessOutputHandler := connect.NewUnaryHandler(
 		BackgroundServiceGetProcessOutputProcedure,
 		svc.GetProcessOutput,
 		connect.WithSchema(backgroundServiceMethods.ByName("GetProcessOutput")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	backgroundServiceKillProcessHandler := connect.NewUnaryHandler(

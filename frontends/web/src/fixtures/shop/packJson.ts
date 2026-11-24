@@ -6,9 +6,15 @@
  * Each file is the proto3 JSON of one message, decoded with protobuf-es
  * `fromJson` WITHOUT `ignoreUnknownFields`: a field the proto no longer has,
  * a misspelt key or an enum name that does not exist is a load error, so a
- * fixture cannot drift from the contract unseen. This is the check forge's
- * `fixtureJson` (forge#2716) makes; `fixtureJson` below has its name and
- * signature, and becomes a re-export of forge's once a release ships it.
+ * fixture cannot drift from the contract unseen: the check the fixture
+ * transport makes on a pack's `data` (../transport.ts `fixtureJson`, after
+ * forge#2716).
+ *
+ * Not that `fixtureJson`, which only DECLARES a pack's data entry
+ * (`{ schema, json }`) for the transport to decode once, when the pack loads.
+ * These handlers decode at answer time instead, because every answer is
+ * re-anchored on the pack clock, so the two stay apart: `decodeFixtureJson`
+ * decodes now and returns the message.
  *
  * The files are written at one instant, DATA_ANCHOR (the screenshot harness's
  * FIXED_NOW). `packJson` moves every instant in a decoded message, a
@@ -31,13 +37,13 @@ export const DATA_ANCHOR = Date.UTC(2026, 10, 18, 15, 30, 0);
  * `json` is the parsed value or the file's text (a `?raw` import, which keeps
  * a large file's literal type out of the type checker).
  */
-export function fixtureJson<Desc extends DescMessage>(schema: Desc, json: unknown): MessageShape<Desc> {
+export function decodeFixtureJson<Desc extends DescMessage>(schema: Desc, json: unknown): MessageShape<Desc> {
   return fromJson(schema, (typeof json === "string" ? JSON.parse(json) : json) as JsonValue);
 }
 
-/** `fixtureJson`, with every instant moved from DATA_ANCHOR to the pack clock's `now`. */
+/** `decodeFixtureJson`, with every instant moved from DATA_ANCHOR to the pack clock's `now`. */
 export function packJson<Desc extends DescMessage>(schema: Desc, json: unknown, now: number = demoNow()): MessageShape<Desc> {
-  const message = fixtureJson(schema, json);
+  const message = decodeFixtureJson(schema, json);
   const delta = now - DATA_ANCHOR;
   return delta === 0 ? message : (shiftMessage(schema, message, delta) as MessageShape<Desc>);
 }

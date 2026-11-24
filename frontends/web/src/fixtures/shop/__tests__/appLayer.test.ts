@@ -22,6 +22,7 @@ import { AttachmentService, GetAttachmentResponseSchema } from "@/gen/reliant/v1
 import { CatalogService } from "@/gen/reliant/v1/catalog_pb";
 import { ChatService, ListMessagesResponseSchema } from "@/gen/reliant/v1/chat_pb";
 import { DaemonRegistryService } from "@/gen/reliant/v1/daemon_registry_pb";
+import { ForgeService } from "@/gen/reliant/v1/forge_pb";
 import { ListProjectsWithAppsResponseSchema, ProjectService } from "@/gen/reliant/v1/project_pb";
 import { QuestionService } from "@/gen/reliant/v1/question_pb";
 import { RunService } from "@/gen/reliant/v1/run_pb";
@@ -43,23 +44,23 @@ import { createFixtureTransport } from "../../transport";
 import { APP_LAYER_ANSWERS, appLayerScenarioHandlers, shopAppPack } from "../app";
 import { chatStreamEvents, streamingImpl } from "../handlers/reliant/streaming";
 import { SHOP_READ_ONLY_MESSAGE, shopScenario } from "../index";
-import { DATA_ANCHOR, fixtureJson, packJson } from "../packJson";
+import { DATA_ANCHOR, decodeFixtureJson, packJson } from "../packJson";
 import { HOUR, demoNow, resetDemoNowForTests } from "../shopStory";
 import { CHAT_IDS, PROJECT_IDS, WORKTREE_IDS } from "../workspace";
 
 const FIXED_NOW = Date.UTC(2026, 10, 18, 15, 30);
 
 const SERVICES: DescService[] = [
-  ApprovalService, AttachmentService, CatalogService, ChatService, DaemonRegistryService, ProjectService, QuestionService, RunService,
+  ApprovalService, AttachmentService, CatalogService, ChatService, DaemonRegistryService, ForgeService, ProjectService, QuestionService, RunService,
   SettingsService, StreamingService, TriggerService, WorkflowService, WorktreeService, BillingService, UserService, ObservabilityBillingService,
 ];
 const METHODS = new Map<string, DescMethod>(SERVICES.flatMap((s) => s.methods.map((m) => [`${s.typeName}/${m.name}`, m] as const)));
 
-/** What the app layer answers: phase 2's Appendix A b-rl and b-cp rows, plus the observability usage the visual harness answers. */
+/** What the app layer answers: phase 2's Appendix A b-rl and b-cp rows, plus the observability usage the visual harness answers and forge's reports the console preview reads. */
 const RELIANT_KEYS = [
   "ApprovalService/ListApprovalsByChat", "AttachmentService/GetAttachment", "CatalogService/ListAvailableModels", "CatalogService/ListModels",
   "ChatService/GetChat", "ChatService/GetWorkflowExecutions", "ChatService/ListArchivedChats", "ChatService/ListChats", "ChatService/ListMessages",
-  "DaemonRegistryService/ListDaemons", "ProjectService/GetProject", "ProjectService/ListProjects", "ProjectService/ListProjectsWithApps",
+  "DaemonRegistryService/ListDaemons", "ForgeService/GetEnvShape", "ForgeService/GetEnvStatus", "ForgeService/GetTopology", "ProjectService/GetProject", "ProjectService/ListProjects", "ProjectService/ListProjectsWithApps",
   "QuestionService/ListAsyncQuestions", "QuestionService/ListPendingQuestions", "RunService/LastRunPerWorkflow", "RunService/ListRuns",
   "SettingsService/GetPrivacySettings", "SettingsService/GetProviderStatuses", "SettingsService/ListSettings",
   "StreamingService/StreamChatUpdates", "StreamingService/StreamUserUpdates", "TriggerService/ListTriggers", "WorkflowService/ListWorkflows",
@@ -80,6 +81,9 @@ const REQUESTS: Record<string, Record<string, unknown>> = {
   "reliant.v1.ChatService/GetChat": { chatId: CHAT_IDS.cartTotals },
   "reliant.v1.ChatService/GetWorkflowExecutions": { chatId: CHAT_IDS.cartTotals },
   "reliant.v1.ChatService/ListMessages": { chatId: CHAT_IDS.cartTotals },
+  "reliant.v1.ForgeService/GetEnvShape": { projectId: PROJECT_IDS.shop, env: "prod" },
+  "reliant.v1.ForgeService/GetEnvStatus": { projectId: PROJECT_IDS.shop, env: "prod" },
+  "reliant.v1.ForgeService/GetTopology": { projectId: PROJECT_IDS.shop },
   "reliant.v1.ProjectService/GetProject": { projectId: PROJECT_IDS.shop },
   "reliant.v1.QuestionService/ListAsyncQuestions": { chatId: CHAT_IDS.cartTotals },
   "reliant.v1.StreamingService/StreamChatUpdates": { chatId: CHAT_IDS.cartTotals },
@@ -106,7 +110,7 @@ describe("the app layer", () => {
     const keys = Object.keys(appLayerScenarioHandlers()).sort();
     expect(keys).toEqual([...RELIANT_KEYS, ...CONTROL_PLANE_KEYS].sort());
     for (const key of keys) expect(METHODS.has(key), key).toBe(true);
-    expect(RELIANT_KEYS).toHaveLength(26);
+    expect(RELIANT_KEYS).toHaveLength(29);
   });
 
   it.each([...RELIANT_KEYS, ...CONTROL_PLANE_KEYS].filter((k) => METHODS.get(k)?.methodKind === "unary"))("%s answers a schema-valid, wire-safe message", async (key) => {
@@ -132,11 +136,22 @@ describe("the app layer", () => {
   });
 
   it("serves the demo pack under it", () => {
-    const scenario = shopAppPack({ now: FIXED_NOW }).scenario;
+    const pack = shopAppPack({ now: FIXED_NOW });
+    expect(pack.extends?.map((layer) => layer.name)).toEqual(["shop"]);
+    const scenario = pack.scenario;
     const resolved = typeof scenario === "function" ? scenario({ now: demoNow, idPrefix: "", id: (s) => s, data: {} }) : scenario;
-    const keys = Object.keys((resolved as { handlers: object }).handlers);
-    for (const key of Object.keys(shopScenario().handlers)) expect(keys).toContain(key);
-    for (const key of Object.keys(appLayerScenarioHandlers())) expect(keys).toContain(key);
+    expect(Object.keys(resolved ?? {}).sort()).toEqual(Object.keys(appLayerScenarioHandlers()).sort());
+    expect(Object.keys(shopScenario().handlers).length).toBeGreaterThan(0);
+  });
+
+  it("answers its five side-effecting reads under readOnly: true, and refuses a write", async () => {
+    const strict = createFixtureTransport({ pack: shopAppPack({ now: FIXED_NOW }), now: demoNow, readOnly: true, readOnlyMessage: SHOP_READ_ONLY_MESSAGE });
+    for (const key of APP_LAYER_ANSWERS) {
+      const method = METHODS.get(key)!;
+      const res = await strict.unary(method as DescMethodUnary, undefined, undefined, undefined, create(method.input, REQUESTS[key] as never), undefined);
+      expectWireSafe(method.output, res.message);
+    }
+    await expect(createClient(ChatService, strict).deleteChat({ chatId: CHAT_IDS.cartTotals })).rejects.toThrow(SHOP_READ_ONLY_MESSAGE);
   });
 
   it("tells the fixture chat's story: the transcript without the client-only failed send, the stream with it", async () => {
@@ -196,9 +211,9 @@ describe("the app layer's data/*.json", () => {
   ];
 
   it.each(FILES)("%s loads strictly", (_name, schema, text) => {
-    expectWireSafe(schema, fixtureJson(schema, text));
+    expectWireSafe(schema, decodeFixtureJson(schema, text));
     // An unknown key is a load error, not a silently dropped field.
-    expect(() => fixtureJson(schema, { ...JSON.parse(text), notAField: true })).toThrow(/notAField/);
+    expect(() => decodeFixtureJson(schema, { ...JSON.parse(text), notAField: true })).toThrow(/notAField/);
   });
 
   it("moves every instant onto the pack clock, and nothing under the harness's", () => {

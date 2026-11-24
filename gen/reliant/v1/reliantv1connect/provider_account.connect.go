@@ -127,6 +127,7 @@ func NewProviderAccountServiceClient(httpClient connect.HTTPClient, baseURL stri
 			httpClient,
 			baseURL+ProviderAccountServiceListProviderAccountsProcedure,
 			connect.WithSchema(providerAccountServiceMethods.ByName("ListProviderAccounts")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateProviderAccount: connect.NewClient[v1.UpdateProviderAccountRequest, v1.UpdateProviderAccountResponse](
@@ -163,12 +164,14 @@ func NewProviderAccountServiceClient(httpClient connect.HTTPClient, baseURL stri
 			httpClient,
 			baseURL+ProviderAccountServiceGetChatProviderAccountProcedure,
 			connect.WithSchema(providerAccountServiceMethods.ByName("GetChatProviderAccount")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getPersonalFundingQuestion: connect.NewClient[v1.GetPersonalFundingQuestionRequest, v1.GetPersonalFundingQuestionResponse](
 			httpClient,
 			baseURL+ProviderAccountServiceGetPersonalFundingQuestionProcedure,
 			connect.WithSchema(providerAccountServiceMethods.ByName("GetPersonalFundingQuestion")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		resolvePersonalFundingChoice: connect.NewClient[v1.ResolvePersonalFundingChoiceRequest, v1.ResolvePersonalFundingChoiceResponse](
@@ -299,6 +302,7 @@ func NewProviderAccountServiceHandler(svc ProviderAccountServiceHandler, opts ..
 		ProviderAccountServiceListProviderAccountsProcedure,
 		svc.ListProviderAccounts,
 		connect.WithSchema(providerAccountServiceMethods.ByName("ListProviderAccounts")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerAccountServiceUpdateProviderAccountHandler := connect.NewUnaryHandler(
@@ -335,12 +339,14 @@ func NewProviderAccountServiceHandler(svc ProviderAccountServiceHandler, opts ..
 		ProviderAccountServiceGetChatProviderAccountProcedure,
 		svc.GetChatProviderAccount,
 		connect.WithSchema(providerAccountServiceMethods.ByName("GetChatProviderAccount")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerAccountServiceGetPersonalFundingQuestionHandler := connect.NewUnaryHandler(
 		ProviderAccountServiceGetPersonalFundingQuestionProcedure,
 		svc.GetPersonalFundingQuestion,
 		connect.WithSchema(providerAccountServiceMethods.ByName("GetPersonalFundingQuestion")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerAccountServiceResolvePersonalFundingChoiceHandler := connect.NewUnaryHandler(

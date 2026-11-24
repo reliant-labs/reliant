@@ -3,7 +3,8 @@ name: Merge queue
 # The merge queue's verdict: the job named "CI result" (the ruleset's required
 # check), on every merge group. It is a few seconds of aggregation over the
 # jobs that do the work, `merge-gate`, `golangci` and `vitest`, which run at
-# the same time: it passes only when each succeeded (THE VERDICT, below). The gate's
+# the same time, and `visual` when the group reaches the web UI: it passes
+# only when each succeeded (THE VERDICT, below). The gate's
 # budget is five minutes of wall time, runner queue included (owner,
 # 2026-11-01: "merge-queue tests take at most 5 minutes; anything longer
 # belongs in the pre-release gate").
@@ -41,6 +42,21 @@ name: Merge queue
 # minutes. A group that selects no vitest file passes each leg in seconds,
 # after the planner, so `vitest` concludes success or failure, never skipped.
 #
+# AND THE VISUAL BASELINE (owner, 2026-11-24; reliant#3446): the `visual` job,
+# `scripts/visual-gate.sh`, the visual suite (frontends/web/e2e/visual) in the
+# pinned Playwright image, COMPARE ONLY (--update-snapshots=none), on the merge
+# group's own commit, when `scripts/ci-lanes.sh`'s `visual` lane says the
+# group reaches it. Baselines used to go stale on main two ways: a PR captured
+# on a base that lacked another PR's UI change, or a later commit on the PR
+# (a pr-fix push) changed pixels after the capture. The group is main plus
+# the entries ahead, so both now fail on the PR that causes them, naming the
+# surfaces and the re-capture command. A group that reaches no visual input
+# passes it in seconds with a notice saying why. It runs beside the gate, so
+# it adds only what it runs past the other workers: on 2026-11-24 it ended
+# 371-381s after the run's creation, where the last 20 web groups' workers
+# ended at a median 374s (a median ~16s added, at most ~80s).
+# visual-nightly.yml runs it on main every night.
+#
 # WHAT DOES NOT: vet, forge lint's golangci, buf, whole-project and deploy
 # lanes, golangci over packages the group did not change, buf lint on an
 # unchanged proto, the race detector, slow and integration tests, the whole
@@ -60,7 +76,7 @@ name: Merge queue
 # START (a `needs:` between them would put the lint, then a second runner
 # queue, in front of the gate).
 #
-# THE VERDICT. `CI result` needs exactly the three workers, runs `if: always()`
+# THE VERDICT. `CI result` needs exactly the four workers, runs `if: always()`
 # (a failed or cancelled worker must turn it red, never skip it: GitHub counts
 # a skipped required check as passed), and passes only when every
 # `needs.<job>.result` is `success`; `needs.vitest.result` is the matrix's
@@ -273,8 +289,6 @@ jobs:
         if: steps.changed.outputs.any == 'true'
         run: task ci:golangci -- --base "${BASE}"
 
-  # The required check (header: THE VERDICT). Both workers' results, from
-  # `needs`, and nothing else: no checkout, no token, no API.
   # The affected vitest files, in four shards (header: BESIDE IT TOO). The
   # gate passes --skip-vitest, so this job is the only one that runs them, and
   # `CI result` needs it. One matrix job: needs.vitest.result rolls the legs up.
@@ -309,21 +323,74 @@ jobs:
       - name: scripts/vitest-shard.sh
         run: scripts/vitest-shard.sh --base "${BASE}" --shard "${{ matrix.shard }}/4"
 
+  # The visual baseline, compare only (header: AND THE VISUAL BASELINE). Its own
+  # runner, started with the gate. A group that reaches no visual input skips
+  # its STEPS, not the job, with a notice saying why, so the skip is a job
+  # success (a skipped job would read as success too, but say nothing).
+  visual:
+    name: Visual baseline
+    runs-on: ubuntu-latest
+    # The build plus ~3 minutes of Playwright; CI result starts after it,
+    # inside the ruleset's 45-minute check timeout.
+    timeout-minutes: 25
+    env:
+      BASE: ${{ github.event.merge_group.base_sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # scripts/ci-lanes.sh decides (its `visual` lane), as it does for the
+      # control-plane contract. A diff it cannot compute turns the lane on.
+      - name: Does the group reach the visual lane?
+        id: lane
+        run: |
+          set -euo pipefail
+          lane=$(scripts/ci-lanes.sh --base "${BASE}" | sed -n 's/^visual=//p')
+          echo "run=${lane:-true}" | tee -a "$GITHUB_OUTPUT"
+          if [ "${lane:-true}" != true ]; then
+            echo "::notice title=Visual baseline: skipped, a pass::nothing since the group's base reaches the visual lane (scripts/ci-lanes.sh visual=false: no renderer source, style, asset, build config, lockfile, sdk/ts source or e2e/visual change)"
+          fi
+      - uses: ./.github/actions/setup
+        if: steps.lane.outputs.run == 'true'
+        with:
+          go: "false"
+          node: "true"
+          github-read-token: ""
+      # Docker is the hosted runner's own; the suite runs in the pinned
+      # Playwright image through frontends/web/scripts/visual-docker.sh.
+      - name: scripts/visual-gate.sh
+        if: steps.lane.outputs.run == 'true'
+        run: scripts/visual-gate.sh
+      - name: Upload the visual diffs
+        if: failure() && steps.lane.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-results
+          path: |
+            frontends/web/test-results-visual
+            frontends/web/playwright-report-visual
+            frontends/web/visual-results.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # The required check (header: THE VERDICT). The workers' results, from
+  # `needs`, and nothing else: no checkout, no token, no API.
   ci-result:
     name: CI result
-    needs: [merge-gate, golangci, vitest]
+    needs: [merge-gate, golangci, vitest, visual]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     steps:
-      - name: Merge gate, golangci (changed) and vitest passed
+      - name: Merge gate, golangci (changed), vitest and the visual baseline passed
         env:
           RESULTS: ${{ toJSON(needs) }}
         run: |
           set -euo pipefail
-          bad=$(jq -r '. as $needs | ("merge-gate", "golangci", "vitest") as $job
+          bad=$(jq -r '. as $needs | ("merge-gate", "golangci", "vitest", "visual") as $job
             | ($needs[$job].result // "missing") as $result
             | select($result != "success") | "\($job): \($result)"' <<<"${RESULTS}")
           if [ -n "${bad}" ]; then echo "::error title=CI result::jobs that did not pass:"; echo "${bad}"; exit 1; fi
-          echo "merge-gate, golangci and vitest all passed"
+          echo "merge-gate, golangci, vitest and visual all passed"

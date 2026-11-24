@@ -381,12 +381,14 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceListChatsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("ListChats")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getChat: connect.NewClient[v1.GetChatRequest, v1.GetChatResponse](
 			httpClient,
 			baseURL+ChatServiceGetChatProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetChat")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateChat: connect.NewClient[v1.UpdateChatRequest, v1.UpdateChatResponse](
@@ -405,12 +407,14 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceSearchChatsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("SearchChats")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listArchivedChats: connect.NewClient[v1.ListArchivedChatsRequest, v1.ListArchivedChatsResponse](
 			httpClient,
 			baseURL+ChatServiceListArchivedChatsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("ListArchivedChats")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		sendMessage: connect.NewClient[v1.SendMessageRequest, v1.SendMessageResponse](
@@ -429,6 +433,7 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceListQueuedAgentMessagesProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("ListQueuedAgentMessages")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		cancelQueuedAgentMessage: connect.NewClient[v1.CancelQueuedAgentMessageRequest, v1.CancelQueuedAgentMessageResponse](
@@ -447,18 +452,21 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceListMessagesProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("ListMessages")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getToolResult: connect.NewClient[v1.GetToolResultRequest, v1.GetToolResultResponse](
 			httpClient,
 			baseURL+ChatServiceGetToolResultProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetToolResult")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getContentBlockBodies: connect.NewClient[v1.GetContentBlockBodiesRequest, v1.GetContentBlockBodiesResponse](
 			httpClient,
 			baseURL+ChatServiceGetContentBlockBodiesProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetContentBlockBodies")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateChatState: connect.NewClient[v1.UpdateChatStateRequest, v1.UpdateChatStateResponse](
@@ -519,6 +527,7 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceListBranchesProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("ListBranches")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateWorkflowParams: connect.NewClient[v1.UpdateWorkflowParamsRequest, v1.UpdateWorkflowParamsResponse](
@@ -537,36 +546,42 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceGetChatUpdatesProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetChatUpdates")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listChatPlans: connect.NewClient[v1.ListChatPlansRequest, v1.ListChatPlansResponse](
 			httpClient,
 			baseURL+ChatServiceListChatPlansProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("ListChatPlans")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getWorkflowExecutions: connect.NewClient[v1.GetWorkflowExecutionsRequest, v1.GetWorkflowExecutionsResponse](
 			httpClient,
 			baseURL+ChatServiceGetWorkflowExecutionsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetWorkflowExecutions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listStepExecutions: connect.NewClient[v1.ListStepExecutionsRequest, v1.ListStepExecutionsResponse](
 			httpClient,
 			baseURL+ChatServiceListStepExecutionsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("ListStepExecutions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getWorkflowNodeExecutions: connect.NewClient[v1.GetWorkflowNodeExecutionsRequest, v1.GetWorkflowNodeExecutionsResponse](
 			httpClient,
 			baseURL+ChatServiceGetWorkflowNodeExecutionsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetWorkflowNodeExecutions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getThreadWorkflowInputs: connect.NewClient[v1.GetThreadWorkflowInputsRequest, v1.GetThreadWorkflowInputsResponse](
 			httpClient,
 			baseURL+ChatServiceGetThreadWorkflowInputsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetThreadWorkflowInputs")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setChatDaemon: connect.NewClient[v1.SetChatDaemonRequest, v1.SetChatDaemonResponse](
@@ -585,6 +600,7 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceListChatProjectsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("ListChatProjects")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		attachProjectToChat: connect.NewClient[v1.AttachProjectToChatRequest, v1.AttachProjectToChatResponse](
@@ -1084,12 +1100,14 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceListChatsProcedure,
 		svc.ListChats,
 		connect.WithSchema(chatServiceMethods.ByName("ListChats")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceGetChatHandler := connect.NewUnaryHandler(
 		ChatServiceGetChatProcedure,
 		svc.GetChat,
 		connect.WithSchema(chatServiceMethods.ByName("GetChat")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceUpdateChatHandler := connect.NewUnaryHandler(
@@ -1108,12 +1126,14 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceSearchChatsProcedure,
 		svc.SearchChats,
 		connect.WithSchema(chatServiceMethods.ByName("SearchChats")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceListArchivedChatsHandler := connect.NewUnaryHandler(
 		ChatServiceListArchivedChatsProcedure,
 		svc.ListArchivedChats,
 		connect.WithSchema(chatServiceMethods.ByName("ListArchivedChats")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceSendMessageHandler := connect.NewUnaryHandler(
@@ -1132,6 +1152,7 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceListQueuedAgentMessagesProcedure,
 		svc.ListQueuedAgentMessages,
 		connect.WithSchema(chatServiceMethods.ByName("ListQueuedAgentMessages")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceCancelQueuedAgentMessageHandler := connect.NewUnaryHandler(
@@ -1150,18 +1171,21 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceListMessagesProcedure,
 		svc.ListMessages,
 		connect.WithSchema(chatServiceMethods.ByName("ListMessages")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceGetToolResultHandler := connect.NewUnaryHandler(
 		ChatServiceGetToolResultProcedure,
 		svc.GetToolResult,
 		connect.WithSchema(chatServiceMethods.ByName("GetToolResult")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceGetContentBlockBodiesHandler := connect.NewUnaryHandler(
 		ChatServiceGetContentBlockBodiesProcedure,
 		svc.GetContentBlockBodies,
 		connect.WithSchema(chatServiceMethods.ByName("GetContentBlockBodies")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceUpdateChatStateHandler := connect.NewUnaryHandler(
@@ -1222,6 +1246,7 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceListBranchesProcedure,
 		svc.ListBranches,
 		connect.WithSchema(chatServiceMethods.ByName("ListBranches")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceUpdateWorkflowParamsHandler := connect.NewUnaryHandler(
@@ -1240,36 +1265,42 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceGetChatUpdatesProcedure,
 		svc.GetChatUpdates,
 		connect.WithSchema(chatServiceMethods.ByName("GetChatUpdates")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceListChatPlansHandler := connect.NewUnaryHandler(
 		ChatServiceListChatPlansProcedure,
 		svc.ListChatPlans,
 		connect.WithSchema(chatServiceMethods.ByName("ListChatPlans")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceGetWorkflowExecutionsHandler := connect.NewUnaryHandler(
 		ChatServiceGetWorkflowExecutionsProcedure,
 		svc.GetWorkflowExecutions,
 		connect.WithSchema(chatServiceMethods.ByName("GetWorkflowExecutions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceListStepExecutionsHandler := connect.NewUnaryHandler(
 		ChatServiceListStepExecutionsProcedure,
 		svc.ListStepExecutions,
 		connect.WithSchema(chatServiceMethods.ByName("ListStepExecutions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceGetWorkflowNodeExecutionsHandler := connect.NewUnaryHandler(
 		ChatServiceGetWorkflowNodeExecutionsProcedure,
 		svc.GetWorkflowNodeExecutions,
 		connect.WithSchema(chatServiceMethods.ByName("GetWorkflowNodeExecutions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceGetThreadWorkflowInputsHandler := connect.NewUnaryHandler(
 		ChatServiceGetThreadWorkflowInputsProcedure,
 		svc.GetThreadWorkflowInputs,
 		connect.WithSchema(chatServiceMethods.ByName("GetThreadWorkflowInputs")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceSetChatDaemonHandler := connect.NewUnaryHandler(
@@ -1288,6 +1319,7 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceListChatProjectsProcedure,
 		svc.ListChatProjects,
 		connect.WithSchema(chatServiceMethods.ByName("ListChatProjects")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceAttachProjectToChatHandler := connect.NewUnaryHandler(

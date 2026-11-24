@@ -26,6 +26,7 @@ service OrganizationService {
   // in each, oldest org first, and which one is their default. An org switcher
   // and `forge cloud login`'s org choice are built on it.
   rpc ListMyOrganizations(ListMyOrganizationsRequest) returns (ListMyOrganizationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -83,6 +84,7 @@ service OrganizationService {
   // usage. Any member may call it. Which permissions each member holds stays
   // on AccessTokenService.ListOrgMemberGrants.
   rpc ListMembers(ListMembersRequest) returns (ListMembersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -117,6 +119,7 @@ service OrganizationService {
   // ListInvitations lists the org's invitations, pending ones by default.
   // Admin or owner: they are other people's email addresses.
   rpc ListInvitations(ListInvitationsRequest) returns (ListInvitationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -326,6 +329,7 @@ service OrganizationService {
   // ListGitHubAppInstallations lists the installations linked to the org. Any
   // member may call it.
   rpc ListGitHubAppInstallations(ListGitHubAppInstallationsRequest) returns (ListGitHubAppInstallationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
