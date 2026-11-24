@@ -60,7 +60,28 @@ pixels that are not comparable to the baselines.
   next green run closes it. It catches what moved a surface from outside the
   queue's paths, and never blocks a merge.
 
-Neither ever re-captures or retries. A surface that differs on a commit whose
+## Re-capture without docker: `visual-recapture.yml`
+
+No docker where you are (pr-fix's machine has none)? Dispatch the re-capture on
+a hosted runner, always from main:
+
+```sh
+gh workflow run visual-recapture.yml --ref main -f pr=<n> -f head=<full head sha>
+```
+
+It merges current main into the head, runs `task test:web:visual --
+--update-snapshots=changed` in the pinned image, and commits ONLY the changed
+PNGs under `__screenshots__/` onto the head as `test(web): re-capture visual
+baselines`, pushed without force (a head that moved refuses it), then
+dispatches `ci.yml` for the new head's `CI result`. The job that runs the PR's
+code can only read; the job that pushes runs main's
+`.github/scripts/visual-recapture-apply.sh` and nothing from the PR. pr-fix
+dispatches it when a merge group failed only on `Visual baseline`. A run
+where every capture already matches pushes nothing: the failure came from an
+entry ahead in the queue, or a nondeterministic surface (below). Still list
+the moved surfaces in the PR body.
+
+Neither gate ever re-captures or retries. A surface that differs on a commit whose
 UI did not change is nondeterministic: delete it from `SURFACES` with a
 `flake:removed` issue holding its entry and the diff, never re-run to green.
 
