@@ -69,6 +69,7 @@ import { useUpdateStreamConnection } from "./hooks/useUpdateStreamConnection";
 
 import { useNotificationStore, startPermissionRefresh } from "./store/notificationStore";
 import { useWorkspaceStateStore, type RightSidebarTab } from "./store/workspaceStateStore";
+import { chatScopeOf, shellProjectNow, shellScopeNow, useShellChatScope } from "./lib/urlState/shellScopeStore";
 import {
   clearPane,
   focusEventName,
@@ -104,8 +105,8 @@ function App() {
   // Chat list from the React Query cache (the single source of truth), used by
   // the tray-status effect below: the sidebar's list, every project or the
   // filter's one.
-  const projectFilterId = useWorkspaceStateStore((state) => state.projectFilterId);
-  const { data: sidebarList } = useChatListWithWorkspaces(projectFilterId);
+  const sidebarScope = useShellChatScope();
+  const { data: sidebarList } = useChatListWithWorkspaces(sidebarScope);
   const chats = sidebarList?.chats ?? EMPTY_CHAT_LIST;
   const selectProject = useProjectStore((state) => state.selectProject);
   const { projects, isLoading: projectsLoading } = useProjects();
@@ -422,7 +423,7 @@ function App() {
     async (direction: 1 | -1) => {
       const projects = getCachedProjects();
       if (projects.length === 0) return;
-      const filter = useWorkspaceStateStore.getState().projectFilterId;
+      const filter = shellProjectNow();
       const index = projects.findIndex((p) => p.id === filter);
       const nextIndex =
         index === -1
@@ -1346,7 +1347,7 @@ function App() {
         return;
       }
 
-      const sorted = getCachedChatList(useWorkspaceStateStore.getState().projectFilterId)
+      const sorted = getCachedChatList(chatScopeOf(shellScopeNow()))
         .filter((chat) => chat.state !== ChatState.ARCHIVED)
         .sort((a, b) => {
           const aTime = Date.parse(a.updatedAt || a.createdAt || "");
