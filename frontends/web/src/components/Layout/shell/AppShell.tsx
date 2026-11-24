@@ -37,7 +37,6 @@ import { useNarrowViewport } from "@/hooks/useNarrowViewport";
 import { useShortcutHost } from "@/hooks/useShortcutHost";
 import { useSidebarOverlay } from "@/hooks/useSidebarOverlay";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
-import { lazyRoute } from "@/lib/lazyRoute";
 import { runsPath } from "@/lib/paths";
 import type { RunsSearch } from "@/routeSchemas";
 import { useSignedIn } from "@/lib/session";
@@ -50,8 +49,6 @@ import { ResizableSidebar } from "../ResizableSidebar";
 import type { NavigateOptions } from "../sidebar/NavRenderer";
 import { holdNavDrawerOpen, navDrawerHeld, releaseNavDrawerHold } from "../sidebar/navDrawerHold";
 import { ShellFrameContext, shellFrameScope, toggleShellNav, useNavDrawer, useShellFrame, type ShellFrame } from "./shellFrame";
-
-const SetupGuide = lazyRoute(() => import("../../Onboarding/OnboardingChecklist"), "OnboardingChecklist");
 
 // ── The frame ───────────────────────────────────────────────────────────────
 
@@ -74,6 +71,14 @@ export interface ShellNavProps {
   onOpenTours?: () => void;
 }
 
+/** What the frame hands the Setup Guide that floats over its pages. */
+export interface ShellGuideProps {
+  /** Opens a page (a narrow window's nav drawer closes on it). */
+  onNavigate: (href: string) => void;
+  /** Opens the journey picker over the page on screen. */
+  onOpenTours: () => void;
+}
+
 export interface AppShellFrameProps {
   /**
    * The nav body, the column under the macOS title strip. The host chooses it:
@@ -83,10 +88,17 @@ export interface AppShellFrameProps {
    * first shell page, not with the entry chunk.
    */
   nav: ComponentType<ShellNavProps>;
+  /**
+   * The Setup Guide over every shell page, except while a tour is open: the
+   * app passes its own (routes.tsx `AppSetupGuide`, the lazy
+   * Onboarding/OnboardingChecklist), so the frame never imports the app's
+   * onboarding; a host with nothing to set up (the public demo) passes none.
+   */
+  guide?: ComponentType<ShellGuideProps>;
   children: ReactNode;
 }
 
-export function AppShellFrame({ nav, children }: AppShellFrameProps) {
+export function AppShellFrame({ nav, guide, children }: AppShellFrameProps) {
   // The RENDERED matches, like the keyboard host: mid-navigation the location
   // already names the destination while the page on screen is still the old one.
   const pathname = useRouterState({
@@ -175,9 +187,9 @@ export function AppShellFrame({ nav, children }: AppShellFrameProps) {
         <div role={inShell ? "main" : undefined} className={inShell ? "flex h-full min-w-0 flex-1 flex-col" : "contents"} data-testid={inShell ? "shell-main" : undefined}>
           {children}
         </div>
-        {inShell && (
+        {inShell && guide && (
           <Suspense fallback={null}>
-            <ShellSetupGuide />
+            <ShellSetupGuide guide={guide} />
           </Suspense>
         )}
       </div>
@@ -196,10 +208,11 @@ function useOpenTours(): () => void {
 }
 
 /**
- * The Setup Guide (Onboarding/OnboardingChecklist.tsx) floats over every shell
- * page, except while a tour is open: the tour's spotlights are the guide then.
+ * The host's Setup Guide (the app's: Onboarding/OnboardingChecklist.tsx) floats
+ * over every shell page, except while a tour is open: the tour's spotlights are
+ * the guide then.
  */
-function ShellSetupGuide() {
+function ShellSetupGuide({ guide: SetupGuide }: { guide: ComponentType<ShellGuideProps> }) {
   const navigate = useNavigate();
   const tourOpen = useRouterState({ select: (s) => (s.location.search as { tour?: unknown }).tour != null });
   const onOpenTours = useOpenTours();
