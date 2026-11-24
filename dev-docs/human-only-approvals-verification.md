@@ -11,9 +11,10 @@
 > sent as the cookie are refused. `internal/grpc/interceptors/approval_session_test.go` is the
 > matrix. The checks below still verify the Supabase half until it is removed.
 
-`ApprovalService.Approve`, `Deny`, `BatchApprove` and `BatchDeny` refuse any
-credential software can hold (`auth.RequirePerson`, reliant #2123, #2175). For
-identity-provider JWTs the split rests on one claim: `JWTValidator.ValidateToken`
+`ApprovalService.Approve`, `Deny`, `BatchApprove` and `BatchDeny` use
+`auth.RequireApprovalDecider`: app sessions and explicitly scoped, unbound
+access tokens can decide; machine-bound tokens cannot, whatever their scopes.
+For identity-provider JWTs the split rests on one claim: `JWTValidator.ValidateToken`
 (`internal/auth/jwt.go`) classifies a token carrying `client_id` as
 `CredentialOAuthClient` (refused) and one without it as `CredentialSession`
 (accepted). Supabase's OAuth server puts `client_id` on the tokens it issues a
@@ -45,32 +46,45 @@ cut -d. -f2 <<<"$TOKEN" | tr '_-' '/+' | base64 -d 2>/dev/null | jq '{sub, clien
 
 ## 2. Exercise the gate
 
-Start a run in a test chat that pauses on an approval, so one approval is
-pending, and note its request id.
+Use disposable approvals in a test chat owned by the verifying user. Start
+runs that pause on approval and note their request ids. Repeat the matrix below
+for `reliant.v1.ApprovalService/Approve`, `Deny`, `BatchApprove` and `BatchDeny`,
+using fresh pending requests for each successful decision (and the RPC's
+single-request or batch body as appropriate).
 
-1. Call `reliant.v1.ApprovalService/Approve` with the OAuth-client token
-   (`Authorization: Bearer <token>`, body `{"requestId": "<id>"}`). Expect
-   `permission_denied` with reason `person_required`; the api-server log has
-   `[Approval] Refused a decision made with a credential software can hold`
-   with `credential="OAuth client token"`; `ListApprovalsByChat` still lists
-   the approval as pending.
-2. Repeat with the CLI login's `rlat_` token (`reliant auth login`). Expect the
-   same refusal with `credential="access token"`.
-3. Approve it from the web app, then repeat with a second approval from the
-   desktop app. Expect each to succeed and the run to continue.
+| Credential | Expected result |
+| --- | --- |
+| OAuth-client JWT | `permission_denied`, reason `person_required` |
+| Machine-bound `rlat_` token, even with `approvals:decide` | `permission_denied`, reason `machine_credential_cannot_decide` |
+| Unbound `rlat_` token without explicit `approvals:decide` (including one with only `reliant:api`) | `permission_denied`, reason `scope_missing` |
+| Unbound `rlat_` token explicitly granted `approvals:decide` | Success: retained v1 compatibility path |
+| Web or desktop app session | Success |
+
+For bearer credentials use `Authorization: Bearer <token>`. For the managed
+browser session use the sign-in cookie, not a session id as a bearer; until
+cutover also exercise the Supabase app session described above. Do not infer
+admission from a token being a CLI login: inspect its binding and explicit
+scopes to choose the expected row.
+
+After every refusal, verify `ListApprovalsByChat` still shows each request as
+pending and its waiting run has not resumed. After every successful decision,
+verify each request has the intended approved or denied state and its waiting
+run resumes along the corresponding path. Check ApprovalService error metrics
+and api-server logs for unexpected refusals or failures, without recording
+credential values.
 
 ## 3. If a token classifies differently
 
-- **An OAuth-client token has no `client_id`, or step 2.1 succeeds** (fails
-  open: software can answer approvals). Do not promote the release; in prod,
-  roll back or fix forward immediately. The fix classifies on a claim only an
-  app session carries (Supabase's `session_id`, checked against step 1's
-  tokens) instead of on the absence of `client_id`, with a test signing both
-  real payload shapes from step 1.
-- **The app session carries `client_id`, or step 2.3 is refused** (fails
-  closed: nobody can decide an approval, and every gated run waits until it
-  times out). Same response: hold or roll back the release (the previous one
-  has no gate), then fix the classifier the same way.
+- **An OAuth-client token has no `client_id`, or the OAuth-client row
+  succeeds:** hold promotion and investigate the provider classifier. Record
+  the decoded claim sets (claims only, never the token) on the tracking issue.
+- **Any denied row succeeds or changes pending state, any admitted row is
+  refused, or a successful decision does not resume its waiting run:** hold
+  promotion; if already in prod, use the release pipeline to restore the
+  previous release or ship a verified fix forward, then repeat this matrix.
+  Record the credential class, explicit scopes, binding and RPC, never the
+  credential value.
 
-In both cases record the decoded claim sets (claims only, never the token) on
-the issue that tracks the fix.
+An explicitly scoped, unbound token succeeding is expected v1 compatibility,
+not a rollback trigger. Judge failures against the matrix above, not a blanket
+rule that every credential previously described as refused must still fail.
