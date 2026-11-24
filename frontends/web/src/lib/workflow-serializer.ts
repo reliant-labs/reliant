@@ -178,7 +178,7 @@ function cleanStepForYaml(step: Step): Record<string, unknown> {
 function daemonSelectorToYaml(daemon: Step['daemon']): unknown {
   const value = daemon?.value
   if (!value || value.case === undefined) return undefined
-  if (value.case === 'expr') return value.value || undefined
+  if (value.case === 'expr') return value.value
   const ds = value.value
   if (!ds) return undefined
   const labels = ds.labels && Object.keys(ds.labels).length > 0 ? ds.labels : undefined

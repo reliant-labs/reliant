@@ -97,6 +97,15 @@ describe("workflow serializer: node base keys", () => {
     expect(node("labelled").daemon).toEqual({ labels: { gpu: "true" } });
   });
 
+  it.each(["", "{{ inputs.machine }}", "local", " "])("preserves the daemon expression scalar %j", (expression) => {
+    const workflow: Workflow = {
+      name: "expression",
+      nodes: [{ id: "run", type: "run", daemon: { value: { case: "expr", value: expression } } }],
+    };
+    const written = yaml.load(serializeWorkflowToYAML(workflow)) as Record<string, any>;
+    expect(written.nodes[0]).toHaveProperty("daemon", expression);
+  });
+
   it("is stable: a second save writes what the first did", () => {
     const again = yaml.load(serializeWorkflowToYAML(deserializeWorkflowFromYAML(yaml.dump(saved))));
     expect(again).toEqual(saved);
