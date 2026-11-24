@@ -77,6 +77,19 @@ produce a meaningful timeout change. `shop/workloads.ts` answers the
 observability workload rows from the same current-promotion ledger used by
 config and release history.
 
+## The same pack in the production build
+
+The shop pack also serves the **production** build, through fixture mode
+(`FIXTURES_SCENARIO` in config.js, `src/lib/fixturesConfig.ts`). Fixture mode
+adds `shop/app.ts`, the reliant services' layer, on top of `shopPack`, so chat,
+projects and settings render too. It serves two surfaces:
+
+- the visual harness, `e2e/visual`;
+- the hosted preview env, `deploy/kcl/preview`. See `preview-env.md` for what it
+  declares and how it is (not yet) deployed.
+
+The demo bundle never loads that layer, and its bundle guard fails if it does.
+
 ## Verify the real target
 
 From `frontends/web`:

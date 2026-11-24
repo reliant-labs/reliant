@@ -1,7 +1,9 @@
 package forgetest
 
 import (
+	"encoding/json"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -105,6 +107,43 @@ func TestNoRenderedEnvButPreviewCarriesFixtures(t *testing.T) {
 		rendered++
 	}
 	require.Greater(t, rendered, 0, "no env under deploy/kcl has a main.k")
+}
+
+// The preview env as forge renders it: fixture mode on, read-only, and every
+// origin the app dials a fake one. Its config.js is what makes the production
+// build serve the shop pack (frontends/web/src/lib/fixturesConfig.ts), so a
+// render that dropped a key, or named a real backend, would ship a preview
+// that calls live services.
+func TestThePreviewEnvRendersFixtureMode(t *testing.T) {
+	forge := Pinned(t) // Use the same KCL evaluator as env build, in the full lane.
+	t.Setenv("FORGE_LEDGER", "machine")
+	t.Setenv("FORGE_LEDGER_HOME", t.TempDir())
+
+	cmd := forge.Command(t.Context(), "kcl", "eval", filepath.Join("deploy", "kcl", fixturesEnv, "main.k"), "-S", "output")
+	cmd.Dir = kclRoot(t)
+	out, err := cmd.Output()
+	require.NoError(t, err, "render %s: %s", fixturesEnv, out)
+
+	var doc struct {
+		Frontends []struct {
+			Name              string                            `json:"name"`
+			RuntimeConfigSpec map[string]struct{ Value string } `json:"runtime_config_spec"`
+		} `json:"frontends"`
+	}
+	require.NoError(t, json.Unmarshal(out, &doc), "render %s: not JSON", fixturesEnv)
+	require.Len(t, doc.Frontends, 1, "env %s declares one frontend", fixturesEnv)
+	web := doc.Frontends[0]
+	assert.Equal(t, "web", web.Name)
+	value := func(key string) string { return web.RuntimeConfigSpec[key].Value }
+
+	assert.Equal(t, "shop", value("FIXTURES_SCENARIO"), "env %s serves the shop pack", fixturesEnv)
+	assert.Equal(t, "true", value("FIXTURES_READ_ONLY"), "env %s refuses every write", fixturesEnv)
+	for _, key := range []string{"API_URL", "CONTROL_PLANE_API_URL", "GATEWAY_URL", "SUPABASE_URL"} {
+		u, err := url.Parse(value(key))
+		require.NoError(t, err, "%s", key)
+		assert.True(t, strings.HasSuffix(u.Hostname(), ".invalid"),
+			"env %s: %s = %q must be a fake origin under .invalid, which never resolves", fixturesEnv, key, value(key))
+	}
 }
 
 func TestEnvOf(t *testing.T) {
