@@ -30,8 +30,8 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
   useNavigate: () => state.navigate,
   useParams: () => state.params,
   useRouter: () => ({ latestLocation: { pathname: "/projects/shop/workspaces" } }),
-  Link: ({ to, children, ...rest }: { to: string; children: ReactNode }) => (
-    <a href={to} {...rest}>
+  Link: ({ to, search, children, ...rest }: { to: string; search?: Record<string, string>; children: ReactNode }) => (
+    <a href={search ? `${to}?${new URLSearchParams(search)}` : to} {...rest}>
       {children}
     </a>
   ),
@@ -120,7 +120,7 @@ describe("a project's page", () => {
     expect(screen.getByTestId("project-page-name")).toHaveTextContent("shop");
     const apps = screen.getAllByTestId("project-app");
     expect(apps.map((a) => a.getAttribute("data-app"))).toEqual(["shop", "docs"]);
-    expect(within(apps[0]).getByRole("link", { name: "Open console" })).toHaveAttribute("href", "/forge/p/shop");
+    expect(within(apps[0]).getByRole("link", { name: "Open console" })).toHaveAttribute("href", "/forge/p/shop?project=shop");
     expect(apps[0]).toHaveTextContent("prod, staging");
     expect(within(apps[1]).queryByRole("link", { name: "Open console" })).toBeNull();
     expect(apps[1]).toHaveTextContent("This org has no app of this name yet");

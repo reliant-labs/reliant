@@ -757,6 +757,30 @@ single-parent squash commit on top of the entry ahead of it (or main). When it
 does not hold, the script exits 2 naming the parent count or the ancestry it
 expected: it refuses, it never passes a break it could not isolate.
 
+**One `buf breaking` finding is additive, not a waiver.** buf's FILE rules
+report any change of an rpc's `idempotency_level` (`RPC_SAME_IDEMPOTENCY_LEVEL`),
+including an rpc that declared none now declaring `NO_SIDE_EFFECTS` or
+`IDEMPOTENT`. That direction changes nothing on the wire: a Connect server also
+accepts GET for a `NO_SIDE_EFFECTS` rpc, every existing client (old daemons,
+SDKs, Electron, web) keeps sending POST, and no reliant client turns GET on. It
+only adds a promise the handler already keeps. So `check-compat.sh proto` runs
+`buf breaking --error-format json` and counts a finding as additive only when its
+`type` is exactly `RPC_SAME_IDEMPOTENCY_LEVEL` and its message is exactly
+`... changed option "idempotency_level" from "IDEMPOTENCY_UNKNOWN" to
+"NO_SIDE_EFFECTS"` (or `"IDEMPOTENT"`). It logs those as `additive, not
+breaking`. Every other finding still needs `breaking:approved`: dropping or
+downgrading `NO_SIDE_EFFECTS` or `IDEMPOTENT` withdraws a promise a client may
+already retry or GET-cache on, and `IDEMPOTENT` to `NO_SIDE_EFFECTS` is left out
+on purpose to keep the exemption to the one change it was made for. A
+run that exits for any reason but findings, a line that is not a finding object,
+or no `jq` on PATH exempts nothing. buf's rule stays on: the narrow exemption is
+in the gate, so a hand-run `buf breaking` still lists the additive findings.
+`scripts/test-check-compat.sh` covers both directions. The vendored control-plane
+contract (`proto-vendor/controlplane/`) is outside this buf workspace, so a
+re-vendor is judged only by `task contract:controlplane:check` (exactly
+`SOURCE`'s export), not by this check; its wire compatibility is control-plane's
+`scripts/check-vendored-proto.sh` to enforce.
+
 **Check after the first queue run that reaches it** (the first entry touching
 `proto/` or `db/migrations/` after this lands): its `task ci:merge -- --queue`
 step logs `check-compat: proto unchanged since <sha>`, `... wire-compatible

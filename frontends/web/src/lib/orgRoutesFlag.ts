@@ -10,7 +10,8 @@ import { loadConfig } from "./config_gen";
  *
  *   on   the path builders (lib/paths) emit the org form, `/o/<org slug>/…`,
  *        and the org-less path of an org-scoped page redirects into the tab's
- *        org (lib/orgRouting.ts, forwardIntoOrg).
+ *        org (lib/orgRouting.ts, forwardIntoOrg), a chat's or a project's into
+ *        the resource's own (lib/chatRouteResolve.ts, lib/projectRouteResolve.ts).
  *   off  (the default) the builders emit today's paths and nothing redirects.
  *
  * Either way the `/o/<org>` routes resolve, so an org URL never 404s: turning

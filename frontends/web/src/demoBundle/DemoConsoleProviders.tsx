@@ -1,9 +1,9 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * What the forge console's pages read from context in the demo shell
- * (demoShellRoutes.tsx wraps its `_authenticated` layout in it), the same
- * providers DemoConsole gives its own panel:
+ * What the forge console's pages read from context in the demo shell:
+ * demoShellRoutes.tsx wraps its `_authenticated` layout in it, and the demo's
+ * own pages (/forge/demo, DemoConsole) are inside it too, with their `section`:
  *
  *  - the Observability views read nothing from here: the console's REAL
  *    client reads the shop fixture pack over the demo's transport
@@ -18,13 +18,14 @@ import type { ReactNode } from "react";
 
 import { DemoBrowserProviders } from "@/components/Forge/Demo/DemoBrowserProviders";
 import { DemoNavExtras } from "@/components/Forge/Demo/DemoNavExtras";
+import type { DemoSection } from "@/components/Forge/Demo/demoPath";
 import { AskAgentModeProvider } from "@/components/Forge/Observability/AskReliant/askAgentMode";
 
-export function DemoConsoleProviders({ children }: { children: ReactNode }) {
+export function DemoConsoleProviders({ section, children }: { section?: DemoSection; children: ReactNode }) {
   return (
     <AskAgentModeProvider mode="handoff" cli="forge" demo>
       <DemoBrowserProviders>
-        <DemoNavExtras>{children}</DemoNavExtras>
+        <DemoNavExtras section={section}>{children}</DemoNavExtras>
       </DemoBrowserProviders>
     </AskAgentModeProvider>
   );

@@ -55,7 +55,7 @@ func TestPreviewProjectOrgMove_Generated(t *testing.T) {
 		"p-theirs": {ID: "p-theirs", UserID: "someone-else", OrgID: &acme},
 		"p-legacy": {ID: "p-legacy", UserID: "test-user"},
 	}
-	store := &project.MockRepository{
+	store := &stubRepo{MockRepository: &project.MockRepository{},
 		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) {
 			if p, ok := projects[id]; ok {
 				return p, nil
@@ -79,7 +79,7 @@ func TestPreviewProjectOrgMove_Generated(t *testing.T) {
 			}, nil
 		},
 	}
-	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Ledger: storeLedger}))
+	svc := project.NewTestProject(t, withDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Ledger: storeLedger}))
 	person := func(m authz.Membership) context.Context {
 		return authz.WithCredentialKind(authz.WithMembership(project.AuthedContext(t), m), authz.CredentialKindPerson)
 	}
@@ -176,10 +176,10 @@ func TestPreviewProjectOrgMove_RefusalReasons(t *testing.T) {
 		"p-acme":   {ID: "p-acme", UserID: "test-user", OrgID: &acme},
 		"p-globex": {ID: "p-globex", UserID: "test-user", OrgID: &globex},
 	}
-	store := &project.MockRepository{
+	store := &stubRepo{MockRepository: &project.MockRepository{},
 		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) { return projects[id], nil },
 	}
-	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store)}))
+	svc := project.NewTestProject(t, withDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store)}))
 	person := authz.WithCredentialKind(authz.WithMembership(project.AuthedContext(t), moveOrgs{}), authz.CredentialKindPerson)
 	software := authz.WithCredentialKind(authz.WithMembership(project.AuthedContext(t), moveOrgs{}), authz.CredentialKindSoftware)
 	for _, tc := range []struct {

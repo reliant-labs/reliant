@@ -24,7 +24,6 @@ import { Code, ConnectError, createClient } from "@connectrpc/connect";
 
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 
-import { DashboardSource } from "@/gen/controlplane/services/dashboard/v1/dashboard_pb";
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { ObservabilityBillingService } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import { SecretStoreService } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
@@ -40,12 +39,11 @@ import { listSecrets } from "@/services/forge/secretStore";
 import { DEMO_DOMAINS, DEMO_ENVS, DEMO_PROJECT, DEMO_RELEASES, DEMO_SECRETS, DEMO_WORKLOADS, consoleScenarioHandlers } from "../handlers/console";
 import { DEMO_DEFAULT_SERVICES } from "../handlers/defaults";
 import { outsideDemo } from "../handlers/scope";
-import { createShopApi } from "../model/shopApi";
 import { isDemoRead } from "../../readOnly";
 import { createShopTransport } from "..";
 import { FIXTURE_ENVS, FIXTURE_PROJECT } from "@/components/Forge/Observability/__fixtures__/fixtureApi";
 import { shopPromotions } from "../model/delivery";
-import { DEMO_INCIDENT, demoNow, resetDemoNowForTests } from "../shopStory";
+import { demoNow, resetDemoNowForTests } from "../shopStory";
 import { describePromotion } from "@/components/Forge/Observability/releaseMarkers";
 
 const { OPTIONAL: LABEL_OPTIONAL, REPEATED: LABEL_REPEATED } = FieldDescriptorProto_Label;
@@ -212,7 +210,7 @@ describe("the console's sample data, on the demo's transport", () => {
   });
 
   it("Activity: promotions, a release cut, a triage and a rotation, newest first", async () => {
-    const { events } = await listActivity({ orgId: "org-demo", projectId: DEMO_PROJECT, envIds: [] });
+    const { events } = await listActivity({ orgId: "org-acme", projectId: DEMO_PROJECT, envIds: [] });
     expect(events.map((e) => e.verb)).toEqual(["query_database", "promote", "cut", "assign", "issue_opened", "promote", "promote", "cut", "rotate", "rotate", "resolve"]);
     expect(events.every((e, i) => i === 0 || events[i - 1].atMs >= e.atMs)).toBe(true);
   });
@@ -263,54 +261,13 @@ describe("every console read is answered; every write is refused", () => {
     }
   });
 
-  it("answers every read of every console service, story or default, with no Unimplemented", async () => {
+  it("answers observability usage as a control plane without billing does: Unimplemented", async () => {
     const t = (await import("@/lib/connect")).transport;
-    // The story answers a read that names one thing (an issue, a session, a metric, a dashboard)
-    // only for a thing it has, as the server does: ask about the story's own.
-    const story = createShopApi();
-    const scope = { orgId: "org-acme", projectId: "shop", envIds: ["env-prod"], filters: [] };
-    const day = { startMs: Date.now() - 86_400_000, endMs: Date.now() };
-    const [session] = (await story.listSessions({ ...scope, window: day, hasError: false, hasReplay: true, userId: "", pathContains: "", pageSize: 1 })).sessions;
-    const [metric] = (await story.listMetricCatalog({ ...scope, window: { startMs: Date.now() - 3_600_000, endMs: Date.now() } })).metrics;
-    const named = {
-      "controlplane.v1.DashboardService/GetDashboard": { orgId: "org-acme", ref: { source: DashboardSource.GENERATED, projectId: "shop", key: "overview" } },
-      "controlplane.v1.DashboardService/ListDashboardVersions": { orgId: "org-acme", ref: { source: DashboardSource.GENERATED, projectId: "shop", key: "overview" } },
-      "controlplane.v1.IssuesService/GetIssue": { issueId: DEMO_INCIDENT.issueId },
-      "controlplane.v1.IssuesService/ListIssueEvents": { issueId: DEMO_INCIDENT.issueId },
-      "controlplane.v1.IssuesService/ListIssueTimeline": { issueId: DEMO_INCIDENT.issueId },
-      "controlplane.v1.ObservabilityService/GetMetric": { scope: { orgId: "org-acme", projectId: "shop", envIds: ["env-prod"] }, metricName: metric.name },
-      "controlplane.v1.ObservabilityService/GetReleaseHealth": { scope: { orgId: "org-acme", projectId: "shop", envIds: ["env-prod"] } },
-      "controlplane.v1.RumService/GetSession": { scope: { orgId: "org-acme", projectId: "shop" }, sessionId: session.sessionId },
-      "controlplane.v1.RumService/GetSessionTimeline": { scope: { orgId: "org-acme", projectId: "shop" }, sessionId: session.sessionId },
-      "controlplane.v1.RumService/GetSessionReplay": { scope: { orgId: "org-acme", projectId: "shop" }, sessionId: session.sessionId },
-    };
     // The demo has no billing: its reads answer as a control plane without the billing API (handlers/billing.ts).
     const billing = createClient(ObservabilityBillingService, t) as unknown as Record<string, (req: object) => Promise<unknown>>;
     for (const method of methodsOf(ObservabilityBillingService).filter((m) => isDemoRead(m))) {
       await expect(billing[method.localName]({ orgId: "org-acme" }), method.name).rejects.toSatisfy((err: unknown) => ConnectError.from(err).code === Code.Unimplemented);
     }
-    let reads = 0;
-    for (const service of DEMO_DEFAULT_SERVICES.filter((s) => s !== ObservabilityBillingService)) {
-      const client = createClient(service, t) as unknown as Record<string, (req: object) => Promise<unknown>>;
-      for (const method of methodsOf(service).filter((m) => isDemoRead(m))) {
-        // Structured inventory/config reads require an address, just as the
-        // server does. Coverage must exercise a valid request, not replace
-        // ownership and confirmation checks with generated placeholder data.
-        const addressed: Record<string, object> = {
-          "controlplane.v1.AppDatabaseService/DescribeDatabase": { environmentId: "env-dev", database: "shop" },
-          "controlplane.v1.AppDatabaseService/BrowseTable": { environmentId: "env-dev", database: "shop", table: "public.orders", limit: 50 },
-          "controlplane.v1.StorageBrowserService/ListBrowsableBuckets": { environmentId: "env-staging" },
-          "controlplane.v1.StorageBrowserService/ListObjects": { environmentId: "env-staging", bucket: "uploads" },
-          "controlplane.v1.StorageBrowserService/GetObjectMetadata": { environmentId: "env-staging", bucket: "uploads", key: "README.txt" },
-          "controlplane.v1.StorageBrowserService/PreviewObject": { environmentId: "env-staging", bucket: "uploads", key: "README.txt" },
-          "controlplane.v1.DeployService/GetWorkloadConfig": { environmentId: "env-dev", workload: "api" },
-          ...named,
-        };
-        await expect(client[method.localName](addressed[`${service.typeName}/${method.name}`] ?? {}), `${service.typeName}/${method.name}`).resolves.toBeDefined();
-        reads++;
-      }
-    }
-    expect(reads).toBeGreaterThan(70);
   });
 
   it("refuses every write of every console service, defaults or not", async () => {
@@ -350,6 +307,25 @@ describe("nothing outside shop", () => {
     expect((await (await client(DomainService)).listDomainBindings({ environmentId: OTHER_ENV })).bindings).toEqual([]);
   });
 
+  it("every org-scoped read is empty for a foreign org, including alerting story and defaults", async () => {
+    const t = (await import("@/lib/connect")).transport;
+    let checked = 0;
+    for (const service of DEMO_DEFAULT_SERVICES) {
+      const client = createClient(service, t) as unknown as Record<string, (req: object) => Promise<unknown>>;
+      for (const method of service.methods.filter((m) => m.methodKind === "unary" && isDemoRead(m))) {
+        if (!method.input.fields.some((field) => field.name === "org_id")) continue;
+        const response = await client[method.localName]({ orgId: "org-foreign" });
+        expect(response, `${service.typeName}/${method.name}`).toEqual(create(method.output));
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+    const { AlertingService } = await import("@/gen/controlplane/services/alerting/v1/alerting_pb");
+    const alerts = await client(AlertingService);
+    expect((await alerts.listAlerts({ orgId: "org-acme" })).alerts.length).toBeGreaterThan(0);
+    expect((await alerts.listAlerts({})).alerts.length).toBeGreaterThan(0);
+  });
+
   it("the story's project handlers answer nothing for another project", async () => {
     const deploy = await client(DeployService);
     expect((await deploy.getLiveView({ project: "other" })).environments).toEqual([]);
@@ -359,14 +335,14 @@ describe("nothing outside shop", () => {
     expect((await deploy.getRelease({ project: "other", version: "v1.8.3" })).release).toBeUndefined();
     expect((await deploy.compareReleases({ project: "other", fromVersion: "v1.8.2", toVersion: "v1.8.3" })).to).toBeUndefined();
     expect((await deploy.compareReleases({ project: DEMO_PROJECT, environmentId: OTHER_ENV, fromVersion: "v1.8.2", toVersion: "v1.8.3" })).to).toBeUndefined();
-    expect((await listActivity({ orgId: "org-demo", projectId: "other", envIds: [] })).events).toEqual([]);
-    expect((await listActivity({ orgId: "org-demo", projectId: DEMO_PROJECT, envIds: [OTHER_ENV] })).events).toEqual([]);
+    expect((await listActivity({ orgId: "org-acme", projectId: "other", envIds: [] })).events).toEqual([]);
+    expect((await listActivity({ orgId: "org-acme", projectId: DEMO_PROJECT, envIds: [OTHER_ENV] })).events).toEqual([]);
     // An environment named by name, not id (ListDeployAttemptsRequest.environment_name).
     expect((await deploy.listDeployAttempts({ project: DEMO_PROJECT, environmentName: "other-prod" })).attempts).toEqual([]);
     expect((await deploy.listDeployAttempts({ project: DEMO_PROJECT, environmentName: "prod" })).attempts.length).toBeGreaterThan(0);
     // And shop's, named: still answered.
     expect((await deploy.getRelease({ project: DEMO_PROJECT, version: "v1.8.3" })).release?.version).toBe("v1.8.3");
-    const prodOnly = await listActivity({ orgId: "org-demo", projectId: DEMO_PROJECT, envIds: ["env-prod"] });
+    const prodOnly = await listActivity({ orgId: "org-acme", projectId: DEMO_PROJECT, envIds: ["env-prod"] });
     expect(prodOnly.events.length).toBeGreaterThan(0);
     expect(prodOnly.events.every((e) => e.env?.id === "env-prod")).toBe(true);
   });

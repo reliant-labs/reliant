@@ -22,13 +22,11 @@ the console's `ObservabilityApi`, from one module per area (telemetry via
 alerting, sessions, dashboards, metrics). It is the authoring format, not what
 pages read: the handlers (`handlers/observability.ts`, `alerting.ts`,
 `delivery.ts`, `issues.ts`, `user.ts`, `rum.ts`, `dashboards.ts`) encode it on
-the wire, and on the demo host the console's real client
-(`controlPlaneObservabilityApi`) decodes it, so no page reads the model
-directly there. `__tests__/realClient.test.ts` holds every read the real
-client makes to the model's answer. Only `/forge/demo` in the Reliant and
-forge shells, whose transport is the real control plane, still reads the
-model in memory (`DemoConsole.tsx` `FixtureApiOffDemoHost`) until a transport
-can be scoped to a subtree. `handlers/billing.ts` answers observability billing
+the wire, and in the demo shell (the only place `/forge/demo` runs; the app's
+leaves for it) the console's real client (`controlPlaneObservabilityApi`)
+decodes it, so no page reads the model directly.
+`__tests__/realClient.test.ts` holds every read the real client makes to the
+model's answer. `handlers/billing.ts` answers observability billing
 Unimplemented: the demo has none. `handlers/console.ts` answers Releases, Environments, Secrets, Domains
 and Activity from the same ledger. Nothing under `src/fixtures/` imports the
 console's unit-test fixtures (`Observability/__fixtures__`);

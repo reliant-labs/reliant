@@ -22,7 +22,7 @@ import (
 
 // scheduling records each ScheduleProjectDeletion on purges, answering as
 // projectpurge does for a project that was not scheduled.
-func scheduling(store *project.MockRepository, purges *project.MockProjectPurges) *[]string {
+func scheduling(store *stubRepo, purges *project.MockProjectPurges) *[]string {
 	var scheduled []string
 	purges.ScheduleProjectDeletionFunc = func(_ context.Context, id, by string, after time.Time, _ core.ProjectDecision) (core.ProjectDeletion, error) {
 		scheduled = append(scheduled, id+" by "+by)
@@ -41,7 +41,7 @@ func TestDeleteProject_Generated(t *testing.T) {
 	purges := &project.MockProjectPurges{}
 	scheduled := scheduling(store, purges)
 	now := time.Date(2026, time.January, 5, 12, 0, 0, 0, time.UTC)
-	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Purges: purges, Now: func() time.Time { return now }}))
+	svc := project.NewTestProject(t, withDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Purges: purges, Now: func() time.Time { return now }}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteProjectRequest, pb.DeleteProjectResponse]{
 		{

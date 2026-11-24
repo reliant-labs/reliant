@@ -13,6 +13,13 @@ import (
 // Repository is what the takeover reads and writes. *db.Repo satisfies it.
 type Repository interface {
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
+}
+
+// Offers is the org-wide read of what a takeover lists and the offers it
+// makes and settles. internal/triggerowner's Service satisfies it: its writes
+// run under the trigger's row lock, so an offer is made only for the owner it
+// was decided on.
+type Offers interface {
 	ListOrgTriggers(ctx context.Context, orgID string) ([]*core.Trigger, error)
 	ListOrgWorkflowDrafts(ctx context.Context, orgID string) ([]*core.WorkflowDraft, error)
 	CreateTriggerOffer(ctx context.Context, o *core.TriggerOffer) error

@@ -11,16 +11,17 @@ import { StorageBrowserService } from "@/gen/controlplane/services/storage_brows
 import { createDataBrowserApi } from "@/services/controlPlane/observability/appDatabaseApi";
 import { createStorageBrowserApi } from "@/services/controlPlane/storageBrowser/storageBrowserApi";
 import { createDemoTransport } from "./demoTransport";
+import { DEMO_ORG } from "@/fixtures/shop/shopStory";
 
 export function createDemoBrowserApis() {
   const transport = createDemoTransport({ source: "fixtures", url: "" });
   const refused = async (): Promise<never> => { throw new ConnectError("This is a demo. Identity changes are turned off.", Code.PermissionDenied); };
   const reads = createIdentityReadApi(createClient(IdentityService, transport));
   const requireScope = (org: string, env: string) => {
-    if (org !== "demo-org" || !["env-dev", "env-staging", "env-prod"].includes(env)) throw new ConnectError("No such sample identity scope.", Code.NotFound);
+    if (org !== DEMO_ORG || !["env-dev", "env-staging", "env-prod"].includes(env)) throw new ConnectError("No such sample identity scope.", Code.NotFound);
   };
   const identity: IdentityApi & { getUser: ReturnType<typeof createIdentityReadApi>["getUser"] } = {
-    currentOrgId: async () => "demo-org",
+    currentOrgId: async () => DEMO_ORG,
     getStatus: async (org, env) => { requireScope(org, env); return reads.getStatus(org, env); },
     getUser: async (org, env, user) => { requireScope(org, env); return reads.getUser(org, env, user); },
     listUsers: async (org, env, filter, token) => { requireScope(org, env); return reads.listUsers(org, env, filter, token); },

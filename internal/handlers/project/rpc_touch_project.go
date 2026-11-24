@@ -29,7 +29,7 @@ func (s *Service) TouchProject(
 	}
 
 	if s.deps.Router != nil {
-		project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+		project, err := s.deps.ProjectRows.GetProject(ctx, req.Msg.ProjectId)
 		if err != nil {
 			logging.WarnContext(ctx, "TouchProject: failed to load project for MCP warmup", "projectID", req.Msg.ProjectId, "error", err)
 		} else if project != nil {
