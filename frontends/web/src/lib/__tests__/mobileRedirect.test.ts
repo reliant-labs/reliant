@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { defaultParseSearch, defaultStringifySearch } from '@tanstack/react-router'
+import { mobileNewChatSearchSchema } from '@/routeSchemas'
 import {
   MOBILE_MAX_WIDTH,
   mobilePathFor,
@@ -192,6 +194,18 @@ describe('mobilePathFor', () => {
     expect(mobilePathFor('/project/a%2Fb')).toBe('/m/chats?projects=a%2Fb')
     // The path names the project: a scope carried with it is not the page's.
     expect(mobilePathFor('/project/abc', '?projects=all&focus=app%3Ashop')).toBe('/m/chats?projects=abc')
+  })
+
+  it.each(['p1', '123', 'true', 'null', 'p1,p2'])('round-trips scope and draft strings through the router: %s', (id) => {
+    const parseDestination = (url: string) => defaultParseSearch(new URL(url, 'http://phone').search)
+    expect(parseDestination(mobilePathFor(`/project/${encodeURIComponent(id)}`))).toEqual({ projects: id })
+    const scope = { projects: id, focus: id }
+    expect(parseDestination(mobilePathFor('/', defaultStringifySearch(scope)))).toEqual(scope)
+    // Raw external links and router-generated links both remain valid drafts.
+    for (const search of [new URLSearchParams({ project: id, machine: id, ws: id }).toString(), defaultStringifySearch({ project: id, machine: id, ws: id })]) {
+      const parsed = parseDestination(mobilePathFor('/new', search))
+      expect(mobileNewChatSearchSchema.parse(parsed)).toMatchObject({ project: id, machine: id, worktreeId: id })
+    }
   })
 
   it("opens a draft with its project, machine and workspace", () => {

@@ -42,6 +42,7 @@ import { useChatStore } from "@/store/chatStore";
 import { useProjectStore } from "@/store/projectStore";
 
 import { MobileScopeSync } from "../MobileScopeSync";
+import { chatScopeOfSearch } from "../mobileScope";
 
 let router: AnyRouter;
 const selectProject = vi.fn();
@@ -96,6 +97,17 @@ afterEach(() => {
 });
 
 describe("MobileScopeSync", () => {
+  it("keeps multi-project list/search cache scopes distinct from all projects", async () => {
+    expect(chatScopeOfSearch({ projects: "p2,p1" })).toBe("projects:p1,p2");
+    expect(chatScopeOfSearch({ projects: "p1" })).toBe("p1");
+    expect(chatScopeOfSearch({ projects: "all" })).toBeNull();
+    await phoneAt("/m/chats?projects=p1,p2");
+    await waitFor(() => expect(shellScopeNow()).toEqual({ mode: "many", projectIds: ["p1", "p2"] }));
+    await router.navigate({ to: "/m/chats", search: { projects: "p2,p3" } as never });
+    await waitFor(() => expect(loadChats).toHaveBeenCalledTimes(1));
+    expect(selectProject).not.toHaveBeenCalled();
+  });
+
   it("fills a bare chat list from the tab's last scope, in place", async () => {
     scopeDefault.set({ mode: "one", projectId: "p2" });
     await phoneAt("/m/chats");
@@ -125,7 +137,8 @@ describe("MobileScopeSync", () => {
 
   it("leaves a chat's own page to its chat", async () => {
     await phoneAt("/m/chats/chat-1?projects=p2");
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Publishing happens in the same commit's effects as project selection.
+    await waitFor(() => expect(shellScopeNow()).toEqual({ mode: "one", projectId: "p2" }));
     expect(selectProject).not.toHaveBeenCalled();
     expect(at()).toBe("/m/chats/chat-1?projects=p2");
   });

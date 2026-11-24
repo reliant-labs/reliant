@@ -8,8 +8,7 @@
  * (lib/urlState/shellScope.ts), which the root route carries on every
  * navigation that does not name them:
  *
- *   `?projects=<id>|all`    which project's chats the list and search show
- *                           (one project, else every project)
+ *   `?projects=<id>|<id>,<id>|all` which projects' chats the list and search show
  *   `/m/new?project=<id>`   the project a new chat starts in, as on desktop
  *                           `/new?project=`; it wins over `projects`, which
  *                           stays for Back to the list
@@ -20,17 +19,17 @@
 
 import { useSearch } from "@tanstack/react-router";
 
-import { oneProjectOf } from "@/lib/urlState/shellScopeStore";
+import { chatScopeOf, oneProjectOf } from "@/lib/urlState/shellScopeStore";
 import { scopeOfSearch, type ShellScope } from "@/lib/urlState/shellScope";
 import type { SearchRecord } from "@/lib/urlState/searchParams";
 
-/** The one project the chat list shows, else null (every project: `all`, several, or none named). */
+/** The chat-list cache scope: one id, a canonical multi-project key, or null for all. */
 export function chatScopeOfSearch(search: SearchRecord | null | undefined): string | null {
   const scope = scopeOfSearch(search);
-  return scope ? oneProjectOf(scope) : null;
+  return scope ? chatScopeOf(scope) : null;
 }
 
-/** Re-renders with the one project the URL scopes the chat list to (null: every project). */
+/** Re-renders with the URL's effective chat-list scope (null: every project). */
 export function useMobileChatScope(): string | null {
   return chatScopeOfSearch(useSearch({ strict: false }) as SearchRecord);
 }

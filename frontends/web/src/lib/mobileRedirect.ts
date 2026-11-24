@@ -25,6 +25,8 @@
  * on a small screen. A redirect with no exit is worse than no redirect.
  */
 
+import { defaultParseSearch, defaultStringifySearch } from "@tanstack/react-router";
+
 /** Below this width the desktop shell's sidebars and panels stop fitting. */
 import {
   encodedSegment,
@@ -161,10 +163,16 @@ export function mobilePathFor(pathname: string, search = ""): string {
   // The mobile tree is not under the org yet (U15): an org page maps as its org-less twin.
   const path = orgFreePath(pathname).replace(/\/+$/, "") || "/";
   const query = new URLSearchParams(search);
+  // Router-generated URLs quote JSON-looking strings (e.g. an id "123").
+  // Decode those quotes before carrying the values, while accepting raw links too.
+  const parsed = defaultParseSearch(search);
+  for (const [key, value] of Object.entries(parsed)) {
+    if (typeof value === "string") query.set(key, value);
+  }
 
   // The path names the one project, which ends any scope carried with it.
   const home = PROJECT_HOME.exec(path);
-  if (home) return `${mobileChatsPath()}?${new URLSearchParams({ projects: decodeSegment(home[1]) })}`;
+  if (home) return `${mobileChatsPath()}${defaultStringifySearch({ projects: decodeSegment(home[1]) })}`;
 
   const twin = new URL(mobileTwinOf(path, query), "http://twin");
   if (path === "/new") {
@@ -177,7 +185,9 @@ export function mobilePathFor(pathname: string, search = ""): string {
     const value = query.get(key);
     if (value && !twin.searchParams.has(key)) twin.searchParams.set(key, value);
   }
-  return `${twin.pathname}${twin.search}`;
+  // Match the router's serializer: ordinary strings stay readable, but
+  // JSON-looking ids must stay strings when the destination parses them.
+  return `${twin.pathname}${defaultStringifySearch(Object.fromEntries(twin.searchParams))}`;
 }
 
 /** The shell's scope params every page carries (routeSchemas PROJECTS_CARRIED). */

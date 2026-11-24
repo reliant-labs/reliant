@@ -30,7 +30,7 @@ import { orgFreePath } from "@/lib/paths/org";
 import { mobileChatsPath, mobileNewChatPath, mobileSearchPath } from "@/lib/paths";
 import type { SearchRecord } from "@/lib/urlState/searchParams";
 import { projectsParam, scopeDefault, scopeOfSearch } from "@/lib/urlState/shellScope";
-import { fillScope, oneProjectOf, publishShellScope } from "@/lib/urlState/shellScopeStore";
+import { chatScopeOf, fillScope, oneProjectOf, publishShellScope } from "@/lib/urlState/shellScopeStore";
 import { useChatStore } from "@/store/chatStore";
 import { useProjectStore } from "@/store/projectStore";
 import { shellScopeSearch } from "../Layout/shellScopeNav";
@@ -84,13 +84,14 @@ export function MobileScopeSync() {
   useEffect(() => () => publishShellScope(null), []);
 
   // The chat store's list follows the scope (the first load is MobileShell's).
+  const chatScope = urlScope ? chatScopeOf(urlScope) : null;
   const loadedScope = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     const previous = loadedScope.current;
-    loadedScope.current = scopeProjectId;
-    if (previous === undefined || previous === scopeProjectId) return;
+    loadedScope.current = chatScope;
+    if (previous === undefined || previous === chatScope) return;
     void useChatStore.getState().loadChats();
-  }, [scopeProjectId]);
+  }, [chatScope]);
 
   // The context project follows the project the URL names.
   const target = onChat ? null : onNewChat ? (newChatProjectOf({ project: projectParam, scope: urlScope, contextProjectId: null, listed }) ?? null) : scopeProjectId;
