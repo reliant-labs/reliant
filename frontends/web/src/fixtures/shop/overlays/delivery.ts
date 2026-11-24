@@ -7,12 +7,19 @@
  * Each is put over the pack's app layer, under the real console.
  */
 
+import { create } from "@bufbuild/protobuf";
 import { Code } from "@connectrpc/connect";
 
-import { DeploySecretPosture, DeployTier } from "@/gen/controlplane/controlplane/v1/deploy_pb";
+import { DeploySecretPosture, DeployTier, WorkloadKind } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { DomainService } from "@/gen/controlplane/services/domain/v1/domain_pb";
-import { ObservabilityService, WorkloadHealth } from "@/gen/controlplane/services/observability/v1/observability_pb";
+import {
+  ObservabilityService,
+  WorkloadHealth,
+  WorkloadJobResult,
+  WorkloadJobSchema,
+  WorkloadSchema,
+} from "@/gen/controlplane/services/observability/v1/observability_pb";
 
 import { emptying, failing, refining, stalling } from "../../overlay";
 import type { FixturePack } from "../../transport";
@@ -51,6 +58,49 @@ export const deliveryOverlays = {
       for (const row of list.workloads) {
         if (row.workload !== "worker") continue;
         Object.assign(row, { health: WorkloadHealth.CRASH_LOOPING, healthReason: "CrashLoopBackOff", restartsInWindow: 14n, readyReplicas: 0 });
+      }
+    }),
+    /**
+     * The shop's jobs listed as workloads, as a hosted environment's are
+     * (owner, 2026-11-24): shop-migrate declared at one copy, its run
+     * completed and nothing of it running — what the control plane called
+     * "0 of 1 replicas ready", degraded, and the Overview drew yellow — beside
+     * a seed job whose latest run failed. A job reads its runs: the migration
+     * green with when it ran, the seed red with why.
+     */
+    jobs: refining("workloads.jobs", obs.listWorkloads, observabilityHandlers(createShopApi()), (list) => {
+      const envs = [...new Set(list.workloads.map((row) => row.envId))];
+      for (const envId of envs) {
+        const base = list.workloads.find((row) => row.envId === envId)!;
+        const job = (workload: string) =>
+          create(WorkloadSchema, {
+            ...base,
+            workload,
+            kind: WorkloadKind.JOB,
+            health: WorkloadHealth.DEGRADED,
+            healthReason: "0 of 1 replicas ready",
+            replicasObserved: 0,
+            readyReplicas: 0,
+            desiredReplicas: 1,
+            containers: [],
+            pods: [],
+          });
+        list.workloads.push(job("shop-migrate"), job("seed"));
+        const migrated = list.jobs.find((run) => run.envId === envId && run.workload === "shop-migrate");
+        const at = migrated?.finishedAt ?? base.latestWarning?.time;
+        list.jobs.unshift(
+          create(WorkloadJobSchema, {
+            envId,
+            envName: base.envName,
+            name: "seed-3c81f0aa21",
+            workload: "seed",
+            result: WorkloadJobResult.FAILED,
+            reason: "BackoffLimitExceeded",
+            releaseVersion: base.releaseVersion,
+            startedAt: at,
+            finishedAt: at,
+          })
+        );
       }
     }),
     empty: emptying("workloads.empty", WORKLOADS),
