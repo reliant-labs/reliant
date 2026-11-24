@@ -61,15 +61,13 @@ afterEach(() => {
 
 describe("two tabs choosing several projects", () => {
   it("this tab keeps its own choice when another tab's choice reaches the shared setting", () => {
-    // This tab chose p1 + p2 (its own copy); the other tab then chose p3 + p4.
-    useShellLastPick.setState({ key: SEVERAL_PROJECTS_PICK, several: ["p1", "p2"] });
+    // This tab chose p1 + p2 (its URL); the other tab then chose p3 + p4.
     shared.filter = ["p3", "p4"];
 
-    const { result } = renderHook(() => useShellProject("/", {}));
+    const { result } = renderHook(() => useShellProject("/", { projects: "p1,p2" }));
 
     expect(result.current.mode).toBe("many");
     expect([...result.current.ids].sort()).toEqual(["p1", "p2"]);
-    expect([...useChatProjectFilterStore.getState().many].sort()).toEqual(["p1", "p2"]);
   });
 
   it("an open tab never takes the shared setting, re-read on focus: it only fills a tab's first empty home", () => {

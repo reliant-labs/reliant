@@ -106,8 +106,10 @@ describe("useShellCurrentProject", () => {
   });
 
   it("follows the URL's choice of several: the focused project among them", () => {
-    useChatProjectFilterStore.setState({ many: ["p3", "p4"] });
+    location.search = { projects: "p3,p4", focus: "p4" };
     useShellLastPick.setState({ key: SEVERAL_PROJECTS_PICK, several: ["p3", "p4"], focus: "p4" });
+    // What the nav on screen publishes for that URL.
+    publishShellScope({ scope: { mode: "many", projectIds: ["p3", "p4"] }, focus: "p4" });
 
     const { result } = renderBoth();
 

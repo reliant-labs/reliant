@@ -28,9 +28,12 @@ import { useMemo } from "react";
 
 import { useProjects, type Project } from "@/hooks/project-queries";
 import { useShellScopeStore } from "@/lib/urlState/shellScopeStore";
+import { appRowKey } from "@/services/projects/catalog";
 import { useProjectStore } from "@/store/projectStore";
 
 import { useShellProject } from "./shellProject";
+
+const APP_KEY = appRowKey("");
 
 /** A route that names no project: routeProjectOf answers null for it. */
 const NO_ROUTE = "";
@@ -41,7 +44,10 @@ export function useShellCurrentProject(): Project | null {
   const shell = useShellProject(NO_ROUTE, NO_SEARCH);
   const { projects } = useProjects();
   const published = useShellScopeStore((state) => state.published);
-  const shownId = published?.scope.mode === "one" ? published.scope.projectId : null;
+  // One project: it; several or all: the focused one (`?focus=`), when it is a project.
+  const focusKey = published && published.scope.mode !== "one" ? published.focus : null;
+  const shownId =
+    published?.scope.mode === "one" ? published.scope.projectId : focusKey && !focusKey.startsWith(APP_KEY) ? focusKey : null;
 
   return useMemo(() => {
     // The one project the nav shows.

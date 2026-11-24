@@ -100,7 +100,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
-  useShellLastPick.setState({ key: null, several: [], focus: null });
+  useShellLastPick.setState({ key: null, several: [], focus: null, urlDecided: false });
   useChatProjectFilterStore.setState({ many: [] });
   delete (globalThis as { __RELIANT_ROUTER?: unknown }).__RELIANT_ROUTER;
 });
@@ -144,13 +144,12 @@ describe("two tabs choosing different scopes", () => {
     expect(fresh.get()).toEqual(many("p1", "p2"));
   });
 
-  it("the nav keeps this tab's choice of several when another tab's reaches the shared setting", () => {
-    useShellLastPick.setState({ key: SEVERAL_PROJECTS_PICK, several: ["p1", "p2"] });
+  it("the nav shows this tab's URL when another tab's choice reaches the shared setting", () => {
+    useShellLastPick.setState({ key: SEVERAL_PROJECTS_PICK, several: ["p3", "p4"] });
     shared.filter = ["p3", "p4"];
-    const { result } = renderHook(() => useShellProject("/inbox", {}));
+    const { result } = renderHook(() => useShellProject("/inbox", { projects: "p1,p2" }));
     expect(result.current.mode).toBe("many");
     expect([...result.current.ids].sort()).toEqual(["p1", "p2"]);
-    expect([...useChatProjectFilterStore.getState().many].sort()).toEqual(["p1", "p2"]);
   });
 });
 
