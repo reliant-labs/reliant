@@ -191,14 +191,15 @@ type toolUsageChats interface {
 }
 
 // toolUsageMeter records the tool calls of one activity execution, all of
-// one chat. The chat is read once, on the first call that records.
+// one chat. The chat is read on the first call that records, and kept once
+// read: a failed read is tried again by the next call.
 type toolUsageMeter struct {
 	recorder ToolUsageRecorder
 	chats    toolUsageChats
 	chatID   string
 	thread   string
 
-	once sync.Once
+	mu   sync.Mutex
 	chat *db.Chat
 }
 
@@ -208,19 +209,22 @@ func newToolUsageMeter(recorder ToolUsageRecorder, chats toolUsageChats, chatID,
 	return &toolUsageMeter{recorder: recorder, chats: chats, chatID: chatID, thread: thread}
 }
 
+// chatRow is the meter's chat, read with ctx, which must outlive the
+// activity's cancellation (record's write context): a cancelled call is
+// still recorded, and a read on a cancelled context would fail.
 func (m *toolUsageMeter) chatRow(ctx context.Context) *db.Chat {
-	m.once.Do(func() {
-		if m.chats == nil || m.chatID == "" {
-			return
-		}
-		chat, err := m.chats.GetChat(ctx, m.chatID)
-		if err != nil {
-			logging.WarnContext(ctx, "could not read the chat to record tool usage", "chatID", m.chatID, "error", err)
-			return
-		}
-		m.chat = chat
-	})
-	return m.chat
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.chat != nil || m.chats == nil || m.chatID == "" {
+		return m.chat
+	}
+	chat, err := m.chats.GetChat(ctx, m.chatID)
+	if err != nil {
+		logging.WarnContext(ctx, "could not read the chat to record tool usage", "chatID", m.chatID, "error", err)
+		return nil
+	}
+	m.chat = chat
+	return chat
 }
 
 // meteredToolCall is one tool call as the span and the ledger see it.
@@ -265,23 +269,19 @@ func (m *toolUsageMeter) record(ctx context.Context, call meteredToolCall, note 
 	if !ok {
 		return
 	}
-	chat := m.chatRow(ctx)
+	// Detached and bounded: a cancelled call is still one to record, so
+	// neither the chat's read nor the write may see the activity's
+	// cancellation, and a slow database must not hold up the call.
+	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), toolUsageWriteTimeout)
+	defer cancel()
+	chat := m.chatRow(wctx)
 	if chat == nil || chat.UserID == "" {
 		return
 	}
 	info := activity.GetInfo(ctx)
-	scope := telemetry.RunScopeFromContext(ctx)
-	workflowID := scope.WorkflowID
-	if workflowID == "" {
-		workflowID = info.WorkflowExecution.ID
-	}
-	threadID := scope.ThreadID
-	if threadID == "" {
-		threadID = m.thread
-	}
-	rootRunID := scope.RootRunID
-	if rootRunID == "" {
-		rootRunID = scope.RunID // a top-level run is its own root
+	run := usageRunOf(ctx)
+	if run.ThreadID == "" {
+		run.ThreadID = m.thread
 	}
 	kind, name := toolUsageKind(call.name, call.response)
 	rec := store.ToolCallUsageRecord{
@@ -291,13 +291,13 @@ func (m *toolUsageMeter) record(ctx context.Context, call meteredToolCall, note 
 		OrgID:        chatOrgID(chat),
 		ChatID:       chat.ID,
 		ProjectID:    chat.ProjectID,
-		WorkflowID:   workflowID,
-		ThreadID:     threadID,
-		WorkflowName: scope.WorkflowName,
-		NodeID:       scope.NodeID,
-		Preset:       scope.Preset,
-		AIRunID:      scope.RunID,
-		AIRootRunID:  rootRunID,
+		WorkflowID:   run.WorkflowID,
+		ThreadID:     run.ThreadID,
+		WorkflowName: run.WorkflowName,
+		NodeID:       run.NodeID,
+		Preset:       run.Preset,
+		AIRunID:      run.AIRunID,
+		AIRootRunID:  run.AIRootRunID,
 		ToolName:     name,
 		ToolKind:     kind,
 		Location:     call.location,
@@ -306,9 +306,6 @@ func (m *toolUsageMeter) record(ctx context.Context, call meteredToolCall, note 
 		DurationMs:   d.Milliseconds(),
 		CreatedAt:    time.Now(),
 	}
-	// Detached: a cancelled call is still one to record.
-	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), toolUsageWriteTimeout)
-	defer cancel()
 	if _, err := m.recorder.RecordToolCallUsage(wctx, rec); err != nil {
 		logging.WarnContext(ctx, "could not record tool usage", "chatID", chat.ID, "toolKind", kind, "error", err)
 	}

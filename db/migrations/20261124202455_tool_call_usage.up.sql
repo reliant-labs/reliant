@@ -1,7 +1,7 @@
 -- forge:backward-compatible — adds a new table, its indexes and a write-admission trigger; the previous release never reads or writes the table.
 
 -- Migration: tool_call_usage
--- Created: 2026-11-24T17:10:57Z
+-- Created: 2026-11-24T20:24:55Z
 --
 -- tool_call_usage: the count-only service record of every tool call a run
 -- makes, a model's (execute_tools) or a workflow node's (invoke_tool). Written
@@ -28,9 +28,8 @@
 -- result an earlier dispatch recorded is not executed again and writes no
 -- row; only a repeated write of the same attempt is ignored.
 --
--- The run columns are the ones llm_call_usage gains in the same line of work
--- (agent-analytics.md PR A1), so a tool call and a model call join on them:
--- NULL is "not recorded". ai_run_id and ai_root_run_id are the run in AI monitoring's
+-- The run columns are llm_call_usage's (20261124162017_llm_call_usage_run_scope),
+-- so a tool call and a model call join on them: NULL is "not recorded". ai_run_id and ai_root_run_id are the run in AI monitoring's
 -- sense (forge.ai.run.id, step_executions.run_id), which Temporal's run id in
 -- id is not.
 --

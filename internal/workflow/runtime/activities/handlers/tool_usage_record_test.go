@@ -8,19 +8,22 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
+	temporalactivity "go.temporal.io/sdk/activity"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/daemonoffline"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/telemetry"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -53,20 +56,6 @@ func (c *captureToolUsage) byCall(t *testing.T) map[string]store.ToolCallUsageRe
 	return out
 }
 
-// slowToolExecutor is a mockToolExecutor whose call slow takes a while, so
-// its span has a duration of whole milliseconds to compare.
-type slowToolExecutor struct {
-	*mockToolExecutor
-	slow string
-}
-
-func (e slowToolExecutor) ExecuteTool(ctx context.Context, req *toolexec.ToolRequest) (*toolexec.ToolResult, error) {
-	if req.ToolCallID == e.slow {
-		time.Sleep(30 * time.Millisecond)
-	}
-	return e.mockToolExecutor.ExecuteTool(ctx, req)
-}
-
 // toolSpanDurations is each ended execute_tool span's duration in
 // milliseconds, by tool_call_id.
 func toolSpanDurations(spans []sdktrace.ReadOnlySpan) map[string]int64 {
@@ -82,7 +71,7 @@ func toolSpanDurations(spans []sdktrace.ReadOnlySpan) map[string]int64 {
 // Every call of a batch is one row, whatever kind of tool it named and however
 // it ended, with the outcome and the closed error class of the path that
 // answered it; only a shipped tool is named; the row's duration is its
-// execute_tool span's; and the row names the chat's owner, org and project and
+// execute_tool span's (to the nanosecond: TestToolCall_DurationIsTheSpans); and the row names the chat's owner, org and project and
 // the run the batch was part of.
 //
 // Not parallel: it swaps the global tracer provider (recordHandlerSpans).
@@ -106,7 +95,7 @@ func TestExecuteTools_RecordsEachCallsOutcomeAndClassPerToolKind(t *testing.T) {
 	executor.results[offline] = &toolexec.ToolResult{Success: false, IsError: true, Content: "Error: " + daemonoffline.ErrorSubstring}
 	executor.errors[cancelled] = context.Canceled
 	usage := &captureToolUsage{}
-	activity := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), slowToolExecutor{executor, ok}).WithToolUsage(usage)
+	activity := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), executor).WithToolUsage(usage)
 
 	var output ExecuteToolsOutput
 	require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
@@ -170,7 +159,6 @@ func TestExecuteTools_RecordsEachCallsOutcomeAndClassPerToolKind(t *testing.T) {
 			assert.Equal(t, spanMs, r.DurationMs, "%s: the row's duration is its span's", call)
 		}
 	}
-	assert.GreaterOrEqual(t, got[ok].DurationMs, int64(30), "the slow call's row holds its time")
 	assert.Equal(t, telemetry.ToolLocationLocal, got[responseOK].Location, "a response tool is answered on the worker")
 	assert.Equal(t, toolLocation(tools.ToolWrite), got[dispatch].Location)
 }
@@ -219,6 +207,49 @@ func TestInvokeTool_RecordsTheCall(t *testing.T) {
 	assert.Equal(t, store.ToolKindBuiltin, r.ToolKind)
 	assert.Equal(t, tools.ToolReportBug, r.ToolName)
 	assert.Equal(t, store.ToolOutcomeSuccess, r.Outcome)
+}
+
+// ctxChats is a toolUsageChats that, like the database, refuses a cancelled
+// context.
+type ctxChats struct{ chat *db.Chat }
+
+func (c ctxChats) GetChat(ctx context.Context, _ string) (*db.Chat, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return c.chat, nil
+}
+
+// A call cancelled with its activity (the user pressed stop) is still
+// recorded, as cancelled: the chat's read and the write run on a context the
+// activity's cancellation does not reach. Read on the activity's context, the
+// chat's read failed and no row was written.
+func TestToolUsageMeter_RecordsACallWhoseActivityWasCancelled(t *testing.T) {
+	t.Parallel()
+	usage := &captureToolUsage{}
+	chat := &db.Chat{ID: "chat-cancelled", UserID: "user-1", ProjectID: "proj-1"}
+	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
+	env.RegisterActivityWithOptions(func(ctx context.Context) error {
+		ctx, cancel := context.WithCancel(ctx)
+		meter := newToolUsageMeter(usage, ctxChats{chat}, chat.ID, chat.ID)
+		meter.run(ctx, meteredToolCall{name: tools.ToolView, callID: "toolu_stop", location: telemetry.ToolLocationDaemon},
+			func(callCtx context.Context) message.ToolResult {
+				cancel() // the activity is cancelled while the call runs
+				noteToolCancelled(callCtx)
+				return message.ToolResult{IsError: true}
+			})
+		return nil
+	}, temporalactivity.RegisterOptions{Name: "CancelledToolCall"})
+	_, err := env.ExecuteActivity("CancelledToolCall")
+	require.NoError(t, err)
+
+	got := usage.byCall(t)
+	require.Contains(t, got, "toolu_stop", "the cancelled call has its row")
+	r := got["toolu_stop"]
+	assert.Equal(t, store.ToolOutcomeCancelled, r.Outcome)
+	assert.Empty(t, r.ErrorClass)
+	assert.Equal(t, chat.UserID, r.UserID)
+	assert.Equal(t, chat.ProjectID, r.ProjectID)
 }
 
 // The outcome a row records is the note's, given the result: a replay writes
