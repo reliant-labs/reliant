@@ -49256,6 +49256,11 @@
               "kind": "bool"
             },
             {
+              "name": "observe",
+              "kind": "message",
+              "type_name": "reliant.v1.NodeObserve"
+            },
+            {
               "name": "secret_refs",
               "kind": "message",
               "type_name": "reliant.v1.NodeSecretRef",
@@ -49358,6 +49363,26 @@
               "oneof": "args"
             }
           ],
+          "reliant.v1.NodeObserve": [
+            {
+              "name": "attributes",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            },
+            {
+              "name": "events",
+              "kind": "message",
+              "type_name": "reliant.v1.ObserveEvent",
+              "repeated": true
+            },
+            {
+              "name": "metrics",
+              "kind": "message",
+              "type_name": "reliant.v1.ObserveMetric",
+              "repeated": true
+            }
+          ],
           "reliant.v1.NodeRouterCandidate": [
             {
               "name": "id",
@@ -49428,6 +49453,54 @@
               "name": "default",
               "kind": "message",
               "type_name": "google.protobuf.Value"
+            }
+          ],
+          "reliant.v1.ObserveEvent": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "when",
+              "kind": "string"
+            },
+            {
+              "name": "each",
+              "kind": "string"
+            },
+            {
+              "name": "attributes",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            }
+          ],
+          "reliant.v1.ObserveMetric": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "value",
+              "kind": "string"
+            },
+            {
+              "name": "unit",
+              "kind": "string"
+            },
+            {
+              "name": "when",
+              "kind": "string"
+            },
+            {
+              "name": "attributes",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
             }
           ],
           "reliant.v1.Position": [
@@ -50508,6 +50581,11 @@
               "name": "check",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowCheck"
+            },
+            {
+              "name": "observe",
+              "kind": "message",
+              "type_name": "reliant.v1.NodeObserve"
             }
           ],
           "reliant.v1.WorkflowAttention": [
@@ -50860,10 +50938,13 @@
           "reliant.v1.ModelInputConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ModelSelector": "reliant/v1/workflow_v2.proto",
           "reliant.v1.Node": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.NodeObserve": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NodeRouterCandidate": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NodeSecretRef": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NumberInputConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ObjectInputConfig": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.ObserveEvent": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.ObserveMetric": "reliant/v1/workflow_v2.proto",
           "reliant.v1.Position": "reliant/v1/workflow_v2.proto",
           "reliant.v1.PresetInputConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.PresetsConfig": "reliant/v1/workflow_v2.proto",

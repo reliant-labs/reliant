@@ -29,6 +29,7 @@ import (
 //	node condition, edge case condition          EdgeEvalContext
 //	loop while, loop key                         LoopEvalContext
 //	save_message (content, condition, …)         PostActivityContext
+//	observe (attributes, events, metrics)        ObserveContext
 //
 // `outputs` (the enclosing loop's previous-iteration outputs) is declared by a
 // context only when its Outputs field is set, which the runtime does exactly
@@ -48,6 +49,8 @@ const (
 	siteLoopWhile
 	siteLoopKey
 	siteSaveMessage
+	siteObserve
+	siteObserveEach // an observe event's attributes under each:, with item bound
 )
 
 // siteNamespaces returns the namespaces the runtime context for site declares.
@@ -73,6 +76,10 @@ func siteNamespaces(site celSite, inLoop bool) []wfcel.CELNamespace {
 		ctx = &wfcel.LoopEvalContext{}
 	case siteSaveMessage:
 		ctx = &wfcel.PostActivityContext{}
+	case siteObserve:
+		ctx = &wfcel.ObserveContext{}
+	case siteObserveEach:
+		ctx = &wfcel.ObserveContext{InEach: true}
 	default:
 		ctx = &wfcel.NodeResolutionContext{Outputs: loopOutputs}
 	}
@@ -260,6 +267,7 @@ func validateWorkflowScope(s *workflowScope, result *Result) {
 	validateSwitchCaseConditions(s.wf, s.basePath, result)
 	validateAllJoinReachability(s.wf, s.basePath, result)
 	s.validateDeclaredOutputs(result)
+	s.validateGraphObserve(result)
 }
 
 // validateNode validates one node's condition, config, inject, loop fields
@@ -282,6 +290,10 @@ func (s *workflowScope) validateNode(node *reliantv1.Node, nodePath []string, re
 
 	if sm := node.GetSaveMessage(); sm != nil {
 		s.validateSaveMessage(node, sm, append(append([]string{}, nodePath...), saveMessageFieldKey), after, result)
+	}
+
+	if o := node.GetObserve(); o != nil {
+		s.validateObserve(o, node, append(append([]string{}, nodePath...), observeFieldKey), after, result)
 	}
 
 	if thread := model.NodeThreadConfig(node); thread != nil {

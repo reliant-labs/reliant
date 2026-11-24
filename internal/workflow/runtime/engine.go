@@ -470,28 +470,44 @@ func EvaluateDeclaredOutputs(
 //
 // Preferred input is protobuf JSON (protojson), but we keep a legacy fallback
 // for simplified workflow JSON used in tests and tooling.
+//
+// A field this build does not define is discarded, not refused. The
+// definition a run replays was written by whatever server started it, and
+// during a rolling deploy or after a rollback that can be a newer one: a
+// strict read failed every replay of a run whose definition used a field this
+// build predates (an additive key such as `observe`), so a new optional field
+// could not be adopted until no older worker was left anywhere. The tolerant
+// read comes last, after the strict read and the legacy fallback have both
+// refused, because the legacy shorthand (a run node's `command` beside its
+// `id`) is also "unknown" to protojson: reading it tolerantly first would drop
+// those fields instead of parsing them.
 func LoadWorkflow(data []byte) (*reliantv1.Workflow, error) {
 	workflow := &reliantv1.Workflow{}
 	protoErr := protojson.Unmarshal(data, workflow)
 	if protoErr == nil {
 		return workflow, nil
 	}
+	if legacyWorkflow, err := loadLegacyWorkflowJSON(data); err == nil {
+		return legacyWorkflow, nil
+	}
+	tolerant := &reliantv1.Workflow{}
+	if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal(data, tolerant); err == nil {
+		return tolerant, nil
+	}
+	return nil, fmt.Errorf("unmarshal workflow JSON: %w", protoErr)
+}
 
-	// Legacy fallback: parse generic JSON, convert to YAML, then decode via the
-	// workflow YAML parser. This supports shorthand structures like node.args.
+// loadLegacyWorkflowJSON parses generic JSON, converts it to YAML, then
+// decodes it with the workflow YAML parser. This supports shorthand
+// structures like node.args.
+func loadLegacyWorkflowJSON(data []byte) (*reliantv1.Workflow, error) {
 	var raw map[string]interface{}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("unmarshal workflow JSON: %w", protoErr)
+		return nil, err
 	}
-
 	yamlBytes, err := yaml.Marshal(raw)
 	if err != nil {
-		return nil, fmt.Errorf("unmarshal workflow JSON: %w", protoErr)
+		return nil, err
 	}
-
-	legacyWorkflow, err := wfyaml.ParseWorkflow(yamlBytes)
-	if err != nil {
-		return nil, fmt.Errorf("unmarshal workflow JSON: %w", protoErr)
-	}
-	return legacyWorkflow, nil
+	return wfyaml.ParseWorkflow(yamlBytes)
 }
