@@ -346,9 +346,9 @@ The block's metrics are OpenTelemetry instruments on the meter
 
 | Metric | Kind | Attributes |
 |---|---|---|
-| `reliant.observed.<name>` | the author's: counter, histogram or gauge (float64), with the author's unit | `forge.ai.workflow.name`, `forge.ai.node.id`, `forge.ai.node.type`, and at most four author keys whose values are a bool, an integer or a code-shaped string (anything else is `other`). Never `org.id` or a user, chat, run or thread id. Past 64 attribute sets per metric, or 4,096 per process, a new set is recorded as `overflow=true`. |
+| `reliant.observed.<name>` | the author's: counter, histogram or gauge (float64), with the author's unit | `forge.ai.workflow.name`, `forge.ai.node.id`, `forge.ai.node.type`, and at most four author keys whose values are a bool, an integer or a code-shaped string (anything else is `other`). Never `org.id` or a user, chat, run or thread id. Past 64 attribute sets per metric, or 4,096 per process, a new set is recorded as `overflow=true`. A process creates at most 128 metric names; a point of a name past that is dropped and counted as overflow with `metric=other`. |
 | `reliant.observe.errors` | counter | `kind`: `eval`, `budget`, `panic`, `kind_conflict`, `write`. |
-| `reliant.observe.overflow` | counter | `metric`: the full metric name whose point overflowed. |
+| `reliant.observe.overflow` | counter | `metric`: the full metric name whose point overflowed, or `other` for a name past the process's name cap. |
 | `reliant.observe.dropped` | counter | `reason`: `row_cap` (the root run already stored 2,000 observations) or `write_failed`. The span and metrics of a dropped observation were still emitted. |
 
 ## `invoke_agent <agent>`

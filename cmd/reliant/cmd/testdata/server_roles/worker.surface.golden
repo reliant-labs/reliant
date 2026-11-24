@@ -92,6 +92,7 @@ RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE kind=string flag="" default="" required=fa
 RELIANT_WORKER_HOSTED_ACTIONS_URL kind=string flag="" default="" required=false optional=true sensitive=false allowed=[] aliases=[]
 RELIANT_WORKER_LEDGER_RETENTION_START_DELAY kind=google.protobuf.Duration flag="" default="1h" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS kind=int32 flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_WORKER_NODE_OBSERVATION_RETENTION kind=google.protobuf.Duration flag="" default="0s" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_WORKER_STEP_EXECUTION_RETENTION kind=google.protobuf.Duration flag="" default="0s" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_WORKER_WORKFLOW_TASK_POLLERS kind=int32 flag="" default="5" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_WORKTREE_RECLAIM kind=string flag="" default="dry-run" required=false optional=false sensitive=false allowed=[off dry-run on] aliases=[]

@@ -41,7 +41,9 @@ const (
 	MetricObserveErrors = "reliant.observe.errors"
 	// MetricObserveOverflow counts data points whose attribute set was new
 	// after the metric (or the process) had reached its series cap, and was
-	// recorded as AttrObserveOverflow=true instead; by AttrObserveMetric.
+	// recorded as AttrObserveOverflow=true instead; by AttrObserveMetric. A
+	// point of a metric name past the process's name cap is dropped and
+	// counted here with AttrObserveMetric=ObserveMetricOther.
 	MetricObserveOverflow = "reliant.observe.overflow"
 	// MetricObserveDropped counts observations that were not stored, by
 	// AttrObserveDropReason. Their spans and metrics were still emitted.

@@ -15,6 +15,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
+// fixedEval evaluates on a clock that never moves, so no test but the budget
+// test depends on how long evaluation takes on the host running it.
+var fixedEval = Evaluator{Now: func() time.Time { return time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC) }}
+
 // planScope is rc-train's plan node, finished with no cut (design section
 // 13.1), in a loop's second iteration.
 func planScope() Scope {
@@ -54,7 +58,7 @@ func TestEvaluate_DecisionEventAttributesAndMetric(t *testing.T) {
 			Attributes: map[string]string{"decision": "{{ output.cut ? 'cut' : 'no_cut' }}"},
 		}},
 	}
-	res := Evaluate(block, planScope())
+	res := fixedEval.Evaluate(block, planScope())
 
 	assert.Empty(t, res.Errors)
 	assert.False(t, res.Truncated)
@@ -91,7 +95,7 @@ func TestEvaluate_AFailingExpressionDropsOnlyItsOwnKey(t *testing.T) {
 			{Name: "ok", Kind: model.ObserveKindGauge, Value: "{{ 2.5 }}"},
 		},
 	}
-	res := Evaluate(block, planScope())
+	res := fixedEval.Evaluate(block, planScope())
 
 	assert.Equal(t, map[string]interface{}{"fine": "main_unchanged"}, res.Attributes)
 	require.Len(t, res.Events, 1)
@@ -152,7 +156,7 @@ func TestEvaluate_WhenAndEach(t *testing.T) {
 			}},
 		},
 	}
-	res := Evaluate(block, s)
+	res := fixedEval.Evaluate(block, s)
 	require.Len(t, res.Events, 2)
 	assert.Equal(t, Event{Name: "land", Attributes: map[string]interface{}{"value": "merged", "pr": "a/b#1"}}, res.Events[0])
 	assert.Equal(t, Event{Name: "land", Attributes: map[string]interface{}{"value": "queued", "pr": "a/b#2"}}, res.Events[1])
@@ -160,7 +164,7 @@ func TestEvaluate_WhenAndEach(t *testing.T) {
 
 	// each: emits at most MaxEachItems events, and the node at most
 	// model.ObserveMaxEvents.
-	capped := Evaluate(&reliantv1.NodeObserve{Events: []*reliantv1.ObserveEvent{{Name: "land", Each: "{{ output.many }}"}}}, s)
+	capped := fixedEval.Evaluate(&reliantv1.NodeObserve{Events: []*reliantv1.ObserveEvent{{Name: "land", Each: "{{ output.many }}"}}}, s)
 	assert.Len(t, capped.Events, model.ObserveMaxEvents)
 	assert.True(t, capped.Truncated)
 }
@@ -178,7 +182,7 @@ func TestEvaluate_CapsTheMergedBlock(t *testing.T) {
 	for i := 0; i < model.ObserveMaxMetrics+2; i++ {
 		metrics = append(metrics, &reliantv1.ObserveMetric{Name: fmt.Sprintf("m%d", i), Kind: model.ObserveKindCounter})
 	}
-	res := Evaluate(&reliantv1.NodeObserve{Attributes: attrs, Metrics: metrics}, planScope())
+	res := fixedEval.Evaluate(&reliantv1.NodeObserve{Attributes: attrs, Metrics: metrics}, planScope())
 	assert.Len(t, res.Attributes, model.ObserveMaxAttributes)
 	assert.Contains(t, res.Attributes, "k00", "keys are kept in order")
 	assert.NotContains(t, res.Attributes, fmt.Sprintf("k%02d", model.ObserveMaxAttributes))
@@ -209,7 +213,7 @@ func TestStorable_RedactsAndBounds(t *testing.T) {
 
 func TestEvaluate_NilBlockIsNothing(t *testing.T) {
 	t.Parallel()
-	res := Evaluate(nil, planScope())
+	res := fixedEval.Evaluate(nil, planScope())
 	assert.False(t, res.HasRecord())
 	assert.Empty(t, res.Metrics)
 }

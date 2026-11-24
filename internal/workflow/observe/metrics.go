@@ -23,6 +23,14 @@ import (
 const (
 	MaxSeriesPerMetric  = 64
 	MaxSeriesPerProcess = 4096
+	// MaxMetricsPerProcess bounds the distinct metric names (instruments) a
+	// process creates. A point of a name past it is dropped and counted as
+	// overflow under the fixed metric label telemetry.ObserveMetricOther, so
+	// neither the instruments the process holds nor the series it exports
+	// grow with the names workflows declare. Together with the series caps it
+	// bounds a process's observe series at MaxSeriesPerProcess plus one
+	// overflow series per name.
+	MaxMetricsPerProcess = 128
 )
 
 // MetricBase is the platform's attributes on every observe metric: which
@@ -57,6 +65,7 @@ type Recorder struct {
 	total       int
 	perMetric   int
 	perProcess  int
+	maxNames    int
 }
 
 type instrument struct {
@@ -74,6 +83,7 @@ func NewRecorder(meter metric.Meter) *Recorder {
 		series:      map[string]map[attribute.Distinct]struct{}{},
 		perMetric:   MaxSeriesPerMetric,
 		perProcess:  MaxSeriesPerProcess,
+		maxNames:    MaxMetricsPerProcess,
 	}
 	var err error
 	// An instrument the SDK refuses still comes back usable (a no-op).
@@ -121,9 +131,15 @@ func DefaultRecorder() *Recorder {
 // attribute is dropped: the platform's identity of the node wins.
 func (r *Recorder) Record(ctx context.Context, base MetricBase, points []MetricPoint) {
 	for _, p := range points {
-		inst, ok := r.instrument(p)
-		if !ok {
+		inst, outcome := r.instrument(p)
+		switch outcome {
+		case instrumentKindConflict:
 			r.CountErrors(ctx, []Error{{Kind: telemetry.ObserveErrorKindConflict}})
+			continue
+		case instrumentOverNameCap:
+			// No instrument, and no label naming the metric: a name past the
+			// cap must cost the process and the backend nothing per name.
+			r.overflow.Add(ctx, 1, metric.WithAttributes(attribute.String(telemetry.AttrObserveMetric, telemetry.ObserveMetricOther)))
 			continue
 		}
 		name := telemetry.MetricObservedPrefix + p.Name
@@ -165,14 +181,32 @@ func (r *Recorder) CountDropped(ctx context.Context, reason string) {
 	r.dropped.Add(ctx, 1, metric.WithAttributes(attribute.String(telemetry.AttrObserveDropReason, reason)))
 }
 
-// instrument returns p's instrument, creating it on first use. A name this
-// process first created with another kind is refused: one name, one
-// instrument.
-func (r *Recorder) instrument(p MetricPoint) (*instrument, bool) {
+// instrumentOutcome is why instrument returned no instrument, if it did not.
+type instrumentOutcome int
+
+const (
+	instrumentOK instrumentOutcome = iota
+	// instrumentKindConflict: the name exists with another kind.
+	instrumentKindConflict
+	// instrumentOverNameCap: the name is new and the process holds
+	// MaxMetricsPerProcess names already.
+	instrumentOverNameCap
+)
+
+// instrument returns p's instrument, creating it on first use while the
+// process is under its name cap. A name this process first created with
+// another kind is refused: one name, one instrument.
+func (r *Recorder) instrument(p MetricPoint) (*instrument, instrumentOutcome) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if inst, ok := r.instruments[p.Name]; ok {
-		return inst, inst.kind == p.Kind
+		if inst.kind != p.Kind {
+			return nil, instrumentKindConflict
+		}
+		return inst, instrumentOK
+	}
+	if len(r.instruments) >= r.maxNames {
+		return nil, instrumentOverNameCap
 	}
 	name := telemetry.MetricObservedPrefix + p.Name
 	desc := "Declared by a workflow's observe: block."
@@ -198,11 +232,11 @@ func (r *Recorder) instrument(p MetricPoint) (*instrument, bool) {
 		}
 		inst.gauge, err = r.meter.Float64Gauge(name, o...)
 	default:
-		return nil, false
+		return nil, instrumentKindConflict
 	}
 	handle(err)
 	r.instruments[p.Name] = inst
-	return inst, true
+	return inst, instrumentOK
 }
 
 // admit returns attrs as a set when it is one the metric has recorded before,

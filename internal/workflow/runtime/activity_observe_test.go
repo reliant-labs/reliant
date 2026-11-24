@@ -110,6 +110,9 @@ func newObserveHarness(t *testing.T, fn func(context.Context, types.ActivityInpu
 	registry.SetObservationWriter(store)
 	registry.observeRecorder = wfobserve.NewRecorder(mp.Meter(telemetry.ObserveMeterName))
 	registry.observeClock = func() time.Time { return observeClockAt }
+	// A clock that never moves: no test but the slow-block one depends on how
+	// long evaluation takes on the host running it.
+	registry.observeEvaluator = wfobserve.Evaluator{Now: func() time.Time { return observeClockAt }}
 	for _, c := range configure {
 		c(registry)
 	}

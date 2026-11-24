@@ -4,6 +4,7 @@ package wfobserve
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -135,4 +136,47 @@ func TestRecorder_RefusesASecondKindForAName(t *testing.T) {
 	assert.Len(t, got["reliant.observed.x"], 1)
 	assert.Equal(t, map[string]float64{"kind=kind_conflict": 1}, got[telemetry.MetricObserveErrors])
 	assert.Equal(t, map[string]float64{"reason=row_cap": 1}, got[telemetry.MetricObserveDropped])
+}
+
+// Metric names are author-supplied, so the instruments a process holds, and
+// the series it exports, are bounded too: a name past the cap creates no
+// instrument and no per-name series, and is counted under one fixed label.
+func TestRecorder_BoundsMetricNames(t *testing.T) {
+	t.Parallel()
+	r, reader := newTestRecorder(t)
+	r.maxNames = 3
+	ctx := context.Background()
+	for i := 0; i < 10; i++ {
+		r.Record(ctx, planBase, []MetricPoint{{Name: fmt.Sprintf("name%d", i), Kind: model.ObserveKindCounter, Value: 1}})
+	}
+	assert.Len(t, r.instruments, 3, "no instrument past the name cap")
+
+	got := collect(t, reader)
+	observed := 0
+	for name := range got {
+		if strings.HasPrefix(name, telemetry.MetricObservedPrefix) {
+			observed++
+		}
+	}
+	assert.Equal(t, 3, observed, "exported observe metrics stay at the name cap")
+	assert.Equal(t, map[string]float64{"metric=other": 7}, got[telemetry.MetricObserveOverflow],
+		"names past the cap are counted under one fixed label, never their own")
+}
+
+// The default caps hold against more names than the process series budget.
+func TestRecorder_DefaultCapsBoundNamesAndSeries(t *testing.T) {
+	t.Parallel()
+	r, reader := newTestRecorder(t)
+	ctx := context.Background()
+	for i := 0; i < MaxSeriesPerProcess+10; i++ {
+		r.Record(ctx, planBase, []MetricPoint{{Name: fmt.Sprintf("n%d", i), Kind: model.ObserveKindCounter, Value: 1}})
+	}
+	assert.Len(t, r.instruments, MaxMetricsPerProcess)
+	series := 0
+	for _, points := range collect(t, reader) {
+		series += len(points)
+	}
+	// One series per admitted name, the overflow counter's one "other"
+	// series: nothing per rejected name.
+	assert.LessOrEqual(t, series, MaxMetricsPerProcess+1)
 }

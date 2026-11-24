@@ -61,7 +61,7 @@ func TestAnnotate(t *testing.T) {
 	_, span := tp.Tracer("test").Start(context.Background(), "workflow.node plan")
 
 	const secretDetail = "rc.sh refused: token ghp_xxx expired for someone@example.com"
-	res := Evaluate(nil, planScope())
+	res := fixedEval.Evaluate(nil, planScope())
 	res.Attributes = map[string]interface{}{"trigger": "schedule", "detail": Storable(secretDetail), "count": int64(3), "missing": nil}
 	res.Events = []Event{{Name: "decision", Attributes: map[string]interface{}{"name": "cut", "value": "no_cut", "reason": "main_unchanged", "pr": "a/b#1"}}}
 	res.Errors = []Error{{Kind: telemetry.ObserveErrorEval, Message: "attributes.broken: no such key: " + secretDetail}}
