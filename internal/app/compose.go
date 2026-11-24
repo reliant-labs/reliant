@@ -571,6 +571,7 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 		Integrations:    g.IntegrationSettings(),
 		DB:              g.Database(),
 		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		AutomationKeys:  g.CredentialsAutomationtokens(),
 		Owners:          g.Triggerowner(),
 	})
 }
