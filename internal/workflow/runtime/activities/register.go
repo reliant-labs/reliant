@@ -217,8 +217,8 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	if deps.Repo != nil {
 		runFunding = handlers.NewRunFundingStore(deps.Repo.ORM(), deps.Repo)
 	}
-	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, workspaceRows, toolCalls, deps.ToolExecutor).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter).WithChatProjects(chatProjects))
-	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, workspaceRows, toolCalls, deps.ToolExecutor).WithRunFunding(runFunding).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter).WithChatProjects(chatProjects))
+	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, workspaceRows, toolCalls, deps.ToolExecutor).WithRunFunding(runFunding).WithToolUsage(deps.ToolUsage).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter).WithChatProjects(chatProjects))
+	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, workspaceRows, toolCalls, deps.ToolExecutor).WithRunFunding(runFunding).WithToolUsage(deps.ToolUsage).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter).WithChatProjects(chatProjects))
 	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger).WithHostedExecutor(deps.HostedActions).WithSecretResolver(deps.SecretResolver))
 
 	// ========================================================================

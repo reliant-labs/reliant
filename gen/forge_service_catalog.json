@@ -26,6 +26,7 @@
         "Chat",
         "ChatUpdateHeadsBackfill",
         "ChatUpdateHub",
+        "Chatprlinks",
         "Connection",
         "Connector",
         "ConnectorGrants",
@@ -504,6 +505,7 @@
         "AgentRuns",
         "ChangeController",
         "ChatUpdateHub",
+        "Chatprlinks",
         "CredentialsAutomationtokens",
         "CredentialsConnectionvault",
         "CredentialsOrgaccounts",
@@ -54669,6 +54671,43 @@
       "implementation_candidates": []
     },
     {
+      "id": "Chatprlinks",
+      "name": "Chatprlinks",
+      "kind": "component",
+      "type": "github.com/reliant-labs/reliant/internal/chatprlinks.Service",
+      "source": {
+        "path": "internal/chatprlinks/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": [
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/chatprlinks.MockService",
+          "source": {
+            "path": "internal/chatprlinks/mock_gen.go",
+            "symbol": "MockService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/chatprlinks.forgeMiddlewareService",
+          "source": {
+            "path": "internal/chatprlinks/middleware_gen.go",
+            "symbol": "forgeMiddlewareService"
+          },
+          "methods": []
+        },
+        {
+          "type": "*github.com/reliant-labs/reliant/internal/chatprlinks.service",
+          "source": {
+            "path": "internal/chatprlinks/service.go",
+            "symbol": "service"
+          },
+          "methods": []
+        }
+      ]
+    },
+    {
       "id": "Connection",
       "name": "Connection",
       "kind": "component",
@@ -57161,6 +57200,30 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "Chatprlinks",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/chatprlinks.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chatprlinks",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/chatprlinks.Store",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "Connection",
       "field": "Connections",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/connection.Connections",
@@ -57813,6 +57876,19 @@
     },
     {
       "consumer": "IntegrationsWriteledger",
+      "field": "PRLinks",
+      "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.PRLinker",
+      "methods": [],
+      "candidates": [
+        "Chatprlinks"
+      ],
+      "providers": [
+        "Chatprlinks"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "IntegrationsWriteledger",
       "field": "Runs",
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.RunLookup",
       "methods": [],
@@ -57865,6 +57941,17 @@
       "consumer": "Llmusage",
       "field": "Ledger",
       "interface": "github.com/reliant-labs/reliant/internal/llmusage.Ledger",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Llmusage",
+      "field": "Tools",
+      "interface": "github.com/reliant-labs/reliant/internal/llmusage.ToolLedger",
       "methods": [],
       "candidates": [],
       "providers": [
@@ -60346,6 +60433,19 @@
     },
     {
       "consumer": "WorkerTrigger",
+      "field": "AutomationKeys",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/automationtokens.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsAutomationtokens"
+      ],
+      "providers": [
+        "CredentialsAutomationtokens"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerTrigger",
       "field": "ConnectionVault",
       "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
       "methods": [],
@@ -60564,6 +60664,19 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Worktree",
+      "field": "PRLinks",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.PRLinker",
+      "methods": [],
+      "candidates": [
+        "Chatprlinks"
+      ],
+      "providers": [
+        "Chatprlinks"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Worktree",

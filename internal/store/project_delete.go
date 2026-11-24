@@ -145,6 +145,9 @@ var chatPurgeSteps = []struct{ name, sql string }{
 	{"questions", `DELETE FROM questions WHERE chat_id = ANY(?0)`},
 	{"chat_updates", `DELETE FROM chat_updates WHERE chat_id = ANY(?0)`},
 	{"chat_update_heads", `DELETE FROM chat_update_heads WHERE chat_id = ANY(?0)`},
+	// The chats' tool calls' usage records (tool_call_usage): a project's
+	// deletion takes them, as an account's does (accountpurge).
+	{"tool_call_usage", `DELETE FROM tool_call_usage WHERE chat_id = ANY(?0)`},
 	{"workflows", `DELETE FROM workflows WHERE chat_id = ANY(?0)`},
 	{"update_stream_counters", `
 		DELETE FROM update_stream_counters WHERE stream_kind = 'chat' AND stream_id = ANY(?0)`},
@@ -166,6 +169,10 @@ var chatPurgeSteps = []struct{ name, sql string }{
 		DELETE FROM background_process_output
 		WHERE process_id IN (SELECT id FROM background_processes WHERE chat_id = ANY(?0))`},
 	{"background_processes", `DELETE FROM background_processes WHERE chat_id = ANY(?0)`},
+	// The pull requests the chats produced: keyed by chat with no foreign
+	// key. A link writer selects its chat FOR KEY SHARE, so one in flight is
+	// waited for by this batch's FOR UPDATE and its row is deleted here.
+	{"chat_pr_links", `DELETE FROM chat_pr_links WHERE chat_id = ANY(?0)`},
 
 	// The chats, and what still cascades from them (user_updates, run_events,
 	// chat_selections).
@@ -396,6 +403,10 @@ var flatThinSteps = []struct{ name, sql string }{
 	{"project background_processes", `
 		DELETE FROM background_processes WHERE id IN (
 			SELECT id FROM background_processes WHERE project_id = ?0 LIMIT ?1)`},
+	// One row per tool call: a long chat holds as many as it has messages.
+	{"tool_call_usage", `
+		DELETE FROM tool_call_usage WHERE (id, attempt) IN (
+			SELECT id, attempt FROM tool_call_usage WHERE chat_id IN (` + projectChatIDs + `) LIMIT ?1)`},
 }
 
 // thinProjectChats removes the bulk stored under the project's chats in
