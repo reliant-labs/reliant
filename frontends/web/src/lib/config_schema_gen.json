@@ -102,6 +102,16 @@
       "source": "runtime"
     },
     {
+      "name": "FIXTURES_READ_ONLY",
+      "type": "string",
+      "source": "runtime"
+    },
+    {
+      "name": "FIXTURES_SCENARIO",
+      "type": "string",
+      "source": "runtime"
+    },
+    {
       "name": "FORGE_APP_HOST",
       "type": "string",
       "source": "config"
