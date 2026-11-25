@@ -16,6 +16,9 @@ func New(cfg Config) *Limiter {
 
 func (t *Tree) prepareCgroup(*exec.Cmd, uint64) {}
 
+// reattachCgroup has nothing to take back outside Linux.
+func (t *Tree) reattachCgroup(string) {}
+
 // cgroupVanished is false outside Linux: a tree has no cgroup to lose.
 func (t *Tree) cgroupVanished(error) bool { return false }
 
