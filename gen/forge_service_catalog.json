@@ -60816,7 +60816,6 @@
     },
     {
       "consumer": "WorkerToolsFactory",
-<<<<<<< ours
       "field": "ChangeController",
       "interface": "github.com/reliant-labs/reliant/internal/llm/tools.ChangeController",
       "methods": [],
@@ -60856,6 +60855,17 @@
     },
     {
       "consumer": "WorkerToolsFactory",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "WorkerToolsFactory",
       "field": "WorkflowDrafts",
       "interface": "github.com/reliant-labs/reliant/internal/workflowdrafts.Service",
       "methods": [],
@@ -60866,16 +60876,6 @@
         "Workflowdrafts"
       ],
       "resolution": "composition_expression"
-=======
-      "field": "Updates",
-      "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
-      "methods": [],
-      "candidates": [
-        "Database"
-      ],
-      "providers": [],
-      "resolution": "unresolved"
->>>>>>> theirs
     },
     {
       "consumer": "WorkerToolsFactory",
@@ -61898,7 +61898,14 @@
     },
     {
       "code": "binding_unresolved",
-<<<<<<< ours
+      "component": "WorkerToolsFactory.Updates",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewWorkerToolsFactory"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Workflowdrafts.Drafts",
       "source": {
         "path": "internal/workflowdrafts/service.go",
@@ -61927,12 +61934,6 @@
       "source": {
         "path": "internal/workflowdrafts/service.go",
         "symbol": "New"
-=======
-      "component": "WorkerToolsFactory.Updates",
-      "source": {
-        "path": "internal/app/providers_worker.go",
-        "symbol": "NewWorkerToolsFactory"
->>>>>>> theirs
       }
     },
     {
