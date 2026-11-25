@@ -86,6 +86,39 @@ function runHook(hook: (() => void) | undefined): void {
 
 type Search = Record<string, unknown>;
 
+/** Where a `returnToStart` journey was started (its context key): the page and its search, `tour` left out. */
+export const TOUR_ORIGIN_KEY = "startedFrom";
+
+export interface TourOrigin {
+  pathname: string;
+  search: Search;
+}
+
+function isOrigin(value: unknown): value is TourOrigin {
+  return !!value && typeof value === "object" && typeof (value as TourOrigin).pathname === "string";
+}
+
+/** Whether `journey` returns to where it was started, in this shell. */
+function returnsToStart(journey: JourneyId): boolean {
+  try {
+    return getJourney(journey).returnToStart?.(getTourShell()) ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/** The recorded start of `journey`, when it returns there. */
+export function tourOriginOf(journey: JourneyId): TourOrigin | null {
+  if (!returnsToStart(journey)) return null;
+  const origin = useTourStore.getState().contexts?.[journey]?.[TOUR_ORIGIN_KEY];
+  return isOrigin(origin) ? origin : null;
+}
+
+/** Whether `pathname` is a page one of `journey`'s steps lives on: starting there is not a start to return to. */
+function onJourneyPage(journey: JourneyId, pathname: string): boolean {
+  return activeJourneySteps(journey).some((candidate) => !!candidate.route && isOnRoute(candidate.route, pathname));
+}
+
 export interface StepRef {
   journey: JourneyId;
   stepId: string;
@@ -219,8 +252,12 @@ export function useTourNavigation(): TourNavigation {
   const land = useCallback(
     async (journey: JourneyId) => {
       const shell = getTourShell();
+      const origin = tourOriginOf(journey);
       const target = getJourney(journey).finish?.(shell);
-      if (target) {
+      if (origin) {
+        useTourStore.getState().setJourneyContext(journey, { [TOUR_ORIGIN_KEY]: undefined });
+        await navigate({ to: origin.pathname, search: { ...origin.search, tour: undefined } } as never);
+      } else if (target) {
         await navigate({ to: target.to, params: target.params, search: { ...target.search, tour: undefined } } as never);
       } else if (shell === "reliant" && getReliantTourHooks()) {
         await getReliantTourHooks()!.landOnChat(navigate as (options: never) => Promise<void>);
@@ -243,9 +280,17 @@ export function useTourNavigation(): TourNavigation {
       const store = useTourStore.getState();
       void store.setLastJourney(journey);
       void store.setResumeStep(null);
+      // Where leaving the tour returns to (returnToStart): this page, unless it is one of the journey's own.
+      if (returnsToStart(journey)) {
+        const { pathname, search } = router.latestLocation;
+        if (!onJourneyPage(journey, pathname)) {
+          const { tour: _tour, ...rest } = search as Search;
+          store.setJourneyContext(journey, { [TOUR_ORIGIN_KEY]: { pathname, search: rest } satisfies TourOrigin });
+        }
+      }
       goToStep(journey, first);
     },
-    [goToStep],
+    [goToStep, router],
   );
 
   const openPicker = useCallback(
@@ -279,6 +324,8 @@ export function useTourNavigation(): TourNavigation {
       await store.completeStep(formatTourParam(journey, stepId));
       void store.setResumeStep(null);
       if (then) {
+        // Leaving for the other journey: this one's start is not where that one ends.
+        if (returnsToStart(journey)) store.setJourneyContext(journey, { [TOUR_ORIGIN_KEY]: undefined });
         void store.markTourCompleted(journey, "completed");
         startJourney(then, "picker", { from_journey: journey });
         return;
@@ -338,9 +385,19 @@ export function useTourNavigation(): TourNavigation {
     const live = liveStep();
     if (!live) return;
     const prev = previousStepId(live.journey, live.stepId);
-    if (prev) goToStep(live.journey, prev);
-    else exitTour();
-  }, [liveStep, goToStep, exitTour]);
+    if (prev) {
+      goToStep(live.journey, prev);
+      return;
+    }
+    // Back off the first step closes the tour: where it was started, for a journey that returns there.
+    const origin = tourOriginOf(live.journey);
+    if (!origin) {
+      exitTour();
+      return;
+    }
+    useTourStore.getState().setJourneyContext(live.journey, { [TOUR_ORIGIN_KEY]: undefined });
+    void navigate({ to: origin.pathname, search: { ...origin.search, tour: undefined } } as never);
+  }, [liveStep, goToStep, exitTour, navigate]);
 
   const skipAll = useCallback(async () => {
     const live = liveStep();
