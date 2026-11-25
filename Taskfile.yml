@@ -487,6 +487,44 @@ tasks:
     cmds:
       - pnpm --silent test
 
+  frontends:
+    # forge's scaffold task, with forge's body: runs SCRIPT in every frontend
+    # `forge project frontends` lists (the inventory `forge ci gate` uses),
+    # stopping at the first failure. SCRIPT names the frontend's package
+    # manager as $PM:
+    #
+    #   task frontends SCRIPT='$PM outdated'
+    #
+    # Two differences from forge's. It is not internal: reliant's own lanes
+    # (deps:web, build:web, test:web, lint:web, fmt:web) do not go through it,
+    # because their bodies differ from forge's on purpose (a frozen lockfile,
+    # the test-capture record, eslint --fix), so it is only useful called
+    # directly, and SCRIPT is required. And `sort -u`: the deprecated demo env
+    # declares a second frontend (forge-demo) at frontends/web, which forge
+    # lists once per name, so without it SCRIPT would run there twice.
+    # Electron is not a forge frontend and is not listed.
+    desc: "Run SCRIPT in every frontend forge lists, $PM naming its package manager (task frontends SCRIPT='$PM outdated')"
+    requires:
+      vars: [SCRIPT]
+    silent: true
+    vars:
+      FRONTENDS:
+        sh: '{{.FORGE}} project frontends --with-package-manager | sort -u'
+    env:
+      FRONTENDS: '{{.FRONTENDS}}'
+    cmds:
+      - cmd: |
+          ran=0
+          for frontend in $FRONTENDS; do
+            PM="${frontend%%:*}"
+            dir="${frontend#*:}"
+            export PM
+            echo "==> {{.SCRIPT}} ($dir, $PM)"
+            (cd "$dir" && {{.SCRIPT}}) || exit 1
+            ran=$((ran + 1))
+          done
+          [ "$ran" -gt 0 ] || echo "This project has no frontends — nothing to run."
+
   # ── The gate ──────────────────────────────────────────────────────────
 
   ci:
@@ -990,20 +1028,56 @@ tasks:
     cmds:
       - go run ./cmd/reliant db migrate up
 
-  # forge's scaffold names for the dev loop. `forge env up dev` is the whole
-  # product stack on this machine (deploy/kcl/dev): air for the three server
-  # roles, the web app, host Postgres, NATS and Temporal; no docker compose,
-  # so forge's dev-up/dev-up-prod/dev-psql have no counterpart here (the
-  # stack's DSN: `forge env config dev`; queries: .reliant/tools/db-query.sh).
+  # forge's scaffold names for the dev loop. forge's bodies drive a docker
+  # compose file; reliant has none. `forge env up dev` is the whole product
+  # stack on this machine (deploy/kcl/dev): air for the three server roles,
+  # the web app, host Postgres, NATS and Temporal, on this checkout's own
+  # port block. So dev/dev-up/dev-down/dev-psql map onto it, and dev-up-prod,
+  # which has no counterpart, says what to run instead.
   dev:
     desc: Run this checkout's dev stack with hot reload (forge env up dev)
     cmds:
       - '{{.FORGE}} env up dev {{.CLI_ARGS}}'
 
+  dev-up:
+    # forge's dev-up starts the stack and returns; `dev` above holds the
+    # foreground. --background is forge's own detach: the stack keeps
+    # running, and `task dev-down` (forge env down dev) stops it.
+    desc: Start this checkout's dev stack and return (forge env up dev --background; stop it with task dev-down)
+    cmds:
+      - '{{.FORGE}} env up dev --background {{.CLI_ARGS}}'
+
+  dev-up-prod:
+    # forge's dev-up-prod runs the production app image under docker compose.
+    # reliant declares no local production-mode stack, so this fails and
+    # names what exists, rather than reporting success for a run it did not do.
+    desc: "Not available in reliant: no local production-mode stack (prints what to run instead)"
+    cmds:
+      - cmd: |
+          echo "task dev-up-prod: reliant has no local production-mode stack (no docker compose app service)." >&2
+          echo "  The production server image:  forge env build release --target reliant-image --docker" >&2
+          echo "  The dev stack:                task dev (or task dev-up)" >&2
+          echo "  The whole platform:           forge env up dev in ../control-plane (reliant.md)" >&2
+          exit 1
+        silent: true
+
   dev-down:
     desc: Stop this checkout's dev stack only (forge env down dev)
     cmds:
       - '{{.FORGE}} env down dev {{.CLI_ARGS}}'
+
+  dev-psql:
+    # The database this checkout's stack uses, as `forge env config dev`
+    # reports it: the launched port when the stack is up (each worktree's
+    # stack has its own port block, so never assume one). Read-only use is on
+    # you; control-plane's stack database (localhost:5434) is not this one.
+    desc: Open psql on this checkout's dev stack database (the DATABASE_URL forge env config dev names)
+    cmds:
+      - cmd: |
+          command -v psql >/dev/null 2>&1 || { echo "psql not installed — install postgresql-client" >&2; exit 1; }
+          dsn="$({{.FORGE}} env config dev --json | jq -r '[.workloads[].env.DATABASE_URL // empty][0] // empty')"
+          [ -n "$dsn" ] || { echo "forge env config dev names no DATABASE_URL" >&2; exit 1; }
+          exec psql "$dsn" {{.CLI_ARGS}}
 
   db-seed:
     # forge's seeder: deterministic, FK-coherent rows derived from the applied
@@ -1013,6 +1087,49 @@ tasks:
     desc: Seed the dev database (forge db seed apply; dev only)
     cmds:
       - '{{.FORGE}} db seed apply {{.CLI_ARGS}}'
+
+  db-snapshot-restore:
+    # forge's body: restore a pg_dump custom-format dump (optionally gzipped)
+    # into a database of its own, reliant_snapshot by default, so it never
+    # clobbers the dev data. One adaptation: the server defaults to this
+    # checkout's dev stack Postgres (the DATABASE_URL `forge env config dev`
+    # names, its own port block) instead of 127.0.0.1:5432; PGHOST, PGPORT,
+    # PGUSER and PGPASSWORD still win. reliant produces no snapshots: dev data
+    # comes from `task db-seed`. A dump of a real database holds user data;
+    # restore only a sanitized one.
+    desc: Restore a pg_dump snapshot into reliant_snapshot on the dev stack's Postgres (DUMP=path/to/file.dump[.gz])
+    cmds:
+      - cmd: |
+          # Template vars, not "${DUMP:-...}" as forge's body has it: a
+          # `task ... DUMP=x` var never reaches the shell's environment.
+          DUMP='{{.DUMP | default "snapshot.dump.gz"}}'
+          DB='{{.SNAPSHOT_DB | default "reliant_snapshot"}}'
+          if [ ! -f "$DUMP" ]; then
+            echo "ERROR: Dump file '$DUMP' not found." >&2
+            echo "Usage: task db-snapshot-restore DUMP=/path/to/snapshot.dump[.gz]" >&2
+            exit 1
+          fi
+          for cmd in pg_restore createdb dropdb; do
+            command -v "$cmd" >/dev/null 2>&1 || { echo "$cmd not installed — install postgresql-client" >&2; exit 1; }
+          done
+          # postgres://user:pass@host:port/db?... from the dev stack's config.
+          dsn="$({{.FORGE}} env config dev --json | jq -r '[.workloads[].env.DATABASE_URL // empty][0] // empty')"
+          [ -n "$dsn" ] || { echo "forge env config dev names no DATABASE_URL" >&2; exit 1; }
+          rest="${dsn#*://}"; creds="${rest%%@*}"; hostport="${rest#*@}"; hostport="${hostport%%/*}"
+          export PGHOST="${PGHOST:-${hostport%%:*}}" PGPORT="${PGPORT:-${hostport##*:}}"
+          export PGUSER="${PGUSER:-${creds%%:*}}" PGPASSWORD="${PGPASSWORD:-${creds#*:}}"
+          echo "==> Restoring $DUMP into $DB (host=$PGHOST port=$PGPORT user=$PGUSER)..."
+          dropdb --if-exists "$DB" 2>/dev/null || true
+          createdb "$DB" || exit 1
+          if [[ "$DUMP" == *.gz ]]; then
+            gunzip -c "$DUMP" | pg_restore -d "$DB" \
+              --no-owner --no-privileges --clean --if-exists || true
+          else
+            pg_restore -d "$DB" \
+              --no-owner --no-privileges --clean --if-exists "$DUMP" || true
+          fi
+          echo "==> Restore complete. Connect with: psql -h $PGHOST -p $PGPORT -U $PGUSER -d $DB"
+        silent: true
 
   # ── Pins, releases, docs site ─────────────────────────────────────────
 
