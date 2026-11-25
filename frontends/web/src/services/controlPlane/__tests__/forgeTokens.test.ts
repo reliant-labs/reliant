@@ -23,6 +23,9 @@ import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
 import {
   createForgeToken,
+  DEFAULT_FORGE_TOKEN_BUNDLE,
+  FORGE_TOKEN_BUNDLES,
+  forgeTokenBundlesFor,
   FORGE_TOKEN_ENV,
   FORGE_TOKEN_SCOPE_GROUPS,
   FORGE_TOKEN_SCOPES,
@@ -73,6 +76,7 @@ describe("listForgeTokens", () => {
         name: "ci-deploy",
         prefix: "rlt_ab",
         scopes: ["deploy:write"],
+        bundles: [],
         allScopes: false,
         createdAt: CREATED,
         expiresAt: undefined,
@@ -298,5 +302,78 @@ describe("what the token UI tells a person", () => {
       expect(group.title).not.toBe("");
       for (const { scope, label } of group.scopes) expect(label, scope).not.toBe("");
     }
+  });
+});
+
+describe("scope bundles", () => {
+  it("starts a personal token with developer and an organization token with ci", () => {
+    expect(DEFAULT_FORGE_TOKEN_BUNDLE).toEqual({ personal: "developer", org: "ci" });
+  });
+
+  it("never offers developer to an organization token, and offers every bundle to a personal one", () => {
+    expect(forgeTokenBundlesFor("org")).toEqual(["ci", "admin"]);
+    expect(forgeTokenBundlesFor("personal")).toEqual(["ci", "developer", "admin"]);
+  });
+
+  it("describes every bundle", () => {
+    for (const [bundle, { label, description }] of Object.entries(FORGE_TOKEN_BUNDLES)) {
+      expect(label, bundle).not.toBe("");
+      expect(description, bundle).not.toBe("");
+    }
+  });
+
+  it("mints a personal developer token through CreateMyToken with the bundle and no scope", async () => {
+    const mine = vi.fn(() => ({ secret: "rlt_dev" }));
+    const org = vi.fn(() => ({ secret: "x" }));
+    setTransport(mockTransport({ "AccessTokenService.CreateMyToken": mine, "AccessTokenService.CreateToken": org }));
+
+    const res = await createForgeToken({ orgId: ORG, name: "laptop", kind: "personal", scopes: [], bundles: ["developer"], expiresInDays: 30 });
+
+    expect(res).toEqual({ secret: "rlt_dev", kind: "personal" });
+    expect(mine).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, name: "laptop", scopes: [], bundles: ["developer"] }));
+    expect(org).not.toHaveBeenCalled();
+  });
+
+  it("mints an organization ci token through CreateToken", async () => {
+    const org = vi.fn(() => ({ secret: "rlat_ci" }));
+    const mine = vi.fn(() => ({ secret: "x" }));
+    setTransport(mockTransport({ "AccessTokenService.CreateToken": org, "AccessTokenService.CreateMyToken": mine }));
+
+    const res = await createForgeToken({ orgId: ORG, name: "org-ci", kind: "org", scopes: [], bundles: ["ci"], expiresInDays: null });
+
+    expect(res).toEqual({ secret: "rlat_ci", kind: "org" });
+    expect(org).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, name: "org-ci", scopes: [], bundles: ["ci"] }));
+    expect(mine).not.toHaveBeenCalled();
+  });
+
+  it("refuses, without calling the server, developer on an organization token, an unknown bundle, nothing at all, and an upload-only scope beside a bundle", async () => {
+    const org = vi.fn(() => ({ secret: "x" }));
+    const mine = vi.fn(() => ({ secret: "x" }));
+    setTransport(mockTransport({ "AccessTokenService.CreateToken": org, "AccessTokenService.CreateMyToken": mine }));
+    const base = { orgId: ORG, name: "t", expiresInDays: null };
+
+    await expect(createForgeToken({ ...base, kind: "org", scopes: [], bundles: ["developer"] })).rejects.toThrow(/acts as no one/);
+    await expect(createForgeToken({ ...base, scopes: [], bundles: ["superuser"] })).rejects.toThrow(/unknown bundle superuser/);
+    await expect(createForgeToken({ ...base, scopes: [], bundles: [] })).rejects.toThrow(/choose a bundle/);
+    await expect(createForgeToken({ ...base, kind: "org", scopes: ["sourcemaps:write"], bundles: ["ci"] })).rejects.toThrow(
+      /cannot be combined/,
+    );
+    expect(org).not.toHaveBeenCalled();
+    expect(mine).not.toHaveBeenCalled();
+  });
+
+  it("lists a token's bundles beside the server's resolved scopes", async () => {
+    setTransport(
+      mockTransport({
+        "AccessTokenService.ListMyTokens": {
+          response: { tokens: [{ id: "t_dev", name: "laptop", bundles: ["developer"], scopes: ["deploy:read", "reliant:api"] }] },
+        },
+      }),
+    );
+
+    const [token] = await listForgeTokens(ORG);
+
+    expect(token.bundles).toEqual(["developer"]);
+    expect(token.scopes).toEqual(["deploy:read", "reliant:api"]);
   });
 });

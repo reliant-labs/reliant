@@ -345,16 +345,30 @@ message AccessToken {
   // permissions". Saving scopes back unchanged (UpdateMyToken) keeps the
   // wildcard; removing any scope turns it into exactly the list submitted.
   bool all_scopes = 14;
+  // bundles are the scope bundles the token holds beside its scopes ("ci",
+  // "developer", "admin"; forge accesstoken.AllBundles), as stored. Each is
+  // expanded at every use under the server's catalog, so a scope added to the
+  // bundle later reaches the token, and scopes above already includes what
+  // they expand to now. A bundle never carries a sensitive scope. A
+  // UpdateMyToken scope edit keeps a bundle only while the new list still
+  // holds everything it expands to.
+  repeated string bundles = 15;
 }
 
 message CreateTokenRequest {
   string name = 1;
+  // scopes may be empty when bundles names at least one bundle.
   repeated string scopes = 2;
   google.protobuf.Timestamp expires_at = 3;
   // The org this request acts in (docs/orgs.md). Unset: the caller's default
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 4;
+  // bundles the token holds beside scopes (AccessToken.bundles), typically
+  // "ci". The caller must hold, org-wide, every organization permission each
+  // bundle expands to today, and no bundle may carry a scope that acts as a
+  // person (so not "developer").
+  repeated string bundles = 5;
 }
 
 message CreateTokenResponse {
@@ -402,6 +416,12 @@ message CreateMyTokenRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 7;
+  // bundles the token holds beside scopes (AccessToken.bundles), typically
+  // "developer"; scopes may then be empty. The caller must hold every
+  // organization permission each bundle expands to today, as for scopes, and
+  // every use clips the token to what they hold then. A token bound to a
+  // resource, or a daemon credential, takes no bundle.
+  repeated string bundles = 8;
 }
 
 message CreateMyTokenResponse {

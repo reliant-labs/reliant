@@ -632,7 +632,15 @@ type AccessToken struct {
 	// snapshot of a set that follows the person's grants. A UI shows it as "all
 	// permissions". Saving scopes back unchanged (UpdateMyToken) keeps the
 	// wildcard; removing any scope turns it into exactly the list submitted.
-	AllScopes     bool `protobuf:"varint,14,opt,name=all_scopes,json=allScopes,proto3" json:"all_scopes,omitempty"`
+	AllScopes bool `protobuf:"varint,14,opt,name=all_scopes,json=allScopes,proto3" json:"all_scopes,omitempty"`
+	// bundles are the scope bundles the token holds beside its scopes ("ci",
+	// "developer", "admin"; forge accesstoken.AllBundles), as stored. Each is
+	// expanded at every use under the server's catalog, so a scope added to the
+	// bundle later reaches the token, and scopes above already includes what
+	// they expand to now. A bundle never carries a sensitive scope. A
+	// UpdateMyToken scope edit keeps a bundle only while the new list still
+	// holds everything it expands to.
+	Bundles       []string `protobuf:"bytes,15,rep,name=bundles,proto3" json:"bundles,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -765,15 +773,28 @@ func (x *AccessToken) GetAllScopes() bool {
 	return false
 }
 
+func (x *AccessToken) GetBundles() []string {
+	if x != nil {
+		return x.Bundles
+	}
+	return nil
+}
+
 type CreateTokenRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Name      string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// scopes may be empty when bundles names at least one bundle.
 	Scopes    []string               `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	// The org this request acts in (docs/orgs.md). Unset: the caller's default
 	// org. A person must be a member of it; a machine credential may name only
 	// its own org.
-	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	OrgId *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// bundles the token holds beside scopes (AccessToken.bundles), typically
+	// "ci". The caller must hold, org-wide, every organization permission each
+	// bundle expands to today, and no bundle may carry a scope that acts as a
+	// person (so not "developer").
+	Bundles       []string `protobuf:"bytes,5,rep,name=bundles,proto3" json:"bundles,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -834,6 +855,13 @@ func (x *CreateTokenRequest) GetOrgId() string {
 		return *x.OrgId
 	}
 	return ""
+}
+
+func (x *CreateTokenRequest) GetBundles() []string {
+	if x != nil {
+		return x.Bundles
+	}
+	return nil
 }
 
 type CreateTokenResponse struct {
@@ -1102,7 +1130,13 @@ type CreateMyTokenRequest struct {
 	// The org this request acts in (docs/orgs.md). Unset: the caller's default
 	// org. A person must be a member of it; a machine credential may name only
 	// its own org.
-	OrgId         *string `protobuf:"bytes,7,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	OrgId *string `protobuf:"bytes,7,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// bundles the token holds beside scopes (AccessToken.bundles), typically
+	// "developer"; scopes may then be empty. The caller must hold every
+	// organization permission each bundle expands to today, as for scopes, and
+	// every use clips the token to what they hold then. A token bound to a
+	// resource, or a daemon credential, takes no bundle.
+	Bundles       []string `protobuf:"bytes,8,rep,name=bundles,proto3" json:"bundles,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1184,6 +1218,13 @@ func (x *CreateMyTokenRequest) GetOrgId() string {
 		return *x.OrgId
 	}
 	return ""
+}
+
+func (x *CreateMyTokenRequest) GetBundles() []string {
+	if x != nil {
+		return x.Bundles
+	}
+	return nil
 }
 
 type CreateMyTokenResponse struct {
@@ -2085,7 +2126,7 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\x06member\x18\x01 \x01(\v2 .controlplane.v1.OrgMemberGrantsR\x06member\"5\n" +
 	"\x0fResourceBinding\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"\xc4\x04\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"\xde\x04\n" +
 	"\vAccessToken\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12%\n" +
@@ -2106,13 +2147,15 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\bresource\x18\f \x01(\v2 .controlplane.v1.ResourceBindingR\bresource\x12\x1c\n" +
 	"\tephemeral\x18\r \x01(\bR\tephemeral\x12\x1d\n" +
 	"\n" +
-	"all_scopes\x18\x0e \x01(\bR\tallScopes\"\xa2\x01\n" +
+	"all_scopes\x18\x0e \x01(\bR\tallScopes\x12\x18\n" +
+	"\abundles\x18\x0f \x03(\tR\abundles\"\xbc\x01\n" +
 	"\x12CreateTokenRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06scopes\x18\x02 \x03(\tR\x06scopes\x129\n" +
 	"\n" +
 	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x1a\n" +
-	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12\x18\n" +
+	"\abundles\x18\x05 \x03(\tR\abundlesB\t\n" +
 	"\a_org_id\"a\n" +
 	"\x13CreateTokenResponse\x122\n" +
 	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token\x12\x16\n" +
@@ -2129,7 +2172,7 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
 	"\a_org_id\"I\n" +
 	"\x13RevokeTokenResponse\x122\n" +
-	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token\"\x98\x02\n" +
+	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token\"\xb2\x02\n" +
 	"\x14CreateMyTokenRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06scopes\x18\x02 \x03(\tR\x06scopes\x129\n" +
@@ -2138,7 +2181,8 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\bresource\x18\x04 \x01(\v2 .controlplane.v1.ResourceBindingR\bresource\x12\x1c\n" +
 	"\tephemeral\x18\x05 \x01(\bR\tephemeral\x12\x16\n" +
 	"\x06rotate\x18\x06 \x01(\bR\x06rotate\x12\x1a\n" +
-	"\x06org_id\x18\a \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\x06org_id\x18\a \x01(\tH\x00R\x05orgId\x88\x01\x01\x12\x18\n" +
+	"\abundles\x18\b \x03(\tR\abundlesB\t\n" +
 	"\a_org_id\"}\n" +
 	"\x15CreateMyTokenResponse\x122\n" +
 	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token\x12\x16\n" +
