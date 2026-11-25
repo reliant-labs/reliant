@@ -113,7 +113,7 @@ function Band({
         <Icon className="h-4 w-4 text-muted-foreground" />
         <h3
           id={id}
-          className="text-xs font-semibold text-muted-foreground"
+          className="text-meta font-semibold text-muted-foreground"
         >
           {title}
         </h3>
@@ -263,7 +263,7 @@ export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void;
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading billing…</p>
+          <p className="text-ui text-muted-foreground">Loading billing…</p>
         ) : (
           <div className="space-y-4">
             {checkoutPlanId && (
@@ -293,7 +293,7 @@ export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void;
                 <button
                   type="button"
                   onClick={() => setCheckoutPlanId(null)}
-                  className="mt-3 min-h-[44px] w-full text-sm text-muted-foreground"
+                  className="mt-3 min-h-[44px] w-full text-ui text-muted-foreground"
                 >
                   Cancel
                 </button>
@@ -310,14 +310,14 @@ export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void;
               <p className="text-2xl font-semibold text-foreground">
                 {walletUi.balance}
               </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p className="mt-0.5 text-meta text-muted-foreground">
                 credit remaining
               </p>
               {walletUi.warning && (
                 // Semantic `warning` tokens, not a hardcoded amber pair. The
                 // literal `amber-500` here was a brand colour by another name:
                 // it ignored the theme and needed a `dark:` twin to stay legible.
-                <div className="mt-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-ink">
+                <div className="mt-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-meta text-warning-ink">
                   <p className="font-semibold">{walletUi.warning.title}</p>
                   <p>{walletUi.warning.message}</p>
                 </div>
@@ -335,13 +335,13 @@ export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void;
                 {planUi.planName ?? "No compute plan"}
               </p>
               {planUi.planName === null ? (
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 text-meta text-muted-foreground">
                   Machines run on a plan — pick one below to get started.
                 </p>
               ) : planUi.detailUnavailable ? (
                 // ONE line, not a confident `0 h`. Naming the cause is what
                 // stops someone auditing config that is already correct.
-                <p className="mt-2 text-xs text-muted-foreground">
+                <p className="mt-2 text-meta text-muted-foreground">
                   Plan details are unavailable — the control plane may not have
                   restarted since the plan catalog changed.
                 </p>
@@ -351,7 +351,7 @@ export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void;
                 // where hours-used belongs reads as zero, which is the exact
                 // reading this branch exists to prevent. No bar either — an
                 // empty track is the same claim in another form.
-                <div className="mt-3 text-xs text-muted-foreground">
+                <div className="mt-3 text-meta text-muted-foreground">
                   <p>Usage unavailable for this period.</p>
                   {planUi.includedHours > 0 && (
                     <p className="mt-0.5">
@@ -363,13 +363,13 @@ export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void;
                 <div className="mt-3">
                   {usageUi.headline && (
                     <p
-                      className="mb-1.5 text-sm font-semibold text-foreground"
+                      className="mb-1.5 text-ui font-semibold text-foreground"
                       data-testid="mobile-sdh-headline"
                     >
                       {usageUi.headline}
                     </p>
                   )}
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center justify-between text-meta">
                     <span className="text-muted-foreground">
                       {usageUi.usedLabel}
                     </span>
@@ -395,7 +395,7 @@ export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void;
               )}
               {purchasablePlans.length > 0 && !checkoutPlanId && (
                 <div className="mt-4 space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">
+                  <p className="text-meta font-medium text-muted-foreground">
                     {subscription ? "Switch plan" : "Choose a plan"}
                   </p>
                   {purchasablePlans.map((plan) => {
@@ -410,17 +410,17 @@ export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void;
                         className="flex min-h-[44px] w-full items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-left active:opacity-80 disabled:opacity-60"
                       >
                         <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium text-foreground">
+                          <span className="block truncate text-ui font-medium text-foreground">
                             {planDisplayName(plan)}
                           </span>
-                          <span className="block text-xs text-muted-foreground">
+                          <span className="block text-meta text-muted-foreground">
                             {/* Sizes are the reason to pick one plan over
                                 another, so they are on the row rather than a
                                 tap away on desktop. */}
                             {formatAllowedSizes(d.allowedSizes)}
                           </span>
                         </span>
-                        <span className="shrink-0 text-sm font-semibold text-foreground">
+                        <span className="shrink-0 text-ui font-semibold text-foreground">
                           {isCurrent
                             ? "Current"
                             : `${formatPrice(d.monthlyPriceCents ?? 0)}/mo`}
@@ -428,7 +428,7 @@ export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void;
                       </button>
                     );
                   })}
-                  <p className="pt-1 text-center text-xs text-muted-foreground">
+                  <p className="pt-1 text-center text-meta text-muted-foreground">
                     {/* Says what now happens — payment opens on this screen and
                         never leaves it. The previous copy promised a round trip
                         ("you'll come back here"), which stopped being true when
@@ -442,7 +442,7 @@ export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void;
               )}
             </Band>
 
-            <p className="text-center text-xs text-muted-foreground">
+            <p className="text-center text-meta text-muted-foreground">
               For invoices, usage charts, and plan comparisons, use desktop.
             </p>
           </div>
