@@ -60685,6 +60685,17 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "WorkerChat",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "WorkerDaemonRouter",
       "field": "AutomationTokens",
       "interface": "github.com/reliant-labs/reliant/internal/credentials/automationtokens.Service",
@@ -61728,6 +61739,14 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewVault"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "WorkerChat.Updates",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewWorkerChat"
       }
     },
     {
