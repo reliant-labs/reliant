@@ -51,15 +51,16 @@ interface Probe {
 
 const readProbe = (page: Page) => page.evaluate(() => (window as unknown as { __forgeFixtures?: Probe }).__forgeFixtures ?? null)
 
-/** No call in flight and none started for `quietMs`, or the deadline. */
+/** Require a ready probe with no calls in flight and none started for `quietMs`. */
 async function quiet(page: Page, { deadlineMs = 20_000, quietMs = 600 } = {}): Promise<void> {
   const begin = performance.now()
   let last = -1
   let quietSince = 0
+  let probe: Probe | null = null
   while (performance.now() - begin < deadlineMs) {
     const now = performance.now() - begin
-    const probe = await readProbe(page)
-    if (!probe || probe.started !== last || probe.inflight > 0) {
+    probe = await readProbe(page)
+    if (!probe?.ready || probe.started !== last || probe.inflight !== 0) {
       last = probe?.started ?? -1
       quietSince = now
     } else if (now - quietSince >= quietMs) {
@@ -67,6 +68,7 @@ async function quiet(page: Page, { deadlineMs = 20_000, quietMs = 600 } = {}): P
     }
     await new Promise((r) => setTimeout(r, 100))
   }
+  throw new Error(`Preview did not become quiescent within ${deadlineMs}ms; last probe: ${JSON.stringify(probe)}`)
 }
 
 /**
