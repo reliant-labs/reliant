@@ -732,7 +732,7 @@ func (m *MockPollRepo) GetIntegrationAccessSubject(ctx context.Context, userID s
 var _ PollRepo = (*MockPollRepo)(nil)
 
 // forge:section MockFireRepo
-// forge:hash=6fd3bcb549ddddc0adb37a72a66dc5721c8112f3762ff51f9069a6fe126cf3aa
+// forge:hash=2b8ec5b1c29f9e2f7f687a3ed898a055dfe186b2818ea919de8989a1cf99ccc6
 
 // MockFireRepo is a test mock for the FireRepo interface.
 //
@@ -768,6 +768,9 @@ type MockFireRepo struct {
 	ReleaseUnboundTriggerCapacityFunc         func(context.Context, store.TriggerCapacityExecution, string) (bool, error)
 	TriggerCapacityStartFencedFunc            func(context.Context, store.TriggerCapacityExecution) (bool, error)
 	ExpirePendingTriggerCapacityEventsFunc    func(context.Context, time.Time, string, int) ([]*core.TriggerEvent, error)
+	ListTriggerCapacityKeyRunsFunc            func(context.Context, store.TriggerCapacityScope, string, int64) ([]store.TriggerCapacityKeyRun, error)
+	MarkTriggerCapacityRunSupersededFunc      func(context.Context, string, string) (bool, error)
+	SettleSupersededTriggerCapacityRunFunc    func(context.Context, string) error
 }
 
 // GetTrigger records the call and delegates to GetTriggerFunc when set.
@@ -1004,11 +1007,38 @@ func (m *MockFireRepo) ExpirePendingTriggerCapacityEvents(ctx context.Context, r
 	return nil, contractkit.MockNotSet("MockFireRepo", "ExpirePendingTriggerCapacityEvents")
 }
 
+// ListTriggerCapacityKeyRuns records the call and delegates to ListTriggerCapacityKeyRunsFunc when set.
+func (m *MockFireRepo) ListTriggerCapacityKeyRuns(ctx context.Context, scope store.TriggerCapacityScope, key string, order int64) ([]store.TriggerCapacityKeyRun, error) {
+	m.Recorder.Record("ListTriggerCapacityKeyRuns", ctx, scope, key, order)
+	if m.ListTriggerCapacityKeyRunsFunc != nil {
+		return m.ListTriggerCapacityKeyRunsFunc(ctx, scope, key, order)
+	}
+	return nil, contractkit.MockNotSet("MockFireRepo", "ListTriggerCapacityKeyRuns")
+}
+
+// MarkTriggerCapacityRunSuperseded records the call and delegates to MarkTriggerCapacityRunSupersededFunc when set.
+func (m *MockFireRepo) MarkTriggerCapacityRunSuperseded(ctx context.Context, eventID string, byEventID string) (bool, error) {
+	m.Recorder.Record("MarkTriggerCapacityRunSuperseded", ctx, eventID, byEventID)
+	if m.MarkTriggerCapacityRunSupersededFunc != nil {
+		return m.MarkTriggerCapacityRunSupersededFunc(ctx, eventID, byEventID)
+	}
+	return false, contractkit.MockNotSet("MockFireRepo", "MarkTriggerCapacityRunSuperseded")
+}
+
+// SettleSupersededTriggerCapacityRun records the call and delegates to SettleSupersededTriggerCapacityRunFunc when set.
+func (m *MockFireRepo) SettleSupersededTriggerCapacityRun(ctx context.Context, eventID string) error {
+	m.Recorder.Record("SettleSupersededTriggerCapacityRun", ctx, eventID)
+	if m.SettleSupersededTriggerCapacityRunFunc != nil {
+		return m.SettleSupersededTriggerCapacityRunFunc(ctx, eventID)
+	}
+	return contractkit.MockNotSet("MockFireRepo", "SettleSupersededTriggerCapacityRun")
+}
+
 // Compile-time check.
 var _ FireRepo = (*MockFireRepo)(nil)
 
 // forge:section MockEventFireRepo
-// forge:hash=2b19aa0779d5259639d39b20126680002a70964b7cf11a6f05934480c3352776
+// forge:hash=bd6372a759c0137c932c325ce8c847eb30e748355125412e98ff7482eedb1713
 
 // MockEventFireRepo is a test mock for the EventFireRepo interface.
 //
@@ -1040,6 +1070,9 @@ type MockEventFireRepo struct {
 	ReleaseUnboundTriggerCapacityFunc         func(context.Context, store.TriggerCapacityExecution, string) (bool, error)
 	TriggerCapacityStartFencedFunc            func(context.Context, store.TriggerCapacityExecution) (bool, error)
 	ExpirePendingTriggerCapacityEventsFunc    func(context.Context, time.Time, string, int) ([]*core.TriggerEvent, error)
+	ListTriggerCapacityKeyRunsFunc            func(context.Context, store.TriggerCapacityScope, string, int64) ([]store.TriggerCapacityKeyRun, error)
+	MarkTriggerCapacityRunSupersededFunc      func(context.Context, string, string) (bool, error)
+	SettleSupersededTriggerCapacityRunFunc    func(context.Context, string) error
 }
 
 // GetTrigger records the call and delegates to GetTriggerFunc when set.
@@ -1240,11 +1273,38 @@ func (m *MockEventFireRepo) ExpirePendingTriggerCapacityEvents(ctx context.Conte
 	return nil, contractkit.MockNotSet("MockEventFireRepo", "ExpirePendingTriggerCapacityEvents")
 }
 
+// ListTriggerCapacityKeyRuns records the call and delegates to ListTriggerCapacityKeyRunsFunc when set.
+func (m *MockEventFireRepo) ListTriggerCapacityKeyRuns(ctx context.Context, scope store.TriggerCapacityScope, key string, order int64) ([]store.TriggerCapacityKeyRun, error) {
+	m.Recorder.Record("ListTriggerCapacityKeyRuns", ctx, scope, key, order)
+	if m.ListTriggerCapacityKeyRunsFunc != nil {
+		return m.ListTriggerCapacityKeyRunsFunc(ctx, scope, key, order)
+	}
+	return nil, contractkit.MockNotSet("MockEventFireRepo", "ListTriggerCapacityKeyRuns")
+}
+
+// MarkTriggerCapacityRunSuperseded records the call and delegates to MarkTriggerCapacityRunSupersededFunc when set.
+func (m *MockEventFireRepo) MarkTriggerCapacityRunSuperseded(ctx context.Context, eventID string, byEventID string) (bool, error) {
+	m.Recorder.Record("MarkTriggerCapacityRunSuperseded", ctx, eventID, byEventID)
+	if m.MarkTriggerCapacityRunSupersededFunc != nil {
+		return m.MarkTriggerCapacityRunSupersededFunc(ctx, eventID, byEventID)
+	}
+	return false, contractkit.MockNotSet("MockEventFireRepo", "MarkTriggerCapacityRunSuperseded")
+}
+
+// SettleSupersededTriggerCapacityRun records the call and delegates to SettleSupersededTriggerCapacityRunFunc when set.
+func (m *MockEventFireRepo) SettleSupersededTriggerCapacityRun(ctx context.Context, eventID string) error {
+	m.Recorder.Record("SettleSupersededTriggerCapacityRun", ctx, eventID)
+	if m.SettleSupersededTriggerCapacityRunFunc != nil {
+		return m.SettleSupersededTriggerCapacityRunFunc(ctx, eventID)
+	}
+	return contractkit.MockNotSet("MockEventFireRepo", "SettleSupersededTriggerCapacityRun")
+}
+
 // Compile-time check.
 var _ EventFireRepo = (*MockEventFireRepo)(nil)
 
 // forge:section MockCapacityStore
-// forge:hash=0349794e1407a9ff032b9481057b8f5b8bb06197d559253fb8f3bbbd7414b94b
+// forge:hash=89bf027113cc7080ea5d99f9d07400351a5fe5bb09cb07fc283dddf1a63eeb0f
 
 // MockCapacityStore is a test mock for the CapacityStore interface.
 //
@@ -1267,6 +1327,9 @@ type MockCapacityStore struct {
 	ReleaseUnboundTriggerCapacityFunc         func(context.Context, store.TriggerCapacityExecution, string) (bool, error)
 	TriggerCapacityStartFencedFunc            func(context.Context, store.TriggerCapacityExecution) (bool, error)
 	ExpirePendingTriggerCapacityEventsFunc    func(context.Context, time.Time, string, int) ([]*core.TriggerEvent, error)
+	ListTriggerCapacityKeyRunsFunc            func(context.Context, store.TriggerCapacityScope, string, int64) ([]store.TriggerCapacityKeyRun, error)
+	MarkTriggerCapacityRunSupersededFunc      func(context.Context, string, string) (bool, error)
+	SettleSupersededTriggerCapacityRunFunc    func(context.Context, string) error
 }
 
 // EnqueueTriggerCapacitySuperseding records the call and delegates to EnqueueTriggerCapacitySupersedingFunc when set.
@@ -1386,8 +1449,61 @@ func (m *MockCapacityStore) ExpirePendingTriggerCapacityEvents(ctx context.Conte
 	return nil, contractkit.MockNotSet("MockCapacityStore", "ExpirePendingTriggerCapacityEvents")
 }
 
+// ListTriggerCapacityKeyRuns records the call and delegates to ListTriggerCapacityKeyRunsFunc when set.
+func (m *MockCapacityStore) ListTriggerCapacityKeyRuns(ctx context.Context, scope store.TriggerCapacityScope, key string, order int64) ([]store.TriggerCapacityKeyRun, error) {
+	m.Recorder.Record("ListTriggerCapacityKeyRuns", ctx, scope, key, order)
+	if m.ListTriggerCapacityKeyRunsFunc != nil {
+		return m.ListTriggerCapacityKeyRunsFunc(ctx, scope, key, order)
+	}
+	return nil, contractkit.MockNotSet("MockCapacityStore", "ListTriggerCapacityKeyRuns")
+}
+
+// MarkTriggerCapacityRunSuperseded records the call and delegates to MarkTriggerCapacityRunSupersededFunc when set.
+func (m *MockCapacityStore) MarkTriggerCapacityRunSuperseded(ctx context.Context, eventID string, byEventID string) (bool, error) {
+	m.Recorder.Record("MarkTriggerCapacityRunSuperseded", ctx, eventID, byEventID)
+	if m.MarkTriggerCapacityRunSupersededFunc != nil {
+		return m.MarkTriggerCapacityRunSupersededFunc(ctx, eventID, byEventID)
+	}
+	return false, contractkit.MockNotSet("MockCapacityStore", "MarkTriggerCapacityRunSuperseded")
+}
+
+// SettleSupersededTriggerCapacityRun records the call and delegates to SettleSupersededTriggerCapacityRunFunc when set.
+func (m *MockCapacityStore) SettleSupersededTriggerCapacityRun(ctx context.Context, eventID string) error {
+	m.Recorder.Record("SettleSupersededTriggerCapacityRun", ctx, eventID)
+	if m.SettleSupersededTriggerCapacityRunFunc != nil {
+		return m.SettleSupersededTriggerCapacityRunFunc(ctx, eventID)
+	}
+	return contractkit.MockNotSet("MockCapacityStore", "SettleSupersededTriggerCapacityRun")
+}
+
 // Compile-time check.
 var _ CapacityStore = (*MockCapacityStore)(nil)
+
+// forge:section MockRunCanceller
+// forge:hash=ea80cf640a5cf7ae38b7bfceb497ebadb66774b2d9798d8668e8ba21b66662b5
+
+// MockRunCanceller is a test mock for the RunCanceller interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockRunCanceller.<Method>Func not set" error.
+type MockRunCanceller struct {
+	contractkit.Recorder
+	TerminateFunc func(context.Context, string) error
+}
+
+// Terminate records the call and delegates to TerminateFunc when set.
+func (m *MockRunCanceller) Terminate(ctx context.Context, chatID string) error {
+	m.Recorder.Record("Terminate", ctx, chatID)
+	if m.TerminateFunc != nil {
+		return m.TerminateFunc(ctx, chatID)
+	}
+	return contractkit.MockNotSet("MockRunCanceller", "Terminate")
+}
+
+// Compile-time check.
+var _ RunCanceller = (*MockRunCanceller)(nil)
 
 // forge:section MockCapacityDescriber
 // forge:hash=a4fdc80178c99ed364f2cde1f6b06e709f0e510eb3554f1b1a1dc01e58c7c16f
