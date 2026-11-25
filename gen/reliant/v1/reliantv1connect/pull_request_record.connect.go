@@ -68,12 +68,14 @@ func NewPullRequestRecordServiceClient(httpClient connect.HTTPClient, baseURL st
 			httpClient,
 			baseURL+PullRequestRecordServiceGetPullRequestRecordProcedure,
 			connect.WithSchema(pullRequestRecordServiceMethods.ByName("GetPullRequestRecord")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listPullRequestRecords: connect.NewClient[v1.ListPullRequestRecordsRequest, v1.ListPullRequestRecordsResponse](
 			httpClient,
 			baseURL+PullRequestRecordServiceListPullRequestRecordsProcedure,
 			connect.WithSchema(pullRequestRecordServiceMethods.ByName("ListPullRequestRecords")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -117,12 +119,14 @@ func NewPullRequestRecordServiceHandler(svc PullRequestRecordServiceHandler, opt
 		PullRequestRecordServiceGetPullRequestRecordProcedure,
 		svc.GetPullRequestRecord,
 		connect.WithSchema(pullRequestRecordServiceMethods.ByName("GetPullRequestRecord")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	pullRequestRecordServiceListPullRequestRecordsHandler := connect.NewUnaryHandler(
 		PullRequestRecordServiceListPullRequestRecordsProcedure,
 		svc.ListPullRequestRecords,
 		connect.WithSchema(pullRequestRecordServiceMethods.ByName("ListPullRequestRecords")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.PullRequestRecordService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

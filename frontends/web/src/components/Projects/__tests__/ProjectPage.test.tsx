@@ -30,8 +30,8 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
   useNavigate: () => state.navigate,
   useParams: () => state.params,
   useRouter: () => ({ latestLocation: { pathname: "/projects/shop/workspaces" } }),
-  Link: ({ to, children, ...rest }: { to: string; children: ReactNode }) => (
-    <a href={to} {...rest}>
+  Link: ({ to, search, children, ...rest }: { to: string; search?: Record<string, string>; children: ReactNode }) => (
+    <a href={search ? `${to}?${new URLSearchParams(search)}` : to} {...rest}>
       {children}
     </a>
   ),
@@ -56,6 +56,10 @@ vi.mock("@/store/projectStore", () => ({
 vi.mock("../../Layout/AreaShell", () => ({ AreaShell: ({ children }: { children: ReactNode }) => <>{children}</> }));
 vi.mock("../../Settings/BranchesSection", () => ({ WorkspacesBody: () => <div data-testid="workspaces-body" /> }));
 vi.mock("../../Settings/projects/ProjectMachines", () => ({ ProjectMachines: () => <div data-testid="project-machines" /> }));
+// The Sharing section has its own tests (Sharing/__tests__/ProjectSharingSection): here, that Settings holds it.
+vi.mock("../../Sharing/ProjectSharingSection", () => ({
+  ProjectSharingSection: ({ project }: { project: { id: string } }) => <div data-testid="project-sharing" data-project={project.id} />,
+}));
 // The shell's chats card and its deploy empty state have their own tests: here, where they show.
 vi.mock("../ProjectChats", () => ({ ProjectChats: ({ projectId }: { projectId: string }) => <div data-testid="project-landing-chats" data-project={projectId} /> }));
 vi.mock("../../Forge/Console/AppSectionEmptyState", () => ({
@@ -116,7 +120,7 @@ describe("a project's page", () => {
     expect(screen.getByTestId("project-page-name")).toHaveTextContent("shop");
     const apps = screen.getAllByTestId("project-app");
     expect(apps.map((a) => a.getAttribute("data-app"))).toEqual(["shop", "docs"]);
-    expect(within(apps[0]).getByRole("link", { name: "Open console" })).toHaveAttribute("href", "/forge/p/shop");
+    expect(within(apps[0]).getByRole("link", { name: "Open console" })).toHaveAttribute("href", "/forge/p/shop?project=shop");
     expect(apps[0]).toHaveTextContent("prod, staging");
     expect(within(apps[1]).queryByRole("link", { name: "Open console" })).toBeNull();
     expect(apps[1]).toHaveTextContent("This org has no app of this name yet");
@@ -147,6 +151,7 @@ describe("a project's page", () => {
     rerender(<ProjectPageBody tab="settings" />);
     expect(screen.getByTestId("project-settings")).toBeInTheDocument();
     expect(screen.getByTestId("project-machines")).toBeInTheDocument();
+    expect(screen.getByTestId("project-sharing")).toHaveAttribute("data-project", "shop");
   });
 
   it("shows a shared project read-only: no checkouts, chats or tabs", () => {

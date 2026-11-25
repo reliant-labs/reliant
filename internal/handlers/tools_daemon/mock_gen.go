@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=55388fc5f55b08647a2767a1d0d1c190d9aa13884f5c72531b8409b2135aa170
+// forge:hash=4067dafef1a7363a7b0dc3cac8eda2fc438ffb7aa0fda491e683a85d0b4648b6
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -30,39 +30,23 @@ type MockRepository struct {
 	contractkit.Recorder
 	GetDaemonFunc                               func(context.Context, string) (*db.Daemon, error)
 	UpsertDaemonFunc                            func(context.Context, *db.Daemon) error
-	MergeDeclaredDaemonLabelsFunc               func(context.Context, string, string, bool, map[string]string, int) (bool, error)
 	GetDaemonStorageStateFunc                   func(context.Context, string) (string, error)
 	SetDaemonStorageStateFunc                   func(context.Context, string, string) error
-	SetDaemonLocalModelsFunc                    func(context.Context, string, string) error
 	UpsertDaemonAttachmentFunc                  func(context.Context, *db.DaemonAttachment) error
-	RenewDaemonAttachmentFunc                   func(context.Context, *db.DaemonAttachment) (bool, error)
-	ReleaseDaemonAttachmentFunc                 func(context.Context, string, time.Time) error
-	UpdateDaemonAttachmentPortsFunc             func(context.Context, string, []uint32) error
-	UpdateDaemonAttachmentMemoryFunc            func(context.Context, string, int64, int64, bool) error
-	UpdateDaemonAttachmentHealthFunc            func(context.Context, string, db.MachineHealth) error
-	GetProjectByPathAndUserInScopeFunc          func(context.Context, string, string, *core.OrgScope) (*db.Project, error)
 	GetProjectWithUserCheckFunc                 func(context.Context, string, string) (*db.Project, error)
 	CreateProjectFunc                           func(context.Context, *db.Project) error
-	WithMachineCheckoutsLockedFunc              func(context.Context, string, func(ctx context.Context) error) error
-	ResolveQueuedProjectDaemonFunc              func(context.Context, string, string) error
 	SyncProjectConfigSnapshotFunc               func(context.Context, *db.ProjectConfigRecord, bool, *core.OrgScope) (bool, error)
 	GetProjectMachineCatalogPushedAtFunc        func(context.Context, string, string) (time.Time, error)
 	CreateUserUpdateFunc                        func(context.Context, *db.UserUpdate) error
 	EmitUserRefetchFunc                         func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 	SetProjectForgeNameFunc                     func(context.Context, string, string, string) (bool, error)
 	ListProjectsFunc                            func(context.Context, db.ProjectFilters) ([]*db.Project, error)
-	ListProjectDaemonsForDaemonFunc             func(context.Context, string) ([]*core.ProjectDaemon, error)
-	StartQueuedProjectDaemonClonesFunc          func(context.Context, string) error
 	RecordObservedProjectDaemonInScopeFunc      func(context.Context, string, string, string, *string, *core.OrgScope) (bool, error)
 	MarkProjectDaemonInstalledInScopeFunc       func(context.Context, string, string, *core.OrgScope) (bool, error)
 	FailProjectDaemonInstallInScopeFunc         func(context.Context, string, string, string, *core.OrgScope) (bool, error)
-	GetProjectByRemoteURLAndUserInScopeFunc     func(context.Context, string, string, *core.OrgScope) (*db.Project, error)
-	DetachProjectDaemonOfOtherOrgFunc           func(context.Context, string, string, string, string) (bool, error)
-	ListProjectDaemonDetachmentsForDaemonFunc   func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
 	UpdateProjectFunc                           func(context.Context, *db.Project, string) error
 	ListReposByProjectFunc                      func(context.Context, string) ([]*core.Repo, error)
 	SetRepoForgeAppsFunc                        func(context.Context, string, []core.RepoForgeApp, bool) error
-	ListMachinePoolsForUserFunc                 func(context.Context, string) ([]*db.MachinePool, error)
 	RecordFailedProjectDaemonRestoreInScopeFunc func(context.Context, string, string, string, *string, string, *core.OrgScope) (bool, error)
 	ListDaemonsByUserIDFunc                     func(context.Context, string) ([]*db.Daemon, error)
 }
@@ -85,15 +69,6 @@ func (m *MockRepository) UpsertDaemon(ctx context.Context, daemon *db.Daemon) er
 	return contractkit.MockNotSet("MockRepository", "UpsertDaemon")
 }
 
-// MergeDeclaredDaemonLabels records the call and delegates to MergeDeclaredDaemonLabelsFunc when set.
-func (m *MockRepository) MergeDeclaredDaemonLabels(ctx context.Context, userID string, daemonID string, boundCredential bool, labels map[string]string, maxLabels int) (bool, error) {
-	m.Recorder.Record("MergeDeclaredDaemonLabels", ctx, userID, daemonID, boundCredential, labels, maxLabels)
-	if m.MergeDeclaredDaemonLabelsFunc != nil {
-		return m.MergeDeclaredDaemonLabelsFunc(ctx, userID, daemonID, boundCredential, labels, maxLabels)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "MergeDeclaredDaemonLabels")
-}
-
 // GetDaemonStorageState records the call and delegates to GetDaemonStorageStateFunc when set.
 func (m *MockRepository) GetDaemonStorageState(ctx context.Context, daemonID string) (string, error) {
 	m.Recorder.Record("GetDaemonStorageState", ctx, daemonID)
@@ -112,15 +87,6 @@ func (m *MockRepository) SetDaemonStorageState(ctx context.Context, daemonID str
 	return contractkit.MockNotSet("MockRepository", "SetDaemonStorageState")
 }
 
-// SetDaemonLocalModels records the call and delegates to SetDaemonLocalModelsFunc when set.
-func (m *MockRepository) SetDaemonLocalModels(ctx context.Context, daemonID string, inventoryJSON string) error {
-	m.Recorder.Record("SetDaemonLocalModels", ctx, daemonID, inventoryJSON)
-	if m.SetDaemonLocalModelsFunc != nil {
-		return m.SetDaemonLocalModelsFunc(ctx, daemonID, inventoryJSON)
-	}
-	return contractkit.MockNotSet("MockRepository", "SetDaemonLocalModels")
-}
-
 // UpsertDaemonAttachment records the call and delegates to UpsertDaemonAttachmentFunc when set.
 func (m *MockRepository) UpsertDaemonAttachment(ctx context.Context, att *db.DaemonAttachment) error {
 	m.Recorder.Record("UpsertDaemonAttachment", ctx, att)
@@ -128,60 +94,6 @@ func (m *MockRepository) UpsertDaemonAttachment(ctx context.Context, att *db.Dae
 		return m.UpsertDaemonAttachmentFunc(ctx, att)
 	}
 	return contractkit.MockNotSet("MockRepository", "UpsertDaemonAttachment")
-}
-
-// RenewDaemonAttachment records the call and delegates to RenewDaemonAttachmentFunc when set.
-func (m *MockRepository) RenewDaemonAttachment(ctx context.Context, att *db.DaemonAttachment) (bool, error) {
-	m.Recorder.Record("RenewDaemonAttachment", ctx, att)
-	if m.RenewDaemonAttachmentFunc != nil {
-		return m.RenewDaemonAttachmentFunc(ctx, att)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "RenewDaemonAttachment")
-}
-
-// ReleaseDaemonAttachment records the call and delegates to ReleaseDaemonAttachmentFunc when set.
-func (m *MockRepository) ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error {
-	m.Recorder.Record("ReleaseDaemonAttachment", ctx, daemonID, attachedAt)
-	if m.ReleaseDaemonAttachmentFunc != nil {
-		return m.ReleaseDaemonAttachmentFunc(ctx, daemonID, attachedAt)
-	}
-	return contractkit.MockNotSet("MockRepository", "ReleaseDaemonAttachment")
-}
-
-// UpdateDaemonAttachmentPorts records the call and delegates to UpdateDaemonAttachmentPortsFunc when set.
-func (m *MockRepository) UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error {
-	m.Recorder.Record("UpdateDaemonAttachmentPorts", ctx, daemonID, ports)
-	if m.UpdateDaemonAttachmentPortsFunc != nil {
-		return m.UpdateDaemonAttachmentPortsFunc(ctx, daemonID, ports)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpdateDaemonAttachmentPorts")
-}
-
-// UpdateDaemonAttachmentMemory records the call and delegates to UpdateDaemonAttachmentMemoryFunc when set.
-func (m *MockRepository) UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes int64, limitBytes int64, pressure bool) error {
-	m.Recorder.Record("UpdateDaemonAttachmentMemory", ctx, daemonID, usedBytes, limitBytes, pressure)
-	if m.UpdateDaemonAttachmentMemoryFunc != nil {
-		return m.UpdateDaemonAttachmentMemoryFunc(ctx, daemonID, usedBytes, limitBytes, pressure)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpdateDaemonAttachmentMemory")
-}
-
-// UpdateDaemonAttachmentHealth records the call and delegates to UpdateDaemonAttachmentHealthFunc when set.
-func (m *MockRepository) UpdateDaemonAttachmentHealth(ctx context.Context, daemonID string, health db.MachineHealth) error {
-	m.Recorder.Record("UpdateDaemonAttachmentHealth", ctx, daemonID, health)
-	if m.UpdateDaemonAttachmentHealthFunc != nil {
-		return m.UpdateDaemonAttachmentHealthFunc(ctx, daemonID, health)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpdateDaemonAttachmentHealth")
-}
-
-// GetProjectByPathAndUserInScope records the call and delegates to GetProjectByPathAndUserInScopeFunc when set.
-func (m *MockRepository) GetProjectByPathAndUserInScope(ctx context.Context, path string, userID string, scope *core.OrgScope) (*db.Project, error) {
-	m.Recorder.Record("GetProjectByPathAndUserInScope", ctx, path, userID, scope)
-	if m.GetProjectByPathAndUserInScopeFunc != nil {
-		return m.GetProjectByPathAndUserInScopeFunc(ctx, path, userID, scope)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetProjectByPathAndUserInScope")
 }
 
 // GetProjectWithUserCheck records the call and delegates to GetProjectWithUserCheckFunc when set.
@@ -200,24 +112,6 @@ func (m *MockRepository) CreateProject(ctx context.Context, project *db.Project)
 		return m.CreateProjectFunc(ctx, project)
 	}
 	return contractkit.MockNotSet("MockRepository", "CreateProject")
-}
-
-// WithMachineCheckoutsLocked records the call and delegates to WithMachineCheckoutsLockedFunc when set.
-func (m *MockRepository) WithMachineCheckoutsLocked(p0 context.Context, daemonID string, fn func(ctx context.Context) error) error {
-	m.Recorder.Record("WithMachineCheckoutsLocked", p0, daemonID, fn)
-	if m.WithMachineCheckoutsLockedFunc != nil {
-		return m.WithMachineCheckoutsLockedFunc(p0, daemonID, fn)
-	}
-	return contractkit.MockNotSet("MockRepository", "WithMachineCheckoutsLocked")
-}
-
-// ResolveQueuedProjectDaemon records the call and delegates to ResolveQueuedProjectDaemonFunc when set.
-func (m *MockRepository) ResolveQueuedProjectDaemon(ctx context.Context, requestID string, installErr string) error {
-	m.Recorder.Record("ResolveQueuedProjectDaemon", ctx, requestID, installErr)
-	if m.ResolveQueuedProjectDaemonFunc != nil {
-		return m.ResolveQueuedProjectDaemonFunc(ctx, requestID, installErr)
-	}
-	return contractkit.MockNotSet("MockRepository", "ResolveQueuedProjectDaemon")
 }
 
 // SyncProjectConfigSnapshot records the call and delegates to SyncProjectConfigSnapshotFunc when set.
@@ -274,24 +168,6 @@ func (m *MockRepository) ListProjects(ctx context.Context, filters db.ProjectFil
 	return nil, contractkit.MockNotSet("MockRepository", "ListProjects")
 }
 
-// ListProjectDaemonsForDaemon records the call and delegates to ListProjectDaemonsForDaemonFunc when set.
-func (m *MockRepository) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
-	m.Recorder.Record("ListProjectDaemonsForDaemon", ctx, daemonID)
-	if m.ListProjectDaemonsForDaemonFunc != nil {
-		return m.ListProjectDaemonsForDaemonFunc(ctx, daemonID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListProjectDaemonsForDaemon")
-}
-
-// StartQueuedProjectDaemonClones records the call and delegates to StartQueuedProjectDaemonClonesFunc when set.
-func (m *MockRepository) StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error {
-	m.Recorder.Record("StartQueuedProjectDaemonClones", ctx, daemonID)
-	if m.StartQueuedProjectDaemonClonesFunc != nil {
-		return m.StartQueuedProjectDaemonClonesFunc(ctx, daemonID)
-	}
-	return contractkit.MockNotSet("MockRepository", "StartQueuedProjectDaemonClones")
-}
-
 // RecordObservedProjectDaemonInScope records the call and delegates to RecordObservedProjectDaemonInScopeFunc when set.
 func (m *MockRepository) RecordObservedProjectDaemonInScope(ctx context.Context, projectID string, daemonID string, path string, defaultBranch *string, scope *core.OrgScope) (bool, error) {
 	m.Recorder.Record("RecordObservedProjectDaemonInScope", ctx, projectID, daemonID, path, defaultBranch, scope)
@@ -317,33 +193,6 @@ func (m *MockRepository) FailProjectDaemonInstallInScope(ctx context.Context, pr
 		return m.FailProjectDaemonInstallInScopeFunc(ctx, projectID, daemonID, installErr, scope)
 	}
 	return false, contractkit.MockNotSet("MockRepository", "FailProjectDaemonInstallInScope")
-}
-
-// GetProjectByRemoteURLAndUserInScope records the call and delegates to GetProjectByRemoteURLAndUserInScopeFunc when set.
-func (m *MockRepository) GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL string, userID string, scope *core.OrgScope) (*db.Project, error) {
-	m.Recorder.Record("GetProjectByRemoteURLAndUserInScope", ctx, remoteURL, userID, scope)
-	if m.GetProjectByRemoteURLAndUserInScopeFunc != nil {
-		return m.GetProjectByRemoteURLAndUserInScopeFunc(ctx, remoteURL, userID, scope)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetProjectByRemoteURLAndUserInScope")
-}
-
-// DetachProjectDaemonOfOtherOrg records the call and delegates to DetachProjectDaemonOfOtherOrgFunc when set.
-func (m *MockRepository) DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID string, daemonID string, userID string, machineOrg string) (bool, error) {
-	m.Recorder.Record("DetachProjectDaemonOfOtherOrg", ctx, projectID, daemonID, userID, machineOrg)
-	if m.DetachProjectDaemonOfOtherOrgFunc != nil {
-		return m.DetachProjectDaemonOfOtherOrgFunc(ctx, projectID, daemonID, userID, machineOrg)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "DetachProjectDaemonOfOtherOrg")
-}
-
-// ListProjectDaemonDetachmentsForDaemon records the call and delegates to ListProjectDaemonDetachmentsForDaemonFunc when set.
-func (m *MockRepository) ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error) {
-	m.Recorder.Record("ListProjectDaemonDetachmentsForDaemon", ctx, daemonID)
-	if m.ListProjectDaemonDetachmentsForDaemonFunc != nil {
-		return m.ListProjectDaemonDetachmentsForDaemonFunc(ctx, daemonID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListProjectDaemonDetachmentsForDaemon")
 }
 
 // UpdateProject records the call and delegates to UpdateProjectFunc when set.
@@ -373,15 +222,6 @@ func (m *MockRepository) SetRepoForgeApps(ctx context.Context, repoID string, ap
 	return contractkit.MockNotSet("MockRepository", "SetRepoForgeApps")
 }
 
-// ListMachinePoolsForUser records the call and delegates to ListMachinePoolsForUserFunc when set.
-func (m *MockRepository) ListMachinePoolsForUser(ctx context.Context, userID string) ([]*db.MachinePool, error) {
-	m.Recorder.Record("ListMachinePoolsForUser", ctx, userID)
-	if m.ListMachinePoolsForUserFunc != nil {
-		return m.ListMachinePoolsForUserFunc(ctx, userID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListMachinePoolsForUser")
-}
-
 // RecordFailedProjectDaemonRestoreInScope records the call and delegates to RecordFailedProjectDaemonRestoreInScopeFunc when set.
 func (m *MockRepository) RecordFailedProjectDaemonRestoreInScope(ctx context.Context, projectID string, daemonID string, path string, defaultBranch *string, installErr string, scope *core.OrgScope) (bool, error) {
 	m.Recorder.Record("RecordFailedProjectDaemonRestoreInScope", ctx, projectID, daemonID, path, defaultBranch, installErr, scope)
@@ -403,8 +243,90 @@ func (m *MockRepository) ListDaemonsByUserID(ctx context.Context, userID string)
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
 
+// forge:section MockMachineCheckouts
+// forge:hash=a281261f2ee0d7a1a0308a97bd7b6af4438146d7d1fd1d6b60735b1809e4ad04
+
+// MockMachineCheckouts is a test mock for the MachineCheckouts interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockMachineCheckouts.<Method>Func not set" error.
+type MockMachineCheckouts struct {
+	contractkit.Recorder
+	WithMachineCheckoutsLockedFunc            func(context.Context, string, func(ctx context.Context) error) error
+	DetachProjectDaemonOfOtherOrgFunc         func(context.Context, string, string, string, string) (bool, error)
+	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
+}
+
+// WithMachineCheckoutsLocked records the call and delegates to WithMachineCheckoutsLockedFunc when set.
+func (m *MockMachineCheckouts) WithMachineCheckoutsLocked(p0 context.Context, daemonID string, fn func(ctx context.Context) error) error {
+	m.Recorder.Record("WithMachineCheckoutsLocked", p0, daemonID, fn)
+	if m.WithMachineCheckoutsLockedFunc != nil {
+		return m.WithMachineCheckoutsLockedFunc(p0, daemonID, fn)
+	}
+	return contractkit.MockNotSet("MockMachineCheckouts", "WithMachineCheckoutsLocked")
+}
+
+// DetachProjectDaemonOfOtherOrg records the call and delegates to DetachProjectDaemonOfOtherOrgFunc when set.
+func (m *MockMachineCheckouts) DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID string, daemonID string, userID string, machineOrg string) (bool, error) {
+	m.Recorder.Record("DetachProjectDaemonOfOtherOrg", ctx, projectID, daemonID, userID, machineOrg)
+	if m.DetachProjectDaemonOfOtherOrgFunc != nil {
+		return m.DetachProjectDaemonOfOtherOrgFunc(ctx, projectID, daemonID, userID, machineOrg)
+	}
+	return false, contractkit.MockNotSet("MockMachineCheckouts", "DetachProjectDaemonOfOtherOrg")
+}
+
+// ListProjectDaemonDetachmentsForDaemon records the call and delegates to ListProjectDaemonDetachmentsForDaemonFunc when set.
+func (m *MockMachineCheckouts) ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error) {
+	m.Recorder.Record("ListProjectDaemonDetachmentsForDaemon", ctx, daemonID)
+	if m.ListProjectDaemonDetachmentsForDaemonFunc != nil {
+		return m.ListProjectDaemonDetachmentsForDaemonFunc(ctx, daemonID)
+	}
+	return nil, contractkit.MockNotSet("MockMachineCheckouts", "ListProjectDaemonDetachmentsForDaemon")
+}
+
+// Compile-time check.
+var _ MachineCheckouts = (*MockMachineCheckouts)(nil)
+
+// forge:section MockMachineDetachments
+// forge:hash=ca0f4be9fdd1190071c7e73e67e69cf36e4156c73cdf6f80fab1f7ca29b978b4
+
+// MockMachineDetachments is a test mock for the MachineDetachments interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockMachineDetachments.<Method>Func not set" error.
+type MockMachineDetachments struct {
+	contractkit.Recorder
+	DetachProjectDaemonOfOtherOrgFunc         func(context.Context, string, string, string, string) (bool, error)
+	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
+}
+
+// DetachProjectDaemonOfOtherOrg records the call and delegates to DetachProjectDaemonOfOtherOrgFunc when set.
+func (m *MockMachineDetachments) DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID string, daemonID string, userID string, machineOrg string) (bool, error) {
+	m.Recorder.Record("DetachProjectDaemonOfOtherOrg", ctx, projectID, daemonID, userID, machineOrg)
+	if m.DetachProjectDaemonOfOtherOrgFunc != nil {
+		return m.DetachProjectDaemonOfOtherOrgFunc(ctx, projectID, daemonID, userID, machineOrg)
+	}
+	return false, contractkit.MockNotSet("MockMachineDetachments", "DetachProjectDaemonOfOtherOrg")
+}
+
+// ListProjectDaemonDetachmentsForDaemon records the call and delegates to ListProjectDaemonDetachmentsForDaemonFunc when set.
+func (m *MockMachineDetachments) ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error) {
+	m.Recorder.Record("ListProjectDaemonDetachmentsForDaemon", ctx, daemonID)
+	if m.ListProjectDaemonDetachmentsForDaemonFunc != nil {
+		return m.ListProjectDaemonDetachmentsForDaemonFunc(ctx, daemonID)
+	}
+	return nil, contractkit.MockNotSet("MockMachineDetachments", "ListProjectDaemonDetachmentsForDaemon")
+}
+
+// Compile-time check.
+var _ MachineDetachments = (*MockMachineDetachments)(nil)
+
 // forge:section MockProjectReconcileStore
-// forge:hash=1d2cd24305b9eb09a590f8025a5d140c5f340e7befcf2ee3da8eba9cf47c1598
+// forge:hash=9644154d3dae81cb1041c66be0a83af9db2e27067cf016d990e78ce5c4555f3a
 
 // MockProjectReconcileStore is a test mock for the ProjectReconcileStore interface.
 //
@@ -415,17 +337,19 @@ var _ Repository = (*MockRepository)(nil)
 type MockProjectReconcileStore struct {
 	contractkit.Recorder
 	ListProjectsFunc                          func(context.Context, db.ProjectFilters) ([]*db.Project, error)
-	ListProjectDaemonsForDaemonFunc           func(context.Context, string) ([]*core.ProjectDaemon, error)
-	StartQueuedProjectDaemonClonesFunc        func(context.Context, string) error
 	RecordObservedProjectDaemonInScopeFunc    func(context.Context, string, string, string, *string, *core.OrgScope) (bool, error)
 	MarkProjectDaemonInstalledInScopeFunc     func(context.Context, string, string, *core.OrgScope) (bool, error)
 	FailProjectDaemonInstallInScopeFunc       func(context.Context, string, string, string, *core.OrgScope) (bool, error)
-	GetProjectByRemoteURLAndUserInScopeFunc   func(context.Context, string, string, *core.OrgScope) (*db.Project, error)
-	DetachProjectDaemonOfOtherOrgFunc         func(context.Context, string, string, string, string) (bool, error)
-	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
 	UpdateProjectFunc                         func(context.Context, *db.Project, string) error
 	ListReposByProjectFunc                    func(context.Context, string) ([]*core.Repo, error)
 	SetRepoForgeAppsFunc                      func(context.Context, string, []core.RepoForgeApp, bool) error
+	DetachProjectDaemonOfOtherOrgFunc         func(context.Context, string, string, string, string) (bool, error)
+	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
+	GetProjectByPathAndUserInScopeFunc        func(context.Context, string, string, *core.OrgScope) (*core.Project, error)
+	GetProjectByRemoteURLAndUserInScopeFunc   func(context.Context, string, string, *core.OrgScope) (*core.Project, error)
+	ListProjectDaemonsForDaemonFunc           func(context.Context, string) ([]*core.ProjectDaemon, error)
+	StartQueuedProjectDaemonClonesFunc        func(context.Context, string) error
+	ResolveQueuedProjectDaemonFunc            func(context.Context, string, string) error
 }
 
 // ListProjects records the call and delegates to ListProjectsFunc when set.
@@ -435,24 +359,6 @@ func (m *MockProjectReconcileStore) ListProjects(ctx context.Context, filters db
 		return m.ListProjectsFunc(ctx, filters)
 	}
 	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "ListProjects")
-}
-
-// ListProjectDaemonsForDaemon records the call and delegates to ListProjectDaemonsForDaemonFunc when set.
-func (m *MockProjectReconcileStore) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
-	m.Recorder.Record("ListProjectDaemonsForDaemon", ctx, daemonID)
-	if m.ListProjectDaemonsForDaemonFunc != nil {
-		return m.ListProjectDaemonsForDaemonFunc(ctx, daemonID)
-	}
-	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "ListProjectDaemonsForDaemon")
-}
-
-// StartQueuedProjectDaemonClones records the call and delegates to StartQueuedProjectDaemonClonesFunc when set.
-func (m *MockProjectReconcileStore) StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error {
-	m.Recorder.Record("StartQueuedProjectDaemonClones", ctx, daemonID)
-	if m.StartQueuedProjectDaemonClonesFunc != nil {
-		return m.StartQueuedProjectDaemonClonesFunc(ctx, daemonID)
-	}
-	return contractkit.MockNotSet("MockProjectReconcileStore", "StartQueuedProjectDaemonClones")
 }
 
 // RecordObservedProjectDaemonInScope records the call and delegates to RecordObservedProjectDaemonInScopeFunc when set.
@@ -482,33 +388,6 @@ func (m *MockProjectReconcileStore) FailProjectDaemonInstallInScope(ctx context.
 	return false, contractkit.MockNotSet("MockProjectReconcileStore", "FailProjectDaemonInstallInScope")
 }
 
-// GetProjectByRemoteURLAndUserInScope records the call and delegates to GetProjectByRemoteURLAndUserInScopeFunc when set.
-func (m *MockProjectReconcileStore) GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL string, userID string, scope *core.OrgScope) (*db.Project, error) {
-	m.Recorder.Record("GetProjectByRemoteURLAndUserInScope", ctx, remoteURL, userID, scope)
-	if m.GetProjectByRemoteURLAndUserInScopeFunc != nil {
-		return m.GetProjectByRemoteURLAndUserInScopeFunc(ctx, remoteURL, userID, scope)
-	}
-	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "GetProjectByRemoteURLAndUserInScope")
-}
-
-// DetachProjectDaemonOfOtherOrg records the call and delegates to DetachProjectDaemonOfOtherOrgFunc when set.
-func (m *MockProjectReconcileStore) DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID string, daemonID string, userID string, machineOrg string) (bool, error) {
-	m.Recorder.Record("DetachProjectDaemonOfOtherOrg", ctx, projectID, daemonID, userID, machineOrg)
-	if m.DetachProjectDaemonOfOtherOrgFunc != nil {
-		return m.DetachProjectDaemonOfOtherOrgFunc(ctx, projectID, daemonID, userID, machineOrg)
-	}
-	return false, contractkit.MockNotSet("MockProjectReconcileStore", "DetachProjectDaemonOfOtherOrg")
-}
-
-// ListProjectDaemonDetachmentsForDaemon records the call and delegates to ListProjectDaemonDetachmentsForDaemonFunc when set.
-func (m *MockProjectReconcileStore) ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error) {
-	m.Recorder.Record("ListProjectDaemonDetachmentsForDaemon", ctx, daemonID)
-	if m.ListProjectDaemonDetachmentsForDaemonFunc != nil {
-		return m.ListProjectDaemonDetachmentsForDaemonFunc(ctx, daemonID)
-	}
-	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "ListProjectDaemonDetachmentsForDaemon")
-}
-
 // UpdateProject records the call and delegates to UpdateProjectFunc when set.
 func (m *MockProjectReconcileStore) UpdateProject(ctx context.Context, project *db.Project, userID string) error {
 	m.Recorder.Record("UpdateProject", ctx, project, userID)
@@ -536,5 +415,338 @@ func (m *MockProjectReconcileStore) SetRepoForgeApps(ctx context.Context, repoID
 	return contractkit.MockNotSet("MockProjectReconcileStore", "SetRepoForgeApps")
 }
 
+// DetachProjectDaemonOfOtherOrg records the call and delegates to DetachProjectDaemonOfOtherOrgFunc when set.
+func (m *MockProjectReconcileStore) DetachProjectDaemonOfOtherOrg(ctx context.Context, projectID string, daemonID string, userID string, machineOrg string) (bool, error) {
+	m.Recorder.Record("DetachProjectDaemonOfOtherOrg", ctx, projectID, daemonID, userID, machineOrg)
+	if m.DetachProjectDaemonOfOtherOrgFunc != nil {
+		return m.DetachProjectDaemonOfOtherOrgFunc(ctx, projectID, daemonID, userID, machineOrg)
+	}
+	return false, contractkit.MockNotSet("MockProjectReconcileStore", "DetachProjectDaemonOfOtherOrg")
+}
+
+// ListProjectDaemonDetachmentsForDaemon records the call and delegates to ListProjectDaemonDetachmentsForDaemonFunc when set.
+func (m *MockProjectReconcileStore) ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error) {
+	m.Recorder.Record("ListProjectDaemonDetachmentsForDaemon", ctx, daemonID)
+	if m.ListProjectDaemonDetachmentsForDaemonFunc != nil {
+		return m.ListProjectDaemonDetachmentsForDaemonFunc(ctx, daemonID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "ListProjectDaemonDetachmentsForDaemon")
+}
+
+// GetProjectByPathAndUserInScope records the call and delegates to GetProjectByPathAndUserInScopeFunc when set.
+func (m *MockProjectReconcileStore) GetProjectByPathAndUserInScope(ctx context.Context, path string, userID string, scope *core.OrgScope) (*core.Project, error) {
+	m.Recorder.Record("GetProjectByPathAndUserInScope", ctx, path, userID, scope)
+	if m.GetProjectByPathAndUserInScopeFunc != nil {
+		return m.GetProjectByPathAndUserInScopeFunc(ctx, path, userID, scope)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "GetProjectByPathAndUserInScope")
+}
+
+// GetProjectByRemoteURLAndUserInScope records the call and delegates to GetProjectByRemoteURLAndUserInScopeFunc when set.
+func (m *MockProjectReconcileStore) GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL string, userID string, scope *core.OrgScope) (*core.Project, error) {
+	m.Recorder.Record("GetProjectByRemoteURLAndUserInScope", ctx, remoteURL, userID, scope)
+	if m.GetProjectByRemoteURLAndUserInScopeFunc != nil {
+		return m.GetProjectByRemoteURLAndUserInScopeFunc(ctx, remoteURL, userID, scope)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "GetProjectByRemoteURLAndUserInScope")
+}
+
+// ListProjectDaemonsForDaemon records the call and delegates to ListProjectDaemonsForDaemonFunc when set.
+func (m *MockProjectReconcileStore) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
+	m.Recorder.Record("ListProjectDaemonsForDaemon", ctx, daemonID)
+	if m.ListProjectDaemonsForDaemonFunc != nil {
+		return m.ListProjectDaemonsForDaemonFunc(ctx, daemonID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "ListProjectDaemonsForDaemon")
+}
+
+// StartQueuedProjectDaemonClones records the call and delegates to StartQueuedProjectDaemonClonesFunc when set.
+func (m *MockProjectReconcileStore) StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error {
+	m.Recorder.Record("StartQueuedProjectDaemonClones", ctx, daemonID)
+	if m.StartQueuedProjectDaemonClonesFunc != nil {
+		return m.StartQueuedProjectDaemonClonesFunc(ctx, daemonID)
+	}
+	return contractkit.MockNotSet("MockProjectReconcileStore", "StartQueuedProjectDaemonClones")
+}
+
+// ResolveQueuedProjectDaemon records the call and delegates to ResolveQueuedProjectDaemonFunc when set.
+func (m *MockProjectReconcileStore) ResolveQueuedProjectDaemon(ctx context.Context, requestID string, installErr string) error {
+	m.Recorder.Record("ResolveQueuedProjectDaemon", ctx, requestID, installErr)
+	if m.ResolveQueuedProjectDaemonFunc != nil {
+		return m.ResolveQueuedProjectDaemonFunc(ctx, requestID, installErr)
+	}
+	return contractkit.MockNotSet("MockProjectReconcileStore", "ResolveQueuedProjectDaemon")
+}
+
 // Compile-time check.
 var _ ProjectReconcileStore = (*MockProjectReconcileStore)(nil)
+
+// forge:section MockProjectReconcileRepo
+// forge:hash=2f39f34e7070e0ed39d5e5b09d3d7559453c592ba5a8be9ff3fc8bb9ee92b47d
+
+// MockProjectReconcileRepo is a test mock for the ProjectReconcileRepo interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProjectReconcileRepo.<Method>Func not set" error.
+type MockProjectReconcileRepo struct {
+	contractkit.Recorder
+	ListProjectsFunc                       func(context.Context, db.ProjectFilters) ([]*db.Project, error)
+	RecordObservedProjectDaemonInScopeFunc func(context.Context, string, string, string, *string, *core.OrgScope) (bool, error)
+	MarkProjectDaemonInstalledInScopeFunc  func(context.Context, string, string, *core.OrgScope) (bool, error)
+	FailProjectDaemonInstallInScopeFunc    func(context.Context, string, string, string, *core.OrgScope) (bool, error)
+	UpdateProjectFunc                      func(context.Context, *db.Project, string) error
+	ListReposByProjectFunc                 func(context.Context, string) ([]*core.Repo, error)
+	SetRepoForgeAppsFunc                   func(context.Context, string, []core.RepoForgeApp, bool) error
+}
+
+// ListProjects records the call and delegates to ListProjectsFunc when set.
+func (m *MockProjectReconcileRepo) ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error) {
+	m.Recorder.Record("ListProjects", ctx, filters)
+	if m.ListProjectsFunc != nil {
+		return m.ListProjectsFunc(ctx, filters)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReconcileRepo", "ListProjects")
+}
+
+// RecordObservedProjectDaemonInScope records the call and delegates to RecordObservedProjectDaemonInScopeFunc when set.
+func (m *MockProjectReconcileRepo) RecordObservedProjectDaemonInScope(ctx context.Context, projectID string, daemonID string, path string, defaultBranch *string, scope *core.OrgScope) (bool, error) {
+	m.Recorder.Record("RecordObservedProjectDaemonInScope", ctx, projectID, daemonID, path, defaultBranch, scope)
+	if m.RecordObservedProjectDaemonInScopeFunc != nil {
+		return m.RecordObservedProjectDaemonInScopeFunc(ctx, projectID, daemonID, path, defaultBranch, scope)
+	}
+	return false, contractkit.MockNotSet("MockProjectReconcileRepo", "RecordObservedProjectDaemonInScope")
+}
+
+// MarkProjectDaemonInstalledInScope records the call and delegates to MarkProjectDaemonInstalledInScopeFunc when set.
+func (m *MockProjectReconcileRepo) MarkProjectDaemonInstalledInScope(ctx context.Context, projectID string, daemonID string, scope *core.OrgScope) (bool, error) {
+	m.Recorder.Record("MarkProjectDaemonInstalledInScope", ctx, projectID, daemonID, scope)
+	if m.MarkProjectDaemonInstalledInScopeFunc != nil {
+		return m.MarkProjectDaemonInstalledInScopeFunc(ctx, projectID, daemonID, scope)
+	}
+	return false, contractkit.MockNotSet("MockProjectReconcileRepo", "MarkProjectDaemonInstalledInScope")
+}
+
+// FailProjectDaemonInstallInScope records the call and delegates to FailProjectDaemonInstallInScopeFunc when set.
+func (m *MockProjectReconcileRepo) FailProjectDaemonInstallInScope(ctx context.Context, projectID string, daemonID string, installErr string, scope *core.OrgScope) (bool, error) {
+	m.Recorder.Record("FailProjectDaemonInstallInScope", ctx, projectID, daemonID, installErr, scope)
+	if m.FailProjectDaemonInstallInScopeFunc != nil {
+		return m.FailProjectDaemonInstallInScopeFunc(ctx, projectID, daemonID, installErr, scope)
+	}
+	return false, contractkit.MockNotSet("MockProjectReconcileRepo", "FailProjectDaemonInstallInScope")
+}
+
+// UpdateProject records the call and delegates to UpdateProjectFunc when set.
+func (m *MockProjectReconcileRepo) UpdateProject(ctx context.Context, project *db.Project, userID string) error {
+	m.Recorder.Record("UpdateProject", ctx, project, userID)
+	if m.UpdateProjectFunc != nil {
+		return m.UpdateProjectFunc(ctx, project, userID)
+	}
+	return contractkit.MockNotSet("MockProjectReconcileRepo", "UpdateProject")
+}
+
+// ListReposByProject records the call and delegates to ListReposByProjectFunc when set.
+func (m *MockProjectReconcileRepo) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
+	m.Recorder.Record("ListReposByProject", ctx, projectID)
+	if m.ListReposByProjectFunc != nil {
+		return m.ListReposByProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReconcileRepo", "ListReposByProject")
+}
+
+// SetRepoForgeApps records the call and delegates to SetRepoForgeAppsFunc when set.
+func (m *MockProjectReconcileRepo) SetRepoForgeApps(ctx context.Context, repoID string, apps []core.RepoForgeApp, complete bool) error {
+	m.Recorder.Record("SetRepoForgeApps", ctx, repoID, apps, complete)
+	if m.SetRepoForgeAppsFunc != nil {
+		return m.SetRepoForgeAppsFunc(ctx, repoID, apps, complete)
+	}
+	return contractkit.MockNotSet("MockProjectReconcileRepo", "SetRepoForgeApps")
+}
+
+// Compile-time check.
+var _ ProjectReconcileRepo = (*MockProjectReconcileRepo)(nil)
+
+// forge:section MockAttachments
+// forge:hash=e6eefebcd27d45fa5af0241413d8a09563451cdce20b09374b65d2a127a8d8d0
+
+// MockAttachments is a test mock for the Attachments interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockAttachments.<Method>Func not set" error.
+type MockAttachments struct {
+	contractkit.Recorder
+	RenewDaemonAttachmentFunc        func(context.Context, *core.DaemonAttachment) (bool, error)
+	ReleaseDaemonAttachmentFunc      func(context.Context, string, time.Time) error
+	SetDaemonAttachmentPortsFunc     func(context.Context, string, []uint32) error
+	SetDaemonAttachmentMemoryFunc    func(context.Context, string, int64, int64, bool) error
+	SetDaemonAttachmentHealthFunc    func(context.Context, string, core.MachineHealth) error
+	SetDaemonAttachmentResourcesFunc func(context.Context, string, string) error
+}
+
+// RenewDaemonAttachment records the call and delegates to RenewDaemonAttachmentFunc when set.
+func (m *MockAttachments) RenewDaemonAttachment(ctx context.Context, att *core.DaemonAttachment) (bool, error) {
+	m.Recorder.Record("RenewDaemonAttachment", ctx, att)
+	if m.RenewDaemonAttachmentFunc != nil {
+		return m.RenewDaemonAttachmentFunc(ctx, att)
+	}
+	return false, contractkit.MockNotSet("MockAttachments", "RenewDaemonAttachment")
+}
+
+// ReleaseDaemonAttachment records the call and delegates to ReleaseDaemonAttachmentFunc when set.
+func (m *MockAttachments) ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error {
+	m.Recorder.Record("ReleaseDaemonAttachment", ctx, daemonID, attachedAt)
+	if m.ReleaseDaemonAttachmentFunc != nil {
+		return m.ReleaseDaemonAttachmentFunc(ctx, daemonID, attachedAt)
+	}
+	return contractkit.MockNotSet("MockAttachments", "ReleaseDaemonAttachment")
+}
+
+// SetDaemonAttachmentPorts records the call and delegates to SetDaemonAttachmentPortsFunc when set.
+func (m *MockAttachments) SetDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error {
+	m.Recorder.Record("SetDaemonAttachmentPorts", ctx, daemonID, ports)
+	if m.SetDaemonAttachmentPortsFunc != nil {
+		return m.SetDaemonAttachmentPortsFunc(ctx, daemonID, ports)
+	}
+	return contractkit.MockNotSet("MockAttachments", "SetDaemonAttachmentPorts")
+}
+
+// SetDaemonAttachmentMemory records the call and delegates to SetDaemonAttachmentMemoryFunc when set.
+func (m *MockAttachments) SetDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes int64, limitBytes int64, pressure bool) error {
+	m.Recorder.Record("SetDaemonAttachmentMemory", ctx, daemonID, usedBytes, limitBytes, pressure)
+	if m.SetDaemonAttachmentMemoryFunc != nil {
+		return m.SetDaemonAttachmentMemoryFunc(ctx, daemonID, usedBytes, limitBytes, pressure)
+	}
+	return contractkit.MockNotSet("MockAttachments", "SetDaemonAttachmentMemory")
+}
+
+// SetDaemonAttachmentHealth records the call and delegates to SetDaemonAttachmentHealthFunc when set.
+func (m *MockAttachments) SetDaemonAttachmentHealth(ctx context.Context, daemonID string, health core.MachineHealth) error {
+	m.Recorder.Record("SetDaemonAttachmentHealth", ctx, daemonID, health)
+	if m.SetDaemonAttachmentHealthFunc != nil {
+		return m.SetDaemonAttachmentHealthFunc(ctx, daemonID, health)
+	}
+	return contractkit.MockNotSet("MockAttachments", "SetDaemonAttachmentHealth")
+}
+
+// SetDaemonAttachmentResources records the call and delegates to SetDaemonAttachmentResourcesFunc when set.
+func (m *MockAttachments) SetDaemonAttachmentResources(ctx context.Context, daemonID string, statsJSON string) error {
+	m.Recorder.Record("SetDaemonAttachmentResources", ctx, daemonID, statsJSON)
+	if m.SetDaemonAttachmentResourcesFunc != nil {
+		return m.SetDaemonAttachmentResourcesFunc(ctx, daemonID, statsJSON)
+	}
+	return contractkit.MockNotSet("MockAttachments", "SetDaemonAttachmentResources")
+}
+
+// Compile-time check.
+var _ Attachments = (*MockAttachments)(nil)
+
+// forge:section MockLocalModels
+// forge:hash=ea7b082aeb1a64b216939993a028e51fa329ff11d3a1f0854a434cab81f89742
+
+// MockLocalModels is a test mock for the LocalModels interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockLocalModels.<Method>Func not set" error.
+type MockLocalModels struct {
+	contractkit.Recorder
+	SetDaemonLocalModelsFunc func(context.Context, string, string) error
+}
+
+// SetDaemonLocalModels records the call and delegates to SetDaemonLocalModelsFunc when set.
+func (m *MockLocalModels) SetDaemonLocalModels(ctx context.Context, daemonID string, inventoryJSON string) error {
+	m.Recorder.Record("SetDaemonLocalModels", ctx, daemonID, inventoryJSON)
+	if m.SetDaemonLocalModelsFunc != nil {
+		return m.SetDaemonLocalModelsFunc(ctx, daemonID, inventoryJSON)
+	}
+	return contractkit.MockNotSet("MockLocalModels", "SetDaemonLocalModels")
+}
+
+// Compile-time check.
+var _ LocalModels = (*MockLocalModels)(nil)
+
+// forge:section MockProjectLookups
+// forge:hash=624ff5345ed34ed2fcdcd1cd2dd963fa7f8e089638a49198c71b8cab231ae16b
+
+// MockProjectLookups is a test mock for the ProjectLookups interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProjectLookups.<Method>Func not set" error.
+type MockProjectLookups struct {
+	contractkit.Recorder
+	GetProjectByPathAndUserInScopeFunc      func(context.Context, string, string, *core.OrgScope) (*core.Project, error)
+	GetProjectByRemoteURLAndUserInScopeFunc func(context.Context, string, string, *core.OrgScope) (*core.Project, error)
+}
+
+// GetProjectByPathAndUserInScope records the call and delegates to GetProjectByPathAndUserInScopeFunc when set.
+func (m *MockProjectLookups) GetProjectByPathAndUserInScope(ctx context.Context, path string, userID string, scope *core.OrgScope) (*core.Project, error) {
+	m.Recorder.Record("GetProjectByPathAndUserInScope", ctx, path, userID, scope)
+	if m.GetProjectByPathAndUserInScopeFunc != nil {
+		return m.GetProjectByPathAndUserInScopeFunc(ctx, path, userID, scope)
+	}
+	return nil, contractkit.MockNotSet("MockProjectLookups", "GetProjectByPathAndUserInScope")
+}
+
+// GetProjectByRemoteURLAndUserInScope records the call and delegates to GetProjectByRemoteURLAndUserInScopeFunc when set.
+func (m *MockProjectLookups) GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL string, userID string, scope *core.OrgScope) (*core.Project, error) {
+	m.Recorder.Record("GetProjectByRemoteURLAndUserInScope", ctx, remoteURL, userID, scope)
+	if m.GetProjectByRemoteURLAndUserInScopeFunc != nil {
+		return m.GetProjectByRemoteURLAndUserInScopeFunc(ctx, remoteURL, userID, scope)
+	}
+	return nil, contractkit.MockNotSet("MockProjectLookups", "GetProjectByRemoteURLAndUserInScope")
+}
+
+// Compile-time check.
+var _ ProjectLookups = (*MockProjectLookups)(nil)
+
+// forge:section MockProjectDaemons
+// forge:hash=e6c9a8fda58562efce5718241539c4cbc519b2dac45d2225b193694b507e84d7
+
+// MockProjectDaemons is a test mock for the ProjectDaemons interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProjectDaemons.<Method>Func not set" error.
+type MockProjectDaemons struct {
+	contractkit.Recorder
+	ListProjectDaemonsForDaemonFunc    func(context.Context, string) ([]*core.ProjectDaemon, error)
+	StartQueuedProjectDaemonClonesFunc func(context.Context, string) error
+	ResolveQueuedProjectDaemonFunc     func(context.Context, string, string) error
+}
+
+// ListProjectDaemonsForDaemon records the call and delegates to ListProjectDaemonsForDaemonFunc when set.
+func (m *MockProjectDaemons) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
+	m.Recorder.Record("ListProjectDaemonsForDaemon", ctx, daemonID)
+	if m.ListProjectDaemonsForDaemonFunc != nil {
+		return m.ListProjectDaemonsForDaemonFunc(ctx, daemonID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectDaemons", "ListProjectDaemonsForDaemon")
+}
+
+// StartQueuedProjectDaemonClones records the call and delegates to StartQueuedProjectDaemonClonesFunc when set.
+func (m *MockProjectDaemons) StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error {
+	m.Recorder.Record("StartQueuedProjectDaemonClones", ctx, daemonID)
+	if m.StartQueuedProjectDaemonClonesFunc != nil {
+		return m.StartQueuedProjectDaemonClonesFunc(ctx, daemonID)
+	}
+	return contractkit.MockNotSet("MockProjectDaemons", "StartQueuedProjectDaemonClones")
+}
+
+// ResolveQueuedProjectDaemon records the call and delegates to ResolveQueuedProjectDaemonFunc when set.
+func (m *MockProjectDaemons) ResolveQueuedProjectDaemon(ctx context.Context, requestID string, installErr string) error {
+	m.Recorder.Record("ResolveQueuedProjectDaemon", ctx, requestID, installErr)
+	if m.ResolveQueuedProjectDaemonFunc != nil {
+		return m.ResolveQueuedProjectDaemonFunc(ctx, requestID, installErr)
+	}
+	return contractkit.MockNotSet("MockProjectDaemons", "ResolveQueuedProjectDaemon")
+}
+
+// Compile-time check.
+var _ ProjectDaemons = (*MockProjectDaemons)(nil)

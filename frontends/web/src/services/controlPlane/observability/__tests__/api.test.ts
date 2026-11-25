@@ -259,9 +259,9 @@ describe("traces and panels", () => {
 
   it("names a dashboard panel's read with Forge-Panel", async () => {
     client.queryPanel.mockResolvedValue({ panelId: "fleet-now", kind: "sql", unit: "", stepSeconds: 0, truncated: false, columns: [], rows: [], series: [], funnelSteps: [], issues: [], sessions: [] });
-    await queryPanel({ ...env, window, panel: { id: "fleet-now", title: "Fleet now", kind: "sql", signal: "traces", series: [], sql: "SELECT 1" }, services: [], stepSeconds: 0, dashboardId: "devboxes" });
+    await queryPanel({ ...env, window, panel: { id: "fleet-now", title: "Fleet now", kind: "sql", signal: "traces", series: [], sql: "SELECT 1" }, services: [], stepSeconds: 0, dashboardId: "sandboxes" });
     const options = client.queryPanel.mock.calls[0][1];
-    expect(options.headers).toEqual({ "Forge-Panel": "devboxes/fleet-now" });
+    expect(options.headers).toEqual({ "Forge-Panel": "sandboxes/fleet-now" });
     // the read scheduler's abort signal still rides along
     expect(options.signal).toBeInstanceOf(AbortSignal);
   });
@@ -687,10 +687,11 @@ describe("usage", () => {
     });
   });
 
-
-  it("surfaces the billing service's error", async () => {
-    client.getObservabilityUsage.mockRejectedValueOnce(new ConnectError("denied", Code.PermissionDenied));
-    await expect(getObservabilityUsage("org-1")).rejects.toMatchObject({ code: Code.PermissionDenied });
+  // control-plane#3095 removed ObservabilityService's copy of the rpc, so no
+  // error, Unimplemented included, sends the read anywhere else.
+  it.each([Code.Unimplemented, Code.PermissionDenied])("surfaces error code %s without falling back", async (code) => {
+    client.getObservabilityUsage.mockRejectedValueOnce(new ConnectError("failed", code));
+    await expect(getObservabilityUsage("org-1")).rejects.toMatchObject({ code });
     expect(services).toEqual(["observability_billing.v1.ObservabilityBillingService"]);
     expect(client.getObservabilityUsage).toHaveBeenCalledTimes(1);
   });

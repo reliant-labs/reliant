@@ -26,13 +26,14 @@ func TestListDeletedProjects_Generated(t *testing.T) {
 	store := ownedProjectRepo(t)
 	after := time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)
 	by := "test-user"
-	store.ListDeletedProjectsFunc = func(_ context.Context, userID string, _ *core.OrgScope, _ bool) ([]*core.Project, error) {
+	purges := &project.MockProjectPurges{}
+	purges.ListDeletedProjectsFunc = func(_ context.Context, userID string, _ *core.OrgScope, _ bool) ([]*core.Project, error) {
 		mine := ownedProject()
 		mine.DeleteAfter, mine.DeletedBy = &after, &by
 		other := &db.Project{ID: "p-9", UserID: "someone-else", Name: "theirs", DeleteAfter: &after, DeletedBy: &userID}
 		return []*core.Project{mine, other}, nil
 	}
-	svc := newService(t, store, nil)
+	svc := newServicePurges(t, store, purges)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListDeletedProjectsRequest, pb.ListDeletedProjectsResponse]{
 		{

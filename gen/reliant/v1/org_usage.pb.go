@@ -794,9 +794,9 @@ const file_reliant_v1_org_usage_proto_rawDesc = "" +
 	"(ORG_LLM_COST_ESTIMATE_STATUS_UNSPECIFIED\x10\x00\x12*\n" +
 	"&ORG_LLM_COST_ESTIMATE_STATUS_AVAILABLE\x10\x01\x12,\n" +
 	"(ORG_LLM_COST_ESTIMATE_STATUS_UNAVAILABLE\x10\x02\x12%\n" +
-	"!ORG_LLM_COST_ESTIMATE_STATUS_NONE\x10\x032\xa7\x01\n" +
-	"\x0fOrgUsageService\x12\x93\x01\n" +
-	"\x0eGetOrgLLMUsage\x12!.reliant.v1.GetOrgLLMUsageRequest\x1a\".reliant.v1.GetOrgLLMUsageResponse\":\xa2\xbb\x186:4:2read-only: the org's usage totals; changes nothingB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"!ORG_LLM_COST_ESTIMATE_STATUS_NONE\x10\x032\xaa\x01\n" +
+	"\x0fOrgUsageService\x12\x96\x01\n" +
+	"\x0eGetOrgLLMUsage\x12!.reliant.v1.GetOrgLLMUsageRequest\x1a\".reliant.v1.GetOrgLLMUsageResponse\"=\xa2\xbb\x186:4:2read-only: the org's usage totals; changes nothing\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_org_usage_proto_rawDescOnce sync.Once

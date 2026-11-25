@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/vault"
@@ -84,7 +85,7 @@ func (e *triggerTestEnv) createConnection(t *testing.T, userID, integration, acc
 		ExternalAccountID: &account, Status: status,
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	require.NoError(t, e.repo.Connections().CreateConnection(context.Background(), conn, nil,
+	require.NoError(t, db.TestConnections(t, e.repo).CreateConnection(context.Background(), conn, nil,
 		core.ConnectionEvent{ConnectionID: conn.ID, UserID: userID, Kind: core.ConnectionEventCreated, Actor: "user:" + userID}))
 	return conn
 }

@@ -102,7 +102,7 @@ func (a *ExecuteToolsActivity) persistCappedToolResult(ctx context.Context, chat
 
 	readCtx, cancel := detachedForTerminalWrite(ctx)
 	defer cancel()
-	call, err := a.repo.GetToolCall(readCtx, result.ToolCallID)
+	call, err := a.toolCalls.FindToolCall(readCtx, result.ToolCallID)
 	// Only this chat's call: another chat's under the same provider-chosen id
 	// is not this batch's to rewrite (and the write would be refused anyway).
 	if err != nil || call == nil || call.ChatID != chatID || !call.Status.IsTerminal() {

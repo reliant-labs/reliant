@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -267,6 +268,12 @@ type daemonConnection struct {
 	// last read, when its lines were last logged, and whether a label read
 	// error has been logged. Only the inbound state worker touches it.
 	machineStats machineStatsState
+
+	// Resource-stats bookkeeping (see recordResourceStats): when the
+	// heartbeat's resource reading was last stored on the lease. Zero after a
+	// re-created lease, so the next heartbeat writes it again. Only the
+	// inbound state worker touches it.
+	resourcesWrittenAt time.Time
 
 	// Local-model relay (see localmodel_gateway.go). Guarded by localModelMu.
 	localModelMu sync.Mutex
@@ -564,12 +571,12 @@ func leaseTime(t time.Time) time.Time {
 // finishes first and this release wins; any later one sees done closed and
 // does nothing (renewLease).
 func (s *Service) releaseLease(ctx context.Context, conn *daemonConnection) error {
-	if s.deps.Repo == nil || conn.attachedAt.IsZero() {
+	if s.deps.Attachments == nil || conn.attachedAt.IsZero() {
 		return nil // no lease was written for this connection
 	}
 	conn.leaseMu.Lock()
 	defer conn.leaseMu.Unlock()
-	return s.deps.Repo.ReleaseDaemonAttachment(ctx, conn.daemonID, conn.attachedAt)
+	return s.deps.Attachments.ReleaseDaemonAttachment(ctx, conn.daemonID, conn.attachedAt)
 }
 
 // errDaemonSuperseded ends the stream of a connection whose daemonID slot was

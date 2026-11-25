@@ -22,13 +22,16 @@ const staleApprovalBatch = 200
 // the close is announced on its chat's feed (db.ResolvePendingApproval). A
 // failed or paused run is resumable and keeps its approval.
 func (r *Reconciler) resolveStaleApprovals(ctx context.Context, stats *passStats) (int, error) {
-	stale, err := r.repo.ListStaleApprovals(ctx, staleApprovalBatch)
+	if r.approvals == nil {
+		return 0, nil
+	}
+	stale, err := r.approvals.ListStaleApprovals(ctx, staleApprovalBatch)
 	if err != nil {
 		return 0, fmt.Errorf("failed to list stale approvals: %w", err)
 	}
 	closed := 0
 	for _, a := range stale {
-		ok, err := r.repo.ResolvePendingApproval(ctx, a.ID,
+		ok, err := r.approvals.ResolvePendingApproval(ctx, a.ID,
 			int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED),
 			"This request can no longer be answered: "+a.Why+". Nothing was approved.", "run_ended")
 		if err != nil {
@@ -54,16 +57,19 @@ func (r *Reconciler) resolveStaleApprovals(ctx context.Context, stats *passStats
 // completion once per process; every close announces itself now, so a later
 // pass would find nothing.
 func (r *Reconciler) announceApprovalResolutions(ctx context.Context, stats *passStats) error {
+	if r.approvals == nil {
+		return nil
+	}
 	if r.approvalFeedRepaired.Load() {
 		return nil
 	}
 	for {
-		rows, err := r.repo.ListUnannouncedApprovalResolutions(ctx, staleApprovalBatch)
+		rows, err := r.approvals.ListUnannouncedApprovalResolutions(ctx, staleApprovalBatch)
 		if err != nil {
 			return fmt.Errorf("failed to list unannounced approval resolutions: %w", err)
 		}
 		for _, a := range rows {
-			if err := r.repo.AnnounceApprovalResolution(ctx, a); err != nil {
+			if err := r.approvals.AnnounceApprovalResolution(ctx, a); err != nil {
 				// Retried on the next pass: the flag stays unset.
 				return fmt.Errorf("failed to announce approval %s: %w", a.ID, err)
 			}

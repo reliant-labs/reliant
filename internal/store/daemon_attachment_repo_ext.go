@@ -88,7 +88,8 @@ func UpsertDaemonAttachment(ctx context.Context, db orm.Context, att *core.Daemo
 			health_state = '',
 			health_code = '',
 			health_reason = '',
-			health_since = NULL
+			health_since = NULL,
+			resource_stats = ''
 		WHERE daemon_attachment.user_id = EXCLUDED.user_id
 		   OR EXISTS (SELECT 1 FROM daemons d WHERE d.id = EXCLUDED.daemon_id AND d.user_id = EXCLUDED.user_id)`,
 		att.DaemonID, att.UserID, string(att.Source), att.PodIP, att.PodPort, att.AttachedAt, att.LastStreamActivity,
@@ -107,6 +108,15 @@ func UpsertDaemonAttachment(ctx context.Context, db orm.Context, att *core.Daemo
 // constant for a session, and a renewal that finds the row leaves it alone.
 // Bound ($N): it runs on every heartbeat.
 func RenewDaemonAttachment(ctx context.Context, db orm.Context, att *core.DaemonAttachment) (created bool, err error) {
+	if att == nil || att.DaemonID == "" || att.UserID == "" || att.Source == "" {
+		return false, fmt.Errorf("renewing daemon attachment requires daemon_id, user_id and source")
+	}
+	// A renewal names its session (attached_at). Defaulting it would make a
+	// renewal look like a newer session and adopt, and so outlive, a lease its
+	// real session can then no longer release.
+	if att.AttachedAt.IsZero() || att.LastStreamActivity.IsZero() {
+		return false, fmt.Errorf("renewing daemon attachment requires attached_at and last_stream_activity")
+	}
 	err = db.QueryRow(ctx, `
 		INSERT INTO daemon_attachment (daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity,
 			build_version, build_commit, build_commit_time_unix, build_forge_version)
@@ -130,6 +140,9 @@ func RenewDaemonAttachment(ctx context.Context, db orm.Context, att *core.Daemon
 // on the lease. A no-op when there is no lease; last_stream_activity is left
 // to RenewDaemonAttachment.
 func SetDaemonAttachmentMemory(ctx context.Context, db orm.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
 	row := &DaemonAttachment{DaemonID: daemonID, MemoryUsedBytes: usedBytes, MemoryLimitBytes: limitBytes, MemoryPressure: pressure}
 	return ignoreNoRows(UpdateDaemonAttachmentMasked(ctx, db, row,
 		[]string{DaemonAttachmentFieldMemoryUsedBytes, DaemonAttachmentFieldMemoryLimitBytes, DaemonAttachmentFieldMemoryPressure},
@@ -139,6 +152,9 @@ func SetDaemonAttachmentMemory(ctx context.Context, db orm.Context, daemonID str
 // SetDaemonAttachmentPorts records a heartbeat's detected listener ports on
 // the lease, JSON-encoded (nil is []). A no-op when there is no lease.
 func SetDaemonAttachmentPorts(ctx context.Context, db orm.Context, daemonID string, ports []uint32) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
 	if ports == nil {
 		ports = []uint32{}
 	}
@@ -155,6 +171,9 @@ func SetDaemonAttachmentPorts(ctx context.Context, db orm.Context, daemonID stri
 // SetDaemonAttachmentHealth records a heartbeat's machine health on the
 // lease. A no-op when there is no lease.
 func SetDaemonAttachmentHealth(ctx context.Context, db orm.Context, daemonID string, h core.MachineHealth) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
 	row := &DaemonAttachment{DaemonID: daemonID, HealthState: string(h.State), HealthCode: h.Code, HealthReason: h.Reason}
 	if !h.Since.IsZero() {
 		since := h.Since
@@ -165,12 +184,27 @@ func SetDaemonAttachmentHealth(ctx context.Context, db orm.Context, daemonID str
 		crud.NoReadBack()))
 }
 
+// SetDaemonAttachmentResources records a heartbeat's resource reading on the
+// lease (protojson of reliantv1.DaemonResourceStats). A no-op when there is
+// no lease.
+func SetDaemonAttachmentResources(ctx context.Context, db orm.Context, daemonID, statsJSON string) error {
+	row := &DaemonAttachment{DaemonID: daemonID, ResourceStats: statsJSON}
+	return ignoreNoRows(UpdateDaemonAttachmentMasked(ctx, db, row,
+		[]string{DaemonAttachmentFieldResourceStats}, crud.NoReadBack()))
+}
+
 // ReleaseDaemonAttachment deletes the lease a stream session created when it
 // ends — the row whose attached_at is at or before the session's own, so a
 // stale teardown cannot delete a newer session's lease — and moves the
 // released lease's last_stream_activity onto daemons.last_seen_at, forward
 // only, in the same statement.
 func ReleaseDaemonAttachment(ctx context.Context, db orm.Context, daemonID string, attachedAt time.Time) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	if attachedAt.IsZero() {
+		return fmt.Errorf("releasing daemon attachment %s requires the session's attached_at", daemonID)
+	}
 	_, err := db.Bun().NewRaw(`
 		WITH released AS (
 			DELETE FROM daemon_attachment
@@ -295,12 +329,13 @@ func listDaemonAttachments(ctx context.Context, db orm.Context, filter func(*bun
 			row.AttachedAt, row.LastStreamActivity, row.MemoryUsedBytes, row.MemoryLimitBytes, row.MemoryPressure, detected,
 			core.DaemonBuild{Version: row.BuildVersion, Commit: row.BuildCommit, CommitTimeUnix: row.BuildCommitTimeUnix, ForgeVersion: row.BuildForgeVersion},
 			machineHealth(row.HealthState, row.HealthCode, row.HealthReason, row.HealthSince))
+		out[i].ResourceStats = row.ResourceStats
 	}
 	return out, nil
 }
 
 // daemonAttachmentColumns is the column list scanDaemonAttachments reads, in order.
-const daemonAttachmentColumns = `daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity, memory_used_bytes, memory_limit_bytes, memory_pressure, detected_ports, build_version, build_commit, build_commit_time_unix, build_forge_version, health_state, health_code, health_reason, health_since`
+const daemonAttachmentColumns = `daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity, memory_used_bytes, memory_limit_bytes, memory_pressure, detected_ports, build_version, build_commit, build_commit_time_unix, build_forge_version, health_state, health_code, health_reason, health_since, resource_stats`
 
 func scanDaemonAttachments(rows *sql.Rows) ([]*core.DaemonAttachment, error) {
 	defer rows.Close()
@@ -316,10 +351,11 @@ func scanDaemonAttachments(rows *sql.Rows) ([]*core.DaemonAttachment, error) {
 			build                              core.DaemonBuild
 			healthState, healthCode, healthWhy string
 			healthSince                        sql.NullTime
+			resources                          string
 		)
 		if err := rows.Scan(&daemonID, &userID, &source, &podIP, &podPort, &attachedAt, &lastActivity, &used, &limit, &pressure, &detected,
 			&build.Version, &build.Commit, &build.CommitTimeUnix, &build.ForgeVersion,
-			&healthState, &healthCode, &healthWhy, &healthSince); err != nil {
+			&healthState, &healthCode, &healthWhy, &healthSince, &resources); err != nil {
 			return nil, fmt.Errorf("scanning attachment: %w", err)
 		}
 		var ip *string
@@ -335,8 +371,10 @@ func scanDaemonAttachments(rows *sql.Rows) ([]*core.DaemonAttachment, error) {
 		if healthSince.Valid {
 			since = &healthSince.Time
 		}
-		out = append(out, daemonAttachmentToCore(daemonID, userID, core.DaemonAttachmentSource(source), ip, port,
-			attachedAt, lastActivity, used, limit, pressure, detected, build, machineHealth(healthState, healthCode, healthWhy, since)))
+		att := daemonAttachmentToCore(daemonID, userID, core.DaemonAttachmentSource(source), ip, port,
+			attachedAt, lastActivity, used, limit, pressure, detected, build, machineHealth(healthState, healthCode, healthWhy, since))
+		att.ResourceStats = resources
+		out = append(out, att)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterating attachments: %w", err)

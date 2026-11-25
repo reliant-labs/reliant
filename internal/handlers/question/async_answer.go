@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/askuser"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -162,7 +163,7 @@ func (s *Service) deliverAsyncAnswer(ctx context.Context, chat *db.Chat, questio
 // is in. PendingQuestionsByThread holds blocking questions only, so the async
 // one being answered is never it.
 func (s *Service) parkedOnBlockingQuestion(ctx context.Context, chatID, thread string) (bool, error) {
-	byThread, err := s.deps.Repo.PendingQuestionsByThread(ctx, chatID)
+	byThread, err := s.deps.Questions.PendingQuestionsByThread(ctx, chatID)
 	if err != nil {
 		return false, svcerr.WrapOr(err, svcerr.Internal("failed to check the asking thread's questions"))
 	}
@@ -179,7 +180,7 @@ func (s *Service) queueBehindBlockingQuestion(ctx context.Context, chat *db.Chat
 	if from == "" {
 		from = thread
 	}
-	if _, err := s.deps.Repo.EnqueueAgentMessageOnce(ctx, &db.AgentMessage{
+	if _, err := s.deps.Mailbox.EnqueueAgentMessageOnce(ctx, &db.AgentMessage{
 		ID:           asyncAnswerMessageID(questionID, thread, body),
 		FromThreadID: from,
 		ChatID:       chat.ID,

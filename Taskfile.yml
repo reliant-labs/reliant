@@ -376,9 +376,14 @@ tasks:
     # -timeout 300s per package (the retired Makefile's budget); P8 moves it
     # toward forge's 120s once the overruns are measured and gated. It stops
     # nothing: other agents' environments are not this task's to touch.
+    #
+    # Recorded: the Go tests as lane `unit` of a forge test run (results and
+    # coverage under .forge/tests/runs/), the web tests as lane `frontend`
+    # (scripts/test-capture.sh); `forge test report` summarises them. The
+    # verdict is the tests' own; FORGE_TESTS=off records nothing.
     desc: Run Go unit tests (-race -count=1) and the web and electron tests (excludes integration + e2e)
     cmds:
-      - '{{.SLOT}} go test {{.GOTESTRACE}} -count=1 -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
+      - '{{.SLOT}} ./scripts/test-capture.sh go unit {{.GOTESTRACE}} -count=1 -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
       - task: test:sdk:full
         if: '[ -z "{{.CLI_ARGS}}" ]'
       - task: test:web
@@ -396,15 +401,16 @@ tasks:
         pkgs="{{.CLI_ARGS}}"
         [ -n "$pkgs" ] || pkgs=$(./scripts/integration-packages.sh | tr '\n' ' ')
         if [ -z "$pkgs" ]; then echo "test:integration: no integration-tagged test files; nothing to run"; exit 0; fi
-        {{.SLOT}} go test {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m $pkgs
+        {{.SLOT}} ./scripts/test-capture.sh go integration {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m $pkgs
 
   test:e2e:
     # e2e/stories: real Postgres (pgtest's, as every DB-backed test) + an
     # ephemeral Temporal dev server (the test starts it) + a scripted LLM.
-    # `--` args replace the default package.
+    # `--` args replace the default package. Recorded as lane `e2e`
+    # (scripts/test-capture.sh), its -v output printed as before.
     desc: Run the hermetic story e2e tests (-tags e2e, ./e2e/stories/)
     cmds:
-      - go test -tags e2e -count=1 -timeout=10m -v {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./e2e/stories/{{end}}
+      - ./scripts/test-capture.sh go e2e -tags e2e -count=1 -timeout=10m -v {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./e2e/stories/{{end}}
 
   test:all:
     desc: Run the unit (Go + web + electron) and integration suites (e2e has its own task)
@@ -459,7 +465,9 @@ tasks:
     desc: Run the web unit tests (vitest, every file — prefer task test:affected LANES=web)
     dir: frontends/web
     cmds:
-      - '{{.SLOT}} npm test -- --run'
+      # Recorded as lane `frontend`, with v8 coverage (vite.config.ts reads
+      # FORGE_TEST_LANE_DIR; scripts/test-capture.sh).
+      - '{{.SLOT}} ../../scripts/test-capture.sh vitest frontend npm test -- --run'
 
   test:web:coverage:
     desc: Run the web unit tests with coverage
@@ -483,7 +491,9 @@ tasks:
 
   ci:
     # The whole local gate: forge's checks (verify-generated, golangci-lint,
-    # buf-lint, migration-safety, go-build, vuln-go, license-check) plus
+    # buf-lint, migration-safety, each frontend's lint/typecheck/build,
+    # go-build, vuln-go, vuln-npm, vuln-sbom, secret-scan, license-check,
+    # flake-check; `forge ci gate --list`) plus
     # forge.yaml's ci.gate.extra_checks (test-affected in place of forge's
     # unit-tests, web, electron, docs-generate, the pin and repo checks), in
     # ONE summary table. Every check runs even if an earlier one failed; a
@@ -545,7 +555,7 @@ tasks:
   # lanes below are the rest, each one task. Every one runs on a laptop too.
 
   ci:lanes:
-    desc: "Which path-selected CI lanes a change reaches (web, playwright, electron, cp_contract): -- --base <rev> | --full"
+    desc: "Which path-selected CI lanes a change reaches (web, playwright, electron, visual, cp_contract): -- --base <rev> | --full"
     cmds:
       - ./scripts/ci-lanes.sh {{.CLI_ARGS}}
 
@@ -596,6 +606,15 @@ tasks:
       - cd frontends/web && NODE_ENV=production npm run build
       - node .github/scripts/verify-bundle.mjs --dist frontends/web/dist
 
+  demo:bundle-size:
+    # The forge demo bundle against frontends/web/scripts/demo/bundle-budget.json:
+    # the release gate's demo-size step (scripts/release-gate.sh). It gates
+    # there only; a pull request that moves the demo pastes its
+    # `-- --report-only` table (dev-docs/demo-inventory.md, "Bundle size").
+    desc: "Build the forge demo and check its size against the budget, as a markdown table: -- --report-only | --json-out <f> | --before <f>"
+    cmds:
+      - ./scripts/demo-bundle-size.sh {{.CLI_ARGS}}
+
   test:web:e2e:
     desc: Run desktop Chromium and representative touch Chromium/WebKit against the built renderer
     cmds:
@@ -633,10 +652,11 @@ tasks:
     # frozen clock, in dark and light at 1440x900 and dark at 390x844,
     # compared with the committed e2e/visual/__screenshots__. It runs in the
     # pinned Playwright Linux image (scripts/visual-docker.sh; needs docker),
-    # so the baselines match on every host. Opt-in: no gate runs it (a
-    # browser and a production build, ~5 minutes on a loaded host). A UI PR
-    # runs it and commits re-captured baselines, so the PR diff is the before
-    # and after. VISUAL_SKIP_BUILD=1 reuses dist/; `-- --update-snapshots`
+    # so the baselines match on every host. A UI PR runs it and commits
+    # re-captured baselines, so the PR diff is the before and after. The
+    # merge queue runs it compare-only when a group reaches the web UI, and
+    # visual-nightly.yml on main (scripts/visual-gate.sh, which calls this
+    # task with --update-snapshots=none; ~5 minutes on a loaded host). VISUAL_SKIP_BUILD=1 reuses dist/; `-- --update-snapshots`
     # re-captures; `-- --grep chat` narrows it. The build pins its version
     # (RELEASE_VERSION) so the settings footer reads the same whatever commit
     # or working tree built it; it must equal VISUAL_RELEASE_VERSION in
@@ -1071,9 +1091,14 @@ tasks:
       - '{{.FORGE}} ui sourcemaps push {{.DIST}} --frontend desktop --build-id {{.BUILD_ID}} --env desktop --project {{.PROJECT}} --org {{.ORG}} {{.CLI_ARGS}}'
 
   flake:report:test:
-    desc: Self-test of scripts/flake-report.sh (a retried pass is a suspected flake; a data race never is) against a throwaway module
+    desc: Self-test of scripts/flake-report.sh (what it hands forge test flakes confirm/--issues, and its own --sweep) against a fake forge and gh
     cmds:
       - ./scripts/test-flake-report.sh
+
+  test:capture:test:
+    desc: Self-test of scripts/test-capture.sh (a Vitest lane recorded in one checkout reports repo-relative paths and blob ids in another)
+    cmds:
+      - ./scripts/test-test-capture.sh
 
   forge:resolve:test:
     desc: Self-test of scripts/forge.sh (which forge tasks and scripts run - FORGE_BIN, forge at the pin, reliant forge, go run) against fake binaries

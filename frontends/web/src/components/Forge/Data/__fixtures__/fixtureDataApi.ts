@@ -4,8 +4,9 @@
  * An in-memory DataBrowserApi: a small shop's database, answered the way
  * control-plane's AppDatabaseService answers (filters, sort, offset paging,
  * has_more, ESTIMATED and capped EXACT counts, the audited environment's
- * confirmation), so the component tests and the dev-only preview
- * (/forge-data-preview) exercise the real browser against real behaviour.
+ * confirmation), so the component tests exercise the real browser against
+ * real behaviour. (The dev-only preview, /forge-data-preview, renders the
+ * shop fixture pack.)
  *
  *   environments  env-prod (prod, AUDITED), env-staging (staging, OPEN),
  *                 env-dev (dev, OPEN)
@@ -36,12 +37,6 @@ import type {
   DbTable,
 } from "@/services/controlPlane/observability/appDatabaseApi";
 import type { DataBrowserApi } from "@/services/controlPlane/observability/DataBrowserApiContext";
-
-export const DATA_FIXTURE_ENVS = [
-  { id: "env-prod", name: "prod" },
-  { id: "env-staging", name: "staging" },
-  { id: "env-dev", name: "dev" },
-] as const;
 
 export interface DataFixtureOptions {
   /** Every database's policy, per environment id (default: prod audited, the rest open). */

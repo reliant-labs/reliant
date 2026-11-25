@@ -24,8 +24,12 @@
 // cancelled (skipped, superseded), timed_out, an engine fault (failure,
 // titled "Reliant could not run this check"), never neutral or skipped.
 //
-// Built by hand, by internal/app's NewWorkflowChecks provider
-// (providers_worker.go): never a node compose.go constructs from Deps.
+// Two configurations, each a variant type in internal/app: RecordOnlyChecks
+// (no GitHub) for the fire and run activities, and SyncingChecks (GitHub, the
+// broker and RunURL), wrapped in the Syncer its consumers take. The package
+// itself has no default configuration, so it stays provided: only those two
+// providers construct it (forge's graph lint would otherwise report it
+// unreachable, since no consumer takes the plain Service).
 //
 //forge:provided
 package workflowcheck

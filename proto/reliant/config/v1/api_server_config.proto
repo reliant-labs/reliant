@@ -255,9 +255,24 @@ message ApiServerConfig {
   // endpoint accepts, comma-separated (typically the Supabase project URL).
   // None: connectors authenticate with rlat_ connector credentials only, and
   // OAuth discovery is not advertised.
+  //
+  // Listing the control plane (RELIANT_AUTHORIZATION_SERVER, compared with
+  // trailing slashes trimmed) here also makes the workspace connector accept
+  // the mcp:oauth access tokens that control plane issues to MCP clients for
+  // this endpoint. Clients use the first server listed, so naming it second,
+  // behind Supabase, accepts its tokens without moving anyone to it.
   repeated string mcp_oauth_issuers = 34 [(forge.v1.config) = {
     env_var: "MCP_OAUTH_ISSUERS"
     description: "Comma-separated OAuth issuers whose tokens the connector endpoint accepts"
+  }];
+
+  // The OAuth scopes the connector endpoints advertise (RFC 9728
+  // scopes_supported, and the 401 challenge's scope). They must be scopes the
+  // authorization server clients use actually issues, or the authorize step
+  // fails before the user sees anything. Unset: "openid".
+  repeated string mcp_oauth_scopes = 97 [(forge.v1.config) = {
+    env_var: "MCP_OAUTH_SCOPES"
+    description: "Comma-separated OAuth scopes the connector endpoints advertise (default openid)"
   }];
 
   // The largest attachment accepted, in bytes.

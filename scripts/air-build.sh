@@ -2,8 +2,16 @@
 # air-build.sh — build one Go main package ONCE per save, however many Air
 # watchers ask for it, and hand each watcher its own copy of the binary.
 #
-#   usage: scripts/air-build.sh <main package> <output path>
+#   usage: scripts/air-build.sh <main package> <output path> [go build flags...]
 #   e.g.   scripts/air-build.sh ./cmd/control-plane ./tmp/admin-server/control-plane
+#
+# Flags after the output path go to go build as they are. The air configs
+# pass $FORGE_GO_BUILD_FLAGS there: `forge env up` sets it, for a dev env
+# that builds the binary for coverage (forge.yaml `tests.coverage`), to the
+# cover build's -cover -covermode=atomic -coverpkg=…, and leaves it unset
+# otherwise, so the build is exactly the one below. Every watcher of one
+# binary gets the same flags from one env, and go build's action IDs include
+# them, so an instrumented and a plain build never pass for each other.
 #
 # The same file lives in control-plane and reliant; change both together.
 #
@@ -57,8 +65,8 @@
 # alpine dev image, which has no bash.
 set -eu
 
-if [ $# -ne 2 ]; then
-  echo "usage: $0 <main package> <output path>" >&2
+if [ $# -lt 2 ]; then
+  echo "usage: $0 <main package> <output path> [go build flags...]" >&2
   exit 2
 fi
 pkg=$1
@@ -87,7 +95,8 @@ fi
 
 # ── Holding the lock from here on. ──────────────────────────────────────────
 
-CGO_ENABLED=0 go build -trimpath -buildvcs=false -o "$dir/bin" "$pkg"
+shift 2
+CGO_ENABLED=0 go build -trimpath -buildvcs=false "$@" -o "$dir/bin" "$pkg"
 
 # Link the shared binary to the caller's output through a rename, so a running
 # process is never handed a half-written file. Already that file (a hard link

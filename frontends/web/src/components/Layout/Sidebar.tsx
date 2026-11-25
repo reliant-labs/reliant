@@ -50,6 +50,7 @@ import { SharedWithOrgSection } from "../Sharing/SharedWithOrgSection";
 import { useChatProjectFilter } from "../../hooks/useChatProjectFilter";
 import { ChatProjectFilterButton, ChatProjectFilterScope } from "../Projects/ChatProjectFilter";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
+import { HelpMenu } from "./sidebar/HelpMenu";
 import type { RunsSearch } from "../../routeSchemas";
 import { useMarkUnread } from "../../hooks/message-queries";
 import { activityNeedsAttention } from "../../store/chatNavigationStore";
@@ -99,11 +100,11 @@ import {
   SidebarSubRow,
   ChatSectionHeading,
 } from "./sidebar/primitives";
-import { OrgHeaderRow, ProjectSwitcherRow } from "./sidebar/ProjectSwitcher";
-import { useShellProject } from "./sidebar/shellProject";
-import { FindBox } from "./sidebar/FindBox";
+import { usePublishShellScope, useShellProject } from "./sidebar/shellProject";
 import type { NavigateOptions, NavSlots } from "./sidebar/NavRenderer";
-import { ShellNavBody } from "./sidebar/ShellNavBody";
+import { hybridNav } from "./sidebar/navConfig";
+import { ShellNavColumn } from "./sidebar/ShellNavColumn";
+import { useNarrowViewport } from "../../hooks/useNarrowViewport";
 import { chatSetupNeeded, chatSetupPath } from "../OnboardingFlow/onboardingGate";
 import { ConnectSandboxCta } from "../EmptyState/ConnectSandboxCta";
 import { useChatSetup } from "../OnboardingFlow/useChatSetup";
@@ -131,6 +132,8 @@ interface SidebarProps {
   /** Open the Runs tab with filters; the Workflows row's pill passes "live". */
   onOpenRuns?: (search?: RunsSearch) => void;
   onOpenChatSearch?: () => void;
+  /** Open the journey picker (`?tour=pick:menu`) on the page on screen: Help › Take a tour, the Setup Guide's tour item. */
+  onOpenTours?: () => void;
 }
 
 const NO_SEARCH: Record<string, unknown> = {};
@@ -720,6 +723,7 @@ function SidebarComponent({
   search = NO_SEARCH,
   onNavigate,
   onOpenRuns,
+  onOpenTours,
 }: SidebarProps) {
   const go = useCallback(
     (href: string, options?: NavigateOptions) => (options ? onNavigate?.(href, options) : onNavigate?.(href)),
@@ -730,6 +734,8 @@ function SidebarComponent({
   // hooks/useChatProjectFilter), or every project's — grouped by project
   // unless it is one.
   const shell = useShellProject(pathname, search);
+  // Every other reader of the scope (the chat list load, the keyboard, a new chat) takes what this shows.
+  usePublishShellScope(shell, search);
   // The bridges of the chat filter of several (URL, remembered choice, org), run once, here.
   const chatProjectFilter = useChatProjectFilter({ sync: { pathname, search } });
   const projectFilterId = shell.mode === "one" ? shell.projectId : null;
@@ -844,6 +850,8 @@ function SidebarComponent({
   // single natural control to focus, so the pane container takes it and
   // ordinary tab-order takes over from there.
   const sidebarRootRef = useRef<HTMLDivElement>(null);
+  // A phone: the nav is the shell's drawer (Layout/shell/AppShell).
+  const narrow = useNarrowViewport();
   useEffect(() => {
     const handleFocus = () => sidebarRootRef.current?.focus();
     const name = focusEventName("left-sidebar");
@@ -2029,8 +2037,9 @@ function SidebarComponent({
                       />
                     )}
 
-                    {/* Other members' shared chats, read-only; nothing when there are none. */}
-                    {chatListTab === "active" && !noChatsHere && <SharedWithOrgSection activeChatId={activeChatId ?? null} />}
+                    {/* Other members' shared chats, read-only; nothing when there are none. On both tabs:
+                        the shared list is not filtered by the viewer's archive. */}
+                    {!noChatsHere && <SharedWithOrgSection activeChatId={activeChatId ?? null} />}
 
                     {listLoading && (
                       <div role="status" aria-label="Loading chats" className="space-y-1.5 py-2 pl-8 pr-1" data-testid="chat-list-loading">
@@ -2093,26 +2102,21 @@ function SidebarComponent({
       />
     ),
     "update-button": () => <SidebarUpdateButton />,
+    // Help, beside Settings.
+    help: () => <HelpMenu onNavigate={go} onOpenTours={onOpenTours} />,
   };
 
   return (
-    <div
+    <ShellNavColumn
       ref={sidebarRootRef}
-      className="flex h-full flex-col bg-background"
-      data-onboarding="left-sidebar"
-      // Marks the focus context for the keyboard dispatcher and gives the pane
-      // something focusable, so "focus the chat list" has a target.
-      data-context="left-sidebar"
-      tabIndex={-1}
+      config={hybridNav}
+      slots={slots}
+      shell={shell}
+      pathname={pathname}
+      search={search}
+      onNavigate={go}
+      flat={narrow}
     >
-      {/* The header (U6, owner): the org row on the nav's top bar, then Find (the command palette), then the project(s) every row below is about. */}
-      <OrgHeaderRow />
-      <FindBox />
-      <ProjectSwitcherRow shell={shell} pathname={pathname} onNavigate={go} />
-
-      {/* The nav as data (U6c): the variant's rows, or the area the route is in, then the footer. */}
-      <ShellNavBody shell={shell} pathname={pathname} search={search} slots={slots} onNavigate={go} />
-
       {/* One context menu for every row; its items follow the row. */}
       {contextMenu && (
         <ContextMenu
@@ -2140,7 +2144,7 @@ function SidebarComponent({
         <MoveChatToProjectDialog chatId={movingChatId} open onClose={() => setMovingChatId(null)} />
       )}
       {/* Render complete */}
-    </div>
+    </ShellNavColumn>
   );
 }
 

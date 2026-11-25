@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/connections"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
 	"github.com/stretchr/testify/require"
@@ -109,14 +109,14 @@ func TestRefresh_TwoWorkersRaceResolvedByGeneration(t *testing.T) {
 // secretsAfter runs before() once, just before the first GetOwnedSecrets: the
 // moment between a caller's connection read and its secrets read.
 type secretsAfter struct {
-	db.ConnectionStore
+	connectionvault.Service
 	once   sync.Once
 	before func()
 }
 
 func (s *secretsAfter) GetOwnedSecrets(ctx context.Context, owner core.ConnectionOwner, id string) (map[string]core.ConnectionSecret, error) {
 	s.once.Do(s.before)
-	return s.ConnectionStore.GetOwnedSecrets(ctx, owner, id)
+	return s.Service.GetOwnedSecrets(ctx, owner, id)
 }
 
 // The interleaving behind TestRefresh_TwoWorkersRaceResolvedByGeneration's
@@ -134,7 +134,7 @@ func TestRefresh_StaleExpiryBesideFreshGenerationDoesNotRefreshAgain(t *testing.
 	doer := redirectingDoer{target: e.gh.srv}
 	workerA := connections.NewTokenSource(e.store, e.vault, e.providers, doer)
 	var tokA string
-	store := &secretsAfter{ConnectionStore: e.store, before: func() {
+	store := &secretsAfter{Service: e.store, before: func() {
 		tok, err := workerA.Token(context.Background(), "alice", conn.ID)
 		require.NoError(t, err)
 		tokA = reveal(t, tok)
@@ -168,7 +168,7 @@ func TestRefresh_GenerationCASRejectsStaleWriter(t *testing.T) {
 	conn := e.connect("alice", "a")
 	gen := e.generation(conn.ID, "access_token")
 
-	err := e.store.WithSecretsLock(ctx, "alice", conn.ID, func(tx *db.SecretsTx) error {
+	err := e.store.WithSecretsLock(ctx, "alice", conn.ID, func(tx *connectionvault.SecretsTx) error {
 		return tx.Replace(ctx, gen-1, []core.ConnectionSecret{{Field: "access_token", VaultKeyID: "x", Ciphertext: []byte("x")}}, nil)
 	})
 	require.ErrorIs(t, err, core.ErrGenerationConflict)
@@ -253,13 +253,13 @@ func TestRefresh_MissingRefreshTokenNeedsReauth(t *testing.T) {
 
 // countingStore counts how many refresh transactions reach the database.
 type countingStore struct {
-	db.ConnectionStore
+	connectionvault.Service
 	locks atomic.Int32
 }
 
-func (c *countingStore) WithOwnedSecretsLock(ctx context.Context, owner core.ConnectionOwner, id string, fn func(*db.SecretsTx) error) error {
+func (c *countingStore) WithOwnedSecretsLock(ctx context.Context, owner core.ConnectionOwner, id string, fn func(*connectionvault.SecretsTx) error) error {
 	c.locks.Add(1)
-	return c.ConnectionStore.WithOwnedSecretsLock(ctx, owner, id, fn)
+	return c.Service.WithOwnedSecretsLock(ctx, owner, id, fn)
 }
 
 // The row lock alone would also yield one provider call, but only after every
@@ -270,7 +270,7 @@ func TestRefresh_SingleFlightCollapsesDatabaseTransactions(t *testing.T) {
 	conn := e.connect("alice", "a")
 	e.expireAccessToken(conn.ID)
 	e.gh.refreshDelay = 150 * 1000 * 1000
-	counting := &countingStore{ConnectionStore: e.store}
+	counting := &countingStore{Service: e.store}
 	src := connections.NewTokenSource(counting, e.vault, e.providers, redirectingDoer{target: e.gh.srv})
 
 	const n = 20
@@ -318,7 +318,7 @@ func TestRefresh_CallerThatReadTheReplacedGenerationOpensNoSecondTransaction(t *
 	conn := e.connect("alice", "a")
 	e.expireAccessToken(conn.ID)
 	store := &lateReaderStore{
-		countingStore: countingStore{ConnectionStore: e.store},
+		countingStore: countingStore{Service: e.store},
 		read:          make(chan struct{}),
 		refreshed:     make(chan struct{}),
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
@@ -113,7 +114,43 @@ func TestRunScopeInterceptor_OpensANodeSpanForANodesActivity(t *testing.T) {
 			assert.Equal(t, "user-1", a[telemetry.AttrUserID])
 			assert.Equal(t, "org-1", a[telemetry.AttrOrgID])
 			assert.Equal(t, "chat-1", a[telemetry.AttrChatID])
+			assert.Equal(t, "chat-1", a[telemetry.AttrGenAIConversationID], "the node names its chat as the conversation too")
 		})
+	}
+}
+
+// A node whose activity fails ends with the failure's class, error.type and
+// the status description alike, and none of the error's text: an activity's
+// error can carry a provider's or a machine's message. The Temporal worker
+// logs the error itself. The test swaps the global tracer provider, so it
+// does not run in parallel.
+func TestRunScopeInterceptor_AFailedNodeSpanCarriesACodeNotTheErrorText(t *testing.T) {
+	rec := tracetest.NewSpanRecorder()
+	prev := otel.GetTracerProvider()
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(rec)))
+	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+
+	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
+	env.SetWorkerOptions(temporaltest.WorkerOptions(worker.Options{
+		Interceptors: []interceptor.WorkerInterceptor{NewRunScopeWorkerInterceptor(nil)},
+	}))
+	work := func(context.Context, map[string]any) error {
+		return errors.New(`daemon said: "my password is hunter2"`)
+	}
+	env.RegisterActivity(work)
+	_, err := env.ExecuteActivity(work, map[string]any{"chat_id": "chat-1", "workflow_id": "wf-1", "step_id": "build", "node_type": "run"})
+	require.Error(t, err)
+
+	require.Len(t, rec.Ended(), 1)
+	node := rec.Ended()[0]
+	assert.Equal(t, codes.Error, node.Status().Code)
+	assert.Equal(t, telemetry.ErrorTypeError, node.Status().Description)
+	assert.Empty(t, node.Events(), "no exception event")
+	for _, kv := range node.Attributes() {
+		assert.NotContains(t, kv.Value.Emit(), "hunter2", "attribute %s", kv.Key)
+		if kv.Key == telemetry.AttrErrorType {
+			assert.Equal(t, telemetry.ErrorTypeError, kv.Value.AsString())
+		}
 	}
 }
 

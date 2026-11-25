@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -42,13 +44,7 @@ const (
 // repo is not found, as GetProjectWithUserCheck and GetRepo answer.
 func ownedProjectRepo(t *testing.T) *repo.MockRepository {
 	t.Helper()
-	return &repo.MockRepository{
-		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
-			if id == "p-1" && userID == "test-user" {
-				return &db.Project{ID: id, UserID: userID, Name: "proj", Path: creatorPath, IsGitRepo: true}, nil
-			}
-			return nil, core.ErrProjectNotFound
-		},
+	return projectaccesstest.Bound(&repo.MockRepository{
 		GetRepoFunc: func(_ context.Context, id string) (*core.Repo, error) {
 			if id == "r-1" {
 				return &core.Repo{ID: id, ProjectID: "p-1", Name: "svc", RelativePath: "svc"}, nil
@@ -61,5 +57,10 @@ func ownedProjectRepo(t *testing.T) *repo.MockRepository {
 		GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
 			return &db.Daemon{ID: id, UserID: "test-user"}, nil
 		},
-	}
+	}, func(_ context.Context, id, userID string) (*db.Project, error) {
+		if id == "p-1" && userID == "test-user" {
+			return &db.Project{ID: id, UserID: userID, Name: "proj", Path: creatorPath, IsGitRepo: true}, nil
+		}
+		return nil, core.ErrProjectNotFound
+	})
 }

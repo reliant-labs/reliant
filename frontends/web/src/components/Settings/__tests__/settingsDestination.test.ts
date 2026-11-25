@@ -18,12 +18,25 @@ describe("settings destination persistence", () => {
     [{ section: "billing", tab: "invoices" }, { section: "billing", tab: "invoices" }],
     [{ section: "billing", tab: "local" }, { section: "billing" }],
     [{ section: "appearance", tab: "models", machineId: "d-1" }, { section: "appearance" }],
-    [{ section: "machines", machineId: "d-1", checkout: "success", from: "connectors" }, { section: "machines", machineId: "d-1" }],
-    [{ section: "machines", machineId: {} }, { section: "machines" }],
-    [{ section: "machines", machineId: "  " }, { section: "machines" }],
   ])("only restores supported navigation fields from %j", (saved, expected) => {
     localStorage.setItem(key, JSON.stringify(saved));
     expect(readSettingsDestination()).toEqual(expected);
+  });
+
+  // Agent sandboxes is Agents › Sandboxes in the nav: restoring it opened
+  // Settings with no Settings sections in the nav, on every later open.
+  it.each([{ section: "machines" }, { section: "machines", machineId: "d-1" }])(
+    "never restores a page another nav area owns, even one saved before: %j", (saved) => {
+      localStorage.setItem(key, JSON.stringify(saved));
+      expect(readSettingsDestination()).toEqual({ section: "account" });
+    },
+  );
+
+  it("keeps the previous destination when a page another nav area owns is visited", () => {
+    rememberSettingsDestination({ section: "appearance" });
+    rememberSettingsDestination({ section: "machines" });
+    expect(JSON.parse(localStorage.getItem(key)!)).toEqual({ section: "appearance" });
+    expect(readSettingsDestination()).toEqual({ section: "appearance" });
   });
 
   it("writes only the destination allowlist", () => {

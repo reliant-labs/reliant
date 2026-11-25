@@ -12,9 +12,12 @@ import (
 	"sync"
 	"testing"
 
+	ormstore "github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/reliant-labs/forge/pkg/oauth2"
-	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/connections"
 )
 
 // acmeManifest is a provider that exists only as YAML: tenant-scoped OAuth
@@ -129,7 +132,7 @@ func acmeEnv(t *testing.T, env map[string]string) (*env, *fakeAcme) {
 	e.tokens = connections.NewTokenSource(e.store, e.vault, providers, doer)
 	e.broker = connections.NewBroker(e.store, e.vault, providers, doer, "https://reliant.example").WithAppOrigins([]string{testAppOrigin})
 	e.svc = connections.NewService(e.store, e.vault, providers, e.tokens, e.broker, doer)
-	e.resolver = connections.NewResolver(e.repo, e.store, e.tokens)
+	e.resolver = connections.NewResolver(connections.ResolverDeps{Owners: e.repo, Runs: ormstore.NewWorkflowExtStore(e.repo.ORM()), Store: e.store, Tokens: e.tokens})
 	return e, f
 }
 

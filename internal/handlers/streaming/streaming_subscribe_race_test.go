@@ -90,8 +90,8 @@ func (r *snapshotGateRepo) CountMessagesInChat(context.Context, string) (int, er
 	return 0, nil
 }
 
-func (r *snapshotGateRepo) GetLatestNonMessageUpdatesPerEntity(context.Context, string) ([]db.ChatUpdate, error) {
-	return nil, nil
+func (r *snapshotGateRepo) SnapshotUpdateHeads(context.Context, string) ([]db.ChatUpdate, string, error) {
+	return nil, "", nil
 }
 
 func (r *snapshotGateRepo) ListLiveToolCallsByChat(context.Context, string) ([]*db.ToolCall, error) {
@@ -187,7 +187,7 @@ func TestStreamChatUpdates_ChatUpdatePublishedDuringSnapshotIsNotLost(t *testing
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = deltaHub.Close() })
 
-	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: deltaHub, UserUpdates: userHub, ChatUpdates: chatHub}))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: deltaHub, UserUpdates: userHub, ChatUpdates: chatHub})))
 
 	client := streamingTestClient(t, svc)
 

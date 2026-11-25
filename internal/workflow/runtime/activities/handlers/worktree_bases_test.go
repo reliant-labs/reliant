@@ -3,8 +3,9 @@ package handlers
 import (
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 func TestRepoWorktreeBasesTargetOnly(t *testing.T) {

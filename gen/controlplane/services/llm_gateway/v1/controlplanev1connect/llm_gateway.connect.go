@@ -94,12 +94,14 @@ func NewLLMGatewayServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+LLMGatewayServiceListLLMKeysProcedure,
 			connect.WithSchema(lLMGatewayServiceMethods.ByName("ListLLMKeys")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getLLMKey: connect.NewClient[v1.GetLLMKeyRequest, v1.GetLLMKeyResponse](
 			httpClient,
 			baseURL+LLMGatewayServiceGetLLMKeyProcedure,
 			connect.WithSchema(lLMGatewayServiceMethods.ByName("GetLLMKey")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		revokeLLMKey: connect.NewClient[v1.RevokeLLMKeyRequest, v1.RevokeLLMKeyResponse](
@@ -118,12 +120,14 @@ func NewLLMGatewayServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+LLMGatewayServiceGetLLMSpendProcedure,
 			connect.WithSchema(lLMGatewayServiceMethods.ByName("GetLLMSpend")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listAvailableModels: connect.NewClient[v1.ListAvailableModelsRequest, v1.ListAvailableModelsResponse](
 			httpClient,
 			baseURL+LLMGatewayServiceListAvailableModelsProcedure,
 			connect.WithSchema(lLMGatewayServiceMethods.ByName("ListAvailableModels")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -203,12 +207,14 @@ func NewLLMGatewayServiceHandler(svc LLMGatewayServiceHandler, opts ...connect.H
 		LLMGatewayServiceListLLMKeysProcedure,
 		svc.ListLLMKeys,
 		connect.WithSchema(lLMGatewayServiceMethods.ByName("ListLLMKeys")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	lLMGatewayServiceGetLLMKeyHandler := connect.NewUnaryHandler(
 		LLMGatewayServiceGetLLMKeyProcedure,
 		svc.GetLLMKey,
 		connect.WithSchema(lLMGatewayServiceMethods.ByName("GetLLMKey")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	lLMGatewayServiceRevokeLLMKeyHandler := connect.NewUnaryHandler(
@@ -227,12 +233,14 @@ func NewLLMGatewayServiceHandler(svc LLMGatewayServiceHandler, opts ...connect.H
 		LLMGatewayServiceGetLLMSpendProcedure,
 		svc.GetLLMSpend,
 		connect.WithSchema(lLMGatewayServiceMethods.ByName("GetLLMSpend")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	lLMGatewayServiceListAvailableModelsHandler := connect.NewUnaryHandler(
 		LLMGatewayServiceListAvailableModelsProcedure,
 		svc.ListAvailableModels,
 		connect.WithSchema(lLMGatewayServiceMethods.ByName("ListAvailableModels")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/controlplane.v1.LLMGatewayService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

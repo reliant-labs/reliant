@@ -63,7 +63,11 @@ was started with --auto-update.
   reliant update --channel alpha --json --yes`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			opts := cliupdate.Options{Channel: channel, Managed: cliupdate.ManagedHost(isManagedMachine())}
+			managed, err := isManagedMachine(cmd)
+			if err != nil {
+				return err
+			}
+			opts := cliupdate.Options{Channel: channel, Managed: cliupdate.ManagedHost(managed)}
 			if swapped {
 				return finishSwap(cmd.OutOrStdout(), opts, from, jsonOut)
 			}

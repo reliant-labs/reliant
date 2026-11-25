@@ -168,6 +168,60 @@ message SaveMessageConfig {
   CelString display_style = 7 [(reliant) = {hidden: true}];
 }
 
+// NodeObserve declares what a node records about itself when it finishes:
+// attributes on its workflow.node span, span events, and metrics. On a
+// Workflow it is the default every node of that graph merges with (not
+// inherited by sub-workflows). Every value is a template ("{{ expr }}") over
+// the node's own result (`output`), `inputs`, `trigger`, `workflow`, `iter`,
+// `node` (id, type, path, attempt, duration_ms) and, inside `each`, `item`;
+// `nodes` is not in scope. `when` is raw CEL, like `condition`.
+//
+// The fields are plain strings, not the Cel* wrappers, on purpose: the
+// runtime resolves every Cel* field of a node before dispatch, when `output`
+// does not exist yet. Recording never fails, retries or delays the node.
+// dev-docs/design/workflow-observe.md is the design.
+message NodeObserve {
+  // Attributes are set on the node's span, key -> template.
+  map<string, string> attributes = 1;
+  // Events are span events; the author picks the names. An event named
+  // "decision" with name/value/reason attributes is the recommended
+  // convention for a node that chooses something.
+  repeated ObserveEvent events = 2;
+  // Metrics are OTEL instruments, cardinality-capped.
+  repeated ObserveMetric metrics = 3;
+}
+
+// ObserveEvent is one span event a node records.
+message ObserveEvent {
+  // Name is the event's name, e.g. "decision".
+  string name = 1;
+  // When is raw CEL (no {{ }}): the event is recorded only when it is true.
+  // It is evaluated once, before each, and cannot read `item`.
+  string when = 2;
+  // Each is a template evaluating to a list: one event per element, with the
+  // element bound to `item`.
+  string each = 3;
+  // Attributes are the event's attributes, key -> template.
+  map<string, string> attributes = 4;
+}
+
+// ObserveMetric is one metric a node emits.
+message ObserveMetric {
+  // Name is the metric's name, e.g. "rc_train.ticks".
+  string name = 1;
+  // Kind is counter, histogram or gauge.
+  string kind = 2;
+  // Value is a template evaluating to a number. Optional for a counter
+  // (default 1); required for a histogram or gauge.
+  string value = 3;
+  // Unit is the UCUM unit, e.g. "ms" or "{call}". Optional.
+  string unit = 4;
+  // When is raw CEL (no {{ }}): the metric is emitted only when it is true.
+  string when = 5;
+  // Attributes are the metric's attributes, key -> template.
+  map<string, string> attributes = 6;
+}
+
 // ThreadConfig configures thread behavior for a node.
 // Threads are conversation contexts that persist messages across nodes.
 message ThreadConfig {
@@ -304,6 +358,11 @@ message Node {
   // already ending are not failures and are never tolerated. Unset (the
   // default) keeps today's behaviour: the node's failure is the run's.
   bool tolerate_failure = 9 [(reliant) = {description: "Make the node optional: when it fails the run continues, and nodes.<id>.failed is true with the reason in nodes.<id>.error"}];
+
+  // Observe declares the attributes, span events and metrics this node
+  // records when it finishes, as templates over its own result. Merged with
+  // the workflow's observe (the node wins). See NodeObserve.
+  NodeObserve observe = 30 [(reliant) = {description: "What the node records when it finishes: span attributes, events (a decision is an event named decision) and metrics, as templates over output.*. Never fails the node"}];
 
   // Type-specific arguments. Exactly one must be set, matching the type field.
   // SecretRefs are the declared secrets this node's activity resolves, written by
@@ -1288,6 +1347,37 @@ message RunArgs {
     example: "reliant"
     hidden: true
   }];
+  // LLMGateway runs the command with a short-lived LLM gateway step key in its
+  // environment, for a third-party agent CLI (Claude Code) to spend through
+  // Reliant's gateway: the worker mints a key capped to the step's budget and
+  // models and billed to the run's organization's Reliant credits, the machine
+  // sets the CLI's variables for this one command only (ANTHROPIC_BASE_URL and
+  // ANTHROPIC_AUTH_TOKEN for claude-code) and removes the provider variables
+  // that would override them, the key is redacted from the command's output,
+  // and it is revoked when the step ends. Refused, without running the
+  // command, on a machine whose daemon does not apply step keys and on a
+  // deployment that cannot issue them. Output: nodes.<id>.llm_gateway.
+  LLMGatewayStep llm_gateway = 7 [(reliant) = {
+    description: "Run the command with a short-lived, budget-capped LLM gateway key for a third-party agent CLI, as {cli: claude-code, budget_usd: 2, models: [...]}. The key is set for this command only, redacted from its output and revoked when the step ends"
+    example: "{\"cli\": \"claude-code\", \"budget_usd\": 2}"
+    type_hint: "JSON object"
+    label: "LLM gateway"
+  }];
+}
+
+// LLMGatewayStep is a run node's `llm_gateway`: which CLI the step key is for
+// and what it may spend. Plain values, never expressions, so the workflow is
+// checkable when it is saved.
+message LLMGatewayStep {
+  // Cli names the program that consumes the key, which decides the variables
+  // the machine sets: "claude-code" (Claude Code). Required.
+  string cli = 1;
+  // BudgetUsd caps what the key may spend, in US dollars: 0 is the default
+  // ($5), and the most is $50.
+  double budget_usd = 2;
+  // Models are the models the key may call; the first is the CLI's main
+  // model. Empty: every gateway model the CLI's protocol serves.
+  repeated string models = 3;
 }
 
 // SubWorkflowArgs configures a workflow node — invokes a sub-workflow.
@@ -2188,6 +2278,31 @@ message RunOutput {
   // stdout, half that of stderr): they are not the command's whole output,
   // and text a workflow decodes (json.decode) may not decode.
   bool truncated = 6;
+  // The step key the command ran with, when the node sets llm_gateway:
+  // what it was allowed and what it spent. Never the key itself.
+  RunLLMGatewayOutput llm_gateway = 7;
+}
+
+// RunLLMGatewayOutput is a run node's nodes.<id>.llm_gateway: the step key its
+// command ran with.
+message RunLLMGatewayOutput {
+  // The key's id at the control plane (never the key).
+  string key_id = 1;
+  // The organization whose Reliant credits the key spent.
+  string billing_org_id = 2;
+  // The models the key could call.
+  repeated string models = 3;
+  // The key's spending cap, in US dollars.
+  double budget_usd = 4;
+  // What the key spent, in US dollars, as metered as of the step's end (when
+  // the key was revoked). Final only when spend_known is true.
+  double spend_usd = 5;
+  // True when spend_usd is final. False means some calls were still settling
+  // when the step ended (or the spend could not be read): spend_usd is then
+  // not final and may be low or zero, never the whole cost.
+  bool spend_known = 6;
+  // When the key would have expired had it not been revoked, RFC 3339.
+  string expires_at = 7;
 }
 
 // WorkflowOutput is the output from a workflow node (non-loop sub-workflow).
@@ -2392,6 +2507,11 @@ message Workflow {
   // node starts, and concluded on every ending (see WorkflowCheck). Absent,
   // the default, posts nothing.
   WorkflowCheck check = 26;
+  // Observe is the default observe block for every node of this graph,
+  // merged with each node's own: attributes by key and metrics by name (the
+  // node wins), events concatenated (defaults first). Sub-workflows follow
+  // their own defaults. See NodeObserve.
+  NodeObserve observe = 27;
 }
 
 // WorkflowCheck is a GitHub check run whose lifecycle the engine owns, posted
@@ -2484,6 +2604,16 @@ message WorkflowRequirements {
   // itself), that must exist and reach their origin. Reaching origin is
   // checked with git ls-remote, which writes nothing into the checkout.
   repeated string repos = 3;
+  // CliLogin are vendor agent CLIs (claude, codex, gemini, cursor, copilot)
+  // that must be installed and signed in on the run's machine: each is
+  // checked with the vendor's own status command, whose output never leaves
+  // the machine; Reliant never reads, stores or relays a vendor's sign-in.
+  // A person signs one in with `reliant machine login <vendor>`.
+  repeated string cli_login = 4 [(reliant) = {
+    description: "Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine. Checked with each vendor's own status command before the first node; sign one in with `reliant machine login <vendor> --machine <name>`"
+    example: "[claude, codex]"
+    label: "CLI sign-ins"
+  }];
 }
 
 // WorkflowConcurrency is a trigger admission policy, not a worker task limit.

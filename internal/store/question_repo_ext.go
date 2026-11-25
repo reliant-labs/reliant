@@ -91,6 +91,9 @@ func ListQuestionsByWorkflowStepIteration(ctx context.Context, db orm.Context, w
 // builder rather than the generated List, which caps a limit-less list at
 // its default page.
 func ListQuestionsByChat(ctx context.Context, db orm.Context, chatID string) ([]*core.Question, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
 	var rows []*Question
 	err := db.Bun().NewSelect().Model(&rows).
 		Where("chat_id = ?", chatID).
@@ -107,6 +110,9 @@ func ListQuestionsByChat(ctx context.Context, db orm.Context, chatID string) ([]
 // without waiting) is no gate, so it is not listed; ListAsyncQuestionsByChat
 // lists those.
 func ListPendingQuestionsByChat(ctx context.Context, db orm.Context, chatID string) ([]*core.Question, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
 	rows, err := ListQuestion(ctx, db,
 		orm.WhereEq(QuestionFieldChatID, chatID),
 		orm.WhereEq(QuestionFieldStatus, core.QuestionStatusPending),
@@ -126,12 +132,18 @@ func ListPendingQuestionsByChat(ctx context.Context, db orm.Context, chatID stri
 // run resumes into the same wait and keeps its question. An async question is
 // not listed: nothing waits on it, so it must not take over the composer.
 func ListAnswerablePendingQuestionsByChat(ctx context.Context, db orm.Context, chatID string) ([]*core.Question, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
 	return listAnswerablePendingQuestions(ctx, db, "questions.chat_id = ?", chatID)
 }
 
 // ListAnswerablePendingQuestionsByUser is ListAnswerablePendingQuestionsByChat
 // across every chat the user owns, oldest first.
 func ListAnswerablePendingQuestionsByUser(ctx context.Context, db orm.Context, userID string) ([]*core.Question, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
 	return listAnswerablePendingQuestions(ctx, db,
 		"questions.chat_id IN (SELECT c.id FROM chats c WHERE c.user_id = ?)", userID)
 }
@@ -154,11 +166,37 @@ func listAnswerablePendingQuestions(ctx context.Context, db orm.Context, scope s
 	return questionsFromRows(rows), nil
 }
 
+// PendingQuestionsByThread returns each thread's newest PENDING blocking
+// question for a chat, keyed by the question's thread id, which is a workflow
+// row's `thread` column, so the result joins straight onto workflow rows.
+//
+// A newest-pending-per-chat lookup cannot answer "which thread is waiting?":
+// in a chat with several spawned threads it hands back the newest question
+// from ANY thread, and a caller that reports per thread would stamp one
+// thread's gate onto siblings that are genuinely executing. Keying by thread
+// here makes that smear impossible at the source. Chat-wide questions are
+// ListPendingQuestionsByChat's.
+func PendingQuestionsByThread(ctx context.Context, db orm.Context, chatID string) (map[string]*core.Question, error) {
+	pending, err := ListPendingQuestionsByChat(ctx, db, chatID)
+	if err != nil {
+		return nil, err
+	}
+	byThread := make(map[string]*core.Question, len(pending))
+	for _, q := range pending {
+		// Oldest first, so a later row is the newer question for its thread.
+		byThread[q.ThreadID] = q
+	}
+	return byThread, nil
+}
+
 // ListAsyncQuestionsByChat returns every async question in a chat (asked
 // without waiting), pending and resolved alike, oldest first: what the chat
 // timeline renders them from. Read through the builder rather than the
 // generated List, which caps a limit-less list at its default page.
 func ListAsyncQuestionsByChat(ctx context.Context, db orm.Context, chatID string) ([]*core.Question, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
 	var rows []*Question
 	err := db.Bun().NewSelect().Model(&rows).
 		Where("chat_id = ?", chatID).
@@ -202,6 +240,7 @@ func questionToRow(q *core.Question) *Question {
 		ToolCallID:         q.ToolCallID,
 		Async:              q.Async,
 		WithdrawnReason:    q.WithdrawnReason,
+		AnsweredBy:         q.AnsweredBy,
 	}
 	if q.LoopIteration != nil {
 		it := int64(*q.LoopIteration)
@@ -226,6 +265,7 @@ func questionFromRow(row *Question) *core.Question {
 		ToolCallID:         row.ToolCallID,
 		Async:              row.Async,
 		WithdrawnReason:    row.WithdrawnReason,
+		AnsweredBy:         row.AnsweredBy,
 	}
 	if row.Status != nil {
 		q.Status = int(*row.Status)

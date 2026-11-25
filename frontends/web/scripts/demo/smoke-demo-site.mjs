@@ -24,14 +24,16 @@
 //
 // 2. NAV: starts at `/`, clicks the Home's "Open the console", then every nav
 //    item, at desktop 1440×900 and phone 390×844 (where the nav is a drawer
-//    behind "Open navigation"). The nav is grouped (Console/groupedNav.tsx and
-//    the demo's DemoNavExtras.tsx): Issues, Performance and More tools are
-//    buttons that fold, and must hold their pages (navGroups below); every
-//    other row (navRows: Home, Overview, Sessions, … How it was built) is a
-//    link of its own. Groups are unfolded, and a row with sub-pages
-//    (Environments) is opened, so every sub-item is clicked too. An item is
-//    dead, and the run fails, when the click does not move the URL to the
-//    item's href, or the page's heading and content do not change.
+//    behind "Open navigation"). The nav has the signed-in app's groups, in its
+//    order (Console/groupedNav.tsx, Layout/sidebar/navConfig/hybrid.ts), plus the
+//    demo's own rows (DemoNavExtras.tsx): Observability, Analytics, Deployments,
+//    Tests, Security and Configure are buttons that fold, and must hold their
+//    pages (navGroups below); every other row (navRows: Home, Overview,
+//    Dashboards, Data, Storage, Auth, How it was built) is a link of its own.
+//    The pages the demo does not serve (navAbsent: Usage) must have no item. Groups are unfolded, and a row with sub-pages (Environments)
+//    is opened, so every sub-item is clicked too. An item is dead, and the run
+//    fails, when the click does not move the URL to the item's href, or the
+//    page's heading and content do not change.
 //
 // AUDITED READS: Data and Storage read an audited environment only after the
 // reader gives a reason, in a dialog naming the environment (AccessReasonDialog),
@@ -85,6 +87,13 @@ const pages = [
   `${home}/observability/logs`,
   `${home}/observability/dashboards`,
   `${home}/observability/alerts`,
+  `${home}/speed-insights`,
+  `${home}/security/vulnerabilities`,
+  `${home}/security/sboms`,
+  `${home}/tests`,
+  `${home}/tests/coverage`,
+  `${home}/tests/runs`,
+  `${home}/tests/flaky`,
   ...(auditedEnvs.length ? audited.map((surface) => `${surface.path}?env=${auditedEnvs[0]}`) : []),
 ];
 const viewports = [
@@ -108,24 +117,29 @@ const tourStart = "forge:fg-intro";
 // The grouped nav. A group is a button with no page of its own; it must hold
 // these pages. A row is a link of its own: its label and where it goes.
 const navGroups = {
-  Issues: [`${home}/observability/errors`, `${home}/observability/alerts`],
-  Performance: [`${home}/observability/traces`, `${home}/observability/rpc`],
-  "More tools": [`${home}/observability/dashboards`, `${home}/observability/logs`, `${home}/observability/metrics`, `${home}/observability/graph`, `${home}/storage`],
+  Observability: [
+    `${home}/observability`,
+    ...["graph", "metrics", "logs", "rpc", "profiles", "errors", "alerts", "traces", "sessions"].map((view) => `${home}/observability/${view}`),
+    `${home}/speed-insights`,
+  ],
+  Analytics: [`${home}/analytics`, ...["users", "product", "acquisition", "events"].map((tab) => `${home}/analytics/${tab}`)],
+  Deployments: [`${home}/services`, `${home}/releases`, `${home}/environments`],
+  Tests: [`${home}/tests`, `${home}/tests/coverage`, `${home}/tests/runs`, `${home}/tests/flaky`],
+  Security: [`${home}/security/vulnerabilities`, `${home}/security/sboms`],
+  Configure: [`${home}/secrets`, `${home}/domains`, `${home}/activity`],
 };
 const navRows = [
   { label: "Home", to: (key) => key === demoSection("home") },
   { label: "Overview", to: (key) => key === home },
-  { label: "Sessions", to: (key) => key === `${home}/observability/sessions` },
-  { label: "Product analytics", to: (key) => key.startsWith(`${home}/observability/dashboards/`) },
-  { label: "Releases", to: (key) => key === `${home}/releases` },
+  { label: "Dashboards", to: (key) => key === `${home}/observability/dashboards` },
   { label: "Data", to: (key) => key === `${home}/data` },
-  { label: "Users", to: (key) => key === `${home}/users` },
-  { label: "Environments", to: (key) => key === `${home}/environments` },
-  { label: "Secrets", to: (key) => key === `${home}/secrets` },
-  { label: "Domains", to: (key) => key === `${home}/domains` },
-  { label: "Activity", to: (key) => key === `${home}/activity` },
+  { label: "Storage", to: (key) => key === `${home}/storage` },
+  // Users became Auth (/users redirects there).
+  { label: "Auth", to: (key) => key === `${home}/auth` },
   { label: "How it was built", to: (key) => key === demoSection("built") },
 ];
+// The pages the demo does not serve (DEMO_HIDDEN_PAGES, demoPath.ts): no nav item may lead there.
+const navAbsent = [`${home}/usage`];
 /** Where an href goes, as the nav pass compares it: the path, plus a demo page's `?section=`. */
 const navKey = (href) => {
   const url = new URL(href, base);
@@ -272,21 +286,24 @@ async function exerciseHome(page) {
 
 /** The grouped nav's groups and rows, checked against navGroups and navRows. Unfold the groups first. Returns problems. */
 async function checkGroupedNav(page) {
-  const { groups, rows } = await page.evaluate(() => {
+  const { groups, rows, all } = await page.evaluate(() => {
     const nav = document.querySelector("[data-smoke-nav]");
     const href = (a) => new URL(a.getAttribute("href"), location.href).href;
     // A group is a row that is a button; its pages are the links in its list.
+    // Its label is the row's text less a badge (a count) after it.
     const groups = [...nav.querySelectorAll("li > button[aria-expanded]")].map((button) => ({
-      label: button.textContent.trim(),
+      label: (button.querySelector(".truncate") ?? button).textContent.trim(),
       items: [...(button.parentElement.querySelector(":scope > ul")?.querySelectorAll("a[href]") ?? [])].map(href),
     }));
     // A row is a link that is not inside another row's list.
     const rows = [...nav.querySelectorAll("a[href]")]
       .filter((a) => !a.closest("li")?.parentElement?.closest("li"))
       .map((a) => ({ label: a.textContent.trim(), href: href(a) }));
-    return { groups, rows };
+    const all = [...nav.querySelectorAll("a[href]")].map(href);
+    return { groups, rows, all };
   });
   const problems = [];
+  for (const key of navAbsent) if (all.map(navKey).includes(key)) problems.push(`the nav links to ${key}, a page the demo does not serve`);
   for (const [label, want] of Object.entries(navGroups)) {
     const group = groups.find((g) => g.label === label);
     if (!group) {
@@ -461,11 +478,14 @@ try {
       if (navProblem) return dead.push(`${item.label}: ${navProblem}`);
       if (!(await markNav(page))) return dead.push(`${item.label}: the nav is gone after the previous click`);
       await navItems(page);
-      const link = page.locator(`[data-smoke-nav] a[href^="${item.href}"]`).filter({ hasText: item.label }).first();
+      // The item's own path, with or without a query: a prefix would also match a page under it
+      // (Observability's "Overview" is /observability; the Dashboards group lists a dashboard titled "Overview" below it).
+      const exact = (href) => `[data-smoke-nav] a[href="${href}"], [data-smoke-nav] a[href^="${href}?"]`;
+      const link = page.locator(exact(item.href)).filter({ hasText: item.label }).first();
       // A section's sub-items show while the section is open: open it the way
       // a visitor would, with a click on the section.
       if (item.via && !(await link.isVisible().catch(() => false))) {
-        const section = page.locator(`[data-smoke-nav] a[href^="${item.via.href}"]`).filter({ hasText: item.via.label }).first();
+        const section = page.locator(exact(item.via.href)).filter({ hasText: item.via.label }).first();
         await section.click({ timeout: 5000 }).catch(() => {});
         await page.waitForTimeout(settle / 4);
         if (viewport.mobile) await revealNav(page, viewport);

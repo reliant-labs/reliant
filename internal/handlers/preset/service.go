@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+
 	"connectrpc.com/connect"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -22,6 +24,11 @@ type Deps struct {
 	// Repo reads and writes presets, the settings that hold a user's
 	// defaults, and the workflows a preset applies to (deps.go).
 	Repo Repository
+	// Projects reads a project the caller may write (owner and org decided
+	// together: projectaccess).
+	Projects projectaccess.Service
+	// Drafts reads the caller's saved workflows a preset applies to.
+	Drafts Drafts
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -35,6 +42,12 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("preset: Deps.Repo is required")
+	}
+	if d.Projects == nil {
+		return fmt.Errorf("preset: Deps.Projects is required")
+	}
+	if d.Drafts == nil {
+		return fmt.Errorf("preset: Deps.Drafts is required")
 	}
 	return nil
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/google/uuid"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -60,7 +61,7 @@ func newResumeWakeFixture(t *testing.T, router toolexec.DaemonRouter) (*MachineR
 	require.NoError(t, base.CreateChat(ctx, &db.Chat{ID: chatID, UserID: "u1", Title: "t", ProjectID: projectID,
 		State: db.ChatStateIdle, CreatedAt: time.Now(), UpdatedAt: time.Now()}))
 	repo := &markerRepo{Repo: base}
-	a := NewMachineResumeWakeActivity(repo, toolexec.NewRemoteExecutor(router))
+	a := NewMachineResumeWakeActivity(repo, workspaceRowsOf(repo), toolexec.NewRemoteExecutor(router))
 	a.pollInterval = 5 * time.Millisecond
 	return a, repo, chatID
 }
@@ -101,7 +102,7 @@ func TestMachineResumeWake_ServerOnlyBatchWakesNothing(t *testing.T) {
 	t.Parallel()
 
 	router := newRunWakeRouter()
-	a := NewMachineResumeWakeActivity(nil, toolexec.NewRemoteExecutor(router))
+	a := NewMachineResumeWakeActivity(nil, nil, toolexec.NewRemoteExecutor(router))
 
 	out := runResumeWake(t, a, MachineResumeWakeInput{
 		ChatID: "unused", ToolNames: []string{"websearch", "fetch"}, ToolsKnown: true, WaitSeconds: 30,

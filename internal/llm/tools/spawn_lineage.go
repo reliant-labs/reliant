@@ -4,7 +4,7 @@ package tools
 import (
 	"fmt"
 
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
@@ -27,13 +27,13 @@ import (
 // Best-effort: it backs a read-only view and a better refusal message, so a
 // failed lookup degrades to "not inherited" — the answer every caller gave
 // before inheritance existed — rather than failing the tool call.
-func findInheritedSpawnChild(rctx *rctx.ToolContext, repo inheritedSpawnLookup, callerThreadID, agentID string) *db.InheritedSpawnChild {
+func findInheritedSpawnChild(rctx *rctx.ToolContext, repo inheritedSpawnLookup, callerThreadID, agentID string) *core.InheritedSpawnChild {
 	inherited, err := repo.ListInheritedSpawnChildren(rctx.Context, callerThreadID)
 	if err != nil {
 		logging.Warn("[spawn] Failed to resolve inherited sub-agents", "thread", callerThreadID, "error", err)
 		return nil
 	}
-	var found *db.InheritedSpawnChild
+	var found *core.InheritedSpawnChild
 	for _, child := range inherited {
 		if child.ChildThreadID != nil && *child.ChildThreadID == agentID {
 			// Keep overwriting: within one source the rows are in request
@@ -45,7 +45,7 @@ func findInheritedSpawnChild(rctx *rctx.ToolContext, repo inheritedSpawnLookup, 
 }
 
 // inheritedSourceLabel names the conversation that owns an inherited agent.
-func inheritedSourceLabel(child *db.InheritedSpawnChild) string {
+func inheritedSourceLabel(child *core.InheritedSpawnChild) string {
 	if child.SourceChatTitle != "" {
 		return fmt.Sprintf("%q (chat %s)", child.SourceChatTitle, child.SourceChatID)
 	}
@@ -55,7 +55,7 @@ func inheritedSourceLabel(child *db.InheritedSpawnChild) string {
 // inheritedSpawnRefusal is the error for trying to CONTROL an inherited agent
 // (action is "message", "stop" or "wait on"). It names the owner, the reason,
 // and what the caller can still do.
-func inheritedSpawnRefusal(action string, child *db.InheritedSpawnChild, agentID string) string {
+func inheritedSpawnRefusal(action string, child *core.InheritedSpawnChild, agentID string) string {
 	return fmt.Sprintf(
 		"agent_id %q was spawned by thread %s in the conversation %s, before this chat was branched from it. "+
 			"It still belongs to that conversation: its result is delivered there, not here, and only that conversation can %s it. "+
@@ -65,7 +65,7 @@ func inheritedSpawnRefusal(action string, child *db.InheritedSpawnChild, agentID
 
 // inheritedReadOnlyNote prefixes spawn_status output about an inherited agent,
 // so a model reading the agent's result does not also assume it can act on it.
-func inheritedReadOnlyNote(child *db.InheritedSpawnChild) string {
+func inheritedReadOnlyNote(child *core.InheritedSpawnChild) string {
 	return fmt.Sprintf(
 		"[Inherited, read-only] This agent was spawned by thread %s in the conversation %s, before this chat was branched from it. "+
 			"Its result is delivered to that conversation, not here, and this chat cannot message or stop it.\n\n",

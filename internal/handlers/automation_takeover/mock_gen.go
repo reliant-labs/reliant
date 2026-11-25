@@ -17,7 +17,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=95111203b00ea46ec3ba6bee68d56135c5d9f29d6242ace106009a3a0395974c
+// forge:hash=adbb01275a0187a357398bd1c50d237d2c03c22c1d7720880276aa5943b81a15
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -27,13 +27,7 @@ import (
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	GetTriggerFunc               func(context.Context, string) (*core.Trigger, error)
-	ListOrgTriggersFunc          func(context.Context, string) ([]*core.Trigger, error)
-	ListOrgWorkflowDraftsFunc    func(context.Context, string) ([]*core.WorkflowDraft, error)
-	CreateTriggerOfferFunc       func(context.Context, *core.TriggerOffer) error
-	GetTriggerOfferFunc          func(context.Context, string) (*core.TriggerOffer, error)
-	ListPendingTriggerOffersFunc func(context.Context, core.TriggerOfferFilters) ([]*core.TriggerOffer, error)
-	SettleTriggerOfferFunc       func(context.Context, string, string, string) (bool, error)
+	GetTriggerFunc func(context.Context, string) (*core.Trigger, error)
 }
 
 // GetTrigger records the call and delegates to GetTriggerFunc when set.
@@ -45,62 +39,84 @@ func (m *MockRepository) GetTrigger(ctx context.Context, id string) (*core.Trigg
 	return nil, contractkit.MockNotSet("MockRepository", "GetTrigger")
 }
 
+// Compile-time check.
+var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockOffers
+// forge:hash=93daf27c68eefdd74ad42a0f0d2cce888af00ffb5b6682d3071173dd1b9f9965
+
+// MockOffers is a test mock for the Offers interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockOffers.<Method>Func not set" error.
+type MockOffers struct {
+	contractkit.Recorder
+	ListOrgTriggersFunc          func(context.Context, string) ([]*core.Trigger, error)
+	ListOrgWorkflowDraftsFunc    func(context.Context, string) ([]*core.WorkflowDraft, error)
+	CreateTriggerOfferFunc       func(context.Context, *core.TriggerOffer) error
+	GetTriggerOfferFunc          func(context.Context, string) (*core.TriggerOffer, error)
+	ListPendingTriggerOffersFunc func(context.Context, core.TriggerOfferFilters) ([]*core.TriggerOffer, error)
+	SettleTriggerOfferFunc       func(context.Context, string, string, string) (bool, error)
+}
+
 // ListOrgTriggers records the call and delegates to ListOrgTriggersFunc when set.
-func (m *MockRepository) ListOrgTriggers(ctx context.Context, orgID string) ([]*core.Trigger, error) {
+func (m *MockOffers) ListOrgTriggers(ctx context.Context, orgID string) ([]*core.Trigger, error) {
 	m.Recorder.Record("ListOrgTriggers", ctx, orgID)
 	if m.ListOrgTriggersFunc != nil {
 		return m.ListOrgTriggersFunc(ctx, orgID)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListOrgTriggers")
+	return nil, contractkit.MockNotSet("MockOffers", "ListOrgTriggers")
 }
 
 // ListOrgWorkflowDrafts records the call and delegates to ListOrgWorkflowDraftsFunc when set.
-func (m *MockRepository) ListOrgWorkflowDrafts(ctx context.Context, orgID string) ([]*core.WorkflowDraft, error) {
+func (m *MockOffers) ListOrgWorkflowDrafts(ctx context.Context, orgID string) ([]*core.WorkflowDraft, error) {
 	m.Recorder.Record("ListOrgWorkflowDrafts", ctx, orgID)
 	if m.ListOrgWorkflowDraftsFunc != nil {
 		return m.ListOrgWorkflowDraftsFunc(ctx, orgID)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListOrgWorkflowDrafts")
+	return nil, contractkit.MockNotSet("MockOffers", "ListOrgWorkflowDrafts")
 }
 
 // CreateTriggerOffer records the call and delegates to CreateTriggerOfferFunc when set.
-func (m *MockRepository) CreateTriggerOffer(ctx context.Context, o *core.TriggerOffer) error {
+func (m *MockOffers) CreateTriggerOffer(ctx context.Context, o *core.TriggerOffer) error {
 	m.Recorder.Record("CreateTriggerOffer", ctx, o)
 	if m.CreateTriggerOfferFunc != nil {
 		return m.CreateTriggerOfferFunc(ctx, o)
 	}
-	return contractkit.MockNotSet("MockRepository", "CreateTriggerOffer")
+	return contractkit.MockNotSet("MockOffers", "CreateTriggerOffer")
 }
 
 // GetTriggerOffer records the call and delegates to GetTriggerOfferFunc when set.
-func (m *MockRepository) GetTriggerOffer(ctx context.Context, id string) (*core.TriggerOffer, error) {
+func (m *MockOffers) GetTriggerOffer(ctx context.Context, id string) (*core.TriggerOffer, error) {
 	m.Recorder.Record("GetTriggerOffer", ctx, id)
 	if m.GetTriggerOfferFunc != nil {
 		return m.GetTriggerOfferFunc(ctx, id)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetTriggerOffer")
+	return nil, contractkit.MockNotSet("MockOffers", "GetTriggerOffer")
 }
 
 // ListPendingTriggerOffers records the call and delegates to ListPendingTriggerOffersFunc when set.
-func (m *MockRepository) ListPendingTriggerOffers(ctx context.Context, f core.TriggerOfferFilters) ([]*core.TriggerOffer, error) {
+func (m *MockOffers) ListPendingTriggerOffers(ctx context.Context, f core.TriggerOfferFilters) ([]*core.TriggerOffer, error) {
 	m.Recorder.Record("ListPendingTriggerOffers", ctx, f)
 	if m.ListPendingTriggerOffersFunc != nil {
 		return m.ListPendingTriggerOffersFunc(ctx, f)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListPendingTriggerOffers")
+	return nil, contractkit.MockNotSet("MockOffers", "ListPendingTriggerOffers")
 }
 
 // SettleTriggerOffer records the call and delegates to SettleTriggerOfferFunc when set.
-func (m *MockRepository) SettleTriggerOffer(ctx context.Context, id string, status string, reason string) (bool, error) {
+func (m *MockOffers) SettleTriggerOffer(ctx context.Context, id string, status string, reason string) (bool, error) {
 	m.Recorder.Record("SettleTriggerOffer", ctx, id, status, reason)
 	if m.SettleTriggerOfferFunc != nil {
 		return m.SettleTriggerOfferFunc(ctx, id, status, reason)
 	}
-	return false, contractkit.MockNotSet("MockRepository", "SettleTriggerOffer")
+	return false, contractkit.MockNotSet("MockOffers", "SettleTriggerOffer")
 }
 
 // Compile-time check.
-var _ Repository = (*MockRepository)(nil)
+var _ Offers = (*MockOffers)(nil)
 
 // forge:section MockTriggerAdopter
 // forge:hash=406f5806d0816bbc034a2a8b0b5af634f3be669d825d178d3dcbed1f5637f181

@@ -2393,21 +2393,21 @@ const file_services_dashboard_v1_dashboard_proto_rawDesc = "" +
 	"\x1fDASHBOARD_VIEW_KIND_UNSPECIFIED\x10\x00\x12*\n" +
 	"&DASHBOARD_VIEW_KIND_ORGANIZATION_COSTS\x10\x01\x12*\n" +
 	"&DASHBOARD_VIEW_KIND_ORGANIZATION_USAGE\x10\x02\x12,\n" +
-	"(DASHBOARD_VIEW_KIND_ORGANIZATION_BILLING\x10\x032\x96\n" +
+	"(DASHBOARD_VIEW_KIND_ORGANIZATION_BILLING\x10\x032\xaa\n" +
 	"\n" +
-	"\x10DashboardService\x12a\n" +
-	"\x0eListDashboards\x12&.controlplane.v1.ListDashboardsRequest\x1a'.controlplane.v1.ListDashboardsResponse\x12[\n" +
-	"\fGetDashboard\x12$.controlplane.v1.GetDashboardRequest\x1a%.controlplane.v1.GetDashboardResponse\x12^\n" +
+	"\x10DashboardService\x12f\n" +
+	"\x0eListDashboards\x12&.controlplane.v1.ListDashboardsRequest\x1a'.controlplane.v1.ListDashboardsResponse\"\x03\x90\x02\x01\x12`\n" +
+	"\fGetDashboard\x12$.controlplane.v1.GetDashboardRequest\x1a%.controlplane.v1.GetDashboardResponse\"\x03\x90\x02\x01\x12^\n" +
 	"\rSaveDashboard\x12%.controlplane.v1.SaveDashboardRequest\x1a&.controlplane.v1.SaveDashboardResponse\x12U\n" +
 	"\n" +
-	"SaveAsCopy\x12\".controlplane.v1.SaveAsCopyRequest\x1a#.controlplane.v1.SaveAsCopyResponse\x12v\n" +
-	"\x15ListDashboardVersions\x12-.controlplane.v1.ListDashboardVersionsRequest\x1a..controlplane.v1.ListDashboardVersionsResponse\x12|\n" +
+	"SaveAsCopy\x12\".controlplane.v1.SaveAsCopyRequest\x1a#.controlplane.v1.SaveAsCopyResponse\x12{\n" +
+	"\x15ListDashboardVersions\x12-.controlplane.v1.ListDashboardVersionsRequest\x1a..controlplane.v1.ListDashboardVersionsResponse\"\x03\x90\x02\x01\x12|\n" +
 	"\x17RestoreDashboardVersion\x12/.controlplane.v1.RestoreDashboardVersionRequest\x1a0.controlplane.v1.RestoreDashboardVersionResponse\x12g\n" +
 	"\x10ArchiveDashboard\x12(.controlplane.v1.ArchiveDashboardRequest\x1a).controlplane.v1.ArchiveDashboardResponse\x12^\n" +
 	"\rStarDashboard\x12%.controlplane.v1.StarDashboardRequest\x1a&.controlplane.v1.StarDashboardResponse\x12d\n" +
 	"\x0fUnstarDashboard\x12'.controlplane.v1.UnstarDashboardRequest\x1a(.controlplane.v1.UnstarDashboardResponse\x12p\n" +
-	"\x13RecordDashboardView\x12+.controlplane.v1.RecordDashboardViewRequest\x1a,.controlplane.v1.RecordDashboardViewResponse\x12y\n" +
-	"\x16ListDashboardTemplates\x12..controlplane.v1.ListDashboardTemplatesRequest\x1a/.controlplane.v1.ListDashboardTemplatesResponse\x12y\n" +
+	"\x13RecordDashboardView\x12+.controlplane.v1.RecordDashboardViewRequest\x1a,.controlplane.v1.RecordDashboardViewResponse\x12~\n" +
+	"\x16ListDashboardTemplates\x12..controlplane.v1.ListDashboardTemplatesRequest\x1a/.controlplane.v1.ListDashboardTemplatesResponse\"\x03\x90\x02\x01\x12y\n" +
 	"\x16PromoteDashboardToCode\x12..controlplane.v1.PromoteDashboardToCodeRequest\x1a/.controlplane.v1.PromoteDashboardToCodeResponseB\xd9\x01\n" +
 	"\x13com.controlplane.v1B\x0eDashboardProtoP\x01ZUgithub.com/reliant-labs/reliant/gen/controlplane/services/dashboard/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 

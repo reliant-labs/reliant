@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+
 	"connectrpc.com/connect"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -27,6 +29,18 @@ type Deps struct {
 	// Repo reads and writes worktrees, their projects, repos and chats
 	// (deps.go).
 	Repo Repository
+	// Rows reads a worktree, looks up a create's prior row and deletes a
+	// worktree (deps.go).
+	Rows Rows
+	// Projects reads a project the caller may write (owner and org decided
+	// together: projectaccess).
+	Projects projectaccess.Service
+	// ProjectRows reads a project row with no owner check (deps.go).
+	ProjectRows ProjectReader
+	// Repos lists a project's nested repos (deps.go).
+	Repos RepoLister
+	// Daemons reads a machine's row (deps.go).
+	Daemons DaemonReader
 	// Recoveries is the recovery journal (deps.go).
 	Recoveries Recoveries
 	// GitCredentials resolves the owner's current credential only at call time.
@@ -47,6 +61,11 @@ type Deps struct {
 	// periodic sweep, and a permanent delete does not wait on the machine.
 	// forge:optional-dep
 	Settler Settler
+	// PRLinks records which chats a pull request CreateWorktreePR opens was
+	// produced by (chat_pr_links). Without it the pull request is opened and
+	// no chat is linked to it.
+	// forge:optional-dep
+	PRLinks PRLinker
 }
 
 // Router is the slice of toolexec.DaemonRouter the worktree handlers use.
@@ -81,6 +100,21 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("worktree: Deps.Repo is required")
+	}
+	if d.Rows == nil {
+		return fmt.Errorf("worktree: Deps.Rows is required")
+	}
+	if d.Projects == nil {
+		return fmt.Errorf("worktree: Deps.Projects is required")
+	}
+	if d.ProjectRows == nil {
+		return fmt.Errorf("worktree: Deps.ProjectRows is required")
+	}
+	if d.Repos == nil {
+		return fmt.Errorf("worktree: Deps.Repos is required")
+	}
+	if d.Daemons == nil {
+		return fmt.Errorf("worktree: Deps.Daemons is required")
 	}
 	if d.Recoveries == nil {
 		return fmt.Errorf("worktree: Deps.Recoveries is required")

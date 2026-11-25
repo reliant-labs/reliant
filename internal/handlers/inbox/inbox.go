@@ -427,7 +427,7 @@ func (r *itemReads) project(ctx context.Context, userID, id string) bool {
 	defer r.mu.Unlock()
 	ok, seen := r.projects[id]
 	if !seen {
-		project, err := r.s.deps.Repo.GetProject(ctx, id)
+		project, err := r.s.deps.ProjectRows.GetProject(ctx, id)
 		switch {
 		case svcerr.IsNotFound(err):
 			ok = authz.CanReadOwn(ctx, userID, nil)

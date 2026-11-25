@@ -76,19 +76,8 @@ func (r *Runner) WithRootCAs(pool *x509.CertPool) *Runner {
 	return &Runner{client: &http.Client{Transport: tr}, executors: r.executors}
 }
 
-// New builds a runner whose every connection goes through deps.Guard (nil is
-// netguard.New()) and whose go: actions dispatch through the process registry
-// (Executors).
-func New(deps Deps) Service {
-	var guard DialGuard = netguard.New()
-	if deps.Guard != nil {
-		guard = deps.Guard
-	}
-	return buildRunner(guard)
-}
-
-// NewRunner is New for the callers that still hold the concrete *Runner: it
-// builds a Runner whose every connection goes through guard.
+// NewRunner builds a Runner whose every connection goes through guard and
+// whose go: actions dispatch through the process registry (Executors).
 func NewRunner(guard *netguard.Guard) *Runner { return buildRunner(guard) }
 
 func buildRunner(guard DialGuard) *Runner {

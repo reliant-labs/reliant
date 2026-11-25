@@ -34,7 +34,7 @@ func TestMediaUnavailableMessage_DerivedFromCatalog(t *testing.T) {
 func TestCheckMediaAvailable_NoProviderYieldsSharedError(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	InitializeAPIKeyProvider(repo)
+	InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	ctx := context.Background()
 
 	// Only an anthropic key: serves neither image nor video.
@@ -61,7 +61,7 @@ func TestCheckMediaAvailable_NoProviderYieldsSharedError(t *testing.T) {
 func TestCheckMediaAvailable_ProvidersThatServeTheModality(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	InitializeAPIKeyProvider(repo)
+	InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	ctx := context.Background()
 
 	db.SeedProviderAccount(t, repo, "media-gem", "gemini", "AIza-test")
@@ -77,7 +77,7 @@ func TestCheckMediaAvailable_ProvidersThatServeTheModality(t *testing.T) {
 func TestResolveVideo_TierSelectsModelAndPreferenceOnlyAppliesToDefault(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	InitializeAPIKeyProvider(repo)
+	InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	ctx := context.Background()
 	userID := "media-prefs"
 	db.SeedProviderAccount(t, repo, userID, "gemini", "AIza-test")
@@ -117,7 +117,7 @@ func TestResolveVideo_TierSelectsModelAndPreferenceOnlyAppliesToDefault(t *testi
 func TestResolveImage_FastTierAndPreference(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	InitializeAPIKeyProvider(repo)
+	InitializeAPIKeyProvider(db.TestAccounts(t, repo), repo)
 	ctx := context.Background()
 	userID := "media-img-prefs"
 	db.SeedProviderAccount(t, repo, userID, "gemini", "AIza-test")

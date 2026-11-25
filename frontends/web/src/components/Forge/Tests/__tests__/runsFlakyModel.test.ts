@@ -73,9 +73,9 @@ describe("a run in words", () => {
 
   it("places a failure at the output's file and line, else the test's", () => {
     const test = { id: "go:x:TestA", lang: "go", package: "x", name: "TestA", file: "a_test.go", line: 3 };
-    expect(failurePlace({ test, output: "", file: "b_test.go", line: 9, failureSignature: "", attempts: 1, verdict: "real" })).toBe("b_test.go:9");
-    expect(failurePlace({ test, output: "", file: "", line: 0, failureSignature: "", attempts: 1, verdict: "real" })).toBe("a_test.go:3");
-    expect(failurePlace({ test: { ...test, file: "", line: 0 }, output: "", file: "", line: 0, failureSignature: "", attempts: 1, verdict: "real" })).toBe("");
+    expect(failurePlace({ test, output: "", file: "b_test.go", line: 9, failureSignature: "", attempts: 1, verdict: "real", infraGroup: "" })).toBe("b_test.go:9");
+    expect(failurePlace({ test, output: "", file: "", line: 0, failureSignature: "", attempts: 1, verdict: "real", infraGroup: "" })).toBe("a_test.go:3");
+    expect(failurePlace({ test: { ...test, file: "", line: 0 }, output: "", file: "", line: 0, failureSignature: "", attempts: 1, verdict: "real", infraGroup: "" })).toBe("");
   });
 });
 

@@ -38,14 +38,9 @@ func capacitySettled(err error) bool {
 // as the redriver's expiry sweep would.
 var errCapacityExpired = errors.New(capacityExpiredDetail)
 
-type capacityRepository interface {
-	EnqueueTriggerCapacity(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) error
-	CanLaunchTriggerCapacity(context.Context, string, store.TriggerCapacityScope, store.TriggerCapacityLimits) (bool, error)
-	BindTriggerCapacityExecution(context.Context, string, string, string) error
-	PrepareTriggerCapacityExecution(context.Context, string, string) error
-	ListTriggerCapacityExecutions(context.Context, store.TriggerCapacityScope) ([]store.TriggerCapacityExecution, error)
-	ReleaseTriggerCapacityExecution(context.Context, store.TriggerCapacityExecution) error
-	ReleaseClosedTriggerCapacityExecution(context.Context, store.TriggerCapacityExecution) error
+// capacityEvents is the one event read admission makes besides the capacity
+// store: the enrolled row, by its dedupe key.
+type capacityEvents interface {
 	GetTriggerEventByDedupe(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 }
 
@@ -145,11 +140,6 @@ func capacityScope(t *core.Trigger) (store.TriggerCapacityScope, error) {
 	return store.TriggerCapacityScope{UserID: t.UserID, ProjectID: t.ProjectID, WorkflowRef: ref.Key()}, nil
 }
 
-// capacityQueue finds the event a scope admits next. *db.Repo satisfies it.
-type capacityQueue interface {
-	NextAdmissibleTriggerCapacityEvent(context.Context, store.TriggerCapacityScope, store.TriggerCapacityLimits) (*core.TriggerEvent, error)
-}
-
 // capacityWake hands a freed or still-free slot straight to the next waiting
 // event. Without it a waiting event is fired again only by the redriver, one
 // queue head per scope per pass, so N free slots took N passes to fill and a
@@ -177,12 +167,8 @@ type capacityWake struct {
 //
 // Best effort: a failure is logged, and the redriver still fires the head on
 // its next pass.
-func (w *capacityWake) wakeNext(ctx context.Context, repo any, t *core.Trigger, limits store.TriggerCapacityLimits, kind core.TriggerEventKind, dedupeKey string) {
+func (w *capacityWake) wakeNext(ctx context.Context, queue CapacityStore, t *core.Trigger, limits store.TriggerCapacityLimits, kind core.TriggerEventKind, dedupeKey string) {
 	if w == nil || w.starter == nil || limits.MaxRunning == 0 {
-		return
-	}
-	queue, ok := repo.(capacityQueue)
-	if !ok {
 		return
 	}
 	scope, err := capacityScope(t)
@@ -204,11 +190,7 @@ func (w *capacityWake) wakeNext(ctx context.Context, repo any, t *core.Trigger, 
 	}
 }
 
-func prepareCapacity(ctx context.Context, repository any, descriptions capacityDescriptions, t *core.Trigger, event *core.TriggerEvent, limits store.TriggerCapacityLimits, spec *launch.Spec) error {
-	repo, ok := repository.(capacityRepository)
-	if !ok {
-		return errors.New("workflow capacity storage is unavailable")
-	}
+func prepareCapacity(ctx context.Context, events capacityEvents, repo CapacityStore, descriptions capacityDescriptions, t *core.Trigger, event *core.TriggerEvent, limits store.TriggerCapacityLimits, spec *launch.Spec) error {
 	if descriptions == nil {
 		return errors.New("workflow capacity Temporal descriptions are unavailable")
 	}
@@ -220,11 +202,13 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 		if event.CapacityOrder != nil && (event.CapacityProjectID == nil || event.CapacityWorkflowRef == nil || *event.CapacityProjectID != scope.ProjectID || *event.CapacityWorkflowRef != scope.WorkflowRef) {
 			return errCapacityScopeChanged
 		}
-		if err := repo.EnqueueTriggerCapacity(ctx, event, scope); err != nil {
+		superseded, err := repo.EnqueueTriggerCapacitySuperseding(ctx, event, scope)
+		if err != nil {
 			return err
 		}
+		traceSuperseded(ctx, events, t, superseded)
 	}
-	enrolled, err := repo.GetTriggerEventByDedupe(ctx, event.Kind, event.DedupeKey)
+	enrolled, err := events.GetTriggerEventByDedupe(ctx, event.Kind, event.DedupeKey)
 	if err != nil {
 		return err
 	}
@@ -270,7 +254,7 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 // reconcileCapacityExecutions frees the slots whose runs have finished. A row
 // that cannot be reconciled is logged and keeps its slot; it never fails the
 // fire, or one bad row would stop every launch in its scope.
-func reconcileCapacityExecutions(ctx context.Context, repo capacityRepository, descriptions capacityDescriptions, occupied []store.TriggerCapacityExecution) {
+func reconcileCapacityExecutions(ctx context.Context, repo CapacityStore, descriptions capacityDescriptions, occupied []store.TriggerCapacityExecution) {
 	for _, execution := range occupied {
 		if err := reconcileCapacityExecution(ctx, repo, descriptions, execution); err != nil {
 			slog.WarnContext(ctx, "workflow capacity: cannot reconcile an occupied slot; it stays held",
@@ -279,7 +263,7 @@ func reconcileCapacityExecutions(ctx context.Context, repo capacityRepository, d
 	}
 }
 
-func reconcileCapacityExecution(ctx context.Context, repo capacityRepository, descriptions capacityDescriptions, execution store.TriggerCapacityExecution) error {
+func reconcileCapacityExecution(ctx context.Context, repo CapacityStore, descriptions capacityDescriptions, execution store.TriggerCapacityExecution) error {
 	for _, execution := range []store.TriggerCapacityExecution{execution} {
 		if execution.WorkflowID == "" {
 			continue
@@ -322,16 +306,13 @@ func reconcileCapacityExecution(ctx context.Context, repo capacityRepository, de
 					// The admitted start may still land behind this chain.
 					continue
 				}
-				if recovery, ok := repo.(capacityStartRecovery); ok {
-					fenced, err := recovery.TriggerCapacityStartFenced(ctx, execution)
-					if err != nil {
+				fenced, err := repo.TriggerCapacityStartFenced(ctx, execution)
+				if err != nil {
+					return err
+				}
+				if fenced {
+					if _, err := repo.ReleaseUnboundTriggerCapacity(ctx, execution, "superseded_before_binding"); err != nil {
 						return err
-					}
-					if fenced {
-						_, err = recovery.ReleaseUnboundTriggerCapacity(ctx, execution, "superseded_before_binding")
-						if err != nil {
-							return err
-						}
 					}
 				}
 				continue
@@ -359,4 +340,20 @@ func reconcileCapacityExecution(ctx context.Context, repo capacityRepository, de
 		}
 	}
 	return nil
+}
+
+// traceSuperseded opens a trigger.fire span for each waiting event an
+// enrollment superseded (`waiting: latest`): they were settled in bulk, by
+// another event's firing, which ctx's span is and each links to. Each names
+// its own trigger, read through repository when it is not t; one that cannot
+// be read is named by none.
+func traceSuperseded(ctx context.Context, repository any, t *core.Trigger, superseded []*core.TriggerEvent) {
+	if len(superseded) == 0 {
+		return
+	}
+	triggers := map[string]*core.Trigger{t.ID: t}
+	reader, _ := repository.(triggerReader)
+	for _, ev := range superseded {
+		traceSettled(ctx, settledTrigger(ctx, reader, triggers, ev), ev, ev.Outcome, ev.OutcomeDetail)
+	}
 }

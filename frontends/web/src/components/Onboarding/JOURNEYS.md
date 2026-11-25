@@ -20,7 +20,8 @@ in its own change.
 | `advanceOn.ts` | Required actions (`advanceOn`) and `phases`. |
 | `useTourNavigation.ts` | Moving between steps, finishing, skipping, analytics. |
 | `JourneyTour.tsx` | The engine UI (picker and step). Shell-neutral. |
-| `OnboardingWizard.tsx` | Reliant's wrapper: auth gates, the version re-offer, the checklist. |
+| `OnboardingWizard.tsx` | Reliant's wrapper: auth gates, the version re-offer, the checklist's state. |
+| `OnboardingChecklist.tsx`, `checklistItems.ts` | The Setup Guide: a floating "Get started · 3/8" pill on every shell page, and its items with their completion signals. |
 | `tourShell.ts` | Which shell (`reliant` / `forge`) and where progress is stored. |
 
 ## The URL
@@ -34,6 +35,10 @@ The URL is the source of truth for what is open:
 ?tour=pick / pick:menu     the journey picker (after onboarding / from a menu)
 ?tour=chat-and-sidebars    a retired single-tour id: opens its successor journey
 ```
+
+The picker's entries in Reliant: the nav footer's **Help › Take a tour**
+(`Layout/sidebar/HelpMenu.tsx`), the command palette, Settings › About, the
+Setup Guide's "Take a tour" and the chat home's "Prefer a quick tour first?".
 
 The root route **retains `?tour=` across navigations** that don't name it
 (`routes.tsx`, `retainTourParam`). So a journey can span pages that the user
@@ -118,7 +123,7 @@ last step). There is no bottom nav bar and no generic Skip step.
 | `id` | kebab-case, **unique across all journeys**, prefixed `wf-` / `fg-`. Appears in the URL and in analytics. Don't rename a shipped id. |
 | `title`, `description` | Card copy. `description` is a ReactNode. |
 | `target` | CSS selector to spotlight. Prefer `[data-tour='…']`; see "Anchors". No target (and no `targets`) means a centred card. |
-| `targets` | Multi-spotlight: several labelled targets (`{selector, label, description}`). |
+| `targets` | Multi-spotlight: several labelled targets (`{selector, label, description, labelPosition?}`). A label goes on the first side with room (right, left, above, below); `labelPosition` names the side to try first, for a wide target whose side is over other chrome. |
 | `type` | `spotlight` / `multi-spotlight` / `card`. Inferred from `target` / `targets`. |
 | `tooltipPosition`, `tooltipPadding`, `spotlightConfig` | Placement. A preferred side; the card flips to a side with room and never covers its target (`calloutPlacement.ts`). |
 | `copyByShell` | `{ forge: { description: … } }`: per-shell title / description / target. |
@@ -179,7 +184,7 @@ the app).
 | `{ kind: "click", selector? }` | edge | The element (default: the step's `target`) is clicked. Capture phase, deferred one tick, so the click's own navigation runs first. |
 | `{ kind: "event", event, where? }` | edge | A tour signal is emitted, optionally narrowed by `where(payload)`. |
 | `{ kind: "route", path }` | level | The pathname matches: a prefix string or a RegExp. |
-| `{ kind: "checklist", item }` | level | An onboarding-checklist item is complete. Reliant only; the checklist's own detectors (`onboardingChecklistStore.subscribeToStoreChanges`) set it, e.g. `create-workflow` when a user-source workflow exists. |
+| `{ kind: "checklist", item }` | level | An onboarding-checklist item is complete. Reliant only; the checklist's own detectors (`onboardingChecklistStore.subscribeToStoreChanges`) set it, e.g. `run-workflow` when a user-source workflow exists. |
 | `{ kind: "store", test, subscribe }` | level | Any store state. Build it with `whenStore(useSomeStore, (s) => …)`. |
 | `{ kind: "element", selector }` | level | An element matching `selector` is in the DOM. |
 | `{ kind: "when", test(ctx) }` | level | Anything else. `ctx = { location: {pathname, search}, signals, context }`. It is re-checked on every location change, signal and context write. |
@@ -241,19 +246,24 @@ done. Gate them per step: `shell: "reliant"` and/or `isAvailable`. If no outro
 step applies (in the forge shell, say), the journey ends on its last step.
 The end card sits on whichever step is last.
 
-The workflows outro tours the chat and its panels, then tidies them away:
+The workflows outro tours the chat and the shell around it, then closes only
+what it opened:
 
 ```ts
 outro: [{
   id: "wf-outro-layout",
   shell: "reliant",
   title: "Back to the chat",
-  target: "[data-onboarding='chat-input']",
-  description: "Conversations on the left, files on the right, the terminal below. Each opens from its button and closes the same way.",
-  route: { path: "/", open: { to: "/" }, label: "Open the chat" },
-  onComplete: layoutActions.collapseAll,
+  targets: [/* the composer, the menu toggle, the files + terminal toggles */],
+  description: "… The menu on the left holds your chats and workflows. The file browser opens on the right and the terminal at the bottom …",
+  route: { path: "/project/", open: () => …, label: "Open the chat" },
+  onEnter: () => { layoutActions.showSidebar(); layoutActions.showFilesForTour(); },
+  onComplete: layoutActions.hidePanelsTourOpened,
 }],
 ```
+
+Never close the left nav when a tour ends: it is the one shell's navigation,
+not a panel the tour borrowed.
 
 `layoutActions` acts through each panel's existing owner and persists the
 change exactly as the user's own toggle would:
@@ -263,7 +273,9 @@ change exactly as the user's own toggle would:
 | `showSidebar` / `hideSidebar` | `workspaceStateStore.setLeftSidebarExpandedGlobal` |
 | `showTerminal` / `hideTerminal` | `terminalStore.showTerminal` / `hideTerminal` |
 | `showFiles` / `hideFiles` | ModernApp's file browser, through its `open-file-browser` / `close-file-browser` window events |
-| `collapseAll` | All three |
+| `showFilesForTour` / `showTerminalForTour` | The same, remembering that the tour opened the panel (nothing when it was already open) |
+| `hidePanelsTourOpened` | Closes the files panel and the terminal, but only those the `…ForTour` actions opened |
+| `collapseAll` | All three, the left nav included; no shipped journey uses it |
 
 ## Anchors (`data-tour="…"`)
 
@@ -332,7 +344,9 @@ effects are skipped when storage isn't the settings adapter:
 The forge brand does this in `routes.tsx` (`bootForgeTour`,
 ForgeShell/forgeTourBoot.ts, at module load on the forge host), mounts
 `<JourneyTour />` at its root in place of `OnboardingWizard`, and both brands
-mount `/forge/demo` (and `/demo`) as public routes. A landing `?journey=` is handled
+mount `/forge/demo` (and `/demo`) as public routes that leave for the demo
+host, query kept (`Forge/Demo/demoHandoff.ts`): the demo has one home, so a
+journey started there continues on the demo host's cut. A landing `?journey=` is handled
 by ForgeShell/landingJourney.ts:
 - `forge` starts the forge journey: at once for a signed-out visitor (on the
   public demo, instead of the sign-in redirect), on arrival for a signed-in
@@ -352,7 +366,8 @@ Home** (`/forge/demo?section=home`), free to explore:
   built per shell in `journeys/forge.tsx` (`stop`). The root route keeps
   `?tour=` across the console's links (`retainTourParam`), and an older
   `/forge/demo?view=…&tour=…` link is redirected to the console page it names
-  (`consoleTourHref`). Reliant and the forge shell keep `/forge/demo`.
+  (`consoleTourHref`), which is also where Reliant's and the forge shell's
+  `/forge/demo` hand a tour off to.
 - `Forge/Demo/tips` explains each page (below, "Page tours"). Its card opens by
   itself on a section's first visit this session; tips are off while the tour
   is open.
@@ -391,7 +406,7 @@ the visitor stays on the console.
 ### Page tours (the demo)
 
 The public demo gives each page one compact, non-modal explanation: what it
-is, why it helps, and how to use it (2–3 sentences). Dismiss leaves an
+is, why it helps, and how to use it (2–3 sentences). Done closes it and leaves an
 accessible `?` restore button. Secondary agent help is a click/tap/keyboard
 disclosure, not hover-only. Deploy yours free is primary (the only button on a phone), Install forge and Sign up free secondary.
 There is no global toast or automatic local multi-stop sequence.
@@ -399,7 +414,8 @@ There is no global toast or automatic local multi-stop sequence.
 A section's first visit this session opens that page's explanation by itself
 on a laptop; a reload, coming back, or a sub-page does not (a phone gets a
 closed "About this page" disclosure instead). `DemoTips` owns `PageEntryTour`,
-with Step 1 of 1, Dismiss and Done inside its callout. There is no full-site
+with Done (and "How an agent helps", where the page has no agent card of its
+own) inside its callout. There is no full-site
 sequence or prerequisite action. `?` replays it. Same-page filters, polling and
 rerenders do not restart it. Legacy `/forge/demo?view=logs&tour=forge:fg-logs`
 explains Logs.
@@ -407,7 +423,8 @@ Phone callouts use a bottom sheet after the drawer closes; their targets scroll
 into view above it. No auth or modal is required to explore.
 
 Copy and a single optional anchor live in `tips/tipCopy.ts`; page mapping is
-`tips/tipKeys.ts`. `DemoTipsAndToast.test.tsx` pins automatic entry, Dismiss /
+`tips/tipKeys.ts`: every page the demo's nav lists has a tip (the pages it does
+not serve, `DEMO_HIDDEN_PAGES`, have none). `DemoTipsAndToast.test.tsx` pins automatic entry, Done /
 restore, current-page legacy links, real navigation and plain-language copy.
 
 | Event | Props |

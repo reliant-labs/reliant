@@ -24,7 +24,7 @@ func startLifecycleDerivation(t *testing.T, repo *fakeRepo) func(daemonwire.Even
 	nc := startTestNATS(t)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	d := NewDerivation(nc, repo)
+	d := NewDerivation(nc, repo, repo)
 	done := make(chan error, 1)
 	go func() { done <- d.Start(ctx) }()
 
@@ -247,7 +247,7 @@ func TestDerivation_LifecycleOOMAccountingAccumulates(t *testing.T) {
 func TestDerivation_LifecycleRepoFailurePropagates(t *testing.T) {
 	repo := newFakeRepo()
 	repo.lifecycleErr = errors.New("connection reset")
-	d := NewDerivation(nil, repo)
+	d := NewDerivation(nil, repo, repo)
 
 	err := d.onLifecycle(context.Background(), daemonwire.Event{
 		DaemonID: "d-err", Type: daemonwire.EventLifecycle,
@@ -266,7 +266,7 @@ func TestDerivation_LifecycleRepoFailurePropagates(t *testing.T) {
 func TestDerivation_LifecycleNotifiesOnlyWhenApplied(t *testing.T) {
 	repo := newFakeRepo()
 	repo.seedDaemon(&db.Daemon{ID: "d-managed", UserID: "u-1"})
-	d := NewDerivation(nil, repo)
+	d := NewDerivation(nil, repo, repo)
 
 	type call struct{ userID, daemonID string }
 	var calls []call

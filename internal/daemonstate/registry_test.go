@@ -11,7 +11,9 @@ import (
 
 	"github.com/nats-io/nats.go"
 
+	"github.com/reliant-labs/reliant/internal/daemonmirror"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
@@ -25,7 +27,7 @@ import (
 
 // UpsertDaemonIdentity models the SQL: create when absent, fill the name when
 // present, never rewrite the owner.
-func (f *fakeRepo) UpsertDaemonIdentity(_ context.Context, id db.DaemonIdentity) (bool, error) {
+func (f *fakeRepo) UpsertDaemonIdentity(_ context.Context, id core.DaemonIdentity) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	row, ok := f.daemons[id.DaemonID]
@@ -62,8 +64,8 @@ func (f *fakeRepo) removeLocked(daemonID string) (string, bool, error) {
 // ApplyDaemonRegistrySnapshot models the SQL's semantics (owner-scoped upsert,
 // then removal of absent rows behind the two guards) closely enough that a
 // consumer which passes the wrong guard values fails here too.
-func (f *fakeRepo) ApplyDaemonRegistrySnapshot(ctx context.Context, snap db.RegistrySnapshotApply) (db.RegistrySnapshotResult, error) {
-	var result db.RegistrySnapshotResult
+func (f *fakeRepo) ApplyDaemonRegistrySnapshot(ctx context.Context, snap daemonmirror.RegistrySnapshotApply) (daemonmirror.RegistrySnapshotResult, error) {
+	var result daemonmirror.RegistrySnapshotResult
 	keep := map[string]bool{}
 	for _, d := range snap.Daemons {
 		keep[d.Identity.DaemonID] = true
@@ -125,7 +127,7 @@ func startRegistryDerivation(t *testing.T, repo *fakeRepo, wantSubs int) (*nats.
 	ctx, cancel := context.WithCancel(context.Background())
 	rec := &notifyRecorder{}
 
-	d := NewDerivation(nc, repo)
+	d := NewDerivation(nc, repo, repo)
 	d.NotifyLifecycleApplied(rec.record)
 	done := make(chan error, 1)
 	go func() { done <- d.Start(ctx) }()

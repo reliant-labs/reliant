@@ -80,7 +80,7 @@ func (s *Service) DeleteProject(
 	// The write re-checks, under the owner's org lock, the owner and org this
 	// authority was decided on: a project that moved org meanwhile is refused.
 	// The machine fan-out below runs only after it succeeded.
-	deletion, err := s.deps.Repo.ScheduleProjectDeletion(ctx, project.ID, userID, s.now().Add(core.ProjectDeleteWindow), project.Decision())
+	deletion, err := s.deps.Purges.ScheduleProjectDeletion(ctx, project.ID, userID, s.now().Add(core.ProjectDeleteWindow), project.Decision())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete project"))
 	}
@@ -115,7 +115,7 @@ func (s *Service) deletableProject(ctx context.Context, userID, projectID, actio
 	if projectID == "" {
 		return nil, authz.ProjectDeleteNone, svcerr.InvalidArgument("project_id is required")
 	}
-	project, err := s.deps.Repo.GetProject(ctx, projectID)
+	project, err := s.deps.ProjectRows.GetProject(ctx, projectID)
 	if err != nil {
 		if svcerr.IsNotFound(err) {
 			return nil, authz.ProjectDeleteNone, core.ErrProjectNotFound

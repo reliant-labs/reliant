@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestDaemonAttachmentMemoryTelemetry verifies the heartbeat-driven memory
@@ -27,7 +29,7 @@ func TestDaemonAttachmentMemoryTelemetry(t *testing.T) {
 	t.Cleanup(clean)
 
 	// No row yet: updating memory must be a silent no-op, not an error.
-	if err := repo.UpdateDaemonAttachmentMemory(ctx, daemonID, 1, 2, true); err != nil {
+	if err := store.SetDaemonAttachmentMemory(ctx, repo.ORM(), daemonID, 1, 2, true); err != nil {
 		t.Fatalf("UpdateDaemonAttachmentMemory without row: %v", err)
 	}
 
@@ -42,7 +44,7 @@ func TestDaemonAttachmentMemoryTelemetry(t *testing.T) {
 
 	// Record telemetry as the heartbeat handler would.
 	const used, limit = int64(3_650_722_201), int64(4_294_967_296)
-	if err := repo.UpdateDaemonAttachmentMemory(ctx, daemonID, used, limit, true); err != nil {
+	if err := store.SetDaemonAttachmentMemory(ctx, repo.ORM(), daemonID, used, limit, true); err != nil {
 		t.Fatalf("UpdateDaemonAttachmentMemory: %v", err)
 	}
 

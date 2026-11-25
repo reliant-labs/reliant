@@ -43,7 +43,7 @@ func (s *Service) ResumeAfterOrgMove(ctx context.Context, t *core.Trigger) (resu
 	ctx = auth.WithUser(ctx, t.UserID, "", "")
 	// The same read SetTriggerEnabled's requireProjectWritable makes: the
 	// owner, a live member of the project's (new) org.
-	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, t.ProjectID, t.UserID); err != nil {
+	if _, err := s.deps.Projects.GetProjectWithUserCheck(ctx, t.ProjectID, t.UserID); err != nil {
 		if errors.Is(err, authz.ErrMembershipUnavailable) {
 			return false, "", fmt.Errorf("check the owner's organization: %w", err)
 		}
@@ -63,7 +63,7 @@ func (s *Service) ResumeAfterOrgMove(ctx context.Context, t *core.Trigger) (resu
 	if err := s.refreshTriggerAccess(ctx, &enabling); err != nil {
 		return ownerFixes(err, "check the owner's integration access")
 	}
-	resumed, err = s.deps.Repo.ResumeTriggerPausedBy(ctx, t.ID, core.TriggerPausedOrgMove, t.UpdatedAt)
+	resumed, err = s.deps.OrgMoves.ResumePausedTrigger(ctx, t.ID, core.TriggerPausedOrgMove, t.UpdatedAt)
 	if err != nil {
 		return false, "", fmt.Errorf("turn the trigger back on: %w", err)
 	}

@@ -9,6 +9,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/execfollow"
 )
 
@@ -29,7 +30,7 @@ func analyzeRunData(chatWorkflow string, root *db.Workflow) *runData {
 		byThread:        map[string]*db.Workflow{root.Thread: root},
 		stepsByWF:       map[string][]*db.StepExecution{},
 		blocksByMsg:     map[string][]*db.MessageContentBlock{},
-		backoffByThread: map[string]db.ProviderBackoff{},
+		backoffByThread: map[string]core.ProviderBackoff{},
 	}
 	if chatWorkflow != "" {
 		rd.chat.WorkflowName = &chatWorkflow

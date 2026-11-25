@@ -10,10 +10,9 @@
  *     that are waiting on the user.
  *  2. resolveChat — the lookup the reopen paths use — falls back to GetChat
  *     on a detail-cache miss, because a miss no longer means "deleted".
- *  3. The regression this guards: on reload, workspace restore used to read
- *     the active chat from the cache loadChats seeds from the list. An
- *     automation chat is not in that list, so restore declared it "no longer
- *     exists" and cleared it, dropping the user out of the chat they had open.
+ *  3. Workspace restore never reopens a remembered chat (only a URL opens
+ *     one: `/c/<id>`), so it never declares one "no longer exists" either: an
+ *     automation chat the list omits keeps its remembered reference.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -171,30 +170,16 @@ describe("resolveChat", () => {
 });
 
 describe("workspace restore", () => {
-  it("reopens an active automation chat that is not in the chat list", async () => {
+  it("never reopens a remembered chat: only a URL opens a chat", async () => {
     getChat.mockResolvedValue(create(GetChatResponseSchema, { chat: automationChat }));
 
     const { result } = renderHook(() => useWorkspaceRestore({ skipProjectRestore: true }));
 
     await waitFor(() => expect(result.current.isComplete).toBe(true));
-    expect(selectChat).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "auto-chat" }),
-      // Timed as a restore, not a click (lib/chatOpenInteraction ChatOpenEntry).
-      { deferPersist: true, openEntry: "restore" },
-    );
-    // The stored active chat was NOT cleared as "no longer exists".
+    expect(selectChat).not.toHaveBeenCalled();
+    expect(getChat).not.toHaveBeenCalled();
+    // The remembered reference is left alone, not cleared as "no longer exists".
     expect(setActiveChatId).not.toHaveBeenCalled();
     expect(result.current.warnings).toEqual([]);
-  });
-
-  it("still clears an active chat that no longer exists", async () => {
-    workspace.activeChatId = "deleted-chat";
-    getChat.mockRejectedValue(new ConnectError("chat not found", Code.NotFound));
-
-    const { result } = renderHook(() => useWorkspaceRestore({ skipProjectRestore: true }));
-
-    await waitFor(() => expect(result.current.isComplete).toBe(true));
-    expect(selectChat).not.toHaveBeenCalled();
-    expect(setActiveChatId).toHaveBeenCalledWith("proj-1", null, null);
   });
 });

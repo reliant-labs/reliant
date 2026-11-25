@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
@@ -212,15 +213,19 @@ func personGatedServer(t *testing.T, fake *fakeRegistry, p *fat.Principal, write
 	t.Helper()
 	registry, err := daemon_registry.New(daemon_registry.Deps{
 		Logger: slog.New(slog.DiscardHandler), Config: &config.Config{},
+		Mirror: &daemon_registry.MockMirror{},
 		Repo: &daemon_registry.MockRepository{
+			GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
+				return &db.Daemon{ID: id, UserID: "u"}, nil
+			},
+			ListDaemonsByUserIDFunc: func(context.Context, string) ([]*db.Daemon, error) { return nil, nil },
+		},
+		Pools: &daemon_registry.MockPools{
 			SetDaemonLabelsFunc: func(context.Context, string, string, map[string]string) (bool, error) {
 				*writes++
 				return true, nil
 			},
-			GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
-				return &db.Daemon{ID: id, UserID: "u"}, nil
-			},
-			PutMachinePoolFunc: func(_ context.Context, p *core.MachinePool) (*core.MachinePool, error) {
+			PutMachinePoolFunc: func(_ context.Context, p *core.MachinePool, _ string, _ time.Time) (*core.MachinePool, error) {
 				*writes++
 				return p, nil
 			},
@@ -232,7 +237,6 @@ func personGatedServer(t *testing.T, fake *fakeRegistry, p *fat.Principal, write
 			ListMachinePoolMembersFunc: func(context.Context, *core.MachinePool, string) ([]core.MachinePoolMemberRow, error) {
 				return nil, nil
 			},
-			ListDaemonsByUserIDFunc: func(context.Context, string) ([]*db.Daemon, error) { return nil, nil },
 		},
 	})
 	require.NoError(t, err)

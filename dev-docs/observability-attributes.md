@@ -17,10 +17,33 @@ markers.
 Where to look in code: `internal/telemetry/ai_attrs.go` (gen_ai and `forge.ai.*`
 names), `ai_spans.go` (node, agent turn, tool call), `run_scope.go` (the scope
 and the `reliant.chat.id` family), `run_exec_attrs.go` and `run_exec_span.go`,
-`internal/llm/genai_span.go` (the provider call), and
+`ai_error_type.go` (the `error.type` vocabulary of the AI spans),
+`gateway_attrs.go` (the LLM gateway's call id on the `chat` span),
+`internal/llm/genai_span.go` and `genai_error_type.go` (the provider call), and
 `internal/workflow/runtime/run_telemetry.go` (the run's own span). #3286 adds
 `integration_attrs.go` and `integration_spans.go`; #3289 adds `trigger_attrs.go`
 and `internal/triggers/fire_span.go`.
+
+The four AI spans of a turn (`workflow.node`, `invoke_agent`, `chat`,
+`execute_tool`) are opened by forge's `pkg/observe/genai` starters (`StartNode`,
+`StartAgent`, `StartChat`, `StartTool`); Reliant's `StartNodeSpan`,
+`StartAgentTurn`, `llm.StartGenAISpan` and `StartToolCall` are thin wrappers that
+put the run scope into forge's scope (`genai.WithScope`) and add Reliant's own
+attributes. Their instrumentation scope is forge's
+(`github.com/reliant-labs/forge/pkg/observe/genai`). Every `gen_ai.*` and
+`forge.ai.*` constant in `ai_attrs.go` is an alias of forge's, so the names here
+and the ones forge's AI dashboards read cannot drift. The span tree of a scripted
+turn is pinned by `internal/llm/genai_span_tree_test.go` against
+`internal/llm/testdata/genai_span_tree.golden.json`: names, kinds, parents,
+attribute keys, events, links and statuses. A change there is a change to this
+contract.
+
+**Sampling.** The tracer provider `observability.Init` installs (forge's
+`observe.Setup`) wraps the `OTEL_TRACES_SAMPLER` sampler in forge's
+`genai.KeepSampler`: a span that starts with `gen_ai.operation.name` or any
+`forge.ai.*` attribute is always recorded and sampled, because token and cost
+totals are sums over them. Every other span is the base sampler's
+(`internal/observability/keep_sampler_test.go`).
 
 The spans go to Reliant's own ClickStack through `internal/observability` and
 only staff can query them today. Nothing here is exported to tenants yet; the
@@ -105,8 +128,10 @@ out.
 | `gen_ai.agent.id` | string | The agent: the thread whose turns it takes. |
 | `gen_ai.agent.name` | string | The agent's preset, else its workflow's name. |
 
-The run span and the node span use `SpanAttributes()`, not `GenAIAttributes()`
-(details in each section). New spans use `GenAIAttributes()`.
+The run span and the node span use `SpanAttributes()` plus
+`gen_ai.conversation.id`, not `GenAIAttributes()`: neither is an agent, so
+neither names `gen_ai.agent.*` (details in each section). New spans use
+`GenAIAttributes()`.
 
 ## Namespaces
 
@@ -117,9 +142,9 @@ Four namespaces, and a name belongs to the first that fits.
 prefix. Where the convention has a name, use it.
 
 **`forge.ai.*`** is what the convention does not cover yet: the workflow, its
-nodes, the run, the tool's location and the cost. These are forge's names, spelled
-as forge's `pkg/observe/genai` declares them, and forge's built-in AI dashboards
-read them. Reuse them; never duplicate one under a Reliant name (no
+nodes, the run, the tool's location and the cost. These are forge's names:
+reliant's constants are aliases of forge's `pkg/observe/genai` ones, and forge's
+built-in AI dashboards read them. Reuse them; never duplicate one under a Reliant name (no
 `reliant.workflow.*` for what `forge.ai.workflow.*` already says). Reliant adds no
 new `forge.ai.*` name on its own: that namespace is forge's to extend.
 
@@ -129,11 +154,14 @@ new `forge.ai.*` name on its own: that namespace is forge's to extend.
 |---|---|---|
 | `reliant.chat.*` | `run_scope.go` | The chat. Today only `reliant.chat.id`. |
 | `reliant.run.*` | `run_exec_attrs.go` | A run node's command (`run.exec`). |
+| `reliant.gateway.*` | `gateway_attrs.go` | A model call routed through Reliant's LLM gateway. Today only `reliant.gateway.call_id`. |
 | `reliant.integration.*` | `integration_attrs.go` (#3286) | An integration call. |
 | `reliant.trigger.*` | `trigger_attrs.go` (#3289) | A trigger firing, and the join from a run back to it. |
 
 `reliant.cost_usd` and `reliant.model_id` and `reliant.tool_calls` on the `chat`
-span are older, flat `reliant.*` names, kept as they are.
+span are older, flat `reliant.*` names, kept as they are. forge reads
+`reliant.cost_usd` (`genai.AttrCostUSDReliant`) but never emits it, so Reliant
+adds it itself beside `forge.ai.cost.usd`.
 
 **Other OpenTelemetry conventions** are used when one fits and the value is safe:
 `error.type`, `process.exit.code`, `http.response.status_code`, `server.address`,
@@ -150,9 +178,9 @@ one, and keep emitting both while anything reads the old one (as
 
 These are the agreed rules every span and attribute follows. They exist because
 the same spans are meant to be exported to an org's own destination later, where
-a mistake is a disclosure. The newer spans (`run.exec`, `integration.call`,
-`trigger.fire`) follow all of them; the older ones predate rules 3 and 4 in
-places, and [Known gaps](#known-gaps) lists where.
+a mistake is a disclosure. Every span Reliant opens in the tree follows them;
+[Known gaps](#known-gaps) lists the spans it does not open, and the few cases
+that still miss `org.id`.
 
 1. **`org.id` on every span.** Tenant export is fail-closed on it: a span with no
    `org.id` is dropped from every tenant destination. A new span creation site
@@ -176,11 +204,13 @@ places, and [Known gaps](#known-gaps) lists where.
 4. **The status description is a code, never text.** A failed span's
    `Status{Error, description}` description is a short machine code (`timeout`,
    `http_404`, `machine_unavailable (<transport code>)`, `failed`, `error`),
-   the same value as `error.type` or the outcome. Do not call `RecordError` on a
-   new span: it records the exception's message as an event, and a provider or a
-   machine can put anything in one. The new spans (`run.exec`, `integration.call`,
-   `trigger.fire`) follow this. A cancellation is the caller hanging up, not a
-   failure: it is `error.type=canceled` with *no* error status.
+   the same value as `error.type` or the outcome. Do not call `RecordError`: it
+   records the exception's message as an event, and a provider or a machine can
+   put anything in one. Every span in the tree follows this; the AI spans take
+   their codes from [one vocabulary](#errortype-on-the-ai-spans). The error's
+   text is not lost: the code that returned it logs it to the staff logs, where
+   the trace and run ids join it to the span. A cancellation is the caller
+   hanging up, not a failure: it is `error.type=canceled` with *no* error status.
 5. **A closed enum, not free text, for a reason.** When a span needs to say *why*,
    it names one value of a closed vocabulary that lives beside the attribute as
    constants. The model case is `reliant.trigger.reason`: the trigger_events row
@@ -203,6 +233,38 @@ places, and [Known gaps](#known-gaps) lists where.
    with every `reliant.*` attribute dropped. A fact a viewer is meant to see
    belongs under `gen_ai.*` or `forge.ai.*`, not only under `reliant.*`.
 
+## `error.type` on the AI spans
+
+`workflow.node`, `invoke_agent`, `execute_tool` and `chat` end a failure with one
+value of a closed vocabulary (`internal/telemetry/ai_error_type.go`), as
+`error.type` and as the status description alike. They never call `RecordError`
+and never describe a status with an error's text. A value outside the vocabulary
+is written as `error`.
+
+| Value | Means | Set on |
+|---|---|---|
+| `canceled` | The caller hung up (stop, a newer turn). No error status. | all four |
+| `timeout` | A deadline ran out. | all four |
+| `tool_error` | The tool ran and reported an error. Status untouched. | `execute_tool` |
+| `context_overflow` | The request exceeded the model's context window. | `chat`, `invoke_agent` |
+| `credit_exhausted` | The provider's quota, credit or billing is exhausted. | `chat`, `invoke_agent` |
+| `prompt_refused` | The provider refused the prompt under its usage policy. | `chat`, `invoke_agent` |
+| `stream_stalled` | The stream sent only keepalives past its content-stall deadline. | `chat`, `invoke_agent` |
+| `stream_ended_early` | The stream closed before its terminal event. | `chat`, `invoke_agent` |
+| `malformed_output` | The model's response could not be read. | `chat`, `invoke_agent` |
+| `empty_input` | The request had nothing to send. | `chat`, `invoke_agent` |
+| `no_provider` | No provider could serve the model. | `chat`, `invoke_agent` |
+| `http_<status>` | The provider answered with an HTTP status of 400-599 (`http_429`, `http_529`). | `chat`, `invoke_agent` |
+| `error` | Any other failure. | all four |
+
+The provider classes are decided by `llm.ErrorType`, most specific first (a
+context overflow answered with a 400 is `context_overflow`, not `http_400`). The
+node span classes only by the error's type (`canceled`, `timeout`, `error`): its
+`call_llm` node's turn and calls below it carry the provider class. A failed
+provider call is logged at WARN (`LLM provider call failed`, with the error, its
+class, the provider and the model) on the call's context; a failed activity, and
+with it its node and turn, is logged by the Temporal worker.
+
 ## The run: `RunWorkflow:DynamicWorkflow`
 
 Opened by forge's temporalotel interceptor as the workflow starts, on every
@@ -220,13 +282,19 @@ sets attributes on it, which is replay-safe because an attribute is not a comman
 Attributes: `gen_ai.operation.name` = `invoke_workflow`, the run scope's
 `SpanAttributes()` with the fields the workflow knows (`reliant.chat.id`,
 `thread.id`, `workflow.id`, `forge.ai.workflow.*`, `forge.ai.run.id`,
-`forge.ai.root_run_id`), `gen_ai.conversation.id`, and
-`reliant.trigger.event_id` (#3289, pending merge) when a trigger launched it.
+`forge.ai.root_run_id`), `gen_ai.conversation.id`,
+`reliant.trigger.event_id` (#3289, pending merge) when a trigger launched it, and
+`org.id`.
+
+`org.id` is set once the run's root definition load returns. Workflow code
+cannot read the database, so the worker's `ActivityLoadWorkflow` reports the
+org of the run's chat in its result (`org_id`), from the same chat-owner lookup
+that stamps every other span of the run, and `nameRunOrg` sets it on the span.
+The result is in the run's history, so a replay sets the same value; a run whose
+history predates the field, or whose chat has no org, names none. A run that
+fails before its definition loads has no `org.id`. The span has no `user.id`.
 
 Status: the interceptor's. Reliant sets none.
-
-This span has no `org.id` or `user.id` today: workflow code cannot read the
-database, and the org is added worker-side. See [Known gaps](#known-gaps).
 
 ## `workflow.node <node id>`
 
@@ -239,12 +307,8 @@ activity's result.
 | Name | `workflow.node <forge.ai.node.id>` |
 | Kind | Internal |
 | Parent | The run span; in a spawned sub-agent, the sub-agent's. |
-| Attributes | The run scope's `SpanAttributes()`. |
-| Status | Error, described by the error's text, when the activity fails; a cancellation is `error.type=canceled`, no status. |
-
-The node span carries `reliant.chat.id` but not `gen_ai.conversation.id`; a
-per-chat read keyed on `gen_ai.conversation.id` finds its children and not the
-node itself ([Known gaps](#known-gaps)).
+| Attributes | The run scope's `SpanAttributes()`, and `gen_ai.conversation.id` (the chat, beside `reliant.chat.id`) so a per-chat read keyed on the conversation finds the node itself. No `gen_ai.agent.*`: a node is not an agent. |
+| Status | Error when the activity fails, described by its [class](#errortype-on-the-ai-spans) (`timeout`, `error`); a cancellation is `error.type=canceled`, no status. |
 
 ## `invoke_agent <agent>`
 
@@ -258,7 +322,7 @@ One agent turn. Its LLM calls are its children (opened under its context) and, b
 | Kind | Internal |
 | Parent | `workflow.node` of the `call_llm` node. |
 | Attributes | `gen_ai.operation.name`=`invoke_agent` and `GenAIAttributes()`. |
-| Status | Error on a failed turn; a cancellation is `error.type=canceled`, no status. |
+| Status | Error on a failed turn, described by its provider [class](#errortype-on-the-ai-spans) (`llm.ErrorType`); a cancellation is `error.type=canceled`, no status. |
 
 ## `chat <model>`
 
@@ -270,18 +334,19 @@ driver's HTTP spans are its children.
 | Name | `chat <requested model>` |
 | Kind | Client |
 | Parent | `invoke_agent`. |
-| Status | Error on a provider failure; a cancellation is `error.type=canceled`, no status. |
+| Status | Error on a provider failure, described by its [class](#errortype-on-the-ai-spans) (`context_overflow`, `http_529`, ...), which is also `error.type`; a cancellation is `error.type=canceled`, no status. |
 
 | Attribute | Type | Meaning |
 |---|---|---|
 | `gen_ai.operation.name` | string | `chat` |
 | `gen_ai.provider.name` | string | The driver family: `anthropic`, `openai`, `codex`, ... |
 | `gen_ai.request.model` | string | The model asked for. |
-| `gen_ai.request.stream` | bool | Whether the call streamed. |
+| `gen_ai.request.stream` | bool | Whether the call streamed. Always set: forge's `StartChat` records only `true`, and Reliant adds `false`. |
 | `reliant.model_id` | string | Reliant's own model id, when it has one. |
 | `GenAIAttributes()` | | The run scope, as above. |
 | `gen_ai.response.model` | string | The model that served it (the requested one when the provider did not say). |
 | `gen_ai.response.id` | string | The provider's request id. |
+| `reliant.gateway.call_id` | string | The LLM gateway's id for the call: LiteLLM's `x-litellm-call-id`, which control-plane's wallet ledger stores as the call's `provider_request_id`. Set only by the `reliant` driver, on every call the gateway answered, failed and streamed ones included; after retries it is the last answered attempt's. Never set on any other provider's call. It is the exact join to the gateway's billed cost; `gen_ai.response.id` is the upstream provider's id, a different value (`dev-docs/design/agent-analytics.md` §3.2, §4). |
 | `gen_ai.response.finish_reasons` | string[] | One value. |
 | `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens` | int | Token counts. |
 | `gen_ai.usage.cache_read.input_tokens`, `gen_ai.usage.cache_creation.input_tokens`, `gen_ai.usage.reasoning.output_tokens` | int | Set only when non-zero. |
@@ -292,7 +357,9 @@ driver's HTTP spans are its children.
 Span events: `gen_ai.first_token` (once per call, retries included: the span's
 start to it is the time to first token) and `gen_ai.retry_wait` with `attempt`,
 `http.response.status_code`, `reason` (a short code like `http_529`) and
-`delay_ms`.
+`delay_ms`. A retry with no HTTP status (`reason=connection_error`) has no
+`http.response.status_code`; before forge's `genai.RetryWait` it said `0`, and
+readers treat the two alike.
 
 ## `execute_tool <tool>`
 
@@ -303,7 +370,7 @@ One tool call the turn asked for.
 | Name | `execute_tool <gen_ai.tool.name>` |
 | Kind | Internal |
 | Parent | The `invoke_agent` of the turn that asked, when its traceparent names a span of this trace; otherwise the current span, with a link to the turn. A link to the `execute_tools` node's span when it is parented by the turn. |
-| Status | Error only for a failure to run the tool at all. A tool that ran and reported an error is `error.type=tool_error`, status untouched. A cancellation is `error.type=canceled`, no status. |
+| Status | Error only for a failure to run the tool at all, described by its [class](#errortype-on-the-ai-spans). A tool that ran and reported an error is `error.type=tool_error`, status untouched. A cancellation is `error.type=canceled`, no status. |
 
 | Attribute | Type | Meaning |
 |---|---|---|
@@ -539,28 +606,37 @@ must keep true:
   use: a read filters on both, and a span with no `org.id` is treated as not the
   chat's.
 - **Org coverage is audited**, with a test that opens each kind of span and asserts
-  `org.id`. The gaps below are what such an audit finds today.
+  `org.id`: `TestGenAISpanTree_EveryAISpanCarriesOrgID`
+  (`internal/llm/genai_span_tree_test.go`) for the node, agent turn, model call
+  and tool call, failed and cancelled ones included, and
+  `internal/workflow/runtime/run_telemetry_test.go` for the run span. The gaps
+  below are what such an audit finds today.
 
 ## Known gaps
 
 Where the code today does not yet meet the rules. They are listed so a reader
 does not mistake the reference for a guarantee. None is changed by this document.
 
-- **`org.id` is missing from the run span** (`RunWorkflow:DynamicWorkflow`), which
-  workflow code names without a database. It is also missing from the
-  infrastructure spans other libraries open (Temporal's `StartWorkflow` and
-  `RunActivity`, `otelhttp`'s `HTTP POST`), and from a `trigger.fire`
-  span whose trigger could not be read, and from an `integration.call` outside a
-  run whose caller knew no org. Tenant export has to either stamp these or accept
-  dropping them.
-- **The node span has `reliant.chat.id`, not `gen_ai.conversation.id`**, because it
-  is opened with `SpanAttributes()`. A per-chat read keyed on the conversation id
-  does not see the node spans themselves, only what they contain.
-- **Older spans record error text.** `EndAISpan` (`workflow.node`, `invoke_agent`,
-  `execute_tool`) and the `chat` span call `RecordError` and describe an error
-  status with the error's message. They predate rules 3 and 4. The newer spans
-  (`run.exec`, `integration.call`, `trigger.fire`) follow them. Bringing the older
-  spans in line is a separate, additive change.
+- **Spans other libraries open have no `org.id`**: Temporal's `StartWorkflow`,
+  `StartActivity` and `RunActivity`, and `otelhttp`'s `HTTP POST` (under `chat`
+  and the gateway round trip). Reliant does not open them, so no creation site
+  can stamp them. Dropping them is not harmless: `RunActivity` is the parent of
+  every `workflow.node`, so a tenant tree without it has every node orphaned
+  from its run. The recommended treatment, for the export work to build: a span
+  processor on the exporting process stamps `org.id` at `OnStart` from the
+  context the span is started under (the run scope, else W3C baggage the
+  starter put there), never from anything ambient, and the fail-closed filter
+  drops what it still cannot name. `HTTP POST` starts under a context that
+  already holds the run scope. `RunActivity` does not yet: the tracing
+  interceptor opens it before the run-scope interceptor binds the scope, so the
+  scope has to be bound first (an outer interceptor that only binds it), or
+  the org carried in baggage from the workflow. `StartWorkflow` starts in the
+  request that launched the run, whose org the launcher knows.
+- **A few Reliant spans can still lack `org.id`**: a run span whose run fails
+  before its definition loads, or whose history predates `org_id` in that
+  load's result; a `trigger.fire` span whose trigger could not be read; an
+  `integration.call` outside a run whose caller knew no org. The fail-closed
+  filter drops them.
 - **`toolexec.ToolRequest.Environment` never reaches a daemon**; only the shell
   tool's `env` input does. Not a telemetry defect, but it bounds what a run node
   can be given to make a command observable.

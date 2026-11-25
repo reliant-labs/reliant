@@ -20,7 +20,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -31,21 +30,6 @@ import (
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
 )
-
-// triggerConnections is the slice of the connection store an integration
-// trigger's write path reads.
-type triggerConnections interface {
-	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
-	DefaultConnection(ctx context.Context, userID, integrationID string) (*core.Connection, error)
-}
-
-// connections returns the connection store, when the repository has one.
-func (s *Service) connections() triggerConnections {
-	if repo, ok := s.deps.Repo.(interface{ Connections() db.ConnectionStore }); ok {
-		return repo.Connections()
-	}
-	return nil
-}
 
 // syncs reports whether a trigger is converged onto a Temporal Schedule:
 // every schedule trigger, and integration triggers (whose syncer decides
@@ -127,7 +111,7 @@ func (s *Service) triggerFromDefinition(
 		return nil, svcerr.InvalidArgument("daemon_id is required: a trigger must name the daemon its runs execute on, a machine_pool_id, or no_machine")
 	}
 
-	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, def.ProjectId, userID); svcerr.IsNotFound(err) {
+	if _, err := s.deps.Projects.GetProjectWithUserCheck(ctx, def.ProjectId, userID); svcerr.IsNotFound(err) {
 		return nil, tools.RefuseActivation("project not found", svcerr.NotFound("project"))
 	} else if err != nil {
 		return nil, triggerDBError("get project", err)
@@ -294,7 +278,7 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 	// against (fires then wait until a member syncs).
 	catalogMachine := def.DaemonId
 	if def.MachinePoolId != "" {
-		if member, _, err := machinepool.AgreedCatalog(ctx, s.deps.Repo, userID, def.MachinePoolId, def.ProjectId); err == nil {
+		if member, _, err := machinepool.AgreedCatalog(ctx, s.deps.Pools, userID, def.MachinePoolId, def.ProjectId); err == nil {
 			catalogMachine = member
 		}
 	}
@@ -370,7 +354,7 @@ func (s *Service) validateTriggerDaemon(ctx context.Context, userID, projectID, 
 // member that has the project is accepted (its runs wait, saying why), so a
 // pool can be wired before its machines finish cloning.
 func (s *Service) validateTriggerPool(ctx context.Context, userID string, def *reliantv1.TriggerDefinition) error {
-	if _, err := s.deps.Repo.GetMachinePoolForUser(ctx, userID, def.MachinePoolId); errors.Is(err, core.ErrMachinePoolNotFound) {
+	if _, err := s.deps.Pools.GetMachinePoolForUser(ctx, userID, def.MachinePoolId); errors.Is(err, core.ErrMachinePoolNotFound) {
 		return tools.RefuseActivation("machine pool not found", svcerr.NotFound("machine pool"))
 	} else if err != nil {
 		return triggerDBError("get machine pool", err)
@@ -388,13 +372,13 @@ func (s *Service) ensureGrants(ctx context.Context, t *core.Trigger) {
 		s.grants.ensure(ctx, t.UserID, t.DaemonID)
 		return
 	}
-	pool, err := s.deps.Repo.GetMachinePoolForUser(ctx, t.UserID, t.MachinePoolID)
+	pool, err := s.deps.Pools.GetMachinePoolForUser(ctx, t.UserID, t.MachinePoolID)
 	if err != nil {
 		logging.WarnContext(ctx, "automation access not granted to pool members: could not read the pool",
 			"trigger_id", t.ID, "pool_id", t.MachinePoolID, "error", err)
 		return
 	}
-	members, err := s.deps.Repo.ListMachinePoolMembers(ctx, pool, "")
+	members, err := s.deps.Pools.ListMachinePoolMembers(ctx, pool, "")
 	if err != nil {
 		logging.WarnContext(ctx, "automation access not granted to pool members: could not list them",
 			"trigger_id", t.ID, "pool_id", t.MachinePoolID, "error", err)
@@ -452,7 +436,7 @@ func (s *Service) render(ctx context.Context, t *core.Trigger) *reliantv1.Trigge
 	if fresh, err := s.deps.Repo.GetTrigger(ctx, t.ID); err == nil {
 		t = fresh
 	}
-	recent, err := s.deps.Repo.RecentTriggerFirings(ctx, t.UserID, []string{t.ID}, triggers.HealthWindow)
+	recent, err := s.deps.Firings.RecentTriggerFirings(ctx, t.UserID, []string{t.ID}, triggers.HealthWindow)
 	if err != nil {
 		logging.WarnContext(ctx, "could not resolve a trigger's recent firings", "trigger_id", t.ID, "error", err)
 	}

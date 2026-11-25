@@ -11,13 +11,16 @@ import (
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
 
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // fakeWorkflowRun is a minimal client.WorkflowRun for tests that just need
@@ -113,11 +116,17 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 	temporal := &atomicityTestTemporalClient{}
 	service := &Service{
 		deps: Deps{
-			Repo:     failingRepo,
-			Temporal: temporal,
+			Repo:        failingRepo,
+			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
+			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
+			ProjectRows: store.NewProjectExtStore(repo.ORM()),
+			Questions:   &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
+			Temporal:      temporal,
 		},
-		threads: threads.NewService(failingRepo),
-		runs:    runs.NewService(failingRepo, temporal, nil),
+		threads: threads.New(threads.Deps{Repo: failingRepo}),
+		runs:    runs.New(runs.Deps{Repo: failingRepo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
 	_, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
@@ -192,11 +201,17 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	temporal := &atomicityTestTemporalClient{}
 	service := &Service{
 		deps: Deps{
-			Repo:     failingRepo,
-			Temporal: temporal,
+			Repo:        failingRepo,
+			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
+			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
+			ProjectRows: store.NewProjectExtStore(repo.ORM()),
+			Questions:   &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
+			Temporal:      temporal,
 		},
-		threads: threads.NewService(failingRepo),
-		runs:    runs.NewService(failingRepo, temporal, nil),
+		threads: threads.New(threads.Deps{Repo: failingRepo}),
+		runs:    runs.New(runs.Deps{Repo: failingRepo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
 	resp, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{

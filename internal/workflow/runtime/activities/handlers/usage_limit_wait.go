@@ -45,14 +45,16 @@ type UsageLimitWaitOutput struct {
 //
 // The workflow calls it BEFORE it parks on its timer: a marker written after
 // the park cannot tell a run that is waiting from one that is wedged, which is
-// the whole reason provider_backoff exists. See db.ProviderBackoff.
+// the whole reason provider_backoff exists. See core.ProviderBackoff.
 type UsageLimitWaitActivity struct {
-	repo UsageLimitWaitStore
+	repo    UsageLimitWaitStore
+	waits   ProviderBackoffMarkers
+	threads MessageSaver
 }
 
 // NewUsageLimitWaitActivity creates a new UsageLimitWaitActivity.
-func NewUsageLimitWaitActivity(repo UsageLimitWaitStore) *UsageLimitWaitActivity {
-	return &UsageLimitWaitActivity{repo: repo}
+func NewUsageLimitWaitActivity(deps UsageLimitWaitDeps) *UsageLimitWaitActivity {
+	return &UsageLimitWaitActivity{repo: deps.Store, waits: deps.Waits, threads: deps.Threads}
 }
 
 // Name returns the activity name for registration.
@@ -68,12 +70,12 @@ func (a *UsageLimitWaitActivity) Execute(ctx context.Context, input UsageLimitWa
 		if activity.IsActivity(ctx) {
 			key = "provider-switch-" + activity.GetInfo(ctx).ActivityID + "-" + input.Thread
 		}
-		postNotice(ctx, a.repo, input.ChatID, input.Thread, input.WorkflowID, key,
+		postNotice(ctx, a.threads, input.ChatID, input.Thread, input.WorkflowID, key,
 			providerSwitchNotice(input.Provider, input.Model, until, input.Probing))
 		return UsageLimitWaitOutput{Success: true}, nil
 	}
 	if input.Clear {
-		if err := a.repo.ClearUsageLimitWait(ctx, input.ChatID, input.Thread, time.Now()); err != nil {
+		if err := a.waits.ClearUsageLimitWait(ctx, input.ChatID, input.Thread, time.Now()); err != nil {
 			return UsageLimitWaitOutput{}, err
 		}
 		return UsageLimitWaitOutput{Success: true}, nil
@@ -82,7 +84,7 @@ func (a *UsageLimitWaitActivity) Execute(ctx context.Context, input UsageLimitWa
 	if err != nil {
 		return UsageLimitWaitOutput{}, fmt.Errorf("invalid resume_at %q: %w", input.ResumeAt, err)
 	}
-	if err := a.repo.RecordUsageLimitWait(ctx, input.ChatID, input.Thread, input.Provider, input.Probing, resumeAt, time.Now()); err != nil {
+	if err := a.waits.RecordUsageLimitWait(ctx, input.ChatID, input.Thread, input.Provider, input.Probing, resumeAt, time.Now()); err != nil {
 		return UsageLimitWaitOutput{}, err
 	}
 	return UsageLimitWaitOutput{Success: true}, nil

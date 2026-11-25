@@ -112,7 +112,18 @@ type ApiServerConfig struct {
 	// endpoint accepts, comma-separated (typically the Supabase project URL).
 	// None: connectors authenticate with rlat_ connector credentials only, and
 	// OAuth discovery is not advertised.
+	//
+	// Listing the control plane (RELIANT_AUTHORIZATION_SERVER, compared with
+	// trailing slashes trimmed) here also makes the workspace connector accept
+	// the mcp:oauth access tokens that control plane issues to MCP clients for
+	// this endpoint. Clients use the first server listed, so naming it second,
+	// behind Supabase, accepts its tokens without moving anyone to it.
 	McpOauthIssuers []string `protobuf:"bytes,34,rep,name=mcp_oauth_issuers,json=mcpOauthIssuers,proto3" json:"mcp_oauth_issuers,omitempty"`
+	// The OAuth scopes the connector endpoints advertise (RFC 9728
+	// scopes_supported, and the 401 challenge's scope). They must be scopes the
+	// authorization server clients use actually issues, or the authorize step
+	// fails before the user sees anything. Unset: "openid".
+	McpOauthScopes []string `protobuf:"bytes,97,rep,name=mcp_oauth_scopes,json=mcpOauthScopes,proto3" json:"mcp_oauth_scopes,omitempty"`
 	// The largest attachment accepted, in bytes.
 	MaxUploadSize int64 `protobuf:"varint,35,opt,name=max_upload_size,json=maxUploadSize,proto3" json:"max_upload_size,omitempty"`
 	// What the worktree sweep does with active worktrees its daemon reports
@@ -390,6 +401,13 @@ func (x *ApiServerConfig) GetMcpOauthIssuers() []string {
 	return nil
 }
 
+func (x *ApiServerConfig) GetMcpOauthScopes() []string {
+	if x != nil {
+		return x.McpOauthScopes
+	}
+	return nil
+}
+
 func (x *ApiServerConfig) GetMaxUploadSize() int64 {
 	if x != nil {
 		return x.MaxUploadSize
@@ -612,7 +630,7 @@ var File_reliant_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xf83\n" +
+	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\x8c5\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
@@ -674,7 +692,9 @@ const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x14authorization_server\x18! \x01(\tBh\x82\xce\x18d\n" +
 	"\x1cRELIANT_AUTHORIZATION_SERVER*DPublic URL of the control plane that issues this deployment's tokensR\x13authorizationServer\x12\x8e\x01\n" +
 	"\x11mcp_oauth_issuers\x18\" \x03(\tBb\x82\xce\x18^\n" +
-	"\x11MCP_OAUTH_ISSUERS*IComma-separated OAuth issuers whose tokens the connector endpoint acceptsR\x0fmcpOauthIssuers\x12u\n" +
+	"\x11MCP_OAUTH_ISSUERS*IComma-separated OAuth issuers whose tokens the connector endpoint acceptsR\x0fmcpOauthIssuers\x12\x91\x01\n" +
+	"\x10mcp_oauth_scopes\x18a \x03(\tBg\x82\xce\x18c\n" +
+	"\x10MCP_OAUTH_SCOPES*OComma-separated OAuth scopes the connector endpoints advertise (default openid)R\x0emcpOauthScopes\x12u\n" +
 	"\x0fmax_upload_size\x18# \x01(\x03BM\xbaH\x04\"\x02 \x00\x82\xce\x18B\n" +
 	"\x0fMAX_UPLOAD_SIZE\x1a\b10485760*%Largest attachment accepted, in bytesR\rmaxUploadSize\x12\x9d\x01\n" +
 	"\x15worktree_auto_archive\x18$ \x01(\tBi\x82\xce\x18e\n" +

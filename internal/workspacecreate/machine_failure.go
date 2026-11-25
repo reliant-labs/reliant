@@ -4,6 +4,7 @@ package workspacecreate
 import (
 	"errors"
 	"log/slog"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -18,7 +19,9 @@ import (
 // at WARN (visible, never an issue: the level forge gives a DeadlineExceeded
 // rpc), and the workspace's failure reason says what happened instead of "did
 // not finish". A machine that is not connected at all is already a user error
-// (toolexec), which the process log policy writes at INFO.
+// (toolexec), which the process log policy writes at INFO. So is a machine
+// that kept refusing the command while it finalized another workspace's
+// recovery, past the wait recovery_wait.go gives it.
 
 // connectionInterrupted is how the router's "daemon connection interrupted"
 // error describes itself (toolexec.ErrDaemonConnectionInterrupted). Declared
@@ -37,7 +40,14 @@ func (e machineFailureError) Unwrap() error { return e.error }
 // err as the cause, and true; otherwise err unchanged and false.
 func machineFailure(doing string, err error) (error, bool) {
 	var dropped connectionInterrupted
+	var outlasted *recoveryOutlastedError
 	switch {
+	case errors.As(err, &outlasted):
+		// The machine refused the command the whole time it was finalizing
+		// another workspace's recovery (recovery_wait.go): nothing ran.
+		kind := svcerr.Unavailable(doing + ": your machine was busy finalizing another workspace's removal for over " +
+			outlasted.waited.Round(time.Second).String() + "; try again")
+		return machineFailureError{svcerr.WithCause(kind, err)}, true
 	case errors.As(err, &dropped) && dropped.ConnectionInterrupted():
 		kind := svcerr.Unavailable(doing + ": your machine's connection dropped before it answered; try again")
 		return machineFailureError{svcerr.WithCause(kind, err)}, true

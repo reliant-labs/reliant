@@ -12,6 +12,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // createRaceRepo loses this machine's first project create to another
@@ -33,8 +34,15 @@ func (r *createRaceRepo) CreateProject(ctx context.Context, p *db.Project) error
 	return r.Repo.CreateProject(ctx, p)
 }
 
-func (r *createRaceRepo) WithMachineCheckoutsLocked(ctx context.Context, _ string, fn func(ctx context.Context) error) error {
-	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(1), fn)
+// raceCheckouts is the machine's checkouts with the locked transaction run
+// once, as createRaceRepo's comment says.
+type raceCheckouts struct {
+	MachineCheckouts
+	repo *db.Repo
+}
+
+func (r raceCheckouts) WithMachineCheckoutsLocked(ctx context.Context, _ string, fn func(ctx context.Context) error) error {
+	return r.repo.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(1), fn)
 }
 
 // Review round 9 (B1): two machines discover the same new folder at once. The
@@ -62,7 +70,7 @@ func TestDiscoveryThatLosesTheCreateRace_RecordsItsCheckoutAndStoresTheSnapshot(
 		require.NoError(t, err)
 		require.True(t, recorded)
 	}}
-	svc := newTestService(racing)
+	svc := newTestService(racing, raceCheckouts{MachineCheckouts: store.NewProjectDaemonDetachmentExtStore(repo.ORM()), repo: repo})
 	defer svc.Close()
 	conn := newTestConn(userID, loser, nil)
 
@@ -78,7 +86,7 @@ func TestDiscoveryThatLosesTheCreateRace_RecordsItsCheckoutAndStoresTheSnapshot(
 		machines = append(machines, r.DaemonID)
 	}
 	assert.ElementsMatch(t, []string{winner, loser}, machines, "the machine that lost the create holds the project too")
-	record, synced, err := repo.GetProjectMachineConfigRecord(ctx, winnerID, loser)
+	record, synced, err := store.GetProjectMachineConfigRecord(ctx, repo.ORM(), winnerID, loser)
 	require.NoError(t, err)
 	require.True(t, synced, "the losing machine's snapshot was dropped until a reconnect")
 	assert.Equal(t, "from the loser", *record.UserConfigYAML)

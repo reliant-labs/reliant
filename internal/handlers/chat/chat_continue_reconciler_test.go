@@ -18,6 +18,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/reconciliation"
 )
 
@@ -71,7 +72,7 @@ func newTerminatedRunFixture(t *testing.T) (continueFixture, *reconciliation.Rec
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Active()))
 	f.temporal.status = enums.WORKFLOW_EXECUTION_STATUS_TERMINATED
 
-	rec := reconciliation.NewReconciler(f.repo, terminatedRunTemporal{f.temporal}, reconciliation.DefaultConfig())
+	rec := reconciliation.New(reconciliation.Deps{Store: f.repo, Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Daemons: store.NewDaemonExtStore(f.repo.ORM()), Questions: store.NewQuestionExtStore(f.repo.ORM()), Temporal: terminatedRunTemporal{f.temporal}, Config: reconciliation.DefaultConfig()})
 	rec.SetQueuedDelivery(queueddelivery.New(queueddelivery.Deps{Store: f.repo, Machines: onlineMachines{}, Deliverer: f.svc, Signaler: f.temporal}))
 	return f, rec
 }

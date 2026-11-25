@@ -7,7 +7,6 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 )
@@ -45,7 +44,7 @@ func (s *Service) PreviewAccountDeletion(
 		return nil, err
 	}
 
-	counts, err := accountpurge.Preview(ctx, s.deps.SQL, userID)
+	counts, err := s.deps.Purger.Preview(ctx, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("could not read account contents"))
 	}

@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // TestApprovalCreateActivity_Basic creates an approval and verifies the output
@@ -32,7 +33,7 @@ func TestApprovalCreateActivity_Basic(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 	h.CreateTestWorkflow(ctx, workflowID, chatID)
 
-	activity := NewApprovalCreateActivity(h.Repo())
+	activity := NewApprovalCreateActivity(approvalCreateDeps(h.Repo()))
 
 	input := ApprovalCreateInput{
 		ChatID:             chatID,
@@ -68,7 +69,7 @@ func TestApprovalCreateActivity_MarksChatUnread(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 	h.CreateTestWorkflow(ctx, workflowID, chatID)
 
-	activity := NewApprovalCreateActivity(h.Repo())
+	activity := NewApprovalCreateActivity(approvalCreateDeps(h.Repo()))
 
 	input := ApprovalCreateInput{
 		ChatID:             chatID,
@@ -109,7 +110,7 @@ func TestApprovalCreateActivity_EmitsApprovalUpdate(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 	h.CreateTestWorkflow(ctx, workflowID, chatID)
 
-	activity := NewApprovalCreateActivity(h.Repo())
+	activity := NewApprovalCreateActivity(approvalCreateDeps(h.Repo()))
 
 	input := ApprovalCreateInput{
 		ChatID:             chatID,
@@ -183,7 +184,7 @@ func TestApprovalCreateActivity_Idempotency(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	activity := NewApprovalCreateActivity(h.Repo())
+	activity := NewApprovalCreateActivity(approvalCreateDeps(h.Repo()))
 	input := ApprovalCreateInput{
 		ChatID:             chatID,
 		WorkflowID:         workflowID,
@@ -231,7 +232,7 @@ func TestApprovalCreateActivity_ThreadIDAttribution(t *testing.T) {
 	subAgentThreadID := uuid.New().String()
 	h.CreateTestThread(ctx, chatID, subAgentThreadID)
 
-	activity := NewApprovalCreateActivity(h.Repo())
+	activity := NewApprovalCreateActivity(approvalCreateDeps(h.Repo()))
 
 	input := ApprovalCreateInput{
 		ChatID:             chatID,
@@ -277,7 +278,7 @@ func TestApprovalCreateActivity_ThreadIDOmittedIsNull(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 	h.CreateTestWorkflow(ctx, workflowID, chatID)
 
-	activity := NewApprovalCreateActivity(h.Repo())
+	activity := NewApprovalCreateActivity(approvalCreateDeps(h.Repo()))
 
 	input := ApprovalCreateInput{
 		ChatID:             chatID,
@@ -338,7 +339,7 @@ func TestApprovalCreateActivity_IdempotencyAlreadyResolved(t *testing.T) {
 		nil, &actionTaken, nil)
 	require.NoError(t, err)
 
-	activity := NewApprovalCreateActivity(h.Repo())
+	activity := NewApprovalCreateActivity(approvalCreateDeps(h.Repo()))
 	input := ApprovalCreateInput{
 		ChatID:             chatID,
 		WorkflowID:         workflowID,
@@ -372,7 +373,7 @@ func TestApprovalCreateActivity_ToolCallBatch(t *testing.T) {
 	h.CreateTestWorkflow(ctx, workflowID, chatID)
 
 	var output ApprovalCreateOutput
-	require.NoError(t, h.ExecuteActivity(NewApprovalCreateActivity(h.Repo()).Execute, ApprovalCreateInput{
+	require.NoError(t, h.ExecuteActivity(NewApprovalCreateActivity(approvalCreateDeps(h.Repo())).Execute, ApprovalCreateInput{
 		ChatID: chatID, WorkflowID: workflowID, TemporalWorkflowID: workflowID, StepID: "agent_loop",
 		Title: "Approval: enable_trigger", ToolCallID: "call-1", BatchID: "batch-1",
 	}, &output))
@@ -385,7 +386,7 @@ func TestApprovalCreateActivity_ToolCallBatch(t *testing.T) {
 	assert.Contains(t, *stored.Metadata, `"tool_call_id":"call-1"`)
 
 	var step ApprovalCreateOutput
-	require.NoError(t, h.ExecuteActivity(NewApprovalCreateActivity(h.Repo()).Execute, ApprovalCreateInput{
+	require.NoError(t, h.ExecuteActivity(NewApprovalCreateActivity(approvalCreateDeps(h.Repo())).Execute, ApprovalCreateInput{
 		ChatID: chatID, WorkflowID: workflowID, TemporalWorkflowID: workflowID, StepID: "approve", Title: "Deploy?",
 	}, &step))
 	stored, err = h.Repo().GetApproval(ctx, step.ApprovalID)

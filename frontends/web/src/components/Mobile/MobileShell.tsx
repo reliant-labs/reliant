@@ -26,10 +26,12 @@
  * ## 2. A project must be selected
  *
  * The desktop app selects a project from the URL (`/project/$projectId`) or a
- * restored workspace. Mobile has no project route, so it restores the last
- * project (`restoreLastProject`, the desktop's own path) and falls back to the
- * user's first. A chat screen then moves to its chat's own project if that
- * differs (see MobileChatScreen).
+ * restored workspace. Mobile names it in the URL too: the chat list's scope
+ * (`?projects=<id>`) or a new chat's project (`/m/new?project=<id>`), which
+ * `MobileScopeSync` moves the context to. A URL that names none restores the
+ * last project (`restoreLastProject`, the desktop's own path) and falls back
+ * to the user's first. A chat screen then moves to its chat's own project if
+ * that differs (see MobileChatScreen).
  *
  * ## 3. Top-level navigation
  *
@@ -66,6 +68,7 @@ import { MobileLayout } from "./MobileLayout";
 import { MobileNavDrawer } from "./MobileNavDrawer";
 import { MobileNavigationFeedback } from "./MobileNavigationFeedback";
 import { MobileInboxBadgeSync } from "./MobileInboxBadgeSync";
+import { MobileScopeSync } from "./MobileScopeSync";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
 import { useUpdateStreamConnection } from "@/hooks/useUpdateStreamConnection";
 import { useProjectStore } from "../../store/projectStore";
@@ -125,6 +128,10 @@ export function MobileShell() {
   const initialSelectionAttempted = useRef(false);
   useEffect(() => {
     if (currentProject || projects.length === 0) return;
+    // Read fresh: MobileScopeSync (a child, so its effects run first) may have
+    // just moved the context to the project the URL names, which no restore
+    // may replace.
+    if (useProjectStore.getState().currentProject) return;
     if (initialSelectionAttempted.current) return;
     initialSelectionAttempted.current = true;
     void restoreLastProject({ restoreWorkspace: false });
@@ -173,6 +180,7 @@ export function MobileShell() {
         <Outlet />
       </div>
       <MobileNavDrawer isOpen={isDrawerOpen} onClose={closeDrawer} />
+      <MobileScopeSync />
       <MobileInboxBadgeSync />
       <MobileNavigationFeedback />
     </MobileLayout>
