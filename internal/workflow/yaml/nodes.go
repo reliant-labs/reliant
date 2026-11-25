@@ -302,18 +302,16 @@ func yamlMappingToMap(node *yaml.Node, skipBase bool) (map[string]*yaml.Node, er
 	return result, nil
 }
 
+// validateActivityNodeTopLevelKeys refuses a key that is neither a node base
+// field, args, nor one of the kind's own arg fields. The base fields come from
+// the generated list (the Node proto's own fields), never a hand-kept copy:
+// a copy that missed tolerate_failure refused it on every activity kind.
 func validateActivityNodeTopLevelKeys(node *yaml.Node, binding generatedNodeBinding) error {
-	allowed := map[string]struct{}{
-		yamlKeyID:          {},
-		yamlKeyType:        {},
-		yamlKeyCondition:   {},
-		yamlKeyTimeout:     {},
-		yamlKeySaveMessage: {},
-		yamlKeyDaemon:      {},
-		yamlKeyOutcome:     {},
-		yamlKeyObserve:     {},
-		yamlKeyArgs:        {},
+	allowed := make(map[string]struct{}, len(generatedNodeBaseFieldKeys)+1+len(binding.argFieldKeys))
+	for key := range generatedNodeBaseFieldKeys {
+		allowed[key] = struct{}{}
 	}
+	allowed[yamlKeyArgs] = struct{}{}
 	for key := range binding.argFieldKeys {
 		allowed[key] = struct{}{}
 	}

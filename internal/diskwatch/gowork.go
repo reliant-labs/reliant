@@ -42,13 +42,8 @@ import (
 // could not be read fails it (scanProcRoot), as if there were no /proc. Each
 // process is read between two reads of its start time, so reads that straddle
 // a pid's reuse by another process are never taken for either (readProcess).
-// One refusal is explained instead, by identity: this user's own systemd
-// service manager (`systemd --user` in user@<uid>.service/init.scope), which
-// holds a capability the daemon lacks, so the kernel withholds its references
-// from its own user (CAP_WAKE_ALARM, reliant#3522). It does no work in a
-// GOTMPDIR itself, and everything it starts runs in another cgroup as a
-// process the scan reads, so it fails nothing and keeps nothing
-// (serviceManager).
+// A service manager's identity or capabilities cannot excuse unreadable
+// references: neither proves that it holds no work directory.
 //
 // Where there is no /proc (macOS) nothing can be proven, and a go-build*
 // directory is removed by age alone, GoWorkDirAge, as before.
@@ -102,11 +97,6 @@ type procSnapshot struct {
 	names map[string]bool
 	// goStarts and linkStarts are the live go commands and linkers.
 	goStarts, linkStarts []procStart
-	// explained names this user's live processes whose references the
-	// kernel withheld and the scan explained by identity, each with why it
-	// holds nothing beyond its command line: this user's own systemd service
-	// manager (scanProcRoot, serviceManager). They keep no directory.
-	explained []string
 }
 
 // addRefs records the work-directory names in s, a path, argument or
@@ -183,9 +173,8 @@ type workDirAudit struct {
 	// rule 2: until it exits, nothing born after it started can be proven
 	// dead.
 	OldestCreator string `json:"oldest_creator,omitempty"`
-	// ExplainedUnreadable names the live processes whose references the
-	// scan could not read but explained by identity, and why each holds
-	// nothing (procSnapshot.explained).
+	// ExplainedUnreadable is retained for audit compatibility but never populated:
+	// unreadable references now always fail the proof, regardless of identity.
 	ExplainedUnreadable []string `json:"explained_unreadable,omitempty"`
 	Stopped             string   `json:"stopped,omitempty"`
 	Error               string   `json:"error,omitempty"`
@@ -235,7 +224,6 @@ func (w *Watcher) trimGoWorkDirs(ctx context.Context, age time.Duration, p *pace
 	if scanErr != nil {
 		audit.Proof, audit.Error = "age_only", scanErr.Error()
 	}
-	audit.ExplainedUnreadable = snap.explained
 	if scanErr != nil && (age <= 0 || daemonOnly) {
 		// A root is removed only on a proof; without one, nothing is.
 		return nil, audit

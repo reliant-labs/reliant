@@ -76,13 +76,14 @@ type AgentMessageNotifier interface {
 
 type spawnSendTool struct {
 	repo     spawnSendStore
+	mailbox  SpawnMailbox
 	tree     SpawnTree
 	notifier AgentMessageNotifier
 }
 
 // NewSpawnSendTool builds the spawn_send tool.
 func NewSpawnSendTool(deps SpawnSendDeps) Tool {
-	return NewToolWrapper[SpawnSendParams, ToolResponse](&spawnSendTool{repo: deps.Store, tree: deps.Tree, notifier: deps.Notifier})
+	return NewToolWrapper[SpawnSendParams, ToolResponse](&spawnSendTool{repo: deps.Store, mailbox: deps.Mailbox, tree: deps.Tree, notifier: deps.Notifier})
 }
 
 func (s *spawnSendTool) Name() string {
@@ -98,7 +99,7 @@ func (s *spawnSendTool) RequiresPermission(params SpawnSendParams) (bool, error)
 }
 
 func (s *spawnSendTool) Execute(rctx *rctx.ToolContext, params SpawnSendParams) (ToolResponse, error) {
-	if s.repo == nil || s.tree == nil {
+	if s.repo == nil || s.mailbox == nil || s.tree == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 	threadID := rctx.Thread
@@ -185,7 +186,7 @@ func (s *spawnSendTool) Execute(rctx *rctx.ToolContext, params SpawnSendParams) 
 		Status:       core.AgentMessageStatusQueued,
 		CreatedAt:    time.Now(),
 	}
-	if err := s.repo.EnqueueAgentMessage(rctx.Context, msg); err != nil {
+	if err := s.mailbox.EnqueueAgentMessage(rctx.Context, msg); err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to queue message: %v", err)), nil
 	}
 

@@ -237,6 +237,18 @@ func TestLoadWorktreeInfo_ThreadBoundRoutesToWorktreeOwner(t *testing.T) {
 	_, _, err = a.loadWorktreeInfo(ctx, chat, project, spawned.ThreadID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "archived")
+
+	// That refusal is for machine tools. A tool that never touches the
+	// machine still runs, so an agent resumed after its workspace was
+	// archived can report and message its parent (obs 7d1425f4, c405d76f).
+	_, errMsg := a.loadToolExecutionContext(ctx, f.chatID, spawned.ThreadID, "shell", "{}", "call-1", "")
+	assert.Contains(t, errMsg, "archived", "a machine tool is still refused")
+	for _, name := range []string{"spawn_send", "report_bug", "load_tool"} {
+		tec, errMsg := a.loadToolExecutionContext(ctx, f.chatID, spawned.ThreadID, name, "{}", "call-1", "")
+		require.Empty(t, errMsg, name)
+		assert.Empty(t, tec.worktree.Path, "%s runs without the archived workspace", name)
+		assert.False(t, tec.worktreeThreadBound, name)
+	}
 }
 
 // capturingExecutor records the ToolRequest it is handed.
@@ -265,7 +277,7 @@ func TestSpawnWorktree_ChildToolsRunInWorktreeDespiteInheritedOverrides(t *testi
 
 	run := func(thread string, override string, sel *types.DaemonSelector) *toolexec.ToolRequest {
 		exec := &capturingExecutor{mockToolExecutor: *newMockToolExecutor()}
-		act := NewExecuteToolsActivity(f.repo, workspaceRowsOf(f.repo), toolCallsOf(f.repo), exec)
+		act := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.repo, Rows: workspaceRowsOf(f.repo), ToolCalls: toolCallsOf(f.repo), ToolExecutor: exec, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())})
 		fn := func(ctx context.Context) (message.ToolResult, error) {
 			return act.executeSingleTool(ctx, nil, f.chatID, thread, "shell", `{"command":"pwd"}`,
 				"tc-"+uuid.NewString(), "act", "run", 1, override, sel), nil
@@ -393,7 +405,7 @@ func TestEnsureBatchWorkspace_ThreadBoundWorktree(t *testing.T) {
 	wt := mustWorktree(t, f, wtID)
 
 	executor := &daemonLikeExecutor{}
-	a := NewExecuteToolsActivity(f.repo, workspaceRowsOf(f.repo), toolCallsOf(f.repo), executor)
+	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.repo, Rows: workspaceRowsOf(f.repo), ToolCalls: toolCallsOf(f.repo), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())})
 	rtx := &types.RuntimeContext{
 		ChatID: f.chatID, Thread: spawned.ThreadID,
 		ProjectPath:    "/home/u/projects/p",

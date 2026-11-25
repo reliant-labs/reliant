@@ -243,6 +243,52 @@ func TestScanProcRoot_UnreadableProcessFailsTheScan(t *testing.T) {
 	}
 }
 
+// Capability masks explain a refusal, not the absence of work references.
+// Even a process with extra capabilities must fail an incomplete scan.
+func TestScanProcRoot_CapabilitiesDoNotExcuseUnreadableReferences(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a mode-000 directory, so the refusal cannot be staged")
+	}
+	for _, tc := range []struct {
+		name, theirs string
+	}{
+		{"permitted extra capabilities", "ffffffffffffffff"},
+		{"permitted no capabilities", "0000000000000000"},
+		{"no readable status", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			fakeProc(t, root, 10, "go", "/tmp/go-build1")
+			dir := fakeProc(t, root, 11, "systemd", "/")
+			if tc.theirs != "" {
+				writeStatus(t, filepath.Join(dir, "status"), tc.theirs)
+			}
+			fd := filepath.Join(dir, "fd")
+			if err := os.Chmod(fd, 0); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chmod(fd, 0o755) })
+
+			s, err := scanProcRoot(root, reader{euid: os.Geteuid()}, time.Unix(0, 0))
+			if !errors.Is(err, fs.ErrPermission) {
+				t.Fatalf("scan error = %v, want permission denied", err)
+			}
+			if len(s.names) != 0 || len(s.goStarts) != 0 {
+				t.Fatalf("incomplete scan returned partial snapshot: %+v", s)
+			}
+		})
+	}
+}
+
+// writeStatus writes a /proc status file permitting the capabilities in mask.
+func writeStatus(t *testing.T, path, mask string) {
+	t.Helper()
+	body := "Name:\tx\nCapInh:\t0000000000000000\nCapPrm:\t" + mask + "\nCapEff:\t" + mask + "\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // replace swaps path for a non-directory (dir) or a directory (!dir): reading
 // it then fails with ENOTDIR or EISDIR, an error that is not an exit, for
 // root too (a mode-000 directory is readable by root).
@@ -444,16 +490,10 @@ func managerCgroup() string {
 	return "/user.slice/user-" + u + ".slice/user@" + u + ".service/init.scope"
 }
 
-// reliant#3522: a lingering `systemd --user` (CAP_WAKE_ALARM in its
-// permitted set) refuses its cwd, fds and environment to its own user, and
-// that one refusal failed every scan on the host, so no work directory was
-// ever proven dead. The refusal is explained by identity, from what /proc
-// shows everyone: every uid ours, a permitted set beyond the reader's, the
-// cgroup systemd gives this user's manager alone (user@<uid>.service/
-// init.scope), and the command name systemd. That process then holds nothing
-// beyond its command line. Every other refusal still fails the scan, a
-// capability holder anywhere else included.
-func TestScanProcRoot_ServiceManagerIsExplained(t *testing.T) {
+// A systemd manager's identity and capabilities do not prove the absence of
+// references. Its unreadable environment may hold a GOTMPDIR even when its
+// command line and cgroup look exactly like the user's service manager.
+func TestScanProcRoot_ServiceManagerFailsIncompleteScan(t *testing.T) {
 	uid := strconv.Itoa(os.Geteuid())
 	ours := uid + "\t" + uid + "\t" + uid + "\t" + uid
 	build := func(t *testing.T, comm string) (root, dir string) {
@@ -461,6 +501,9 @@ func TestScanProcRoot_ServiceManagerIsExplained(t *testing.T) {
 		fakeProc(t, root, 10, "go", "/tmp/go-build1")
 		dir = fakeProc(t, root, 11, comm, "/")
 		if err := os.WriteFile(filepath.Join(dir, "cmdline"), []byte("/lib/systemd/systemd\x00--user\x00GOTMPDIR=/x/gotmp-5-5\x00"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "environ"), []byte("GOTMPDIR=/tmp/gotmp-11-1\x00"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		withhold(t, dir)
@@ -471,15 +514,11 @@ func TestScanProcRoot_ServiceManagerIsExplained(t *testing.T) {
 	fakeStatus(t, dir, ours, "0000000800000000")
 	fakeCgroupFile(t, dir, managerCgroup())
 	s, err := scanProcRoot(root, reader{euid: os.Geteuid()}, time.Unix(0, 0))
-	if err != nil {
-		t.Fatalf("this user's service manager's refusal failed the scan: %v", err)
+	if !errors.Is(err, fs.ErrPermission) {
+		t.Fatalf("scan error = %v, want permission denied", err)
 	}
-	want := "pid 11 (systemd): this user's service manager (user@" + uid + ".service/init.scope)"
-	if len(s.explained) != 1 || s.explained[0] != want {
-		t.Errorf("explained = %q, want [%q]", s.explained, want)
-	}
-	if !s.names["go-build1"] || !s.names["gotmp-5-5"] || len(s.goStarts) != 1 {
-		t.Errorf("scan = %+v, want the go command's go-build1, the manager's command line, and one go command", s)
+	if len(s.names) != 0 || len(s.goStarts) != 0 {
+		t.Fatalf("incomplete scan returned partial snapshot: %+v", s)
 	}
 
 	// Everything else unreadable still fails the proof.
@@ -514,7 +553,7 @@ func TestScanProcRoot_ServiceManagerIsExplained(t *testing.T) {
 			fakeStatus(t, dir, uid+"\t"+uid+"\t0\t"+uid, "0000000800000000")
 			fakeCgroupFile(t, dir, managerCgroup())
 		}},
-		{"permitted set within the reader's", "systemd", reader{euid: os.Geteuid(), capEff: 0x0000000800000000}, func(t *testing.T, dir string) {
+		{"permitted set within the reader's", "systemd", reader{euid: os.Geteuid()}, func(t *testing.T, dir string) {
 			fakeStatus(t, dir, ours, "0000000800000000")
 			fakeCgroupFile(t, dir, managerCgroup())
 		}},
@@ -547,16 +586,5 @@ func TestScanProcRoot_ServiceManagerIsExplained(t *testing.T) {
 				t.Errorf("err = %v, want it to name the refusal", err)
 			}
 		})
-	}
-}
-
-func TestReadCapEff(t *testing.T) {
-	dir := t.TempDir()
-	fakeStatus(t, dir, "1\t1\t1\t1", "000001ffffffffff")
-	if c, err := readCapEff(dir); err != nil || c != 0x000001ffffffffff {
-		t.Fatalf("readCapEff = %x, %v; want 1ffffffffff", c, err)
-	}
-	if c, err := readCapEff(filepath.Join(procRoot, "self")); err != nil {
-		t.Fatalf("this process's own CapEff: %x, %v", c, err)
 	}
 }

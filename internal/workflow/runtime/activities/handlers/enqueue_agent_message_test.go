@@ -10,8 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -56,7 +58,7 @@ func TestEnqueueAgentMessage_Completion(t *testing.T) {
 	_, err = h.Repo().CreateThread(ctx, &db.Thread{ID: childThreadID, ChatID: chatID, ParentThreadID: &parentThreadID})
 	require.NoError(t, err)
 
-	act := NewEnqueueAgentMessageActivity(h.Repo())
+	act := NewEnqueueAgentMessageActivity(EnqueueAgentMessageDeps{Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(h.Repo().ORM()), Announcer: h.Repo()})})
 
 	var out EnqueueAgentMessageOutput
 	err = h.ExecuteActivity(act.Execute, EnqueueAgentMessageInput{
@@ -70,7 +72,7 @@ func TestEnqueueAgentMessage_Completion(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, out.ID)
 
-	queued, err := h.Repo().ListQueuedAgentMessagesForThread(ctx, parentThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, h.Repo().ORM(), parentThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	assert.Equal(t, core.AgentMessageKindCompletion, queued[0].Kind)
@@ -88,7 +90,7 @@ func TestEnqueueAgentMessage_RequiresToThreadID(t *testing.T) {
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
-	act := NewEnqueueAgentMessageActivity(h.Repo())
+	act := NewEnqueueAgentMessageActivity(EnqueueAgentMessageDeps{Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(h.Repo().ORM()), Announcer: h.Repo()})})
 	var out EnqueueAgentMessageOutput
 	err := h.ExecuteActivity(act.Execute, EnqueueAgentMessageInput{
 		FromThreadID: "from",
@@ -130,7 +132,7 @@ func (f *spawnReportFixture) seedPlaceholder(t *testing.T, toolCallID string) *c
 		Kind: core.AgentMessageKindCompletion, Body: lostInTransitBody, ToolCallID: &toolCallID,
 		Status: core.AgentMessageStatusQueued, CreatedAt: time.Now().UTC(), Synthesized: true,
 	}
-	inserted, err := f.h.Repo().EnqueueAgentMessageIfAbsent(context.Background(), placeholder)
+	inserted, err := store.EnqueueAgentMessageIfAbsent(context.Background(), f.h.Repo().ORM(), placeholder)
 	require.NoError(t, err)
 	require.True(t, inserted)
 	return placeholder
@@ -138,7 +140,7 @@ func (f *spawnReportFixture) seedPlaceholder(t *testing.T, toolCallID string) *c
 
 func (f *spawnReportFixture) report(t *testing.T, kind core.AgentMessageKind, toolCallID, body string) (EnqueueAgentMessageOutput, error) {
 	t.Helper()
-	act := NewEnqueueAgentMessageActivity(f.h.Repo())
+	act := NewEnqueueAgentMessageActivity(EnqueueAgentMessageDeps{Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(f.h.Repo().ORM()), Announcer: f.h.Repo()})})
 	var out EnqueueAgentMessageOutput
 	err := f.h.ExecuteActivity(act.Execute, EnqueueAgentMessageInput{
 		ChatID: f.chatID, FromThreadID: f.childThreadID, ToThreadID: f.parentThreadID,
@@ -151,7 +153,7 @@ func (f *spawnReportFixture) rowsFor(t *testing.T, toolCallID string) []*core.Ag
 	t.Helper()
 	var rows []*core.AgentMessage
 	// Queued rows only: delivered/undelivered placeholders are asserted via the row ids below.
-	queued, err := f.h.Repo().ListQueuedAgentMessagesForThread(context.Background(), f.parentThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(context.Background(), f.h.Repo().ORM(), f.parentThreadID)
 	require.NoError(t, err)
 	for _, m := range queued {
 		if m.ToolCallID != nil && *m.ToolCallID == toolCallID {
@@ -187,7 +189,7 @@ func TestEnqueueAgentMessage_RealReportSupersedesDeliveredPlaceholder(t *testing
 
 	f := newSpawnReportFixture(t)
 	placeholder := f.seedPlaceholder(t, "toolu_del")
-	moved, err := f.h.Repo().MarkAgentMessagesDelivered(context.Background(), []string{placeholder.ID}, time.Now().UTC(), "")
+	moved, err := store.MarkAgentMessagesDelivered(context.Background(), f.h.Repo().ORM(), []string{placeholder.ID}, time.Now().UTC(), "")
 	require.NoError(t, err)
 	require.Len(t, moved, 1)
 
@@ -222,7 +224,7 @@ func TestEnqueueAgentMessage_SupersedeDefeatsAStaleDrainClaim(t *testing.T) {
 	_, err := f.report(t, core.AgentMessageKindCompletion, "toolu_race", "real result")
 	require.NoError(t, err)
 
-	claimed, err := f.h.Repo().MarkAgentMessagesDelivered(ctx, []string{listed[0].ID}, time.Now().UTC(), "")
+	claimed, err := store.MarkAgentMessagesDelivered(ctx, f.h.Repo().ORM(), []string{listed[0].ID}, time.Now().UTC(), "")
 	require.NoError(t, err)
 	assert.Empty(t, claimed, "a claim on the superseded placeholder's id must not take the real report")
 
@@ -258,7 +260,7 @@ func TestEnqueueAgentMessage_NonTerminalKindsUnaffected(t *testing.T) {
 	require.NoError(t, err)
 	_, err = f.report(t, core.AgentMessageKindHumanMessage, "", "hi")
 	require.NoError(t, err)
-	queued, err := f.h.Repo().ListQueuedAgentMessagesForThread(context.Background(), f.parentThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(context.Background(), f.h.Repo().ORM(), f.parentThreadID)
 	require.NoError(t, err)
 	assert.Len(t, queued, 2)
 }

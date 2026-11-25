@@ -38,11 +38,6 @@ import (
 // preemptionPollInterval is how often a preemptable call checks for mail.
 const preemptionPollInterval = time.Second
 
-// preemptionStore is the one write preemption needs.
-type preemptionStore interface {
-	MarkQueuedAgentMessagesPreempting(ctx context.Context, toThreadID string, preemptedAt time.Time) (int64, error)
-}
-
 // batchPreemption is shared by every call in one ExecuteTools batch. Mail
 // preempts the BATCH, not one call: the thread's next turn waits for every
 // call in it, so a sibling wait left running would hold the message back just
@@ -50,7 +45,7 @@ type preemptionStore interface {
 // MarkQueuedAgentMessagesPreempting), so whichever call sees it first must end
 // all of them.
 type batchPreemption struct {
-	store    preemptionStore
+	store    MailboxPreempter
 	thread   string
 	interval time.Duration
 	preempt  chan struct{}
@@ -59,7 +54,7 @@ type batchPreemption struct {
 
 // newBatchPreemption watches thread's mailbox every interval, or every
 // preemptionPollInterval when interval is zero.
-func newBatchPreemption(store preemptionStore, thread string, interval time.Duration) *batchPreemption {
+func newBatchPreemption(store MailboxPreempter, thread string, interval time.Duration) *batchPreemption {
 	if store == nil || thread == "" {
 		return nil
 	}

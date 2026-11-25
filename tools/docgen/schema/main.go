@@ -117,7 +117,7 @@ var toolHints = map[string]string{
 		"authorized, for the run's owner and acting identity.",
 	"WorkflowRequirements.repos": "Checkouts relative to the project root (\".\" for the root) that must exist, " +
 		"reach their origin (git ls-remote, which writes nothing) and have no local tag diverged from origin's.",
-	"WorkflowRequirements.cli_login": "Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be " +
+	"WorkflowRequirements.cli_login": "Deprecated: kept working throughout v1, slated for removal in a future major. Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be " +
 		"installed and signed in on the run's machine, each checked with the vendor's own status command, whose " +
 		"output never leaves the machine. Sign one in with `reliant machine login <vendor> --machine <name>`; a " +
 		"step that calls claude, codex or copilot needs credentials: inherit.",

@@ -76,10 +76,8 @@ func TestTrimGoWorkDirs_RemovesOnlyProvenDead(t *testing.T) {
 	}
 }
 
-// reliant#3522: the scan's explained processes (this user's own systemd
-// service manager, whose references the kernel withholds) keep no directory:
-// a dead root is removed whenever they started, and the audit names them.
-func TestTrimGoWorkDirs_ExplainedProcessKeepsNothing(t *testing.T) {
+// An unreadable service manager prevents proving any daemon root dead.
+func TestTrimGoWorkDirs_UnreadableManagerKeepsRoots(t *testing.T) {
 	m := newTrimMachine(t, 100*GiB, CacheTrimConfig{})
 	births := map[string]time.Time{}
 	base := commandGoTmpBasePrefix + itoa(os.Getuid())
@@ -93,21 +91,20 @@ func TestTrimGoWorkDirs_ExplainedProcessKeepsNothing(t *testing.T) {
 	older := mk("gotmp-1-1", time.Hour)
 	younger := mk("gotmp-1-2", 20*time.Minute)
 	m.w.trim.birth = func(p string) time.Time { return births[p] }
-	manager := "pid 20256 (systemd): this user's service manager (user@1001.service/init.scope)"
 	m.w.trim.procs = func() (procSnapshot, error) {
-		return procSnapshot{explained: []string{manager}}, nil
+		return procSnapshot{}, errors.New("pid 20256 (systemd): permission denied")
 	}
 
 	m.w.TrimCaches(context.Background(), false)
-	if exists(older) || exists(younger) {
-		t.Errorf("dead roots kept beside an explained process: older=%v younger=%v", exists(older), exists(younger))
+	if !exists(older) || !exists(younger) {
+		t.Errorf("roots removed despite unreadable manager: older=%v younger=%v", exists(older), exists(younger))
 	}
 	a := lastWorkDirAudit(t, m.w)
-	if a.Proof != "proc_scan" || a.Removed != 2 || a.Error != "" {
-		t.Errorf("audit = %+v, want a proc_scan proof that removed both", a)
+	if a.Removed != 0 || a.Error == "" {
+		t.Errorf("audit = %+v, want an incomplete scan that removed nothing", a)
 	}
-	if len(a.ExplainedUnreadable) != 1 || a.ExplainedUnreadable[0] != manager {
-		t.Errorf("audit explained_unreadable = %q, want [%q]", a.ExplainedUnreadable, manager)
+	if len(a.ExplainedUnreadable) != 0 {
+		t.Errorf("audit excused unreadable references: %q", a.ExplainedUnreadable)
 	}
 }
 

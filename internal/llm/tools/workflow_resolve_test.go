@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -46,7 +48,7 @@ func TestResolveWorkflowDraft_ByUUID(t *testing.T) {
 	draft := createResolverDraft(t, repo)
 	ctx := createTestContext(t, "")
 
-	got, err := resolveWorkflowDraft(ctx, repo, draft.ID)
+	got, err := resolveWorkflowDraft(ctx, workflowdraftstest.New(t, repo), draft.ID)
 	require.NoError(t, err)
 	assert.Equal(t, draft.ID, got.ID)
 }
@@ -59,7 +61,7 @@ func TestResolveWorkflowDraft_BySlug(t *testing.T) {
 	draft := createResolverDraft(t, repo)
 	ctx := createTestContext(t, "")
 
-	got, err := resolveWorkflowDraft(ctx, repo, draft.Slug)
+	got, err := resolveWorkflowDraft(ctx, workflowdraftstest.New(t, repo), draft.Slug)
 	require.NoError(t, err)
 	assert.Equal(t, draft.ID, got.ID)
 }
@@ -74,7 +76,7 @@ func TestResolveWorkflowDraft_ByName(t *testing.T) {
 
 	// The display name is not the slug, so this can only be served by the
 	// name lookup that runs after the slug lookup misses.
-	got, err := resolveWorkflowDraft(ctx, repo, draft.Name)
+	got, err := resolveWorkflowDraft(ctx, workflowdraftstest.New(t, repo), draft.Name)
 	require.NoError(t, err)
 	assert.Equal(t, draft.ID, got.ID)
 }
@@ -86,7 +88,7 @@ func TestResolveWorkflowDraft_NotFound(t *testing.T) {
 
 	t.Run("unknown name names both recovery tools", func(t *testing.T) {
 		ctx := createTestContext(t, "")
-		_, err := resolveWorkflowDraft(ctx, repo, "no-such-workflow")
+		_, err := resolveWorkflowDraft(ctx, workflowdraftstest.New(t, repo), "no-such-workflow")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "create_workflow")
 		assert.Contains(t, err.Error(), "list_workflows")
@@ -94,7 +96,7 @@ func TestResolveWorkflowDraft_NotFound(t *testing.T) {
 
 	t.Run("unknown uuid names both recovery tools", func(t *testing.T) {
 		ctx := createTestContext(t, "")
-		_, err := resolveWorkflowDraft(ctx, repo, uuid.New().String())
+		_, err := resolveWorkflowDraft(ctx, workflowdraftstest.New(t, repo), uuid.New().String())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "create_workflow")
 		assert.Contains(t, err.Error(), "list_workflows")
@@ -105,7 +107,7 @@ func TestResolveWorkflowDraft_NotFound(t *testing.T) {
 		createTestChat(t, repo, chatID)
 		ctx := createTestContext(t, chatID)
 
-		_, err := resolveWorkflowDraft(ctx, repo, "")
+		_, err := resolveWorkflowDraft(ctx, workflowdraftstest.New(t, repo), "")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "`id` is required")
 		assert.Contains(t, err.Error(), "create_workflow")
@@ -130,15 +132,15 @@ func TestWorkflowTools_RequireID(t *testing.T) {
 	require.NoError(t, err)
 
 	tools := map[string]Tool{
-		GetWorkflowToolName:   NewGetWorkflowTool(repo),
-		"edit_workflow":       NewEditWorkflowTool(repo),
-		"write_workflow":      NewWriteWorkflowTool(repo),
-		ListScenariosToolName: NewListScenariosTool(repo),
-		"view_scenario":       NewViewScenarioTool(repo, store.NewWorkflowScenarioExtStore(repo.ORM())),
-		"edit_scenario":       NewEditScenarioTool(repo, store.NewWorkflowScenarioExtStore(repo.ORM())),
-		"write_scenario":      NewWriteScenarioTool(repo, store.NewWorkflowScenarioExtStore(repo.ORM()), nil),
-		"delete_scenario":     NewDeleteScenarioTool(repo, store.NewWorkflowScenarioExtStore(repo.ORM())),
-		"run_scenario":        NewRunScenarioTool(repo, store.NewWorkflowScenarioExtStore(repo.ORM()), nil),
+		GetWorkflowToolName:   NewGetWorkflowTool(repo, workflowdraftstest.New(t, repo)),
+		"edit_workflow":       NewEditWorkflowTool(repo, workflowdraftstest.New(t, repo)),
+		"write_workflow":      NewWriteWorkflowTool(repo, workflowdraftstest.New(t, repo)),
+		ListScenariosToolName: NewListScenariosTool(repo, workflowdraftstest.New(t, repo)),
+		"view_scenario":       NewViewScenarioTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowScenarioExtStore(repo.ORM())),
+		"edit_scenario":       NewEditScenarioTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowScenarioExtStore(repo.ORM())),
+		"write_scenario":      NewWriteScenarioTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowScenarioExtStore(repo.ORM()), nil),
+		"delete_scenario":     NewDeleteScenarioTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowScenarioExtStore(repo.ORM())),
+		"run_scenario":        NewRunScenarioTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowScenarioExtStore(repo.ORM()), nil),
 	}
 	require.Len(t, tools, 9)
 	extra := map[string]string{
@@ -181,7 +183,7 @@ func TestResolveWorkflowDraft_OtherUsersUUIDNotFound(t *testing.T) {
 	}
 	require.NoError(t, repo.CreateWorkflowDraft(context.Background(), foreign))
 
-	_, err := resolveWorkflowDraft(createTestContext(t, ""), repo, foreign.ID)
+	_, err := resolveWorkflowDraft(createTestContext(t, ""), workflowdraftstest.New(t, repo), foreign.ID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "workflow not found")
 }
@@ -242,12 +244,12 @@ func TestCreateWorkflow_DuplicateSlugIsClearToolError(t *testing.T) {
 	input, _ := json.Marshal(CreateWorkflowParams{Content: &content})
 	call := ToolCall{ID: "c", Name: "create_workflow", Input: string(input)}
 
-	first, err := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM())).Run(ctx, call)
+	first, err := NewCreateWorkflowTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowDraftExtStore(repo.ORM())).Run(ctx, call)
 	require.NoError(t, err)
 	require.False(t, first.IsError, first.Content)
 
 	retries := db.RecordRetryBackoffs(repo)
-	second, err := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM())).Run(ctx, call)
+	second, err := NewCreateWorkflowTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowDraftExtStore(repo.ORM())).Run(ctx, call)
 	require.NoError(t, err)
 	require.True(t, second.IsError)
 	assert.Contains(t, second.Content, name)
@@ -270,7 +272,7 @@ func TestCreateWorkflow_ReturnedIDWorksWithoutChatBinding(t *testing.T) {
 	name := "unbound-" + uuid.New().String()[:8]
 	content := "name: " + name + "\ndescription: before\nentry: [run]\nnodes:\n  - id: run\n    type: run\n    command: echo hi\n"
 	createInput, _ := json.Marshal(CreateWorkflowParams{Content: &content})
-	resp, err := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM())).Run(ctx, ToolCall{ID: "c", Name: "create_workflow", Input: string(createInput)})
+	resp, err := NewCreateWorkflowTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowDraftExtStore(repo.ORM())).Run(ctx, ToolCall{ID: "c", Name: "create_workflow", Input: string(createInput)})
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
 	var created CreateWorkflowResult
@@ -278,13 +280,13 @@ func TestCreateWorkflow_ReturnedIDWorksWithoutChatBinding(t *testing.T) {
 	assert.Contains(t, resp.Content, "Pass this `id`")
 
 	input, _ := json.Marshal(GetWorkflowParams{ID: created.ID})
-	got, err := NewGetWorkflowTool(repo).Run(ctx, ToolCall{ID: "g", Name: GetWorkflowToolName, Input: string(input)})
+	got, err := NewGetWorkflowTool(repo, workflowdraftstest.New(t, repo)).Run(ctx, ToolCall{ID: "g", Name: GetWorkflowToolName, Input: string(input)})
 	require.NoError(t, err)
 	assert.False(t, got.IsError, got.Content)
 	assert.Contains(t, got.Content, created.ID)
 
 	edit, _ := json.Marshal(EditWorkflowParams{ID: created.ID, OldString: "description: before", NewString: "description: after"})
-	ed, err := NewEditWorkflowTool(repo).Run(ctx, ToolCall{ID: "e", Name: "edit_workflow", Input: string(edit)})
+	ed, err := NewEditWorkflowTool(repo, workflowdraftstest.New(t, repo)).Run(ctx, ToolCall{ID: "e", Name: "edit_workflow", Input: string(edit)})
 	require.NoError(t, err)
 	require.False(t, ed.IsError, ed.Content)
 

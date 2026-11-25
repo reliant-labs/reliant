@@ -50,12 +50,32 @@ type DrainAgentMessagesOutput = types.DrainAgentMessagesOutput
 // keeps history always consistent at the point this activity runs.
 type DrainAgentMessagesActivity struct {
 	repo    DrainAgentMessagesStore
+	mailbox MailboxQueue
 	threads MessageSaver
 }
 
 // NewDrainAgentMessagesActivity creates a new DrainAgentMessagesActivity.
-func NewDrainAgentMessagesActivity(repo DrainAgentMessagesStore, threadsSvc MessageSaver) *DrainAgentMessagesActivity {
-	return &DrainAgentMessagesActivity{repo: repo, threads: threadsSvc}
+// NewDrainAgentMessagesActivity accepts the original store/saver pair as well
+// as DrainAgentMessagesDeps. New code should pass explicit dependencies.
+// Deprecated: use NewDrainAgentMessagesActivityWithDeps.
+func NewDrainAgentMessagesActivity(storeOrDeps any, threads ...MessageSaver) *DrainAgentMessagesActivity {
+	if deps, ok := storeOrDeps.(DrainAgentMessagesDeps); ok {
+		return NewDrainAgentMessagesActivityWithDeps(deps)
+	}
+	var deps DrainAgentMessagesDeps
+	if storeOrDeps != nil {
+		deps.Store = storeOrDeps.(DrainAgentMessagesStore)
+		deps.Mailbox = storeOrDeps.(MailboxQueue)
+	}
+	if len(threads) > 0 {
+		deps.Threads = threads[0]
+	}
+	return NewDrainAgentMessagesActivityWithDeps(deps)
+}
+
+// NewDrainAgentMessagesActivityWithDeps creates a drain with explicit dependencies.
+func NewDrainAgentMessagesActivityWithDeps(deps DrainAgentMessagesDeps) *DrainAgentMessagesActivity {
+	return &DrainAgentMessagesActivity{repo: deps.Store, mailbox: deps.Mailbox, threads: deps.Threads}
 }
 
 func (a *DrainAgentMessagesActivity) Name() string        { return "DrainAgentMessages" }
@@ -71,8 +91,13 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 	if input.Thread == "" {
 		return DrainAgentMessagesOutput{}, fmt.Errorf("thread is required")
 	}
+	if a.mailbox == nil {
+		// An error, not a panic: CallLLM logs a failed drain and takes the
+		// turn anyway, leaving the mail queued.
+		return DrainAgentMessagesOutput{}, fmt.Errorf("drain agent messages: no mailbox is wired")
+	}
 
-	queued, err := a.repo.ListQueuedAgentMessagesForThread(ctx, input.Thread)
+	queued, err := a.mailbox.ListQueuedAgentMessagesForThread(ctx, input.Thread)
 	if err != nil {
 		return DrainAgentMessagesOutput{}, fmt.Errorf("failed to list queued agent messages: %w", err)
 	}
@@ -135,7 +160,7 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 		//
 		// delivered_message_id is backfilled once the envelope exists; the claim
 		// only needs to establish ownership.
-		claimed, err := a.repo.MarkAgentMessagesDelivered(txCtx, ids, time.Now().UTC(), "")
+		claimed, err := a.mailbox.MarkAgentMessagesDelivered(txCtx, ids, time.Now().UTC(), "")
 		if err != nil {
 			return fmt.Errorf("failed to claim agent messages for delivery: %w", err)
 		}
@@ -268,7 +293,7 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 		// only backfills that pointer. It deliberately does not re-check the
 		// claim: these ids are ours, and re-running the guarded update would
 		// match nothing now that their status is 2.
-		if err := a.repo.SetAgentMessagesDeliveredMessageID(txCtx, ids, envelopeMessageID); err != nil {
+		if err := a.mailbox.SetAgentMessagesDeliveredMessageID(txCtx, ids, envelopeMessageID); err != nil {
 			return fmt.Errorf("failed to record delivery message id: %w", err)
 		}
 
