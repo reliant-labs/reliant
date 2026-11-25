@@ -8,6 +8,7 @@ import type { ToolContentProps } from './types';
 import { LightweightCodeViewer } from '../LightweightCodeViewer';
 import { formatErrorMessage } from '../../../lib/utils';
 import { CopyButton } from './CopyButton';
+import { ToolErrorText } from './ToolErrorText';
 
 function GenericToolRendererComponent({ ctx }: ToolContentProps) {
   const { input, result } = ctx;
@@ -48,17 +49,17 @@ function GenericToolRendererComponent({ ctx }: ToolContentProps) {
 
       {/* Result display */}
       {hasResult && (
-        <div className={result.is_error ? 'bg-warning/5' : ''}>
-          <div className={`px-2 py-1 text-2xs ${result.is_error ? 'text-warning-ink' : 'text-muted-foreground'} bg-muted/40 border-b border-border/20 flex items-center justify-between`}>
-            <span>{result.is_error ? 'Warning' : 'Output'}</span>
+        <div>
+          <div className="px-2 py-1 text-2xs text-muted-foreground bg-muted/40 border-b border-border/20 flex items-center justify-between">
+            <span>{result.is_error ? 'Error' : 'Output'}</span>
             {!result.is_error && result.content && (
               <CopyButton content={result.content} resolveContent={ctx.loadFullResult} className="opacity-100" />
             )}
           </div>
           {result.is_error ? (
-            <div className="px-2 py-1.5 text-xs text-warning-ink">
+            <ToolErrorText tone={result.content.includes('blocked') ? 'warning' : 'error'}>
               {formatErrorMessage(result.content)}
-            </div>
+            </ToolErrorText>
           ) : (
             <LightweightCodeViewer
               content={result.content}

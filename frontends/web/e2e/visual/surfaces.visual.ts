@@ -283,6 +283,15 @@ const SURFACES: Surface[] = [
     },
   },
   {
+    // The same fan-out on a phone: touch has no hover, so each running
+    // agent's Open thread and Cancel are always shown.
+    name: 'chat-agents',
+    path: `/m/chats/${CHAT_IDS.agents}`,
+    on: ['mobile'],
+    ready: (page) => page.getByText('Survey currency rounding rules').first(),
+    act: (page) => mobileChatAtEnd(page, 'Survey currency rounding rules'),
+  },
+  {
     name: 'chat-list',
     path: '/m/chats',
     on: ['mobile'],
@@ -387,6 +396,27 @@ const SURFACES: Surface[] = [
     on: ['mobile'],
     ready: (page) => page.getByText(FAILURE_FIRST_LINE).first(),
     act: (page) => mobileChatAtEnd(page, FAILURE_FIRST_LINE),
+  },
+  {
+    // The same turn with its errors opened: the failed step's error result
+    // and the provider error's detail, each a quiet line under the indent
+    // rule, not a tinted box or a bordered card.
+    name: 'chat-failure-open',
+    path: `/c/${CHAT_IDS.failure}`,
+    on: ['desktop'],
+    ready: (page) => page.getByText('The AI provider failed').first(),
+    act: async (page) => {
+      await expect(page.getByText(FAILURE_FIRST_LINE).first()).toBeVisible({ timeout: 20_000 })
+      await settle(page)
+      await transcript(page).getByRole('button', { name: /^Activity/ }).first().click()
+      await transcript(page).getByRole('button', { name: /Toggle tool details for shell/ }).last().click()
+      await transcript(page).getByRole('button', { name: /Click for details/ }).first().click()
+      // The click leaves focus on the error row, which reveals its Copy: blur
+      // it so the capture is the row at rest.
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+      await settle(page)
+      await scrollToEnd(page)
+    },
   },
   {
     // The Workflows tab: built-in and your own workflows, two on a schedule.
