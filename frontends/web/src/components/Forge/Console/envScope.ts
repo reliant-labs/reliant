@@ -19,6 +19,8 @@
 
 import type { RosterEnv } from "@/services/forge/roster";
 
+import { isSampleApp } from "../Sample/sampleApp";
+
 export const ENV_ALL = "all";
 /** What the scope control says on a dashboard whose signals belong to no environment. */
 export const PLATFORM_SCOPE_LABEL = "platform-wide (not per environment)";
@@ -35,6 +37,8 @@ export function rememberedEnv(project: string): string | null {
 }
 
 export function rememberEnv(project: string, env: string): void {
+  // The forge tour's sample app is no one's: nothing about it is kept for a later visit.
+  if (isSampleApp(project)) return;
   try {
     window.localStorage.setItem(storageKey(project), env);
   } catch {

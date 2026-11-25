@@ -61,7 +61,7 @@ import { splitFindings } from "../../workflow/workflowDraftStatus";
 import { FilterSearch, SelectFilter } from "../FilterMenu";
 import { WORKFLOW_SOURCE_LABEL } from "../WorkflowSourceBadge";
 import { useSwitchTriggers } from "../useSwitchTriggers";
-import { useWorkflowsScope } from "../useWorkflowsScope";
+import { inWorkflowsScope, useWorkflowsScope, type WorkflowsScope } from "../useWorkflowsScope";
 import { ComingUpTimeline } from "./ComingUpTimeline";
 import { ReadyMadeStrip } from "./ReadyMadeStrip";
 import { workflowsColumns, type WorkflowRowAction, type WorkflowRowItem, type WorkflowsTableRow } from "./WorkflowRow";
@@ -308,24 +308,31 @@ function deleteDescription(workflow: WorkflowResponse, automations: readonly Tri
 }
 
 /**
- * The definitions in scope: one project's list, or the union of every
- * project's — built-in and your own workflows once (they are the same in every
- * project), each project's own workflows once per project, named with it.
+ * The definitions in scope: one project's list, or the union of several
+ * projects' (the nav's choice of several) or every project's — built-in and
+ * your own workflows once (they are the same in every project), each
+ * project's own workflows once per project, named with it.
  */
-function useListedWorkflows(projectId: string | undefined, allProjects: boolean) {
+function useListedWorkflows(scope: WorkflowsScope) {
+  const { currentProjectId: projectId, allProjects, projectIds: several } = scope;
+  const union = allProjects || !!several;
   const { projects: listedProjects, isLoading: projectsLoading } = useProjects();
   const currentProject = useProjectStore((state) => state.currentProject);
   // The project list, or at least the current project while it is unknown.
-  const projects = useMemo(
+  const knownProjects = useMemo(
     () => (listedProjects.length > 0 ? listedProjects : currentProject ? [{ id: currentProject.id, name: currentProject.name }] : []),
     [listedProjects, currentProject],
   );
-  const one = useWorkflowLibrary(allProjects ? undefined : projectId);
-  const projectIds = useMemo(() => (allProjects ? projects.map((p) => p.id) : []), [allProjects, projects]);
-  const many = useProjectLibraries(projectIds, allProjects);
+  const projects = useMemo(
+    () => (several ? knownProjects.filter((p) => several.includes(p.id)) : knownProjects),
+    [knownProjects, several],
+  );
+  const one = useWorkflowLibrary(union ? undefined : projectId);
+  const projectIds = useMemo(() => (union ? projects.map((p) => p.id) : []), [union, projects]);
+  const many = useProjectLibraries(projectIds, union);
 
   return useMemo(() => {
-    if (!allProjects) {
+    if (!union) {
       return {
         workflows: (one.data?.workflows ?? []).map((workflow): ListedWorkflow => ({ workflow })),
         invalid: one.data?.invalidWorkflows ?? [],
@@ -358,7 +365,7 @@ function useListedWorkflows(projectId: string | undefined, allProjects: boolean)
       complete: !projectsLoading && many.complete,
       refetch: many.refetch,
     };
-  }, [allProjects, one.data, one.isLoading, one.isError, one.error, one.refetch, projects, projectsLoading, many]);
+  }, [union, one.data, one.isLoading, one.isError, one.error, one.refetch, projects, projectsLoading, many]);
 }
 
 /** One line for what starts a workflow, from its triggers in scope or, with none, what it declares. */
@@ -377,8 +384,9 @@ function WorkflowsBody() {
   const navigate = useNavigate();
   const scope = useWorkflowsScope();
   const [search, setSearch] = useWorkflowsSearch();
-  const listed = useListedWorkflows(scope.currentProjectId, scope.allProjects);
-  const lastRuns = useLastRunPerWorkflow(scope.projectId, scope.allProjects);
+  const listed = useListedWorkflows(scope);
+  const lastRuns = useLastRunPerWorkflow(scope.projectId, scope.allProjects, scope.projectIds);
+  // Several projects read every project's triggers (they are few) and keep theirs.
   const triggers = useTriggers(scope.projectId);
   const naming = useIntegrationEventNaming();
   const { switchTriggers, isPending: switching } = useSwitchTriggers();
@@ -406,7 +414,10 @@ function WorkflowsBody() {
   const { isWorkflowHidden } = useHiddenItems();
   const { toggleWorkflowVisibility } = useToggleHiddenItem();
 
-  const triggerList = useMemo(() => triggers.data ?? [], [triggers.data]);
+  const triggerList = useMemo(
+    () => (triggers.data ?? []).filter((t) => inWorkflowsScope(scope, t.projectId)),
+    [triggers.data, scope],
+  );
   const view = useMemo(
     () =>
       workflowsView({
@@ -579,7 +590,7 @@ function WorkflowsBody() {
 
   return (
     <div className="space-y-8" data-onboarding="workflow-hub">
-      {triggerList.length > 0 && <OnSummary triggers={triggerList} allProjects={scope.allProjects} />}
+      {triggerList.length > 0 && <OnSummary triggers={triggerList} scopeNote={scope.allProjects ? ", every project" : scope.projectIds ? `, ${scope.projectIds.length} projects` : ""} />}
 
       <div className="space-y-3">
       <WorkflowsControls search={search} onChange={setSearch} showFailed={listed.invalid.length > 0} />
@@ -712,7 +723,7 @@ function WorkflowsBody() {
  * healthy, are off, and when the next run is; then the next 24 hours.
  * Collapsible — it summarises the table below, it does not replace it.
  */
-function OnSummary({ triggers, allProjects }: { triggers: Trigger[]; allProjects: boolean }) {
+function OnSummary({ triggers, scopeNote }: { triggers: Trigger[]; scopeNote: string }) {
   const counts = useMemo(() => automationCounts(automationUnits(triggers)), [triggers]);
   // The headline: what runs by itself and is healthy, as the one big number;
   // what needs you, what is off and when the next run is, as a quiet row
@@ -732,7 +743,7 @@ function OnSummary({ triggers, allProjects }: { triggers: Trigger[]; allProjects
         <div className="min-w-0">
           <div className="flex items-baseline gap-2 text-ui">
             <span className="font-medium text-foreground">On and healthy</span>
-            <span className="text-meta text-muted-foreground">Runs by itself{allProjects ? ", every project" : ""}</span>
+            <span className="text-meta text-muted-foreground">Runs by itself{scopeNote}</span>
           </div>
           <div className="mt-1 text-figure tabular-nums text-foreground" data-testid="automation-healthy-on">{counts.healthyOn}</div>
         </div>

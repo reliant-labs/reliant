@@ -27,11 +27,11 @@ function pastTimes(value: unknown, out: { path: string; ms: number }[] = [], pat
 }
 
 describe("the Security fixtures' clock", () => {
-  it("is the visual harness's FIXED_NOW (e2e/visual/fixtures/base.ts), which the preview freezes too", () => {
+  it("is the visual harness's FIXED_NOW (e2e/visual/clock.ts), which the preview freezes too", () => {
     // src cannot import e2e/ (a composite project includes only src), so the literal is read and compared.
-    const base = readFileSync(resolve(__dirname, "../../../../../e2e/visual/fixtures/base.ts"), "utf8");
+    const base = readFileSync(resolve(__dirname, "../../../../../e2e/visual/clock.ts"), "utf8");
     const args = /export const FIXED_NOW = Date\.UTC\(([^)]*)\)/.exec(base)?.[1];
-    expect(args, "FIXED_NOW is no longer a Date.UTC literal in e2e/visual/fixtures/base.ts").toBeDefined();
+    expect(args, "FIXED_NOW is no longer a Date.UTC literal in e2e/visual/clock.ts").toBeDefined();
     const [year, month, ...rest] = args!.split(",").map((part) => Number(part.trim()));
     expect(FIXTURE_NOW).toBe(Date.UTC(year!, month!, ...rest));
   });

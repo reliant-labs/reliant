@@ -17,6 +17,10 @@ import {
   type SidebarProjectSettings,
 } from "../lib/sidebarProjectPrefs";
 import { settingsSync } from "../services/settingsSync";
+import { appRowKey } from "../services/projects/catalog";
+import { SAMPLE_APP } from "../components/Forge/Sample/sampleApp";
+
+const SAMPLE_ROW_KEY = appRowKey(SAMPLE_APP);
 
 export const sidebarProjectPrefsKey = ["sidebar-project-prefs"] as const;
 
@@ -143,6 +147,9 @@ export function useSidebarProjectPrefs(): SidebarProjectPrefsView {
   const writable = ready && q.isSuccess;
   const change = useCallback(
     (c: SidebarProjectChange) => {
+      // The forge tour's sample app (listed only while the tour walks it) is
+      // never written into the person's settings.
+      if ((c.kind === "pin" || c.kind === "hide") && c.projectId === SAMPLE_ROW_KEY) return;
       // The org and the account are the ones current when the change starts,
       // never ones read later.
       if (writable) mutate({ change: c, orgId, owner: currentSessionOwner() });

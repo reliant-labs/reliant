@@ -72,14 +72,10 @@ vi.mock('@/services/controlPlane/environments', () => ({
   DaemonType: { UNSPECIFIED: 0, MANAGED: 1, EXTERNAL: 2 },
   PortAccessMode: { UNSPECIFIED: 0, PUBLIC: 1, AUTHENTICATED: 2, TOKEN: 3 },
   describeError: (e: unknown, fallback = 'error') => (e instanceof Error ? e.message : fallback),
-  portAccessRulesQueryKey: (daemonId: string) => ['cp', 'ports', daemonId],
   getComputeSubscription: vi.fn(async () => ({})),
-  getDaemon: mocks.getDaemon,
-  deleteDaemon: vi.fn(),
   suspendDaemon: mocks.suspendDaemon,
   resumeEnvironment: mocks.resumeEnvironment,
   resizeDaemon: mocks.resizeDaemon,
-  listPortAccessRules: vi.fn(async () => []),
   setPortAccess: vi.fn(),
   removePortAccess: vi.fn(),
 }))
@@ -87,11 +83,20 @@ vi.mock('@/services/controlPlane/environments', () => ({
 import { MachinesSection } from '@/components/Settings/cloud/machines'
 import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 import { setTransport } from '@/lib/connect'
+import { cpDaemonHandlers } from '@/test/cpDaemonTransport'
 import { daemonRegistryTransport } from '@/test/daemonRegistry'
 import { eligibilityHandlers } from '@/test/billingTransport'
 
+// Control-plane DaemonService answers at the transport: Settings › Machines
+// reads GetDaemon and the port rules through the generated hooks.
+const cpDaemon = () =>
+  cpDaemonHandlers({
+    getDaemon: (req: { daemonId: string }) => mocks.getDaemon(req.daemonId),
+    listPortAccessRules: () => ({ rules: [] }),
+  })
+
 // The daemon list is read through connectClient(DaemonRegistryService).
-beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() }, eligibilityHandlers(() => mocks.getComputeEligibility()))))
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() }, cpDaemon(), eligibilityHandlers(() => mocks.getComputeEligibility()))))
 afterEach(() => setTransport(null))
 
 const LARGE = 10 // DAEMON_SIZE_XL

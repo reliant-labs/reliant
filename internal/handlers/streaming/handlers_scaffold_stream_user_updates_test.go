@@ -52,7 +52,7 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 	t.Run("anonymous caller is unauthenticated", func(t *testing.T) {
 		t.Parallel()
 		_, client := streaming.NewTestStreamingServer(t,
-			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo()}),
+			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo(), ChatRows: foreignChatRows()}),
 			streaming.WithoutPrincipal())
 		err := open(t, client, &pb.StreamUserUpdatesRequest{})
 		require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
@@ -61,7 +61,7 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 	t.Run("anonymous caller cannot open a chat stream", func(t *testing.T) {
 		t.Parallel()
 		_, client := streaming.NewTestStreamingServer(t,
-			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo()}),
+			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo(), ChatRows: foreignChatRows()}),
 			streaming.WithoutPrincipal())
 		err := openChat(t, client, &pb.StreamChatUpdatesRequest{ChatId: "chat-1"})
 		require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
@@ -70,7 +70,7 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 	t.Run("another user's chat is not found", func(t *testing.T) {
 		t.Parallel()
 		_, client := streaming.NewTestStreamingServer(t,
-			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo()}),
+			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo(), ChatRows: foreignChatRows()}),
 			streaming.WithPrincipal(testkit.WithUserID("test-user")))
 		err := openChat(t, client, &pb.StreamChatUpdatesRequest{ChatId: "chat-of-someone-else"})
 		require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
@@ -79,7 +79,7 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 	t.Run("a chat stream names its chat", func(t *testing.T) {
 		t.Parallel()
 		_, client := streaming.NewTestStreamingServer(t,
-			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo()}),
+			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo(), ChatRows: foreignChatRows()}),
 			streaming.WithPrincipal(testkit.WithUserID("test-user")))
 		err := openChat(t, client, &pb.StreamChatUpdatesRequest{})
 		require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
@@ -93,8 +93,12 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 func foreignChatRepo() *streaming.MockRepository {
 	return &streaming.MockRepository{
 		GetLatestUserUpdateSequenceFunc: func(context.Context, string) (int64, error) { return 0, nil },
-		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
-			return &db.ChatRow{ID: id, UserID: "someone-else"}, nil
-		},
 	}
+}
+
+// foreignChatRows reads every chat as another user's.
+func foreignChatRows() *streaming.MockChatRows {
+	return &streaming.MockChatRows{GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
+		return &db.ChatRow{ID: id, UserID: "someone-else"}, nil
+	}}
 }

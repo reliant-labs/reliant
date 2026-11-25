@@ -249,6 +249,16 @@ cannot see).
 - A web test that reads a file through a variable path. The marker scan
   (`readFileSync`, `readdirSync`, `process.cwd()`, `__dirname`) selects any test
   that reads files and names the changed file as a literal.
+- **The visual baseline is outside the affected tier, by design.** Its data is
+  the shop fixture pack (`frontends/web/src/fixtures/shop/**`), the one world
+  the public demo, the hosted preview and the screenshots share, served in the
+  page by fixture mode. So an edit to the pack (its story, a handler, an
+  overlay in `shop/overlays.ts`) moves visual baselines as surely as a styling
+  change does, and no Go or vitest lane here notices: the merge queue's
+  `visual` lane (compare only) does, and fails the entry. So a PR that touches
+  `src/fixtures/shop/**` or `src/fixtures/{install,outside,transport,overlay}.ts`
+  runs `task test:web:visual` itself and commits the baselines it moves
+  (`frontends/web/e2e/visual/README.md`).
 
 ## Gates and CI: which tests run where
 
