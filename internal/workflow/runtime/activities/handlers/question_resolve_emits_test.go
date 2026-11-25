@@ -12,6 +12,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
@@ -40,7 +41,7 @@ func TestQuestionResolveActivity_EmitsResolvedUpdate(t *testing.T) {
 	}))
 
 	questionID := uuid.NewString()
-	require.NoError(t, repo.CreateQuestion(ctx, &db.Question{
+	require.NoError(t, questions.NewFromRepo(repo).CreateQuestion(ctx, &db.Question{
 		ID: questionID, ChatID: chatID, WorkflowID: "wf-1", ThreadID: chatID,
 		StepID: "ask", Status: db.QuestionStatusPending, CreatedAt: now,
 	}))
@@ -51,7 +52,7 @@ func TestQuestionResolveActivity_EmitsResolvedUpdate(t *testing.T) {
 
 	// The activity reads activity.GetLogger, so it needs a real activity
 	// context — the test environment supplies one.
-	resolveActivity := NewQuestionResolveActivity(repo)
+	resolveActivity := NewQuestionResolveActivity(repo, questions.NewFromRepo(repo))
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(resolveActivity.Execute)
@@ -109,14 +110,14 @@ func TestQuestionResolveActivity_KeepsAnAnswerThatGotThereFirst(t *testing.T) {
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 	questionID := uuid.NewString()
-	require.NoError(t, repo.CreateQuestion(ctx, &db.Question{
+	require.NoError(t, questions.NewFromRepo(repo).CreateQuestion(ctx, &db.Question{
 		ID: questionID, ChatID: chatID, WorkflowID: "wf-1", ThreadID: chatID,
 		StepID: "ask", Status: db.QuestionStatusPending, CreatedAt: now,
 	}))
 	answer := `{"answers":[{"question":"Which style?","selected":["Bold"]}]}`
-	require.NoError(t, repo.ResolveQuestion(ctx, questionID, &answer))
+	require.NoError(t, questions.NewFromRepo(repo).ResolveQuestion(ctx, questionID, &answer))
 
-	resolveActivity := NewQuestionResolveActivity(repo)
+	resolveActivity := NewQuestionResolveActivity(repo, questions.NewFromRepo(repo))
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(resolveActivity.Execute)

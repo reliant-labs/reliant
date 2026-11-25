@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -48,7 +49,7 @@ func setupFailedRunWithQuestion(t *testing.T, threadOf func(fx absorbFixture) st
 
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Failed())
 	questionID := uuid.NewString()
-	require.NoError(t, repo.CreateQuestion(ctx, &db.Question{
+	require.NoError(t, questions.NewFromRepo(repo).CreateQuestion(ctx, &db.Question{
 		ID: questionID, ChatID: fx.chatID, WorkflowID: fx.rootThreadID, TemporalWorkflowID: fx.rootThreadID,
 		ThreadID: threadOf(fx), StepID: "execute_tools", Status: db.QuestionStatusPending, CreatedAt: time.Now().UTC(),
 	}))

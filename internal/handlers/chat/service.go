@@ -45,6 +45,8 @@ type Deps struct {
 	// (ChatRows, ChatViews; deps.go).
 	ChatRows  ChatRows
 	ChatViews ChatViews
+	// QuestionResolver resolves a question when a chat resumes past it.
+	QuestionResolver QuestionResolver
 	// Backoff reads and releases the provider-backoff markers of the chats' runs.
 	Backoff Backoff
 	// Questions lists the chat's open questions (Questions, deps.go).
@@ -148,6 +150,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.ChatViews == nil {
 		return fmt.Errorf("chat: Deps.ChatViews is required")
+	}
+	if d.QuestionResolver == nil {
+		return fmt.Errorf("chat: Deps.QuestionResolver is required")
 	}
 	if d.Backoff == nil {
 		return fmt.Errorf("chat: Deps.Backoff is required")
@@ -279,7 +284,7 @@ func New(deps Deps) (*Service, error) {
 	}
 	return &Service{
 		deps:    deps,
-		runs:    runs.New(runs.Deps{Repo: deps.Repo, Chats: deps.ChatViews, Workflows: deps.Workflows, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
+		runs:    runs.New(runs.Deps{Repo: deps.Repo, Chats: deps.ChatViews, Resolver: deps.QuestionResolver, Workflows: deps.Workflows, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
 		threads: threads.New(threads.Deps{Repo: deps.Repo, Chats: deps.Chats, Signaler: deps.Temporal, ToolCanceler: deps.Router}),
 	}, nil
 }

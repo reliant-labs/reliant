@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
@@ -45,7 +46,7 @@ func TestViewerQuestionsCarryNoResolvedPrompt(t *testing.T) {
 		{ID: "q-ask-" + f.ChatID, ChatID: f.ChatID, WorkflowID: step.WorkflowID, ThreadID: step.WorkflowID, StepID: "ask_user",
 			Status: core.QuestionStatusPending, Metadata: &asked, ToolCallID: &callID, Async: true, CreatedAt: viewertest.SeededAt},
 	} {
-		if err := repo.CreateQuestion(ctx, q); err != nil {
+		if err := questions.NewFromRepo(repo).CreateQuestion(ctx, q); err != nil {
 			t.Fatal(err)
 		}
 	}

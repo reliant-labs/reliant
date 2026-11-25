@@ -66,6 +66,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/projectpurge"
 	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/prrecords"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -329,7 +330,7 @@ type RunLifecycleDeps struct {
 // NewRunLifecycle is the run service: it records runs and drives their
 // workflows.
 func NewRunLifecycle(d RunLifecycleDeps) (*runs.Service, error) {
-	return runs.New(runs.Deps{Repo: d.DB, Chats: store.NewChatsWithActivityExtStore(d.DB.ORM()), Workflows: store.NewWorkflowExtStore(d.DB.ORM()), Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause, Waits: d.Backoff}), nil
+	return runs.New(runs.Deps{Repo: d.DB, Chats: store.NewChatsWithActivityExtStore(d.DB.ORM()), Resolver: questions.NewFromRepo(d.DB), Workflows: store.NewWorkflowExtStore(d.DB.ORM()), Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause, Waits: d.Backoff}), nil
 }
 
 // RunLauncherDeps is what a launch creates and starts.
@@ -385,28 +386,29 @@ type WorkerChatDeps struct {
 //forge:root-only worker
 func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 	svc, err := chat.New(chat.Deps{
-		Logger:        d.Logger,
-		Config:        d.Config,
-		Repo:          d.DB,
-		Chats:         chataccess.NewFromORM(d.DB.ORM()),
-		ChatRows:      store.NewChatExtStore(d.DB.ORM()),
-		ChatViews:     store.NewChatsWithActivityExtStore(d.DB.ORM()),
-		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
-		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
-		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
-		Questions:     store.NewQuestionExtStore(d.DB.ORM()),
-		Spawns:        store.NewToolCallExtStore(d.DB.ORM()),
-		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),
-		Messages:      store.NewMessageExtStore(d.DB.ORM()),
-		ToolBlocks:    store.NewMessageContentBlockExtStore(d.DB.ORM()),
-		Senders:       store.NewThreadExtStore(d.DB.ORM()),
-		Backoff:       d.Backoff,
-		Temporal:      d.Temporal.Client,
-		Pause:         d.Pause,
-		Router:        d.Router,
-		LocalModels:   local.NewRepoDirectory(d.DB, store.NewModelEndpointExtStore(d.DB.ORM())),
-		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.Updates}),
-		AgentMessages: store.NewAgentMessageExtStore(d.DB.ORM()),
+		Logger:           d.Logger,
+		Config:           d.Config,
+		Repo:             d.DB,
+		Chats:            chataccess.NewFromORM(d.DB.ORM()),
+		ChatRows:         store.NewChatExtStore(d.DB.ORM()),
+		ChatViews:        store.NewChatsWithActivityExtStore(d.DB.ORM()),
+		QuestionResolver: questions.NewFromRepo(d.DB),
+		Workflows:        store.NewWorkflowExtStore(d.DB.ORM()),
+		Worktrees:        store.NewWorktreeExtStore(d.DB.ORM()),
+		ProjectRows:      store.NewProjectExtStore(d.DB.ORM()),
+		Questions:        store.NewQuestionExtStore(d.DB.ORM()),
+		Spawns:           store.NewToolCallExtStore(d.DB.ORM()),
+		Selections:       store.NewChatSelectionExtStore(d.DB.ORM()),
+		Messages:         store.NewMessageExtStore(d.DB.ORM()),
+		ToolBlocks:       store.NewMessageContentBlockExtStore(d.DB.ORM()),
+		Senders:          store.NewThreadExtStore(d.DB.ORM()),
+		Backoff:          d.Backoff,
+		Temporal:         d.Temporal.Client,
+		Pause:            d.Pause,
+		Router:           d.Router,
+		LocalModels:      local.NewRepoDirectory(d.DB, store.NewModelEndpointExtStore(d.DB.ORM())),
+		Mailbox:          agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.Updates}),
+		AgentMessages:    store.NewAgentMessageExtStore(d.DB.ORM()),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("chat service: %w", err)

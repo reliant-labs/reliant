@@ -51,6 +51,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/planningtest"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -418,26 +419,27 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// No Router: these stories run without a daemon, so there is no tool to
 	// cancel on interrupt and no machine to wake for an attended turn.
 	chatSvc, err := chat.New(chat.Deps{
-		Logger:        slog.Default(),
-		Config:        &typedconfig.Config{},
-		Repo:          s.Repo,
-		Chats:         chataccess.NewFromORM(s.Repo.ORM()),
-		ChatRows:      store.NewChatExtStore(s.Repo.ORM()),
-		ChatViews:     store.NewChatsWithActivityExtStore(s.Repo.ORM()),
-		Workflows:     store.NewWorkflowExtStore(s.Repo.ORM()),
-		Worktrees:     store.NewWorktreeExtStore(s.Repo.ORM()),
-		ProjectRows:   store.NewProjectExtStore(s.Repo.ORM()),
-		Backoff:       providerbackofftest.New(t, s.Repo),
-		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
-		AgentMessages: store.NewAgentMessageExtStore(s.Repo.ORM()),
-		Questions:     store.NewQuestionExtStore(s.Repo.ORM()),
-		Spawns:        store.NewToolCallExtStore(s.Repo.ORM()),
-		Selections:    store.NewChatSelectionExtStore(s.Repo.ORM()),
-		Messages:      store.NewMessageExtStore(s.Repo.ORM()),
-		ToolBlocks:    store.NewMessageContentBlockExtStore(s.Repo.ORM()),
-		Senders:       store.NewThreadExtStore(s.Repo.ORM()),
-		Temporal:      s.Temporal,
-		Pause:         pause,
+		Logger:           slog.Default(),
+		Config:           &typedconfig.Config{},
+		Repo:             s.Repo,
+		Chats:            chataccess.NewFromORM(s.Repo.ORM()),
+		ChatRows:         store.NewChatExtStore(s.Repo.ORM()),
+		ChatViews:        store.NewChatsWithActivityExtStore(s.Repo.ORM()),
+		QuestionResolver: questions.NewFromRepo(s.Repo),
+		Workflows:        store.NewWorkflowExtStore(s.Repo.ORM()),
+		Worktrees:        store.NewWorktreeExtStore(s.Repo.ORM()),
+		ProjectRows:      store.NewProjectExtStore(s.Repo.ORM()),
+		Backoff:          providerbackofftest.New(t, s.Repo),
+		Mailbox:          agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
+		AgentMessages:    store.NewAgentMessageExtStore(s.Repo.ORM()),
+		Questions:        store.NewQuestionExtStore(s.Repo.ORM()),
+		Spawns:           store.NewToolCallExtStore(s.Repo.ORM()),
+		Selections:       store.NewChatSelectionExtStore(s.Repo.ORM()),
+		Messages:         store.NewMessageExtStore(s.Repo.ORM()),
+		ToolBlocks:       store.NewMessageContentBlockExtStore(s.Repo.ORM()),
+		Senders:          store.NewThreadExtStore(s.Repo.ORM()),
+		Temporal:         s.Temporal,
+		Pause:            pause,
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
@@ -447,10 +449,10 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Repo:      s.Repo,
 		ChatRows:  store.NewChatExtStore(s.Repo.ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(s.Repo.ORM()),
-		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
-		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
-		Signals:   pause,
-		Messages:  chatSvc,
+		Resolver:  questions.NewFromRepo(s.Repo), Questions: store.NewQuestionExtStore(s.Repo.ORM()),
+		Mailbox:  agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
+		Signals:  pause,
+		Messages: chatSvc,
 	})
 	require.NoError(t, err, "question service")
 	approvalSvc, err := approval.New(approval.Deps{

@@ -226,7 +226,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=54c7a8bd1905f129f02b5e246d5de3eb7c4bd4508f3ff8c9576b6d1f4f2f559e
+// forge:hash=faa82ca1971b539fbcf54a8a7196a94274f556e91b52b976b053cbc643b2d588
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -333,7 +333,6 @@ type MockRepository struct {
 	DeleteWorkflowCheckpointFunc                             func(context.Context, string) error
 	CascadeTerminalStatusToDescendantsFunc                   func(context.Context, string, db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtreeFunc                 func(context.Context, string, db.WorkflowStopReason) error
-	ResolveQuestionFunc                                      func(context.Context, string, *string) error
 	EmitQuestionUpdateFunc                                   func(context.Context, string, db.QuestionUpdate) error
 	LockChatRunControlFunc                                   func(context.Context, string) (func(), error)
 	ClaimPendingTriggerEventFunc                             func(context.Context, string, map[string]any, *core.TriggerEventDefinition) (bool, error)
@@ -1244,15 +1243,6 @@ func (m *MockRepository) CascadeTerminalStatusToThreadSubtree(ctx context.Contex
 	return contractkit.MockNotSet("MockRepository", "CascadeTerminalStatusToThreadSubtree")
 }
 
-// ResolveQuestion records the call and delegates to ResolveQuestionFunc when set.
-func (m *MockRepository) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
-	m.Recorder.Record("ResolveQuestion", ctx, id, responseData)
-	if m.ResolveQuestionFunc != nil {
-		return m.ResolveQuestionFunc(ctx, id, responseData)
-	}
-	return contractkit.MockNotSet("MockRepository", "ResolveQuestion")
-}
-
 // EmitQuestionUpdate records the call and delegates to EmitQuestionUpdateFunc when set.
 func (m *MockRepository) EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error {
 	m.Recorder.Record("EmitQuestionUpdate", ctx, chatID, update)
@@ -1750,6 +1740,32 @@ func (m *MockChatViews) GetChat(ctx context.Context, id string) (*db.Chat, error
 
 // Compile-time check.
 var _ ChatViews = (*MockChatViews)(nil)
+
+// forge:section MockQuestionResolver
+// forge:hash=3f3d9b7dd6b010f14241170cfb730403484f82ad2df6f10164d14087dc7ebe63
+
+// MockQuestionResolver is a test mock for the QuestionResolver interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockQuestionResolver.<Method>Func not set" error.
+type MockQuestionResolver struct {
+	contractkit.Recorder
+	ResolveQuestionFunc func(context.Context, string, *string) error
+}
+
+// ResolveQuestion records the call and delegates to ResolveQuestionFunc when set.
+func (m *MockQuestionResolver) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
+	m.Recorder.Record("ResolveQuestion", ctx, id, responseData)
+	if m.ResolveQuestionFunc != nil {
+		return m.ResolveQuestionFunc(ctx, id, responseData)
+	}
+	return contractkit.MockNotSet("MockQuestionResolver", "ResolveQuestion")
+}
+
+// Compile-time check.
+var _ QuestionResolver = (*MockQuestionResolver)(nil)
 
 // forge:section MockDirectory
 // forge:hash=83876a76b6d6a4cf6e2fbb6be01be521691ea4b970ac0f00e255c8f96d481f76

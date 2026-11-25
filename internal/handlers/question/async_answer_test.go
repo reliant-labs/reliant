@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 )
@@ -126,7 +127,7 @@ func (f *asyncAnswerFixture) askAsync(t *testing.T, id, thread string) {
 	t.Helper()
 	metadata := `{"type":"ask_user","async":true,"tool_call_id":"call-` + id + `","questions":[{"question":"Which database?","options":[{"label":"Postgres","description":"d"},{"label":"SQLite","description":"d"}]}]}`
 	toolCall := "call-" + id
-	require.NoError(t, f.repo.CreateQuestion(context.Background(), &db.Question{
+	require.NoError(t, questions.NewFromRepo(f.repo).CreateQuestion(context.Background(), &db.Question{
 		ID: id, ChatID: f.chatID, WorkflowID: thread, TemporalWorkflowID: f.chatID,
 		ThreadID: thread, StepID: "agent_loop", Status: db.QuestionStatusPending,
 		Metadata: &metadata, ToolCallID: &toolCall, Async: true, CreatedAt: time.Now().UTC(),
@@ -306,7 +307,7 @@ func TestResolveAsyncQuestion_EmptyAnswerSendsNothing(t *testing.T) {
 func TestListAsyncQuestions(t *testing.T) {
 	f := newAsyncAnswerFixture(t)
 	f.askAsync(t, "q-async", f.spawnID)
-	require.NoError(t, f.repo.CreateQuestion(context.Background(), &db.Question{
+	require.NoError(t, questions.NewFromRepo(f.repo).CreateQuestion(context.Background(), &db.Question{
 		ID: "q-blocking", ChatID: f.chatID, WorkflowID: f.spawnID, ThreadID: f.spawnID,
 		StepID: "agent_loop", Status: db.QuestionStatusPending, CreatedAt: time.Now().UTC(),
 	}))
@@ -376,7 +377,7 @@ func TestResolveAsyncQuestion_ThreadParkedOnABlockingQuestionGetsItInItsMailboxO
 				require.NoError(t, err)
 			}
 			f.askAsync(t, "q-a", asker)
-			require.NoError(t, f.repo.CreateQuestion(ctx, &db.Question{
+			require.NoError(t, questions.NewFromRepo(f.repo).CreateQuestion(ctx, &db.Question{
 				ID: "q-b", ChatID: f.chatID, WorkflowID: asker, ThreadID: asker,
 				StepID: "agent_loop", Status: db.QuestionStatusPending, CreatedAt: time.Now().UTC(),
 			}))

@@ -58576,6 +58576,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "QuestionResolver",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.QuestionResolver",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Questions",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Questions",
       "methods": [],
@@ -60554,6 +60565,17 @@
       "candidates": [
         "Database"
       ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
+      "field": "Resolver",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.Resolver",
+      "methods": [],
+      "candidates": [],
       "providers": [
         "Database"
       ],

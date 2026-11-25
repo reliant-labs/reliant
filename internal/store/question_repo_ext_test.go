@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 )
@@ -39,7 +40,7 @@ func TestQuestionQueries(t *testing.T) {
 	}
 	q2 := question("q-2", "q-chat", "thread-b", time.Minute)
 	q2.LoopNodeID, q2.LoopIteration, q2.Metadata, q2.ToolCallID = nil, nil, nil, nil
-	if err := env.Repo.CreateQuestion(ctx, q2); err != nil {
+	if err := questions.NewFromRepo(env.Repo).CreateQuestion(ctx, q2); err != nil {
 		t.Fatalf("Repo.CreateQuestion: %v", err)
 	}
 	q3 := question("q-3", "q-chat", "thread-a", 2*time.Minute)
