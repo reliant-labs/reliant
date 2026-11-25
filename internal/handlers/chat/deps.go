@@ -218,3 +218,9 @@ type ChatRows interface {
 type ChatViews interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }
+
+// QuestionResolver resolves a question and announces the chat's activity.
+// *questions.Service satisfies it.
+type QuestionResolver interface {
+	ResolveQuestion(ctx context.Context, id string, responseData *string) error
+}

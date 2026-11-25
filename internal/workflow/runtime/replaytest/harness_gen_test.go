@@ -38,6 +38,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/daemon"
@@ -52,6 +53,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -356,23 +358,27 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 	// first turn); the worker above has no router either, so the activity
 	// settles as skipped_no_daemon_router without touching a filesystem.
 	chatSvc, err := chat.New(chat.Deps{
-		Logger:        slog.Default(),
-		Config:        &typedconfig.Config{},
-		Repo:          s.Repo,
-		Workflows:     store.NewWorkflowExtStore(s.Repo.ORM()),
-		Worktrees:     store.NewWorktreeExtStore(s.Repo.ORM()),
-		ProjectRows:   store.NewProjectExtStore(s.Repo.ORM()),
-		Questions:     store.NewQuestionExtStore(s.Repo.ORM()),
-		Spawns:        store.NewToolCallExtStore(s.Repo.ORM()),
-		Selections:    store.NewChatSelectionExtStore(s.Repo.ORM()),
-		Backoff:       providerbackofftest.New(t, s.Repo),
-		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
-		AgentMessages: store.NewAgentMessageExtStore(s.Repo.ORM()),
-		Messages:      store.NewMessageExtStore(s.Repo.ORM()),
-		ToolBlocks:    store.NewMessageContentBlockExtStore(s.Repo.ORM()),
-		Senders:       store.NewThreadExtStore(s.Repo.ORM()),
-		Temporal:      s.Temporal,
-		Pause:         pause,
+		Logger:           slog.Default(),
+		Config:           &typedconfig.Config{},
+		Repo:             s.Repo,
+		Chats:            chataccess.NewFromORM(s.Repo.ORM()),
+		ChatRows:         store.NewChatExtStore(s.Repo.ORM()),
+		ChatViews:        store.NewChatsWithActivityExtStore(s.Repo.ORM()),
+		QuestionResolver: questions.NewFromRepo(s.Repo),
+		Workflows:        store.NewWorkflowExtStore(s.Repo.ORM()),
+		Worktrees:        store.NewWorktreeExtStore(s.Repo.ORM()),
+		ProjectRows:      store.NewProjectExtStore(s.Repo.ORM()),
+		Questions:        store.NewQuestionExtStore(s.Repo.ORM()),
+		Spawns:           store.NewToolCallExtStore(s.Repo.ORM()),
+		Selections:       store.NewChatSelectionExtStore(s.Repo.ORM()),
+		Backoff:          providerbackofftest.New(t, s.Repo),
+		Mailbox:          agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
+		AgentMessages:    store.NewAgentMessageExtStore(s.Repo.ORM()),
+		Messages:         store.NewMessageExtStore(s.Repo.ORM()),
+		ToolBlocks:       store.NewMessageContentBlockExtStore(s.Repo.ORM()),
+		Senders:          store.NewThreadExtStore(s.Repo.ORM()),
+		Temporal:         s.Temporal,
+		Pause:            pause,
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
@@ -381,6 +387,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		Repo:      s.Repo,
 		ChatRows:  store.NewChatExtStore(s.Repo.ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(s.Repo.ORM()),
+		Resolver:  questions.NewFromRepo(s.Repo),
 		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
 		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
 		Signals:   pause,

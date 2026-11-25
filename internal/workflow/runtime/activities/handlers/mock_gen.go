@@ -3558,7 +3558,7 @@ func (m *MockPreflightDaemonCheckStore) SetChatDaemonBlocked(ctx context.Context
 var _ PreflightDaemonCheckStore = (*MockPreflightDaemonCheckStore)(nil)
 
 // forge:section MockQuestionCreateStore
-// forge:hash=6d7ca61b1a4e1d01b7e62a0074f088d83f53a45b7effb45185b722f74ece633c
+// forge:hash=4ef762afff6a7583271cdc15d0ecfb3df4e84ee1252725d24804f3b453bb5ad6
 
 // MockQuestionCreateStore is a test mock for the QuestionCreateStore interface.
 //
@@ -3569,7 +3569,6 @@ var _ PreflightDaemonCheckStore = (*MockPreflightDaemonCheckStore)(nil)
 type MockQuestionCreateStore struct {
 	contractkit.Recorder
 	RunTxFunc                     func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-	CreateQuestionFunc            func(context.Context, *db.Question) error
 	UpdateChatUnreadFunc          func(context.Context, string, bool, string) error
 	EmitQuestionUpdateFunc        func(context.Context, string, db.QuestionUpdate) error
 	EmitUserRefetchFunc           func(context.Context, string, db.RefetchType, db.RefetchOpts) error
@@ -3586,15 +3585,6 @@ func (m *MockQuestionCreateStore) RunTx(p0 context.Context, policy orm.TxPolicy,
 		return m.RunTxFunc(p0, policy, f)
 	}
 	return contractkit.MockNotSet("MockQuestionCreateStore", "RunTx")
-}
-
-// CreateQuestion records the call and delegates to CreateQuestionFunc when set.
-func (m *MockQuestionCreateStore) CreateQuestion(ctx context.Context, question *db.Question) error {
-	m.Recorder.Record("CreateQuestion", ctx, question)
-	if m.CreateQuestionFunc != nil {
-		return m.CreateQuestionFunc(ctx, question)
-	}
-	return contractkit.MockNotSet("MockQuestionCreateStore", "CreateQuestion")
 }
 
 // UpdateChatUnread records the call and delegates to UpdateChatUnreadFunc when set.
@@ -3664,7 +3654,7 @@ func (m *MockQuestionCreateStore) CountOtherPendingBlockers(ctx context.Context,
 var _ QuestionCreateStore = (*MockQuestionCreateStore)(nil)
 
 // forge:section MockQuestionResolveStore
-// forge:hash=4c052e9237bce3e252b808e47a5dc0aa6a0bd79fe22d733c3d95d8779d5440d4
+// forge:hash=9ae641fded7aa317fbfac05f7cb2cf6da3bd01f55b895e11e0c0608e248c86d4
 
 // MockQuestionResolveStore is a test mock for the QuestionResolveStore interface.
 //
@@ -3675,7 +3665,6 @@ var _ QuestionCreateStore = (*MockQuestionCreateStore)(nil)
 type MockQuestionResolveStore struct {
 	contractkit.Recorder
 	GetQuestionByIDFunc    func(context.Context, string) (*db.Question, error)
-	ResolveQuestionFunc    func(context.Context, string, *string) error
 	EmitQuestionUpdateFunc func(context.Context, string, db.QuestionUpdate) error
 }
 
@@ -3686,15 +3675,6 @@ func (m *MockQuestionResolveStore) GetQuestionByID(ctx context.Context, id strin
 		return m.GetQuestionByIDFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockQuestionResolveStore", "GetQuestionByID")
-}
-
-// ResolveQuestion records the call and delegates to ResolveQuestionFunc when set.
-func (m *MockQuestionResolveStore) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
-	m.Recorder.Record("ResolveQuestion", ctx, id, responseData)
-	if m.ResolveQuestionFunc != nil {
-		return m.ResolveQuestionFunc(ctx, id, responseData)
-	}
-	return contractkit.MockNotSet("MockQuestionResolveStore", "ResolveQuestion")
 }
 
 // EmitQuestionUpdate records the call and delegates to EmitQuestionUpdateFunc when set.
@@ -3708,6 +3688,42 @@ func (m *MockQuestionResolveStore) EmitQuestionUpdate(ctx context.Context, chatI
 
 // Compile-time check.
 var _ QuestionResolveStore = (*MockQuestionResolveStore)(nil)
+
+// forge:section MockQuestionWriter
+// forge:hash=84650212b4944dbf43a4feea119b662b7a5f408120616708294483416f514a5c
+
+// MockQuestionWriter is a test mock for the QuestionWriter interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockQuestionWriter.<Method>Func not set" error.
+type MockQuestionWriter struct {
+	contractkit.Recorder
+	CreateQuestionFunc  func(context.Context, *db.Question) error
+	ResolveQuestionFunc func(context.Context, string, *string) error
+}
+
+// CreateQuestion records the call and delegates to CreateQuestionFunc when set.
+func (m *MockQuestionWriter) CreateQuestion(ctx context.Context, question *db.Question) error {
+	m.Recorder.Record("CreateQuestion", ctx, question)
+	if m.CreateQuestionFunc != nil {
+		return m.CreateQuestionFunc(ctx, question)
+	}
+	return contractkit.MockNotSet("MockQuestionWriter", "CreateQuestion")
+}
+
+// ResolveQuestion records the call and delegates to ResolveQuestionFunc when set.
+func (m *MockQuestionWriter) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
+	m.Recorder.Record("ResolveQuestion", ctx, id, responseData)
+	if m.ResolveQuestionFunc != nil {
+		return m.ResolveQuestionFunc(ctx, id, responseData)
+	}
+	return contractkit.MockNotSet("MockQuestionWriter", "ResolveQuestion")
+}
+
+// Compile-time check.
+var _ QuestionWriter = (*MockQuestionWriter)(nil)
 
 // forge:section MockSaveMessageStore
 // forge:hash=fc5fc9c436abdfcfeeffe0528443a3a67b515f47100c9a64894b4fc9e344e7c4

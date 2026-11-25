@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
@@ -162,12 +163,14 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	var workflowRuns handlers.WorkflowRuns
 	var toolCalls handlers.ToolCalls
 	var questionsByStep handlers.QuestionsByStep
+	var questionWriter handlers.QuestionWriter
 	var workspaceRows handlers.WorkspaceRows
 	if deps.Repo != nil {
 		workspaceRows = handlers.NewWorkspaceRows(deps.Repo.ORM())
 		workflowRuns = handlers.NewWorkflowRuns(deps.Repo.ORM())
 		toolCalls = handlers.NewToolCalls(deps.Repo.ORM())
 		questionsByStep = store.NewQuestionExtStore(deps.Repo.ORM())
+		questionWriter = questions.NewFromRepo(deps.Repo)
 	}
 
 	// ========================================================================
@@ -265,8 +268,8 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// QUESTION ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewQuestionCreateActivity(deps.Repo, questionsByStep))
-	v2.RegisterActivity(registry, handlers.NewQuestionResolveActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewQuestionCreateActivity(deps.Repo, questionWriter, questionsByStep))
+	v2.RegisterActivity(registry, handlers.NewQuestionResolveActivity(deps.Repo, questionWriter))
 
 	// ========================================================================
 	// RUN STEP ACTIVITIES

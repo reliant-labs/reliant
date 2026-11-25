@@ -3550,42 +3550,11 @@ func (r *Repo) DeleteWorkflowScenario(ctx context.Context, id string) error {
 
 // ==================== Questions ====================
 
-func (r *Repo) CreateQuestion(ctx context.Context, question *Question) error {
-	if question == nil {
-		return fmt.Errorf("question cannot be nil")
-	}
-	if question.ID == "" {
-		return fmt.Errorf("question ID cannot be empty")
-	}
-	if err := store.InsertQuestion(ctx, r.ORM(), question); err != nil {
-		return err
-	}
-	_ = r.emitChatActivityIfChanged(ctx, question.ChatID)
-	return nil
-}
-
 func (r *Repo) GetQuestionByID(ctx context.Context, id string) (*Question, error) {
 	if id == "" {
 		return nil, fmt.Errorf("question ID cannot be empty")
 	}
 	return store.GetQuestion(ctx, r.ORM(), id)
-}
-
-func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
-	if id == "" {
-		return fmt.Errorf("question ID cannot be empty")
-	}
-	if err := store.ResolveQuestion(ctx, r.ORM(), id, responseData, time.Now().UTC()); err != nil {
-		return err
-	}
-
-	// Emit activity change
-	q, err := r.GetQuestionByID(ctx, id)
-	if err == nil && q != nil {
-		_ = r.emitChatActivityIfChanged(ctx, q.ChatID)
-	}
-
-	return nil
 }
 
 // ==================== Helper Functions ====================

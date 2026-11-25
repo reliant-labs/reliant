@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/daemonmirror"
+	"github.com/reliant-labs/reliant/internal/questions"
 
 	"github.com/nats-io/nats.go/jetstream"
 
@@ -1189,16 +1190,16 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 // newChat constructs the chat handler (internal/handlers/chat).
 func (g *Graph) newChat() (*chat.Service, error) {
 	return chat.New(chat.Deps{
-		Logger:        g.Log,
-		Config:        g.Cfg,
-		Repo:          g.Database(),
-		Chats:         chataccess.NewFromORM(g.Database().ORM()),
-		ChatRows:      store.NewChatExtStore(g.Database().ORM()),
-		ChatViews:     store.NewChatsWithActivityExtStore(g.Database().ORM()),
-		Workflows:     store.NewWorkflowExtStore(g.Database().ORM()),
-		Worktrees:     store.NewWorktreeExtStore(g.Database().ORM()),
-		ProjectRows:   store.NewProjectExtStore(g.Database().ORM()),
-		TriggerEvents: store.NewTriggerEventExtStore(g.Database().ORM()),
+		Logger:           g.Log,
+		Config:           g.Cfg,
+		Repo:             g.Database(),
+		Chats:            chataccess.NewFromORM(g.Database().ORM()),
+		ChatRows:         store.NewChatExtStore(g.Database().ORM()),
+		ChatViews:        store.NewChatsWithActivityExtStore(g.Database().ORM()),
+		QuestionResolver: questions.NewFromRepo(g.Database()),
+		Workflows:        store.NewWorkflowExtStore(g.Database().ORM()),
+		Worktrees:        store.NewWorktreeExtStore(g.Database().ORM()),
+		ProjectRows:      store.NewProjectExtStore(g.Database().ORM()), TriggerEvents: store.NewTriggerEventExtStore(g.Database().ORM()),
 		Questions:     store.NewQuestionExtStore(g.Database().ORM()),
 		Spawns:        store.NewToolCallExtStore(g.Database().ORM()),
 		Selections:    store.NewChatSelectionExtStore(g.Database().ORM()),
@@ -1535,10 +1536,10 @@ func (g *Graph) newQuestion() (*question.Service, error) {
 		Repo:      g.Database(),
 		ChatRows:  store.NewChatExtStore(g.Database().ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(g.Database().ORM()),
-		Questions: store.NewQuestionExtStore(g.Database().ORM()),
-		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.chatUpdates()}),
-		Signals:   g.PauseService(),
-		Messages:  g.Chat(),
+		Resolver:  questions.NewFromRepo(g.Database()), Questions: store.NewQuestionExtStore(g.Database().ORM()),
+		Mailbox:  agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.chatUpdates()}),
+		Signals:  g.PauseService(),
+		Messages: g.Chat(),
 	})
 }
 
