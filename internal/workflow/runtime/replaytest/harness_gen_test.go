@@ -376,6 +376,8 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		Logger:    slog.Default(),
 		Config:    &typedconfig.Config{},
 		Repo:      s.Repo,
+		ChatRows:  store.NewChatExtStore(s.Repo.ORM()),
+		ChatViews: store.NewChatsWithActivityExtStore(s.Repo.ORM()),
 		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
 		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
 		Signals:   pause,

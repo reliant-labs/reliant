@@ -509,6 +509,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Logger:         d.Logger,
 		Config:         d.Config,
 		Repo:           repo,
+		Chats:          store.NewChatExtStore(repo.ORM()),
 		Firings:        store.NewTriggerEventExtStore(repo.ORM()),
 		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()),
 		Owners:         d.Owners,
