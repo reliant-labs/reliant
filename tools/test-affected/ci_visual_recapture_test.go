@@ -72,8 +72,8 @@ func TestVisualRecaptureWorkflow(t *testing.T) {
 		t.Errorf("capture must re-capture the changed baselines (%v) and upload them (%v)", update, upload)
 	}
 	// The job that writes runs nothing from the PR: only main's apply script.
-	if push.Permissions["contents"] != "write" || push.Permissions["actions"] != "write" || len(push.Permissions) != 2 {
-		t.Errorf("push permissions %v, want contents: write and actions: write alone", push.Permissions)
+	if push.Permissions["contents"] != "write" || len(push.Permissions) != 1 {
+		t.Errorf("push permissions %v, want contents: write alone (no actions: a dispatch on the PR branch would run its workflow with secrets)", push.Permissions)
 	}
 	if push.Needs != "capture" || !strings.Contains(push.If, "needs.capture.outputs.changed") {
 		t.Errorf("push needs capture (%v) and runs only when a baseline changed (%q)", push.Needs, push.If)
@@ -89,6 +89,9 @@ func TestVisualRecaptureWorkflow(t *testing.T) {
 		case s.Run != "":
 			if strings.Contains(s.Run, "trusted/.github/scripts/visual-recapture-apply.sh") {
 				apply = true
+			}
+			if strings.Contains(s.Run, "workflow run") || strings.Contains(s.Run, "dispatches") {
+				t.Errorf("push step %q dispatches a workflow: on the PR branch that runs the PR's definition with secrets", s.Name)
 			}
 			for _, bad := range []string{"pr/", "staged/", "task ", "npm ", "pnpm ", "npx ", "make "} {
 				if strings.Contains(strings.ReplaceAll(s.Run, "$RUNNER_TEMP", ""), bad) && !strings.Contains(s.Run, "visual-recapture-apply.sh") {
@@ -113,6 +116,7 @@ func TestVisualRecaptureApplyScript(t *testing.T) {
 	type setup struct {
 		files map[string]string // staged path -> content
 		link  string            // a staged symlink, by path
+		dest  string            // a symlink committed in the PR's checkout at this path, to /tmp
 		moved bool              // the remote branch moved past the head
 	}
 	run := func(t *testing.T, s setup) (string, int, string) {
@@ -128,6 +132,19 @@ func TestVisualRecaptureApplyScript(t *testing.T) {
 		}
 		git := scratchGit(t, work)
 		scratchWrite(t, work, shot, "\x89PNG\r\n\x1a\nold")
+		if s.dest != "" {
+			outside := filepath.Join(dir, "outside")
+			if err := os.MkdirAll(outside, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			_ = os.RemoveAll(filepath.Join(work, s.dest))
+			if err := os.MkdirAll(filepath.Dir(filepath.Join(work, s.dest)), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(outside, filepath.Join(work, s.dest)); err != nil {
+				t.Fatal(err)
+			}
+		}
 		git("add", ".")
 		git("commit", "-q", "-m", "base")
 		git("remote", "add", "origin", remote)
@@ -201,6 +218,8 @@ func TestVisualRecaptureApplyScript(t *testing.T) {
 		"a symlink":                       {link: shot},
 		"a baseline over 1 MiB":           {files: map[string]string{shot: png + strings.Repeat("x", 1<<20)}},
 		"a workflow smuggled beside them": {files: map[string]string{shot: png, ".github/workflows/x.yml": "on: push"}},
+		"a symlinked directory in the PR": {files: map[string]string{shot: png}, dest: "frontends/web/e2e/visual/__screenshots__/desktop-dark"},
+		"a symlinked baseline in the PR":  {files: map[string]string{"frontends/web/e2e/visual/__screenshots__/mobile/x.png": png}, dest: "frontends/web/e2e/visual/__screenshots__/mobile/x.png"},
 	}
 	for name, s := range refused {
 		t.Run(name+" refuses the whole set", func(t *testing.T) {

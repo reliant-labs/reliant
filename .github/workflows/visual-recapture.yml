@@ -23,9 +23,12 @@ name: Visual re-capture
 # main's .github/scripts, and visual-recapture-apply.sh accepts nothing but
 # PNG files under frontends/web/e2e/visual/__screenshots__ (each checked),
 # commits them onto the head, and pushes without force (a head that moved
-# refuses it). A GITHUB_TOKEN push starts no workflow, so it then dispatches
-# ci.yml on the branch for the head's `CI result`; pr-review hears the push
-# through the Reliant App's webhook and reviews the new head like any other.
+# refuses it). It dispatches nothing: running a workflow on the PR's branch
+# would run the PR's own definition of it, with this repository's secrets.
+# pr-review hears the push through the Reliant App's webhook and reviews the
+# new head like any other; a GITHUB_TOKEN push starts no `ci.yml` run, so the
+# head's `CI result` comes from pr-sweep's existing route for a required check
+# no run reported (control-plane pr-fix.sh facts, route retrigger).
 #
 # Every capture already matching is a result too (RECAPTURE=none): the visual
 # failure came from an entry ahead in the queue, or a nondeterministic surface,
@@ -143,7 +146,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
-      actions: write
     steps:
       # main's scripts only: nothing from the PR runs in this job.
       - uses: actions/checkout@v6
@@ -162,7 +164,6 @@ jobs:
           name: visual-recapture
           path: staged
       - name: Commit and push
-        id: apply
         env:
           STAGED: ${{ github.workspace }}/staged
           TARGET: ${{ github.workspace }}/pr
@@ -170,13 +171,4 @@ jobs:
           HEAD_SHA: ${{ inputs.head }}
         run: |
           set -euo pipefail
-          trusted/.github/scripts/visual-recapture-apply.sh | tee "$RUNNER_TEMP/apply.out"
-          echo "pushed=$(grep -c '^RECAPTURE=pushed' "$RUNNER_TEMP/apply.out" || true)" >>"$GITHUB_OUTPUT"
-      # A GITHUB_TOKEN push starts no workflow; a dispatch does, and its run
-      # reports the new head's `CI result`.
-      - name: Dispatch ci.yml for the new head
-        if: steps.apply.outputs.pushed == '1'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BRANCH: ${{ needs.capture.outputs.branch }}
-        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+          trusted/.github/scripts/visual-recapture-apply.sh

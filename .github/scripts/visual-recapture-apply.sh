@@ -55,9 +55,23 @@ for f in "${files[@]}"; do
   [ "$(head -c 8 "$p" | od -An -tx1 | tr -d ' \n')" = "$sig" ] || die "refused $f is not a PNG"
 done
 
+# The destination is the PR's checkout, which the PR controls: a tracked symlink at a
+# baseline's path, or at any directory above it, would make the copy write outside the
+# screenshots with this job's token. Every component under TARGET must be a real directory
+# (or absent), and the file itself a regular file (or absent); anything else refuses all.
 for f in "${files[@]}"; do
-  mkdir -p "$TARGET/$(dirname "$f")"
-  cp -- "$STAGED/$f" "$TARGET/$f"
+  p=""
+  IFS=/ read -ra parts <<<"$f"
+  for c in "${parts[@]}"; do
+    p="${p:+$p/}$c"
+    if [ -L "$TARGET/$p" ]; then die "refused $p is a symlink in the PR's checkout"; fi
+    if [ "$p" != "$f" ] && [ -e "$TARGET/$p" ] && [ ! -d "$TARGET/$p" ]; then die "refused $p is not a directory in the PR's checkout"; fi
+  done
+  if [ -e "$TARGET/$f" ] && [ ! -f "$TARGET/$f" ]; then die "refused $f is not a regular file in the PR's checkout"; fi
+done
+for f in "${files[@]}"; do
+  mkdir -p -- "$TARGET/$(dirname "$f")"
+  cp --no-dereference --remove-destination -- "$STAGED/$f" "$TARGET/$f"
 done
 git -C "$TARGET" add -- "${files[@]}"
 if git -C "$TARGET" diff --cached --quiet; then out none; exit 0; fi
