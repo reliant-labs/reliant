@@ -14,7 +14,7 @@
  */
 
 import type { DescField, DescMessage, Message } from "@bufbuild/protobuf";
-import { isMessage } from "@bufbuild/protobuf";
+import { isMessage, ScalarType } from "@bufbuild/protobuf";
 
 /** Whether a field's proto name says it holds ids: `id`, `…_id`, `…_ids`. */
 export function isIdField(name: string): boolean {
@@ -61,7 +61,9 @@ export function someString(desc: DescMessage, msg: Message, visit: (field: DescF
         if (field.listKind === "message" && (value as unknown[]).some((v) => nested(field.message, v))) return true;
         break;
       case "map": {
-        const values = Object.values(value as Record<string, unknown>);
+        const entries = value as Record<string, unknown>;
+        if (field.mapKey === ScalarType.STRING && Object.keys(entries).some((key) => visit(field, key))) return true;
+        const values = Object.values(entries);
         if (field.mapKind === "scalar" && values.some((v) => typeof v === "string" && visit(field, v))) return true;
         if (field.mapKind === "message" && values.some((v) => nested(field.message, v))) return true;
         break;
@@ -100,10 +102,15 @@ export function mapStrings(desc: DescMessage, msg: Message, map: (field: DescFie
       }
       case "map": {
         const entries = value as Record<string, unknown>;
-        for (const [key, v] of Object.entries(entries)) {
-          if (field.mapKind === "scalar" && typeof v === "string") entries[key] = map(field, v);
+        // Rebuild from a snapshot so renamed keys cannot overwrite an entry
+        // before it has been visited (including when two keys swap places).
+        const mappedEntries = Object.entries(entries).map(([key, v]) => {
+          const mappedKey = field.mapKey === ScalarType.STRING ? map(field, key) : key;
+          const mappedValue = field.mapKind === "scalar" && typeof v === "string" ? map(field, v) : v;
           if (field.mapKind === "message") nested(field.message, v);
-        }
+          return [mappedKey, mappedValue];
+        });
+        setValue(fields, field, Object.fromEntries(mappedEntries));
         break;
       }
     }
