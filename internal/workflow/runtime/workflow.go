@@ -6487,7 +6487,7 @@ func waitForDaemon(ctx workflow.Context, preflightInput map[string]interface{}) 
 	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: preflightWaitSlice + preflightSliceMargin,
 		HeartbeatTimeout:    preflightHeartbeatTimeout,
-		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
+		RetryPolicy:         preflightRetryPolicy(),
 	})
 	waitStart := workflow.Now(ctx)
 	in := preflightSliceInput(preflightInput, preflightWaitSlice, preflightMachineWaitCap, false)
@@ -6499,6 +6499,27 @@ func waitForDaemon(ctx workflow.Context, preflightInput map[string]interface{}) 
 		return nil
 	}
 	return waitForMachine(ctx, actCtx, preflightInput, waitStart, result["failed_since"])
+}
+
+// preflightRetryPolicy is PreflightDaemonCheck's retry ladder: a few quick
+// attempts, so one lost heartbeat (a worker restarting mid-slice) or a
+// database blip does not fail the user's run (obs 5a36f26f). Every failure
+// the check decides itself is non-retryable
+// (handlers.PreflightDaemonCheckFailedErrType), so a missing machine, a
+// refused wake or an exhausted wait still fails at once.
+//
+// No version gate: a retry policy is an attribute of the ScheduleActivityTask
+// command, and replay matches an activity by its id and type, not its
+// options. Every replay fixture that waits for a daemon was recorded with
+// MaximumAttempts 1 and replays through this (TestReplayFixtures). An
+// in-flight run picks the ladder up at its next check.
+func preflightRetryPolicy() *temporal.RetryPolicy {
+	return &temporal.RetryPolicy{
+		InitialInterval:    2 * time.Second,
+		BackoffCoefficient: 2.0,
+		MaximumInterval:    10 * time.Second,
+		MaximumAttempts:    preflightActivityMaxAttempts,
+	}
 }
 
 // waitForMachine is the rest of a run's wait for a machine that is still
