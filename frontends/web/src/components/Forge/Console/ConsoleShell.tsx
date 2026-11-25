@@ -63,6 +63,7 @@ import {
   withSearch,
   type ConsolePage,
 } from "./paths";
+import { appDisplayName } from "../Sample/sampleApp";
 import { consoleNavEntries } from "./consoleNavRegistry";
 import { testIdParts } from "../Tests/flakyModel";
 
@@ -442,7 +443,7 @@ export function ConsoleBreadcrumb({
         href={linkTo ? linkTo({ kind: "overview" }) : withSearch(consolePath(project, { kind: "overview" }), { env })}
         className="truncate hover:text-ink"
       >
-        {project}
+        {appDisplayName(project)}
       </Link>
       {crumbs.map((crumb, index) => (
         <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5 max-sm:hidden max-sm:last:inline-flex">

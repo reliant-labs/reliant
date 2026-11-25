@@ -10,6 +10,7 @@
  *   services    one dashboard per long-running service, worker or operator
  *   jobs        the consolidated dashboard of every job and cron job
  *   product     frontends and product analytics (product-*)
+ *   ai          model calls, agents, tools and workflow runs (forge's AI hub)
  *   platform    workloads, Reliant's own self-monitoring (selfmon-*), built-ins
  *   releases    release health
  *   custom      everything a team wrote itself
@@ -20,7 +21,7 @@
 
 import type { DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
 
-export const DASHBOARD_GROUPS = ["overview", "services", "jobs", "product", "platform", "releases", "custom"] as const;
+export const DASHBOARD_GROUPS = ["overview", "services", "jobs", "product", "ai", "platform", "releases", "custom"] as const;
 export type DashboardGroup = (typeof DASHBOARD_GROUPS)[number];
 
 export const GROUP_LABELS: Record<DashboardGroup, string> = {
@@ -28,6 +29,7 @@ export const GROUP_LABELS: Record<DashboardGroup, string> = {
   services: "Services",
   jobs: "Jobs",
   product: "Product",
+  ai: "AI",
   platform: "Platform",
   releases: "Releases",
   custom: "Custom",
@@ -38,6 +40,7 @@ export const GROUP_ABOUT: Record<DashboardGroup, string> = {
   services: "One per long-running service, worker and operator",
   jobs: "Every job and cron job, on one dashboard",
   product: "Frontends and product analytics",
+  ai: "Model calls, agents, tools and workflow runs",
   platform: "Workloads, self-monitoring and organization views",
   releases: "How each release changed errors and latency",
   custom: "Dashboards your team wrote",
