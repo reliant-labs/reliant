@@ -2786,24 +2786,6 @@ func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
 	return store.RemoveTrigger(ctx, r.ORM(), id)
 }
 
-// lockTriggerProjects takes the key share a trigger write needs on its
-// projects before the trigger's own row lock (store.LockProjectsForWrite):
-// the project it is in now and, when it moves, toProjectID. Only a write
-// that leaves the trigger on, or moves it, is admitted against a deletion;
-// one that leaves it off, in place, locks nothing. The database's admission
-// re-decides under the same lock in the write itself, so a trigger that moved
-// between this read and its row lock is still refused.
-func (r *Repo) lockTriggerProjects(ctx context.Context, triggerID, toProjectID string, enabled bool) error {
-	current, err := store.TriggerProjectID(ctx, r.ORM(), triggerID)
-	if err != nil {
-		return err
-	}
-	if !enabled && (toProjectID == "" || toProjectID == current) {
-		return nil
-	}
-	return store.LockProjectsForWrite(ctx, r.ORM(), current, toProjectID)
-}
-
 // CreateTriggerEvent records one firing. The insert is ON CONFLICT
 // (kind, dedupe_key) DO NOTHING, so created=false means a firing for that
 // key already existed and nothing was written. That constraint is what
