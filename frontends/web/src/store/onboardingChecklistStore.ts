@@ -67,14 +67,9 @@ import type { ListDaemonsResponse } from "../gen/reliant/v1/daemon_registry_pb";
 import { projectServiceKeys } from "../hooks/project-service-hooks_gen";
 import type { ListProjectsWithAppsResponse } from "../gen/reliant/v1/project_pb";
 import { catalogFromResponse, catalogHasDeployedApp as catalogHasApp, catalogHasOwnRepo } from "../services/projects/catalog";
-import {
-  listMembers,
-  memberKeys,
-  orgMembershipAvailable,
-  seatsShowATeam,
-  type MemberPage,
-  type OrgInvitation,
-} from "../services/controlPlane/members";
+import { organizationServiceKeys, organizationServiceQueries } from "../hooks/controlplane/organization-service-hooks_gen";
+import type { ListInvitationsResponse, ListMembersResponse } from "../gen/controlplane/services/organization/v1/organization_pb";
+import { orgMembershipAvailable, seatsShowATeam, toMemberPage } from "../services/controlPlane/members";
 import type { JourneyRecord } from "./tourStore";
 
 /**
@@ -269,9 +264,6 @@ function catalogHasRepo(response: ListProjectsWithAppsResponse): boolean {
 function catalogHasDeployedApp(response: ListProjectsWithAppsResponse): boolean {
   return catalogHasApp(catalogFromResponse(response));
 }
-
-/** The org's seat count, read once while "invite-teammate" is outstanding (under memberKeys, so an org switch drops it). */
-const TEAM_SEATS_KEY = (orgId: string) => [...memberKeys.all, orgId, "seats"] as const;
 
 /** A tour journey finished with Finish, at its current version or an older one. Exit tour and a dismissed picker are not. */
 function journeyCompleted(record: JourneyRecord): boolean {
@@ -508,12 +500,12 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
           const scope = getOrgScope();
           const { orgId } = scope.ready ? scope : await whenOrgScopeReady();
           if (!orgId) throw new Error("no org");
-          const page = await queryClient.fetchQuery({
-            queryKey: TEAM_SEATS_KEY(orgId),
-            queryFn: () => listMembers(orgId, "", 1),
-            staleTime: 60_000,
-          });
-          found("invite-teammate", seatsShowATeam(page.seats));
+          // The org's seat count: a one-member ListMembers page, under the
+          // roster's keys (ORG_MEMBER_READS), so an org switch drops it.
+          const page = await queryClient.fetchQuery(
+            organizationServiceQueries.listMembers({ orgId, pageSize: 1 }, { staleTime: 60_000 }),
+          );
+          found("invite-teammate", seatsShowATeam(toMemberPage(page).seats));
         } catch {
           // Fail open (a self-hosted server, a member who may not read the roster)
         }
@@ -615,18 +607,22 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         cache.subscribe((event) => {
           if (done("invite-teammate")) return;
           const key = event.query.queryKey;
-          if (key[0] !== memberKeys.all[0]) return;
+          const watched =
+            partialMatchKey(key, organizationServiceKeys.listMembers.all) ||
+            partialMatchKey(key, organizationServiceKeys.listInvitations.all);
+          if (!watched) return;
+          // A plain read holds the response; the roster's paged read, its pages.
           const data = event.query.state.data as
-            | MemberPage
-            | { pages?: MemberPage[] }
-            | OrgInvitation[]
+            | ListMembersResponse
+            | ListInvitationsResponse
+            | { pages: (ListMembersResponse | ListInvitationsResponse)[] }
             | undefined;
-          if (!data) return;
-          const team = Array.isArray(data)
-            ? data.some((invitation) => invitation.status === "pending")
-            : "seats" in data
-              ? seatsShowATeam(data.seats)
-              : !!data.pages?.[0] && seatsShowATeam(data.pages[0].seats);
+          const first = data && "pages" in data ? data.pages[0] : data;
+          if (!first) return;
+          const team =
+            "invitations" in first
+              ? first.invitations.some((invitation) => invitation.status === "pending")
+              : seatsShowATeam(toMemberPage(first).seats);
           if (team) void get().markComplete("invite-teammate");
         }),
       );

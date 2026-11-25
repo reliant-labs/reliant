@@ -293,6 +293,35 @@ Target elements through a stable attribute, never through classes or text.
 4. A target that never appears doesn't trap the user. The spotlight keeps
    retrying for about 3 s, then shows its card anyway, with Skip step and End
    tour available. `blockOutside` blocks nothing while the target is missing.
+5. `__tests__/tourAnchors.test.ts` fails when a selector a journey, phase or
+   tip names is rendered nowhere, so a rename can't strand a step.
+
+### The nav's anchors: one set, every shell
+
+The left nav is data (`Layout/sidebar/navConfig/`), drawn by one renderer,
+`Layout/sidebar/NavRenderer.tsx`. The signed-in app, the forge shell and the
+public demo all draw it, inside the one shell (`Layout/shell/AppShell.tsx`), so
+a step that rings the nav names the same anchor wherever it runs:
+
+| Anchor | Where |
+|---|---|
+| `forge-console-nav` | the nav's top level (`nav-top`): the app's rows |
+| `nav-drill-in` | an area's header ("‹ Observability") while the nav is drilled into it |
+| `nav-overview`, `nav-observability`, `nav-deployments`, `nav-tests`, `nav-security`, `nav-configure` | one row or group each |
+
+A nav item names its anchor with `tour: "<name>"` (`navConfig/types.ts`), and
+`NavRenderer` renders it as `data-tour` (on a group, the whole block). Set it
+only on an item a journey points at.
+
+On an area's routes (Observability is a drill-in) the nav draws no `nav-top`
+and no area row: a step that rings the nav there targets `nav-drill-in`, never
+`forge-console-nav` alone. `tourAnchors.test.ts` pins every anchor in this
+table, and `e2e/journey-forge.spec.ts` walks the demo's journey in the shell.
+
+There is no anchor for a frame of the console's own: the console is a page of
+the shell (`Forge/Console/ConsoleFrame.tsx`), in the app and on the demo host
+alike. The old `[data-tour='forge-console'] aside` named the console's second
+frame (`ConsoleShell`); no step targets it, and after #3574 nothing renders it.
 
 ## Signals (the event bus)
 
@@ -356,8 +385,10 @@ by ForgeShell/landingJourney.ts:
 
 The public demo host (`demo.reliantlabs.io`, the `demo` shell,
 `demoShellRoutes.tsx`) boots the tour as the forge shell does, but with
-`memoryTourStorage()`: nothing is remembered. A bare entry **opens on the
-Home** (`/forge/demo?section=home`), free to explore:
+`memoryTourStorage()`: nothing is remembered. Its pages render in the app's
+one shell with the demo's nav (`Forge/Demo/demoNav.ts`), so its steps ring the
+same anchors as the app's ("The nav's anchors", above). A bare entry **opens
+on the Home** (`/forge/demo?section=home`), free to explore:
 - The Home's hero and the action row under every page's header offer **Take
   the tour** (`TOUR_START`, `Forge/Demo/DemoScreenActions.tsx`). Nothing starts
   the tour by itself. (`DemoTourToast` has rendered nothing since #2334.)

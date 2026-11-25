@@ -1,17 +1,14 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { useCallback } from "react";
-import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
 
-import { hasControlPlane } from "@/services/controlPlane/config";
 import {
-  listMyOrganizations,
-  orgKeys,
-  resolveActiveOrg,
-  setDefaultOrganization,
-  type MyOrg,
-  type MyOrgs,
-} from "@/services/controlPlane/orgs";
+  organizationServiceQueries,
+  useSetDefaultOrganization,
+} from "@/hooks/controlplane/organization-service-hooks_gen";
+import { hasControlPlane } from "@/services/controlPlane/config";
+import { orgKeys, resolveActiveOrg, toMyOrgs, type MyOrg } from "@/services/controlPlane/orgs";
 import { switchTabOrg } from "@/lib/orgSwitch";
 import { chooseActiveOrg, isMachineCredentialUser, useActiveOrgStore } from "@/store/activeOrgStore";
 import { useAuthStore } from "@/store/authStore";
@@ -26,14 +23,19 @@ export function useMyOrgs(client?: QueryClient) {
   // It is a person's list: a machine credential (an API-key session) is
   // refused, and acts in its own org with none named (store/activeOrgStore).
   const person = useAuthStore((s) => s.user !== null && !isMachineCredentialUser(s.user.id));
-  return useQuery<MyOrgs>({
-    queryKey: orgKeys.mine,
-    queryFn: listMyOrganizations,
-    enabled: hasControlPlane && person,
-    staleTime: 60_000,
-    // Leaving an org elsewhere must show up when the person comes back.
-    refetchOnWindowFocus: true,
-  }, client);
+  return useQuery(
+    organizationServiceQueries.listMyOrganizations(
+      {},
+      {
+        enabled: hasControlPlane && person,
+        staleTime: 60_000,
+        // Leaving an org elsewhere must show up when the person comes back.
+        refetchOnWindowFocus: true,
+        select: toMyOrgs,
+      },
+    ),
+    client,
+  );
 }
 
 export interface ActiveOrg {
@@ -84,11 +86,13 @@ export function useActiveOrg(client?: QueryClient): ActiveOrg {
   };
 }
 
-/** Make `orgId` the server-side default: what the CLI and other devices act in too. */
+/**
+ * Make `{ orgId }` the server-side default: what the CLI and other devices act
+ * in too. PermissionDenied for an org the caller is not in. Refreshes the
+ * membership list (its `isDefault` flags), nothing else.
+ */
 export function useSetDefaultOrg() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: setDefaultOrganization,
-    onSuccess: () => qc.invalidateQueries({ queryKey: orgKeys.mine }),
+  return useSetDefaultOrganization({
+    invalidate: (qc) => void qc.invalidateQueries({ queryKey: orgKeys.mine }),
   });
 }

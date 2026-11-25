@@ -300,6 +300,16 @@ func (o *ExecOutcome) NoteThreadLimit(note string) {
 	o.Stderr = appendStderr(o.Stderr, note)
 }
 
+// NoteRemovedOutput appends the idle reclaim's note to a failed command:
+// the node_modules or build output of the directory it ran in was removed
+// while it sat unused (idlereclaim.Records.Note). Only on failure: a command
+// that succeeded did not need what was removed.
+func (o *ExecOutcome) NoteRemovedOutput(note string) {
+	if o.ExitCode != 0 {
+		o.Stderr = appendStderr(o.Stderr, note)
+	}
+}
+
 func appendStderr(stderr, msg string) string {
 	if msg == "" {
 		return stderr

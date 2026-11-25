@@ -83,7 +83,6 @@ type Repository interface {
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
 
 	// The chats archived with a worktree.
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	ListChats(ctx context.Context, filters db.ChatFilters) ([]*db.Chat, error)
 	UpdateChatState(ctx context.Context, chatID string, state db.ChatState, reason string) error
 	// LockChatRunControl takes the chat's run-control lock (runs.Service.LockRunControl):
@@ -105,4 +104,10 @@ type Repository interface {
 // user_updates refetch). chatupdates.Service satisfies it.
 type UserRefetch interface {
 	EmitUserRefetch(ctx context.Context, userID string, refetchType core.RefetchType, opts core.RefetchOpts) error
+}
+
+// Chats reads one chat with its computed state, for placement. store.ChatsWithActivityExtStore
+// satisfies it.
+type Chats interface {
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }

@@ -179,7 +179,12 @@ test('the preview refuses sending a chat message, with nothing sent off the page
   await quiet(page)
 
   const composer = page.getByTestId('chat-input')
+  // The home focuses its composer once it has rendered, and text typed
+  // before then can be dropped (an empty box, Send disabled, nothing to
+  // refuse). Wait for the focus, and for the text to hold, before sending.
+  await expect(composer).toBeFocused()
   await composer.fill(message)
+  await expect(composer).toHaveValue(message)
   await composer.press('Enter')
   await expect.poll(async () => (await readProbe(page))?.refused ?? [], { message: `${write}, refused` }).toContain(write)
   // Nothing was sent: the message is back in the box.

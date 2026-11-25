@@ -81,7 +81,6 @@ func (f *superviseChatService) GetWorkflowExecutions(_ context.Context, _ *conne
 func (f *superviseChatService) ListMessages(_ context.Context, _ *connect.Request[reliantv1.ListMessagesRequest]) (*connect.Response[reliantv1.ListMessagesResponse], error) {
 	return connect.NewResponse(&reliantv1.ListMessagesResponse{
 		Messages: f.messages,
-		Total:    int32(len(f.messages)),
 		Count:    int32(len(f.messages)),
 	}), nil
 }

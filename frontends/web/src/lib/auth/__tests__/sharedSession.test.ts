@@ -54,7 +54,6 @@ const hosted = (overrides: Partial<AuthStorageInputs> = {}): AuthStorageInputs =
   cookieDomain: '.reliantlabs.io',
   hostname: 'app.reliantlabs.io',
   protocol: 'https:',
-  demoHost: 'demo.reliantlabs.io',
   demoShell: false,
   ...overrides,
 })
@@ -87,9 +86,9 @@ describe('resolveAuthStorageMode', () => {
     expect(resolveAuthStorageMode(hosted({ cookieDomain: '' }))).toBe('local')
   })
 
-  it('never uses the cookie on the demo host or in the demo shell', () => {
-    expect(resolveAuthStorageMode(hosted({ hostname: 'demo.reliantlabs.io' }))).toBe('local')
-    expect(resolveAuthStorageMode(hosted({ hostname: 'DEMO.reliantlabs.io' }))).toBe('local')
+  it('never uses the cookie in the demo shell', () => {
+    // The demo's own build (demo.html) on the demo host is always the demo shell.
+    expect(resolveAuthStorageMode(hosted({ hostname: 'demo.reliantlabs.io', demoShell: true }))).toBe('local')
     // ?shell=demo on app.* mounts the demo, which has no auth either.
     expect(resolveAuthStorageMode(hosted({ demoShell: true }))).toBe('local')
   })

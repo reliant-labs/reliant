@@ -19,9 +19,10 @@ const toastSuccess = vi.fn();
 vi.mock("@/lib/toast-manager", () => ({ toast: { success: (m: string) => toastSuccess(m), error: vi.fn() } }));
 
 import { OrgPolicyMode, SpendPeriod } from "@/gen/controlplane/controlplane/v1/org_policy_pb";
+import { orgPolicyServiceKeys } from "@/hooks/controlplane/org-policy-service-hooks_gen";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
-import { useActiveOrgStore } from "@/store/activeOrgStore";
+import { ORG_SCOPED_QUERY_ROOTS, useActiveOrgStore } from "@/store/activeOrgStore";
 import { useAuthStore } from "@/store/authStore";
 import { renderWithQuery } from "@/test/renderWithQuery";
 
@@ -170,7 +171,8 @@ describe("PoliciesPage (admin)", () => {
   });
 
   it("previews a draft, then saves it with the version it started from", async () => {
-    const { calls } = setup("admin");
+    const { calls, queryClient } = setup("admin");
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     await screen.findByTestId("policy-card-mcp");
     await userEvent.click(screen.getByRole("switch", { name: "Tools (MCP) policy" }));
     expect(screen.getByTestId("policies-savebar")).toHaveTextContent("Unsaved changes to Tools (MCP).");
@@ -186,6 +188,14 @@ describe("PoliciesPage (admin)", () => {
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Policies saved as version 4."));
     expect(screen.queryByTestId("policies-savebar")).toBeNull();
     expect(screen.getByTestId("policies-version")).toHaveTextContent("Version 4");
+    // The save's record is the document's cached answer, unasked; the caps the
+    // usage is measured against may have moved, so it is read again.
+    expect(calls.get).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: orgPolicyServiceKeys.getMyPolicyUsage({ orgId: ORG }) });
+  });
+
+  it("an org switch purges every OrgPolicyService read", () => {
+    expect(ORG_SCOPED_QUERY_ROOTS).toContain(orgPolicyServiceKeys.all[0]);
   });
 
   it("shows a refusal on its card and will not save", async () => {

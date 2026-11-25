@@ -114,6 +114,9 @@ type LifecyclePublisher interface {
 	Connected(daemonID, userID, daemonType string, build daemonwire.Build)
 	Disconnected(daemonID, userID, daemonType string)
 	Activity(daemonID, userID, daemonType, reason string)
+	// UpgradeChanged publishes the upgrade state the daemon changed to, as
+	// an upgrade event (upgrade.go).
+	UpgradeChanged(daemonID, userID, daemonType string, upgrade daemonwire.Upgrade)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

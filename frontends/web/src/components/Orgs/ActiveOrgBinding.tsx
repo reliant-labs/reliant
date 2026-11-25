@@ -5,6 +5,8 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { resetAfterLeavingOrg } from "@/lib/orgScope";
+import { ORG_MEMBER_READS } from "@/services/controlPlane/members";
+import { orgKeys } from "@/services/controlPlane/orgs";
 import { useAuthStore } from "@/store/authStore";
 import {
   ORG_SCOPED_QUERY_ROOTS,
@@ -71,7 +73,7 @@ export function ActiveOrgBinding({
       settled.current = undefined;
       // Never reuse another person's membership list, even across an auth
       // transition that did not go through the explicit Sign out action.
-      void qc.resetQueries({ queryKey: ["orgs"] });
+      void qc.resetQueries({ queryKey: orgKeys.mine });
     }
   }, [userId, qc]);
 
@@ -101,6 +103,7 @@ export function ActiveOrgBinding({
       // choice the transport named. Its own keyed reads are dropped, not re-sent.
       const left = switched ? (settled.current ?? null) : used;
       for (const root of ORG_SCOPED_QUERY_ROOTS) void resetAfterLeavingOrg(qc, [root], left);
+      for (const queryKey of ORG_MEMBER_READS) void resetAfterLeavingOrg(qc, queryKey, left);
       onSwitch?.(activeOrgId, qc, { firstLoad: false });
     } else if (settled.current === undefined && used === null && activeOrgId !== null) {
       // The first answer of a tab that had nothing saved. The product's lists

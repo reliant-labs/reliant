@@ -7,7 +7,6 @@
   "CHANGES_UI": "",
   "CLI_DEFAULTS_BAKED": "",
   "CONTROL_PLANE_API_URL": "https://cp.preview.invalid",
-  "DEMO_APP_HOST": "demo.reliantlabs.io",
   "DEMO_DATA_SOURCE": "fixtures",
   "DEMO_DATA_URL": "",
   "DEMO_TELEMETRY": "replay",
