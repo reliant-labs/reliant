@@ -23,7 +23,7 @@ import { FlaskConical, Plus } from "lucide-react";
 import Card from "@/components/forge-ui/card";
 import EmptyState from "@/components/forge-ui/empty_state";
 import Link from "@/components/forge-ui/link";
-import PageHeader from "@/components/forge-ui/page_header";
+import { ConsolePageHeader } from "../Console/severalSectionContext";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Tag from "@/components/forge-ui/tag";
 import { useChanges, useChangesOrg } from "@/hooks/changes-queries";
@@ -39,7 +39,7 @@ import { NewChangeDialog, type NewChangeEnv } from "./NewChangeDialog";
 function PageFrame({ children, onNew, canCreate }: { children: ReactNode; onNew?: () => void; canCreate: boolean }) {
   return (
     <div className="min-w-0 space-y-4" data-testid="console-experiments">
-      <PageHeader
+      <ConsolePageHeader
         density="compact"
         title="Experiments"
         subtitle="Change what your app does for some or all of your users without a deploy, and compare versions to see which works better."
