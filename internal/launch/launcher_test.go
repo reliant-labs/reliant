@@ -269,7 +269,7 @@ func TestLaunchCreatesSessionAndStartsRun(t *testing.T) {
 
 	// Its root run is ACTIVE: Launch closes the pending window itself once
 	// Temporal has accepted the start.
-	rootRun, err := repo.GetWorkflow(ctx, result.WorkflowID)
+	rootRun, err := store.LoadWorkflow(ctx, repo.ORM(), result.WorkflowID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), rootRun.Status)
 	assert.Equal(t, chatID, rootRun.Thread, "root run: thread == workflow id")
@@ -598,7 +598,7 @@ func TestLaunchRecordsEventStartsWithUseExistingAndActivatesRoot(t *testing.T) {
 	call, _ := starter.rootRun(t)
 	assert.Equal(t, enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING, call.options.WorkflowIDConflictPolicy)
 
-	root, err := repo.GetWorkflow(ctx, chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status)
 }
@@ -630,7 +630,7 @@ func TestLaunchStartsPendingBranchAndRefusesASecondStart(t *testing.T) {
 	assert.Equal(t, "continue on the branch", messageText(t, ctx, repo, messages[0].ID))
 	assert.Equal(t, result.EventID, eventsFor(t, ctx, repo, chatID).ID)
 
-	root, err := repo.GetWorkflow(ctx, chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status)
 
@@ -668,7 +668,7 @@ func TestLaunchPendingSwitchesWorkflowAndRejectsForeignProject(t *testing.T) {
 	chat, err := repo.GetChat(ctx, chatID)
 	require.NoError(t, err)
 	assert.Equal(t, "builtin://structured-agent", *chat.WorkflowName)
-	root, err := repo.GetWorkflow(ctx, chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, "builtin://structured-agent", root.WorkflowName)
 }
@@ -691,7 +691,7 @@ func TestLaunchResumesAfterTemporalStartFailure(t *testing.T) {
 	_, err := launcher.Launch(ctx, ev, spec)
 	require.ErrorIs(t, err, ErrInternal)
 
-	root, err := repo.GetWorkflow(ctx, chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Pending(), root.Status, "a failed start leaves the chat pending, never half-active")
 
@@ -699,7 +699,7 @@ func TestLaunchResumesAfterTemporalStartFailure(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, chatID, result.Chat.ID)
 
-	root, err = repo.GetWorkflow(ctx, chatID)
+	root, err = store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status)
 
@@ -943,7 +943,7 @@ func TestConcurrentLaunchesOfTheSameEventConvergeOnOneChat(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, messages, 1, "the seed message must be saved exactly once")
 
-	root, err := repo.GetWorkflow(ctx, chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status)
 }

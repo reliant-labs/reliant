@@ -2458,10 +2458,6 @@ func (r *Repo) CreateWorkflow(ctx context.Context, workflow *Workflow) error {
 	})
 }
 
-func (r *Repo) GetWorkflow(ctx context.Context, id string) (*Workflow, error) {
-	return store.LoadWorkflow(ctx, r.ORM(), id)
-}
-
 func (r *Repo) GetWorkflowByThread(ctx context.Context, chatID, thread string) (*Workflow, error) {
 	return store.FindWorkflowByThread(ctx, r.ORM(), chatID, thread)
 }
@@ -2500,7 +2496,7 @@ func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newS
 		if !ok {
 			return nil // CAS failed, nothing to emit
 		}
-		wf, err := r.GetWorkflow(txCtx, id)
+		wf, err := store.LoadWorkflow(txCtx, r.ORM(), id)
 		if err != nil {
 			return err
 		}
@@ -2563,7 +2559,7 @@ func (r *Repo) CancelStoppedSpawn(ctx context.Context, workflowID string) (bool,
 			return fmt.Errorf("resolve the mailboxes of stopped spawn %s: %w", workflowID, err)
 		}
 		if resolved > 0 {
-			if wf, err := r.GetWorkflow(txCtx, workflowID); err == nil && wf != nil && wf.ChatID != "" {
+			if wf, err := store.LoadWorkflow(txCtx, r.ORM(), workflowID); err == nil && wf != nil && wf.ChatID != "" {
 				r.announceAgentMailboxChanged(txCtx, wf.ChatID)
 			}
 		}
@@ -2598,7 +2594,7 @@ func (r *Repo) AbandonFailedWorkflowStart(ctx context.Context, id string) (bool,
 		if err != nil || !ok {
 			return err
 		}
-		wf, err := r.GetWorkflow(txCtx, id)
+		wf, err := store.LoadWorkflow(txCtx, r.ORM(), id)
 		if err != nil {
 			return err
 		}
@@ -2622,7 +2618,7 @@ func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status Workf
 		if err := store.UpdateWorkflowStatus(txCtx, r.ORM(), id, status); err != nil {
 			return err
 		}
-		wf, err := r.GetWorkflow(txCtx, id)
+		wf, err := store.LoadWorkflow(txCtx, r.ORM(), id)
 		if err != nil {
 			return err
 		}
@@ -2645,7 +2641,7 @@ func (r *Repo) EnsureWorkflowRunning(ctx context.Context, workflowID, chatID str
 	if workflowID == "" {
 		return
 	}
-	wf, err := r.GetWorkflow(ctx, workflowID)
+	wf, err := store.LoadWorkflow(ctx, r.ORM(), workflowID)
 	if err != nil || wf == nil {
 		return // Workflow not tracked yet (WorkflowStatus "started" hasn't fired)
 	}

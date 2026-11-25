@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The reconciler's ReapOrphanedThreads runs every pass, on its own
@@ -141,7 +142,7 @@ func TestWorkflowStatus_StartedNeverExposesARevivedThreadUnderATerminalWorkflow(
 	require.NoError(t, err)
 	assert.Equal(t, db.ThreadStatusRunning, thread.Status,
 		"the thread of a run that is starting must read running, not the status a reap stamped on it")
-	workflow, err := h.Repo().GetWorkflow(ctx, chatID)
+	workflow, err := store.LoadWorkflow(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), workflow.Status)
 }
@@ -210,10 +211,10 @@ func TestWorkflowStatus_TerminalArmsCascadeInTheStatusCommit(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, tc.wantThread, thread.Status, "thread %s ends with its run", threadID)
 			}
-			workflow, err := h.Repo().GetWorkflow(ctx, chatID)
+			workflow, err := store.LoadWorkflow(ctx, h.Repo().ORM(), chatID)
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantRun, workflow.Status)
-			child, err := h.Repo().GetWorkflow(ctx, childWorkflowID)
+			child, err := store.LoadWorkflow(ctx, h.Repo().ORM(), childWorkflowID)
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantRun.StopReason, child.Status.StopReason, "the sub-agent's row ends with its run")
 		})

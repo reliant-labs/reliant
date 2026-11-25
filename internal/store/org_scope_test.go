@@ -221,7 +221,7 @@ func TestOrgOfTriggersSavedWorkflowsAndRuns(t *testing.T) {
 	convWorkflow(t, env, "w-legacy", "c-legacy", core.WorkflowStateActive, core.StopReasonUnspecified)
 	runOrg := func(id string) *string {
 		t.Helper()
-		w, err := env.Repo.GetWorkflow(ctx, id)
+		w, err := store.LoadWorkflow(ctx, env.Repo.ORM(), id)
 		if err != nil {
 			t.Fatal(err)
 		}
