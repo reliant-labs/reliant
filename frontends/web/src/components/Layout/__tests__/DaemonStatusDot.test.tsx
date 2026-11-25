@@ -31,7 +31,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("DaemonStatusDot", () => {
-  it.each(["managed", "self_hosted"])("uses the machine picker icon and opens the active %s machine, not the first listed machine", (daemonType) => {
+  it.each(["managed", "self_hosted"])("names the active %s machine and opens it, not the first listed machine", (daemonType) => {
     const offline = create(DaemonInfoSchema, { daemonId: "offline", status: DaemonStatus.DISCONNECTED });
     const active = create(DaemonInfoSchema, { daemonId: "active", name: "My machine", daemonType, status: DaemonStatus.ACTIVE });
     state.daemons = [offline, active];
@@ -39,8 +39,7 @@ describe("DaemonStatusDot", () => {
     render(<DaemonStatusDot />);
 
     const button = screen.getByRole("button", { name: "Machine connected: My machine. Open machine settings" });
-    expect(button.querySelector("svg")).toHaveClass("lucide-monitor");
-    expect(button.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(button).toHaveTextContent("My machine");
     fireEvent.click(button);
     expect(state.navigate).toHaveBeenCalledWith({
       to: "/settings/machines/active",

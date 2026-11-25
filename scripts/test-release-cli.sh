@@ -234,7 +234,78 @@ grep -q 'backwards' "$fx/err" || fail "the root refusal does not say why: $(cat 
 cmp -s "$fx/r2/daemon-channels.json" "$fx/root-after-C.json" || fail "the root manifest changed"
 echo "ok: an interrupted publish is recovered as signed, stored unchanged, and never rolls the root manifest back"
 
-# 7. verify-published hashes every copy, on R2 and on the GitHub Release.
+# 7. An SBOM per archive, from the binary inside it, attached beside the signed set.
+# The fake forge (FORGE_BIN, which scripts/forge.sh runs as given) records its
+# argv and writes a CycloneDX document naming the binary it read; it fails for
+# the windows/arm64 binary when FORGE_SBOM_FAIL=1.
+cat > "$fx/bin/forge" << 'FORGE'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FORGE_CALLS"
+[ "$1 $2 $3" = "vuln sbom --file" ] || { echo "unexpected forge: $*" >&2; exit 90; }
+[ "${FORGE_SBOM_FAIL:-}" = 1 ] && [ "$(cat "$4")" = "binary windows-arm64" ] && { echo "syft: cannot read it" >&2; exit 1; }
+jq -n --arg read "$(cat "$4")" --arg subject "$6" --arg version "$8" \
+  '{bomFormat: "CycloneDX", specVersion: "1.6", metadata: {component: {name: $subject, version: $version}}, read: $read}'
+FORGE
+chmod +x "$fx/bin/forge"
+export FORGE_BIN="$fx/bin/forge" FORGE_CALLS="$fx/forge-calls"
+bash "$src" sbom v1.2.6 "$fx/dist" "$fx/sbom" 2> "$fx/err" || fail "sbom: $(cat "$fx/err")"
+for t in $targets; do
+  a="reliant_${t%-*}_${t#*-}.tar.gz"
+  jq -e --arg a "$a" --arg t "$t" '.metadata.component == {name: $a, version: "v1.2.6"} and .read == "binary \($t)"' "$fx/sbom/$a.cdx.json" > /dev/null ||
+    fail "the SBOM of $a: $(cat "$fx/sbom/$a.cdx.json" 2> /dev/null)"
+done
+[ "$(ls "$fx/sbom" | wc -l)" = 6 ] || fail "sbom wrote $(ls "$fx/sbom")"
+grep -q -- '--artifact reliant_darwin_arm64.tar.gz --release v1.2.6$' "$FORGE_CALLS" || fail "forge was not asked for the archive as subject: $(cat "$FORGE_CALLS")"
+echo "ok: each archive gets an SBOM of its own binary, named for the archive and the release"
+# A rerun builds different bytes, but cli-publish recovers the original signed
+# set. Published SBOMs must read that set, not the rerun's cli-archives artifact.
+printf 'rebuilt linux-amd64\n' > "$fx/backend/backend-linux-amd64/reliant-backend"
+bash "$src" package "$fx/backend" "$fx/rebuilt" 2> /dev/null
+! cmp -s "$fx/rebuilt/reliant_linux_amd64.tar.gz" "$fx/gh/v1.2.6/reliant_linux_amd64.tar.gz" || fail "rerun fixture did not rebuild different bytes"
+bash "$src" sbom-published v1.2.6 "$fx/sbom-published" 2> "$fx/err" || fail "sbom-published: $(cat "$fx/err")"
+for t in $targets; do
+  a="reliant_${t%-*}_${t#*-}.tar.gz"
+  jq -e --arg t "$t" '.read == "binary \($t)"' "$fx/sbom-published/$a.cdx.json" > /dev/null || fail "published SBOM described rebuilt $a"
+done
+! bash "$src" sbom-published v1.2.9 "$fx/sbom-absent" 2> /dev/null || fail "published SBOM fell back without a signed set"
+[ ! -e "$fx/sbom-absent" ] || fail "missing signed set wrote SBOMs"
+cp "$fx/gh/v1.2.6/reliant_linux_amd64.tar.gz" "$fx/published-keep"
+printf x >> "$fx/gh/v1.2.6/reliant_linux_amd64.tar.gz"
+! bash "$src" sbom-published v1.2.6 "$fx/sbom-corrupt" 2> /dev/null || fail "published SBOM accepted a corrupt signed set"
+[ ! -e "$fx/sbom-corrupt" ] || fail "corrupt signed set wrote SBOMs"
+cp "$fx/published-keep" "$fx/gh/v1.2.6/reliant_linux_amd64.tar.gz"
+# Hold the workflow routing too: published releases never describe this run's
+# artifact; dry runs still do. No YAML dependency is needed for this narrow check.
+python3 - "$(dirname "$src")/../.github/workflows/release.yml" << 'PY'
+import pathlib
+import sys
+job = pathlib.Path(sys.argv[1]).read_text().split('  cli-sbom:', 1)[1].split('\n  # ===', 1)[0]
+steps = job.split('\n      - name:')[1:]
+for command, condition in [
+    ('actions/download-artifact@', "needs.cli-publish.result != 'success'"),
+    ('scripts/release-cli.sh sbom ', "needs.cli-publish.result != 'success'"),
+    ('scripts/release-cli.sh sbom-published ', "needs.cli-publish.result == 'success'"),
+]:
+    matches = [s for s in steps if command in s]
+    assert len(matches) == 1 and 'if: ' + condition in matches[0], command
+assert job.index('scripts/release-cli.sh sbom-published ') < job.index('scripts/release-cli.sh store-sbom-github ')
+PY
+echo "ok: published SBOMs describe retained bytes on reruns; missing or corrupt signed sets fail closed"
+! bash "$src" sbom v1.2.6 "$fx/v1" "$fx/sbom-bad" 2> /dev/null || fail "sbom described a tampered set"
+! FORGE_SBOM_FAIL=1 bash "$src" sbom v1.2.6 "$fx/dist" "$fx/sbom-part" 2> "$fx/err" || fail "sbom passed with an archive forge could not describe"
+grep -q '::warning::no SBOM for reliant_windows_arm64.tar.gz: syft: cannot read it' "$fx/err" || fail "the missing SBOM is not named: $(cat "$fx/err")"
+[ "$(ls "$fx/sbom-part" | wc -l)" = 5 ] || fail "a failed archive stopped the others' SBOMs: $(ls "$fx/sbom-part")"
+echo "ok: a tampered set is refused; an archive forge cannot describe is named, and the others are still written"
+: > "$GH_CALLS"
+mkdir -p "$fx/gh/v1.2.9"
+! bash "$src" store-sbom-github v1.2.9 "$fx/sbom" 2> /dev/null || fail "SBOMs were attached to a Release with no signed set"
+bash "$src" store-sbom-github v1.2.6 "$fx/sbom" 2> "$fx/err" || fail "store-sbom-github: $(cat "$fx/err")"
+bash "$src" store-sbom-github v1.2.6 "$fx/sbom-part" 2> "$fx/err" || fail "a re-run's SBOMs did not replace the stored ones: $(cat "$fx/err")"
+[ "$(grep -c '\.cdx\.json$' "$GH_CALLS")" = 11 ] || fail "store-sbom-github uploaded: $(cat "$GH_CALLS")"
+[ ! -e "$fx/r2/cli/v1.2.6/reliant_linux_amd64.tar.gz.cdx.json" ] || fail "an SBOM reached R2's signed set"
+echo "ok: SBOMs go to a Release that holds the signed set, replaced by a re-run, never into the signed set"
+
+# 8. verify-published hashes every copy, on R2 and on the GitHub Release.
 vp() { bash "$src" verify-published "$@" --base https://dl.test --github https://gh.test --wait 0 > "$fx/out" 2>&1; }
 vp v1.2.6 latest || fail "verify-published: $(cat "$fx/out")"
 ! vp v1.2.7 latest || fail "verify-published accepted a channel naming another release"

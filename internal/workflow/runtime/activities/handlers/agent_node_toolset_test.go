@@ -109,7 +109,7 @@ func newNestedAgentFixture(t *testing.T, noMachine bool) *nestedAgentFixture {
 		Fields: map[string]string{"api_key": "ghp_test_not_a_real_token"},
 	})
 	require.NoError(t, err)
-	source := connauth.New(connauth.Deps{Resolver: connections.NewResolver(h.Repo(), store, tokens)})
+	source := connauth.New(connauth.Deps{Resolver: connections.NewResolver(connections.ResolverDeps{Owners: h.Repo(), Runs: dbstore.NewWorkflowExtStore(h.Repo().ORM()), Store: store, Tokens: tokens})})
 
 	driver := &promptCaptureDriver{}
 	resolver := func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {

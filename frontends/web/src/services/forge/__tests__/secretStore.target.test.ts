@@ -12,6 +12,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { transport } from "@/lib/connect";
 
 const listSecretsRpc = vi.fn();
 const setSecretRpc = vi.fn();
@@ -104,13 +105,13 @@ describe("managedStoreTarget", () => {
 
 describe("the RPCs are keyed by environmentId", () => {
   it("lists with environmentId and nothing else", async () => {
-    const listing = await listSecrets("denv_1");
+    const listing = await listSecrets(transport, "denv_1");
     expect(listSecretsRpc).toHaveBeenCalledWith({ environmentId: "denv_1" });
     expect(listing.secrets.map((r) => r.name)).toEqual(["A", "B"]);
   });
 
   it("writes with environmentId", async () => {
-    await setSecret({ environmentId: "denv_1", name: "K", value: "v", cas: 0 });
+    await setSecret(transport, { environmentId: "denv_1", name: "K", value: "v", cas: 0 });
     expect(setSecretRpc).toHaveBeenCalledWith({ environmentId: "denv_1", name: "K", secretValue: "v", cas: 0 });
   });
 });

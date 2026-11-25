@@ -4,13 +4,13 @@
  * Dashboard 3, "Billing and infrastructure" (`org-billing`,
  * DASHBOARD_VIEW_KIND_ORGANIZATION_BILLING).
  *
- * What the organization runs, what it used and what it costs: dev boxes,
+ * What the organization runs, what it used and what it costs: sandboxes,
  * hosted apps, databases, static sites and observability. A typed built-in
  * view over `BillingService.ListOrganizationUsage` (history, spend rate and
  * live inventory) and `GetOrganizationCostSummary` (allowances), gated by
  * billing:read and independent of environment and telemetry filters.
  *
- * Dev boxes are measured in seconds and carry no dollar figure; static egress,
+ * Sandboxes are measured in seconds and carry no dollar figure; static egress,
  * builds and the registry carry usage and no price. Those read n/a, never $0.
  */
 
@@ -106,21 +106,21 @@ export function OrganizationBillingView({ orgId, nowMs: fixedNow }: Organization
       ) : (
         <>
           <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-            <UsagePanel title="Dev boxes now" description="Count by size and state, and provisioned storage." testId="billing-devboxes-now">
-              <Loaded query={usage} orgId={orgId} what="dev boxes">
+            <UsagePanel title="Sandboxes now" description="Count by size and state, and provisioned storage." testId="billing-devboxes-now">
+              <Loaded query={usage} orgId={orgId} what="sandboxes">
                 {(u) => <DevBoxesNow usage={u} summary={cost.data?.orgId === orgId ? cost.data : undefined} nowMs={nowMs} />}
               </Loaded>
             </UsagePanel>
-            <UsagePanel title="Dev-box running hours" description="Hours running per bucket, stacked by machine size. Dev boxes are measured, not priced here." testId="billing-devbox-hours">
-              <Loaded query={usage} orgId={orgId} what="dev-box hours">
+            <UsagePanel title="Sandbox running hours" description="Hours running per bucket, stacked by machine size. Sandboxes are measured, not priced here." testId="billing-devbox-hours">
+              <Loaded query={usage} orgId={orgId} what="sandbox hours">
                 {(u) => (
                   <UsageChart
-                    label="Dev-box running hours by size"
+                    label="Sandbox running hours by size"
                     bucketsMs={bucketStarts(u)}
                     series={quantitySeriesByDetail(u, "machines", "running_seconds", 1 / 3600)}
                     unit="count"
                     stacked
-                    empty="No dev box ran in this range."
+                    empty="No sandbox ran in this range."
                   />
                 )}
               </Loaded>
@@ -130,7 +130,7 @@ export function OrganizationBillingView({ orgId, nowMs: fixedNow }: Organization
             <Loaded query={usage} orgId={orgId} what="spend rate">
               {(u) => <SpendRatePanel usage={u} monthToDate={mtd.data?.orgId === orgId ? mtd.data : undefined} nowMs={nowMs} />}
             </Loaded>
-            <UsagePanel title="Dev-box activity by hour of day" description="When dev boxes run, hour by hour." testId="billing-devbox-heatmap">
+            <UsagePanel title="Sandbox activity by hour of day" description="When sandboxes run, hour by hour." testId="billing-devbox-heatmap">
               <p className="text-sm text-ink-muted">Not available yet: the billing history is kept per day, so an hour-of-day breakdown cannot be drawn from it.</p>
             </UsagePanel>
           </div>
@@ -186,11 +186,11 @@ function DevBoxesNow({ usage, summary, nowMs }: { usage: OrganizationUsage; summ
     <div className="space-y-3">
       <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
         <StatTile
-          caption="Dev boxes"
+          caption="Sandboxes"
           testId="billing-devbox-count"
           value={known ? fmt(inventoryCount(items)) : "Unavailable"}
           badge={<CompletenessBadge value={inventory?.completeness} label="Inventory" limitations={inventory?.limitations} />}
-          footnote={known ? countBy(items, "state").map((s) => `${fmt(s.count)} ${s.key || "unknown"}`).join(" · ") || "None running or suspended" : "Current dev boxes could not be read; unknown, not zero"}
+          footnote={known ? countBy(items, "state").map((s) => `${fmt(s.count)} ${s.key || "unknown"}`).join(" · ") || "None running or suspended" : "Current sandboxes could not be read; unknown, not zero"}
         />
         <StatTile
           caption="Provisioned storage"
@@ -199,7 +199,7 @@ function DevBoxesNow({ usage, summary, nowMs }: { usage: OrganizationUsage; summ
           footnote={!known ? "Unknown, not zero" : storageAllowance ? `Pooled allowance: ${fmt(storageAllowance.included)} ${storageAllowance.unit}` : "Pooled allowance: not reported"}
         />
       </div>
-      <RowsTable caption="Dev boxes by size" head={["Size", "Count"]} rows={known ? countBy(items, "size").map((s) => [s.key || "Unspecified", fmt(s.count)]) : []} empty={known ? "No dev boxes right now." : "Current dev boxes could not be read; unknown, not zero."} />
+      <RowsTable caption="Sandboxes by size" head={["Size", "Count"]} rows={known ? countBy(items, "size").map((s) => [s.key || "Unspecified", fmt(s.count)]) : []} empty={known ? "No sandboxes right now." : "Current sandboxes could not be read; unknown, not zero."} />
     </div>
   );
 }

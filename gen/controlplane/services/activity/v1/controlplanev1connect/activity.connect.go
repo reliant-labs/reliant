@@ -70,12 +70,14 @@ func NewActivityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+ActivityServiceListActivityProcedure,
 			connect.WithSchema(activityServiceMethods.ByName("ListActivity")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listMembershipActivity: connect.NewClient[v1.ListMembershipActivityRequest, v1.ListActivityResponse](
 			httpClient,
 			baseURL+ActivityServiceListMembershipActivityProcedure,
 			connect.WithSchema(activityServiceMethods.ByName("ListMembershipActivity")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -122,12 +124,14 @@ func NewActivityServiceHandler(svc ActivityServiceHandler, opts ...connect.Handl
 		ActivityServiceListActivityProcedure,
 		svc.ListActivity,
 		connect.WithSchema(activityServiceMethods.ByName("ListActivity")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	activityServiceListMembershipActivityHandler := connect.NewUnaryHandler(
 		ActivityServiceListMembershipActivityProcedure,
 		svc.ListMembershipActivity,
 		connect.WithSchema(activityServiceMethods.ByName("ListMembershipActivity")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/controlplane.v1.ActivityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

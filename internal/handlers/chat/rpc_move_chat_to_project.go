@@ -201,6 +201,11 @@ func (s *Service) MoveChatToProject(
 		if err != nil || !moved {
 			return err
 		}
+		// A project attached to the chat that becomes its primary is no
+		// longer an attachment (the primary is never a chat_projects row).
+		if err := s.deps.Repo.DetachChatProject(txCtx, chat.ID, target.ID); err != nil {
+			return err
+		}
 		configData, err := json.Marshal(map[string]interface{}{
 			"chat_id":             chat.ID,
 			"project_id":          target.ID,

@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/projectpurge"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
@@ -30,7 +31,7 @@ func TestAChatOfADeletedProjectIsHiddenFromASavedIDUntilRestored(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Chats: chataccesstest.For(repo), Orgs: f.Membership, Router: &wakeRecordingRouter{Recorder: &toolexectest.Recorder{}}}))
+	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Chats: chataccesstest.For(repo), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Orgs: f.Membership, Router: &wakeRecordingRouter{Recorder: &toolexectest.Recorder{}}}))
 
 	transcript := func(ctx context.Context) error {
 		_, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.ChatID}))

@@ -20,13 +20,15 @@ func noRecoveries() Recoveries {
 // realDeps is Deps over a real database: its stores are the generated ones.
 func realDeps(repo *db.Repo) Deps {
 	return Deps{
-		Repo:       repo,
-		Items:      store.NewInboxDismissalExtStore(repo.ORM()),
-		Firings:    store.NewTriggerEventExtStore(repo.ORM()),
-		Notices:    store.NewTriggerExtStore(repo.ORM()),
-		Recoveries: store.NewWorktreeRecoveryExtStore(repo.ORM()),
-		Marks:      store.NewWorktreeExtStore(repo.ORM()),
-		OrgKeys:    &MockOrgKeys{},
+		Repo:        repo,
+		ProjectRows: store.NewProjectExtStore(repo.ORM()),
+		Machines:    store.NewDaemonExtStore(repo.ORM()),
+		Items:       store.NewInboxDismissalExtStore(repo.ORM()),
+		Firings:     store.NewTriggerEventExtStore(repo.ORM()),
+		Notices:     store.NewTriggerExtStore(repo.ORM()),
+		Recoveries:  store.NewWorktreeRecoveryExtStore(repo.ORM()),
+		Marks:       store.NewWorktreeExtStore(repo.ORM()),
+		OrgKeys:     &MockOrgKeys{},
 	}
 }
 
@@ -37,10 +39,10 @@ func mockDeps(repo Repository) Deps {
 	case *inflightRepo:
 		return r.deps()
 	case *MockRepository:
-		return Deps{Repo: r, Items: &MockItems{}, Firings: &MockFirings{}, Notices: &MockNotices{}, Storage: &MockStorage{}, Recoveries: noRecoveries(), Marks: &MockMarkDecisionStore{}}
+		return Deps{Repo: r, ProjectRows: &MockProjectReader{}, Machines: &MockDaemonReader{}, Items: &MockItems{}, Firings: &MockFirings{}, Notices: &MockNotices{}, Storage: &MockStorage{}, Recoveries: noRecoveries(), Marks: &MockMarkDecisionStore{}}
 	}
 	o := repo.(interface{ ORM() *orm.Client }).ORM()
-	return Deps{Repo: repo, Items: store.NewInboxDismissalExtStore(o), Firings: store.NewTriggerEventExtStore(o), Notices: store.NewTriggerExtStore(o), Storage: realStorage(repo), Recoveries: store.NewWorktreeRecoveryExtStore(o), Marks: store.NewWorktreeExtStore(o)}
+	return Deps{Repo: repo, ProjectRows: store.NewProjectExtStore(o), Machines: store.NewDaemonExtStore(o), Items: store.NewInboxDismissalExtStore(o), Firings: store.NewTriggerEventExtStore(o), Notices: store.NewTriggerExtStore(o), Storage: realStorage(repo), Recoveries: store.NewWorktreeRecoveryExtStore(o), Marks: store.NewWorktreeExtStore(o)}
 }
 
 // realStorage is the sweep's store over a real repository, as the composition
@@ -61,6 +63,12 @@ func realStorage(repo Repository) worktreesweep.Stores {
 // every inbox needs filled from d.Repo when d leaves them out.
 func withDeps(d Deps) TestOption {
 	fill := mockDeps(d.Repo)
+	if d.ProjectRows == nil {
+		d.ProjectRows = fill.ProjectRows
+	}
+	if d.Machines == nil {
+		d.Machines = fill.Machines
+	}
 	if d.Recoveries == nil {
 		d.Recoveries = fill.Recoveries
 	}

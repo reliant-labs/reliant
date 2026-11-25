@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v1.10.1-0.20261122204638-05bc400d9f0f
+forge_version: v1.10.1-0.20261123064811-54313eead62f
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
@@ -116,6 +116,15 @@ tests:
     flakes:
         issues: true
         quarantine: pr
+# `forge vuln patch --verify` (and the vuln-patch workflow, unless its
+# verify_command says otherwise) proves a bumped tree with the merge gate,
+# the gate the merge queue would run on the bump: affected Go/web/electron
+# tests (a go.mod or lockfile change runs the whole lane), go build, scoped
+# forge lint and the generate check, over the dirty tree. Unset, forge would
+# run `task test:short`, which builds and lints nothing.
+vuln:
+    patch:
+        verify: task ci:merge
 database:
     # Prod's Postgres major (Cloud SQL reliant-pg is POSTGRES_16). forge's
     # pgtest boots its embedded test server at this major, so a test run
@@ -287,7 +296,11 @@ ci:
               requires: [task, python3]
               heavy: true
               mutates_tree: true
+            # forge's own row for frontends/web has the same name (one
+            # lint-<frontend> per frontend), and an extra check may not
+            # shadow it silently: this takes it over, unchanged.
             - name: lint-web
+              replaces: lint-web
               dir: frontends/web
               command: [npm, run, lint]
               requires: [npm]

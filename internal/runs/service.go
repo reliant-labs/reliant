@@ -22,6 +22,7 @@ import (
 // execute again. See the package doc for what that ownership covers.
 type Service struct {
 	repo      Repository
+	workflows WorkflowLoader
 	questions Questions
 	temporal  TemporalClient
 	pause     PauseController
@@ -44,7 +45,7 @@ type Service struct {
 // Deps, not a forge contract package: it is built by hand in the worker and the
 // chat handler.
 func New(deps Deps) *Service {
-	return &Service{repo: deps.Repo, questions: deps.Questions, temporal: deps.Temporal, pause: deps.Pause, waits: deps.Waits}
+	return &Service{repo: deps.Repo, workflows: deps.Workflows, questions: deps.Questions, temporal: deps.Temporal, pause: deps.Pause, waits: deps.Waits}
 }
 
 // LockRunControl serializes the chat's run-control operations — pause, resume,
@@ -322,7 +323,7 @@ func (s *Service) cancelledRunSettled(ctx context.Context, workflowID string) bo
 //     running. The cascade ends only live descendants, so for the usual row,
 //     whose writer committed status and cascade together, it is a no-op.
 func (s *Service) settleClosedRun(ctx context.Context, workflowID string) {
-	wf, err := s.repo.GetWorkflow(ctx, workflowID)
+	wf, err := s.workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil || wf == nil {
 		if err != nil {
 			logging.WarnContext(ctx, "[runs] Could not read a cancelled run's row to settle it",
@@ -473,7 +474,7 @@ func (s *Service) ResumeInterrupted(ctx context.Context, chatID string, inputUpd
 // because the delivery may have reset-replayed the execution into a new run. Both writes are best-effort: the signal is the step that actually
 // restarts the run, and it has already succeeded.
 func (s *Service) ResumeViaSignal(ctx context.Context, in ResumeViaSignalInput) (ResumeOutcome, error) {
-	before, known := workflow.StatusBeforeWake(ctx, s.repo, in.WorkflowID)
+	before, known := workflow.StatusBeforeWake(ctx, workflow.FacadeWorkflows{Repo: s.repo}, in.WorkflowID)
 	if err := s.pause.SignalWithRecovery(ctx, in.TargetWorkflowID, in.SignalName, in.SignalData, in.InputUpdate); err != nil {
 		logging.InfoContext(ctx, "[runs] Signal-parked run not reset-resumable — restart at checkpoint",
 			"chatID", in.ChatID, "workflowID", in.WorkflowID,
@@ -513,7 +514,7 @@ func (s *Service) Inspect(ctx context.Context, chatID string) (Inspection, error
 	if state.IsRunning {
 		// Open in Temporal. Stuck only if the row disagrees by claiming the
 		// run already failed.
-		wf, wfErr := s.repo.GetWorkflow(ctx, workflowID)
+		wf, wfErr := s.workflows.LoadWorkflow(ctx, workflowID)
 		stuck := wfErr == nil && wf != nil && wf.Status == db.Failed()
 		return Inspection{WorkflowID: workflowID, Stuck: stuck}, nil
 	}
@@ -658,7 +659,7 @@ func (s *Service) cascadeTerminal(ctx context.Context, workflowID string, reason
 }
 
 func (s *Service) reconcileStoppedRun(ctx context.Context, workflowID string, status db.WorkflowStatus) {
-	wf, err := s.repo.GetWorkflow(ctx, workflowID)
+	wf, err := s.workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil {
 		logging.WarnContext(ctx, "[runs] Failed to load workflow before stopped-run reconciliation",
 			"workflowID", workflowID, "error", err)
@@ -671,7 +672,7 @@ func (s *Service) reconcileStoppedRun(ctx context.Context, workflowID string, st
 }
 
 func (s *Service) markTerminated(ctx context.Context, workflowID string) error {
-	wf, err := s.repo.GetWorkflow(ctx, workflowID)
+	wf, err := s.workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil {
 		return fmt.Errorf("load workflow %s before terminate CAS: %w", workflowID, err)
 	}
@@ -746,7 +747,7 @@ func (s *Service) chatRun(ctx context.Context, chatID string) (*db.Chat, string,
 // deliberately not treated as stuck — refusing to resume because we could not
 // reach Temporal would strand a perfectly resumable chat.
 func (s *Service) isStuck(ctx context.Context, workflowID string) bool {
-	wf, err := s.repo.GetWorkflow(ctx, workflowID)
+	wf, err := s.workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil || wf == nil || wf.Status != db.Failed() {
 		return false
 	}

@@ -7,7 +7,7 @@
  * Three rules from the contract shape every function here:
  *
  *   ABSENT IS NEVER ZERO. A point's dollar amount is optional: absent means
- *   not measured (dev boxes carry seconds and no price; static egress, builds
+ *   not measured (sandboxes carry seconds and no price; static egress, builds
  *   and the registry carry usage and no price). An unavailable source returns
  *   no points at all. So a total exists only when at least one point carried
  *   a figure; otherwise the answer is "not priced", "no usage" or
@@ -89,7 +89,7 @@ export type UsageCategory = (typeof USAGE_CATEGORIES)[number];
 
 const CATEGORY_LABELS: Record<string, string> = {
   managed_llm: "Managed LLM",
-  machines: "Dev boxes",
+  machines: "Sandboxes",
   hosted_apps: "Hosted apps",
   databases: "Databases",
   static_hosting: "Static sites",
@@ -103,7 +103,7 @@ export function categoryLabel(category: string): string {
 
 const SOURCE_LABELS: Record<string, string> = {
   managed_llm: "Managed LLM",
-  machines: "Dev boxes",
+  machines: "Sandboxes",
   hosted_infrastructure: "Hosted infrastructure",
   observability: "Observability",
   inventory: "Current inventory",
@@ -172,7 +172,7 @@ export function nanosToDollars(nanos: bigint): number {
 /** What one category's dollar figure is over a response, said honestly. */
 export type CategoryAmount =
   | { kind: "amount"; nanos: bigint; basis: Basis; unpricedDimensions: string[] }
-  /** Usage was measured but carries no price (dev boxes, static egress, builds). */
+  /** Usage was measured but carries no price (sandboxes, static egress, builds). */
   | { kind: "unpriced" }
   /** The source looked and found nothing in range. */
   | { kind: "no-usage" }

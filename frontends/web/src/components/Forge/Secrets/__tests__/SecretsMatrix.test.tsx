@@ -10,11 +10,13 @@ const shapes = vi.hoisted(() => new Map<string, unknown>());
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 vi.mock("@/services/forge/secretStore", async (original) => ({
   ...await original<typeof import("@/services/forge/secretStore")>(),
-  listSecrets: store.list, getSecretVersions: store.history, revealSecret: store.reveal,
+  listSecrets: (_transport: unknown, ...args: unknown[]) => store.list(...args),
+  getSecretVersions: (_transport: unknown, ...args: unknown[]) => store.history(...args),
+  revealSecret: store.reveal,
 }));
 vi.mock("@/services/forge/live", async (original) => ({
   ...await original<typeof import("@/services/forge/live")>(),
-  getEnvironmentShape: async (id: string) => shapes.get(id) ?? null,
+  getEnvironmentShape: async (_transport: unknown, id: string) => shapes.get(id) ?? null,
 }));
 vi.mock("@tanstack/react-router", async (original) => ({ ...await original<typeof import("@tanstack/react-router")>(), useNavigate: () => vi.fn() }));
 const env = (name: string, provider = "hosted"): RosterEnv => {

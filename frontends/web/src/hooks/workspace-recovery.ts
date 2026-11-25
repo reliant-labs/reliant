@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { recreateWorktree } from "./worktree-actions";
+import { refreshAfterArchiveChange } from "./worktree-actions";
+import { useRecreateWorktree } from "./worktree-service-hooks_gen";
 import { chatKeys } from "./chat-queries";
 import * as chatActions from "./chat-actions";
 
@@ -9,8 +10,14 @@ import * as chatActions from "./chat-actions";
  * that is still there is left untouched.
  */
 export function useRecreateWorkspace() {
-  return useMutation({
-    mutationFn: (worktreeId: string) => recreateWorktree(worktreeId),
+  const queryClient = useQueryClient();
+  // Re-read this workspace and the lists, not every WorktreeService read (the
+  // generated refresh): other workspaces' diffs and git status are each a
+  // round trip to a machine. Awaited, so the toast follows the refreshed row.
+  return useRecreateWorktree({
+    invalidate: false,
+    onSettled: (response, _error, { worktreeId }) =>
+      response && worktreeId ? refreshAfterArchiveChange(worktreeId, queryClient) : undefined,
   });
 }
 

@@ -75,7 +75,7 @@ func (s *Service) AdoptTrigger(
 		CreatedAt:           now,
 		ExpiresAt:           now.Add(OfferTTL),
 	}
-	if err := s.deps.Repo.CreateTriggerOffer(ctx, offer); err != nil {
+	if err := s.deps.Offers.CreateTriggerOffer(ctx, offer); err != nil {
 		return nil, dbError("offer trigger", err)
 	}
 	logging.InfoContext(ctx, "[takeover] offered an automation whose creator left its organization",

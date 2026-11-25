@@ -120,6 +120,7 @@ func NewAlertingServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+AlertingServiceListReceiversProcedure,
 			connect.WithSchema(alertingServiceMethods.ByName("ListReceivers")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createReceiver: connect.NewClient[v1.CreateReceiverRequest, v1.CreateReceiverResponse](
@@ -156,6 +157,7 @@ func NewAlertingServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+AlertingServiceListSilencesProcedure,
 			connect.WithSchema(alertingServiceMethods.ByName("ListSilences")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		expireSilence: connect.NewClient[v1.ExpireSilenceRequest, v1.ExpireSilenceResponse](
@@ -168,18 +170,21 @@ func NewAlertingServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+AlertingServiceListAlertsProcedure,
 			connect.WithSchema(alertingServiceMethods.ByName("ListAlerts")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listAlertHistory: connect.NewClient[v1.ListAlertHistoryRequest, v1.ListAlertHistoryResponse](
 			httpClient,
 			baseURL+AlertingServiceListAlertHistoryProcedure,
 			connect.WithSchema(alertingServiceMethods.ByName("ListAlertHistory")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listNotifications: connect.NewClient[v1.ListNotificationsRequest, v1.ListNotificationsResponse](
 			httpClient,
 			baseURL+AlertingServiceListNotificationsProcedure,
 			connect.WithSchema(alertingServiceMethods.ByName("ListNotifications")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		markNotificationsRead: connect.NewClient[v1.MarkNotificationsReadRequest, v1.MarkNotificationsReadResponse](
@@ -312,6 +317,7 @@ func NewAlertingServiceHandler(svc AlertingServiceHandler, opts ...connect.Handl
 		AlertingServiceListReceiversProcedure,
 		svc.ListReceivers,
 		connect.WithSchema(alertingServiceMethods.ByName("ListReceivers")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	alertingServiceCreateReceiverHandler := connect.NewUnaryHandler(
@@ -348,6 +354,7 @@ func NewAlertingServiceHandler(svc AlertingServiceHandler, opts ...connect.Handl
 		AlertingServiceListSilencesProcedure,
 		svc.ListSilences,
 		connect.WithSchema(alertingServiceMethods.ByName("ListSilences")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	alertingServiceExpireSilenceHandler := connect.NewUnaryHandler(
@@ -360,18 +367,21 @@ func NewAlertingServiceHandler(svc AlertingServiceHandler, opts ...connect.Handl
 		AlertingServiceListAlertsProcedure,
 		svc.ListAlerts,
 		connect.WithSchema(alertingServiceMethods.ByName("ListAlerts")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	alertingServiceListAlertHistoryHandler := connect.NewUnaryHandler(
 		AlertingServiceListAlertHistoryProcedure,
 		svc.ListAlertHistory,
 		connect.WithSchema(alertingServiceMethods.ByName("ListAlertHistory")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	alertingServiceListNotificationsHandler := connect.NewUnaryHandler(
 		AlertingServiceListNotificationsProcedure,
 		svc.ListNotifications,
 		connect.WithSchema(alertingServiceMethods.ByName("ListNotifications")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	alertingServiceMarkNotificationsReadHandler := connect.NewUnaryHandler(

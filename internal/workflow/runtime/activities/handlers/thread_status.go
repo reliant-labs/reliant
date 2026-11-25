@@ -60,7 +60,21 @@ type ThreadStatusActivity struct {
 }
 
 // NewThreadStatusActivity creates a new ThreadStatusActivity.
-func NewThreadStatusActivity(deps ThreadStatusDeps) *ThreadStatusActivity {
+// Deprecated: use NewThreadStatusActivityWithDeps.
+func NewThreadStatusActivity(storeOrDeps any) *ThreadStatusActivity {
+	if deps, ok := storeOrDeps.(ThreadStatusDeps); ok {
+		return NewThreadStatusActivityWithDeps(deps)
+	}
+	var deps ThreadStatusDeps
+	if storeOrDeps != nil {
+		deps.Store = storeOrDeps.(ThreadStatusStore)
+		deps.Mailbox, _ = storeOrDeps.(MailboxResolver)
+	}
+	return NewThreadStatusActivityWithDeps(deps)
+}
+
+// NewThreadStatusActivityWithDeps creates a status activity with explicit dependencies.
+func NewThreadStatusActivityWithDeps(deps ThreadStatusDeps) *ThreadStatusActivity {
 	return &ThreadStatusActivity{repo: deps.Store, mailbox: deps.Mailbox}
 }
 

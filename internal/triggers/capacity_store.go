@@ -7,6 +7,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -29,7 +30,7 @@ func NewCapacityStores(db orm.Context) CapacityStores {
 	}
 }
 
-func (c CapacityStores) ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) (int64, error) {
+func (c CapacityStores) ExpirePendingTriggerCapacityEvents(ctx context.Context, recordedBefore time.Time, detail string, limit int) ([]*core.TriggerEvent, error) {
 	return c.events.ExpirePendingTriggerCapacityEvents(ctx, recordedBefore, detail, limit)
 }
 

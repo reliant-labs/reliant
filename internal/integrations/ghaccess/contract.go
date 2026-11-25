@@ -26,8 +26,11 @@
 // periodically for every user with an enabled GitHub trigger (Run). Webhook
 // revocations cut access between refreshes; a refresh restores what remains.
 //
-// Built by hand, by internal/app's NewGitHubAccess provider
-// (providers_api.go): never a node compose.go constructs from Deps.
+// Built by internal/app's NewGitHubAccess provider (providers_api.go): New
+// takes positional collaborators, not Deps, and the provider builds it only
+// when RELIANT_GITHUB_WEBHOOK_SECRET is set, over the TokenSource
+// gitHubTokenSource selects (control-plane's delegated token when hosted, a
+// saved connection when self-hosted).
 //
 //forge:provided
 package ghaccess

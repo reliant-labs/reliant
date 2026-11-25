@@ -123,10 +123,15 @@ func TestPauseChat_CancelsToolsBeforeSignalingWorkflow(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()),
-			Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
+			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
+			ProjectRows: store.NewProjectExtStore(repo.ORM()),
+			Questions:   store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 		},
-		runs:    runs.New(runs.Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: nil, Pause: pauseController}),
-		threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), ToolCanceler: daemonRouter}),
+		runs:    runs.New(runs.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: nil, Pause: pauseController}),
+		threads: threads.New(threads.Deps{Repo: repo, ToolCanceler: daemonRouter}),
 	}
 
 	resp, err := service.PauseChat(ctx, connect.NewRequest(&reliantv1.PauseChatRequest{ChatId: chatID}))

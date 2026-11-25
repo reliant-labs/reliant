@@ -116,6 +116,7 @@ var ErrHistoryLimitExceeded = errors.New("temporal history limit exceeded")
 type PauseService struct {
 	temporalClient client.Client
 	database       PauseStore
+	workflows      WorkflowLoader
 
 	// resetGuard bounds reset-and-replay attempts so a deterministically-failing
 	// workflow is not reset forever. Optional (nil = always allow); shared with
@@ -128,12 +129,23 @@ type PauseService struct {
 	namespace string
 }
 
+// PauseServiceDeps is what a PauseService is built from.
+type PauseServiceDeps struct {
+	// Temporal signals, resets and describes runs.
+	Temporal client.Client
+	// Store writes the status updates that go with each signal.
+	Store PauseStore
+	// Workflows reads a run's workflow row.
+	Workflows WorkflowLoader
+}
+
 // NewPauseService creates a PauseService with a Temporal client for signaling
 // and a database handle for status updates.
-func NewPauseService(temporalClient client.Client, database PauseStore) *PauseService {
+func NewPauseService(deps PauseServiceDeps) *PauseService {
 	return &PauseService{
-		temporalClient: temporalClient,
-		database:       database,
+		temporalClient: deps.Temporal,
+		database:       deps.Store,
+		workflows:      deps.Workflows,
 	}
 }
 
@@ -462,13 +474,13 @@ func (ps *PauseService) ResumeWorkflow(ctx context.Context, workflowID, chatID s
 		"chatID", chatID,
 	)
 
-	before, known := StatusBeforeWake(ctx, ps.database, workflowID)
+	before, known := StatusBeforeWake(ctx, ps.workflows, workflowID)
 	err := ps.SignalWithRecovery(ctx, workflowID, SignalResume, nil, inputUpdate)
 	if err != nil {
 		// Check if the error is because the workflow is truly not found (not just expired)
 		if strings.Contains(err.Error(), "failed to reset expired workflow") {
 			// Reset failed — check DB to give a better error
-			wf, dbErr := ps.database.GetWorkflow(ctx, workflowID)
+			wf, dbErr := ps.workflows.LoadWorkflow(ctx, workflowID)
 			if dbErr != nil {
 				return fmt.Errorf("%w: %s", ErrWorkflowNotFound, workflowID)
 			}
@@ -518,7 +530,7 @@ func (ps *PauseService) ResumeExpiredWorkflow(ctx context.Context, workflowID, c
 		"chatID", chatID,
 	)
 
-	before, known := StatusBeforeWake(ctx, ps.database, workflowID)
+	before, known := StatusBeforeWake(ctx, ps.workflows, workflowID)
 
 	// Reset the workflow to the last WorkflowTaskCompleted event (the pause point).
 	// Pass empty runID so Temporal uses the latest run.
@@ -572,7 +584,7 @@ func (ps *PauseService) ResumeExpiredWorkflow(ctx context.Context, workflowID, c
 // so without it a model the user just chose — or one the send moved off a
 // provider that cannot serve it — would never reach it.
 func (ps *PauseService) ResumeInterruptedWorkflow(ctx context.Context, workflowID, chatID string, inputUpdate map[string]interface{}) (string, error) {
-	before, known := StatusBeforeWake(ctx, ps.database, workflowID)
+	before, known := StatusBeforeWake(ctx, ps.workflows, workflowID)
 
 	// resetInterruptedForResume has already revived the subtree the replay is
 	// about to rebuild — before this function marks the root Active, which is

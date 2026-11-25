@@ -66,7 +66,7 @@ func newInterruptSettleEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment,
 		activity.RegisterOptions{Name: "SaveMessage"},
 	)
 
-	registry := NewActivityRegistry(&wrapperTestRepo{})
+	registry := NewActivityRegistry(ActivityRegistryDeps{Store: &wrapperTestRepo{}, Workflows: &wrapperTestRepo{}})
 	registry.SetMessageWriter(messageWriterFunc(func(_ context.Context, rtx types.RuntimeContext, args *reliantv1.SaveMessageNodeArgs, _ string, _ int32) (*reliantv1.SaveMessageOutput, error) {
 		if strings.HasPrefix(rtx.StepID, "execute_tools") && args != nil {
 			atomic.AddInt32(&e.savedToolTurns, 1)

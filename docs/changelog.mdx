@@ -13,6 +13,34 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.30.0" description="November 24, 2026">
+### 7 new features, 3 fixes and 2 other changes
+
+Every pull request merged since v1.29.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **llm-usage: record each model call's run, node, project, provider request id, time to first token and cost** [#3475](https://github.com/reliant-labs/reliant/pull/3475)
+- **telemetry: trigger.fire spans on every fire path, skips included** [#3289](https://github.com/reliant-labs/reliant/pull/3289)
+- **sharing: share saved workflows with the org (SetWorkflowDraftSharing)** [#3306](https://github.com/reliant-labs/reliant/pull/3306)
+- **telemetry: record the LLM gateway's call id on every gateway-routed chat span** [#3484](https://github.com/reliant-labs/reliant/pull/3484)
+- **workflows: accept an observe: block on any node and the workflow (release A: schema, tolerant reader, lint)** [#3478](https://github.com/reliant-labs/reliant/pull/3478)
+- **web: a floating Setup Guide for the whole app, a Help row beside Settings, and the workflows outro fits the one shell** [#3377](https://github.com/reliant-labs/reliant/pull/3377)
+- **collab: attribution columns, approvalkind min_role and the transcript author-tag renderer (chat collaboration C1)** [#3480](https://github.com/reliant-labs/reliant/pull/3480)
+
+#### Changed
+
+- **web: expect canonical project scope in responsive composer URLs** [#3488](https://github.com/reliant-labs/reliant/pull/3488)
+- **web: the shell reads a session port, not the auth store** [#3494](https://github.com/reliant-labs/reliant/pull/3494)
+
+#### Fixed
+
+- **web: mobile project pickers follow the URL** [#3477](https://github.com/reliant-labs/reliant/pull/3477)
+- **web: the workflow serializer keeps daemon, outcome, tolerate_failure and observe** [#3486](https://github.com/reliant-labs/reliant/pull/3486)
+- **proto: reads whose response carries a secret or is per-call are not NO_SIDE_EFFECTS** [#3466](https://github.com/reliant-labs/reliant/pull/3466)
+
+</Update>
+
 <Update label="v1.29.0" description="November 22, 2026">
 ### 2 new features, 5 fixes and 4 other changes
 

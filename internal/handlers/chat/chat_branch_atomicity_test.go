@@ -121,7 +121,12 @@ func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo: failingRepo, Chats: chataccesstest.For(failingRepo),
-			Questions: &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
+			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
+			ProjectRows: store.NewProjectExtStore(repo.ORM()),
+			Questions:   &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 		},
 		threads: threads.New(threads.Deps{Repo: failingRepo}),
 	}
@@ -179,7 +184,12 @@ func TestBranchChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	service := &Service{
 		deps: Deps{
 			Repo: failingRepo, Chats: chataccesstest.For(failingRepo),
-			Questions: &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
+			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
+			ProjectRows: store.NewProjectExtStore(repo.ORM()),
+			Questions:   &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 		},
 		threads: threads.New(threads.Deps{Repo: failingRepo}),
 	}

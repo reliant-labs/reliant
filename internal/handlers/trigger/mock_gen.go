@@ -113,8 +113,34 @@ func (m *MockOrgResolver) LiveMembersFresh(ctx context.Context, userID string, o
 // Compile-time check.
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
+// forge:section MockOwners
+// forge:hash=0252499f11645a8504df193dd2086864a8280ffc310fc17957a30baf14004428
+
+// MockOwners is a test mock for the Owners interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockOwners.<Method>Func not set" error.
+type MockOwners struct {
+	contractkit.Recorder
+	AdoptTriggerFunc func(context.Context, *core.Trigger, string, string, ...db.OrgRead) error
+}
+
+// AdoptTrigger records the call and delegates to AdoptTriggerFunc when set.
+func (m *MockOwners) AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner string, offerID string, reads ...db.OrgRead) error {
+	m.Recorder.Record("AdoptTrigger", ctx, t, previousOwner, offerID, reads)
+	if m.AdoptTriggerFunc != nil {
+		return m.AdoptTriggerFunc(ctx, t, previousOwner, offerID, reads...)
+	}
+	return contractkit.MockNotSet("MockOwners", "AdoptTrigger")
+}
+
+// Compile-time check.
+var _ Owners = (*MockOwners)(nil)
+
 // forge:section MockRepository
-// forge:hash=5382b739a0222752b12f1d1f86ddffe31830bb70c61da7f1c7e8887149eafa09
+// forge:hash=0b38e7676b04ee04a332f5fab18eced631a038c2120675fcace8533831ed2c5f
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -126,6 +152,7 @@ type MockRepository struct {
 	contractkit.Recorder
 	GetConnectionFunc                  func(context.Context, string, string) (*core.Connection, error)
 	GetIntegrationAccessSubjectFunc    func(context.Context, string, string, time.Time) (string, error)
+	DefaultConnectionFunc              func(context.Context, string, string) (*core.Connection, error)
 	AssignUnassignedOrgFunc            func(context.Context, string, string) error
 	RunTxFunc                          func(context.Context, orm.TxPolicy, func(context.Context) error) error
 	LockActivationDependenciesFunc     func(context.Context, string, string) error
@@ -137,13 +164,10 @@ type MockRepository struct {
 	UpdateTriggerFunc                  func(context.Context, *core.Trigger) error
 	CreateTriggerInOrgFunc             func(context.Context, *core.Trigger, ...db.OrgRead) error
 	UpdateTriggerInOrgFunc             func(context.Context, *core.Trigger, ...db.OrgRead) error
-	AdoptTriggerFunc                   func(context.Context, *core.Trigger, string, string, ...db.OrgRead) error
 	DeleteTriggerFunc                  func(context.Context, string) error
 	SetTriggerEnabledFunc              func(context.Context, string, bool) error
-	SetTriggerWebhookSecretFunc        func(context.Context, string, []byte) error
 	SetTriggerWebhookTokenHashFunc     func(context.Context, string, []byte) error
 	GetTriggerWebhookCredentialsFunc   func(context.Context, string) (*core.TriggerWebhookCredentials, error)
-	RecentTriggerFiringsFunc           func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
 	ListTriggerEventsFunc              func(context.Context, core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error)
 	GetTriggerEventByChatIDFunc        func(context.Context, string) (*core.TriggerEvent, error)
 	ListTriggerRegistrationsFunc       func(context.Context, string, []string) (map[string]*core.TriggerRegistration, error)
@@ -179,6 +203,15 @@ func (m *MockRepository) GetIntegrationAccessSubject(ctx context.Context, userID
 		return m.GetIntegrationAccessSubjectFunc(ctx, userID, integrationID, freshAfter)
 	}
 	return "", contractkit.MockNotSet("MockRepository", "GetIntegrationAccessSubject")
+}
+
+// DefaultConnection records the call and delegates to DefaultConnectionFunc when set.
+func (m *MockRepository) DefaultConnection(ctx context.Context, userID string, integrationID string) (*core.Connection, error) {
+	m.Recorder.Record("DefaultConnection", ctx, userID, integrationID)
+	if m.DefaultConnectionFunc != nil {
+		return m.DefaultConnectionFunc(ctx, userID, integrationID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "DefaultConnection")
 }
 
 // AssignUnassignedOrg records the call and delegates to AssignUnassignedOrgFunc when set.
@@ -280,15 +313,6 @@ func (m *MockRepository) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger
 	return contractkit.MockNotSet("MockRepository", "UpdateTriggerInOrg")
 }
 
-// AdoptTrigger records the call and delegates to AdoptTriggerFunc when set.
-func (m *MockRepository) AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwner string, offerID string, reads ...db.OrgRead) error {
-	m.Recorder.Record("AdoptTrigger", ctx, t, previousOwner, offerID, reads)
-	if m.AdoptTriggerFunc != nil {
-		return m.AdoptTriggerFunc(ctx, t, previousOwner, offerID, reads...)
-	}
-	return contractkit.MockNotSet("MockRepository", "AdoptTrigger")
-}
-
 // DeleteTrigger records the call and delegates to DeleteTriggerFunc when set.
 func (m *MockRepository) DeleteTrigger(ctx context.Context, id string) error {
 	m.Recorder.Record("DeleteTrigger", ctx, id)
@@ -307,15 +331,6 @@ func (m *MockRepository) SetTriggerEnabled(ctx context.Context, id string, enabl
 	return contractkit.MockNotSet("MockRepository", "SetTriggerEnabled")
 }
 
-// SetTriggerWebhookSecret records the call and delegates to SetTriggerWebhookSecretFunc when set.
-func (m *MockRepository) SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error {
-	m.Recorder.Record("SetTriggerWebhookSecret", ctx, id, sealed)
-	if m.SetTriggerWebhookSecretFunc != nil {
-		return m.SetTriggerWebhookSecretFunc(ctx, id, sealed)
-	}
-	return contractkit.MockNotSet("MockRepository", "SetTriggerWebhookSecret")
-}
-
 // SetTriggerWebhookTokenHash records the call and delegates to SetTriggerWebhookTokenHashFunc when set.
 func (m *MockRepository) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error {
 	m.Recorder.Record("SetTriggerWebhookTokenHash", ctx, id, hash)
@@ -332,15 +347,6 @@ func (m *MockRepository) GetTriggerWebhookCredentials(ctx context.Context, id st
 		return m.GetTriggerWebhookCredentialsFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetTriggerWebhookCredentials")
-}
-
-// RecentTriggerFirings records the call and delegates to RecentTriggerFiringsFunc when set.
-func (m *MockRepository) RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	m.Recorder.Record("RecentTriggerFirings", ctx, userID, triggerIDs, perTrigger)
-	if m.RecentTriggerFiringsFunc != nil {
-		return m.RecentTriggerFiringsFunc(ctx, userID, triggerIDs, perTrigger)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "RecentTriggerFirings")
 }
 
 // ListTriggerEvents records the call and delegates to ListTriggerEventsFunc when set.
@@ -498,6 +504,58 @@ func (m *MockRepository) ListTriggers(ctx context.Context, f core.TriggerFilters
 
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockFirings
+// forge:hash=380f7f8e8aa8207f402f327fd697a7d088c85a0904d2674b64940bf1c3a88eb9
+
+// MockFirings is a test mock for the Firings interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockFirings.<Method>Func not set" error.
+type MockFirings struct {
+	contractkit.Recorder
+	RecentTriggerFiringsFunc func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
+}
+
+// RecentTriggerFirings records the call and delegates to RecentTriggerFiringsFunc when set.
+func (m *MockFirings) RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	m.Recorder.Record("RecentTriggerFirings", ctx, userID, triggerIDs, perTrigger)
+	if m.RecentTriggerFiringsFunc != nil {
+		return m.RecentTriggerFiringsFunc(ctx, userID, triggerIDs, perTrigger)
+	}
+	return nil, contractkit.MockNotSet("MockFirings", "RecentTriggerFirings")
+}
+
+// Compile-time check.
+var _ Firings = (*MockFirings)(nil)
+
+// forge:section MockWebhookSecrets
+// forge:hash=b35cc39ad59123af22278f5f6ff98e91c6d140889d9d56476ff40fc671ace86c
+
+// MockWebhookSecrets is a test mock for the WebhookSecrets interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockWebhookSecrets.<Method>Func not set" error.
+type MockWebhookSecrets struct {
+	contractkit.Recorder
+	SetTriggerWebhookSecretFunc func(context.Context, string, []byte) error
+}
+
+// SetTriggerWebhookSecret records the call and delegates to SetTriggerWebhookSecretFunc when set.
+func (m *MockWebhookSecrets) SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error {
+	m.Recorder.Record("SetTriggerWebhookSecret", ctx, id, sealed)
+	if m.SetTriggerWebhookSecretFunc != nil {
+		return m.SetTriggerWebhookSecretFunc(ctx, id, sealed)
+	}
+	return contractkit.MockNotSet("MockWebhookSecrets", "SetTriggerWebhookSecret")
+}
+
+// Compile-time check.
+var _ WebhookSecrets = (*MockWebhookSecrets)(nil)
 
 // forge:section MockPools
 // forge:hash=0a60e20a06d59a6dd96e6679b86dc7762b4c9b75965ec65ddc5e2a1994d580f1

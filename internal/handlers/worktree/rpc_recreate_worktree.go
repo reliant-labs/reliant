@@ -41,13 +41,13 @@ func (s *Service) RecreateWorktree(
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.getWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
 
 	// Get project for git operations
-	project, err := s.deps.Repo.GetProject(ctx, worktree.ProjectID)
+	project, err := s.getProject(ctx, worktree.ProjectID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
@@ -72,7 +72,7 @@ func (s *Service) RecreateWorktree(
 	// Recreate EVERY repo of the workspace. A multi-repo project's root is not a
 	// git repository, so rebuilding it means one `git worktree add` per nested
 	// repo, each in its own repository, under <workspace>/<relative path>.
-	repos, err := s.deps.Repo.ListReposByProject(ctx, worktree.ProjectID)
+	repos, err := s.listRepos(ctx, worktree.ProjectID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
 	}
@@ -197,7 +197,7 @@ func (s *Service) repairActiveWorktree(ctx context.Context, userID string, workt
 	if err != nil {
 		return nil, err
 	}
-	repos, err := s.deps.Repo.ListReposByProject(ctx, worktree.ProjectID)
+	repos, err := s.listRepos(ctx, worktree.ProjectID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
 	}

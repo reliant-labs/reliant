@@ -57,7 +57,7 @@ func TestAttachProjectToDaemon_Generated(t *testing.T) {
 
 	// project.NewTestProject (helpers_gen_test.go) returns the
 	// project *Service wired with stubbed dependencies. Override one
-	// with project.WithProjectDeps(...), or per-row via Case.Setup.
+	// with withDeps(...), or per-row via Case.Setup.
 	svc := project.NewTestProject(t)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.AttachProjectToDaemonRequest, pb.AttachProjectToDaemonResponse]{

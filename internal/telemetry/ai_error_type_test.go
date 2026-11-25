@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 // recordAISpans installs an in-memory tracer provider for the AI span helpers,
@@ -135,6 +137,33 @@ func TestToolCall_AToolErrorIsNotAFailedCall(t *testing.T) {
 	s := rec.Ended()[0]
 	assert.Equal(t, ErrorTypeToolError, attrsOf(s)[AttrErrorType])
 	assert.Equal(t, codes.Unset, s.Status().Code)
+}
+
+// A tool call's duration is its span's, exactly: the tool usage ledger records
+// it, and a row and its span must agree. Zero until the call ends.
+//
+// Not parallel: it swaps the global tracer provider and toolCallNow.
+func TestToolCall_DurationIsTheSpans(t *testing.T) {
+	rec := recordAISpans(t)
+	_, call := StartToolCall(context.Background(), "grep", "tc-1", ToolLocationDaemon, "")
+	assert.Zero(t, call.Duration(), "a call still running has no duration")
+	call.End(false, nil)
+	require.Len(t, rec.Ended(), 1)
+	s := rec.Ended()[0]
+	assert.Equal(t, s.EndTime().Sub(s.StartTime()), call.Duration())
+
+	// A span that records no times (a no-op provider) is timed by the call's
+	// own clock.
+	prevProvider, prevNow := otel.GetTracerProvider(), toolCallNow
+	t.Cleanup(func() { otel.SetTracerProvider(prevProvider); toolCallNow = prevNow })
+	otel.SetTracerProvider(noop.NewTracerProvider())
+	clock := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	toolCallNow = func() time.Time { return clock }
+	_, call = StartToolCall(context.Background(), "grep", "tc-2", ToolLocationDaemon, "")
+	clock = clock.Add(1500 * time.Millisecond)
+	call.End(false, nil)
+	assert.Equal(t, 1500*time.Millisecond, call.Duration())
+	assert.Zero(t, (*ToolCall)(nil).Duration())
 }
 
 // The node span names the chat as gen_ai.conversation.id beside

@@ -2663,14 +2663,14 @@ const file_services_organization_v1_organization_proto_rawDesc = "" +
 	"\aproject\x18\x03 \x01(\tR\aproject\x12\x10\n" +
 	"\x03env\x18\x04 \x01(\tR\x03env\x12\x12\n" +
 	"\x04name\x18\x05 \x01(\tR\x04name\x12\x10\n" +
-	"\x03url\x18\x06 \x01(\tR\x03url2\x8a\x0f\n" +
-	"\x13OrganizationService\x12p\n" +
-	"\x13ListMyOrganizations\x12+.controlplane.v1.ListMyOrganizationsRequest\x1a,.controlplane.v1.ListMyOrganizationsResponse\x12y\n" +
+	"\x03url\x18\x06 \x01(\tR\x03url2\x9e\x0f\n" +
+	"\x13OrganizationService\x12u\n" +
+	"\x13ListMyOrganizations\x12+.controlplane.v1.ListMyOrganizationsRequest\x1a,.controlplane.v1.ListMyOrganizationsResponse\"\x03\x90\x02\x01\x12y\n" +
 	"\x16SetDefaultOrganization\x12..controlplane.v1.SetDefaultOrganizationRequest\x1a/.controlplane.v1.SetDefaultOrganizationResponse\x12m\n" +
-	"\x12CreateOrganization\x12*.controlplane.v1.CreateOrganizationRequest\x1a+.controlplane.v1.CreateOrganizationResponse\x12X\n" +
-	"\vListMembers\x12#.controlplane.v1.ListMembersRequest\x1a$.controlplane.v1.ListMembersResponse\x12[\n" +
-	"\fInviteMember\x12$.controlplane.v1.InviteMemberRequest\x1a%.controlplane.v1.InviteMemberResponse\x12d\n" +
-	"\x0fListInvitations\x12'.controlplane.v1.ListInvitationsRequest\x1a(.controlplane.v1.ListInvitationsResponse\x12g\n" +
+	"\x12CreateOrganization\x12*.controlplane.v1.CreateOrganizationRequest\x1a+.controlplane.v1.CreateOrganizationResponse\x12]\n" +
+	"\vListMembers\x12#.controlplane.v1.ListMembersRequest\x1a$.controlplane.v1.ListMembersResponse\"\x03\x90\x02\x01\x12[\n" +
+	"\fInviteMember\x12$.controlplane.v1.InviteMemberRequest\x1a%.controlplane.v1.InviteMemberResponse\x12i\n" +
+	"\x0fListInvitations\x12'.controlplane.v1.ListInvitationsRequest\x1a(.controlplane.v1.ListInvitationsResponse\"\x03\x90\x02\x01\x12g\n" +
 	"\x10RevokeInvitation\x12(.controlplane.v1.RevokeInvitationRequest\x1a).controlplane.v1.RevokeInvitationResponse\x12^\n" +
 	"\rGetInvitation\x12%.controlplane.v1.GetInvitationRequest\x1a&.controlplane.v1.GetInvitationResponse\x12g\n" +
 	"\x10AcceptInvitation\x12(.controlplane.v1.AcceptInvitationRequest\x1a).controlplane.v1.AcceptInvitationResponse\x12[\n" +
@@ -2679,8 +2679,8 @@ const file_services_organization_v1_organization_proto_rawDesc = "" +
 	"\x10UpdateMemberRole\x12(.controlplane.v1.UpdateMemberRoleRequest\x1a).controlplane.v1.UpdateMemberRoleResponse\x12\x85\x01\n" +
 	"\x1aMoveFreeHostingDesignation\x122.controlplane.v1.MoveFreeHostingDesignationRequest\x1a3.controlplane.v1.MoveFreeHostingDesignationResponse\x12v\n" +
 	"\x15StartGitHubAppInstall\x12-.controlplane.v1.StartGitHubAppInstallRequest\x1a..controlplane.v1.StartGitHubAppInstallResponse\x12\x82\x01\n" +
-	"\x19LinkGitHubAppInstallation\x121.controlplane.v1.LinkGitHubAppInstallationRequest\x1a2.controlplane.v1.LinkGitHubAppInstallationResponse\x12\x85\x01\n" +
-	"\x1aListGitHubAppInstallations\x122.controlplane.v1.ListGitHubAppInstallationsRequest\x1a3.controlplane.v1.ListGitHubAppInstallationsResponse\x12\x88\x01\n" +
+	"\x19LinkGitHubAppInstallation\x121.controlplane.v1.LinkGitHubAppInstallationRequest\x1a2.controlplane.v1.LinkGitHubAppInstallationResponse\x12\x8a\x01\n" +
+	"\x1aListGitHubAppInstallations\x122.controlplane.v1.ListGitHubAppInstallationsRequest\x1a3.controlplane.v1.ListGitHubAppInstallationsResponse\"\x03\x90\x02\x01\x12\x88\x01\n" +
 	"\x1bUnlinkGitHubAppInstallation\x123.controlplane.v1.UnlinkGitHubAppInstallationRequest\x1a4.controlplane.v1.UnlinkGitHubAppInstallationResponseB\xdf\x01\n" +
 	"\x13com.controlplane.v1B\x11OrganizationProtoP\x01ZXgithub.com/reliant-labs/reliant/gen/controlplane/services/organization/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 

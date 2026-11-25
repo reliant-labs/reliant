@@ -65,7 +65,7 @@ func (s *Service) ListWorktrees(
 	// Self-heal invariant: every project should have a main worktree.
 	// This also repairs older projects created while Postgres parity bugs existed.
 	if len(worktrees) == 0 && offset == 0 {
-		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, req.Msg.ProjectId, userID)
+		project, err := s.deps.Projects.GetProjectWithUserCheck(ctx, req.Msg.ProjectId, userID)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 		}

@@ -18,7 +18,7 @@
 // Built by hand, by internal/app's NewProviderAccounts provider (providers.go): never
 // a node compose.go constructs from Deps.
 //
-//forge:provided
+// (exp)
 package provideraccounts
 
 import (

@@ -44,7 +44,7 @@ func TestListProjects_ByOrg(t *testing.T) {
 			return nil
 		},
 	}
-	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Orgs: orgs.New(orgSource{})}))
+	svc := project.NewTestProject(t, withDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Orgs: orgs.New(orgSource{})}))
 	ctx := project.AuthedContext(t)
 	list := func(org *string) error {
 		_, err := svc.ListProjects(ctx, connect.NewRequest(&pb.ListProjectsRequest{OrgId: org}))
@@ -80,7 +80,7 @@ func TestListProjects_NoOrgsIgnoresTheOrg(t *testing.T) {
 		filters = f
 		return nil, nil
 	}}
-	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Orgs: orgs.New(nil)}))
+	svc := project.NewTestProject(t, withDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Orgs: orgs.New(nil)}))
 	org := "acme"
 	if _, err := svc.ListProjects(project.AuthedContext(t), connect.NewRequest(&pb.ListProjectsRequest{OrgId: &org})); err != nil {
 		t.Fatal(err)

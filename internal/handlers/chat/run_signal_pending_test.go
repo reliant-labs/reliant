@@ -57,11 +57,12 @@ func TestSignalRunOnPendingRunIsNotDelivered(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	chats := &Service{deps: Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}, threads: threadsSvc}
+	chats := &Service{deps: Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, threads: threadsSvc}
 	runs, err := run.New(run.Deps{
 		Logger:    slog.Default(),
 		Config:    &typedconfig.Config{},
 		Repo:      repo,
+		Workflows: store.NewWorkflowExtStore(repo.ORM()),
 		ChatRows:  store.NewChatExtStore(repo.ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()),
 		Chats:     chats,

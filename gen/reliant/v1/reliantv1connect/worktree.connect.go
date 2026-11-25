@@ -197,6 +197,7 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorktreeServiceListWorktreeRecoveriesProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("ListWorktreeRecoveries")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		restoreWorktreeRecovery: connect.NewClient[v1.RestoreWorktreeRecoveryRequest, v1.RestoreWorktreeRecoveryResponse](
@@ -227,12 +228,14 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorktreeServiceListArchivedWorktreesProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("ListArchivedWorktrees")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getWorktree: connect.NewClient[v1.GetWorktreeRequest, v1.GetWorktreeResponse](
 			httpClient,
 			baseURL+WorktreeServiceGetWorktreeProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("GetWorktree")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateWorktree: connect.NewClient[v1.UpdateWorktreeRequest, v1.UpdateWorktreeResponse](
@@ -600,6 +603,7 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		WorktreeServiceListWorktreeRecoveriesProcedure,
 		svc.ListWorktreeRecoveries,
 		connect.WithSchema(worktreeServiceMethods.ByName("ListWorktreeRecoveries")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceRestoreWorktreeRecoveryHandler := connect.NewUnaryHandler(
@@ -630,12 +634,14 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		WorktreeServiceListArchivedWorktreesProcedure,
 		svc.ListArchivedWorktrees,
 		connect.WithSchema(worktreeServiceMethods.ByName("ListArchivedWorktrees")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceGetWorktreeHandler := connect.NewUnaryHandler(
 		WorktreeServiceGetWorktreeProcedure,
 		svc.GetWorktree,
 		connect.WithSchema(worktreeServiceMethods.ByName("GetWorktree")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceUpdateWorktreeHandler := connect.NewUnaryHandler(

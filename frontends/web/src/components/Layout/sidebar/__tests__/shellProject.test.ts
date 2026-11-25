@@ -61,6 +61,49 @@ describe("the project shell's current project", () => {
     expect(sectionsAppOf(statusPage)).toBe("status-page");
   });
 
+  // The 2026-11-23 incident's shape: a parent checkout (reliant-labs) whose nested
+  // `control-plane/` repo declares the control-plane app, beside the
+  // control-plane checkout itself, which declares it at its root.
+  describe("a multi-repo project and a nested repository's app", () => {
+    const repo = (id: string, relativePath: string) => ({ id, name: id, relativePath, remote: "" });
+    const at = (app: AppChipModel, repoId: string, subpath = ""): AppChipModel => ({ ...app, repoId, subpath });
+    const parent: ProjectCatalogRow = {
+      ...projectRow("p-parent", "reliant-labs", [at(chip("control-plane", "live"), "r-cp-nested"), at(chip("reliant", "not_deployed", "not_hosted"), "r-reliant")]),
+      repos: [repo("r-root", ""), repo("r-cp-nested", "control-plane"), repo("r-reliant", "reliant")],
+    };
+    const checkout: ProjectCatalogRow = {
+      ...projectRow("p-cp", "control-plane", [at(chip("control-plane", "live"), "r-cp")]),
+      repos: [repo("r-cp", ".")],
+    };
+    const mono: ProjectCatalogRow = {
+      ...projectRow("p-mono", "mono", [at(chip("web", "not_deployed"), "r-mono", "apps/web"), at(chip("vendored", "live"), "r-vendor")]),
+      repos: [repo("r-mono", ""), repo("r-vendor", "third_party/vendored")],
+    };
+    const multi: ProjectCatalog = { orgId: "org", hostedAppsState: "ok", rows: [parent, checkout, mono] };
+
+    it("does not adopt the nested repo's app as the parent's own", () => {
+      expect(deployedAppOf(parent)).toBeNull();
+      expect(sectionsAppOf(parent)).toBe("reliant-labs");
+      expect(deployedAppOf(checkout)).toBe("control-plane");
+    });
+
+    it("keeps an app in a directory of the project's own repo, but not a vendored repo's", () => {
+      expect(sectionsAppOf(mono)).toBe("web");
+      expect(deployedAppOf(mono)).toBeNull();
+    });
+
+    it("adopts a nested repo's app when the project declares it", () => {
+      const declared: ProjectCatalogRow = { ...parent, project: { ...parent.project, is_forge: true, forge_project_name: "control-plane" } };
+      expect(sectionsAppOf(declared)).toBe("control-plane");
+    });
+
+    it("resolves the app to the checkout whose own code it is, whatever the list order", () => {
+      expect(rowForRef(multi, { kind: "app", name: "control-plane" })).toBe(checkout);
+      // With no project owning it, a project holding it anywhere still answers.
+      expect(rowForRef({ ...multi, rows: [parent] }, { kind: "app", name: "control-plane" })).toBe(parent);
+    });
+  });
+
   it("moves to the same section of the picked project's app, else to its chats", () => {
     expect(pickTarget({ kind: "project", row: docs }, "/forge/p/shopfront/observability/errors").href).toBe("/forge/p/docs-site/observability/errors");
     expect(pickTarget({ kind: "project", row: shop }, "/forge/p/docs-site/releases/v1").href).toBe("/forge/p/shopfront/releases");

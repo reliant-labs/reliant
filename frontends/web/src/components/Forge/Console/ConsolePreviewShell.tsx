@@ -2,7 +2,7 @@
 
 /**
  * DEV-ONLY: the REAL console chrome (ConsoleShell) around a preview
- * harness's screen, on a fabricated project — so a screenshot of a harness
+ * harness's screen, on the shop fixture pack's app — so a screenshot of a harness
  * shows the nav and top bar the product shows, not a bare screen that looks
  * like the product and is not (which cost two review cycles once, asking
  * where the left nav had gone).
@@ -13,18 +13,16 @@
 
 import { useState, type ReactNode } from "react";
 
+import { DEMO_ENVS, DEMO_PROJECT } from "@/fixtures/shop/handlers/scope";
+
 import { ConsoleShell, type ConsoleNavDashboard, type ConsoleNavEnv } from "./ConsoleShell";
 import { ProjectMonogram } from "./ConsoleProjectSwitcher";
 import type { ConsolePage } from "./paths";
 
-const PROJECT = "control-plane";
+/** The shop fixture pack's app and environments (src/fixtures/shop), the one world every preview shows. */
+const PROJECT = DEMO_PROJECT;
 
-const ENVS = [
-  { name: "prod", preview: false },
-  { name: "e2e", preview: false },
-  { name: "dev", preview: false },
-  { name: "pr-1042", preview: true },
-];
+const ENVS: ConsoleNavEnv[] = DEMO_ENVS.map((env) => ({ name: env.name, preview: false }));
 
 export function ConsolePreviewShell({
   page,

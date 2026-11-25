@@ -41,6 +41,9 @@ type tracingStarter struct {
 	parent map[string]trace.SpanContext // workflow id → that span's parent
 }
 
+// traceStartTime is the fixed time the tests' starts and events carry.
+var traceStartTime = time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
+
 func newTracingStarter(t *testing.T, tp trace.TracerProvider) *tracingStarter {
 	t.Helper()
 	tracer, err := temporalotel.NewTracer(temporalotel.TracerOptions{Tracer: tp.Tracer("temporal-client"), AllowInvalidParentSpans: true})
@@ -52,7 +55,7 @@ func (s *tracingStarter) ExecuteWorkflow(
 	ctx context.Context, options client.StartWorkflowOptions, wf interface{}, args ...interface{},
 ) (client.WorkflowRun, error) {
 	span, err := s.tracer.StartSpan(&interceptor.TracerStartSpanOptions{
-		Parent: s.tracer.SpanFromContext(ctx), Operation: "StartWorkflow", Name: options.ID, Time: time.Now(), ToHeader: true,
+		Parent: s.tracer.SpanFromContext(ctx), Operation: "StartWorkflow", Name: options.ID, Time: traceStartTime, ToHeader: true,
 	})
 	if err != nil {
 		return nil, err
@@ -78,7 +81,7 @@ func TestLaunch_TriggerFanOutStartsATraceOfItsOwnPerRun(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(tracetest.NewSpanRecorder()))
 	starter := newTracingStarter(t, tp)
-	launcher := New(Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue"})
+	launcher := New(Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue"})
 
 	fireCtx, firing := tp.Tracer("test").Start(ctx, "trigger.fire integration")
 	defer firing.End()
@@ -88,7 +91,7 @@ func TestLaunch_TriggerFanOutStartsATraceOfItsOwnPerRun(t *testing.T) {
 	runs := map[string]string{} // org → workflow id
 	for _, org := range []string{"org-a", "org-b"} {
 		res, err := launcher.Launch(fireCtx, Event{
-			Kind: core.TriggerEventKindIntegration, DedupeKey: "trigger-" + org + ":delivery-1", OccurredAt: time.Now().UTC(),
+			Kind: core.TriggerEventKindIntegration, DedupeKey: "trigger-" + org + ":delivery-1", OccurredAt: traceStartTime,
 		}, Spec{
 			OwnerUserID: launchTestUserID, ProjectID: projectID, DefaultOrgID: org, Workflow: "builtin://agent",
 			Params: mockModelParams(t), Messages: userSeed("go"),
@@ -121,7 +124,7 @@ func TestLaunch_AttendedStartStaysInItsCallersTrace(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(tracetest.NewSpanRecorder()))
 	starter := newTracingStarter(t, tp)
-	launcher := New(Deps{Store: repo, Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue"})
+	launcher := New(Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo}, TaskQueue: "test-task-queue"})
 
 	reqCtx, request := tp.Tracer("test").Start(ctx, "ChatService/CreateChat")
 	defer request.End()

@@ -22,7 +22,7 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import type { CoverageSource, FetchCoverageSource } from "@/services/coverageSource/coverageSource";
-import type { CoverageRequest, CoverageTree, FileCoverage, FileCoverageRequest } from "@/services/controlPlane/tests/types";
+import type { CoverageRequest, CoverageTarget, CoverageTree, FileCoverage, FileCoverageRequest } from "@/services/controlPlane/tests/types";
 import {
   coverageTreeOf,
   fileCoverageOf,
@@ -98,25 +98,173 @@ function cov(statements: number, percent: number): WireStatementCoverage {
   return { statements: BigInt(statements), covered: BigInt(covered), percent: statements === 0 ? 0 : Math.round((covered / statements) * 1000) / 10 };
 }
 
-function diff(lines: number, covered: number): WireDiffCoverage {
-  return { baseSha: FIXTURE_BASE, lines: BigInt(lines), covered: BigInt(covered), percent: Math.round((covered / lines) * 1000) / 10 };
+function diff(baseSha: string, lines: number, covered: number): WireDiffCoverage {
+  return { baseSha, lines: BigInt(lines), covered: BigInt(covered), percent: Math.round((covered / lines) * 1000) / 10 };
 }
 
-interface FixtureNode {
+/** One node of a fixture report: a package, a directory or a file, with its figures by lane. */
+export interface CoverageFixtureNode {
   path: string;
   kind: number;
   lang: string;
   statements: number;
   combined: number;
   lanes: Partial<Record<string, number>>;
-  /** Changed lines against FIXTURE_BASE, and how many of them are covered. */
+  /** Changed lines against the base, and how many of them are covered. */
   changed?: [lines: number, covered: number];
+}
+
+/** One line of a file: [line, statements, unit, integration, e2e, partial, changed against the base]. Zero hits: the lane did not reach it. */
+export type CoverageLineRow = [number, number, number, number, number, boolean, boolean];
+
+/**
+ * One commit's report, as the coverage engine answers it: the tree (packages
+ * and directories, and the files in them), and per file its blob, import
+ * path and lines.
+ */
+export interface CoverageReportFixture {
+  gitCommit: string;
+  treeHash: string;
+  lanes: string[];
+  root: CoverageFixtureNode;
+  nodes: CoverageFixtureNode[];
+  /** The base a diff names: pinned by the fixture, or (unset) the base the request asked for. */
+  diffBase?: string;
+  /** The only base the nodes' `changed` lines are against; unset: whatever base is asked for. */
+  changedSince?: string;
+  /** Against a requested base: whether it has a report, and the delta to it. */
+  base: (baseSha: string) => { hasReport: boolean; deltaPercent?: number };
+  importPath: (path: string) => string;
+  blobId: (path: string) => string;
+  lines: (path: string) => CoverageLineRow[];
+}
+
+const parentOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
+
+/** A path that is a prefix of nodes but not one itself ("internal"): its children's sums. */
+function aggregate(nodes: readonly CoverageFixtureNode[], lanes: readonly string[], path: string): CoverageFixtureNode | null {
+  const below = nodes.filter((node) => node.kind !== FILE && node.path.startsWith(`${path}/`));
+  if (below.length === 0) return null;
+  const statements = below.reduce((sum, node) => sum + node.statements, 0);
+  const weighted = (pick: (node: CoverageFixtureNode) => number | undefined) => below.reduce((sum, node) => sum + node.statements * (pick(node) ?? 0), 0) / statements;
+  return {
+    path,
+    kind: WireNodeKind.DIRECTORY,
+    lang: "",
+    statements,
+    combined: weighted((node) => node.combined),
+    lanes: Object.fromEntries(lanes.map((lane) => [lane, weighted((node) => node.lanes[lane])])),
+  };
+}
+
+/** The lens: one lane's figure stands in for combined, and the other lanes drop out. */
+function lensed(node: CoverageFixtureNode, lane: string | undefined) {
+  const lanes = Object.fromEntries(
+    Object.entries(node.lanes)
+      .filter(([name]) => !lane || name === lane)
+      .map(([name, percent]) => [name, cov(node.statements, percent!)])
+  );
+  const combined = lane ? (node.lanes[lane] === undefined ? cov(node.statements, 0) : cov(node.statements, node.lanes[lane]!)) : cov(node.statements, node.combined);
+  return { combined, lanes };
+}
+
+const targetName = (target: CoverageTarget) =>
+  "gitCommit" in target ? `commit ${target.gitCommit}` : "releaseVersion" in target ? `release ${target.releaseVersion}` : `environment ${target.environmentId}`;
+
+const notFound = (what: string) => new ConnectError(`${what} is not in this report`, Code.NotFound);
+
+/**
+ * GetCoverage and GetFileCoverage over the report `resolve` names for a
+ * target (null: no report for it, NotFound), as WIRE messages.
+ */
+export function coverageFixtureEngine(resolve: (target: CoverageTarget) => CoverageReportFixture | null) {
+  const reportFor = (target: CoverageTarget) => {
+    const report = resolve(target);
+    if (!report) throw notFound(targetName(target));
+    return report;
+  };
+
+  function lens(report: CoverageReportFixture, req: { lane?: string; baseSha?: string }) {
+    // Changed lines are reported only against the base they were counted against.
+    const changedBase = req.baseSha && (!report.changedSince || req.baseSha === report.changedSince) ? req.baseSha : undefined;
+    return { lane: req.lane, baseSha: req.baseSha, changedBase, diffBase: report.diffBase ?? req.baseSha ?? "" };
+  }
+  type Lens = ReturnType<typeof lens>;
+
+  function nodeOf(node: CoverageFixtureNode, l: Lens): WireCoverageNode {
+    const { combined, lanes } = lensed(node, l.lane);
+    return { path: node.path, kind: node.kind, lang: node.lang, combined, lanes, diff: l.changedBase && node.changed ? diff(l.diffBase, ...node.changed) : undefined, changed: !!l.changedBase && !!node.changed };
+  }
+
+  function coverageOf(report: CoverageReportFixture, node: CoverageFixtureNode, l: Lens): WireCoverage {
+    const { combined, lanes } = lensed(node, l.lane);
+    const base = l.baseSha ? report.base(l.baseSha) : null;
+    return {
+      granularity: "statement",
+      combined,
+      lanes,
+      languages: [],
+      baseHasReport: !!base?.hasReport,
+      deltaPercent: base ? base.deltaPercent : undefined,
+      diff: l.changedBase && node.changed ? diff(l.diffBase, ...node.changed) : undefined,
+      excludedGeneratedStatements: 0n,
+    };
+  }
+
+  /** What GetCoverage lists under `path`: packages and directories below it, and the files directly in it. */
+  const childrenOf = (report: CoverageReportFixture, path: string) =>
+    report.nodes.filter((node) => (node.kind === FILE ? parentOf(node.path) === path : path === "" || node.path.startsWith(`${path}/`)));
+
+  function linesOf(rows: readonly CoverageLineRow[], changedBase: string | undefined): WireLineCoverage[] {
+    return rows.map(([line, statements, unit, integration, e2e, partial, changed]) => {
+      const hits: Record<string, bigint> = {};
+      if (unit) hits.unit = BigInt(unit);
+      if (integration) hits.integration = BigInt(integration);
+      if (e2e) hits.e2e = BigInt(e2e);
+      return { line, statements, hits, partial, changed: !!changedBase && changed };
+    });
+  }
+
+  return {
+    coverageResponse(req: CoverageRequest): WireCoverageResponse {
+      const report = reportFor(req.target);
+      const self = req.path === "" ? report.root : (report.nodes.find((node) => node.path === req.path && node.kind !== FILE) ?? aggregate(report.nodes, report.lanes, req.path));
+      if (!self) throw notFound(req.path);
+      const l = lens(report, req);
+      const children = childrenOf(report, req.path).filter((node) => !req.changedOnly || (l.changedBase && node.changed));
+      return {
+        gitCommit: report.gitCommit,
+        treeHash: report.treeHash,
+        lanes: report.lanes,
+        path: req.path,
+        coverage: coverageOf(report, self, l),
+        children: children.map((node) => nodeOf(node, l)),
+      };
+    },
+    fileCoverageResponse(req: FileCoverageRequest): WireFileCoverageResponse {
+      const report = reportFor(req.target);
+      const node = report.nodes.find((candidate) => candidate.path === req.path && candidate.kind === FILE);
+      if (!node) throw notFound(req.path);
+      const l = lens(report, { baseSha: req.baseSha });
+      return {
+        gitCommit: report.gitCommit,
+        path: node.path,
+        importPath: report.importPath(node.path),
+        blobId: report.blobId(node.path),
+        lang: node.lang,
+        granularity: "statement",
+        lanes: report.lanes,
+        coverage: coverageOf(report, node, l),
+        lines: linesOf(report.lines(node.path), l.changedBase),
+      };
+    },
+  };
 }
 
 const PACKAGE = WireNodeKind.PACKAGE;
 const FILE = WireNodeKind.FILE;
 
-const NODES: FixtureNode[] = [
+const NODES: CoverageFixtureNode[] = [
   { path: "cmd/shopfront", kind: PACKAGE, lang: "go", statements: 120, combined: 12.5, lanes: { unit: 8.3, e2e: 12.5 } },
   { path: "frontends/web/src", kind: WireNodeKind.DIRECTORY, lang: "ts", statements: 5_400, combined: 68.2, lanes: { unit: 63.0, e2e: 40.1 } },
   { path: "internal/billing", kind: PACKAGE, lang: "go", statements: 2_310, combined: 58.0, lanes: { unit: 51.2, integration: 30.1, e2e: 44.0 }, changed: [3, 2] },
@@ -128,82 +276,10 @@ const NODES: FixtureNode[] = [
   { path: FIXTURE_TAX_PATH, kind: FILE, lang: "go", statements: 1_358, combined: 52.0, lanes: { unit: 44.6, integration: 29.0, e2e: 42.0 } },
 ];
 
-const ROOT: FixtureNode = { path: "", kind: WireNodeKind.DIRECTORY, lang: "", statements: 48_210, combined: 74.2, lanes: { unit: 61.4, integration: 38.0, e2e: 52.7 }, changed: [17, 11] };
+const ROOT: CoverageFixtureNode = { path: "", kind: WireNodeKind.DIRECTORY, lang: "", statements: 48_210, combined: 74.2, lanes: { unit: 61.4, integration: 38.0, e2e: 52.7 }, changed: [17, 11] };
 
-const parentOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
-
-/** What GetCoverage lists under `path`: packages and directories below it, and the files directly in it. */
-function childrenOf(path: string): FixtureNode[] {
-  return NODES.filter((node) => (node.kind === FILE ? parentOf(node.path) === path : path === "" || node.path.startsWith(`${path}/`)));
-}
-
-/** The lens: one lane's figure stands in for combined, and the other lanes drop out. */
-function lensed(node: FixtureNode, lane: string | undefined) {
-  const lanes = Object.fromEntries(
-    Object.entries(node.lanes)
-      .filter(([name]) => !lane || name === lane)
-      .map(([name, percent]) => [name, cov(node.statements, percent!)])
-  );
-  const combined = lane ? (node.lanes[lane] === undefined ? cov(node.statements, 0) : cov(node.statements, node.lanes[lane]!)) : cov(node.statements, node.combined);
-  return { combined, lanes };
-}
-
-function nodeOf(node: FixtureNode, req: { lane?: string; baseSha?: string }): WireCoverageNode {
-  const { combined, lanes } = lensed(node, req.lane);
-  return { path: node.path, kind: node.kind, lang: node.lang, combined, lanes, diff: req.baseSha && node.changed ? diff(...node.changed) : undefined, changed: !!req.baseSha && !!node.changed };
-}
-
-function coverageOf(node: FixtureNode, req: { lane?: string; baseSha?: string }): WireCoverage {
-  const { combined, lanes } = lensed(node, req.lane);
-  return {
-    granularity: "statement",
-    combined,
-    lanes,
-    languages: [],
-    baseHasReport: !!req.baseSha,
-    deltaPercent: req.baseSha ? -0.4 : undefined,
-    diff: req.baseSha && node.changed ? diff(...node.changed) : undefined,
-    excludedGeneratedStatements: 0n,
-  };
-}
-
-/** A path that is a prefix of nodes but not one itself ("internal"): its children's sums. */
-function aggregate(path: string): FixtureNode | null {
-  const below = NODES.filter((node) => node.kind !== FILE && node.path.startsWith(`${path}/`));
-  if (below.length === 0) return null;
-  const statements = below.reduce((sum, node) => sum + node.statements, 0);
-  const weighted = (pick: (node: FixtureNode) => number | undefined) => below.reduce((sum, node) => sum + node.statements * (pick(node) ?? 0), 0) / statements;
-  return {
-    path,
-    kind: WireNodeKind.DIRECTORY,
-    lang: "",
-    statements,
-    combined: weighted((node) => node.combined),
-    lanes: Object.fromEntries(LANES.map((lane) => [lane, weighted((node) => node.lanes[lane])])),
-  };
-}
-
-const notFound = (what: string) => new ConnectError(`${what} is not in this report`, Code.NotFound);
-
-/** GetCoverage over the fixture report. A commit other than the fixture's is not found. */
-export function fixtureCoverageResponse(req: CoverageRequest): WireCoverageResponse {
-  if ("gitCommit" in req.target && req.target.gitCommit !== COMMIT) throw notFound(`commit ${req.target.gitCommit}`);
-  const self = req.path === "" ? ROOT : (NODES.find((node) => node.path === req.path && node.kind !== FILE) ?? aggregate(req.path));
-  if (!self) throw notFound(req.path);
-  const children = childrenOf(req.path).filter((node) => !req.changedOnly || (req.baseSha && node.changed));
-  const lensReq = { lane: req.lane, baseSha: req.baseSha };
-  return {
-    gitCommit: COMMIT,
-    treeHash: TREE,
-    lanes: LANES,
-    path: req.path,
-    coverage: coverageOf(self, lensReq),
-    children: children.map((node) => nodeOf(node, lensReq)),
-  };
-}
-
-/** refund.go line by line: [line, statements, unit, integration, e2e, partial, changed against the base]. Zero hits: the lane did not reach it. */
-const REFUND_LINES: [number, number, number, number, number, boolean, boolean][] = [
+/** refund.go line by line. */
+const REFUND_LINES: CoverageLineRow[] = [
   [16, 1, 12, 0, 3, false, false],
   [17, 1, 0, 0, 0, false, true],
   [19, 1, 12, 0, 3, true, true],
@@ -217,40 +293,38 @@ const REFUND_LINES: [number, number, number, number, number, boolean, boolean][]
 ];
 
 /** A file the fixture does not detail: a few covered lines, so the view has rows. */
-const GENERIC_LINES: [number, number, number, number, number, boolean, boolean][] = [
+export const GENERIC_COVERAGE_LINES: CoverageLineRow[] = [
   [12, 1, 40, 6, 9, false, false],
   [13, 2, 40, 6, 9, false, false],
   [18, 1, 0, 0, 0, false, false],
   [24, 1, 22, 0, 4, true, false],
 ];
 
-function linesOf(rows: typeof REFUND_LINES, baseSha: string | undefined): WireLineCoverage[] {
-  return rows.map(([line, statements, unit, integration, e2e, partial, changed]) => {
-    const hits: Record<string, bigint> = {};
-    if (unit) hits.unit = BigInt(unit);
-    if (integration) hits.integration = BigInt(integration);
-    if (e2e) hits.e2e = BigInt(e2e);
-    return { line, statements, hits, partial, changed: !!baseSha && changed };
-  });
+/** shopfront's report at 9f3c…: refund.go in full; invoice.go uncommitted; tax.go a blob GitHub lost. */
+const REPORT: CoverageReportFixture = {
+  gitCommit: COMMIT,
+  treeHash: TREE,
+  lanes: LANES,
+  root: ROOT,
+  nodes: NODES,
+  diffBase: FIXTURE_BASE,
+  base: () => ({ hasReport: true, deltaPercent: -0.4 }),
+  importPath: (path) => `github.com/acme/shopfront/${parentOf(path)}`,
+  blobId: (path) => (path === FIXTURE_REFUND_PATH ? FIXTURE_REFUND_BLOB : path === FIXTURE_TAX_PATH ? TAX_BLOB : ""),
+  lines: (path) => (path === FIXTURE_REFUND_PATH ? REFUND_LINES : GENERIC_COVERAGE_LINES),
+};
+
+// A commit other than the fixture's is not found; an environment or release target reads the fixture's report.
+const engine = coverageFixtureEngine((target) => ("gitCommit" in target && target.gitCommit !== COMMIT ? null : REPORT));
+
+/** GetCoverage over the fixture report. A commit other than the fixture's is not found. */
+export function fixtureCoverageResponse(req: CoverageRequest): WireCoverageResponse {
+  return engine.coverageResponse(req);
 }
 
 /** GetFileCoverage over the fixture report: refund.go in full; invoice.go uncommitted; tax.go a blob GitHub lost. */
 export function fixtureFileCoverageResponse(req: FileCoverageRequest): WireFileCoverageResponse {
-  if ("gitCommit" in req.target && req.target.gitCommit !== COMMIT) throw notFound(`commit ${req.target.gitCommit}`);
-  const node = NODES.find((candidate) => candidate.path === req.path && candidate.kind === FILE);
-  if (!node) throw notFound(req.path);
-  const blobId = node.path === FIXTURE_REFUND_PATH ? FIXTURE_REFUND_BLOB : node.path === FIXTURE_TAX_PATH ? TAX_BLOB : "";
-  return {
-    gitCommit: COMMIT,
-    path: node.path,
-    importPath: `github.com/acme/shopfront/${parentOf(node.path)}`,
-    blobId,
-    lang: node.lang,
-    granularity: "statement",
-    lanes: LANES,
-    coverage: coverageOf(node, { baseSha: req.baseSha }),
-    lines: linesOf(node.path === FIXTURE_REFUND_PATH ? REFUND_LINES : GENERIC_LINES, req.baseSha),
-  };
+  return engine.fileCoverageResponse(req);
 }
 
 /** The fixture report through wire.ts, as the TestApi answers it: a path or commit it lacks is NotFound. */

@@ -70,6 +70,9 @@
 #                lint, every whole-project lane, the frontends
 #   build        go build ./...
 #   webbuild     task build:web:verify (lint, production renderer, artifact verification)
+#   demo-size    task demo:bundle-size (the forge demo bundle against
+#                frontends/web/scripts/demo/bundle-budget.json; it gates here
+#                only, a pull request pastes its --report-only table)
 #   typecheck    frontends/web's `npm run typecheck` (tsc -b, tests included)
 #   vet          go vet ./...
 #   test-go      task test -- <packages>  (Go -race -count=1 without -short:
@@ -82,7 +85,7 @@
 #
 # Parts (run --part; CI runs each as its own job, so the gate's wall time is
 # the slowest part, not the sum: ~70 min serial on one runner, 2026-10-30):
-#   static       npm generate docs build webbuild typecheck vet
+#   static       npm generate docs build webbuild demo-size typecheck vet
 #   lint         npm lint
 #   go           npm test-go     (sharded: --shard I/N; packages balanced on
 #                                 RG_GO_TIMINGS_FROM's record, else
@@ -91,7 +94,7 @@
 # CI splits static three ways, so its slow steps (generate ~280s, webbuild
 # ~220s) run side by side instead of one after another:
 #   generate     npm generate docs
-#   webbuild     npm webbuild
+#   webbuild     npm webbuild demo-size
 #   compile      npm build typecheck vet
 # A record needs every step, not a fixed set of parts: static, or generate +
 # webbuild + compile (the RC train's rl-gate.sh runs the four above).
@@ -112,16 +115,16 @@
 #   FORGE_BIN          a prebuilt forge (must be the pin; check-forge-generate.sh refuses otherwise)
 set -uo pipefail
 
-STEPS=(npm generate docs lint build webbuild typecheck vet test-go test-web test-electron integration e2e)
+STEPS=(npm generate docs lint build webbuild demo-size typecheck vet test-go test-web test-electron integration e2e)
 PARTS=(static lint go web)
 declare -A PART_STEPS=(
-  [static]="npm generate docs build webbuild typecheck vet"
+  [static]="npm generate docs build webbuild demo-size typecheck vet"
   [lint]="npm lint"
   [go]="npm test-go"
   [web]="npm test-web test-electron integration e2e"
   # static, split three ways for CI (header).
   [generate]="npm generate docs"
-  [webbuild]="npm webbuild"
+  [webbuild]="npm webbuild demo-size"
   [compile]="npm build typecheck vet"
 )
 # The hotfix gate's steps (release-gate.sh hotfix).
@@ -588,6 +591,7 @@ run_step() {
     lint) "$forge_sh" lint --quiet --no-fix ;;
     build) go build ./... ;;
     webbuild) task build:web:verify ;;
+    demo-size) task demo:bundle-size ;;
     typecheck) npm --prefix frontends/web run --silent typecheck ;;
     vet) bash scripts/vet.sh ./... ;;
     merge)

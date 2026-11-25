@@ -13,7 +13,8 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { useCreateWorkflowDraft } from "@/hooks/workflow-library-queries";
+import { workflowWriteRefresh } from "@/hooks/workflow-queries";
+import { useCreateWorkflowDraft } from "@/hooks/workflow-service-hooks_gen";
 import { FIX_MY_PR_TITLE, seedFixMyPr } from "@/components/Onboarding/journeys/fixMyPr";
 import { cn } from "@/lib/utils";
 import Modal from "../forge-ui/modal";
@@ -67,7 +68,8 @@ export function NewWorkflowDialog({ open, projectId, onClose, onCreated, guided 
   const starts = guided ? [GUIDED_START, ...NEW_WORKFLOW_STARTS] : NEW_WORKFLOW_STARTS;
   const [title, setTitle] = useState(guided ? FIX_MY_PR_TITLE : "");
   const [startId, setStartId] = useState(starts[0]!.id);
-  const createDraft = useCreateWorkflowDraft(projectId);
+  // One draft per call, so it runs only on a user action (submit), never from an effect.
+  const createDraft = useCreateWorkflowDraft(workflowWriteRefresh());
   const [seeding, setSeeding] = useState(false);
   const pending = createDraft.isPending || seeding;
 
@@ -90,7 +92,7 @@ export function NewWorkflowDialog({ open, projectId, onClose, onCreated, guided 
       return;
     }
     createDraft.mutate(
-      { title: title.trim(), template: start.template },
+      { projectId, title: title.trim(), template: start.template },
       {
         onSuccess: (created) => onCreated({ slug: created.slug, title: created.title, draftId: created.draftId }),
         onError: (error) => {
