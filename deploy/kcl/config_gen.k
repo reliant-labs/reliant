@@ -1897,7 +1897,7 @@ vaultMaintenanceConfigEnvMap = lambda c: VaultMaintenanceConfig, config_secrets:
 }
 
 # forge:section schema WorkerConfig
-# forge:hash=19c9837fa805f7ade03a50abad415e4177942517cc7203b45570d3069910740f
+# forge:hash=b886b9e15f7cbab88cea14d98ac8871540b0f0146dbf82024c98f6fc1d072dbc
 schema WorkerConfig:
     # Private HTTPS workspace-controller endpoint for fixed hosted actions
     hosted_actions_url: str = ""
@@ -1937,6 +1937,8 @@ schema WorkerConfig:
     step_execution_retention: str = "0s"
     # Wait after worker start before the first ledger retention pass, so an api-server rollout completes first (0: at once)
     ledger_retention_start_delay: str = "1h"
+    # Age past which a finished run's recorded node observations (observe: attributes and events) are deleted (0: never)
+    node_observation_retention: str = "0s"
 
     check:
         pre_stop_delay != "", "pre_stop_delay = \"\" cannot reach the process: an empty PRE_STOP_DELAY counts as unset, so it would load the default \"5s\" — set a value"
@@ -1946,6 +1948,7 @@ schema WorkerConfig:
         chat_update_retention != "", "chat_update_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_CHAT_UPDATE_RETENTION counts as unset, so it would load the default \"0s\" — set a value"
         step_execution_retention != "", "step_execution_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_STEP_EXECUTION_RETENTION counts as unset, so it would load the default \"0s\" — set a value"
         ledger_retention_start_delay != "", "ledger_retention_start_delay = \"\" cannot reach the process: an empty RELIANT_WORKER_LEDGER_RETENTION_START_DELAY counts as unset, so it would load the default \"1h\" — set a value"
+        node_observation_retention != "", "node_observation_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_NODE_OBSERVATION_RETENTION counts as unset, so it would load the default \"0s\" — set a value"
 
 # forge:section env-map workerConfigEnvMap
 # forge:hash=73c8553dedb9f5b3bcefc972bda5c8ae27cb0bf15a6e1addcc5f36ef1a92c4d7
@@ -1992,7 +1995,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
         "workerConfigEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _sensitive]}, which is not a `sensitive` field of WorkerConfig. Sensitive fields: ${sorted([_k for _k in _sensitive])}. Add `sensitive: true` to the field's (forge.v1.config) annotation in its config proto, or drop the name from this workload's config_secrets."
     {
         # forge:section workerConfigEnvMap values (root)
-        # forge:hash=dd30d3a5fea347b0bc051e9c5a037bcde4685d3aee23340bed4ffd6f2ab21445
+        # forge:hash=332d9678c869ea4b0a455eda103e315639930151792e6adb703537974125ef11
         if c.hosted_actions_url != "":
             "RELIANT_WORKER_HOSTED_ACTIONS_URL" = c.hosted_actions_url
         if c.hosted_actions_ca_file != "":
@@ -2014,6 +2017,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
         "RELIANT_WORKER_CHAT_UPDATE_RETENTION" = c.chat_update_retention
         "RELIANT_WORKER_STEP_EXECUTION_RETENTION" = c.step_execution_retention
         "RELIANT_WORKER_LEDGER_RETENTION_START_DELAY" = c.ledger_retention_start_delay
+        "RELIANT_WORKER_NODE_OBSERVATION_RETENTION" = c.node_observation_retention
 
         # forge:section workerConfigEnvMap values (end)
         # forge:hash=fa178fe4044cdbd75d3e720bd63a7af32e878a5551d581a0f83e855bb2cb706b
@@ -2663,7 +2667,7 @@ ROOTS: {str: Root} = {
             "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS",
 
             # forge:section root worker env (root) #3
-            # forge:hash=33186553e2570e695146dbb443e158dedd4a02085ce6b22ae7db9558e2cda91a
+            # forge:hash=70d220a87f5a1a77143da462766d214493a2c6a59bee71c9f8c96ba9896ae6b8
             "RELIANT_WORKER_HOSTED_ACTIONS_URL",
             "RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE",
             "HEALTH_PORT",
@@ -2683,6 +2687,7 @@ ROOTS: {str: Root} = {
             "RELIANT_WORKER_CHAT_UPDATE_RETENTION",
             "RELIANT_WORKER_STEP_EXECUTION_RETENTION",
             "RELIANT_WORKER_LEDGER_RETENTION_START_DELAY",
+            "RELIANT_WORKER_NODE_OBSERVATION_RETENTION",
 
             # forge:section root worker env (end)
             # forge:hash=870d2e1cb19ff2c9d8d3359b10e1fe506b0ea907940a4ad023f3f6bc6b0cdf3d

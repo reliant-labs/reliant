@@ -731,6 +731,7 @@ func (g *Graph) newLedgerRetention() (*LedgerRetention, error) {
 		DB:                     g.Database(),
 		ChatUpdateRetention:    g.WorkerConfig.GetChatUpdateRetention().AsDuration(),
 		StepExecutionRetention: g.WorkerConfig.GetStepExecutionRetention().AsDuration(),
+		ObservationRetention:   g.WorkerConfig.GetNodeObservationRetention().AsDuration(),
 		StartDelay:             g.WorkerConfig.GetLedgerRetentionStartDelay().AsDuration(),
 	})
 }

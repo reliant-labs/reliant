@@ -112,6 +112,9 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 	      VALUES ($1,$2,1,2,$3,'{}',$4)`, id("chat")+"-1", id("chat"), id("appr"), now)
 	exec(`INSERT INTO chat_update_heads (chat_id, head_key, update_id, sequence_number, update_type, entity_id, data, created_at)
 	      VALUES ($1,'e:'||$2,$3,1,2,$2,'{}',$4)`, id("chat"), id("appr"), id("chat")+"-1", now)
+	// What a node's observe: block recorded: keyed by chat with no foreign key.
+	exec(`INSERT INTO node_observations (id, chat_id, workflow_id, step_id, created_at)
+	      VALUES ($1,$2,$3,'plan',$4)`, id("obs"), id("chat"), id("wf"), now)
 
 	exec(`INSERT INTO settings (id, user_id, key, value, value_type, created_at, updated_at)
 	      VALUES ($1,$2,'theme','dark','string',$3,$3)`, id("set"), userID, now)
@@ -161,6 +164,7 @@ var ownershipCount = map[string]string{
 	// a join the chat's own deletion would empty.
 	"chat_updates":      `SELECT COUNT(*) FROM chat_updates WHERE chat_id = 'chat-' || $1`,
 	"chat_update_heads": `SELECT COUNT(*) FROM chat_update_heads WHERE chat_id = 'chat-' || $1`,
+	"node_observations": `SELECT COUNT(*) FROM node_observations WHERE chat_id = 'chat-' || $1`,
 }
 
 func countRows(t *testing.T, rawDB *sql.DB, table, userID string) int {
@@ -204,7 +208,7 @@ func TestPurge_RemovesEverythingForUser(t *testing.T) {
 		"user_app_sessions", "messages", "threads", "tool_calls",
 		"insights_model_calls_member_daily", "insights_tool_calls_member_daily",
 		"provider_account_limits", "thread_provider_accounts",
-		"chat_updates", "chat_update_heads",
+		"chat_updates", "chat_update_heads", "node_observations",
 	}, credentialTables...) {
 		if n := countRows(t, rawDB, table, userID); n != 0 {
 			t.Errorf("%s: %d rows survived the purge, want 0", table, n)

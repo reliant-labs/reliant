@@ -28,5 +28,6 @@ default_worker = config_gen.workloadEnvMap(_process(config_gen.WorkerConfig {}),
 enabled_worker = config_gen.workloadEnvMap(_process(config_gen.WorkerConfig {
     chat_update_retention = "720h"
     step_execution_retention = "2160h"
+    node_observation_retention = "4320h"
     ledger_retention_start_delay = "0s"
 }), workloads.temporal_worker)
