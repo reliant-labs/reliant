@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -183,7 +184,7 @@ func TestInterruptThread_CancelsExecutingToolCallsOnThread(t *testing.T) {
 	fx := newInterruptFixture(t, repo, "test-user")
 	signaler := &recordingThreadInterruptSignaler{}
 	canceler := newRecordingThreadInterruptCanceler()
-	svc := New(Deps{Repo: repo, Signaler: signaler, ToolCanceler: canceler})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: signaler, ToolCanceler: canceler})
 
 	shellCall := "toolu_" + uuid.NewString()
 	viewCall := "toolu_" + uuid.NewString()
@@ -219,7 +220,7 @@ func TestInterruptThread_LeavesOtherThreadsAlone(t *testing.T) {
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
 	canceler := newRecordingThreadInterruptCanceler()
-	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
 
 	rootCall := "toolu_" + uuid.NewString()
 	spawnCall := "toolu_" + uuid.NewString()
@@ -247,7 +248,7 @@ func TestInterruptThread_IgnoresAlreadyFinishedToolCalls(t *testing.T) {
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
 	canceler := newRecordingThreadInterruptCanceler()
-	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
 
 	doneCall := "toolu_" + uuid.NewString()
 	insertInterruptToolCall(t, repo, doneCall, fx.chatID, fx.rootThreadID, "view", core.ToolCallStatusCompleted)
@@ -285,7 +286,7 @@ func TestInterruptThread_CancelsPendingToolCallsOnThread(t *testing.T) {
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
 	canceler := newRecordingThreadInterruptCanceler()
-	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
 
 	pendingCall := "toolu_" + uuid.NewString()
 	insertInterruptToolCall(t, repo, pendingCall, fx.chatID, fx.rootThreadID, "spawn_status", core.ToolCallStatusPending)
@@ -311,7 +312,7 @@ func TestInterruptThread_NothingExecutingSucceeds(t *testing.T) {
 	fx := newInterruptFixture(t, repo, "test-user")
 	signaler := &recordingThreadInterruptSignaler{}
 	canceler := newRecordingThreadInterruptCanceler()
-	svc := New(Deps{Repo: repo, Signaler: signaler, ToolCanceler: canceler})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: signaler, ToolCanceler: canceler})
 
 	result, err := svc.InterruptThread(ctx, InterruptThreadOpts{
 		UserID: fx.userID, ChatID: fx.chatID, ThreadID: fx.rootThreadID,
@@ -335,7 +336,7 @@ func TestInterruptThread_ReportsUndeliverableCancels(t *testing.T) {
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
 	canceler := newRecordingThreadInterruptCanceler()
-	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
 
 	reachable := "toolu_" + uuid.NewString()
 	unreachable := "toolu_" + uuid.NewString()
@@ -362,10 +363,10 @@ func TestInterruptThread_LeavesQueuedMailboxForDelivery(t *testing.T) {
 
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
-	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: newRecordingThreadInterruptCanceler()})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: newRecordingThreadInterruptCanceler()})
 
 	queuedBody := "actually, stop and check the migration first"
-	require.NoError(t, repo.EnqueueAgentMessage(ctx, &db.AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(ctx, repo.ORM(), &db.AgentMessage{
 		ID:           uuid.NewString(),
 		ChatID:       fx.chatID,
 		FromThreadID: fx.rootThreadID,
@@ -385,7 +386,7 @@ func TestInterruptThread_LeavesQueuedMailboxForDelivery(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.CancelledToolCalls)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1,
 		"interrupt must leave the mailbox for call_llm to deliver, not consume it itself")
@@ -401,7 +402,7 @@ func TestInterruptThread_RejectsWrongOwnerAndCrossChat(t *testing.T) {
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "owner-user")
 	otherFx := newInterruptFixture(t, repo, "other-user")
-	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{}})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{}})
 
 	_, err := svc.InterruptThread(ctx, InterruptThreadOpts{
 		UserID: "other-user", ChatID: fx.chatID, ThreadID: fx.rootThreadID,
@@ -422,7 +423,7 @@ func TestInterruptThread_RequiresChatThreadAndUser(t *testing.T) {
 
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
-	svc := New(Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 
 	_, err := svc.InterruptThread(ctx, InterruptThreadOpts{
 		UserID:   fx.userID,
@@ -487,7 +488,7 @@ func TestInterruptThread_CancelsToolsBeforeSignalingWorkflow(t *testing.T) {
 
 	var mu sync.Mutex
 	var order []string
-	svc := New(Deps{Repo: repo, Signaler: orderRecordingSignaler{mu: &mu, log: &order}, ToolCanceler: orderRecordingCanceler{mu: &mu, log: &order}})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: orderRecordingSignaler{mu: &mu, log: &order}, ToolCanceler: orderRecordingCanceler{mu: &mu, log: &order}})
 
 	callID := "toolu_" + uuid.NewString()
 	insertInterruptToolCall(t, repo, callID, fx.chatID, fx.rootThreadID, "bash", core.ToolCallStatusExecuting)
@@ -512,7 +513,7 @@ func TestInterruptThread_ReportsUndeliverableWorkflowSignal(t *testing.T) {
 
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
-	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{
 		failErr: errors.New("temporal unavailable"),
 	}})
 
@@ -541,7 +542,7 @@ func TestInterruptThread_RecordsCancellationDurablyImmediately(t *testing.T) {
 
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
-	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: newRecordingThreadInterruptCanceler()})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: newRecordingThreadInterruptCanceler()})
 
 	callID := "toolu_" + uuid.NewString()
 	insertInterruptToolCall(t, repo, callID, fx.chatID, fx.rootThreadID, "bash", core.ToolCallStatusExecuting)
@@ -577,7 +578,7 @@ func TestInterruptThread_DoesNotRewriteAlreadyFinishedCalls(t *testing.T) {
 
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
-	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: newRecordingThreadInterruptCanceler()})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: newRecordingThreadInterruptCanceler()})
 
 	doneID := "toolu_" + uuid.NewString()
 	insertInterruptToolCall(t, repo, doneID, fx.chatID, fx.rootThreadID, "bash", core.ToolCallStatusCompleted)
@@ -605,7 +606,7 @@ func TestInterruptThread_DurableCancelIsScopedToTheThread(t *testing.T) {
 
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
-	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: newRecordingThreadInterruptCanceler()})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: newRecordingThreadInterruptCanceler()})
 
 	rootCall := "toolu_" + uuid.NewString()
 	childCall := "toolu_" + uuid.NewString()

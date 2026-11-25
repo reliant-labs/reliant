@@ -56,7 +56,9 @@ type Service interface {
 	ListMyOrganizations(ctx context.Context, jwt string) ([]MyOrganization, error)
 
 	// PreviewAccountDeletionWallet asks the control plane what deleting the
-	// caller's account would refund and forfeit. Changes nothing.
+	// caller's account would refund and forfeit. Changes nothing. The error
+	// wraps ErrAccountDeletionConfirmed when the platform account is already
+	// verifiably deleted.
 	PreviewAccountDeletionWallet(ctx context.Context, jwt string) (*AccountDeletionWalletQuote, error)
 
 	// DeleteCurrentUserAccount asks the control plane to settle the caller's
@@ -68,7 +70,8 @@ type Service interface {
 	// nothing — the caller must surface the blockers and stop. An error means
 	// the call itself failed; a connect.CodeUnavailable error means a refund's
 	// outcome could not be confirmed and nothing else was deleted, so the
-	// caller may retry.
+	// caller may retry. An error wrapping ErrAccountDeletionConfirmed means
+	// an earlier call already deleted the platform account.
 	DeleteCurrentUserAccount(ctx context.Context, jwt string) (*AccountDeletionResult, error)
 
 	// CloneRepoOntoDaemon asks the control plane to clone a repo onto one of

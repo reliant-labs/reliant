@@ -22,7 +22,7 @@ the console's `ObservabilityApi`, from one module per area (telemetry via
 alerting, sessions, dashboards, metrics). It is the authoring format, not what
 pages read: the handlers (`handlers/observability.ts`, `alerting.ts`,
 `delivery.ts`, `issues.ts`, `user.ts`, `rum.ts`, `dashboards.ts`) encode it on
-the wire, and in the demo shell (the only place `/forge/demo` runs; the app's
+the wire, and in the demo (the only place `/forge/demo` runs; the app's
 leaves for it) the console's real client (`controlPlaneObservabilityApi`)
 decodes it, so no page reads the model directly.
 `__tests__/realClient.test.ts` holds every read the real client makes to the
@@ -76,6 +76,51 @@ Bundle selectors are scoped to their environment, and historical release reads
 produce a meaningful timeout change. `shop/workloads.ts` answers the
 observability workload rows from the same current-promotion ledger used by
 config and release history.
+
+## One shell, one nav
+
+The demo has no frame of its own. Every page, the demo's own (`/forge/demo?section=…`)
+and the console's (`/forge/p/shop/…`), renders in the signed-in app's shell
+(`Layout/shell/AppShell.tsx` `AppShellFrame`, since #3519):
+
+- **The frame** is drawn for a public, read-only host (`AppShellFrame publicPreview`)
+  under a signed-out session (`demoShellRoutes.tsx` `DEMO_SESSION`, through the
+  session port `lib/session`, never the auth store): it grants no session or keyboard
+  capabilities. It loads as its own lazy chunk (`Forge/Demo/DemoShellFrame.tsx`), so
+  it stays out of the entry chunk.
+- **The nav** is the shell's one nav column (`Layout/sidebar/ShellNavColumn.tsx`) with
+  the demo's config, `Forge/Demo/demoNav.ts`: the app's own items
+  (`navConfig/items.tsx`) in the app's order, less the app's Inbox, Agents, Settings
+  and billing, plus Home and "How it was built". `demoNav.test.ts` pins it as a subset
+  of `hybridNav`, in order. The pages the demo does not serve (`DEMO_HIDDEN_PAGES`)
+  are pruned from it (`navConfig/prune.ts`).
+- **The app-only parts** come in through seams the demo leaves empty: the nav body
+  (`AppShellFrame nav`), the Setup Guide (`guide`) and the keyboard host's overlays
+  (`ShortcutHost overlays`). Nothing app-only is twinned for the demo.
+- **The console's chrome** is `Forge/Console/ConsoleFrame.tsx` (the breadcrumb and the
+  environment scope over the page), the same as in the app. The demo's own additions
+  (its agent cards, plain issue copy, section crumbs) are a `LedConsoleHost`
+  (`demoBundle/DemoConsoleProviders.tsx` `DemoConsoleHost`).
+- **One anchor set.** The tour and the tips ring the shell's own anchors
+  (`Onboarding/JOURNEYS.md`, "Anchors"), so the demo and the app share them.
+
+After #3574 the console has no second frame: `ConsoleShell`, its grouped nav and the
+led console's nav half are deleted (until it merges they are unreachable code), and
+the dev `__preview__` pages wear the same shell (`Forge/__preview__/PreviewShellFrame.tsx`).
+
+## The same pack in the production build
+
+The shop pack also serves the **production** build, through fixture mode
+(`FIXTURES_SCENARIO` in config.js, `src/lib/fixturesConfig.ts`). Fixture mode
+adds `shop/app.ts`, the reliant services' layer, on top of `shopPack`, so chat,
+projects and settings render too. It serves two surfaces:
+
+- the visual harness, `e2e/visual`;
+- the hosted preview env, `deploy/kcl/preview`. See `preview-env.md` for what it
+  declares, where it is hosted (a control-plane prod frontend), and the tests
+  that prove its sign-in code is inert.
+
+The demo bundle never loads that layer, and its bundle guard fails if it does.
 
 ## Verify the real target
 

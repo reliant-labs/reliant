@@ -29,10 +29,15 @@ func scanProcesses() (procSnapshot, error) {
 	if err != nil {
 		return procSnapshot{}, err
 	}
-	return scanProcRoot(procRoot, os.Geteuid(), boot)
+	return scanProcRoot(procRoot, reader{euid: os.Geteuid()}, boot)
 }
 
-// scanProcRoot is scanProcesses over the /proc at root, as the user euid.
+// reader is the user whose processes' references the scan must read.
+type reader struct {
+	euid int
+}
+
+// scanProcRoot is scanProcesses over the /proc at root, as the reader as.
 //
 // The snapshot is a proof only if it is complete for every process that can
 // hold this user's work directories: this user's own (those whose /proc
@@ -51,7 +56,7 @@ func scanProcesses() (procSnapshot, error) {
 // replacement would mix the two. So each process is read between two reads
 // of its start time (readProcess), and what it held counts only when both
 // name the same process.
-func scanProcRoot(root string, euid int, boot time.Time) (procSnapshot, error) {
+func scanProcRoot(root string, as reader, boot time.Time) (procSnapshot, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return procSnapshot{}, err
@@ -63,7 +68,7 @@ func scanProcRoot(root string, euid int, boot time.Time) (procSnapshot, error) {
 		if err != nil || pid <= 0 {
 			continue
 		}
-		p, err := readProcessStable(filepath.Join(root, e.Name()), euid)
+		p, err := readProcessStable(filepath.Join(root, e.Name()), as)
 		if errors.Is(err, errProcExited) {
 			continue // holds nothing, and no process took its pid
 		}
@@ -107,11 +112,11 @@ const pidReadAttempts = 3
 // readProcessStable is readProcess, read again when the pid's process was
 // replaced mid-read: the replacement is a live process like any other, and
 // is judged by a read of its own.
-func readProcessStable(dir string, euid int) (procInfo, error) {
+func readProcessStable(dir string, as reader) (procInfo, error) {
 	var err error
 	for range pidReadAttempts {
 		var p procInfo
-		if p, err = readProcess(dir, euid); !errors.Is(err, errProcReplaced) {
+		if p, err = readProcess(dir, as); !errors.Is(err, errProcReplaced) {
 			return p, err
 		}
 	}
@@ -127,7 +132,7 @@ type procInfo struct {
 	refs    procSnapshot // its references (names only)
 }
 
-// readProcess reads one process's /proc entry at dir, as the user euid: its
+// readProcess reads one process's /proc entry at dir, as the reader as: its
 // identity (command name and start time) and every reference it holds.
 //
 // The start time is read first and again last. Between two reads that agree,
@@ -138,7 +143,7 @@ type procInfo struct {
 // exited (errProcExited) and nothing read counts; when it finds another
 // process, the reads may mix the two (errProcReplaced), and the replacement
 // must be read afresh.
-func readProcess(dir string, euid int) (procInfo, error) {
+func readProcess(dir string, as reader) (procInfo, error) {
 	comm, start, err := readStat(dir)
 	if gone(err) {
 		return procInfo{}, errProcExited
@@ -149,7 +154,18 @@ func readProcess(dir string, euid int) (procInfo, error) {
 		return procInfo{}, err
 	}
 	p := procInfo{comm: comm, start: start}
-	if err := p.read(dir, euid); err != nil {
+	if err := p.read(dir, as); err != nil {
+		if gone(err) {
+			// Its status or cgroup vanished while a refusal was explained:
+			// an exit, or another process taking its pid, only if stat
+			// agrees.
+			switch _, again, serr := readStat(dir); {
+			case gone(serr):
+				return procInfo{}, errProcExited
+			case serr == nil && again != start:
+				return procInfo{}, errProcReplaced
+			}
+		}
 		return procInfo{}, err
 	}
 	_, again, err := readStat(dir)
@@ -164,10 +180,11 @@ func readProcess(dir string, euid int) (procInfo, error) {
 	return p, nil
 }
 
-// read fills in p's command line and, for one of euid's processes, its
+// read fills in p's command line and, for one of the reader's processes, its
 // references. Whatever is gone is skipped: readProcess decides afterwards
 // whether that was the process exiting or another taking its pid.
-func (p *procInfo) read(dir string, euid int) error {
+func (p *procInfo) read(dir string, as reader) error {
+	euid := as.euid
 	// Whose references /proc gives this user is told by who owns them, not
 	// the process: a non-dumpable process of this user's (a sandbox,
 	// ssh-agent) has root's, and is withheld from its own user too.
@@ -187,9 +204,13 @@ func (p *procInfo) read(dir string, euid int) error {
 	p.cmdline = cmdline
 	p.refs.addRefs(string(cmdline))
 	if own {
-		if p.exe, err = readRefs(&p.refs, dir); err != nil {
+		exe, err := readRefs(&p.refs, dir)
+		if err != nil {
+			// Extra capabilities can explain a denial, but cannot prove
+			// this process holds no work directories. Keep the scan incomplete.
 			return fmt.Errorf("(%s): %w", p.comm, err)
 		}
+		p.exe = exe
 	}
 	return nil
 }

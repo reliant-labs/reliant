@@ -14,7 +14,7 @@ func TestLoadToolExecutionContextWithoutWorkspaceRows(t *testing.T) {
 			return &db.Chat{ID: "chat", ProjectID: "project"}, nil
 		},
 	}
-	a := NewExecuteToolsActivity(repo, nil, nil, nil)
+	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: repo})
 
 	tec, errMsg := a.loadToolExecutionContext(context.Background(), "chat", "root", "shell", "{}", "call", "")
 

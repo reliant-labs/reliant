@@ -180,12 +180,11 @@ type ApprovalStatus = reliantv1.ApprovalStatus
 // [Client.Approvals].
 //
 // Reading needs reliant:api. Deciding (Approve, Deny, BatchApprove,
-// BatchDeny) needs the approvals:decide scope GRANTED EXPLICITLY on the token:
-// reliant:api does not stand in for it, so a token minted for runs, triggers or
-// the inbox cannot approve anything. A token bound to a machine (a daemon
-// credential, which is what a run executes with) is refused even when it holds
-// approvals:decide. The refusals are [ErrScopeMissing] (Error.Scopes names the
-// scope) and [ErrMachineCredential]; both are also [ErrPermissionDenied].
+// BatchDeny) is refused to every API token, approvals:decide included: an
+// approval means a person said yes, so the server admits only the app's
+// signed-in browser session (reason person_required). A token bound to a
+// machine is refused as [ErrMachineCredential]; every refusal is also
+// [ErrPermissionDenied].
 type ApprovalsClient struct {
 	c         *Client
 	approvals reliantv1connect.ApprovalServiceClient
@@ -271,9 +270,8 @@ func optString(s string) *string {
 
 // Approve approves one pending approval and signals the run waiting on it.
 //
-// It needs the approvals:decide scope granted explicitly; reliant:api is not
-// enough, and a machine-bound token is refused whatever it holds (see
-// [ApprovalsClient]). Approving an approval already resolved is
+// The server refuses it to every API token (see [ApprovalsClient]): only a
+// person signed in to the app decides an approval. Approving an approval already resolved is
 // [ErrApprovalNotPending]; an unknown id, or one in a chat the caller does not
 // own, is [ErrNotFound].
 func (a *ApprovalsClient) Approve(ctx context.Context, approvalID string, opt DecideOptions) (Decision, error) {

@@ -36,9 +36,9 @@ import { useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
-import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { deployServiceKeys, deployServiceQueries } from "@/hooks/controlplane/deploy-service-hooks_gen";
+import { billingServiceKeys, billingServiceQueries } from "@/hooks/controlplane/billing-service-hooks_gen";
 import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "@/lib/orgScope";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 
@@ -76,9 +76,8 @@ export const USAGE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
  */
 export const deployUsageKeys = {
   all: ["deploy-usage"] as const,
-  overage: (orgId: string | null) => ["deploy-usage", "infra-overage", orgId ?? ""] as const,
-  // The attribution rows are the generated DeployService.ListUsage read
-  // (deployServiceKeys.listUsage). The names stay here: one entry over two rpcs.
+  // Overage and attribution rows use the generated BillingService and
+  // DeployService keys. Names stay here: one entry over two rpcs.
   names: (orgId: string | null) => ["deploy-usage", "names", orgId ?? ""] as const,
 };
 
@@ -127,13 +126,10 @@ export function useDeployUsage(): DeployUsageState {
 
   const overage = useQuery(
     withOrgFailure(
-      {
-        queryKey: deployUsageKeys.overage(org.orgId),
-        queryFn: () =>
-          getControlPlaneClient(BillingService).getCurrentUserInfraOverage(orgRequest({}, org.orgId)),
+      billingServiceQueries.getCurrentUserInfraOverage(orgRequest({}, org.orgId), {
         enabled: orgQueryEnabled(org),
         staleTime: 60_000,
-      },
+      }),
       org,
     ),
   );
@@ -198,6 +194,7 @@ export function useDeployUsage(): DeployUsageState {
   const refetch = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: deployUsageKeys.all });
     void queryClient.invalidateQueries({ queryKey: deployServiceKeys.listUsage.all });
+    void queryClient.invalidateQueries({ queryKey: billingServiceKeys.getCurrentUserInfraOverage.all });
   }, [queryClient]);
 
   // Names are decoration: a failure to resolve them leaves ids in the table,

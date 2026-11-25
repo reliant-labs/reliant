@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.temporal.io/sdk/temporal"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/temporal"
 )
 
 // EnqueueAgentMessageInput is the input for the EnqueueAgentMessage activity.
@@ -52,8 +53,8 @@ type EnqueueAgentMessageActivity struct {
 }
 
 // NewEnqueueAgentMessageActivity creates a new EnqueueAgentMessageActivity.
-func NewEnqueueAgentMessageActivity(repo EnqueueAgentMessageStore) *EnqueueAgentMessageActivity {
-	return &EnqueueAgentMessageActivity{repo: repo}
+func NewEnqueueAgentMessageActivity(deps EnqueueAgentMessageDeps) *EnqueueAgentMessageActivity {
+	return &EnqueueAgentMessageActivity{repo: deps.Mailbox}
 }
 
 func (a *EnqueueAgentMessageActivity) Name() string        { return "EnqueueAgentMessage" }

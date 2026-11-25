@@ -14,6 +14,8 @@ import (
 type Store interface {
 	EnqueueAgentMessage(ctx context.Context, msg *db.AgentMessage) error
 	EnqueueAgentMessageOnce(ctx context.Context, msg *db.AgentMessage) (bool, error)
+	EnqueueAgentMessageIfAbsent(ctx context.Context, msg *db.AgentMessage) (bool, error)
+	EnqueueSpawnReport(ctx context.Context, msg *db.AgentMessage) (db.SpawnReportOutcome, error)
 }
 
 // Announcer tells a chat's open clients that its mailbox changed. *db.Repo

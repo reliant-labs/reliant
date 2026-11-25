@@ -132,15 +132,6 @@ vi.mock("@/hooks/useCloudBillingQueries", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
-    cloudBillingKeys: {
-      all: ["cloud-billing"],
-      computeSubscription: ["cloud-billing", "compute-subscription"],
-      walletOverview: ["cloud-billing", "wallet-overview"],
-      computeUsage: (p: string) => ["cloud-billing", "compute-usage", p],
-      plans: ["cloud-billing", "plans"],
-      invoices: ["cloud-billing", "invoices"],
-      billingEmail: ["cloud-billing", "billing-email"],
-    },
     useComputeSubscription: () => query(subState.current),
     useWalletOverview: () => query(undefined),
     useComputeUsage: () => query(undefined),
