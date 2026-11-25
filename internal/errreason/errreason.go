@@ -61,6 +61,10 @@ const (
 	// FileTooLargeToDownload: DownloadFile on a file over its whole-file cap
 	// (25 MB). FailedPrecondition; the message names the size and the cap.
 	FileTooLargeToDownload = "file_too_large_to_download"
+	// MachineNeedsUpdateForUploads: BeginFileUpload into the machine's
+	// uploads folder (USER_UPLOADS) on a daemon too old to have it.
+	// FailedPrecondition; the message names the machine to update.
+	MachineNeedsUpdateForUploads = "machine_needs_update_for_uploads"
 
 	// ScopeMissing is forge's accesstoken.ReasonScopeMissing: authenticated,
 	// but the credential lacks a scope; the scopes ride

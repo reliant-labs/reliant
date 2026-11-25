@@ -49,9 +49,16 @@ func (s *Service) CommitFileUpload(
 	if err := s.sendUploadCommand(ctx, userID, scope.target, daemon.UploadCommitCommand, cmdReq, &committed, uploadCommitTimeoutMs); err != nil {
 		return nil, err
 	}
+	// A user upload is outside every workspace (it went to the machine's
+	// uploads folder): its absolute path is the only path it has.
+	path := committed.Path
+	if committed.Destination != daemon.UploadDestinationUserUploads {
+		path = uploadRelativePath(root, committed.Path)
+	}
 	return connect.NewResponse(&pb.CommitFileUploadResponse{
-		Path:    uploadRelativePath(root, committed.Path),
-		Size:    committed.Size,
-		Created: committed.Created,
+		Path:         path,
+		Size:         committed.Size,
+		Created:      committed.Created,
+		AbsolutePath: committed.Path,
 	}), nil
 }

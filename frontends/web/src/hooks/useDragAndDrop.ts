@@ -7,6 +7,12 @@ interface DragAndDropOptions {
   maxFileSize?: number;
   maxFiles?: number;
   disabled?: boolean;
+  /**
+   * Take a file of any type, including one with no type at all; the caller
+   * decides what to do with each. `allowedMimeTypes` then only colors the
+   * drag overlay's "valid" state, which stays valid.
+   */
+  acceptAnyType?: boolean;
 }
 
 interface DragAndDropState {
@@ -47,6 +53,7 @@ export function useDragAndDrop({
   maxFileSize = 50 * 1024 * 1024, // 50MB default
   maxFiles = 10,
   disabled = false,
+  acceptAnyType = false,
 }: DragAndDropOptions) {
   const [state, setState] = useState<DragAndDropState>({
     isDragging: false,
@@ -65,6 +72,8 @@ export function useDragAndDrop({
         error: `File "${file.name}" is too large (max ${sizeMB}MB)`
       };
     }
+
+    if (acceptAnyType) return { valid: true };
 
     // Check mime type - try to determine from both file.type and extension
     let mimeType = file.type;
@@ -94,7 +103,7 @@ export function useDragAndDrop({
     }
 
     return { valid: true };
-  }, [allowedMimeTypes, maxFileSize]);
+  }, [allowedMimeTypes, maxFileSize, acceptAnyType]);
 
   const processFiles = useCallback(async (files: FileList | File[]) => {
     if (disabled) return;
@@ -163,7 +172,7 @@ export function useDragAndDrop({
           // Try to get file type from the item
           const type = item.type;
           if (type) {
-            const isValid = allowedMimeTypes.some(allowed => type.startsWith(allowed));
+            const isValid = acceptAnyType || allowedMimeTypes.some(allowed => type.startsWith(allowed));
             if (isValid) {
               hasValidFiles = true;
             } else {
@@ -183,7 +192,7 @@ export function useDragAndDrop({
         isValidDrag: !hasInvalidFiles || hasValidFiles,
       }));
     }
-  }, [disabled, allowedMimeTypes]);
+  }, [disabled, allowedMimeTypes, acceptAnyType]);
 
   const handleDragLeave = useCallback((e: DragEvent) => {
     e.preventDefault();

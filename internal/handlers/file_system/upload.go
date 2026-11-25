@@ -398,10 +398,11 @@ func (s *Service) beginLegacyUpload(ctx context.Context, userID string, scope wo
 		return nil, svcerr.AlreadyExists(daemon.UploadExistsMarker + ": " + dest.rel)
 	}
 	return &pb.BeginFileUploadResponse{
-		UploadId:  encodeLegacyUploadID(legacyUpload{Dir: directory, Name: filename, Size: size, Policy: policy}),
-		ChunkSize: int32(max(size, 1)),
-		Path:      dest.rel,
-		MaxSize:   maxSize,
+		UploadId:    encodeLegacyUploadID(legacyUpload{Dir: directory, Name: filename, Size: size, Policy: policy}),
+		ChunkSize:   int32(max(size, 1)),
+		Path:        dest.rel,
+		MaxSize:     maxSize,
+		Destination: pb.UploadDestination_UPLOAD_DESTINATION_WORKSPACE,
 	}, nil
 }
 

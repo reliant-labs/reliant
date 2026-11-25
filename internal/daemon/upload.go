@@ -25,6 +25,9 @@ const (
 	UploadCommitCommand = "fs.upload_commit"
 	UploadAbortCommand  = "fs.upload_abort"
 	UploadStatusCommand = "fs.upload_status"
+	// UserUploadBeginCommand (user_uploads.go) opens a session whose file
+	// goes to the machine's uploads folder instead of a workspace; the
+	// commands above carry it on from there.
 )
 
 // The conflict policies, as they cross the wire in "on_conflict".
@@ -124,6 +127,10 @@ type UploadCommitResponse struct {
 	Size int64  `json:"size"`
 	// Created is false when the upload replaced an existing file.
 	Created bool `json:"created"`
+	// Destination is UploadDestinationUserUploads for a session begun by
+	// UserUploadBeginCommand (Path is then outside the workspace root); empty
+	// for a workspace upload.
+	Destination string `json:"destination,omitempty"`
 }
 
 // UploadStatusResponse is fs.upload_status's reply. An unknown session is

@@ -558,12 +558,30 @@ enum UploadConflictPolicy {
   UPLOAD_CONFLICT_POLICY_RENAME = 3;
 }
 
+// UploadDestination says where on the machine an upload lands.
+enum UploadDestination {
+  // The same as WORKSPACE.
+  UPLOAD_DESTINATION_UNSPECIFIED = 0;
+  // A folder of the workspace (BeginFileUploadRequest.directory).
+  UPLOAD_DESTINATION_WORKSPACE = 1;
+  // The machine's uploads folder, outside every workspace:
+  // ~/.reliant/uploads/<uploads_folder>/<filename> in the home directory of
+  // the user the daemon runs as. The daemon resolves that root itself; the
+  // client names only the folder and the file name. A name already taken
+  // there is always kept, the upload taking "report (1).xlsx" (the RENAME
+  // policy, whatever on_conflict says). This is where the chat composer
+  // sends a file it cannot attach (a spreadsheet, an archive), so the agent
+  // can be pointed at its absolute path.
+  UPLOAD_DESTINATION_USER_UPLOADS = 2;
+}
+
 message BeginFileUploadRequest {
   string project_id = 1;
   optional string worktree_id = 2;
   optional string chat_id = 3;
   // The workspace-relative folder to upload into; "" or "/" is the workspace
-  // root. It must stay inside the workspace and outside .git.
+  // root. It must stay inside the workspace and outside .git. Ignored for
+  // USER_UPLOADS.
   string directory = 4;
   // The file's base name: no path separators, no "." or "..".
   string filename = 5;
@@ -571,6 +589,14 @@ message BeginFileUploadRequest {
   // (BeginFileUploadResponse.max_size; 2 GiB by default).
   int64 size = 6;
   UploadConflictPolicy on_conflict = 7;
+  // Where the file lands; unset is WORKSPACE. A machine whose daemon
+  // predates USER_UPLOADS refuses it with FAILED_PRECONDITION and the error
+  // reason "machine_needs_update_for_uploads".
+  UploadDestination destination = 8;
+  // USER_UPLOADS only: the folder under ~/.reliant/uploads/ (the chat's id,
+  // say). 1 to 128 ASCII letters, digits, "-" or "_", not starting with "-"
+  // or "_"; never a path.
+  string uploads_folder = 9;
 }
 
 message BeginFileUploadResponse {
@@ -580,11 +606,17 @@ message BeginFileUploadResponse {
   // fewer). A machine that predates staged uploads takes a small file in a
   // single chunk, and then chunk_size is the whole file.
   int32 chunk_size = 2;
-  // The workspace-relative path the file is headed for. With the RENAME
-  // policy the final path is decided at commit (CommitFileUploadResponse.path).
+  // The workspace-relative path the file is headed for (for USER_UPLOADS,
+  // its absolute path on the machine). With the RENAME policy the final path
+  // is decided at commit (CommitFileUploadResponse.path).
   string path = 3;
   // The largest file this server accepts, in bytes.
   int64 max_size = 4;
+  // The destination this server opened the session for. A client that asked
+  // for USER_UPLOADS and reads anything else is talking to a server that
+  // predates it, which opened a workspace upload instead: it aborts the
+  // session before sending a byte.
+  UploadDestination destination = 5;
 }
 
 message UploadFileChunkRequest {
@@ -620,11 +652,15 @@ message CommitFileUploadRequest {
 }
 
 message CommitFileUploadResponse {
-  // The workspace-relative path the file now has.
+  // The workspace-relative path the file now has (for USER_UPLOADS, its
+  // absolute path on the machine).
   string path = 1;
   int64 size = 2;
   // False when the upload replaced an existing file (OVERWRITE).
   bool created = 3;
+  // The absolute path the file now has on the machine, in the machine's own
+  // convention.
+  string absolute_path = 4;
 }
 
 message AbortFileUploadRequest {

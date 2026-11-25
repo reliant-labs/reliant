@@ -253,6 +253,66 @@ func (UploadConflictPolicy) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{3}
 }
 
+// UploadDestination says where on the machine an upload lands.
+type UploadDestination int32
+
+const (
+	// The same as WORKSPACE.
+	UploadDestination_UPLOAD_DESTINATION_UNSPECIFIED UploadDestination = 0
+	// A folder of the workspace (BeginFileUploadRequest.directory).
+	UploadDestination_UPLOAD_DESTINATION_WORKSPACE UploadDestination = 1
+	// The machine's uploads folder, outside every workspace:
+	// ~/.reliant/uploads/<uploads_folder>/<filename> in the home directory of
+	// the user the daemon runs as. The daemon resolves that root itself; the
+	// client names only the folder and the file name. A name already taken
+	// there is always kept, the upload taking "report (1).xlsx" (the RENAME
+	// policy, whatever on_conflict says). This is where the chat composer
+	// sends a file it cannot attach (a spreadsheet, an archive), so the agent
+	// can be pointed at its absolute path.
+	UploadDestination_UPLOAD_DESTINATION_USER_UPLOADS UploadDestination = 2
+)
+
+// Enum value maps for UploadDestination.
+var (
+	UploadDestination_name = map[int32]string{
+		0: "UPLOAD_DESTINATION_UNSPECIFIED",
+		1: "UPLOAD_DESTINATION_WORKSPACE",
+		2: "UPLOAD_DESTINATION_USER_UPLOADS",
+	}
+	UploadDestination_value = map[string]int32{
+		"UPLOAD_DESTINATION_UNSPECIFIED":  0,
+		"UPLOAD_DESTINATION_WORKSPACE":    1,
+		"UPLOAD_DESTINATION_USER_UPLOADS": 2,
+	}
+)
+
+func (x UploadDestination) Enum() *UploadDestination {
+	p := new(UploadDestination)
+	*p = x
+	return p
+}
+
+func (x UploadDestination) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (UploadDestination) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_filesystem_proto_enumTypes[4].Descriptor()
+}
+
+func (UploadDestination) Type() protoreflect.EnumType {
+	return &file_reliant_v1_filesystem_proto_enumTypes[4]
+}
+
+func (x UploadDestination) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use UploadDestination.Descriptor instead.
+func (UploadDestination) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{4}
+}
+
 // FileNode represents a file or directory in the tree
 type FileNode struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
@@ -2767,14 +2827,23 @@ type BeginFileUploadRequest struct {
 	WorktreeId *string                `protobuf:"bytes,2,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
 	ChatId     *string                `protobuf:"bytes,3,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
 	// The workspace-relative folder to upload into; "" or "/" is the workspace
-	// root. It must stay inside the workspace and outside .git.
+	// root. It must stay inside the workspace and outside .git. Ignored for
+	// USER_UPLOADS.
 	Directory string `protobuf:"bytes,4,opt,name=directory,proto3" json:"directory,omitempty"`
 	// The file's base name: no path separators, no "." or "..".
 	Filename string `protobuf:"bytes,5,opt,name=filename,proto3" json:"filename,omitempty"`
 	// The file's total size in bytes. It must not exceed the server's limit
 	// (BeginFileUploadResponse.max_size; 2 GiB by default).
-	Size          int64                `protobuf:"varint,6,opt,name=size,proto3" json:"size,omitempty"`
-	OnConflict    UploadConflictPolicy `protobuf:"varint,7,opt,name=on_conflict,json=onConflict,proto3,enum=reliant.v1.UploadConflictPolicy" json:"on_conflict,omitempty"`
+	Size       int64                `protobuf:"varint,6,opt,name=size,proto3" json:"size,omitempty"`
+	OnConflict UploadConflictPolicy `protobuf:"varint,7,opt,name=on_conflict,json=onConflict,proto3,enum=reliant.v1.UploadConflictPolicy" json:"on_conflict,omitempty"`
+	// Where the file lands; unset is WORKSPACE. A machine whose daemon
+	// predates USER_UPLOADS refuses it with FAILED_PRECONDITION and the error
+	// reason "machine_needs_update_for_uploads".
+	Destination UploadDestination `protobuf:"varint,8,opt,name=destination,proto3,enum=reliant.v1.UploadDestination" json:"destination,omitempty"`
+	// USER_UPLOADS only: the folder under ~/.reliant/uploads/ (the chat's id,
+	// say). 1 to 128 ASCII letters, digits, "-" or "_", not starting with "-"
+	// or "_"; never a path.
+	UploadsFolder string `protobuf:"bytes,9,opt,name=uploads_folder,json=uploadsFolder,proto3" json:"uploads_folder,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2858,6 +2927,20 @@ func (x *BeginFileUploadRequest) GetOnConflict() UploadConflictPolicy {
 	return UploadConflictPolicy_UPLOAD_CONFLICT_POLICY_UNSPECIFIED
 }
 
+func (x *BeginFileUploadRequest) GetDestination() UploadDestination {
+	if x != nil {
+		return x.Destination
+	}
+	return UploadDestination_UPLOAD_DESTINATION_UNSPECIFIED
+}
+
+func (x *BeginFileUploadRequest) GetUploadsFolder() string {
+	if x != nil {
+		return x.UploadsFolder
+	}
+	return ""
+}
+
 type BeginFileUploadResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The session, opaque to the client; every later call names it.
@@ -2866,11 +2949,17 @@ type BeginFileUploadResponse struct {
 	// fewer). A machine that predates staged uploads takes a small file in a
 	// single chunk, and then chunk_size is the whole file.
 	ChunkSize int32 `protobuf:"varint,2,opt,name=chunk_size,json=chunkSize,proto3" json:"chunk_size,omitempty"`
-	// The workspace-relative path the file is headed for. With the RENAME
-	// policy the final path is decided at commit (CommitFileUploadResponse.path).
+	// The workspace-relative path the file is headed for (for USER_UPLOADS,
+	// its absolute path on the machine). With the RENAME policy the final path
+	// is decided at commit (CommitFileUploadResponse.path).
 	Path string `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
 	// The largest file this server accepts, in bytes.
-	MaxSize       int64 `protobuf:"varint,4,opt,name=max_size,json=maxSize,proto3" json:"max_size,omitempty"`
+	MaxSize int64 `protobuf:"varint,4,opt,name=max_size,json=maxSize,proto3" json:"max_size,omitempty"`
+	// The destination this server opened the session for. A client that asked
+	// for USER_UPLOADS and reads anything else is talking to a server that
+	// predates it, which opened a workspace upload instead: it aborts the
+	// session before sending a byte.
+	Destination   UploadDestination `protobuf:"varint,5,opt,name=destination,proto3,enum=reliant.v1.UploadDestination" json:"destination,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2931,6 +3020,13 @@ func (x *BeginFileUploadResponse) GetMaxSize() int64 {
 		return x.MaxSize
 	}
 	return 0
+}
+
+func (x *BeginFileUploadResponse) GetDestination() UploadDestination {
+	if x != nil {
+		return x.Destination
+	}
+	return UploadDestination_UPLOAD_DESTINATION_UNSPECIFIED
 }
 
 type UploadFileChunkRequest struct {
@@ -3157,11 +3253,15 @@ func (x *CommitFileUploadRequest) GetOnConflict() UploadConflictPolicy {
 
 type CommitFileUploadResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The workspace-relative path the file now has.
+	// The workspace-relative path the file now has (for USER_UPLOADS, its
+	// absolute path on the machine).
 	Path string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
 	Size int64  `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
 	// False when the upload replaced an existing file (OVERWRITE).
-	Created       bool `protobuf:"varint,3,opt,name=created,proto3" json:"created,omitempty"`
+	Created bool `protobuf:"varint,3,opt,name=created,proto3" json:"created,omitempty"`
+	// The absolute path the file now has on the machine, in the machine's own
+	// convention.
+	AbsolutePath  string `protobuf:"bytes,4,opt,name=absolute_path,json=absolutePath,proto3" json:"absolute_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3215,6 +3315,13 @@ func (x *CommitFileUploadResponse) GetCreated() bool {
 		return x.Created
 	}
 	return false
+}
+
+func (x *CommitFileUploadResponse) GetAbsolutePath() string {
+	if x != nil {
+		return x.AbsolutePath
+	}
+	return ""
 }
 
 type AbortFileUploadRequest struct {
@@ -3730,7 +3837,7 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\acontent\x18\x01 \x01(\fR\acontent\x12!\n" +
 	"\fcontent_type\x18\x02 \x01(\tR\vcontentType\x12\x1a\n" +
 	"\bfilename\x18\x03 \x01(\tR\bfilename\x12\x12\n" +
-	"\x04size\x18\x04 \x01(\x03R\x04size\"\xa8\x02\n" +
+	"\x04size\x18\x04 \x01(\x03R\x04size\"\x90\x03\n" +
 	"\x16BeginFileUploadRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12$\n" +
@@ -3741,16 +3848,19 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\bfilename\x18\x05 \x01(\tR\bfilename\x12\x12\n" +
 	"\x04size\x18\x06 \x01(\x03R\x04size\x12A\n" +
 	"\von_conflict\x18\a \x01(\x0e2 .reliant.v1.UploadConflictPolicyR\n" +
-	"onConflictB\x0e\n" +
+	"onConflict\x12?\n" +
+	"\vdestination\x18\b \x01(\x0e2\x1d.reliant.v1.UploadDestinationR\vdestination\x12%\n" +
+	"\x0euploads_folder\x18\t \x01(\tR\ruploadsFolderB\x0e\n" +
 	"\f_worktree_idB\n" +
 	"\n" +
-	"\b_chat_id\"\x84\x01\n" +
+	"\b_chat_id\"\xc5\x01\n" +
 	"\x17BeginFileUploadResponse\x12\x1b\n" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x1d\n" +
 	"\n" +
 	"chunk_size\x18\x02 \x01(\x05R\tchunkSize\x12\x12\n" +
 	"\x04path\x18\x03 \x01(\tR\x04path\x12\x19\n" +
-	"\bmax_size\x18\x04 \x01(\x03R\amaxSize\"\xe0\x01\n" +
+	"\bmax_size\x18\x04 \x01(\x03R\amaxSize\x12?\n" +
+	"\vdestination\x18\x05 \x01(\x0e2\x1d.reliant.v1.UploadDestinationR\vdestination\"\xe0\x01\n" +
 	"\x16UploadFileChunkRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12$\n" +
@@ -3779,11 +3889,12 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\f_worktree_idB\n" +
 	"\n" +
 	"\b_chat_idB\x0e\n" +
-	"\f_on_conflict\"\\\n" +
+	"\f_on_conflict\"\x81\x01\n" +
 	"\x18CommitFileUploadResponse\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\x03R\x04size\x12\x18\n" +
-	"\acreated\x18\x03 \x01(\bR\acreated\"\xb4\x01\n" +
+	"\acreated\x18\x03 \x01(\bR\acreated\x12#\n" +
+	"\rabsolute_path\x18\x04 \x01(\tR\fabsolutePath\"\xb4\x01\n" +
 	"\x16AbortFileUploadRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12$\n" +
@@ -3830,7 +3941,11 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\"UPLOAD_CONFLICT_POLICY_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bUPLOAD_CONFLICT_POLICY_FAIL\x10\x01\x12$\n" +
 	" UPLOAD_CONFLICT_POLICY_OVERWRITE\x10\x02\x12!\n" +
-	"\x1dUPLOAD_CONFLICT_POLICY_RENAME\x10\x032\x8d\x15\n" +
+	"\x1dUPLOAD_CONFLICT_POLICY_RENAME\x10\x03*~\n" +
+	"\x11UploadDestination\x12\"\n" +
+	"\x1eUPLOAD_DESTINATION_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cUPLOAD_DESTINATION_WORKSPACE\x10\x01\x12#\n" +
+	"\x1fUPLOAD_DESTINATION_USER_UPLOADS\x10\x022\x8d\x15\n" +
 	"\x11FileSystemService\x12P\n" +
 	"\vGetFileTree\x12\x1e.reliant.v1.GetFileTreeRequest\x1a\x1f.reliant.v1.GetFileTreeResponse\"\x00\x12Y\n" +
 	"\x0eGetFileContent\x12!.reliant.v1.GetFileContentRequest\x1a\".reliant.v1.GetFileContentResponse\"\x00\x12\xbc\x01\n" +
@@ -3864,119 +3979,122 @@ func file_reliant_v1_filesystem_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_filesystem_proto_rawDescData
 }
 
-var file_reliant_v1_filesystem_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_reliant_v1_filesystem_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
 var file_reliant_v1_filesystem_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
 var file_reliant_v1_filesystem_proto_goTypes = []any{
 	(FileNodeType)(0),                   // 0: reliant.v1.FileNodeType
 	(FileViewerKind)(0),                 // 1: reliant.v1.FileViewerKind
 	(ProjectCheckoutState)(0),           // 2: reliant.v1.ProjectCheckoutState
 	(UploadConflictPolicy)(0),           // 3: reliant.v1.UploadConflictPolicy
-	(*FileNode)(nil),                    // 4: reliant.v1.FileNode
-	(*FileMetadata)(nil),                // 5: reliant.v1.FileMetadata
-	(*FilePreviewInfo)(nil),             // 6: reliant.v1.FilePreviewInfo
-	(*GetFileTreeRequest)(nil),          // 7: reliant.v1.GetFileTreeRequest
-	(*GetFileTreeResponse)(nil),         // 8: reliant.v1.GetFileTreeResponse
-	(*ProjectCheckoutMissing)(nil),      // 9: reliant.v1.ProjectCheckoutMissing
-	(*GetFileContentRequest)(nil),       // 10: reliant.v1.GetFileContentRequest
-	(*GetFileContentResponse)(nil),      // 11: reliant.v1.GetFileContentResponse
-	(*SaveFileContentRequest)(nil),      // 12: reliant.v1.SaveFileContentRequest
-	(*SaveFileContentResponse)(nil),     // 13: reliant.v1.SaveFileContentResponse
-	(*GetFileMetadataRequest)(nil),      // 14: reliant.v1.GetFileMetadataRequest
-	(*GetFileMetadataResponse)(nil),     // 15: reliant.v1.GetFileMetadataResponse
-	(*GetFilePreviewInfoRequest)(nil),   // 16: reliant.v1.GetFilePreviewInfoRequest
-	(*GetFilePreviewInfoResponse)(nil),  // 17: reliant.v1.GetFilePreviewInfoResponse
-	(*CreateFileOrFolderRequest)(nil),   // 18: reliant.v1.CreateFileOrFolderRequest
-	(*CreateFileOrFolderResponse)(nil),  // 19: reliant.v1.CreateFileOrFolderResponse
-	(*DeleteFileOrFolderRequest)(nil),   // 20: reliant.v1.DeleteFileOrFolderRequest
-	(*DeleteFileOrFolderResponse)(nil),  // 21: reliant.v1.DeleteFileOrFolderResponse
-	(*CopyFileRequest)(nil),             // 22: reliant.v1.CopyFileRequest
-	(*CopyFileResponse)(nil),            // 23: reliant.v1.CopyFileResponse
-	(*SearchFilesRequest)(nil),          // 24: reliant.v1.SearchFilesRequest
-	(*SearchFilesResponse)(nil),         // 25: reliant.v1.SearchFilesResponse
-	(*SearchResult)(nil),                // 26: reliant.v1.SearchResult
-	(*SearchMatch)(nil),                 // 27: reliant.v1.SearchMatch
-	(*ReplaceInFilesRequest)(nil),       // 28: reliant.v1.ReplaceInFilesRequest
-	(*ReplaceInFilesResponse)(nil),      // 29: reliant.v1.ReplaceInFilesResponse
-	(*ReplaceResult)(nil),               // 30: reliant.v1.ReplaceResult
-	(*ListDirectoryRequest)(nil),        // 31: reliant.v1.ListDirectoryRequest
-	(*ListDirectoryResponse)(nil),       // 32: reliant.v1.ListDirectoryResponse
-	(*DirectoryEntry)(nil),              // 33: reliant.v1.DirectoryEntry
-	(*CreateDirectoryRequest)(nil),      // 34: reliant.v1.CreateDirectoryRequest
-	(*CreateDirectoryResponse)(nil),     // 35: reliant.v1.CreateDirectoryResponse
-	(*GetFilePreviewRequest)(nil),       // 36: reliant.v1.GetFilePreviewRequest
-	(*GetFilePreviewResponse)(nil),      // 37: reliant.v1.GetFilePreviewResponse
-	(*DownloadFileRequest)(nil),         // 38: reliant.v1.DownloadFileRequest
-	(*DownloadFileResponse)(nil),        // 39: reliant.v1.DownloadFileResponse
-	(*BeginFileUploadRequest)(nil),      // 40: reliant.v1.BeginFileUploadRequest
-	(*BeginFileUploadResponse)(nil),     // 41: reliant.v1.BeginFileUploadResponse
-	(*UploadFileChunkRequest)(nil),      // 42: reliant.v1.UploadFileChunkRequest
-	(*UploadFileChunkResponse)(nil),     // 43: reliant.v1.UploadFileChunkResponse
-	(*CommitFileUploadRequest)(nil),     // 44: reliant.v1.CommitFileUploadRequest
-	(*CommitFileUploadResponse)(nil),    // 45: reliant.v1.CommitFileUploadResponse
-	(*AbortFileUploadRequest)(nil),      // 46: reliant.v1.AbortFileUploadRequest
-	(*AbortFileUploadResponse)(nil),     // 47: reliant.v1.AbortFileUploadResponse
-	(*GetFileUploadStatusRequest)(nil),  // 48: reliant.v1.GetFileUploadStatusRequest
-	(*GetFileUploadStatusResponse)(nil), // 49: reliant.v1.GetFileUploadStatusResponse
+	(UploadDestination)(0),              // 4: reliant.v1.UploadDestination
+	(*FileNode)(nil),                    // 5: reliant.v1.FileNode
+	(*FileMetadata)(nil),                // 6: reliant.v1.FileMetadata
+	(*FilePreviewInfo)(nil),             // 7: reliant.v1.FilePreviewInfo
+	(*GetFileTreeRequest)(nil),          // 8: reliant.v1.GetFileTreeRequest
+	(*GetFileTreeResponse)(nil),         // 9: reliant.v1.GetFileTreeResponse
+	(*ProjectCheckoutMissing)(nil),      // 10: reliant.v1.ProjectCheckoutMissing
+	(*GetFileContentRequest)(nil),       // 11: reliant.v1.GetFileContentRequest
+	(*GetFileContentResponse)(nil),      // 12: reliant.v1.GetFileContentResponse
+	(*SaveFileContentRequest)(nil),      // 13: reliant.v1.SaveFileContentRequest
+	(*SaveFileContentResponse)(nil),     // 14: reliant.v1.SaveFileContentResponse
+	(*GetFileMetadataRequest)(nil),      // 15: reliant.v1.GetFileMetadataRequest
+	(*GetFileMetadataResponse)(nil),     // 16: reliant.v1.GetFileMetadataResponse
+	(*GetFilePreviewInfoRequest)(nil),   // 17: reliant.v1.GetFilePreviewInfoRequest
+	(*GetFilePreviewInfoResponse)(nil),  // 18: reliant.v1.GetFilePreviewInfoResponse
+	(*CreateFileOrFolderRequest)(nil),   // 19: reliant.v1.CreateFileOrFolderRequest
+	(*CreateFileOrFolderResponse)(nil),  // 20: reliant.v1.CreateFileOrFolderResponse
+	(*DeleteFileOrFolderRequest)(nil),   // 21: reliant.v1.DeleteFileOrFolderRequest
+	(*DeleteFileOrFolderResponse)(nil),  // 22: reliant.v1.DeleteFileOrFolderResponse
+	(*CopyFileRequest)(nil),             // 23: reliant.v1.CopyFileRequest
+	(*CopyFileResponse)(nil),            // 24: reliant.v1.CopyFileResponse
+	(*SearchFilesRequest)(nil),          // 25: reliant.v1.SearchFilesRequest
+	(*SearchFilesResponse)(nil),         // 26: reliant.v1.SearchFilesResponse
+	(*SearchResult)(nil),                // 27: reliant.v1.SearchResult
+	(*SearchMatch)(nil),                 // 28: reliant.v1.SearchMatch
+	(*ReplaceInFilesRequest)(nil),       // 29: reliant.v1.ReplaceInFilesRequest
+	(*ReplaceInFilesResponse)(nil),      // 30: reliant.v1.ReplaceInFilesResponse
+	(*ReplaceResult)(nil),               // 31: reliant.v1.ReplaceResult
+	(*ListDirectoryRequest)(nil),        // 32: reliant.v1.ListDirectoryRequest
+	(*ListDirectoryResponse)(nil),       // 33: reliant.v1.ListDirectoryResponse
+	(*DirectoryEntry)(nil),              // 34: reliant.v1.DirectoryEntry
+	(*CreateDirectoryRequest)(nil),      // 35: reliant.v1.CreateDirectoryRequest
+	(*CreateDirectoryResponse)(nil),     // 36: reliant.v1.CreateDirectoryResponse
+	(*GetFilePreviewRequest)(nil),       // 37: reliant.v1.GetFilePreviewRequest
+	(*GetFilePreviewResponse)(nil),      // 38: reliant.v1.GetFilePreviewResponse
+	(*DownloadFileRequest)(nil),         // 39: reliant.v1.DownloadFileRequest
+	(*DownloadFileResponse)(nil),        // 40: reliant.v1.DownloadFileResponse
+	(*BeginFileUploadRequest)(nil),      // 41: reliant.v1.BeginFileUploadRequest
+	(*BeginFileUploadResponse)(nil),     // 42: reliant.v1.BeginFileUploadResponse
+	(*UploadFileChunkRequest)(nil),      // 43: reliant.v1.UploadFileChunkRequest
+	(*UploadFileChunkResponse)(nil),     // 44: reliant.v1.UploadFileChunkResponse
+	(*CommitFileUploadRequest)(nil),     // 45: reliant.v1.CommitFileUploadRequest
+	(*CommitFileUploadResponse)(nil),    // 46: reliant.v1.CommitFileUploadResponse
+	(*AbortFileUploadRequest)(nil),      // 47: reliant.v1.AbortFileUploadRequest
+	(*AbortFileUploadResponse)(nil),     // 48: reliant.v1.AbortFileUploadResponse
+	(*GetFileUploadStatusRequest)(nil),  // 49: reliant.v1.GetFileUploadStatusRequest
+	(*GetFileUploadStatusResponse)(nil), // 50: reliant.v1.GetFileUploadStatusResponse
 }
 var file_reliant_v1_filesystem_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.FileNode.type:type_name -> reliant.v1.FileNodeType
-	4,  // 1: reliant.v1.FileNode.children:type_name -> reliant.v1.FileNode
+	5,  // 1: reliant.v1.FileNode.children:type_name -> reliant.v1.FileNode
 	0,  // 2: reliant.v1.FileMetadata.type:type_name -> reliant.v1.FileNodeType
 	1,  // 3: reliant.v1.FilePreviewInfo.viewer_kind:type_name -> reliant.v1.FileViewerKind
-	4,  // 4: reliant.v1.GetFileTreeResponse.files:type_name -> reliant.v1.FileNode
+	5,  // 4: reliant.v1.GetFileTreeResponse.files:type_name -> reliant.v1.FileNode
 	2,  // 5: reliant.v1.ProjectCheckoutMissing.state:type_name -> reliant.v1.ProjectCheckoutState
-	5,  // 6: reliant.v1.GetFileMetadataResponse.metadata:type_name -> reliant.v1.FileMetadata
-	6,  // 7: reliant.v1.GetFilePreviewInfoResponse.info:type_name -> reliant.v1.FilePreviewInfo
+	6,  // 6: reliant.v1.GetFileMetadataResponse.metadata:type_name -> reliant.v1.FileMetadata
+	7,  // 7: reliant.v1.GetFilePreviewInfoResponse.info:type_name -> reliant.v1.FilePreviewInfo
 	0,  // 8: reliant.v1.CreateFileOrFolderRequest.type:type_name -> reliant.v1.FileNodeType
-	26, // 9: reliant.v1.SearchFilesResponse.results:type_name -> reliant.v1.SearchResult
-	27, // 10: reliant.v1.SearchResult.matches:type_name -> reliant.v1.SearchMatch
-	30, // 11: reliant.v1.ReplaceInFilesResponse.results:type_name -> reliant.v1.ReplaceResult
-	33, // 12: reliant.v1.ListDirectoryResponse.entries:type_name -> reliant.v1.DirectoryEntry
+	27, // 9: reliant.v1.SearchFilesResponse.results:type_name -> reliant.v1.SearchResult
+	28, // 10: reliant.v1.SearchResult.matches:type_name -> reliant.v1.SearchMatch
+	31, // 11: reliant.v1.ReplaceInFilesResponse.results:type_name -> reliant.v1.ReplaceResult
+	34, // 12: reliant.v1.ListDirectoryResponse.entries:type_name -> reliant.v1.DirectoryEntry
 	3,  // 13: reliant.v1.BeginFileUploadRequest.on_conflict:type_name -> reliant.v1.UploadConflictPolicy
-	3,  // 14: reliant.v1.CommitFileUploadRequest.on_conflict:type_name -> reliant.v1.UploadConflictPolicy
-	7,  // 15: reliant.v1.FileSystemService.GetFileTree:input_type -> reliant.v1.GetFileTreeRequest
-	10, // 16: reliant.v1.FileSystemService.GetFileContent:input_type -> reliant.v1.GetFileContentRequest
-	12, // 17: reliant.v1.FileSystemService.SaveFileContent:input_type -> reliant.v1.SaveFileContentRequest
-	14, // 18: reliant.v1.FileSystemService.GetFileMetadata:input_type -> reliant.v1.GetFileMetadataRequest
-	16, // 19: reliant.v1.FileSystemService.GetFilePreviewInfo:input_type -> reliant.v1.GetFilePreviewInfoRequest
-	36, // 20: reliant.v1.FileSystemService.GetFilePreview:input_type -> reliant.v1.GetFilePreviewRequest
-	18, // 21: reliant.v1.FileSystemService.CreateFileOrFolder:input_type -> reliant.v1.CreateFileOrFolderRequest
-	20, // 22: reliant.v1.FileSystemService.DeleteFileOrFolder:input_type -> reliant.v1.DeleteFileOrFolderRequest
-	22, // 23: reliant.v1.FileSystemService.CopyFile:input_type -> reliant.v1.CopyFileRequest
-	24, // 24: reliant.v1.FileSystemService.SearchFiles:input_type -> reliant.v1.SearchFilesRequest
-	28, // 25: reliant.v1.FileSystemService.ReplaceInFiles:input_type -> reliant.v1.ReplaceInFilesRequest
-	31, // 26: reliant.v1.FileSystemService.ListDirectory:input_type -> reliant.v1.ListDirectoryRequest
-	34, // 27: reliant.v1.FileSystemService.CreateDirectory:input_type -> reliant.v1.CreateDirectoryRequest
-	38, // 28: reliant.v1.FileSystemService.DownloadFile:input_type -> reliant.v1.DownloadFileRequest
-	40, // 29: reliant.v1.FileSystemService.BeginFileUpload:input_type -> reliant.v1.BeginFileUploadRequest
-	42, // 30: reliant.v1.FileSystemService.UploadFileChunk:input_type -> reliant.v1.UploadFileChunkRequest
-	44, // 31: reliant.v1.FileSystemService.CommitFileUpload:input_type -> reliant.v1.CommitFileUploadRequest
-	46, // 32: reliant.v1.FileSystemService.AbortFileUpload:input_type -> reliant.v1.AbortFileUploadRequest
-	48, // 33: reliant.v1.FileSystemService.GetFileUploadStatus:input_type -> reliant.v1.GetFileUploadStatusRequest
-	8,  // 34: reliant.v1.FileSystemService.GetFileTree:output_type -> reliant.v1.GetFileTreeResponse
-	11, // 35: reliant.v1.FileSystemService.GetFileContent:output_type -> reliant.v1.GetFileContentResponse
-	13, // 36: reliant.v1.FileSystemService.SaveFileContent:output_type -> reliant.v1.SaveFileContentResponse
-	15, // 37: reliant.v1.FileSystemService.GetFileMetadata:output_type -> reliant.v1.GetFileMetadataResponse
-	17, // 38: reliant.v1.FileSystemService.GetFilePreviewInfo:output_type -> reliant.v1.GetFilePreviewInfoResponse
-	37, // 39: reliant.v1.FileSystemService.GetFilePreview:output_type -> reliant.v1.GetFilePreviewResponse
-	19, // 40: reliant.v1.FileSystemService.CreateFileOrFolder:output_type -> reliant.v1.CreateFileOrFolderResponse
-	21, // 41: reliant.v1.FileSystemService.DeleteFileOrFolder:output_type -> reliant.v1.DeleteFileOrFolderResponse
-	23, // 42: reliant.v1.FileSystemService.CopyFile:output_type -> reliant.v1.CopyFileResponse
-	25, // 43: reliant.v1.FileSystemService.SearchFiles:output_type -> reliant.v1.SearchFilesResponse
-	29, // 44: reliant.v1.FileSystemService.ReplaceInFiles:output_type -> reliant.v1.ReplaceInFilesResponse
-	32, // 45: reliant.v1.FileSystemService.ListDirectory:output_type -> reliant.v1.ListDirectoryResponse
-	35, // 46: reliant.v1.FileSystemService.CreateDirectory:output_type -> reliant.v1.CreateDirectoryResponse
-	39, // 47: reliant.v1.FileSystemService.DownloadFile:output_type -> reliant.v1.DownloadFileResponse
-	41, // 48: reliant.v1.FileSystemService.BeginFileUpload:output_type -> reliant.v1.BeginFileUploadResponse
-	43, // 49: reliant.v1.FileSystemService.UploadFileChunk:output_type -> reliant.v1.UploadFileChunkResponse
-	45, // 50: reliant.v1.FileSystemService.CommitFileUpload:output_type -> reliant.v1.CommitFileUploadResponse
-	47, // 51: reliant.v1.FileSystemService.AbortFileUpload:output_type -> reliant.v1.AbortFileUploadResponse
-	49, // 52: reliant.v1.FileSystemService.GetFileUploadStatus:output_type -> reliant.v1.GetFileUploadStatusResponse
-	34, // [34:53] is the sub-list for method output_type
-	15, // [15:34] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	4,  // 14: reliant.v1.BeginFileUploadRequest.destination:type_name -> reliant.v1.UploadDestination
+	4,  // 15: reliant.v1.BeginFileUploadResponse.destination:type_name -> reliant.v1.UploadDestination
+	3,  // 16: reliant.v1.CommitFileUploadRequest.on_conflict:type_name -> reliant.v1.UploadConflictPolicy
+	8,  // 17: reliant.v1.FileSystemService.GetFileTree:input_type -> reliant.v1.GetFileTreeRequest
+	11, // 18: reliant.v1.FileSystemService.GetFileContent:input_type -> reliant.v1.GetFileContentRequest
+	13, // 19: reliant.v1.FileSystemService.SaveFileContent:input_type -> reliant.v1.SaveFileContentRequest
+	15, // 20: reliant.v1.FileSystemService.GetFileMetadata:input_type -> reliant.v1.GetFileMetadataRequest
+	17, // 21: reliant.v1.FileSystemService.GetFilePreviewInfo:input_type -> reliant.v1.GetFilePreviewInfoRequest
+	37, // 22: reliant.v1.FileSystemService.GetFilePreview:input_type -> reliant.v1.GetFilePreviewRequest
+	19, // 23: reliant.v1.FileSystemService.CreateFileOrFolder:input_type -> reliant.v1.CreateFileOrFolderRequest
+	21, // 24: reliant.v1.FileSystemService.DeleteFileOrFolder:input_type -> reliant.v1.DeleteFileOrFolderRequest
+	23, // 25: reliant.v1.FileSystemService.CopyFile:input_type -> reliant.v1.CopyFileRequest
+	25, // 26: reliant.v1.FileSystemService.SearchFiles:input_type -> reliant.v1.SearchFilesRequest
+	29, // 27: reliant.v1.FileSystemService.ReplaceInFiles:input_type -> reliant.v1.ReplaceInFilesRequest
+	32, // 28: reliant.v1.FileSystemService.ListDirectory:input_type -> reliant.v1.ListDirectoryRequest
+	35, // 29: reliant.v1.FileSystemService.CreateDirectory:input_type -> reliant.v1.CreateDirectoryRequest
+	39, // 30: reliant.v1.FileSystemService.DownloadFile:input_type -> reliant.v1.DownloadFileRequest
+	41, // 31: reliant.v1.FileSystemService.BeginFileUpload:input_type -> reliant.v1.BeginFileUploadRequest
+	43, // 32: reliant.v1.FileSystemService.UploadFileChunk:input_type -> reliant.v1.UploadFileChunkRequest
+	45, // 33: reliant.v1.FileSystemService.CommitFileUpload:input_type -> reliant.v1.CommitFileUploadRequest
+	47, // 34: reliant.v1.FileSystemService.AbortFileUpload:input_type -> reliant.v1.AbortFileUploadRequest
+	49, // 35: reliant.v1.FileSystemService.GetFileUploadStatus:input_type -> reliant.v1.GetFileUploadStatusRequest
+	9,  // 36: reliant.v1.FileSystemService.GetFileTree:output_type -> reliant.v1.GetFileTreeResponse
+	12, // 37: reliant.v1.FileSystemService.GetFileContent:output_type -> reliant.v1.GetFileContentResponse
+	14, // 38: reliant.v1.FileSystemService.SaveFileContent:output_type -> reliant.v1.SaveFileContentResponse
+	16, // 39: reliant.v1.FileSystemService.GetFileMetadata:output_type -> reliant.v1.GetFileMetadataResponse
+	18, // 40: reliant.v1.FileSystemService.GetFilePreviewInfo:output_type -> reliant.v1.GetFilePreviewInfoResponse
+	38, // 41: reliant.v1.FileSystemService.GetFilePreview:output_type -> reliant.v1.GetFilePreviewResponse
+	20, // 42: reliant.v1.FileSystemService.CreateFileOrFolder:output_type -> reliant.v1.CreateFileOrFolderResponse
+	22, // 43: reliant.v1.FileSystemService.DeleteFileOrFolder:output_type -> reliant.v1.DeleteFileOrFolderResponse
+	24, // 44: reliant.v1.FileSystemService.CopyFile:output_type -> reliant.v1.CopyFileResponse
+	26, // 45: reliant.v1.FileSystemService.SearchFiles:output_type -> reliant.v1.SearchFilesResponse
+	30, // 46: reliant.v1.FileSystemService.ReplaceInFiles:output_type -> reliant.v1.ReplaceInFilesResponse
+	33, // 47: reliant.v1.FileSystemService.ListDirectory:output_type -> reliant.v1.ListDirectoryResponse
+	36, // 48: reliant.v1.FileSystemService.CreateDirectory:output_type -> reliant.v1.CreateDirectoryResponse
+	40, // 49: reliant.v1.FileSystemService.DownloadFile:output_type -> reliant.v1.DownloadFileResponse
+	42, // 50: reliant.v1.FileSystemService.BeginFileUpload:output_type -> reliant.v1.BeginFileUploadResponse
+	44, // 51: reliant.v1.FileSystemService.UploadFileChunk:output_type -> reliant.v1.UploadFileChunkResponse
+	46, // 52: reliant.v1.FileSystemService.CommitFileUpload:output_type -> reliant.v1.CommitFileUploadResponse
+	48, // 53: reliant.v1.FileSystemService.AbortFileUpload:output_type -> reliant.v1.AbortFileUploadResponse
+	50, // 54: reliant.v1.FileSystemService.GetFileUploadStatus:output_type -> reliant.v1.GetFileUploadStatusResponse
+	36, // [36:55] is the sub-list for method output_type
+	17, // [17:36] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_filesystem_proto_init() }
@@ -4012,7 +4130,7 @@ func file_reliant_v1_filesystem_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_filesystem_proto_rawDesc), len(file_reliant_v1_filesystem_proto_rawDesc)),
-			NumEnums:      4,
+			NumEnums:      5,
 			NumMessages:   46,
 			NumExtensions: 0,
 			NumServices:   1,
