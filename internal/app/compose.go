@@ -604,6 +604,7 @@ func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 		Backoff:          g.Providerbackoff(),
 		ChangeController: g.ChangeController(),
 		Mirror:           g.Daemonmirror(),
+		WorkflowDrafts:   g.Workflowdrafts(),
 	})
 }
 
