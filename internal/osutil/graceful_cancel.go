@@ -62,11 +62,36 @@ const DefaultGraceDelay = 3 * time.Second
 // Signalling only the command's group killed the shell and left those running,
 // reparented to init, with the EXIT traps that release their locks never run
 // (a cancelled workflow run's `timeout … ci-full-main.sh`, 2026-11-22 and
-// 2026-11-24). So the command's descendants are read once, at cancellation,
+// 2026-11-24). So on Linux the command's descendants are read at cancellation
 // and every group they made of their own is stopped too: SIGTERM to the
-// process that made it, SIGKILL to all of it after grace (descendants). The
-// tree is kept in custody through grace, re-read every custodyPoll, so what
-// its members fork after the cancel is killed with them.
+// process that made it, SIGKILL to all of it after grace. The tree is kept in
+// custody through grace, re-read every custodyPoll, and every signal to it
+// goes through a pidfd held on one process, never to a group id, which may
+// name an unrelated group by the time the signal lands (descendants).
+//
+// # Containment
+//
+// A cgroup is the one boundary nothing a command starts can leave: setsid,
+// double forks and reparenting to init change a process's group and parent,
+// not its cgroup. So a command run in a cgroup of its own
+// (ApplyGracefulCancelIn, with internal/proctree's Tree) is killed at the
+// escalation through it (Containment.Kill: cgroup.kill, or freezing the cgroup
+// and SIGKILLing what it holds), which reaches everything the command started
+// however it got there, what its members forked during grace included. The
+// pidfd custody is then only the SIGTERM's way to the strays.
+//
+// Coverage, by platform:
+//
+//   - Linux with a per-command cgroup (cloud machines; a daemon whose cgroup
+//     v2 parent is delegated to it): everything, at the escalation.
+//   - Linux without one: the command's group, and every descendant the custody
+//     proved the command's while grace lasted. A process forked and orphaned
+//     between two readings, by a member that exited, is missed.
+//   - Linux without pidfds (before 5.3, or seccomp refuses pidfd_open), and
+//     macOS: the command's own group only (killGroup), as before descendants
+//     existed. macOS has no handle that names one process, so no descendant
+//     outside the group is signalled there.
+//   - Windows: the child alone (terminateGracefully).
 //
 // # Two ordering hazards this handles
 //
@@ -75,7 +100,11 @@ const DefaultGraceDelay = 3 * time.Second
 // no such guarantee: it can fire after Wait has reaped. It therefore uses
 // Process.Kill(), which os.Process tracks as done and turns into a harmless
 // ErrProcessDone, rather than a raw kill on a pid number that may by then
-// belong to someone else.
+// belong to someone else; and reaches the rest of the tree through the
+// command's cgroup or through a pidfd per process, never through a group id
+// (descendants). Only where there are neither (macOS, Linux before 5.3) is
+// the command's own group signalled by its id, while a member recorded before
+// the leader could be reaped is still in it (killGroup), as before.
 //
 // # Reporting
 //
@@ -97,6 +126,25 @@ const DefaultGraceDelay = 3 * time.Second
 // outlive the command; the returned func is safe to call more than once and
 // is intended for defer.
 func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
+	return ApplyGracefulCancelIn(cmd, grace, nil)
+}
+
+// Containment is an OS-enforced boundary around a command and everything it
+// starts: internal/proctree's Tree, the command's own cgroup. Its methods must
+// be safe on a command that has no such boundary (Populated false, Kill
+// false), and from any goroutine once the command has started.
+type Containment interface {
+	// Populated reports whether any process is left inside.
+	Populated() bool
+	// Kill SIGKILLs every process inside, and reports whether it could.
+	Kill() bool
+}
+
+// ApplyGracefulCancelIn is ApplyGracefulCancel for a command run inside
+// contain (nil: none): the escalation kills through contain, which reaches
+// every process the command started, and the escalation is not called off
+// while contain is populated ("Containment").
+func ApplyGracefulCancelIn(cmd *exec.Cmd, grace time.Duration, contain Containment) (stop func()) {
 	if grace <= 0 {
 		grace = DefaultGraceDelay
 	}
@@ -125,7 +173,7 @@ func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
 		err := terminateGracefully(proc)
 		tree.terminate()
 
-		go superviseGrace(proc, members, tree, grace, done)
+		go superviseGrace(proc, members, tree, contain, grace, done)
 
 		return err
 	}
@@ -138,21 +186,21 @@ func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
 }
 
 // custodyPoll is how often a cancelled command's process tree is re-read
-// during grace (descendants' "Custody, not a snapshot"). Each reading walks the
-// process table, so it is not free; a tenth of a second keeps that to a few
-// dozen readings per cancellation at the default grace.
+// during grace (descendants' "How a process is proved the command's"). Each
+// reading walks the process table, so it is not free; a tenth of a second
+// keeps that to a few dozen readings per cancellation at the default grace.
 const custodyPoll = 100 * time.Millisecond
 
 // superviseGrace escalates a cancelled command on its own clock, so WaitDelay
-// keeps meaning only the pipe drain. The escalation kills the GROUP, and it
-// outlives the leader: a `bash -c` dies on SIGTERM at once while a child that
-// trapped or ignored it runs on, and stopping the escalation the moment Wait
-// returned left exactly that child orphaned. So until grace runs out the tree
-// is re-read every custodyPoll, and when the command has finished (done) the
-// escalation is called off only once nothing in custody is left; otherwise,
-// at grace, it SIGKILLs the rest: each group only while it is proved still the
-// command's (killGroup, descendants.kill).
-func superviseGrace(proc *os.Process, members []GroupMember, tree *descendants, grace time.Duration, done <-chan struct{}) {
+// keeps meaning only the pipe drain. The escalation outlives the leader: a
+// `bash -c` dies on SIGTERM at once while a child that trapped or ignored it
+// runs on, and stopping the escalation the moment Wait returned left exactly
+// that child orphaned. So until grace runs out the tree is re-read every
+// custodyPoll, and when the command has finished (done) the escalation is
+// called off only once nothing of it is left; otherwise, at grace, it kills
+// the rest (escalate).
+func superviseGrace(proc *os.Process, members []GroupMember, tree *descendants, contain Containment, grace time.Duration, done <-chan struct{}) {
+	defer tree.release()
 	deadline := time.NewTimer(grace)
 	defer deadline.Stop()
 	poll := time.NewTicker(custodyPoll)
@@ -161,16 +209,31 @@ func superviseGrace(proc *os.Process, members []GroupMember, tree *descendants, 
 	for {
 		select {
 		case <-deadline.C:
-			killGroup(proc, members)
-			tree.kill()
+			escalate(proc, members, tree, contain)
 			return
 		case <-done:
 			finished, done = true, nil
 		case <-poll.C:
 		}
 		tree.refresh()
-		if finished && !GroupOwned(proc.Pid, members) && !tree.alive() {
+		if finished && !GroupOwned(proc.Pid, members) && !tree.alive() && !populated(contain) {
 			return
 		}
 	}
+}
+
+// escalate SIGKILLs what is left of a cancelled command: through its
+// containment when it has one with anything in it, which reaches everything
+// the command started; otherwise each process in custody, through its pidfd
+// (descendants.escalate).
+func escalate(proc *os.Process, members []GroupMember, tree *descendants, contain Containment) {
+	if populated(contain) && contain.Kill() {
+		_ = proc.Kill()
+		return
+	}
+	tree.escalate(proc, members)
+}
+
+func populated(contain Containment) bool {
+	return contain != nil && contain.Populated()
 }

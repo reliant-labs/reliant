@@ -865,6 +865,13 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	// handler so the two paths cannot bound it differently.
 	cmd.WaitDelay = ExecWaitDelay
 
+	// Its own cgroup with a process limit where the machine allows, so a
+	// runaway command fails alone (internal/proctree), and a cancel's
+	// escalation reaches everything it started, wherever it went (below).
+	// After the heavy-slot and sandbox rewrites above, which change what cmd
+	// execs.
+	tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
+
 	// Cancellation terminates the process GROUP and escalates to a kill only
 	// after ExecGraceDelay, instead of os/exec's default of SIGKILL with no
 	// warning. A SIGKILLed child runs no signal handler, so a cancelled `git
@@ -876,17 +883,12 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	// below, outliving this function, and the timer must stay armed for as long
 	// as cancellation can still fire. Stopped on every path where this function
 	// owns the command through to completion.
-	stopGrace := osutil.ApplyGracefulCancel(cmd, ExecGraceDelay)
+	stopGrace := osutil.ApplyGracefulCancelIn(cmd, ExecGraceDelay, tree)
 
 	// Snapshot the cgroup's oom_kill counter so a SIGKILL during the
 	// command's lifetime can be attributed to the kernel OOM killer.
 	// Invalid (and therefore inert) on hosts without cgroup v2 accounting.
 	oomSnap := localMemReader.SnapshotOOMKills()
-
-	// Its own cgroup with a process limit where the machine allows, so a
-	// runaway command fails alone (internal/proctree). Last before Start:
-	// the heavy-slot and sandbox rewrites above change what cmd execs.
-	tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
 
 	start := time.Now()
 	err = tree.Start(deadline.Context(), cmd)

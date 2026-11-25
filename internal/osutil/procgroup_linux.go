@@ -48,6 +48,14 @@ func GroupOwned(pgid int, members []GroupMember) bool {
 	return false
 }
 
+// tableEntry is one live process of a process-table listing: who it is, its
+// parent and its process group.
+type tableEntry struct {
+	GroupMember
+	PPID int
+	Pgid int
+}
+
 // processTable lists every live process (zombies excluded, as in
 // GroupMembers) with its parent and process group. ok is false where /proc
 // cannot be read.
