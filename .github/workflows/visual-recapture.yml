@@ -25,10 +25,17 @@ name: Visual re-capture
 # commits them onto the head, and pushes without force (a head that moved
 # refuses it). It dispatches nothing: running a workflow on the PR's branch
 # would run the PR's own definition of it, with this repository's secrets.
-# pr-review hears the push through the Reliant App's webhook and reviews the
-# new head like any other; a GITHUB_TOKEN push starts no `ci.yml` run, so the
-# head's `CI result` comes from pr-sweep's existing route for a required check
-# no run reported (control-plane pr-fix.sh facts, route retrigger).
+#
+# THE PUSH IS THE RELIANT APP'S. The push job's GITHUB_TOKEN can only read; the
+# push step alone gets an installation token of the Reliant App, minted for this
+# one repository with contents: write (vars.RELIANT_APP_CLIENT_ID,
+# secrets.RELIANT_APP_PRIVATE_KEY; revoked when the job ends). control-plane's
+# push gate (cp#3624) trusts a same-repository head pushed by the bot, so the CI
+# that follows the push (an App push starts `ci.yml` like any push; else
+# pr-sweep's re-trigger) counts as trusted. A GITHUB_TOKEN push stays refused
+# there, and this workflow makes none: without the App's credentials the push
+# job fails and nothing is pushed. pr-review hears the push through the Reliant
+# App's webhook and reviews the new head like any other.
 #
 # Every capture already matching is a result too (RECAPTURE=none): the visual
 # failure came from an entry ahead in the queue, or a nondeterministic surface,
@@ -144,8 +151,9 @@ jobs:
     if: needs.capture.outputs.changed != '0'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # contents: read: the push is the Reliant App's token, never this job's.
     permissions:
-      contents: write
+      contents: read
     steps:
       # main's scripts only: nothing from the PR runs in this job.
       - uses: actions/checkout@v6
@@ -159,12 +167,34 @@ jobs:
           ref: ${{ inputs.head }}
           path: pr
           fetch-depth: 1
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           name: visual-recapture
           path: staged
+      - name: Require the Reliant App's credentials
+        env:
+          HAS_ID: ${{ vars.RELIANT_APP_CLIENT_ID != '' }}
+          HAS_KEY: ${{ secrets.RELIANT_APP_PRIVATE_KEY != '' }}
+        run: |
+          if [ "$HAS_ID" != true ] || [ "$HAS_KEY" != true ]; then
+            echo "::error::the push is the Reliant App's: set the repository variable RELIANT_APP_CLIENT_ID and the secret RELIANT_APP_PRIVATE_KEY. Nothing was pushed; never a GITHUB_TOKEN push"
+            exit 1
+          fi
+      # A token of the Reliant App for this repository alone, contents: write, used only by
+      # the push step below (revoked when the job ends).
+      - name: Mint the Reliant App's token for this repository
+        id: app
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ vars.RELIANT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELIANT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
       - name: Commit and push
         env:
+          PUSH_TOKEN: ${{ steps.app.outputs.token }}
           STAGED: ${{ github.workspace }}/staged
           TARGET: ${{ github.workspace }}/pr
           BRANCH: ${{ needs.capture.outputs.branch }}
