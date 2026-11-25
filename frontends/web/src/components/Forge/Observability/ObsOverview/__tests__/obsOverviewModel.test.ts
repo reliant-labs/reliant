@@ -91,6 +91,34 @@ describe("the Analytics box's reads", () => {
     expect(dailySeries(undefined)).toEqual({ timestamps: [], values: [] });
   });
 
+  it.each([
+    { timestamps: [1], values: [3, 4] },
+    { timestamps: [1, 2], values: [3] },
+    { timestamps: [1], values: [] },
+    { timestamps: [], values: [3] },
+  ])("rejects mismatched daily arrays: %j", (series) => {
+    expect(dailySeries(result({ series: [{ ...series, label: "users", group: {}, value: null }] }))).toEqual({ timestamps: [], values: [] });
+  });
+
+  it("sorts shuffled daily pairs, retaining nulls without mutating the series", () => {
+    const series = { label: "users", group: {}, timestamps: [3, 1, 2], values: [30, 10, null], value: null };
+    expect(dailySeries(result({ series: [series] }))).toEqual({ timestamps: [1, 2, 3], values: [10, null, 30] });
+    expect(series.timestamps).toEqual([3, 1, 2]);
+    expect(series.values).toEqual([30, 10, null]);
+  });
+
+  it("drops non-finite daily timestamps together with their values", () => {
+    const series = { timestamps: [NaN, 2, Infinity, 1, -Infinity], values: [90, 20, 80, 10, 70] };
+    expect(dailySeries(result({ series: [series] }))).toEqual({ timestamps: [1, 2], values: [10, 20] });
+    expect(dailySeries(result({ series: [{ timestamps: [NaN], values: [90] }] }))).toEqual({ timestamps: [], values: [] });
+  });
+
+  it("sorts shuffled SQL days and drops unparseable days", () => {
+    const day = Date.UTC(2026, 10, 20) / 1000;
+    const rows = [{ group: { t: "2026-11-21" }, values: [6] }, { group: { t: "invalid" }, values: [99] }, { group: { t: "2026-11-20" }, values: [5] }];
+    expect(dailySeries(result({ columns: ["users"], rows }))).toEqual({ timestamps: [day, day + 86_400], values: [5, 6] });
+  });
+
   it("names the most-sent custom event, skipping forge's own", () => {
     const events = result({ columns: ["events", "users", "last_seen"], rows: [{ group: { event: "page_view" }, values: [500, 1, 0] }, { group: { event: "product.add_to_cart" }, values: [120, 1, 0] }] });
     expect(topEvent(events)).toEqual({ name: "add_to_cart", events: 120 });
