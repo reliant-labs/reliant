@@ -1,0 +1,741 @@
+package architecture
+
+import (
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
+	"os"
+	"path"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"testing"
+)
+
+// ─── every construction of a service sets every required Deps field ───────
+//
+// A pull request adds a field to a service's Deps struct and wires every
+// construction the merge gate runs: the affected packages' tests under
+// -short. The constructions it does not run are left without the field: a
+// slow test (testkit.Slow, or a testing.Short skip), a test behind a build tag
+// (e2e, replayfixtures, integration) and the harnesses those tests share. The
+// merge gate compiles them (scripts/test-build.sh) and they compile, because a
+// missing field is a zero value, not an error. Main then goes red at the
+// release gate with a nil dereference deep in the service:
+//
+//   - #3368 made chat.Deps.Chats and threads.Deps.Chats required; the e2e
+//     stories harness, TestInterruptThread_ReadsOnlyLiveCalls (slow) and
+//     replaytest's generate_interrupt (replayfixtures) did not set them
+//     (fixed by #3589).
+//   - #3599 added launch.Deps.Chats; TestReconcilerRecoversAFireStuckPending
+//     (DB-backed, skipped under -short) did not set it (fixed by #3605).
+//
+// This test reads the source, so it sees every construction whatever its
+// build tags and however slow its test is, and runs on every Go change
+// (test-affected selects packages that walk every Go file). A field of a
+// Deps struct is required unless it is marked `// forge:optional-dep` (forge's
+// convention: an optional dep's consumer handles nil) or listed in
+// depsFieldsNotEverywhere below. Every composite literal of a Deps type
+// outside its own package, and every one passed straight to its package's
+// New inside it, must name each required field. A literal inside the
+// package that builds a Service by hand (`&Service{deps: Deps{Repo: r}}`) is
+// a unit test of one method and is not judged.
+//
+// So a new Deps field is required everywhere at once: wire it at every
+// construction this test names, or mark it `// forge:optional-dep` (its
+// consumer must then handle nil), in the pull request that adds it.
+
+// depsFieldsNotEverywhere names the Deps fields ("<package dir>.<Field>")
+// that constructions in the listed package directories left unset when this
+// test was added (2026-11-26), on purpose (a unit test that calls one method,
+// a service built only to create threads) or by history. An entry exempts
+// those directories only: a new harness or test elsewhere that leaves the
+// field out is still a finding. It shrinks: the test fails on a directory
+// that sets the field everywhere now, so delete it then. Never add a field a
+// pull request introduces: wire it everywhere, or mark it
+// `// forge:optional-dep`.
+var depsFieldsNotEverywhere = map[string][]string{
+	"internal/accesstokenclient.HTTPClient":              {"internal/accesstokenclient", "internal/handlers/approval", "internal/llm/drivers", "internal/orgcredentials", "internal/tokenauthority"},
+	"internal/changetools.Session":                       {"internal/app"},
+	"internal/chatprlinks.Chats":                         {"internal/chatprlinks"},
+	"internal/chatprlinks.Store":                         {"internal/chatprlinks"},
+	"internal/cliauth.HTTPClient":                        {"internal/cliauth"},
+	"internal/cliauth.Now":                               {"internal/cliauth"},
+	"internal/cliauth.OpenURL":                           {"internal/cliauth"},
+	"internal/controlplane.ControlPlane":                 {"internal/controlplane"},
+	"internal/controlplane.HTTPClient":                   {"internal/app", "internal/controlplane", "internal/mcpserver", "internal/workersetup", "internal/workflow/runtime/activities/handlers"},
+	"internal/controlplane.Sign":                         {"internal/app", "internal/controlplane", "internal/mcpserver", "internal/workflow/runtime/activities/handlers"},
+	"internal/credentials/automationtokens.Sealer":       {"internal/credentials/automationtokens"},
+	"internal/credentials/connectionvault.DB":            {"internal/credentials/connectionvault"},
+	"internal/credentials/orgaccounts.DB":                {"internal/credentials/orgaccounts"},
+	"internal/credentials/orgaccounts.Sealer":            {"internal/credentials/orgaccounts"},
+	"internal/credentials/provideraccounts.DB":           {"internal/credentials/provideraccounts"},
+	"internal/credentials/provideraccounts.Sealer":       {"internal/credentials/provideraccounts"},
+	"internal/daemonmirror.Config":                       {"internal/daemonmirror", "internal/daemonmirror/daemonmirrortest"},
+	"internal/daemonmirror.Daemons":                      {"internal/daemonmirror"},
+	"internal/daemonmirror.Lifecycle":                    {"internal/daemonmirror"},
+	"internal/daemonmirror.Logger":                       {"internal/daemonmirror", "internal/daemonmirror/daemonmirrortest"},
+	"internal/daemonmirror.Tx":                           {"internal/daemonmirror"},
+	"internal/daemonmirror.Updates":                      {"internal/daemonmirror"},
+	"internal/dblock.Config":                             {"internal/app", "internal/db", "internal/dblock"},
+	"internal/dblock.Logger":                             {"internal/app", "internal/db", "internal/dblock"},
+	"internal/dblock.Sessions":                           {"internal/dblock"},
+	"internal/egresslimit.Clock":                         {"internal/app", "internal/egresslimit", "internal/toolexec", "internal/toolexec/daemonruntime"},
+	"internal/egresslimit.Limits":                        {"internal/egresslimit"},
+	"internal/egresslimit.Logger":                        {"internal/egresslimit", "internal/toolexec", "internal/toolexec/daemonruntime"},
+	"internal/forgecred.Now":                             {"cmd/reliant/cmd"},
+	"internal/forgecred.Org":                             {"internal/forgecred"},
+	"internal/forgepin.CacheDir":                         {"internal/skills/catalog", "internal/toolexec/daemonruntime"},
+	"internal/forgepin.Run":                              {"internal/skills/catalog", "internal/toolexec/daemonruntime"},
+	"internal/gitcredentialclient.ControlPlane":          {"internal/gitcredentialclient"},
+	"internal/gitcredentialclient.HTTPClient":            {"internal/app", "internal/gitcredentialclient", "internal/integrations/credwire"},
+	"internal/handlers/account.Config":                   {"internal/handlers/account"},
+	"internal/handlers/account.Logger":                   {"internal/handlers/account"},
+	"internal/handlers/approval.Config":                  {"internal/handlers/approval"},
+	"internal/handlers/approval.Connections":             {"e2e/stories", "internal/handlers/approval"},
+	"internal/handlers/approval.Logger":                  {"internal/handlers/approval"},
+	"internal/handlers/approval.Repo":                    {"internal/handlers/approval"},
+	"internal/handlers/approval.Signals":                 {"internal/handlers/approval"},
+	"internal/handlers/attachment.API":                   {"internal/handlers/attachment"},
+	"internal/handlers/attachment.Attachments":           {"internal/handlers/attachment"},
+	"internal/handlers/attachment.Config":                {"internal/handlers/attachment"},
+	"internal/handlers/attachment.Logger":                {"internal/handlers/attachment"},
+	"internal/handlers/automation_takeover.Config":       {"internal/handlers/automation_takeover"},
+	"internal/handlers/automation_takeover.Logger":       {"internal/handlers/automation_takeover"},
+	"internal/handlers/automation_takeover.Offers":       {"internal/handlers/automation_takeover"},
+	"internal/handlers/automation_takeover.Repo":         {"internal/handlers/automation_takeover"},
+	"internal/handlers/automation_takeover.Triggers":     {"internal/handlers/automation_takeover"},
+	"internal/handlers/catalog.Config":                   {"internal/handlers/catalog"},
+	"internal/handlers/catalog.Logger":                   {"internal/handlers/catalog"},
+	"internal/handlers/chat.AgentMessages":               {"internal/handlers/chat"},
+	"internal/handlers/chat.Backoff":                     {"internal/handlers/chat"},
+	"internal/handlers/chat.ChatRows":                    {"internal/handlers/chat"},
+	"internal/handlers/chat.ChatViews":                   {"internal/handlers/chat"},
+	"internal/handlers/chat.Config":                      {"internal/handlers/chat"},
+	"internal/handlers/chat.Logger":                      {"internal/handlers/chat"},
+	"internal/handlers/chat.Mailbox":                     {"internal/handlers/chat"},
+	"internal/handlers/chat.Messages":                    {"internal/handlers/chat"},
+	"internal/handlers/chat.Pause":                       {"internal/handlers/chat"},
+	"internal/handlers/chat.ProjectRows":                 {"internal/handlers/chat"},
+	"internal/handlers/chat.Questions":                   {"internal/handlers/chat"},
+	"internal/handlers/chat.Selections":                  {"internal/handlers/chat"},
+	"internal/handlers/chat.Senders":                     {"internal/handlers/chat"},
+	"internal/handlers/chat.Spawns":                      {"internal/handlers/chat"},
+	"internal/handlers/chat.Temporal":                    {"internal/handlers/chat"},
+	"internal/handlers/chat.ToolBlocks":                  {"internal/handlers/chat"},
+	"internal/handlers/chat.Workflows":                   {"internal/handlers/chat"},
+	"internal/handlers/chat.Worktrees":                   {"internal/handlers/chat"},
+	"internal/handlers/connection.Config":                {"internal/handlers/connection"},
+	"internal/handlers/connection.Logger":                {"internal/handlers/connection"},
+	"internal/handlers/daemon_registry.Config":           {"internal/handlers/daemon_registry"},
+	"internal/handlers/daemon_registry.Logger":           {"internal/handlers/daemon_registry"},
+	"internal/handlers/daemon_registry.Mirror":           {"internal/handlers/daemon_registry"},
+	"internal/handlers/daemon_registry.Pools":            {"internal/handlers/daemon_registry"},
+	"internal/handlers/daemon_registry.Repo":             {"internal/handlers/daemon_registry"},
+	"internal/handlers/file_system.Config":               {"internal/handlers/file_system"},
+	"internal/handlers/file_system.Logger":               {"internal/handlers/file_system"},
+	"internal/handlers/file_system.Placement":            {"internal/handlers/file_system"},
+	"internal/handlers/file_system.Repo":                 {"internal/handlers/file_system"},
+	"internal/handlers/file_system.Router":               {"internal/handlers/file_system"},
+	"internal/handlers/forge.Config":                     {"internal/handlers/forge"},
+	"internal/handlers/forge.Logger":                     {"internal/handlers/forge"},
+	"internal/handlers/forge.Router":                     {"internal/handlers/forge"},
+	"internal/handlers/inbox.Config":                     {"internal/handlers/inbox"},
+	"internal/handlers/inbox.Firings":                    {"internal/handlers/inbox"},
+	"internal/handlers/inbox.Items":                      {"internal/handlers/inbox"},
+	"internal/handlers/inbox.Logger":                     {"internal/handlers/inbox"},
+	"internal/handlers/inbox.Machines":                   {"internal/handlers/inbox"},
+	"internal/handlers/inbox.Marks":                      {"internal/handlers/inbox"},
+	"internal/handlers/inbox.Notices":                    {"internal/handlers/inbox"},
+	"internal/handlers/inbox.OrgKeys":                    {"internal/handlers/inbox"},
+	"internal/handlers/inbox.ProjectRows":                {"internal/handlers/inbox"},
+	"internal/handlers/inbox.Recoveries":                 {"internal/handlers/inbox"},
+	"internal/handlers/inbox.Repo":                       {"internal/handlers/inbox"},
+	"internal/handlers/inbox.Storage":                    {"internal/handlers/inbox"},
+	"internal/handlers/mcp.Config":                       {"internal/handlers/mcp"},
+	"internal/handlers/mcp.Logger":                       {"internal/handlers/mcp"},
+	"internal/handlers/mcp.ProjectRows":                  {"internal/handlers/mcp"},
+	"internal/handlers/mcp.Refetch":                      {"internal/handlers/mcp"},
+	"internal/handlers/message.Chats":                    {"internal/handlers/message"},
+	"internal/handlers/message.Config":                   {"internal/handlers/message"},
+	"internal/handlers/message.Logger":                   {"internal/handlers/message"},
+	"internal/handlers/model_endpoint.Config":            {"internal/handlers/model_endpoint"},
+	"internal/handlers/model_endpoint.Logger":            {"internal/handlers/model_endpoint"},
+	"internal/handlers/model_endpoint.Machines":          {"internal/handlers/model_endpoint"},
+	"internal/handlers/model_endpoint.Network":           {"internal/handlers/model_endpoint"},
+	"internal/handlers/org_policy_impact.Config":         {"internal/handlers/org_policy_impact"},
+	"internal/handlers/org_policy_impact.Logger":         {"internal/handlers/org_policy_impact"},
+	"internal/handlers/org_provider_account.Config":      {"internal/handlers/org_provider_account"},
+	"internal/handlers/org_provider_account.Logger":      {"internal/handlers/org_provider_account"},
+	"internal/handlers/org_usage.Config":                 {"internal/handlers/org_usage"},
+	"internal/handlers/org_usage.Logger":                 {"internal/handlers/org_usage"},
+	"internal/handlers/package_commands.Config":          {"internal/handlers/package_commands"},
+	"internal/handlers/package_commands.Favorites":       {"internal/handlers/package_commands"},
+	"internal/handlers/package_commands.Logger":          {"internal/handlers/package_commands"},
+	"internal/handlers/package_commands.Placement":       {"internal/handlers/package_commands"},
+	"internal/handlers/package_commands.Router":          {"internal/handlers/package_commands"},
+	"internal/handlers/plan.Config":                      {"internal/handlers/plan"},
+	"internal/handlers/plan.Logger":                      {"internal/handlers/plan"},
+	"internal/handlers/project.Config":                   {"internal/handlers/project"},
+	"internal/handlers/project.Detachments":              {"internal/handlers/project"},
+	"internal/handlers/project.Installs":                 {"internal/handlers/project"},
+	"internal/handlers/project.Ledger":                   {"internal/handlers/project"},
+	"internal/handlers/project.Logger":                   {"internal/handlers/project"},
+	"internal/handlers/project.Lookups":                  {"internal/handlers/project"},
+	"internal/handlers/project.Machines":                 {"internal/handlers/project"},
+	"internal/handlers/project.ProjectConfigs":           {"internal/handlers/project"},
+	"internal/handlers/project.ProjectRows":              {"internal/handlers/project"},
+	"internal/handlers/project.Purges":                   {"internal/handlers/project"},
+	"internal/handlers/project.Repos":                    {"internal/handlers/project"},
+	"internal/handlers/project.Shared":                   {"internal/handlers/project"},
+	"internal/handlers/provider_account.Accounts":        {"internal/handlers/provider_account"},
+	"internal/handlers/provider_account.Chats":           {"internal/handlers/provider_account"},
+	"internal/handlers/provider_account.Config":          {"internal/handlers/provider_account"},
+	"internal/handlers/provider_account.Funding":         {"internal/handlers/provider_account"},
+	"internal/handlers/provider_account.Logger":          {"internal/handlers/provider_account"},
+	"internal/handlers/provider_account.Refetch":         {"internal/handlers/provider_account"},
+	"internal/handlers/provider_account.Store":           {"internal/handlers/provider_account"},
+	"internal/handlers/provider_account.ValidateKey":     {"internal/handlers/provider_account"},
+	"internal/handlers/question.ChatRows":                {"internal/handlers/question"},
+	"internal/handlers/question.ChatViews":               {"internal/handlers/question"},
+	"internal/handlers/question.Config":                  {"internal/handlers/question"},
+	"internal/handlers/question.Logger":                  {"internal/handlers/question"},
+	"internal/handlers/question.Messages":                {"internal/handlers/question"},
+	"internal/handlers/question.Questions":               {"internal/handlers/question"},
+	"internal/handlers/question.Refetch":                 {"internal/handlers/question", "internal/workflow/runtime/replaytest"},
+	"internal/handlers/question.Repo":                    {"internal/handlers/question"},
+	"internal/handlers/question.Signals":                 {"internal/handlers/question"},
+	"internal/handlers/repo.Config":                      {"internal/handlers/repo"},
+	"internal/handlers/repo.Logger":                      {"internal/handlers/repo"},
+	"internal/handlers/repo.Repos":                       {"internal/handlers/repo"},
+	"internal/handlers/run.ChatRows":                     {"internal/handlers/run"},
+	"internal/handlers/run.ChatViews":                    {"internal/handlers/run"},
+	"internal/handlers/run.Chats":                        {"internal/handlers/run"},
+	"internal/handlers/run.Config":                       {"internal/handlers/run"},
+	"internal/handlers/run.Logger":                       {"internal/handlers/run"},
+	"internal/handlers/run.Repo":                         {"internal/handlers/run"},
+	"internal/handlers/run.Workflows":                    {"internal/handlers/run"},
+	"internal/handlers/scenario.Config":                  {"internal/handlers/scenario"},
+	"internal/handlers/scenario.Drafts":                  {"internal/handlers/scenario"},
+	"internal/handlers/scenario.Logger":                  {"internal/handlers/scenario"},
+	"internal/handlers/scenario.ProjectConfigs":          {"internal/handlers/scenario"},
+	"internal/handlers/scenario.ProjectRows":             {"internal/handlers/scenario"},
+	"internal/handlers/scenario.Projects":                {"internal/handlers/scenario"},
+	"internal/handlers/settings.Accounts":                {"internal/handlers/settings"},
+	"internal/handlers/settings.Config":                  {"internal/handlers/settings"},
+	"internal/handlers/settings.ControlPlane":            {"internal/handlers/settings"},
+	"internal/handlers/settings.ExchangeAntigravityCode": {"internal/handlers/settings"},
+	"internal/handlers/settings.ExchangeClaudeCode":      {"internal/handlers/settings"},
+	"internal/handlers/settings.ExchangeCodexCode":       {"internal/handlers/settings"},
+	"internal/handlers/settings.Logger":                  {"internal/handlers/settings"},
+	"internal/handlers/settings.ValidateKey":             {"internal/handlers/settings"},
+	"internal/handlers/streaming.Config":                 {"internal/handlers/streaming"},
+	"internal/handlers/streaming.Heads":                  {"internal/handlers/streaming"},
+	"internal/handlers/streaming.Logger":                 {"internal/handlers/streaming"},
+	"internal/handlers/streaming.OrgFeed":                {"internal/handlers/streaming"},
+	"internal/handlers/streaming.Projects":               {"internal/grpc", "internal/handlers/chat", "internal/handlers/streaming"},
+	"internal/handlers/streaming.Senders":                {"internal/handlers/streaming"},
+	"internal/handlers/streaming.Siblings":               {"internal/handlers/streaming"},
+	"internal/handlers/streaming.SpawnCalls":             {"internal/handlers/streaming"},
+	"internal/handlers/streaming.UserLog":                {"internal/handlers/streaming"},
+	"internal/handlers/system.Config":                    {"internal/handlers/system"},
+	"internal/handlers/system.Logger":                    {"internal/handlers/system"},
+	"internal/handlers/task.Config":                      {"internal/handlers/task"},
+	"internal/handlers/task.Logger":                      {"internal/handlers/task"},
+	"internal/handlers/tool_call.Chats":                  {"internal/handlers/tool_call"},
+	"internal/handlers/tool_call.Config":                 {"internal/handlers/tool_call"},
+	"internal/handlers/tool_call.Logger":                 {"internal/handlers/tool_call"},
+	"internal/handlers/tool_call.Workflows":              {"internal/handlers/tool_call"},
+	"internal/handlers/tools_daemon.MachineStats":        {"internal/grpc", "internal/handlers/project", "internal/servergateway", "internal/workersetup"},
+	"internal/handlers/trigger.Chats":                    {"internal/handlers/trigger"},
+	"internal/handlers/trigger.Config":                   {"internal/handlers/trigger"},
+	"internal/handlers/trigger.Firings":                  {"internal/handlers/trigger"},
+	"internal/handlers/trigger.Logger":                   {"internal/handlers/trigger"},
+	"internal/handlers/trigger.OrgMoves":                 {"internal/handlers/trigger"},
+	"internal/handlers/trigger.Owners":                   {"internal/handlers/trigger"},
+	"internal/handlers/trigger.Pools":                    {"internal/handlers/trigger"},
+	"internal/handlers/trigger.TriggerWrites":            {"internal/handlers/trigger"},
+	"internal/handlers/trigger.WebhookSecrets":           {"internal/handlers/trigger"},
+	"internal/handlers/usage.Config":                     {"internal/handlers/usage"},
+	"internal/handlers/usage.Logger":                     {"internal/handlers/usage"},
+	"internal/handlers/workflow.Config":                  {"internal/handlers/workflow"},
+	"internal/handlers/workflow.Logger":                  {"internal/handlers/workflow"},
+	"internal/handlers/workflow.Pools":                   {"internal/handlers/workflow"},
+	"internal/handlers/workflow.ProjectRows":             {"internal/handlers/workflow"},
+	"internal/handlers/worktree.Chats":                   {"internal/handlers/worktree"},
+	"internal/handlers/worktree.Config":                  {"internal/handlers/worktree"},
+	"internal/handlers/worktree.Daemons":                 {"internal/handlers/worktree"},
+	"internal/handlers/worktree.GitCredentials":          {"internal/handlers/worktree"},
+	"internal/handlers/worktree.Logger":                  {"internal/handlers/worktree"},
+	"internal/handlers/worktree.ProjectRows":             {"internal/handlers/worktree"},
+	"internal/handlers/worktree.Projects":                {"internal/handlers/worktree"},
+	"internal/handlers/worktree.Recoveries":              {"internal/handlers/worktree"},
+	"internal/handlers/worktree.Refetch":                 {"internal/handlers/worktree"},
+	"internal/handlers/worktree.Repos":                   {"internal/handlers/worktree"},
+	"internal/handlers/worktree.Rows":                    {"internal/handlers/worktree"},
+	"internal/hosteduse.HTTPClient":                      {"internal/app", "internal/hosteduse"},
+	"internal/integrations/connauth.Broker":              {"internal/handlers/trigger", "internal/integrations/connauth", "internal/integrations/ghdelegated", "internal/triggers", "internal/workflow/runtime/activities/handlers"},
+	"internal/integrations/connauth.Resolver":            {"internal/integrations/connauth"},
+	"internal/integrations/ghblobs.APIBaseURL":           {"internal/app"},
+	"internal/integrations/ghblobs.HTTPClient":           {"internal/app"},
+	"internal/integrations/ghblobs.MaxBytes":             {"internal/app"},
+	"internal/integrations/ghusers.APIBaseURL":           {"internal/app", "internal/integrations/ghusers"},
+	"internal/integrations/ghusers.HTTPClient":           {"internal/app", "internal/integrations/ghusers"},
+	"internal/integrations/inputoptions.Credentials":     {"internal/integrations/inputoptions"},
+	"internal/integrations/inputoptions.Logger":          {"internal/app", "internal/integrations/inputoptions", "internal/integrations/inputoptions/inputoptionstest"},
+	"internal/integrations/inputoptions.Now":             {"internal/app", "internal/integrations/inputoptions", "internal/integrations/inputoptions/inputoptionstest"},
+	"internal/integrations/inputoptions.Runner":          {"internal/integrations/inputoptions"},
+	"internal/integrations/inputoptions.TTL":             {"internal/app", "internal/integrations/inputoptions", "internal/integrations/inputoptions/inputoptionstest"},
+	"internal/integrations/inputoptions.Types":           {"internal/integrations/inputoptions"},
+	"internal/integrations/writeledger.Now":              {"internal/integrations/writeledger", "internal/triggers", "internal/workflow/runtime/activities/handlers"},
+	"internal/integrations/writeledger.PRLinks":          {"internal/integrations/writeledger", "internal/triggers", "internal/workflow/runtime/activities/handlers"},
+	"internal/integrations/writeledger.Runs":             {"internal/integrations/writeledger", "internal/workflow/runtime/activities/handlers"},
+	"internal/integrations/writeledger.Store":            {"internal/integrations/writeledger"},
+	"internal/integrations/writeledger.Workflows":        {"internal/integrations/writeledger", "internal/triggers", "internal/workflow/runtime/activities/handlers"},
+	"internal/launch.Chats":                              {"internal/launch"},
+	"internal/launch.Pinner":                             {"e2e/stories", "internal/agentruns", "internal/handlers/trigger", "internal/handlers/workflow", "internal/launch", "internal/triggers", "internal/triggers/workflowevent", "internal/workflow/reconciliation"},
+	"internal/launch.ProjectRows":                        {"internal/launch"},
+	"internal/launch.Projects":                           {"internal/launch"},
+	"internal/launch.Workflows":                          {"internal/launch"},
+	"internal/launch.Worktrees":                          {"internal/launch"},
+	"internal/llm/accountrouter.Now":                     {"internal/workersetup", "internal/workflow/runtime/activities/handlers"},
+	"internal/llm/accountrouter.Rand":                    {"internal/workersetup"},
+	"internal/llm/accountrouter.Store":                   {"internal/llm/accountrouter"},
+	"internal/llmusage.Config":                           {"internal/llmusage", "internal/llmusage/llmusagetest", "internal/workersetup"},
+	"internal/llmusage.Ledger":                           {"internal/llmusage"},
+	"internal/llmusage.Logger":                           {"internal/llmusage", "internal/llmusage/llmusagetest", "internal/workersetup"},
+	"internal/llmusage.Tools":                            {"internal/llmusage"},
+	"internal/llmusage.Tx":                               {"internal/llmusage"},
+	"internal/localprobe.HTTPClient":                     {"internal/toolexec/daemonruntime"},
+	"internal/machinetools.Actions":                      {"internal/machinetools"},
+	"internal/machinetools.Pools":                        {"internal/machinetools"},
+	"internal/machinetools.Waker":                        {"internal/machinetools"},
+	"internal/machinewake.Owners":                        {"internal/machinewake"},
+	"internal/orgcredentials.Now":                        {"internal/app", "internal/orgcredentials"},
+	"internal/orgmove.Config":                            {"internal/app", "internal/orgmove"},
+	"internal/orgmove.Logger":                            {"internal/orgmove"},
+	"internal/orgmove.Members":                           {"internal/orgmove"},
+	"internal/planning.Config":                           {"internal/db", "internal/planning", "internal/planningtest"},
+	"internal/planning.Dependencies":                     {"internal/planning"},
+	"internal/planning.Logger":                           {"internal/db", "internal/planning", "internal/planningtest"},
+	"internal/planning.Plans":                            {"internal/planning"},
+	"internal/planning.Tasks":                            {"internal/planning"},
+	"internal/privacy.Config":                            {"internal/privacy"},
+	"internal/privacy.Logger":                            {"internal/privacy"},
+	"internal/privacy.Settings":                          {"internal/privacy"},
+	"internal/projectaccess.Store":                       {"internal/projectaccess"},
+	"internal/providerbackoff.Activity":                  {"internal/providerbackoff"},
+	"internal/providerbackoff.Config":                    {"internal/db", "internal/providerbackoff", "internal/providerbackoff/providerbackofftest", "internal/workersetup"},
+	"internal/providerbackoff.Logger":                    {"internal/db", "internal/providerbackoff", "internal/providerbackoff/providerbackofftest", "internal/workersetup"},
+	"internal/providerbackoff.Markers":                   {"internal/providerbackoff"},
+	"internal/providerbackoff.Tx":                        {"internal/providerbackoff"},
+	"internal/readguard.Limits":                          {"internal/app", "internal/readguard"},
+	"internal/readguard.Procedures":                      {"internal/readguard"},
+	"internal/runs.Waits":                                {"e2e/stories", "internal/handlers/chat", "internal/handlers/streaming", "internal/handlers/trigger"},
+	"internal/seatmatch.Config":                          {"internal/handlers/settings", "internal/seatmatch"},
+	"internal/seatmatch.Logger":                          {"internal/handlers/settings", "internal/seatmatch"},
+	"internal/seatmatch.Store":                           {"internal/seatmatch"},
+	"internal/threads.Chats":                             {"internal/agentruns", "internal/app", "internal/handlers/chat", "internal/handlers/streaming", "internal/handlers/trigger", "internal/handlers/workflow", "internal/launch", "internal/llm/tools", "internal/threads", "internal/triggers", "internal/triggers/workflowevent", "internal/workersetup", "internal/workflow/reconciliation", "internal/workflow/runtime/activities", "internal/workflow/runtime/activities/handlers"},
+	"internal/threads.Messages":                          {"internal/app", "internal/handlers/chat", "internal/handlers/streaming", "internal/handlers/trigger", "internal/llm/tools", "internal/threads", "internal/workflow/runtime/activities/handlers"},
+	"internal/threads.Senders":                           {"internal/app", "internal/handlers/chat", "internal/handlers/streaming", "internal/handlers/trigger", "internal/llm/tools", "internal/threads", "internal/workflow/runtime/activities/handlers"},
+	"internal/threads.Signaler":                          {"e2e/stories", "internal/agentruns", "internal/app", "internal/handlers/chat", "internal/handlers/streaming", "internal/handlers/trigger", "internal/handlers/workflow", "internal/launch", "internal/llm/tools", "internal/threads", "internal/triggers", "internal/triggers/workflowevent", "internal/workersetup", "internal/workflow/reconciliation", "internal/workflow/runtime/activities", "internal/workflow/runtime/activities/handlers"},
+	"internal/threads.ToolCanceler":                      {"e2e/stories", "internal/agentruns", "internal/app", "internal/handlers/chat", "internal/handlers/streaming", "internal/handlers/trigger", "internal/handlers/workflow", "internal/launch", "internal/llm/tools", "internal/threads", "internal/triggers", "internal/triggers/workflowevent", "internal/workersetup", "internal/workflow/reconciliation", "internal/workflow/runtime/activities", "internal/workflow/runtime/activities/handlers", "internal/workflow/runtime/replaytest"},
+	"internal/tokenauthority.ControlPlane":               {"internal/grpc", "internal/tokenauthority"},
+	"internal/tokenauthority.DB":                         {"internal/grpc", "internal/tokenauthority"},
+	"internal/triggerowner.Adoptions":                    {"internal/triggerowner"},
+	"internal/triggerowner.Config":                       {"e2e/stories", "internal/app", "internal/handlers/trigger", "internal/store/storetest", "internal/triggerowner", "internal/triggertools"},
+	"internal/triggerowner.Locks":                        {"internal/triggerowner"},
+	"internal/triggerowner.Logger":                       {"e2e/stories", "internal/app", "internal/handlers/trigger", "internal/store/storetest", "internal/triggerowner", "internal/triggertools"},
+	"internal/triggerowner.Offers":                       {"internal/triggerowner"},
+	"internal/triggerowner.OrgReads":                     {"internal/triggerowner"},
+	"internal/triggerowner.Triggers":                     {"internal/triggerowner"},
+	"internal/triggerowner.Tx":                           {"internal/triggerowner"},
+	"internal/vault.Now":                                 {"cmd/reliant/cmd", "internal/app", "internal/connections", "internal/db", "internal/handlers/connection", "internal/handlers/trigger", "internal/integrations/connauth", "internal/integrations/ghdelegated", "internal/store/storetest", "internal/triggers", "internal/vault", "internal/workflow/runtime/activities/handlers", "tools/reliant-dev"},
+	"internal/workflow/reconciliation.Chats":             {"internal/workflow/reconciliation"},
+	"internal/workflow/reconciliation.Daemons":           {"internal/workflow/reconciliation"},
+	"internal/workflow/reconciliation.Mailbox":           {"internal/workflow/reconciliation"},
+	"internal/workflow/reconciliation.Orphans":           {"internal/workflow/reconciliation"},
+	"internal/workflow/reconciliation.Workflows":         {"internal/workflow/reconciliation"},
+	"internal/workflowcheck.GitHub":                      {"internal/app", "internal/workersetup"},
+	"internal/workflowcheck.RunURL":                      {"internal/app", "internal/triggers", "internal/workersetup"},
+	"internal/workflowdrafts.Config":                     {"internal/db", "internal/workflowdrafts", "internal/workflowdraftstest"},
+	"internal/workflowdrafts.Drafts":                     {"internal/workflowdrafts"},
+	"internal/workflowdrafts.Locks":                      {"internal/workflowdrafts"},
+	"internal/workflowdrafts.Logger":                     {"internal/db", "internal/workflowdrafts", "internal/workflowdraftstest"},
+	"internal/workflowdrafts.Tx":                         {"internal/workflowdrafts"},
+	"internal/workflowdrafts.Updates":                    {"internal/workflowdrafts"},
+}
+
+func TestEveryConstructionSetsEveryRequiredDepsField(t *testing.T) {
+	t.Parallel()
+
+	repo := root(t)
+	module := modulePath(t, repo)
+	files := map[string][]byte{}
+	err := filepath.WalkDir(repo, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if p == repo {
+				return nil
+			}
+			switch d.Name() {
+			case ".git", "node_modules", "testdata", "vendor", "dist", ".reliant", ".forge":
+				return filepath.SkipDir
+			}
+			if _, err := os.Stat(filepath.Join(p, "go.mod")); err == nil {
+				return filepath.SkipDir // another module
+			}
+			return nil
+		}
+		if !strings.HasSuffix(p, ".go") {
+			return nil
+		}
+		src, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		if !strings.Contains(string(src), "Deps") {
+			return nil
+		}
+		rel, err := filepath.Rel(repo, p)
+		if err != nil {
+			return err
+		}
+		files[filepath.ToSlash(rel)] = src
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk %s: %v", repo, err)
+	}
+
+	findings, err := missingDepsFields(module, files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exempt := map[string]bool{} // "<field key> <constructing dir>"
+	for key, dirs := range depsFieldsNotEverywhere {
+		for _, dir := range dirs {
+			exempt[key+" "+dir] = true
+		}
+	}
+	used := map[string]bool{}
+	for _, f := range findings {
+		var unlisted []string
+		for _, field := range f.missing {
+			key := f.pkgDir + "." + field + " " + path.Dir(f.file)
+			if exempt[key] {
+				used[key] = true
+				continue
+			}
+			unlisted = append(unlisted, field)
+		}
+		if len(unlisted) > 0 {
+			t.Errorf("%s builds %s.Deps without %s. Every construction sets every Deps field that is not "+
+				"`// forge:optional-dep`, slow and build-tagged tests included: the merge gate does not run those, "+
+				"and a missing dep is a nil panic at the release gate (#3589, #3605). Set it here, or mark the "+
+				"field `// forge:optional-dep` if its consumer handles nil.",
+				f.pos, path.Base(f.pkgDir), strings.Join(unlisted, ", "))
+		}
+	}
+	var stale []string
+	for key := range exempt {
+		if !used[key] {
+			stale = append(stale, key)
+		}
+	}
+	sort.Strings(stale)
+	for _, key := range stale {
+		field, dir, _ := strings.Cut(key, " ")
+		t.Errorf("depsFieldsNotEverywhere exempts %s in %s, but every construction there sets it now (or it is gone): delete %q from its entry",
+			field, dir, dir)
+	}
+}
+
+// depsFinding is one Deps literal that leaves required fields unset.
+type depsFinding struct {
+	file    string   // module-relative file of the literal
+	pos     string   // file:line of the literal
+	pkgDir  string   // module-relative directory of the package declaring Deps
+	missing []string // required fields it does not name, in declaration order
+}
+
+// depsStruct is a package's Deps struct: its fields in order, and which are
+// marked `// forge:optional-dep`.
+type depsStruct struct {
+	fields   []string
+	optional map[string]bool
+}
+
+// missingDepsFields finds, in files (module-relative path → source), every
+// Deps literal that leaves a required field unset. Pure, so the rule itself
+// is tested on fixtures (TestMissingDepsFieldsFindsTheShapesThatReddenedMain).
+func missingDepsFields(module string, files map[string][]byte) ([]depsFinding, error) {
+	fset := token.NewFileSet()
+	parsed := map[string]*ast.File{}
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		f, err := parser.ParseFile(fset, name, files[name], parser.ParseComments|parser.SkipObjectResolution)
+		if err != nil {
+			return nil, fmt.Errorf("parse %s: %w", name, err)
+		}
+		parsed[name] = f
+	}
+
+	// The Deps structs, keyed by the import path of their package.
+	structs := map[string]*depsStruct{}
+	for _, name := range names {
+		f := parsed[name]
+		for _, decl := range f.Decls {
+			gd, ok := decl.(*ast.GenDecl)
+			if !ok || gd.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range gd.Specs {
+				ts := spec.(*ast.TypeSpec)
+				st, ok := ts.Type.(*ast.StructType)
+				if !ok || ts.Name.Name != "Deps" {
+					continue
+				}
+				ds := &depsStruct{optional: map[string]bool{}}
+				for _, field := range st.Fields.List {
+					optional := field.Doc != nil && strings.Contains(field.Doc.Text(), "forge:optional-dep")
+					for _, n := range fieldNames(field) {
+						ds.fields = append(ds.fields, n)
+						if optional {
+							ds.optional[n] = true
+						}
+					}
+				}
+				structs[importPath(module, name)] = ds
+			}
+		}
+	}
+
+	var out []depsFinding
+	for _, name := range names {
+		f := parsed[name]
+		self := importPath(module, name)
+		imports := map[string]string{}
+		for _, im := range f.Imports {
+			p, err := strconv.Unquote(im.Path.Value)
+			if err != nil {
+				continue
+			}
+			local := path.Base(p)
+			if im.Name != nil {
+				local = im.Name.Name
+			}
+			imports[local] = p
+		}
+		// Literals passed straight to New: the constructions the rule judges
+		// inside the declaring package.
+		toNew := map[*ast.CompositeLit]bool{}
+		ast.Inspect(f, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			if id, ok := call.Fun.(*ast.Ident); !ok || id.Name != "New" {
+				return true
+			}
+			for _, arg := range call.Args {
+				if u, ok := arg.(*ast.UnaryExpr); ok {
+					arg = u.X
+				}
+				if lit, ok := arg.(*ast.CompositeLit); ok {
+					toNew[lit] = true
+				}
+			}
+			return true
+		})
+		ast.Inspect(f, func(n ast.Node) bool {
+			lit, ok := n.(*ast.CompositeLit)
+			if !ok {
+				return true
+			}
+			var decl string
+			switch typ := lit.Type.(type) {
+			case *ast.Ident:
+				if typ.Name != "Deps" || !toNew[lit] {
+					return true
+				}
+				decl = self
+			case *ast.SelectorExpr:
+				x, ok := typ.X.(*ast.Ident)
+				if !ok || typ.Sel.Name != "Deps" {
+					return true
+				}
+				decl = imports[x.Name]
+			default:
+				return true
+			}
+			ds := structs[decl]
+			if ds == nil || decl == "" {
+				return true
+			}
+			set := map[string]bool{}
+			for _, elt := range lit.Elts {
+				kv, ok := elt.(*ast.KeyValueExpr)
+				if !ok {
+					return true // positional: every field is named by construction
+				}
+				if id, ok := kv.Key.(*ast.Ident); ok {
+					set[id.Name] = true
+				}
+			}
+			var missing []string
+			for _, field := range ds.fields {
+				if ds.optional[field] || set[field] {
+					continue
+				}
+				if decl != self && !ast.IsExported(field) {
+					continue // another package cannot set it
+				}
+				missing = append(missing, field)
+			}
+			if len(missing) > 0 {
+				p := fset.Position(lit.Pos())
+				out = append(out, depsFinding{
+					file:    name,
+					pos:     fmt.Sprintf("%s:%d", p.Filename, p.Line),
+					pkgDir:  strings.TrimPrefix(strings.TrimPrefix(decl, module), "/"),
+					missing: missing,
+				})
+			}
+			return true
+		})
+	}
+	return out, nil
+}
+
+// fieldNames is a struct field's names; an embedded field's is its type's.
+func fieldNames(field *ast.Field) []string {
+	if len(field.Names) > 0 {
+		out := make([]string, 0, len(field.Names))
+		for _, n := range field.Names {
+			out = append(out, n.Name)
+		}
+		return out
+	}
+	typ := field.Type
+	if star, ok := typ.(*ast.StarExpr); ok {
+		typ = star.X
+	}
+	switch t := typ.(type) {
+	case *ast.Ident:
+		return []string{t.Name}
+	case *ast.SelectorExpr:
+		return []string{t.Sel.Name}
+	}
+	return nil
+}
+
+// importPath is the import path of the package holding the module-relative
+// file name.
+func importPath(module, name string) string {
+	dir := path.Dir(name)
+	if dir == "." {
+		return module
+	}
+	return module + "/" + dir
+}
+
+// modulePath reads the module path from repo's go.mod.
+func modulePath(t *testing.T, repo string) string {
+	t.Helper()
+	for _, line := range strings.Split(readFile(t, filepath.Join(repo, "go.mod")), "\n") {
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "module "); ok {
+			return strings.TrimSpace(rest)
+		}
+	}
+	t.Fatalf("no module line in %s/go.mod", repo)
+	return ""
+}
+
+// The shapes behind #3589 and #3605, on fixtures: a slow or build-tagged
+// test that builds a service without a Deps field its pull request added.
+func TestMissingDepsFieldsFindsTheShapesThatReddenedMain(t *testing.T) {
+	t.Parallel()
+	const module = "example.com/m"
+	launchPkg := `package launch
+
+type Deps struct {
+	Store Store
+	// Chats reads the chat a launch starts.
+	Chats ChatReader
+	// Pinner pins a chat. Nil pins nothing.
+	// forge:optional-dep
+	Pinner ChatPinner
+	internal int
+}
+
+func New(d Deps) *Launcher { return nil }
+`
+	files := map[string][]byte{
+		"internal/launch/launch.go": []byte(launchPkg),
+		// #3605: a DB-backed test skipped under -short builds launch without
+		// the Chats #3599 added.
+		"internal/reconciliation/stranded_test.go": []byte(`package reconciliation
+
+import "example.com/m/internal/launch"
+
+func TestStuck(t *testing.T) {
+	if testing.Short() { t.Skip("needs a database") }
+	_ = launch.New(launch.Deps{Store: repo})
+}
+`),
+		// #3589: an e2e-tagged harness, under an import alias.
+		"e2e/stories/harness_test.go": []byte(`//go:build e2e
+
+package stories
+
+import l "example.com/m/internal/launch"
+
+var deps = &l.Deps{Store: repo}
+`),
+		// Wired: Chats set, the optional Pinner and the unexported field left out.
+		"internal/app/compose.go": []byte(`package app
+
+import "example.com/m/internal/launch"
+
+var _ = launch.New(launch.Deps{Store: repo, Chats: chats})
+`),
+		// Inside the package: New's literal is judged, a hand-built Service's is not.
+		"internal/launch/launch_test.go": []byte(`package launch
+
+var a = New(Deps{Store: s, Chats: c, internal: 1})
+var b = New(Deps{Chats: c})
+var c = &Launcher{deps: Deps{Store: s}}
+`),
+	}
+	findings, err := missingDepsFields(module, files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, f := range findings {
+		got[f.pos] = f.pkgDir + ": " + strings.Join(f.missing, ",")
+	}
+	want := map[string]string{
+		"internal/reconciliation/stranded_test.go:7": "internal/launch: Chats",
+		"e2e/stories/harness_test.go:7":              "internal/launch: Chats",
+		"internal/launch/launch_test.go:4":           "internal/launch: Store,internal",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("findings = %v, want %v", got, want)
+	}
+	for pos, w := range want {
+		if got[pos] != w {
+			t.Errorf("finding at %s = %q, want %q (all: %v)", pos, got[pos], w, got)
+		}
+	}
+}

@@ -146,8 +146,9 @@ The phases:
      (~620 CPU-seconds) after a change to `internal/workflowdrafts`, whose 152
      deferred test packages it compiles. main's `go-cache` job compiles the
      test packages too (`task build:packages`), so the queue's restored cache
-     holds them. A fixture that compiles and fails at run time (a "Deps.X is
-     required" panic in a slow test, #3448/#3507) is still the release gate's.
+     holds them. A fixture that compiles and fails at run time is the release
+     gate's, with one exception the test phase catches from source: a
+     construction that leaves a Deps field unset (below, "Deps fields").
    - **test** is `tools/test-affected run -plan <plan.json> -lanes go,web,electron
      -test-budget auto`. It runs the plan the plan phase wrote (re-planning
      loaded the whole package graph again: 17-141s), so the changed packages
@@ -435,6 +436,22 @@ These are the trade-offs. Each is caught by the release gate:
 
 - **Slow tests.** A test marked `testkit.Slow` (or an older
   `testing.Short()` skip) never runs before a merge.
+
+  **Deps fields** are the exception. A pull request that adds a field to a
+  service's `Deps` and wires only the tests the merge gate runs leaves the slow
+  and build-tagged constructions without it, and main goes red with a nil
+  panic (#3368 → #3589, #3599 → #3605, #3448/#3507). `internal/architecture`'s
+  `TestEveryConstructionSetsEveryRequiredDepsField` reads every Go file,
+  whatever its build tags, and fails a `Deps` literal that leaves out a field
+  not marked `// forge:optional-dep`: every one outside the declaring package,
+  and every one passed to `New` inside it. It runs on every Go change (a
+  walker), in under a second. Fields some packages already left out when it
+  landed are exempt in those packages only (`depsFieldsNotEverywhere`); a new
+  field is never exempt, so wire it everywhere or mark it optional. It cannot
+  see a construction that builds `Deps` field by field, nor tell which methods
+  need a field: `threads.Deps.Chats` (needed only by the interrupt and pause
+  paths) is exempt in `internal/threads`, whose tests mostly build a
+  creator-only service.
 - **Vitest files further from the change.** Those more than two imports away,
   or more than one from a hub. A FULL web fallback runs the same reached set,
   so a dependency bump that breaks a test no changed module reaches merges
