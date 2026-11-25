@@ -56,7 +56,7 @@ import { DeclaredSpecGap as WireDeclaredSpecGap, WorkloadKind as WireWorkloadKin
 import { ObservabilityBillingService, ObservabilityQuotaState } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 
 import { getControlPlaneClient } from "../client";
-import { obsClient } from "./obsClient";
+import { obsCall } from "./obsInterceptors";
 import type {
   AttributeFilter,
   AttributeOp,
@@ -111,7 +111,7 @@ import type { MetricKind, SeriesMeta } from "./metricsTypes";
 import { mapClient, mapServiceBuilds } from "./client";
 
 function client(transport?: Transport) {
-  return obsClient(ObservabilityService, transport);
+  return getControlPlaneClient(ObservabilityService, transport);
 }
 
 // ── Scope and time ───────────────────────────────────────────────────────────
@@ -226,7 +226,7 @@ export async function searchLogs(req: SearchLogsRequest, options: { signal?: Abo
     order: SortOrder.NEWEST_FIRST,
     pageSize: req.limit,
     pageToken: req.cursor ?? "",
-  }, options);
+  }, obsCall(options));
   // The cursor is the page's identity; a record's index within it makes the key.
   const page = req.cursor ?? "first";
   return {
@@ -276,7 +276,7 @@ export async function listTraces(req: ListTracesRequest, options: { signal?: Abo
     pageSize: req.limit,
     pageToken: req.cursor ?? "",
     groupBy: req.groupBy ?? [],
-  }, options);
+  }, obsCall(options));
   return {
     traces: res.traces.map(mapTraceSummary),
     nextCursor: res.nextPageToken,
@@ -327,7 +327,7 @@ function mapSpan(s: WireSpan): Span {
 
 /** Traces are kept 7 days, so a lookup by id searches all of them. */
 export async function getTrace(req: ObsScope & { traceId: string; window: TimeWindow }, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<Trace> {
-  const res = await client(transport).getTrace({ scope: scope(req, req.window), traceId: req.traceId }, options);
+  const res = await client(transport).getTrace({ scope: scope(req, req.window), traceId: req.traceId }, obsCall(options));
   return {
     traceId: res.traceId || req.traceId,
     spans: res.spans.map(mapSpan),
@@ -431,7 +431,7 @@ export async function queryPanel(req: QueryPanelRequest, options: { signal?: Abo
       groupBy: req.groupBy ?? [],
       explain: req.explain ?? false,
     },
-    options.signal || headers ? { ...(options.signal ? { signal: options.signal } : {}), ...(headers ? { headers } : {}) } : undefined
+    obsCall({ ...(options.signal ? { signal: options.signal } : {}), ...(headers ? { headers } : {}) })
   );
   return {
     kind: res.kind,
@@ -501,7 +501,7 @@ export async function getServiceOverview(
   options: { signal?: AbortSignal } = {},
   transport?: Transport,
 ): Promise<ServiceOverview> {
-  const res = await client(transport).getServiceOverview({ scope: scope(req, req.window, req.services), groupBy: req.groupBy ?? [] }, options);
+  const res = await client(transport).getServiceOverview({ scope: scope(req, req.window, req.services), groupBy: req.groupBy ?? [] }, obsCall(options));
   const step = res.trendStepSeconds > 0 ? res.trendStepSeconds : 60;
   const services: ServiceHealth[] = res.services.map((s) => {
     const requests = pointsOf(s.requestTrend);
@@ -550,7 +550,7 @@ export async function getFlamegraph(req: GetFlamegraphRequest, options: { signal
     service: req.service,
     profileType: req.profileType,
     traceId: req.traceId ?? "",
-  }, options);
+  }, obsCall(options));
   return {
     speedscopeJson: res.speedscopeJson,
     totalValue: Number(res.totalValue),
@@ -572,7 +572,7 @@ const signalsOf = (values: string[]): ServiceSignal[] =>
  * (a filter that matches nothing must not hide the view that would show it).
  */
 export async function getServiceSignals(req: GetServiceSignalsRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ServiceSignalsResult> {
-  const res = await client(transport).getServiceSignals({ scope: scope(req, req.window) }, options);
+  const res = await client(transport).getServiceSignals({ scope: scope(req, req.window) }, obsCall(options));
   return {
     services: res.services.map((s) => ({
       service: s.service,
@@ -606,7 +606,7 @@ const USAGE_SIGNALS: readonly UsageSignal[] = ["logs", "traces", "metrics", "pro
  * Served by ObservabilityBillingService (a Postgres read, same admission as the
  * observability reads). ObservabilityService's copy of this rpc was removed in
  * control-plane#3095. It spends no ClickHouse read slot, so it bypasses
- * obsClient's read queue.
+ * the read queue (obsInterceptors.ts).
  */
 export async function getObservabilityUsage(orgId: string, transport?: Transport): Promise<ObservabilityUsage> {
   const res = await getControlPlaneClient(ObservabilityBillingService, transport).getObservabilityUsage({ orgId });
@@ -658,7 +658,7 @@ export async function listAttributeValues(req: ListAttributeValuesRequest, optio
     prefix: req.prefix || undefined,
     signal: req.signal ? WIRE_SIGNAL[req.signal] : undefined,
     limit: req.limit ?? 50,
-  }, options);
+  }, obsCall(options));
   return { values: res.values.map((v) => ({ value: v.value, count: Number(v.count) })), truncated: res.truncated };
 }
 
@@ -840,7 +840,7 @@ function mapJob(j: WireWorkloadJob): WorkloadJob {
 }
 
 export async function listWorkloads(req: ObsScope & { window: TimeWindow; services?: string[] }, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ListWorkloadsResult> {
-  const res = await client(transport).listWorkloads({ scope: scope(req, req.window, req.services) }, options);
+  const res = await client(transport).listWorkloads({ scope: scope(req, req.window, req.services) }, obsCall(options));
   return {
     truncated: res.truncated,
     workloads: res.workloads.map(mapWorkload),
@@ -866,7 +866,7 @@ export async function getWorkload(req: GetWorkloadRequest, options: { signal?: A
     workload: req.workload,
     container: req.container ?? "",
     stepSeconds: req.stepSeconds ?? 0,
-  }, options);
+  }, obsCall(options));
   return {
     stepSeconds: res.stepSeconds,
     truncated: res.truncated,
