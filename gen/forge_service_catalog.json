@@ -24,6 +24,7 @@
         "Background",
         "Catalog",
         "Chat",
+        "ChatTrace",
         "ChatUpdateHeadsBackfill",
         "ChatUpdateHub",
         "Chatprlinks",
@@ -172,6 +173,13 @@
         {
           "component": "Chat",
           "service": "reliant.v1.ChatService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "ChatTrace",
+          "service": "reliant.v1.ChatTraceService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -10502,6 +10510,487 @@
           "reliant.v1.WorktreeStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "WorktreeStatus"
+          }
+        }
+      }
+    },
+    {
+      "name": "reliant.v1.ChatTraceService",
+      "proto_file": "reliant/v1/chat_trace.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.ChatTraceService/GetChatTrace",
+          "name": "GetChatTrace",
+          "input": "reliant.v1.GetChatTraceRequest",
+          "output": "reliant.v1.GetChatTraceResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "ChatTraceService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "GetChatTrace",
+            "InputType": "GetChatTraceRequest",
+            "OutputType": "GetChatTraceResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.GetChatTraceRequest",
+            "OutputTypeFQ": "reliant.v1.GetChatTraceResponse",
+            "InputProtoFile": "reliant/v1/chat_trace.proto",
+            "OutputProtoFile": "reliant/v1/chat_trace.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only: one chat's spans and model-call usage; changes nothing"
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/chat_trace.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "GetChatTraceRequest": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "run_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "start_time",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "google.protobuf.Timestamp"
+            },
+            {
+              "Name": "end_time",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "google.protobuf.Timestamp"
+            }
+          ],
+          "GetChatTraceResponse": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "completeness",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "partial_reasons",
+              "ProtoType": "[]enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "viewer",
+              "ProtoType": "bool",
+              "IsOptional": false
+            },
+            {
+              "Name": "spans",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ChatTraceSpan"
+            },
+            {
+              "Name": "spans_start_time",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "google.protobuf.Timestamp"
+            },
+            {
+              "Name": "spans_end_time",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "google.protobuf.Timestamp"
+            },
+            {
+              "Name": "model_calls",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ChatModelCall"
+            },
+            {
+              "Name": "totals",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ChatTraceTotals"
+            },
+            {
+              "Name": "as_of",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "google.protobuf.Timestamp"
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.ChatModelCall": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "attempt",
+              "kind": "int32"
+            },
+            {
+              "name": "time",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "purpose",
+              "kind": "string"
+            },
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "model",
+              "kind": "string"
+            },
+            {
+              "name": "outcome",
+              "kind": "string"
+            },
+            {
+              "name": "error_class",
+              "kind": "string"
+            },
+            {
+              "name": "input_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "output_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "cache_read_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "cache_write_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "latency_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "ttft_ms",
+              "kind": "int64",
+              "optional": true
+            },
+            {
+              "name": "run_id",
+              "kind": "string"
+            },
+            {
+              "name": "node_id",
+              "kind": "string"
+            },
+            {
+              "name": "workflow_name",
+              "kind": "string"
+            },
+            {
+              "name": "auth_mode",
+              "kind": "string"
+            },
+            {
+              "name": "cost_usd_nanos",
+              "kind": "int64",
+              "optional": true
+            },
+            {
+              "name": "cost_basis",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ChatTraceSpan": [
+            {
+              "name": "trace_id",
+              "kind": "string"
+            },
+            {
+              "name": "span_id",
+              "kind": "string"
+            },
+            {
+              "name": "parent_span_id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "service_name",
+              "kind": "string"
+            },
+            {
+              "name": "start_time",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "duration_ns",
+              "kind": "int64"
+            },
+            {
+              "name": "status_code",
+              "kind": "string"
+            },
+            {
+              "name": "attributes",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            },
+            {
+              "name": "events",
+              "kind": "message",
+              "type_name": "reliant.v1.ChatTraceSpanEvent",
+              "repeated": true
+            },
+            {
+              "name": "links",
+              "kind": "message",
+              "type_name": "reliant.v1.ChatTraceSpanLink",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.ChatTraceSpanEvent": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "time",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "attributes",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            }
+          ],
+          "reliant.v1.ChatTraceSpanLink": [
+            {
+              "name": "trace_id",
+              "kind": "string"
+            },
+            {
+              "name": "span_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ChatTraceTotals": [
+            {
+              "name": "calls",
+              "kind": "int64"
+            },
+            {
+              "name": "error_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "input_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "output_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "cache_read_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "cache_write_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "latency_ms_total",
+              "kind": "int64"
+            },
+            {
+              "name": "reported_cost_usd_nanos",
+              "kind": "int64"
+            },
+            {
+              "name": "reported_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "estimated_cost_usd_nanos",
+              "kind": "int64"
+            },
+            {
+              "name": "estimated_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "unpriced_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "unknown_cost_calls",
+              "kind": "int64"
+            }
+          ],
+          "reliant.v1.GetChatTraceRequest": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "run_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "start_time",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "end_time",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.GetChatTraceResponse": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "completeness",
+              "kind": "enum",
+              "type_name": "reliant.v1.ChatTraceCompleteness"
+            },
+            {
+              "name": "partial_reasons",
+              "kind": "enum",
+              "type_name": "reliant.v1.ChatTracePartialReason",
+              "repeated": true
+            },
+            {
+              "name": "viewer",
+              "kind": "bool"
+            },
+            {
+              "name": "spans",
+              "kind": "message",
+              "type_name": "reliant.v1.ChatTraceSpan",
+              "repeated": true
+            },
+            {
+              "name": "spans_start_time",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "spans_end_time",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "model_calls",
+              "kind": "message",
+              "type_name": "reliant.v1.ChatModelCall",
+              "repeated": true
+            },
+            {
+              "name": "totals",
+              "kind": "message",
+              "type_name": "reliant.v1.ChatTraceTotals"
+            },
+            {
+              "name": "as_of",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.ChatModelCall": "reliant/v1/chat_trace.proto",
+          "reliant.v1.ChatTraceSpan": "reliant/v1/chat_trace.proto",
+          "reliant.v1.ChatTraceSpanEvent": "reliant/v1/chat_trace.proto",
+          "reliant.v1.ChatTraceSpanLink": "reliant/v1/chat_trace.proto",
+          "reliant.v1.ChatTraceTotals": "reliant/v1/chat_trace.proto",
+          "reliant.v1.GetChatTraceRequest": "reliant/v1/chat_trace.proto",
+          "reliant.v1.GetChatTraceResponse": "reliant/v1/chat_trace.proto"
+        },
+        "Enums": {
+          "reliant.v1.ChatTraceCompleteness": [
+            "CHAT_TRACE_COMPLETENESS_UNSPECIFIED",
+            "CHAT_TRACE_COMPLETENESS_COMPLETE",
+            "CHAT_TRACE_COMPLETENESS_PARTIAL"
+          ],
+          "reliant.v1.ChatTracePartialReason": [
+            "CHAT_TRACE_PARTIAL_REASON_UNSPECIFIED",
+            "CHAT_TRACE_PARTIAL_REASON_TRACE_EXPIRED",
+            "CHAT_TRACE_PARTIAL_REASON_SPANS_UNAVAILABLE",
+            "CHAT_TRACE_PARTIAL_REASON_SPANS_TRUNCATED",
+            "CHAT_TRACE_PARTIAL_REASON_SPANS_MISSING",
+            "CHAT_TRACE_PARTIAL_REASON_CALLS_EXPIRED",
+            "CHAT_TRACE_PARTIAL_REASON_CALLS_TRUNCATED"
+          ]
+        },
+        "EnumNumbers": {
+          "reliant.v1.ChatTraceCompleteness": [
+            0,
+            1,
+            2
+          ],
+          "reliant.v1.ChatTracePartialReason": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ]
+        },
+        "EnumGoRefs": {
+          "reliant.v1.ChatTraceCompleteness": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ChatTraceCompleteness"
+          },
+          "reliant.v1.ChatTracePartialReason": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ChatTracePartialReason"
           }
         }
       }
@@ -55577,6 +56066,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "ChatTrace",
+      "name": "ChatTrace",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/chat_trace.Service",
+      "source": {
+        "path": "internal/handlers/chat_trace/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "ChatUpdateHeadsBackfill",
       "name": "ChatUpdateHeadsBackfill",
       "kind": "provider",
@@ -57992,6 +58493,32 @@
     },
     {
       "consumer": "Chat",
+      "field": "ChatRows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.ChatRows",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "ChatViews",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.ChatViews",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/chataccess.Service",
       "methods": [],
@@ -58181,6 +58708,30 @@
       "consumer": "Chat",
       "field": "Worktrees",
       "interface": "github.com/reliant-labs/reliant/internal/launch.WorktreeReader",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ChatTrace",
+      "field": "Spans",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat_trace.Spans",
+      "methods": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "ChatTrace",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat_trace.Store",
       "methods": [],
       "candidates": [
         "Database"
@@ -62111,6 +62662,14 @@
       "component": "Account.Purger",
       "source": {
         "path": "internal/handlers/account/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "ChatTrace.Spans",
+      "source": {
+        "path": "internal/handlers/chat_trace/service.go",
         "symbol": "New"
       }
     },

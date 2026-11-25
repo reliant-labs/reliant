@@ -30,7 +30,7 @@ func (s *Service) GetThreadWorkflowInputs(
 	}
 
 	// Verify chat ownership
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.chatViews().GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
