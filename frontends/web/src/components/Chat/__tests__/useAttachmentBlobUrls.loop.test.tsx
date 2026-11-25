@@ -56,7 +56,7 @@ describe("useAttachmentBlobUrls with an unstable attachments array", () => {
     setTransport(
       mockTransport({
         "AttachmentService.GetAttachment": (req) =>
-          getAttachmentAsBlob((req as { attachmentId: string }).attachmentId),
+          getAttachmentAsBlob((req as { id: string }).id),
       }),
     );
   });

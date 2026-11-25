@@ -16,7 +16,7 @@ import (
 )
 
 // forge:section MockAttachmentStore
-// forge:hash=bb3ff339e49742d06865dc661699175c91f5ea2139ca4b64fa2b7157e3073a64
+// forge:hash=6ee85a897ba3d71a9d2437f49a9cf7a93dd50e438e3990cc35204c73be6486d1
 
 // MockAttachmentStore is a test mock for the AttachmentStore interface.
 //
@@ -27,8 +27,6 @@ import (
 type MockAttachmentStore struct {
 	contractkit.Recorder
 	InsertAttachmentFunc func(context.Context, *core.Attachment) error
-	GetAttachmentFunc    func(context.Context, string) (*core.Attachment, error)
-	RemoveAttachmentFunc func(context.Context, string) error
 }
 
 // InsertAttachment records the call and delegates to InsertAttachmentFunc when set.
@@ -38,24 +36,6 @@ func (m *MockAttachmentStore) InsertAttachment(ctx context.Context, a *core.Atta
 		return m.InsertAttachmentFunc(ctx, a)
 	}
 	return contractkit.MockNotSet("MockAttachmentStore", "InsertAttachment")
-}
-
-// GetAttachment records the call and delegates to GetAttachmentFunc when set.
-func (m *MockAttachmentStore) GetAttachment(ctx context.Context, id string) (*core.Attachment, error) {
-	m.Recorder.Record("GetAttachment", ctx, id)
-	if m.GetAttachmentFunc != nil {
-		return m.GetAttachmentFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockAttachmentStore", "GetAttachment")
-}
-
-// RemoveAttachment records the call and delegates to RemoveAttachmentFunc when set.
-func (m *MockAttachmentStore) RemoveAttachment(ctx context.Context, id string) error {
-	m.Recorder.Record("RemoveAttachment", ctx, id)
-	if m.RemoveAttachmentFunc != nil {
-		return m.RemoveAttachmentFunc(ctx, id)
-	}
-	return contractkit.MockNotSet("MockAttachmentStore", "RemoveAttachment")
 }
 
 // Compile-time check.

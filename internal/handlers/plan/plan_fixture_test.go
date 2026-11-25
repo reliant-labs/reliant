@@ -3,6 +3,7 @@ package plan_test
 import (
 	"context"
 	"fmt"
+	"testing"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -31,18 +32,18 @@ type planMocks struct {
 	Threads *plan.MockThreadStore
 	Chats   *plan.MockChatStore
 	Refetch *plan.MockChatRefetcher
-	Tx      *plan.MockTxRunner
+	DB      orm.Context
 }
 
 // Deps is the Deps the mocks stand in for.
 func (m *planMocks) Deps() plan.Deps {
-	return plan.Deps{Plans: m.Plans, Tasks: m.Tasks, Threads: m.Threads, Chats: m.Chats, Refetch: m.Refetch, Tx: m.Tx}
+	return plan.Deps{Plans: m.Plans, Tasks: m.Tasks, Threads: m.Threads, Chats: m.Chats, Refetch: m.Refetch, DB: m.DB}
 }
 
 // newPlanMocks answers the fixture's chat, thread and plan lookups, runs a
 // transaction's body in place and accepts refetch notifications. Tests
 // program the writes they reach.
-func newPlanMocks() *planMocks {
+func newPlanMocks(t *testing.T) *planMocks {
 	chats := map[string]*core.ChatRow{
 		ownChatID:   {ID: ownChatID, UserID: "test-user"},
 		otherChatID: {ID: otherChatID, UserID: "someone-else"},
@@ -86,8 +87,7 @@ func newPlanMocks() *planMocks {
 		Refetch: &plan.MockChatRefetcher{
 			EmitChatRefetchFunc: func(context.Context, string, core.RefetchType) error { return nil },
 		},
-		Tx: &plan.MockTxRunner{
-			RunTxFunc: func(ctx context.Context, _ orm.TxPolicy, fn func(context.Context) error) error { return fn(ctx) },
-		},
+		// The CRUD rpcs run on a real database; the rpcs these mocks serve never touch it.
+		DB: plan.NewMigratedTestDB(t),
 	}
 }

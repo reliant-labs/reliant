@@ -32,7 +32,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/questions"
 
 	"github.com/nats-io/nats.go/jetstream"
-
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	"github.com/reliant-labs/reliant/internal/accountpurge"
@@ -1127,6 +1127,7 @@ func (g *Graph) newAttachment() (*attachment.Service, error) {
 		Config:      g.Cfg,
 		Attachments: store.NewAttachmentExtStore(g.Database().ORM()),
 		API:         g.ApiServerConfig,
+		DB:          g.ORM(),
 	})
 }
 
@@ -1427,12 +1428,11 @@ func (g *Graph) newTask() (*task.Service, error) {
 	return task.New(task.Deps{
 		Logger:  g.Log,
 		Config:  g.Cfg,
-		Tasks:   store.NewTaskExtStore(repo.ORM()),
 		Plans:   store.NewPlanExtStore(repo.ORM()),
 		Threads: store.NewThreadExtStore(repo.ORM()),
 		Chats:   store.NewChatExtStore(repo.ORM()),
 		Refetch: g.chatUpdates(),
-		Tx:      repo.ORM(),
+		DB:      g.ORM(),
 	})
 }
 
@@ -1447,7 +1447,7 @@ func (g *Graph) newPlan() (*plan.Service, error) {
 		Threads: store.NewThreadExtStore(repo.ORM()),
 		Chats:   store.NewChatExtStore(repo.ORM()),
 		Refetch: g.chatUpdates(),
-		Tx:      repo.ORM(),
+		DB:      g.ORM(),
 	})
 }
 
@@ -1958,6 +1958,13 @@ func (g *Graph) newPullRequestRecord() (*pull_request_record.Service, error) {
 		Config: g.Cfg,
 		Store:  store.NewPrRecordExtStore(g.Database().ORM()),
 		Now:    nil, // optional — no provider
+	})
+}
+
+// newORM constructs the ORM provider (NewORM, internal/app/providers.go).
+func (g *Graph) newORM() (orm.Context, error) {
+	return NewORM(ORMDeps{
+		Repo: g.Database(),
 	})
 }
 
