@@ -107,6 +107,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/providerusage"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llmusage"
+	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/privacy"
@@ -589,23 +590,43 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 
 func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 	return NewWorkerToolsFactory(WorkerToolsFactoryDeps{
-		ConnectionVault:  g.CredentialsConnectionvault(),
-		Network:          g.ServerProcessConfig.GetNetwork(),
-		Temporal:         g.TemporalClient(),
-		AgentRuns:        g.AgentRuns(),
-		Triggers:         g.WorkerTrigger(),
-		Credentials:      g.WorkerIntegrationCredentials(),
-		WriteLedger:      g.IntegrationsWriteledger(),
-		CatalogSearch:    g.WorkerCatalogSearch(),
-		Router:           g.WorkerDaemonRouter(),
-		DB:               g.Database(),
-		Membership:       g.OrgResolver(),
-		Logger:           g.Log,
-		Config:           g.Cfg,
-		Backoff:          g.Providerbackoff(),
-		ChangeController: g.ChangeController(),
-		Mirror:           g.Daemonmirror(),
-		WorkflowDrafts:   g.Workflowdrafts(),
+		ConnectionVault:   g.CredentialsConnectionvault(),
+		Network:           g.ServerProcessConfig.GetNetwork(),
+		Temporal:          g.TemporalClient(),
+		AgentRuns:         g.AgentRuns(),
+		Triggers:          g.WorkerTrigger(),
+		Credentials:       g.WorkerIntegrationCredentials(),
+		WriteLedger:       g.IntegrationsWriteledger(),
+		CatalogSearch:     g.WorkerCatalogSearch(),
+		Router:            g.WorkerDaemonRouter(),
+		DB:                g.Database(),
+		Membership:        g.OrgResolver(),
+		Logger:            g.Log,
+		Config:            g.Cfg,
+		Backoff:           g.Providerbackoff(),
+		ChangeController:  g.ChangeController(),
+		MachineController: g.MachineController(),
+		WorkflowDrafts:    g.Workflowdrafts(),
+	})
+}
+
+func (g *Graph) newMachineController() (tools.MachineController, error) {
+	return NewMachineController(MachineControllerDeps{
+		DB:     g.Database(),
+		Router: g.WorkerDaemonRouter(),
+		Mirror: g.Daemonmirror(),
+		Logger: g.Log,
+		Config: g.Cfg,
+	})
+}
+
+func (g *Graph) newOrgMoves() (orgmove.Service, error) {
+	return NewOrgMoves(OrgMovesDeps{
+		DB:           g.Database(),
+		Router:       g.WorkerDaemonRouter(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		Triggers:     g.WorkerTrigger(),
+		Membership:   g.OrgResolver(),
 	})
 }
 
@@ -662,7 +683,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		Membership: g.OrgResolver(),
 		// ... and the org policy resolver beside it (orgpolicy).
 		Policies: g.OrgPolicyResolver(),
-		Triggers: g.WorkerTrigger(),
+		OrgMoves: g.OrgMoves(),
 	})
 }
 
@@ -1202,7 +1223,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Chats:          store.NewChatExtStore(g.Database().ORM()),
 		Owners:         g.Triggerowner(),
 		Firings:        store.NewTriggerEventExtStore(g.Database().ORM()),
-		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()), TriggerWrites: store.NewTriggerWritesExtStore(g.Database().ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(g.Database().ORM()),
 		Pools:          store.NewMachinePoolExtStore(g.Database().ORM()),
 		Syncer:         syncer,
@@ -1676,8 +1697,11 @@ func (g *Graph) newSharing() (*sharing.Service, error) {
 		Projects:       store.NewProjectExtStore(o),
 		WorkflowDrafts: g.Workflowdrafts(),
 		Shares:         store.NewShareEventExtStore(o),
+		Members:        store.NewChatMemberExtStore(o),
 		Tx:             o,
 		Orgs:           g.OrgResolver(),
+		// SetChatMember grants only with chat_collaboration.enabled.
+		Collaboration: g.ApiServerConfig.GetChatCollaboration(),
 	})
 }
 

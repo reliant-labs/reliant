@@ -25,6 +25,7 @@ import { AppPageProjectPicker } from "@/components/Layout/sidebar/AppPageProject
 
 import { LearnLink } from "@/lib/learnLinks";
 
+import { appDisplayName } from "../Sample/sampleApp";
 import { consoleCrumbs, type Crumb } from "./consoleCrumbs";
 import { learnSectionOf } from "./consoleLearn";
 import { useConsoleNavExtras } from "./consoleNavExtras";
@@ -91,7 +92,7 @@ export function ConsoleBreadcrumb({ project, env, crumbs }: { project: string; e
   return (
     <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-ink-muted">
       <Link href={withSearch(consolePath(project, { kind: "overview" }), { env })} className="truncate hover:text-ink">
-        {project}
+        {appDisplayName(project)}
       </Link>
       {crumbs.map((crumb, index) => (
         <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5 max-sm:hidden max-sm:last:inline-flex">

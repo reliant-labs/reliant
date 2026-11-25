@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/orm"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -43,6 +44,17 @@ type Shares interface {
 	ListSharedWorkflowDrafts(ctx context.Context, f core.SharedWorkflowDraftFilters) ([]*core.WorkflowDraft, error)
 }
 
+// Members is the one writer of a chat's per-person grants (with its share
+// event) and their reader (chat-collaboration.md §3).
+// store.ChatMemberExtStore satisfies it; ApplyChatMemberChange must run in a
+// transaction (Deps.Tx), so the grant and its event land together.
+type Members interface {
+	LockChatMembers(ctx context.Context, chatID string) error
+	ApplyChatMemberChange(ctx context.Context, c core.ChatMemberChange) (core.ShareAction, error)
+	GetChatMember(ctx context.Context, chatID, userID string) (*core.ChatMember, error)
+	ListChatMembers(ctx context.Context, chatID string) ([]*core.ChatMember, error)
+}
+
 // TxRunner opens the transaction a visibility change runs in. *orm.Client
 // satisfies it.
 type TxRunner interface {
@@ -69,7 +81,9 @@ type Deps struct {
 	WorkflowDrafts WorkflowDrafts
 	// Shares writes a visibility and lists what is shared.
 	Shares Shares
-	// Tx opens the transaction a visibility change runs in.
+	// Members writes and reads a chat's per-person grants.
+	Members Members
+	// Tx opens the transaction a visibility or member change runs in.
 	Tx TxRunner
 	// Orgs resolves the org a shared list is of. Without one (a deployment
 	// with no control plane) there are no orgs, so nothing is shared and the
@@ -77,6 +91,12 @@ type Deps struct {
 	//
 	// forge:optional-dep
 	Orgs OrgResolver
+	// Collaboration gates granting (chat_collaboration.enabled): only with it
+	// set may SetChatMember grant anyone. nil is off. Removing and listing
+	// members are never gated.
+	//
+	// forge:optional-dep
+	Collaboration *configv1.ChatCollaborationConfig
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -99,6 +119,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Shares == nil {
 		return fmt.Errorf("sharing: Deps.Shares is required")
+	}
+	if d.Members == nil {
+		return fmt.Errorf("sharing: Deps.Members is required")
 	}
 	if d.Tx == nil {
 		return fmt.Errorf("sharing: Deps.Tx is required")

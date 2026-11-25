@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // ListProjectDaemons returns every project_daemons row across all the
@@ -33,7 +34,9 @@ func (s *Service) ListProjectDaemons(
 
 	out := make([]*reliantv1.ProjectDaemon, 0)
 	names := s.newMachineNames()
+	ids := make([]string, 0, len(projects))
 	for _, p := range projects {
+		ids = append(ids, p.ID)
 		rows, err := s.deps.Repo.ListProjectDaemonsForProject(ctx, p.ID)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list project_daemons"))
@@ -42,6 +45,13 @@ func (s *Service) ListProjectDaemons(
 			out = append(out, names.proto(ctx, pd))
 		}
 	}
+	// The nested repositories being set up with each checkout, in one read.
+	// Best-effort: without them a client still has each checkout's state.
+	nested, err := s.deps.Installs.ListProjectDaemonReposForProjects(ctx, ids)
+	if err != nil {
+		logging.WarnContext(ctx, "ListProjectDaemons: could not read the nested repositories being set up", "error", err)
+	}
+	attachNestedRepos(out, nested)
 
 	return connect.NewResponse(&reliantv1.ListProjectDaemonsResponse{
 		ProjectDaemons: out,
