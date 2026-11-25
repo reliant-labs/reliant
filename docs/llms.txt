@@ -12,7 +12,7 @@ Every page below is markdown: each link ends in `.md`, and appending `.md` to an
 - [Reliant quick start: run your first AI agent workflow](https://docs.reliantlabs.io/getting-started/quick-start.md): Sign in to Reliant, set up a machine and a model, chat with the default agent, run a built-in multi-agent workflow and write your own in YAML.
 - [Forge quick start: build and deploy a Go + React app](https://docs.reliantlabs.io/forge/quick-start.md): Build a Go and React app with Reliant and Forge, run it locally and deploy it to a URL on Reliant hosting. No account needed with forge env deploy --claimable.
 - [Reliant hosting: services, workers, static sites and Postgres](https://docs.reliantlabs.io/hosting/overview.md): What Reliant hosting runs for a forge project, what it costs, what a queued deploy means, and what it refuses
-- [Limits: what Reliant hosting does and does not do](https://docs.reliantlabs.io/hosting/limits.md): Every limit in one place: the no-account claimable deploy (72 hours, one service, 125m CPU), the free static site (1 GiB), what needs billing, no autoscaling, no hosted cron, one region (us-central1), Next.js static export only, and telemetry retention.
+- [Limits: what Reliant hosting does and does not do](https://docs.reliantlabs.io/hosting/limits.md): Every limit in one place: the no-account claimable deploy (72 hours, one service, 125m CPU), the free static site (1 GiB), what needs billing, no hosted cron, deploying a Next.js app, and telemetry retention.
 
 ## Forge: start here
 
@@ -21,7 +21,7 @@ Every page below is markdown: each link ends in `.md`, and appending `.md` to an
 - [Deploy your app with a coding agent (Claude Code, Codex, Cursor)](https://docs.reliantlabs.io/guides/forge/deploy-with-a-coding-agent.md): Install the Forge MCP server in Claude Code, Codex or Cursor and ask the agent to deploy your app with no account: it returns a live URL and a 72-hour claim link.
 - [forge project start: the first command to run](https://docs.reliantlabs.io/reference/cli.md#reliant-forge-project-start): `forge project start` prints the one next command for the directory you are in (deploy the app already there, or create one); `forge project start app` goes from an empty directory to authored protos. Run it first.
 - [Forge overview](https://docs.reliantlabs.io/forge/overview.md): What forge is: a Go + React framework with tests, environments, hosting and monitoring from the first commit.
-- [When not to use Forge](https://docs.reliantlabs.io/forge/when-not-to-use-forge.md): Where Forge and Reliant hosting are the wrong fit: generated code you don't want, a REST-first API, a database that isn't Postgres, a backend that isn't a container, multi-region or autoscaling needs, and a one-time scaffold.
+- [When not to use Forge](https://docs.reliantlabs.io/forge/when-not-to-use-forge.md): Where Forge and Reliant hosting are the wrong fit: generated code you don't want, a REST-first API, a database that isn't Postgres, a backend that isn't a container, and a one-time scaffold.
 - [Forge quick start](https://docs.reliantlabs.io/forge/quick-start.md): From a prompt to a deployed URL.
 - [Lint AI-generated code](https://docs.reliantlabs.io/forge/linting/overview.md): What forge lint checks and why it matters more when an agent writes the code.
 - [Querying with forge obs](https://docs.reliantlabs.io/hosting/observability/forge-obs.md): `forge obs check` judges a deploy with exit codes 0, 1, 2 and 8.
