@@ -72,7 +72,7 @@ export const deliveryOverlays = {
      * a seed job whose latest run failed. A job reads its runs: the migration
      * green with when it ran, the seed red with why.
      */
-    jobs: refining("workloads.jobs", obs.listWorkloads, observabilityHandlers(createShopApi()), (list) => {
+    jobs: refining("workloads.jobs", obs.listWorkloads, telemetry, (list) => {
       const envs = [...new Set(list.workloads.map((row) => row.envId))];
       for (const envId of envs) {
         const base = list.workloads.find((row) => row.envId === envId)!;
