@@ -194,7 +194,7 @@ function ServiceSignals({ app, env, range }: { app: string; env: string; range: 
                     </td>
                     <td className={cn(TD, "text-right")}>{formatRate(h.requestRate)}</td>
                     <td className={cn(TD, "w-24")}>
-                      <UPlotChart compact height={18} timestamps={h.timestamps} series={[{ label: "Requests", values: h.rateSeries }]} unit="rate" label={`Requests per second to ${row.name}`} />
+                      <UPlotChart compact className="w-16" height={18} timestamps={h.timestamps} series={[{ label: "Requests", values: h.rateSeries }]} unit="rate" label={`Requests per second to ${row.name}`} />
                     </td>
                     <td className={cn(TD, "text-right", h.errorRate >= 0.05 ? "text-danger-ink" : h.errorRate >= 0.01 ? "text-warning-ink" : "")}>{formatPercent(h.errorRate)}</td>
                     <td className={cn(TD, "text-right")}>{formatDuration(h.p95Ms)}</td>
