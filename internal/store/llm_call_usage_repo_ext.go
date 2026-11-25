@@ -387,6 +387,39 @@ func ListLLMUsageDetail(ctx context.Context, db orm.Context, userID string, from
 	return rows, err
 }
 
+// ChatLLMCallQuery selects one chat's model calls: created in [From, To)
+// (From zero: from the oldest kept), of run RunID when set (the run, or a run
+// it spawned: ai_run_id or ai_root_run_id), at most Limit of them.
+type ChatLLMCallQuery struct {
+	ChatID   string
+	From, To time.Time
+	RunID    string
+	Limit    int
+}
+
+// ListChatLLMCalls is a chat's per-call rows, oldest first (created_at, id,
+// attempt), for its Trace/Cost tab. It reads llm_call_usage_chat_created_at_idx.
+func ListChatLLMCalls(ctx context.Context, db orm.Context, q ChatLLMCallQuery) ([]*LlmCallUsage, error) {
+	if q.ChatID == "" {
+		return nil, errors.New("llm call usage: chat id is required")
+	}
+	if q.Limit <= 0 {
+		return nil, errors.New("llm call usage: limit must be positive")
+	}
+	var rows []*LlmCallUsage
+	sel := db.Bun().NewSelect().Model(&rows).Where("chat_id = ?", q.ChatID).Where("created_at < ?", q.To.UTC())
+	if !q.From.IsZero() {
+		sel = sel.Where("created_at >= ?", q.From.UTC())
+	}
+	if q.RunID != "" {
+		sel = sel.Where("(ai_run_id = ? OR ai_root_run_id = ?)", q.RunID, q.RunID)
+	}
+	if err := sel.OrderExpr("created_at, id, attempt").Limit(int64(q.Limit)).Scan(ctx); err != nil {
+		return nil, fmt.Errorf("list chat %s's model calls: %w", q.ChatID, err)
+	}
+	return rows, nil
+}
+
 // DeleteLLMCallUsageForUser removes everything the ledger holds for a user, the
 // rollup included. Account deletion calls it.
 func DeleteLLMCallUsageForUser(ctx context.Context, db orm.Context, userID string) (int64, error) {
