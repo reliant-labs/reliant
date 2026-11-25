@@ -249,13 +249,16 @@ tasks:
         ./cmd/reliant/
 
   build:packages:
-    # Every package compiled, nothing linked, no test variants: the build
-    # cache CI saves on main for every job to restore (-trimpath, so it is a
-    # hit in any checkout). The e2e stories' imports are compiled too.
-    desc: Compile every package (and what the e2e stories import) into the Go build cache
+    # Every package compiled, nothing linked: the build cache CI saves on main
+    # for every job to restore (-trimpath, so it is a hit in any checkout).
+    # The e2e stories' imports are compiled too, and every test package
+    # (scripts/test-build.sh, the merge gate's testbuild phase), so the merge
+    # queue recompiles only the test packages its change reaches.
+    desc: Compile every package and every test package (and what the e2e stories import) into the Go build cache
     cmds:
       - go build ./...
       - go test -tags e2e -c -o /dev/null ./e2e/stories
+      - scripts/test-build.sh
 
   build:dev-cli:
     desc: Build dist/reliant-dev, the internal forensics CLI (reads the DB directly)
