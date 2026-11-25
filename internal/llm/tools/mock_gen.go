@@ -1227,7 +1227,7 @@ func (m *MockscenarioExecStore) GetChat(ctx context.Context, id string) (*db.Cha
 var _ scenarioExecStore = (*MockscenarioExecStore)(nil)
 
 // forge:section MockcreatePlanStore
-// forge:hash=e436d7f546a2adea3aa71fbb6b79575169ddb7fa317c8a725ccb947743b1c4a9
+// forge:hash=043a07ae34929ecc79153148a34bff81839e12e38dd915f56f9b64585d09759c
 
 // MockcreatePlanStore is a test mock for the createPlanStore interface.
 //
@@ -1237,9 +1237,8 @@ var _ scenarioExecStore = (*MockscenarioExecStore)(nil)
 // "MockcreatePlanStore.<Method>Func not set" error.
 type MockcreatePlanStore struct {
 	contractkit.Recorder
-	CreatePlanFunc      func(context.Context, *db.Plan) error
-	CreateTaskFunc      func(context.Context, *db.Task) error
-	EmitChatRefetchFunc func(context.Context, string, db.RefetchType) error
+	CreatePlanFunc func(context.Context, *db.Plan) error
+	CreateTaskFunc func(context.Context, *db.Task) error
 }
 
 // CreatePlan records the call and delegates to CreatePlanFunc when set.
@@ -1260,20 +1259,11 @@ func (m *MockcreatePlanStore) CreateTask(ctx context.Context, task *db.Task) err
 	return contractkit.MockNotSet("MockcreatePlanStore", "CreateTask")
 }
 
-// EmitChatRefetch records the call and delegates to EmitChatRefetchFunc when set.
-func (m *MockcreatePlanStore) EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error {
-	m.Recorder.Record("EmitChatRefetch", ctx, chatID, refetchType)
-	if m.EmitChatRefetchFunc != nil {
-		return m.EmitChatRefetchFunc(ctx, chatID, refetchType)
-	}
-	return contractkit.MockNotSet("MockcreatePlanStore", "EmitChatRefetch")
-}
-
 // Compile-time check.
 var _ createPlanStore = (*MockcreatePlanStore)(nil)
 
 // forge:section MockupdatePlanStore
-// forge:hash=c4d66b292e558a41e8f210e4ef977b6831b2fd3a3a917d368ee5888b8bc74211
+// forge:hash=0e56d4f4cd5644597f960f813feb24d118eb18207ed55b216abe98c290e9ee37
 
 // MockupdatePlanStore is a test mock for the updatePlanStore interface.
 //
@@ -1283,17 +1273,7 @@ var _ createPlanStore = (*MockcreatePlanStore)(nil)
 // "MockupdatePlanStore.<Method>Func not set" error.
 type MockupdatePlanStore struct {
 	contractkit.Recorder
-	EmitChatRefetchFunc func(context.Context, string, db.RefetchType) error
-	GetThreadFunc       func(context.Context, string) (*db.Thread, error)
-}
-
-// EmitChatRefetch records the call and delegates to EmitChatRefetchFunc when set.
-func (m *MockupdatePlanStore) EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error {
-	m.Recorder.Record("EmitChatRefetch", ctx, chatID, refetchType)
-	if m.EmitChatRefetchFunc != nil {
-		return m.EmitChatRefetchFunc(ctx, chatID, refetchType)
-	}
-	return contractkit.MockNotSet("MockupdatePlanStore", "EmitChatRefetch")
+	GetThreadFunc func(context.Context, string) (*db.Thread, error)
 }
 
 // GetThread records the call and delegates to GetThreadFunc when set.
@@ -1335,7 +1315,7 @@ func (m *MockgetPlanStore) GetThread(ctx context.Context, id string) (*db.Thread
 var _ getPlanStore = (*MockgetPlanStore)(nil)
 
 // forge:section MockaddTaskStore
-// forge:hash=04e2753c1e5f5347ea3304ee1a02bc2f09f7855bb3de85ce840f62fe91289406
+// forge:hash=5fda88abfc878f6b936740a2665efa336128e506241e41b57985e9dc0e079e69
 
 // MockaddTaskStore is a test mock for the addTaskStore interface.
 //
@@ -1345,9 +1325,8 @@ var _ getPlanStore = (*MockgetPlanStore)(nil)
 // "MockaddTaskStore.<Method>Func not set" error.
 type MockaddTaskStore struct {
 	contractkit.Recorder
-	CreateTaskFunc      func(context.Context, *db.Task) error
-	EmitChatRefetchFunc func(context.Context, string, db.RefetchType) error
-	GetThreadFunc       func(context.Context, string) (*db.Thread, error)
+	CreateTaskFunc func(context.Context, *db.Task) error
+	GetThreadFunc  func(context.Context, string) (*db.Thread, error)
 }
 
 // CreateTask records the call and delegates to CreateTaskFunc when set.
@@ -1357,15 +1336,6 @@ func (m *MockaddTaskStore) CreateTask(ctx context.Context, task *db.Task) error 
 		return m.CreateTaskFunc(ctx, task)
 	}
 	return contractkit.MockNotSet("MockaddTaskStore", "CreateTask")
-}
-
-// EmitChatRefetch records the call and delegates to EmitChatRefetchFunc when set.
-func (m *MockaddTaskStore) EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error {
-	m.Recorder.Record("EmitChatRefetch", ctx, chatID, refetchType)
-	if m.EmitChatRefetchFunc != nil {
-		return m.EmitChatRefetchFunc(ctx, chatID, refetchType)
-	}
-	return contractkit.MockNotSet("MockaddTaskStore", "EmitChatRefetch")
 }
 
 // GetThread records the call and delegates to GetThreadFunc when set.
@@ -1453,7 +1423,7 @@ func (m *MocktaskScopeStore) GetThread(ctx context.Context, id string) (*db.Thre
 var _ taskScopeStore = (*MocktaskScopeStore)(nil)
 
 // forge:section MockupdateTaskStore
-// forge:hash=a4bb75132737a5b0a273ab4fc3f35274a381e924775accbb5963edba6c9c8e18
+// forge:hash=bb7479de33fa6e06370d4ae05e8f21d0b785c57f785bed6159fab75ea6967bd8
 
 // MockupdateTaskStore is a test mock for the updateTaskStore interface.
 //
@@ -1463,11 +1433,10 @@ var _ taskScopeStore = (*MocktaskScopeStore)(nil)
 // "MockupdateTaskStore.<Method>Func not set" error.
 type MockupdateTaskStore struct {
 	contractkit.Recorder
-	GetPlanFunc         func(context.Context, string) (*db.Plan, error)
-	RunTxFunc           func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-	EmitChatRefetchFunc func(context.Context, string, db.RefetchType) error
-	GetTaskFunc         func(context.Context, string) (*db.Task, error)
-	GetThreadFunc       func(context.Context, string) (*db.Thread, error)
+	GetPlanFunc   func(context.Context, string) (*db.Plan, error)
+	RunTxFunc     func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
+	GetTaskFunc   func(context.Context, string) (*db.Task, error)
+	GetThreadFunc func(context.Context, string) (*db.Thread, error)
 }
 
 // GetPlan records the call and delegates to GetPlanFunc when set.
@@ -1486,15 +1455,6 @@ func (m *MockupdateTaskStore) RunTx(p0 context.Context, policy orm.TxPolicy, f f
 		return m.RunTxFunc(p0, policy, f)
 	}
 	return contractkit.MockNotSet("MockupdateTaskStore", "RunTx")
-}
-
-// EmitChatRefetch records the call and delegates to EmitChatRefetchFunc when set.
-func (m *MockupdateTaskStore) EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error {
-	m.Recorder.Record("EmitChatRefetch", ctx, chatID, refetchType)
-	if m.EmitChatRefetchFunc != nil {
-		return m.EmitChatRefetchFunc(ctx, chatID, refetchType)
-	}
-	return contractkit.MockNotSet("MockupdateTaskStore", "EmitChatRefetch")
 }
 
 // GetTask records the call and delegates to GetTaskFunc when set.
@@ -1519,7 +1479,7 @@ func (m *MockupdateTaskStore) GetThread(ctx context.Context, id string) (*db.Thr
 var _ updateTaskStore = (*MockupdateTaskStore)(nil)
 
 // forge:section MockcreateSubtaskStore
-// forge:hash=384a2f1505243da71a9ba481365732bb0ed0fecd8b29c34086a91ade4a812cf1
+// forge:hash=faf0dc134065ae9a965bda746d77345624233887ad6031676f71f920ada3994d
 
 // MockcreateSubtaskStore is a test mock for the createSubtaskStore interface.
 //
@@ -1529,11 +1489,10 @@ var _ updateTaskStore = (*MockupdateTaskStore)(nil)
 // "MockcreateSubtaskStore.<Method>Func not set" error.
 type MockcreateSubtaskStore struct {
 	contractkit.Recorder
-	CreateTaskFunc      func(context.Context, *db.Task) error
-	EmitChatRefetchFunc func(context.Context, string, db.RefetchType) error
-	GetTaskFunc         func(context.Context, string) (*db.Task, error)
-	GetPlanFunc         func(context.Context, string) (*db.Plan, error)
-	GetThreadFunc       func(context.Context, string) (*db.Thread, error)
+	CreateTaskFunc func(context.Context, *db.Task) error
+	GetTaskFunc    func(context.Context, string) (*db.Task, error)
+	GetPlanFunc    func(context.Context, string) (*db.Plan, error)
+	GetThreadFunc  func(context.Context, string) (*db.Thread, error)
 }
 
 // CreateTask records the call and delegates to CreateTaskFunc when set.
@@ -1543,15 +1502,6 @@ func (m *MockcreateSubtaskStore) CreateTask(ctx context.Context, task *db.Task) 
 		return m.CreateTaskFunc(ctx, task)
 	}
 	return contractkit.MockNotSet("MockcreateSubtaskStore", "CreateTask")
-}
-
-// EmitChatRefetch records the call and delegates to EmitChatRefetchFunc when set.
-func (m *MockcreateSubtaskStore) EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error {
-	m.Recorder.Record("EmitChatRefetch", ctx, chatID, refetchType)
-	if m.EmitChatRefetchFunc != nil {
-		return m.EmitChatRefetchFunc(ctx, chatID, refetchType)
-	}
-	return contractkit.MockNotSet("MockcreateSubtaskStore", "EmitChatRefetch")
 }
 
 // GetTask records the call and delegates to GetTaskFunc when set.
@@ -1585,7 +1535,7 @@ func (m *MockcreateSubtaskStore) GetThread(ctx context.Context, id string) (*db.
 var _ createSubtaskStore = (*MockcreateSubtaskStore)(nil)
 
 // forge:section MockaddDependencyStore
-// forge:hash=1dcd7aca3274ba3b6c3500902d67354627ad052923a4ae1b986d5eff7d8c98b0
+// forge:hash=74b7e09d53719b8523c9a5f40de7fb4ecdf28b83dfd9a621ed238448d8df884e
 
 // MockaddDependencyStore is a test mock for the addDependencyStore interface.
 //
@@ -1595,17 +1545,7 @@ var _ createSubtaskStore = (*MockcreateSubtaskStore)(nil)
 // "MockaddDependencyStore.<Method>Func not set" error.
 type MockaddDependencyStore struct {
 	contractkit.Recorder
-	EmitChatRefetchFunc func(context.Context, string, db.RefetchType) error
-	GetTaskFunc         func(context.Context, string) (*db.Task, error)
-}
-
-// EmitChatRefetch records the call and delegates to EmitChatRefetchFunc when set.
-func (m *MockaddDependencyStore) EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error {
-	m.Recorder.Record("EmitChatRefetch", ctx, chatID, refetchType)
-	if m.EmitChatRefetchFunc != nil {
-		return m.EmitChatRefetchFunc(ctx, chatID, refetchType)
-	}
-	return contractkit.MockNotSet("MockaddDependencyStore", "EmitChatRefetch")
+	GetTaskFunc func(context.Context, string) (*db.Task, error)
 }
 
 // GetTask records the call and delegates to GetTaskFunc when set.
@@ -1621,7 +1561,7 @@ func (m *MockaddDependencyStore) GetTask(ctx context.Context, id string) (*db.Ta
 var _ addDependencyStore = (*MockaddDependencyStore)(nil)
 
 // forge:section MockremoveDependencyStore
-// forge:hash=3f393712149e0e206fc7cb545a3ee39b491ac52c108c070e575eb67f643ae113
+// forge:hash=1d390f85785ea0c1acc77324fe878ee0e7711e5dd10dfb5c1d748c933074ce4c
 
 // MockremoveDependencyStore is a test mock for the removeDependencyStore interface.
 //
@@ -1631,16 +1571,6 @@ var _ addDependencyStore = (*MockaddDependencyStore)(nil)
 // "MockremoveDependencyStore.<Method>Func not set" error.
 type MockremoveDependencyStore struct {
 	contractkit.Recorder
-	EmitChatRefetchFunc func(context.Context, string, db.RefetchType) error
-}
-
-// EmitChatRefetch records the call and delegates to EmitChatRefetchFunc when set.
-func (m *MockremoveDependencyStore) EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error {
-	m.Recorder.Record("EmitChatRefetch", ctx, chatID, refetchType)
-	if m.EmitChatRefetchFunc != nil {
-		return m.EmitChatRefetchFunc(ctx, chatID, refetchType)
-	}
-	return contractkit.MockNotSet("MockremoveDependencyStore", "EmitChatRefetch")
 }
 
 // Compile-time check.
@@ -3397,7 +3327,7 @@ func (m *MockrunScenarioStore) GetChat(ctx context.Context, id string) (*db.Chat
 var _ runScenarioStore = (*MockrunScenarioStore)(nil)
 
 // forge:section MockworktreeStore
-// forge:hash=c0333279691b8eda66b21d00a82060f0dbd9404ebc79ad03eae905b772808c16
+// forge:hash=d31dc5d657ff518fd536029ced07b3c6cbb5176ee64f6a3885eed97d7d6f6578
 
 // MockworktreeStore is a test mock for the worktreeStore interface.
 //
@@ -3417,7 +3347,6 @@ type MockworktreeStore struct {
 	CreateRepoFunc               func(context.Context, *core.Repo) error
 	ListReposByProjectFunc       func(context.Context, string) ([]*core.Repo, error)
 	UpdateProjectFunc            func(context.Context, *db.Project, string) error
-	EmitUserRefetchFunc          func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 	GetLiveChatIDForWorktreeFunc func(context.Context, string) (string, error)
 	ListWorktreesFunc            func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
 }
@@ -3512,15 +3441,6 @@ func (m *MockworktreeStore) UpdateProject(ctx context.Context, project *db.Proje
 	return contractkit.MockNotSet("MockworktreeStore", "UpdateProject")
 }
 
-// EmitUserRefetch records the call and delegates to EmitUserRefetchFunc when set.
-func (m *MockworktreeStore) EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error {
-	m.Recorder.Record("EmitUserRefetch", ctx, userID, refetchType, opts)
-	if m.EmitUserRefetchFunc != nil {
-		return m.EmitUserRefetchFunc(ctx, userID, refetchType, opts)
-	}
-	return contractkit.MockNotSet("MockworktreeStore", "EmitUserRefetch")
-}
-
 // GetLiveChatIDForWorktree records the call and delegates to GetLiveChatIDForWorktreeFunc when set.
 func (m *MockworktreeStore) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {
 	m.Recorder.Record("GetLiveChatIDForWorktree", ctx, worktreeID)
@@ -3593,3 +3513,39 @@ func (m *MockwithdrawQuestionStore) WithdrawAsyncQuestion(ctx context.Context, c
 
 // Compile-time check.
 var _ withdrawQuestionStore = (*MockwithdrawQuestionStore)(nil)
+
+// forge:section MockRefetcher
+// forge:hash=ef6ca7eabce08d8bde986c41d515b3095b6c753052360010a1f9cf145e678f27
+
+// MockRefetcher is a test mock for the Refetcher interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockRefetcher.<Method>Func not set" error.
+type MockRefetcher struct {
+	contractkit.Recorder
+	EmitChatRefetchFunc func(context.Context, string, core.RefetchType) error
+	EmitUserRefetchFunc func(context.Context, string, core.RefetchType, core.RefetchOpts) error
+}
+
+// EmitChatRefetch records the call and delegates to EmitChatRefetchFunc when set.
+func (m *MockRefetcher) EmitChatRefetch(ctx context.Context, chatID string, refetchType core.RefetchType) error {
+	m.Recorder.Record("EmitChatRefetch", ctx, chatID, refetchType)
+	if m.EmitChatRefetchFunc != nil {
+		return m.EmitChatRefetchFunc(ctx, chatID, refetchType)
+	}
+	return contractkit.MockNotSet("MockRefetcher", "EmitChatRefetch")
+}
+
+// EmitUserRefetch records the call and delegates to EmitUserRefetchFunc when set.
+func (m *MockRefetcher) EmitUserRefetch(ctx context.Context, userID string, refetchType core.RefetchType, opts core.RefetchOpts) error {
+	m.Recorder.Record("EmitUserRefetch", ctx, userID, refetchType, opts)
+	if m.EmitUserRefetchFunc != nil {
+		return m.EmitUserRefetchFunc(ctx, userID, refetchType, opts)
+	}
+	return contractkit.MockNotSet("MockRefetcher", "EmitUserRefetch")
+}
+
+// Compile-time check.
+var _ Refetcher = (*MockRefetcher)(nil)

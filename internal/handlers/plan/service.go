@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/orm"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -32,8 +33,9 @@ type Deps struct {
 	// Refetch tells a chat's clients a plan or task changed.
 	Refetch ChatRefetcher
 
-	// Tx opens the transactions of the read-check-write rpcs.
-	Tx TxRunner
+	// DB is the handle the generated CRUD ops run on, and the transactions
+	// of their scoped writes. *orm.Client satisfies it.
+	DB orm.Context
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -60,8 +62,8 @@ func (d Deps) validateDeps() error {
 	if d.Refetch == nil {
 		return fmt.Errorf("plan: Deps.Refetch is required")
 	}
-	if d.Tx == nil {
-		return fmt.Errorf("plan: Deps.Tx is required")
+	if d.DB == nil {
+		return fmt.Errorf("plan: Deps.DB is required")
 	}
 	return nil
 }

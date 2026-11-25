@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -18,13 +19,12 @@ import (
 // Tenant isolation for PlanService, on a real database. A plan is reached
 // through its thread's chat: the owner may do everything; a viewer of the
 // shared chat may only read it by chat (GetPlanByChatId); another tenant gets
-// nothing. Codes and row effects only, never message text, so the conversion
-// to forge CRUD (which changes both) leaves this file alone except where a
-// TODO says a code tightens.
+// nothing. Codes and row effects only, never message text. Every refusal of a
+// plan the caller may not write is NotFound: a plan's existence in another
+// tenant, or in a chat only shared with them, is never revealed.
 //
-// TODO facade wave 1c (plan CRUD conversion): another tenant's cases accept
-// PermissionDenied today and NotFound after; tighten each RefusedToday to
-// Code(NotFound) in that PR (owner decision D-B, breaking changes allowed).
+// TODO(forge#2461): the scoping is hand-written in handlers_crud.go (a join
+// through the chat); switch to a forge:owner declaration once forge can follow it.
 func TestPlanTenantIsolation(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
@@ -65,24 +65,21 @@ func TestPlanTenantIsolation(t *testing.T) {
 				return build(t, f, id)
 			},
 		}
-		if as == viewertest.AsOtherTenant {
-			c.TODO = "facade wave 1c: another tenant's row answers NotFound"
-		}
 		if after != nil {
 			c.After = func(t *testing.T, f *viewertest.Fixture, err error) { after(t, f, id, err) }
 		}
 		cases = append(cases, c)
 	}
-	viewerRefused := viewertest.Code(connect.CodePermissionDenied)
-	tenantRefused := viewertest.RefusedToday(connect.CodePermissionDenied)
+	viewerRefused := viewertest.Code(connect.CodeNotFound)
+	tenantRefused := viewertest.Code(connect.CodeNotFound)
 	getPlan := func(_ *testing.T, _ *viewertest.Fixture, id string) proto.Message {
-		return &pb.GetPlanRequest{PlanId: id}
+		return &pb.GetPlanRequest{Id: id}
 	}
 	updatePlan := func(_ *testing.T, _ *viewertest.Fixture, id string) proto.Message {
-		return &pb.UpdatePlanRequest{PlanId: id, Title: proto.String("renamed")}
+		return &pb.UpdatePlanRequest{Plan: &pb.Plan{Id: id, Title: "renamed"}, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title"}}}
 	}
 	deletePlan := func(_ *testing.T, _ *viewertest.Fixture, id string) proto.Message {
-		return &pb.DeletePlanRequest{PlanId: id}
+		return &pb.DeletePlanRequest{Id: id}
 	}
 	listTasks := func(_ *testing.T, _ *viewertest.Fixture, id string) proto.Message {
 		return &pb.ListPlanTasksRequest{PlanId: id}
@@ -122,9 +119,11 @@ func TestPlanTenantIsolation(t *testing.T) {
 		empty func() proto.Message
 		gone  func() proto.Message
 	}{
-		{"GetPlan", func() proto.Message { return &pb.GetPlanRequest{} }, func() proto.Message { return &pb.GetPlanRequest{PlanId: "absent"} }},
-		{"UpdatePlan", func() proto.Message { return &pb.UpdatePlanRequest{} }, func() proto.Message { return &pb.UpdatePlanRequest{PlanId: "absent"} }},
-		{"DeletePlan", func() proto.Message { return &pb.DeletePlanRequest{} }, func() proto.Message { return &pb.DeletePlanRequest{PlanId: "absent"} }},
+		{"GetPlan", func() proto.Message { return &pb.GetPlanRequest{} }, func() proto.Message { return &pb.GetPlanRequest{Id: "absent"} }},
+		{"UpdatePlan", func() proto.Message { return &pb.UpdatePlanRequest{} }, func() proto.Message {
+			return &pb.UpdatePlanRequest{Plan: &pb.Plan{Id: "absent", Title: "x"}, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title"}}}
+		}},
+		{"DeletePlan", func() proto.Message { return &pb.DeletePlanRequest{} }, func() proto.Message { return &pb.DeletePlanRequest{Id: "absent"} }},
 		{"ListPlanTasks", func() proto.Message { return &pb.ListPlanTasksRequest{} }, func() proto.Message { return &pb.ListPlanTasksRequest{PlanId: "absent"} }},
 	} {
 		rpc := rpc
@@ -149,8 +148,7 @@ func TestPlanTenantIsolation(t *testing.T) {
 	cases = append(cases,
 		viewertest.IsolationCase{Name: "GetPlanByChatId/owner", Rpc: "GetPlanByChatId", As: viewertest.AsOwner, Want: viewertest.Code(viewertest.OK), Request: chatReq},
 		viewertest.IsolationCase{Name: "GetPlanByChatId/viewer", Rpc: "GetPlanByChatId", As: viewertest.AsViewer, Want: viewertest.Code(viewertest.OK), Request: chatReq},
-		viewertest.IsolationCase{Name: "GetPlanByChatId/other tenant", Rpc: "GetPlanByChatId", As: viewertest.AsOtherTenant, Want: tenantRefused, Request: chatReq,
-			TODO: "facade wave 1c: another tenant's chat answers NotFound"},
+		viewertest.IsolationCase{Name: "GetPlanByChatId/other tenant", Rpc: "GetPlanByChatId", As: viewertest.AsOtherTenant, Want: tenantRefused, Request: chatReq},
 		viewertest.IsolationCase{Name: "GetPlanByChatId/absent", Rpc: "GetPlanByChatId", As: viewertest.AsOwner, Want: viewertest.Code(connect.CodeNotFound),
 			Request: func(*testing.T, *viewertest.Fixture) proto.Message {
 				return &pb.GetPlanByChatIdRequest{ChatId: "absent"}
@@ -159,8 +157,7 @@ func TestPlanTenantIsolation(t *testing.T) {
 			Request: func(*testing.T, *viewertest.Fixture) proto.Message { return &pb.GetPlanByChatIdRequest{} }},
 		viewertest.IsolationCase{Name: "CreatePlan/owner", Rpc: "CreatePlan", As: viewertest.AsOwner, Want: viewertest.Code(viewertest.OK), Request: createReq},
 		viewertest.IsolationCase{Name: "CreatePlan/viewer", Rpc: "CreatePlan", As: viewertest.AsViewer, Want: viewerRefused, Request: createReq},
-		viewertest.IsolationCase{Name: "CreatePlan/other tenant", Rpc: "CreatePlan", As: viewertest.AsOtherTenant, Want: tenantRefused, Request: createReq,
-			TODO: "facade wave 1c: another tenant's chat answers NotFound"},
+		viewertest.IsolationCase{Name: "CreatePlan/other tenant", Rpc: "CreatePlan", As: viewertest.AsOtherTenant, Want: tenantRefused, Request: createReq},
 		viewertest.IsolationCase{Name: "CreatePlan/absent chat", Rpc: "CreatePlan", As: viewertest.AsOwner, Want: viewertest.Code(connect.CodeNotFound),
 			Request: func(*testing.T, *viewertest.Fixture) proto.Message {
 				return &pb.CreatePlanRequest{ChatId: "absent", Title: "x"}

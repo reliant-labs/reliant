@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/orm"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -19,8 +20,12 @@ type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
-	// Attachments stores attachments and their bytes.
+	// Attachments stores new attachments and their bytes.
 	Attachments AttachmentStore
+
+	// DB is the handle the generated Get and Delete ops run on.
+	// *orm.Client satisfies it.
+	DB orm.Context
 	// API is the API server's config: max_upload_size (MAX_UPLOAD_SIZE) is
 	// the largest upload accepted, in bytes. Nil, or a zero size, takes the
 	// default, 10 MB.
@@ -36,6 +41,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Config == nil {
 		return fmt.Errorf("attachment: Deps.Config is required")
+	}
+	if d.DB == nil {
+		return fmt.Errorf("attachment: Deps.DB is required")
 	}
 	if d.Attachments == nil {
 		return fmt.Errorf("attachment: Deps.Attachments is required")

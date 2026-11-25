@@ -8,86 +8,15 @@
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_forge_v1_forge } from "../../forge/v1/forge_pb";
+import type { Attachment } from "./chat_pb";
+import { file_reliant_v1_chat } from "./chat_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file reliant/v1/attachment.proto.
  */
 export const file_reliant_v1_attachment: GenFile = /*@__PURE__*/
-  fileDesc("ChtyZWxpYW50L3YxL2F0dGFjaG1lbnQucHJvdG8SCnJlbGlhbnQudjEi5wEKDkF0dGFjaG1lbnRJbmZvEgoKAmlkGAEgASgJEg8KB3VzZXJfaWQYAiABKAkSEAoIZmlsZW5hbWUYAyABKAkSDAoEc2l6ZRgEIAEoAxIRCgltaW1lX3R5cGUYBSABKAkSFgoJZmlsZV9oYXNoGAYgASgJSACIAQESEQoJZmlsZV9wYXRoGAcgASgJEhIKCmNyZWF0ZWRfYXQYCCABKAkSEgoKdXBkYXRlZF9hdBgJIAEoCRILCgN1cmwYCiABKAkSFwoPYXR0YWNobWVudF90eXBlGAsgASgJQgwKCl9maWxlX2hhc2giTwoXVXBsb2FkQXR0YWNobWVudFJlcXVlc3QSEAoIZmlsZW5hbWUYASABKAkSDwoHY29udGVudBgCIAEoDBIRCgltaW1lX3R5cGUYAyABKAkiSgoYVXBsb2FkQXR0YWNobWVudFJlc3BvbnNlEi4KCmF0dGFjaG1lbnQYASABKAsyGi5yZWxpYW50LnYxLkF0dGFjaG1lbnRJbmZvIi0KFEdldEF0dGFjaG1lbnRSZXF1ZXN0EhUKDWF0dGFjaG1lbnRfaWQYASABKAkiWAoVR2V0QXR0YWNobWVudFJlc3BvbnNlEi4KCmF0dGFjaG1lbnQYASABKAsyGi5yZWxpYW50LnYxLkF0dGFjaG1lbnRJbmZvEg8KB2NvbnRlbnQYAiABKAwiMAoXRGVsZXRlQXR0YWNobWVudFJlcXVlc3QSFQoNYXR0YWNobWVudF9pZBgBIAEoCSIrChhEZWxldGVBdHRhY2htZW50UmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCSJSChpDcmVhdGVGaWxlUmVmZXJlbmNlUmVxdWVzdBIRCglmaWxlX3BhdGgYASABKAkSEAoIZmlsZW5hbWUYAiABKAkSDwoHY29udGVudBgDIAEoDCJNChtDcmVhdGVGaWxlUmVmZXJlbmNlUmVzcG9uc2USLgoKYXR0YWNobWVudBgBIAEoCzIaLnJlbGlhbnQudjEuQXR0YWNobWVudEluZm8yowUKEUF0dGFjaG1lbnRTZXJ2aWNlErABChBVcGxvYWRBdHRhY2htZW50EiMucmVsaWFudC52MS5VcGxvYWRBdHRhY2htZW50UmVxdWVzdBokLnJlbGlhbnQudjEuVXBsb2FkQXR0YWNobWVudFJlc3BvbnNlIlGiuxhNOks6SXN0YWdlcyBhbiBpbWFnZSBmb3IgdGhlIGNvbXBvc2VyOiB0aGUgbWVzc2FnZSB0aGF0IHNlbmRzIGl0IGlzIHRoZSByZWNvcmQSwQEKE0NyZWF0ZUZpbGVSZWZlcmVuY2USJi5yZWxpYW50LnYxLkNyZWF0ZUZpbGVSZWZlcmVuY2VSZXF1ZXN0GicucmVsaWFudC52MS5DcmVhdGVGaWxlUmVmZXJlbmNlUmVzcG9uc2UiWaK7GFU6UzpRc3RhZ2VzIGEgZmlsZSdzIGNvbnRlbnQgZm9yIHRoZSBjb21wb3NlcjogdGhlIG1lc3NhZ2UgdGhhdCBzZW5kcyBpdCBpcyB0aGUgcmVjb3JkElkKDUdldEF0dGFjaG1lbnQSIC5yZWxpYW50LnYxLkdldEF0dGFjaG1lbnRSZXF1ZXN0GiEucmVsaWFudC52MS5HZXRBdHRhY2htZW50UmVzcG9uc2UiA5ACARK7AQoQRGVsZXRlQXR0YWNobWVudBIjLnJlbGlhbnQudjEuRGVsZXRlQXR0YWNobWVudFJlcXVlc3QaJC5yZWxpYW50LnYxLkRlbGV0ZUF0dGFjaG1lbnRSZXNwb25zZSJcorsYWDpWOlRyZW1vdmVzIGFuIGF0dGFjaG1lbnQgc3RhZ2VkIGZvciB0aGUgY29tcG9zZXI6IGRyYWZ0IHN0YXRlIG9mIGEgbWVzc2FnZSBub3QgeWV0IHNlbnRCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_forge_v1_forge]);
-
-/**
- * AttachmentInfo contains full attachment metadata including storage details
- *
- * @generated from message reliant.v1.AttachmentInfo
- */
-export type AttachmentInfo = Message<"reliant.v1.AttachmentInfo"> & {
-  /**
-   * @generated from field: string id = 1;
-   */
-  id: string;
-
-  /**
-   * @generated from field: string user_id = 2;
-   */
-  userId: string;
-
-  /**
-   * @generated from field: string filename = 3;
-   */
-  filename: string;
-
-  /**
-   * @generated from field: int64 size = 4;
-   */
-  size: bigint;
-
-  /**
-   * @generated from field: string mime_type = 5;
-   */
-  mimeType: string;
-
-  /**
-   * @generated from field: optional string file_hash = 6;
-   */
-  fileHash?: string | undefined;
-
-  /**
-   * @generated from field: string file_path = 7;
-   */
-  filePath: string;
-
-  /**
-   * @generated from field: string created_at = 8;
-   */
-  createdAt: string;
-
-  /**
-   * @generated from field: string updated_at = 9;
-   */
-  updatedAt: string;
-
-  /**
-   * URL for frontend compatibility (constructed from ID)
-   *
-   * @generated from field: string url = 10;
-   */
-  url: string;
-
-  /**
-   * Type of attachment: "image" (binary uploaded) or "file_reference" (path to local file)
-   *
-   * @generated from field: string attachment_type = 11;
-   */
-  attachmentType: string;
-};
-
-/**
- * Describes the message reliant.v1.AttachmentInfo.
- * Use `create(AttachmentInfoSchema)` to create a new message.
- */
-export const AttachmentInfoSchema: GenMessage<AttachmentInfo> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_attachment, 0);
+  fileDesc("ChtyZWxpYW50L3YxL2F0dGFjaG1lbnQucHJvdG8SCnJlbGlhbnQudjEiTwoXVXBsb2FkQXR0YWNobWVudFJlcXVlc3QSEAoIZmlsZW5hbWUYASABKAkSDwoHY29udGVudBgCIAEoDBIRCgltaW1lX3R5cGUYAyABKAkiRgoYVXBsb2FkQXR0YWNobWVudFJlc3BvbnNlEioKCmF0dGFjaG1lbnQYASABKAsyFi5yZWxpYW50LnYxLkF0dGFjaG1lbnQiIgoUR2V0QXR0YWNobWVudFJlcXVlc3QSCgoCaWQYASABKAkiVAoVR2V0QXR0YWNobWVudFJlc3BvbnNlEioKCmF0dGFjaG1lbnQYASABKAsyFi5yZWxpYW50LnYxLkF0dGFjaG1lbnQSDwoHY29udGVudBgCIAEoDCIlChdEZWxldGVBdHRhY2htZW50UmVxdWVzdBIKCgJpZBgBIAEoCSIrChhEZWxldGVBdHRhY2htZW50UmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCSJSChpDcmVhdGVGaWxlUmVmZXJlbmNlUmVxdWVzdBIRCglmaWxlX3BhdGgYASABKAkSEAoIZmlsZW5hbWUYAiABKAkSDwoHY29udGVudBgDIAEoDCJJChtDcmVhdGVGaWxlUmVmZXJlbmNlUmVzcG9uc2USKgoKYXR0YWNobWVudBgBIAEoCzIWLnJlbGlhbnQudjEuQXR0YWNobWVudDKjBQoRQXR0YWNobWVudFNlcnZpY2USsAEKEFVwbG9hZEF0dGFjaG1lbnQSIy5yZWxpYW50LnYxLlVwbG9hZEF0dGFjaG1lbnRSZXF1ZXN0GiQucmVsaWFudC52MS5VcGxvYWRBdHRhY2htZW50UmVzcG9uc2UiUaK7GE06SzpJc3RhZ2VzIGFuIGltYWdlIGZvciB0aGUgY29tcG9zZXI6IHRoZSBtZXNzYWdlIHRoYXQgc2VuZHMgaXQgaXMgdGhlIHJlY29yZBLBAQoTQ3JlYXRlRmlsZVJlZmVyZW5jZRImLnJlbGlhbnQudjEuQ3JlYXRlRmlsZVJlZmVyZW5jZVJlcXVlc3QaJy5yZWxpYW50LnYxLkNyZWF0ZUZpbGVSZWZlcmVuY2VSZXNwb25zZSJZorsYVTpTOlFzdGFnZXMgYSBmaWxlJ3MgY29udGVudCBmb3IgdGhlIGNvbXBvc2VyOiB0aGUgbWVzc2FnZSB0aGF0IHNlbmRzIGl0IGlzIHRoZSByZWNvcmQSWQoNR2V0QXR0YWNobWVudBIgLnJlbGlhbnQudjEuR2V0QXR0YWNobWVudFJlcXVlc3QaIS5yZWxpYW50LnYxLkdldEF0dGFjaG1lbnRSZXNwb25zZSIDkAIBErsBChBEZWxldGVBdHRhY2htZW50EiMucmVsaWFudC52MS5EZWxldGVBdHRhY2htZW50UmVxdWVzdBokLnJlbGlhbnQudjEuRGVsZXRlQXR0YWNobWVudFJlc3BvbnNlIlyiuxhYOlY6VHJlbW92ZXMgYW4gYXR0YWNobWVudCBzdGFnZWQgZm9yIHRoZSBjb21wb3NlcjogZHJhZnQgc3RhdGUgb2YgYSBtZXNzYWdlIG5vdCB5ZXQgc2VudEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_forge_v1_forge, file_reliant_v1_chat]);
 
 /**
  * @generated from message reliant.v1.UploadAttachmentRequest
@@ -120,7 +49,7 @@ export type UploadAttachmentRequest = Message<"reliant.v1.UploadAttachmentReques
  * Use `create(UploadAttachmentRequestSchema)` to create a new message.
  */
 export const UploadAttachmentRequestSchema: GenMessage<UploadAttachmentRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_attachment, 1);
+  messageDesc(file_reliant_v1_attachment, 0);
 
 /**
  * @generated from message reliant.v1.UploadAttachmentResponse
@@ -129,9 +58,9 @@ export type UploadAttachmentResponse = Message<"reliant.v1.UploadAttachmentRespo
   /**
    * The created attachment with metadata
    *
-   * @generated from field: reliant.v1.AttachmentInfo attachment = 1;
+   * @generated from field: reliant.v1.Attachment attachment = 1;
    */
-  attachment?: AttachmentInfo | undefined;
+  attachment?: Attachment | undefined;
 };
 
 /**
@@ -139,16 +68,16 @@ export type UploadAttachmentResponse = Message<"reliant.v1.UploadAttachmentRespo
  * Use `create(UploadAttachmentResponseSchema)` to create a new message.
  */
 export const UploadAttachmentResponseSchema: GenMessage<UploadAttachmentResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_attachment, 2);
+  messageDesc(file_reliant_v1_attachment, 1);
 
 /**
  * @generated from message reliant.v1.GetAttachmentRequest
  */
 export type GetAttachmentRequest = Message<"reliant.v1.GetAttachmentRequest"> & {
   /**
-   * @generated from field: string attachment_id = 1;
+   * @generated from field: string id = 1;
    */
-  attachmentId: string;
+  id: string;
 };
 
 /**
@@ -156,7 +85,7 @@ export type GetAttachmentRequest = Message<"reliant.v1.GetAttachmentRequest"> & 
  * Use `create(GetAttachmentRequestSchema)` to create a new message.
  */
 export const GetAttachmentRequestSchema: GenMessage<GetAttachmentRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_attachment, 3);
+  messageDesc(file_reliant_v1_attachment, 2);
 
 /**
  * @generated from message reliant.v1.GetAttachmentResponse
@@ -165,9 +94,9 @@ export type GetAttachmentResponse = Message<"reliant.v1.GetAttachmentResponse"> 
   /**
    * Attachment metadata
    *
-   * @generated from field: reliant.v1.AttachmentInfo attachment = 1;
+   * @generated from field: reliant.v1.Attachment attachment = 1;
    */
-  attachment?: AttachmentInfo | undefined;
+  attachment?: Attachment | undefined;
 
   /**
    * File content as bytes (base64 encoded in JSON transport)
@@ -182,16 +111,16 @@ export type GetAttachmentResponse = Message<"reliant.v1.GetAttachmentResponse"> 
  * Use `create(GetAttachmentResponseSchema)` to create a new message.
  */
 export const GetAttachmentResponseSchema: GenMessage<GetAttachmentResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_attachment, 4);
+  messageDesc(file_reliant_v1_attachment, 3);
 
 /**
  * @generated from message reliant.v1.DeleteAttachmentRequest
  */
 export type DeleteAttachmentRequest = Message<"reliant.v1.DeleteAttachmentRequest"> & {
   /**
-   * @generated from field: string attachment_id = 1;
+   * @generated from field: string id = 1;
    */
-  attachmentId: string;
+  id: string;
 };
 
 /**
@@ -199,7 +128,7 @@ export type DeleteAttachmentRequest = Message<"reliant.v1.DeleteAttachmentReques
  * Use `create(DeleteAttachmentRequestSchema)` to create a new message.
  */
 export const DeleteAttachmentRequestSchema: GenMessage<DeleteAttachmentRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_attachment, 5);
+  messageDesc(file_reliant_v1_attachment, 4);
 
 /**
  * @generated from message reliant.v1.DeleteAttachmentResponse
@@ -216,7 +145,7 @@ export type DeleteAttachmentResponse = Message<"reliant.v1.DeleteAttachmentRespo
  * Use `create(DeleteAttachmentResponseSchema)` to create a new message.
  */
 export const DeleteAttachmentResponseSchema: GenMessage<DeleteAttachmentResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_attachment, 6);
+  messageDesc(file_reliant_v1_attachment, 5);
 
 /**
  * @generated from message reliant.v1.CreateFileReferenceRequest
@@ -249,7 +178,7 @@ export type CreateFileReferenceRequest = Message<"reliant.v1.CreateFileReference
  * Use `create(CreateFileReferenceRequestSchema)` to create a new message.
  */
 export const CreateFileReferenceRequestSchema: GenMessage<CreateFileReferenceRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_attachment, 7);
+  messageDesc(file_reliant_v1_attachment, 6);
 
 /**
  * @generated from message reliant.v1.CreateFileReferenceResponse
@@ -258,9 +187,9 @@ export type CreateFileReferenceResponse = Message<"reliant.v1.CreateFileReferenc
   /**
    * The created file reference with metadata
    *
-   * @generated from field: reliant.v1.AttachmentInfo attachment = 1;
+   * @generated from field: reliant.v1.Attachment attachment = 1;
    */
-  attachment?: AttachmentInfo | undefined;
+  attachment?: Attachment | undefined;
 };
 
 /**
@@ -268,10 +197,13 @@ export type CreateFileReferenceResponse = Message<"reliant.v1.CreateFileReferenc
  * Use `create(CreateFileReferenceResponseSchema)` to create a new message.
  */
 export const CreateFileReferenceResponseSchema: GenMessage<CreateFileReferenceResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_attachment, 8);
+  messageDesc(file_reliant_v1_attachment, 7);
 
 /**
  * AttachmentService handles file attachment operations
+ * Wire change (owner-approved, breaking:approved, 2026-11-25; reliant#3253):
+ * the attachment rpcs took forge's native CRUD shapes (timestamps and the
+ * Get/Upload response layouts changed). Clients built before it must upgrade.
  *
  * @generated from service reliant.v1.AttachmentService
  */
@@ -298,7 +230,6 @@ export const AttachmentService: GenService<{
   },
   /**
    * GetAttachment retrieves an attachment by ID (includes file content)
-   * forge:custom — scoped to the caller: another user's attachment answers NotFound
    *
    * @generated from rpc reliant.v1.AttachmentService.GetAttachment
    */
@@ -309,7 +240,6 @@ export const AttachmentService: GenService<{
   },
   /**
    * DeleteAttachment removes an attachment by ID
-   * forge:custom — checks the caller owns the attachment before it deletes, answering NotFound otherwise
    *
    * @generated from rpc reliant.v1.AttachmentService.DeleteAttachment
    */

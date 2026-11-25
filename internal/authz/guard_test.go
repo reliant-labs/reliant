@@ -277,7 +277,7 @@ var shareGuard = struct {
 		"internal/handlers/chat_trace/rpc_get_chat_trace.go":           "GetChatTrace: stubbed spans (viewerSpan), model calls with no cost or ids (modelCalls)",
 		"internal/handlers/message/rpc_get_message.go":                 "GetMessage (messageproto.ElideForViewer)",
 		"internal/handlers/plan/rpc_get_plan_by_chat_id.go":            "GetPlanByChatId: the agent's plan",
-		"internal/handlers/task/rpc_list_tasks.go":                     "ListTasks: the plan's tasks",
+		"internal/handlers/task/handlers_crud.go":                      "ListTasks: the plan's tasks",
 		"internal/handlers/question/rpc_list_pending_questions.go":     "ListPendingQuestions for one chat: read-only cards",
 		"internal/handlers/question/rpc_list_async_questions.go":       "ListAsyncQuestions: read-only cards",
 		"internal/handlers/project/rpc_get_project.go":                 "GetProject (projectproto.ForViewer, no git check)",

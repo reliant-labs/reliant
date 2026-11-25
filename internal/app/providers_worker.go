@@ -557,15 +557,17 @@ type WorkerToolsFactory struct{ *tools.ToolsFactory }
 type WorkerToolsFactoryDeps struct {
 	ConnectionVault connectionvault.Service
 	DB              *db.Repo
-	Backoff         providerbackoff.Service
-	Network         *configv1.NetworkConfig
-	Temporal        *TemporalClient
-	AgentRuns       *agentruns.Runs
-	Triggers        *WorkerTrigger
-	Credentials     *WorkerIntegrationCredentials
-	WriteLedger     writeledger.Service
-	CatalogSearch   *WorkerCatalogSearch
-	Router          *WorkerDaemonRouter
+	// Updates writes the plan, task and worktree refetches the tools announce.
+	Updates       chatupdates.Service
+	Backoff       providerbackoff.Service
+	Network       *configv1.NetworkConfig
+	Temporal      *TemporalClient
+	AgentRuns     *agentruns.Runs
+	Triggers      *WorkerTrigger
+	Credentials   *WorkerIntegrationCredentials
+	WriteLedger   writeledger.Service
+	CatalogSearch *WorkerCatalogSearch
+	Router        *WorkerDaemonRouter
 	// WorkflowDrafts is the saved workflows the workflow and scenario tools
 	// read and write.
 	WorkflowDrafts workflowdrafts.Service
@@ -629,6 +631,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		Placement:          daemonplacement.NewRecords(repo.ORM()),
 		Workflows:          store.NewWorkflowExtStore(repo.ORM()),
 		Planning:           planner,
+		Refetch:            d.Updates,
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// The worker is where spawn_send actually executes (inside the
 		// ExecuteTools activity), so this is the wiring that matters most for

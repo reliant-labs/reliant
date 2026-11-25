@@ -43,21 +43,20 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // InsertPlan stores a new plan. created_at is p's when set; updated_at is the
 // time of the write. Both are written back onto p.
 func InsertPlan(ctx context.Context, db orm.Context, p *core.Plan) error {
-	status := reliantv1.PlanStatus(p.Status)
+	status := p.Status
 	row := &Plan{
 		ID:          p.ID,
 		ThreadID:    p.ThreadID,
 		Title:       p.Title,
 		Description: p.Description,
 		Status:      &status,
-		Complexity:  planComplexityFromCore(p.Complexity),
+		Complexity:  p.Complexity,
 		ProjectID:   p.ProjectID,
 		CreatedAt:   p.CreatedAt,
 		CompletedAt: p.CompletedAt,
@@ -126,13 +125,13 @@ func ListPlansByChatID(ctx context.Context, db orm.Context, chatID string) ([]*c
 // status, complexity, completed_at) from p and stamps updated_at, which is
 // written back onto p. A missing plan is orm.ErrNoRows.
 func ReplacePlan(ctx context.Context, db orm.Context, p *core.Plan) error {
-	status := reliantv1.PlanStatus(p.Status)
+	status := p.Status
 	row := &Plan{
 		ID:          p.ID,
 		Title:       p.Title,
 		Description: p.Description,
 		Status:      &status,
-		Complexity:  planComplexityFromCore(p.Complexity),
+		Complexity:  p.Complexity,
 		CompletedAt: p.CompletedAt,
 	}
 	err := UpdatePlanMasked(ctx, db, row, []string{
@@ -154,14 +153,6 @@ func RemovePlan(ctx context.Context, db orm.Context, id string) error {
 	return nil
 }
 
-func planComplexityFromCore(c *int32) *reliantv1.PlanComplexity {
-	if c == nil {
-		return nil
-	}
-	v := reliantv1.PlanComplexity(*c)
-	return &v
-}
-
 func planToCore(row *Plan) *core.Plan {
 	p := &core.Plan{
 		ID:          row.ID,
@@ -174,12 +165,9 @@ func planToCore(row *Plan) *core.Plan {
 		CompletedAt: row.CompletedAt,
 	}
 	if row.Status != nil {
-		p.Status = int32(*row.Status)
+		p.Status = *row.Status
 	}
-	if row.Complexity != nil {
-		c := int32(*row.Complexity)
-		p.Complexity = &c
-	}
+	p.Complexity = row.Complexity
 	return p
 }
 

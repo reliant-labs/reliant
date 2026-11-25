@@ -14,6 +14,8 @@ import (
 	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -88,8 +90,8 @@ type Plan struct {
 	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
 	Status        v1.PlanStatus          `protobuf:"varint,5,opt,name=status,proto3,enum=reliant.v1.PlanStatus" json:"status,omitempty"`
 	Complexity    PlanComplexity         `protobuf:"varint,6,opt,name=complexity,proto3,enum=reliant.v1.PlanComplexity" json:"complexity,omitempty"`
-	CreatedAt     string                 `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     string                 `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	ProjectId     *string                `protobuf:"bytes,9,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -167,18 +169,18 @@ func (x *Plan) GetComplexity() PlanComplexity {
 	return PlanComplexity_PLAN_COMPLEXITY_UNSPECIFIED
 }
 
-func (x *Plan) GetCreatedAt() string {
+func (x *Plan) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
-	return ""
+	return nil
 }
 
-func (x *Plan) GetUpdatedAt() string {
+func (x *Plan) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdatedAt
 	}
-	return ""
+	return nil
 }
 
 func (x *Plan) GetProjectId() string {
@@ -321,7 +323,7 @@ func (x *CreatePlanResponse) GetPlan() *Plan {
 // GetPlanRequest retrieves a plan by ID
 type GetPlanRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlanId        string                 `protobuf:"bytes,1,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -356,9 +358,9 @@ func (*GetPlanRequest) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_plan_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *GetPlanRequest) GetPlanId() string {
+func (x *GetPlanRequest) GetId() string {
 	if x != nil {
-		return x.PlanId
+		return x.Id
 	}
 	return ""
 }
@@ -499,13 +501,16 @@ func (x *GetPlanByChatIdResponse) GetPlan() *Plan {
 }
 
 // UpdatePlanRequest updates a plan
+//
+// Wire change (owner-approved, breaking:approved, 2026-11-25; reliant#3253):
+// this message took forge's native CRUD shape. Clients built before it must
+// upgrade; it is not wire-compatible with the previous layout.
 type UpdatePlanRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlanId        string                 `protobuf:"bytes,1,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
-	Title         *string                `protobuf:"bytes,2,opt,name=title,proto3,oneof" json:"title,omitempty"`
-	Description   *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
-	Status        *v1.PlanStatus         `protobuf:"varint,4,opt,name=status,proto3,enum=reliant.v1.PlanStatus,oneof" json:"status,omitempty"`
-	Complexity    *PlanComplexity        `protobuf:"varint,5,opt,name=complexity,proto3,enum=reliant.v1.PlanComplexity,oneof" json:"complexity,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The plan, carrying its id and the fields update_mask names.
+	Plan *Plan `protobuf:"bytes,1,opt,name=plan,proto3" json:"plan,omitempty"`
+	// The Plan fields to write (title, description, status, complexity).
+	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -540,39 +545,18 @@ func (*UpdatePlanRequest) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_plan_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *UpdatePlanRequest) GetPlanId() string {
+func (x *UpdatePlanRequest) GetPlan() *Plan {
 	if x != nil {
-		return x.PlanId
+		return x.Plan
 	}
-	return ""
+	return nil
 }
 
-func (x *UpdatePlanRequest) GetTitle() string {
-	if x != nil && x.Title != nil {
-		return *x.Title
+func (x *UpdatePlanRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
+	if x != nil {
+		return x.UpdateMask
 	}
-	return ""
-}
-
-func (x *UpdatePlanRequest) GetDescription() string {
-	if x != nil && x.Description != nil {
-		return *x.Description
-	}
-	return ""
-}
-
-func (x *UpdatePlanRequest) GetStatus() v1.PlanStatus {
-	if x != nil && x.Status != nil {
-		return *x.Status
-	}
-	return v1.PlanStatus(0)
-}
-
-func (x *UpdatePlanRequest) GetComplexity() PlanComplexity {
-	if x != nil && x.Complexity != nil {
-		return *x.Complexity
-	}
-	return PlanComplexity_PLAN_COMPLEXITY_UNSPECIFIED
+	return nil
 }
 
 // UpdatePlanResponse returns the updated plan
@@ -623,7 +607,7 @@ func (x *UpdatePlanResponse) GetPlan() *Plan {
 // DeletePlanRequest deletes a plan
 type DeletePlanRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlanId        string                 `protobuf:"bytes,1,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -658,9 +642,9 @@ func (*DeletePlanRequest) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_plan_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *DeletePlanRequest) GetPlanId() string {
+func (x *DeletePlanRequest) GetId() string {
 	if x != nil {
-		return x.PlanId
+		return x.Id
 	}
 	return ""
 }
@@ -668,7 +652,6 @@ func (x *DeletePlanRequest) GetPlanId() string {
 // DeletePlanResponse confirms deletion
 type DeletePlanResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -701,13 +684,6 @@ func (x *DeletePlanResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use DeletePlanResponse.ProtoReflect.Descriptor instead.
 func (*DeletePlanResponse) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_plan_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *DeletePlanResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
 }
 
 // ListPlanTasksRequest lists tasks for a plan
@@ -919,7 +895,7 @@ var File_reliant_v1_plan_proto protoreflect.FileDescriptor
 const file_reliant_v1_plan_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/plan.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\x1a\x15reliant/v1/task.proto\"\xc4\x02\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17reliant/v1/common.proto\x1a\x15reliant/v1/task.proto\"\xfc\x02\n" +
 	"\x04Plan\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12\x14\n" +
@@ -928,11 +904,11 @@ const file_reliant_v1_plan_proto_rawDesc = "" +
 	"\x06status\x18\x05 \x01(\x0e2\x16.reliant.v1.PlanStatusR\x06status\x12:\n" +
 	"\n" +
 	"complexity\x18\x06 \x01(\x0e2\x1a.reliant.v1.PlanComplexityR\n" +
-	"complexity\x12\x1d\n" +
+	"complexity\x129\n" +
 	"\n" +
-	"created_at\x18\a \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\tR\tupdatedAt\x12\"\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\"\n" +
 	"\n" +
 	"project_id\x18\t \x01(\tH\x00R\tprojectId\x88\x01\x01B\r\n" +
 	"\v_project_id\"\x83\x02\n" +
@@ -948,33 +924,24 @@ const file_reliant_v1_plan_proto_rawDesc = "" +
 	"project_id\x18\x06 \x01(\tH\x00R\tprojectId\x88\x01\x01B\r\n" +
 	"\v_project_id\":\n" +
 	"\x12CreatePlanResponse\x12$\n" +
-	"\x04plan\x18\x01 \x01(\v2\x10.reliant.v1.PlanR\x04plan\")\n" +
-	"\x0eGetPlanRequest\x12\x17\n" +
-	"\aplan_id\x18\x01 \x01(\tR\x06planId\"7\n" +
+	"\x04plan\x18\x01 \x01(\v2\x10.reliant.v1.PlanR\x04plan\" \n" +
+	"\x0eGetPlanRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"7\n" +
 	"\x0fGetPlanResponse\x12$\n" +
 	"\x04plan\x18\x01 \x01(\v2\x10.reliant.v1.PlanR\x04plan\"1\n" +
 	"\x16GetPlanByChatIdRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\"?\n" +
 	"\x17GetPlanByChatIdResponse\x12$\n" +
-	"\x04plan\x18\x01 \x01(\v2\x10.reliant.v1.PlanR\x04plan\"\x98\x02\n" +
-	"\x11UpdatePlanRequest\x12\x17\n" +
-	"\aplan_id\x18\x01 \x01(\tR\x06planId\x12\x19\n" +
-	"\x05title\x18\x02 \x01(\tH\x00R\x05title\x88\x01\x01\x12%\n" +
-	"\vdescription\x18\x03 \x01(\tH\x01R\vdescription\x88\x01\x01\x123\n" +
-	"\x06status\x18\x04 \x01(\x0e2\x16.reliant.v1.PlanStatusH\x02R\x06status\x88\x01\x01\x12?\n" +
-	"\n" +
-	"complexity\x18\x05 \x01(\x0e2\x1a.reliant.v1.PlanComplexityH\x03R\n" +
-	"complexity\x88\x01\x01B\b\n" +
-	"\x06_titleB\x0e\n" +
-	"\f_descriptionB\t\n" +
-	"\a_statusB\r\n" +
-	"\v_complexity\":\n" +
+	"\x04plan\x18\x01 \x01(\v2\x10.reliant.v1.PlanR\x04plan\"v\n" +
+	"\x11UpdatePlanRequest\x12$\n" +
+	"\x04plan\x18\x01 \x01(\v2\x10.reliant.v1.PlanR\x04plan\x12;\n" +
+	"\vupdate_mask\x18\x02 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
+	"updateMask\":\n" +
 	"\x12UpdatePlanResponse\x12$\n" +
-	"\x04plan\x18\x01 \x01(\v2\x10.reliant.v1.PlanR\x04plan\",\n" +
-	"\x11DeletePlanRequest\x12\x17\n" +
-	"\aplan_id\x18\x01 \x01(\tR\x06planId\".\n" +
-	"\x12DeletePlanResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\"7\n" +
+	"\x04plan\x18\x01 \x01(\v2\x10.reliant.v1.PlanR\x04plan\"#\n" +
+	"\x11DeletePlanRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\x14\n" +
+	"\x12DeletePlanResponse\"7\n" +
 	"\x14ListPlanTasksRequest\x12\x1f\n" +
 	"\aplan_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06planId\"\x95\x01\n" +
 	"\x15ListPlanTasksResponse\x12&\n" +
@@ -991,7 +958,7 @@ const file_reliant_v1_plan_proto_rawDesc = "" +
 	"\x1bPLAN_COMPLEXITY_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16PLAN_COMPLEXITY_SIMPLE\x10\x01\x12\x1c\n" +
 	"\x18PLAN_COMPLEXITY_MODERATE\x10\x02\x12\x1b\n" +
-	"\x17PLAN_COMPLEXITY_COMPLEX\x10\x032\xbd\x05\n" +
+	"\x17PLAN_COMPLEXITY_COMPLEX\x10\x032\xb8\x05\n" +
 	"\vPlanService\x12M\n" +
 	"\n" +
 	"CreatePlan\x12\x1d.reliant.v1.CreatePlanRequest\x1a\x1e.reliant.v1.CreatePlanResponse\"\x00\x12G\n" +
@@ -1000,11 +967,12 @@ const file_reliant_v1_plan_proto_rawDesc = "" +
 	"\n" +
 	"UpdatePlan\x12\x1d.reliant.v1.UpdatePlanRequest\x1a\x1e.reliant.v1.UpdatePlanResponse\"4\xa2\xbb\x180:.\n" +
 	"\x06update\x12$\n" +
-	"\x04plan\x12\aplan_id\x1a\x13response.plan.title\x12l\n" +
+	"\x04plan\x12\aplan.id\x1a\x13response.plan.title\x12g\n" +
 	"\n" +
-	"DeletePlan\x12\x1d.reliant.v1.DeletePlanRequest\x1a\x1e.reliant.v1.DeletePlanResponse\"\x1f\xa2\xbb\x18\x1b:\x19\n" +
-	"\x06delete\x12\x0f\n" +
-	"\x04plan\x12\aplan_id\x12Y\n" +
+	"DeletePlan\x12\x1d.reliant.v1.DeletePlanRequest\x1a\x1e.reliant.v1.DeletePlanResponse\"\x1a\xa2\xbb\x18\x16:\x14\n" +
+	"\x06delete\x12\n" +
+	"\n" +
+	"\x04plan\x12\x02id\x12Y\n" +
 	"\rListPlanTasks\x12 .reliant.v1.ListPlanTasksRequest\x1a!.reliant.v1.ListPlanTasksResponse\"\x03\x90\x02\x01\x12h\n" +
 	"\x12ListPlansByProject\x12%.reliant.v1.ListPlansByProjectRequest\x1a&.reliant.v1.ListPlansByProjectResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
@@ -1040,42 +1008,46 @@ var file_reliant_v1_plan_proto_goTypes = []any{
 	(*ListPlansByProjectRequest)(nil),  // 14: reliant.v1.ListPlansByProjectRequest
 	(*ListPlansByProjectResponse)(nil), // 15: reliant.v1.ListPlansByProjectResponse
 	(v1.PlanStatus)(0),                 // 16: reliant.v1.PlanStatus
-	(*Task)(nil),                       // 17: reliant.v1.Task
-	(*TaskDependency)(nil),             // 18: reliant.v1.TaskDependency
+	(*timestamppb.Timestamp)(nil),      // 17: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil),      // 18: google.protobuf.FieldMask
+	(*Task)(nil),                       // 19: reliant.v1.Task
+	(*TaskDependency)(nil),             // 20: reliant.v1.TaskDependency
 }
 var file_reliant_v1_plan_proto_depIdxs = []int32{
 	16, // 0: reliant.v1.Plan.status:type_name -> reliant.v1.PlanStatus
 	0,  // 1: reliant.v1.Plan.complexity:type_name -> reliant.v1.PlanComplexity
-	16, // 2: reliant.v1.CreatePlanRequest.status:type_name -> reliant.v1.PlanStatus
-	0,  // 3: reliant.v1.CreatePlanRequest.complexity:type_name -> reliant.v1.PlanComplexity
-	1,  // 4: reliant.v1.CreatePlanResponse.plan:type_name -> reliant.v1.Plan
-	1,  // 5: reliant.v1.GetPlanResponse.plan:type_name -> reliant.v1.Plan
-	1,  // 6: reliant.v1.GetPlanByChatIdResponse.plan:type_name -> reliant.v1.Plan
-	16, // 7: reliant.v1.UpdatePlanRequest.status:type_name -> reliant.v1.PlanStatus
-	0,  // 8: reliant.v1.UpdatePlanRequest.complexity:type_name -> reliant.v1.PlanComplexity
-	1,  // 9: reliant.v1.UpdatePlanResponse.plan:type_name -> reliant.v1.Plan
-	17, // 10: reliant.v1.ListPlanTasksResponse.tasks:type_name -> reliant.v1.Task
-	18, // 11: reliant.v1.ListPlanTasksResponse.dependencies:type_name -> reliant.v1.TaskDependency
-	1,  // 12: reliant.v1.ListPlansByProjectResponse.plans:type_name -> reliant.v1.Plan
-	2,  // 13: reliant.v1.PlanService.CreatePlan:input_type -> reliant.v1.CreatePlanRequest
-	4,  // 14: reliant.v1.PlanService.GetPlan:input_type -> reliant.v1.GetPlanRequest
-	6,  // 15: reliant.v1.PlanService.GetPlanByChatId:input_type -> reliant.v1.GetPlanByChatIdRequest
-	8,  // 16: reliant.v1.PlanService.UpdatePlan:input_type -> reliant.v1.UpdatePlanRequest
-	10, // 17: reliant.v1.PlanService.DeletePlan:input_type -> reliant.v1.DeletePlanRequest
-	12, // 18: reliant.v1.PlanService.ListPlanTasks:input_type -> reliant.v1.ListPlanTasksRequest
-	14, // 19: reliant.v1.PlanService.ListPlansByProject:input_type -> reliant.v1.ListPlansByProjectRequest
-	3,  // 20: reliant.v1.PlanService.CreatePlan:output_type -> reliant.v1.CreatePlanResponse
-	5,  // 21: reliant.v1.PlanService.GetPlan:output_type -> reliant.v1.GetPlanResponse
-	7,  // 22: reliant.v1.PlanService.GetPlanByChatId:output_type -> reliant.v1.GetPlanByChatIdResponse
-	9,  // 23: reliant.v1.PlanService.UpdatePlan:output_type -> reliant.v1.UpdatePlanResponse
-	11, // 24: reliant.v1.PlanService.DeletePlan:output_type -> reliant.v1.DeletePlanResponse
-	13, // 25: reliant.v1.PlanService.ListPlanTasks:output_type -> reliant.v1.ListPlanTasksResponse
-	15, // 26: reliant.v1.PlanService.ListPlansByProject:output_type -> reliant.v1.ListPlansByProjectResponse
-	20, // [20:27] is the sub-list for method output_type
-	13, // [13:20] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	17, // 2: reliant.v1.Plan.created_at:type_name -> google.protobuf.Timestamp
+	17, // 3: reliant.v1.Plan.updated_at:type_name -> google.protobuf.Timestamp
+	16, // 4: reliant.v1.CreatePlanRequest.status:type_name -> reliant.v1.PlanStatus
+	0,  // 5: reliant.v1.CreatePlanRequest.complexity:type_name -> reliant.v1.PlanComplexity
+	1,  // 6: reliant.v1.CreatePlanResponse.plan:type_name -> reliant.v1.Plan
+	1,  // 7: reliant.v1.GetPlanResponse.plan:type_name -> reliant.v1.Plan
+	1,  // 8: reliant.v1.GetPlanByChatIdResponse.plan:type_name -> reliant.v1.Plan
+	1,  // 9: reliant.v1.UpdatePlanRequest.plan:type_name -> reliant.v1.Plan
+	18, // 10: reliant.v1.UpdatePlanRequest.update_mask:type_name -> google.protobuf.FieldMask
+	1,  // 11: reliant.v1.UpdatePlanResponse.plan:type_name -> reliant.v1.Plan
+	19, // 12: reliant.v1.ListPlanTasksResponse.tasks:type_name -> reliant.v1.Task
+	20, // 13: reliant.v1.ListPlanTasksResponse.dependencies:type_name -> reliant.v1.TaskDependency
+	1,  // 14: reliant.v1.ListPlansByProjectResponse.plans:type_name -> reliant.v1.Plan
+	2,  // 15: reliant.v1.PlanService.CreatePlan:input_type -> reliant.v1.CreatePlanRequest
+	4,  // 16: reliant.v1.PlanService.GetPlan:input_type -> reliant.v1.GetPlanRequest
+	6,  // 17: reliant.v1.PlanService.GetPlanByChatId:input_type -> reliant.v1.GetPlanByChatIdRequest
+	8,  // 18: reliant.v1.PlanService.UpdatePlan:input_type -> reliant.v1.UpdatePlanRequest
+	10, // 19: reliant.v1.PlanService.DeletePlan:input_type -> reliant.v1.DeletePlanRequest
+	12, // 20: reliant.v1.PlanService.ListPlanTasks:input_type -> reliant.v1.ListPlanTasksRequest
+	14, // 21: reliant.v1.PlanService.ListPlansByProject:input_type -> reliant.v1.ListPlansByProjectRequest
+	3,  // 22: reliant.v1.PlanService.CreatePlan:output_type -> reliant.v1.CreatePlanResponse
+	5,  // 23: reliant.v1.PlanService.GetPlan:output_type -> reliant.v1.GetPlanResponse
+	7,  // 24: reliant.v1.PlanService.GetPlanByChatId:output_type -> reliant.v1.GetPlanByChatIdResponse
+	9,  // 25: reliant.v1.PlanService.UpdatePlan:output_type -> reliant.v1.UpdatePlanResponse
+	11, // 26: reliant.v1.PlanService.DeletePlan:output_type -> reliant.v1.DeletePlanResponse
+	13, // 27: reliant.v1.PlanService.ListPlanTasks:output_type -> reliant.v1.ListPlanTasksResponse
+	15, // 28: reliant.v1.PlanService.ListPlansByProject:output_type -> reliant.v1.ListPlansByProjectResponse
+	22, // [22:29] is the sub-list for method output_type
+	15, // [15:22] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_plan_proto_init() }
@@ -1086,7 +1058,6 @@ func file_reliant_v1_plan_proto_init() {
 	file_reliant_v1_task_proto_init()
 	file_reliant_v1_plan_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_plan_proto_msgTypes[1].OneofWrappers = []any{}
-	file_reliant_v1_plan_proto_msgTypes[7].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
