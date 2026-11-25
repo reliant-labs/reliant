@@ -5,6 +5,7 @@ import { useState } from "react";
 import Button from "@/components/forge-ui/button";
 import { hardNavigate } from "@/lib/hardNavigate";
 import { logger } from "@/lib/logger";
+import { getAuthIdentity } from "@/lib/auth/use-auth";
 import { useAuthStore } from "@/store/authStore";
 
 import { EXISTING_ACCOUNT_COPY } from "./claimCopy";
@@ -26,7 +27,7 @@ export function useSignInToClaim(): { go: () => Promise<void>; working: boolean 
   const go = async () => {
     setWorking(true);
     try {
-      if (useAuthStore.getState().user) await signOut();
+      if (getAuthIdentity()) await signOut();
     } catch (err) {
       // A failed sign-out must not trap them here: the sign-in screen is
       // still the way forward, and signing in replaces the session.

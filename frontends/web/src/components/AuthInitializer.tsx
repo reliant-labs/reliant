@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useAuthStore } from "@/store/authStore";
+import { isForgeAuth } from "@/lib/auth/forge-api";
+import { getAuthIdentity, useAuth } from "@/lib/auth/use-auth";
 import { useGlobalDataStore } from "@/store/globalDataStore";
 import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
 import { loadPrivacySettings } from "@/hooks/privacy-queries";
@@ -27,8 +29,17 @@ import { isForgeShell } from "@/lib/shell";
  *
  * Returns null if no token appears within the budget. Callers treat that as
  * "try again later", never as a fatal error.
+ *
+ * forge sign-in (lib/auth/forge-api.ts) has nothing to wait for: the session
+ * is the broker's HttpOnly cookie, which every request already carries, so
+ * the credential is ready the moment the identity is.
  */
-async function waitForAccessToken(timeoutMs = 10_000): Promise<string | null> {
+async function waitForCredential(timeoutMs = 10_000): Promise<boolean> {
+  if (isForgeAuth()) return true;
+  return (await waitForAccessToken(timeoutMs)) !== null;
+}
+
+async function waitForAccessToken(timeoutMs: number): Promise<string | null> {
   const startedAt = performance.now();
   let attempt = 0;
 
@@ -62,7 +73,10 @@ interface AuthInitializerProps {
 export function AuthInitializer({ children }: AuthInitializerProps) {
   const initialize = useAuthStore((state) => state.initialize);
 
-  const { user, loading, initialized, session } = useAuthStore();
+  const { identity: user, loading, initialized } = useAuth();
+  // Only a re-run trigger: a startup deferred for want of a token retries when
+  // the session (the credential) lands, which the identity does not change for.
+  const session = useAuthStore((state) => state.session);
   const prefetch = useGlobalDataStore((state) => state.prefetch);
   const checkApiKeys = useApiKeySetupStore((state) => state.checkApiKeys);
   const resetApiKeyCheck = useApiKeySetupStore((state) => state.reset);
@@ -77,7 +91,7 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
   // another identity is installed its remaining steps would load and install
   // the previous user's state over the next one's, so they stop instead.
   const stillSignedInAs = (forUserId: string) =>
-    useAuthStore.getState().user?.id === forUserId;
+    getAuthIdentity()?.id === forUserId;
 
   useEffect(() => {
     void initialize();
@@ -138,8 +152,7 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
       // comes back "missing authorization token" — which then trips each
       // caller's retry ladder (settingsSync alone backs off 1s/2s/3s/3s/3s),
       // turning a sub-second gap into tens of seconds of visible stall.
-      const token = await waitForAccessToken();
-      if (!token) {
+      if (!(await waitForCredential())) {
         // Don't burn the one-shot guard on a failed attempt: a later session
         // commit should still be able to run startup.
         if (hasInitializedAuthenticatedStartup.current === startupUserId) {
@@ -155,7 +168,6 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
         userId: user.id,
         email: user.email,
         hasSession: !!session,
-        hasAccessToken: !!session?.access_token,
       });
 
       // A prefetch, not awaited: the project list waits for the tab's org
@@ -201,7 +213,6 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
         userId: user.id,
         email: user.email,
         hasSession: !!session,
-        hasAccessToken: !!session?.access_token,
       });
 
       // Wait for the token itself rather than sleeping a fixed 500ms on
@@ -210,17 +221,15 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
       // (it wasn't, whenever the main process was busy), and losing the race
       // meant the entire prefetch fan-out went out unauthenticated.
       void (async () => {
-        const token = await waitForAccessToken();
+        const ready = await waitForCredential();
         if (!stillSignedInAs(prefetchUserId)) return;
         logger.info("[AuthInitializer] Session check before prefetch:", {
-          hasAccessToken: !!token,
+          hasCredential: ready,
           hasAuthStoreSession: !!session,
-          hasAuthStoreAccessToken: !!session?.access_token,
-          tokenLength: token?.length,
           isElectron: !!window.electronAPI,
         });
 
-        if (!token) {
+        if (!ready) {
           logger.warn("[AuthInitializer] No access token available; skipping prefetch");
           if (hasPrefetched.current === prefetchUserId) hasPrefetched.current = null;
           return;
