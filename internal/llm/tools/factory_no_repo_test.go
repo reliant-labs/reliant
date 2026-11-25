@@ -32,7 +32,13 @@ func heldRepos(v reflect.Value, seen map[uintptr]bool) (held, typedNil int) {
 		}
 		return heldRepos(inner, seen)
 	case reflect.Pointer:
-		if v.IsNil() || v.Type() == repoType {
+		if v.Type() == repoType {
+			if v.IsNil() {
+				return 1, 1
+			}
+			return 1, 0
+		}
+		if v.IsNil() {
 			return 0, 0
 		}
 		if seen[v.Pointer()] {

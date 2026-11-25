@@ -99,6 +99,9 @@ type Deps struct {
 	Workflows   launch.WorkflowLoader
 	Worktrees   launch.WorktreeReader
 	ProjectRows launch.ProjectReader
+	// TriggerEvents is the ledger a launch dedupes against
+	// (store.TriggerEventExtStore).
+	TriggerEvents launch.TriggerEventStore
 }
 
 // Temporal is the slice of the Temporal client the chat handlers use, and
@@ -324,7 +327,7 @@ func New(deps Deps) (*Service, error) {
 // disagree.
 func (s *Service) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Chats: s.chatViews(), Workflows: s.deps.Workflows, Worktrees: s.deps.Worktrees, ProjectRows: s.deps.ProjectRows, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
+		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Chats: s.chatViews(), Workflows: s.deps.Workflows, Worktrees: s.deps.Worktrees, ProjectRows: s.deps.ProjectRows, TriggerEvents: s.deps.TriggerEvents, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
 	})
 	return s.launcherImpl
 }
