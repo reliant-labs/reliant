@@ -527,6 +527,13 @@ describe("priority+ row", () => {
     expect(within(screen.getByTestId("composer-tools")).getByRole("button", { name: "Model settings" })).toBeInTheDocument();
   });
 
+  it("fills the model pill at rest, like the mode pill beside it", () => {
+    primaryPointer("fine");
+    renderWithQuery(<ChatInput onSend={vi.fn()} />);
+    const pill = within(screen.getByTestId("composer-tools")).getByRole("button", { name: "Model settings" });
+    expect(pill).toHaveClass("rounded-full", "bg-[var(--chat-button-bg)]");
+  });
+
   it("folds what does not fit, in priority order", () => {
     expect(foldCount(300, [100, 100, 100], 4)).toBe(2);
     expect(foldCount(308, [100, 100, 100], 4)).toBe(3);
