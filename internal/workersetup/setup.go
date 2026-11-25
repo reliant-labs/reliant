@@ -581,7 +581,7 @@ func chatOwners(cfg *Config) *telemetry.ChatOwnerCache {
 	}
 	repo := cfg.Database
 	return telemetry.NewChatOwnerOrgCache(func(ctx context.Context, chatID string) (telemetry.ChatOwner, error) {
-		chat, err := repo.GetChat(ctx, chatID)
+		chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 		if err != nil || chat == nil {
 			return telemetry.ChatOwner{}, err
 		}
