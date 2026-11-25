@@ -2,25 +2,34 @@
  * Visual-regression harness: puts a page in a fully deterministic state
  * before the app loads.
  *
- *   network     every RPC answered from fixtures/*.ts (shim.ts + rpc.ts)
- *   clock       Date frozen at FIXED_NOW (timers keep running)
- *   randomness  Math.random seeded
+ *   network     fixture mode: config.js names the shop pack
+ *               (FIXTURES_SCENARIO = "shop", read-only), so the production
+ *               build answers every RPC in the page, behind the app's real
+ *               interceptors (src/fixtures/install.ts), and
+ *               src/fixtures/outside.ts is the only fetch boundary
+ *   variants    a surface's named overlays (src/fixtures/shop/overlays.ts),
+ *               plus `empty-reads` on every page: a read no fixture answers
+ *               gets the empty response, as the old fetch shim's `{}` did
+ *   clock       Date frozen at FIXED_NOW (page.clock; timers keep running),
+ *               and the pack clock pinned to it
+ *   randomness  Math.random seeded (shim.ts)
  *   appearance  the project's theme stored before the bootstrap reads it;
  *               the default (Reliant) color scheme; reduced motion
  *   locale      en-US, UTC (playwright.visual.config.ts)
  *
- * `settle` then waits for web fonts and for the network to go quiet, and
+ * `settle` then waits for web fonts and for the pack's calls to go quiet, and
  * toHaveScreenshot's own two-identical-frames check does the rest.
  */
 import { test, type Page } from '@playwright/test'
 
-import { FIXED_NOW, USER } from './fixtures/base'
-import { allFixtures } from './fixtures'
-import { FixtureServer, type Fixtures, type RpcCall } from './rpc'
-import { networkShim, type ShimOptions } from './shim'
+import { FIXED_NOW } from './clock'
+import { pageShim, type ShimOptions } from './shim'
 
-/** Runtime config replacing the env's config.js: the managed product, every URL fake (shim.ts answers them). */
-const CONFIG = {
+/**
+ * Runtime config replacing the env's config.js: the managed product, every URL
+ * fake (fixture mode reaches none of them), and forge#2719's fixture keys.
+ */
+export const CONFIG = {
   AUTH_MODE: 'cloud',
   API_URL: 'https://api.visual.invalid',
   CONTROL_PLANE_API_URL: 'https://cp.visual.invalid',
@@ -32,30 +41,53 @@ const CONFIG = {
   ENVIRONMENT: 'visual',
   OTEL_ENDPOINT: '',
   OTEL_REPLAY: 'false',
+  FIXTURES_SCENARIO: 'shop',
+  FIXTURES_READ_ONLY: 'true',
 }
 
+/** Every page's overlay: unanswered reads answer empty (plan D6). The hosted preview does not use it. */
+const HARNESS_OVERLAYS = ['empty-reads']
+
 export interface HarnessOptions {
-  /** Fixtures that override the shared tables for this page. */
-  fixtures?: Fixtures
+  /** Overlays of the shop app pack for this page (src/fixtures/shop/overlays.ts), in order. */
+  overlays?: string[]
   /** localStorage entries (settings) written before the app boots. */
   storage?: Record<string, string>
 }
 
-export async function installHarness(page: Page, options: HarnessOptions = {}): Promise<FixtureServer> {
+/** `window.__forgeFixtures` once fixture mode is installed (src/fixtures/install.ts ForgeFixturesProbe). */
+export interface Probe {
+  ready: boolean
+  overlays: string[]
+  started: number
+  inflight: number
+  rpcs: Record<string, number>
+  refused: string[]
+  unknown: string[]
+  escaped: string[]
+  outside: string[]
+  unannotated: string[]
+}
+
+export const readProbe = (page: Page): Promise<Probe | null> =>
+  page.evaluate(() => {
+    const probe = (window as unknown as { __forgeFixtures?: Probe }).__forgeFixtures
+    return probe?.ready ? JSON.parse(JSON.stringify(probe)) : null
+  })
+
+export async function installHarness(page: Page, options: HarnessOptions = {}): Promise<void> {
   const theme: ShimOptions['theme'] = test.info().project.use.colorScheme === 'light' ? 'light' : 'dark'
-  const server = new FixtureServer({ ...allFixtures, ...options.fixtures })
   if (options.storage) {
     await page.addInitScript((entries) => {
       for (const [key, value] of Object.entries(entries)) localStorage.setItem(key, value)
     }, options.storage)
   }
   await page.clock.setFixedTime(FIXED_NOW)
-  await page.exposeBinding('__visualRpc', (_source, call: RpcCall) => server.answer(call))
   await page.route('**/config.js', (route) =>
     route.fulfill({ status: 200, contentType: 'text/javascript', body: `window.__FORGE_CONFIG__ = ${JSON.stringify(CONFIG)};` }),
   )
-  await page.addInitScript(networkShim, { now: FIXED_NOW, theme, user: USER } satisfies ShimOptions)
-  return server
+  const overlays = [...(options.overlays ?? []), ...HARNESS_OVERLAYS]
+  await page.addInitScript(pageShim, { now: FIXED_NOW, overlays, theme } satisfies ShimOptions)
 }
 
 export interface SettleOptions {
@@ -66,9 +98,12 @@ export interface SettleOptions {
 }
 
 /**
- * Fonts loaded, no RPC in flight and none started for `quietMs`, then two
- * frames. Fails with "the network never went quiet" once `deadlineMs` has
- * passed, so a request that never finishes is a red test, not a hang.
+ * Fonts loaded, no call in flight and none started for `quietMs`, then two
+ * frames. The counts are the fixture probe's (src/fixtures/install.ts): a
+ * server stream counts until its header, so an open subscription does not
+ * hold the page busy, but a call that never answers does. Fails with "the
+ * network never went quiet" once `deadlineMs` has passed, so a request that
+ * never finishes is a red test, not a hang.
  *
  * Timed in Node with performance.now(): the page's Date is frozen at
  * FIXED_NOW (page.clock), and nothing here may read the page's clock.
@@ -92,12 +127,12 @@ export async function settle(page: Page, { deadlineMs = 20_000, quietMs = 600 }:
   let last = -1
   let quietSince = elapsed()
   for (;;) {
-    const { started, inflight } = await page.evaluate(() => {
-      const w = window as unknown as { __visualStarted: number; __visualInflight: number }
-      return { started: w.__visualStarted, inflight: w.__visualInflight }
+    const counts = await page.evaluate(() => {
+      const probe = (window as unknown as { __forgeFixtures?: { ready?: boolean; started: number; inflight: number } }).__forgeFixtures
+      return probe?.ready ? { started: probe.started, inflight: probe.inflight } : null
     })
-    if (started !== last || inflight > 0) {
-      last = started
+    if (!counts || counts.started !== last || counts.inflight > 0) {
+      last = counts?.started ?? -1
       quietSince = elapsed()
     } else if (elapsed() - quietSince >= quietMs) {
       break

@@ -6,7 +6,7 @@ import {
   DEFAULT_DEMO_APP_HOST,
   DEFAULT_FORGE_APP_HOST,
   SHELL_OVERRIDE_KEY,
-  demoAppHost,
+  demoAppOrigin,
   forgeAppHost,
   forgeAppOrigin,
   normalizeHost,
@@ -18,9 +18,9 @@ import {
 } from "@/lib/shell";
 
 /**
- * One bundle, three shells: the hostname picks Reliant, the forge shell or the
- * public demo, with a remembered `?shell=` override for looking at the others
- * without DNS.
+ * One bundle, three shells: the hostname picks Reliant or the forge shell,
+ * with a remembered `?shell=` override for looking at the others (the public
+ * demo included) without DNS.
  */
 
 function memoryStorage(initial: Record<string, string> = {}) {
@@ -37,7 +37,6 @@ const base = (over: Partial<ShellInputs> = {}): ShellInputs => ({
   hostname: "app.reliantlabs.io",
   search: "",
   forgeHost: DEFAULT_FORGE_APP_HOST,
-  demoHost: DEFAULT_DEMO_APP_HOST,
   electron: false,
   storage: memoryStorage(),
   ...over,
@@ -102,12 +101,8 @@ describe("resolveShell", () => {
     expect(resolveShell(base({ hostname: "demo.reliantlabs.io", search: "?shell=demo", electron: true }))).toBe("reliant");
   });
 
-  it("is the demo on the demo host (demo.reliantlabs.io by default), and follows a configured one", () => {
-    expect(DEFAULT_DEMO_APP_HOST).toBe("demo.reliantlabs.io");
-    expect(resolveShell(base({ hostname: "demo.reliantlabs.io" }))).toBe("demo");
-    expect(resolveShell(base({ hostname: "DEMO.reliantlabs.io" }))).toBe("demo");
-    expect(resolveShell(base({ hostname: "demo.reliantlabs.io.evil.test" }))).toBe("reliant");
-    expect(resolveShell(base({ hostname: "try.example.test", demoHost: "try.example.test" }))).toBe("demo");
+  it("is Reliant on the demo host: the demo is its own build (demo.html), not this bundle", () => {
+    expect(resolveShell(base({ hostname: "demo.reliantlabs.io" }))).toBe("reliant");
   });
 
   it("?shell=demo picks the demo anywhere and remembers it, like ?shell=forge", () => {
@@ -145,11 +140,9 @@ describe("hosts", () => {
     expect(forgeAppHost()).toBe("forge.staging.test");
   });
 
-  it("reads DEMO_APP_HOST from the runtime config, defaulting to demo.reliantlabs.io", () => {
-    setRuntimeConfig({});
-    expect(demoAppHost()).toBe("demo.reliantlabs.io");
-    setRuntimeConfig({ DEMO_APP_HOST: "https://demo.staging.test/" });
-    expect(demoAppHost()).toBe("demo.staging.test");
+  it("links to the public demo on its own host", () => {
+    expect(DEFAULT_DEMO_APP_HOST).toBe("demo.reliantlabs.io");
+    expect(demoAppOrigin()).toBe("https://demo.reliantlabs.io");
   });
 
 });

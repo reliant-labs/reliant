@@ -16,7 +16,7 @@
  * The fixture source fetcher (`fixtureCoverageSource`) answers the page's
  * CoverageSourceContext; its scenario picks what GitHub says for EVERY file,
  * so each no-source state can be shown on refund.go. `?source=<scenario>` in
- * the preview (e2e/visual/fixtures/tests.ts).
+ * the preview.
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";

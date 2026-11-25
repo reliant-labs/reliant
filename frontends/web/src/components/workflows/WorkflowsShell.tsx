@@ -63,6 +63,8 @@ import { useProjects } from "@/hooks/project-queries";
 import { ProjectSelector } from "../Projects/ProjectSelector";
 import Tooltip from "../forge-ui/tooltip";
 import { useWorkflowsScope } from "./useWorkflowsScope";
+import { useShellScopeStore } from "@/lib/urlState/shellScopeStore";
+import { withScope, type ShellScope } from "@/lib/urlState/shellScope";
 import { homePath } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
 import { PageMain } from "@/components/Layout/shell/shellFrame";
@@ -297,11 +299,17 @@ function WorkflowsHeader({ onClose, activeTab, showExit }: {
 }
 
 /**
- * The area's scope: one project, or All projects. Every page honours it
- * (useWorkflowsScope). The list is the project selector (Projects/ProjectSelector).
- * Choosing a project makes it current and narrows to it;
- * All projects keeps the current project as background (`?project=`) and sets
- * `?allProjects=true`.
+ * The area's scope: one project, several, or All projects. Every page
+ * honours it (useWorkflowsScope). The list is the project selector
+ * (Projects/ProjectSelector).
+ *
+ * Inside the one shell the scope is the nav's, so a choice here is the nav's
+ * too: it is written to the URL's `?projects=` (lib/urlState/shellScope),
+ * which the nav reads, and the chat list beside it follows.
+ *
+ * With no nav on screen, choosing a project makes it current and narrows to
+ * it; All projects keeps the current project as background (`?project=`) and
+ * sets `?allProjects=true`.
  */
 function ProjectSwitcher() {
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -309,6 +317,7 @@ function ProjectSwitcher() {
   const selectProject = useProjectStore((state) => state.selectProject);
   const navigate = useNavigate();
   const scope = useWorkflowsScope();
+  const nav = useShellScopeStore((state) => state.published?.scope ?? null);
   const [open, setOpen] = useState(false);
 
   const setAllProjects = (allProjects: boolean) =>
@@ -317,6 +326,23 @@ function ProjectSwitcher() {
       search: (prev: Record<string, unknown>) => ({ ...prev, allProjects: allProjects || undefined }),
       replace: true,
     } as never);
+  // The nav's scope, through the URL; a widening `?allProjects` gives way to it.
+  const setNavScope = (next: ShellScope) =>
+    void navigate({
+      to: ".",
+      search: (prev: Record<string, unknown>) => ({ ...withScope(prev ?? {}, next), allProjects: undefined }),
+      replace: true,
+    } as never);
+
+  const scopedName = scope.projectId
+    ? (projects.find((p) => p.id === scope.projectId)?.name ??
+      (currentProject?.id === scope.projectId ? currentProject.name : undefined))
+    : undefined;
+  const label = scope.allProjects
+    ? "All projects"
+    : scope.projectIds
+      ? `${scope.projectIds.length} projects`
+      : (scopedName ?? currentProject?.name ?? "All projects");
 
   return (
     <ProjectSelector
@@ -324,13 +350,17 @@ function ProjectSwitcher() {
       onOpenChange={setOpen}
       mode="chat"
       align="left"
-      selectedKey={scope.allProjects ? ALL_PROJECTS_KEY : (currentProject?.id ?? ALL_PROJECTS_KEY)}
+      selectedKey={scope.allProjects ? ALL_PROJECTS_KEY : (scope.projectId ?? currentProject?.id ?? ALL_PROJECTS_KEY)}
       leadItems={[
         {
           key: ALL_PROJECTS_KEY,
           label: "All projects",
           testId: "workflows-project-all",
           onSelect: () => {
+            if (nav) {
+              if (nav.mode !== "all" || scope.allProjects) setNavScope({ mode: "all" });
+              return;
+            }
             if (!scope.allProjects) setAllProjects(true);
           },
         },
@@ -338,6 +368,10 @@ function ProjectSwitcher() {
       onSelect={(selection) => {
         if (selection.kind !== "project") return;
         const project = projects.find((p) => p.id === selection.row.key) ?? selection.row.project;
+        if (nav) {
+          if (scope.projectId !== project.id) setNavScope({ mode: "one", projectId: project.id });
+          return;
+        }
         const active = !scope.allProjects && project.id === currentProject?.id;
         if (active) return;
         if (scope.allProjects) setAllProjects(false);
@@ -351,7 +385,7 @@ function ProjectSwitcher() {
           className="inline-flex h-8 max-w-[18rem] items-center gap-2 rounded-md border border-border px-2.5 text-sm text-foreground transition-colors hover:border-muted-foreground/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span className="text-muted-foreground">Project</span>
-          <span className="truncate font-medium">{scope.allProjects ? "All projects" : (currentProject?.name ?? "All projects")}</span>
+          <span className="truncate font-medium">{label}</span>
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
       )}

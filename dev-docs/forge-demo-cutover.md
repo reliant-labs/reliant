@@ -56,7 +56,7 @@ The cutover steps below describe the original hosting migration.
    - A build attempt on 2026-11-06 recorded it before refusing (fixed in forge#1876).
    - It is declared and has never been deployed.
 3. Move the domain, then check again.
-4. Merge reliant #2336 `feat/forge-demo-unhost`: the demo's own build is the supported path, and `DEMO_APP_HOST` is deprecated (it still mounts the demo shell in `prod/reliant-web`, until a future major).
+4. Merge reliant #2336 `feat/forge-demo-unhost`: the demo's own build is the supported path, and `DEMO_APP_HOST` is deprecated. It has since been removed (2026-11-19): `prod/reliant-web` no longer mounts the demo shell on any host.
 
 ## Commands
 
@@ -133,9 +133,10 @@ forge env deploy demo <previous version>    # read the plan's "direction: BEHIND
 ```
 
 A static site has no migrations or data, so deploying the demo env's previous release is a
-complete rollback for it. Step 1 restores exactly what served before the cutover: whatever
-build prod's reliant-web runs, which still mounts the demo shell on that host (`DEMO_APP_HOST`,
-deprecated but kept working after step 4 too).
+complete rollback for it. Step 1 no longer restores the demo: `DEMO_APP_HOST` was removed
+(2026-11-19), so prod's reliant-web serves Reliant on that host, not the demo shell. Roll the
+demo back with its previous release (step 2, or the prod `forge_demo` target's previous
+release since the move into prod below).
 
 ## Follow-ups
 

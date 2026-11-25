@@ -3,10 +3,8 @@
 /**
  * shopfront's releases as every fixture names them: each version and the
  * commit it was cut from. ONE table, read by the Tests fixtures (the trend's
- * release markers, the runs, GetReleaseTests) and by the visual harness's
- * DeployService fixtures (e2e/visual/fixtures/services.ts ListReleases,
- * releases.ts GetRelease), so a release's header and its Tests tab name the
- * same commit.
+ * release markers, the runs, GetReleaseTests), so a release's header and its
+ * Tests tab name the same commit.
  *
  * A leaf: it imports nothing, so every fixture module can read it at load
  * time whatever order they are loaded in.

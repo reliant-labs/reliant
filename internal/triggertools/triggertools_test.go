@@ -131,7 +131,7 @@ func setup(t *testing.T, publicURL string) *env {
 		CreatedAt: now, UpdatedAt: now}))
 
 	svc, err := trigger.New(trigger.Deps{
-		Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, OrgMoves: store.NewProjectOrgMoveExtStore(repo.ORM()),
+		Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), OrgMoves: store.NewProjectOrgMoveExtStore(repo.ORM()),
 		Owners: realOwners(t, repo), Firings: store.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: store.NewTriggerExtStore(repo.ORM()),
 		Projects: projectaccesstest.For(repo), Pools: store.NewMachinePoolExtStore(repo.ORM()), Syncer: e.backend, Fires: e.backend,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: fakeCatalog{}, Intake: fakeIntake{},
