@@ -11,17 +11,18 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Store is the slice of the repository this service uses; *db.Repo satisfies it.
-type Store interface {
-	ListLLMUsageDaily(ctx context.Context, userID string, from, to time.Time) ([]*db.LLMUsageDay, error)
+// Usage reads the caller's LLM usage. store.LlmCallUsageExtStore satisfies it;
+// both reads take the owner and fail closed on an empty one.
+type Usage interface {
+	ListLLMUsageDaily(ctx context.Context, userID string, from, to time.Time) ([]*store.LlmCallUsageDaily, error)
 	// ListLLMUsageDetail is the per-call breakdown (funding and account
 	// included) of the days whose individual calls are still kept.
-	ListLLMUsageDetail(ctx context.Context, userID string, from, to time.Time) ([]*db.LLMUsageDetail, error)
+	ListLLMUsageDetail(ctx context.Context, userID string, from, to time.Time) ([]*store.LLMUsageDetail, error)
 }
 
 // AccountNames names the provider accounts a usage response groups by; provideraccounts.Service
@@ -37,9 +38,9 @@ type AccountNames interface {
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
-	// Store holds the daily LLM usage rollup.
-	Store Store
-	// Accounts labels an account breakdown.
+	// Usage holds the daily LLM usage rollup.
+	Usage Usage
+	// Accounts names the accounts a response groups by.
 	Accounts AccountNames
 	// Now reports the current time; time.Now when nil.
 	// forge:optional-dep
@@ -55,8 +56,8 @@ func (d Deps) validateDeps() error {
 	if d.Config == nil {
 		return fmt.Errorf("usage: Deps.Config is required")
 	}
-	if d.Store == nil {
-		return fmt.Errorf("usage: Deps.Store is required")
+	if d.Usage == nil {
+		return fmt.Errorf("usage: Deps.Usage is required")
 	}
 	if d.Accounts == nil {
 		return fmt.Errorf("usage: Deps.Accounts is required")

@@ -1,12 +1,6 @@
 package store
 
 import (
-	"context"
-	"database/sql"
-	"errors"
-	"fmt"
-
-	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
@@ -75,35 +69,6 @@ var orgReadSQL = map[string]string{
 // since #2537's first release, so a backfill of the previous release, during
 // a rolling deploy, serializes with this one's writes too.
 const userOrgLockSQL = `SELECT pg_advisory_xact_lock(hashtextextended('org-backfill:' || ?, 0))`
-
-// LockUserOrgs takes userID's org lock for the rest of the surrounding
-// transaction, then checks each read: its row still has the org the decision
-// read. It must run inside a transaction (the lock is transaction-scoped)
-// and before any row lock of that transaction.
-func LockUserOrgs(ctx context.Context, db orm.Context, userID string, reads ...OrgRead) error {
-	if userID == "" {
-		return fmt.Errorf("org lock: user is required")
-	}
-	if _, err := db.Bun().NewRaw(userOrgLockSQL, userID).Exec(ctx); err != nil {
-		return fmt.Errorf("take the org lock: %w", err)
-	}
-	for _, read := range reads {
-		query, ok := orgReadSQL[read.Table]
-		if !ok {
-			return fmt.Errorf("org lock: %q has no org", read.Table)
-		}
-		var rows []struct {
-			OrgID *string `bun:"org_id"`
-		}
-		if err := db.Bun().NewRaw(query, read.ID).Scan(ctx, &rows); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("re-read the org of %s %s: %w", read.Table, read.ID, err)
-		}
-		if len(rows) == 0 || !sameOrg(rows[0].OrgID, read.Org) {
-			return ErrOrgChanged
-		}
-	}
-	return nil
-}
 
 // sameOrg is IS NOT DISTINCT FROM.
 func sameOrg(stored, read *string) bool {

@@ -46,6 +46,7 @@ import { Code, ConnectError, type Interceptor, type StreamResponse } from "@conn
 import { installFixtureTransport } from "@/lib/connect";
 import type { RuntimeFixtures } from "@/lib/fixturesConfig";
 
+import { markNoIndex } from "./noindex";
 import { installOutside } from "./outside";
 import { shopAppPack } from "./shop/app";
 import { SHOP_READ_ONLY_MESSAGE } from "./shop/index";
@@ -179,6 +180,8 @@ export function interimReads(probe: Pick<ForgeFixturesProbe, "unannotated">, ans
 
 /** Install fixture mode for `config` (lib/fixturesBoot.ts calls this). */
 export async function installFixtures(config: RuntimeFixtures): Promise<void> {
+  // Sample data is never a search result, nor is a failed install's page (noindex.ts).
+  markNoIndex();
   if (!(FIXTURE_SCENARIOS as readonly string[]).includes(config.scenario)) {
     throw new Error(`fixture mode: no scenario "${config.scenario}" in this build (it serves: ${FIXTURE_SCENARIOS.join(", ")})`);
   }

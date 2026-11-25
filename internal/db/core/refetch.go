@@ -21,3 +21,16 @@ const (
 	// follows the active org is stale.
 	RefetchProjectOrgMoved RefetchType = "project_org_moved"
 )
+
+// RefetchData is the JSON payload of a refetch update, on either stream.
+type RefetchData struct {
+	Type RefetchType `json:"type"`
+}
+
+// RefetchOpts scopes a user-level refetch to the project, worktree or chat it
+// is about.
+type RefetchOpts struct {
+	ProjectID  *string
+	WorktreeID *string
+	ChatID     *string
+}

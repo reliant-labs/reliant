@@ -8,61 +8,68 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type {
+  GetCurrentUserReliantOverviewResponse,
+  GetCurrentUserWalletOverviewResponse,
+} from "@/gen/controlplane/services/billing/v1/billing_pb";
+import { billingServiceKeys, billingServiceMutations, billingServiceQueries } from "@/hooks/controlplane/billing-service-hooks_gen";
+import { refreshing } from "@/hooks/billingKeys";
 import {
-  getReliantOverview,
-  getWalletOverview,
   listLLMKeys,
   listAvailableModels,
   getLLMSpend,
   createManagedLLMKey,
   revokeLLMKey,
   rotateLLMKey,
-  redeemCoupon,
+  redeemCouponResult,
   type CreateManagedKeyArgs,
   type GetLLMSpendArgs,
 } from "@/services/controlPlane/reliantAI";
-import { orgQueryEnabled, useOrgScope, withOrgFailure } from "@/lib/orgScope";
-import { cloudBillingKeys } from "./useCloudBillingQueries";
-import { computeEligibilityQueryKey } from "./useOnboardingQueries";
+import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "@/lib/orgScope";
 
+// The BillingService reads (overviews) are on the generated keys; these are
+// LLMGatewayService's.
 const KEY = {
-  reliantOverview: ["reliantAI", "reliantOverview"] as const,
-  walletOverview: ["reliantAI", "walletOverview"] as const,
   keys: (orgId: string) => ["reliantAI", "keys", orgId] as const,
   models: (orgId: string) => ["reliantAI", "models", orgId] as const,
   spend: (args: GetLLMSpendArgs) =>
     ["reliantAI", "spend", args.orgId, args.startDate, args.endDate] as const,
 };
 
-/** In the tab's org: read in it, keyed by it, and not before it is known (lib/orgScope). */
+const reliantOverviewOf = (res: GetCurrentUserReliantOverviewResponse) => res.overview;
+const walletOverviewOf = (res: GetCurrentUserWalletOverviewResponse) => res.overview;
+
+/** In the tab's org: read in it, keyed by it, and not before it is known (lib/orgScope). Entitlement + period spend/remaining/cap. */
 export function useReliantOverview() {
   const org = useOrgScope();
   return useQuery(
     withOrgFailure(
-      {
-        queryKey: [...KEY.reliantOverview, org.orgId ?? ""],
-        queryFn: () => getReliantOverview(org.orgId),
+      billingServiceQueries.getCurrentUserReliantOverview(orgRequest({}, org.orgId), {
         enabled: orgQueryEnabled(org),
         staleTime: 30_000,
         refetchOnWindowFocus: false,
-      },
+        select: reliantOverviewOf,
+      }),
       org,
     ),
   );
 }
 
-/** In the tab's org, like useReliantOverview. */
+/**
+ * In the tab's org, like useReliantOverview: the wallet balance and its ten
+ * newest ledger entries. (The billing dashboard's useWalletOverview reads five,
+ * so it is a different request and cache entry.)
+ */
 export function useWalletOverview() {
   const org = useOrgScope();
   return useQuery(
     withOrgFailure(
-      {
-        queryKey: [...KEY.walletOverview, org.orgId ?? ""],
-        queryFn: () => getWalletOverview(org.orgId),
+      billingServiceQueries.getCurrentUserWalletOverview(orgRequest({ ledgerPage: 1, ledgerPageSize: 10 }, org.orgId), {
         enabled: orgQueryEnabled(org),
         staleTime: 30_000,
         refetchOnWindowFocus: false,
-      },
+        select: walletOverviewOf,
+      }),
       org,
     ),
   );
@@ -85,31 +92,32 @@ export function useWalletOverview() {
 export function useRedeemCoupon() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (code: string) => redeemCoupon(code),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: KEY.walletOverview });
-      void queryClient.invalidateQueries({ queryKey: KEY.reliantOverview });
-      void queryClient.invalidateQueries({
-        queryKey: cloudBillingKeys.computeSubscription,
-      });
-      void queryClient.invalidateQueries({
-        queryKey: cloudBillingKeys.walletOverview,
-      });
-      // The read that actually GATES compute, and the one this list was
-      // missing. A compute coupon grants MINUTES, not a subscription, so
-      // invalidating the subscription key above refreshes a row the coupon did
-      // not touch while leaving the eligibility answer — which folds granted
-      // minutes in — stale for its full 30s staleTime.
-      //
-      // It belongs here rather than at the call sites. Onboarding's compute
-      // step happened to refetch eligibility by hand, so the gap was invisible
-      // there and load-bearing everywhere else: a code redeemed on the billing
-      // page granted minutes server-side while every eligibility-driven
-      // surface went on believing the user had none.
-      void queryClient.invalidateQueries({
-        queryKey: computeEligibilityQueryKey,
-      });
-    },
+    mutationFn: async (code: string) =>
+      redeemCouponResult(
+        await billingServiceMutations(queryClient).redeemCoupon(
+          { code },
+          {
+            invalidate: refreshing(
+              // Every wallet overview (this tab's and the billing dashboard's).
+              billingServiceKeys.getCurrentUserWalletOverview.all,
+              billingServiceKeys.getCurrentUserReliantOverview.all,
+              billingServiceKeys.getCurrentUserComputeSubscription.all,
+              // The read that actually GATES compute, and the one this list was
+              // missing. A compute coupon grants MINUTES, not a subscription, so
+              // invalidating the subscription key above refreshes a row the coupon did
+              // not touch while leaving the eligibility answer — which folds granted
+              // minutes in — stale for its full 30s staleTime.
+              //
+              // It belongs here rather than at the call sites. Onboarding's compute
+              // step happened to refetch eligibility by hand, so the gap was invisible
+              // there and load-bearing everywhere else: a code redeemed on the billing
+              // page granted minutes server-side while every eligibility-driven
+              // surface went on believing the user had none.
+              billingServiceKeys.getCurrentUserComputeEligibility.all,
+            ),
+          },
+        ),
+      ),
   });
 }
 

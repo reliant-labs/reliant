@@ -6,12 +6,15 @@
  * rendered unconditionally, which no unit test of the table would catch.
  */
 
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
 import { DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 import type { DaemonInfo as Daemon } from '@/gen/reliant/v1/daemon_registry_pb'
+import { setTransport } from '@/lib/connect'
+import { mockTransport } from '@/lib/test-utils'
+import { cpDaemonHandlers } from '@/test/cpDaemonTransport'
 
 const resumeMutate = vi.fn()
 const suspendMutate = vi.fn()
@@ -22,18 +25,20 @@ let daemons: Daemon[] = []
 // The screen reads status from the registry list and the provisioning SPEC
 // (repo, branch, idle timeout) from control-plane's GetDaemon — the two-owner
 // split in docs/design/one-daemon-list.md. Both are stubbed so the test can
-// assert the screen renders each half from its own source.
-vi.mock('@/services/controlPlane/environments', () => ({
-  getDaemon: async () => ({
-    daemon: {
-      gitRepo: 'reliant-labs/reliant',
-      gitBranch: 'main',
-      idleTimeout: '30m',
-      storageSize: '20Gi',
-    },
-    workspaceBaseDomain: '',
-  }),
-}))
+// assert the screen renders each half from its own source: GetDaemon at the
+// transport (the screen reads it through its generated hook).
+const cpTransport = () =>
+  mockTransport(cpDaemonHandlers({
+    getDaemon: () => ({
+      daemon: {
+        gitRepo: 'reliant-labs/reliant',
+        gitBranch: 'main',
+        idleTimeout: '30m',
+        storageSize: '20Gi',
+      },
+      workspaceBaseDomain: '',
+    }),
+  }))
 
 vi.mock('@/hooks/useOnboardingQueries', () => ({
   useDaemonList: () => ({ data: daemons, isLoading: false }),
@@ -77,7 +82,10 @@ function daemon(overrides: Partial<Daemon> = {}): Daemon {
   } as Daemon
 }
 
+afterEach(() => setTransport(null))
+
 beforeEach(() => {
+  setTransport(cpTransport())
   resumeMutate.mockClear()
   suspendMutate.mockClear()
   deleteMutate.mockClear()

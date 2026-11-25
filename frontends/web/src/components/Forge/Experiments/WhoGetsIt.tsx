@@ -21,14 +21,15 @@ import { useId, useMemo, useState } from "react";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
-import { useChangesApi } from "@/services/controlPlane/changes/ChangesApiContext";
+import { NO_REFETCH, useChangeWrites, type ChangeReply } from "@/hooks/changes-queries";
+import { launchChangeRequest, rampChangeRequest, rollOutChangeRequest, updateChangeDraftRequest } from "@/services/controlPlane/changes/changesRequests";
 import type { Change, ChangeAudience, ChangeDraftEdit, ChangeMetric, ChangeSplitArm, ChangeUnit } from "@/services/controlPlane/changes/changesTypes";
 
 import { FIELD, segmentTone, SEGMENTED } from "../controlStyles";
 import { evenSplit, formatBp, parsePercent, splitTotal, UNIT_LABELS, WHO_GETS_IT, whoGetsItOf, type WhoGetsIt as Who } from "./changeModel";
 
 /** One write: a label for the approval and busy states, and the call (a step-up code when retried after approval). */
-export type ChangeWrite = (label: string, write: (stepUpCode?: string) => Promise<Change>) => Promise<Change | null>;
+export type ChangeWrite = (label: string, write: (stepUpCode?: string) => Promise<ChangeReply>) => Promise<Change | null>;
 
 export interface WhoGetsItProps {
   change: Change;
@@ -109,7 +110,7 @@ export function draftEdit(change: Change, d: Draft, who: Who): ChangeDraftEdit |
 }
 
 export function WhoGetsIt({ change, initialWho, busy, onWrite }: WhoGetsItProps) {
-  const api = useChangesApi();
+  const writes = useChangeWrites();
   const id = useId();
   const variants = useMemo(() => change.declaration?.variants.map((v) => v.name) ?? [], [change.declaration]);
   const defaultVariant = change.declaration?.defaultVariant ?? "";
@@ -146,22 +147,26 @@ export function WhoGetsIt({ change, initialWho, busy, onWrite }: WhoGetsItProps)
   /** Save the draft if it changed; the revision the next write must name. Null when the save failed. */
   const saveDraft = async (): Promise<number | null> => {
     if (!edit) return change.revision;
-    const saved = await onWrite("Save draft", () => api.updateChangeDraft(change.id, change.revision, edit));
+    const saved = await onWrite("Save draft", () => writes.updateChangeDraft(updateChangeDraftRequest(change.id, change.revision, edit), NO_REFETCH));
     return saved ? saved.revision : null;
   };
 
   const launch = async () => {
     const revision = await saveDraft();
     if (revision === null || percentBp === null) return;
-    await onWrite(running ? "Relaunch" : "Launch", (stepUpCode) => api.launchChange(change.id, percentBp, { expectedRevision: revision, stepUpCode }));
+    await onWrite(running ? "Relaunch" : "Launch", (stepUpCode) =>
+      writes.launchChange(launchChangeRequest(change.id, percentBp, { expectedRevision: revision, stepUpCode }), NO_REFETCH)
+    );
   };
   const ramp = () =>
-    percentBp !== null && onWrite(`Change to ${formatBp(percentBp)}%`, (stepUpCode) => api.rampChange(change.id, percentBp, { expectedRevision: change.revision, stepUpCode }));
+    percentBp !== null && onWrite(`Change to ${formatBp(percentBp)}%`, (stepUpCode) =>
+      writes.rampChange(rampChangeRequest(change.id, percentBp, { expectedRevision: change.revision, stepUpCode }), NO_REFETCH)
+    );
   const rollOut = async (everyone: boolean) => {
     const revision = everyone || running ? change.revision : await saveDraft();
     if (revision === null || (!everyone && percentBp === null)) return;
     await onWrite(everyone ? `Give everyone ${variant}` : `Roll out to ${formatBp(percentBp ?? 0)}%`, (stepUpCode) =>
-      api.rollOutChange(change.id, { expectedRevision: revision, stepUpCode, variant, everyone, percentBp: percentBp ?? 0 })
+      writes.rollOutChange(rollOutChangeRequest(change.id, { expectedRevision: revision, stepUpCode, variant, everyone, percentBp: percentBp ?? 0 }), NO_REFETCH)
     );
   };
 
