@@ -19,11 +19,11 @@ import type { MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport
 
 import { SHOP_CHARGE_BLOB, SHOP_CHARGE_SOURCE } from "../model/tests";
 import { withMessageRequests } from "./defaults";
-import { scopedToDemo } from "./scope";
+import { DEMO_SCOPE, scopedToDemo, type PackScope } from "./scope";
 
 export const COVERAGE_SOURCE_RPC = `${CoverageSourceService.typeName}/GetCoverageSource`;
 
-export function coverageSourceHandlers(): MockHandlers {
+export function coverageSourceHandlers(scope: PackScope = DEMO_SCOPE): MockHandlers {
   const handlers: MockHandlers = {
     [COVERAGE_SOURCE_RPC]: (req: GetCoverageSourceRequest) =>
       create(GetCoverageSourceResponseSchema, {
@@ -33,5 +33,5 @@ export function coverageSourceHandlers(): MockHandlers {
             : { case: "unavailable", value: CoverageSourceUnavailable.NOT_YET_AVAILABLE },
       }),
   };
-  return withMessageRequests(scopedToDemo(handlers, [CoverageSourceService]), [CoverageSourceService]);
+  return withMessageRequests(scopedToDemo(handlers, [CoverageSourceService], scope), [CoverageSourceService]);
 }

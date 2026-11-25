@@ -247,6 +247,11 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	outcome := daemon.ClassifyExecOutcome(err, deadline.Err(), stdoutBuf.String(), stderrBuf.String(), memReader, oomSnap, diskwatch.Default())
 	outcome.NoteHeavyTimeout(heavy)
 	outcome.NoteThreadLimit(tree.LimitNote())
+	if outcome.ExitCode != 0 {
+		// The idle reclaim removed this directory's node_modules or build
+		// output: say so, or "Cannot find module" reads like a broken checkout.
+		outcome.NoteRemovedOutput(idleReclaimNote(req.WorkingDir))
+	}
 
 	logExecFinished(outcome, duration)
 

@@ -37,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/agentruns"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
@@ -458,6 +459,13 @@ func (g *Graph) newRepoUpdateFeed() (*RepoUpdateFeed, error) {
 	})
 }
 
+// chatUpdates is the one writer of the chat and user update streams: it
+// appends a refetch and publishes it to the hubs after its transaction commits
+// (internal/chatupdates).
+func (g *Graph) chatUpdates() chatupdates.Service {
+	return chatupdates.NewFromORM(g.Database().ORM(), g.Database(), hubPublisher{users: g.UserUpdateHub(), chats: g.ChatUpdateHub()})
+}
+
 func (g *Graph) newVault() (vault.Service, error) {
 	return NewVault(VaultDeps{
 		Ctx:          g.Ctx,
@@ -541,6 +549,7 @@ func (g *Graph) newWorkerChat() (*WorkerChat, error) {
 		Pause:    g.PauseService(),
 		Router:   g.WorkerDaemonRouter(),
 		DB:       g.Database(),
+		Updates:  g.chatUpdates(),
 		Backoff:  g.Providerbackoff(),
 	})
 }
@@ -1113,6 +1122,7 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
+		Chats:          store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Rows:           store.NewWorktreeExtStore(g.Database().ORM()),
 		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
 		ProjectRows:    store.NewProjectExtStore(g.Database().ORM()),
@@ -1147,7 +1157,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Router:        g.APIDaemonRouter().NATSDaemonRouter,
 		LocalModels:   local.NewRepoDirectory(g.Database(), store.NewModelEndpointExtStore(g.Database().ORM())),
 		Orgs:          g.OrgResolver(),
-		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.Database()}),
+		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.chatUpdates()}),
 		AgentMessages: store.NewAgentMessageExtStore(g.Database().ORM()),
 	})
 }
@@ -1187,6 +1197,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
+		Chats:          store.NewChatExtStore(g.Database().ORM()),
 		Owners:         g.Triggerowner(),
 		Firings:        store.NewTriggerEventExtStore(g.Database().ORM()),
 		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()),
@@ -1362,7 +1373,7 @@ func (g *Graph) newTask() (*task.Service, error) {
 		Plans:   store.NewPlanExtStore(repo.ORM()),
 		Threads: store.NewThreadExtStore(repo.ORM()),
 		Chats:   store.NewChatExtStore(repo.ORM()),
-		Refetch: repo,
+		Refetch: g.chatUpdates(),
 		Tx:      repo.ORM(),
 	})
 }
@@ -1377,7 +1388,7 @@ func (g *Graph) newPlan() (*plan.Service, error) {
 		Tasks:   store.NewTaskExtStore(repo.ORM()),
 		Threads: store.NewThreadExtStore(repo.ORM()),
 		Chats:   store.NewChatExtStore(repo.ORM()),
-		Refetch: repo,
+		Refetch: g.chatUpdates(),
 		Tx:      repo.ORM(),
 	})
 }
@@ -1462,8 +1473,10 @@ func (g *Graph) newQuestion() (*question.Service, error) {
 		Logger:    g.Log,
 		Config:    g.Cfg,
 		Repo:      g.Database(),
+		ChatRows:  store.NewChatExtStore(g.Database().ORM()),
+		ChatViews: store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Questions: store.NewQuestionExtStore(g.Database().ORM()),
-		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.Database()}),
+		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.chatUpdates()}),
 		Signals:   g.PauseService(),
 		Messages:  g.Chat(),
 	})
@@ -1524,6 +1537,7 @@ func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		ChatRows:    store.NewChatExtStore(g.Database().ORM()),
 		Senders:     store.NewThreadExtStore(g.Database().ORM()),
 		Projects:    store.NewProjectExtStore(g.Database().ORM()),
 		SpawnCalls:  store.NewToolCallExtStore(g.Database().ORM()),
@@ -1789,16 +1803,17 @@ func (g *Graph) newSeatmatch() (seatmatch.Service, error) {
 // the one writer of a trigger's owner after it is created (the takeover).
 func (g *Graph) newTriggerowner() (triggerowner.Service, error) {
 	o := g.Database().ORM()
-	stores := triggerowner.NewStores(o)
+	owned, trigs := store.NewTriggerOwnerExtStore(o), store.NewTriggerExtStore(o)
 	svc, err := triggerowner.New(triggerowner.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Tx:       o,
-		Locks:    stores,
-		Triggers: stores,
-		Offers:   stores,
-		OrgReads: stores,
-		Now:      nil, // optional — no provider
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Tx:        o,
+		Locks:     owned,
+		Triggers:  trigs,
+		Adoptions: owned,
+		Offers:    owned,
+		OrgReads:  owned,
+		Now:       nil, // optional — no provider
 	})
 	if err != nil {
 		return nil, err

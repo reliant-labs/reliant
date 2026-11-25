@@ -106,8 +106,8 @@ type env struct {
 // the trigger service re-owns an orphaned trigger through.
 func realOwners(t *testing.T, repo *db.Repo) triggerowner.Service {
 	t.Helper()
-	stores := triggerowner.NewStores(repo.ORM())
-	svc, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	owned, trigs := store.NewTriggerOwnerExtStore(repo.ORM()), store.NewTriggerExtStore(repo.ORM())
+	svc, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: owned, Triggers: trigs, Adoptions: owned, Offers: owned, OrgReads: owned})
 	require.NoError(t, err)
 	return svc
 }
@@ -131,7 +131,7 @@ func setup(t *testing.T, publicURL string) *env {
 		CreatedAt: now, UpdatedAt: now}))
 
 	svc, err := trigger.New(trigger.Deps{
-		Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, OrgMoves: store.NewProjectOrgMoveExtStore(repo.ORM()),
+		Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), OrgMoves: store.NewProjectOrgMoveExtStore(repo.ORM()),
 		Owners: realOwners(t, repo), Firings: store.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: store.NewTriggerExtStore(repo.ORM()),
 		Projects: projectaccesstest.For(repo), Pools: store.NewMachinePoolExtStore(repo.ORM()), Syncer: e.backend, Fires: e.backend,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: fakeCatalog{}, Intake: fakeIntake{},

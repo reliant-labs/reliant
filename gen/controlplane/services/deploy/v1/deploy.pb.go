@@ -454,6 +454,11 @@ const (
 	// The demand fits the claimable plan but the platform will not take it right
 	// now (compute is off, or the platform-wide ceiling is full). Retry later.
 	DeployCapacityCode_DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE DeployCapacityCode = 8
+	// The org has billing and the demand would take it past its live
+	// static-site limit (100 by default; each environment's site counts as
+	// one). Refused, never queued. The limit is a soft one: the fix says how to
+	// have support raise it.
+	DeployCapacityCode_DEPLOY_CAPACITY_CODE_STATIC_SITE_LIMIT_REACHED DeployCapacityCode = 9
 )
 
 // Enum value maps for DeployCapacityCode.
@@ -468,6 +473,7 @@ var (
 		6: "DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN",
 		7: "DEPLOY_CAPACITY_CODE_CLAIMABLE_INELIGIBLE",
 		8: "DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE",
+		9: "DEPLOY_CAPACITY_CODE_STATIC_SITE_LIMIT_REACHED",
 	}
 	DeployCapacityCode_value = map[string]int32{
 		"DEPLOY_CAPACITY_CODE_UNSPECIFIED":               0,
@@ -479,6 +485,7 @@ var (
 		"DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN":              6,
 		"DEPLOY_CAPACITY_CODE_CLAIMABLE_INELIGIBLE":      7,
 		"DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE":     8,
+		"DEPLOY_CAPACITY_CODE_STATIC_SITE_LIMIT_REACHED": 9,
 	}
 )
 
@@ -12307,7 +12314,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"*DEPLOY_OBJECT_COMPARISON_STATE_UNSPECIFIED\x10\x00\x12+\n" +
 	"'DEPLOY_OBJECT_COMPARISON_STATE_COMPARED\x10\x01\x121\n" +
 	"-DEPLOY_OBJECT_COMPARISON_STATE_NO_ENVIRONMENT\x10\x02\x121\n" +
-	"-DEPLOY_OBJECT_COMPARISON_STATE_BUNDLE_MISSING\x10\x03*\x91\x03\n" +
+	"-DEPLOY_OBJECT_COMPARISON_STATE_BUNDLE_MISSING\x10\x03*\xc5\x03\n" +
 	"\x12DeployCapacityCode\x12$\n" +
 	" DEPLOY_CAPACITY_CODE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17DEPLOY_CAPACITY_CODE_OK\x10\x01\x12(\n" +
@@ -12317,7 +12324,8 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"&DEPLOY_CAPACITY_CODE_SPEND_CAP_REACHED\x10\x05\x12%\n" +
 	"!DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN\x10\x06\x12-\n" +
 	")DEPLOY_CAPACITY_CODE_CLAIMABLE_INELIGIBLE\x10\a\x12.\n" +
-	"*DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE\x10\b2\xac6\n" +
+	"*DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE\x10\b\x122\n" +
+	".DEPLOY_CAPACITY_CODE_STATIC_SITE_LIMIT_REACHED\x10\t2\xac6\n" +
 	"\rDeployService\x12s\n" +
 	"\x14ResolveHostedProject\x12,.controlplane.v1.ResolveHostedProjectRequest\x1a-.controlplane.v1.ResolveHostedProjectResponse\x12u\n" +
 	"\x0fGetCapabilities\x12-.controlplane.v1.GetDeployCapabilitiesRequest\x1a..controlplane.v1.GetDeployCapabilitiesResponse\"\x03\x90\x02\x01\x12c\n" +

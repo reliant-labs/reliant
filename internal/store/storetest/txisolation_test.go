@@ -288,8 +288,8 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 
 // triggerOwner is the trigger owner service over the probe's database.
 func triggerOwner(p *storetest.TxProbe) triggerowner.Service {
-	stores := triggerowner.NewStores(p.ORM)
-	svc, err := triggerowner.New(triggerowner.Deps{Tx: p.ORM, Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	owned, trigs := store.NewTriggerOwnerExtStore(p.ORM), store.NewTriggerExtStore(p.ORM)
+	svc, err := triggerowner.New(triggerowner.Deps{Tx: p.ORM, Locks: owned, Triggers: trigs, Adoptions: owned, Offers: owned, OrgReads: owned})
 	if err != nil {
 		panic(err)
 	}

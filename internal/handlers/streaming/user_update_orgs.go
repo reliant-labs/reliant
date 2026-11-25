@@ -40,8 +40,14 @@ const maxOrgGateEntries = 4096
 // except that a deletion still reaches the client as a bare marker, its id
 // and kind and nothing else, so the client can drop the item. The cursor
 // moves past a withheld update either way, as for every filtered one.
+// orgReads is what the gate reads: a chat's org and a workflow draft's.
+type orgReads interface {
+	GetWorkflowDraft(ctx context.Context, id string) (*db.WorkflowDraft, error)
+}
+
 type orgGate struct {
-	repo     Repository
+	repo     orgReads
+	chats    ChatRows
 	projects Projects
 	userID   string
 	orgs     map[string]string
@@ -54,8 +60,8 @@ type orgGate struct {
 	now        func() time.Time
 }
 
-func newOrgGate(repo Repository, projects Projects, userID string, recheck time.Duration) *orgGate {
-	return &orgGate{repo: repo, projects: projects, userID: userID, orgs: map[string]string{}, unassigned: map[string]time.Time{}, recheck: recheck, now: time.Now}
+func newOrgGate(repo orgReads, chats ChatRows, projects Projects, userID string, recheck time.Duration) *orgGate {
+	return &orgGate{repo: repo, chats: chats, projects: projects, userID: userID, orgs: map[string]string{}, unassigned: map[string]time.Time{}, recheck: recheck, now: time.Now}
 }
 
 // allows reports whether update may be delivered, stripping it to a
@@ -74,7 +80,7 @@ func (g *orgGate) allows(ctx context.Context, update *db.UserUpdate) bool {
 		id := *update.ChatID
 		key = "chat:" + id
 		read = func() (*string, error) {
-			chat, err := g.repo.GetChatRow(ctx, id)
+			chat, err := g.chats.GetChatRow(ctx, id)
 			if err != nil {
 				return nil, err
 			}

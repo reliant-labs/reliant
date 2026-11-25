@@ -195,8 +195,8 @@ func RecordToolCallUsage(ctx context.Context, db orm.Context, rec ToolCallUsageR
 
 	res, err := db.Bun().NewRaw(`INSERT INTO tool_call_usage (id, attempt, user_id, org_id, chat_id, project_id,
 		workflow_id, thread_id, workflow_name, node_id, preset, ai_run_id, ai_root_run_id,
-		tool_name, tool_kind, location, outcome, error_class, duration_ms, created_at)
-		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+		tool_name, tool_kind, location, outcome, error_class, duration_ms, created_at, insights_folded)
+		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, true)
 		ON CONFLICT (id, attempt) DO NOTHING`,
 		rec.ID, rec.Attempt, rec.UserID, rec.OrgID, rec.ChatID, emptyToNil(rec.ProjectID),
 		emptyToNil(rec.WorkflowID), emptyToNil(rec.ThreadID), emptyToNil(rec.WorkflowName), emptyToNil(rec.NodeID),
@@ -209,17 +209,35 @@ func RecordToolCallUsage(ctx context.Context, db orm.Context, rec ToolCallUsageR
 	if err != nil {
 		return false, fmt.Errorf("insert tool call usage %s: %w", rec.ID, err)
 	}
-	return n > 0, nil
+	if n == 0 {
+		return false, nil
+	}
+	// The row was inserted folded: it is counted here, never by the backlog fold.
+	if err := toolInsights.foldOne(ctx, db, rec.ID, rec.Attempt, rec.ProjectID, insightsToolTeam, insightsToolMember); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// FoldToolCallUsageIntoInsights adds up to batch of the oldest tool call rows
+// the insights rollups do not count yet (written before them, or by a previous
+// release) and returns how many. Each row is counted exactly once: it is
+// marked in the transaction that adds it. Call it until it returns less than
+// batch. The caller's ctx must be a transaction (db.Repo.RunTx).
+func FoldToolCallUsageIntoInsights(ctx context.Context, db orm.Context, batch int) (int64, error) {
+	return toolInsights.foldBacklog(ctx, db, batch, insightsToolTeam, insightsToolMember)
 }
 
 // PruneToolCallUsage deletes rows created before cutoff, at most batch of
-// them, and returns how many. Call it until it returns less than batch.
+// them, and returns how many. A row the insights rollups do not count yet is
+// kept until FoldToolCallUsageIntoInsights has folded it. Call it until it
+// returns less than batch.
 func PruneToolCallUsage(ctx context.Context, db orm.Context, cutoff time.Time, batch int) (int64, error) {
 	if batch <= 0 {
 		return 0, errors.New("prune tool call usage: batch must be positive")
 	}
 	res, err := db.Bun().NewRaw(`DELETE FROM tool_call_usage WHERE (id, attempt) IN (
-		SELECT id, attempt FROM tool_call_usage WHERE created_at < ? ORDER BY created_at LIMIT ? FOR UPDATE SKIP LOCKED)`,
+		SELECT id, attempt FROM tool_call_usage WHERE created_at < ? AND insights_folded ORDER BY created_at LIMIT ? FOR UPDATE SKIP LOCKED)`,
 		cutoff.UTC(), batch).Exec(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("prune tool call usage: %w", err)
