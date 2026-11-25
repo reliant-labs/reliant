@@ -57,7 +57,15 @@ You grow the manifest as you adopt more, and every step stands alone, so you can
 
 [Migrate an existing app](/forge/migrate-an-existing-app) is the entry point for this path.
 
-A manifest doesn't get everything a scaffold does. The automatic per-RPC tracing, the service graph and the dashboards derived from your code need Forge's generated RPC layer, so they belong to scaffolded apps. An existing app gets what works from declarations and standard telemetry: dashboards, issues, alerts and release verdicts built from OpenTelemetry, the release ledger and gates, deploys and hosting, previews, secrets, security scans, migration checks and the agent tooling. Deeper instrumentation comes from Forge's runtime libraries, or from porting a service to codegen.
+What each form turns on:
+
+| You have | What works |
+|---|---|
+| No manifest at all | The linters (migration safety, tracing, slow tests) and the agent tooling: skills and the Forge MCP server |
+| An env document (`deploy/envs/<env>.yaml`) | Hosted monitoring from OpenTelemetry (dashboards, error issues, alerts, a verdict per release), and the deploys your own CI makes, recorded by listing those workloads as `runtime: {type: external}` |
+| KCL from `forge project new --in-place` | Everything Forge does for a deployed app: parity checks against your deploy tool, build once and promote by digest, release gates, hosting, managed Postgres, secrets, preview environments and security scans per release |
+
+Neither form gets everything a scaffold does. The automatic per-RPC tracing, the service graph and the dashboards derived from your code need Forge's generated RPC layer, so they belong to scaffolded apps. Deeper instrumentation for an existing app comes from Forge's runtime libraries, or from porting a service to codegen.
 
 ## The replacement map
 
