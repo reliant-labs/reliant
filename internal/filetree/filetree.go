@@ -24,6 +24,11 @@
 // anyway; when it fires the result is marked Truncated rather than silently
 // short.
 //
+// A caller with a deadline (Options.Deadline) also bounds the walk in time:
+// past it, no further directory is read, and every directory not yet entered
+// is returned unexpanded for the UI to load on demand. The node budget bounds
+// how much is walked, not how long a slow disk takes to walk it.
+//
 //forge:exclude-contract: bounded directory walk over a local root (skip set, .gitignore, node budget); local filesystem reads only, no network
 package filetree
 
@@ -136,8 +141,9 @@ type Result struct {
 	// NodeCount is the total number of nodes produced, at every level.
 	NodeCount int
 
-	// Truncated is true when the node budget stopped the walk early, so the
-	// caller knows the tree it holds is a prefix rather than the whole thing.
+	// Truncated is true when the node budget or the deadline stopped the walk
+	// early, so the caller knows the tree it holds is a prefix rather than the
+	// whole thing.
 	Truncated bool
 }
 
@@ -170,9 +176,25 @@ type Options struct {
 	// tighter cap, not as an escape hatch to raise it beyond reason.
 	MaxNodes int
 
+	// Deadline, when set, is when the walk stops reading directories. The
+	// root is always listed, and a directory already being listed is listed
+	// in full; past the deadline, every directory not yet entered is returned
+	// with no Children and HasChildren set (it may turn out to be empty when
+	// expanded), and the result is marked Truncated. Zero means no deadline.
+	//
+	// It exists for the daemon's fs.get_tree, whose caller gives up after its
+	// request deadline: on a slow or busy disk a walk inside the node budget
+	// still outlasted that (prod, 2026-11-25: fs.get_tree took 7-10s on one
+	// machine, and every request that crossed 10s failed with nothing shown).
+	// A partial tree delivered in time beats a whole one nobody receives.
+	Deadline time.Time
+
 	// FS is the filesystem to read through. Nil means the local OS.
 	FS localfs.FS
 }
+
+// now is the walk's clock, a variable so tests can run out of time on cue.
+var now = time.Now
 
 // Walk performs a bounded, gitignore-aware walk of opts.Root.
 //
@@ -204,6 +226,7 @@ func Walk(opts Options) (*Result, error) {
 		fs:         filesystem,
 		showHidden: opts.ShowHidden,
 		maxNodes:   maxNodes,
+		deadline:   opts.Deadline,
 		ignore:     newGitIgnore(filesystem, opts.Root),
 	}
 
@@ -219,10 +242,28 @@ type walker struct {
 	fs         localfs.FS
 	showHidden bool
 	maxNodes   int
+	deadline   time.Time
 	ignore     *gitIgnore
 
 	count     int
 	truncated bool
+	// expired latches once the deadline has passed, so every directory after
+	// that point is treated alike.
+	expired bool
+}
+
+// outOfTime reports whether the deadline has passed, marking the result
+// truncated the first time it is found to have.
+func (w *walker) outOfTime() bool {
+	if w.expired {
+		return true
+	}
+	if w.deadline.IsZero() || now().Before(w.deadline) {
+		return false
+	}
+	w.expired = true
+	w.truncated = true
+	return true
 }
 
 // walk lists dir and, budget permitting, its subdirectories.
@@ -277,6 +318,11 @@ func (w *walker) walk(dir, relPath string, segs []string, patterns []pattern, re
 		switch {
 		case !isDir:
 			node.Size = info.Size()
+
+		// Out of time: leave the directory unread, for the UI to expand on
+		// demand. Its contents are unknown, so the chevron is offered.
+		case w.outOfTime():
+			node.HasChildren = true
 
 		// Descend while more than one level remains, or while the caller asked
 		// for everything the budget allows.
