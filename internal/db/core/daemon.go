@@ -15,6 +15,10 @@ type Daemon struct {
 	// DaemonType is the type of daemon: "managed" (cloud-hosted) or
 	// "self_hosted" (user-run local daemon). Empty/nil if undetermined.
 	DaemonType *string
+	// WorkingDir is the working directory the daemon reported when it last
+	// registered (DAEMON_WORKING_DIR, else its process's cwd). Nil until a
+	// release that records it saw the machine register.
+	WorkingDir *string
 	// Name is the name the owner gave the machine, mirrored from the control
 	// plane (which owns it). Empty until the control plane has reported one —
 	// a daemon that registered here before any control-plane event, or a
@@ -127,6 +131,10 @@ type DaemonAttachment struct {
 	// Health is whether the machine can do work, as its heartbeat last
 	// reported. The zero value is "not reported".
 	Health MachineHealth
+	// ResourceStats is the machine's and the daemon process's latest resource
+	// reading from the heartbeat, protojson of reliantv1.DaemonResourceStats
+	// (resource_stats). "" while the session has reported none.
+	ResourceStats string
 }
 
 // MachineHealthState is MachineHealth's verdict, as stored.

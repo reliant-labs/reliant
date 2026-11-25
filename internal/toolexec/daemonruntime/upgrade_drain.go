@@ -4,6 +4,7 @@ package daemonruntime
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -49,9 +50,10 @@ import (
 // Its owner's updater acts — Electron's, a package manager, or later the
 // self-update primitive — and stops it the way it always does.
 //
-// Background processes still die with the daemon at a restart, as at any
-// stop: KillAllRunning (daemon.go) is unchanged. Surviving one is a later
-// phase (R5), which needs their output on disk, not in daemon-held pipes.
+// Background processes still die with a managed daemon at a restart, as at
+// any stop: KillAllRunning (daemon.go) is unchanged, and a pod roll ends
+// them anyway. Only a self-update's exec in place hands them to the next
+// image (R5: upgrade_self.go, shell/background_survive.go).
 
 const (
 	// upgradeMaxDrain caps how long a drain lets running calls go on (D5).
@@ -139,6 +141,12 @@ type upgradeDrain struct {
 	selfRetry       time.Duration
 	quietIdle       time.Duration
 	quietDrain      time.Duration
+
+	// The desktop app's upgrade notice (upgrade_supervisor.go):
+	// supervisorNotice is the last one printed, so a repeat is not;
+	// supervisorOut is where it goes, os.Stdout when nil (a test seam).
+	supervisorNotice string
+	supervisorOut    io.Writer
 }
 
 // armUpgrade gives the drain what its upgrade exit needs: how to stop the
@@ -363,6 +371,9 @@ func (d *daemonClient) handleRestartRequested(ctx context.Context, req *reliantv
 			TargetVersion:  req.GetTargetVersion(),
 			Detail:         "this machine is updated by its owner's app or package manager; the daemon keeps serving until then. Upgrade: " + advice,
 		})
+		// The desktop app that spawned this daemon is its owner's updater:
+		// tell it on stdout (upgrade_supervisor.go).
+		d.tellSupervisor(req)
 		return
 	}
 

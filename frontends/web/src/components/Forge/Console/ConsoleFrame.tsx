@@ -2,33 +2,36 @@
 
 /**
  * The console's frame INSIDE THE ONE SHELL (U6): no nav column — the app's
- * sections are rows of the shell's left nav, nested under the open app
- * (Layout/sidebar/AppsNavSection.tsx) — just a slim bar with the breadcrumb
- * and the ONE environment selector, over the page, with the page's Learn
- * link (consoleLearn.ts) beside the selector.
+ * sections are rows of the shell's left nav (Layout/sidebar/navConfig/
+ * items.tsx) — just a slim bar with the breadcrumb and the ONE environment
+ * selector, over the page, with the page's Learn link (consoleLearn.ts)
+ * beside the selector.
  *
  * `forge-ui` is REQUIRED, not cosmetic: inside it forge's `accent` token
  * resolves to reliant's primary action colour; outside it, to reliant's muted
  * hover tint (src/index.css). `forge-console` raises the control edge to 3:1
  * so filters and toggles read as controls beside the charts.
  *
- * ConsoleShell stays the frame of the public demo and the dev previews, which
- * have no shell around them.
+ * It is the console's only frame: the app, the public demo
+ * (demoShellRoutes.tsx) and the dev previews (Forge/__preview__/
+ * PreviewShellFrame.tsx) all draw the console inside the shell.
  */
 
 import type { ReactNode } from "react";
 
+import Link from "@/components/forge-ui/link";
 import { PageMain, ShellPageHeader } from "@/components/Layout/shell/shellFrame";
 import { AppPageProjectPicker } from "@/components/Layout/sidebar/AppPageProjectPicker";
 
 import { LearnLink } from "@/lib/learnLinks";
 
+import { appDisplayName } from "../Sample/sampleApp";
+import { consoleCrumbs, type Crumb } from "./consoleCrumbs";
 import { learnSectionOf } from "./consoleLearn";
 import { useConsoleNavExtras } from "./consoleNavExtras";
-import { ConsoleBreadcrumb, consoleCrumbs } from "./ConsoleShell";
 import { EnvScopeControl } from "./EnvScopeControl";
 import type { ScopeOption } from "./envScope";
-import { pinnedEnvOf, type ConsolePage } from "./paths";
+import { consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
 import { useRouteUsesEnvScope } from "./useConsoleNavModel";
 
 export interface ConsoleFrameProps {
@@ -77,7 +80,36 @@ export function ConsoleFrame({ project, page, env, dashboardTitle, scope, platfo
         <AppPageProjectPicker app={project} page={page} />
         <ConsoleBreadcrumb project={project} env={env} crumbs={crumbs} />
       </ShellPageHeader>
-      <PageMain className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-6 max-md:px-4 max-md:pt-4">{children}</PageMain>
+      <PageMain className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-6 max-md:px-4 max-md:pt-4" data-testid="forge-console-page">
+        {children}
+      </PageMain>
     </div>
+  );
+}
+
+/** The console's breadcrumb: the app (its Overview), then the page's trail. */
+export function ConsoleBreadcrumb({ project, env, crumbs }: { project: string; env: string; crumbs: Crumb[] }) {
+  return (
+    <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-ink-muted">
+      <Link href={withSearch(consolePath(project, { kind: "overview" }), { env })} className="truncate hover:text-ink">
+        {appDisplayName(project)}
+      </Link>
+      {crumbs.map((crumb, index) => (
+        <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5 max-sm:hidden max-sm:last:inline-flex">
+          <span aria-hidden="true" className="text-ink-subtle">
+            ›
+          </span>
+          {crumb.href ? (
+            <Link href={crumb.href} className="truncate hover:text-ink">
+              {crumb.label}
+            </Link>
+          ) : (
+            <span aria-current="page" className="truncate font-medium text-ink">
+              {crumb.label}
+            </span>
+          )}
+        </span>
+      ))}
+    </nav>
   );
 }

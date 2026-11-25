@@ -18,22 +18,31 @@
 //      button. Then on the Home it opens the first workflow's sheet and closes
 //      it with Escape, and "Take the tour" must start the tour on the console;
 //    - the build story (/forge/demo?section=built) showing no recorded build;
-//    - a page with no `[data-shell=demo]` root.
+//    - a page with no `[data-shell=demo]` root, or not in the app's shell (no
+//      `[data-testid=shell-nav]`: every page of the demo is a page of the app's
+//      one shell, Layout/shell/AppShell.tsx, with the demo's nav, demoNav.ts);
+//    - the sample image's preview (Storage, staging) not rendering, or its URL
+//      not same-origin or shaped like a presigned GCS/S3 link.
 //    Per page it also prints how often "Sample data isn't available" showed (an
 //    RPC the demo has no sample data for): a content gap, not a failure.
 //
 // 2. NAV: starts at `/`, clicks the Home's "Open the console", then every nav
-//    item, at desktop 1440×900 and phone 390×844 (where the nav is a drawer
-//    behind "Open navigation"). The nav has the signed-in app's groups, in its
-//    order (Console/groupedNav.tsx, Layout/sidebar/navConfig/hybrid.ts), plus the
-//    demo's own rows (DemoNavExtras.tsx): Observability, Analytics, Deployments,
-//    Tests, Security and Configure are buttons that fold, and must hold their
-//    pages (navGroups below); every other row (navRows: Home, Overview,
-//    Dashboards, Data, Storage, Auth, How it was built) is a link of its own.
-//    The pages the demo does not serve (navAbsent: Usage) must have no item. Groups are unfolded, and a row with sub-pages (Environments)
-//    is opened, so every sub-item is clicked too. An item is dead, and the run
-//    fails, when the click does not move the URL to the item's href, or the
-//    page's heading and content do not change.
+//    item, at desktop 1440×900 and phone 390×844 (where the nav is the shell's
+//    drawer, opened by the page header's toggle, `[data-testid=shell-nav-toggle]`).
+//    The nav is the shell's (`[data-testid=shell-nav]`), drawn from the
+//    signed-in app's own items in its order (Layout/sidebar/navConfig/hybrid.ts,
+//    Forge/Demo/demoNav.ts) plus the demo's own rows: Dashboards, Analytics,
+//    Deployments, Tests, Security and Configure are buttons that fold, and must
+//    hold their pages (navGroups below); Observability is a drill-in (navDrill):
+//    its row opens its Overview and its rows replace the nav under a "‹ Back"
+//    header; every other row (navRows: Home, Overview, Data, Storage, Auth,
+//    How it was built) is a link of its own. The pages the demo does not serve
+//    (navAbsent: Usage) must have no item. Groups are unfolded, so every
+//    sub-item is clicked too; then the drill-in is entered, each of its rows
+//    clicked, and left by its "‹ Back" header (which must land on the
+//    Overview). An item is dead, and the run fails, when the click does not
+//    move the URL to the item's href, or the page's heading and content do not
+//    change.
 //
 // AUDITED READS: Data and Storage read an audited environment only after the
 // reader gives a reason, in a dialog naming the environment (AccessReasonDialog),
@@ -70,6 +79,11 @@ const audited = [
   { path: `${home}/data`, subject: "data", root: "data-browser", read: (page) => page.getByRole("navigation", { name: "Tables" }).getByRole("link").first() },
   { path: `${home}/storage`, subject: "files", root: "storage-browser", read: (page) => page.getByRole("main").getByRole("table").getByRole("row").nth(1) },
 ];
+// The sample bucket's one image, opened in staging (not audited). Its preview
+// URL must be the fixture's obviously fake one (handlers/storage.ts
+// SAMPLE_IMAGE_URL): same-origin, never shaped like a presigned GCS/S3 link.
+const sampleImagePage = `${home}/storage?env=staging&bucket=uploads&object=product-photo.png`;
+const PRESIGNED = /storage\.googleapis\.com|amazonaws\.com|X-Goog-|X-Amz-|Signature=|GoogleAccessId/i;
 // The demo's own pages, `?section=` of the demo console (demoPath.ts).
 const demoSection = (section) => `/forge/demo?section=${section}`;
 const pages = [
@@ -95,6 +109,7 @@ const pages = [
   `${home}/tests/runs`,
   `${home}/tests/flaky`,
   ...(auditedEnvs.length ? audited.map((surface) => `${surface.path}?env=${auditedEnvs[0]}`) : []),
+  sampleImagePage,
 ];
 const viewports = [
   { name: "desktop", width: 1440, height: 900, mobile: false },
@@ -114,24 +129,33 @@ const agentWorkflows = ["fix-errors", "watch-alerts", "slow-pages", "weekly-dige
 // The tour "Take the tour" starts (TOUR_START, DemoScreenActions.tsx).
 const tourStart = "forge:fg-intro";
 
-// The grouped nav. A group is a button with no page of its own; it must hold
+// The shell's nav. A group is a button with no page of its own; it must hold
 // these pages. A row is a link of its own: its label and where it goes.
 const navGroups = {
-  Observability: [
-    `${home}/observability`,
-    ...["graph", "metrics", "logs", "rpc", "profiles", "errors", "alerts", "traces", "sessions"].map((view) => `${home}/observability/${view}`),
-    `${home}/speed-insights`,
-  ],
+  Dashboards: [`${home}/observability/dashboards`],
   Analytics: [`${home}/analytics`, ...["users", "product", "acquisition", "events"].map((tab) => `${home}/analytics/${tab}`)],
   Deployments: [`${home}/services`, `${home}/releases`, `${home}/environments`],
   Tests: [`${home}/tests`, `${home}/tests/coverage`, `${home}/tests/runs`, `${home}/tests/flaky`],
   Security: [`${home}/security/vulnerabilities`, `${home}/security/sboms`],
   Configure: [`${home}/secrets`, `${home}/domains`, `${home}/activity`],
 };
+// A drill-in: its row (by test id) opens its first page; on its routes its
+// rows replace the nav, under a "‹ <label>" header (nav-back) back to the Overview.
+const navDrill = {
+  Observability: {
+    row: "nav-observability",
+    area: "observability",
+    pages: [
+      `${home}/observability`,
+      ...["graph", "metrics", "logs", "rpc", "profiles", "errors", "alerts", "traces", "sessions"].map((view) => `${home}/observability/${view}`),
+      `${home}/speed-insights`,
+    ],
+  },
+};
 const navRows = [
   { label: "Home", to: (key) => key === demoSection("home") },
   { label: "Overview", to: (key) => key === home },
-  { label: "Dashboards", to: (key) => key === `${home}/observability/dashboards` },
+  { label: "Observability", to: (key) => key === `${home}/observability` },
   { label: "Data", to: (key) => key === `${home}/data` },
   { label: "Storage", to: (key) => key === `${home}/storage` },
   // Users became Auth (/users redirects there).
@@ -183,10 +207,35 @@ function report(label, problems, detail = "") {
   failures.push(...problems.map((p) => `${label}: ${p}`));
 }
 
+/** The sample image's preview: shown, from the page's own origin, nothing like a presigned link. Returns problems. */
+async function checkSampleImage(page) {
+  const img = page.getByTestId("storage-preview-image");
+  try {
+    await img.waitFor({ timeout: 15000 });
+  } catch {
+    return ["the sample image's preview ([data-testid=storage-preview-image]) did not render"];
+  }
+  const src = (await img.getAttribute("src")) ?? "";
+  if (!src.trim()) return ["the sample image's preview URL is empty"];
+  const problems = [];
+  if (new URL(src, base).origin !== origin) problems.push(`the sample image's preview URL is not same-origin: ${src}`);
+  if (PRESIGNED.test(src)) problems.push(`the sample image's preview URL looks presigned: ${src}`);
+  try {
+    await page.waitForFunction(() => {
+      const image = document.querySelector('[data-testid="storage-preview-image"]');
+      return image?.complete && image.naturalWidth > 0;
+    }, null, { timeout: 15000 });
+  } catch {
+    problems.push(`the sample image's preview did not load: ${src}`);
+  }
+  return problems;
+}
+
 /** What a nav click must change: the main heading and the page's text. */
 async function pageState(page) {
   const state = await page.evaluate(() => {
-    const main = document.querySelector("main") ?? document.querySelector("[data-testid='forge-shell']") ?? document.body;
+    // The shell's one main region (AppShellFrame); the nav is beside it, not in it.
+    const main = document.querySelector("[data-testid='shell-main']") ?? document.querySelector("main") ?? document.body;
     const heading = main.querySelector("h1")?.textContent?.trim() ?? "";
     const nav = document.querySelector("[data-smoke-nav]");
     const text = [...main.querySelectorAll("*")]
@@ -284,25 +333,25 @@ async function exerciseHome(page) {
   return problems;
 }
 
-/** The grouped nav's groups and rows, checked against navGroups and navRows. Unfold the groups first. Returns problems. */
-async function checkGroupedNav(page) {
-  const { groups, rows, all } = await page.evaluate(() => {
+/** The shell nav's groups and rows (top level, footer), checked against navGroups, navRows and navAbsent. Unfold the groups first. Returns problems. */
+async function checkShellNav(page) {
+  const { groups, rows, all, top } = await page.evaluate(() => {
+    // A row's label: its text, less a badge (a count) after it (Layout/sidebar/primitives.tsx: the label is `.truncate`).
+    const labelOf = (el) => (el.querySelector(".truncate") ?? el).textContent.trim();
     const nav = document.querySelector("[data-smoke-nav]");
     const href = (a) => new URL(a.getAttribute("href"), location.href).href;
-    // A group is a row that is a button; its pages are the links in its list.
-    // Its label is the row's text less a badge (a count) after it.
-    const groups = [...nav.querySelectorAll("li > button[aria-expanded]")].map((button) => ({
-      label: (button.querySelector(".truncate") ?? button).textContent.trim(),
-      items: [...(button.parentElement.querySelector(":scope > ul")?.querySelectorAll("a[href]") ?? [])].map(href),
-    }));
-    // A row is a link that is not inside another row's list.
-    const rows = [...nav.querySelectorAll("a[href]")]
-      .filter((a) => !a.closest("li")?.parentElement?.closest("li"))
-      .map((a) => ({ label: a.textContent.trim(), href: href(a) }));
+    // A group is its block (NavRenderer: `nav-<id>-group`): the row is a button, its pages the links in its list.
+    const groups = [...nav.querySelectorAll("[data-testid^='nav-'][data-testid$='-group']")].map((block) => {
+      const button = block.querySelector("button[aria-expanded]");
+      return { label: button ? labelOf(button) : "", items: [...block.querySelectorAll("[role='group'] a[href]")].map(href) };
+    });
+    // A row is a link that is not inside a group's list.
+    const rows = [...nav.querySelectorAll("a[href]")].filter((a) => !a.closest("[role='group']")).map((a) => ({ label: labelOf(a), href: href(a) }));
     const all = [...nav.querySelectorAll("a[href]")].map(href);
-    return { groups, rows, all };
+    return { groups, rows, all, top: !!nav.querySelector("[data-testid='nav-top']") };
   });
   const problems = [];
+  if (!top) problems.push("the nav is not at its top level (no [data-testid=nav-top]) on the Overview");
   for (const key of navAbsent) if (all.map(navKey).includes(key)) problems.push(`the nav links to ${key}, a page the demo does not serve`);
   for (const [label, want] of Object.entries(navGroups)) {
     const group = groups.find((g) => g.label === label);
@@ -322,25 +371,44 @@ async function checkGroupedNav(page) {
   return problems;
 }
 
-/** Marks the console's left nav (the <nav> holding "Overview") and returns whether it was found. */
+/** Marks the shell's nav (`[data-testid=shell-nav]`, AppShellFrame) and returns whether it was found. */
 async function markNav(page) {
-  return page.evaluate((home) => {
-    const overview = [...document.querySelectorAll("a[href]")].find((a) => a.textContent.trim() === "Overview" && a.getAttribute("href").startsWith(home));
-    const nav = overview?.closest("nav");
+  return page.evaluate(() => {
+    const nav = document.querySelector("[data-testid='shell-nav']");
     if (!nav) return false;
     nav.setAttribute("data-smoke-nav", "");
     return true;
-  }, home);
+  });
 }
 
-/** On the phone the nav is a drawer: open it. Returns a problem, or null. */
+/** On the phone the nav is the shell's drawer: open it with the page header's toggle. Returns a problem, or null. */
 async function revealNav(page, viewport) {
   if (!viewport.mobile) return null;
-  const open = page.getByRole("button", { name: "Open navigation" });
-  if (!(await open.count())) return "no \"Open navigation\" button: the nav is unreachable on a phone";
-  if ((await open.getAttribute("aria-expanded")) !== "true") await open.click();
-  await page.waitForTimeout(400);
+  const nav = page.getByTestId("shell-nav");
+  if ((await nav.getAttribute("data-state").catch(() => null)) === "open") return null;
+  const open = page.getByTestId("shell-nav-toggle");
+  if (!(await open.count())) return "no page-header toggle ([data-testid=shell-nav-toggle]): the nav is unreachable on a phone";
+  await open.click();
+  try {
+    await page.locator("[data-testid='shell-nav'][data-state='open']").waitFor({ timeout: 5000 });
+  } catch {
+    return "the page header's toggle did not open the nav drawer";
+  }
+  await page.waitForTimeout(300);
   return null;
+}
+
+/**
+ * Closes the phone's drawer, if it is open, as a visitor does: a tap on the
+ * page beside it (the drawer's backdrop, AppShellFrame). Not Escape: on a
+ * console page the forge layout takes Escape as "leave the console".
+ */
+async function hideNav(page, viewport) {
+  if (!viewport.mobile) return;
+  const nav = page.getByTestId("shell-nav");
+  if ((await nav.getAttribute("data-state").catch(() => null)) !== "open") return;
+  await page.mouse.click(viewport.width - 8, Math.round(viewport.height / 2)).catch(() => {});
+  await page.locator("[data-testid='shell-nav'][data-state='closed']").waitFor({ timeout: 3000 }).catch(() => {});
 }
 
 /**
@@ -400,12 +468,19 @@ async function answerAudit(page, answered, reached = new Map()) {
   return problems;
 }
 
-/** The left nav's items now, as hrefs (query dropped) in nav order. Folded sections show their items once open. */
-async function navItems(page) {
-  const folded = page.locator("[data-smoke-nav] button[aria-expanded='false']");
+/**
+ * The nav's items now, as hrefs (query dropped) in nav order, with their
+ * labels: the top level's or the drill-in's, and the footer's. Folded groups
+ * are unfolded first (only the nav's groups: the header's switchers are
+ * menus). The drill-in's "‹ Back" header is not an item.
+ */
+async function navItems(page, within = "[data-smoke-nav]") {
+  const folded = page.locator("[data-smoke-nav] [data-testid^='nav-'][data-testid$='-group'] button[aria-expanded='false']");
   for (let i = await folded.count(); i > 0; i--) await folded.nth(0).click().catch(() => {});
-  const links = await page.locator("[data-smoke-nav] a[href]").evaluateAll((els) => els.map((a) => [a.getAttribute("href"), a.textContent.trim()]));
-  return [...new Map(links.map(([href, label]) => [navKey(href), label])).entries()].map(([href, label]) => ({ href, label }));
+  const links = await page
+    .locator(`${within} a[href]:not([data-testid='nav-back'])`)
+    .evaluateAll((els) => els.map((a) => [a.getAttribute("href"), (a.querySelector(".truncate") ?? a).textContent.trim(), a.getAttribute("data-testid")]));
+  return [...new Map(links.map(([href, label, testId]) => [navKey(href), { label, testId }])).entries()].map(([href, { label, testId }]) => ({ href, label, testId }));
 }
 
 try {
@@ -428,7 +503,9 @@ try {
     }
     if (want.searchParams.get("section") === "built" && !(await page.getByTestId("how-built").isVisible())) problems.push("build story has no recorded build");
     if (!(await page.locator("[data-shell='demo']").count())) problems.push("no [data-shell=demo] root");
+    if (!(await page.getByTestId("shell-nav").count())) problems.push("not in the app's shell (no [data-testid=shell-nav])");
     problems.push(...(await answerAudit(page, new Set())));
+    if (path === sampleImagePage) problems.push(...(await checkSampleImage(page)));
     if (process.env.SCREENSHOT_DIR) {
       fs.mkdirSync(process.env.SCREENSHOT_DIR, { recursive: true });
       const name = path === "/" ? "root" : path.replace(/^\//, "").replace(/\//g, "_");
@@ -456,16 +533,15 @@ try {
     await page.waitForTimeout(settle);
     const reveal = await revealNav(page, viewport);
     if (reveal || !(await markNav(page))) {
-      report(`nav ${viewport.name}`, [reveal ?? "no left nav (a <nav> holding the Overview link) on the console"]);
+      report(`nav ${viewport.name}`, [reveal ?? "no shell nav ([data-testid=shell-nav]) on the console"]);
       await context.close();
       continue;
     }
-    // Breadth-first over what the nav shows: unfolding a group (Issues, More
-    // tools) or opening a row with sub-pages (Environments) shows its
-    // sub-items, which join the queue.
     const inProject = (list) => list.filter((item) => inScope(item.href));
-    const queue = inProject(await navItems(page)).filter((i) => i.href !== home);
-    problems.push(...(await checkGroupedNav(page)).map((p) => `${viewport.name}: ${p}`));
+    const drillRows = new Set(Object.values(navDrill).map((d) => d.row));
+    // The top level: every row and group page but a drill-in's own row (walked below).
+    const queue = inProject(await navItems(page)).filter((i) => i.href !== home && !drillRows.has(i.testId));
+    problems.push(...(await checkShellNav(page)).map((p) => `${viewport.name}: ${p}`));
     const seen = new Set([home, ...queue.map((i) => i.href)]);
     let prev = await pageState(page);
     const dead = [];
@@ -473,30 +549,15 @@ try {
     // Which environment each audited surface read in, when the nav reached it.
     const reached = new Map();
     let clicked = 0;
-    const clickItem = async (item) => {
-      const navProblem = await revealNav(page, viewport);
-      if (navProblem) return dead.push(`${item.label}: ${navProblem}`);
-      if (!(await markNav(page))) return dead.push(`${item.label}: the nav is gone after the previous click`);
-      await navItems(page);
-      // The item's own path, with or without a query: a prefix would also match a page under it
-      // (Observability's "Overview" is /observability; the Dashboards group lists a dashboard titled "Overview" below it).
-      const exact = (href) => `[data-smoke-nav] a[href="${href}"], [data-smoke-nav] a[href^="${href}?"]`;
-      const link = page.locator(exact(item.href)).filter({ hasText: item.label }).first();
-      // A section's sub-items show while the section is open: open it the way
-      // a visitor would, with a click on the section.
-      if (item.via && !(await link.isVisible().catch(() => false))) {
-        const section = page.locator(exact(item.via.href)).filter({ hasText: item.via.label }).first();
-        await section.click({ timeout: 5000 }).catch(() => {});
-        await page.waitForTimeout(settle / 4);
-        if (viewport.mobile) await revealNav(page, viewport);
-        await markNav(page);
-      }
+    /** Clicks `link` (a nav item) and checks the page it opens. Returns whether the click happened. */
+    const openItem = async (item, link) => {
       try {
         await link.click({ timeout: 5000 });
       } catch (err) {
         const lines = String(err.message).split("\n");
         const blocker = lines.find((l) => /intercepts pointer events/.test(l));
-        return dead.push(`${item.label} (${item.href}): not clickable — ${(blocker ?? lines[0]).trim()}`);
+        dead.push(`${item.label} (${item.href}): not clickable — ${(blocker ?? lines[0]).trim()}`);
+        return false;
       }
       clicked++;
       await page.waitForTimeout(settle / 2);
@@ -509,17 +570,86 @@ try {
       if (why.length) dead.push(`${item.label} (${item.href}): ${why.join("; ")}`);
       else console.log(`       ${viewport.name}: ${item.label} → ${now.path} "${now.heading}"`);
       prev = now;
-      if (await revealNav(page, viewport) === null && (await markNav(page))) {
+      return true;
+    };
+    // The item's own path, with or without a query: a prefix would also match a page under it
+    // (Observability's "Overview" is /observability; the Dashboards group lists a dashboard titled "Overview" below it).
+    const exact = (href) => `[data-smoke-nav] a[href="${href}"], [data-smoke-nav] a[href^="${href}?"]`;
+    const clickItem = async (item) => {
+      const navProblem = await revealNav(page, viewport);
+      if (navProblem) return dead.push(`${item.label}: ${navProblem}`);
+      if (!(await markNav(page))) return dead.push(`${item.label}: the nav is gone after the previous click`);
+      await navItems(page);
+      const link = page.locator(exact(item.href)).filter({ hasText: item.label }).first();
+      if (!(await openItem(item, link))) return;
+      if ((await revealNav(page, viewport)) === null && (await markNav(page))) {
         for (const next of inProject(await navItems(page))) {
-          if (!seen.has(next.href)) {
+          if (!seen.has(next.href) && !drillRows.has(next.testId)) {
             seen.add(next.href);
-            queue.push({ ...next, via: item.via ?? { href: item.href, label: item.label } });
+            queue.push(next);
           }
         }
-        if (viewport.mobile) await page.keyboard.press("Escape").catch(() => {});
+        await hideNav(page, viewport);
       }
     };
     while (queue.length) await clickItem(queue.shift());
+
+    // The drill-ins: the row opens the area's first page and the area's rows take the nav; each row
+    // is clicked there; "‹ Back" leaves for the Overview, where the top level is back.
+    for (const [label, drill] of Object.entries(navDrill)) {
+      const enter = async () => {
+        const navProblem = await revealNav(page, viewport);
+        if (navProblem) return navProblem;
+        await markNav(page);
+        return null;
+      };
+      let problem = await enter();
+      if (problem) {
+        dead.push(`${label}: ${problem}`);
+        continue;
+      }
+      const row = page.locator(`[data-smoke-nav] [data-testid='${drill.row}']`);
+      if (!(await row.count())) {
+        dead.push(`${label}: no drill-in row ([data-testid=${drill.row}]) in the nav`);
+        continue;
+      }
+      if (!(await openItem({ label, href: drill.pages[0] }, row.first()))) continue;
+      seen.add(drill.pages[0]);
+      problem = await enter();
+      const drillIn = page.locator(`[data-smoke-nav] [data-testid='nav-drill-in'][data-area='${drill.area}']`);
+      if (problem || !(await drillIn.count())) {
+        dead.push(`${label}: its row did not drill in ([data-testid=nav-drill-in][data-area=${drill.area}])${problem ? `: ${problem}` : ""}`);
+        continue;
+      }
+      // The drill-in's own rows (the footer stays under it, and was walked above).
+      const items = inProject(await navItems(page, "[data-smoke-nav] [data-testid='nav-drill-in']"));
+      const keys = items.map((i) => i.href);
+      const missing = drill.pages.filter((p) => !keys.includes(p));
+      if (missing.length) problems.push(`${viewport.name}: the ${label} drill-in lacks ${missing.join(", ")} (it holds ${keys.join(", ")})`);
+      for (const key of navAbsent) if (keys.includes(key)) problems.push(`${viewport.name}: the ${label} drill-in links to ${key}, a page the demo does not serve`);
+      await hideNav(page, viewport);
+      for (const item of items.filter((i) => i.href !== drill.pages[0])) {
+        seen.add(item.href);
+        problem = await enter();
+        if (problem) {
+          dead.push(`${item.label}: ${problem}`);
+          continue;
+        }
+        await openItem(item, page.locator(exact(item.href)).filter({ hasText: item.label }).first());
+        await hideNav(page, viewport);
+      }
+      problem = await enter();
+      const back = page.locator("[data-smoke-nav] [data-testid='nav-back']");
+      if (problem || !(await back.count())) {
+        dead.push(`${label}: no "‹ Back" header in its drill-in${problem ? `: ${problem}` : ""}`);
+        continue;
+      }
+      await openItem({ label: `‹ Back from ${label}`, href: home }, back.first());
+      await enter();
+      if (!(await page.locator("[data-smoke-nav] [data-testid='nav-top']").count())) dead.push(`‹ Back from ${label}: the nav did not return to its top level`);
+      await hideNav(page, viewport);
+    }
+
     // Overview last, so that click too leaves the page it is on.
     await clickItem({ href: home, label: "Overview" });
     if (seen.size < 7) problems.push(`only ${seen.size} nav items found`);
@@ -533,7 +663,7 @@ try {
       }
     }
     problems.push(...dead.map((d) => `dead nav item: ${d}`));
-    report(`nav ${viewport.name} ${viewport.width}×${viewport.height}`, problems, ` (${clicked} of ${seen.size} items clicked)`);
+    report(`nav ${viewport.name} ${viewport.width}×${viewport.height}`, problems, ` (${seen.size} items, ${clicked} clicks: each item, the drill-in's ‹ Back and the Overview last)`);
     await context.close();
   }
 } finally {

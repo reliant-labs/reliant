@@ -20,7 +20,8 @@ in its own change.
 | `advanceOn.ts` | Required actions (`advanceOn`) and `phases`. |
 | `useTourNavigation.ts` | Moving between steps, finishing, skipping, analytics. |
 | `JourneyTour.tsx` | The engine UI (picker and step). Shell-neutral. |
-| `OnboardingWizard.tsx` | Reliant's wrapper: auth gates, the version re-offer, the checklist. |
+| `OnboardingWizard.tsx` | Reliant's wrapper: auth gates, the version re-offer, the checklist's state. |
+| `OnboardingChecklist.tsx`, `checklistItems.ts` | The Setup Guide: a floating "Get started · 3/8" pill on every shell page, and its items with their completion signals. |
 | `tourShell.ts` | Which shell (`reliant` / `forge`) and where progress is stored. |
 
 ## The URL
@@ -34,6 +35,10 @@ The URL is the source of truth for what is open:
 ?tour=pick / pick:menu     the journey picker (after onboarding / from a menu)
 ?tour=chat-and-sidebars    a retired single-tour id: opens its successor journey
 ```
+
+The picker's entries in Reliant: the nav footer's **Help › Take a tour**
+(`Layout/sidebar/HelpMenu.tsx`), the command palette, Settings › About, the
+Setup Guide's "Take a tour" and the chat home's "Prefer a quick tour first?".
 
 The root route **retains `?tour=` across navigations** that don't name it
 (`routes.tsx`, `retainTourParam`). So a journey can span pages that the user
@@ -52,6 +57,8 @@ export const workflowsJourney: Journey = {
   steps: [ /* JourneyStep[] */ ],
   outro: [ /* JourneyStep[], walked after steps; see "Outro" */ ],
   finish: (shell) => shell === "reliant" ? { to: "/forge" } : null, // where Finish lands; default: Reliant's chat
+  returnToStart: (shell) => true,   // Finish, Exit tour and Back off step 1 return to where the journey was started; see "Leaving"
+  onLiveChange: (live) => {},       // told when the journey goes live and when it stops, however it stops; see "Leaving"
   elsewhere: { label: "Try AI workflows", href: () => workflowLibraryPath() }, // where it runs: an app path opens in place, a URL in a new tab
   isAvailable: () => true,          // e.g. a feature flag
   reshowAfterVersionBump: true,     // default true
@@ -111,6 +118,21 @@ last step). There is no bottom nav bar and no generic Skip step.
 - **Try the other journey** starts the other journey. If the other journey
   doesn't run in this shell, it becomes the other journey's `elsewhere` link.
 
+**Leaving.** A journey that walks pages which are not the person's own (the
+forge journey's sample app) sets `returnToStart`. Starting it (the picker, a
+menu, Try the other journey) records the page it was started from, less
+`?tour=`, in the journey context (`startedFrom`), unless that page is one of
+the journey's own. Finish, Exit tour and Back on the first step go back there
+and clear it. With nothing recorded (a `?tour=` link opened cold), `finish`
+applies.
+
+State that exists only while a journey runs (the forge journey's sample app in
+the switcher) hangs on `onLiveChange`: `JourneyLiveWatch`, at the app's root,
+calls it with true when `?tour=` first names one of the journey's steps and
+with false when it stops naming them, whatever stopped it (Finish, Exit tour,
+Back, a link, the next journey). It is not called between the journey's own
+steps.
+
 ## A step (`JourneyStep`)
 
 | Field | Meaning |
@@ -118,7 +140,7 @@ last step). There is no bottom nav bar and no generic Skip step.
 | `id` | kebab-case, **unique across all journeys**, prefixed `wf-` / `fg-`. Appears in the URL and in analytics. Don't rename a shipped id. |
 | `title`, `description` | Card copy. `description` is a ReactNode. |
 | `target` | CSS selector to spotlight. Prefer `[data-tour='…']`; see "Anchors". No target (and no `targets`) means a centred card. |
-| `targets` | Multi-spotlight: several labelled targets (`{selector, label, description}`). |
+| `targets` | Multi-spotlight: several labelled targets (`{selector, label, description, labelPosition?}`). A label goes on the first side with room (right, left, above, below); `labelPosition` names the side to try first, for a wide target whose side is over other chrome. |
 | `type` | `spotlight` / `multi-spotlight` / `card`. Inferred from `target` / `targets`. |
 | `tooltipPosition`, `tooltipPadding`, `spotlightConfig` | Placement. A preferred side; the card flips to a side with room and never covers its target (`calloutPlacement.ts`). |
 | `copyByShell` | `{ forge: { description: … } }`: per-shell title / description / target. |
@@ -179,7 +201,7 @@ the app).
 | `{ kind: "click", selector? }` | edge | The element (default: the step's `target`) is clicked. Capture phase, deferred one tick, so the click's own navigation runs first. |
 | `{ kind: "event", event, where? }` | edge | A tour signal is emitted, optionally narrowed by `where(payload)`. |
 | `{ kind: "route", path }` | level | The pathname matches: a prefix string or a RegExp. |
-| `{ kind: "checklist", item }` | level | An onboarding-checklist item is complete. Reliant only; the checklist's own detectors (`onboardingChecklistStore.subscribeToStoreChanges`) set it, e.g. `create-workflow` when a user-source workflow exists. |
+| `{ kind: "checklist", item }` | level | An onboarding-checklist item is complete. Reliant only; the checklist's own detectors (`onboardingChecklistStore.subscribeToStoreChanges`) set it, e.g. `run-workflow` when a user-source workflow exists. |
 | `{ kind: "store", test, subscribe }` | level | Any store state. Build it with `whenStore(useSomeStore, (s) => …)`. |
 | `{ kind: "element", selector }` | level | An element matching `selector` is in the DOM. |
 | `{ kind: "when", test(ctx) }` | level | Anything else. `ctx = { location: {pathname, search}, signals, context }`. It is re-checked on every location change, signal and context write. |
@@ -241,19 +263,24 @@ done. Gate them per step: `shell: "reliant"` and/or `isAvailable`. If no outro
 step applies (in the forge shell, say), the journey ends on its last step.
 The end card sits on whichever step is last.
 
-The workflows outro tours the chat and its panels, then tidies them away:
+The workflows outro tours the chat and the shell around it, then closes only
+what it opened:
 
 ```ts
 outro: [{
   id: "wf-outro-layout",
   shell: "reliant",
   title: "Back to the chat",
-  target: "[data-onboarding='chat-input']",
-  description: "Conversations on the left, files on the right, the terminal below. Each opens from its button and closes the same way.",
-  route: { path: "/", open: { to: "/" }, label: "Open the chat" },
-  onComplete: layoutActions.collapseAll,
+  targets: [/* the composer, the menu toggle, the files + terminal toggles */],
+  description: "… The menu on the left holds your chats and workflows. The file browser opens on the right and the terminal at the bottom …",
+  route: { path: "/project/", open: () => …, label: "Open the chat" },
+  onEnter: () => { layoutActions.showSidebar(); layoutActions.showFilesForTour(); },
+  onComplete: layoutActions.hidePanelsTourOpened,
 }],
 ```
+
+Never close the left nav when a tour ends: it is the one shell's navigation,
+not a panel the tour borrowed.
 
 `layoutActions` acts through each panel's existing owner and persists the
 change exactly as the user's own toggle would:
@@ -263,7 +290,9 @@ change exactly as the user's own toggle would:
 | `showSidebar` / `hideSidebar` | `workspaceStateStore.setLeftSidebarExpandedGlobal` |
 | `showTerminal` / `hideTerminal` | `terminalStore.showTerminal` / `hideTerminal` |
 | `showFiles` / `hideFiles` | ModernApp's file browser, through its `open-file-browser` / `close-file-browser` window events |
-| `collapseAll` | All three |
+| `showFilesForTour` / `showTerminalForTour` | The same, remembering that the tour opened the panel (nothing when it was already open) |
+| `hidePanelsTourOpened` | Closes the files panel and the terminal, but only those the `…ForTour` actions opened |
+| `collapseAll` | All three, the left nav included; no shipped journey uses it |
 
 ## Anchors (`data-tour="…"`)
 
@@ -281,6 +310,35 @@ Target elements through a stable attribute, never through classes or text.
 4. A target that never appears doesn't trap the user. The spotlight keeps
    retrying for about 3 s, then shows its card anyway, with Skip step and End
    tour available. `blockOutside` blocks nothing while the target is missing.
+5. `__tests__/tourAnchors.test.ts` fails when a selector a journey, phase or
+   tip names is rendered nowhere, so a rename can't strand a step.
+
+### The nav's anchors: one set, every shell
+
+The left nav is data (`Layout/sidebar/navConfig/`), drawn by one renderer,
+`Layout/sidebar/NavRenderer.tsx`. The signed-in app, the forge shell and the
+public demo all draw it, inside the one shell (`Layout/shell/AppShell.tsx`), so
+a step that rings the nav names the same anchor wherever it runs:
+
+| Anchor | Where |
+|---|---|
+| `forge-console-nav` | the nav's top level (`nav-top`): the app's rows |
+| `nav-drill-in` | an area's header ("‹ Observability") while the nav is drilled into it |
+| `nav-overview`, `nav-observability`, `nav-deployments`, `nav-tests`, `nav-security`, `nav-configure` | one row or group each |
+
+A nav item names its anchor with `tour: "<name>"` (`navConfig/types.ts`), and
+`NavRenderer` renders it as `data-tour` (on a group, the whole block). Set it
+only on an item a journey points at.
+
+On an area's routes (Observability is a drill-in) the nav draws no `nav-top`
+and no area row: a step that rings the nav there targets `nav-drill-in`, never
+`forge-console-nav` alone. `tourAnchors.test.ts` pins every anchor in this
+table, and `e2e/journey-forge.spec.ts` walks the demo's journey in the shell.
+
+There is no anchor for a frame of the console's own: the console is a page of
+the shell (`Forge/Console/ConsoleFrame.tsx`), in the app and on the demo host
+alike. The old `[data-tour='forge-console'] aside` named the console's second
+frame (`ConsoleShell`); no step targets it, and after #3574 nothing renders it.
 
 ## Signals (the event bus)
 
@@ -344,8 +402,10 @@ by ForgeShell/landingJourney.ts:
 
 The public demo host (`demo.reliantlabs.io`, the `demo` shell,
 `demoShellRoutes.tsx`) boots the tour as the forge shell does, but with
-`memoryTourStorage()`: nothing is remembered. A bare entry **opens on the
-Home** (`/forge/demo?section=home`), free to explore:
+`memoryTourStorage()`: nothing is remembered. Its pages render in the app's
+one shell with the demo's nav (`Forge/Demo/demoNav.ts`), so its steps ring the
+same anchors as the app's ("The nav's anchors", above). A bare entry **opens
+on the Home** (`/forge/demo?section=home`), free to explore:
 - The Home's hero and the action row under every page's header offer **Take
   the tour** (`TOUR_START`, `Forge/Demo/DemoScreenActions.tsx`). Nothing starts
   the tour by itself. (`DemoTourToast` has rendered nothing since #2334.)
@@ -361,26 +421,48 @@ Home** (`/forge/demo?section=home`), free to explore:
   is open.
 
 The forge journey runs its own cut there, chosen with `isAvailable`
-(`lib/demoTour.ts`, runtime config `DEMO_TOUR`):
+(`lib/demoTour.ts`, runtime config `DEMO_TOUR`).
 
-| Step | Reliant / forge shell | demo, `short` (default) | demo, `full` |
-|---|---|---|---|
-| fg-intro (what forge is, Install forge) | ✓ | ✓ | ✓ |
-| fg-console | ✓ | | ✓ |
-| fg-instrumented | ✓ | ✓ | ✓ |
-| fg-trace | ✓ | ✓ | ✓ |
-| fg-hops (between services) | ✓ | ✓ | ✓ |
-| fg-inside (inside a service) | | ✓ | ✓ |
-| fg-logs | ✓ | ✓ | ✓ |
-| fg-profile | ✓ | | ✓ |
-| fg-graph | | | ✓ |
-| fg-issue | ✓ | ✓ | ✓ |
-| fg-oncall | ✓ | | ✓ |
-| fg-agent (what a coding agent reads) | | | ✓ |
-| fg-ask | ✓ | ✓ | ✓ |
-| fg-built (the recorded forge run, a wide modal card, `card: { wide, modal }`) | | ✓ | ✓ |
-| fg-done | ✓ | ✓ | ✓ |
-| **steps** | 11 | 10 | 15 |
+**Signed in, on either app host, it walks the sample app inside the shell**
+(`/forge/p/sample_shop/…`, `Forge/Sample/sampleApp.ts`): the shell's real nav
+and console pages, so the tour teaches the UI a person's own app gets. Its
+nav steps spotlight the nav's own anchors (`tour: "nav-<section>"` on the nav
+config's items, which NavRenderer renders as `data-tour`), the same set the
+demo host's walk uses. The sample's data is its TransportScope's
+(`fixtures/scope.tsx`): the shop pack, every id it mints prefixed `sample_`,
+which is why the steps' trace, span and issue ids are read through `shown()`.
+The name `sample_shop` cannot be a real forge app (names are
+`[a-z][a-z0-9-]*`), the shell never remembers it as the last pick
+(`shellProject.ts` `remembersPick`), and leaving the tour returns to where it
+started (`returnToStart`). While the tour is live (`onLiveChange`, below) the
+switcher lists "shop (sample)"; when it stops, the row goes and the sample's
+cache is cleared. A signed-in `/forge/demo` or `/demo` link opens the page it
+names there (`Forge/Sample/ForgeDemoEntry.ts`). Signed out, those links leave
+for the demo host (`Forge/Demo/demoHandoff.ts`), where the demo's cut runs.
+
+| Step | shell, signed in | an app host, signed out | demo, `short` (default) | demo, `full` |
+|---|---|---|---|---|
+| fg-intro (what forge is, Install forge) | ✓ | ✓ | ✓ | ✓ |
+| fg-console (the console's sections in the nav) | | ✓ | | ✓ |
+| fg-nav (the shell's nav, the app's sections) | ✓ | | | |
+| fg-instrumented | ✓ | ✓ | ✓ | ✓ |
+| fg-deployments (Deployments ▾, on Releases) | ✓ | | | |
+| fg-trace | ✓ | ✓ | ✓ | ✓ |
+| fg-hops (between services) | ✓ | ✓ | ✓ | ✓ |
+| fg-inside (inside a service) | | | ✓ | ✓ |
+| fg-logs | ✓ | ✓ | ✓ | ✓ |
+| fg-profile | | ✓ | | ✓ |
+| fg-graph | | | | ✓ |
+| fg-issue | ✓ | ✓ | ✓ | ✓ |
+| fg-oncall | ✓ | ✓ | | ✓ |
+| fg-agent (what a coding agent reads) | | | | ✓ |
+| fg-ask | ✓ | ✓ | ✓ | ✓ |
+| fg-tests (Tests ▾) | ✓ | | | |
+| fg-security (Security ▾) | ✓ | | | |
+| fg-configure (Configure ▾, on Secrets) | ✓ | | | |
+| fg-built (the recorded forge run, a wide modal card, `card: { wide, modal }`) | | | ✓ | ✓ |
+| fg-done | ✓ | ✓ | ✓ | ✓ |
+| **steps** | 14 | 11 | 10 | 15 |
 
 fg-built is the demo's last step before the end card. It does not replace
 fg-instrumented, which runs in every cut; the short cut leaves out fg-agent

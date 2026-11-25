@@ -15,6 +15,8 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/chatproto"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -296,12 +298,22 @@ func userWorkflowListItem(draft *db.WorkflowDraft, check workflowCheck) (*relian
 		AutomationOnly:   protoWf.AutomationOnly,
 		Permissions:      protoWf.Permissions,
 		Triggers:         protoWf.Triggers,
+		Visibility:       draftVisibility(draft),
+		OrgId:            draft.OrgID,
 	}
 	if !draft.UpdatedAt.IsZero() {
 		updatedAt := draft.UpdatedAt.Format(time.RFC3339)
 		item.UpdatedAt = &updatedAt
 	}
 	return item, nil
+}
+
+// draftVisibility is who besides its owner may read a saved workflow, on the
+// wire. Every list and get that carries it answers the owner alone (a saved
+// workflow reaches them only through authz.CanReadWorkflow), so a viewer
+// learns no more than ListSharedWorkflowDrafts already tells them.
+func draftVisibility(draft *db.WorkflowDraft) reliantv1.ResourceVisibility {
+	return chatproto.Visibility(authz.WorkflowVisibility(draft))
 }
 
 // storedWorkflowParseWarn admits one "Failed to parse stored project

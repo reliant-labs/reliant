@@ -79,7 +79,7 @@ func TestLLMCallUsage_EveryActivityAttemptIsCountedAndRepeatsAreNot(t *testing.T
 	require.NoError(t, raw.QueryRow(`SELECT count(DISTINCT attempt) FROM llm_call_usage WHERE id = $1`, "wf/run/act-1").Scan(&attempts))
 	assert.Equal(t, 2, attempts)
 
-	days, err := repo.ListLLMUsageDaily(ctx, "u1", at, at)
+	days, err := store.ListLLMUsageDaily(ctx, repo.ORM(), "u1", at, at)
 	require.NoError(t, err)
 	require.Len(t, days, 1)
 	d := days[0]
@@ -114,6 +114,35 @@ func TestLLMCallUsage_ConcurrentDuplicatesCountOnce(t *testing.T) {
 	assert.Equal(t, 1, rowCount(t, raw, `SELECT calls FROM llm_call_usage_daily`))
 }
 
+func insightsModelColumns(member bool) map[string]string {
+	cols := map[string]string{
+		"org_id": "text", "day": "date", "project_id": "text", "workflow_name": "text", "node_id": "text", "preset": "text",
+		"provider": "text", "model": "text", "auth_mode": "text", "funding": "text", "paid_by_org": "boolean", "purpose": "text",
+		"outcome": "text", "error_class": "text", "calls": "bigint", "retried_calls": "bigint", "input_tokens": "bigint", "output_tokens": "bigint",
+		"cache_read_tokens": "bigint", "cache_write_tokens": "bigint", "latency_ms_total": "bigint", "latency_ms_hist": "ARRAY",
+		"ttft_calls": "bigint", "ttft_ms_total": "bigint", "ttft_ms_hist": "ARRAY", "reported_calls": "bigint",
+		"reported_cost_usd_nanos": "bigint", "estimated_calls": "bigint", "estimated_cost_usd_nanos": "bigint",
+		"unpriced_calls": "bigint", "updated_at": "timestamp with time zone",
+	}
+	if member {
+		cols["user_id"] = "text"
+	}
+	return cols
+}
+
+func insightsToolColumns(member bool) map[string]string {
+	cols := map[string]string{
+		"org_id": "text", "day": "date", "project_id": "text", "workflow_name": "text", "node_id": "text", "preset": "text",
+		"tool_name": "text", "tool_kind": "text", "location": "text", "outcome": "text", "error_class": "text",
+		"calls": "bigint", "retried_calls": "bigint", "duration_ms_total": "bigint", "duration_ms_hist": "ARRAY",
+		"updated_at": "timestamp with time zone",
+	}
+	if member {
+		cols["user_id"] = "text"
+	}
+	return cols
+}
+
 // The ledger records counts and metadata. This pins the exact column set of
 // both tables, so a column that could hold a prompt, a reply, a tool input, a
 // file name or an error's text cannot be added without changing this list and
@@ -139,6 +168,9 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 			// The LLM gateway's id for the call (x-litellm-call-id), which
 			// control-plane's wallet ledger keys the call's cost by.
 			"gateway_call_id": "text",
+			// Whether the insights rollups count the row (agent-analytics.md §3.1),
+			// and the org that paid for it, an opaque id.
+			"insights_folded": "boolean", "funding_org_id": "text",
 		},
 		"llm_call_usage_daily": {
 			"user_id": "text", "org_id": "text", "provider": "text", "model": "text", "auth_mode": "text", "purpose": "text",
@@ -155,6 +187,25 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 			"cache_write_tokens": "bigint", "latency_ms_total": "bigint", "updated_at": "timestamp with time zone",
 		},
 		"llm_usage_purged_users": {"user_id": "text", "purged_at": "timestamp with time zone"},
+		// The tool calls' ledger (agent-analytics.md §3.5): ids, the run's names,
+		// closed-set labels, a shipped tool's name and counts. No tool input,
+		// output, command, file name or error text.
+		"tool_call_usage": {
+			"id": "text", "attempt": "integer", "user_id": "text", "org_id": "text", "chat_id": "text",
+			"project_id": "text", "workflow_id": "text", "thread_id": "text", "workflow_name": "text",
+			"node_id": "text", "preset": "text", "ai_run_id": "text", "ai_root_run_id": "text",
+			"tool_name": "text", "tool_kind": "text", "location": "text", "outcome": "text", "error_class": "text",
+			"duration_ms": "bigint", "created_at": "timestamp with time zone",
+			"insights_folded": "boolean",
+		},
+		// The insights rollups (agent-analytics.md §3.1): daily totals per org
+		// (no user_id: the team tables name no one) and per member, keyed by
+		// ids, the run's names and closed-set labels; counts and latency
+		// histograms only.
+		"insights_model_calls_daily":        insightsModelColumns(false),
+		"insights_model_calls_member_daily": insightsModelColumns(true),
+		"insights_tool_calls_daily":         insightsToolColumns(false),
+		"insights_tool_calls_member_daily":  insightsToolColumns(true),
 	}
 	for table, cols := range want {
 		rows, err := raw.Query(`SELECT column_name, data_type FROM information_schema.columns
@@ -209,6 +260,24 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 	_, err = raw.Exec(`INSERT INTO llm_org_usage_daily (day, org_id, account_id, user_id, provider, model, funding, purpose)
 		VALUES (current_date, 'o', 'a', 'u', 'p', 'm', 'org_key', 'chat')`)
 	assert.NoError(t, err)
+
+	// The tool ledger's labels are closed sets too, and only a tool Reliant
+	// ships is named: an MCP tool's name is the user's own.
+	insertTool := func(id, name, kind, outcome, class string) error {
+		_, err := raw.Exec(`INSERT INTO tool_call_usage (id, attempt, user_id, chat_id, tool_name, tool_kind, location, outcome, error_class)
+			VALUES ($1, 1, 'u', 'c', $2, $3, 'daemon', $4, $5)`, id, name, kind, outcome, class)
+		return err
+	}
+	assert.Error(t, insertTool("t1", "shell", "builtin", "error", "exit status 1: rm -rf /home/me"),
+		"free text in error_class must be refused by the schema")
+	assert.Error(t, insertTool("t2", "mcp__acme-internal__deploy", "mcp", "success", ""),
+		"an MCP tool's name must not be recorded")
+	assert.Error(t, insertTool("t3", "", "builtin", "success", ""), "a shipped tool is named")
+	assert.Error(t, insertTool("t4", "shell", "builtin", "success", "tool_error"), "a success has no error class")
+	assert.Error(t, insertTool("t5", "shell", "builtin", "error", ""), "an error has a class")
+	assert.Error(t, insertTool("t6", "shell", "plugin", "success", ""), "tool_kind is a closed set")
+	assert.NoError(t, insertTool("t7", "", "mcp", "error", "tool_error"))
+	assert.NoError(t, insertTool("t8", "shell", "builtin", "cancelled", ""))
 }
 
 func TestLLMUsageDaily_RollupSumsPerUserModelProviderAuthModeAndDay(t *testing.T) {
@@ -237,7 +306,7 @@ func TestLLMUsageDaily_RollupSumsPerUserModelProviderAuthModeAndDay(t *testing.T
 	mk("h", time.Date(2026, 10, 28, 23, 59, 0, 0, time.UTC), func(r *LLMCallUsage) { r.Model = "edge" })
 	mk("i", time.Date(2026, 10, 29, 0, 1, 0, 0, time.UTC), func(r *LLMCallUsage) { r.Model = "edge" })
 
-	rows, err := repo.ListLLMUsageDaily(ctx, "u1", d1, d2)
+	rows, err := store.ListLLMUsageDaily(ctx, repo.ORM(), "u1", d1, d2)
 	require.NoError(t, err)
 	type key struct{ day, provider, model, mode string }
 	got := map[key]LLMUsageDay{}
@@ -269,7 +338,7 @@ func TestLLMUsageDaily_RollupSumsPerUserModelProviderAuthModeAndDay(t *testing.T
 	assert.Len(t, got, 6, "rows: %v", keys)
 
 	// Range bounds are inclusive UTC dates.
-	only, err := repo.ListLLMUsageDaily(ctx, "u1", d2, d2)
+	only, err := store.ListLLMUsageDaily(ctx, repo.ORM(), "u1", d2, d2)
 	require.NoError(t, err)
 	for _, r := range only {
 		assert.Equal(t, "2026-10-29", r.Day.Format("2006-01-02"))
@@ -344,7 +413,7 @@ func TestLLMUsageDaily_PurposeSplitsTheRollup(t *testing.T) {
 		_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, r)
 		require.NoError(t, err)
 	}
-	rows, err := repo.ListLLMUsageDaily(ctx, "u1", at, at)
+	rows, err := store.ListLLMUsageDaily(ctx, repo.ORM(), "u1", at, at)
 	require.NoError(t, err)
 	calls := map[string]int64{}
 	for _, r := range rows {

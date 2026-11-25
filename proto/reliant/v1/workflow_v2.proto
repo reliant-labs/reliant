@@ -168,6 +168,60 @@ message SaveMessageConfig {
   CelString display_style = 7 [(reliant) = {hidden: true}];
 }
 
+// NodeObserve declares what a node records about itself when it finishes:
+// attributes on its workflow.node span, span events, and metrics. On a
+// Workflow it is the default every node of that graph merges with (not
+// inherited by sub-workflows). Every value is a template ("{{ expr }}") over
+// the node's own result (`output`), `inputs`, `trigger`, `workflow`, `iter`,
+// `node` (id, type, path, attempt, duration_ms) and, inside `each`, `item`;
+// `nodes` is not in scope. `when` is raw CEL, like `condition`.
+//
+// The fields are plain strings, not the Cel* wrappers, on purpose: the
+// runtime resolves every Cel* field of a node before dispatch, when `output`
+// does not exist yet. Recording never fails, retries or delays the node.
+// dev-docs/design/workflow-observe.md is the design.
+message NodeObserve {
+  // Attributes are set on the node's span, key -> template.
+  map<string, string> attributes = 1;
+  // Events are span events; the author picks the names. An event named
+  // "decision" with name/value/reason attributes is the recommended
+  // convention for a node that chooses something.
+  repeated ObserveEvent events = 2;
+  // Metrics are OTEL instruments, cardinality-capped.
+  repeated ObserveMetric metrics = 3;
+}
+
+// ObserveEvent is one span event a node records.
+message ObserveEvent {
+  // Name is the event's name, e.g. "decision".
+  string name = 1;
+  // When is raw CEL (no {{ }}): the event is recorded only when it is true.
+  // It is evaluated once, before each, and cannot read `item`.
+  string when = 2;
+  // Each is a template evaluating to a list: one event per element, with the
+  // element bound to `item`.
+  string each = 3;
+  // Attributes are the event's attributes, key -> template.
+  map<string, string> attributes = 4;
+}
+
+// ObserveMetric is one metric a node emits.
+message ObserveMetric {
+  // Name is the metric's name, e.g. "rc_train.ticks".
+  string name = 1;
+  // Kind is counter, histogram or gauge.
+  string kind = 2;
+  // Value is a template evaluating to a number. Optional for a counter
+  // (default 1); required for a histogram or gauge.
+  string value = 3;
+  // Unit is the UCUM unit, e.g. "ms" or "{call}". Optional.
+  string unit = 4;
+  // When is raw CEL (no {{ }}): the metric is emitted only when it is true.
+  string when = 5;
+  // Attributes are the metric's attributes, key -> template.
+  map<string, string> attributes = 6;
+}
+
 // ThreadConfig configures thread behavior for a node.
 // Threads are conversation contexts that persist messages across nodes.
 message ThreadConfig {
@@ -205,11 +259,8 @@ message InjectConfig {
     description: "UI display style for injected message; defaults to hidden"
     enum_values: "info|warning|success|hidden"
   }];
-  // Deprecated: use repeated attachments field (5) instead.
-  CelString legacy_attachments = 3 [
-    deprecated = true,
-    (reliant) = {hidden: true}
-  ];
+  reserved 3;
+  reserved "legacy_attachments";
   // Attachments to include in the injected message.
   repeated InjectAttachment attachments = 5 [(reliant) = {description: "Attachments to include"}];
 }
@@ -304,6 +355,11 @@ message Node {
   // already ending are not failures and are never tolerated. Unset (the
   // default) keeps today's behaviour: the node's failure is the run's.
   bool tolerate_failure = 9 [(reliant) = {description: "Make the node optional: when it fails the run continues, and nodes.<id>.failed is true with the reason in nodes.<id>.error"}];
+
+  // Observe declares the attributes, span events and metrics this node
+  // records when it finishes, as templates over its own result. Merged with
+  // the workflow's observe (the node wins). See NodeObserve.
+  NodeObserve observe = 30 [(reliant) = {description: "What the node records when it finishes: span attributes, events (a decision is an event named decision) and metrics, as templates over output.*. Never fails the node"}];
 
   // Type-specific arguments. Exactly one must be set, matching the type field.
   // SecretRefs are the declared secrets this node's activity resolves, written by
@@ -681,16 +737,9 @@ message ExecuteToolsArgs {
   // recorded no set (a run that predates it, or tool calls not from an LLM).
   // See research/TOOL_CAPABILITIES.md.
   ToolCapabilities capabilities = 6 [(reliant) = {hidden: true}];
-  // Deprecated: the integration action approval prompt that set this was
-  // removed. Only the replay branch that keeps runs recorded before the
-  // removal working still sets it (runtime/action_approval_legacy.go): a call
-  // the person attending denied, keyed by tool call id, with the reason the
-  // model is told; the activity records each FAILED with it. Reserve the tag
-  // when that branch and its version gate are retired.
-  map<string, string> refused_tool_calls = 7 [
-    deprecated = true,
-    (reliant) = {hidden: true}
-  ];
+  // The removed integration action approval prompt's refusals.
+  reserved 7;
+  reserved "refused_tool_calls";
 }
 
 // InvokeToolArgs configures an invoke_tool node — invokes ONE tool directly from the graph,
@@ -1298,12 +1347,18 @@ message RunArgs {
   // and it is revoked when the step ends. Refused, without running the
   // command, on a machine whose daemon does not apply step keys and on a
   // deployment that cannot issue them. Output: nodes.<id>.llm_gateway.
-  LLMGatewayStep llm_gateway = 7 [(reliant) = {
-    description: "Run the command with a short-lived, budget-capped LLM gateway key for a third-party agent CLI, as {cli: claude-code, budget_usd: 2, models: [...]}. The key is set for this command only, redacted from its output and revoked when the step ends"
-    example: "{\"cli\": \"claude-code\", \"budget_usd\": 2}"
-    type_hint: "JSON object"
-    label: "LLM gateway"
-  }];
+  //
+  // Deprecated (shipped in v1.29.0, slated for removal): it keeps working
+  // throughout v1 and is removed only in a future major.
+  LLMGatewayStep llm_gateway = 7 [
+    deprecated = true,
+    (reliant) = {
+      description: "Deprecated: kept working throughout v1, slated for removal. Run the command with a short-lived, budget-capped LLM gateway key for a third-party agent CLI, as {cli: claude-code, budget_usd: 2, models: [...]}. The key is set for this command only, redacted from its output and revoked when the step ends"
+      example: "{\"cli\": \"claude-code\", \"budget_usd\": 2}"
+      type_hint: "JSON object"
+      label: "LLM gateway"
+    }
+  ];
 }
 
 // LLMGatewayStep is a run node's `llm_gateway`: which CLI the step key is for
@@ -2030,13 +2085,9 @@ message ToolCapabilities {
   // exactly (not through a tag, a glob or "*"), sorted: an unattended run keeps
   // them. Only set when unattended is.
   repeated string unattended_opt_in = 11;
-  // Deprecated: never written. It listed the offered tools whose calls asked
-  // the person attending before they ran — the integration action approval
-  // prompt, since removed. A call_llm output recorded before the removal still
-  // carries it, and the replay branch that keeps those runs working reads it
-  // (runtime/action_approval_legacy.go). Reserve the tag when that branch and
-  // its version gate are retired.
-  repeated string approval_required = 12 [deprecated = true];
+  // The removed integration action approval prompt's gated tools.
+  reserved 12;
+  reserved "approval_required";
   // SpawnDepthExhausted: the agent is a sub-agent whose spawn depth has
   // reached the maximum, so it is never offered spawn. load_tool and the
   // execution refusal say so instead of "not found".
@@ -2221,7 +2272,9 @@ message RunOutput {
   bool truncated = 6;
   // The step key the command ran with, when the node sets llm_gateway:
   // what it was allowed and what it spent. Never the key itself.
-  RunLLMGatewayOutput llm_gateway = 7;
+  // Deprecated with RunArgs.llm_gateway: set while that field keeps working
+  // throughout v1.
+  RunLLMGatewayOutput llm_gateway = 7 [deprecated = true];
 }
 
 // RunLLMGatewayOutput is a run node's nodes.<id>.llm_gateway: the step key its
@@ -2448,6 +2501,11 @@ message Workflow {
   // node starts, and concluded on every ending (see WorkflowCheck). Absent,
   // the default, posts nothing.
   WorkflowCheck check = 26;
+  // Observe is the default observe block for every node of this graph,
+  // merged with each node's own: attributes by key and metrics by name (the
+  // node wins), events concatenated (defaults first). Sub-workflows follow
+  // their own defaults. See NodeObserve.
+  NodeObserve observe = 27;
 }
 
 // WorkflowCheck is a GitHub check run whose lifecycle the engine owns, posted
@@ -2545,11 +2603,17 @@ message WorkflowRequirements {
   // checked with the vendor's own status command, whose output never leaves
   // the machine; Reliant never reads, stores or relays a vendor's sign-in.
   // A person signs one in with `reliant machine login <vendor>`.
-  repeated string cli_login = 4 [(reliant) = {
-    description: "Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine. Checked with each vendor's own status command before the first node; sign one in with `reliant machine login <vendor> --machine <name>`"
-    example: "[claude, codex]"
-    label: "CLI sign-ins"
-  }];
+  //
+  // Deprecated (shipped in v1.29.0, slated for removal): it keeps working
+  // throughout v1 and is removed only in a future major.
+  repeated string cli_login = 4 [
+    deprecated = true,
+    (reliant) = {
+      description: "Deprecated: kept working throughout v1, slated for removal. Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine. Checked with each vendor's own status command before the first node; sign one in with `reliant machine login <vendor> --machine <name>`"
+      example: "[claude, codex]"
+      label: "CLI sign-ins"
+    }
+  ];
 }
 
 // WorkflowConcurrency is a trigger admission policy, not a worker task limit.

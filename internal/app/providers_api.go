@@ -18,6 +18,7 @@ import (
 	forgeauth "github.com/reliant-labs/forge/pkg/auth"
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/session"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
@@ -25,14 +26,17 @@ import (
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
@@ -66,6 +70,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/readguard"
+	"github.com/reliant-labs/reliant/internal/runenv"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
@@ -201,11 +206,58 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 	return s, nil
 }
 
+// SignInSessions keeps the managed identity's sign-in sessions SERVER-SIDE
+// (forge/pkg/session): the browser's cookie holds an opaque id, the
+// identity's tokens stay in auth_sessions sealed under a key derived from that
+// id, and the access token is renewed before it expires. The login broker
+// creates them (login_broker.go, WithSessions) and UserAuth resolves them
+// (auth.Settings.Sessions), so the cookie is a browser session — the one
+// credential that decides an approval (auth.RequireApprovalDecider).
+//
+// nil — the node is absent — until the broker is configured (an identity's
+// oidc_client_id and broker token: LoginBrokerConfigured).
+type SignInSessions struct{ *session.Manager }
+
+// SignInSessionsDeps is the database the sessions live in and the config the
+// broker reads.
+type SignInSessionsDeps struct {
+	API    *config.ApiServerConfig
+	DB     *db.Repo
+	Logger *slog.Logger
+}
+
+// NewSignInSessions is the session Manager over reliant's database, or
+// nothing without a configured login broker.
+//
+//forge:root-only api
+func NewSignInSessions(d SignInSessionsDeps) (*SignInSessions, error) {
+	if LoginBrokerConfigured(d.API) != nil {
+		return nil, nil
+	}
+	m, err := session.NewManager(session.Config{
+		Store:     session.NewPostgresStore(d.DB.ORM().DB()),
+		Refresher: SessionRefresher(d.API),
+		Logger:    d.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sign-in sessions: %w", err)
+	}
+	return &SignInSessions{m}, nil
+}
+
+// Run deletes ended sessions hourly until ctx ends.
+func (s *SignInSessions) Run(ctx context.Context) error { return s.Manager.Run(ctx) }
+
 // UserAuthDeps is how callers authenticate, and the authority `rlat_` access
 // tokens are resolved against.
 type UserAuthDeps struct {
 	Settings *APISettings
 	Tokens   tokenauthority.Authority
+	// Sessions resolves the sign-in cookie's session ids; nil without a
+	// login broker, when the cookie is refused.
+	//
+	// forge:optional-dep
+	Sessions *SignInSessions
 }
 
 // NewUserAuth authenticates the user audience: a JWT or the shared API key,
@@ -219,7 +271,14 @@ type UserAuthDeps struct {
 //forge:audience user
 //forge:root-only api
 func NewUserAuth(d UserAuthDeps) (*grpcserver.UserAuth, error) {
-	return grpcserver.NewUserAuth(d.Settings.Auth, d.Tokens)
+	settings := d.Settings.Auth
+	if d.Sessions != nil {
+		settings.Sessions = d.Sessions.Manager
+		// The plain-named cookie only in local development, where the
+		// broker cannot set a __Host- one (plain http).
+		settings.DevSessionCookie = runenv.IsDev()
+	}
+	return grpcserver.NewUserAuth(settings, d.Tokens)
 }
 
 // UserChainDeps is the user chain's authenticator and the email domains it
@@ -321,6 +380,17 @@ type APIListenerDeps struct {
 	// ClientVersions is the client version policy, whose legacy switches
 	// the listener's edge applies (ServerProcessConfig.client_versions).
 	ClientVersions *configv1.ClientVersionPolicy
+	// SignIn is the login broker's session store: with it the native
+	// sign-in routes (/auth/*, login_broker.go) are mounted; nil without a
+	// configured identity, when they are not.
+	//
+	// forge:optional-dep
+	SignIn *SignInSessions
+	// Accounts reads the signed-in person's control-plane account for
+	// /auth/session; nil without a control plane.
+	//
+	// forge:optional-dep
+	Accounts *ControlPlaneAccounts
 }
 
 // NewAPIListener is the address browsers, the CLI and `rlat_` tokens call
@@ -344,10 +414,43 @@ func NewAPIListener(d APIListenerDeps) (*grpcserver.APIListener, error) {
 		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
 			services := d.Routes.Register(mux, opts...)
 			d.HTTP.Register(mux)
+			if d.SignIn != nil {
+				// NATIVE SIGN-IN, only with a configured identity: the /auth/*
+				// routes login_broker.go mounts.
+				opts := []BrokerOption{WithSessions(d.SignIn.Manager)}
+				if d.Accounts != nil {
+					opts = append(opts, WithAccounts(d.Accounts.GetCurrentAccount))
+				}
+				RegisterLoginBroker(mux, d.API, d.Logger, opts...)
+				d.Logger.Info("native sign-in enabled", "routes", "/auth/* (internal/app/login_broker.go)")
+			}
 			return services
 		}),
 		Logger: d.Logger,
 	})
+}
+
+// ControlPlaneAccounts reads a signed-in person's control-plane account with
+// their own token (controlplane.Service.GetCurrentAccount): what the sign-in
+// session reports for onboarding.
+type ControlPlaneAccounts struct{ controlplane.Service }
+
+// ControlPlaneAccountsDeps is the control plane the accounts are read from.
+type ControlPlaneAccountsDeps struct {
+	ControlPlane *configv1.ControlPlaneConfig
+}
+
+// NewControlPlaneAccounts is the account reader, or nothing (nil) without a
+// control plane: a self-hosted deployment has no accounts beside the
+// identity's.
+//
+//forge:root-only api
+func NewControlPlaneAccounts(d ControlPlaneAccountsDeps) (*ControlPlaneAccounts, error) {
+	svc := hostedControlPlane(d.ControlPlane)
+	if svc == nil {
+		return nil, nil
+	}
+	return &ControlPlaneAccounts{svc}, nil
 }
 
 // APIDebugServer is the api-server's localhost-only diagnostics listener on
@@ -435,6 +538,7 @@ func NewAPIToolsFactory(d APIToolsFactoryDeps) (*tools.ToolsFactory, error) {
 		Repo:               repo,
 		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
 		SpawnTree:          store.NewToolCallExtStore(repo.ORM()),
+		SpawnMailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
@@ -1011,6 +1115,8 @@ type WorktreeSweepDeps struct {
 	DB           *db.Repo
 	Router       *APIDaemonRouter
 	Settings     *APISettings
+	// Updates tells the user's clients a worktree changed.
+	Updates chatupdates.Service
 }
 
 // The sweep records the use a daemon reports through the optional UseStore;
@@ -1083,7 +1189,7 @@ func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 		WithIdleRetirement(d.Settings.WorktreeLiveShedIdle, idleRetirementStore{ChatExtStore: chats, WorktreeExtStore: worktrees}).
 		WithAutoArchive(d.Settings.WorktreeAutoArchive, worktreeSweepStore{WorktreeExtStore: worktrees, chats: chats},
 			func(ctx context.Context, userID, projectID, worktreeID string) {
-				if err := database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
+				if err := d.Updates.EmitUserRefetch(ctx, userID, core.RefetchWorktreeChanges, core.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
 					logging.WarnContext(ctx, "worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
 				}
 			}).
@@ -1300,7 +1406,10 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	cfg.Namespace = d.Namespace
 	r := reconciliation.New(reconciliation.Deps{
 		Store:     d.DB,
+		Chats:     store.NewChatsWithActivityExtStore(d.DB.ORM()),
 		Questions: store.NewQuestionExtStore(d.DB.ORM()),
+		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
+		Orphans:   store.NewAgentMessageExtStore(d.DB.ORM()),
 		Temporal:  d.Temporal.Client,
 		Config:    cfg,
 		Workflows: store.NewWorkflowExtStore(d.DB.ORM()),
@@ -1459,9 +1568,10 @@ func (b *ChatUpdateHeadsBackfill) pass(ctx context.Context) {
 // deletes only what has aged out, so an hour keeps the backlog small.
 const llmUsageRetentionInterval = time.Hour
 
-// LLMUsageRetention deletes per-call LLM usage rows older than
-// llmusage.Retention. The daily rollup is kept. Every replica runs it;
-// the delete is idempotent and skips rows another replica is deleting.
+// LLMUsageRetention folds per-call LLM and tool usage rows the insights
+// rollups do not count yet into them, then deletes the rows older than
+// llmusage.Retention. The rollups are kept. Every replica runs it; the fold
+// and the delete are idempotent and skip rows another replica holds.
 type LLMUsageRetention struct{ ledger llmusage.Service }
 
 // LLMUsageRetentionDeps is the ledger that is pruned.
@@ -1481,10 +1591,23 @@ func (l *LLMUsageRetention) Run(ctx context.Context) error {
 	ticker := time.NewTicker(llmUsageRetentionInterval)
 	defer ticker.Stop()
 	for {
+		// Fold first: pruning keeps a row the insights rollups do not count
+		// yet, so this is what lets rows from before the rollups (and from a
+		// previous release during a rollout) age out.
+		if n, err := l.ledger.FoldInsights(ctx); err != nil {
+			logging.WarnContext(ctx, "folding usage into the insights rollups failed", "folded", n, "error", err)
+		} else if n > 0 {
+			logging.InfoContext(ctx, "folded usage into the insights rollups", "folded", n)
+		}
 		if n, err := l.ledger.PruneLLMCallUsage(ctx, time.Now()); err != nil {
 			logging.WarnContext(ctx, "pruning LLM call usage failed", "deleted", n, "error", err)
 		} else if n > 0 {
 			logging.InfoContext(ctx, "pruned LLM call usage past retention", "deleted", n)
+		}
+		if n, err := l.ledger.PruneToolCallUsage(ctx, time.Now()); err != nil {
+			logging.WarnContext(ctx, "pruning tool call usage failed", "deleted", n, "error", err)
+		} else if n > 0 {
+			logging.InfoContext(ctx, "pruned tool call usage past retention", "deleted", n)
 		}
 		if _, err := l.ledger.PruneLLMUsagePurgeFences(ctx, time.Now()); err != nil {
 			logging.WarnContext(ctx, "pruning LLM usage purge fences failed", "error", err)

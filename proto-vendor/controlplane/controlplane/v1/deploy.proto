@@ -1930,8 +1930,10 @@ message DeploySourceAttestation {
   string subject = 2;
   string run_id = 3;
   // WRITE-ONLY, and empty on every read. The raw OIDC JWT the server
-  // verifies; see DeploySourceProvenance.attestation.
-  string token = 4;
+  // verifies; see DeploySourceProvenance.attestation. forge:secret records
+  // that no read returns it, so the reads that carry this message can still
+  // declare NO_SIDE_EFFECTS.
+  string token = 4; // forge:secret
 }
 
 // DeployBundle is one rendered, content-addressed deploy artifact: the whole
@@ -2054,6 +2056,12 @@ message DeclaredWorkload {
   // declaration carries neither: a bundle rendered by an older forge, a
   // hand-written manifest, or a workload only the shape names.
   string forge_kind = 18;
+  // A CronJob's schedule, as declared: a 5-field cron expression or a
+  // descriptor ("@daily"), prefixed "CRON_TZ=<zone> " when the CronJob names
+  // a time zone (Kubernetes' spec.timeZone). From a CronJob's spec.schedule,
+  // else a forge.dev Workload record's spec.schedule. Empty for any other
+  // kind, and from a bundle recorded before this field.
+  string schedule = 19;
 }
 
 // DeclaredSpecGap is why a declared workload's spec is not recorded.

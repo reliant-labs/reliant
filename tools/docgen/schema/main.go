@@ -93,6 +93,10 @@ var toolHints = map[string]string{
 		"queued when the firing is recorded, in_progress when the first node starts, and concluded on every ending " +
 		"(success, failure, cancelled, timed_out; never neutral or skipped). `check: <name>` or {name, repository, " +
 		"head_sha, output, timeout}. See WorkflowCheck below.",
+	"observe": "The default observe block for every node of this graph ({attributes, events, metrics}, templates over " +
+		"each node's `output` and `node`), merged with a node's own: attributes by key and metrics by name (the node " +
+		"wins), events concatenated. Not inherited by sub-workflows. See the nodes reference, Observability. This " +
+		"release reads and validates it and records nothing yet.",
 	// WorkflowCheck's fields.
 	"repository": "A template over `trigger` naming the repository, owner/name. Unset: the event's " +
 		"(trigger.payload.attributes.repository).",
@@ -113,7 +117,7 @@ var toolHints = map[string]string{
 		"authorized, for the run's owner and acting identity.",
 	"WorkflowRequirements.repos": "Checkouts relative to the project root (\".\" for the root) that must exist, " +
 		"reach their origin (git ls-remote, which writes nothing) and have no local tag diverged from origin's.",
-	"WorkflowRequirements.cli_login": "Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be " +
+	"WorkflowRequirements.cli_login": "Deprecated: kept working throughout v1, slated for removal in a future major. Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be " +
 		"installed and signed in on the run's machine, each checked with the vendor's own status command, whose " +
 		"output never leaves the machine. Sign one in with `reliant machine login <vendor> --machine <name>`; a " +
 		"step that calls claude, codex or copilot needs credentials: inherit.",

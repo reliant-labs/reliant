@@ -16,8 +16,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/controlplane"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // MaxRangeDays bounds one GetOrgLLMUsage range, inclusive of both ends.
@@ -51,13 +51,13 @@ var fundingNames = map[pb.OrgLLMFunding]string{
 	pb.OrgLLMFunding_ORG_LLM_FUNDING_ORG_WALLET: "org_wallet",
 }
 
-var groupKeys = map[pb.OrgLLMUsageGroupBy]func(*db.LLMOrgUsageDay) string{
-	pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_DAY:      func(r *db.LLMOrgUsageDay) string { return r.Day.UTC().Format(dateLayout) },
-	pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_MEMBER:   func(r *db.LLMOrgUsageDay) string { return r.UserID },
-	pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_ACCOUNT:  func(r *db.LLMOrgUsageDay) string { return r.AccountID },
-	pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_MODEL:    func(r *db.LLMOrgUsageDay) string { return r.Model },
-	pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_FUNDING:  func(r *db.LLMOrgUsageDay) string { return r.Funding },
-	pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_PROVIDER: func(r *db.LLMOrgUsageDay) string { return r.Provider },
+var groupKeys = map[pb.OrgLLMUsageGroupBy]func(*store.LlmOrgUsageDaily) string{
+	pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_DAY:      func(r *store.LlmOrgUsageDaily) string { return r.Day.UTC().Format(dateLayout) },
+	pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_MEMBER:   func(r *store.LlmOrgUsageDaily) string { return r.UserID },
+	pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_ACCOUNT:  func(r *store.LlmOrgUsageDaily) string { return r.AccountID },
+	pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_MODEL:    func(r *store.LlmOrgUsageDaily) string { return r.Model },
+	pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_FUNDING:  func(r *store.LlmOrgUsageDaily) string { return r.Funding },
+	pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_PROVIDER: func(r *store.LlmOrgUsageDaily) string { return r.Provider },
 }
 
 // GetOrgLLMUsage sums the org's org-funded rollup rows over a UTC date range
@@ -90,7 +90,7 @@ func (s *Service) GetOrgLLMUsage(
 		}
 	}
 
-	rows, err := s.deps.Store.ListLLMOrgUsageDaily(ctx, orgID, start, end)
+	rows, err := s.deps.Usage.ListLLMOrgUsageDaily(ctx, orgID, start, end)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -211,7 +211,7 @@ func newAggregate() *aggregate {
 		totals: &pb.OrgLLMUsageBucket{}, totalKeys: map[modelKey]*tokens{}}
 }
 
-func (a *aggregate) add(key string, r *db.LLMOrgUsageDay) {
+func (a *aggregate) add(key string, r *store.LlmOrgUsageDaily) {
 	b := a.byKey[key]
 	if b == nil {
 		b = &pb.OrgLLMUsageBucket{Key: key}
@@ -240,7 +240,7 @@ func (a *aggregate) add(key string, r *db.LLMOrgUsageDay) {
 	}
 }
 
-func addRow(b *pb.OrgLLMUsageBucket, r *db.LLMOrgUsageDay) {
+func addRow(b *pb.OrgLLMUsageBucket, r *store.LlmOrgUsageDaily) {
 	b.Calls += r.Calls
 	b.ErrorCalls += r.ErrorCalls
 	b.InputTokens += r.InputTokens

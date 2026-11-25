@@ -21,7 +21,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
 // LLMUsageRecorder is what an activity needs of the usage ledger: one
@@ -102,18 +101,8 @@ func recordLLMUsage(ctx context.Context, c llmUsageCall) {
 		return
 	}
 	info := activity.GetInfo(ctx)
-	// The run the call was part of, from the scope the worker's run-scope
-	// interceptor (and the agent turn, for its preset) put on ctx: the scope
-	// the call's span is opened from, so the row and the span name one run.
-	scope := telemetry.RunScopeFromContext(ctx)
-	workflowID := scope.WorkflowID
-	if workflowID == "" {
-		workflowID = info.WorkflowExecution.ID
-	}
-	rootRunID := scope.RootRunID
-	if rootRunID == "" {
-		rootRunID = scope.RunID // a top-level run is its own root
-	}
+	// The run the call was part of (usageRunOf).
+	run := usageRunOf(ctx)
 	rec := db.LLMCallUsage{
 		ID:               llmUsageID(info.WorkflowExecution.ID, info.WorkflowExecution.RunID, info.ActivityID, c.Purpose, c.Ordinal, c.Request),
 		UserID:           c.UserID,
@@ -135,14 +124,14 @@ func recordLLMUsage(ctx context.Context, c llmUsageCall) {
 		Attempt:          info.Attempt,
 		CreatedAt:        time.Now(),
 
-		WorkflowID:        workflowID,
-		ThreadID:          scope.ThreadID,
-		WorkflowName:      scope.WorkflowName,
-		NodeID:            scope.NodeID,
-		Preset:            scope.Preset,
+		WorkflowID:        run.WorkflowID,
+		ThreadID:          run.ThreadID,
+		WorkflowName:      run.WorkflowName,
+		NodeID:            run.NodeID,
+		Preset:            run.Preset,
 		ProjectID:         c.ProjectID,
-		AIRunID:           scope.RunID,
-		AIRootRunID:       rootRunID,
+		AIRunID:           run.AIRunID,
+		AIRootRunID:       run.AIRootRunID,
 		ProviderRequestID: strings.TrimSpace(c.ProviderRequestID),
 		GatewayCallID:     strings.TrimSpace(c.GatewayCallID),
 		TTFTMs:            c.TTFTMs,

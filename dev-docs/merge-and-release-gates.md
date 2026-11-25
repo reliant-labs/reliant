@@ -37,8 +37,8 @@ Neither gate keeps a second copy of it.
 
 | Tier | Command | What it runs | When |
 |---|---|---|---|
-| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change; golangci-lint over the packages with a changed `.go` file, findings in the changed files (`scripts/golangci-changed.sh`, the merge queue's `golangci (changed)` job, outside the queue); the web `tsc -b` (incremental on state this checkout wrote; `--force` on a first run or copied state) when a web lane is selected or a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint), in the merge queue too; the forge demo bundle's build when the diff reaches its import graph; migration-safety when a migration or forge.yaml changed; electron's tests when electron reads a changed file; the whole lane when the rules cannot scope a change; and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
-| **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, `go vet ./...`, `task test` as three steps (Go `-race -count=1` without `-short`, so every slow test runs, then web and electron in full), `task test:integration` and `task test:e2e`. CI runs them as parallel parts (below) | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
+| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, plus every **transitive** dependent when there are at most 20 more (`MG_REACH_CAP`), and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change, and of **every test package** (`testbuild`); golangci-lint over the packages with a changed `.go` file, findings in the changed files, plus staticcheck's SA1019 over the packages that use what the diff deprecates (`scripts/golangci-changed.sh`, the merge queue's `golangci (changed)` job, outside the queue); forge lint's whole-project `--graph --closed-sets --proto-format` lanes on every diff (`projectlint`); the web `tsc -b` (incremental on state this checkout wrote; `--force` on a first run or copied state) when a web lane is selected or a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint), in the merge queue too; the forge demo bundle's build when the diff reaches its import graph; migration-safety when a migration or forge.yaml changed, and migration order against main's newest (in the queue, also against the entries queued ahead); electron's tests when electron reads a changed file; the whole lane when the rules cannot scope a change; and the forge-generate and docs-generate no-op checks only when one of their inputs changed (`internal/app` included) | before **every merge**. The merge queue runs it on the squash it is about to land |
+| **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, the forge demo bundle's size budget (`task demo:bundle-size`), `go vet ./...`, `task test` as three steps (Go `-race -count=1` without `-short`, so every slow test runs, then web and electron in full), `task test:integration` and `task test:e2e`. CI runs them as parallel parts (below) | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
 
 ## The merge gate
 
@@ -100,7 +100,11 @@ The phases:
    starts no other phase; before it, those phases failed minutes in, every
    test "connection refused" (control-plane#2189). `MG_PGTEST_TIMEOUT`
    (default 150s) bounds it.
-2. **generate** runs only if the plan's forge-generate lane is selected. It runs
+2. **generate** runs only if the plan's forge-generate lane is selected (a forge
+   input or output changed, `tools/test-affected/rules.go`'s `forgeInputs`; the
+   composition root `internal/app/` is one since control-plane#3571, where #3499
+   changed only its wiring and main's check failed on `gen/forge_service_catalog.json`).
+   It runs
    `task generate:forge`, the same command `task generate:check` runs, followed
    by `forge lint --conventions`. When every reason is Go code that a
    `forge.yaml` generate hook's generator compiles, and nothing forge itself
@@ -115,8 +119,8 @@ The phases:
    any other file fails the gate.
 3. **docs** runs only if the plan's docs-generate lane is selected. It runs
    `task generate:docs` under the same no-op rule.
-4. **build**, **test**, **typecheck**, **golangci**, **lint** and **migsafety**
-   then run at the same time (after the generators, when they may rewrite the
+4. **build**, **testbuild**, **test**, **typecheck**, **golangci**, **lint**,
+   **projectlint** and **migsafety** then run at the same time (after the generators, when they may rewrite the
    tree; below):
    - **build** compiles, without linking, every package whose build contains a
      changed package (the plan's `go.build`, at any distance), or `./...` when
@@ -126,12 +130,31 @@ The phases:
      server, the CLI, a dozen generators): 41s with every package already
      compiled, against 6s for `go list -export ./...` (2026-10-26). Link
      errors are the release gate's `go build`.
+   - **testbuild** is `scripts/test-build.sh`: `go list -test -export` over
+     every package with test files, compiled (never linked, never run), and
+     each package whose tests sit behind one custom build tag (`e2e/stories`'
+     `e2e`, `replaytest`'s `replayfixtures`, ...) under that tag. It runs on
+     every diff in every tier, after build (whose compiles it reuses), and
+     skips the packages the test phase runs (`--exclude`): `go test` compiles
+     those, and side by side the two compiled the same packages twice. A required field or signature change that breaks a fixture
+     in a test package no lane selected fails here, naming the file and line:
+     #3489 kept main red for 30 hours with exactly that, refactor after
+     refactor breaking fixtures more than one import away. Measured on 48 CPUs
+     at load 30-45, after build: 11s with nothing to recompile (~80
+     CPU-seconds, mostly loading the package graph), 11s after an
+     `internal/db` change (the test phase runs every package it reaches), 42s
+     (~620 CPU-seconds) after a change to `internal/workflowdrafts`, whose 152
+     deferred test packages it compiles. main's `go-cache` job compiles the
+     test packages too (`task build:packages`), so the queue's restored cache
+     holds them. A fixture that compiles and fails at run time (a "Deps.X is
+     required" panic in a slow test, #3448/#3507) is still the release gate's.
    - **test** is `tools/test-affected run -plan <plan.json> -lanes go,web,electron
      -test-budget auto`. It runs the plan the plan phase wrote (re-planning
      loaded the whole package graph again: 17-141s), so the changed packages
-     and the packages that import one by name, not the whole
-     reverse-dependency closure, and the vitest files within two imports of a
-     changed module (below). A Go test the change adds or edits that runs past
+     and the packages that import one by name, plus the rest of the
+     reverse-dependency closure when it adds at most `MG_REACH_CAP` (20)
+     packages, and the vitest files within two imports of a changed module
+     ([below](#direct-importers-and-a-transitive-budget)). A Go test the change adds or edits that runs past
      the per-test budget fails it (below). On a **FULL web fallback** (a
      `package.json`, lockfile or web build-config change, which no rule can
      scope) it runs `-web-full reached`: the vitest files the diff's own web
@@ -210,21 +233,33 @@ The phases:
      test and typecheck phases.
    - **migsafety** is `forge lint --migration-safety`, and runs only when a
      migration changed.
-   - **closedsets** is `forge lint --closed-sets`, and runs when a migration,
-     `go.mod` or `forge.yaml` changed. A CHECK declared `forge:closed-set`
-     (access_tokens' scopes) must list exactly the set the pinned forge carries;
-     a pin bump that grows it needs a widening migration
-     (`task db:migration NAME="<name> --closed-set <constraint>"`). It is its own
-     phase, not a lane of the scoped lint, because a pin bump changes only root
-     files and has no directory to scope to. Without it, the forge bump that
-     added `mcp:oauth` and `mcp:forge` merged and the release gate's DB test
-     failed (#3382).
+   - **projectlint** is `forge lint --graph --closed-sets --proto-format`,
+     unscoped, on every diff in every tier: the whole-project forge lanes that
+     take seconds (12-24s together at load 270 on 48 CPUs; `--closed-sets` 2s,
+     `--proto-format` 1s alone). The scoped lint skips a lane it cannot scope,
+     and each of these fails on files the diff need not touch: `--graph`, a
+     provider no root reaches (#3483: `internal/planning`); `--closed-sets`, a
+     CHECK declared `forge:closed-set` (access_tokens' scopes) that no longer
+     lists exactly the set the pinned forge carries, which a pin bump grows
+     (#3382; the fix is a widening migration,
+     `task db:migration NAME="<name> --closed-set <constraint>"`);
+     `--proto-format`, a `.proto` buf format would rewrite (#3397, #3480). It
+     replaced the closedsets phase, which ran only on a migration, `go.mod` or
+     `forge.yaml` change. The other whole-project lanes (golangci over the
+     module, the frontends, component-drift, config-reach) stay in the release
+     gate: they take minutes.
    - **migorder** is `go run ./tools/test-affected migration-order`, and runs
      only when a migration changed. It fetches `origin/main` and fails a
      migration versioned at or below main's newest, which golang-migrate would
      never apply (reliant#1399). It fetches because migsafety reads the local
      `origin/main` as last fetched, and a branch reviewed while main moved
-     passes it against a stale head.
+     passes it against a stale head. Under `--queue` it adds `-also HEAD^`:
+     the merge group's HEAD is this entry's squash on top of main and the
+     entries queued ahead, none of them on `origin/main` yet, so it also fails
+     a migration the entry adds at or below the newest one the entries ahead
+     carry. #3482 and #3483 were queued together, each above main's newest,
+     and #3483's `20261124202455` landed below #3482's `20261124204326`
+     (control-plane#3571).
 
 Where a regenerate becomes the tree the other phases judge, the generators run
 FIRST, in place, and build, test, typecheck, lint and migsafety start only once
@@ -246,9 +281,9 @@ the other phases.
 The gate fails closed on a phase that never completed. Every phase records
 itself in `$MG_LOGDIR/expected` before it launches and leaves a `<phase>.row`
 only when it finishes. The last step, `go run ./tools/test-affected gate-verify`,
-compares what the plan **obliges** (build, test, plus `generate`, `docs`,
-`migorder`, `typecheck`, `demo`, `migsafety`, `closedsets`, `lint`, `golangci` as the plan, the diff and
-the tier select them) and what the gate **started** against the rows. A phase with no row
+compares what the plan **obliges** (build, test, testbuild, projectlint, plus
+`generate`, `docs`, `migorder`, `typecheck`, `demo`, `migsafety`, `lint`,
+`golangci` as the plan, the diff and the tier select them) and what the gate **started** against the rows. A phase with no row
 (queued for a slot and cut off, cancelled, timed out, its tool missing) fails
 the gate and is named: `FAILED: docs never completed (no result row; ...)`.
 The verdict is also written to `$MG_LOGDIR/verdict`. A missing `jq` or an
@@ -314,17 +349,35 @@ On a failure, revert the prewarm launch (the `phase prewarm prewarm_tests &`
 line and its `wait` in `scripts/merge-gate.sh`): generate then runs alone and
 serialized again, as before reliant#2308.
 
-### Direct importers only
+### Direct importers, and a transitive budget
 
 A change to a hub package (`internal/logging`, `internal/observability`) reaches
 about 177 test binaries through the full reverse-dependency closure. On a host at
 load ~100 that is about 7 minutes of `go test -short`, so the merge gate's Go
 fan-out stops after one hop (owner's decision, 2026-10-24). It runs the changed
 packages, the packages whose files or tests import one of them directly, the
-tree-walking guards, and every DB-backed package when a migration changed. Every
+tree-walking guards, and every DB-backed package when a migration changed.
+
+The rest of the closure runs too when it is small: when it adds at most
+`MG_REACH_CAP` packages (default 20; `tools/test-affected plan -go-reach-cap`,
+the plan's `go.reach_cap`), and the plan then says `reach all`. Above it, every
 deeper dependent is listed in the plan as `deferred` and runs in the release
-gate. `go build ./...` still compiles every package, so a deferred package can
-only fail at test time, never at compile time, before the merge.
+gate. Measured on 48 CPUs at load 45-95, `-p 24` (2026-11-25), a synthetic
+export added to each package:
+
+| changed package | direct | whole closure | the added packages' `-short` run | at the default 20 |
+|---|---|---|---|---|
+| `internal/handlers/chat` | 16 | 18 | +2: 42s | selected |
+| `internal/db` | 119 | 165 | +46: 46s | deferred |
+| `internal/workflowdrafts` (imported by `internal/llm/tools`) | 15 | 166 | +151: 193s | deferred |
+
+The default is set by the merge queue's runner, not this host: 4 CPUs, the
+test phase at half of them, so 46 more test binaries (internal/db's) would add
+minutes to every internal/db change. 20 bounds it to some 20 links and runs.
+
+`testbuild` compiles every test package on every diff, so a deferred package
+can still only fail at test time, never at compile time, before the merge.
+`MG_REACH_CAP=0` restores direct importers only.
 
 The web lane takes the same cut (`-reach direct`): a changed module runs the
 vitest files that import it, and those importing a module that imports it (two
@@ -356,13 +409,29 @@ slow tests and the race detector (`task test`), golangci-lint and buf lint
 packages and vitest files (`task test` runs every one), and the whole
 `forge generate` where the merge gate ran only the generate hooks.
 
+### The demo bundle's size budget (owner, 2026-11-24)
+
+The release gate's `demo-size` step (`task demo:bundle-size`,
+`scripts/demo-bundle-size.sh`) builds the forge demo as forge ships it and
+fails when its initial or total gzip is over
+`frontends/web/scripts/demo/bundle-budget.json`. It **gates releases only**: the
+merge gate builds the demo for its guard (`vite-plugin-demo-bundle.ts`), never
+for its size, and a pull request that moves the demo pastes
+`task demo:bundle-size -- --report-only` (with `--before`, its before and after)
+into its body instead. In CI it runs in the `webbuild` part, after the
+renderer's release build; the RC train runs it in `static`. What it measures,
+today's numbers and how a ceiling moves: `dev-docs/demo-inventory.md`, "Bundle
+size".
+
 ### What the merge gate does not catch
 
 These are the trade-offs. Each is caught by the release gate:
 
-- **Tests of transitive dependents.** A behaviour change that breaks a package
-  two or more imports away merges green. It is caught at release time, which
-  makes it harder to bisect.
+- **Tests of transitive dependents of a hub.** When a change reaches more than
+  `MG_REACH_CAP` packages beyond its direct importers, a behaviour change that
+  breaks a package two or more imports away merges green (a fixture that stops
+  compiling does not: `testbuild`). It is caught at release time, which makes it
+  harder to bisect.
 
 - **Slow tests.** A test marked `testkit.Slow` (or an older
   `testing.Short()` skip) never runs before a merge.
@@ -376,9 +445,10 @@ These are the trade-offs. Each is caught by the release gate:
   is a finding in a file the diff did not change, or behind a build tag. buf
   lint runs only for a proto change.
 - **The race detector.** Nothing before a merge runs `-race`.
-- **Whole-project lint lanes.** golangci over packages the diff did not touch,
-  the frontend lint, the graph, component-drift and config-reach lanes cannot
-  be scoped, so `--scope` skips them.
+- **The slow whole-project lint lanes.** golangci over packages the diff did
+  not touch (except SA1019 where the diff deprecates), the frontend lint,
+  component-drift and config-reach cannot be scoped and take minutes. The fast
+  ones (graph, closed-sets, proto-format) run in `projectlint`.
 - **Semantic interactions with a concurrent merge.** When main moves during the
   gate, the queue lands without re-running the gate if main's new commits touch
   none of the branch's files and none of the project-wide inputs: pins, proto,
@@ -717,6 +787,17 @@ group (Reliant bug 67d80734). So `task ci:merge` runs the same lint as its
   holds every workflow step that runs the gate to either installing the pinned
   golangci-lint (the setup action's `golangci: "true"`) or delegating to such
   a job under the same condition.
+- **Deprecations.** A declaration the diff marks `Deprecated:` (by hand, or in
+  the code a proto's `deprecated = true` generates) turns every use of it into
+  staticcheck's SA1019, in files the diff did not change, which the pass above
+  never reports. The script finds each such declaration in the diff, then runs
+  `golangci-lint --enable-only staticcheck` over the packages that declare or
+  import it and name it, and fails on an SA1019 finding there. #2930
+  deprecated `ListMessagesResponse.Total`; the unchanged
+  `internal/handlers/chat/rpc_list_messages.go` still wrote it, and only the
+  release gate's whole-module lint said so (#3005). A diff that deprecates
+  nothing costs only the scan; one deprecation in `internal/db` used by one
+  other package added 5s warm.
 - **Slot and lock.** It runs beside build, test and lint inside the gate's one
   heavy slot, at a quarter of the gate's CPU budget (`GOMAXPROCS`), like lint.
   golangci-lint takes a machine-wide lock and, given no flag, exits 3 after
@@ -869,7 +950,7 @@ CI splits two parts further than the RC train (control-plane
 of parts:
 
 - **static is three parts**, generate (`npm generate docs`), webbuild
-  (`npm webbuild`) and compile (`npm build typecheck vet`). As one part its
+  (`npm webbuild demo-size`) and compile (`npm build typecheck vet`). As one part its
   slow steps ran one after another (generate 283s, webbuild 223s, vet 107s on
   2026-11-20) and it was one of the three jobs that set the run's ~15 minutes.
   The webbuild part also replaces the separate `web-bundle` job off a pull

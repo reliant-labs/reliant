@@ -104,7 +104,7 @@ func setupPausedAgentMessageFixture(t *testing.T) pausedAgentMessageFixture {
 	pause := &orderedPauseController{log: &log}
 	service := &Service{
 		deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())},
-		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
+		runs: runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
 	}
 	return pausedAgentMessageFixture{
 		sendAgentMessageFixture: fx,
@@ -139,7 +139,7 @@ func TestSendAgentMessage_PausedChatIsResumedForAMessageToItsRoot(t *testing.T) 
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status, "the resumed run reads as running")
 
-	queued, err := fx.repo.ListQueuedAgentMessagesForThread(fx.ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(fx.ctx, fx.repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1, "the message stays queued for the resumed run's next call_llm")
 	assert.Equal(t, "continue", queued[0].Body)
@@ -201,7 +201,7 @@ func TestSendAgentMessage_PausedChatIsResumedForAMessageToASubAgent(t *testing.T
 	assert.Equal(t, []string{"resume:" + fx.rootThreadID, "wake:" + fx.childThreadID}, *fx.log,
 		"the doorbell still names the sub-agent: it is the thread with input")
 
-	queued, err := fx.repo.ListQueuedAgentMessagesForThread(fx.ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(fx.ctx, fx.repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 
@@ -242,7 +242,7 @@ func TestSendAgentMessage_PausedChatThatCannotResumeWithdrawsTheMessage(t *testi
 	assert.False(t, resp.Success)
 	assert.Contains(t, resp.Message, "Send this as a normal message")
 
-	queued, err := fx.repo.ListQueuedAgentMessagesForThread(fx.ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(fx.ctx, fx.repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "a message nothing will deliver must not stay queued")
 	assert.Empty(t, threadWakeSignals(fx.temporal.signals), "nothing is woken for a withdrawn message")

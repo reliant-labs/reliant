@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggerowner"
 )
 
@@ -95,8 +96,8 @@ func TestCreateTriggerOffer_RefusedOnceTheOwnerChanged(t *testing.T) {
 
 func ownerOf(t *testing.T, repo *db.Repo) triggerowner.Service {
 	t.Helper()
-	stores := triggerowner.NewStores(repo.ORM())
-	svc, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	owned, trigs := store.NewTriggerOwnerExtStore(repo.ORM()), store.NewTriggerExtStore(repo.ORM())
+	svc, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: owned, Triggers: trigs, Adoptions: owned, Offers: owned, OrgReads: owned})
 	require.NoError(t, err)
 	return svc
 }

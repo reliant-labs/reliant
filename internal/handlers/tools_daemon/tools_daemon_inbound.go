@@ -142,7 +142,9 @@ func (s *Service) handleIncoming(ctx context.Context, conn *daemonConnection) er
 			conn.daemonToolCallsInFlight.Store(hb.Heartbeat.GetToolCallsInFlight())
 			// Here, not on the state worker: tool requests stop going to a
 			// draining daemon the moment it says so (upgrade.go).
-			conn.recordUpgradeStatus(hb.Heartbeat.GetUpgrade())
+			if conn.recordUpgradeStatus(hb.Heartbeat.GetUpgrade()) {
+				s.publishUpgradeState(conn, hb.Heartbeat.GetUpgrade())
+			}
 			select {
 			case leaseRenew <- struct{}{}:
 			default: // a renewal is already pending; it covers this one
@@ -341,7 +343,11 @@ func (s *Service) applyInboundState(ctx context.Context, conn *daemonConnection,
 				// whatever these caches say was written is gone.
 				conn.lastDetectedPortsKey = ""
 				conn.healthWritten = false
+				conn.resourcesWrittenAt = time.Time{}
 			}
+			// The machine's and the daemon's CPU, memory and fds, at most
+			// once a minute, for DaemonInfo.resources.
+			s.recordResourceStats(ctx, conn, hb, s.now())
 			// Whether the machine can do work (the daemon's fork
 			// watchdog), on the attachment record where the registry,
 			// the UI and wait_for_machine read it.

@@ -25,6 +25,7 @@ import type { ObservabilityApi } from "@/services/controlPlane/observability/Obs
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
 import type { Panel } from "@/services/controlPlane/observability/types";
 
+import { SHOP_READ_ONLY_MESSAGE } from "../index";
 import { DEMO_INCIDENT, DEMO_ORG, RUNNING } from "../shopStory";
 import { installOverWire, uninstallOverWire } from "./overWire";
 
@@ -150,7 +151,9 @@ describe.each(WHEN)("the real client over the shop pack, %s", (_when, at) => {
     // The built-in analytics dashboards' sql panels are answered by their dashboard (productAnalytics.ts): not blank.
     expect(answeredSql).toBeGreaterThan(40);
     await same((api) => api.listDashboardTemplates(DEMO_ORG));
-  });
+    // Every panel of every shipped dashboard, asked twice (model and wire): 3.5-5s on a CI runner,
+    // so the 5s default failed main under load. Its own budget, not a smaller sweep.
+  }, 30_000);
 
   it("answers the database panels and the databases a panel may read", async () => {
     await same((api) => api.listDashboardDatabases("env-prod"));
@@ -202,7 +205,9 @@ describe.each(WHEN)("the real client over the shop pack, %s", (_when, at) => {
     }
     await same((api) => api.getIssue({ issueId: DEMO_INCIDENT.issueId, window: day() }));
     await same((api) => api.listOrgMembers(DEMO_ORG));
-    await same((api) => api.getCurrentIssueUser());
+    // The reader is refused: UserService.GetCurrentUser writes on read (control-plane#3513's audit), so it
+    // declares no NO_SIDE_EFFECTS, and the demo pack answers nothing outside DEMO_PACK_ANSWERS.
+    await expect(wire.getCurrentIssueUser()).rejects.toThrow(SHOP_READ_ONLY_MESSAGE);
   });
 
   it("answers the activity feed, an issue's history included", async () => {

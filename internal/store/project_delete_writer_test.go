@@ -183,6 +183,14 @@ var workflowContentWrites = []struct {
 			VALUES ($1,$2,'step','act',$3)`, workflow+"-s", workflow, projectDeleteWriterNow)
 		return err
 	}},
+	// A tool call's usage record (store.RecordToolCallUsage), which a call
+	// in flight when its project is deleted writes after the call ends.
+	{"tool_call_usage", func(ctx context.Context, tx *sql.Tx, chat, workflow string) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO tool_call_usage (id, attempt, user_id, chat_id, workflow_id, tool_name, tool_kind, location, outcome, created_at)
+			VALUES ($1,1,'owner',$2,$3,'shell','builtin','daemon','success',$4) ON CONFLICT (id, attempt) DO NOTHING`,
+			workflow+"-t", chat, workflow, projectDeleteWriterNow)
+		return err
+	}},
 }
 
 func assertNoWorkflowContentOf(t *testing.T, env *storetest.Env, chat, workflow string) {
@@ -192,6 +200,7 @@ func assertNoWorkflowContentOf(t *testing.T, env *storetest.Env, chat, workflow 
 		{`SELECT count(*) FROM workflow_checkpoints WHERE chat_id = $1`, chat},
 		{`SELECT count(*) FROM questions WHERE chat_id = $1`, chat},
 		{`SELECT count(*) FROM step_executions WHERE workflow_id = $1`, workflow},
+		{`SELECT count(*) FROM tool_call_usage WHERE chat_id = $1`, chat},
 	} {
 		var n int
 		if err := env.SQL.QueryRowContext(context.Background(), q.sql, q.arg).Scan(&n); err != nil {

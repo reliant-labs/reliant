@@ -40,12 +40,30 @@ type Questions interface {
 	ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
 }
 
+// Mailbox writes the placeholder report the stranded-background-spawn sweep
+// leaves for a spawn whose report never arrived, and announces it to the
+// chat's clients. *agentmailbox.Mailbox satisfies it.
+type Mailbox interface {
+	EnqueueAgentMessageIfAbsent(ctx context.Context, msg *db.AgentMessage) (bool, error)
+}
+
+// Orphans resolves the queued mail of threads that are already terminal.
+// store.AgentMessageExtStore satisfies it.
+type Orphans interface {
+	ListThreadsWithOrphanedAgentMessages(ctx context.Context) ([]string, error)
+	MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, toThreadID string) (int64, error)
+}
+
 // Deps is what a Reconciler is built from.
 type Deps struct {
 	// Store is everything a reconcile pass reads and writes.
 	Store ReconcilerStore
 	// Questions lists the chat's pending questions.
 	Questions Questions
+	// Mailbox writes the sweep's placeholder reports.
+	Mailbox Mailbox
+	// Orphans resolves the mail a finished thread left queued.
+	Orphans Orphans
 	// Temporal is the Temporal client the drift scan and the resets use.
 	Temporal client.Client
 	// Config holds the pass's thresholds; nil, or a zero field, is the
@@ -55,6 +73,14 @@ type Deps struct {
 	Workflows WorkflowLoader
 	// Daemons reads the daemon a backgrounded process runs on.
 	Daemons DaemonReader
+	// Chats reads a chat's owner, activity, main thread and run, with no
+	// owner check. store.ChatsWithActivityExtStore satisfies it.
+	Chats Chats
+}
+
+// Chats reads a chat with its computed state.
+type Chats interface {
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }
 
 // WorkflowLoader reads a workflow row by id. store.WorkflowExtStore
@@ -101,12 +127,8 @@ type ReconcilerStore interface {
 	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 
-	// The agent-message mailbox.
-	EnqueueAgentMessageIfAbsent(ctx context.Context, msg *db.AgentMessage) (bool, error)
-	ListThreadsWithOrphanedAgentMessages(ctx context.Context) ([]string, error)
-	MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, toThreadID string) (int64, error)
-
-	// GetChat, GetToolCall and SaveMessageToThread are called directly too;
+	// GetToolCall and SaveMessageToThread are called directly too (and GetChat,
+	// through handlers.ChatTransitioner);
 	// the roles below already declare them.
 
 	// handlers.TransitionChatOnCompletion, EmitTransitionMessage and

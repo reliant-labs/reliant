@@ -13,12 +13,6 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
   useComputeUsage: () => ({ data: undefined }),
   usePlans: () => ({ data: { plans: [] }, isLoading: false }),
 }))
-vi.mock('@/services/controlPlane/billing', () => ({
-  getComputeEligibility: vi.fn(async () => ({
-    eligible: true, reason: 0, hasActiveSubscription: true,
-    grantedSmallDaemonSecondsRemaining: 0, planName: 'Compute Small', allowedDaemonSizes: ['m'],
-  })),
-}))
 vi.mock('@/lib/event-context', () => ({
   useEventBus: () => ({ emit: vi.fn(), on: vi.fn(() => () => {}) }),
 }))
@@ -37,14 +31,10 @@ vi.mock('@/services/controlPlane/environments', () => ({
   DaemonSize: { DAEMON_SIZE_UNSPECIFIED: 0, DAEMON_SIZE_M: 8, DAEMON_SIZE_L: 9, DAEMON_SIZE_XL: 10, DAEMON_SIZE_2XL: 11 },
   PortAccessMode: { UNSPECIFIED: 0, PUBLIC: 1, AUTHENTICATED: 2, TOKEN: 3 },
   describeError: (_e: unknown, fallback = 'error') => fallback,
-  portAccessRulesQueryKey: (id: string) => ['cp', 'ports', id],
   getComputeSubscription: vi.fn(async () => ({})),
-  getDaemon: vi.fn(),
   createEnvironment: vi.fn(),
-  deleteDaemon: vi.fn(),
   suspendDaemon: vi.fn(),
   resumeEnvironment: vi.fn(),
-  listPortAccessRules: vi.fn(async () => []),
   setPortAccess: vi.fn(),
   removePortAccess: vi.fn(),
 }))
@@ -55,10 +45,23 @@ import {
 } from '@/components/Settings/cloud/machines'
 import { DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 import { setTransport } from '@/lib/connect'
+import { cpDaemonHandlers } from '@/test/cpDaemonTransport'
 import { daemonRegistryTransport } from '@/test/daemonRegistry'
+import { eligibilityHandlers } from '@/test/billingTransport'
+
+// Control-plane DaemonService answers at the transport: Settings › Machines
+// reads GetDaemon and the port rules through the generated hooks.
+const cpDaemon = () =>
+  cpDaemonHandlers({
+    getDaemon: () => ({}),
+    listPortAccessRules: () => ({ rules: [] }),
+  })
 
 // The daemon list is read through connectClient(DaemonRegistryService).
-beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() }, cpDaemon(), eligibilityHandlers(() => ({
+    eligible: true, reason: 0, hasActiveSubscription: true,
+    grantedSmallDaemonSecondsRemaining: 0, planName: 'Compute Small', allowedDaemonSizes: ['m'],
+  })))))
 afterEach(() => setTransport(null))
 
 // A managed machine is labelled by its control-plane name, never its pod

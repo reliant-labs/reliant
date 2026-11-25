@@ -1,6 +1,8 @@
 /**
- * The chat list's project filter, choose N of M (hooks/useChatProjectFilter,
- * Projects/ChatProjectFilter), scopes the list from any route.
+ * The shell's project scope, choose N of M (hooks/useChatProjectFilter),
+ * scopes the chat list from any route. Its one control is the nav's project
+ * switcher (sidebar/ProjectSwitcher.tsx); this drives the hook's set/clear as
+ * the switcher does, so the assertions are on the URL and the list.
  *
  *   - Two of five projects list only their chats, in one ListChats naming
  *     both (`project_ids`), at `/?projects=`.
@@ -18,15 +20,14 @@
  * location, which moves the moment a navigation starts, and the project id
  * from the route params, which follow only once the new match resolves.
  *
- * The real router, stores, query hooks and selector run here; only the
+ * The real router, stores and query hooks run here; only the
  * transport (and the settings read) is fake, so the assertions are on the
  * ListChats requests the server would see and the chats the list renders.
  * The list is mounted once, outside the routes, as the shell mounts the
  * sidebar.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import {
   createMemoryHistory,
@@ -40,10 +41,9 @@ import {
 
 import type { ListChatsRequest } from "../../../gen/reliant/v1/chat_pb";
 import { ProjectFilterRouteSync } from "../ProjectFilterRouteSync";
-import { ChatProjectFilterButton, ChatProjectFilterScope } from "../../Projects/ChatProjectFilter";
 import { useChatListWithWorkspaces } from "../../../hooks/chat-queries";
 import type { Project } from "../../../hooks/project-queries";
-import { resetChatProjectFilterForTests, useChatProjectFilter } from "../../../hooks/useChatProjectFilter";
+import { resetChatProjectFilterForTests, useChatProjectFilter, type ChatProjectFilter } from "../../../hooks/useChatProjectFilter";
 import { setTransport } from "../../../lib/connect";
 import { queryClient } from "../../../lib/query-client";
 import { mockTransport } from "../../../lib/test-utils";
@@ -95,16 +95,19 @@ function chatsFor(req: { projectId: string; projectIds: string[] }) {
   return ids.map((id) => ({ id: `chat-${id}`, title: `Chat in ${id.toUpperCase()}`, projectId: id }));
 }
 
-/** The sidebar's wiring, minus its layout: the filter, its summary, the list it scopes. */
+/** The filter the shell rendered last: what the switcher's picks call. */
+let current: ChatProjectFilter | null = null;
+
+/** The sidebar's wiring, minus its layout: the filter's state and the list it scopes. */
 function ChatListShell() {
   const filterId = useWorkspaceStateStore((state) => state.projectFilterId);
   const location = useLocation();
   const filter = useChatProjectFilter({ sync: { pathname: location.pathname, search: location.search } });
+  current = filter;
   const { data } = useChatListWithWorkspaces(filter.mode === "many" ? filter.ids : filterId);
   return (
     <>
-      <ChatProjectFilterButton filter={filter} />
-      <ChatProjectFilterScope filter={filter} />
+      <span data-testid="filter-state">{`${filter.mode}:${filter.ids.join(",")}`}</span>
       <ul data-testid="chat-list">
         {(data?.chats ?? []).map((chat) => (
           <li key={chat.id}>{chat.title}</li>
@@ -141,21 +144,13 @@ async function mountAt(path: string) {
   return router;
 }
 
-/** Open the filter and act in the selector. */
-async function inFilter(act: () => Promise<void>) {
-  await userEvent.click(screen.getByTestId("chat-project-filter-trigger"));
-  await screen.findByTestId("project-selector");
-  await act();
-  await userEvent.click(screen.getByTestId("project-selector-done"));
+/** Choose these projects ([] for every project), as the switcher does. */
+async function choose(ids: string[]) {
+  await act(async () => {
+    current!.set(ids);
+  });
 }
-const toggle = (id: string) => userEvent.click(screen.getByTestId(`project-selector-row-${id}`));
-/** Only this, from the keyboard: search the project, then Shift+Enter on it. */
-const onlyThis = async (id: string) => {
-  const search = screen.getByTestId("project-selector-search");
-  fireEvent.change(search, { target: { value: `Project ${id.toUpperCase()}` } });
-  await screen.findByTestId(`project-selector-row-${id}`);
-  fireEvent.keyDown(search, { key: "Enter", shiftKey: true });
-};
+const filterState = () => screen.getByTestId("filter-state").textContent;
 
 const listed = () => within(screen.getByTestId("chat-list")).queryAllByRole("listitem").map((li) => li.textContent);
 const ALL = ["Chat in A", "Chat in B", "Chat in C", "Chat in D", "Chat in E"];
@@ -165,6 +160,7 @@ function newPage() {
   cleanup();
   queryClient.clear();
   resetChatProjectFilterForTests();
+  current = null;
 }
 
 beforeEach(() => {
@@ -192,24 +188,19 @@ afterEach(() => {
   delete (globalThis as { __RELIANT_ROUTER?: unknown }).__RELIANT_ROUTER;
 });
 
-describe("the chat list's project filter, choose N of M", () => {
+describe("the shell's project scope, choose N of M, scoping the chat list", () => {
   it("lists only the chats of the two projects of five chosen, in one ListChats naming both", async () => {
     const router = await mountAt("/");
     await waitFor(() => expect(listed()).toEqual(ALL));
 
-    await act(async () => {
-      await inFilter(async () => {
-        await toggle("b");
-        await toggle("d");
-      });
-    });
+    await choose(["b", "d"]);
 
     await waitFor(() => expect(listed()).toEqual(["Chat in B", "Chat in D"]));
     expect(requests.at(-1)?.projectIds.sort()).toEqual(["b", "d"]);
     expect(router.state.location.pathname).toBe("/");
     expect(router.state.location.search).toMatchObject({ projects: "b,d" });
     expect(useWorkspaceStateStore.getState().projectFilterId).toBeNull();
-    expect(screen.getByTestId("project-filter-label")).toHaveTextContent("2 projects");
+    expect(filterState()).toBe("many:b,d");
     // Remembered for the next tab.
     expect(remembered.writes.at(-1)).toEqual(["b", "d"]);
   });
@@ -221,7 +212,7 @@ describe("the chat list's project filter, choose N of M", () => {
     newPage();
     await mountAt("/?projects=a,e");
     await waitFor(() => expect(listed()).toEqual(["Chat in A", "Chat in E"]));
-    expect(screen.getByTestId("project-filter-label")).toHaveTextContent("2 projects");
+    expect(filterState()).toBe("many:a,e");
   });
 
   it("clearing it lists every project's chats again, and forgets the choice", async () => {
@@ -229,12 +220,12 @@ describe("the chat list's project filter, choose N of M", () => {
     await waitFor(() => expect(listed()).toEqual(["Chat in A", "Chat in C"]));
 
     await act(async () => {
-      await userEvent.click(screen.getByTestId("project-filter-clear"));
+      current!.clear();
     });
 
     await waitFor(() => expect(listed()).toEqual(ALL));
     expect(router.state.location.search).not.toHaveProperty("projects");
-    expect(screen.queryByTestId("project-filter-label")).toBeNull();
+    expect(filterState()).toBe("all:");
     expect(remembered.writes.at(-1)).toEqual([]);
   });
 
@@ -246,10 +237,8 @@ describe("the chat list's project filter, choose N of M", () => {
     await waitFor(() => expect(listed()).toEqual(["Chat in C"]));
     expect(requests.at(-1)).toEqual({ projectId: "c", projectIds: [] });
 
-    // Only this: another single project, by the old route.
-    await act(async () => {
-      await inFilter(() => onlyThis("b"));
-    });
+    // Another single project, by the old route.
+    await choose(["b"]);
     await waitFor(() => expect(listed()).toEqual(["Chat in B"]));
     expect(router.state.location.pathname).toBe("/project/b");
     expect(useWorkspaceStateStore.getState().projectFilterId).toBe("b");
@@ -261,16 +250,12 @@ describe("the chat list's project filter, choose N of M", () => {
     const router = await mountAt("/project/a");
     await waitFor(() => expect(listed()).toEqual(["Chat in A"]));
 
-    await act(async () => {
-      await inFilter(() => toggle("e"));
-    });
+    await choose(["a", "e"]);
     await waitFor(() => expect(listed()).toEqual(["Chat in A", "Chat in E"]));
     expect(router.state.location.pathname).toBe("/");
     expect(useWorkspaceStateStore.getState().projectFilterId).toBeNull();
 
-    await act(async () => {
-      await inFilter(() => userEvent.click(screen.getByTestId("project-selector-clear")));
-    });
+    await choose([]);
     await waitFor(() => expect(listed()).toEqual(ALL));
   });
 

@@ -162,18 +162,21 @@ func NewIssuesServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+IssuesServiceListIssuesProcedure,
 			connect.WithSchema(issuesServiceMethods.ByName("ListIssues")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getIssue: connect.NewClient[v1.GetIssueRequest, v1.GetIssueResponse](
 			httpClient,
 			baseURL+IssuesServiceGetIssueProcedure,
 			connect.WithSchema(issuesServiceMethods.ByName("GetIssue")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listIssueEvents: connect.NewClient[v1.ListIssueEventsRequest, v1.ListIssueEventsResponse](
 			httpClient,
 			baseURL+IssuesServiceListIssueEventsProcedure,
 			connect.WithSchema(issuesServiceMethods.ByName("ListIssueEvents")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateIssueStatus: connect.NewClient[v1.UpdateIssueStatusRequest, v1.UpdateIssueStatusResponse](
@@ -216,12 +219,14 @@ func NewIssuesServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+IssuesServiceListAssignableUsersProcedure,
 			connect.WithSchema(issuesServiceMethods.ByName("ListAssignableUsers")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listIssueTimeline: connect.NewClient[v1.ListIssueTimelineRequest, v1.ListIssueTimelineResponse](
 			httpClient,
 			baseURL+IssuesServiceListIssueTimelineProcedure,
 			connect.WithSchema(issuesServiceMethods.ByName("ListIssueTimeline")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		declareMaintenanceWindow: connect.NewClient[v1.DeclareMaintenanceWindowRequest, v1.DeclareMaintenanceWindowResponse](
@@ -234,6 +239,7 @@ func NewIssuesServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+IssuesServiceListMaintenanceWindowsProcedure,
 			connect.WithSchema(issuesServiceMethods.ByName("ListMaintenanceWindows")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -406,18 +412,21 @@ func NewIssuesServiceHandler(svc IssuesServiceHandler, opts ...connect.HandlerOp
 		IssuesServiceListIssuesProcedure,
 		svc.ListIssues,
 		connect.WithSchema(issuesServiceMethods.ByName("ListIssues")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	issuesServiceGetIssueHandler := connect.NewUnaryHandler(
 		IssuesServiceGetIssueProcedure,
 		svc.GetIssue,
 		connect.WithSchema(issuesServiceMethods.ByName("GetIssue")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	issuesServiceListIssueEventsHandler := connect.NewUnaryHandler(
 		IssuesServiceListIssueEventsProcedure,
 		svc.ListIssueEvents,
 		connect.WithSchema(issuesServiceMethods.ByName("ListIssueEvents")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	issuesServiceUpdateIssueStatusHandler := connect.NewUnaryHandler(
@@ -460,12 +469,14 @@ func NewIssuesServiceHandler(svc IssuesServiceHandler, opts ...connect.HandlerOp
 		IssuesServiceListAssignableUsersProcedure,
 		svc.ListAssignableUsers,
 		connect.WithSchema(issuesServiceMethods.ByName("ListAssignableUsers")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	issuesServiceListIssueTimelineHandler := connect.NewUnaryHandler(
 		IssuesServiceListIssueTimelineProcedure,
 		svc.ListIssueTimeline,
 		connect.WithSchema(issuesServiceMethods.ByName("ListIssueTimeline")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	issuesServiceDeclareMaintenanceWindowHandler := connect.NewUnaryHandler(
@@ -478,6 +489,7 @@ func NewIssuesServiceHandler(svc IssuesServiceHandler, opts ...connect.HandlerOp
 		IssuesServiceListMaintenanceWindowsProcedure,
 		svc.ListMaintenanceWindows,
 		connect.WithSchema(issuesServiceMethods.ByName("ListMaintenanceWindows")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/controlplane.v1.IssuesService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

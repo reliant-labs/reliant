@@ -562,12 +562,15 @@ func (x *ListMaintenanceWindowsResponse) GetWindows() []*MaintenanceWindow {
 	return nil
 }
 
-// IssueTimeRange is a half-open range [start, end). Both ends are required when
-// the range is present, and end must be after start.
+// IssueTimeRange is a half-open range [start, end): when present, either both
+// absolute ends, with end after start, or a window relative to the server's
+// clock (relative, ObservabilityService's TimeRange.relative), which the server
+// resolves when it answers. Never both. A range in a response is absolute.
 type IssueTimeRange struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Start         *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start,proto3" json:"start,omitempty"`
 	End           *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=end,proto3" json:"end,omitempty"`
+	Relative      *v1.RelativeWindow     `protobuf:"bytes,3,opt,name=relative,proto3" json:"relative,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -612,6 +615,13 @@ func (x *IssueTimeRange) GetStart() *timestamppb.Timestamp {
 func (x *IssueTimeRange) GetEnd() *timestamppb.Timestamp {
 	if x != nil {
 		return x.End
+	}
+	return nil
+}
+
+func (x *IssueTimeRange) GetRelative() *v1.RelativeWindow {
+	if x != nil {
+		return x.Relative
 	}
 	return nil
 }
@@ -951,8 +961,12 @@ type ListIssuesResponse struct {
 	// instance_users, echoed exactly. Unset when the request named none, or
 	// when this read could not apply it (controlplane.v1.InstanceScope).
 	InstanceScope *v1.InstanceScope `protobuf:"bytes,3,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The absolute range this page read: scope.time_range resolved (or the
+	// default last 24 hours). A client pages a relative window by sending this
+	// as the next page's scope.time_range, so every page reads the same range.
+	EffectiveTimeRange *IssueTimeRange `protobuf:"bytes,4,opt,name=effective_time_range,json=effectiveTimeRange,proto3" json:"effective_time_range,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ListIssuesResponse) Reset() {
@@ -1002,6 +1016,13 @@ func (x *ListIssuesResponse) GetNextPageToken() string {
 func (x *ListIssuesResponse) GetInstanceScope() *v1.InstanceScope {
 	if x != nil {
 		return x.InstanceScope
+	}
+	return nil
+}
+
+func (x *ListIssuesResponse) GetEffectiveTimeRange() *IssueTimeRange {
+	if x != nil {
+		return x.EffectiveTimeRange
 	}
 	return nil
 }
@@ -3363,7 +3384,7 @@ var File_services_issues_v1_issues_proto protoreflect.FileDescriptor
 
 const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\n" +
-	"\x1fservices/issues/v1/issues.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/client.proto\x1a\x1ccontrolplane/v1/issues.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb1\x02\n" +
+	"\x1fservices/issues/v1/issues.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/client.proto\x1a\x1ccontrolplane/v1/issues.proto\x1a!controlplane/v1/time_window.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb1\x02\n" +
 	"\x11MaintenanceWindow\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
 	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\x15\n" +
@@ -3389,10 +3410,11 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\x05since\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\x05since\x88\x01\x01B\b\n" +
 	"\x06_since\"^\n" +
 	"\x1eListMaintenanceWindowsResponse\x12<\n" +
-	"\awindows\x18\x01 \x03(\v2\".controlplane.v1.MaintenanceWindowR\awindows\"p\n" +
+	"\awindows\x18\x01 \x03(\v2\".controlplane.v1.MaintenanceWindowR\awindows\"\xad\x01\n" +
 	"\x0eIssueTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
-	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\xb2\x02\n" +
+	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\x12;\n" +
+	"\brelative\x18\x03 \x01(\v2\x1f.controlplane.v1.RelativeWindowR\brelative\"\xb2\x02\n" +
 	"\n" +
 	"IssueScope\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1a\n" +
@@ -3443,11 +3465,12 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\n" +
 	"\b_browserB\x05\n" +
 	"\x03_osB\x12\n" +
-	"\x10_service_version\"\xb3\x01\n" +
+	"\x10_service_version\"\x86\x02\n" +
 	"\x12ListIssuesResponse\x12.\n" +
 	"\x06issues\x18\x01 \x03(\v2\x16.controlplane.v1.IssueR\x06issues\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12E\n" +
-	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\x8d\x02\n" +
+	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\x12Q\n" +
+	"\x14effective_time_range\x18\x04 \x01(\v2\x1f.controlplane.v1.IssueTimeRangeR\x12effectiveTimeRange\"\x8d\x02\n" +
 	"\x0fGetIssueRequest\x12\x19\n" +
 	"\bissue_id\x18\x01 \x01(\tR\aissueId\x12>\n" +
 	"\n" +
@@ -3667,23 +3690,23 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\x1eISSUE_RESOLVE_KIND_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ISSUE_RESOLVE_KIND_NOW\x10\x01\x12#\n" +
 	"\x1fISSUE_RESOLVE_KIND_NEXT_RELEASE\x10\x02\x12\x1e\n" +
-	"\x1aISSUE_RESOLVE_KIND_VERSION\x10\x032\xe1\n" +
+	"\x1aISSUE_RESOLVE_KIND_VERSION\x10\x032\xff\n" +
 	"\n" +
-	"\rIssuesService\x12U\n" +
+	"\rIssuesService\x12Z\n" +
 	"\n" +
-	"ListIssues\x12\".controlplane.v1.ListIssuesRequest\x1a#.controlplane.v1.ListIssuesResponse\x12O\n" +
-	"\bGetIssue\x12 .controlplane.v1.GetIssueRequest\x1a!.controlplane.v1.GetIssueResponse\x12d\n" +
-	"\x0fListIssueEvents\x12'.controlplane.v1.ListIssueEventsRequest\x1a(.controlplane.v1.ListIssueEventsResponse\x12j\n" +
+	"ListIssues\x12\".controlplane.v1.ListIssuesRequest\x1a#.controlplane.v1.ListIssuesResponse\"\x03\x90\x02\x01\x12T\n" +
+	"\bGetIssue\x12 .controlplane.v1.GetIssueRequest\x1a!.controlplane.v1.GetIssueResponse\"\x03\x90\x02\x01\x12i\n" +
+	"\x0fListIssueEvents\x12'.controlplane.v1.ListIssueEventsRequest\x1a(.controlplane.v1.ListIssueEventsResponse\"\x03\x90\x02\x01\x12j\n" +
 	"\x11UpdateIssueStatus\x12).controlplane.v1.UpdateIssueStatusRequest\x1a*.controlplane.v1.UpdateIssueStatusResponse\x12d\n" +
 	"\x0fAddIssueComment\x12'.controlplane.v1.AddIssueCommentRequest\x1a(.controlplane.v1.AddIssueCommentResponse\x12m\n" +
 	"\x12UpdateIssueComment\x12*.controlplane.v1.UpdateIssueCommentRequest\x1a+.controlplane.v1.UpdateIssueCommentResponse\x12m\n" +
 	"\x12DeleteIssueComment\x12*.controlplane.v1.DeleteIssueCommentRequest\x1a+.controlplane.v1.DeleteIssueCommentResponse\x12X\n" +
 	"\vAssignIssue\x12#.controlplane.v1.AssignIssueRequest\x1a$.controlplane.v1.AssignIssueResponse\x12^\n" +
-	"\rLinkIssueChat\x12%.controlplane.v1.LinkIssueChatRequest\x1a&.controlplane.v1.LinkIssueChatResponse\x12p\n" +
-	"\x13ListAssignableUsers\x12+.controlplane.v1.ListAssignableUsersRequest\x1a,.controlplane.v1.ListAssignableUsersResponse\x12j\n" +
-	"\x11ListIssueTimeline\x12).controlplane.v1.ListIssueTimelineRequest\x1a*.controlplane.v1.ListIssueTimelineResponse\x12\x7f\n" +
-	"\x18DeclareMaintenanceWindow\x120.controlplane.v1.DeclareMaintenanceWindowRequest\x1a1.controlplane.v1.DeclareMaintenanceWindowResponse\x12y\n" +
-	"\x16ListMaintenanceWindows\x12..controlplane.v1.ListMaintenanceWindowsRequest\x1a/.controlplane.v1.ListMaintenanceWindowsResponseB\xd3\x01\n" +
+	"\rLinkIssueChat\x12%.controlplane.v1.LinkIssueChatRequest\x1a&.controlplane.v1.LinkIssueChatResponse\x12u\n" +
+	"\x13ListAssignableUsers\x12+.controlplane.v1.ListAssignableUsersRequest\x1a,.controlplane.v1.ListAssignableUsersResponse\"\x03\x90\x02\x01\x12o\n" +
+	"\x11ListIssueTimeline\x12).controlplane.v1.ListIssueTimelineRequest\x1a*.controlplane.v1.ListIssueTimelineResponse\"\x03\x90\x02\x01\x12\x7f\n" +
+	"\x18DeclareMaintenanceWindow\x120.controlplane.v1.DeclareMaintenanceWindowRequest\x1a1.controlplane.v1.DeclareMaintenanceWindowResponse\x12~\n" +
+	"\x16ListMaintenanceWindows\x12..controlplane.v1.ListMaintenanceWindowsRequest\x1a/.controlplane.v1.ListMaintenanceWindowsResponse\"\x03\x90\x02\x01B\xd3\x01\n" +
 	"\x13com.controlplane.v1B\vIssuesProtoP\x01ZRgithub.com/reliant-labs/reliant/gen/controlplane/services/issues/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -3749,12 +3772,13 @@ var file_services_issues_v1_issues_proto_goTypes = []any{
 	(*ListIssueTimelineResponse)(nil),        // 45: controlplane.v1.ListIssueTimelineResponse
 	nil,                                      // 46: controlplane.v1.IssueEvent.AttributesEntry
 	(*timestamppb.Timestamp)(nil),            // 47: google.protobuf.Timestamp
-	(v1.IssueStatus)(0),                      // 48: controlplane.v1.IssueStatus
-	(v1.IssuePlatform)(0),                    // 49: controlplane.v1.IssuePlatform
-	(*v1.Issue)(nil),                         // 50: controlplane.v1.Issue
-	(*v1.InstanceScope)(nil),                 // 51: controlplane.v1.InstanceScope
-	(*v1.ClientContext)(nil),                 // 52: controlplane.v1.ClientContext
-	(*v1.IssueUser)(nil),                     // 53: controlplane.v1.IssueUser
+	(*v1.RelativeWindow)(nil),                // 48: controlplane.v1.RelativeWindow
+	(v1.IssueStatus)(0),                      // 49: controlplane.v1.IssueStatus
+	(v1.IssuePlatform)(0),                    // 50: controlplane.v1.IssuePlatform
+	(*v1.Issue)(nil),                         // 51: controlplane.v1.Issue
+	(*v1.InstanceScope)(nil),                 // 52: controlplane.v1.InstanceScope
+	(*v1.ClientContext)(nil),                 // 53: controlplane.v1.ClientContext
+	(*v1.IssueUser)(nil),                     // 54: controlplane.v1.IssueUser
 }
 var file_services_issues_v1_issues_proto_depIdxs = []int32{
 	47, // 0: controlplane.v1.MaintenanceWindow.starts_at:type_name -> google.protobuf.Timestamp
@@ -3767,90 +3791,92 @@ var file_services_issues_v1_issues_proto_depIdxs = []int32{
 	4,  // 7: controlplane.v1.ListMaintenanceWindowsResponse.windows:type_name -> controlplane.v1.MaintenanceWindow
 	47, // 8: controlplane.v1.IssueTimeRange.start:type_name -> google.protobuf.Timestamp
 	47, // 9: controlplane.v1.IssueTimeRange.end:type_name -> google.protobuf.Timestamp
-	9,  // 10: controlplane.v1.IssueScope.time_range:type_name -> controlplane.v1.IssueTimeRange
-	10, // 11: controlplane.v1.ListIssuesRequest.scope:type_name -> controlplane.v1.IssueScope
-	48, // 12: controlplane.v1.ListIssuesRequest.statuses:type_name -> controlplane.v1.IssueStatus
-	49, // 13: controlplane.v1.ListIssuesRequest.platform:type_name -> controlplane.v1.IssuePlatform
-	0,  // 14: controlplane.v1.ListIssuesRequest.sort:type_name -> controlplane.v1.IssueSort
-	50, // 15: controlplane.v1.ListIssuesResponse.issues:type_name -> controlplane.v1.Issue
-	51, // 16: controlplane.v1.ListIssuesResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	9,  // 17: controlplane.v1.GetIssueRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
-	50, // 18: controlplane.v1.GetIssueResponse.issue:type_name -> controlplane.v1.Issue
-	15, // 19: controlplane.v1.GetIssueResponse.latest_event:type_name -> controlplane.v1.IssueEvent
-	16, // 20: controlplane.v1.GetIssueResponse.frames:type_name -> controlplane.v1.IssueFrame
-	17, // 21: controlplane.v1.GetIssueResponse.by_version:type_name -> controlplane.v1.IssueVersionBreakdown
-	18, // 22: controlplane.v1.GetIssueResponse.first_release:type_name -> controlplane.v1.IssueReleaseRef
-	51, // 23: controlplane.v1.GetIssueResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	47, // 24: controlplane.v1.IssueEvent.timestamp:type_name -> google.protobuf.Timestamp
-	46, // 25: controlplane.v1.IssueEvent.attributes:type_name -> controlplane.v1.IssueEvent.AttributesEntry
-	52, // 26: controlplane.v1.IssueEvent.client:type_name -> controlplane.v1.ClientContext
-	47, // 27: controlplane.v1.IssueVersionBreakdown.first_seen_at:type_name -> google.protobuf.Timestamp
-	47, // 28: controlplane.v1.IssueVersionBreakdown.last_seen_at:type_name -> google.protobuf.Timestamp
-	47, // 29: controlplane.v1.IssueReleaseRef.promoted_at:type_name -> google.protobuf.Timestamp
-	9,  // 30: controlplane.v1.ListIssueEventsRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
-	15, // 31: controlplane.v1.ListIssueEventsResponse.events:type_name -> controlplane.v1.IssueEvent
-	51, // 32: controlplane.v1.ListIssueEventsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	2,  // 33: controlplane.v1.IssueResolveIn.kind:type_name -> controlplane.v1.IssueResolveKind
-	1,  // 34: controlplane.v1.UpdateIssueStatusRequest.status:type_name -> controlplane.v1.IssueStatusChange
-	21, // 35: controlplane.v1.UpdateIssueStatusRequest.resolve_in:type_name -> controlplane.v1.IssueResolveIn
-	47, // 36: controlplane.v1.UpdateIssueStatusRequest.ignored_until:type_name -> google.protobuf.Timestamp
-	50, // 37: controlplane.v1.UpdateIssueStatusResponse.issue:type_name -> controlplane.v1.Issue
-	53, // 38: controlplane.v1.IssueComment.author:type_name -> controlplane.v1.IssueUser
-	47, // 39: controlplane.v1.IssueComment.created_at:type_name -> google.protobuf.Timestamp
-	47, // 40: controlplane.v1.IssueComment.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 41: controlplane.v1.AddIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
-	24, // 42: controlplane.v1.UpdateIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
-	50, // 43: controlplane.v1.AssignIssueResponse.issue:type_name -> controlplane.v1.Issue
-	53, // 44: controlplane.v1.IssueChatLink.linked_by:type_name -> controlplane.v1.IssueUser
-	47, // 45: controlplane.v1.IssueChatLink.linked_at:type_name -> google.protobuf.Timestamp
-	34, // 46: controlplane.v1.LinkIssueChatResponse.link:type_name -> controlplane.v1.IssueChatLink
-	53, // 47: controlplane.v1.ListAssignableUsersResponse.users:type_name -> controlplane.v1.IssueUser
-	3,  // 48: controlplane.v1.IssueActor.kind:type_name -> controlplane.v1.IssueActor.Kind
-	48, // 49: controlplane.v1.IssueStatusEntry.from:type_name -> controlplane.v1.IssueStatus
-	48, // 50: controlplane.v1.IssueStatusEntry.to:type_name -> controlplane.v1.IssueStatus
-	47, // 51: controlplane.v1.IssueStatusEntry.ignored_until:type_name -> google.protobuf.Timestamp
-	24, // 52: controlplane.v1.IssueCommentEntry.comment:type_name -> controlplane.v1.IssueComment
-	53, // 53: controlplane.v1.IssueAssignmentEntry.from:type_name -> controlplane.v1.IssueUser
-	53, // 54: controlplane.v1.IssueAssignmentEntry.to:type_name -> controlplane.v1.IssueUser
-	34, // 55: controlplane.v1.IssueChatEntry.link:type_name -> controlplane.v1.IssueChatLink
-	47, // 56: controlplane.v1.IssueTimelineEntry.time:type_name -> google.protobuf.Timestamp
-	39, // 57: controlplane.v1.IssueTimelineEntry.actor:type_name -> controlplane.v1.IssueActor
-	40, // 58: controlplane.v1.IssueTimelineEntry.status:type_name -> controlplane.v1.IssueStatusEntry
-	41, // 59: controlplane.v1.IssueTimelineEntry.comment:type_name -> controlplane.v1.IssueCommentEntry
-	42, // 60: controlplane.v1.IssueTimelineEntry.assignment:type_name -> controlplane.v1.IssueAssignmentEntry
-	43, // 61: controlplane.v1.IssueTimelineEntry.chat:type_name -> controlplane.v1.IssueChatEntry
-	44, // 62: controlplane.v1.ListIssueTimelineResponse.entries:type_name -> controlplane.v1.IssueTimelineEntry
-	11, // 63: controlplane.v1.IssuesService.ListIssues:input_type -> controlplane.v1.ListIssuesRequest
-	13, // 64: controlplane.v1.IssuesService.GetIssue:input_type -> controlplane.v1.GetIssueRequest
-	19, // 65: controlplane.v1.IssuesService.ListIssueEvents:input_type -> controlplane.v1.ListIssueEventsRequest
-	22, // 66: controlplane.v1.IssuesService.UpdateIssueStatus:input_type -> controlplane.v1.UpdateIssueStatusRequest
-	25, // 67: controlplane.v1.IssuesService.AddIssueComment:input_type -> controlplane.v1.AddIssueCommentRequest
-	27, // 68: controlplane.v1.IssuesService.UpdateIssueComment:input_type -> controlplane.v1.UpdateIssueCommentRequest
-	29, // 69: controlplane.v1.IssuesService.DeleteIssueComment:input_type -> controlplane.v1.DeleteIssueCommentRequest
-	31, // 70: controlplane.v1.IssuesService.AssignIssue:input_type -> controlplane.v1.AssignIssueRequest
-	33, // 71: controlplane.v1.IssuesService.LinkIssueChat:input_type -> controlplane.v1.LinkIssueChatRequest
-	37, // 72: controlplane.v1.IssuesService.ListAssignableUsers:input_type -> controlplane.v1.ListAssignableUsersRequest
-	36, // 73: controlplane.v1.IssuesService.ListIssueTimeline:input_type -> controlplane.v1.ListIssueTimelineRequest
-	5,  // 74: controlplane.v1.IssuesService.DeclareMaintenanceWindow:input_type -> controlplane.v1.DeclareMaintenanceWindowRequest
-	7,  // 75: controlplane.v1.IssuesService.ListMaintenanceWindows:input_type -> controlplane.v1.ListMaintenanceWindowsRequest
-	12, // 76: controlplane.v1.IssuesService.ListIssues:output_type -> controlplane.v1.ListIssuesResponse
-	14, // 77: controlplane.v1.IssuesService.GetIssue:output_type -> controlplane.v1.GetIssueResponse
-	20, // 78: controlplane.v1.IssuesService.ListIssueEvents:output_type -> controlplane.v1.ListIssueEventsResponse
-	23, // 79: controlplane.v1.IssuesService.UpdateIssueStatus:output_type -> controlplane.v1.UpdateIssueStatusResponse
-	26, // 80: controlplane.v1.IssuesService.AddIssueComment:output_type -> controlplane.v1.AddIssueCommentResponse
-	28, // 81: controlplane.v1.IssuesService.UpdateIssueComment:output_type -> controlplane.v1.UpdateIssueCommentResponse
-	30, // 82: controlplane.v1.IssuesService.DeleteIssueComment:output_type -> controlplane.v1.DeleteIssueCommentResponse
-	32, // 83: controlplane.v1.IssuesService.AssignIssue:output_type -> controlplane.v1.AssignIssueResponse
-	35, // 84: controlplane.v1.IssuesService.LinkIssueChat:output_type -> controlplane.v1.LinkIssueChatResponse
-	38, // 85: controlplane.v1.IssuesService.ListAssignableUsers:output_type -> controlplane.v1.ListAssignableUsersResponse
-	45, // 86: controlplane.v1.IssuesService.ListIssueTimeline:output_type -> controlplane.v1.ListIssueTimelineResponse
-	6,  // 87: controlplane.v1.IssuesService.DeclareMaintenanceWindow:output_type -> controlplane.v1.DeclareMaintenanceWindowResponse
-	8,  // 88: controlplane.v1.IssuesService.ListMaintenanceWindows:output_type -> controlplane.v1.ListMaintenanceWindowsResponse
-	76, // [76:89] is the sub-list for method output_type
-	63, // [63:76] is the sub-list for method input_type
-	63, // [63:63] is the sub-list for extension type_name
-	63, // [63:63] is the sub-list for extension extendee
-	0,  // [0:63] is the sub-list for field type_name
+	48, // 10: controlplane.v1.IssueTimeRange.relative:type_name -> controlplane.v1.RelativeWindow
+	9,  // 11: controlplane.v1.IssueScope.time_range:type_name -> controlplane.v1.IssueTimeRange
+	10, // 12: controlplane.v1.ListIssuesRequest.scope:type_name -> controlplane.v1.IssueScope
+	49, // 13: controlplane.v1.ListIssuesRequest.statuses:type_name -> controlplane.v1.IssueStatus
+	50, // 14: controlplane.v1.ListIssuesRequest.platform:type_name -> controlplane.v1.IssuePlatform
+	0,  // 15: controlplane.v1.ListIssuesRequest.sort:type_name -> controlplane.v1.IssueSort
+	51, // 16: controlplane.v1.ListIssuesResponse.issues:type_name -> controlplane.v1.Issue
+	52, // 17: controlplane.v1.ListIssuesResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	9,  // 18: controlplane.v1.ListIssuesResponse.effective_time_range:type_name -> controlplane.v1.IssueTimeRange
+	9,  // 19: controlplane.v1.GetIssueRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
+	51, // 20: controlplane.v1.GetIssueResponse.issue:type_name -> controlplane.v1.Issue
+	15, // 21: controlplane.v1.GetIssueResponse.latest_event:type_name -> controlplane.v1.IssueEvent
+	16, // 22: controlplane.v1.GetIssueResponse.frames:type_name -> controlplane.v1.IssueFrame
+	17, // 23: controlplane.v1.GetIssueResponse.by_version:type_name -> controlplane.v1.IssueVersionBreakdown
+	18, // 24: controlplane.v1.GetIssueResponse.first_release:type_name -> controlplane.v1.IssueReleaseRef
+	52, // 25: controlplane.v1.GetIssueResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	47, // 26: controlplane.v1.IssueEvent.timestamp:type_name -> google.protobuf.Timestamp
+	46, // 27: controlplane.v1.IssueEvent.attributes:type_name -> controlplane.v1.IssueEvent.AttributesEntry
+	53, // 28: controlplane.v1.IssueEvent.client:type_name -> controlplane.v1.ClientContext
+	47, // 29: controlplane.v1.IssueVersionBreakdown.first_seen_at:type_name -> google.protobuf.Timestamp
+	47, // 30: controlplane.v1.IssueVersionBreakdown.last_seen_at:type_name -> google.protobuf.Timestamp
+	47, // 31: controlplane.v1.IssueReleaseRef.promoted_at:type_name -> google.protobuf.Timestamp
+	9,  // 32: controlplane.v1.ListIssueEventsRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
+	15, // 33: controlplane.v1.ListIssueEventsResponse.events:type_name -> controlplane.v1.IssueEvent
+	52, // 34: controlplane.v1.ListIssueEventsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	2,  // 35: controlplane.v1.IssueResolveIn.kind:type_name -> controlplane.v1.IssueResolveKind
+	1,  // 36: controlplane.v1.UpdateIssueStatusRequest.status:type_name -> controlplane.v1.IssueStatusChange
+	21, // 37: controlplane.v1.UpdateIssueStatusRequest.resolve_in:type_name -> controlplane.v1.IssueResolveIn
+	47, // 38: controlplane.v1.UpdateIssueStatusRequest.ignored_until:type_name -> google.protobuf.Timestamp
+	51, // 39: controlplane.v1.UpdateIssueStatusResponse.issue:type_name -> controlplane.v1.Issue
+	54, // 40: controlplane.v1.IssueComment.author:type_name -> controlplane.v1.IssueUser
+	47, // 41: controlplane.v1.IssueComment.created_at:type_name -> google.protobuf.Timestamp
+	47, // 42: controlplane.v1.IssueComment.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 43: controlplane.v1.AddIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
+	24, // 44: controlplane.v1.UpdateIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
+	51, // 45: controlplane.v1.AssignIssueResponse.issue:type_name -> controlplane.v1.Issue
+	54, // 46: controlplane.v1.IssueChatLink.linked_by:type_name -> controlplane.v1.IssueUser
+	47, // 47: controlplane.v1.IssueChatLink.linked_at:type_name -> google.protobuf.Timestamp
+	34, // 48: controlplane.v1.LinkIssueChatResponse.link:type_name -> controlplane.v1.IssueChatLink
+	54, // 49: controlplane.v1.ListAssignableUsersResponse.users:type_name -> controlplane.v1.IssueUser
+	3,  // 50: controlplane.v1.IssueActor.kind:type_name -> controlplane.v1.IssueActor.Kind
+	49, // 51: controlplane.v1.IssueStatusEntry.from:type_name -> controlplane.v1.IssueStatus
+	49, // 52: controlplane.v1.IssueStatusEntry.to:type_name -> controlplane.v1.IssueStatus
+	47, // 53: controlplane.v1.IssueStatusEntry.ignored_until:type_name -> google.protobuf.Timestamp
+	24, // 54: controlplane.v1.IssueCommentEntry.comment:type_name -> controlplane.v1.IssueComment
+	54, // 55: controlplane.v1.IssueAssignmentEntry.from:type_name -> controlplane.v1.IssueUser
+	54, // 56: controlplane.v1.IssueAssignmentEntry.to:type_name -> controlplane.v1.IssueUser
+	34, // 57: controlplane.v1.IssueChatEntry.link:type_name -> controlplane.v1.IssueChatLink
+	47, // 58: controlplane.v1.IssueTimelineEntry.time:type_name -> google.protobuf.Timestamp
+	39, // 59: controlplane.v1.IssueTimelineEntry.actor:type_name -> controlplane.v1.IssueActor
+	40, // 60: controlplane.v1.IssueTimelineEntry.status:type_name -> controlplane.v1.IssueStatusEntry
+	41, // 61: controlplane.v1.IssueTimelineEntry.comment:type_name -> controlplane.v1.IssueCommentEntry
+	42, // 62: controlplane.v1.IssueTimelineEntry.assignment:type_name -> controlplane.v1.IssueAssignmentEntry
+	43, // 63: controlplane.v1.IssueTimelineEntry.chat:type_name -> controlplane.v1.IssueChatEntry
+	44, // 64: controlplane.v1.ListIssueTimelineResponse.entries:type_name -> controlplane.v1.IssueTimelineEntry
+	11, // 65: controlplane.v1.IssuesService.ListIssues:input_type -> controlplane.v1.ListIssuesRequest
+	13, // 66: controlplane.v1.IssuesService.GetIssue:input_type -> controlplane.v1.GetIssueRequest
+	19, // 67: controlplane.v1.IssuesService.ListIssueEvents:input_type -> controlplane.v1.ListIssueEventsRequest
+	22, // 68: controlplane.v1.IssuesService.UpdateIssueStatus:input_type -> controlplane.v1.UpdateIssueStatusRequest
+	25, // 69: controlplane.v1.IssuesService.AddIssueComment:input_type -> controlplane.v1.AddIssueCommentRequest
+	27, // 70: controlplane.v1.IssuesService.UpdateIssueComment:input_type -> controlplane.v1.UpdateIssueCommentRequest
+	29, // 71: controlplane.v1.IssuesService.DeleteIssueComment:input_type -> controlplane.v1.DeleteIssueCommentRequest
+	31, // 72: controlplane.v1.IssuesService.AssignIssue:input_type -> controlplane.v1.AssignIssueRequest
+	33, // 73: controlplane.v1.IssuesService.LinkIssueChat:input_type -> controlplane.v1.LinkIssueChatRequest
+	37, // 74: controlplane.v1.IssuesService.ListAssignableUsers:input_type -> controlplane.v1.ListAssignableUsersRequest
+	36, // 75: controlplane.v1.IssuesService.ListIssueTimeline:input_type -> controlplane.v1.ListIssueTimelineRequest
+	5,  // 76: controlplane.v1.IssuesService.DeclareMaintenanceWindow:input_type -> controlplane.v1.DeclareMaintenanceWindowRequest
+	7,  // 77: controlplane.v1.IssuesService.ListMaintenanceWindows:input_type -> controlplane.v1.ListMaintenanceWindowsRequest
+	12, // 78: controlplane.v1.IssuesService.ListIssues:output_type -> controlplane.v1.ListIssuesResponse
+	14, // 79: controlplane.v1.IssuesService.GetIssue:output_type -> controlplane.v1.GetIssueResponse
+	20, // 80: controlplane.v1.IssuesService.ListIssueEvents:output_type -> controlplane.v1.ListIssueEventsResponse
+	23, // 81: controlplane.v1.IssuesService.UpdateIssueStatus:output_type -> controlplane.v1.UpdateIssueStatusResponse
+	26, // 82: controlplane.v1.IssuesService.AddIssueComment:output_type -> controlplane.v1.AddIssueCommentResponse
+	28, // 83: controlplane.v1.IssuesService.UpdateIssueComment:output_type -> controlplane.v1.UpdateIssueCommentResponse
+	30, // 84: controlplane.v1.IssuesService.DeleteIssueComment:output_type -> controlplane.v1.DeleteIssueCommentResponse
+	32, // 85: controlplane.v1.IssuesService.AssignIssue:output_type -> controlplane.v1.AssignIssueResponse
+	35, // 86: controlplane.v1.IssuesService.LinkIssueChat:output_type -> controlplane.v1.LinkIssueChatResponse
+	38, // 87: controlplane.v1.IssuesService.ListAssignableUsers:output_type -> controlplane.v1.ListAssignableUsersResponse
+	45, // 88: controlplane.v1.IssuesService.ListIssueTimeline:output_type -> controlplane.v1.ListIssueTimelineResponse
+	6,  // 89: controlplane.v1.IssuesService.DeclareMaintenanceWindow:output_type -> controlplane.v1.DeclareMaintenanceWindowResponse
+	8,  // 90: controlplane.v1.IssuesService.ListMaintenanceWindows:output_type -> controlplane.v1.ListMaintenanceWindowsResponse
+	78, // [78:91] is the sub-list for method output_type
+	65, // [65:78] is the sub-list for method input_type
+	65, // [65:65] is the sub-list for extension type_name
+	65, // [65:65] is the sub-list for extension extendee
+	0,  // [0:65] is the sub-list for field type_name
 }
 
 func init() { file_services_issues_v1_issues_proto_init() }

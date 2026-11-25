@@ -57,6 +57,29 @@ type ApiServerConfig struct {
 	JwtJwksSnapshotFile   string               `protobuf:"bytes,94,opt,name=jwt_jwks_snapshot_file,json=jwtJwksSnapshotFile,proto3" json:"jwt_jwks_snapshot_file,omitempty"`
 	JwtJwksSnapshot       string               `protobuf:"bytes,95,opt,name=jwt_jwks_snapshot,json=jwtJwksSnapshot,proto3" json:"jwt_jwks_snapshot,omitempty"`
 	JwtJwksSnapshotMaxAge *durationpb.Duration `protobuf:"bytes,96,opt,name=jwt_jwks_snapshot_max_age,json=jwtJwksSnapshotMaxAge,proto3" json:"jwt_jwks_snapshot_max_age,omitempty"`
+	// ── Native sign-in: the login broker (internal/app/login_broker.go) ────
+	//
+	// The managed identity's sign-in, served by reliant-api on /auth/*: the
+	// browser posts credentials to this server, which runs the OIDC flow
+	// against the identity and answers with an HttpOnly cookie holding a
+	// server-side session id. forge.IdentityRef fills every one of these from
+	// the env's forge.ManagedIdentity (an IdentityOnHost in dev, the control
+	// plane's instance when hosted); nothing is mounted until oidc_client_id
+	// and the broker token are set (LoginBrokerConfigured).
+	OidcClientId    string `protobuf:"bytes,99,opt,name=oidc_client_id,json=oidcClientId,proto3" json:"oidc_client_id,omitempty"`
+	OidcRedirectUri string `protobuf:"bytes,100,opt,name=oidc_redirect_uri,json=oidcRedirectUri,proto3" json:"oidc_redirect_uri,omitempty"`
+	OidcScopes      string `protobuf:"bytes,101,opt,name=oidc_scopes,json=oidcScopes,proto3" json:"oidc_scopes,omitempty"`
+	IdpLoginUri     string `protobuf:"bytes,102,opt,name=idp_login_uri,json=idpLoginUri,proto3" json:"idp_login_uri,omitempty"`
+	IdpBase         string `protobuf:"bytes,103,opt,name=idp_base,json=idpBase,proto3" json:"idp_base,omitempty"`
+	IdpHost         string `protobuf:"bytes,104,opt,name=idp_host,json=idpHost,proto3" json:"idp_host,omitempty"`
+	// HIGHLY PRIVILEGED: it can complete a sign-in for any user of the
+	// instance. It belongs to this server alone.
+	IdpBrokerToken     string `protobuf:"bytes,105,opt,name=idp_broker_token,json=idpBrokerToken,proto3" json:"idp_broker_token,omitempty"`
+	IdpBrokerTokenFile string `protobuf:"bytes,106,opt,name=idp_broker_token_file,json=idpBrokerTokenFile,proto3" json:"idp_broker_token_file,omitempty"`
+	// DELIVERED by the identity's converge, never hand-written.
+	IdpLoginPolicy   string `protobuf:"bytes,107,opt,name=idp_login_policy,json=idpLoginPolicy,proto3" json:"idp_login_policy,omitempty"`
+	TrustedProxyHops int32  `protobuf:"varint,108,opt,name=trusted_proxy_hops,json=trustedProxyHops,proto3" json:"trusted_proxy_hops,omitempty"`
+	AuthSelfSignup   bool   `protobuf:"varint,109,opt,name=auth_self_signup,json=authSelfSignup,proto3" json:"auth_self_signup,omitempty"`
 	// The email domains allowed to sign in, comma-separated; none allows every
 	// domain. The loader trims each element and drops blank ones, which the
 	// domain whitelist already did to every entry, so " B.com," still means
@@ -184,9 +207,11 @@ type ApiServerConfig struct {
 	LivenessPaths  string `protobuf:"bytes,24,opt,name=liveness_paths,json=livenessPaths,proto3" json:"liveness_paths,omitempty"`
 	ReadinessPaths string `protobuf:"bytes,25,opt,name=readiness_paths,json=readinessPaths,proto3" json:"readiness_paths,omitempty"`
 	// Organization features the API server gates while they roll out.
-	Orgs          *OrgsConfig `protobuf:"bytes,85,opt,name=orgs,proto3" json:"orgs,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Orgs *OrgsConfig `protobuf:"bytes,85,opt,name=orgs,proto3" json:"orgs,omitempty"`
+	// Chat collaboration (per-person grants on a chat) while it rolls out.
+	ChatCollaboration *ChatCollaborationConfig `protobuf:"bytes,98,opt,name=chat_collaboration,json=chatCollaboration,proto3" json:"chat_collaboration,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ApiServerConfig) Reset() {
@@ -308,6 +333,83 @@ func (x *ApiServerConfig) GetJwtJwksSnapshotMaxAge() *durationpb.Duration {
 		return x.JwtJwksSnapshotMaxAge
 	}
 	return nil
+}
+
+func (x *ApiServerConfig) GetOidcClientId() string {
+	if x != nil {
+		return x.OidcClientId
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetOidcRedirectUri() string {
+	if x != nil {
+		return x.OidcRedirectUri
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetOidcScopes() string {
+	if x != nil {
+		return x.OidcScopes
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetIdpLoginUri() string {
+	if x != nil {
+		return x.IdpLoginUri
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetIdpBase() string {
+	if x != nil {
+		return x.IdpBase
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetIdpHost() string {
+	if x != nil {
+		return x.IdpHost
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetIdpBrokerToken() string {
+	if x != nil {
+		return x.IdpBrokerToken
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetIdpBrokerTokenFile() string {
+	if x != nil {
+		return x.IdpBrokerTokenFile
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetIdpLoginPolicy() string {
+	if x != nil {
+		return x.IdpLoginPolicy
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetTrustedProxyHops() int32 {
+	if x != nil {
+		return x.TrustedProxyHops
+	}
+	return 0
+}
+
+func (x *ApiServerConfig) GetAuthSelfSignup() bool {
+	if x != nil {
+		return x.AuthSelfSignup
+	}
+	return false
 }
 
 func (x *ApiServerConfig) GetAllowedEmailDomains() []string {
@@ -506,6 +608,69 @@ func (x *ApiServerConfig) GetOrgs() *OrgsConfig {
 	return nil
 }
 
+func (x *ApiServerConfig) GetChatCollaboration() *ChatCollaborationConfig {
+	if x != nil {
+		return x.ChatCollaboration
+	}
+	return nil
+}
+
+// ChatCollaborationConfig gates chat collaboration (control-plane
+// docs/design/chat-collaboration.md §12): the per-person grants of
+// chat_members, and later the reply and manage decisions built on them. The
+// rules every config here follows are in config.proto's header.
+type ChatCollaborationConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Lets a chat's owner, and its members at manage, grant a person view,
+	// reply or manage on it (SharingService.SetChatMember). Off by default:
+	// turn it on only once every API server AND worker, and the release a
+	// rollback would return to, read chat_members, so no grant can exist while
+	// an older process could misjudge one (an older release treats every chat
+	// as having no members, which fails closed). Removing a member and listing
+	// them are never gated, so a grant made while it was on can always be
+	// taken back.
+	Enabled       bool `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChatCollaborationConfig) Reset() {
+	*x = ChatCollaborationConfig{}
+	mi := &file_reliant_config_v1_api_server_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChatCollaborationConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChatCollaborationConfig) ProtoMessage() {}
+
+func (x *ChatCollaborationConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_config_v1_api_server_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChatCollaborationConfig.ProtoReflect.Descriptor instead.
+func (*ChatCollaborationConfig) Descriptor() ([]byte, []int) {
+	return file_reliant_config_v1_api_server_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ChatCollaborationConfig) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
 // OrgsConfig gates organization features that need every replica (and the
 // release a rollback would return to) to understand them before anything
 // writes them. The rules every config here follows are in config.proto's
@@ -563,7 +728,7 @@ type OrgsConfig struct {
 
 func (x *OrgsConfig) Reset() {
 	*x = OrgsConfig{}
-	mi := &file_reliant_config_v1_api_server_config_proto_msgTypes[1]
+	mi := &file_reliant_config_v1_api_server_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -575,7 +740,7 @@ func (x *OrgsConfig) String() string {
 func (*OrgsConfig) ProtoMessage() {}
 
 func (x *OrgsConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_api_server_config_proto_msgTypes[1]
+	mi := &file_reliant_config_v1_api_server_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -588,7 +753,7 @@ func (x *OrgsConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrgsConfig.ProtoReflect.Descriptor instead.
 func (*OrgsConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_api_server_config_proto_rawDescGZIP(), []int{1}
+	return file_reliant_config_v1_api_server_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *OrgsConfig) GetConnectionsEnabled() bool {
@@ -630,7 +795,7 @@ var File_reliant_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\x8c5\n" +
+	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xbcC\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
@@ -661,7 +826,30 @@ const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x11jwt_jwks_snapshot\x18_ \x01(\tB}\x82\xce\x18y\n" +
 	"\x11JWT_JWKS_SNAPSHOT*`The same JWKS snapshot, inline (sensitive only so it rides the secret path; the keys are public)0\x01P\x01R\x0fjwtJwksSnapshot\x12\xc7\x01\n" +
 	"\x19jwt_jwks_snapshot_max_age\x18` \x01(\v2\x19.google.protobuf.DurationBr\x82\xce\x18n\n" +
-	"\x19JWT_JWKS_SNAPSHOT_MAX_AGE\x12\x19jwt-jwks-snapshot-max-age\x1a\x04168h*0How old a JWKS snapshot may be and still be usedR\x15jwtJwksSnapshotMaxAge\x12\x93\x01\n" +
+	"\x19JWT_JWKS_SNAPSHOT_MAX_AGE\x12\x19jwt-jwks-snapshot-max-age\x1a\x04168h*0How old a JWKS snapshot may be and still be usedR\x15jwtJwksSnapshotMaxAge\x12\x8c\x01\n" +
+	"\x0eoidc_client_id\x18c \x01(\tBf\x82\xce\x18b\n" +
+	"\x0eOIDC_CLIENT_ID*PThe identity's native-broker OIDC client id (a PKCE public client: not a secret)R\foidcClientId\x12}\n" +
+	"\x11oidc_redirect_uri\x18d \x01(\tBQ\x82\xce\x18M\n" +
+	"\x11OIDC_REDIRECT_URI*8The redirect URI registered for the broker's OIDC clientR\x0foidcRedirectUri\x12\xc7\x01\n" +
+	"\voidc_scopes\x18e \x01(\tB\xa5\x01\x82\xce\x18\xa0\x01\n" +
+	"\vOIDC_SCOPES\x1a#openid,profile,email,offline_access*lComma-separated scopes the broker asks for; offline_access earns the refresh token sessions are renewed withR\n" +
+	"oidcScopes\x12\xab\x01\n" +
+	"\ridp_login_uri\x18f \x01(\tB\x86\x01\x82\xce\x18\x81\x01\n" +
+	"\rIDP_LOGIN_URI*pThe app's sign-in route the identity redirects an authorization request to (the app's origin is derived from it)R\vidpLoginUri\x12t\n" +
+	"\bidp_base\x18g \x01(\tBY\x82\xce\x18U\n" +
+	"\bIDP_BASE*IThe identity's origin the server dials for the session and finalize callsR\aidpBase\x12\x86\x01\n" +
+	"\bidp_host\x18h \x01(\tBk\x82\xce\x18g\n" +
+	"\bIDP_HOST*[Host header for the identity when idp_base is not the host its instance is registered underR\aidpHost\x12\x8d\x01\n" +
+	"\x10idp_broker_token\x18i \x01(\tBc\x82\xce\x18_\n" +
+	"\x10IDP_BROKER_TOKEN*GThe login broker's service-account token (sensitive, highly privileged)0\x01P\x01R\x0eidpBrokerToken\x12\xa5\x01\n" +
+	"\x15idp_broker_token_file\x18j \x01(\tBr\x82\xce\x18n\n" +
+	"\x15IDP_BROKER_TOKEN_FILE*UA file holding the broker token, re-read on every use so it rotates without a restartR\x12idpBrokerTokenFile\x12\xbb\x01\n" +
+	"\x10idp_login_policy\x18k \x01(\tB\x90\x01\x82\xce\x18\x8b\x01\n" +
+	"\x10IDP_LOGIN_POLICY*sThe LOGIN_POLICY document the broker enforces (sign-up mode, methods, social providers); empty is the legacy policy0\x01P\x01R\x0eidpLoginPolicy\x12\xc4\x01\n" +
+	"\x12trusted_proxy_hops\x18l \x01(\x05B\x95\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x89\x01\n" +
+	"\x12TRUSTED_PROXY_HOPS\x1a\x010*pReverse proxies in front of this server that append to X-Forwarded-For (the sign-in rate limits' client address)R\x10trustedProxyHops\x12\x90\x01\n" +
+	"\x10auth_self_signup\x18m \x01(\bBf\x82\xce\x18b\n" +
+	"\x10AUTH_SELF_SIGNUP*NServe POST /auth/register outside development (with no delivered login policy)R\x0eauthSelfSignup\x12\x93\x01\n" +
 	"\x15allowed_email_domains\x18\x04 \x03(\tB_\x82\xce\x18[\n" +
 	"\x15ALLOWED_EMAIL_DOMAINS*BComma-separated email domains allowed to sign in (none allows all)R\x13allowedEmailDomains\x12\x9f\x01\n" +
 	"\x11disable_forge_api\x18\x06 \x01(\bBs\x82\xce\x18o\n" +
@@ -721,11 +909,15 @@ const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x0eLIVENESS_PATHS\x1a\x10/health,/healthz*9Liveness probe paths on the health port (comma-separated)R\rlivenessPaths\x12\x8a\x01\n" +
 	"\x0freadiness_paths\x18\x19 \x01(\tBa\x82\xce\x18]\n" +
 	"\x0fREADINESS_PATHS\x1a\x0e/ready,/readyz*:Readiness probe paths on the health port (comma-separated)R\x0ereadinessPaths\x121\n" +
-	"\x04orgs\x18U \x01(\v2\x1d.reliant.config.v1.OrgsConfigR\x04orgs:\xa0\x02\xbaH\x82\x02\x1av\n" +
+	"\x04orgs\x18U \x01(\v2\x1d.reliant.config.v1.OrgsConfigR\x04orgs\x12Y\n" +
+	"\x12chat_collaboration\x18b \x01(\v2*.reliant.config.v1.ChatCollaborationConfigR\x11chatCollaboration:\xa0\x02\xbaH\x82\x02\x1av\n" +
 	"\x15auth_api_key_required\x12&AUTH_MODE=apikey requires AUTH_API_KEY\x1a5this.auth_mode != 'apikey' || this.auth_api_key != ''\x1a\x87\x01\n" +
 	"\x15jwt_audience_required\x12<JWT_ISSUER requires JWT_AUDIENCE (the identity project's id)\x1a0this.jwt_issuer == '' || this.jwt_audience != ''\xca\xc1\x18\x16\n" +
 	"\areliant\x12\x06server\x12\x03apiJ\x04\b\x05\x10\x06J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x03tlsR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreview\"\xcc\a\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x03tlsR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreview\"\xa9\x01\n" +
+	"\x17ChatCollaborationConfig\x12\x8d\x01\n" +
+	"\aenabled\x18\x01 \x01(\bBs\x82\xce\x18o\n" +
+	"\"RELIANT_CHAT_COLLABORATION_ENABLED*ILet chat owners and managers grant people view, reply or manage on a chatR\aenabled\"\xcc\a\n" +
 	"\n" +
 	"OrgsConfig\x12\x9b\x01\n" +
 	"\x13connections_enabled\x18\x01 \x01(\bBj\x82\xce\x18f\n" +
@@ -751,27 +943,29 @@ func file_reliant_config_v1_api_server_config_proto_rawDescGZIP() []byte {
 	return file_reliant_config_v1_api_server_config_proto_rawDescData
 }
 
-var file_reliant_config_v1_api_server_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_reliant_config_v1_api_server_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_reliant_config_v1_api_server_config_proto_goTypes = []any{
-	(*ApiServerConfig)(nil),     // 0: reliant.config.v1.ApiServerConfig
-	(*OrgsConfig)(nil),          // 1: reliant.config.v1.OrgsConfig
-	(*durationpb.Duration)(nil), // 2: google.protobuf.Duration
+	(*ApiServerConfig)(nil),         // 0: reliant.config.v1.ApiServerConfig
+	(*ChatCollaborationConfig)(nil), // 1: reliant.config.v1.ChatCollaborationConfig
+	(*OrgsConfig)(nil),              // 2: reliant.config.v1.OrgsConfig
+	(*durationpb.Duration)(nil),     // 3: google.protobuf.Duration
 }
 var file_reliant_config_v1_api_server_config_proto_depIdxs = []int32{
-	2, // 0: reliant.config.v1.ApiServerConfig.jwt_jwks_snapshot_max_age:type_name -> google.protobuf.Duration
-	2, // 1: reliant.config.v1.ApiServerConfig.worktree_landed_idle:type_name -> google.protobuf.Duration
-	2, // 2: reliant.config.v1.ApiServerConfig.worktree_reclaim_quiet:type_name -> google.protobuf.Duration
-	2, // 3: reliant.config.v1.ApiServerConfig.worktree_reclaim_grace:type_name -> google.protobuf.Duration
-	2, // 4: reliant.config.v1.ApiServerConfig.worktree_live_shed_idle:type_name -> google.protobuf.Duration
-	2, // 5: reliant.config.v1.ApiServerConfig.payload_blob_gc_horizon:type_name -> google.protobuf.Duration
-	2, // 6: reliant.config.v1.ApiServerConfig.pre_stop_delay:type_name -> google.protobuf.Duration
-	2, // 7: reliant.config.v1.ApiServerConfig.shutdown_timeout:type_name -> google.protobuf.Duration
-	1, // 8: reliant.config.v1.ApiServerConfig.orgs:type_name -> reliant.config.v1.OrgsConfig
-	9, // [9:9] is the sub-list for method output_type
-	9, // [9:9] is the sub-list for method input_type
-	9, // [9:9] is the sub-list for extension type_name
-	9, // [9:9] is the sub-list for extension extendee
-	0, // [0:9] is the sub-list for field type_name
+	3,  // 0: reliant.config.v1.ApiServerConfig.jwt_jwks_snapshot_max_age:type_name -> google.protobuf.Duration
+	3,  // 1: reliant.config.v1.ApiServerConfig.worktree_landed_idle:type_name -> google.protobuf.Duration
+	3,  // 2: reliant.config.v1.ApiServerConfig.worktree_reclaim_quiet:type_name -> google.protobuf.Duration
+	3,  // 3: reliant.config.v1.ApiServerConfig.worktree_reclaim_grace:type_name -> google.protobuf.Duration
+	3,  // 4: reliant.config.v1.ApiServerConfig.worktree_live_shed_idle:type_name -> google.protobuf.Duration
+	3,  // 5: reliant.config.v1.ApiServerConfig.payload_blob_gc_horizon:type_name -> google.protobuf.Duration
+	3,  // 6: reliant.config.v1.ApiServerConfig.pre_stop_delay:type_name -> google.protobuf.Duration
+	3,  // 7: reliant.config.v1.ApiServerConfig.shutdown_timeout:type_name -> google.protobuf.Duration
+	2,  // 8: reliant.config.v1.ApiServerConfig.orgs:type_name -> reliant.config.v1.OrgsConfig
+	1,  // 9: reliant.config.v1.ApiServerConfig.chat_collaboration:type_name -> reliant.config.v1.ChatCollaborationConfig
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_api_server_config_proto_init() }
@@ -785,7 +979,7 @@ func file_reliant_config_v1_api_server_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_config_v1_api_server_config_proto_rawDesc), len(file_reliant_config_v1_api_server_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

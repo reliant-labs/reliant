@@ -28,34 +28,56 @@
  */
 
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
+import type { QueryKey } from "@tanstack/react-query";
 
 import { ActivityService } from "@/gen/controlplane/services/activity/v1/activity_pb";
 import {
   OrganizationService,
+  type ListInvitationsResponse,
+  type ListMembersResponse,
   type MyOrganization,
   type OrgInvitation as WireInvitation,
   type OrgMember as WireMember,
 } from "@/gen/controlplane/services/organization/v1/organization_pb";
+import { organizationServiceKeys } from "@/hooks/controlplane/organization-service-hooks_gen";
 import { errorReason, hasErrorReason } from "@/lib/errorReasons";
 
 import { getControlPlaneClient } from "./client";
+import { hasControlPlane } from "./config";
 import { mapActivityEvent, type ActivityList } from "./observability/activityApi";
 import type { MyOrg } from "./orgs";
+
+/** Whether this deployment has orgs to be a member of (a control plane); without one there is no one to invite. */
+export const orgMembershipAvailable = hasControlPlane;
+
+/** Whether an org's seats show more than its founder: a second member, or an invitation waiting on an answer. */
+export function seatsShowATeam(seats: Pick<SeatUsage, "members" | "pendingInvitations">): boolean {
+  return seats.members > 1 || seats.pendingInvitations > 0;
+}
 
 /** The three roles. Roles are presets of grants; admin and owner hold them all. */
 export type OrgRole = "owner" | "admin" | "member";
 export const ORG_ROLES: readonly OrgRole[] = ["member", "admin", "owner"];
 
 /**
- * Query keys. The root is in activeOrgStore's ORG_SCOPED_QUERY_ROOTS, so an
- * org switch drops every one of them.
+ * Query keys of the membership audit trail. The root is in activeOrgStore's
+ * ORG_SCOPED_QUERY_ROOTS, so an org switch drops every one of them.
  */
 export const memberKeys = {
   all: ["orgs-members"] as const,
-  members: (orgId: string) => ["orgs-members", orgId, "members"] as const,
-  invitations: (orgId: string) => ["orgs-members", orgId, "invitations"] as const,
   activity: (orgId: string) => ["orgs-members", orgId, "activity"] as const,
 };
+
+/**
+ * The roster and invitation reads, on OrganizationService's generated keys
+ * (each request names its org). An org switch drops them (ActiveOrgBinding)
+ * by these prefixes, not the service root: the person's own org list lives
+ * under that root too, and survives a switch.
+ */
+export const ORG_MEMBER_READS: readonly QueryKey[] = [
+  organizationServiceKeys.listMembers.all,
+  organizationServiceKeys.listInvitations.all,
+];
 
 export interface OrgMember {
   userId: string;
@@ -177,10 +199,8 @@ export async function createOrganization(name: string): Promise<MyOrg> {
   return mapMyOrg(res.organization);
 }
 
-/** ListMembers: one page of the roster, oldest member first, and the seat count. */
-export async function listMembers(orgId: string, pageToken = "", pageSize = 200): Promise<MemberPage> {
-  requireOrg(orgId);
-  const res = await client().listMembers({ orgId, pageToken, pageSize });
+/** One ListMembers page in the web's model: the roster, oldest member first, and the seat count. */
+export function toMemberPage(res: ListMembersResponse): MemberPage {
   return {
     members: res.members.map(mapMember),
     nextPageToken: res.nextPageToken,
@@ -204,10 +224,8 @@ export async function inviteMember(orgId: string, email: string, role: OrgRole):
   };
 }
 
-/** ListInvitations: the pending ones, newest first. Admin/owner. */
-export async function listInvitations(orgId: string): Promise<OrgInvitation[]> {
-  requireOrg(orgId);
-  const res = await client().listInvitations({ orgId, pageSize: 200 });
+/** ListInvitations' answer in the web's model: the pending ones, newest first. */
+export function toInvitations(res: ListInvitationsResponse): OrgInvitation[] {
   return res.invitations.map(mapInvitation);
 }
 

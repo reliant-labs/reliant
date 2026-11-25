@@ -124,12 +124,14 @@ func NewDomainServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DomainServiceGetDomainProcedure,
 			connect.WithSchema(domainServiceMethods.ByName("GetDomain")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listDomains: connect.NewClient[v1.ListDomainsRequest, v1.ListDomainsResponse](
 			httpClient,
 			baseURL+DomainServiceListDomainsProcedure,
 			connect.WithSchema(domainServiceMethods.ByName("ListDomains")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		deleteDomain: connect.NewClient[v1.DeleteDomainRequest, v1.DeleteDomainResponse](
@@ -160,6 +162,7 @@ func NewDomainServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DomainServiceListDomainBindingsProcedure,
 			connect.WithSchema(domainServiceMethods.ByName("ListDomainBindings")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -273,12 +276,14 @@ func NewDomainServiceHandler(svc DomainServiceHandler, opts ...connect.HandlerOp
 		DomainServiceGetDomainProcedure,
 		svc.GetDomain,
 		connect.WithSchema(domainServiceMethods.ByName("GetDomain")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	domainServiceListDomainsHandler := connect.NewUnaryHandler(
 		DomainServiceListDomainsProcedure,
 		svc.ListDomains,
 		connect.WithSchema(domainServiceMethods.ByName("ListDomains")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	domainServiceDeleteDomainHandler := connect.NewUnaryHandler(
@@ -309,6 +314,7 @@ func NewDomainServiceHandler(svc DomainServiceHandler, opts ...connect.HandlerOp
 		DomainServiceListDomainBindingsProcedure,
 		svc.ListDomainBindings,
 		connect.WithSchema(domainServiceMethods.ByName("ListDomainBindings")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/controlplane.v1.DomainService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

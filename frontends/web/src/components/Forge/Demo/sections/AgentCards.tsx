@@ -9,7 +9,7 @@
  *   AgentCardGrid     the five workflow cards (the landing, the Agents page)
  *   ChatWithAgentCard the chat card, wide
  *   PageAgentStrip    one card in context, at the top of Errors, Alerts,
- *                     Slow requests and Releases (pageTop, DemoNavExtras)
+ *                     Slow requests and Releases (pageTop, DemoConsoleHost)
  */
 
 import { useState, type ReactNode } from "react";

@@ -26,10 +26,10 @@
  * silently wrong, so a mismatch is one more reason, never a best effort.
  */
 
-import { Code, ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError, createClient, type Transport } from "@connectrpc/connect";
 
 import { CoverageSourceService, CoverageSourceUnavailable } from "@/gen/reliant/v1/coverage_source_pb";
-import { connectClient } from "@/lib/connect";
+import { connectClient, transport as appTransport } from "@/lib/connect";
 
 /**
  * Why a file has no source to show.
@@ -84,11 +84,16 @@ const REASONS: Partial<Record<CoverageSourceUnavailable, CoverageSourceUnavailab
  * reliant without the RPC is `not-yet-available`; any other failure throws
  * (the page shows `unreachable`). The bytes are decoded as UTF-8 here and
  * re-hashed by `verifySource` before anything is drawn over them.
+ *
+ * `transport` is the caller's TransportScope's (lib/transportScope.tsx): a
+ * scope's own transport (a fixture pack's) gets a client on it; none, or the
+ * app's, is the app's client.
  */
-export const fetchCoverageSource: FetchCoverageSource = async (project, blobId, opts) => {
+export async function fetchCoverageSource(project: string, blobId: string, opts?: CoverageSourceOptions, transport?: Transport): Promise<CoverageSource> {
   if (!blobId) return { unavailable: "uncommitted" };
   try {
-    const res = await connectClient(CoverageSourceService).getCoverageSource(
+    const client = transport && transport !== appTransport ? createClient(CoverageSourceService, transport) : connectClient(CoverageSourceService);
+    const res = await client.getCoverageSource(
       { project, blobId, orgId: opts?.orgId ?? undefined },
       { signal: opts?.signal }
     );
@@ -105,7 +110,7 @@ export const fetchCoverageSource: FetchCoverageSource = async (project, blobId, 
     if (ConnectError.from(err).code === Code.Unimplemented) return { unavailable: "not-yet-available" };
     throw err;
   }
-};
+}
 
 /** The reason, or null when there is source. */
 export function unavailableReason(source: CoverageSource): CoverageSourceUnavailableReason | null {

@@ -28,6 +28,7 @@
             "group": "Get started",
             "pages": [
               "index",
+              "getting-started/deploy-your-app",
               "getting-started/why-reliant",
               "getting-started/quick-start",
               "getting-started/installation",
@@ -180,7 +181,8 @@
             "pages": [
               "forge/overview",
               "forge/quick-start",
-              "forge/migrate-an-existing-app"
+              "forge/migrate-an-existing-app",
+              "forge/when-not-to-use-forge"
             ]
           },
           {
@@ -248,6 +250,7 @@
             "group": "Host your app",
             "pages": [
               "hosting/overview",
+              "hosting/limits",
               "forge/deploy-without-an-account",
               "hosting/managed-postgres",
               "hosting/preview-environments",
@@ -415,6 +418,13 @@
                   "guides/forge/build-app-from-one-prompt",
                   "guides/forge/deploy-static-site-cdn",
                   "guides/forge/bring-existing-app-any-language",
+                  "guides/forge/deploy-express",
+                  "guides/forge/deploy-fastapi",
+                  "guides/forge/deploy-django",
+                  "guides/forge/deploy-rails",
+                  "guides/forge/deploy-spring",
+                  "guides/forge/deploy-nextjs-static",
+                  "guides/forge/deploy-vite",
                   "guides/forge/adopt-existing-vite-nextjs",
                   "guides/forge/port-codebase-to-forge",
                   "guides/forge/add-expo-mobile-app"

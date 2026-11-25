@@ -8,6 +8,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
 	chat "github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
@@ -15,7 +16,7 @@ import (
 func TestUpdateChat_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: newChatRepo()}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: newChatRepo(), Chats: chataccesstest.For(newChatRepo())}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.UpdateChatRequest, pb.UpdateChatResponse]{
 		{

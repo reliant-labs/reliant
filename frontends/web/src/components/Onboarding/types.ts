@@ -230,6 +230,24 @@ export interface Journey {
   /** Where Finish lands, per shell. Default: Reliant's chat (and nothing in the forge shell). */
   finish?: (shell: TourShell) => RouteTarget | null;
   /**
+   * Finish, Exit tour, and Back on the first step return to the page the
+   * journey was started from (the picker, a menu), instead of `finish`'s
+   * target, in the shells this says. For a journey that walks pages that are
+   * not the person's own (the forge journey's sample app): leaving it puts
+   * them back where they were. Without a recorded start (a `?tour=` link
+   * opened cold), `finish` applies. Default: never.
+   */
+  returnToStart?: (shell: TourShell) => boolean;
+  /**
+   * Called with true when the journey goes live (`?tour=` names one of its
+   * steps) and with false when it stops, however it stops: Finish, Exit
+   * tour, Back off the first step, a link that drops `?tour=`, another
+   * journey starting (JourneyLiveWatch, at the app's root). For state that
+   * exists only while the journey runs (the forge journey's sample app in the
+   * switcher). Not called again between its own steps.
+   */
+  onLiveChange?: (live: boolean) => void;
+  /**
    * How to reach this journey from a shell it doesn't run in: the end card's
    * "Try the other journey" becomes this link — an app path opens in place
    * (the forge brand → the Workflows area), a URL in a new tab (the public
@@ -285,40 +303,50 @@ export interface SpotlightTarget {
   icon?: React.ReactNode;
   /** Spotlight config for this specific target */
   spotlightConfig?: SpotlightConfig;
+  /**
+   * The side its label prefers, used when the label fits there; otherwise the
+   * first side with room (right, left, above, below). For a wide target, like
+   * the composer, whose side is over other chrome.
+   */
+  labelPosition?: "right" | "left" | "above" | "below";
 }
 
 // ─── Checklist Types ─────────────────────────────────────────────────────────
 
+/**
+ * The Setup Guide's items (constants.ts CHECKLIST_ITEMS). Ids are stable: they
+ * are the settings row's values and `checklist_step_completed`'s `step_id`.
+ * A retired id maps onto its successor in LEGACY_CHECKLIST_ITEMS.
+ */
 export type ChecklistItemId =
+  | "connect-machine"
   | "add-api-key"
   | "start-chat"
+  | "add-repo"
+  | "run-workflow"
+  | "deploy-app"
+  | "invite-teammate"
+  | "take-product-tour";
+
+/** Ids the guide used to have: still in older settings rows (constants.ts maps them). */
+export type LegacyChecklistItemId =
   | "use-custom-workflow"
   | "create-workflow"
-  | "take-product-tour"
   | "create-workspace"
   | "create-preset"
   | "install-mcp"
   | "read-docs";
 
-export type ChecklistCategory = "required" | "bonus";
-
-export type ChecklistAction =
-  | "navigate"
-  | "external-link"
-  | "open-modal"
-  | "focus-input";
-
 export interface ChecklistItem {
   id: ChecklistItemId;
   title: string;
+  /** One line under the title: what doing it gets you. */
   description: string;
-  category: ChecklistCategory;
-  /** What happens when the user clicks the action button */
-  action: ChecklistAction;
-  /** URL for external links, or route/target identifier for navigation */
-  actionTarget?: string;
-  /** Button label for the action */
-  actionLabel: string;
+  /**
+   * Whether the item applies here (an org's items need a control plane).
+   * Omitted: always. An unavailable item is neither shown nor counted.
+   */
+  available?: () => boolean;
 }
 
 // ─── Store Types ─────────────────────────────────────────────────────────────

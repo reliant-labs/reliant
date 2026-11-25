@@ -21,9 +21,14 @@ The public demo leads bare `/` visits to the Home, `/forge/demo?section=home`: a
 hero with "Open the console", "Take the tour" and "How this shop was built", four
 numbered stories, and the agent workflows. The build story, with the real recorded
 Forge run, is `/forge/demo?section=built`. `/forge/p/shop` opens the running sample
-console directly; individual-page deep links remain direct. The smoke script checks
-the Home, then enters the console through "Open the console" and clicks every row of
-its grouped nav.
+console directly; individual-page deep links remain direct. Every page, the Home
+included, renders inside the signed-in app's own shell (`AppShellFrame`, since #3519)
+with the demo's nav (`Forge/Demo/demoNav.ts`): the app's own rows in the app's order,
+less the app's Inbox, Agents, Settings and billing, plus Home and "How it was built".
+There is one shell and one nav (after #3574, which deletes the console's second
+frame, `ConsoleShell`, and its grouped nav). The smoke script checks the Home, then enters
+the console through "Open the console" and clicks every row of the shell's nav,
+Observability's drill-in included.
 The cutover steps below describe the original hosting migration.
 
 ## What changes
@@ -56,7 +61,7 @@ The cutover steps below describe the original hosting migration.
    - A build attempt on 2026-11-06 recorded it before refusing (fixed in forge#1876).
    - It is declared and has never been deployed.
 3. Move the domain, then check again.
-4. Merge reliant #2336 `feat/forge-demo-unhost`: the demo's own build is the supported path, and `DEMO_APP_HOST` is deprecated (it still mounts the demo shell in `prod/reliant-web`, until a future major).
+4. Merge reliant #2336 `feat/forge-demo-unhost`: the demo's own build is the supported path, and `DEMO_APP_HOST` is deprecated. It has since been removed (2026-11-19): `prod/reliant-web` no longer mounts the demo shell on any host.
 
 ## Commands
 
@@ -95,7 +100,9 @@ node frontends/web/scripts/demo/smoke-demo-site.mjs https://demo.reliantlabs.io
 ```
 
 The smoke script loads `/`, the build story and 19 console pages in headless Chrome,
-then walks the grouped nav at desktop and phone widths. It exits 1 on any of these:
+then walks the shell's nav at desktop and phone widths (on a phone, the shell's drawer,
+opened by the page header's toggle; Observability is a drill-in, left by its "‹ Back").
+It exits 1 on any of these:
 
 - a request to another origin, or a 4xx/5xx response;
 - a page error, or a CORS console error;
@@ -104,7 +111,7 @@ then walks the grouped nav at desktop and phone widths. It exits 1 on any of the
 - the nav missing a group (the signed-in app's Observability, Analytics, Deployments,
   Tests, Security, Configure) or row, a dead nav item, or an item leading to a page
   the demo does not serve (Usage, Speed insights);
-- a page without `data-shell="demo"`;
+- a page without `data-shell="demo"`, or outside the app's shell (no `[data-testid=shell-nav]`);
 - Data or Storage on prod (the demo's audited environment) not asking for a
   reason, reading before it is given, or not reading after it.
 
@@ -133,9 +140,10 @@ forge env deploy demo <previous version>    # read the plan's "direction: BEHIND
 ```
 
 A static site has no migrations or data, so deploying the demo env's previous release is a
-complete rollback for it. Step 1 restores exactly what served before the cutover: whatever
-build prod's reliant-web runs, which still mounts the demo shell on that host (`DEMO_APP_HOST`,
-deprecated but kept working after step 4 too).
+complete rollback for it. Step 1 no longer restores the demo: `DEMO_APP_HOST` was removed
+(2026-11-19), so prod's reliant-web serves Reliant on that host, not the demo shell. Roll the
+demo back with its previous release (step 2, or the prod `forge_demo` target's previous
+release since the move into prod below).
 
 ## Follow-ups
 

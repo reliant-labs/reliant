@@ -4,6 +4,7 @@ package tools_daemon
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -31,7 +32,7 @@ func seedInstallingProject(t *testing.T, repo *db.Repo, userID, daemonID, reques
 		IsGitRepo: true,
 	}
 	require.NoError(t, repo.CreateProject(ctx, project))
-	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, project.ID, daemonID, project.Path, nil, requestID))
+	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, project.ID, daemonID, project.Path, nil, requestID, nil))
 
 	rows, err := repo.ListProjectDaemonsForProject(ctx, project.ID)
 	require.NoError(t, err)
@@ -143,4 +144,40 @@ func TestQueuedClone_UnrelatedCommandFailureLeavesTheInstallAlone(t *testing.T) 
 	rows, err := repo.ListProjectDaemonsForProject(context.Background(), project.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "installing", string(rows[0].InstallState))
+}
+
+// A project set up on a second machine lands at that machine's path, not at
+// projects.path, and its nested repositories clone after the root. The
+// root's announcement must find the checkout by the machine's own row, keep
+// it installing while the nested clones run, and settle it failed naming the
+// nested repository when its clone fails (here: the connection can carry no
+// command).
+func TestQueuedClone_RootAnnouncementClonesTheNestedReposBeforeSettling(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+	svc := newTestService(repo)
+	defer svc.Close()
+	ctx := context.Background()
+
+	userID := "user-install-" + uuid.NewString()
+	daemonID := uuid.NewString()
+	project := &core.Project{ID: uuid.NewString(), Name: "reliant-labs", Path: "/Users/me/src/reliant-labs-" + uuid.NewString(), UserID: userID, IsGitRepo: true}
+	require.NoError(t, repo.CreateProject(ctx, project))
+	remote := "git@github.com:reliant-labs/forge.git"
+	nested := &core.Repo{ID: uuid.NewString(), ProjectID: project.ID, Name: "forge", RelativePath: "forge", RemoteURL: &remote}
+	require.NoError(t, repo.CreateRepo(ctx, nested))
+	machinePath := "/srv/src/reliant-labs-" + uuid.NewString()
+	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, project.ID, daemonID, machinePath, nil, "clone:"+project.ID, []string{nested.ID}))
+
+	conn := &daemonConnection{userID: userID, daemonID: daemonID, done: make(chan struct{})}
+	defer close(conn.done)
+	require.NoError(t, svc.handleFileSystemChanged(ctx, conn, &reliantv1.FileSystemChanged{ProjectPath: machinePath}))
+
+	require.Eventually(t, func() bool {
+		rows, err := repo.ListProjectDaemonsForProject(ctx, project.ID)
+		return err == nil && len(rows) == 1 && rows[0].InstallState == core.ProjectInstallFailed
+	}, 10*time.Second, 20*time.Millisecond, "the checkout must settle once its nested clone has")
+	rows, err := repo.ListProjectDaemonsForProject(ctx, project.ID)
+	require.NoError(t, err)
+	assert.Contains(t, rows[0].InstallError, "forge (forge/)", "the failure names the nested repository")
 }

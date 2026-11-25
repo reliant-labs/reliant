@@ -171,17 +171,20 @@ test.describe('mobile surface', () => {
   test('the console nav is an off-canvas drawer, and nothing scrolls sideways', async ({ page }) => {
     await mockMobileBackend(page);
     await page.goto('/forge-workloads-preview?desktop=1');
-    const shell = page.getByTestId('forge-shell').first();
-    const present = await devHarnessPresent(page, '/forge-workloads-preview', shell);
+    // The console is a page of the app's shell (Forge/__preview__/PreviewShellFrame): its nav is the shell's drawer.
+    const nav = page.getByTestId('shell-nav');
+    const present = await devHarnessPresent(page, '/forge-workloads-preview', nav);
     test.skip(!present, 'the fixture harness is a dev-build-only route');
 
     await noSidewaysScroll(page);
-    const open = page.getByRole('button', { name: 'Open navigation' }).first();
+    const open = page.getByTestId('shell-nav-toggle');
     await expect(open).toBeVisible();
     await open.click();
-    const nav = page.getByRole('dialog').filter({ has: page.getByRole('link', { name: 'Data' }) }).first();
-    await expect(nav).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(nav).toBeHidden();
+    await expect(nav).toHaveAttribute('data-state', 'open');
+    await expect(nav.getByRole('link', { name: 'Data' })).toBeVisible();
+    // A tap beside the drawer closes it (Escape on a console page leaves the console).
+    const viewport = page.viewportSize()!;
+    await page.mouse.click(viewport.width - 8, Math.round(viewport.height / 2));
+    await expect(nav).toHaveAttribute('data-state', 'closed');
   });
 });

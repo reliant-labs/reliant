@@ -17,13 +17,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 
-	"github.com/reliant-labs/reliant/internal/store"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -39,7 +39,7 @@ import (
 // environment because Execute reads activity.GetLogger.
 func drainThreadMailbox(t *testing.T, repo *db.Repo, chatID, threadID string) {
 	t.Helper()
-	drain := handlers.NewDrainAgentMessagesActivity(repo, threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}))
+	drain := handlers.NewDrainAgentMessagesActivity(handlers.DrainAgentMessagesDeps{Store: repo, Mailbox: store.NewAgentMessageExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})})
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(drain.Execute)
 	_, err := env.ExecuteActivity(drain.Execute, handlers.DrainAgentMessagesInput{ChatID: chatID, Thread: threadID})
@@ -65,7 +65,7 @@ func newPausedSendService(repo *db.Repo, pause runs.PauseController) (*Service, 
 	}}
 	return &Service{
 		deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())},
-		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
+		runs: runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
 	}, temporal
 }
 
@@ -105,7 +105,7 @@ func TestSendMessage_PausedSendIsDeliveredAfterTheQueuedMailbox(t *testing.T) {
 		[]string{"queued first", "queued second", "typed after pausing"},
 		only(transcriptBodies(t, ctx, repo, fx.chatID), "queued first", "queued second", "typed after pausing"),
 		"the inbox is swept first, then the new message, in the order they were typed")
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Empty(t, remaining)
 }
@@ -125,7 +125,7 @@ func TestSendMessage_PausedSendWithEmptyMailboxIsSaved(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, resp.Msg.Queued)
 	assert.Equal(t, []string{"go on"}, only(transcriptBodies(t, ctx, repo, fx.chatID), "go on"))
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Empty(t, remaining)
 }
@@ -184,7 +184,7 @@ func TestSendMessage_PausedSendRepeatQueuesOnce(t *testing.T) {
 	second := send()
 	assert.Equal(t, first, second)
 
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, remaining, 2, "the repeat must not queue the message a second time")
 	assert.Equal(t, "queued first", remaining[0].Body)
@@ -219,7 +219,7 @@ func TestSendMessage_PausedSendQueuedForALostRunIsLeftForTheNewRun(t *testing.T)
 	assert.Equal(t, "run-"+fx.rootThreadID, resp.Msg.RunId, "a new run was started for the message")
 
 	assert.Empty(t, only(transcriptBodies(t, ctx, repo, fx.chatID), "queued first", "typed after pausing"))
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, remaining, 2)
 	assert.Equal(t, "queued first", remaining[0].Body)

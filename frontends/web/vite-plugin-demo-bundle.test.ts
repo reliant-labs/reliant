@@ -34,6 +34,13 @@ describe("reliantOnlyRule", () => {
     expect(reliantOnlyRule(at("src/components/Settings/providers/accountFormat.ts"), root)).toBeUndefined();
     expect(reliantOnlyRule("\0vite/preload-helper.js", root)).toBeUndefined();
   });
+
+  it("passes the session port and forbids the app's auth-store session behind it", () => {
+    for (const file of ["port.ts", "fixed.ts", "index.ts"]) {
+      expect(reliantOnlyRule(at(`src/lib/session/${file}`), root)).toBeUndefined();
+    }
+    expect(reliantOnlyRule(at("src/lib/auth/authStoreSession.tsx"), root)?.why).toBe("Reliant auth");
+  });
 });
 
 describe("demo twins", () => {

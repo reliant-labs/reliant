@@ -18,6 +18,7 @@ const yamlKeySaveMessage = "save_message"
 const yamlKeyDaemon = "daemon"
 const yamlKeyOutcome = "outcome"
 const yamlKeyTolerateFailure = "tolerate_failure"
+const yamlKeyObserve = "observe"
 const yamlKeyArgs = "args"
 const yamlKeyFrom = "from"
 const yamlKeyCases = "cases"
@@ -29,6 +30,7 @@ var generatedNodeBaseFieldKeys = map[string]struct{}{
 	"condition":        {},
 	"daemon":           {},
 	"id":               {},
+	"observe":          {},
 	"outcome":          {},
 	"save_message":     {},
 	"timeout":          {},
@@ -132,7 +134,6 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"capabilities":            {},
 			"compaction_threshold":    {},
 			"expected_response_tools": {},
-			"refused_tool_calls":      {},
 			"resolved_tool_calls":     {},
 			"response_tool_schemas":   {},
 			"tool_calls":              {},

@@ -94,24 +94,6 @@ type introspectResponse struct {
 	Audience string `json:"audience"`
 }
 
-// wildcardScopes reads a daemon credential's resolved scopes, SKIPPING any
-// this binary does not know. The control plane may run a newer forge than
-// this server; a scope only it knows is held by definition and nothing here
-// can exercise it, so refusing the credential over it would take every daemon
-// offline between the control plane's deploy and this one's. An explicit list
-// still goes through fat.NewSet and is refused whole.
-//
-// forge (after v0.1.47) exports this as accesstoken.KnownScopes.
-func wildcardScopes(raw []string) fat.Set {
-	out := fat.Set{}
-	for _, s := range raw {
-		if scope, ok := fat.ParseScope(s); ok {
-			out[scope] = struct{}{}
-		}
-	}
-	return out
-}
-
 // Introspect resolves a presented token, uncached. A token that is not even
 // shaped like an `rlat_` is refused locally without a round trip.
 func (c *Client) Introspect(ctx context.Context, token string) (*fat.Principal, error) {
@@ -133,7 +115,7 @@ func (c *Client) IntrospectAccount(ctx context.Context, token string) (auth.Acce
 	if !out.Active {
 		return auth.AccessTokenAccount{}, ErrInactive
 	}
-	p, err := out.principal()
+	p, err := out.principal(ctx)
 	if err != nil {
 		return auth.AccessTokenAccount{}, err
 	}
@@ -152,22 +134,14 @@ func (c *Client) IntrospectAccount(ctx context.Context, token string) (auth.Acce
 // clips it to org-wide grants), which ExchangeToken reports as such.
 var ErrNoRecognisedScope = errors.New("the token carries no scope this server recognises")
 
-// principal maps an active introspection onto forge's principal.
-func (out introspectResponse) principal() (*fat.Principal, error) {
-	scopes := wildcardScopes(out.Scopes)
-	if !out.AllScopes && len(out.Scopes) == 0 {
-		return nil, fmt.Errorf("accesstokenclient: token %s: %w", out.TokenID, ErrNoRecognisedScope)
-	}
-	if !out.AllScopes {
-		var err error
-		if scopes, err = fat.NewSet(out.Scopes); err != nil {
-			// A scope this binary cannot evaluate refuses, rather than
-			// authenticating with the understood subset.
-			return nil, fmt.Errorf("accesstokenclient: token %s: %w", out.TokenID, err)
-		}
-	}
-	if len(scopes) == 0 {
-		return nil, fmt.Errorf("accesstokenclient: token %s: %w", out.TokenID, ErrNoRecognisedScope)
+// principal maps an active introspection onto forge's principal. A daemon's
+// wildcard and an explicit list are read alike (ResolveStoredScopes): an
+// entry this binary does not know is skipped, logged and counted, and a list
+// that resolves to nothing is refused.
+func (out introspectResponse) principal(ctx context.Context) (*fat.Principal, error) {
+	scopes, err := ResolveStoredScopes(ctx, out.TokenID, out.Scopes)
+	if err != nil {
+		return nil, fmt.Errorf("accesstokenclient: token %s: %w", out.TokenID, err)
 	}
 	p := &fat.Principal{
 		TokenID:      out.TokenID,
@@ -404,6 +378,12 @@ type OrgMembership struct {
 	// refuses what it gates (fail closed; docs/design/org-provider-accounts.md
 	// §5 there). A set, not a slice, so an OrgMembership stays comparable.
 	OrgScopes OrgScopeSet
+	// DisplayName is the member's name as the org roster shows it, read with
+	// membership. "" when Member is false, when they set none, and from a
+	// control plane that predates the field: a caller renders "" as a neutral
+	// fallback, never as an email or an id (docs/design/chat-collaboration.md
+	// §6.2 there).
+	DisplayName string
 }
 
 // OrgScopeSet is a set of org-administration scopes, held as their names
@@ -445,6 +425,7 @@ func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string)
 		MemberSince    *time.Time `json:"memberSince"`
 		OrgLiveMembers *int32     `json:"orgLiveMembers"`
 		OrgScopes      []string   `json:"orgScopes"`
+		DisplayName    string     `json:"displayName"`
 	}
 	body := map[string]any{"userId": userID}
 	if orgID != "" {
@@ -468,6 +449,7 @@ func (c *Client) ResolveOrgMembership(ctx context.Context, userID, orgID string)
 			m.OrgLiveMembers, m.OrgLiveMembersKnown = *out.OrgLiveMembers, true
 		}
 		m.OrgScopes = NewOrgScopeSet(out.OrgScopes...)
+		m.DisplayName = strings.TrimSpace(out.DisplayName)
 	}
 	return m, nil
 }

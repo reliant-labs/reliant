@@ -6,6 +6,7 @@
  * and OpenAI connected, and picks from four models with a smart / default /
  * fast tier each.
  */
+import type { ChecklistItemId } from "@/components/Onboarding/types";
 import { CatalogService, type ModelInfo } from "@/gen/reliant/v1/catalog_pb";
 import { SettingsService } from "@/gen/reliant/v1/settings_pb";
 
@@ -41,11 +42,13 @@ const MODELS = [
 const SAVED_SETTINGS: [key: string, value: string][] = [
   ["onboarding.wizard.dismissed", "true"],
   ["onboarding.checklist.panel_state", "dismissed"],
-  // Every item of the guide (components/Onboarding/types.ts ChecklistItemId): with all of them
-  // saved, loadState finds nothing new in the data to complete, so it neither probes nor writes.
+  // Every item of the guide (components/Onboarding/types.ts ChecklistItemId), in current ids: with all
+  // of them saved, loadState has no retired id to migrate and detection finds nothing new, so neither writes.
   [
     "onboarding.checklist.completed_items",
-    JSON.stringify(["add-api-key", "start-chat", "use-custom-workflow", "create-workflow", "take-product-tour", "create-workspace", "create-preset", "install-mcp", "read-docs"]),
+    JSON.stringify([
+      "connect-machine", "add-api-key", "start-chat", "add-repo", "run-workflow", "deploy-app", "invite-teammate", "take-product-tour",
+    ] satisfies ChecklistItemId[]),
   ],
   ["appearance.font", "default"],
   ["appearance.chatFont", "default"],
@@ -58,6 +61,9 @@ export function settingsHandlers() {
     ...serve(SettingsService, {
       listSettings: () => ({ settings: SAVED_SETTINGS.map(([key, value]) => setting(key, value)), total: SAVED_SETTINGS.length }),
       getPrivacySettings: () => ({ analyticsEnabled: false, crashReportingEnabled: false }),
+      // Alex's config is healthy. (The server heals a stale legacy key as it reads, so the rpc
+      // declares no NO_SIDE_EFFECTS: it is one of the app pack's named `answers`, app.ts.)
+      getConfigHealth: () => ({ errors: [], errorCount: 0, warningCount: 0 }),
       getProviderStatuses: () => ({
         providers: [
           { provider: "anthropic", configured: true, displayName: "Anthropic", outputModalities: ["text"], accountCount: 1 },

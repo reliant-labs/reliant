@@ -8,7 +8,7 @@
 import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { DaemonSize } from "@/gen/controlplane/controlplane/v1/shared_pb";
@@ -26,11 +26,7 @@ vi.mock("@/hooks/useDaemonStatus", () => ({
   useDaemonStatus: () => ({ daemons: state.daemons, activeDaemon: undefined, loading: false }),
 }));
 vi.mock("@/hooks/daemon-registry-queries", () => ({ invalidateDaemonList: vi.fn() }));
-vi.mock("@/services/controlPlane/billing", () => ({
-  getComputeEligibility: async () => ({ eligible: true, allowedDaemonSizes: state.allowedSizes }),
-}));
 vi.mock("@/hooks/useCloudBillingQueries", () => ({
-  cloudBillingKeys: { computeSubscription: ["sub"] },
   useComputeSubscription: () => ({ data: state.hasSubscription ? { subscription: { plan: { id: "plan-small" } } } : {} }),
   usePlans: () => ({ isLoading: false, data: { plans: [] } }),
 }));
@@ -74,7 +70,14 @@ vi.mock("@/components/forge-ui/modal", () => ({
     ) : null,
 }));
 
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { eligibilityHandlers } from "@/test/billingTransport";
 import { AddMachineSheet } from "../AddMachineSheet";
+
+// Compute eligibility is read through the generated BillingService hooks.
+beforeEach(() => setTransport(mockTransport(eligibilityHandlers(() => ({ eligible: true, allowedDaemonSizes: state.allowedSizes })))));
+afterEach(() => setTransport(null));
 
 beforeEach(() => {
   state.daemons = [{ daemonId: "d-1", name: "cloud-m", status: DaemonStatus.ACTIVE }];

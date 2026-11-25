@@ -42,6 +42,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `permissions` | string[] | No | - |
 | `attention` | WorkflowAttention | No | *Explicit human-attention incident correlation for root unattended launch runs, independent of lifecycle and outcome. Absent preserves legacy behavior. See WorkflowAttention below.* |
 | `check` | WorkflowCheck | No | *A GitHub check run the engine owns, one per run an event trigger fires, written as the Reliant App: queued when the firing is recorded, in_progress when the first node starts, and concluded on every ending (success, failure, cancelled, timed_out; never neutral or skipped). `check: <name>` or {name, repository, head_sha, output, timeout}. See WorkflowCheck below.* |
+| `observe` | NodeObserve | No | *The default observe block for every node of this graph ({attributes, events, metrics}, templates over each node's `output` and `node`), merged with a node's own: attributes by key and metrics by name (the node wins), events concatenated. Not inherited by sub-workflows. See the nodes reference, Observability. This release reads and validates it and records nothing yet.* |
 
 ---
 
@@ -133,7 +134,7 @@ What a run checks before its first node (`requires:`), once its machine is up, o
 | `tools` | string[] | No | *Executables that must be on the run machine's PATH (git, gh, task, jq).* |
 | `integrations` | string[] | No | *Integration ids (github, slack) whose connection must resolve, authorized, for the run's owner and acting identity.* |
 | `repos` | string[] | No | *Checkouts relative to the project root ("." for the root) that must exist, reach their origin (git ls-remote, which writes nothing) and have no local tag diverged from origin's.* |
-| `cli_login` | string[] | No | *Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine, each checked with the vendor's own status command, whose output never leaves the machine. Sign one in with `reliant machine login <vendor> --machine <name>`; a step that calls claude, codex or copilot needs credentials: inherit.* |
+| `cli_login` | string[] | No | *Deprecated: kept working throughout v1, slated for removal in a future major. Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine, each checked with the vendor's own status command, whose output never leaves the machine. Sign one in with `reliant machine login <vendor> --machine <name>`; a step that calls claude, codex or copilot needs credentials: inherit.* |
 
 ---
 

@@ -22,6 +22,9 @@ import { useSetChatVisibility } from "./sharing-service-hooks_gen";
 import { useSetProjectVisibility } from "./sharing-service-hooks_gen";
 import { useListSharedChats } from "./sharing-service-hooks_gen";
 import { useListSharedProjects } from "./sharing-service-hooks_gen";
+import { useSetChatMember } from "./sharing-service-hooks_gen";
+import { useRemoveChatMember } from "./sharing-service-hooks_gen";
+import { useListChatMembers } from "./sharing-service-hooks_gen";
 
 import type { ReactNode } from "react";
 
@@ -117,6 +120,46 @@ describe("SharingService hooks", () => {
     );
 
     const { result } = renderHook(() => useListSharedProjects({} as never), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeDefined();
+  });
+
+  it("useSetChatMember resolves a happy-path response", async () => {
+    setTransport(
+      mockTransport({
+        "SharingService.SetChatMember": { response: {} },
+      }),
+    );
+
+    const { result } = renderHook(() => useSetChatMember(), { wrapper });
+    await result.current.mutateAsync({} as never).catch(() => {
+      // Mutations may reject if the empty request fails validation upstream.
+    });
+    await waitForSettled(result);
+  });
+
+  it("useRemoveChatMember resolves a happy-path response", async () => {
+    setTransport(
+      mockTransport({
+        "SharingService.RemoveChatMember": { response: {} },
+      }),
+    );
+
+    const { result } = renderHook(() => useRemoveChatMember(), { wrapper });
+    await result.current.mutateAsync({} as never).catch(() => {
+      // Mutations may reject if the empty request fails validation upstream.
+    });
+    await waitForSettled(result);
+  });
+
+  it("useListChatMembers resolves a happy-path response", async () => {
+    setTransport(
+      mockTransport({
+        "SharingService.ListChatMembers": { response: {} },
+      }),
+    );
+
+    const { result } = renderHook(() => useListChatMembers({} as never), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBeDefined();
   });

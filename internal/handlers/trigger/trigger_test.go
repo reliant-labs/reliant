@@ -147,7 +147,7 @@ func setupTriggerTest(t *testing.T) *triggerTestEnv {
 
 	tokens, err := automationtokens.New(automationtokens.Deps{DB: repo.ORM(), Sealer: db.NewTestVault(t, repo)})
 	require.NoError(t, err)
-	deps := Deps{Repo: repo, Owners: realOwners(t, repo), Firings: store.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend, AutomationKeys: tokens}
+	deps := Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Owners: realOwners(t, repo), Firings: store.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend, AutomationKeys: tokens}
 	return &triggerTestEnv{
 		tokens:    tokens,
 		svc:       NewTestTrigger(t, WithTriggerDeps(deps)),
@@ -837,8 +837,8 @@ func TestUpdateTriggerReplacesAndValidatesTheDaemon(t *testing.T) {
 // composition root wires it.
 func realOwners(t testing.TB, repo *db.Repo) triggerowner.Service {
 	t.Helper()
-	stores := triggerowner.NewStores(repo.ORM())
-	svc, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	owned, trigs := store.NewTriggerOwnerExtStore(repo.ORM()), store.NewTriggerExtStore(repo.ORM())
+	svc, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: owned, Triggers: trigs, Adoptions: owned, Offers: owned, OrgReads: owned})
 	require.NoError(t, err)
 	return svc
 }

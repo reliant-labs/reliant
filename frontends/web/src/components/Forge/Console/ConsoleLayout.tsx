@@ -19,52 +19,40 @@
  *    on every list page (replace, so it costs no history entry), remembered
  *    when the reader picks one.
  *
- * 3. THE CHROME. Inside the one shell (Layout/shell/AppShell.tsx), the
- *    shell's left nav draws this app's sections inline (the same model,
- *    useConsoleNavModel.ts) and the console is a page under a slim bar with
- *    the breadcrumb and scope (ConsoleFrame). Without the shell (the forge
- *    host until it runs the one router), ConsoleShell — the nav, the top bar,
- *    the rail (its collapsed state remembered per user). Either way in the
- *    led console (ledConsole.tsx): pages that lead with one sentence and the
- *    item worth opening first.
+ * 3. THE CHROME. The console is a page inside the one shell
+ *    (Layout/shell/AppShell.tsx): the shell's left nav draws this app's
+ *    sections inline (the same model, useConsoleNavModel.ts), and the page
+ *    sits under a slim bar with the breadcrumb and scope (ConsoleFrame). The
+ *    app, the public demo (demoShellRoutes.tsx: the app's frame with the
+ *    demo's nav, and a fixed session that turns it on) and the dev previews
+ *    (Forge/__preview__/PreviewShellFrame.tsx) all draw it there, in the led
+ *    console (ledConsole.tsx): pages that lead with one sentence and the item
+ *    worth opening first.
  *
  * Escape and the way out belong to the parent `_forge` layout (ForgeLayout),
  * which also hosts the redirects from the retired URLs.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { Outlet, useLocation, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { DOCS } from "../GettingStarted";
 import { useShellFrame } from "@/components/Layout/shell/shellFrame";
-import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
-import { getParentRouteNavigateOptions } from "@/lib/routeParent";
-import { isForgeShell } from "@/lib/shell";
-import { ForgeMark } from "@/components/ForgeShell/ForgeBrand";
 
-import { ForgeCloseButton } from "../ForgeHeader";
 import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { PrimeMetricCatalog } from "../Observability/Metrics/PrimeMetricCatalog";
-import { ConsoleProjectSwitcher, ProjectMonogram } from "./ConsoleProjectSwitcher";
-import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { useShellLastPick } from "@/components/Layout/sidebar/shellProject";
 
 import { AppSectionEmptyState } from "./AppSectionEmptyState";
 import { ConsoleCheckoutPicker } from "./ConsoleCheckoutPicker";
 import { ConsoleFrame } from "./ConsoleFrame";
-import { ConsoleShell } from "./ConsoleShell";
 import { LedConsoleProvider, type LedConsoleHost } from "./ledConsole";
 import { ForgeConsoleContext, rosterReadFailed, type ForgeConsole } from "./consoleContext";
-import { useConsoleUser } from "./consoleHost";
 import { useConsoleNavModel } from "./useConsoleNavModel";
-import { useObsNavOpen } from "./obsNavOpen";
 import { rememberEnv } from "./envScope";
 import { consolePath, isTestsPage, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
-import { projectsHref } from "@/lib/paths";
-import { changesUIEnabled } from "@/lib/changesFeature";
-
-const RAIL_KEY = "forge.console.rail";
+import { AppScopeProvider } from "@/fixtures/scope";
 
 /** Where switching to the forge app `app` lands: the same page there. */
 export function switchTarget(app: string, page: ConsolePage): string {
@@ -86,7 +74,22 @@ export function switchTarget(app: string, page: ConsolePage): string {
   return consolePath(app, same);
 }
 
+/**
+ * The console in its app's scope (fixtures/scope.tsx): the forge tour's
+ * sample app reads its fixture pack through a TransportScope of its own, with
+ * read-only controls; every real app is unwrapped. Everything below, the
+ * console's own model included, reads inside it.
+ */
 export function ConsoleLayout() {
+  const { project: forgeProject = "" } = useParams({ strict: false }) as { project?: string };
+  return (
+    <AppScopeProvider app={forgeProject}>
+      <ConsoleLayoutInScope />
+    </AppScopeProvider>
+  );
+}
+
+function ConsoleLayoutInScope() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { project: forgeProject = "" } = useParams({ strict: false }) as { project?: string };
@@ -96,12 +99,8 @@ export function ConsoleLayout() {
   // ── 1–2. The Reliant project, the roster and the environment scope: the
   // same model the shell's nav draws this app's sections from. ──
   const model = useConsoleNavModel(forgeProject, pathname, search);
-  const { orgId, page, env, listed, projectId, candidates, roster, envs: navEnvs, alertsFiring, starred, dashboardTitle, optionalViews, scope, platformWide, productAnalytics } = model;
-  // A new object on every render: kept by its counts, so the memoized ConsoleShell is not drawn again for nothing.
-  const testsCount = model.navCounts?.tests;
-  const navCounts = useMemo(() => ({ tests: testsCount }), [testsCount]);
+  const { orgId, page, env, listed, projectId, candidates, roster, dashboardTitle, scope, platformWide, productAnalytics } = model;
   const pinnedEnv = pinnedEnvOf(page);
-  const forgeShell = isForgeShell();
 
   useEffect(() => {
     if (search.env && search.env === env) rememberEnv(forgeProject, env);
@@ -126,21 +125,6 @@ export function ConsoleLayout() {
   );
 
   // ── 3. The chrome. ──
-  const [collapsed, setCollapsed] = useState(() => readRail());
-  const toggleCollapsed = useCallback(() => {
-    setCollapsed((prev) => {
-      writeRail(!prev);
-      return !prev;
-    });
-  }, []);
-
-  const [obsOpen, setObsOpen] = useObsNavOpen();
-
-  const user = useConsoleUser();
-
-  const { trafficLightPadding, dragRegionStyle } = useTitleBarChrome({ collapsedPadding: "0px" });
-  const onClose = useCallback(() => void navigate(getParentRouteNavigateOptions(pathname)), [navigate, pathname]);
-
   const href = useCallback(
     (target: ConsolePage, extra: Record<string, unknown> = {}) =>
       withSearch(consolePath(forgeProject, target), { env, ...extra }),
@@ -158,32 +142,6 @@ export function ConsoleLayout() {
     [productAnalytics]
   );
 
-  // ConsoleShell is memoized: every element it takes is built once per input,
-  // so a URL change that moves none of them (a tour step, a filter) leaves the
-  // chrome alone, and the context value above leaves the page alone.
-  const orgSwitcher = useMemo(() => <OrgSwitcher />, []);
-  const brand = useMemo(
-    () => (
-      <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: trafficLightPadding, ...dragRegionStyle }}>
-        {/* The forge shell has no app to close back to: its mark leads
-            home (Projects' apps), and Reliant is a link in its own chrome. */}
-        {forgeShell ? (
-          <a href={projectsHref("apps")} aria-label="Forge by Reliant: all apps" className="rounded-md p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="forge-shell-home">
-            <ForgeMark className="h-6 w-6" />
-          </a>
-        ) : (
-          <ForgeCloseButton onClose={onClose} />
-        )}
-        <ConsoleProjectSwitcher
-          forgeProject={forgeProject}
-          onSelect={(app) => void navigate({ href: switchTarget(app, page) })}
-          onSelectAll={() => void navigate({ href: projectsHref("apps") })}
-        />
-      </div>
-    ),
-    [trafficLightPadding, dragRegionStyle, forgeShell, onClose, forgeProject, navigate, page]
-  );
-  const brandCollapsed = useMemo(() => <ProjectMonogram name={forgeProject} />, [forgeProject]);
   // Nothing deployed yet (the roster answered with no environment): inside
   // the shell every page of the app says what it will show and how to deploy
   // it (U6b; every project has the same nav). The shell's project names the
@@ -217,71 +175,22 @@ export function ConsoleLayout() {
     <PrimeMetricCatalog orgId={orgId} forgeProject={forgeProject} env={env} roster={roster} />
   );
 
-  // Inside the one shell the app's sections are rows of its nav: the console
-  // is a page under a slim bar, with no column of its own (ConsoleFrame).
-  if (inShell) {
-    return (
-      <LedConsoleProvider host={ledHost}>
-        <ConsoleFrame
-          project={forgeProject}
-          page={page}
-          env={env}
-          dashboardTitle={dashboardTitle}
-          scope={scope}
-          platformWide={platformWide}
-          onEnvChange={setEnv}
-        >
-          {primeMetrics}
-          {body}
-        </ConsoleFrame>
-      </LedConsoleProvider>
-    );
-  }
-
+  // The app's sections are rows of the shell's nav: the console is a page
+  // under a slim bar, with no column of its own (ConsoleFrame).
   return (
     <LedConsoleProvider host={ledHost}>
-    <ConsoleShell
-      project={forgeProject}
-      orgSwitcher={orgSwitcher}
-      page={page}
-      env={env}
-      envs={navEnvs}
-      alertsFiring={alertsFiring}
-      starred={starred}
-      dashboardTitle={dashboardTitle}
-      optionalViews={optionalViews}
-      experiments={changesUIEnabled()}
-      navCounts={navCounts}
-      obsOpen={obsOpen}
-      onObsOpenChange={setObsOpen}
-      scope={scope}
-      platformWide={platformWide}
-      onEnvChange={setEnv}
-      user={user}
-      collapsed={collapsed}
-      onToggleCollapsed={toggleCollapsed}
-      brand={brand}
-      brandCollapsed={brandCollapsed}
-    >
-      {primeMetrics}
-      {body}
-    </ConsoleShell>
+      <ConsoleFrame
+        project={forgeProject}
+        page={page}
+        env={env}
+        dashboardTitle={dashboardTitle}
+        scope={scope}
+        platformWide={platformWide}
+        onEnvChange={setEnv}
+      >
+        {primeMetrics}
+        {body}
+      </ConsoleFrame>
     </LedConsoleProvider>
   );
-}
-
-function readRail(): boolean {
-  try {
-    return window.localStorage.getItem(RAIL_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function writeRail(collapsed: boolean): void {
-  try {
-    window.localStorage.setItem(RAIL_KEY, collapsed ? "1" : "0");
-  } catch {
-    // Not persisted; the rail still toggles for this visit.
-  }
 }

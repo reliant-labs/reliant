@@ -91,9 +91,9 @@ function TaskRow({
 
   const icon =
     status === "complete" ? (
-      <Check className="h-4 w-4 text-emerald-500" data-testid="task-done-icon" />
+      <Check className="h-4 w-4 text-success-ink" data-testid="task-done-icon" />
     ) : status === "failed" ? (
-      <X className="h-4 w-4 text-destructive" />
+      <X className="h-4 w-4 text-destructive-ink" />
     ) : (
       <Loader2
         className="h-4 w-4 animate-spin text-muted-foreground"

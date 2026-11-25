@@ -58,6 +58,12 @@ type RepoLister interface {
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 }
 
+// PRLinker records the chats a pull request was opened from.
+// chatprlinks.Service satisfies it.
+type PRLinker interface {
+	LinkWorktreePR(ctx context.Context, userID, worktreeID, prURL string) (int, error)
+}
+
 // DaemonReader is the daemons row by id, with no owner check: the caller
 // decides with authz. store.DaemonExtStore satisfies it.
 type DaemonReader interface {
@@ -77,14 +83,11 @@ type Repository interface {
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
 
 	// The chats archived with a worktree.
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	ListChats(ctx context.Context, filters db.ChatFilters) ([]*db.Chat, error)
 	UpdateChatState(ctx context.Context, chatID string, state db.ChatState, reason string) error
 	// LockChatRunControl takes the chat's run-control lock (runs.Service.LockRunControl):
 	// archiving a chat holds it so no delivery starts a run around the archive.
 	LockChatRunControl(ctx context.Context, chatID string) (release func(), err error)
-
-	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 
 	// CreateWorktree, UpdateWorktree, ArchiveWorktree and
 	// GetLiveWorktreeByName are called directly too; the roles below already
@@ -95,4 +98,16 @@ type Repository interface {
 	machinewake.Owners
 	daemonplacement.WorktreeReader
 	daemonplacement.Installs
+}
+
+// UserRefetch tells a user's clients to re-read data of a given type (a
+// user_updates refetch). chatupdates.Service satisfies it.
+type UserRefetch interface {
+	EmitUserRefetch(ctx context.Context, userID string, refetchType core.RefetchType, opts core.RefetchOpts) error
+}
+
+// Chats reads one chat with its computed state, for placement. store.ChatsWithActivityExtStore
+// satisfies it.
+type Chats interface {
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/authn"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -53,6 +54,13 @@ const (
 	// whoever does is a program holding the user's token, and it never acts
 	// as a person.
 	CredentialIdentityToken
+	// CredentialBrowserSession is a person's sign-in session in the app: a
+	// server-side session id (forge/pkg/session) that the login broker set
+	// in its HttpOnly cookie, read from that cookie, and resolved to a live
+	// session of the managed identity (forge's authn.Method.IsBrowserSession).
+	// Only the browser that signed in holds it: the id is never handed to
+	// script, and no token held by software resolves to one.
+	CredentialBrowserSession
 )
 
 // String names c for logs and errors.
@@ -68,6 +76,8 @@ func (c Credential) String() string {
 		return "shared API key"
 	case CredentialIdentityToken:
 		return "identity token"
+	case CredentialBrowserSession:
+		return "browser session"
 	default:
 		return "unclassified credential"
 	}
@@ -87,6 +97,8 @@ func (c Credential) Label() string {
 		return "shared_key"
 	case CredentialIdentityToken:
 		return "identity_token"
+	case CredentialBrowserSession:
+		return "browser_session"
 	default:
 		return "unknown"
 	}
@@ -109,7 +121,7 @@ func WithCredential(ctx context.Context, c Credential) context.Context {
 
 // isPerson is the credential class RequirePerson admits.
 func isPerson(c Credential) bool {
-	return c == CredentialSession || c == CredentialSharedKey
+	return c == CredentialSession || c == CredentialSharedKey || c == CredentialBrowserSession
 }
 
 // CredentialFromContext is the kind of credential that authenticated ctx, or
@@ -128,7 +140,10 @@ const ReasonPersonRequired = "person_required"
 // refused, for the message ("approve this request").
 //
 // Accepted:
-//   - CredentialSession: someone signed in to the app in a browser.
+//   - CredentialBrowserSession: someone signed in to the app in a browser,
+//     with the managed identity's sign-in cookie.
+//   - CredentialSession: someone signed in to the app with Supabase, until
+//     the app moves to the managed identity (design-auth-swap R8).
 //   - CredentialSharedKey: a self-host API-key deployment has exactly one
 //     credential for every client, so it cannot tell a person from an agent at
 //     all. Refusing it would make approvals impossible there rather than
@@ -226,32 +241,46 @@ func MachineBound(p *fat.Principal) bool {
 		p.Scopes.Has(fat.ScopeDaemonConnect) || p.Scopes.Has(fat.ScopeDaemonResume))
 }
 
-// RequireApprovalDecider is the one gate on deciding an approval. It admits:
+// RequireApprovalDecider is the one gate on deciding an approval: an
+// approval means "a person said yes" (owner decision 2026-11-19: approvals
+// need a cookie session; bearer and rlat_ tokens never approve). It admits:
 //
-//   - a person: CredentialSession, and CredentialSharedKey (see RequirePerson);
-//   - an access token that holds approvals:decide AS A GRANTED SCOPE and is not
-//     bound to a machine.
+//   - a browser session (CredentialBrowserSession) whose request forge's
+//     authn.Method also calls one (IsBrowserSession: a server-side session
+//     id read from the sign-in cookie). The credential and the method are
+//     both stamped by the authenticator; requiring both means a context that
+//     carries one without the other fails closed;
+//   - a Supabase session (CredentialSession), the app's sign-in until it
+//     moves to the managed identity's cookie session. This admission is the
+//     bridge across the migration and ends with Supabase (design-auth-swap
+//     R8 cutover, removed in R10);
+//   - the self-host shared key (CredentialSharedKey): that mode has one
+//     credential and no sign-in at all, so it is trusted as its single
+//     operator (RequirePerson).
 //
-// reliant:api does NOT stand in for approvals:decide here, even though
-// Set.Permits implies the inbox scopes elsewhere: every token minted before
-// approvals:decide existed, a workflow's included, stays refused. A token
-// bound to a machine is refused even when it holds approvals:decide
-// (ReasonMachineCredentialCannotDecide), and the check runs before the scope
-// check so a daemon credential's wildcard scopes never reach it. Every other
-// credential is refused as RequirePerson refuses it.
+// Everything else is refused: an `rlat_` access token whatever scopes it
+// holds (approvals:decide included; one bound to a machine with
+// ReasonMachineCredentialCannotDecide), the managed identity's token as a
+// bearer, a session id presented as a bearer, a token presented as the
+// cookie (refused before it gets here), an OAuth client's token, and an
+// unclassified context.
 func RequireApprovalDecider(ctx context.Context, action string) error {
-	if CredentialFromContext(ctx) != CredentialAccessToken {
-		return RequirePerson(ctx, action)
+	switch CredentialFromContext(ctx) {
+	case CredentialBrowserSession:
+		if m, ok := authn.AuthMethod(ctx); ok && m.IsBrowserSession() {
+			return nil
+		}
+	case CredentialSession, CredentialSharedKey:
+		return nil
+	case CredentialAccessToken:
+		if p, ok := MachineTokenFromContext(ctx); ok && MachineBound(p) {
+			return MachineCredentialRefusal()
+		}
 	}
-	p, ok := MachineTokenFromContext(ctx)
-	if !ok {
-		return RequirePerson(ctx, action) // an access token with no principal: fail closed
-	}
-	if MachineBound(p) {
-		return MachineCredentialRefusal()
-	}
-	if !p.Scopes.Has(fat.ScopeApprovalsDecide) {
-		return ScopeMissing(fat.ScopeApprovalsDecide)
-	}
-	return nil
+	return svcerr.WithReason(svcerr.PermissionDenied(
+		"Only a person signed in to the Reliant app can "+action+". This request was made with "+
+			article(CredentialFromContext(ctx))+CredentialFromContext(ctx).String()+", which software can hold "+
+			"(an API token or the CLI login included, whatever its scopes): open it in the Reliant app, "+
+			"on the web or desktop, to decide it."),
+		ReasonPersonRequired)
 }

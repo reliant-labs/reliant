@@ -325,7 +325,7 @@ func TestReconcile_LostCloneOfAProjectMovedOutDuringTheProbeIsNotSettled(t *test
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newOrgMachinesFixture(t)
-			require.NoError(t, f.repo.UpsertQueuedProjectDaemon(f.ctx, f.globex.ID, f.globexMachine, f.path, nil, "clone:"+f.globex.ID))
+			require.NoError(t, f.repo.UpsertQueuedProjectDaemon(f.ctx, f.globex.ID, f.globexMachine, f.path, nil, "clone:"+f.globex.ID, nil))
 			_, err := f.repo.ORM().Bun().ExecContext(f.ctx,
 				`UPDATE project_daemons SET cloned_at = ?, clone_started_at = ? WHERE project_id = ? AND daemon_id = ?`,
 				staleSince, staleSince, f.globex.ID, f.globexMachine)

@@ -17,9 +17,9 @@
  * step with forge's; anything reliant adds is marked "RELIANT EXTENSION" and
  * listed here, so the swap knows what forge must have grown first:
  *
- *   1. `readOnly` also takes a classifier function (readOnly.ts isDemoRead).
- *      Deprecated: forge's is a boolean, and the function goes once the read
- *      RPCs declare NO_SIDE_EFFECTS.
+ *   1. (Gone.) `readOnly` took a classifier function (the name heuristic
+ *      readOnly.ts isDemoRead). The read RPCs now declare NO_SIDE_EFFECTS,
+ *      so `readOnly` is a boolean, as forge's is.
  *   2. `answers` (pack and options) and `services`: an explicit list of
  *      side-effecting RPCs a pack answers from fixtures anyway (reads that
  *      wake a sleeping machine, say). The readOnly guard lets exactly those
@@ -260,12 +260,8 @@ export interface CreateFixtureTransportOptions {
    * `true`: refuse every RPC whose proto does not declare
    * `idempotency_level = NO_SIDE_EFFECTS`, with PermissionDenied, before any
    * handler sees it. There is deliberately no name-based alternative.
-   *
-   * @deprecated RELIANT EXTENSION (1): the function form (readOnly.ts
-   * isDemoRead) is local only, and goes once the read RPCs are annotated;
-   * forge's `readOnly` is a boolean.
    */
-  readOnly?: boolean | ((method: DescMethod) => boolean);
+  readOnly?: boolean;
   /** The message a refused RPC carries. Default names the RPC. */
   readOnlyMessage?: string;
   /**
@@ -597,15 +593,13 @@ function serviceImpl(
   options: CreateFixtureTransportOptions,
 ): Record<string, unknown> {
   const impl: Record<string, unknown> = {};
-  // RELIANT EXTENSION (1): the deprecated classifier, through the same guard.
-  const reads = typeof options.readOnly === "function" ? options.readOnly : isRead;
   for (const method of service.methods) {
     const key = keyOf(method);
     // RELIANT EXTENSION (2): a write the pack lists in `answers`, and answers.
     const answered =
       comp.answered.has(key) && (comp.answers.has(key) || comp.defaults.has(key));
     const guard = () => {
-      if (options.readOnly && !reads(method) && !answered) {
+      if (options.readOnly && !isRead(method) && !answered) {
         throw new ConnectError(
           options.readOnlyMessage ??
             `fixture-transport: ${key} is not a read (no idempotency_level = NO_SIDE_EFFECTS)`,
