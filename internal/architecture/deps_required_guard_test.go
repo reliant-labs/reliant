@@ -40,7 +40,7 @@ import (
 // convention: an optional dep's consumer handles nil) or listed in
 // depsFieldsNotEverywhere below. Every composite literal of a Deps type
 // outside its own package, and every one passed to a call inside it (directly
-// or through local bindings and helper returns), must name each required field. A literal inside the
+// or through local bindings and the returns of bare, package-qualified and method helpers), must name each required field. A literal inside the
 // package that builds a Service by hand (`&Service{deps: Deps{Repo: r}}`) is
 // a unit test of one method and is not judged.
 //
@@ -59,46 +59,60 @@ import (
 // `// forge:optional-dep`.
 var depsFieldsNotEverywhere = map[string][]string{
 	// Existing local-variable and wrapper constructions, newly covered by B1.
-	"cmd/reliant/cmd.Cmd":                                {"cmd/reliant/cmd"},
-	"internal/handlers/account.Purger":                   {"internal/handlers/account"},
-	"internal/handlers/background.Logger":                {"internal/handlers/background"},
-	"internal/handlers/background.Config":                {"internal/handlers/background"},
-	"internal/handlers/chat.Chats":                       {"internal/handlers/chat"},
-	"internal/handlers/connector.Logger":                 {"internal/handlers/connector"},
-	"internal/handlers/connector.Config":                 {"internal/handlers/connector"},
-	"internal/handlers/connector.Tokens":                 {"internal/handlers/connector"},
-	"internal/handlers/connector.Integrations":           {"internal/handlers/connector"},
-	"internal/handlers/daemon.Logger":                    {"internal/handlers/daemon"},
-	"internal/handlers/daemon.Config":                    {"internal/handlers/daemon"},
-	"internal/handlers/mcp.Repo":                         {"internal/handlers/mcp"},
-	"internal/handlers/mcp.Projects":                     {"internal/handlers/mcp"},
-	"internal/handlers/mcp.ProjectConfigs":               {"internal/handlers/mcp"},
-	"internal/handlers/package_commands.Repo":            {"internal/handlers/package_commands"},
-	"internal/handlers/package_commands.Projects":        {"internal/handlers/package_commands"},
-	"internal/handlers/preset.Logger":                    {"internal/handlers/preset"},
-	"internal/handlers/preset.Config":                    {"internal/handlers/preset"},
-	"internal/handlers/project.Repo":                     {"internal/handlers/project"},
-	"internal/handlers/project.Projects":                 {"internal/handlers/project"},
-	"internal/handlers/question.Mailbox":                 {"internal/handlers/question"},
-	"internal/handlers/settings.Repo":                    {"internal/handlers/settings"},
-	"internal/handlers/settings.Refetch":                 {"internal/handlers/settings"},
-	"internal/handlers/settings.Privacy":                 {"internal/handlers/settings"},
-	"internal/handlers/settings.PollCopilotDevice":       {"internal/handlers/settings"},
-	"internal/handlers/streaming.ChatRows":               {"internal/handlers/streaming"},
-	"internal/handlers/terminal.Logger":                  {"internal/handlers/terminal"},
-	"internal/handlers/terminal.Config":                  {"internal/handlers/terminal"},
-	"internal/handlers/token.Logger":                     {"internal/handlers/token"},
-	"internal/handlers/token.Config":                     {"internal/handlers/token"},
-	"internal/handlers/token.ControlPlane":               {"internal/handlers/token"},
-	"internal/handlers/tools_daemon.Refetch":             {"internal/handlers/tools_daemon"},
-	"internal/handlers/tools_daemon.Projects":            {"internal/handlers/tools_daemon"},
-	"internal/handlers/tools_daemon.Installs":            {"internal/handlers/tools_daemon"},
-	"internal/handlers/tools_daemon.Checkouts":           {"internal/handlers/tools_daemon"},
-	"internal/handlers/tools_daemon.Pools":               {"internal/handlers/tools_daemon"},
-	"internal/handlers/trigger.Repo":                     {"internal/handlers/trigger"},
-	"internal/handlers/trigger.Projects":                 {"internal/handlers/trigger"},
-	"internal/handlers/worktree_reclaim.Logger":          {"internal/handlers/worktree_reclaim"},
-	"internal/handlers/worktree_reclaim.Config":          {"internal/handlers/worktree_reclaim"},
+	"cmd/reliant/cmd.Cmd":                          {"cmd/reliant/cmd"},
+	"internal/handlers/account.Purger":             {"internal/handlers/account"},
+	"internal/handlers/background.Logger":          {"internal/handlers/background"},
+	"internal/handlers/background.Config":          {"internal/handlers/background"},
+	"internal/handlers/chat.Chats":                 {"internal/handlers/chat"},
+	"internal/handlers/connector.Logger":           {"internal/handlers/connector"},
+	"internal/handlers/connector.Config":           {"internal/handlers/connector"},
+	"internal/handlers/connector.Tokens":           {"internal/handlers/connector"},
+	"internal/handlers/connector.Integrations":     {"internal/handlers/connector"},
+	"internal/handlers/daemon.Logger":              {"internal/handlers/daemon"},
+	"internal/handlers/daemon.Config":              {"internal/handlers/daemon"},
+	"internal/handlers/mcp.Repo":                   {"internal/handlers/mcp"},
+	"internal/handlers/mcp.Projects":               {"internal/handlers/mcp"},
+	"internal/handlers/mcp.ProjectConfigs":         {"internal/handlers/mcp"},
+	"internal/handlers/package_commands.Repo":      {"internal/handlers/package_commands"},
+	"internal/handlers/package_commands.Projects":  {"internal/handlers/package_commands"},
+	"internal/handlers/preset.Logger":              {"internal/handlers/preset"},
+	"internal/handlers/preset.Config":              {"internal/handlers/preset"},
+	"internal/handlers/project.Repo":               {"internal/handlers/project"},
+	"internal/handlers/project.Projects":           {"internal/handlers/project"},
+	"internal/handlers/question.Mailbox":           {"internal/handlers/question"},
+	"internal/handlers/settings.Repo":              {"internal/handlers/settings"},
+	"internal/handlers/settings.Refetch":           {"internal/handlers/settings"},
+	"internal/handlers/settings.Privacy":           {"internal/handlers/settings"},
+	"internal/handlers/settings.PollCopilotDevice": {"internal/handlers/settings"},
+	"internal/handlers/streaming.ChatRows":         {"internal/handlers/streaming"},
+	"internal/handlers/terminal.Logger":            {"internal/handlers/terminal"},
+	"internal/handlers/terminal.Config":            {"internal/handlers/terminal"},
+	"internal/handlers/token.Logger":               {"internal/handlers/token"},
+	"internal/handlers/token.Config":               {"internal/handlers/token"},
+	"internal/handlers/token.ControlPlane":         {"internal/handlers/token"},
+	"internal/handlers/tools_daemon.Refetch":       {"internal/handlers/tools_daemon"},
+	"internal/handlers/tools_daemon.Projects":      {"internal/handlers/tools_daemon"},
+	"internal/handlers/tools_daemon.Installs":      {"internal/handlers/tools_daemon"},
+	"internal/handlers/tools_daemon.Checkouts":     {"internal/handlers/tools_daemon"},
+	"internal/handlers/tools_daemon.Pools":         {"internal/handlers/tools_daemon"},
+	"internal/handlers/trigger.Repo":               {"internal/handlers/trigger"},
+	"internal/handlers/trigger.Projects":           {"internal/handlers/trigger"},
+	"internal/handlers/worktree_reclaim.Logger":    {"internal/handlers/worktree_reclaim"},
+	"internal/handlers/worktree_reclaim.Config":    {"internal/handlers/worktree_reclaim"},
+	// Required fields main added after this test was written (merged in
+	// 2026-11-25); their own packages' unit tests leave them out.
+	"internal/handlers/chat.QuestionResolver":            {"internal/handlers/chat"},
+	"internal/handlers/chat.TriggerEvents":               {"internal/handlers/chat"},
+	"internal/handlers/inbox.Chats":                      {"internal/handlers/inbox"},
+	"internal/handlers/question.Resolver":                {"internal/handlers/question"},
+	"internal/handlers/run.RunLists":                     {"internal/handlers/run"},
+	"internal/launch.Runs":                               {"internal/launch"},
+	"internal/launch.Selections":                         {"internal/launch"},
+	"internal/launch.TaskQueue":                          {"internal/launch"},
+	"internal/launch.Temporal":                           {"internal/launch"},
+	"internal/launch.Threads":                            {"internal/launch"},
+	"internal/launch.TriggerEvents":                      {"internal/launch"},
+	"internal/workflowcheck.Store":                       {"internal/workflowcheck"},
 	"internal/accesstokenclient.HTTPClient":              {"internal/accesstokenclient", "internal/handlers/approval", "internal/llm/drivers", "internal/orgcredentials", "internal/tokenauthority"},
 	"internal/changetools.Session":                       {"internal/app"},
 	"internal/chatprlinks.Chats":                         {"internal/chatprlinks"},
@@ -566,18 +580,7 @@ func missingDepsFields(module string, files map[string][]byte) ([]depsFinding, e
 	for _, name := range names {
 		f := parsed[name]
 		self := importPath(module, name)
-		imports := map[string]string{}
-		for _, im := range f.Imports {
-			p, err := strconv.Unquote(im.Path.Value)
-			if err != nil {
-				continue
-			}
-			local := path.Base(p)
-			if im.Name != nil {
-				local = im.Name.Name
-			}
-			imports[local] = p
-		}
+		imports := fileImports(f)
 		ast.Inspect(f, func(n ast.Node) bool {
 			lit, ok := n.(*ast.CompositeLit)
 			if !ok {
@@ -640,21 +643,42 @@ func missingDepsFields(module string, files map[string][]byte) ([]depsFinding, e
 
 // depsLiteralsReachingCalls follows local bindings and helper return values.
 // Index package functions across files too: parser object links are file-local.
-// Visited expressions bound recursive helpers and cyclic aliases; nested function
-// bodies are inspected only when called, not as returns of their enclosing helper.
+// A helper may be called bare (`New(makeDeps())`), qualified by its package
+// (`New(launch.MakeDeps())`, resolved through the calling file's imports) or as a
+// method (`New(f.deps())`). Without type information a method's receiver is
+// unknown, so a method call follows every method of that name whose results
+// include the package's own Deps (`Deps` or `*Deps`). Visited expressions bound
+// recursive helpers and cyclic aliases; nested function bodies are inspected only
+// when called, not as returns of their enclosing helper.
 func depsLiteralsReachingCalls(module string, files map[string]*ast.File) map[*ast.CompositeLit]bool {
-	functions := map[string]*ast.FuncDecl{}
+	// helper is a function or method declaration with the package and the
+	// imports of the file declaring it, which its return values resolve in.
+	type helper struct {
+		decl    *ast.FuncDecl
+		pkg     string
+		imports map[string]string
+	}
+	functions := map[string]helper{} // "<import path>.<name>"
+	methods := map[string][]helper{} // "<name>", Deps-returning methods only
 	for name, f := range files {
+		pkg, imports := importPath(module, name), fileImports(f)
 		for _, decl := range f.Decls {
-			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil {
-				functions[importPath(module, name)+"."+fn.Name.Name] = fn
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok {
+				continue
+			}
+			h := helper{decl: fn, pkg: pkg, imports: imports}
+			if fn.Recv == nil {
+				functions[pkg+"."+fn.Name.Name] = h
+			} else if returnsDeps(fn) {
+				methods[fn.Name.Name] = append(methods[fn.Name.Name], h)
 			}
 		}
 	}
 	toCall := map[*ast.CompositeLit]bool{}
 	seen := map[ast.Expr]bool{}
-	var follow func(ast.Expr, string)
-	returns := func(body *ast.BlockStmt, pkg string) {
+	var follow func(ast.Expr, string, map[string]string)
+	returns := func(body *ast.BlockStmt, pkg string, imports map[string]string) {
 		if body == nil {
 			return
 		}
@@ -664,13 +688,13 @@ func depsLiteralsReachingCalls(module string, files map[string]*ast.File) map[*a
 			}
 			if ret, ok := n.(*ast.ReturnStmt); ok {
 				for _, result := range ret.Results {
-					follow(result, pkg)
+					follow(result, pkg, imports)
 				}
 			}
 			return true
 		})
 	}
-	follow = func(expr ast.Expr, pkg string) {
+	follow = func(expr ast.Expr, pkg string, imports map[string]string) {
 		if expr == nil || seen[expr] {
 			return
 		}
@@ -679,46 +703,95 @@ func depsLiteralsReachingCalls(module string, files map[string]*ast.File) map[*a
 		case *ast.CompositeLit:
 			toCall[e] = true
 		case *ast.UnaryExpr:
-			follow(e.X, pkg)
+			follow(e.X, pkg, imports)
 		case *ast.ParenExpr:
-			follow(e.X, pkg)
+			follow(e.X, pkg, imports)
 		case *ast.CallExpr:
-			follow(e.Fun, pkg)
+			follow(e.Fun, pkg, imports)
 		case *ast.FuncLit:
-			returns(e.Body, pkg)
+			returns(e.Body, pkg, imports)
+		case *ast.SelectorExpr:
+			// A package-qualified helper: the qualifier is an import of this file
+			// (and not a local name that shadows it).
+			if x, ok := e.X.(*ast.Ident); ok && x.Obj == nil {
+				if p, ok := imports[x.Name]; ok {
+					if h, ok := functions[p+"."+e.Sel.Name]; ok {
+						returns(h.decl.Body, h.pkg, h.imports)
+					}
+					return
+				}
+			}
+			for _, h := range methods[e.Sel.Name] {
+				returns(h.decl.Body, h.pkg, h.imports)
+			}
 		case *ast.Ident:
 			if e.Obj == nil {
-				if fn := functions[pkg+"."+e.Name]; fn != nil {
-					returns(fn.Body, pkg)
+				if h, ok := functions[pkg+"."+e.Name]; ok {
+					returns(h.decl.Body, h.pkg, h.imports)
 				}
 				return
 			}
 			switch d := e.Obj.Decl.(type) {
 			case *ast.FuncDecl:
-				returns(d.Body, pkg)
+				returns(d.Body, pkg, imports)
 			case *ast.AssignStmt:
 				for _, rhs := range d.Rhs {
-					follow(rhs, pkg)
+					follow(rhs, pkg, imports)
 				}
 			case *ast.ValueSpec:
 				for _, value := range d.Values {
-					follow(value, pkg)
+					follow(value, pkg, imports)
 				}
 			}
 		}
 	}
 	for name, f := range files {
-		pkg := importPath(module, name)
+		pkg, imports := importPath(module, name), fileImports(f)
 		ast.Inspect(f, func(n ast.Node) bool {
 			if call, ok := n.(*ast.CallExpr); ok {
 				for _, arg := range call.Args {
-					follow(arg, pkg)
+					follow(arg, pkg, imports)
 				}
 			}
 			return true
 		})
 	}
 	return toCall
+}
+
+// returnsDeps reports whether a function's results include its package's own
+// Deps, by value or by pointer.
+func returnsDeps(fn *ast.FuncDecl) bool {
+	if fn.Type.Results == nil {
+		return false
+	}
+	for _, field := range fn.Type.Results.List {
+		typ := field.Type
+		if star, ok := typ.(*ast.StarExpr); ok {
+			typ = star.X
+		}
+		if id, ok := typ.(*ast.Ident); ok && id.Name == "Deps" {
+			return true
+		}
+	}
+	return false
+}
+
+// fileImports maps each import's local name in f to its import path.
+func fileImports(f *ast.File) map[string]string {
+	imports := map[string]string{}
+	for _, im := range f.Imports {
+		p, err := strconv.Unquote(im.Path.Value)
+		if err != nil {
+			continue
+		}
+		local := path.Base(p)
+		if im.Name != nil {
+			local = im.Name.Name
+		}
+		imports[local] = p
+	}
+	return imports
 }
 
 // fieldNames is a struct field's names; an embedded field's is its type's.
@@ -840,9 +913,31 @@ func recursiveDeps() Deps { if condition { return recursiveDeps() }; return Deps
 func unusedHelper() Deps { return Deps{Store: s} }
 func wiredHelper() Deps { return Deps{Store: s, Chats: c, internal: 1} }
 var wiredReturn = New(wiredHelper())
+type fixture struct{}
+func (fixture) deps() Deps { return Deps{Store: s} }
+var fromMethod = New(fixture{}.deps())
+func (*fixture) wiredDeps() *Deps { return &Deps{Store: s, Chats: c, internal: 1} }
+var wiredMethod = New(*(&fixture{}).wiredDeps())
+func (fixture) unusedDeps() Deps { return Deps{Store: s} }
 `),
 		"internal/launch/helpers_test.go": []byte(`package launch
 func otherFileDeps() Deps { return Deps{Store: s} }
+`),
+		// Helpers of the launch package called package-qualified from another
+		// package: MakeDeps reaches New, WiredDeps sets every field, and
+		// UnusedDeps is never passed to a call.
+		"internal/launch/factory.go": []byte(`package launch
+
+func MakeDeps() Deps { return Deps{Store: s} }
+func WiredDeps() Deps { return Deps{Store: s, Chats: c, internal: 1} }
+func UnusedDeps() Deps { return Deps{Store: s} }
+`),
+		"internal/other/qualified_test.go": []byte(`package other
+
+import ln "example.com/m/internal/launch"
+
+var _ = ln.New(ln.MakeDeps())
+var _ = ln.New(ln.WiredDeps())
 `),
 	}
 	findings, err := missingDepsFields(module, files)
@@ -863,7 +958,9 @@ func otherFileDeps() Deps { return Deps{Store: s} }
 		"internal/launch/launch_test.go:19":          "internal/launch: Chats,internal",
 		"internal/launch/launch_test.go:21":          "internal/launch: Chats,internal",
 		"internal/launch/launch_test.go:23":          "internal/launch: Chats,internal",
+		"internal/launch/launch_test.go:28":          "internal/launch: Chats,internal",
 		"internal/launch/helpers_test.go:2":          "internal/launch: Chats,internal",
+		"internal/launch/factory.go:3":               "internal/launch: Chats,internal",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("findings = %v, want %v", got, want)
