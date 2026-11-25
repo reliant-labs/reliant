@@ -15237,7 +15237,7 @@
           "output": "reliant.v1.DownloadFileResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "UNKNOWN",
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -15578,13 +15578,14 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
             "InputTypeFQ": "reliant.v1.DownloadFileRequest",
             "OutputTypeFQ": "reliant.v1.DownloadFileResponse",
             "InputProtoFile": "reliant/v1/filesystem.proto",
             "OutputProtoFile": "reliant/v1/filesystem.proto",
             "Activity": {
-              "Mutating": true
+              "Mutating": false
             }
           }
         ],

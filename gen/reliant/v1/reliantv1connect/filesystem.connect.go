@@ -212,6 +212,7 @@ func NewFileSystemServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+FileSystemServiceDownloadFileProcedure,
 			connect.WithSchema(fileSystemServiceMethods.ByName("DownloadFile")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -434,6 +435,7 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 		FileSystemServiceDownloadFileProcedure,
 		svc.DownloadFile,
 		connect.WithSchema(fileSystemServiceMethods.ByName("DownloadFile")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.FileSystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -99,7 +99,9 @@ service FileSystemService {
   // It is scoped and guarded exactly like the viewer reads (GetFilePreview),
   // and refuses a file over 25 MB with FailedPrecondition and the error
   // reason "file_too_large_to_download".
-  rpc DownloadFile(DownloadFileRequest) returns (DownloadFileResponse) {}
+  rpc DownloadFile(DownloadFileRequest) returns (DownloadFileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ============================================

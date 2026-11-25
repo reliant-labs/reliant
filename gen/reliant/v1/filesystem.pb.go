@@ -2996,7 +2996,7 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\"PROJECT_CHECKOUT_STATE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1ePROJECT_CHECKOUT_STATE_CLONING\x10\x01\x12'\n" +
 	"#PROJECT_CHECKOUT_STATE_CLONE_FAILED\x10\x02\x12!\n" +
-	"\x1dPROJECT_CHECKOUT_STATE_ABSENT\x10\x032\xb2\x0e\n" +
+	"\x1dPROJECT_CHECKOUT_STATE_ABSENT\x10\x032\xb5\x0e\n" +
 	"\x11FileSystemService\x12P\n" +
 	"\vGetFileTree\x12\x1e.reliant.v1.GetFileTreeRequest\x1a\x1f.reliant.v1.GetFileTreeResponse\"\x00\x12Y\n" +
 	"\x0eGetFileContent\x12!.reliant.v1.GetFileContentRequest\x1a\".reliant.v1.GetFileContentResponse\"\x00\x12\xbc\x01\n" +
@@ -3010,8 +3010,8 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\vSearchFiles\x12\x1e.reliant.v1.SearchFilesRequest\x1a\x1f.reliant.v1.SearchFilesResponse\"\x00\x12\xb6\x01\n" +
 	"\x0eReplaceInFiles\x12!.reliant.v1.ReplaceInFilesRequest\x1a\".reliant.v1.ReplaceInFilesResponse\"]\xa2\xbb\x18Y:W:Ubulk file edit through the daemon: git records each changed file once it is committed\x12V\n" +
 	"\rListDirectory\x12 .reliant.v1.ListDirectoryRequest\x1a!.reliant.v1.ListDirectoryResponse\"\x00\x12\xbc\x01\n" +
-	"\x0fCreateDirectory\x12\".reliant.v1.CreateDirectoryRequest\x1a#.reliant.v1.CreateDirectoryResponse\"`\xa2\xbb\x18\\:Z:Xfilesystem edit through the daemon: an empty directory is not even something git records\x12S\n" +
-	"\fDownloadFile\x12\x1f.reliant.v1.DownloadFileRequest\x1a .reliant.v1.DownloadFileResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x0fCreateDirectory\x12\".reliant.v1.CreateDirectoryRequest\x1a#.reliant.v1.CreateDirectoryResponse\"`\xa2\xbb\x18\\:Z:Xfilesystem edit through the daemon: an empty directory is not even something git records\x12V\n" +
+	"\fDownloadFile\x12\x1f.reliant.v1.DownloadFileRequest\x1a .reliant.v1.DownloadFileResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_filesystem_proto_rawDescOnce sync.Once
