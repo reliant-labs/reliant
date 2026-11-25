@@ -233,12 +233,40 @@ function isUnanswered(err: unknown, key: string): boolean {
 }
 
 /**
+ * A refused stream's body: its first read fails with `err`, or with the
+ * caller's own cancellation when `signal` is aborted by then (what forge's
+ * in-handler refusal reports). An async generator, so it is a complete async
+ * iterator: an outer interceptor may also close it unread (`return()`).
+ */
+async function* refusedBody(err: ConnectError, signal: AbortSignal): AsyncGenerator<never> {
+  yield await Promise.reject<never>(signal.aborted ? ConnectError.from(signal.reason, Code.Canceled) : err);
+}
+
+/**
+ * `body` with forge's Unimplemented for `key` (nothing answers it) turned
+ * into the refusal. Delegates with `yield*`, so an outer interceptor's
+ * `return()` still reaches the router's stream.
+ */
+async function* refusingUnanswered<T>(body: AsyncIterable<T>, key: string, message: string | undefined): AsyncGenerator<T> {
+  try {
+    yield* body;
+  } catch (err) {
+    throw isUnanswered(err, key) ? refusal(key, message) : err;
+  }
+}
+
+/**
  * RELIANT EXTENSION (1, 2): the read-only guard as the innermost client
  * interceptor. A read (the proto's word, or the deprecated classifier's)
  * passes; a write the pack lists in `answers` passes to whatever answers it,
  * and is refused when nothing does; every other write is refused without
- * reaching the router. A refused stream opens and fails on its first read,
- * as forge's in-handler refusal does.
+ * reaching the router. Every refusal is PermissionDenied with the configured
+ * `readOnlyMessage`, as forge's guard refuses. A unary refusal throws; a
+ * refused stream opens and fails on its first read (with the caller's
+ * cancellation instead, once cancelled), as forge's in-handler refusal does,
+ * whether the guard refuses it up front or forge's Unimplemented for an
+ * unanswered listed write arrives while the body is read (a server or bidi
+ * stream's usually does).
  */
 function readOnlyGuard(reads: (method: DescMethod) => boolean, answered: ReadonlySet<string>, message: string | undefined): Interceptor {
   return (next) => async (req) => {
@@ -247,14 +275,15 @@ function readOnlyGuard(reads: (method: DescMethod) => boolean, answered: Readonl
     if (!answered.has(key)) {
       const err = refusal(key, message);
       if (!req.stream) throw err;
-      return {
+      const refused: StreamResponse = {
         stream: true,
         service: req.service,
         method: req.method,
         header: new Headers(),
         trailer: new Headers(),
-        message: { [Symbol.asyncIterator]: () => ({ next: () => Promise.reject(err) }) },
-      } as StreamResponse;
+        message: refusedBody(err, req.signal),
+      };
+      return refused;
     }
     let res;
     try {
@@ -263,17 +292,8 @@ function readOnlyGuard(reads: (method: DescMethod) => boolean, answered: Readonl
       throw isUnanswered(err, key) ? refusal(key, message) : err;
     }
     if (!res.stream) return res;
-    const body = res.message;
-    return {
-      ...res,
-      message: (async function* () {
-        try {
-          yield* body;
-        } catch (err) {
-          throw isUnanswered(err, key) ? refusal(key, message) : err;
-        }
-      })(),
-    } as StreamResponse;
+    const mapped: StreamResponse = { ...res, message: refusingUnanswered(res.message, key, message) };
+    return mapped;
   };
 }
 
