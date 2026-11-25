@@ -71,12 +71,14 @@ func NewDeliveryInsightsServiceClient(httpClient connect.HTTPClient, baseURL str
 			httpClient,
 			baseURL+DeliveryInsightsServiceListReleasesProcedure,
 			connect.WithSchema(deliveryInsightsServiceMethods.ByName("ListReleases")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getDoraMetrics: connect.NewClient[v1.GetDoraMetricsRequest, v1.GetDoraMetricsResponse](
 			httpClient,
 			baseURL+DeliveryInsightsServiceGetDoraMetricsProcedure,
 			connect.WithSchema(deliveryInsightsServiceMethods.ByName("GetDoraMetrics")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -124,12 +126,14 @@ func NewDeliveryInsightsServiceHandler(svc DeliveryInsightsServiceHandler, opts 
 		DeliveryInsightsServiceListReleasesProcedure,
 		svc.ListReleases,
 		connect.WithSchema(deliveryInsightsServiceMethods.ByName("ListReleases")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deliveryInsightsServiceGetDoraMetricsHandler := connect.NewUnaryHandler(
 		DeliveryInsightsServiceGetDoraMetricsProcedure,
 		svc.GetDoraMetrics,
 		connect.WithSchema(deliveryInsightsServiceMethods.ByName("GetDoraMetrics")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/controlplane.v1.DeliveryInsightsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

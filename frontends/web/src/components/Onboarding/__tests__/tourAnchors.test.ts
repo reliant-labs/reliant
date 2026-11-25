@@ -13,7 +13,9 @@
  * object key (`{ "data-testid": … }`) or, for test ids, a component's `testId`
  * prop, literally or as a template whose fixed prefix the value starts with
  * (`data-testid={`obs-issue-${id}`}`). A selector string naming the anchor
- * (`"[data-tour='x']"`) does not count.
+ * (`"[data-tour='x']"`) does not count. The shell nav is data
+ * (Layout/sidebar/navConfig): there an item's `tour: "x"` is its `data-tour`,
+ * which NavRenderer renders.
  * Data attributes (`data-trace-id`, `data-span-id`, …) are fixture values,
  * not anchors, and are not checked here (forgeJourney.test.tsx pins those).
  */
@@ -26,6 +28,7 @@ import { JOURNEYS } from "../journeys/registry";
 // The workflows journey's content is registered by the Reliant shells.
 import "../journeys/catalog";
 import { CONTEXTUAL_TIP_DEFINITIONS } from "../contextualTipsRegistry";
+import { DEMO_TIPS } from "../../Forge/Demo/tips/tipCopy";
 import type { AdvanceOn, JourneyPhase, JourneyStep, StepPresentation } from "../types";
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -54,14 +57,27 @@ const SETTERS: Record<string, RegExp> = Object.fromEntries(
   }),
 );
 
+/** The nav config's items name their `data-tour` as `tour: "x"` (NavItemBase.tour), and NavRenderer renders it. */
+const NAV_CONFIG = join("components", "Layout", "sidebar", "navConfig");
+const NAV_TOUR = new RegExp(`(?<![\\w-])tour\\s*:\\s*(${VALUE})`, "g");
+
+/**
+ * The shell nav's anchors: one set, which the public demo's journey and the
+ * signed-in tour both point at (demo DI phase 3). Pinned here before any
+ * journey names them, so a rename fails now, not when a tour lands on it.
+ */
+const SHELL_NAV_ANCHORS = ["forge-console-nav", "nav-drill-in", "nav-overview", "nav-observability", "nav-deployments", "nav-tests", "nav-security", "nav-configure"];
+
 /** For each anchor attribute, every value a non-test source line sets it to. */
 const SET_VALUES: Record<string, string[]> = (() => {
   const values: Record<string, string[]> = Object.fromEntries(ANCHOR_ATTRS.map((a) => [a, []]));
   for (const file of sourceFiles(SRC)) {
+    const navConfig = file.includes(NAV_CONFIG);
     for (const line of readFileSync(file, "utf8").split("\n")) {
       // A comment naming an anchor does not render it.
       if (/^\s*(\*|\/\/|\/\*|\{\/\*)/.test(line)) continue;
       for (const attr of ANCHOR_ATTRS) for (const m of line.matchAll(SETTERS[attr])) values[attr].push(m[1]);
+      if (navConfig) for (const m of line.matchAll(NAV_TOUR)) values["data-tour"].push(m[1]);
     }
   }
   return values;
@@ -116,6 +132,8 @@ function stepAnchors(step: JourneyStep): Anchor[] {
 const ANCHORS: Anchor[] = [
   ...Object.values(JOURNEYS).flatMap((journey) => [...journey.steps, ...(journey.outro ?? [])].flatMap(stepAnchors)),
   ...CONTEXTUAL_TIP_DEFINITIONS.flatMap((tip) => anchorsOf(tip.targetSelector, `tip ${tip.id}`)),
+  // The public demo's page tips (Forge/Demo/tips): a renamed anchor leaves the tip in a corner, off its subject.
+  ...Object.entries(DEMO_TIPS).flatMap(([key, tip]) => anchorsOf(tip.target, `demo-tip ${key}`)),
 ];
 
 describe("tour anchors", () => {
@@ -124,11 +142,17 @@ describe("tour anchors", () => {
     expect(where).toContain("wf-outro-layout");
     expect(where).toContain("fg-console");
     expect(where).toContain("tip");
+    expect(where).toContain("demo-tip");
     expect(ANCHORS.length).toBeGreaterThan(20);
   });
 
   it("every anchor a step, phase, label or tip names is rendered by some component", () => {
     const missing = ANCHORS.filter((a) => !rendered(a.attr, a.value)).map((a) => `${a.where}: [${a.attr}='${a.value}']`);
+    expect(missing).toEqual([]);
+  });
+
+  it("the shell nav renders its anchors (navConfig `tour`, NavRenderer's `forge-console-nav` and `nav-drill-in`)", () => {
+    const missing = SHELL_NAV_ANCHORS.filter((id) => !rendered("data-tour", id));
     expect(missing).toEqual([]);
   });
 

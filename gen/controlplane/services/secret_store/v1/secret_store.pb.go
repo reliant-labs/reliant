@@ -1966,16 +1966,16 @@ const file_services_secret_store_v1_secret_store_proto_rawDesc = "" +
 	"\x1eSECRET_AUTHOR_KIND_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17SECRET_AUTHOR_KIND_USER\x10\x01\x12\x1c\n" +
 	"\x18SECRET_AUTHOR_KIND_TOKEN\x10\x02\x12\x1f\n" +
-	"\x1bSECRET_AUTHOR_KIND_PLATFORM\x10\x032\x98\n" +
+	"\x1bSECRET_AUTHOR_KIND_PLATFORM\x10\x032\xa7\n" +
 	"\n" +
 	"\x12SecretStoreService\x12m\n" +
 	"\x12GrantHostedHTTPUse\x12*.controlplane.v1.GrantHostedHTTPUseRequest\x1a+.controlplane.v1.GrantHostedHTTPUseResponse\x12p\n" +
 	"\x13RevokeHostedHTTPUse\x12+.controlplane.v1.RevokeHostedHTTPUseRequest\x1a,.controlplane.v1.RevokeHostedHTTPUseResponse\x12a\n" +
 	"\x0eAllowSecretUse\x12&.controlplane.v1.AllowSecretUseRequest\x1a'.controlplane.v1.AllowSecretUseResponse\x12^\n" +
-	"\rDenySecretUse\x12%.controlplane.v1.DenySecretUseRequest\x1a&.controlplane.v1.DenySecretUseResponse\x12g\n" +
-	"\x10ListSecretAccess\x12(.controlplane.v1.ListSecretAccessRequest\x1a).controlplane.v1.ListSecretAccessResponse\x12X\n" +
-	"\vListSecrets\x12#.controlplane.v1.ListSecretsRequest\x1a$.controlplane.v1.ListSecretsResponse\x12j\n" +
-	"\x11GetSecretVersions\x12).controlplane.v1.GetSecretVersionsRequest\x1a*.controlplane.v1.GetSecretVersionsResponse\x12R\n" +
+	"\rDenySecretUse\x12%.controlplane.v1.DenySecretUseRequest\x1a&.controlplane.v1.DenySecretUseResponse\x12l\n" +
+	"\x10ListSecretAccess\x12(.controlplane.v1.ListSecretAccessRequest\x1a).controlplane.v1.ListSecretAccessResponse\"\x03\x90\x02\x01\x12]\n" +
+	"\vListSecrets\x12#.controlplane.v1.ListSecretsRequest\x1a$.controlplane.v1.ListSecretsResponse\"\x03\x90\x02\x01\x12o\n" +
+	"\x11GetSecretVersions\x12).controlplane.v1.GetSecretVersionsRequest\x1a*.controlplane.v1.GetSecretVersionsResponse\"\x03\x90\x02\x01\x12R\n" +
 	"\tSetSecret\x12!.controlplane.v1.SetSecretRequest\x1a\".controlplane.v1.SetSecretResponse\x12[\n" +
 	"\fDeleteSecret\x12$.controlplane.v1.DeleteSecretRequest\x1a%.controlplane.v1.DeleteSecretResponse\x12a\n" +
 	"\x0eUndeleteSecret\x12&.controlplane.v1.UndeleteSecretRequest\x1a'.controlplane.v1.UndeleteSecretResponse\x12^\n" +

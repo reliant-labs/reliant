@@ -39,7 +39,7 @@ describe("OrganizationBillingView", () => {
     expect(boxes).toHaveTextContent("2 running · 1 suspended");
     expect(screen.getByTestId("billing-devbox-storage")).toHaveTextContent("150 GiB");
     expect(screen.getByTestId("billing-devboxes-now")).toHaveTextContent("small");
-    expect(screen.getByRole("group", { name: "Dev-box running hours by size" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Sandbox running hours by size" })).toBeInTheDocument();
 
     const apps = screen.getByTestId("billing-hosted-apps");
     expect(within(apps).getByTestId("billing-count-hosted_apps")).toHaveTextContent("3 in prod");
@@ -60,7 +60,7 @@ describe("OrganizationBillingView", () => {
   it("states partial and unavailable coverage per source", async () => {
     view();
     const coverage = await screen.findByTestId("usage-coverage");
-    expect(within(coverage).getByText("Dev boxes").parentElement).toHaveTextContent("Partial");
+    expect(within(coverage).getByText("Sandboxes").parentElement).toHaveTextContent("Partial");
     expect(within(coverage).getByText("Observability").parentElement).toHaveTextContent("Unavailable");
     expect(coverage).toHaveTextContent("Observability metering could not be read.");
     await waitFor(() => expect(screen.getByRole("heading", { name: "Billing and infrastructure" }).parentElement).toHaveTextContent("Partial"));
@@ -84,7 +84,7 @@ describe("OrganizationBillingView", () => {
     listUsage.mockImplementation(async (req: OrganizationUsageRequest) => respondUnavailable(req));
     view();
     expect(await screen.findByTestId("billing-devbox-count")).toHaveTextContent("Unavailable");
-    expect(screen.getByText("No dev box ran in this range.")).toBeInTheDocument();
+    expect(screen.getByText("No sandbox ran in this range.")).toBeInTheDocument();
     expect(screen.getByTestId("billing-hosted-apps")).toHaveTextContent("Cost in range: Unavailable");
     expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
   });
@@ -97,7 +97,7 @@ describe("OrganizationBillingView", () => {
     expect(boxes).toHaveTextContent("unknown, not zero");
     expect(within(boxes).getByTestId("completeness-badge")).toHaveAttribute("data-completeness", "unavailable");
     expect(screen.getByTestId("billing-devbox-storage")).toHaveTextContent("Unavailable");
-    expect(screen.getByTestId("billing-devboxes-now")).toHaveTextContent("Current dev boxes could not be read");
+    expect(screen.getByTestId("billing-devboxes-now")).toHaveTextContent("Current sandboxes could not be read");
     for (const category of ["hosted_apps", "databases", "static_hosting"]) {
       const count = screen.getByTestId(`billing-count-${category}`);
       expect(count).toHaveTextContent("Unavailable");

@@ -39,8 +39,17 @@ import {
 import { errorReason, hasErrorReason } from "@/lib/errorReasons";
 
 import { getControlPlaneClient } from "./client";
+import { hasControlPlane } from "./config";
 import { mapActivityEvent, type ActivityList } from "./observability/activityApi";
 import type { MyOrg } from "./orgs";
+
+/** Whether this deployment has orgs to be a member of (a control plane); without one there is no one to invite. */
+export const orgMembershipAvailable = hasControlPlane;
+
+/** Whether an org's seats show more than its founder: a second member, or an invitation waiting on an answer. */
+export function seatsShowATeam(seats: Pick<SeatUsage, "members" | "pendingInvitations">): boolean {
+  return seats.members > 1 || seats.pendingInvitations > 0;
+}
 
 /** The three roles. Roles are presets of grants; admin and owner hold them all. */
 export type OrgRole = "owner" | "admin" | "member";

@@ -82,7 +82,8 @@ export function networkShim(opts: ShimOptions): void {
   try {
     localStorage.setItem('supabase-auth', JSON.stringify(session))
     localStorage.setItem('appearance.theme', opts.theme)
-    localStorage.setItem('reliant.checklist.panelState', 'dismissed')
+    // The Setup Guide (nav footer) is dismissed unless a surface asks for it (harness `storage`, written first).
+    if (localStorage.getItem('reliant.checklist.panelState') === null) localStorage.setItem('reliant.checklist.panelState', 'dismissed')
   } catch {
     /* storage disabled: the app falls back to its defaults */
   }

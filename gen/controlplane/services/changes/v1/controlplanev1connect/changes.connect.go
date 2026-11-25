@@ -258,12 +258,14 @@ func NewChangesServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+ChangesServiceListChangesProcedure,
 			connect.WithSchema(changesServiceMethods.ByName("ListChanges")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getChange: connect.NewClient[v1.GetChangeRequest, v1.GetChangeResponse](
 			httpClient,
 			baseURL+ChangesServiceGetChangeProcedure,
 			connect.WithSchema(changesServiceMethods.ByName("GetChange")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createChange: connect.NewClient[v1.CreateChangeRequest, v1.CreateChangeResponse](
@@ -324,24 +326,28 @@ func NewChangesServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+ChangesServiceListChangeEventsProcedure,
 			connect.WithSchema(changesServiceMethods.ByName("ListChangeEvents")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getChangesSnapshot: connect.NewClient[v1.GetChangesSnapshotRequest, v1.GetChangesSnapshotResponse](
 			httpClient,
 			baseURL+ChangesServiceGetChangesSnapshotProcedure,
 			connect.WithSchema(changesServiceMethods.ByName("GetChangesSnapshot")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getChangeReadout: connect.NewClient[v1.GetChangeReadoutRequest, v1.GetChangeReadoutResponse](
 			httpClient,
 			baseURL+ChangesServiceGetChangeReadoutProcedure,
 			connect.WithSchema(changesServiceMethods.ByName("GetChangeReadout")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getChangesDeliveryStatus: connect.NewClient[v1.GetChangesDeliveryStatusRequest, v1.GetChangesDeliveryStatusResponse](
 			httpClient,
 			baseURL+ChangesServiceGetChangesDeliveryStatusProcedure,
 			connect.WithSchema(changesServiceMethods.ByName("GetChangesDeliveryStatus")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -571,12 +577,14 @@ func NewChangesServiceHandler(svc ChangesServiceHandler, opts ...connect.Handler
 		ChangesServiceListChangesProcedure,
 		svc.ListChanges,
 		connect.WithSchema(changesServiceMethods.ByName("ListChanges")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	changesServiceGetChangeHandler := connect.NewUnaryHandler(
 		ChangesServiceGetChangeProcedure,
 		svc.GetChange,
 		connect.WithSchema(changesServiceMethods.ByName("GetChange")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	changesServiceCreateChangeHandler := connect.NewUnaryHandler(
@@ -637,24 +645,28 @@ func NewChangesServiceHandler(svc ChangesServiceHandler, opts ...connect.Handler
 		ChangesServiceListChangeEventsProcedure,
 		svc.ListChangeEvents,
 		connect.WithSchema(changesServiceMethods.ByName("ListChangeEvents")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	changesServiceGetChangesSnapshotHandler := connect.NewUnaryHandler(
 		ChangesServiceGetChangesSnapshotProcedure,
 		svc.GetChangesSnapshot,
 		connect.WithSchema(changesServiceMethods.ByName("GetChangesSnapshot")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	changesServiceGetChangeReadoutHandler := connect.NewUnaryHandler(
 		ChangesServiceGetChangeReadoutProcedure,
 		svc.GetChangeReadout,
 		connect.WithSchema(changesServiceMethods.ByName("GetChangeReadout")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	changesServiceGetChangesDeliveryStatusHandler := connect.NewUnaryHandler(
 		ChangesServiceGetChangesDeliveryStatusProcedure,
 		svc.GetChangesDeliveryStatus,
 		connect.WithSchema(changesServiceMethods.ByName("GetChangesDeliveryStatus")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/controlplane.v1.ChangesService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

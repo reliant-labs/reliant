@@ -24,7 +24,9 @@ service ProviderAccountService {
   // provider and ordered by priority, each with its derived status and latest
   // usage windows.
   // forge:custom — scoped to the caller; joins the latest limit state onto each account
-  rpc ListProviderAccounts(ListProviderAccountsRequest) returns (ListProviderAccountsResponse) {}
+  rpc ListProviderAccounts(ListProviderAccountsRequest) returns (ListProviderAccountsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // UpdateProviderAccount renames an account and/or pauses it. Unset fields
   // are left alone. An empty label restores the default (the detected email).
   // forge:custom — only label and paused are client-writable; status is derived
@@ -88,7 +90,9 @@ service ProviderAccountService {
   // currently using for its provider; unset when none is assigned yet. An
   // account the chat's org owns is returned as a member of the org sees it
   // (provider, label and status, with funding ORG_KEY): never its key hint.
-  rpc GetChatProviderAccount(GetChatProviderAccountRequest) returns (GetChatProviderAccountResponse) {}
+  rpc GetChatProviderAccount(GetChatProviderAccountRequest) returns (GetChatProviderAccountResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetPersonalFundingQuestion returns the chat's open question "continue on
   // your own account?" (control-plane docs/design/org-provider-accounts.md
@@ -97,6 +101,7 @@ service ProviderAccountService {
   // The chat's owner only.
   // forge:custom
   rpc GetPersonalFundingQuestion(GetPersonalFundingQuestionRequest) returns (GetPersonalFundingQuestionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       activity: {none: "reads the chat's own pending question"}
     };

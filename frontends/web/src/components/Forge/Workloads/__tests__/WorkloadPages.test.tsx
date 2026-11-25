@@ -33,9 +33,9 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 }));
 vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/cloudEnvs")>()),
-  restartWorkload: cloud.restartWorkload,
-  setWorkloadRunState: cloud.setWorkloadRunState,
-  getEnvironmentStatus: cloud.getEnvironmentStatus,
+  restartWorkload: (_transport: unknown, ...args: unknown[]) => cloud.restartWorkload(...args),
+  setWorkloadRunState: (_transport: unknown, ...args: unknown[]) => cloud.setWorkloadRunState(...args),
+  getEnvironmentStatus: (_transport: unknown, ...args: unknown[]) => cloud.getEnvironmentStatus(...args),
 }));
 
 // The roster: env names resolve to the control plane's ids, which differ from

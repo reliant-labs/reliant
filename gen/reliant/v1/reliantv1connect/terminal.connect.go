@@ -66,6 +66,7 @@ func NewTerminalServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+TerminalServiceListSessionsProcedure,
 			connect.WithSchema(terminalServiceMethods.ByName("ListSessions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		closeSession: connect.NewClient[v1.CloseTerminalSessionRequest, v1.CloseTerminalSessionResponse](
@@ -112,6 +113,7 @@ func NewTerminalServiceHandler(svc TerminalServiceHandler, opts ...connect.Handl
 		TerminalServiceListSessionsProcedure,
 		svc.ListSessions,
 		connect.WithSchema(terminalServiceMethods.ByName("ListSessions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	terminalServiceCloseSessionHandler := connect.NewUnaryHandler(

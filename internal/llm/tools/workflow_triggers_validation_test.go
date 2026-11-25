@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/stretchr/testify/assert"
@@ -39,7 +41,7 @@ func TestCreateWorkflowReportsTriggerErrors(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
-	tool := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM()))
+	tool := NewCreateWorkflowTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowDraftExtStore(repo.ORM()))
 	ctx := createTestContext(t, "")
 
 	content := workflowWithTriggers(`  - name: nightly
@@ -84,7 +86,7 @@ func TestEditWorkflowReportsTriggerFindings(t *testing.T) {
 `)
 	complete := true
 	input, _ := json.Marshal(CreateWorkflowParams{Content: &content, Complete: &complete})
-	created, err := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM())).Run(ctx, ToolCall{ID: "c", Name: CreateWorkflowToolName, Input: string(input)})
+	created, err := NewCreateWorkflowTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowDraftExtStore(repo.ORM())).Run(ctx, ToolCall{ID: "c", Name: CreateWorkflowToolName, Input: string(input)})
 	require.NoError(t, err)
 	require.False(t, created.IsError, created.Content)
 	var meta CreateWorkflowResult
@@ -97,7 +99,7 @@ func TestEditWorkflowReportsTriggerFindings(t *testing.T) {
 		OldString: `title: "{{ trigger.payload.data.issue.title }}"`,
 		NewString: `title: trigger.payload.data.issue.title`,
 	})
-	resp, err := NewEditWorkflowTool(repo).Run(ctx, ToolCall{ID: "e", Name: ToolEditWorkflow, Input: string(edit)})
+	resp, err := NewEditWorkflowTool(repo, workflowdraftstest.New(t, repo)).Run(ctx, ToolCall{ID: "e", Name: ToolEditWorkflow, Input: string(edit)})
 	require.NoError(t, err)
 	assert.False(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, "Warnings")
@@ -110,7 +112,7 @@ func TestEditWorkflowReportsTriggerFindings(t *testing.T) {
 		OldString: `issue_number: "{{ trigger.payload.data.issue.number }}"`,
 		NewString: `issue_number: trigger.payload.data.issue.number`,
 	})
-	resp, err = NewEditWorkflowTool(repo).Run(ctx, ToolCall{ID: "e1", Name: ToolEditWorkflow, Input: string(edit)})
+	resp, err = NewEditWorkflowTool(repo, workflowdraftstest.New(t, repo)).Run(ctx, ToolCall{ID: "e1", Name: ToolEditWorkflow, Input: string(edit)})
 	require.NoError(t, err)
 	assert.True(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, `input 'issue_number' expects integer, got string "trigger.payload.data.issue.number"`)
@@ -122,7 +124,7 @@ func TestEditWorkflowReportsTriggerFindings(t *testing.T) {
 		OldString: `integration: github`,
 		NewString: `integration: not_a_real_integration`,
 	})
-	resp, err = NewEditWorkflowTool(repo).Run(ctx, ToolCall{ID: "e2", Name: ToolEditWorkflow, Input: string(edit)})
+	resp, err = NewEditWorkflowTool(repo, workflowdraftstest.New(t, repo)).Run(ctx, ToolCall{ID: "e2", Name: ToolEditWorkflow, Input: string(edit)})
 	require.NoError(t, err)
 	assert.False(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, `"not_a_real_integration" is not in the integration catalog`)
@@ -134,7 +136,7 @@ func TestEditWorkflowReportsTriggerFindings(t *testing.T) {
 		OldString: `events: [issues.opened]`,
 		NewString: `events: []`,
 	})
-	resp, err = NewEditWorkflowTool(repo).Run(ctx, ToolCall{ID: "e3", Name: ToolEditWorkflow, Input: string(edit)})
+	resp, err = NewEditWorkflowTool(repo, workflowdraftstest.New(t, repo)).Run(ctx, ToolCall{ID: "e3", Name: ToolEditWorkflow, Input: string(edit)})
 	require.NoError(t, err)
 	assert.True(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, "triggers[0](new-issue).integration.events")

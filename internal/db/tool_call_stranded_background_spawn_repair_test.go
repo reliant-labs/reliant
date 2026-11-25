@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // seedBackgroundSpawnToolCall creates a backgrounded (status 6) spawn
@@ -114,7 +115,7 @@ func TestListStrandedBackgroundSpawnToolCalls_FailClosed(t *testing.T) {
 	insertTestWorkflowWithParent(t, repo, reportedChild, chatID, nil, Completed())
 	seedBackgroundSpawnToolCall(t, repo, ctx, "tc-bg-reported", chatID, parentThreadID, reportedChild)
 	toolCallID := "tc-bg-reported"
-	require.NoError(t, repo.EnqueueAgentMessage(ctx, &AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(ctx, repo.ORM(), &AgentMessage{
 		ID: uuid.New().String(), ChatID: chatID, FromThreadID: reportedChild, ToThreadID: parentThreadID,
 		Kind: core.AgentMessageKindCompletion, Body: "already told you", ToolCallID: &toolCallID,
 		Status: core.AgentMessageStatusQueued, CreatedAt: time.Now().UTC(),
@@ -172,7 +173,7 @@ func TestEnqueueAgentMessageIfAbsent_IdempotentUnderUniqueConstraint(t *testing.
 		Kind: core.AgentMessageKindCompletion, Body: "first report", ToolCallID: &toolCallID,
 		Status: core.AgentMessageStatusQueued, CreatedAt: time.Now().UTC(),
 	}
-	inserted, err := repo.EnqueueAgentMessageIfAbsent(ctx, first)
+	inserted, err := store.EnqueueAgentMessageIfAbsent(ctx, repo.ORM(), first)
 	require.NoError(t, err)
 	require.True(t, inserted, "the first enqueue for a tool_call_id must land")
 
@@ -181,11 +182,11 @@ func TestEnqueueAgentMessageIfAbsent_IdempotentUnderUniqueConstraint(t *testing.
 		Kind: core.AgentMessageKindCompletion, Body: "second report — must not land", ToolCallID: &toolCallID,
 		Status: core.AgentMessageStatusQueued, CreatedAt: time.Now().UTC(),
 	}
-	inserted, err = repo.EnqueueAgentMessageIfAbsent(ctx, second)
+	inserted, err = store.EnqueueAgentMessageIfAbsent(ctx, repo.ORM(), second)
 	require.NoError(t, err, "a conflicting insert must be a no-op, not an error")
 	require.False(t, inserted, "a second terminal report for the same tool_call_id must not land")
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, parentThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), parentThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1, "exactly one row must exist for this tool_call_id")
 	require.Equal(t, "first report", queued[0].Body)
@@ -198,7 +199,7 @@ func TestEnqueueAgentMessageIfAbsent_IdempotentUnderUniqueConstraint(t *testing.
 		Kind: core.AgentMessageKindFailed, Body: "conflicting kind — must not land", ToolCallID: &toolCallID,
 		Status: core.AgentMessageStatusQueued, CreatedAt: time.Now().UTC(),
 	}
-	inserted, err = repo.EnqueueAgentMessageIfAbsent(ctx, third)
+	inserted, err = store.EnqueueAgentMessageIfAbsent(ctx, repo.ORM(), third)
 	require.NoError(t, err)
 	require.False(t, inserted)
 }

@@ -8,11 +8,8 @@ import { AuthInitializer } from "./AuthInitializer";
 import { LoadingSpinner } from "./Layout/LoadingSpinner";
 import { useThemeInitialization } from "../hooks/useThemeInitialization";
 import { useSettingsHydration } from "../hooks/useSettingsHydration";
-import { AuthContextProvider } from "../lib/auth/context";
-import { createSupabaseAuthProvider } from "../lib/auth/supabase-provider";
+import { AuthStoreSession } from "../lib/auth/authStoreSession";
 import { EventBusProvider } from "../lib/event-context";
-
-const authProvider = createSupabaseAuthProvider();
 
 // The route tree (lib/shell.ts): the app's one tree (routes.tsx) on both the
 // app host and the forge host — the forge host is a brand of it, decided
@@ -42,13 +39,13 @@ export function App() {
     <EventBusProvider>
       <QueryClientProvider client={queryClient}>
         <ErrorBoundary>
-          <AuthContextProvider provider={authProvider}>
+          <AuthStoreSession>
             <AuthInitializer>
               <Suspense fallback={<LoadingSpinner />}>
                 <ShellRouter />
               </Suspense>
             </AuthInitializer>
-          </AuthContextProvider>
+          </AuthStoreSession>
         </ErrorBoundary>
       </QueryClientProvider>
     </EventBusProvider>

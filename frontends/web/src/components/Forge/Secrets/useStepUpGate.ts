@@ -24,6 +24,8 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
+import { transport as appTransport } from "@/lib/connect";
+import { useTransport } from "@/lib/transportScope";
 import {
   beginStepUp,
   completeStepUp,
@@ -92,6 +94,7 @@ export function useStepUpGate(
   options: { onGranted?: () => void; clock?: () => number } = {}
 ): StepUpGate {
   const { onGranted, clock = Date.now } = options;
+  const transport = useTransport(appTransport);
   const [state, dispatch] = useReducer(stepUpReducer, STEP_UP_CLOSED);
   const [grantUntil, setGrantUntil] = useState<number | null>(null);
   const held = useRef<HeldWrite | null>(null);
@@ -148,7 +151,7 @@ export function useStepUpGate(
     if (!environmentId || !canSend(stateRef.current, clock())) return;
     const gen = generation.current;
     dispatch({ type: "send" });
-    beginStepUp(environmentId).then(
+    beginStepUp(transport, environmentId).then(
       (challenge) => {
         if (gen !== generation.current) return;
         const expiresAt = challenge.expiresAt ? Date.parse(challenge.expiresAt) : NaN;
@@ -164,14 +167,14 @@ export function useStepUpGate(
         dispatch({ type: "send-failed", failure: sendFailureOf(err), at: clock() });
       }
     );
-  }, [environmentId, clock]);
+  }, [transport, environmentId, clock]);
 
   const submit = useCallback(
     (code: string) => {
       if (!environmentId || !canSubmit(stateRef.current, code)) return;
       const gen = generation.current;
       dispatch({ type: "submit" });
-      completeStepUp(environmentId, code).then(
+      completeStepUp(transport, environmentId, code).then(
         (grant) => {
           if (gen !== generation.current) return;
           const until = grant.validUntil ? Date.parse(grant.validUntil) : NaN;
@@ -197,7 +200,7 @@ export function useStepUpGate(
         }
       );
     },
-    [environmentId, clock, onGranted]
+    [transport, environmentId, clock, onGranted]
   );
 
   const cancel = useCallback(() => {

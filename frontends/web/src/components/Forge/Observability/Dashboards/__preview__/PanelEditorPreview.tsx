@@ -22,7 +22,8 @@ import { useSearch } from "@tanstack/react-router";
 
 import type { Panel } from "@/services/controlPlane/observability/types";
 
-import { FIXTURE_ENVS } from "../../__fixtures__/fixtureApi";
+import { DEMO_ENVS } from "@/fixtures/shop/handlers/scope";
+
 import { PanelDrawer, type DrawerMode } from "../PanelDrawer";
 import { starterPanel, VISUALIZATIONS, withDisplay, withKind, type Visualization } from "../panelBuilder";
 
@@ -71,7 +72,7 @@ export default function PanelEditorPreview() {
   const mode: DrawerMode = search.mode === "edit" || search.mode === "view" ? search.mode : "add";
   const [saved, setSaved] = useState<Panel | null>(null);
   const [open, setOpen] = useState(true);
-  const envIds = search.envs === "all" ? FIXTURE_ENVS.map((e) => e.id) : ["env-prod"];
+  const envIds = search.envs === "all" ? DEMO_ENVS.map((e) => e.id) : ["env-prod"];
   return (
     <div className="space-y-3 p-6" data-testid="panel-editor-preview">
       <p className="text-sm text-ink-muted">The panel editor over fixtures. Save prints the panel forge would store.</p>
@@ -90,7 +91,7 @@ export default function PanelEditorPreview() {
           scope={{ orgId: "org-fixture", projectId: "shop", envIds, filters: [] }}
           range="1h"
           services={[]}
-          environments={FIXTURE_ENVS}
+          environments={DEMO_ENVS}
           env={search.envs === "all" ? "all" : "prod"}
           scopeLabel={search.envs === "all" ? "every environment" : "prod"}
           version={4}

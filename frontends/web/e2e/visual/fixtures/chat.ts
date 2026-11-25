@@ -26,7 +26,7 @@
  * binary-proto stream: the snapshot below is encoded with the app's schemas.
  */
 import type { Fixtures } from '../rpc'
-import { DAY, FIXED_NOW, HOUR, IDS, MIN, USER, WORKTREES, iso } from './base'
+import { DAY, DOCS_PROJECT, FIXED_NOW, HOUR, IDS, MIN, PROJECT, USER, WORKTREES, iso } from './base'
 
 export const CHAT_IDS = {
   long: 'c0ffee00-2222-4aaa-8bbb-00000000000a',
@@ -520,6 +520,8 @@ export const chatFixtures: Fixtures = {
     return { messages: m, total: m.length, count: m.length, hasMore: false, oldestSeq: '1' }
   },
   'reliant.v1.ChatService/GetWorkflowExecutions': (req) => ({ allRootWorkflows: req.chatId === MAIN ? WORKFLOW_TREE : [] }),
+  // Each chat works in its own project alone (chatWithAttachedProjects adds one).
+  'reliant.v1.ChatService/ListChatProjects': (req) => ({ projects: chatProjectsOf(String(req.chatId), []) }),
   'reliant.v1.ApprovalService/ListApprovalsByChat': (req) => req.chatId === MAIN
     ? { approvals: [{
       id: 'appr-c1-push', chatId: MAIN, approvalType: 'APPROVAL_TYPE_TOOL_CALL', entityId: 'blk-c1-approve',
@@ -566,6 +568,24 @@ function chatStream({ failedSend }: { failedSend: boolean }) {
       ],
     }
   }
+}
+
+/** A chat's projects as ListChatProjects lists them: its own first, then `attached`. */
+function chatProjectsOf(chatId: string, attached: Array<typeof PROJECT | typeof DOCS_PROJECT>) {
+  const chat = CHATS.find((c) => c.id === chatId)
+  const own = chat?.projectId === IDS.docsProject ? DOCS_PROJECT : PROJECT
+  const daemonId = chat?.activeDaemonId ?? IDS.cloudDaemon
+  return [
+    { projectId: own.id, name: own.name, primary: true, daemonId, path: own.path, attachedAt: '' },
+    ...attached.map((p) => ({ projectId: p.id, name: p.name, primary: false, daemonId, path: p.path, attachedAt: iso(20 * MIN) })),
+  ]
+}
+
+/** The fixture chat with docs-site attached beside shopfront: the composer's project chips. */
+export const chatWithAttachedProjects: Fixtures = {
+  'reliant.v1.ChatService/ListChatProjects': (req) => ({
+    projects: chatProjectsOf(String(req.chatId), String(req.chatId) === MAIN ? [DOCS_PROJECT] : []),
+  }),
 }
 
 /** The fixture chat without its failed send (see chatStream). */

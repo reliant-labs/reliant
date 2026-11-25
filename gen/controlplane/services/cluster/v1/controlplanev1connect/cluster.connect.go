@@ -95,12 +95,14 @@ func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+ClusterServiceListClustersProcedure,
 			connect.WithSchema(clusterServiceMethods.ByName("ListClusters")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getCluster: connect.NewClient[v1.GetClusterRequest, v1.GetClusterResponse](
 			httpClient,
 			baseURL+ClusterServiceGetClusterProcedure,
 			connect.WithSchema(clusterServiceMethods.ByName("GetCluster")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		removeCluster: connect.NewClient[v1.RemoveClusterRequest, v1.RemoveClusterResponse](
@@ -184,12 +186,14 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 		ClusterServiceListClustersProcedure,
 		svc.ListClusters,
 		connect.WithSchema(clusterServiceMethods.ByName("ListClusters")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	clusterServiceGetClusterHandler := connect.NewUnaryHandler(
 		ClusterServiceGetClusterProcedure,
 		svc.GetCluster,
 		connect.WithSchema(clusterServiceMethods.ByName("GetCluster")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	clusterServiceRemoveClusterHandler := connect.NewUnaryHandler(

@@ -26,6 +26,7 @@ service UsageService {
   // filtered.
   // The response says how complete it is (see LLMUsageCompleteness).
   rpc GetLLMUsage(GetLLMUsageRequest) returns (GetLLMUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       activity: {none: "read-only: the caller's own usage totals; changes nothing"}
     };

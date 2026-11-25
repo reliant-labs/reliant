@@ -24,11 +24,15 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 service PullRequestRecordService {
   // GetPullRequestRecord returns one pull request's record, its heads, and its
   // current head's review markers, checks and verdict.
-  rpc GetPullRequestRecord(GetPullRequestRecordRequest) returns (GetPullRequestRecordResponse) {}
+  rpc GetPullRequestRecord(GetPullRequestRecordRequest) returns (GetPullRequestRecordResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListPullRequestRecords lists one repository's records in number order,
   // each with its current head's checks and verdict.
-  rpc ListPullRequestRecords(ListPullRequestRecordsRequest) returns (ListPullRequestRecordsResponse) {}
+  rpc ListPullRequestRecords(ListPullRequestRecordsRequest) returns (ListPullRequestRecordsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // VerdictPolicy is whose review markers count, the caller's choice. An entry

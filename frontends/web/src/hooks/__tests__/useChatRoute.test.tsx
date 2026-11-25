@@ -220,11 +220,22 @@ describe("the URL follows what the app opens and closes by itself", () => {
     expect(opened).toEqual(["a-1"]);
   });
 
-  it("puts the chat the home page restored in the URL, in place", async () => {
+  it("never redirects the home to a chat: one left open is closed", async () => {
     useChatStore.setState({ activeChatId: "r-1" });
     await open("/");
-    await waitFor(() => expect(path()).toBe("/c/r-1"));
+    await waitFor(() => expect(shown().active).toBeNull());
+    expect(path()).toBe("/");
     expect(router.history.length).toBe(1);
+  });
+
+  it("closes the chat on a Back to the home, and stays there", async () => {
+    await open("/");
+    await act(() => router.navigate({ href: "/c/a-1" }));
+    await waitFor(() => expect(shown().active).toBe("a-1"));
+    act(() => router.history.back());
+    await waitFor(() => expect(path()).toBe("/"));
+    await waitFor(() => expect(shown().active).toBeNull());
+    expect(path()).toBe("/");
   });
 
   it("replaces the new-chat view with the chat its first message made", async () => {

@@ -168,20 +168,20 @@ func TestEnqueueAgentMessageOnce_TakenIDInsertsNothing(t *testing.T) {
 		}
 	}
 
-	inserted, err := repo.EnqueueAgentMessageOnce(ctx, row("first"))
+	inserted, err := store.EnqueueAgentMessageOnce(ctx, repo.ORM(), row("first"))
 	require.NoError(t, err)
 	require.True(t, inserted)
 
-	inserted, err = repo.EnqueueAgentMessageOnce(ctx, row("second"))
+	inserted, err = store.EnqueueAgentMessageOnce(ctx, repo.ORM(), row("second"))
 	require.NoError(t, err, "a taken id is an outcome, not an error")
 	assert.False(t, inserted)
 
-	got, err := repo.GetAgentMessage(ctx, id)
+	got, err := store.GetAgentMessage(ctx, repo.ORM(), id)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Equal(t, "first", got.Body, "the repeat must not overwrite the row")
 
-	missing, err := repo.GetAgentMessage(ctx, uuid.NewString())
+	missing, err := store.GetAgentMessage(ctx, repo.ORM(), uuid.NewString())
 	require.NoError(t, err)
 	assert.Nil(t, missing)
 }
@@ -206,7 +206,7 @@ func TestEnqueueAgentMessageOnce_ConcurrentCallsInsertOneRow(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			inserted[i], errs[i] = repo.EnqueueAgentMessageOnce(ctx, &AgentMessage{
+			inserted[i], errs[i] = store.EnqueueAgentMessageOnce(ctx, repo.ORM(), &AgentMessage{
 				ID: id, ChatID: chatID, FromThreadID: parentThreadID, ToThreadID: parentThreadID,
 				Kind: core.AgentMessageKindHumanMessage, Body: "race",
 				Status: core.AgentMessageStatusQueued, CreatedAt: time.Now().UTC(),
@@ -224,7 +224,7 @@ func TestEnqueueAgentMessageOnce_ConcurrentCallsInsertOneRow(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, winners)
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, parentThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), parentThreadID)
 	require.NoError(t, err)
 	assert.Len(t, queued, 1)
 }
@@ -244,22 +244,22 @@ func TestDeleteUndeliveredAgentMessage_OnlyTouchesUndeliveredRows(t *testing.T) 
 		int32(core.AgentMessageStatusUndelivered), undeliveredID)
 	require.NoError(t, err)
 
-	deleted, err := repo.DeleteUndeliveredAgentMessage(ctx, queuedID, chatID)
+	deleted, err := store.DeleteUndeliveredAgentMessage(ctx, repo.ORM(), queuedID, chatID)
 	require.NoError(t, err)
 	assert.False(t, deleted, "a row that is still queued is not undelivered")
 
-	deleted, err = repo.DeleteUndeliveredAgentMessage(ctx, undeliveredID, "some-other-chat")
+	deleted, err = store.DeleteUndeliveredAgentMessage(ctx, repo.ORM(), undeliveredID, "some-other-chat")
 	require.NoError(t, err)
 	assert.False(t, deleted, "and a row is only removed from its own chat")
 
-	deleted, err = repo.DeleteUndeliveredAgentMessage(ctx, undeliveredID, chatID)
+	deleted, err = store.DeleteUndeliveredAgentMessage(ctx, repo.ORM(), undeliveredID, chatID)
 	require.NoError(t, err)
 	assert.True(t, deleted)
 
-	gone, err := repo.GetAgentMessage(ctx, undeliveredID)
+	gone, err := store.GetAgentMessage(ctx, repo.ORM(), undeliveredID)
 	require.NoError(t, err)
 	assert.Nil(t, gone)
-	kept, err := repo.GetAgentMessage(ctx, queuedID)
+	kept, err := store.GetAgentMessage(ctx, repo.ORM(), queuedID)
 	require.NoError(t, err)
 	assert.NotNil(t, kept)
 }

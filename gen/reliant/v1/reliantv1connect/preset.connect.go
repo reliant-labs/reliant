@@ -110,18 +110,21 @@ func NewPresetServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+PresetServiceListPresetsProcedure,
 			connect.WithSchema(presetServiceMethods.ByName("ListPresets")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getPreset: connect.NewClient[v1.GetPresetRequest, v1.GetPresetResponse](
 			httpClient,
 			baseURL+PresetServiceGetPresetProcedure,
 			connect.WithSchema(presetServiceMethods.ByName("GetPreset")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listPresetsForWorkflow: connect.NewClient[v1.ListPresetsForWorkflowRequest, v1.ListPresetsForWorkflowResponse](
 			httpClient,
 			baseURL+PresetServiceListPresetsForWorkflowProcedure,
 			connect.WithSchema(presetServiceMethods.ByName("ListPresetsForWorkflow")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createPreset: connect.NewClient[v1.CreatePresetRequest, v1.CreatePresetResponse](
@@ -152,12 +155,14 @@ func NewPresetServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+PresetServiceGetDefaultPresetProcedure,
 			connect.WithSchema(presetServiceMethods.ByName("GetDefaultPreset")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getDefaultPresetsBatch: connect.NewClient[v1.GetDefaultPresetsBatchRequest, v1.GetDefaultPresetsBatchResponse](
 			httpClient,
 			baseURL+PresetServiceGetDefaultPresetsBatchProcedure,
 			connect.WithSchema(presetServiceMethods.ByName("GetDefaultPresetsBatch")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -264,18 +269,21 @@ func NewPresetServiceHandler(svc PresetServiceHandler, opts ...connect.HandlerOp
 		PresetServiceListPresetsProcedure,
 		svc.ListPresets,
 		connect.WithSchema(presetServiceMethods.ByName("ListPresets")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	presetServiceGetPresetHandler := connect.NewUnaryHandler(
 		PresetServiceGetPresetProcedure,
 		svc.GetPreset,
 		connect.WithSchema(presetServiceMethods.ByName("GetPreset")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	presetServiceListPresetsForWorkflowHandler := connect.NewUnaryHandler(
 		PresetServiceListPresetsForWorkflowProcedure,
 		svc.ListPresetsForWorkflow,
 		connect.WithSchema(presetServiceMethods.ByName("ListPresetsForWorkflow")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	presetServiceCreatePresetHandler := connect.NewUnaryHandler(
@@ -306,12 +314,14 @@ func NewPresetServiceHandler(svc PresetServiceHandler, opts ...connect.HandlerOp
 		PresetServiceGetDefaultPresetProcedure,
 		svc.GetDefaultPreset,
 		connect.WithSchema(presetServiceMethods.ByName("GetDefaultPreset")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	presetServiceGetDefaultPresetsBatchHandler := connect.NewUnaryHandler(
 		PresetServiceGetDefaultPresetsBatchProcedure,
 		svc.GetDefaultPresetsBatch,
 		connect.WithSchema(presetServiceMethods.ByName("GetDefaultPresetsBatch")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.PresetService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

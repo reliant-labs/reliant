@@ -9,6 +9,9 @@
  * contributes handlers the way ModernApp does: one spy per workspace handler,
  * registered once it is ready.
  *
+ * The overlays are the app's three, handed in as routes.tsx hands them
+ * (APP_OVERLAYS); one pass mounts the host with none, as the public demo will.
+ *
  * What it pins: shortcuts work off the workspace (palette, new chat, a
  * workspace-only shortcut), exactly one dispatcher lives while moving between
  * the workspace and Settings, every desktop menu id reaches its handler once,
@@ -17,8 +20,8 @@
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { useState, type ReactElement } from "react";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -43,14 +46,16 @@ vi.mock("../../Layout/ChatSearch", () => ({
   ),
 }));
 
-import { ShortcutHost, WORKSPACE_ACTION_TTL_MS } from "../ShortcutHost";
+import { ShortcutHost, WORKSPACE_ACTION_TTL_MS, type ShortcutOverlays } from "../ShortcutHost";
+import { lazyRoute } from "../../../lib/lazyRoute";
+import { SwitchProjectDialog } from "../../Projects/SwitchProjectDialog";
 import {
   useShortcutLayer,
   useSuspendShortcuts,
   type ShortcutHandlers,
 } from "../../../hooks/useShortcutHost";
 import { useShortcutsStore } from "../../../store/shortcutsStore";
-import { useAuthStore } from "../../../store/authStore";
+import { renderWithSession } from "../../../lib/test-utils";
 import { useProjectStore, type Project } from "../../../store/projectStore";
 import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
 import { ShortcutRegistry } from "../../../lib/keyboard/registry";
@@ -138,10 +143,28 @@ function SettingsPage() {
 
 // ── Router ─────────────────────────────────────────────────────────────────
 
-function renderAt(path: string) {
+/** The app's overlays, the way routes.tsx hands them to the host. */
+const APP_OVERLAYS: ShortcutOverlays = {
+  projectSwitcher: SwitchProjectDialog,
+  commandPalette: lazyRoute(() => import("../../Layout/CommandPalette"), "CommandPalette"),
+  chatSearch: lazyRoute(() => import("../../Layout/ChatSearch"), "ChatSearch"),
+};
+
+/** Whether the next render is signed in (the session the host reads). */
+let signedIn = true;
+/** Signs the last render out. */
+let signOut: () => void = () => {};
+
+function renderInSession(ui: ReactElement) {
+  const result = renderWithSession(ui, { session: signedIn ? undefined : null });
+  signOut = () => result.setSession(null);
+  return result;
+}
+
+function renderAt(path: string, overlays: ShortcutOverlays | undefined = APP_OVERLAYS) {
   const root = createRootRoute({
     component: () => (
-      <ShortcutHost>
+      <ShortcutHost overlays={overlays}>
         <Outlet />
       </ShortcutHost>
     ),
@@ -180,13 +203,13 @@ function renderAt(path: string) {
     ]),
     history: createMemoryHistory({ initialEntries: [path] }),
   });
-  render(<RouterProvider router={router} />);
+  renderInSession(<RouterProvider router={router} />);
   return router;
 }
 
 /** Render and wait until the bindings have loaded. */
-async function mountAt(path: string) {
-  const router = renderAt(path);
+async function mountAt(path: string, overlays?: ShortcutOverlays) {
+  const router = renderAt(path, overlays);
   await waitFor(() =>
     expect(useShortcutsStore.getState().registry.size).toBeGreaterThan(0),
   );
@@ -245,7 +268,7 @@ beforeEach(() => {
     _initialized: false,
   });
   getShortcuts.mockImplementation(async () => ({ shortcuts: "{}" }));
-  useAuthStore.setState({ user: { id: "u1" } as never });
+  signedIn = true;
   useProjectStore.setState({ currentProject: PROJECT });
   // The chat workspace's URL carries the sidebar's project filter: filtered
   // to p1, "the workspace" is /project/p1.
@@ -274,7 +297,10 @@ afterEach(() => {
   delete w.RELIANT_CONFIG;
   vi.useRealTimers();
   vi.restoreAllMocks();
-  useAuthStore.setState({ user: null });
+  // Signed out first, as the app does: the host takes its overlays down
+  // while they are still in the document.
+  signOut();
+  signOut = () => {};
   useProjectStore.setState({ currentProject: null });
   useWorkspaceStateStore.setState({ projectFilterId: null });
   document.body.innerHTML = "";
@@ -312,6 +338,27 @@ describe.each(["/settings", "/inbox"])("on %s", (path) => {
     await waitFor(() => expect(pathOf(router)).toBe("/project/p1"));
     await waitFor(() => expect(workspace.onFocusTerminal).toHaveBeenCalledOnce());
     expect(workspace.onToggleTerminal).not.toHaveBeenCalled();
+  });
+});
+
+describe("a host with no overlays (the public demo's)", () => {
+  it("leaves the palette's key to the page and opens nothing", async () => {
+    const router = await mountAt("/settings", {});
+
+    const event = press(CMD_SHIFT_P);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(screen.queryByPlaceholderText("Type a command...")).not.toBeInTheDocument();
+    expect(pathOf(router)).toBe("/settings");
+  });
+
+  it("still runs the shortcuts that need no overlay", async () => {
+    const router = await mountAt("/settings", {});
+
+    press(NEW_CHAT_WEB);
+
+    await waitFor(() => expect(pathOf(router)).toBe("/project/p1"));
+    await waitFor(() => expect(workspace.onNewChat).toHaveBeenCalledOnce());
   });
 });
 
@@ -512,10 +559,10 @@ describe("in the workspace", () => {
       });
       return <button onClick={() => setCount((c) => c + 1)}>bump</button>;
     }
-    const root = createRootRoute({ component: () => <ShortcutHost><Outlet /></ShortcutHost> });
+    const root = createRootRoute({ component: () => <ShortcutHost overlays={APP_OVERLAYS}><Outlet /></ShortcutHost> });
     const appLayout = createRoute({ getParentRoute: () => root, id: "_app", component: () => <Outlet /> });
     const index = createRoute({ getParentRoute: () => appLayout, path: "/", component: Counter });
-    render(
+    renderInSession(
       <RouterProvider
         router={createRouter({
           routeTree: root.addChildren([appLayout.addChildren([index])]),
@@ -762,7 +809,7 @@ describe("no shortcuts", () => {
   });
 
   it("while the auth guard has no user", async () => {
-    useAuthStore.setState({ user: null });
+    signedIn = false;
     renderAt("/settings");
     await screen.findByTestId("settings");
 
@@ -776,7 +823,7 @@ describe("no shortcuts", () => {
     await mountAt("/settings");
     expect(captureListeners).toBe(1);
 
-    act(() => useAuthStore.setState({ user: null }));
+    signOut();
 
     expect(captureListeners).toBe(0);
   });

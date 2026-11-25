@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -29,7 +30,7 @@ func newFailedSendService(repo *db.Repo, temporalExists bool) (*Service, *wakeTe
 	}}
 	pause := &questionSignalPause{}
 	return &Service{
-		deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal},
+		deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())},
 		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
 	}, temporal, pause
 }
@@ -116,7 +117,7 @@ func TestSendMessage_FailedRunCoarseRestartQueuesBehindTheMailbox(t *testing.T) 
 	assert.True(t, resp.Msg.Queued)
 
 	assert.Empty(t, only(transcriptBodies(t, ctx, repo, fx.chatID), "queued first", "typed after the failure"))
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, remaining, 2)
 	assert.Equal(t, "queued first", remaining[0].Body)
@@ -164,7 +165,7 @@ func TestSendMessage_FailedRunQuestionAnswerStillResumesTheQuestion(t *testing.T
 
 	assert.Equal(t, []string{markResumeAnswer("go with the minimal one")},
 		only(transcriptBodies(t, ctx, repo, fx.chatID), markResumeAnswer("go with the minimal one"), "queued first"))
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, remaining, 1, "the queue is left for the next call_llm")
 	assert.Equal(t, "queued first", remaining[0].Body)
@@ -209,7 +210,7 @@ func TestSendMessage_FailedRunRepeatAfterQueuedRecoveryIsReplayed(t *testing.T) 
 	assert.True(t, queued)
 	assert.Equal(t, 1, pause.interruptResumes, "the repeat does not recover the run a second time")
 
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Len(t, remaining, 2, "queued once")
 }

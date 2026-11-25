@@ -144,8 +144,60 @@ type startRunLineageReader interface {
 // scenarioLoaderStore is what createScenarioWorkflowLoader reads: the caller's
 // chat (for its project) and the workflow sources refs resolve against.
 type scenarioLoaderStore interface {
-	workflowsource.Store
+	workflowsource.ProjectStore
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+}
+
+// The *Drafts roles are what each workflow and scenario tool reads and writes
+// of the caller's saved workflows. workflowdrafts.Service satisfies every one:
+// each read is scoped to what the caller may see and each write runs under the
+// owner's org lock.
+
+// listWorkflowsDrafts is list_workflows' drafts.
+type listWorkflowsDrafts interface {
+	workflowsource.DraftReads
+	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*db.WorkflowDraft, error)
+}
+
+// getWorkflowDrafts is get_workflow's drafts.
+type getWorkflowDrafts interface {
+	workflowsource.DraftReads
+	workflowDraftLookup
+}
+
+// createWorkflowDrafts is create_workflow's drafts.
+type createWorkflowDrafts interface {
+	workflowsource.DraftReads
+	CreateWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) error
+}
+
+// writeWorkflowDrafts is the drafts of edit_workflow and write_workflow.
+type writeWorkflowDrafts interface {
+	workflowsource.DraftReads
+	workflowDraftLookup
+	UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status db.WorkflowDraftStatus) error
+	// UpdateWorkflowDraftDefinitionAtVersion writes only while the draft is
+	// still at version; otherwise workflowdrafts.ErrVersionConflict.
+	UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name string, slug string, definition string, status db.WorkflowDraftStatus) error
+}
+
+// WorkflowDrafts is every read and write the workflow and scenario tools make
+// of the caller's saved workflows (workflowdrafts.Service). Optional on
+// ToolsOptions: nil makes those tools report that they are unavailable here,
+// like a nil Repo.
+type WorkflowDrafts interface {
+	listWorkflowsDrafts
+	getWorkflowDrafts
+	createWorkflowDrafts
+	writeWorkflowDrafts
+	scenarioRunDrafts
+}
+
+// scenarioRunDrafts is the drafts of the tools that run a scenario: the draft
+// it belongs to, and the workflows its refs resolve against.
+type scenarioRunDrafts interface {
+	workflowsource.DraftReads
+	workflowDraftLookup
 }
 
 // ScenarioStore is the scenario rows the scenario tools find and rewrite.
@@ -331,8 +383,11 @@ type SpawnStatusDeps struct {
 
 // SpawnSendDeps is what the spawn_send tool is built from.
 type SpawnSendDeps struct {
-	// Store reads threads and queues the message.
+	// Store reads threads.
 	Store spawnSendStore
+	// Mailbox queues the message. Nil makes the tool report itself
+	// unavailable.
+	Mailbox SpawnMailbox
 	// Tree places the target relative to the caller.
 	Tree SpawnTree
 	// Notifier rings the recipient's doorbell; nil is no doorbell.
@@ -352,6 +407,11 @@ type SpawnStopDeps struct {
 // spawnSendStore is spawn_send's store.
 type spawnSendStore interface {
 	spawnRelationStore
+}
+
+// SpawnMailbox queues spawn_send's message into the recipient's mailbox and
+// announces it to the chat's clients. *agentmailbox.Mailbox satisfies it.
+type SpawnMailbox interface {
 	EnqueueAgentMessage(ctx context.Context, msg *db.AgentMessage) error
 }
 
@@ -427,67 +487,53 @@ type bugReportLookup interface {
 // listWorkflowsStore is list_workflows' store. Validation and the project
 // index read through workflowsource.
 type listWorkflowsStore interface {
-	workflowsource.Store
-	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*db.WorkflowDraft, error)
+	workflowsource.ProjectStore
 }
 
 // getWorkflowStore is get_workflow's store.
 type getWorkflowStore interface {
-	workflowsource.Store
-	workflowDraftLookup
+	workflowsource.ProjectStore
 }
 
 // createWorkflowStore is create_workflow's store.
 type createWorkflowStore interface {
-	workflowsource.Store
-	CreateWorkflowDraft(ctx context.Context, draft *db.WorkflowDraft) error
+	workflowsource.ProjectStore
 }
 
 // workflowWriteStore is the store of edit_workflow and write_workflow, which
 // both resolve a draft, validate the new definition and save it.
 type workflowWriteStore interface {
-	workflowsource.Store
-	workflowDraftLookup
-	UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status db.WorkflowDraftStatus) error
-	// UpdateWorkflowDraftDefinitionAtVersion writes only while the draft is
-	// still at version; otherwise db.ErrWorkflowDraftVersionConflict.
-	UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name string, slug string, definition string, status db.WorkflowDraftStatus) error
+	workflowsource.ProjectStore
 }
 
 // --- scenario tools ---------------------------------------------------------
 
 // listScenariosStore is list_scenarios' store.
 type listScenariosStore interface {
-	workflowDraftLookup
 	ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID string) ([]*db.WorkflowScenario, error)
 }
 
 // viewScenarioStore is view_scenario's store.
 type viewScenarioStore interface {
-	workflowDraftLookup
 }
 
 // editScenarioStore is edit_scenario's store.
 type editScenarioStore interface {
-	workflowDraftLookup
 }
 
 // writeScenarioStore is write_scenario's store; it runs the scenario it saves.
 type writeScenarioStore interface {
-	workflowDraftLookup
 	scenarioExecStore
 	CreateWorkflowScenario(ctx context.Context, scenario *db.WorkflowScenario) error
 }
 
 // deleteScenarioStore is delete_scenario's store.
 type deleteScenarioStore interface {
-	workflowDraftLookup
 	DeleteWorkflowScenario(ctx context.Context, id string) error
 }
 
 // runScenarioStore is run_scenario's store.
 type runScenarioStore interface {
-	workflowDraftLookup
 	scenarioExecStore
 }
 

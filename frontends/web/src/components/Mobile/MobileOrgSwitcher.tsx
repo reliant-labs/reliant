@@ -39,9 +39,9 @@ function OrgSummary({ name }: { name: string }) {
         <Building2 className="h-4 w-4" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-xs text-muted-foreground">Organization</span>
+        <span className="block text-meta text-muted-foreground">Organization</span>
         <span
-          className="block truncate text-sm font-medium text-foreground"
+          className="block truncate text-ui font-medium text-foreground"
           data-testid="mobile-org-name"
         >
           {name}

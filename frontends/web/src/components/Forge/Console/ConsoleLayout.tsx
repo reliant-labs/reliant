@@ -8,8 +8,9 @@
  * 1. WHICH RELIANT PROJECT the URL's forge project is (consoleContext.ts).
  *    The forge routes do not mount ModernApp, the only thing that loads the
  *    project list on a page load, so this loads it, finds the project that
- *    declares the forge project name (the current one first, if several do),
- *    and selects it — so the rest of the app agrees on a refresh. A name no
+ *    declares the forge project name (the one `?project=` names; else the
+ *    only one; several and none named: ConsoleCheckoutPicker asks), and
+ *    selects it — so the rest of the app agrees on a refresh. A name no
  *    project here declares is still a scope: the pages read the control plane
  *    by it, with no daemon.
  *
@@ -21,9 +22,12 @@
  * 3. THE CHROME. Inside the one shell (Layout/shell/AppShell.tsx), the
  *    shell's left nav draws this app's sections inline (the same model,
  *    useConsoleNavModel.ts) and the console is a page under a slim bar with
- *    the breadcrumb and scope (ConsoleFrame). Without the shell (the forge
- *    host until it runs the one router), ConsoleShell — the nav, the top bar,
- *    the rail (its collapsed state remembered per user). Either way in the
+ *    the breadcrumb and scope (ConsoleFrame). The public demo is in the shell
+ *    too (demoShellRoutes.tsx: the app's frame with the demo's nav, and a
+ *    fixed session that turns it on), so neither the app nor the demo takes
+ *    the other branch, ConsoleShell — the nav, the top bar, the rail (its collapsed
+ *    state remembered per user); it goes with ConsoleShell (demo DI P3.4).
+ *    Either way in the
  *    led console (ledConsole.tsx): pages that lead with one sentence and the
  *    item worth opening first.
  *
@@ -50,6 +54,7 @@ import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { useShellLastPick } from "@/components/Layout/sidebar/shellProject";
 
 import { AppSectionEmptyState } from "./AppSectionEmptyState";
+import { ConsoleCheckoutPicker } from "./ConsoleCheckoutPicker";
 import { ConsoleFrame } from "./ConsoleFrame";
 import { ConsoleShell } from "./ConsoleShell";
 import { LedConsoleProvider, type LedConsoleHost } from "./ledConsole";
@@ -88,13 +93,16 @@ export function ConsoleLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { project: forgeProject = "" } = useParams({ strict: false }) as { project?: string };
-  const search = useSearch({ strict: false }) as { env?: string };
+  const search = useSearch({ strict: false }) as { env?: string; project?: string };
   const { inShell } = useShellFrame();
 
   // ── 1–2. The Reliant project, the roster and the environment scope: the
   // same model the shell's nav draws this app's sections from. ──
   const model = useConsoleNavModel(forgeProject, pathname, search);
-  const { orgId, page, env, listed, projectId, roster, envs: navEnvs, alertsFiring, starred, dashboardTitle, optionalViews, scope, platformWide, productAnalytics } = model;
+  const { orgId, page, env, listed, projectId, candidates, roster, envs: navEnvs, alertsFiring, starred, dashboardTitle, optionalViews, scope, platformWide, productAnalytics } = model;
+  // A new object on every render: kept by its counts, so the memoized ConsoleShell is not drawn again for nothing.
+  const testsCount = model.navCounts?.tests;
+  const navCounts = useMemo(() => ({ tests: testsCount }), [testsCount]);
   const pinnedEnv = pinnedEnvOf(page);
   const forgeShell = isForgeShell();
 
@@ -188,7 +196,9 @@ export function ConsoleLayout() {
   const deployProjectId = projectId ?? (shellFocus && !shellFocus.startsWith("app:") ? shellFocus : null);
   const body = useMemo(
     () =>
-      listed ? (
+      candidates ? (
+        <ConsoleCheckoutPicker app={forgeProject} candidates={candidates} />
+      ) : listed ? (
         <ForgeConsoleContext.Provider value={value}>
           <div className="empty:hidden [&:not(:empty)]:mb-4">
             <ObsQuotaBanner />
@@ -203,7 +213,7 @@ export function ConsoleLayout() {
           <SkeletonLoader variant="table-row" count={4} />
         </div>
       ),
-    [listed, value, undeployed, page, deployProjectId]
+    [candidates, forgeProject, listed, value, undeployed, page, deployProjectId]
   );
 
   const primeMetrics = page.kind === "obs-view" && page.view === "metrics" && (
@@ -244,6 +254,7 @@ export function ConsoleLayout() {
       dashboardTitle={dashboardTitle}
       optionalViews={optionalViews}
       experiments={changesUIEnabled()}
+      navCounts={navCounts}
       obsOpen={obsOpen}
       onObsOpenChange={setObsOpen}
       scope={scope}

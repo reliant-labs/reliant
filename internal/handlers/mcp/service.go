@@ -27,6 +27,8 @@ type Deps struct {
 	// MCP configuration (the project config record) in step with what the
 	// daemon writes to disk.
 	Repo Repository
+	// ProjectRows reads a project by id; the handler decides access on it.
+	ProjectRows ProjectReader
 	// Projects reads a project the caller may write (owner and org decided
 	// together: projectaccess).
 	Projects projectaccess.Service
@@ -55,6 +57,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.ProjectConfigs == nil {
 		return fmt.Errorf("mcp: Deps.ProjectConfigs is required")
+	}
+	if d.ProjectRows == nil {
+		return fmt.Errorf("mcp: Deps.ProjectRows is required")
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("mcp: Deps.Projects is required")

@@ -201,6 +201,12 @@ export interface AppsMockOptions {
    * Default false.
    */
   person?: boolean;
+  /**
+   * The runtime flag `web.org_routes` (ORG_ROUTES="true" in config.js): links
+   * take the `/o/<org>/…` form, and old org-less URLs redirect into it.
+   * Default false, as prod serves it today.
+   */
+  orgRoutes?: boolean;
 }
 
 /** A JWT supabase-js can decode: it reads only `exp` and `sub` locally. */
@@ -262,7 +268,16 @@ export async function mockAppsBackend(page: Page, options: AppsMockOptions = {})
     return options.projectsByOrg[orgId ?? defaultOrgId()] ?? [];
   };
   await page.route('**/reliant.v1.ProjectService/ListProjects', (route) => json(route, { projects: projectsFor(route.request()) }));
-  await page.route('**/reliant.v1.ProjectService/GetProject', (route) => json(route, { project: PROJECT }));
+  // GetProject names no org: with projectsByOrg it answers a project of any of them, stamped with its org.
+  await page.route('**/reliant.v1.ProjectService/GetProject', (route) => {
+    if (!options.projectsByOrg) return json(route, { project: PROJECT });
+    const { projectId } = (route.request().postDataJSON() ?? {}) as { projectId?: string };
+    for (const [orgId, projects] of Object.entries(options.projectsByOrg)) {
+      const project = projects.find((p) => p.id === projectId);
+      if (project) return json(route, { project: { orgId, ...project } });
+    }
+    return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ code: 'not_found', message: 'project not found' }) });
+  });
   // The project catalog (Projects, the project selector): the org's projects
   // with the deployed apps their forge project names, and every other app as
   // one with no code here. Built from the same projects and environments.
@@ -348,7 +363,12 @@ export async function mockAppsBackend(page: Page, options: AppsMockOptions = {})
   // set in an init script, so the built app's own config.js cannot replace it.
   // A control plane implies Supabase auth is configured too; the API-key
   // session, or with `person` the Supabase session, signs the user in.
-  const config = { CONTROL_PLANE_API_URL: origin, SUPABASE_URL: `${origin}/supabase`, SUPABASE_ANON_KEY: 'anon-test-key' };
+  const config = {
+    CONTROL_PLANE_API_URL: origin,
+    SUPABASE_URL: `${origin}/supabase`,
+    SUPABASE_ANON_KEY: 'anon-test-key',
+    ...(options.orgRoutes ? { ORG_ROUTES: 'true' } : {}),
+  };
   await page.route('**/config.js', (route) =>
     route.fulfill({ status: 200, contentType: 'text/javascript', body: `window.__FORGE_CONFIG__ = ${JSON.stringify(config)};` }),
   );

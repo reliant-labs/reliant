@@ -123,54 +123,63 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+CatalogServiceListModelsProcedure,
 			connect.WithSchema(catalogServiceMethods.ByName("ListModels")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listModelsByProvider: connect.NewClient[v1.ListModelsByProviderRequest, v1.ListModelsByProviderResponse](
 			httpClient,
 			baseURL+CatalogServiceListModelsByProviderProcedure,
 			connect.WithSchema(catalogServiceMethods.ByName("ListModelsByProvider")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listAvailableModels: connect.NewClient[v1.ListAvailableModelsRequest, v1.ListAvailableModelsResponse](
 			httpClient,
 			baseURL+CatalogServiceListAvailableModelsProcedure,
 			connect.WithSchema(catalogServiceMethods.ByName("ListAvailableModels")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listTools: connect.NewClient[v1.ListToolsRequest, v1.ListToolsResponse](
 			httpClient,
 			baseURL+CatalogServiceListToolsProcedure,
 			connect.WithSchema(catalogServiceMethods.ByName("ListTools")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listNodes: connect.NewClient[v1.ListNodesRequest, v1.ListNodesResponse](
 			httpClient,
 			baseURL+CatalogServiceListNodesProcedure,
 			connect.WithSchema(catalogServiceMethods.ByName("ListNodes")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getCELCompletions: connect.NewClient[v1.GetCELCompletionsRequest, v1.GetCELCompletionsResponse](
 			httpClient,
 			baseURL+CatalogServiceGetCELCompletionsProcedure,
 			connect.WithSchema(catalogServiceMethods.ByName("GetCELCompletions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		searchCatalog: connect.NewClient[v1.SearchCatalogRequest, v1.SearchCatalogResponse](
 			httpClient,
 			baseURL+CatalogServiceSearchCatalogProcedure,
 			connect.WithSchema(catalogServiceMethods.ByName("SearchCatalog")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getCatalogEntry: connect.NewClient[v1.GetCatalogEntryRequest, v1.GetCatalogEntryResponse](
 			httpClient,
 			baseURL+CatalogServiceGetCatalogEntryProcedure,
 			connect.WithSchema(catalogServiceMethods.ByName("GetCatalogEntry")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listCatalogIntegrations: connect.NewClient[v1.ListCatalogIntegrationsRequest, v1.ListCatalogIntegrationsResponse](
 			httpClient,
 			baseURL+CatalogServiceListCatalogIntegrationsProcedure,
 			connect.WithSchema(catalogServiceMethods.ByName("ListCatalogIntegrations")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listInputOptions: connect.NewClient[v1.ListInputOptionsRequest, v1.ListInputOptionsResponse](
@@ -298,54 +307,63 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		CatalogServiceListModelsProcedure,
 		svc.ListModels,
 		connect.WithSchema(catalogServiceMethods.ByName("ListModels")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	catalogServiceListModelsByProviderHandler := connect.NewUnaryHandler(
 		CatalogServiceListModelsByProviderProcedure,
 		svc.ListModelsByProvider,
 		connect.WithSchema(catalogServiceMethods.ByName("ListModelsByProvider")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	catalogServiceListAvailableModelsHandler := connect.NewUnaryHandler(
 		CatalogServiceListAvailableModelsProcedure,
 		svc.ListAvailableModels,
 		connect.WithSchema(catalogServiceMethods.ByName("ListAvailableModels")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	catalogServiceListToolsHandler := connect.NewUnaryHandler(
 		CatalogServiceListToolsProcedure,
 		svc.ListTools,
 		connect.WithSchema(catalogServiceMethods.ByName("ListTools")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	catalogServiceListNodesHandler := connect.NewUnaryHandler(
 		CatalogServiceListNodesProcedure,
 		svc.ListNodes,
 		connect.WithSchema(catalogServiceMethods.ByName("ListNodes")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	catalogServiceGetCELCompletionsHandler := connect.NewUnaryHandler(
 		CatalogServiceGetCELCompletionsProcedure,
 		svc.GetCELCompletions,
 		connect.WithSchema(catalogServiceMethods.ByName("GetCELCompletions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	catalogServiceSearchCatalogHandler := connect.NewUnaryHandler(
 		CatalogServiceSearchCatalogProcedure,
 		svc.SearchCatalog,
 		connect.WithSchema(catalogServiceMethods.ByName("SearchCatalog")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	catalogServiceGetCatalogEntryHandler := connect.NewUnaryHandler(
 		CatalogServiceGetCatalogEntryProcedure,
 		svc.GetCatalogEntry,
 		connect.WithSchema(catalogServiceMethods.ByName("GetCatalogEntry")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	catalogServiceListCatalogIntegrationsHandler := connect.NewUnaryHandler(
 		CatalogServiceListCatalogIntegrationsProcedure,
 		svc.ListCatalogIntegrations,
 		connect.WithSchema(catalogServiceMethods.ByName("ListCatalogIntegrations")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	catalogServiceListInputOptionsHandler := connect.NewUnaryHandler(

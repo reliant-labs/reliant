@@ -81,6 +81,9 @@ func TestProjectorPullRequestSnapshot(t *testing.T) {
 	if c.PreviousHeadSHA != shaB {
 		t.Errorf("previous head = %q, want lower-cased before", c.PreviousHeadSHA)
 	}
+	if s.HeadRepository != "" {
+		t.Errorf("head repository = %q, want none (the event named none)", s.HeadRepository)
+	}
 	if d := s.Delta; d.FromHead != shaB || d.HeadSHA != shaA || d.HeadRef != "feat/x" {
 		t.Errorf("synchronize delta = %+v", d)
 	}
@@ -292,5 +295,21 @@ func TestClassify(t *testing.T) {
 				t.Fatalf("class = %s, want %s (%+v)", got.Class, tc.want, got)
 			}
 		})
+	}
+}
+
+// TestProjectorHeadRepository: the snapshot carries the repository the head
+// branch lives in, a fork's for a fork's pull request, so the chat link
+// inference can tell the PR's own branch from a fork's of the same name.
+func TestProjectorHeadRepository(t *testing.T) {
+	for want, head := range map[string]map[string]any{
+		"Reliant-Labs/Reliant": {"ref": "feat/x", "sha": shaA, "repo": map[string]any{"full_name": "Reliant-Labs/Reliant", "fork": false}},
+		"someone/reliant":      {"ref": "feat/x", "sha": shaA, "repo": map[string]any{"full_name": "someone/reliant", "fork": true}},
+		"":                     {"ref": "feat/x", "sha": shaA},
+	} {
+		changes := project(t, event("pull_request.opened", map[string]any{"pull_request": pr(5, shaA, nil, map[string]any{"head": head})}))
+		if len(changes) != 1 || changes[0].Snapshot.HeadRepository != want {
+			t.Errorf("head %v: snapshot head repository = %+v, want %q", head, changes, want)
+		}
 	}
 }

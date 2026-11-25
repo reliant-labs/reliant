@@ -24,6 +24,8 @@ type Deps struct {
 	// Repo stores the caller's workflow drafts and reads the projects,
 	// project-synced workflows and visibility settings a listing merges.
 	Repo Repository
+	// ProjectRows reads a project by id; the handler decides access on it.
+	ProjectRows ProjectReader
 	// Projects reads a project the caller may write (owner and org decided
 	// together: projectaccess).
 	Projects projectaccess.Service
@@ -61,6 +63,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("workflow: Deps.Repo is required")
+	}
+	if d.ProjectRows == nil {
+		return fmt.Errorf("workflow: Deps.ProjectRows is required")
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("workflow: Deps.Projects is required")

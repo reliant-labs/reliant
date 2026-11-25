@@ -45,6 +45,32 @@ func (m *MockAutomationRetirer) RetireDeletedTriggers(ctx context.Context, delet
 // Compile-time check.
 var _ AutomationRetirer = (*MockAutomationRetirer)(nil)
 
+// forge:section MockProjectReader
+// forge:hash=f9b4085c70c8d6169fcb271bef837b5099665899a29a3c69622f2265067c12e6
+
+// MockProjectReader is a test mock for the ProjectReader interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProjectReader.<Method>Func not set" error.
+type MockProjectReader struct {
+	contractkit.Recorder
+	GetProjectFunc func(context.Context, string) (*db.Project, error)
+}
+
+// GetProject records the call and delegates to GetProjectFunc when set.
+func (m *MockProjectReader) GetProject(ctx context.Context, id string) (*db.Project, error) {
+	m.Recorder.Record("GetProject", ctx, id)
+	if m.GetProjectFunc != nil {
+		return m.GetProjectFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReader", "GetProject")
+}
+
+// Compile-time check.
+var _ ProjectReader = (*MockProjectReader)(nil)
+
 // forge:section MockOrgResolver
 // forge:hash=80683e1618bfe2157cf10a4d37614a5455d0c5b2f176f9dcd766cec1445d5e88
 
@@ -102,7 +128,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=6991554d7715eb3daaed9aafa8602da8cdefa42b07eaf9a01ff1e2a05a17a4ad
+// forge:hash=395bb5bb4ec9d550b11336143f19bf9cef8b1af81c520d4f8864c5af4fdf352a
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -113,7 +139,6 @@ var _ OrgResolver = (*MockOrgResolver)(nil)
 type MockRepository struct {
 	contractkit.Recorder
 	AssignUnassignedOrgFunc          func(context.Context, string, string) error
-	GetProjectFunc                   func(context.Context, string) (*db.Project, error)
 	ListTriggersFunc                 func(context.Context, core.TriggerFilters) ([]*core.Trigger, error)
 	DeleteTriggerFunc                func(context.Context, string) error
 	RunTxFunc                        func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
@@ -131,15 +156,6 @@ func (m *MockRepository) AssignUnassignedOrg(ctx context.Context, userID string,
 		return m.AssignUnassignedOrgFunc(ctx, userID, orgID)
 	}
 	return contractkit.MockNotSet("MockRepository", "AssignUnassignedOrg")
-}
-
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockRepository) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetProject")
 }
 
 // ListTriggers records the call and delegates to ListTriggersFunc when set.

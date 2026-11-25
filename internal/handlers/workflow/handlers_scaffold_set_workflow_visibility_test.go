@@ -24,7 +24,7 @@ func TestSetWorkflowVisibility_Generated(t *testing.T) {
 		d.IsHidden = hidden
 		return &d, nil
 	}
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(store.deps()))
+	svc := workflow.NewTestWorkflow(t, withDeps(store.deps()))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.SetWorkflowVisibilityRequest, pb.SetWorkflowVisibilityResponse]{
 		{
