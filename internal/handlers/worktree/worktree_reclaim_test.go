@@ -200,7 +200,7 @@ func TestUnarchive_RelocksAsActiveSoAStaleClaimCannotRemove(t *testing.T) {
 	wt, path := e.worktree(t, "unarch")
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
 	// Claim it, as the daemon does for an archived row.
-	archived, err := e.repo.GetWorktree(e.ctx, wt.ID)
+	archived, err := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 	require.NoError(t, err)
 	fence := worktreesweep.Fence(archived)
 	claimReq := worktreereclaim.Request{Worktrees: []worktreereclaim.Worktree{{ID: wt.ID, Path: path, State: worktreereclaim.StateArchived, Fence: fence, BaseBranch: "main"}}}
@@ -229,7 +229,7 @@ func TestRecreate_AppliesTheSavedSnapshotAndKeepsRefsUntilThen(t *testing.T) {
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
 	age(t, path)
 	require.NoError(t, e.sweeper.Sweep(e.ctx)) // holds it: dirty
-	held, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	held, _ := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 	require.Equal(t, "dirty", held.CleanupMetadata.HeldReason)
 
 	// A confirmed clean-up saves and removes it.
@@ -237,7 +237,7 @@ func TestRecreate_AppliesTheSavedSnapshotAndKeepsRefsUntilThen(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, worktreesweep.CleanupRemoved, results[0].Outcome, "%+v", results[0])
 	require.False(t, exists(path))
-	gone, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	gone, _ := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 	require.True(t, gone.CleanupMetadata.DirectoryDeleted)
 	require.Len(t, gone.CleanupMetadata.SnapshotRefs, 1)
 
@@ -254,7 +254,7 @@ func TestRecreate_AppliesTheSavedSnapshotAndKeepsRefsUntilThen(t *testing.T) {
 	b, _ = os.ReadFile(filepath.Join(path, "a.txt"))
 	assert.Equal(t, "edited\n", string(b), "tracked edits are back")
 	assert.Equal(t, "", gitIn(t, path, "diff", "--cached", "--name-only"), "the index is left at HEAD")
-	after, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	after, _ := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 	assert.Nil(t, after.DeletedAt)
 	assert.True(t, after.CleanupMetadata == nil || len(after.CleanupMetadata.SnapshotRefs) == 0, "refs are dropped only after they were re-applied")
 }
@@ -269,7 +269,7 @@ func TestPermanentDelete_RefusesWhileTheDirectoryIsStillOnDisk(t *testing.T) {
 	_, err := e.svc.DeleteWorktree(e.ctx, connect.NewRequest(&reliantv1.DeleteWorktreeRequest{WorktreeId: wt.ID}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-	_, getErr := e.repo.GetWorktree(e.ctx, wt.ID)
+	_, getErr := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 	assert.NoError(t, getErr, "the row must survive so the directory can still be found")
 	assert.True(t, exists(path))
 }
@@ -293,7 +293,7 @@ func TestStoreCleanupMetadata_MergesInsteadOfOverwriting(t *testing.T) {
 	wt, _ := e.worktree(t, "merge")
 	require.NoError(t, e.repo.UpdateWorktreeCleanupMetadata(e.ctx, wt.ID, &db.CleanupMetadata{HeldReason: "dirty", SnapshotRefs: []string{"refs/x"}}))
 	e.svc.storeCleanupMetadata(e.ctx, wt.ID, true)
-	got, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	got, _ := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 	assert.Equal(t, "dirty", got.CleanupMetadata.HeldReason)
 	assert.Equal(t, []string{"refs/x"}, got.CleanupMetadata.SnapshotRefs)
 	assert.True(t, got.CleanupMetadata.DeleteBranch)
@@ -357,7 +357,7 @@ func TestRecreate_RestoresEveryRepoOfAMultiRepoWorkspace(t *testing.T) {
 		require.NoError(t, err, "%s's saved work", name)
 		assert.Contains(t, string(b), "work")
 	}
-	after, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	after, _ := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 	assert.Nil(t, after.DeletedAt)
 	assert.True(t, after.CleanupMetadata == nil || len(after.CleanupMetadata.SnapshotRefs) == 0, "all refs re-applied, so dropped")
 }
@@ -392,7 +392,7 @@ func TestRecreate_AFailedApplyKeepsTheSnapshotRefs(t *testing.T) {
 
 	// Make the apply fail: the recreated checkout already has the file with
 	// other content, but is not clean either way, so recreate must not claim success.
-	gone, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	gone, _ := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 	require.Len(t, gone.CleanupMetadata.SnapshotRefs, 1)
 	ref := gone.CleanupMetadata.SnapshotRefs[0]
 	gitIn(t, e.project.Path, "update-ref", "-d", ref) // the saved work is gone: apply cannot succeed
@@ -403,7 +403,7 @@ func TestRecreate_AFailedApplyKeepsTheSnapshotRefs(t *testing.T) {
 
 	_, err = e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
 	require.NoError(t, err)
-	after, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	after, _ := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 	require.NotNil(t, after.CleanupMetadata, "the refs are the only record of the work")
 	assert.Equal(t, []string{ref}, after.CleanupMetadata.SnapshotRefs)
 }
@@ -430,7 +430,7 @@ func TestRecreate_BranchMovedIsReportedAndKeepsTheRefs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, resp.Msg.SnapshotWarning, "branch moved")
 	require.Len(t, resp.Msg.SnapshotRefs, 1)
-	after, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	after, _ := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 	require.NotNil(t, after.CleanupMetadata)
 	assert.Equal(t, resp.Msg.SnapshotRefs, after.CleanupMetadata.SnapshotRefs)
 	assert.NoFileExists(t, filepath.Join(path, "wip.txt"))
@@ -445,7 +445,7 @@ func TestUnarchive_UnreachableMachineLeavesTheRowArchived(t *testing.T) {
 	e.svc = newWorktreeService(t, rowreads.WithRepo(e.repo), &failingRouter{}, e.sweeper)
 	_, err := e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
 	require.Error(t, err)
-	got, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	got, _ := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 	assert.NotNil(t, got.DeletedAt, "an unverified re-lock must not make the row active")
 }
 
@@ -462,7 +462,7 @@ func TestUnarchive_OfAParkedRow(t *testing.T) {
 		e = newReclaimEnv(t)
 		wt, path = e.worktree(t, "parkedrestore")
 		require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
-		row, err := e.repo.GetWorktree(e.ctx, wt.ID)
+		row, err := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 		require.NoError(t, err)
 		claim := worktreereclaim.ArchivedLockReason(wt.ID, strconv.FormatInt(row.DeletedAt.UnixNano(), 10))
 		// The daemon's reclaimer already exists (its start-up recovery has run).
@@ -481,7 +481,7 @@ func TestUnarchive_OfAParkedRow(t *testing.T) {
 		e, wt, path, q := park(t)
 		_, err := e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
 		require.NoError(t, err)
-		after, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+		after, _ := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 		assert.Nil(t, after.DeletedAt)
 		assert.True(t, exists(path), "the workspace must have its files back")
 		assert.False(t, exists(q))
@@ -493,7 +493,7 @@ func TestUnarchive_OfAParkedRow(t *testing.T) {
 		_, err := e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), q)
-		after, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+		after, _ := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 		assert.NotNil(t, after.DeletedAt, "the row must stay archived")
 		assert.True(t, exists(q), "the parked copy is untouched")
 	})
@@ -526,7 +526,7 @@ func TestRecreate_KeepsSavedCommitRefsListed(t *testing.T) {
 	_, err := e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
 	require.NoError(t, err)
 	assert.Equal(t, sha, gitIn(t, path, "rev-parse", "HEAD"), "the branch held the commit and is checked out again")
-	after, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	after, _ := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 	require.NotNil(t, after.CleanupMetadata)
 	assert.Equal(t, []string{ref}, after.CleanupMetadata.SnapshotRefs, "the saved commit stays listed")
 }
@@ -548,7 +548,7 @@ func TestRecreate_AppliedSnapshotKeepsSavedCommitRefs(t *testing.T) {
 	results, _, err := e.sweeper.Cleanup(e.ctx, worktreesweep.NewStores(e.repo, store.NewWorktreeExtStore(e.repo.ORM())), e.userID, e.daemon, []string{wt.ID})
 	require.NoError(t, err)
 	require.Equal(t, worktreesweep.CleanupRemoved, results[0].Outcome, "%+v", results[0])
-	gone, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	gone, _ := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 	var orphan string
 	for _, ref := range gone.CleanupMetadata.SnapshotRefs {
 		if strings.Contains(ref, "/orphans/") {
@@ -561,7 +561,7 @@ func TestRecreate_AppliedSnapshotKeepsSavedCommitRefs(t *testing.T) {
 	_, err = e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
 	require.NoError(t, err)
 	require.True(t, exists(filepath.Join(path, "wip.txt")), "the snapshot was applied")
-	after, _ := e.repo.GetWorktree(e.ctx, wt.ID)
+	after, _ := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 	require.NotNil(t, after.CleanupMetadata)
 	assert.Equal(t, []string{orphan}, after.CleanupMetadata.SnapshotRefs)
 }

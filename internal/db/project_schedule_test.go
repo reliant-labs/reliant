@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/projectpurge"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -156,7 +157,7 @@ func TestProjectPurgeRunsAfterTheWindowOnce(t *testing.T) {
 	res, err := f.purges.PurgeDueProjects(f.ctx, deleteClock, time.Hour, 50)
 	require.NoError(t, err)
 	assert.Zero(t, res.Purged)
-	_, err = f.repo.GetProject(f.ctx, f.project)
+	_, err = store.GetProject(f.ctx, f.repo.ORM(), f.project)
 	require.NoError(t, err, "a project inside its window is kept")
 
 	// After it: purged, with everything it owned.
@@ -165,7 +166,7 @@ func TestProjectPurgeRunsAfterTheWindowOnce(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Purged)
 	assert.Zero(t, res.Failed)
-	_, err = f.repo.GetProject(f.ctx, f.project)
+	_, err = store.GetProject(f.ctx, f.repo.ORM(), f.project)
 	require.Error(t, err, "the purged project is gone")
 	_, err = f.repo.GetTrigger(f.ctx, f.enabledTrigger)
 	assert.ErrorIs(t, err, core.ErrTriggerNotFound)
@@ -226,7 +227,7 @@ func TestAnInterruptedImmediatePurgeResumesAfterItsLease(t *testing.T) {
 	claimed, err := store.ClaimProjectPurgeNow(f.ctx, f.repo.ORM(), f.project, f.decided(), deleteClock)
 	require.NoError(t, err)
 	require.True(t, claimed)
-	p, err := f.repo.GetProject(f.ctx, f.project)
+	p, err := store.GetProject(f.ctx, f.repo.ORM(), f.project)
 	require.NoError(t, err)
 	require.NotNil(t, p.DeleteAfter)
 	assert.True(t, p.DeleteAfter.Equal(deleteClock), "the claim brings delete_after forward to now, got %v", p.DeleteAfter)
@@ -238,7 +239,7 @@ func TestAnInterruptedImmediatePurgeResumesAfterItsLease(t *testing.T) {
 	res, err = f.purges.PurgeDueProjects(f.ctx, deleteClock.Add(2*time.Hour), time.Hour, 50)
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Purged, "the worker resumes it once the lease runs out, well inside the original window")
-	_, err = f.repo.GetProject(f.ctx, f.project)
+	_, err = store.GetProject(f.ctx, f.repo.ORM(), f.project)
 	require.Error(t, err, "the project is gone")
 }
 
@@ -255,12 +256,12 @@ func TestPurgeProjectNowDeletesAtOnce(t *testing.T) {
 	f := newDeleteFixture(t)
 	_, err := f.purgeNow(core.ProjectDecision{OwnerUserID: "not-the-owner"})
 	assert.ErrorIs(t, err, store.ErrOrgChanged, "a decision about another owner purges nothing")
-	_, err = f.repo.GetProject(f.ctx, f.project)
+	_, err = store.GetProject(f.ctx, f.repo.ORM(), f.project)
 	require.NoError(t, err)
 	triggers, err := f.purgeNow(f.decided())
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{f.enabledTrigger, f.userPaused}, triggers)
-	_, err = f.repo.GetProject(f.ctx, f.project)
+	_, err = store.GetProject(f.ctx, f.repo.ORM(), f.project)
 	require.Error(t, err)
 }
 
@@ -293,7 +294,7 @@ func TestAClaimedPurgeThatFailsIsResumedByTheWorker(t *testing.T) {
 	exec(`CREATE TRIGGER test_refuse_chat_delete BEFORE DELETE ON chats FOR EACH ROW EXECUTE FUNCTION test_refuse_chat_delete()`)
 	_, err = f.purges.PurgeClaimedProject(f.ctx, f.project, f.owner)
 	require.ErrorContains(t, err, "the chat batch fails", "the batches stop part way")
-	_, err = f.repo.GetProject(f.ctx, f.project)
+	_, err = store.GetProject(f.ctx, f.repo.ORM(), f.project)
 	require.NoError(t, err, "what is left stays, hidden and claimed")
 	_, err = f.repo.GetChat(f.ctx, f.chat)
 	require.NoError(t, err, "the chat's batch rolled back")
@@ -309,7 +310,7 @@ func TestAClaimedPurgeThatFailsIsResumedByTheWorker(t *testing.T) {
 	res, err = f.purges.PurgeDueProjects(f.ctx, now.Add(projectpurge.Lease+time.Minute), projectpurge.Lease, 50)
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Purged, "the worker resumes it after the lease")
-	_, err = f.repo.GetProject(f.ctx, f.project)
+	_, err = store.GetProject(f.ctx, f.repo.ORM(), f.project)
 	require.Error(t, err, "the project is gone")
 	_, err = f.repo.GetChat(f.ctx, f.chat)
 	assert.Error(t, err, "its chat is gone")
@@ -650,7 +651,7 @@ func TestDeleteRestoreAndPurgeRefuseAProjectThatMovedOrg(t *testing.T) {
 			return err
 		})
 		assert.ErrorIs(t, err, store.ErrOrgChanged)
-		p, err := f.repo.GetProject(f.ctx, f.project)
+		p, err := store.GetProject(f.ctx, f.repo.ORM(), f.project)
 		require.NoError(t, err)
 		assert.Nil(t, p.DeleteAfter, "nothing was scheduled")
 		assert.True(t, f.trigger(t, f.enabledTrigger).Enabled, "no trigger was paused")
@@ -665,7 +666,7 @@ func TestDeleteRestoreAndPurgeRefuseAProjectThatMovedOrg(t *testing.T) {
 			return err
 		})
 		assert.ErrorIs(t, err, store.ErrOrgChanged)
-		p, err := f.repo.GetProject(f.ctx, f.project)
+		p, err := store.GetProject(f.ctx, f.repo.ORM(), f.project)
 		require.NoError(t, err)
 		assert.NotNil(t, p.DeleteAfter, "still scheduled")
 		assert.False(t, f.trigger(t, f.enabledTrigger).Enabled, "nothing was resumed")
@@ -677,7 +678,7 @@ func TestDeleteRestoreAndPurgeRefuseAProjectThatMovedOrg(t *testing.T) {
 			return f.purges.ClaimProjectPurgeNow(f.ctx, f.project, decided)
 		})
 		assert.ErrorIs(t, err, store.ErrOrgChanged)
-		p, err := f.repo.GetProject(f.ctx, f.project)
+		p, err := store.GetProject(f.ctx, f.repo.ORM(), f.project)
 		require.NoError(t, err, "nothing was purged")
 		assert.Nil(t, p.PurgeStartedAt)
 	})

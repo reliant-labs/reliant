@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -100,7 +102,7 @@ func TestWorkflowStatus_CheckpointLifecycle(t *testing.T) {
 		}))
 	}
 
-	statusAct := NewWorkflowStatusActivity(workflowStatusDeps(repo))
+	statusAct := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(repo)))
 
 	// One chat shared across subtests (createTestChat's project path is fixed
 	// per repo); each subtest gets its own workflow row.

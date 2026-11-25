@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,7 +59,7 @@ func TestCreateWorkflowWithThread_SpawnedRunTakesParentOwner(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	activity := NewCreateWorkflowWithThreadActivity(svc, h.Repo(), workflowRunsOf(h.Repo()))
+	activity := NewCreateWorkflowWithThreadActivity(svc, rowreads.WithRepo(h.Repo()), workflowRunsOf(h.Repo()))
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -86,7 +88,7 @@ func TestCreateWorkflowWithThread_RootRunTakesChatOwner(t *testing.T) {
 	h.CreateTestProject(ctx, projectID, "chat-user")
 	h.CreateTestChat(ctx, chatID, projectID, "chat-user")
 
-	activity := NewCreateWorkflowWithThreadActivity(threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), h.Repo(), workflowRunsOf(h.Repo()))
+	activity := NewCreateWorkflowWithThreadActivity(threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), rowreads.WithRepo(h.Repo()), workflowRunsOf(h.Repo()))
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -116,7 +118,7 @@ func TestWorkflowStatus_CreatedRunsCarryAnOwner(t *testing.T) {
 	h.CreateTestProject(ctx, projectID, "chat-user")
 	h.CreateTestChat(ctx, chatID, projectID, "chat-user")
 
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 
 	rootID := uuid.NewString()
 	var out WorkflowStatusOutput

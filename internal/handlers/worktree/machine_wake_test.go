@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -469,13 +470,13 @@ func TestDeleteWorktree_AsleepOwner_WakesInsteadOfArchiving(t *testing.T) {
 	}
 
 	requireWaking(t, del(), asleepMachineB)
-	got, err := f.repo.GetWorktree(context.Background(), wt.ID)
+	got, err := store.GetWorktree(context.Background(), f.repo.ORM(), wt.ID)
 	require.NoError(t, err)
 	assert.Nil(t, got.DeletedAt, "an asleep machine's worktree is not archived")
 
 	f.router.wakeUp(asleepMachineB)
 	require.NoError(t, del())
-	got, err = f.repo.GetWorktree(context.Background(), wt.ID)
+	got, err = store.GetWorktree(context.Background(), f.repo.ORM(), wt.ID)
 	require.NoError(t, err)
 	assert.NotNil(t, got.DeletedAt, "the retry on the awake machine archives the row")
 }

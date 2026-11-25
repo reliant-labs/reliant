@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -324,7 +325,7 @@ func TestImportWorktree_SingleRepoRegistersInPlace(t *testing.T) {
 		ProjectId: f.projectID, Path: "/x/wt",
 	}))
 	require.NoError(t, err)
-	got, err := f.repo.GetWorktree(context.Background(), resp.Msg.Worktree.Id)
+	got, err := store.GetWorktree(context.Background(), f.repo.ORM(), resp.Msg.Worktree.Id)
 	require.NoError(t, err)
 	assert.Equal(t, "/x/wt", got.Path)
 	assert.Equal(t, "feat/y", got.Branch)

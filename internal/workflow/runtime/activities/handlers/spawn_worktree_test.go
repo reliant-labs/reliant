@@ -36,7 +36,7 @@ func newSpawnWorktreeFixture(t *testing.T) *spawnWorktreeFixture {
 	return &spawnWorktreeFixture{
 		activityPlacementFixture: f,
 		chatID:                   f.chat(t, ""),
-		activity:                 NewCreateWorkflowWithThreadActivity(threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), f.repo, workflowRunsOf(f.repo)),
+		activity:                 NewCreateWorkflowWithThreadActivity(threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), rowreads.WithRepo(f.repo), workflowRunsOf(f.repo)),
 	}
 }
 
@@ -107,7 +107,7 @@ func TestSpawnWorktree_Refusals(t *testing.T) {
 		creating: reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING,
 		failed:   reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED,
 	} {
-		w, err := f.repo.GetWorktree(ctx, id)
+		w, err := store.GetWorktree(ctx, f.repo.ORM(), id)
 		require.NoError(t, err)
 		w.Status = int32(st)
 		require.NoError(t, f.repo.UpdateWorktree(ctx, w))
@@ -170,7 +170,7 @@ func TestSpawnWorktree_ResumeMustMatchBinding(t *testing.T) {
 
 func mustWorktree(t *testing.T, f *spawnWorktreeFixture, id string) *core.Worktree {
 	t.Helper()
-	w, err := f.repo.GetWorktree(context.Background(), id)
+	w, err := store.GetWorktree(context.Background(), f.repo.ORM(), id)
 	require.NoError(t, err)
 	return w
 }
@@ -215,7 +215,7 @@ func TestLoadWorktreeInfo_ThreadBoundRoutesToWorktreeOwner(t *testing.T) {
 	wtID := f.worktree(t, "feature-x", "daemon-b")
 	chat, err := f.repo.GetChat(ctx, f.chatID)
 	require.NoError(t, err)
-	project, err := f.repo.GetProject(ctx, f.projectID)
+	project, err := store.GetProject(ctx, f.repo.ORM(), f.projectID)
 	require.NoError(t, err)
 	a := &ExecuteToolsActivity{repo: rowreads.WithRepo(f.repo), rows: workspaceRowsOf(f.repo)}
 

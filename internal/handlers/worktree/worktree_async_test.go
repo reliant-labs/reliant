@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -145,7 +146,7 @@ func TestCreateWorktreeReturnsBeforeDaemonWorkFinishes(t *testing.T) {
 	assert.Equal(t, reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING, resp.Msg.Worktree.Status,
 		"caller must get a pending row it can render, not a finished one")
 
-	stored, err := repo.GetWorktree(ctx, resp.Msg.Worktree.Id)
+	stored, err := store.GetWorktree(ctx, repo.ORM(), resp.Msg.Worktree.Id)
 	require.NoError(t, err)
 	assert.Equal(t, int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING), stored.Status)
 

@@ -117,7 +117,7 @@ func TestListProjectReposAdoptsUnregisteredRepos(t *testing.T) {
 	persisted, err := store.ListReposByProject(ctx, repo.ORM(), project.ID)
 	require.NoError(t, err)
 	require.Len(t, persisted, 1)
-	updated, err := repo.GetProject(ctx, project.ID)
+	updated, err := store.GetProject(ctx, repo.ORM(), project.ID)
 	require.NoError(t, err)
 	assert.True(t, updated.IsGitRepo)
 

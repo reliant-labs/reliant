@@ -11,7 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -31,7 +33,7 @@ func TestRecreateWorktree_RepairsAnActiveWorktreeWhoseDirectoryVanished(t *testi
 	assert.Contains(t, e.router.calls, toolexec.WorkspaceEnsureCommand)
 
 	// The row is untouched: still active, same path. The chat keeps its binding.
-	after, err := e.repo.GetWorktree(e.ctx, wt.ID)
+	after, err := store.GetWorktree(e.ctx, e.repo.ORM(), wt.ID)
 	require.NoError(t, err)
 	assert.Nil(t, after.DeletedAt)
 	assert.Equal(t, path, after.Path)

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -83,7 +84,7 @@ func TestCreateWorktreeCopiesPathsOnceFromProjectRoot(t *testing.T) {
 
 	userID := uuid.New().String()
 	projectID := seedMultiRepoProject(t, repo, userID, "control-plane", "forge", "reliant")
-	project, err := repo.GetProject(context.Background(), projectID)
+	project, err := store.GetProject(context.Background(), repo.ORM(), projectID)
 	require.NoError(t, err)
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)

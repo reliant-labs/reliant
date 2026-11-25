@@ -125,7 +125,7 @@ func newWorktreeToolFixture(t *testing.T, repos ...*core.Repo) *worktreeToolFixt
 	chatID := newCaller(t, repo)
 	chat, err := repo.GetChat(context.Background(), chatID)
 	require.NoError(t, err)
-	project, err := repo.GetProject(context.Background(), chat.ProjectID)
+	project, err := store.GetProject(context.Background(), repo.ORM(), chat.ProjectID)
 	require.NoError(t, err)
 	// The project lives on the machine; on the worker this path is nothing.
 	// The tool knows it only as the run machine's checkout (rc.Project).
@@ -151,7 +151,7 @@ func newWorktreeToolFixture(t *testing.T, repos ...*core.Repo) *worktreeToolFixt
 
 func (f *worktreeToolFixture) call(t *testing.T, params WorktreeParams) ToolResponse {
 	t.Helper()
-	return callRunTool(t, NewWorktreeTool(rowreads.WithRepo(f.repo), f.repo, store.NewChatExtStore(f.repo.ORM()), f.machine, f.settler, chatupdates.NewFromORM(f.repo.ORM(), f.repo, nil)), f.rc, WorktreeToolName, params)
+	return callRunTool(t, NewWorktreeTool(rowreads.WithRepo(f.repo), rowreads.WithRepo(f.repo), store.NewChatExtStore(f.repo.ORM()), f.machine, f.settler, chatupdates.NewFromORM(f.repo.ORM(), f.repo, nil)), f.rc, WorktreeToolName, params)
 }
 
 func (f *worktreeToolFixture) row(t *testing.T, name string) *db.Worktree {
@@ -310,7 +310,7 @@ func TestWorktreeTool_Create_ReusesAnArchivedName(t *testing.T) {
 	assert.NotEqual(t, old.ID, live.ID)
 	assert.Equal(t, int32(1), live.Status)
 
-	kept, err := f.repo.GetWorktree(context.Background(), old.ID)
+	kept, err := store.GetWorktree(context.Background(), f.repo.ORM(), old.ID)
 	require.NoError(t, err)
 	assert.NotNil(t, kept.DeletedAt, "the archived row stays archived")
 
@@ -320,7 +320,7 @@ func TestWorktreeTool_Create_ReusesAnArchivedName(t *testing.T) {
 
 	del := f.call(t, WorktreeParams{Action: "delete", Name: "feat"})
 	require.False(t, del.IsError, del.Content)
-	gone, err := f.repo.GetWorktree(context.Background(), live.ID)
+	gone, err := store.GetWorktree(context.Background(), f.repo.ORM(), live.ID)
 	require.NoError(t, err)
 	assert.NotNil(t, gone.DeletedAt)
 	assert.Empty(t, f.machine.to("worktree.force_cleanup"))
@@ -334,7 +334,7 @@ func TestWorktreeTool_Create_RetriesAFailedName(t *testing.T) {
 	resp := f.call(t, WorktreeParams{Action: "create", Name: "retry", Branch: failed.Branch})
 	require.False(t, resp.IsError, resp.Content)
 
-	old, err := f.repo.GetWorktree(context.Background(), failed.ID)
+	old, err := store.GetWorktree(context.Background(), f.repo.ORM(), failed.ID)
 	require.NoError(t, err)
 	assert.NotNil(t, old.DeletedAt, "the failed row is archived")
 	live, err := f.repo.GetLiveWorktreeByName(context.Background(), f.project.ID, "retry")
@@ -524,7 +524,7 @@ func TestWorktreeTool_Delete_ArchivesAndLeavesTheDirectoryToReclaim(t *testing.T
 	resp := f.call(t, WorktreeParams{Action: "delete", Name: "feature"})
 	require.False(t, resp.IsError, resp.Content)
 
-	got, err := f.repo.GetWorktree(context.Background(), wt.ID)
+	got, err := store.GetWorktree(context.Background(), f.repo.ORM(), wt.ID)
 	require.NoError(t, err)
 	assert.NotNil(t, got.DeletedAt, "archived")
 	assert.Empty(t, f.machine.sent, "no directory is removed directly")
@@ -571,7 +571,7 @@ func TestWorktreeTool_Delete_Refusals(t *testing.T) {
 		resp := f.call(t, WorktreeParams{Action: "delete", Name: "own"})
 		require.True(t, resp.IsError)
 		assert.Contains(t, resp.Content, "this chat is working in")
-		got, err := f.repo.GetWorktree(context.Background(), own.ID)
+		got, err := store.GetWorktree(context.Background(), f.repo.ORM(), own.ID)
 		require.NoError(t, err)
 		assert.Nil(t, got.DeletedAt)
 	})
@@ -579,7 +579,7 @@ func TestWorktreeTool_Delete_Refusals(t *testing.T) {
 	t.Run("the main checkout", func(t *testing.T) {
 		// is_main is written by the insert only, so the row is created with it.
 		main := f.registerMain(t, "main-ish")
-		got, err := f.repo.GetWorktree(context.Background(), main.ID)
+		got, err := store.GetWorktree(context.Background(), f.repo.ORM(), main.ID)
 		require.NoError(t, err)
 		require.True(t, got.IsMain)
 		resp := f.call(t, WorktreeParams{Action: "delete", Name: "main-ish"})
@@ -614,7 +614,7 @@ func TestWorktreeTool_RefusesANameThatIsAPath(t *testing.T) {
 func TestWorktreeTool_WithoutAMachine_DoesNothingLocally(t *testing.T) {
 	f := newWorktreeToolFixture(t)
 
-	resp := callRunTool(t, NewWorktreeTool(rowreads.WithRepo(f.repo), f.repo, store.NewChatExtStore(f.repo.ORM()), nil, nil, chatupdates.NewFromORM(f.repo.ORM(), f.repo, nil)), f.rc, WorktreeToolName, WorktreeParams{Action: "create", Name: "feature-auth"})
+	resp := callRunTool(t, NewWorktreeTool(rowreads.WithRepo(f.repo), rowreads.WithRepo(f.repo), store.NewChatExtStore(f.repo.ORM()), nil, nil, chatupdates.NewFromORM(f.repo.ORM(), f.repo, nil)), f.rc, WorktreeToolName, WorktreeParams{Action: "create", Name: "feature-auth"})
 	require.True(t, resp.IsError)
 	assert.Contains(t, resp.Content, "no machine can be reached")
 	assert.Nil(t, f.row(t, "feature-auth"))

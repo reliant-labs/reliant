@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
-	"github.com/stretchr/testify/require"
 )
 
 func TestArchiveRecoverableIdleAndFenceSafeRevival(t *testing.T) {
@@ -23,7 +24,7 @@ func TestArchiveRecoverableIdleAndFenceSafeRevival(t *testing.T) {
 	ok, err = store.ArchiveRecoverableIdleWorktree(ctx, env.ORM, id, time.Now())
 	require.NoError(t, err)
 	require.True(t, ok)
-	wt, err := env.Repo.GetWorktree(ctx, id)
+	wt, err := store.GetWorktree(ctx, env.Repo.ORM(), id)
 	require.NoError(t, err)
 	require.Equal(t, core.ArchivedBecauseRecoverableIdle, wt.CleanupMetadata.ArchivedBecause)
 	fence, err := store.ReviveArchivedWorktree(ctx, env.ORM, id)
@@ -51,7 +52,7 @@ func TestArchiveRecoverableIdleNeverOverwritesSavedRecoveryProvenance(t *testing
 			ok, err := store.ArchiveRecoverableIdleWorktree(ctx, env.ORM, id, time.Now().Add(time.Hour))
 			require.NoError(t, err)
 			require.False(t, ok)
-			wt, err := env.Repo.GetWorktree(ctx, id)
+			wt, err := store.GetWorktree(ctx, env.Repo.ORM(), id)
 			require.NoError(t, err)
 			require.Nil(t, wt.DeletedAt)
 		})
@@ -75,7 +76,7 @@ func TestArchiveRecoverableIdleExcludesSpawnedThreadAndPausedRuns(t *testing.T) 
 			ok, err := store.ArchiveRecoverableIdleWorktree(ctx, env.ORM, child.ID, time.Now().Add(time.Hour))
 			require.NoError(t, err)
 			require.False(t, ok)
-			wt, err := env.Repo.GetWorktree(ctx, child.ID)
+			wt, err := store.GetWorktree(ctx, env.Repo.ORM(), child.ID)
 			require.NoError(t, err)
 			require.Nil(t, wt.DeletedAt)
 		})

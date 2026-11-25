@@ -49,7 +49,7 @@ func TestEnsureProjectForApp_CreatesOnceThenReuses(t *testing.T) {
 	first, err := store.EnsureProjectForApp(ctx, r.ORM(), ensureInput("org-a", "u1"))
 	require.NoError(t, err)
 	assert.True(t, first.Created)
-	p, err := r.GetProject(ctx, first.ProjectID)
+	p, err := store.GetProject(ctx, r.ORM(), first.ProjectID)
 	require.NoError(t, err)
 	assert.Equal(t, "shop", p.Name)
 	assert.Equal(t, "u1", p.UserID)
@@ -118,7 +118,7 @@ func TestEnsureProjectForApp_RetriesOutsideProjectNameRace(t *testing.T) {
 	require.True(t, res.Created)
 	assert.Equal(t, 1, hook.conflicts, "the first ensure insert must lose a real unique-key race")
 	assert.Equal(t, 3, hook.inserts, "outside insert, failed ensure insert, retried ensure insert")
-	p, err := r.GetProject(ctx, res.ProjectID)
+	p, err := store.GetProject(ctx, r.ORM(), res.ProjectID)
 	require.NoError(t, err)
 	assert.Equal(t, "shop (app)", p.Name)
 	assert.Equal(t, "/home/workspace/projects/shop (app)", p.Path)
@@ -187,7 +187,7 @@ func TestEnsureProjectForApp_NeverMatchesAnotherOrg(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, res.Created)
 	assert.NotEqual(t, "elsewhere", res.ProjectID)
-	p, err := r.GetProject(ctx, res.ProjectID)
+	p, err := store.GetProject(ctx, r.ORM(), res.ProjectID)
 	require.NoError(t, err)
 	assert.Equal(t, "org-a", *p.OrgID)
 	assert.Equal(t, "shop (app)", p.Name, "the user's path for \"shop\" is taken across orgs")
@@ -241,7 +241,7 @@ func TestEnsureProjectForApp_ConcurrentRemotesGetDistinctNames(t *testing.T) {
 	names := map[string]bool{}
 	for i := range n {
 		require.NoError(t, errs[i])
-		p, err := r.GetProject(ctx, ids[i])
+		p, err := store.GetProject(ctx, r.ORM(), ids[i])
 		require.NoError(t, err)
 		assert.False(t, names[p.Name], "name %q chosen twice", p.Name)
 		names[p.Name] = true

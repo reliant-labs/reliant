@@ -73,7 +73,7 @@ func TestStoreNeverPersistsRemoteCredentials(t *testing.T) {
 	require.NoError(t, err)
 	_, err = raw.Exec(`UPDATE repos SET remote_url = $1 WHERE id = $2`, leakedRemote, r.ID)
 	require.NoError(t, err)
-	gp, err := repo.GetProject(ctx, p.ID)
+	gp, err := store.GetProject(ctx, repo.ORM(), p.ID)
 	require.NoError(t, err)
 	assert.Equal(t, cleanRemote, *gp.RemoteURL, "GetProject")
 	gr, err := repo.GetRepo(ctx, r.ID)

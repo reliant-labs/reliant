@@ -58608,9 +58608,7 @@
       "field": "ProjectRows",
       "interface": "github.com/reliant-labs/reliant/internal/launch.ProjectReader",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -58745,9 +58743,7 @@
       "field": "Worktrees",
       "interface": "github.com/reliant-labs/reliant/internal/launch.WorktreeReader",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -59423,9 +59419,7 @@
       "field": "ProjectRows",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.ProjectReader",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -59607,9 +59601,7 @@
       "field": "ProjectRows",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/mcp.ProjectReader",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -60317,9 +60309,7 @@
       "field": "ProjectRows",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.ProjectReader",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -60900,9 +60890,7 @@
       "field": "ProjectRows",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/scenario.ProjectReader",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -61109,9 +61097,7 @@
       "field": "Projects",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.Projects",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -61240,9 +61226,7 @@
       "field": "Projects",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.Projects",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -62412,9 +62396,7 @@
       "field": "ProjectRows",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/workflow.ProjectReader",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -62566,9 +62548,7 @@
       "field": "ProjectRows",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.ProjectReader",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],

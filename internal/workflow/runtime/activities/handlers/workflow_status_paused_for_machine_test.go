@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +33,7 @@ func newPausedForMachineFixture(t *testing.T) pausedForMachineFixture {
 	require.NoError(t, h.Repo().CreateWorkflow(ctx, &db.Workflow{
 		ID: workflowID, ChatID: chatID, WorkflowName: "builtin://chat", Thread: chatID, Status: db.Active(),
 	}))
-	return pausedForMachineFixture{h: h, activity: NewWorkflowStatusActivity(workflowStatusDeps(h.Repo())), chatID: chatID, workflowID: workflowID}
+	return pausedForMachineFixture{h: h, activity: NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo()))), chatID: chatID, workflowID: workflowID}
 }
 
 func (f pausedForMachineFixture) report(t *testing.T, status string, opts func(*WorkflowStatusInput)) {

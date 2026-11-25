@@ -5,9 +5,11 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A project-file save validates before invoking the daemon writer. With no
@@ -15,7 +17,7 @@ import (
 // this structured validation rejection. No filesystem access is needed here.
 func TestSaveWorkflowInvalidProjectUpdateNeverReachesWriter(t *testing.T) {
 	ctx, repo, svc, projectID := saveTestSetup(t)
-	project, err := repo.GetProject(ctx, projectID)
+	project, err := store.GetProject(ctx, repo.ORM(), projectID)
 	require.NoError(t, err)
 	before := saveWorkflow(t, ctx, svc, projectID, validLifecycleWorkflow, reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE)
 	require.True(t, before.Success)

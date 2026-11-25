@@ -10,6 +10,8 @@ import (
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func seedFilterWorktree(t *testing.T, repo *Repo, projectID, id string, isMain bool, lastActive time.Time) {
@@ -38,7 +40,7 @@ func TestListWorktrees_ActiveArchivedAndMainAreSeparateQueries(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
-	project, err := repo.GetProject(ctx, "test-project")
+	project, err := store.GetProject(ctx, repo.ORM(), "test-project")
 	require.NoError(t, err)
 	base := time.Now().UTC().Add(-time.Hour)
 
@@ -95,7 +97,7 @@ func TestListWorktreesByIDs_ReturnsArchivedAndSkipsUnknown(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
-	project, err := repo.GetProject(ctx, "test-project")
+	project, err := store.GetProject(ctx, repo.ORM(), "test-project")
 	require.NoError(t, err)
 	now := time.Now().UTC()
 
@@ -122,7 +124,7 @@ func TestListWorktrees_DaemonIDNarrowsToThatMachineAndPages(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
-	project, err := repo.GetProject(ctx, "test-project")
+	project, err := store.GetProject(ctx, repo.ORM(), "test-project")
 	require.NoError(t, err)
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	here, elsewhere := "d-here", "d-elsewhere"

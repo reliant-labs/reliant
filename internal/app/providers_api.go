@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 
 	"connectrpc.com/connect"
 	forgeauth "github.com/reliant-labs/forge/pkg/auth"
@@ -1419,7 +1420,7 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	cfg := reconciliation.DefaultConfig()
 	cfg.Namespace = d.Namespace
 	r := reconciliation.New(reconciliation.Deps{
-		Store:     d.DB,
+		Store:     rowreads.WithRepo(d.DB),
 		Chats:     store.NewChatsWithActivityExtStore(d.DB.ORM()),
 		RunEvents: runevents.NewStore(d.DB.ORM()),
 		Questions: store.NewQuestionExtStore(d.DB.ORM()),

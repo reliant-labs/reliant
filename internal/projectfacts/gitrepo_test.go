@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func newReconcileTestProject(t *testing.T, repo *db.Repo, isGit bool) *db.Project {
@@ -42,7 +43,7 @@ func TestReconcileGitRepo_Bidirectional(t *testing.T) {
 	t.Run("false to true when daemon now sees a .git", func(t *testing.T) {
 		p := newReconcileTestProject(t, repo, false)
 		require.NoError(t, ReconcileGitRepo(ctx, repo, p, true))
-		got, err := repo.GetProject(ctx, p.ID)
+		got, err := store.GetProject(ctx, repo.ORM(), p.ID)
 		require.NoError(t, err)
 		assert.True(t, got.IsGitRepo, "gaining a .git must flip the cached flag true")
 	})
@@ -50,7 +51,7 @@ func TestReconcileGitRepo_Bidirectional(t *testing.T) {
 	t.Run("true to false when the .git is gone", func(t *testing.T) {
 		p := newReconcileTestProject(t, repo, true)
 		require.NoError(t, ReconcileGitRepo(ctx, repo, p, false))
-		got, err := repo.GetProject(ctx, p.ID)
+		got, err := store.GetProject(ctx, repo.ORM(), p.ID)
 		require.NoError(t, err)
 		assert.False(t, got.IsGitRepo, "losing the .git must flip the cached flag false — this is the regression the old monotonic logic allowed")
 	})
@@ -64,12 +65,12 @@ func TestReconcileGitRepo_NoopWhenUnchanged(t *testing.T) {
 	ctx := context.Background()
 
 	p := newReconcileTestProject(t, repo, true)
-	before, err := repo.GetProject(ctx, p.ID)
+	before, err := store.GetProject(ctx, repo.ORM(), p.ID)
 	require.NoError(t, err)
 
 	require.NoError(t, ReconcileGitRepo(ctx, repo, p, true))
 
-	after, err := repo.GetProject(ctx, p.ID)
+	after, err := store.GetProject(ctx, repo.ORM(), p.ID)
 	require.NoError(t, err)
 	assert.Equal(t, before.UpdatedAt, after.UpdatedAt, "no-op reconcile must not bump updated_at")
 }

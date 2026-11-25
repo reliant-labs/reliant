@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -309,12 +310,12 @@ func TestFileSystemProxy_ChatFromAnotherProject_IsIgnored(t *testing.T) {
 	require.NotNil(t, resp)
 	assert.Equal(t, []string{fsRoutingDefaultDaemon}, f.router.daemonsFor("fs.get_tree"))
 
-	project, err := f.repo.GetProject(context.Background(), f.projectID)
+	project, err := store.GetProject(context.Background(), f.repo.ORM(), f.projectID)
 	require.NoError(t, err)
 	// The handler scopes the tree with filepreview.ResolveBasePath; the main
 	// checkout stands in for the request machine's own.
 	mainCheckout := func(context.Context) (string, error) { return project.Path, nil }
-	base, err := filepreview.ResolveBasePath(f.ctx, f.repo, f.projectID, nil, &chatID, mainCheckout)
+	base, err := filepreview.ResolveBasePath(f.ctx, rowreads.WithRepo(f.repo), f.projectID, nil, &chatID, mainCheckout)
 	require.NoError(t, err)
 	assert.Equal(t, project.Path, base, "another project's chat must not scope this project's tree to its worktree")
 }

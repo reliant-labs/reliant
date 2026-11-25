@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // chatProjectsFixture is a chat on one machine whose primary project is
@@ -235,7 +236,7 @@ func TestAttachAfterMoveWithStaleChat(t *testing.T) {
 	project := f.installed("forge")
 	stale, err := f.repo.GetChat(f.ctx, f.chatID)
 	require.NoError(t, err)
-	primary, err := f.repo.GetProject(f.ctx, f.primary)
+	primary, err := store.GetProject(f.ctx, f.repo.ORM(), f.primary)
 	require.NoError(t, err)
 	_, err = f.move(&reliantv1.MoveChatToProjectRequest{ChatId: f.chatID, ProjectId: project})
 	require.NoError(t, err)

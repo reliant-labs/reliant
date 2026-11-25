@@ -32,8 +32,10 @@ var ErrNoDatabase = errors.New("rowreads: no database")
 // Reads is the by-id row reads over one database handle. The zero value reads
 // nothing.
 type Reads struct {
-	daemons store.DaemonExtStore
-	repos   store.RepoExtStore
+	daemons   store.DaemonExtStore
+	repos     store.RepoExtStore
+	projects  store.ProjectExtStore
+	worktrees store.WorktreeExtStore
 }
 
 // New returns the reads over db. A nil db yields reads that all fail with
@@ -42,7 +44,7 @@ func New(db orm.Context) Reads {
 	if db == nil {
 		return Reads{}
 	}
-	return Reads{daemons: store.NewDaemonExtStore(db), repos: store.NewRepoExtStore(db)}
+	return Reads{daemons: store.NewDaemonExtStore(db), repos: store.NewRepoExtStore(db), projects: store.NewProjectExtStore(db), worktrees: store.NewWorktreeExtStore(db)}
 }
 
 // Of is the reads over the database handle of s (a *db.Repo), or reads that
@@ -71,6 +73,30 @@ func (r Reads) GetDaemon(ctx context.Context, id string) (*core.Daemon, error) {
 		return nil, fmt.Errorf("failed to get daemon %s: %w", id, err)
 	}
 	return d, err
+}
+
+// GetProject reads a project row. It checks no owner: a read that must is
+// projectaccess.Service.GetProjectWithUserCheck.
+func (r Reads) GetProject(ctx context.Context, id string) (*core.Project, error) {
+	if r.projects == nil {
+		return nil, ErrNoDatabase
+	}
+	if id == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
+	return r.projects.GetProject(ctx, id)
+}
+
+// GetWorktree reads a worktree row. It checks no owner: every caller holds a
+// chat or worktree id it already authorized.
+func (r Reads) GetWorktree(ctx context.Context, id string) (*core.Worktree, error) {
+	if r.worktrees == nil {
+		return nil, ErrNoDatabase
+	}
+	if id == "" {
+		return nil, fmt.Errorf("worktree ID cannot be empty")
+	}
+	return r.worktrees.GetWorktree(ctx, id)
 }
 
 // ListReposByProject lists a project's repos, ordered by relative path.
