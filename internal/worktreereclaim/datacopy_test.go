@@ -14,7 +14,9 @@ import (
 // An ignored file that is a byte-identical copy of the source checkout's file
 // at the same path is not unique data: removing the worktree loses nothing.
 // That is how a worktree gets its dev secrets and .env, and it held every such
-// worktree forever. Both paths remove it.
+// worktree forever. Both paths remove it, the automatic one included (owner,
+// 2026-11-25: control-plane's secrets/dev.yaml held 35 worktrees on one
+// machine at "protected descendant: secrets").
 func TestReconcile_IgnoredCopyOfSourceDoesNotHold(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
@@ -29,12 +31,9 @@ func TestReconcile_IgnoredCopyOfSourceDoesNotHold(t *testing.T) {
 		w := f.worktree("copy-"+name, "feat/copy-"+name)
 		write(t, filepath.Join(w.Path, "secrets", "dev.yaml"), "token: abc\n")
 		write(t, filepath.Join(w.Path, ".env"), "KEY=1\n")
-		got := play(w)
-		if name == "auto" {
-			if got.Outcome != OutcomeHeld || !exists(filepath.Join(w.Path, ".env")) {
-				t.Fatalf("automatic cleanup must preserve protected paths even when copied: %+v", got)
-			}
-		} else if got.Outcome != OutcomeRemoved || exists(w.Path) {
+		// The automatic path too: the retirement inventory judges the
+		// never-listed copies as the classifier does (sourceCovers).
+		if got := play(w); got.Outcome != OutcomeRemoved || exists(w.Path) {
 			t.Fatalf("%s: got %+v, want removed", name, got)
 		}
 	}
