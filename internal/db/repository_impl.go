@@ -2766,9 +2766,6 @@ func (r *Repo) LockUserOrgs(ctx context.Context, userID string, reads ...OrgRead
 }
 
 func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
-	if id == "" {
-		return nil, fmt.Errorf("trigger ID cannot be empty")
-	}
 	return store.GetTrigger(ctx, r.ORM(), id)
 }
 
@@ -2868,22 +2865,6 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
-}
-
-// GetLatestTriggerEvent returns the trigger's latest firing, optionally
-// filtered by outcome, and (nil, nil) when it has never fired.
-func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
-	if triggerID == "" {
-		return nil, fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.GetLatestTriggerEvent(ctx, r.ORM(), triggerID, outcome)
-}
-
-func (r *Repo) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.SetTriggerWebhookTokenHash(ctx, r.ORM(), id, hash)
 }
 
 func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {
