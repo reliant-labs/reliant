@@ -10,6 +10,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/approvalclose"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/questions"
@@ -166,7 +167,11 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	var questionsByStep handlers.QuestionsByStep
 	var questionWriter handlers.QuestionWriter
 	var workspaceRows handlers.WorkspaceRows
+	// updates tells clients what the activities changed; it publishes through
+	// the repository's update notifiers, as the repository's own writes do.
+	var updates chatupdates.Service
 	if deps.Repo != nil {
+		updates = deps.Repo.UpdateWriter()
 		workspaceRows = handlers.NewWorkspaceRows(deps.Repo.ORM())
 		workflowRuns = handlers.NewWorkflowRuns(deps.Repo.ORM())
 		toolCalls = handlers.NewToolCalls(deps.Repo.ORM())
@@ -206,7 +211,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 			queue:    ams,
 			resolver: ams,
 			preempt:  ams,
-			enqueue:  agentmailbox.New(agentmailbox.Deps{Store: ams, Announcer: deps.Repo}),
+			enqueue:  agentmailbox.New(agentmailbox.Deps{Store: ams, Announcer: deps.Repo.UpdateWriter()}),
 		}
 	} else {
 		mailboxStore = &agentMessageStores{}
@@ -240,7 +245,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	if deps.Repo != nil {
 		runFunding = handlers.NewRunFundingStore(deps.Repo.ORM(), deps.Repo)
 	}
-	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivityWithDeps(handlers.ExecuteToolsDeps{Store: deps.Repo, Rows: workspaceRows, ToolExecutor: deps.ToolExecutor, ToolCalls: toolCalls, Preemption: mailboxStore.preempt}).WithRunFunding(runFunding).WithToolUsage(deps.ToolUsage).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter).WithChatProjects(chatProjects))
+	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivityWithDeps(handlers.ExecuteToolsDeps{Store: deps.Repo, Rows: workspaceRows, ToolExecutor: deps.ToolExecutor, ToolCalls: toolCalls, Preemption: mailboxStore.preempt}).WithUpdates(userRefetcher(updates)).WithRunFunding(runFunding).WithToolUsage(deps.ToolUsage).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter).WithChatProjects(chatProjects))
 	v2.RegisterActivity(registry, handlers.NewInvokeToolActivityWithDeps(handlers.ExecuteToolsDeps{Store: deps.Repo, Rows: workspaceRows, ToolExecutor: deps.ToolExecutor, ToolCalls: toolCalls, Preemption: mailboxStore.preempt}).WithRunFunding(runFunding).WithToolUsage(deps.ToolUsage).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter).WithChatProjects(chatProjects))
 	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger).WithHostedExecutor(deps.HostedActions).WithSecretResolver(deps.SecretResolver))
 
@@ -271,7 +276,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// QUESTION ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewQuestionCreateActivity(deps.Repo, questionWriter, questionsByStep, runEvents))
+	v2.RegisterActivity(registry, handlers.NewQuestionCreateActivity(deps.Repo, questionWriter, questionsByStep, runEvents).WithUpdates(userRefetcher(updates)))
 	v2.RegisterActivity(registry, handlers.NewQuestionResolveActivity(deps.Repo, questionWriter))
 
 	// ========================================================================
@@ -290,7 +295,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// WORKTREE ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewCreateWorktreeActivity(deps.Repo, workspaceRows, deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewCreateWorktreeActivity(deps.Repo, workspaceRows, deps.DaemonRouter).WithUpdates(userRefetcher(updates)))
 	v2.RegisterActivity(registry, handlers.NewGitPublishActivity(deps.Repo, workspaceRows, deps.DaemonRouter, deps.Connections).WithLedger(deps.WriteLedger))
 	v2.RegisterActivity(registry, handlers.NewDeleteWorktreeActivity(deps.Repo, workspaceRows, deps.DaemonRouter))
 
@@ -313,7 +318,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewPreflightRequirementsActivity(deps.Repo, workspaceRows, deps.ToolExecutor, deps.Connections).WithDaemonRouter(deps.DaemonRouter))
 	v2.RegisterActivity(registry, handlers.NewMachineResumeWakeActivity(deps.Repo, workspaceRows, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewGreenfieldProbeActivity(deps.Repo, deps.DaemonRouter))
-	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(handlers.WorkflowStatusDeps{Repo: deps.Repo, Runs: runRecords, Workflows: workflowRuns, Attention: attention, RunEvents: runEvents, Pauser: pauser}))
+	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(handlers.WorkflowStatusDeps{Repo: deps.Repo, Updates: chatRefetcher(updates), Runs: runRecords, Workflows: workflowRuns, Attention: attention, RunEvents: runEvents, Pauser: pauser}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewThreadStatusActivity(handlers.ThreadStatusDeps{Store: deps.Repo, Mailbox: mailboxStore.resolver}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewUsageLimitWaitActivity(handlers.UsageLimitWaitDeps{Store: deps.Repo, Waits: deps.ProviderBackoff, Threads: deps.Threads}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewTriggerCapacitySlotActivity(handlers.TriggerCapacitySlotDeps{Slots: capacitySlots}))
@@ -365,4 +370,20 @@ type agentMessageStores struct {
 	resolver handlers.MailboxResolver
 	preempt  handlers.MailboxPreempter
 	enqueue  handlers.EnqueueAgentMessageStore
+}
+
+// userRefetcher and chatRefetcher turn an absent writer into a nil role: a nil
+// chatupdates.Service converted to an activity's role is not nil.
+func userRefetcher(u chatupdates.Service) handlers.UserRefetcher {
+	if u == nil {
+		return nil
+	}
+	return u
+}
+
+func chatRefetcher(u chatupdates.Service) handlers.ChatRefetcher {
+	if u == nil {
+		return nil
+	}
+	return u
 }

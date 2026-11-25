@@ -372,7 +372,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		Spawns:           store.NewToolCallExtStore(s.Repo.ORM()),
 		Selections:       store.NewChatSelectionExtStore(s.Repo.ORM()),
 		Backoff:          providerbackofftest.New(t, s.Repo),
-		Mailbox:          agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
+		Mailbox:          agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo.UpdateWriter()}),
 		AgentMessages:    store.NewAgentMessageExtStore(s.Repo.ORM()),
 		Messages:         store.NewMessageExtStore(s.Repo.ORM()),
 		ToolBlocks:       store.NewMessageContentBlockExtStore(s.Repo.ORM()),
@@ -389,7 +389,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		ChatViews: store.NewChatsWithActivityExtStore(s.Repo.ORM()),
 		Resolver:  questions.NewFromRepo(s.Repo),
 		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
-		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
+		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo.UpdateWriter()}),
 		Signals:   pause,
 		Messages:  chatSvc,
 	})
