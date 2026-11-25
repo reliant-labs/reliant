@@ -33,6 +33,7 @@ variant of the world names an **overlay** (`harness.overlays`), registered in
 | `empty-reads` | every page: a read no fixture answers gets the empty response, as a quiet backend would |
 | `chat-attached-projects` | the fixture chat with docs attached beside shop (the composer's project chips) |
 | `new-chat-installs` | where Alex's projects are checked out, for the phone's new chat |
+| `chat-agents` | a chat opened by URL, never listed: one turn that starts twelve sub-agents (8 done, 3 running, 1 failed) |
 | `chart-hover` | a dashboard opened by URL (a figure and a two-series line) for the chart hover surfaces |
 | `sandboxes-dashboard` | the platform's Sandboxes dashboard, opened by URL, every panel answered |
 | `pending:reliant.v1.ChatService/ListChats` | the harness's own self-test: the chat list never answers |
@@ -88,7 +89,31 @@ pixels that are not comparable to the baselines.
   next green run closes it. It catches what moved a surface from outside the
   queue's paths, and never blocks a merge.
 
-Neither ever re-captures or retries. A surface that differs on a commit whose
+## Re-capture without docker: `visual-recapture.yml`
+
+No docker where you are (pr-fix's machine has none)? Dispatch the re-capture on
+a hosted runner, always from main:
+
+```sh
+gh workflow run visual-recapture.yml --ref main -f pr=<n> -f head=<full head sha>
+```
+
+It merges current main into the head, runs `task test:web:visual --
+--update-snapshots=changed` in the pinned image, and commits ONLY the changed
+PNGs under `__screenshots__/` onto the head as `test(web): re-capture visual
+baselines`, pushed without force (a head that moved refuses it). The job
+that runs the PR's code can only read; the job that pushes runs main's
+`.github/scripts/visual-recapture-apply.sh` and nothing from the PR, refuses a
+symlink anywhere on a baseline's path in the PR's checkout, and dispatches no
+workflow (on the PR's branch that would run the PR's own definition with this
+repository's secrets): the new head's `CI result` comes from the pipeline's
+re-trigger of a required check no run reported. control-plane's pr-fix
+dispatches it when a merge group failed only on `Visual baseline`. A run
+where every capture already matches pushes nothing: the failure came from an
+entry ahead in the queue, or a nondeterministic surface (below). Still list
+the moved surfaces in the PR body.
+
+Neither gate ever re-captures or retries. A surface that differs on a commit whose
 UI did not change is nondeterministic: delete it from `SURFACES` with a
 `flake:removed` issue holding its entry and the diff, never re-run to green.
 

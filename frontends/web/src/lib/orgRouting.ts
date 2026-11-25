@@ -35,15 +35,15 @@ import { redirect } from "@tanstack/react-router";
 
 import { inOrg, orgFreePath, orgRootPath } from "@/lib/paths/org";
 import { legacyOrgForward } from "@/lib/paths/legacy";
-import { queryClient } from "@/lib/query-client";
 import { hasControlPlane } from "@/services/controlPlane/config";
-import { listMyOrganizations, orgKeys, resolveActiveOrg, type MyOrg, type MyOrgs } from "@/services/controlPlane/orgs";
+import { fetchMyOrgs, resolveActiveOrg, type MyOrg, type MyOrgs } from "@/services/controlPlane/orgs";
 import {
   bindActiveOrgUser,
   isMachineCredentialUser,
   learnOrgSegments,
   useActiveOrgStore,
 } from "@/store/activeOrgStore";
+import { getAuthIdentity } from "@/lib/auth/use-auth";
 import { useAuthStore } from "@/store/authStore";
 
 import { rememberOrgsForNotice } from "./orgArrivalNotice";
@@ -65,10 +65,10 @@ export const defaultOrgRoutingDeps: OrgRoutingDeps = {
     // A first load restores the session here, before any guard renders; the
     // guard's own call joins this one (authStore.initialize is shared).
     if (!useAuthStore.getState().initialized) await useAuthStore.getState().initialize();
-    return useAuthStore.getState().user?.id ?? null;
+    return getAuthIdentity()?.id ?? null;
   },
   hasOrgs: () => hasControlPlane,
-  listOrgs: () => queryClient.fetchQuery({ queryKey: orgKeys.mine, queryFn: listMyOrganizations, staleTime: 60_000 }),
+  listOrgs: fetchMyOrgs,
 };
 
 /** The part of a router location these read. */

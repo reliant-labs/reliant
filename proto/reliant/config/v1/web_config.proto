@@ -90,19 +90,10 @@ message ReliantWebConfig {
   }];
 
   // ── The public forge demo (the forge-demo bundle, demo.html) ───────────
-  // Deprecated: the host on which THIS bundle mounts the demo shell. The
-  // demo is its own build and env now (deploy/kcl/demo), the supported path;
-  // this bundle still honours the key (lib/shell.ts) so a deployment that
-  // points the host at reliant-web keeps its demo. Removed only in a future
-  // major.
-  string demo_app_host = 24 [
-    deprecated = true,
-    (forge.v1.config) = {
-      env_var: "DEMO_APP_HOST"
-      default_value: "demo.reliantlabs.io"
-      description: "Deprecated: hostname on which this bundle still mounts the public forge demo (the demo shell), read-only on sample data. The supported demo is its own build and env (deploy/kcl/demo, the forge-demo frontend); this key keeps working until a future major."
-    }
-  ];
+  // demo_app_host (24) named the host on which THIS bundle mounted the demo
+  // shell. The demo is its own build and env (the forge-demo frontend).
+  reserved 24;
+  reserved "demo_app_host";
 
   string demo_telemetry = 25 [(forge.v1.config) = {
     env_var: "DEMO_TELEMETRY"
@@ -152,6 +143,16 @@ message ReliantWebConfig {
     allowed_values: [
       "cloud",
       "self-hosted"
+    ]
+  }];
+
+  string auth_provider = 33 [(forge.v1.config) = {
+    env_var: "AUTH_PROVIDER"
+    default_value: "supabase"
+    description: "Who signs people in. \"supabase\" (the default): Supabase sessions, sent to both APIs as a bearer token. \"forge\": the managed identity's login broker on reliant-api (/auth/*); the browser holds only its session cookie, every RPC goes same-origin through /_api/@reliant and /_api/@cp with credentials included and no Authorization header, and the sign-in screens are the native ones. The desktop app reads the same key from config.js. Turning it back to \"supabase\" is the rollback."
+    allowed_values: [
+      "supabase",
+      "forge"
     ]
   }];
 

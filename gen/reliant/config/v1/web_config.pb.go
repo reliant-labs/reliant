@@ -71,22 +71,14 @@ type ReliantWebConfig struct {
 	GatewayUrl         string `protobuf:"bytes,3,opt,name=gateway_url,json=gatewayUrl,proto3" json:"gateway_url,omitempty"`
 	AppUrl             string `protobuf:"bytes,4,opt,name=app_url,json=appUrl,proto3" json:"app_url,omitempty"`
 	ForgeAppHost       string `protobuf:"bytes,23,opt,name=forge_app_host,json=forgeAppHost,proto3" json:"forge_app_host,omitempty"`
-	// ── The public forge demo (the forge-demo bundle, demo.html) ───────────
-	// Deprecated: the host on which THIS bundle mounts the demo shell. The
-	// demo is its own build and env now (deploy/kcl/demo), the supported path;
-	// this bundle still honours the key (lib/shell.ts) so a deployment that
-	// points the host at reliant-web keeps its demo. Removed only in a future
-	// major.
-	//
-	// Deprecated: Marked as deprecated in reliant/config/v1/web_config.proto.
-	DemoAppHost    string `protobuf:"bytes,24,opt,name=demo_app_host,json=demoAppHost,proto3" json:"demo_app_host,omitempty"`
-	DemoTelemetry  string `protobuf:"bytes,25,opt,name=demo_telemetry,json=demoTelemetry,proto3" json:"demo_telemetry,omitempty"`
-	DemoTour       string `protobuf:"bytes,26,opt,name=demo_tour,json=demoTour,proto3" json:"demo_tour,omitempty"`
-	DemoDataSource string `protobuf:"bytes,27,opt,name=demo_data_source,json=demoDataSource,proto3" json:"demo_data_source,omitempty"`
-	DemoDataUrl    string `protobuf:"bytes,28,opt,name=demo_data_url,json=demoDataUrl,proto3" json:"demo_data_url,omitempty"`
-	DisableTls     string `protobuf:"bytes,5,opt,name=disable_tls,json=disableTls,proto3" json:"disable_tls,omitempty"`
+	DemoTelemetry      string `protobuf:"bytes,25,opt,name=demo_telemetry,json=demoTelemetry,proto3" json:"demo_telemetry,omitempty"`
+	DemoTour           string `protobuf:"bytes,26,opt,name=demo_tour,json=demoTour,proto3" json:"demo_tour,omitempty"`
+	DemoDataSource     string `protobuf:"bytes,27,opt,name=demo_data_source,json=demoDataSource,proto3" json:"demo_data_source,omitempty"`
+	DemoDataUrl        string `protobuf:"bytes,28,opt,name=demo_data_url,json=demoDataUrl,proto3" json:"demo_data_url,omitempty"`
+	DisableTls         string `protobuf:"bytes,5,opt,name=disable_tls,json=disableTls,proto3" json:"disable_tls,omitempty"`
 	// ── Identity ──────────────────────────────────────────────────────────
 	AuthMode         string `protobuf:"bytes,6,opt,name=auth_mode,json=authMode,proto3" json:"auth_mode,omitempty"`
+	AuthProvider     string `protobuf:"bytes,33,opt,name=auth_provider,json=authProvider,proto3" json:"auth_provider,omitempty"`
 	SupabaseUrl      string `protobuf:"bytes,7,opt,name=supabase_url,json=supabaseUrl,proto3" json:"supabase_url,omitempty"`
 	SupabaseAnonKey  string `protobuf:"bytes,8,opt,name=supabase_anon_key,json=supabaseAnonKey,proto3" json:"supabase_anon_key,omitempty"`
 	AuthCookieDomain string `protobuf:"bytes,29,opt,name=auth_cookie_domain,json=authCookieDomain,proto3" json:"auth_cookie_domain,omitempty"`
@@ -174,14 +166,6 @@ func (x *ReliantWebConfig) GetForgeAppHost() string {
 	return ""
 }
 
-// Deprecated: Marked as deprecated in reliant/config/v1/web_config.proto.
-func (x *ReliantWebConfig) GetDemoAppHost() string {
-	if x != nil {
-		return x.DemoAppHost
-	}
-	return ""
-}
-
 func (x *ReliantWebConfig) GetDemoTelemetry() string {
 	if x != nil {
 		return x.DemoTelemetry
@@ -220,6 +204,13 @@ func (x *ReliantWebConfig) GetDisableTls() string {
 func (x *ReliantWebConfig) GetAuthMode() string {
 	if x != nil {
 		return x.AuthMode
+	}
+	return ""
+}
+
+func (x *ReliantWebConfig) GetAuthProvider() string {
+	if x != nil {
+		return x.AuthProvider
 	}
 	return ""
 }
@@ -326,7 +317,7 @@ var File_reliant_config_v1_web_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xe5>\n" +
+	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xe0@\n" +
 	"\x10ReliantWebConfig\x12\xa0\x03\n" +
 	"\aapi_url\x18\x01 \x01(\tB\x86\x03\x82\xce\x18\x81\x03\n" +
 	"\aAPI_URL*\xe1\x02Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there.r\x12\n" +
@@ -340,9 +331,7 @@ const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\aapp_url\x18\x04 \x01(\tB\xfe\x01\x82\xce\x18\xf9\x01\n" +
 	"\aAPP_URL*\xed\x01This app's own public origin: the base of every URL that leaves the process and comes back (the OAuth redirectTo). Unset: the document origin in a browser; in the desktop app, whose origin no system browser can reach, the hosted default.R\x06appUrl\x12\xef\x02\n" +
 	"\x0eforge_app_host\x18\x17 \x01(\tB\xc8\x02\x82\xce\x18\xc3\x02\n" +
-	"\x0eFORGE_APP_HOST\x1a\x14forge.reliantlabs.io*\x9a\x02Hostname that serves the Forge by Reliant brand of this same bundle. Every host mounts the one shell (the same routes and pages); a document loaded on this host shows it with forge branding, every other host with Reliant's. Also the origin the public demo's links into the app open.R\fforgeAppHost\x12\xd0\x02\n" +
-	"\rdemo_app_host\x18\x18 \x01(\tB\xab\x02\x82\xce\x18\xa4\x02\n" +
-	"\rDEMO_APP_HOST\x1a\x13demo.reliantlabs.io*\xfd\x01Deprecated: hostname on which this bundle still mounts the public forge demo (the demo shell), read-only on sample data. The supported demo is its own build and env (deploy/kcl/demo, the forge-demo frontend); this key keeps working until a future major.\x18\x01R\vdemoAppHost\x12\x81\x03\n" +
+	"\x0eFORGE_APP_HOST\x1a\x14forge.reliantlabs.io*\x9a\x02Hostname that serves the Forge by Reliant brand of this same bundle. Every host mounts the one shell (the same routes and pages); a document loaded on this host shows it with forge branding, every other host with Reliant's. Also the origin the public demo's links into the app open.R\fforgeAppHost\x12\x81\x03\n" +
 	"\x0edemo_telemetry\x18\x19 \x01(\tB\xd9\x02\x82\xce\x18\xd4\x02\n" +
 	"\x0eDEMO_TELEMETRY\x1a\x06replay*\xa1\x02What the demo host records about its anonymous visitors, under service reliant-forge-demo. \"replay\": page and tour analytics and masked session replay. \"analytics\": page and tour analytics only. \"off\": nothing. A browser that sends Do Not Track or Global Privacy Control is never recorded.J\x06replayJ\tanalyticsJ\x03offR\rdemoTelemetry\x12\xea\x01\n" +
 	"\tdemo_tour\x18\x1a \x01(\tB\xcc\x01\x82\xce\x18\xc7\x01\n" +
@@ -355,7 +344,9 @@ const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\vDISABLE_TLS*\xa1\x01\"true\": build loopback and WebSocket URLs with http/ws instead of https/wss (a plain-http local stack). The desktop app takes this from its main process instead.R\n" +
 	"disableTls\x12\x93\x03\n" +
 	"\tauth_mode\x18\x06 \x01(\tB\xf5\x02\x82\xce\x18\xf0\x02\n" +
-	"\tAUTH_MODE*\xce\x02\"cloud\": the managed deployment. Sessions use browser storage, and the document must also carry API_URL, CONTROL_PLANE_API_URL, SUPABASE_URL and SUPABASE_ANON_KEY, or the app refuses to start and names what is missing. \"self-hosted\" or unset: self-hosted or local dev. A document rendered by another project must state one of the two.J\x05cloudJ\vself-hostedR\bauthMode\x12\xba\x01\n" +
+	"\tAUTH_MODE*\xce\x02\"cloud\": the managed deployment. Sessions use browser storage, and the document must also carry API_URL, CONTROL_PLANE_API_URL, SUPABASE_URL and SUPABASE_ANON_KEY, or the app refuses to start and names what is missing. \"self-hosted\" or unset: self-hosted or local dev. A document rendered by another project must state one of the two.J\x05cloudJ\vself-hostedR\bauthMode\x12\xb6\x04\n" +
+	"\rauth_provider\x18! \x01(\tB\x90\x04\x82\xce\x18\x8b\x04\n" +
+	"\rAUTH_PROVIDER\x1a\bsupabase*\xde\x03Who signs people in. \"supabase\" (the default): Supabase sessions, sent to both APIs as a bearer token. \"forge\": the managed identity's login broker on reliant-api (/auth/*); the browser holds only its session cookie, every RPC goes same-origin through /_api/@reliant and /_api/@cp with credentials included and no Authorization header, and the sign-in screens are the native ones. The desktop app reads the same key from config.js. Turning it back to \"supabase\" is the rollback.J\bsupabaseJ\x05forgeR\fauthProvider\x12\xba\x01\n" +
 	"\fsupabase_url\x18\a \x01(\tB\x96\x01\x82\xce\x18\x91\x01\n" +
 	"\fSUPABASE_URL\x1a\x16http://127.0.0.1:54321*UThe Supabase project the browser signs in against. Default: a local `supabase start`.r\x12\n" +
 	"\tauth_mode\x12\x05cloudR\vsupabaseUrl\x12\xd7\x01\n" +
@@ -392,7 +383,7 @@ const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"org_routes\x18\x1f \x01(\tB\xad\x03\x82\xce\x18\xa8\x03\n" +
 	"\n" +
 	"ORG_ROUTES*\x99\x03The flag web.org_routes (control-plane docs/design/unified-shell-and-projects.md, D12). \"true\": the app's links name the org (`/o/<org slug>/…`) and the org-less paths of org-scoped pages redirect into the tab's org. Unset or \"false\": links keep today's form and nothing redirects. The `/o/<org>` routes resolve either way, so turning it off is the rollback: every link printed in either form keeps working.R\torgRoutes:\t\xd2\xc1\x18\x05\n" +
-	"\x03webJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x11\x10\x12R\n" +
+	"\x03webJ\x04\b\x18\x10\x19J\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x11\x10\x12R\rdemo_app_hostR\n" +
 	"sentry_dsnR\x0esentry_enabledR\x19sentry_traces_sample_rateR\"sentry_replays_session_sample_rateR sentry_replays_error_sample_rateR\x0ftelemetry_sinksB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
 var (

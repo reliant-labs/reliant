@@ -72,8 +72,10 @@ export interface TriggersCardProps {
   declared: readonly DeclaredTrigger[];
   /** The current project: where Add trigger… and Set up… start. */
   projectId: string;
-  /** The project in scope; undefined when it is every project. */
+  /** The project in scope; undefined when it is several or every project. */
   scopeProjectId?: string;
+  /** The projects in scope when it is several (the nav's choice of several). */
+  scopeProjectIds?: readonly string[];
   /** Why it cannot be turned on (a draft, a definition that failed to load). */
   setupBlockedReason?: string | null;
   /** Widens the area's scope to every project. */
@@ -101,6 +103,7 @@ export function TriggersCard({
   declared,
   projectId,
   scopeProjectId,
+  scopeProjectIds,
   setupBlockedReason,
   onShowAllProjects,
 }: TriggersCardProps) {
@@ -111,7 +114,14 @@ export function TriggersCard({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const mine = useMemo(() => (triggers.data ?? []).filter((t) => triggerRunsWorkflow(t, workflowRef)), [triggers.data, workflowRef]);
-  const inScope = useMemo(() => mine.filter((t) => !scopeProjectId || t.projectId === scopeProjectId), [mine, scopeProjectId]);
+  const inScope = useMemo(
+    () =>
+      mine.filter((t) =>
+        scopeProjectId ? t.projectId === scopeProjectId : scopeProjectIds ? scopeProjectIds.includes(t.projectId) : true,
+      ),
+    [mine, scopeProjectId, scopeProjectIds],
+  );
+  const narrowed = !!scopeProjectId || !!scopeProjectIds;
   const elsewhere = new Set(mine.filter((t) => t.enabled && !inScope.includes(t)).map((t) => t.projectId)).size;
 
   const groups = useMemo<ProjectGroup[]>(() => {
@@ -128,7 +138,7 @@ export function TriggersCard({
   }, [inScope, projects, projectId]);
 
   // Declared triggers the current project has not set up (shown when it is in scope).
-  const currentInScope = !scopeProjectId || scopeProjectId === projectId;
+  const currentInScope = scopeProjectId ? scopeProjectId === projectId : scopeProjectIds ? scopeProjectIds.includes(projectId) : true;
   const setUpHere = new Set(mine.filter((t) => t.projectId === projectId && t.workflowTrigger).map((t) => t.workflowTrigger));
   const notSetUp = currentInScope ? declared.filter((d) => !setUpHere.has(d.name)) : [];
   const storeProject = useProjectStore((state) => state.currentProject);
@@ -235,7 +245,7 @@ export function TriggersCard({
           </ul>
         )}
 
-        {scopeProjectId && elsewhere > 0 && onShowAllProjects && (
+        {narrowed && elsewhere > 0 && onShowAllProjects && (
           <div className="border-t border-border/60 bg-background px-4 py-2 text-xs text-muted-foreground">
             Also on in {elsewhere === 1 ? "1 other project" : `${elsewhere} other projects`}.{" "}
             <button

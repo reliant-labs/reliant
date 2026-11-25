@@ -259,11 +259,8 @@ message InjectConfig {
     description: "UI display style for injected message; defaults to hidden"
     enum_values: "info|warning|success|hidden"
   }];
-  // Deprecated: use repeated attachments field (5) instead.
-  CelString legacy_attachments = 3 [
-    deprecated = true,
-    (reliant) = {hidden: true}
-  ];
+  reserved 3;
+  reserved "legacy_attachments";
   // Attachments to include in the injected message.
   repeated InjectAttachment attachments = 5 [(reliant) = {description: "Attachments to include"}];
 }
@@ -740,16 +737,9 @@ message ExecuteToolsArgs {
   // recorded no set (a run that predates it, or tool calls not from an LLM).
   // See research/TOOL_CAPABILITIES.md.
   ToolCapabilities capabilities = 6 [(reliant) = {hidden: true}];
-  // Deprecated: the integration action approval prompt that set this was
-  // removed. Only the replay branch that keeps runs recorded before the
-  // removal working still sets it (runtime/action_approval_legacy.go): a call
-  // the person attending denied, keyed by tool call id, with the reason the
-  // model is told; the activity records each FAILED with it. Reserve the tag
-  // when that branch and its version gate are retired.
-  map<string, string> refused_tool_calls = 7 [
-    deprecated = true,
-    (reliant) = {hidden: true}
-  ];
+  // The removed integration action approval prompt's refusals.
+  reserved 7;
+  reserved "refused_tool_calls";
 }
 
 // InvokeToolArgs configures an invoke_tool node — invokes ONE tool directly from the graph,
@@ -1347,43 +1337,10 @@ message RunArgs {
     example: "reliant"
     hidden: true
   }];
-  // LLMGateway runs the command with a short-lived LLM gateway step key in its
-  // environment, for a third-party agent CLI (Claude Code) to spend through
-  // Reliant's gateway: the worker mints a key capped to the step's budget and
-  // models and billed to the run's organization's Reliant credits, the machine
-  // sets the CLI's variables for this one command only (ANTHROPIC_BASE_URL and
-  // ANTHROPIC_AUTH_TOKEN for claude-code) and removes the provider variables
-  // that would override them, the key is redacted from the command's output,
-  // and it is revoked when the step ends. Refused, without running the
-  // command, on a machine whose daemon does not apply step keys and on a
-  // deployment that cannot issue them. Output: nodes.<id>.llm_gateway.
-  //
-  // Deprecated (shipped in v1.29.0, slated for removal): it keeps working
-  // throughout v1 and is removed only in a future major.
-  LLMGatewayStep llm_gateway = 7 [
-    deprecated = true,
-    (reliant) = {
-      description: "Deprecated: kept working throughout v1, slated for removal. Run the command with a short-lived, budget-capped LLM gateway key for a third-party agent CLI, as {cli: claude-code, budget_usd: 2, models: [...]}. The key is set for this command only, redacted from its output and revoked when the step ends"
-      example: "{\"cli\": \"claude-code\", \"budget_usd\": 2}"
-      type_hint: "JSON object"
-      label: "LLM gateway"
-    }
-  ];
-}
-
-// LLMGatewayStep is a run node's `llm_gateway`: which CLI the step key is for
-// and what it may spend. Plain values, never expressions, so the workflow is
-// checkable when it is saved.
-message LLMGatewayStep {
-  // Cli names the program that consumes the key, which decides the variables
-  // the machine sets: "claude-code" (Claude Code). Required.
-  string cli = 1;
-  // BudgetUsd caps what the key may spend, in US dollars: 0 is the default
-  // ($5), and the most is $50.
-  double budget_usd = 2;
-  // Models are the models the key may call; the first is the CLI's main
-  // model. Empty: every gateway model the CLI's protocol serves.
-  repeated string models = 3;
+  // Field 7 was llm_gateway (reliant#3299), shipped in v1.29.0 and removed by the
+  // owner's decision (2026-11-25); the number and name are never reused.
+  reserved 7;
+  reserved "llm_gateway";
 }
 
 // SubWorkflowArgs configures a workflow node — invokes a sub-workflow.
@@ -2095,13 +2052,9 @@ message ToolCapabilities {
   // exactly (not through a tag, a glob or "*"), sorted: an unattended run keeps
   // them. Only set when unattended is.
   repeated string unattended_opt_in = 11;
-  // Deprecated: never written. It listed the offered tools whose calls asked
-  // the person attending before they ran — the integration action approval
-  // prompt, since removed. A call_llm output recorded before the removal still
-  // carries it, and the replay branch that keeps those runs working reads it
-  // (runtime/action_approval_legacy.go). Reserve the tag when that branch and
-  // its version gate are retired.
-  repeated string approval_required = 12 [deprecated = true];
+  // The removed integration action approval prompt's gated tools.
+  reserved 12;
+  reserved "approval_required";
   // SpawnDepthExhausted: the agent is a sub-agent whose spawn depth has
   // reached the maximum, so it is never offered spawn. load_tool and the
   // execution refusal say so instead of "not found".
@@ -2284,33 +2237,10 @@ message RunOutput {
   // stdout, half that of stderr): they are not the command's whole output,
   // and text a workflow decodes (json.decode) may not decode.
   bool truncated = 6;
-  // The step key the command ran with, when the node sets llm_gateway:
-  // what it was allowed and what it spent. Never the key itself.
-  // Deprecated with RunArgs.llm_gateway: set while that field keeps working
-  // throughout v1.
-  RunLLMGatewayOutput llm_gateway = 7 [deprecated = true];
-}
-
-// RunLLMGatewayOutput is a run node's nodes.<id>.llm_gateway: the step key its
-// command ran with.
-message RunLLMGatewayOutput {
-  // The key's id at the control plane (never the key).
-  string key_id = 1;
-  // The organization whose Reliant credits the key spent.
-  string billing_org_id = 2;
-  // The models the key could call.
-  repeated string models = 3;
-  // The key's spending cap, in US dollars.
-  double budget_usd = 4;
-  // What the key spent, in US dollars, as metered as of the step's end (when
-  // the key was revoked). Final only when spend_known is true.
-  double spend_usd = 5;
-  // True when spend_usd is final. False means some calls were still settling
-  // when the step ended (or the spend could not be read): spend_usd is then
-  // not final and may be low or zero, never the whole cost.
-  bool spend_known = 6;
-  // When the key would have expired had it not been revoked, RFC 3339.
-  string expires_at = 7;
+  // Field 7 was llm_gateway (reliant#3299), shipped in v1.29.0 and removed by the
+  // owner's decision (2026-11-25); the number and name are never reused.
+  reserved 7;
+  reserved "llm_gateway";
 }
 
 // WorkflowOutput is the output from a workflow node (non-loop sub-workflow).
@@ -2612,22 +2542,10 @@ message WorkflowRequirements {
   // itself), that must exist and reach their origin. Reaching origin is
   // checked with git ls-remote, which writes nothing into the checkout.
   repeated string repos = 3;
-  // CliLogin are vendor agent CLIs (claude, codex, gemini, cursor, copilot)
-  // that must be installed and signed in on the run's machine: each is
-  // checked with the vendor's own status command, whose output never leaves
-  // the machine; Reliant never reads, stores or relays a vendor's sign-in.
-  // A person signs one in with `reliant machine login <vendor>`.
-  //
-  // Deprecated (shipped in v1.29.0, slated for removal): it keeps working
-  // throughout v1 and is removed only in a future major.
-  repeated string cli_login = 4 [
-    deprecated = true,
-    (reliant) = {
-      description: "Deprecated: kept working throughout v1, slated for removal. Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine. Checked with each vendor's own status command before the first node; sign one in with `reliant machine login <vendor> --machine <name>`"
-      example: "[claude, codex]"
-      label: "CLI sign-ins"
-    }
-  ];
+  // Field 4 was cli_login (reliant#3291), shipped in v1.29.0 and removed by the
+  // owner's decision (2026-11-25); the number and name are never reused.
+  reserved 4;
+  reserved "cli_login";
 }
 
 // WorkflowConcurrency is a trigger admission policy, not a worker task limit.

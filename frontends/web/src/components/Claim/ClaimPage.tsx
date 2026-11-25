@@ -26,7 +26,7 @@ import { FreeSiteDialog } from "./FreeSiteDialog";
 import { ExistingAccount } from "./ExistingAccount";
 import type { ClaimSituation } from "./claimSituation";
 import { useClaimFlow } from "./useClaimFlow";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthIdentity } from "@/lib/auth/use-auth";
 
 export function ClaimPage() {
   const { view, claim, claimIntoAccount, freeSiteDialog, answerFreeSite, cancelFreeSite, retryFinish, retryPreview } = useClaimFlow();
@@ -163,7 +163,7 @@ interface ReadyProps {
 
 function Ready({ site, situation, working, error, onClaim, onClaimIntoAccount }: ReadyProps) {
   const existing = situation === "existing-account";
-  const email = useAuthStore((s) => s.user?.email);
+  const email = useAuthIdentity()?.email ?? undefined;
   return (
     <>
       <AuthHeader

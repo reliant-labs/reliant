@@ -178,7 +178,7 @@ interface ChatInit {
   appName?: string;
 }
 
-function chat(o: ChatInit): Chat {
+export function chat(o: ChatInit): Chat {
   const at = isoAgo(o.ago);
   return create(ChatSchema, {
     id: o.id, title: o.title, userId: APP_USER.id, projectId: o.projectId ?? PROJECT_IDS.shop,

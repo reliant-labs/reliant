@@ -42,12 +42,15 @@ type ProjectLookups interface {
 	// GetProjectByRemoteKeyAndUserInScope matches the repository a remote
 	// names, in any form of it (projects.remote_key; not unique).
 	GetProjectByRemoteKeyAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error)
+	GetProjectBySameRemoteAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error)
 }
 
-// DaemonInstalls lists the checkouts a machine holds.
-// store.ProjectDaemonExtStore satisfies it.
+// DaemonInstalls lists the checkouts a machine holds, and the nested
+// repositories being set up with them. store.ProjectDaemonExtStore satisfies
+// it.
 type DaemonInstalls interface {
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
+	ListProjectDaemonReposForProjects(ctx context.Context, projectIDs []string) ([]*core.ProjectDaemonRepo, error)
 }
 
 // ProjectReader reads a project by id. It checks no owner: every caller
@@ -87,7 +90,11 @@ type Repository interface {
 	// made or found, only while the project is in the machine's scope
 	// (re-read under its row lock) and not detached from it.
 	RecordObservedProjectDaemonInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, scope *core.OrgScope) (bool, error)
-	UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error
+	UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string, nestedRepoIDs []string) error
+	// IsDaemonIDAttached reports whether the machine is connected now (a
+	// fresh attachment lease): PreviewProjectMachineMove asks only a
+	// connected machine, and never wakes one.
+	IsDaemonIDAttached(ctx context.Context, daemonID string, staleThreshold time.Duration) (bool, error)
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error)
 	// GetDaemon completes projectcheckout.Reader: whose machine an install
 	// is, and what to call it in a sentence.

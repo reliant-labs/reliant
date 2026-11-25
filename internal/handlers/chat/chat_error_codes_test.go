@@ -11,6 +11,8 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chataccess"
+	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -38,9 +40,13 @@ func requireClientReads(t *testing.T, err error, want connect.Code) {
 	require.NotContains(t, svcerr.ToConnect(err).Message(), "secret")
 }
 
-func newChatService(t *testing.T, repo *chat.MockRepository) *chat.Service {
+func newChatService(t *testing.T, repo *chat.MockRepository, chats ...chataccess.Service) *chat.Service {
 	t.Helper()
-	return chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &chat.MockMailbox{}, AgentMessages: &chat.MockAgentMessages{}, Messages: &chat.MockMessages{}, ToolBlocks: &chat.MockToolBlocks{}, Senders: &chat.MockSenders{}}))
+	var access chataccess.Service = &chataccess.MockService{}
+	if len(chats) > 0 {
+		access = chats[0]
+	}
+	return chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Chats: access, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &chat.MockMailbox{}, AgentMessages: &chat.MockAgentMessages{}, Messages: &chat.MockMessages{}, ToolBlocks: &chat.MockToolBlocks{}, Senders: &chat.MockSenders{}}))
 }
 
 func ownedChat(_ context.Context, id string) (*db.Chat, error) {
@@ -60,16 +66,13 @@ func TestChatOwnershipRead_RepositoryFailureCodes(t *testing.T) {
 
 	for _, tc := range readFailures {
 		byID := func(t *testing.T) *chat.Service {
-			return newChatService(t, &chat.MockRepository{
-				GetChatFunc:    func(context.Context, string) (*db.Chat, error) { return nil, tc.err },
-				GetChatRowFunc: func(context.Context, string) (*db.ChatRow, error) { return nil, tc.err },
-			})
+			return newChatService(t, chat.BindChatReads(&chat.MockRepository{},
+				func(context.Context, string) (*db.Chat, error) { return nil, tc.err },
+				func(context.Context, string) (*db.ChatRow, error) { return nil, tc.err },
+			))
 		}
 		byOwner := func(t *testing.T) *chat.Service {
-			return newChatService(t, &chat.MockRepository{
-				GetChatWithUserCheckFunc:    func(context.Context, string, string) (*db.Chat, error) { return nil, tc.err },
-				GetChatRowWithUserCheckFunc: func(context.Context, string, string) (*db.ChatRow, error) { return nil, tc.err },
-			})
+			return newChatService(t, &chat.MockRepository{}, chataccesstest.Failing(tc.err))
 		}
 		ctx := chat.AuthedContext(t)
 
@@ -128,23 +131,19 @@ func TestChatRepositoryCalls_FailureCodes(t *testing.T) {
 		})
 		t.Run("GetWorkflowExecutions list: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := newChatService(t, &chat.MockRepository{
-				GetChatFunc:             ownedChat,
-				GetChatRowFunc:          ownedChatRow,
+			svc := newChatService(t, chat.BindChatReads(&chat.MockRepository{
 				ListWorkflowsByChatFunc: func(context.Context, string) ([]*db.Workflow, error) { return nil, tc.err },
-			})
+			}, ownedChat, ownedChatRow))
 			_, err := svc.GetWorkflowExecutions(ctx, connect.NewRequest(&pb.GetWorkflowExecutionsRequest{ChatId: "chat-1"}))
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("UpdateChatState write: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := newChatService(t, &chat.MockRepository{
-				GetChatFunc:    ownedChat,
-				GetChatRowFunc: ownedChatRow,
+			svc := newChatService(t, chat.BindChatReads(&chat.MockRepository{
 				UpdateChatStateFunc: func(context.Context, string, db.ChatState, string) error {
 					return tc.err
 				},
-			})
+			}, ownedChat, ownedChatRow))
 			_, err := svc.UpdateChatState(ctx, connect.NewRequest(&pb.UpdateChatStateRequest{
 				ChatId: "chat-1", State: pb.ChatState_CHAT_STATE_ARCHIVED,
 			}))
@@ -166,11 +165,10 @@ func TestChatRepositoryCalls_FailureCodes(t *testing.T) {
 func TestChatOwnership_ForeignChatIsNotFound(t *testing.T) {
 	t.Parallel()
 
-	svc := newChatService(t, &chat.MockRepository{
-		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
+	svc := newChatService(t, chat.BindChatReads(&chat.MockRepository{},
+		func(_ context.Context, id string) (*db.Chat, error) {
 			return &db.Chat{ID: id, UserID: "someone-else"}, nil
-		},
-	})
+		}, nil))
 	_, err := svc.GetChat(chat.AuthedContext(t), connect.NewRequest(&pb.GetChatRequest{ChatId: "chat-1"}))
 	requireClientReads(t, err, connect.CodeNotFound)
 	require.Equal(t, "chat not found", svcerr.ToConnect(err).Message())
@@ -181,14 +179,13 @@ func TestChatOwnership_ForeignChatIsNotFound(t *testing.T) {
 func TestChatOpaqueFailure_ReadsTheSummary(t *testing.T) {
 	t.Parallel()
 
-	svc := newChatService(t, &chat.MockRepository{
-		GetChatFunc: func(context.Context, string) (*db.Chat, error) {
+	svc := newChatService(t, chat.BindChatReads(&chat.MockRepository{},
+		func(context.Context, string) (*db.Chat, error) {
 			return nil, errors.New("dsn=postgres://u:secret@h")
 		},
-		GetChatRowFunc: func(context.Context, string) (*db.ChatRow, error) {
+		func(context.Context, string) (*db.ChatRow, error) {
 			return nil, errors.New("dsn=postgres://u:secret@h")
-		},
-	})
+		}))
 	_, err := svc.TerminateChat(chat.AuthedContext(t), connect.NewRequest(&pb.TerminateChatRequest{ChatId: "chat-1"}))
 	require.Equal(t, "failed to get chat", svcerr.ToConnect(err).Message())
 	require.ErrorContains(t, svcerr.Cause(err), "secret")

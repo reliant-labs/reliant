@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/automationcred"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -146,10 +147,6 @@ type Config struct {
 	// command, a request); nil refuses every step that uses one.
 	SecretResolver handlers.SecretResolver
 
-	// StepKeys mints and revokes the LLM gateway step key a run node with
-	// llm_gateway runs with (the control plane); nil refuses every such node.
-	StepKeys handlers.StepKeyIssuer
-
 	// AllowPrivateEgress is ServerProcessConfig.network.allow_private_egress:
 	// whether a user-supplied model endpoint may resolve to a private,
 	// loopback or link-local address. False is the default.
@@ -275,7 +272,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 
 	// Create threads service
-	threadsService := threads.New(threads.Deps{Repo: cfg.Database, Messages: store.NewMessageExtStore(cfg.Database.ORM()), Senders: store.NewThreadExtStore(cfg.Database.ORM())})
+	threadsService := threads.New(threads.Deps{Repo: cfg.Database, Chats: chataccess.NewFromORM(cfg.Database.ORM()), Messages: store.NewMessageExtStore(cfg.Database.ORM()), Senders: store.NewThreadExtStore(cfg.Database.ORM())})
 
 	// Create activity dependencies
 	activityDeps := v2activities.NewActivities(
@@ -301,7 +298,6 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	activityDeps.Connections = cfg.IntegrationCredentials
 	activityDeps.HostedActions = cfg.HostedActions
 	activityDeps.SecretResolver = cfg.SecretResolver
-	activityDeps.StepKeys = cfg.StepKeys
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
 	if cfg.Database != nil {

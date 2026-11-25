@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	chat "github.com/reliant-labs/reliant/internal/handlers/chat"
@@ -41,18 +42,21 @@ func newChatRepo() *chat.MockRepository {
 		}
 		return &c, nil
 	}
-	return &chat.MockRepository{
-		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
+	repo := chat.BindChatReads(&chat.MockRepository{},
+		func(_ context.Context, id string) (*db.Chat, error) {
 			return get(id)
 		},
-		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
+		func(_ context.Context, id string) (*db.ChatRow, error) {
 			c, err := get(id)
 			if err != nil {
 				return nil, err
 			}
 			return chatRowOf(c), nil
 		},
-		GetChatRowWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.ChatRow, error) {
+	)
+	// The owner-checked reads belong to chataccess, bound to this repository.
+	return chataccesstest.Bound(repo,
+		func(_ context.Context, id, userID string) (*db.ChatRow, error) {
 			c, err := get(id)
 			if err != nil {
 				return nil, err
@@ -62,7 +66,7 @@ func newChatRepo() *chat.MockRepository {
 			}
 			return chatRowOf(c), nil
 		},
-		GetChatWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Chat, error) {
+		func(_ context.Context, id, userID string) (*db.Chat, error) {
 			c, err := get(id)
 			if err != nil {
 				return nil, err
@@ -71,8 +75,7 @@ func newChatRepo() *chat.MockRepository {
 				return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 			}
 			return c, nil
-		},
-	}
+		})
 }
 
 // chatRowOf is the chats-row part of a fixture chat.

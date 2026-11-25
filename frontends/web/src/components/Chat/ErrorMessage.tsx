@@ -1,15 +1,18 @@
-import { useState } from 'react';
 import Tooltip from "../forge-ui/tooltip";
-import { cn, formatErrorMessage } from '../../lib/utils';
-import { ChevronDown,ChevronRight,AlertCircle,AlertTriangle,X } from 'lucide-react';
+import { formatErrorMessage } from '../../lib/utils';
+import { AlertCircle, AlertTriangle, X } from 'lucide-react';
+import { ErrorRow, ERROR_ROW_ACTION_CLASS } from './ErrorRow';
+
 interface ErrorMessageProps {
   content: string;
   onDismiss?: () => void;
 }
 
+/**
+ * An assistant text segment that is an error ("Error: …"): one quiet row with
+ * the simplified message, the full text one click away.
+ */
 export function ErrorMessage({ content, onDismiss }: ErrorMessageProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
   // Extract the error message from the content
   const errorMatch = content.match(/^Error:\s*(.+)/i);
   if (!errorMatch) {
@@ -26,79 +29,29 @@ export function ErrorMessage({ content, onDismiss }: ErrorMessageProps) {
   const isClientError = content.includes('400') || content.includes('429');
 
   const getErrorIcon = () => {
-    if (isCritical) return <AlertTriangle className="w-4 h-4 text-destructive-ink" data-testid="alert-triangle" />;
-    if (isAuthError) return <AlertCircle className="w-4 h-4 text-warning" data-testid="alert-circle" />;
-    if (isClientError) return <AlertCircle className="w-4 h-4 text-warning" data-testid="alert-circle" />;
-    return <AlertCircle className="w-4 h-4 text-destructive-ink" data-testid="alert-circle" />;
-  };
-
-  const getErrorColor = () => {
-    if (isCritical) return 'border-destructive/30 bg-destructive/5';
-    if (isAuthError) return 'border-warning/30 bg-warning/5';
-    if (isClientError) return 'border-warning/30 bg-warning/5';
-    return 'border-destructive/30 bg-destructive/5';
-  };
-
-  const getHeaderColor = () => {
-    if (isCritical) return 'border-destructive/30 bg-destructive/10';
-    if (isAuthError) return 'border-warning/30 bg-warning/10';
-    if (isClientError) return 'border-warning/30 bg-warning/10';
-    return 'border-destructive/30 bg-destructive/10';
+    if (isCritical) return <AlertTriangle className="size-4 text-destructive-ink" data-testid="alert-triangle" />;
+    if (isAuthError || isClientError) return <AlertCircle className="size-4 text-warning-ink" data-testid="alert-circle" />;
+    return <AlertCircle className="size-4 text-destructive-ink" data-testid="alert-circle" />;
   };
 
   return (
-    <div className={cn(
-      "rounded-md border overflow-hidden",
-      getErrorColor()
-    )}>
-      {/* Error Header - Always visible */}
-      <div className={cn(
-        "px-3 py-2 border-b cursor-pointer hover:elevation-1 transition-colors duration-200",
-        getHeaderColor()
-      )}>
-        <button
-          onClick={() => {
-            setIsExpanded((prev) => !prev);
-          }}
-          className="flex items-center gap-2 w-full text-left"
-        >
-          {getErrorIcon()}
-          <span className="text-sm font-medium text-foreground">
-            {simplifiedError}
-          </span>
-          <div className="ml-auto flex items-center gap-1">
-            {onDismiss && (
-              <Tooltip content="Dismiss error" side="bottom" delay={300} triggerClassName="inline-flex">
-<button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDismiss();
-                }}
-                className="p-1 hover:bg-background/50 rounded transition-colors" aria-label="Dismiss error">
-                <X className="w-3 h-3 text-muted-foreground" />
-              </button>
-</Tooltip>
-            )}
-            {isExpanded ? (
-              <ChevronDown className="w-4 h-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            )}
-          </div>
-        </button>
-      </div>
-
-      {/* Expandable Error Details */}
-      {isExpanded && (
-        <div className="p-3 elevation-1">
-          <div className="text-xs text-muted-foreground mb-2 font-medium">
-            Technical Details:
-          </div>
-          <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words bg-background/50 p-2 rounded border border-border/50">
-            {fullError}
-          </pre>
-        </div>
-      )}
-    </div>
+    <ErrorRow
+      icon={getErrorIcon()}
+      details={
+        <pre className="whitespace-pre-wrap break-words font-mono text-code text-muted-foreground">{fullError}</pre>
+      }
+      actions={
+        onDismiss && (
+          <Tooltip content="Dismiss error" side="bottom" delay={300} triggerClassName="inline-flex">
+            <button type="button" onClick={onDismiss} className={ERROR_ROW_ACTION_CLASS} aria-label="Dismiss error">
+              <X className="size-3.5" />
+            </button>
+          </Tooltip>
+        )
+      }
+      data-testid="error-message-row"
+    >
+      {simplifiedError}
+    </ErrorRow>
   );
 }

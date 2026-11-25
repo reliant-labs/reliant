@@ -12,6 +12,7 @@ import { memo } from 'react';
 import type { ToolContentProps } from './types';
 import { PreviewAwareFileMutation } from './FileToolRenderer';
 import { formatErrorMessage } from '../../../lib/utils';
+import { ToolErrorText } from './ToolErrorText';
 import { workflowEditDiff } from '../../../lib/toolFormatters';
 
 /** Highlights the diff as YAML; the viewer reads only the extension. */
@@ -36,9 +37,7 @@ function WorkflowEditToolRendererComponent({ ctx }: ToolContentProps) {
       )}
       {outcome &&
         (result?.is_error ? (
-          <div className="px-2 py-1.5 text-xs text-warning-ink bg-warning/5 border-t border-border/50">
-            {formatErrorMessage(outcome)}
-          </div>
+          <ToolErrorText className="border-t border-border/50">{formatErrorMessage(outcome)}</ToolErrorText>
         ) : (
           <div
             className="whitespace-pre-wrap border-t border-border/50 px-2 py-1.5 text-xs text-muted-foreground"

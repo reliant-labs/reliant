@@ -2,7 +2,8 @@
 
 /**
  * DEV-ONLY: the real forge console — the route tree the product mounts
- * (forgeConsoleRoutes), its layout, nav and pages — at one console URL, over
+ * (forgeConsoleRoutes), its layout and pages, in the app's shell with the
+ * console's nav (PreviewShellFrame) — at one console URL, over
  * the shop fixture pack's app layer (src/fixtures/shop/app.ts) through
  * <FixturePreview>, signed in, with a named overlay for the state the story
  * does not have. Every hook, client and component runs as in the product;
@@ -60,6 +61,7 @@ import { ForgeDomainsPage } from "../Domains/ForgeDomainsPage";
 import { ForgeEnvPage } from "../EnvPage/ForgeEnvPage";
 import { ForgeLayout } from "../ForgeLayout";
 import { EnvironmentsPage } from "../Overview/EnvironmentsPage";
+import { PreviewShellFrame } from "./PreviewShellFrame";
 
 /** The app layer: the console's reads plus the reliant app's (projects, the signed-in user, forge's reports). */
 const PACK = shopAppPack();
@@ -73,7 +75,16 @@ export const CONSOLE_SERVE: FixtureServeOptions = { ...SHOP_SERVE, interceptors:
 
 function buildRouter(path: string) {
   const root = createRootRoute({ component: () => <Outlet /> });
-  const authenticated = createRoute({ getParentRoute: () => root, id: "_authenticated", component: () => <Outlet /> });
+  // The app's own layout id, so the shell's frame is on here by the app's rule (Layout/shell/shellFrame.tsx).
+  const authenticated = createRoute({
+    getParentRoute: () => root,
+    id: "_authenticated",
+    component: () => (
+      <PreviewShellFrame>
+        <Outlet />
+      </PreviewShellFrame>
+    ),
+  });
   const forge = createForgeConsoleRoutes(() => authenticated, {
     layout: ForgeLayout,
     console: ConsoleLayout,

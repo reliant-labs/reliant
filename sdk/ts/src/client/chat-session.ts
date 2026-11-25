@@ -323,7 +323,9 @@ export class ChatSession {
           return [];
         }
       });
-      this.dispatch({ kind: "olderPage", messages, errors, total: response.total, hasMore });
+      // ListMessagesResponse carries no total (paging is by cursor): the
+      // snapshot's total, if any, stands.
+      this.dispatch({ kind: "olderPage", messages, errors, total: pagination.total, hasMore });
       return hasMore;
     } finally {
       this.olderInFlight = false;

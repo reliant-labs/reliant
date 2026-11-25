@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/changetools"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/chatupdates"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
@@ -32,12 +33,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
-	"github.com/reliant-labs/reliant/internal/daemonmirror"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
-	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/hosteduse"
@@ -329,7 +329,7 @@ type RunLifecycleDeps struct {
 // NewRunLifecycle is the run service: it records runs and drives their
 // workflows.
 func NewRunLifecycle(d RunLifecycleDeps) (*runs.Service, error) {
-	return runs.New(runs.Deps{Repo: d.DB, Workflows: store.NewWorkflowExtStore(d.DB.ORM()), Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause, Waits: d.Backoff}), nil
+	return runs.New(runs.Deps{Repo: d.DB, Chats: store.NewChatsWithActivityExtStore(d.DB.ORM()), Workflows: store.NewWorkflowExtStore(d.DB.ORM()), Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause, Waits: d.Backoff}), nil
 }
 
 // RunLauncherDeps is what a launch creates and starts.
@@ -348,17 +348,19 @@ type RunLauncherDeps struct {
 func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
 	pinner := daemonplacement.NewPinner(d.DB, d.Router.NATSDaemonRouter)
 	return launch.New(launch.Deps{
-		Store:       d.DB,
-		Workflows:   store.NewWorkflowExtStore(d.DB.ORM()),
-		Worktrees:   store.NewWorktreeExtStore(d.DB.ORM()),
-		ProjectRows: store.NewProjectExtStore(d.DB.ORM()),
-		Projects:    d.Projects,
-		Selections:  store.NewChatSelectionExtStore(d.DB.ORM()),
-		Threads:     threads.New(threads.Deps{Repo: d.DB}),
-		Temporal:    d.Temporal.Client,
-		Runs:        d.Runs,
-		TaskQueue:   v2workflow.SharedTaskQueue,
-		Pinner:      pinner,
+		Store:         d.DB,
+		Chats:         store.NewChatsWithActivityExtStore(d.DB.ORM()),
+		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
+		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
+		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
+		TriggerEvents: store.NewTriggerEventExtStore(d.DB.ORM()),
+		Projects:      d.Projects,
+		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),
+		Threads:       threads.New(threads.Deps{Repo: d.DB}),
+		Temporal:      d.Temporal.Client,
+		Runs:          d.Runs,
+		TaskQueue:     v2workflow.SharedTaskQueue,
+		Pinner:        pinner,
 	}), nil
 }
 
@@ -387,9 +389,13 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Logger:        d.Logger,
 		Config:        d.Config,
 		Repo:          d.DB,
+		Chats:         chataccess.NewFromORM(d.DB.ORM()),
+		ChatRows:      store.NewChatExtStore(d.DB.ORM()),
+		ChatViews:     store.NewChatsWithActivityExtStore(d.DB.ORM()),
 		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
 		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
 		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
+		TriggerEvents: store.NewTriggerEventExtStore(d.DB.ORM()),
 		Questions:     store.NewQuestionExtStore(d.DB.ORM()),
 		Spawns:        store.NewToolCallExtStore(d.DB.ORM()),
 		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),
@@ -430,6 +436,7 @@ func NewWorkerRun(d WorkerRunDeps) (*WorkerRun, error) {
 		Logger:    d.Logger,
 		Config:    d.Config,
 		Repo:      d.DB,
+		RunLists:  store.NewRunListExtStore(d.DB.ORM()),
 		Workflows: store.NewWorkflowExtStore(d.DB.ORM()),
 		ChatRows:  store.NewChatExtStore(d.DB.ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(d.DB.ORM()),
@@ -516,7 +523,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Repo:           repo,
 		Chats:          store.NewChatExtStore(repo.ORM()),
 		Firings:        store.NewTriggerEventExtStore(repo.ORM()),
-		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(repo.ORM()),
 		Owners:         d.Owners,
 		Projects:       projectaccess.NewFromORM(repo.ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(repo.ORM()),
@@ -558,7 +565,6 @@ type WorkerToolsFactoryDeps struct {
 	WriteLedger     writeledger.Service
 	CatalogSearch   *WorkerCatalogSearch
 	Router          *WorkerDaemonRouter
-	Mirror          daemonmirror.Service
 	// WorkflowDrafts is the saved workflows the workflow and scenario tools
 	// read and write.
 	WorkflowDrafts workflowdrafts.Service
@@ -571,7 +577,12 @@ type WorkerToolsFactoryDeps struct {
 	Config *config.Config
 	// ChangeController runs Forge Changes for list_changes / get_change /
 	// manage_change; nil when self-hosted.
+	// forge:optional-dep
 	ChangeController tools.ChangeController
+	// MachineController acts on the user's machines for list_machines /
+	// manage_machine; nil when self-hosted.
+	// forge:optional-dep
+	MachineController tools.MachineController
 }
 
 // ChangeControllerDeps are what NewChangeController reads.
@@ -583,6 +594,7 @@ type ChangeControllerDeps struct {
 // NewChangeController is nil when self-hosted: Changes live in the control
 // plane, and the tools say so.
 //
+//forge:optional-component: Changes live in the control plane; a self-hosted worker has none
 //forge:root-only worker
 func NewChangeController(d ChangeControllerDeps) tools.ChangeController {
 	if !ControlPlaneEndpoint(d.ControlPlane).Hosted() {
@@ -600,17 +612,6 @@ func NewChangeController(d ChangeControllerDeps) tools.ChangeController {
 func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
 	runMachine := toolexec.NewRunMachine(d.Router)
-	// The registry service is a library here, not a mount: the label and
-	// pool tools call its rpcs in-process, as the run's owner. Its
-	// IdleTimeouts is the worker's control plane (nil when self-hosted).
-	registryDeps := daemon_registry.Deps{Logger: d.Logger, Config: d.Config, Repo: repo, Pools: store.NewMachinePoolExtStore(repo.ORM()), Mirror: d.Mirror}
-	if d.Router != nil && d.Router.ControlPlane != nil {
-		registryDeps.IdleTimeouts = d.Router.ControlPlane
-	}
-	registry, err := daemon_registry.New(registryDeps)
-	if err != nil {
-		return nil, err
-	}
 	planner, err := newToolPlanning(d.Logger, d.Config, repo)
 	if err != nil {
 		return nil, err
@@ -662,7 +663,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		ActivationManager:  d.Triggers.Service,
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
-		MachineController: newMachineController(repo, d.Router, registry),
+		MachineController: d.MachineController,
 		// list_changes / get_change / manage_change run Forge Changes as the
 		// user, through the control plane's ChangesService.
 		ChangeController: d.ChangeController,
@@ -770,9 +771,11 @@ func (a *AccountRecorder) Close(context.Context) error {
 type TemporalWorkerDeps struct {
 	// Checks is the record-only workflowcheck the fire and run activities
 	// report to; the WorkflowCheckSyncer writes GitHub.
-	Checks           *RecordOnlyChecks
-	ConnectionVault  connectionvault.Service
-	DB               *db.Repo
+	Checks          *RecordOnlyChecks
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	// Updates writes refetch signals and publishes them to the hubs.
+	Updates          chatupdates.Service
 	ProviderAccounts provideraccounts.Service
 	OrgAccounts      orgaccounts.Service
 	Temporal         *TemporalClient
@@ -804,9 +807,10 @@ type TemporalWorkerDeps struct {
 	// Policies is the org policy resolver every activity carries
 	// (orgpolicy).
 	Policies *orgpolicy.Resolver
-	// Triggers turns a moved project's triggers back on in their new org
-	// (orgmove's ResumeTriggers step).
-	Triggers *WorkerTrigger
+	// OrgMoves is the steps of a project's move to another org; nil, so
+	// the activities are not registered, where NewOrgMoves says.
+	// forge:optional-dep
+	OrgMoves orgmove.Service
 }
 
 // orgAdminNotifier is the control plane as the worker's notifier of an org's
@@ -818,24 +822,12 @@ func orgAdminNotifier(d TemporalWorkerDeps) workersetup.OrgAdminNotifier {
 	return d.Router.ControlPlane
 }
 
-// stepKeyIssuer is the control plane as the issuer of run steps' LLM gateway
-// step keys, nil without one (a nil interface, never a nil client in one):
-// every run node with llm_gateway is then refused. A control plane the worker
-// cannot sign for answers controlplane.ErrStepKeysUnsupported, which refuses
-// the same way.
-func stepKeyIssuer(d TemporalWorkerDeps) handlers.StepKeyIssuer {
-	if d.Router == nil || d.Router.ControlPlane == nil {
-		return nil
-	}
-	return d.Router.ControlPlane
-}
-
 // projectMoveAnnouncer is orgmove's Announcer: one refetch for the project's
 // owner, written in the commit's own transaction (the ctx it is called with).
-type projectMoveAnnouncer struct{ repo *db.Repo }
+type projectMoveAnnouncer struct{ updates chatupdates.Service }
 
 func (a projectMoveAnnouncer) AnnounceProjectMoved(ctx context.Context, ownerUserID, projectID string) error {
-	return a.repo.EmitUserRefetch(ctx, ownerUserID, db.RefetchProjectOrgMoved, db.RefetchOpts{ProjectID: &projectID})
+	return a.updates.EmitUserRefetch(ctx, ownerUserID, core.RefetchProjectOrgMoved, core.RefetchOpts{ProjectID: &projectID})
 }
 
 // orgMembers is the resolver as orgmove's Members, nil for a deployment with
@@ -847,11 +839,27 @@ func orgMembers(r *orgs.Resolver) orgmove.Members {
 	return r
 }
 
-// workerOrgMoves is the steps of a project's move to another org on this
+// OrgMovesDeps are what NewOrgMoves reads.
+type OrgMovesDeps struct {
+	DB           *db.Repo
+	Router       *WorkerDaemonRouter
+	ControlPlane *configv1.ControlPlaneConfig
+	// Triggers turns a moved project's triggers back on in their new org
+	// (orgmove's ResumeTriggers step).
+	Triggers   *WorkerTrigger
+	Membership *orgs.Resolver
+	// Updates announces the move to the owner's clients.
+	Updates chatupdates.Service
+}
+
+// NewOrgMoves is the steps of a project's move to another org on this
 // worker: nil, so the activities are not registered, without a control plane
 // signed as the internal service (it cannot Prepare, Abort or Record) or the
 // trigger service.
-func workerOrgMoves(d TemporalWorkerDeps) (orgmove.Service, error) {
+//
+//forge:optional-component: a worker without a control plane signed as the internal service cannot move a project
+//forge:root-only worker
+func NewOrgMoves(d OrgMovesDeps) (orgmove.Service, error) {
 	if d.Router == nil || d.Router.ControlPlane == nil || d.Triggers == nil || d.Triggers.Service == nil {
 		return nil, nil
 	}
@@ -863,7 +871,7 @@ func workerOrgMoves(d TemporalWorkerDeps) (orgmove.Service, error) {
 		Logger:       slog.Default(),
 		Store:        store.NewProjectOrgMoveExtStore(o),
 		Projects:     store.NewProjectExtStore(o),
-		Announcer:    projectMoveAnnouncer{repo: d.DB},
+		Announcer:    projectMoveAnnouncer{updates: d.Updates},
 		ControlPlane: d.Router.ControlPlane,
 		Triggers:     d.Triggers.Service,
 		Members:      orgMembers(d.Membership),
@@ -955,12 +963,8 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		slog.Default().Warn("stop nudges are DISABLED on this worker: pause and interrupt reach running activities on their next heartbeat",
 			"subject", stopnudge.Subject, "error", err)
 	}
-	moves, err := workerOrgMoves(d)
-	if err != nil {
-		return nil, err
-	}
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
-		OrgMoves:               moves,
+		OrgMoves:               d.OrgMoves,
 		StopNudges:             nudges,
 		AccountLimits:          d.Recorder.Recorder,
 		OrgAdmins:              orgAdminNotifier(d),
@@ -982,7 +986,6 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,
-		StepKeys:               stepKeyIssuer(d),
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},
@@ -1149,28 +1152,33 @@ const ledgerRetentionInterval = time.Hour
 const ledgerRetentionPause = db.LedgerRetentionPause(20 * time.Millisecond)
 
 // LedgerRetention compacts chat update logs and prunes finished runs' internal
-// steps past their retention (internal/db/ledger_retention.go), hourly. Every
+// steps and node observations past their retention
+// (internal/db/ledger_retention.go), hourly. Every
 // replica runs it: the work is idempotent and skips what another replica is
 // deleting.
 type LedgerRetention struct {
-	repo        *db.Repo
-	chatUpdates time.Duration
-	steps       time.Duration
-	startDelay  time.Duration
-	deleted     metric.Int64Counter
+	repo         *db.Repo
+	chatUpdates  time.Duration
+	steps        time.Duration
+	observations time.Duration
+	startDelay   time.Duration
+	deleted      metric.Int64Counter
 
 	// after and runPass are time.After and pass; a test replaces them.
 	after   func(time.Duration) <-chan time.Time
 	runPass func(ctx context.Context, now time.Time)
 }
 
-// LedgerRetentionDeps is the repository, the two retention periods (0: off)
+// LedgerRetentionDeps is the repository, the three retention periods (0: off)
 // and how long after start the first pass waits (0: at once).
 type LedgerRetentionDeps struct {
 	DB                     *db.Repo
 	ChatUpdateRetention    time.Duration
 	StepExecutionRetention time.Duration
-	StartDelay             time.Duration
+	// ObservationRetention is node_observations' period (worker config
+	// node_observation_retention).
+	ObservationRetention time.Duration
+	StartDelay           time.Duration
 }
 
 // NewLedgerRetention builds the retention loop.
@@ -1185,7 +1193,7 @@ func NewLedgerRetention(d LedgerRetentionDeps) (*LedgerRetention, error) {
 	otel.Handle(err)
 	l := &LedgerRetention{
 		repo: d.DB, chatUpdates: d.ChatUpdateRetention, steps: d.StepExecutionRetention,
-		startDelay: d.StartDelay, deleted: deleted, after: time.After,
+		observations: d.ObservationRetention, startDelay: d.StartDelay, deleted: deleted, after: time.After,
 	}
 	l.runPass = l.pass
 	return l, nil
@@ -1203,8 +1211,8 @@ func NewLedgerRetention(d LedgerRetentionDeps) (*LedgerRetention, error) {
 // that introduces the watermark has such servers at all: every later release
 // reads it.
 func (l *LedgerRetention) Run(ctx context.Context) error {
-	if l.chatUpdates <= 0 && l.steps <= 0 {
-		logging.InfoContext(ctx, "ledger retention is off: both retention periods are 0")
+	if l.chatUpdates <= 0 && l.steps <= 0 && l.observations <= 0 {
+		logging.InfoContext(ctx, "ledger retention is off: every retention period is 0")
 		return nil
 	}
 	if l.startDelay > 0 {
@@ -1263,6 +1271,23 @@ func (l *LedgerRetention) pass(ctx context.Context, now time.Time) {
 			logging.WarnContext(ctx, "ledger retention: pruning step executions failed", append(attrs, "error", err)...)
 		case res.Runs > 0:
 			logging.InfoContext(ctx, "ledger retention: pruned step executions", attrs...)
+		}
+	}
+	if l.observations > 0 {
+		cutoff := now.Add(-l.observations)
+		var res db.StepRetentionResult
+		err := observe.RunRoot(ctx, "worker.ledger_retention.node_observations", func(ctx context.Context) error {
+			var err error
+			res, err = l.repo.PruneNodeObservations(ctx, cutoff, ledgerRetentionPause)
+			return err
+		})
+		l.deleted.Add(context.WithoutCancel(ctx), res.Deleted, metric.WithAttributes(attribute.String("table", "node_observations")))
+		attrs := []any{"runs", res.Runs, "deleted", res.Deleted, "cutoff", cutoff}
+		switch {
+		case err != nil && ctx.Err() == nil:
+			logging.WarnContext(ctx, "ledger retention: pruning node observations failed", append(attrs, "error", err)...)
+		case res.Runs > 0:
+			logging.InfoContext(ctx, "ledger retention: pruned node observations", attrs...)
 		}
 	}
 }

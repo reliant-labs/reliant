@@ -34,8 +34,13 @@ type Repository interface {
 	ListChildWorkflows(ctx context.Context, parentID string) ([]*db.Workflow, error)
 	ListRootWorkflows(ctx context.Context, chatID string) ([]*db.Workflow, error)
 	ListRuns(ctx context.Context, f db.RunListFilters) ([]*db.RunListItem, bool, error)
+}
+
+// RunLists reads the run log's other halves: the trigger events that started
+// no run, and each workflow's newest run. store.RunListExtStore satisfies it.
+type RunLists interface {
 	ListUnlaunchedTriggerEvents(ctx context.Context, f db.RunListFilters) ([]*db.UnlaunchedTriggerEvent, bool, error)
-	LastRunPerWorkflow(ctx context.Context, f db.RunListFilters) ([]*db.RunListItem, error)
+	LastRunPerWorkflowAndOrg(ctx context.Context, f db.RunListFilters) ([]*db.RunListItem, error)
 }
 
 // WorkflowLoader reads one workflow row by id. store.WorkflowExtStore

@@ -75,6 +75,7 @@ import {
 } from "@/lib/protocol";
 import { sampleGuard } from "@/lib/sampleGuard";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
+import { controlPlaneForgeBase, credentialedFetch, isForgeAuth, reliantForgeBase } from "@/lib/auth/forge-api";
 
 // ─── Routes ──────────────────────────────────────────────────────────
 
@@ -129,6 +130,12 @@ export function routeFor(serviceTypeName: string, methodName: string): Transport
  * (packaged Electron before preload has injected RELIANT_CONFIG).
  */
 export function reliantApiBaseUrl(): string | null {
+  // forge sign-in: the session cookie is first-party only to this page's
+  // origin, so reliant-api is reached through it (`/_api/@reliant`, served by
+  // the dev proxy, the hosted site's origin, or the desktop app's protocol
+  // handler). See lib/auth/forge-api.ts.
+  if (isForgeAuth()) return reliantForgeBase();
+
   // Same-origin (Vite-proxy) path — see isSameOriginTransport. Whenever the
   // renderer is served over http(s) (web-dev AND electron-dev), reliant.v1.*
   // RPCs go to the document origin and Vite's `/reliant.v1.*` proxy forwards
@@ -176,6 +183,8 @@ export function isApiReady(): boolean {
  */
 export function controlPlaneBaseUrl(): string | null {
   if (!CONTROL_PLANE_API_URL) return null;
+  // forge sign-in: same-origin `/_api/@cp`, for the cookie (see above).
+  if (isForgeAuth()) return controlPlaneForgeBase();
   return isSameOriginTransport() ? window.location.origin : CONTROL_PLANE_API_URL;
 }
 
@@ -229,9 +238,11 @@ const _built = new Map<TransportRoute, { baseUrl: string; transport: Transport }
  * The concrete Connect transport for one route, built on first use and
  * rebuilt when the route's base URL changes. Throws when the URL is not known.
  *
- * No `credentials: "include"` (forge's scaffold sends a session cookie):
+ * Supabase sign-in sends no cookie (`credentials` is the fetch default):
  * reliant authenticates with a bearer token, and a credentialed cross-origin
  * request would need `Access-Control-Allow-Credentials` from both servers.
+ * forge sign-in sends the session cookie (`credentials: "include"`) and no
+ * bearer, to the same-origin bases above.
  */
 export function transportFor(route: TransportRoute): Transport {
   const spec = ROUTES[route];
@@ -264,6 +275,7 @@ export function transportFor(route: TransportRoute): Transport {
     // backend.
     interceptors: [sampleGuard, ...buildInterceptors({ withAuth: spec.withAuth, backend: spec.backend })],
     useBinaryFormat: spec.useBinaryFormat,
+    ...(isForgeAuth() ? { fetch: credentialedFetch } : {}),
   });
   _built.set(route, { baseUrl, transport });
   return transport;

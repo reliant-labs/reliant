@@ -41,6 +41,51 @@
 // client here and the package imports only the standard library. Every
 // exported name is wire surface, so changing one is a coordinated change to
 // both services.
+//
+// # Compatibility
+//
+// The contract only grows. A new field is optional and omitted when empty,
+// and decoding ignores fields it does not know (UnmarshalEvent never
+// disallows unknown fields), so a consumer built against an older version of
+// this package reads a newer publisher's events and simply does not see the
+// new fields.
+//
+// A new EventType is different: UnmarshalEvent rejects a type it does not
+// know, and every consumer logs and drops what it rejects (plain NATS, no
+// redelivery). So a new type reaches only consumers that ship it, and one
+// that predates it drops each such event with a log line. That suits a fact
+// that is rare and that no older consumer could act on anyway (EventUpgrade).
+// A fact an existing consumer must keep acting on goes on its existing type
+// instead. Never put a fact on an existing type whose consumers would act on
+// it as something else: a field rides with every side effect of its event.
+//
+// # Reading a daemon's upgrade state
+//
+// When the platform asks a daemon to restart (reliant.v1.RestartRequested),
+// the daemon reports its progress on its heartbeat, and the gateway holding
+// its stream publishes EventUpgrade each time that state changes: UPDATING
+// when it starts draining, DRAINED when it can be replaced, FAILED, back to
+// CURRENT when the drain is called off. On the transition only, never per
+// heartbeat. An EventUpgrade carries the daemon's identity and Upgrade, and
+// nothing else: no Build and no Reason, so it is neither a connect nor
+// activity, and must never be read as either.
+//
+// A consumer that acts on it (a fleet roller replacing a managed machine's
+// pod the moment it reports DRAINED, instead of at the drain deadline):
+//
+//   - Each EventUpgrade states the attached stream's whole upgrade report as
+//     of At. A new stream starts with no report: on an EventConnected newer
+//     than the report you hold, drop the report. A daemon that attaches
+//     mid-drain (it moved to another gateway, or restarted in place) is
+//     followed by an EventUpgrade as soon as its first heartbeat is read.
+//   - Events are delivered unordered, so keep the newest by At per daemon
+//     and drop an older one.
+//   - Route on Upgrade.State, and ignore a state you do not know. Read
+//     RolloutID to match the report to your roll, and ToolCallsRunning to
+//     tell a drain the work ended from one the deadline ended.
+//   - Plain NATS loses events, and a consumer (or a NATS account) that
+//     predates the type never sees them. A missing DRAINED costs only time:
+//     keep the drain deadline (plus a margin) as the backstop.
 package daemonwire
 
 import (
@@ -98,6 +143,14 @@ const (
 	// the registry snapshot (SubjectRegistrySnapshot), which removes anything
 	// a lost removal left behind.
 	EventRemoved EventType = "removed"
+
+	// EventUpgrade carries a daemon's drain-protocol state (Event.Upgrade)
+	// from the gateway, published when that state changes. It is
+	// deliberately its own type: it is not a connect (no Build, so nothing
+	// re-mirrors a build observation) and not activity (nothing keeps a
+	// machine awake on it). A consumer that predates it drops it at parse,
+	// which costs that consumer nothing it could have used.
+	EventUpgrade EventType = "upgrade"
 )
 
 // LifecyclePhase is the wire vocabulary for a managed machine's lifecycle,
@@ -177,6 +230,12 @@ type Event struct {
 	// stream that just attached.
 	Build *Build `json:"build,omitempty"`
 
+	// Upgrade is the daemon's progress through a restart the platform asked
+	// for (the drain protocol), as its heartbeat reported it. Required on
+	// EventUpgrade; nil on every other type. See "Reading a daemon's upgrade
+	// state" in the package documentation.
+	Upgrade *Upgrade `json:"upgrade,omitempty"`
+
 	// The fields below are populated only on EventLifecycle. They are on the
 	// one Event struct rather than a second payload type because the subject
 	// family, the key and the "newest wins" semantics are identical: a
@@ -226,6 +285,58 @@ func (b Build) Known() bool {
 	return b.Version != "" || b.Commit != ""
 }
 
+// UpgradeState is a daemon's state in the drain protocol, carried on
+// Upgrade.State. It mirrors reliant.v1.DaemonUpgradeState, lower-cased and
+// without its prefix.
+//
+// A consumer ignores a state it does not know rather than guessing: a newer
+// daemon may report one this contract has not named yet.
+type UpgradeState string
+
+// UpgradeState values.
+const (
+	// UpgradeStateCurrent: no restart in progress. Reported when a drain
+	// ends without a restart (it was called off, or a newer request
+	// replaced it).
+	UpgradeStateCurrent UpgradeState = "current"
+	// UpgradeStateUpdating: draining. The daemon takes no new tool calls
+	// and lets running ones finish, until none is left or Deadline passes.
+	UpgradeStateUpdating UpgradeState = "updating"
+	// UpgradeStateDrained: nothing of the drained work is running, or the
+	// deadline passed (ToolCallsRunning says which). The daemon waits to be
+	// replaced: this is the moment a managed machine's pod can be rolled.
+	UpgradeStateDrained UpgradeState = "drained"
+	// UpgradeStateAwaitingOwner: the machine belongs to a person whose app
+	// or package manager updates it. The daemon keeps serving.
+	UpgradeStateAwaitingOwner UpgradeState = "awaiting_owner"
+	// UpgradeStateFailed: the restart did not happen as asked; Detail says
+	// why and what the daemon does next.
+	UpgradeStateFailed UpgradeState = "failed"
+	// UpgradeStateStaged: a self-updating daemon has a verified newer
+	// release and keeps serving until a quiet moment, when it drains.
+	UpgradeStateStaged UpgradeState = "staged"
+)
+
+// Upgrade is a daemon's report on the newest restart request it received
+// (reliant.v1.DaemonUpgradeStatus), as an EventUpgrade carries it.
+type Upgrade struct {
+	State UpgradeState `json:"state"`
+	// RolloutID and TargetVersion echo the request the report answers, so a
+	// consumer can tell which roll it belongs to. Empty when the request
+	// named none.
+	RolloutID     string `json:"rollout_id,omitempty"`
+	TargetVersion string `json:"target_version,omitempty"`
+	// Deadline is when the drain ends: the request's deadline, capped by the
+	// daemon's own drain limit. Nil when there is none.
+	Deadline *time.Time `json:"deadline,omitempty"`
+	// ToolCallsRunning is how many tool calls were still executing when the
+	// daemon reported this state. Non-zero on a DRAINED report means the
+	// deadline, not the work, ended the drain.
+	ToolCallsRunning uint32 `json:"tool_calls_running,omitempty"`
+	// Detail is why, in words an operator can read.
+	Detail string `json:"detail,omitempty"`
+}
+
 // HasIdentity reports whether a lifecycle event carries enough to CREATE a
 // registry row rather than only update one: the owner and the daemon's type.
 // Name is not required, because a self-hosted daemon that never registered
@@ -242,8 +353,9 @@ func (e Event) HasIdentity() bool {
 
 // UnmarshalEvent parses a state event payload and validates the fields every
 // event must carry: a daemon_id, a type this contract defines, and a non-zero
-// at. Every error is permanent, so a consumer should log and drop the message
-// rather than retry it.
+// at; and, on EventUpgrade, an upgrade with a state. Every error is
+// permanent, so a consumer should log and drop the message rather than retry
+// it.
 func UnmarshalEvent(data []byte) (Event, error) {
 	var e Event
 	if err := json.Unmarshal(data, &e); err != nil {
@@ -253,12 +365,15 @@ func UnmarshalEvent(data []byte) (Event, error) {
 		return Event{}, errors.New("daemon state event missing daemon_id")
 	}
 	switch e.Type {
-	case EventConnected, EventDisconnected, EventActivity, EventLifecycle, EventRemoved:
+	case EventConnected, EventDisconnected, EventActivity, EventLifecycle, EventRemoved, EventUpgrade:
 	default:
 		return Event{}, fmt.Errorf("daemon state event unknown type %q", e.Type)
 	}
 	if e.At.IsZero() {
 		return Event{}, errors.New("daemon state event missing at")
+	}
+	if e.Type == EventUpgrade && (e.Upgrade == nil || e.Upgrade.State == "") {
+		return Event{}, errors.New("daemon upgrade event missing upgrade state")
 	}
 	return e, nil
 }

@@ -159,7 +159,7 @@ func (r *Reconciler) sweepQueuedDeliveries(ctx context.Context) error {
 // machine (activity QUEUED_FOR_MACHINE). Its mailbox is owed to the run that
 // delivery starts, not to the orphaned-mailbox sweep.
 func (r *Reconciler) chatHoldsQueuedMessage(ctx context.Context, chatID string) bool {
-	chat, err := r.repo.GetChat(ctx, chatID)
+	chat, err := r.chats.GetChat(ctx, chatID)
 	if err != nil || chat == nil || chat.Activity == nil {
 		return false
 	}

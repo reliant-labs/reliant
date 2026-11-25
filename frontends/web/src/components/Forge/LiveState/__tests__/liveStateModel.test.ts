@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { ServiceHealth } from "@/services/controlPlane/observability/types";
+import type { ServiceHealth, Workload } from "@/services/controlPlane/observability/types";
 import type { ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { ENV_ALL } from "../../Console/envScope";
@@ -123,6 +123,63 @@ describe("mergeLiveState", () => {
     expect(site?.statusNote).toBeUndefined();
     // A database never counts as needing attention: there is no reading to judge.
     expect(model.attention).toBe(0);
+  });
+
+  describe("a Job reads its runs, never its replicas (owner, 2026-11-24: a completed job read yellow)", () => {
+    // The owner's case: a hosted migrate job declared at one copy, its run completed, no pod running.
+    const migrate = (over: Partial<Workload> = {}): Workload => ({
+      ...workloads[0]!,
+      workload: "control-plane-migrate",
+      kind: "job",
+      health: "healthy",
+      healthReason: "",
+      readyReplicas: 0,
+      desiredReplicas: 1,
+      replicasObserved: 0,
+      containers: [],
+      ...over,
+    });
+    const rowOf = (model: ReturnType<typeof mergeLiveState>) => model.rows.find((row) => row.name === "control-plane-migrate")!;
+
+    it("a completed job with nothing running is green, says when it ran, and shows no ready count", () => {
+      // Even against a server that still judged it on replicas (degraded, "0 of 1 ready"), the run decides.
+      for (const health of ["healthy", "degraded"] as const) {
+        const model = mergeLiveState({ envs: ENVS, env: "prod", workloads: [migrate({ health })], jobs: FIXTURE_JOBS, telemetry: [], hosted: new Map() });
+        const row = rowOf(model);
+        expect(row).toMatchObject({ type: "workload", tone: "success", status: "Succeeded", ready: "—", short: false });
+        expect(row.type === "workload" && row.lastRun?.name).toBe("control-plane-migrate-b9e1b9d6de");
+        expect(model.attention).toBe(0);
+        // Listed once: as the workload, not again as a runs-only job.
+        expect(model.rows.filter((r) => r.name === "control-plane-migrate")).toHaveLength(1);
+      }
+    });
+
+    it("a failed latest run is red, a running one neutral", () => {
+      const failed = mergeLiveState({ envs: ENVS, env: "e2e", workloads: [migrate({ envId: "env-e2e", envName: "e2e" })], jobs: FIXTURE_JOBS, telemetry: [], hosted: new Map() });
+      expect(rowOf(failed)).toMatchObject({ tone: "danger", status: "Failed" });
+      const running = mergeLiveState({
+        envs: ENVS,
+        env: "prod",
+        workloads: [migrate({ health: "pending" })],
+        jobs: [{ ...FIXTURE_JOBS[1]!, result: "running", finishedAtMs: null }],
+        telemetry: [],
+        hosted: new Map(),
+      });
+      expect(rowOf(running)).toMatchObject({ tone: "neutral", status: "Running" });
+    });
+
+    it("with no run in the window, the server's verdict in a run's words", () => {
+      const quiet = (health: Workload["health"]) => rowOf(mergeLiveState({ envs: ENVS, env: "prod", workloads: [migrate({ health })], jobs: [], telemetry: [], hosted: new Map() }));
+      expect(quiet("healthy")).toMatchObject({ tone: "success", status: "Succeeded", ready: "—" });
+      expect(quiet("degraded")).toMatchObject({ tone: "danger", status: "Failed" });
+      expect(quiet("unknown")).toMatchObject({ tone: "neutral", status: "Unknown" });
+    });
+
+    it("leaves a service judged on its replicas", () => {
+      const model = mergeLiveState({ envs: ENVS, env: "prod", workloads, jobs: FIXTURE_JOBS, telemetry: [], hosted: new Map() });
+      const litellm = model.rows.find((row) => row.name === "litellm");
+      expect(litellm).toMatchObject({ type: "workload", tone: "warning", status: "Degraded", ready: "1/2", short: true, lastRun: null });
+    });
   });
 
   it("lists a job seen only in its runs, once", () => {

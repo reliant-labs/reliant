@@ -38,7 +38,7 @@ import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/contro
 import { useForgeConsole } from "../Console/consoleContext";
 import { Page } from "../Console/consolePageFrame";
 import { ENV_ALL } from "../Console/envScope";
-import { PAGE_SUBTITLES } from "../Console/groupedNav";
+import { PAGE_SUBTITLES } from "../Console/consoleCrumbs";
 import { UPlotChart } from "../Observability/charts/UPlotChart";
 import { Segmented, VariableSelect } from "../Observability/Dashboards/parts";
 import { formatCount } from "../Observability/format";

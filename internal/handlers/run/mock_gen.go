@@ -76,7 +76,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=a7cafc03c92fc7aa844384d1a3e3853b1322accd5f4413a8647394b88903aa06
+// forge:hash=0b10efa2a266ce22a4aff66aa945c515b7a9cefa58d7ca56a4729b727856566d
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -86,14 +86,12 @@ var _ OrgResolver = (*MockOrgResolver)(nil)
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	AssignUnassignedOrgFunc         func(context.Context, string, string) error
-	ListRunNodeExecutionsFunc       func(context.Context, string, int) ([]*db.StepExecution, error)
-	ListProjectsFunc                func(context.Context, db.ProjectFilters) ([]*db.Project, error)
-	ListChildWorkflowsFunc          func(context.Context, string) ([]*db.Workflow, error)
-	ListRootWorkflowsFunc           func(context.Context, string) ([]*db.Workflow, error)
-	ListRunsFunc                    func(context.Context, db.RunListFilters) ([]*db.RunListItem, bool, error)
-	ListUnlaunchedTriggerEventsFunc func(context.Context, db.RunListFilters) ([]*db.UnlaunchedTriggerEvent, bool, error)
-	LastRunPerWorkflowFunc          func(context.Context, db.RunListFilters) ([]*db.RunListItem, error)
+	AssignUnassignedOrgFunc   func(context.Context, string, string) error
+	ListRunNodeExecutionsFunc func(context.Context, string, int) ([]*db.StepExecution, error)
+	ListProjectsFunc          func(context.Context, db.ProjectFilters) ([]*db.Project, error)
+	ListChildWorkflowsFunc    func(context.Context, string) ([]*db.Workflow, error)
+	ListRootWorkflowsFunc     func(context.Context, string) ([]*db.Workflow, error)
+	ListRunsFunc              func(context.Context, db.RunListFilters) ([]*db.RunListItem, bool, error)
 }
 
 // AssignUnassignedOrg records the call and delegates to AssignUnassignedOrgFunc when set.
@@ -150,26 +148,44 @@ func (m *MockRepository) ListRuns(ctx context.Context, f db.RunListFilters) ([]*
 	return nil, false, contractkit.MockNotSet("MockRepository", "ListRuns")
 }
 
+// Compile-time check.
+var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockRunLists
+// forge:hash=944f7407f0c32ce40874fa07648a37944373c6193874603970bb1551eedf6816
+
+// MockRunLists is a test mock for the RunLists interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockRunLists.<Method>Func not set" error.
+type MockRunLists struct {
+	contractkit.Recorder
+	ListUnlaunchedTriggerEventsFunc func(context.Context, db.RunListFilters) ([]*db.UnlaunchedTriggerEvent, bool, error)
+	LastRunPerWorkflowAndOrgFunc    func(context.Context, db.RunListFilters) ([]*db.RunListItem, error)
+}
+
 // ListUnlaunchedTriggerEvents records the call and delegates to ListUnlaunchedTriggerEventsFunc when set.
-func (m *MockRepository) ListUnlaunchedTriggerEvents(ctx context.Context, f db.RunListFilters) ([]*db.UnlaunchedTriggerEvent, bool, error) {
+func (m *MockRunLists) ListUnlaunchedTriggerEvents(ctx context.Context, f db.RunListFilters) ([]*db.UnlaunchedTriggerEvent, bool, error) {
 	m.Recorder.Record("ListUnlaunchedTriggerEvents", ctx, f)
 	if m.ListUnlaunchedTriggerEventsFunc != nil {
 		return m.ListUnlaunchedTriggerEventsFunc(ctx, f)
 	}
-	return nil, false, contractkit.MockNotSet("MockRepository", "ListUnlaunchedTriggerEvents")
+	return nil, false, contractkit.MockNotSet("MockRunLists", "ListUnlaunchedTriggerEvents")
 }
 
-// LastRunPerWorkflow records the call and delegates to LastRunPerWorkflowFunc when set.
-func (m *MockRepository) LastRunPerWorkflow(ctx context.Context, f db.RunListFilters) ([]*db.RunListItem, error) {
-	m.Recorder.Record("LastRunPerWorkflow", ctx, f)
-	if m.LastRunPerWorkflowFunc != nil {
-		return m.LastRunPerWorkflowFunc(ctx, f)
+// LastRunPerWorkflowAndOrg records the call and delegates to LastRunPerWorkflowAndOrgFunc when set.
+func (m *MockRunLists) LastRunPerWorkflowAndOrg(ctx context.Context, f db.RunListFilters) ([]*db.RunListItem, error) {
+	m.Recorder.Record("LastRunPerWorkflowAndOrg", ctx, f)
+	if m.LastRunPerWorkflowAndOrgFunc != nil {
+		return m.LastRunPerWorkflowAndOrgFunc(ctx, f)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "LastRunPerWorkflow")
+	return nil, contractkit.MockNotSet("MockRunLists", "LastRunPerWorkflowAndOrg")
 }
 
 // Compile-time check.
-var _ Repository = (*MockRepository)(nil)
+var _ RunLists = (*MockRunLists)(nil)
 
 // forge:section MockWorkflowLoader
 // forge:hash=27de9052bc714bd51848a573063fd6021638e3ab686dcdb35a3c160c957c4b7a

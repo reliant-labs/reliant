@@ -15,8 +15,7 @@
 import { useEffect, useMemo } from "react";
 
 import { useProjects } from "@/hooks/project-queries";
-import { isDemoShell } from "@/lib/shell";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthIdentity } from "@/lib/auth/use-auth";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
 /**
@@ -60,10 +59,9 @@ export interface ConsoleReliantProject {
  * the URL's `?project=`), made the current project once
  * found when `select` (the page on screen is this app's console). `listed`
  * once the project list has answered (or failed): until then a forge name
- * matches nothing only because nothing is loaded yet. The demo shell
- * (lib/shell.ts) has no Reliant projects: the forge name in the URL is the
- * whole scope, and nothing is waited for. Both app hosts have projects (the
- * forge host mounts the one route tree, U6).
+ * matches nothing only because nothing is loaded yet. Both app hosts have
+ * projects (the forge host mounts the one route tree, U6); the demo's build
+ * has none and replaces this module (consoleHost.demo.ts).
  *
  * `select` is false for the shell's nav, which draws an app's sections on
  * every page: a chat's page among them. There the URL's chat decides the
@@ -77,15 +75,14 @@ export function useConsoleReliantProject(
   forgeProject: string,
   { select = true, pinned }: { select?: boolean; pinned?: string | null } = {},
 ): ConsoleReliantProject {
-  const demo = isDemoShell();
   const { projects, isLoading: listing } = useProjects();
-  const listed = demo || projects.length > 0 || !listing;
+  const listed = projects.length > 0 || !listing;
   const currentProject = useProjectStore((state) => state.currentProject);
   const selectProject = useProjectStore((state) => state.selectProject);
 
   const checkout = useMemo(
-    () => (listed && !demo ? consoleCheckout(forgeProject, projects, pinned) : ({ kind: "none" } as const)),
-    [listed, demo, forgeProject, projects, pinned]
+    () => (listed ? consoleCheckout(forgeProject, projects, pinned) : ({ kind: "none" } as const)),
+    [listed, forgeProject, projects, pinned]
   );
   const match = checkout.kind === "one" ? checkout.project : null;
   useEffect(() => {
@@ -103,20 +100,16 @@ export interface ConsoleUser {
 
 /** The signed-in user, as the console's rail shows them. */
 export function useConsoleUser(): ConsoleUser | undefined {
-  const authUser = useAuthStore((state) => state.user);
+  const identity = useAuthIdentity();
   // One object per signed-in user: it is a prop of the console's memoized chrome.
   return useMemo(
     () =>
-      authUser
+      identity
         ? {
-            name:
-              (authUser.user_metadata?.full_name as string | undefined) ??
-              (authUser.user_metadata?.name as string | undefined) ??
-              authUser.email?.split("@")[0] ??
-              "You",
-            email: authUser.email ?? undefined,
+            name: identity.name ?? identity.email?.split("@")[0] ?? "You",
+            email: identity.email ?? undefined,
           }
         : undefined,
-    [authUser]
+    [identity]
   );
 }

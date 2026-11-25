@@ -7,6 +7,9 @@ import {
   canSetUpElsewhere,
   canStartOn,
   isSettingUpAnywhere,
+  moveSourceDaemonIds,
+  nestedRepoInstalls,
+  nestedRepoLabel,
   preferredDaemonIds,
   projectPlacement,
   sectionMachines,
@@ -147,5 +150,41 @@ describe("helpers", () => {
     expect(isSettingUpAnywhere(installs, "temp")).toBe(true);
     expect(isSettingUpAnywhere(installs, "other")).toBe(false);
     expect(isSettingUpAnywhere(installs, undefined)).toBe(false);
+  });
+});
+
+describe("moveSourceDaemonIds", () => {
+  const rows = [
+    row("temp", "laptop", ProjectInstallState.INSTALLED),
+    row("temp", "desk", ProjectInstallState.INSTALLED),
+    row("temp", "gpu", ProjectInstallState.INSTALLING),
+    row("temp", "old", ProjectInstallState.FAILED),
+    row("other", "cicd", ProjectInstallState.INSTALLED),
+  ];
+
+  it("is every machine with the checkout but the target, an online one first", () => {
+    expect(moveSourceDaemonIds(rows, "temp", "cicd", (id) => id === "desk")).toEqual(["desk", "laptop"]);
+    expect(moveSourceDaemonIds(rows, "temp", "laptop")).toEqual(["desk"]);
+  });
+
+  it("is none for a project with no checkout anywhere else", () => {
+    expect(moveSourceDaemonIds(rows, "other", "cicd")).toEqual([]);
+    expect(moveSourceDaemonIds(rows, undefined, "cicd")).toEqual([]);
+  });
+});
+
+describe("nested repositories", () => {
+  it("maps the wire rows, and none from an older server", () => {
+    expect(
+      nestedRepoInstalls([{ name: "forge", relativePath: "forge", installState: ProjectInstallState.FAILED, installError: "denied" }]),
+    ).toEqual([{ name: "forge", relative_path: "forge", install_state: ProjectInstallState.FAILED, install_error: "denied" }]);
+    expect(nestedRepoInstalls(undefined)).toEqual([]);
+  });
+
+  it("labels a repository by its folder, naming it when the folder is called something else", () => {
+    expect(nestedRepoLabel({ name: "forge", relative_path: "forge" })).toBe("forge/");
+    expect(nestedRepoLabel({ name: "sdk", relative_path: "tools/sdk/" })).toBe("tools/sdk/");
+    expect(nestedRepoLabel({ name: "sdk", relative_path: "vendor/client" })).toBe("sdk (vendor/client/)");
+    expect(nestedRepoLabel({ name: "api", relative_path: "" })).toBe("api");
   });
 });

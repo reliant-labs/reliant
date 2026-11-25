@@ -82,7 +82,12 @@ func main() {
 	webShardFlag := fs.String("web-shard", "", "with run: run only shard i of n of the web lane's vitest files (i/n, vitest --shard): the merge queue's vitest job splits the SAME selected file list across n runners, one leg each")
 	captureFlag := fs.Bool("capture", false, "with run: record the Go and web steps through scripts/test-capture.sh (`forge test capture`, lanes "+captureLaneGo+" and "+captureLaneWeb+"): results and coverage under .forge/tests/runs/, the verdict unchanged; the merge gate's choice")
 	reachFlag := fs.String("reach", "", "Go and web lane fan-out: all (every package whose test binary, every vitest file whose import closure, contains a change; the default, also $TEST_REACH) or direct (changed packages + their direct importers; the vitest files that import a changed module or a module importing it: the merge tier)")
+	reachCapFlag := fs.Int("go-reach-cap", 0, "with -reach direct: also select the Go packages -reach all would add when they number at most this (the merge gate's transitive budget, MG_REACH_CAP); 0 keeps the direct cut")
 	if err := fs.Parse(args); err != nil {
+		os.Exit(2)
+	}
+	if *reachCapFlag < 0 {
+		fmt.Fprintln(os.Stderr, "test-affected: -go-reach-cap must not be negative")
 		os.Exit(2)
 	}
 	if *jobs < 1 {
@@ -124,7 +129,7 @@ func main() {
 	if *planFile != "" {
 		pl, err = readPlan(ctx, *root, *baseFlag, *planFile)
 	} else {
-		pl, err = plan(ctx, *root, *baseFlag, *full, splitList(*files), *reachFlag)
+		pl, err = plan(ctx, *root, *baseFlag, *full, splitList(*files), *reachFlag, *reachCapFlag)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "test-affected:", err)
@@ -191,7 +196,7 @@ func laneSet(s string) map[lane]bool {
 }
 
 // plan computes the decision for the tree at root.
-func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []string, reachMode string) (result *Plan, resultErr error) {
+func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []string, reachMode string, reachCap int) (result *Plan, resultErr error) {
 	root = mustAbs(root)
 	before, err := checkoutDigest(ctx, root)
 	if err != nil {
@@ -234,7 +239,7 @@ func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []s
 	}
 	g.Web = BuildWebGraph(append(append([]string{}, tracked...), untracked...), diskReader(root))
 	g.ElectronText = electronTexts(root)
-	pl := ClassifyReach(changes, g, reachMode)
+	pl := ClassifyReachCap(changes, g, reachMode, reachCap)
 	pl.Base, pl.Head = base, head
 	if pl.ForgeGen.HooksOnly {
 		cmds, err := hookCommands(root, pl.ForgeGen.Hooks)
@@ -505,6 +510,9 @@ func short(s string) string {
 func goLine(gp GoPlan) string {
 	if gp.Reach == ReachDirect {
 		return fmt.Sprintf("%d package(s), reach direct (%d transitive dependent(s) left to the full lane)", len(gp.Packages), len(gp.Deferred))
+	}
+	if gp.ReachCap > 0 {
+		return fmt.Sprintf("%d package(s), reach all (the transitive dependents are within the %d-package budget)", len(gp.Packages), gp.ReachCap)
 	}
 	return fmt.Sprintf("%d package(s)", len(gp.Packages))
 }

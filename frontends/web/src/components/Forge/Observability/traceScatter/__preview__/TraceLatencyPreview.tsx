@@ -18,7 +18,7 @@ import { useMemo, useState } from "react";
 
 import PageHeader from "@/components/forge-ui/page_header";
 
-import { ConsolePreviewShell } from "../../../Console/ConsolePreviewShell";
+import { ConsolePreviewFrame } from "../../../__preview__/PreviewShellFrame";
 import { TraceLatencyChart, type TraceLatencyChartProps } from "../TraceLatencyChart";
 import type { TracePoint, TraceRegion } from "../traceScatterModel";
 
@@ -103,7 +103,7 @@ export default function TraceLatencyPreview() {
   );
 
   return (
-    <ConsolePreviewShell
+    <ConsolePreviewFrame
       page={{ kind: "obs-view", view: "traces" }}
       controls={
         <>
@@ -164,6 +164,6 @@ export default function TraceLatencyPreview() {
           {opened ? `Opened trace ${opened}.` : region ? `Region: ${new Date(region.startMs).toISOString()} to ${new Date(region.endMs).toISOString()}, ${region.minMs.toFixed(1)}ms to ${region.maxMs.toFixed(1)}ms.` : "Click a dot, or drag a region."}
         </p>
       </div>
-    </ConsolePreviewShell>
+    </ConsolePreviewFrame>
   );
 }

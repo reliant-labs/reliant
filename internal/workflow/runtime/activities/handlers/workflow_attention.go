@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -13,7 +15,7 @@ func (a *WorkflowStatusActivity) recordAttention(ctx context.Context, input Work
 	if input.Attention == nil || input.ParentWorkflowID != "" {
 		return core.AttentionResult{}, nil
 	}
-	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 	if err != nil {
 		return core.AttentionResult{}, err
 	}

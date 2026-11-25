@@ -9,7 +9,6 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -76,7 +75,7 @@ func (s *Service) find(ctx context.Context, userID, accountID string) (core.Prov
 // afterChange tells the user's other windows the provider set moved. A failed notification never
 // fails the change: the account store is already correct.
 func (s *Service) afterChange(ctx context.Context, userID, provider string) {
-	if err := s.deps.Store.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+	if err := s.deps.Refetch.EmitUserRefetch(ctx, userID, core.RefetchConfigHealth, core.RefetchOpts{}); err != nil {
 		logging.WarnContext(ctx, "Failed to emit config_health refetch after provider account change", "provider", provider, "error", err)
 	}
 }

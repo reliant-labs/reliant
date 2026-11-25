@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
@@ -27,7 +28,7 @@ func (s *Service) SetChatDaemon(
 
 	// Get chat and verify ownership: the row is enough here, the response
 	// re-reads the whole chat after the write.
-	chat, err := s.deps.Repo.GetChatRowWithUserCheck(ctx, req.Msg.ChatId, userID)
+	chat, err := s.chats().GetChatRowWithUserCheck(ctx, req.Msg.ChatId, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -88,7 +89,7 @@ func (s *Service) SetChatDaemon(
 	}
 
 	// Re-fetch chat with updated daemon
-	updatedChat, err := s.deps.Repo.GetChat(ctx, chat.ID)
+	updatedChat, err := s.chatViews().GetChat(ctx, chat.ID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to reload chat"))
 	}

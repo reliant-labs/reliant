@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	run "github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // orgSource: test-user is a live member of acme and home; home is the default.
@@ -49,7 +50,7 @@ func TestListRuns_SessionAndParentHonourTheOrg(t *testing.T) {
 	workflows := &run.MockWorkflowLoader{
 		LoadWorkflowFunc: func(context.Context, string) (*db.Workflow, error) { return runs[0], nil },
 	}
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Workflows: workflows, ChatRows: chatRows, ChatViews: chatViews, Orgs: resolver}))
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, RunLists: &run.MockRunLists{}, Workflows: workflows, ChatRows: chatRows, ChatViews: chatViews, Orgs: resolver}))
 	// A request through a listener carries the membership authz decides with.
 	ctx := authz.WithMembership(run.AuthedContext(t), resolver)
 	str := func(s string) *string { return &s }
@@ -96,6 +97,9 @@ func TestListRuns_LeavesOutARemovedMembersOrgRows(t *testing.T) {
 				{ChatID: "c-legacy", CreatedAt: at.Add(-3 * time.Minute)},
 			}, false, nil
 		},
+	}
+	resolver := orgs.New(orgSource{}) // test-user is in acme and home, not globex
+	lists := &run.MockRunLists{
 		ListUnlaunchedTriggerEventsFunc: func(_ context.Context, f db.RunListFilters) ([]*db.UnlaunchedTriggerEvent, bool, error) {
 			if f.After != nil {
 				return nil, false, nil
@@ -106,8 +110,7 @@ func TestListRuns_LeavesOutARemovedMembersOrgRows(t *testing.T) {
 			}, false, nil
 		},
 	}
-	resolver := orgs.New(orgSource{}) // test-user is in acme and home, not globex
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Orgs: resolver}))
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, RunLists: lists, Orgs: resolver}))
 	ctx := authz.WithMembership(run.AuthedContext(t), resolver)
 
 	got, err := svc.ListRuns(ctx, connect.NewRequest(&pb.ListRunsRequest{IncludeUnlaunchedEvents: ptrBool(true)}))
@@ -137,6 +140,128 @@ func TestListRuns_LeavesOutARemovedMembersOrgRows(t *testing.T) {
 	if svcerr.Code(err) != connect.CodePermissionDenied {
 		t.Fatalf("a credential of an org its user left: %v, want PermissionDenied", err)
 	}
+}
+
+// The Workflows list's "Last run" column is the run log's newest run per
+// workflow, so it shows what the run log would: never a run of an org the
+// caller has left, even when the request names no org (an old client).
+func TestLastRunPerWorkflow_LeavesOutARemovedMembersOrgRuns(t *testing.T) {
+	acme, globex := "acme", "globex"
+	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	repo := &run.MockRepository{}
+	resolver := orgs.New(orgSource{}) // test-user is in acme and home, not globex
+	lists := &run.MockRunLists{
+		LastRunPerWorkflowAndOrgFunc: func(context.Context, db.RunListFilters) ([]*db.RunListItem, error) {
+			return []*db.RunListItem{
+				{ChatID: "c-acme", WorkflowName: "wf-a", CreatedAt: at, OrgID: &acme},
+				{ChatID: "c-globex", WorkflowName: "wf-b", CreatedAt: at, OrgID: &globex},
+				{ChatID: "c-legacy", WorkflowName: "wf-c", CreatedAt: at},
+			}, nil
+		},
+	}
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, RunLists: lists, Orgs: resolver}))
+	ctx := authz.WithMembership(run.AuthedContext(t), resolver)
+
+	got, err := svc.LastRunPerWorkflow(ctx, connect.NewRequest(&pb.LastRunPerWorkflowRequest{}))
+	require.NoError(t, err)
+	var runs []string
+	for _, r := range got.Msg.GetRuns() {
+		runs = append(runs, r.GetSessionId())
+	}
+	require.Equal(t, []string{"c-acme", "c-legacy"}, runs, "a run of an org the caller left is not their last run")
+}
+
+// The org a LastRunPerWorkflow request names is verified and becomes the
+// store's filter, as ListRuns': the web's Workflows list read every org's
+// runs before the request could name one. The project set goes through too.
+func TestLastRunPerWorkflow_HonoursTheNamedOrgAndProjects(t *testing.T) {
+	var got db.RunListFilters
+	repo := &run.MockRepository{
+		AssignUnassignedOrgFunc: func(context.Context, string, string) error { return nil },
+	}
+	resolver := orgs.New(orgSource{})
+	lists := &run.MockRunLists{
+		LastRunPerWorkflowAndOrgFunc: func(_ context.Context, f db.RunListFilters) ([]*db.RunListItem, error) {
+			got = f
+			return nil, nil
+		},
+	}
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, RunLists: lists, Orgs: resolver}))
+	ctx := authz.WithMembership(run.AuthedContext(t), resolver)
+	str := func(s string) *string { return &s }
+
+	_, err := svc.LastRunPerWorkflow(ctx, connect.NewRequest(&pb.LastRunPerWorkflowRequest{
+		OrgId: str("acme"), ProjectIds: []string{"p-1", "p-2"},
+	}))
+	require.NoError(t, err)
+	require.NotNil(t, got.Org, "a named org filters the store")
+	require.Equal(t, "acme", got.Org.OrgID)
+	require.Equal(t, []string{"p-1", "p-2"}, got.ProjectIDs)
+
+	_, err = svc.LastRunPerWorkflow(ctx, connect.NewRequest(&pb.LastRunPerWorkflowRequest{OrgId: str("globex")}))
+	if svcerr.Code(err) != connect.CodePermissionDenied {
+		t.Fatalf("an org the caller is not in: %v, want PermissionDenied", err)
+	}
+
+	got = db.RunListFilters{}
+	_, err = svc.LastRunPerWorkflow(ctx, connect.NewRequest(&pb.LastRunPerWorkflowRequest{}))
+	require.NoError(t, err)
+	require.Nil(t, got.Org, "no org named: every org the caller owns, as before the field")
+}
+
+// ListRuns passes the side nav's several projects to the store.
+func TestListRuns_PassesTheProjectSet(t *testing.T) {
+	var got db.RunListFilters
+	repo := &run.MockRepository{
+		ListRunsFunc: func(_ context.Context, f db.RunListFilters) ([]*db.RunListItem, bool, error) {
+			got = f
+			return nil, false, nil
+		},
+	}
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, RunLists: &run.MockRunLists{}}))
+	_, err := svc.ListRuns(run.AuthedContext(t), connect.NewRequest(&pb.ListRunsRequest{ProjectIds: []string{"p-1", "p-2"}}))
+	require.NoError(t, err)
+	require.Equal(t, []string{"p-1", "p-2"}, got.ProjectIDs)
+}
+
+// A workflow whose newest run is in an org the caller left still shows its
+// newest run they may see: the left org's run is dropped before each
+// workflow's newest is picked, not after (which read it as never run). Real
+// store, so the candidates are what the query returns.
+func TestLastRunPerWorkflow_AnOlderVisibleRunOutlivesANewerRemovedOne(t *testing.T) {
+	repo := db.NewTestRepo(t)
+	resolver := orgs.New(orgSource{}) // test-user is in acme and home, not globex
+	ctx := authz.WithMembership(run.AuthedContext(t), resolver)
+	user := "test-user"
+	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{
+		ID: "p-last", UserID: user, Name: "proj", Path: t.TempDir(), CreatedAt: at, UpdatedAt: at, LastActive: at,
+	}))
+	for _, c := range []struct {
+		id, org string
+		at      time.Time
+	}{
+		{"c-acme-older", "acme", at},
+		{"c-globex-newer", "globex", at.Add(time.Hour)},
+	} {
+		workflow, workflowID, org := "wf", c.id, c.org
+		require.NoError(t, repo.CreateChat(ctx, &db.Chat{
+			ID: c.id, Title: c.id, ProjectID: "p-last", UserID: user, OrgID: &org,
+			WorkflowName: &workflow, WorkflowID: &workflowID, State: db.ChatStateIdle,
+			CreatedAt: c.at, UpdatedAt: c.at, LastActive: c.at,
+		}))
+		_, err := repo.CreateThread(ctx, &db.Thread{ID: c.id, ChatID: c.id, CreatedAt: c.at})
+		require.NoError(t, err)
+		require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{
+			ID: c.id, ChatID: c.id, WorkflowName: workflow, Thread: c.id, Status: db.Completed(), CreatedAt: c.at,
+		}))
+	}
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, RunLists: store.NewRunListExtStore(repo.ORM()), Orgs: resolver}))
+
+	got, err := svc.LastRunPerWorkflow(ctx, connect.NewRequest(&pb.LastRunPerWorkflowRequest{}))
+	require.NoError(t, err)
+	require.Len(t, got.Msg.GetRuns(), 1, "the workflow has a run the caller may see")
+	require.Equal(t, "c-acme-older", got.Msg.GetRuns()[0].GetSessionId())
 }
 
 func ptrBool(b bool) *bool { return &b }

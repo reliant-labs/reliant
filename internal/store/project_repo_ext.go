@@ -229,6 +229,12 @@ func whereRemoteKeyOf(remoteURL string) orm.QueryOption {
 	}
 }
 
+// GetProjectBySameRemoteAndUserInScope uses the database's repository identity
+// for main's alternate-spelling lookup as well.
+func GetProjectBySameRemoteAndUserInScope(ctx context.Context, db orm.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error) {
+	return GetProjectByRemoteKeyAndUserInScope(ctx, db, remoteURL, userID, scope)
+}
+
 // oldestProjectFirst orders a lookup that may match one project per org.
 var oldestProjectFirst = []orm.QueryOption{
 	orm.WithOrderBy(ProjectFieldCreatedAt, orm.Asc),

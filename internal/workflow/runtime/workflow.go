@@ -1204,6 +1204,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	if err != nil {
 		return nil, fmt.Errorf("parse workflow for validation: %w", err)
 	}
+	// A run recorded before llm_gateway's removal: its run nodes that set it
+	// (handlers included, armed from this parse) refuse their command rather
+	// than run without the step key (removed_definition_keys.go).
+	markRecordedLLMGateway(wfWithPlaceholders, loadedWf.WorkflowJSON)
 
 	// The on_failure handler is armed as soon as the definition parses, before
 	// input validation or template resolution can fail: a run that dies there
@@ -1362,6 +1366,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	} else {
 		// No templates - use the placeholder-resolved workflow directly
 		wf = wfWithPlaceholders
+	}
+
+	// The template-resolved definition is a parse of its own: mark it too.
+	if wf != wfWithPlaceholders {
+		markRecordedLLMGateway(wf, loadedWf.WorkflowJSON)
 	}
 
 	onFailureHandler = wf.GetOnFailure()
@@ -1612,7 +1621,8 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// node can have a side effect.
 	// Checked on the inherited machine only when some node routes there; a
 	// pool member is checked when a step is first placed on it.
-	if err := checkRequirements(ctx, input, execCtx, wf, workflowID, thread, !onlyPools); err != nil {
+	legacyCLILogin := legacyRequiresCLILogin(ctx, loadedWf.WorkflowJSON, execCtx)
+	if err := checkRequirements(ctx, input, execCtx, wf, workflowID, thread, !onlyPools, legacyCLILogin); err != nil {
 		return nil, err
 	}
 	requirementsCheckedID := ""
@@ -1621,7 +1631,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			requirementsCheckedID, _ = sel["id"].(string)
 		}
 	}
-	placedReqs := newPlacedRequirements(input, execCtx, wf, workflowID, requirementsCheckedID)
+	placedReqs := newPlacedRequirements(input, execCtx, wf, workflowID, requirementsCheckedID, legacyCLILogin)
 
 	// STEP 6.8: Greenfield probe, the last thing before graph entry so the
 	// guidance it may seed is in the thread when the first LLM call reads it,
@@ -5015,39 +5025,26 @@ func executeToolsWithSpawnSupport(
 
 	// Execute regular tools via ExecuteTools activity
 	if len(split.regularToolCalls) > 0 && resume == nil {
-		runRegular := func(refused map[string]string) workflow.Future {
-			regularNode := &reliantv1.Node{
-				Id:   evalNode.GetId(),
-				Type: model.NodeTypeExecuteTools,
-				Args: &reliantv1.Node_ExecuteTools{ExecuteTools: &reliantv1.ExecuteToolsArgs{
-					ResolvedToolCalls:     split.regularToolCalls,
-					ExpectedResponseTools: etArgs.GetExpectedResponseTools(),
-					ResponseToolSchemas:   etArgs.GetResponseToolSchemas(),
-					CompactionThreshold:   etArgs.GetCompactionThreshold(),
-					Capabilities:          etArgs.GetCapabilities(),
-					RefusedToolCalls:      refused, //nolint:staticcheck // SA1019: set only by the legacy approval gate
-				}},
-			}
-
-			logger.Debug("[executeToolsWithSpawnSupport] Executing regular tools",
-				"step_id", rtx.StepID,
-				"count", len(split.regularToolCalls),
-				"refused", len(refused),
-				"loop_node_id", rtx.LoopNodeID,
-				"loop_iteration", rtx.LoopIteration,
-			)
-
-			return executeWithActivationApprovals(ctx, activityCtx, rtx, regularNode, IsUnattended(workflowInputs))
+		regularNode := &reliantv1.Node{
+			Id:   evalNode.GetId(),
+			Type: model.NodeTypeExecuteTools,
+			Args: &reliantv1.Node_ExecuteTools{ExecuteTools: &reliantv1.ExecuteToolsArgs{
+				ResolvedToolCalls:     split.regularToolCalls,
+				ExpectedResponseTools: etArgs.GetExpectedResponseTools(),
+				ResponseToolSchemas:   etArgs.GetResponseToolSchemas(),
+				CompactionThreshold:   etArgs.GetCompactionThreshold(),
+				Capabilities:          etArgs.GetCapabilities(),
+			}},
 		}
 
-		// A run that recorded this batch behind the removed integration action
-		// approval prompt replays it (action_approval_legacy.go); every other
-		// batch runs at once.
-		if gated := legacyActionApprovalGate(ctx, split.regularToolCalls, etArgs.GetCapabilities()); len(gated) > 0 {
-			regularToolsFuture = afterActionApprovals(ctx, activityCtx, rtx, gated, runRegular)
-		} else {
-			regularToolsFuture = runRegular(nil)
-		}
+		logger.Debug("[executeToolsWithSpawnSupport] Executing regular tools",
+			"step_id", rtx.StepID,
+			"count", len(split.regularToolCalls),
+			"loop_node_id", rtx.LoopNodeID,
+			"loop_iteration", rtx.LoopIteration,
+		)
+
+		regularToolsFuture = executeWithActivationApprovals(ctx, activityCtx, rtx, regularNode, IsUnattended(workflowInputs))
 	}
 
 	// OPTIMIZATION: If only regular tools, return directly to avoid goroutine wrapper

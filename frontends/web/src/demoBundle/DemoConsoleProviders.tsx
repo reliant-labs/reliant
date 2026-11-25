@@ -25,7 +25,7 @@ import { DEMO_SECTIONS, DEMO_SECTION_AGENTS, DEMO_SECTION_BUILT, DEMO_SECTION_HO
 import { PageAgentStrip } from "@/components/Forge/Demo/sections/AgentCards";
 import { PEOPLE_DASHBOARD_KEYS } from "@/components/Forge/Demo/sections/demoLinks";
 import { explainShopIssue } from "@/components/Forge/Demo/sections/shopFacts";
-import type { ProductAnalyticsHub } from "@/components/Forge/Console/groupedNav";
+import type { ProductAnalyticsHub } from "@/components/Forge/Console/consoleNavModel";
 import { LedConsoleProvider, type LedConsoleHost } from "@/components/Forge/Console/ledConsole";
 import { AskAgentModeProvider } from "@/components/Forge/Observability/AskReliant/askAgentMode";
 

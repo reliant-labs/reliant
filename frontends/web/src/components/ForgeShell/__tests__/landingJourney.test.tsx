@@ -21,22 +21,34 @@ vi.mock("@/lib/analytics", async (importOriginal) => ({
 }));
 vi.mock("@/store/authStore", async () => {
   const { create } = await import("zustand");
+  const { identityOf } = await import("@/lib/auth/identity");
   type User = { id: string; email_confirmed_at?: string | null; is_anonymous?: boolean };
-  return {
-    useAuthStore: create<{
-      user: User | null;
-      loading: boolean;
-      initialized: boolean;
-      initialize: () => Promise<void>;
-      signInAnonymously: () => Promise<void>;
-    }>(() => ({
-      user: null,
-      loading: false,
-      initialized: true,
-      initialize: async () => undefined,
-      signInAnonymously: async () => undefined,
-    })),
+  type State = {
+    user: User | null;
+    identity: ReturnType<typeof identityOf>;
+    loading: boolean;
+    initialized: boolean;
+    authError: string | null;
+    initialize: () => Promise<void>;
+    signInAnonymously: () => Promise<void>;
+    signOut: () => Promise<void>;
   };
+  const store = create<State>(() => ({
+    user: null,
+    identity: null,
+    loading: false,
+    initialized: true,
+    authError: null,
+    initialize: async () => undefined,
+    signInAnonymously: async () => undefined,
+    signOut: async () => undefined,
+  }));
+  // The real store derives identity from user on every write; so does this one.
+  const rawSetState = store.setState;
+  store.setState = ((partial: Partial<State>) => {
+    rawSetState("user" in partial ? { ...partial, identity: identityOf(partial.user as never) } : partial);
+  }) as typeof store.setState;
+  return { useAuthStore: store };
 });
 vi.mock("@/hooks/useAuthMode", () => ({ useAuthMode: () => ({ authMode: "supabase", loading: false }) }));
 vi.mock("@/components/Forge/Demo/DemoConsole", () => ({ DemoConsole: () => <div data-testid="demo-console" /> }));
@@ -159,13 +171,13 @@ it.each(["/reset-password", "/verify-email", "/upgrade"])("does not hold sign-in
 
 describe("landingAuthDecision", () => {
   it.each([
-    [{ initialized: false, loading: false, user: null }, "wait"],
-    [{ initialized: true, loading: true, user: null }, "wait"],
-    [{ initialized: true, loading: false, user: null }, "sign-in"],
-    [{ initialized: true, loading: false, user: { email_confirmed_at: null } }, "verify-email"],
-    [{ initialized: true, loading: false, user: { email_confirmed_at: "2026-01-01" } }, "allow"],
+    [{ initialized: false, loading: false, identity: null }, "wait"],
+    [{ initialized: true, loading: true, identity: null }, "wait"],
+    [{ initialized: true, loading: false, identity: null }, "sign-in"],
+    [{ initialized: true, loading: false, identity: { isAnonymous: false, emailVerified: false } }, "verify-email"],
+    [{ initialized: true, loading: false, identity: { isAnonymous: false, emailVerified: true } }, "allow"],
     // A claim in flight holds an anonymous session: it is let in, as AuthGuard does.
-    [{ initialized: true, loading: false, user: { is_anonymous: true } }, "allow"],
+    [{ initialized: true, loading: false, identity: { isAnonymous: true, emailVerified: false } }, "allow"],
   ] as const)("%j → %s", (state, expected) => {
     expect(landingAuthDecision(state)).toBe(expected);
   });
@@ -220,7 +232,8 @@ describe("?journey=forge on the forge brand", () => {
     useAuthStore.setState({ user: SIGNED_IN });
     arriveWith("?journey=forge");
     const router = renderShell("/apps?journey=forge");
-    await waitFor(() => expect(router.state.location.pathname).toBe("/forge/demo"));
+    // Signed in, the journey walks the sample app inside the shell.
+    await waitFor(() => expect(router.state.location.pathname).toBe("/forge/p/sample_shop"));
     expect(searchOf(router).tour).toBe("forge:fg-intro");
     expect(trackEvent.mock.calls.filter(([name]) => name === "journey_selected")).toHaveLength(1);
   });
@@ -235,7 +248,7 @@ describe("?journey=forge on the forge brand", () => {
     // The sign-in screen signs them in and returns them to the shell.
     act(() => useAuthStore.setState({ user: SIGNED_IN }));
     await act(() => router.navigate({ to: "/apps" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/forge/demo"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/forge/p/sample_shop"));
     expect(searchOf(router).tour).toBe("forge:fg-intro");
   });
 

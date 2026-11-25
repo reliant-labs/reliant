@@ -114,6 +114,35 @@ func TestLLMCallUsage_ConcurrentDuplicatesCountOnce(t *testing.T) {
 	assert.Equal(t, 1, rowCount(t, raw, `SELECT calls FROM llm_call_usage_daily`))
 }
 
+func insightsModelColumns(member bool) map[string]string {
+	cols := map[string]string{
+		"org_id": "text", "day": "date", "project_id": "text", "workflow_name": "text", "node_id": "text", "preset": "text",
+		"provider": "text", "model": "text", "auth_mode": "text", "funding": "text", "paid_by_org": "boolean", "purpose": "text",
+		"outcome": "text", "error_class": "text", "calls": "bigint", "retried_calls": "bigint", "input_tokens": "bigint", "output_tokens": "bigint",
+		"cache_read_tokens": "bigint", "cache_write_tokens": "bigint", "latency_ms_total": "bigint", "latency_ms_hist": "ARRAY",
+		"ttft_calls": "bigint", "ttft_ms_total": "bigint", "ttft_ms_hist": "ARRAY", "reported_calls": "bigint",
+		"reported_cost_usd_nanos": "bigint", "estimated_calls": "bigint", "estimated_cost_usd_nanos": "bigint",
+		"unpriced_calls": "bigint", "updated_at": "timestamp with time zone",
+	}
+	if member {
+		cols["user_id"] = "text"
+	}
+	return cols
+}
+
+func insightsToolColumns(member bool) map[string]string {
+	cols := map[string]string{
+		"org_id": "text", "day": "date", "project_id": "text", "workflow_name": "text", "node_id": "text", "preset": "text",
+		"tool_name": "text", "tool_kind": "text", "location": "text", "outcome": "text", "error_class": "text",
+		"calls": "bigint", "retried_calls": "bigint", "duration_ms_total": "bigint", "duration_ms_hist": "ARRAY",
+		"updated_at": "timestamp with time zone",
+	}
+	if member {
+		cols["user_id"] = "text"
+	}
+	return cols
+}
+
 // The ledger records counts and metadata. This pins the exact column set of
 // both tables, so a column that could hold a prompt, a reply, a tool input, a
 // file name or an error's text cannot be added without changing this list and
@@ -136,6 +165,12 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 			"workflow_id": "text", "thread_id": "text", "workflow_name": "text", "node_id": "text", "preset": "text",
 			"project_id": "text", "ai_run_id": "text", "ai_root_run_id": "text", "provider_request_id": "text",
 			"ttft_ms": "bigint", "cost_usd_nanos": "bigint", "cost_basis": "text",
+			// The LLM gateway's id for the call (x-litellm-call-id), which
+			// control-plane's wallet ledger keys the call's cost by.
+			"gateway_call_id": "text",
+			// Whether the insights rollups count the row (agent-analytics.md §3.1),
+			// and the org that paid for it, an opaque id.
+			"insights_folded": "boolean", "funding_org_id": "text",
 		},
 		"llm_call_usage_daily": {
 			"user_id": "text", "org_id": "text", "provider": "text", "model": "text", "auth_mode": "text", "purpose": "text",
@@ -161,7 +196,16 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 			"node_id": "text", "preset": "text", "ai_run_id": "text", "ai_root_run_id": "text",
 			"tool_name": "text", "tool_kind": "text", "location": "text", "outcome": "text", "error_class": "text",
 			"duration_ms": "bigint", "created_at": "timestamp with time zone",
+			"insights_folded": "boolean",
 		},
+		// The insights rollups (agent-analytics.md §3.1): daily totals per org
+		// (no user_id: the team tables name no one) and per member, keyed by
+		// ids, the run's names and closed-set labels; counts and latency
+		// histograms only.
+		"insights_model_calls_daily":        insightsModelColumns(false),
+		"insights_model_calls_member_daily": insightsModelColumns(true),
+		"insights_tool_calls_daily":         insightsToolColumns(false),
+		"insights_tool_calls_member_daily":  insightsToolColumns(true),
 	}
 	for table, cols := range want {
 		rows, err := raw.Query(`SELECT column_name, data_type FROM information_schema.columns
@@ -445,6 +489,7 @@ func TestLLMCallUsage_RunScopeColumnsRoundTripAndEmptyIsNull(t *testing.T) {
 	full.WorkflowID, full.ThreadID, full.WorkflowName, full.NodeID = "wf-1", "thread-1", "agent", "call_llm"
 	full.Preset, full.ProjectID, full.AIRunID, full.AIRootRunID = "researcher", "proj-1", "run-child", "run-root"
 	full.ProviderRequestID, full.TTFTMs = "req_abc", &ttft
+	full.GatewayCallID = "call-litellm-abc"
 	full.CostUSDNanos, full.CostBasis = &nanos, store.LLMCostBasisReported
 	_, err := llmusagetest.New(t, repo).RecordLLMCallUsage(ctx, full)
 	require.NoError(t, err)
@@ -474,6 +519,7 @@ func TestLLMCallUsage_RunScopeColumnsRoundTripAndEmptyIsNull(t *testing.T) {
 	assert.Equal(t, "run-child", str(got.AiRunID))
 	assert.Equal(t, "run-root", str(got.AiRootRunID))
 	assert.Equal(t, "req_abc", str(got.ProviderRequestID))
+	assert.Equal(t, "call-litellm-abc", str(got.GatewayCallID))
 	require.NotNil(t, got.TtftMs)
 	assert.EqualValues(t, 420, *got.TtftMs)
 	require.NotNil(t, got.CostUsdNanos)
@@ -486,6 +532,7 @@ func TestLLMCallUsage_RunScopeColumnsRoundTripAndEmptyIsNull(t *testing.T) {
 		"workflow_id": bare.WorkflowID, "thread_id": bare.ThreadID, "workflow_name": bare.WorkflowName,
 		"node_id": bare.NodeID, "preset": bare.Preset, "project_id": bare.ProjectID, "ai_run_id": bare.AiRunID,
 		"ai_root_run_id": bare.AiRootRunID, "provider_request_id": bare.ProviderRequestID, "cost_basis": bare.CostBasis,
+		"gateway_call_id": bare.GatewayCallID,
 	} {
 		assert.Nil(t, p, "%s: not recorded is NULL, not an empty value", name)
 	}

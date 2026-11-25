@@ -127,28 +127,41 @@ func TestAgentActivationSecretsNeverEnterCardsOrAudit(t *testing.T) {
 // the commit; schedule sync must not happen until the transaction committed.
 type approvalBarrierRepo struct {
 	Repository
+	writes           TriggerWrites
 	atWrite, release chan struct{}
 	once             sync.Once
 }
 
-func (r *approvalBarrierRepo) CreateTrigger(ctx context.Context, tr *core.Trigger) error {
+func (r *approvalBarrierRepo) wait() {
 	r.once.Do(func() { close(r.atWrite); <-r.release })
+}
+
+func (r *approvalBarrierRepo) CreateTrigger(ctx context.Context, tr *core.Trigger) error {
+	r.wait()
 	return r.Repository.CreateTrigger(ctx, tr)
 }
 
 // CreateTriggerInOrg is the write an activation makes since triggers belong
 // to an org (#2537).
 func (r *approvalBarrierRepo) CreateTriggerInOrg(ctx context.Context, tr *core.Trigger, reads ...db.OrgRead) error {
-	r.once.Do(func() { close(r.atWrite); <-r.release })
-	return r.Repository.CreateTriggerInOrg(ctx, tr, reads...)
+	r.wait()
+	return r.writes.CreateTriggerInOrg(ctx, tr, reads...)
 }
+
+func (r *approvalBarrierRepo) UpdateTriggerInOrg(ctx context.Context, tr *core.Trigger, reads ...db.OrgRead) error {
+	return r.writes.UpdateTriggerInOrg(ctx, tr, reads...)
+}
+
 func TestAgentActivationAtomicDependencyMutation(t *testing.T) {
 	testkit.Slow(t, "DB-backed transactional approval barrier")
 	e, p := securityActivation(t)
 	preview, err := e.svc.PrepareActivation(e.ctx, e.userID, tools.ToolCreateTriggerActivation, p)
 	require.NoError(t, err)
-	barrier := &approvalBarrierRepo{Repository: e.repo, atWrite: make(chan struct{}), release: make(chan struct{})}
-	e.configure(t, func(d *Deps) { d.Repo = barrier })
+	barrier := &approvalBarrierRepo{atWrite: make(chan struct{}), release: make(chan struct{})}
+	e.configure(t, func(d *Deps) {
+		barrier.Repository, barrier.writes = d.Repo, d.TriggerWrites
+		d.Repo, d.TriggerWrites = barrier, barrier
+	})
 	done := make(chan error, 1)
 	go func() {
 		_, err := e.svc.ManageActivation(e.ctx, e.userID, tools.ToolCreateTriggerActivation, p, preview.Hash)
