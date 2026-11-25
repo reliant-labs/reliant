@@ -126,7 +126,7 @@ func TestAgentMessageDrain(t *testing.T) {
 	if err := store.EnqueueAgentMessage(ctx, env.ORM, m2); err != nil {
 		t.Fatalf("EnqueueAgentMessage: %v", err)
 	}
-	if err := env.Repo.EnqueueAgentMessage(ctx, mailMsg("m-1", "mb-chat", "mb-parent", "mb-child", core.AgentMessageKindMessage, base)); err != nil {
+	if err := store.EnqueueAgentMessage(ctx, env.Repo.ORM(), mailMsg("m-1", "mb-chat", "mb-parent", "mb-child", core.AgentMessageKindMessage, base)); err != nil {
 		t.Fatalf("Repo.EnqueueAgentMessage: %v", err)
 	}
 	if err := store.EnqueueAgentMessage(ctx, env.ORM, mailMsg("m-3", "mb-chat", "mb-child", "mb-parent", core.AgentMessageKindMessage, base)); err != nil {
@@ -136,7 +136,7 @@ func TestAgentMessageDrain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListQueuedAgentMessagesForThread: %v", err)
 	}
-	twin, err := env.Repo.ListQueuedAgentMessagesForThread(ctx, "mb-child")
+	twin, err := store.ListQueuedAgentMessagesForThread(ctx, env.Repo.ORM(), "mb-child")
 	if err != nil {
 		t.Fatalf("Repo.ListQueuedAgentMessagesForThread: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestAgentMessageDrain(t *testing.T) {
 	if n, err := store.MarkQueuedAgentMessagesPreempting(ctx, env.ORM, "mb-child", base); err != nil || n != 2 {
 		t.Fatalf("MarkQueuedAgentMessagesPreempting = %d, %v; want 2", n, err)
 	}
-	if n, err := env.Repo.MarkQueuedAgentMessagesPreempting(ctx, "mb-child", base); err != nil || n != 0 {
+	if n, err := store.MarkQueuedAgentMessagesPreempting(ctx, env.Repo.ORM(), "mb-child", base); err != nil || n != 0 {
 		t.Fatalf("MarkQueuedAgentMessagesPreempting(again) = %d, %v; want 0", n, err)
 	}
 
@@ -173,7 +173,7 @@ func TestAgentMessageDrain(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(claimed, []string{"m-1", "m-2"}) {
 		t.Fatalf("MarkAgentMessagesDelivered = %v, %v; want [m-1 m-2]", claimed, err)
 	}
-	if again, err := env.Repo.MarkAgentMessagesDelivered(ctx, []string{"m-1", "m-2"}, deliveredAt, ""); err != nil || again != nil {
+	if again, err := store.MarkAgentMessagesDelivered(ctx, env.Repo.ORM(), []string{"m-1", "m-2"}, deliveredAt, ""); err != nil || again != nil {
 		t.Fatalf("second drain claimed %v, %v; want nothing", again, err)
 	}
 	if got, err := store.MarkAgentMessagesDelivered(ctx, env.ORM, nil, deliveredAt, ""); err != nil || got != nil {
@@ -215,13 +215,13 @@ func TestAgentMessageDrain(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(orphans, []string{"mb-child"}) {
 		t.Fatalf("ListThreadsWithOrphanedAgentMessages = %v, %v; want [mb-child]", orphans, err)
 	}
-	if twinOrphans, err := env.Repo.ListThreadsWithOrphanedAgentMessages(ctx); err != nil || !reflect.DeepEqual(twinOrphans, orphans) {
+	if twinOrphans, err := store.ListThreadsWithOrphanedAgentMessages(ctx, env.Repo.ORM()); err != nil || !reflect.DeepEqual(twinOrphans, orphans) {
 		t.Fatalf("Repo.ListThreadsWithOrphanedAgentMessages = %v, %v", twinOrphans, err)
 	}
 	if n, err := store.MarkQueuedAgentMessagesUndeliveredForThread(ctx, env.ORM, "mb-child"); err != nil || n != 1 {
 		t.Fatalf("MarkQueuedAgentMessagesUndeliveredForThread = %d, %v; want 1 (m-4 only)", n, err)
 	}
-	if n, err := env.Repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, "mb-child"); err != nil || n != 0 {
+	if n, err := store.MarkQueuedAgentMessagesUndeliveredForThread(ctx, env.Repo.ORM(), "mb-child"); err != nil || n != 0 {
 		t.Fatalf("MarkQueuedAgentMessagesUndeliveredForThread(again) = %d, %v; want 0", n, err)
 	}
 	if got := mustMail(t, env, "m-1"); got.Status != core.AgentMessageStatusDelivered {
@@ -268,7 +268,7 @@ func TestAgentMessageCancelAndClaim(t *testing.T) {
 		if i%2 == 0 {
 			err = store.EnqueueAgentMessage(ctx, env.ORM, m)
 		} else {
-			err = env.Repo.EnqueueAgentMessage(ctx, m)
+			err = store.EnqueueAgentMessage(ctx, env.Repo.ORM(), m)
 		}
 		if err != nil {
 			t.Fatalf("enqueue %s: %v", m.ID, err)
@@ -311,7 +311,7 @@ func TestAgentMessageCancelAndClaim(t *testing.T) {
 		if i%2 == 0 {
 			err = store.EnqueueAgentMessage(ctx, env.ORM, m)
 		} else {
-			err = env.Repo.EnqueueAgentMessage(ctx, m)
+			err = store.EnqueueAgentMessage(ctx, env.Repo.ORM(), m)
 		}
 		if err != nil {
 			t.Fatalf("enqueue %s: %v", id, err)
@@ -339,8 +339,8 @@ func TestAgentMessageSpawnReports(t *testing.T) {
 	if inserted, err := store.EnqueueAgentMessageIfAbsent(ctx, env.ORM, report("ph-1", "sr-child", true)); err != nil || !inserted {
 		t.Fatalf("EnqueueAgentMessageIfAbsent = %v, %v; want inserted", inserted, err)
 	}
-	if inserted, err := env.Repo.EnqueueAgentMessageIfAbsent(ctx, report("ph-2", "sr-child", true)); err != nil || inserted {
-		t.Fatalf("Repo.EnqueueAgentMessageIfAbsent(same spawn) = %v, %v; want false, no error", inserted, err)
+	if inserted, err := store.EnqueueAgentMessageIfAbsent(ctx, env.Repo.ORM(), report("ph-2", "sr-child", true)); err != nil || inserted {
+		t.Fatalf("store.EnqueueAgentMessageIfAbsent(same spawn, Repo.ORM()) = %v, %v; want false, no error", inserted, err)
 	}
 	if _, err := store.EnqueueAgentMessageIfAbsent(ctx, env.ORM, report("ph-3", "sr-other", true)); !errors.Is(err, core.ErrSpawnReportSlotTaken) {
 		t.Fatalf("EnqueueAgentMessageIfAbsent(other spawn) err = %v, want ErrSpawnReportSlotTaken", err)
@@ -363,8 +363,8 @@ func TestAgentMessageSpawnReports(t *testing.T) {
 	}
 	// A retry of the same real report is already reported; another spawn's
 	// is refused; a placeholder never overwrites a real report.
-	if outcome, err := env.Repo.EnqueueSpawnReport(ctx, report("real-2", "sr-child", false)); err != nil || outcome != core.SpawnReportAlreadyReported {
-		t.Fatalf("Repo.EnqueueSpawnReport(retry) = %v, %v; want already reported", outcome, err)
+	if outcome, err := store.EnqueueSpawnReport(ctx, env.Repo.ORM(), report("real-2", "sr-child", false)); err != nil || outcome != core.SpawnReportAlreadyReported {
+		t.Fatalf("store.EnqueueSpawnReport(retry, Repo.ORM()) = %v, %v; want already reported", outcome, err)
 	}
 	if _, err := store.EnqueueSpawnReport(ctx, env.ORM, report("real-3", "sr-other", false)); !errors.Is(err, core.ErrSpawnReportSlotTaken) {
 		t.Fatalf("EnqueueSpawnReport(other spawn) err = %v, want ErrSpawnReportSlotTaken", err)

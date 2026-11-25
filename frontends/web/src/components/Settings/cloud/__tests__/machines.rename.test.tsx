@@ -14,12 +14,6 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
   useComputeUsage: () => ({ data: undefined }),
   usePlans: () => ({ data: { plans: [] }, isLoading: false }),
 }))
-vi.mock('@/services/controlPlane/billing', () => ({
-  getComputeEligibility: vi.fn(async () => ({
-    eligible: true, reason: 0, hasActiveSubscription: true,
-    grantedSmallDaemonSecondsRemaining: 0, planName: 'Compute Small', allowedDaemonSizes: ['small'],
-  })),
-}))
 vi.mock('@/lib/event-context', () => ({
   useEventBus: () => ({ emit: vi.fn(), on: vi.fn(() => () => {}) }),
 }))
@@ -54,13 +48,17 @@ import { machineNameProblem } from '@/components/Settings/cloud/RenameMachine'
 import { DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 import { setTransport } from '@/lib/connect'
 import { daemonRegistryTransport } from '@/test/daemonRegistry'
+import { eligibilityHandlers } from '@/test/billingTransport'
 
 beforeEach(() =>
   setTransport(
     daemonRegistryTransport({
       listDaemons: () => mocks.listDaemons(),
       renameMachine: (req: { daemonId: string; name: string }) => mocks.renameMachine(req),
-    }),
+    }, eligibilityHandlers(() => ({
+    eligible: true, reason: 0, hasActiveSubscription: true,
+    grantedSmallDaemonSecondsRemaining: 0, planName: 'Compute Small', allowedDaemonSizes: ['small'],
+  }))),
   ),
 )
 afterEach(() => setTransport(null))

@@ -1,10 +1,9 @@
-import { queryOptions } from "@tanstack/react-query";
-
-import { orgQueryEnabled, withOrgFailure, type OrgScope } from "@/lib/orgScope";
-import { getComputeEligibility } from "@/services/controlPlane/billing";
+import { billingServiceKeys, billingServiceQueries } from "@/hooks/controlplane/billing-service-hooks_gen";
+import { orgQueryEnabled, orgRequest, withOrgFailure, type OrgScope } from "@/lib/orgScope";
+import { computeEligibilityOf } from "@/services/controlPlane/billing";
 
 /**
- * The one React Query key for GetCurrentUserComputeEligibility, in a module of
+ * The one React Query read of GetCurrentUserComputeEligibility, in a module of
  * its own so the Add machine sheet, onboarding and Settings share the cache
  * entry (a purchase refetches it once, for every reader) without importing
  * each other's hooks.
@@ -12,7 +11,7 @@ import { getComputeEligibility } from "@/services/controlPlane/billing";
  * This is the family: every org's entry is under it, so an invalidation by it
  * refetches them all. One entry is `computeEligibilityQuery(org)`'s key.
  */
-export const computeEligibilityQueryKey = ["onboarding", "computeEligibility"] as const;
+export const computeEligibilityQueryKey = billingServiceKeys.getCurrentUserComputeEligibility.all;
 
 /**
  * The eligibility read in `org`: funding is the org's (a subscription, granted
@@ -21,11 +20,10 @@ export const computeEligibilityQueryKey = ["onboarding", "computeEligibility"] a
  */
 export function computeEligibilityQuery(org: OrgScope, enabled = true) {
   return withOrgFailure(
-    queryOptions({
-      queryKey: [...computeEligibilityQueryKey, org.orgId ?? ""] as const,
-      queryFn: () => getComputeEligibility(org.orgId),
+    billingServiceQueries.getCurrentUserComputeEligibility(orgRequest({}, org.orgId), {
       enabled: enabled && orgQueryEnabled(org),
       staleTime: 30_000,
+      select: computeEligibilityOf,
     }),
     org,
   );

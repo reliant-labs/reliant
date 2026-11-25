@@ -22,8 +22,6 @@ vi.mock('@/services/controlPlane/reliantAI', () => ({
   },
   // Async wrappers — never invoked because the hooks are mocked, but present
   // so the import surface matches the real module.
-  getReliantOverview: vi.fn(),
-  getWalletOverview: vi.fn(),
   listLLMKeys: vi.fn(),
   listAvailableModels: vi.fn(),
   getLLMSpend: vi.fn(),

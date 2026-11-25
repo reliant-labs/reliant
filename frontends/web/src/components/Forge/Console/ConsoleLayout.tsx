@@ -22,9 +22,12 @@
  * 3. THE CHROME. Inside the one shell (Layout/shell/AppShell.tsx), the
  *    shell's left nav draws this app's sections inline (the same model,
  *    useConsoleNavModel.ts) and the console is a page under a slim bar with
- *    the breadcrumb and scope (ConsoleFrame). Without the shell (the forge
- *    host until it runs the one router), ConsoleShell — the nav, the top bar,
- *    the rail (its collapsed state remembered per user). Either way in the
+ *    the breadcrumb and scope (ConsoleFrame). The public demo is in the shell
+ *    too (demoShellRoutes.tsx: the app's frame with the demo's nav, and a
+ *    fixed session that turns it on), so neither the app nor the demo takes
+ *    the other branch, ConsoleShell — the nav, the top bar, the rail (its collapsed
+ *    state remembered per user); it goes with ConsoleShell (demo DI P3.4).
+ *    Either way in the
  *    led console (ledConsole.tsx): pages that lead with one sentence and the
  *    item worth opening first.
  *

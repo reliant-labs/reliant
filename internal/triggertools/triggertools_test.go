@@ -106,8 +106,8 @@ type env struct {
 // the trigger service re-owns an orphaned trigger through.
 func realOwners(t *testing.T, repo *db.Repo) triggerowner.Service {
 	t.Helper()
-	stores := triggerowner.NewStores(repo.ORM())
-	svc, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	owned, trigs := store.NewTriggerOwnerExtStore(repo.ORM()), store.NewTriggerExtStore(repo.ORM())
+	svc, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: owned, Triggers: trigs, Adoptions: owned, Offers: owned, OrgReads: owned})
 	require.NoError(t, err)
 	return svc
 }

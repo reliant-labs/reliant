@@ -13,12 +13,6 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
   useComputeUsage: () => ({ data: undefined }),
   usePlans: () => ({ data: { plans: [] }, isLoading: false }),
 }))
-vi.mock('@/services/controlPlane/billing', () => ({
-  getComputeEligibility: vi.fn(async () => ({
-    eligible: true, reason: 0, hasActiveSubscription: true,
-    grantedSmallDaemonSecondsRemaining: 0, planName: 'Compute Small', allowedDaemonSizes: ['m'],
-  })),
-}))
 vi.mock('@/lib/event-context', () => ({
   useEventBus: () => ({ emit: vi.fn(), on: vi.fn(() => () => {}) }),
 }))
@@ -56,9 +50,13 @@ import {
 import { DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 import { setTransport } from '@/lib/connect'
 import { daemonRegistryTransport } from '@/test/daemonRegistry'
+import { eligibilityHandlers } from '@/test/billingTransport'
 
 // The daemon list is read through connectClient(DaemonRegistryService).
-beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() }, eligibilityHandlers(() => ({
+    eligible: true, reason: 0, hasActiveSubscription: true,
+    grantedSmallDaemonSecondsRemaining: 0, planName: 'Compute Small', allowedDaemonSizes: ['m'],
+  })))))
 afterEach(() => setTransport(null))
 
 // A managed machine is labelled by its control-plane name, never its pod
