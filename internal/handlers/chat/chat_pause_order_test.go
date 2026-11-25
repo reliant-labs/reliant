@@ -130,8 +130,8 @@ func TestPauseChat_CancelsToolsBeforeSignalingWorkflow(t *testing.T) {
 			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 		},
-		runs:    runs.New(runs.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: nil, Pause: pauseController}),
-		threads: threads.New(threads.Deps{Repo: repo, ToolCanceler: daemonRouter}),
+		runs:    runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: nil, Pause: pauseController}),
+		threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), ToolCanceler: daemonRouter}),
 	}
 
 	resp, err := service.PauseChat(ctx, connect.NewRequest(&reliantv1.PauseChatRequest{ChatId: chatID}))

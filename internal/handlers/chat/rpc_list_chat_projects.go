@@ -20,7 +20,7 @@ func (s *Service) ListChatProjects(
 	if req.Msg.GetChatId() == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
-	chat, err := s.deps.Repo.GetChatWithUserCheck(ctx, req.Msg.GetChatId(), userID)
+	chat, err := s.deps.Chats.GetChatWithUserCheck(ctx, req.Msg.GetChatId(), userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

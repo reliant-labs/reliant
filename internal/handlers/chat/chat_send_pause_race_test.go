@@ -150,8 +150,8 @@ func TestSendMessage_RacingAnInFlightPauseResumesTheRun(t *testing.T) {
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 			Temporal:      temporal,
 		},
-		runs:    runs.New(runs.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
-		threads: threads.New(threads.Deps{Repo: repo, ToolCanceler: &toolexectest.Recorder{}}),
+		runs:    runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
+		threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), ToolCanceler: &toolexectest.Recorder{}}),
 	}
 
 	pauseDone := make(chan error, 1)
