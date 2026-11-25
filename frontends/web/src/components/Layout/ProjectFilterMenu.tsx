@@ -4,9 +4,9 @@
  * The project half of the Chats heading's one menu (ChatListMenu, restyle
  * §11.5): Add project and Manage projects, with the test ids they always had.
  *
- * Which projects the chat list shows is its own control beside the menu now:
- * the project filter, choose N of M (Projects/ChatProjectFilter,
- * hooks/useChatProjectFilter), the project selector in multi-select mode.
+ * Which projects the chat list shows is the shell's project scope, the one
+ * project filter: the switcher at the top of the nav
+ * (sidebar/ProjectSwitcher.tsx; several are hooks/useChatProjectFilter's).
  * One project chosen is still the single-project filter (`/project/<id>`),
  * so `projectFilterLabel` names it.
  */

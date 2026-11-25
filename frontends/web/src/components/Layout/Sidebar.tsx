@@ -54,7 +54,6 @@ import { ShareWorkflowDialog } from "../Sharing/ShareWorkflowDialog";
 import { canShareChat, type ShareableWorkflow } from "../Sharing/shareTargets";
 import { useChatWorkflowShare } from "../Sharing/useChatWorkflowShare";
 import { useChatProjectFilter } from "../../hooks/useChatProjectFilter";
-import { ChatProjectFilterButton, ChatProjectFilterScope } from "../Projects/ChatProjectFilter";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import { HelpMenu } from "./sidebar/HelpMenu";
 import type { RunsSearch } from "../../routeSchemas";
@@ -736,15 +735,16 @@ function SidebarComponent({
     (href: string, options?: NavigateOptions) => (options ? onNavigate?.(href, options) : onNavigate?.(href)),
     [onNavigate],
   );
-  // What the list shows is the project shell's scope (U6b, sidebar/shellProject.ts):
-  // one project's chats, several projects' (the chat filter of several,
-  // hooks/useChatProjectFilter), or every project's — grouped by project
-  // unless it is one.
+  // What the list shows is the project shell's scope (U6b, sidebar/shellProject.ts),
+  // the one project filter (the switcher at the top of the nav): one project's
+  // chats, several projects' (`?projects=`, hooks/useChatProjectFilter), or
+  // every project's — grouped by project unless it is one. The Chats heading
+  // has no project filter of its own (owner: one project filter, the global one).
   const shell = useShellProject(pathname, search);
   // Every other reader of the scope (the chat list load, the keyboard, a new chat) takes what this shows.
   usePublishShellScope(shell, search);
-  // The bridges of the chat filter of several (URL, remembered choice, org), run once, here.
-  const chatProjectFilter = useChatProjectFilter({ sync: { pathname, search } });
+  // The bridges of the scope's choice of several (URL, remembered choice, org), run once, here.
+  useChatProjectFilter({ sync: { pathname, search } });
   const projectFilterId = shell.mode === "one" ? shell.projectId : null;
   const severalProjects = shell.mode === "many" ? shell.ids : null;
   // One app with no code here has no chats to list.
@@ -1922,17 +1922,8 @@ function SidebarComponent({
           data-onboarding="project-filter"
           data-testid="sidebar-chats-heading"
         >
-          <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
-            Chats
-            {/* "· 3 projects ×" while the list is a choice of several (#3027). */}
-            <ChatProjectFilterScope filter={chatProjectFilter} clearClassName={SIDEBAR_ICON_BUTTON} />
-          </span>
-          {!setupNeeded && !noChatsHere && (
-            // The project filter, choose N of M (#3027); at rest only on hover unless it filters.
-            <span className={cn("flex", chatProjectFilter.mode === "all" && SIDEBAR_HEADING_HOVER_ACTION)}>
-              <ChatProjectFilterButton filter={chatProjectFilter} needsYouByProject={needsYouByProject} className={SIDEBAR_ICON_BUTTON} />
-            </span>
-          )}
+          {/* Which projects it lists is the switcher's (ProjectSwitcherRow), never a filter here. */}
+          <span className="flex min-w-0 flex-1 items-center gap-1 truncate">Chats</span>
           {chatListActions}
         </div>
         {/* No agent sandbox can run a chat yet: connect one (your machine, or a Reliant sandbox), in place of the list. */}

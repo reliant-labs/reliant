@@ -15,7 +15,7 @@
  *            3. the project the app is working in (projectStore), else the
  *               most recently active one.
  *          A route that names a project also becomes the last pick.
- *   many   several projects: the chat list's filter of several
+ *   many   several projects: "Select several projects…" in the switcher
  *          (hooks/useChatProjectFilter, `?projects=<id>,<id>`).
  *   all    every project ("All projects" in the switcher): `?projects=all`.
  *
