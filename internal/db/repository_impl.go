@@ -112,6 +112,13 @@ func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) (
 	return store.LastRunPerWorkflow(ctx, r.ORM(), filters)
 }
 
+// LastRunPerWorkflowAndOrg is the newest run of each (workflow, org) pair:
+// LastRunPerWorkflow's candidates, before a caller drops the orgs a person
+// may no longer see (store.LastRunPerWorkflowAndOrg).
+func (r *Repo) LastRunPerWorkflowAndOrg(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
+	return store.LastRunPerWorkflowAndOrg(ctx, r.ORM(), filters)
+}
+
 // ==================== Messages ====================
 
 // CreateMessage creates a message record in the database.

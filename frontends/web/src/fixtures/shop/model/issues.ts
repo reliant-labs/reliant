@@ -40,6 +40,7 @@ import {
   incidentStartMs,
   MINUTE,
 } from "../shopStory";
+import { DEMO_PROJECT } from "../handlers/scope";
 import { shopActivity } from "./activity";
 import { demoWriteRefused, type IssueKeys } from "./shopApi";
 
@@ -358,7 +359,7 @@ export function shopReleaseHealth(now: number, envId: string, promotionId: strin
   };
 }
 
-export function shopIssues(now: number): Pick<ObservabilityApi, IssueKeys> {
+export function shopIssues(now: number, app: string = DEMO_PROJECT): Pick<ObservabilityApi, IssueKeys> {
   const all = seeds(now);
   const seedOf = (id: string) => {
     const seed = all.find((s) => s.id === id);
@@ -424,7 +425,7 @@ export function shopIssues(now: number): Pick<ObservabilityApi, IssueKeys> {
     getCurrentIssueUser: async () => ({ id: reader.id, name: reader.handle }),
     getReleaseHealth: async (req) => shopReleaseHealth(now, req.envIds[0] ?? "", req.promotionId ?? "", req.windowMs ?? 15 * MINUTE),
     listActivity: async (req) => {
-      const events = shopActivity(now).filter(
+      const events = shopActivity(now, app).filter(
         (e) => (!req.targetKind || e.target.kind === req.targetKind) && (!req.targetId || e.target.id === req.targetId) && (!req.verb || e.verb === req.verb) && (!req.envIds.length || (e.env && req.envIds.includes(e.env.id))),
       );
       return { events, nextPageToken: "" };

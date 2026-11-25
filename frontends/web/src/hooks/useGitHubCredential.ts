@@ -33,7 +33,12 @@ import type {
 
 export const GITHUB_CREDENTIAL_QUERY_KEY = ["gitCredential", "github"] as const;
 
-export function useGitHubCredential(): {
+/**
+ * The caller's GitHub credential. `enabled: false` reads nothing (a caller
+ * that needs it only once something else is known); it then reports no token,
+ * not loading.
+ */
+export function useGitHubCredential({ enabled = true }: { enabled?: boolean } = {}): {
   hasToken: boolean;
   /** The GitHub login the token belongs to; unset when the provider could not be reached. */
   accountLogin?: string;
@@ -86,6 +91,7 @@ export function useGitHubCredential(): {
     },
     staleTime: 30_000,
     refetchOnWindowFocus: true,
+    enabled,
   });
 
   const refresh = useCallback(async () => {

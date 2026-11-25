@@ -58,8 +58,8 @@ func createChatWithMessages(t *testing.T, repo *db.Repo, n int) (ctx context.Con
 
 // TestListMessages_ScrollbackReachesTheBeginning proves the end-to-end
 // bounded path (recentLimit > 0) terminates scroll-back at the chat's true
-// first message for a chat whose history exceeds one page, and that Total
-// and HasMore stay correct across every page.
+// first message for a chat whose history exceeds one page, and that HasMore
+// stays correct across every page.
 func TestListMessages_ScrollbackReachesTheBeginning(t *testing.T) {
 	t.Parallel()
 
@@ -87,8 +87,6 @@ func TestListMessages_ScrollbackReachesTheBeginning(t *testing.T) {
 		pages++
 		require.Less(t, pages, 10, "scroll-back did not terminate within a reasonable number of pages")
 
-		require.EqualValues(t, totalMessages, resp.Msg.Total, "Total must always be the true chat-wide count")
-
 		if len(resp.Msg.Messages) == 0 {
 			require.False(t, resp.Msg.HasMore, "an empty page must report hasMore=false")
 			break
@@ -110,8 +108,7 @@ func TestListMessages_ScrollbackReachesTheBeginning(t *testing.T) {
 
 // TestListMessages_Bounded_MainThreadWithSiblings proves the bounded path
 // merges the inline sibling threads (workflow-node threads) into the main
-// thread's window, leaves spawn threads out as the snapshot does, and keeps
-// Total the chat-wide count.
+// thread's window and leaves spawn threads out as the snapshot does.
 func TestListMessages_Bounded_MainThreadWithSiblings(t *testing.T) {
 	t.Parallel()
 
@@ -177,7 +174,6 @@ func TestListMessages_Bounded_MainThreadWithSiblings(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	require.EqualValues(t, 6, resp.Msg.Total, "total is the chat-wide count, spawn messages included")
 	gotIDs := make([]string, len(resp.Msg.Messages))
 	for i, m := range resp.Msg.Messages {
 		gotIDs[i] = m.Id

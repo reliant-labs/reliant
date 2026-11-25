@@ -44,7 +44,7 @@ func TestQuestionRPCs_RepositoryFailureCodes(t *testing.T) {
 		})
 		t.Run("ListAsyncQuestions, reading the chat: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := question.NewTestQuestion(t, question.WithQuestionDeps(question.Deps{Mailbox: &question.MockMailbox{}, Repo: &question.MockRepository{
+			svc := question.NewTestQuestion(t, question.WithQuestionDeps(question.Deps{Mailbox: &question.MockMailbox{}, ChatRows: &question.MockChatRows{
 				GetChatRowFunc: func(context.Context, string) (*db.ChatRow, error) { return nil, tc.err },
 			}}))
 			_, err := svc.ListAsyncQuestions(question.AuthedContext(t), connect.NewRequest(&pb.ListAsyncQuestionsRequest{ChatId: "chat-1"}))
@@ -52,7 +52,7 @@ func TestQuestionRPCs_RepositoryFailureCodes(t *testing.T) {
 		})
 		t.Run("ListPendingQuestions, listing: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := question.NewTestQuestion(t, question.WithQuestionDeps(question.Deps{Mailbox: &question.MockMailbox{}, Repo: &question.MockRepository{
+			svc := question.NewTestQuestion(t, question.WithQuestionDeps(question.Deps{Mailbox: &question.MockMailbox{}, ChatRows: &question.MockChatRows{
 				GetChatRowFunc: ownRow,
 			}, Questions: &question.MockQuestions{
 				ListAnswerablePendingQuestionsByChatFunc: func(context.Context, string) ([]*db.Question, error) {
