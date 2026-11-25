@@ -8,28 +8,24 @@
     },
     {
       "id": "resources",
-      "title": "Managed sandboxes · resources"
+      "title": "Resources"
     },
     {
       "id": "in-guest",
-      "title": "Managed sandboxes · in-guest health"
+      "title": "In-guest health"
     },
     {
       "id": "health",
-      "title": "Managed sandboxes · restarts and pod health"
+      "title": "Restarts and pod health"
     },
     {
       "id": "who",
-      "title": "Managed sandboxes · where and who"
-    },
-    {
-      "id": "platform-machines",
-      "title": "Self-hosted sandboxes"
+      "title": "Where and who"
     }
   ],
   "id": "sandboxes",
   "title": "Sandboxes",
-  "description": "Every sandbox the platform runs. Managed: the workspace pods in ws-* namespaces, from their kubelet series and their daemon's `machine health` / `machine volume` / `exec finished` lines. A managed sandbox appears only while it is awake: a suspended one has no pod and writes nothing, so those sections are empty when all are asleep. Self-hosted sandboxes appear only when labelled monitor=platform in tenant zero's org (the daemon-gateway's heartbeat lines). Replaces Dev boxes and Machine health.",
+  "description": "Every Reliant-hosted sandbox: the workspace pods in ws-* namespaces, from their kubelet series and their daemon's `machine health` / `machine volume` / `exec finished` lines. A sandbox appears only while it is awake: a suspended one has no pod and writes nothing, so every panel is empty when all are asleep or none exist. The platform's own self-hosted machines (the pipeline boxes) are not sandboxes: they are on the Platform machines dashboard. Replaces Dev boxes and Machine health.",
   "replaces": [
     "devboxes",
     "machine-health"
@@ -48,17 +44,17 @@
       "section": "now",
       "id": "fleet-now",
       "title": "Sandboxes now",
-      "description": "Sandboxes running at the range end. Managed: awake pods in ws-* with a kubelet sample in the 5 minutes before it, their owners, and the CPU and memory they use then; a suspended one has no pod and is not counted. Self-hosted: machines labelled monitor=platform in tenant zero's org with any `machine health` or `machine volume` heartbeat line in the 10 minutes before it (MachineNotReporting's window), whatever their daemon reports. The sandbox (pod) filter narrows the managed figures only.",
+      "description": "Sandboxes running at the range end: awake pods in ws-* with a kubelet sample in the 5 minutes before it, their owners, and the CPU and memory they use then. A suspended sandbox has no pod and is not counted, so 0 means none is awake, not that the data is missing.",
       "kind": "sql",
-      "sql": "SELECT m.awake + s.reporting AS sandboxes, m.awake AS managed_awake, s.reporting AS self_hosted_reporting, m.users AS users_with_a_managed_sandbox, m.cpu AS managed_cpu_cores_in_use, m.mem AS managed_memory_gib_in_use\nFROM (\n  SELECT uniqExact(pod) AS awake, uniqExact(ns) AS users, round(sum(cpu), 2) AS cpu, round(sum(mem) / 1073741824, 1) AS mem\n  FROM (\n    SELECT pod, ns, sum(cpu) AS cpu, sum(mem) AS mem FROM (\n      SELECT ResourceAttributes['k8s.pod.name'] AS pod, ResourceAttributes['k8s.namespace.name'] AS ns, ResourceAttributes['k8s.container.name'] AS container,\n             argMaxIf(Value, TimeUnix, MetricName = 'container.cpu.usage') AS cpu,\n             argMaxIf(Value, TimeUnix, MetricName = 'container.memory.working_set') AS mem\n      FROM otel_metrics_gauge\n      WHERE TimeUnix >= {to:DateTime64(9)} - INTERVAL 5 MINUTE AND TimeUnix < {to:DateTime64(9)} AND MetricName IN ('container.cpu.usage', 'container.memory.working_set') AND startsWith(ResourceAttributes['k8s.namespace.name'], 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['k8s.pod.name']))\n      GROUP BY pod, ns, container)\n    GROUP BY pod, ns)) AS m\nCROSS JOIN (\n  SELECT uniqExact(LogAttributes['machine']) AS reporting FROM otel_logs\n  WHERE Timestamp >= {to:DateTime64(9)} - INTERVAL 10 MINUTE AND Timestamp < {to:DateTime64(9)} AND ServiceName = 'daemon-gateway' AND LogAttributes['machine_source'] = 'heartbeat' AND LogAttributes['machine'] != '' AND lower(Body) IN ('machine health', 'machine volume')) AS s",
+      "sql": "SELECT uniqExact(pod) AS sandboxes, uniqExact(ns) AS users_with_a_sandbox, round(sum(cpu), 2) AS cpu_cores_in_use, round(sum(mem) / 1073741824, 1) AS memory_gib_in_use\nFROM (\n  SELECT pod, ns, sum(cpu) AS cpu, sum(mem) AS mem FROM (\n    SELECT ResourceAttributes['k8s.pod.name'] AS pod, ResourceAttributes['k8s.namespace.name'] AS ns, ResourceAttributes['k8s.container.name'] AS container,\n           argMaxIf(Value, TimeUnix, MetricName = 'container.cpu.usage') AS cpu,\n           argMaxIf(Value, TimeUnix, MetricName = 'container.memory.working_set') AS mem\n    FROM otel_metrics_gauge\n    WHERE TimeUnix >= {to:DateTime64(9)} - INTERVAL 5 MINUTE AND TimeUnix < {to:DateTime64(9)} AND MetricName IN ('container.cpu.usage', 'container.memory.working_set') AND startsWith(ResourceAttributes['k8s.namespace.name'], 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['k8s.pod.name']))\n    GROUP BY pod, ns, container)\n  GROUP BY pod, ns)",
       "width": 24,
       "height": 4
     },
     {
       "section": "now",
       "id": "health-now",
-      "title": "Managed sandboxes now · in-guest health",
-      "description": "Managed sandboxes whose daemon logged a health sample in the 5 minutes before the range end, how many run above 1.5 load per CPU, the worst load per CPU, the lowest free disk share, heavy commands waiting for a slot, and `go install .../forge@` builds running, summed over sandboxes. An awake sandbox whose daemon predates the sample is counted in Sandboxes now but not here.",
+      "title": "Sandboxes now · in-guest health",
+      "description": "Sandboxes whose daemon logged a health sample in the 5 minutes before the range end, how many run above 1.5 load per CPU, the worst load per CPU, the lowest free disk share, heavy commands waiting for a slot, and `go install .../forge@` builds running, summed over sandboxes. An awake sandbox whose daemon predates the sample is counted in Sandboxes now but not here.",
       "kind": "sql",
       "sql": "SELECT uniqExact(machine) AS sandboxes_sampled, countIf(load > 1.5) AS over_1_5_load_per_cpu, round(max(load), 2) AS worst_load_per_cpu, round(min(free), 3) AS min_disk_free, sum(waiting) AS heavy_waiting, sum(forge) AS forge_installs FROM (\n  SELECT ServiceName AS machine, argMax(toFloat64OrNull(LogAttributes['load1_per_cpu']), Timestamp) AS load, argMax(toFloat64OrNull(LogAttributes['disk_min_free_ratio']), Timestamp) AS free, argMax(toFloat64OrNull(LogAttributes['heavy_waiting']), Timestamp) AS waiting, argMax(toFloat64OrNull(LogAttributes['forge_installs']), Timestamp) AS forge\n  FROM otel_logs WHERE Timestamp >= {to:DateTime64(9)} - INTERVAL 5 MINUTE AND Timestamp < {to:DateTime64(9)} AND startsWith(ServiceName, 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName)) AND Body = 'machine health'\n  GROUP BY machine)",
       "width": 24,
@@ -67,8 +63,8 @@
     {
       "section": "resources",
       "id": "awake-over-time",
-      "title": "Awake managed sandboxes",
-      "description": "Distinct managed sandboxes (pods) with a kubelet sample in each bucket. A suspended sandbox has no pod and drops out; a resume brings it back under a new pod uid. The steady level is the fleet the daemon cluster is carrying.",
+      "title": "Awake sandboxes",
+      "description": "Distinct sandboxes (pods) with a kubelet sample in each bucket. A suspended sandbox has no pod and drops out; a resume brings it back under a new pod uid. The steady level is the fleet the daemon cluster is carrying.",
       "kind": "sql",
       "sql": "SELECT toStartOfInterval(TimeUnix, toIntervalSecond({step:UInt32})) AS t, uniqExact(ResourceAttributes['k8s.pod.name']) AS awake_sandboxes\nFROM otel_metrics_gauge\nWHERE TimeUnix >= {from:DateTime64(9)} AND TimeUnix < {to:DateTime64(9)} AND MetricName = 'container.memory.working_set' AND startsWith(ResourceAttributes['k8s.namespace.name'], 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['k8s.pod.name']))\nGROUP BY t ORDER BY t",
       "unit": "count",
@@ -78,8 +74,8 @@
     {
       "section": "resources",
       "id": "fleet-cpu-memory",
-      "title": "Managed fleet CPU and memory in use",
-      "description": "Total CPU cores and memory working set in GiB summed over every awake managed sandbox, per bucket (mean per sandbox, then summed).",
+      "title": "Fleet CPU and memory in use",
+      "description": "Total CPU cores and memory working set in GiB summed over every awake sandbox, per bucket (mean per sandbox, then summed).",
       "kind": "sql",
       "sql": "SELECT t, round(sum(cpu), 2) AS cpu_cores, round(sum(mem) / 1073741824, 1) AS memory_gib\nFROM (\n  SELECT toStartOfInterval(TimeUnix, toIntervalSecond({step:UInt32})) AS t, ResourceAttributes['k8s.pod.name'] AS pod, ResourceAttributes['k8s.container.name'] AS container,\n         ifNotFinite(avgIf(Value, MetricName = 'container.cpu.usage'), 0) AS cpu, ifNotFinite(avgIf(Value, MetricName = 'container.memory.working_set'), 0) AS mem\n  FROM otel_metrics_gauge\n  WHERE TimeUnix >= {from:DateTime64(9)} AND TimeUnix < {to:DateTime64(9)} AND MetricName IN ('container.cpu.usage', 'container.memory.working_set') AND startsWith(ResourceAttributes['k8s.namespace.name'], 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['k8s.pod.name']))\n  GROUP BY t, pod, container)\nGROUP BY t ORDER BY t",
       "width": 12,
@@ -89,7 +85,7 @@
       "section": "resources",
       "id": "cpu-distribution",
       "title": "Fleet utilization · CPU per sandbox",
-      "description": "How many managed sandboxes sit in each band of CPU cores. Each sandbox's value is the mean of its containers' CPU over the range; a sandbox counts once however long it was awake. Bands are absolute cores, not a share of the sandbox's size.",
+      "description": "How many sandboxes sit in each band of CPU cores. Each sandbox's value is the mean of its containers' CPU over the range; a sandbox counts once however long it was awake. Bands are absolute cores, not a share of the sandbox's size.",
       "kind": "sql",
       "sql": "SELECT multiIf(cpu < 0.5, '1 · under 0.5', cpu < 1, '2 · 0.5 to 1', cpu < 2, '3 · 1 to 2', cpu < 4, '4 · 2 to 4', cpu < 8, '5 · 4 to 8', cpu < 16, '6 · 8 to 16', '7 · 16 and over') AS cpu_cores_band, count() AS sandboxes\nFROM (SELECT pod, sum(c) AS cpu FROM (\n  SELECT ResourceAttributes['k8s.pod.name'] AS pod, ResourceAttributes['k8s.container.name'] AS container, avg(Value) AS c\n  FROM otel_metrics_gauge WHERE TimeUnix >= {from:DateTime64(9)} AND TimeUnix < {to:DateTime64(9)} AND MetricName = 'container.cpu.usage' AND startsWith(ResourceAttributes['k8s.namespace.name'], 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['k8s.pod.name'])) GROUP BY pod, container) GROUP BY pod)\nGROUP BY cpu_cores_band ORDER BY cpu_cores_band",
       "width": 12,
@@ -99,7 +95,7 @@
       "section": "resources",
       "id": "memory-distribution",
       "title": "Fleet utilization · memory per sandbox",
-      "description": "How many managed sandboxes sit in each band of memory working set. Each sandbox's value is its PEAK over the range: the highest total of its containers at one moment (60s), the figure an OOM kill is decided on.",
+      "description": "How many sandboxes sit in each band of memory working set. Each sandbox's value is its PEAK over the range: the highest total of its containers at one moment (60s), the figure an OOM kill is decided on.",
       "kind": "sql",
       "sql": "SELECT multiIf(mem_gib < 1, '1 · under 1 GiB', mem_gib < 2, '2 · 1 to 2', mem_gib < 4, '3 · 2 to 4', mem_gib < 8, '4 · 4 to 8', mem_gib < 16, '5 · 8 to 16', mem_gib < 32, '6 · 16 to 32', '7 · 32 GiB and over') AS memory_gib_band, count() AS sandboxes\nFROM (\n  SELECT pod, max(total) / 1073741824 AS mem_gib FROM (\n    SELECT pod, b, sum(m) AS total FROM (\n      SELECT ResourceAttributes['k8s.pod.name'] AS pod, ResourceAttributes['k8s.container.name'] AS container, toStartOfInterval(TimeUnix, toIntervalSecond(60)) AS b, max(Value) AS m\n      FROM otel_metrics_gauge WHERE TimeUnix >= {from:DateTime64(9)} AND TimeUnix < {to:DateTime64(9)} AND MetricName = 'container.memory.working_set' AND startsWith(ResourceAttributes['k8s.namespace.name'], 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['k8s.pod.name']))\n      GROUP BY pod, container, b)\n    GROUP BY pod, b)\n  GROUP BY pod)\nGROUP BY memory_gib_band ORDER BY memory_gib_band",
       "width": 12,
@@ -109,7 +105,7 @@
       "section": "resources",
       "id": "cpu-per-box",
       "title": "CPU per sandbox (top 10)",
-      "description": "CPU cores used by each of the ten busiest managed sandboxes, mean per bucket, summed over a sandbox's containers. Sandboxes are ranked by their peak TOTAL over the range. Group names are the pod, which is ws-<workspace id>.",
+      "description": "CPU cores used by each of the ten busiest sandboxes, mean per bucket, summed over a sandbox's containers. Sandboxes are ranked by their peak TOTAL over the range. Group names are the pod, which is ws-<workspace id>.",
       "kind": "sql",
       "sql": "SELECT t, pod, round(sum(c), 3) AS cpu_cores FROM (\n  SELECT toStartOfInterval(TimeUnix, toIntervalSecond({step:UInt32})) AS t, ResourceAttributes['k8s.pod.name'] AS pod, ResourceAttributes['k8s.container.name'] AS container, avg(Value) AS c\n  FROM otel_metrics_gauge\n  WHERE TimeUnix >= {from:DateTime64(9)} AND TimeUnix < {to:DateTime64(9)} AND MetricName = 'container.cpu.usage' AND startsWith(ResourceAttributes['k8s.namespace.name'], 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['k8s.pod.name'])) AND ResourceAttributes['k8s.pod.name'] IN (\n    SELECT pod FROM (\n      SELECT pod, b, sum(v) AS total FROM (\n        SELECT ResourceAttributes['k8s.pod.name'] AS pod, ResourceAttributes['k8s.container.name'] AS container, toStartOfInterval(TimeUnix, toIntervalSecond(60)) AS b, avg(Value) AS v\n        FROM otel_metrics_gauge\n        WHERE TimeUnix >= {from:DateTime64(9)} AND TimeUnix < {to:DateTime64(9)} AND MetricName = 'container.cpu.usage' AND startsWith(ResourceAttributes['k8s.namespace.name'], 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['k8s.pod.name']))\n        GROUP BY pod, container, b)\n      GROUP BY pod, b)\n    GROUP BY pod ORDER BY max(total) DESC LIMIT 10)\n  GROUP BY t, pod, container)\nGROUP BY t, pod ORDER BY t",
       "width": 12,
@@ -119,7 +115,7 @@
       "section": "resources",
       "id": "memory-per-box",
       "title": "Memory per sandbox (top 10)",
-      "description": "Memory working set of the ten largest managed sandboxes, ranked by their peak TOTAL over the range. Each point is the highest total of a sandbox's containers at one moment (60s) inside the bucket.",
+      "description": "Memory working set of the ten largest sandboxes, ranked by their peak TOTAL over the range. Each point is the highest total of a sandbox's containers at one moment (60s) inside the bucket.",
       "kind": "sql",
       "sql": "SELECT t, pod, max(total) AS memory FROM (\n  SELECT toStartOfInterval(b, toIntervalSecond({step:UInt32})) AS t, pod, b, sum(m) AS total FROM (\n    SELECT ResourceAttributes['k8s.pod.name'] AS pod, ResourceAttributes['k8s.container.name'] AS container, toStartOfInterval(TimeUnix, toIntervalSecond(60)) AS b, max(Value) AS m\n    FROM otel_metrics_gauge\n    WHERE TimeUnix >= {from:DateTime64(9)} AND TimeUnix < {to:DateTime64(9)} AND MetricName = 'container.memory.working_set' AND startsWith(ResourceAttributes['k8s.namespace.name'], 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['k8s.pod.name'])) AND ResourceAttributes['k8s.pod.name'] IN (\n    SELECT pod FROM (\n      SELECT pod, b, sum(v) AS total FROM (\n        SELECT ResourceAttributes['k8s.pod.name'] AS pod, ResourceAttributes['k8s.container.name'] AS container, toStartOfInterval(TimeUnix, toIntervalSecond(60)) AS b, max(Value) AS v\n        FROM otel_metrics_gauge\n        WHERE TimeUnix >= {from:DateTime64(9)} AND TimeUnix < {to:DateTime64(9)} AND MetricName = 'container.memory.working_set' AND startsWith(ResourceAttributes['k8s.namespace.name'], 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['k8s.pod.name']))\n        GROUP BY pod, container, b)\n      GROUP BY pod, b)\n    GROUP BY pod ORDER BY max(total) DESC LIMIT 10)\n    GROUP BY pod, container, b)\n  GROUP BY t, pod, b)\nGROUP BY t, pod ORDER BY t",
       "unit": "bytes",
@@ -163,7 +159,7 @@
       "section": "in-guest",
       "id": "daily-load",
       "title": "Daily · load per CPU",
-      "description": "Per UTC day across every sampled managed sandbox: the median and p95 of the 1-minute load divided by the sandbox's CPUs, and the share of samples above 1.5 (the MachineLoadHigh line). The needle to move: these fall when a fix works.",
+      "description": "Per UTC day across every sampled sandbox: the median and p95 of the 1-minute load divided by the sandbox's CPUs, and the share of samples above 1.5 (the MachineLoadHigh line). The needle to move: these fall when a fix works.",
       "kind": "sql",
       "sql": "SELECT toDate(Timestamp) AS day, round(quantile(0.5)(l), 2) AS p50_load_per_cpu, round(quantile(0.95)(l), 2) AS p95_load_per_cpu, round(countIf(l > 1.5) / count(), 3) AS share_over_1_5\nFROM (SELECT Timestamp, toFloat64OrNull(LogAttributes['load1_per_cpu']) AS l FROM otel_logs WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} AND startsWith(ServiceName, 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName)) AND Body = 'machine health' AND isNotNull(l))\nGROUP BY day ORDER BY day",
       "width": 12,
@@ -271,7 +267,7 @@
       "section": "health",
       "id": "restart-summary",
       "title": "Restarts in the range",
-      "description": "In-place container restarts over the range (a restart that keeps the pod uid and raises restartCount; growth is read from an hour before the range starts, so none at its start is missed), the OOM kills among them, and how many managed sandboxes were hit. A planned suspend/resume is NOT here: it recreates the pod, whose counter starts again at 0.",
+      "description": "In-place container restarts over the range (a restart that keeps the pod uid and raises restartCount; growth is read from an hour before the range starts, so none at its start is missed), the OOM kills among them, and how many sandboxes were hit. A planned suspend/resume is NOT here: it recreates the pod, whose counter starts again at 0.",
       "kind": "sql",
       "sql": "SELECT sum(grew) AS restarts, sumIf(grew, reason = 'OOMKilled') AS oom_kills, uniqExactIf(pod, grew > 0) AS sandboxes_restarted\nFROM (\nSELECT t, pod, container, uid, sum(g) AS grew, argMaxIf(reason, TimeUnix, reason != '') AS reason FROM (\n  SELECT TimeUnix, toStartOfInterval(TimeUnix, toIntervalSecond({step:UInt32})) AS t, pod, container, uid, reason,\n         greatest(v - lagInFrame(v, 1, v) OVER (PARTITION BY uid, container ORDER BY TimeUnix ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW), 0) AS g\n  FROM (\n    SELECT TimeUnix, ResourceAttributes['k8s.pod.name'] AS pod, ResourceAttributes['k8s.container.name'] AS container, ResourceAttributes['k8s.pod.uid'] AS uid, Value AS v, ResourceAttributes['k8s.container.last_terminated_reason'] AS reason\n    FROM otel_metrics_gauge\n    WHERE TimeUnix >= {from:DateTime64(9)} - INTERVAL 1 HOUR AND TimeUnix < {to:DateTime64(9)} AND MetricName = 'k8s.container.restarts' AND startsWith(ResourceAttributes['k8s.namespace.name'], 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['k8s.pod.name']))))\nWHERE TimeUnix >= {from:DateTime64(9)}\nGROUP BY t, pod, container, uid)",
       "width": 24,
@@ -293,7 +289,7 @@
       "section": "health",
       "id": "oom-kills",
       "title": "OOM kills by sandbox",
-      "description": "Restarts whose last terminated reason is OOMKilled, per managed sandbox. A sandbox killed by its own workload is the user's; many sandboxes at once on one node is the platform's (see Sandboxes by node).",
+      "description": "Restarts whose last terminated reason is OOMKilled, per sandbox. A sandbox killed by its own workload is the user's; many sandboxes at once on one node is the platform's (see Sandboxes by node).",
       "kind": "sql",
       "sql": "SELECT t, pod, sum(grew) AS oom_kills\nFROM (\nSELECT t, pod, container, uid, sum(g) AS grew, argMaxIf(reason, TimeUnix, reason != '') AS reason FROM (\n  SELECT TimeUnix, toStartOfInterval(TimeUnix, toIntervalSecond({step:UInt32})) AS t, pod, container, uid, reason,\n         greatest(v - lagInFrame(v, 1, v) OVER (PARTITION BY uid, container ORDER BY TimeUnix ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW), 0) AS g\n  FROM (\n    SELECT TimeUnix, ResourceAttributes['k8s.pod.name'] AS pod, ResourceAttributes['k8s.container.name'] AS container, ResourceAttributes['k8s.pod.uid'] AS uid, Value AS v, ResourceAttributes['k8s.container.last_terminated_reason'] AS reason\n    FROM otel_metrics_gauge\n    WHERE TimeUnix >= {from:DateTime64(9)} - INTERVAL 1 HOUR AND TimeUnix < {to:DateTime64(9)} AND MetricName = 'k8s.container.restarts' AND startsWith(ResourceAttributes['k8s.namespace.name'], 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['k8s.pod.name']))))\nWHERE TimeUnix >= {from:DateTime64(9)}\nGROUP BY t, pod, container, uid) WHERE grew > 0 AND reason = 'OOMKilled' GROUP BY t, pod ORDER BY t",
       "unit": "count",
@@ -315,7 +311,7 @@
       "section": "health",
       "id": "pods-not-running",
       "title": "Pending, failed or unknown pods",
-      "description": "Managed sandbox pods whose phase is not Running or Succeeded, counted per bucket by phase (Pending = capacity or scheduling; Failed; Unknown = the node lost it). Phase is the cluster collector's k8s.pod.phase.",
+      "description": "Sandbox pods whose phase is not Running or Succeeded, counted per bucket by phase (Pending = capacity or scheduling; Failed; Unknown = the node lost it). Phase is the cluster collector's k8s.pod.phase.",
       "kind": "sql",
       "sql": "SELECT toStartOfInterval(TimeUnix, toIntervalSecond({step:UInt32})) AS t,\n       multiIf(ph = 1, 'Pending', ph = 4, 'Failed', 'Unknown') AS phase, uniqExact(pod) AS pods\nFROM (SELECT TimeUnix, ResourceAttributes['k8s.pod.name'] AS pod, Value AS ph FROM otel_metrics_gauge\n      WHERE TimeUnix >= {from:DateTime64(9)} AND TimeUnix < {to:DateTime64(9)} AND MetricName = 'k8s.pod.phase' AND startsWith(ResourceAttributes['k8s.namespace.name'], 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['k8s.pod.name'])))\nWHERE ph IN (1, 4, 5) GROUP BY t, phase ORDER BY t",
       "unit": "count",
@@ -326,7 +322,7 @@
       "section": "who",
       "id": "boxes-by-node",
       "title": "Sandboxes by node",
-      "description": "Awake managed sandboxes on each node at the range end, with what they use. One node holding most of the OOM kills or the CPU is a node problem, not a user's. The node is stamped on the sandbox's samples by the node agent (k8s.node.name).",
+      "description": "Awake sandboxes on each node at the range end, with what they use. One node holding most of the OOM kills or the CPU is a node problem, not a user's. The node is stamped on the sandbox's samples by the node agent (k8s.node.name).",
       "kind": "sql",
       "sql": "SELECT node, count() AS sandboxes, round(sum(cpu), 2) AS cpu_cores, round(sum(mem) / 1073741824, 1) AS memory_gib FROM (\n  SELECT ResourceAttributes['k8s.node.name'] AS node, ResourceAttributes['k8s.pod.name'] AS pod,\n         argMaxIf(Value, TimeUnix, MetricName = 'container.cpu.usage') AS cpu, argMaxIf(Value, TimeUnix, MetricName = 'container.memory.working_set') AS mem\n  FROM otel_metrics_gauge\n  WHERE TimeUnix >= {to:DateTime64(9)} - INTERVAL 5 MINUTE AND TimeUnix < {to:DateTime64(9)} AND MetricName IN ('container.cpu.usage', 'container.memory.working_set') AND startsWith(ResourceAttributes['k8s.namespace.name'], 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['k8s.pod.name'])) AND ResourceAttributes['k8s.node.name'] != ''\n  GROUP BY node, pod)\nGROUP BY node ORDER BY sandboxes DESC",
       "width": 10,
@@ -336,53 +332,11 @@
       "section": "who",
       "id": "noisiest-boxes",
       "title": "Noisiest sandboxes",
-      "description": "The busiest managed sandboxes of the range by peak CPU, measured as the sandbox total (its containers summed at one moment): workspace id, owning user id and owning org id (never an email; personal = no organization owns it), node, CPU and memory, and the highest restart count seen. Ids are the operator's labels; samples from before they were stamped fall back to the pod and namespace names.",
+      "description": "The busiest sandboxes of the range by peak CPU, measured as the sandbox total (its containers summed at one moment): workspace id, owning user id and owning org id (never an email; personal = no organization owns it), node, CPU and memory, and the highest restart count seen. Ids are the operator's labels; samples from before they were stamped fall back to the pod and namespace names.",
       "kind": "sql",
       "sql": "SELECT workspace_id, user_id, if(org_id = '', 'personal', org_id) AS owner_org_id, argMaxIf(node, last_seen, node != '') AS node,\n       round(avg(cpu), 2) AS cpu_avg_cores, round(max(cpu), 2) AS cpu_peak_cores, round(max(mem) / 1073741824, 1) AS memory_peak_gib,\n       max(restarts) AS restarts_total\nFROM (\n  SELECT workspace_id, user_id, org_id, b, sum(cpu) AS cpu, sum(mem) AS mem, max(restarts) AS restarts,\n         argMaxIf(node, seen, node != '') AS node, max(seen) AS last_seen\n  FROM (\n    SELECT if(ResourceAttributes['reliant.workspace.id'] != '', ResourceAttributes['reliant.workspace.id'], replaceRegexpOne(ResourceAttributes['k8s.pod.name'], '^ws-', '')) AS workspace_id, if(ResourceAttributes['reliant.user.id'] != '', ResourceAttributes['reliant.user.id'], replaceRegexpOne(ResourceAttributes['k8s.namespace.name'], '^ws-', '')) AS user_id, ResourceAttributes['reliant.workspace.org.id'] AS org_id, ResourceAttributes['k8s.container.name'] AS container, toStartOfInterval(TimeUnix, toIntervalSecond(60)) AS b,\n           argMaxIf(ResourceAttributes['k8s.node.name'], TimeUnix, ResourceAttributes['k8s.node.name'] != '') AS node, max(TimeUnix) AS seen,\n           ifNotFinite(avgIf(Value, MetricName = 'container.cpu.usage'), 0) AS cpu,\n           maxIf(Value, MetricName = 'container.memory.working_set') AS mem,\n           maxIf(Value, MetricName = 'k8s.container.restarts') AS restarts\n    FROM otel_metrics_gauge\n    WHERE TimeUnix >= {from:DateTime64(9)} AND TimeUnix < {to:DateTime64(9)} AND MetricName IN ('container.cpu.usage', 'container.memory.working_set', 'k8s.container.restarts') AND startsWith(ResourceAttributes['k8s.namespace.name'], 'ws-') AND (empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['k8s.pod.name']))\n    GROUP BY workspace_id, user_id, org_id, container, b)\n  GROUP BY workspace_id, user_id, org_id, b)\nGROUP BY workspace_id, user_id, org_id ORDER BY cpu_peak_cores DESC LIMIT 25",
       "width": 14,
       "height": 7
-    },
-    {
-      "section": "platform-machines",
-      "id": "platform-machines-latest",
-      "title": "Self-hosted sandboxes: latest sample",
-      "description": "Each self-hosted sandbox's newest sample in the range: minutes silent (MachineNotReporting past 10), load5 per CPU (MachineLoadSustained past 1.5 for 30m), memory available (MachineMemoryLow under 10%), processes, and its fullest volume (MachineDiskFilling past 80%, MachineDiskFull past 90% used). An older daemon reports no load or memory: those cells are empty. The statement of deploy/observability/queries/machine-stats.sql. The sandbox (pod) filter does not apply: self-hosted sandboxes are not pods.",
-      "kind": "sql",
-      "sql": "SELECT h.machine AS machine, h.last_seen AS last_seen, h.minutes_silent AS minutes_silent,\n       h.cpus AS cpus, h.load5 AS load5, h.load5_per_cpu AS load5_per_cpu,\n       h.mem_available_pct AS mem_available_pct, h.processes AS processes, h.process_limit AS process_limit,\n       v.fullest_volume AS fullest_volume, v.fullest_paths AS fullest_paths, v.fullest_used_pct AS fullest_used_pct\nFROM (\n  SELECT LogAttributes['machine'] AS machine,\n         toString(max(Timestamp)) AS last_seen,\n         intDiv(toUnixTimestamp(now()) - toUnixTimestamp(max(Timestamp)), 60) AS minutes_silent,\n         argMax(toFloat64OrNull(LogAttributes['cpus']), Timestamp) AS cpus,\n         argMax(toFloat64OrNull(LogAttributes['load5']), Timestamp) AS load5,\n         argMax(toFloat64OrNull(LogAttributes['load5_per_cpu']), Timestamp) AS load5_per_cpu,\n         round(argMax(toFloat64OrNull(LogAttributes['mem_available_ratio']), Timestamp) * 100, 1) AS mem_available_pct,\n         argMax(toInt64OrNull(LogAttributes['processes']), Timestamp) AS processes,\n         argMax(toInt64OrNull(LogAttributes['process_limit']), Timestamp) AS process_limit\n  FROM otel_logs\n  WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} AND ServiceName = 'daemon-gateway' AND lower(Body) = 'machine health' AND LogAttributes['machine_source'] = 'heartbeat' AND LogAttributes['machine'] != ''\n  GROUP BY machine) AS h\nLEFT JOIN (\n  SELECT machine, argMax(volume, used) AS fullest_volume, argMax(paths, used) AS fullest_paths, round(max(used) * 100, 1) AS fullest_used_pct FROM (\n    SELECT LogAttributes['machine'] AS machine, LogAttributes['volume'] AS volume,\n           argMax(LogAttributes['paths'], Timestamp) AS paths,\n           argMax(1 - toFloat64OrZero(LogAttributes['free_ratio']), Timestamp) AS used\n    FROM otel_logs\n    WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} AND ServiceName = 'daemon-gateway' AND lower(Body) = 'machine volume' AND LogAttributes['machine_source'] = 'heartbeat' AND LogAttributes['machine'] != '' AND isNotNull(toFloat64OrNull(LogAttributes['free_ratio']))\n    GROUP BY machine, volume)\n  GROUP BY machine) AS v ON v.machine = h.machine\nORDER BY machine",
-      "width": 24,
-      "height": 6
-    },
-    {
-      "section": "platform-machines",
-      "id": "platform-disk-used",
-      "title": "Self-hosted sandboxes: disk used per volume",
-      "description": "Used share of each volume of each self-hosted sandbox (1 - free_ratio of its `machine volume` lines), the highest per bucket. MachineDiskFilling fires past 80%, MachineDiskFull pages past 90%. The sandbox (pod) filter does not apply: self-hosted sandboxes are not pods.",
-      "kind": "sql",
-      "sql": "SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t, concat(LogAttributes['machine'], ' · ', LogAttributes['volume']) AS volume, round(max(1 - toFloat64OrNull(LogAttributes['free_ratio'])), 3) AS used FROM otel_logs WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} AND ServiceName = 'daemon-gateway' AND LogAttributes['machine_source'] = 'heartbeat' AND LogAttributes['machine'] != '' AND lower(Body) = 'machine volume' AND isNotNull(toFloat64OrNull(LogAttributes['free_ratio']))\nGROUP BY t, volume ORDER BY t",
-      "width": 24,
-      "height": 7,
-      "unit": "percent"
-    },
-    {
-      "section": "platform-machines",
-      "id": "platform-load5-per-cpu",
-      "title": "Self-hosted sandboxes: 5-minute load per CPU",
-      "description": "The 5-minute load average divided by the sandbox's CPUs, mean per bucket. Above 1 work queues for a CPU; MachineLoadSustained fires when every sample of 30 minutes is above 1.5. The sandbox (pod) filter does not apply: self-hosted sandboxes are not pods.",
-      "kind": "sql",
-      "sql": "SELECT t, machine, round(avg(l), 2) AS load5_per_cpu FROM (\n  SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t, LogAttributes['machine'] AS machine, toFloat64OrNull(LogAttributes['load5_per_cpu']) AS l FROM otel_logs WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} AND ServiceName = 'daemon-gateway' AND LogAttributes['machine_source'] = 'heartbeat' AND LogAttributes['machine'] != '' AND lower(Body) = 'machine health' AND isNotNull(l))\nGROUP BY t, machine ORDER BY t",
-      "width": 12,
-      "height": 7
-    },
-    {
-      "section": "platform-machines",
-      "id": "platform-mem-available",
-      "title": "Self-hosted sandboxes: memory available",
-      "description": "MemAvailable over MemTotal (/proc/meminfo), the lowest per bucket. MachineMemoryLow fires when every sample of 10 minutes is under 10%. The sandbox (pod) filter does not apply: self-hosted sandboxes are not pods.",
-      "kind": "sql",
-      "sql": "SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t, LogAttributes['machine'] AS machine, round(min(toFloat64OrNull(LogAttributes['mem_available_ratio'])), 3) AS mem_available FROM otel_logs WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} AND ServiceName = 'daemon-gateway' AND LogAttributes['machine_source'] = 'heartbeat' AND LogAttributes['machine'] != '' AND lower(Body) = 'machine health' AND isNotNull(toFloat64OrNull(LogAttributes['mem_available_ratio']))\nGROUP BY t, machine ORDER BY t",
-      "width": 12,
-      "height": 7,
-      "unit": "percent"
     }
   ]
 }

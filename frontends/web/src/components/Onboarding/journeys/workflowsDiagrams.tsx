@@ -178,7 +178,7 @@ export function MachineDiagram() {
       <rect x={144} y={18} width={128} height={84} rx={8} fill={C.card} stroke={C.border} />
       <rect x={154} y={30} width={108} height={20} rx={5} fill="none" stroke={C.primary} strokeWidth={1.5} />
       <Note x={160} y={44} color={C.fg}>
-        cloud machine
+        sandbox
       </Note>
       <path d="M 252 37 L 256 42 L 260 37" stroke={C.muted} fill="none" />
       <Note x={156} y={68}>your computer</Note>

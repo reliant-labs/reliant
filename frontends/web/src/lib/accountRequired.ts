@@ -11,7 +11,7 @@ import { hasErrorReason } from "./errorReasons";
 export const ACCOUNT_REQUIRED_REASON = "account_required" as const;
 
 export const ACCOUNT_REQUIRED_MACHINE_COPY =
-  "Add an email to your account to start a cloud machine — we use it to reach you about your machine and billing.";
+  "Add an email to your account to start a sandbox — we use it to reach you about your sandbox and billing.";
 export const ACCOUNT_REQUIRED_COUPON_COPY =
   "Add an email to your account to redeem this code — we use it to reach you about your machine and billing.";
 

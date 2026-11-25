@@ -81,7 +81,7 @@ export function PrivacySettings() {
           </p>
           <p>
             <strong className="text-foreground">Your code stays on the machine it runs on.</strong> On your own
-            computer, files an agent never opens stay there. A Reliant cloud machine keeps the whole repository on its
+            computer, files an agent never opens stay there. A Reliant sandbox keeps the whole repository on its
             disk in our cloud.
           </p>
           <p>

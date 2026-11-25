@@ -112,7 +112,7 @@ export const LESSONS: Lesson[] = [
     title: "Where it runs",
     body: (
       <>
-        Activate asks where each run happens. Runs on is one of your machines: your own computer, or a cloud machine
+        Activate asks where each run happens. Runs on is one of your machines: your own computer, or a sandbox
         that wakes for a run and sleeps when idle. Workflows that only use the web and integrations can pick No machine.
         Fix my PR runs your tests, so it needs one. It's a draft: publish it first. The tour never turns anything on.
       </>

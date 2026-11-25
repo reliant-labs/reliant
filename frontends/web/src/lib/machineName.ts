@@ -54,7 +54,7 @@ export function machineDisplayName(d: NameableMachine): string {
 
   const id = shortId(d.daemonId);
   if (isManagedMachine(d)) {
-    return id ? `Cloud machine (${id})` : "Cloud machine";
+    return id ? `Sandbox (${id})` : "Sandbox";
   }
   const hostname = d.hostname?.trim() ?? "";
   if (!isPlaceholderLabel(hostname, d.daemonId)) return hostname;

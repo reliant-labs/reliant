@@ -31,7 +31,7 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
   {
     id: "connect-machine",
     title: "Connect a machine",
-    description: "Your computer or a Reliant cloud machine runs the agents",
+    description: "Your computer or a Reliant sandbox runs the agents",
   },
   {
     id: "add-api-key",

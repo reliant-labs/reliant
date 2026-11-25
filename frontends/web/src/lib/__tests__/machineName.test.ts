@@ -22,7 +22,7 @@ describe("machineDisplayName", () => {
       hostname: "ws-ws-2aab1465",
       daemonType: "managed",
     });
-    expect(label).toBe("Cloud machine (2aab1465)");
+    expect(label).toBe("Sandbox (2aab1465)");
     expect(label).not.toContain("ws-ws-");
   });
 
@@ -65,12 +65,12 @@ describe("machineDisplayName", () => {
       "Seans-MacBook-Pro.local",
     );
     expect(machineDisplayName({ daemonId, name, daemonType: "self_hosted" })).toBe("Self-hosted machine (46e3682b)");
-    expect(machineDisplayName({ daemonId, name, daemonType: "managed" })).toBe("Cloud machine (46e3682b)");
+    expect(machineDisplayName({ daemonId, name, daemonType: "managed" })).toBe("Sandbox (46e3682b)");
   });
 
   it("ignores a whitespace-only name", () => {
     expect(machineDisplayName({ daemonId: "abc12345", name: "  ", daemonType: "managed" })).toBe(
-      "Cloud machine (abc12345)",
+      "Sandbox (abc12345)",
     );
   });
 

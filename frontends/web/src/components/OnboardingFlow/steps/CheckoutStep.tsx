@@ -280,7 +280,7 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
       const display = derivePlanDisplay(selectedPlan);
       out.push({
         kind: "compute",
-        label: "Cloud machine",
+        label: "Sandbox",
         detail: selectedPlan
           ? `${planDisplayName(selectedPlan)} — a Reliant-hosted machine to run your work on.`
           : "A Reliant-hosted machine to run your work on.",

@@ -247,7 +247,7 @@ export function ProjectsTable({
  * stays pinned, so two checkouts of the same repo remain distinguishable.
  */
 function ProjectLocation({ path }: { path: string }) {
-  if (isCloudProjectPath(path)) return <span className="text-xs text-ink-muted">On a cloud machine</span>;
+  if (isCloudProjectPath(path)) return <span className="text-xs text-ink-muted">On a sandbox</span>;
   const displayPath = collapseHomePath(path);
   const { head, tail } = splitPathForDisplay(displayPath);
   return (

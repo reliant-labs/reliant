@@ -32,7 +32,7 @@ interface MachineSaleConsentProps {
  */
 export function MachineSaleConsent({ planId, children, onUseOwnComputer, onPlanChanged }: MachineSaleConsentProps) {
   const org = useActiveOrg();
-  if (!org.active) return <CheckoutUnavailable message="Cloud machines can be bought once your organization is verified." onUseOwnComputer={onUseOwnComputer} />;
+  if (!org.active) return <CheckoutUnavailable message="Sandboxes can be bought once your organization is verified." onUseOwnComputer={onUseOwnComputer} />;
   return <OrgMachineSale key={`${org.active.id}:${planId}`} orgId={org.active.id} planId={planId} canManage={["owner", "admin"].includes(org.active.role)} onUseOwnComputer={onUseOwnComputer} onPlanChanged={onPlanChanged}>{children}</OrgMachineSale>;
 }
 function OrgMachineSale({ orgId, planId, canManage, children, onUseOwnComputer, onPlanChanged }: { orgId: string; planId: string; canManage: boolean; children: (monthlyPriceCents?: number) => ReactNode; onUseOwnComputer?: () => void; onPlanChanged?: () => void }) {

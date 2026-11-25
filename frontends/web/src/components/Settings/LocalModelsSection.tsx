@@ -157,7 +157,7 @@ function GettingStarted({ managed }: { managed: boolean }) {
     <div className="space-y-2 text-xs text-muted-foreground">
       {managed ? (
         <p>
-          This is a cloud machine, so it has no GPU of its own to run local models on. To use a model
+          This is a sandbox, so it has no GPU of its own to run local models on. To use a model
           server it can reach over the network, add its URL below.
         </p>
       ) : (
@@ -294,7 +294,7 @@ export function LocalModelsMachineCard({ daemon }: { daemon: DaemonInfo }) {
           size="sm"
           dot
         />
-        {managed && <Badge label="Cloud" size="sm" />}
+        {managed && <Badge label="Sandbox" size="sm" />}
         {online && (
           <div className="ml-auto flex items-center gap-2">
             {inventory?.probedAt && (

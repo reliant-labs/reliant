@@ -292,7 +292,7 @@ describe("creating a machine from the consent flow", () => {
     render(<ConnectorConsent clientId="client-1" />);
 
     expect(
-      await screen.findByRole("button", { name: /create a cloud machine/i })
+      await screen.findByRole("button", { name: /create a sandbox/i })
     ).toBeTruthy();
     expect(screen.getByText(/no machines yet/i)).toBeTruthy();
   });
@@ -315,7 +315,7 @@ describe("creating a machine from the consent flow", () => {
     );
 
     await userEvent.click(
-      await screen.findByRole("button", { name: /create a cloud machine/i })
+      await screen.findByRole("button", { name: /create a sandbox/i })
     );
 
     await waitFor(() => expect(createDaemon).toHaveBeenCalled());
@@ -359,7 +359,7 @@ describe("creating a machine from the consent flow", () => {
     );
 
     await userEvent.click(
-      await screen.findByRole("button", { name: /create a cloud machine/i })
+      await screen.findByRole("button", { name: /create a sandbox/i })
     );
 
     await waitFor(() => {
@@ -380,7 +380,7 @@ describe("creating a machine from the consent flow", () => {
     );
 
     await userEvent.click(
-      await screen.findByRole("button", { name: /create a cloud machine/i })
+      await screen.findByRole("button", { name: /create a sandbox/i })
     );
 
     expect(await screen.findByText(/longer than expected/i)).toBeTruthy();
@@ -393,7 +393,7 @@ describe("creating a machine from the consent flow", () => {
     render(<ConnectorConsent clientId="client-1" />);
 
     await userEvent.click(
-      await screen.findByRole("button", { name: /create a cloud machine/i })
+      await screen.findByRole("button", { name: /create a sandbox/i })
     );
 
     expect(await screen.findByText(/plan limit reached/i)).toBeTruthy();

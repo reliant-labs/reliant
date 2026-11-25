@@ -64,7 +64,7 @@ export function BrowserSettings() {
     <div className="space-y-6">
       <SettingsPageHeader
         title="Built-in browser"
-        description="Controls Reliant's built-in browser, which you and agents use to preview and test pages. Links to your dev servers (localhost, and your cloud machine's previews) open here; other links open in your default browser."
+        description="Controls Reliant's built-in browser, which you and agents use to preview and test pages. Links to your dev servers (localhost, and your sandbox's previews) open here; other links open in your default browser."
       />
 
       <div className="rounded-lg border border-border bg-card p-4 space-y-6">

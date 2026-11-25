@@ -167,7 +167,7 @@ describe("LocalModelsSection", () => {
       daemon({ daemonType: "managed", localModels: create(LocalModelInventorySchema, { endpoints: [] }) }),
     ];
     renderSection();
-    expect(screen.getByText(/cloud machine, so it has no GPU of its own/)).toBeTruthy();
+    expect(screen.getByText(/This is a sandbox, so it has no GPU of its own/)).toBeTruthy();
     expect(screen.queryByText(/ollama pull qwen3/)).toBeNull();
   });
 });
