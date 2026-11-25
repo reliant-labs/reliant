@@ -172,7 +172,7 @@ type projectReadCounter struct {
 
 func (r *projectReadCounter) GetProject(ctx context.Context, id string) (*db.Project, error) {
 	r.gets.Add(1)
-	return store.GetProject(ctx, r.Repo.ORM(), id)
+	return store.GetProject(ctx, r.ORM(), id)
 }
 
 func (r *projectReadCounter) ListProjectsByIDs(ctx context.Context, ids []string) ([]*db.Project, error) {
