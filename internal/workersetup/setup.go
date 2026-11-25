@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/providerbackoff"
+	"github.com/reliant-labs/reliant/internal/serveraction"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
@@ -146,6 +147,12 @@ type Config struct {
 	// SecretResolver resolves declared secrets for the step activities (a
 	// command, a request); nil refuses every step that uses one.
 	SecretResolver handlers.SecretResolver
+
+	// ServerActions is the Reliant server actions (uses: reliant/...) this
+	// worker runs: Enabled is ServerProcessConfig.pipeline.enabled, Handlers
+	// the actions bound here. NewWorker supplies the Resolver over Database.
+	// The zero value refuses every server action as switched off.
+	ServerActions serveraction.Config
 
 	// AllowPrivateEgress is ServerProcessConfig.network.allow_private_egress:
 	// whether a user-supplied model endpoint may resolve to a private,
@@ -298,6 +305,15 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	activityDeps.Connections = cfg.IntegrationCredentials
 	activityDeps.HostedActions = cfg.HostedActions
 	activityDeps.SecretResolver = cfg.SecretResolver
+	serverActions := cfg.ServerActions
+	if serverActions.Resolver == nil && cfg.Database != nil {
+		serverActions.Resolver = handlers.NewServerActionResolver(cfg.Database, store.NewWorkflowExtStore(cfg.Database.ORM()))
+	}
+	dispatcher, err := serveraction.NewDispatcher(serverActions)
+	if err != nil {
+		return nil, nil, fmt.Errorf("server actions: %w", err)
+	}
+	activityDeps.ServerActions = dispatcher
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
 	if cfg.Database != nil {
