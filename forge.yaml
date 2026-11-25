@@ -67,12 +67,15 @@ lint:
         # handler file that grows past it fails the build. Split it into
         # rpc_<family>.go siblings rather than raising the limit.
         forgeconv-handler-file-size: error
-        # access_tokens' scopes and resource-kind CHECKs are declared
-        # `forge:closed-set accesstoken.*`. The rule warns until v0.1.48, so a
-        # forge bump that grew AllScopes (billing:read, forge #1566) passed the
-        # merge gate and failed the release gate's DB test instead. At error,
-        # the bump's own PR fails `forge lint --closed-sets` and is fixed with
-        # `task db:migration` + `forge db migration new --closed-set <constraint>`.
+        # access_tokens' resource-kind CHECK is declared
+        # `forge:closed-set accesstoken.AllResourceKinds`. The rule warns until
+        # v0.1.48, so a forge bump that grew AllScopes (billing:read, forge
+        # #1566) passed the merge gate and failed the release gate's DB test
+        # instead. At error, the bump's own PR fails `forge lint --closed-sets`
+        # and is fixed with `task db:migration` + `forge db migration new
+        # --closed-set <constraint>`. The scopes CHECK is a format check since
+        # 20261125031938_access_tokens_scopes_format (scope bundles), so a new
+        # scope needs no migration and is no longer a closed set.
         forge-closed-set: error
         # P7b A5 (research/forge-migration/14-p7b-lint-adoption-plan.md §2.3,
         # §2.4): no component reads the process environment, no component's

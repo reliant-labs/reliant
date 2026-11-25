@@ -21,12 +21,9 @@ func TestLocalStore_IntrospectReadsStoredScopesTolerantly(t *testing.T) {
 	ctx := context.Background()
 	repo, raw, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
-	// access_tokens_scopes pins the column to THIS binary's catalog, which
-	// is exactly what a newer writer's row would not satisfy. Drop it in this
-	// test's own copy of the database to stand in for that row.
-	if _, err := raw.ExecContext(ctx, `ALTER TABLE access_tokens DROP CONSTRAINT access_tokens_scopes`); err != nil {
-		t.Fatal(err)
-	}
+	// access_tokens_scopes checks only the FORMAT of each entry
+	// (20261125031938_access_tokens_scopes_format), so a newer writer's
+	// unknown scope or bundle ref is stored here through the real CHECK.
 	s := NewLocalStore(repo.ORM())
 
 	mintWith := func(t *testing.T, stored []string) string {
@@ -58,6 +55,9 @@ func TestLocalStore_IntrospectReadsStoredScopesTolerantly(t *testing.T) {
 		}
 	})
 
+	// A sensitive scope is never granted through a bundle by default: a row
+	// whose stored scopes are only bundle:admin, written through the format
+	// CHECK, introspects to the admin bundle without any of them.
 	t.Run("bundle:admin never yields a sensitive scope", func(t *testing.T) {
 		p, err := s.Introspect(ctx, mintWith(t, []string{"bundle:admin"}))
 		if err != nil {
@@ -66,7 +66,7 @@ func TestLocalStore_IntrospectReadsStoredScopesTolerantly(t *testing.T) {
 		if !p.Scopes.Has(fat.ScopeDeployWrite) {
 			t.Fatalf("bundle:admin did not expand: %s", p.Scopes)
 		}
-		for _, sc := range append([]fat.Scope{fat.ScopeDBQuery, fat.ScopeSecretWrite, fat.ScopeTokenWrite},
+		for _, sc := range append([]fat.Scope{fat.ScopeDBQuery, fat.ScopeSecretWrite, fat.ScopeTokenWrite, fat.ScopeTokenRead},
 			fat.ScopesOfClass(fat.ClassSensitive)...) {
 			if p.Scopes.Has(sc) {
 				t.Errorf("bundle:admin yielded the sensitive scope %s", sc)
