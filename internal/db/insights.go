@@ -22,6 +22,36 @@ type InsightsDim = store.InsightsDim
 // InsightsSource is model calls or tool calls.
 type InsightsSource = store.InsightsSource
 
+// The dimensions and sources an insights read takes (store.InsightsDim*).
+const (
+	InsightsDimDay      = store.InsightsDimDay
+	InsightsDimProject  = store.InsightsDimProject
+	InsightsDimWorkflow = store.InsightsDimWorkflow
+	InsightsDimPreset   = store.InsightsDimPreset
+	InsightsDimModel    = store.InsightsDimModel
+	InsightsDimProvider = store.InsightsDimProvider
+	InsightsDimPurpose  = store.InsightsDimPurpose
+	InsightsDimTool     = store.InsightsDimTool
+	InsightsDimToolKind = store.InsightsDimToolKind
+
+	InsightsModelCalls = store.InsightsModelCalls
+	InsightsToolCalls  = store.InsightsToolCalls
+
+	// InsightsLatencyBuckets is the number of buckets of every histogram.
+	InsightsLatencyBuckets = store.InsightsLatencyBuckets
+)
+
+// InsightsDimApplies reports whether src's calls can be grouped by dim.
+func InsightsDimApplies(src InsightsSource, dim InsightsDim) bool {
+	return store.InsightsDimApplies(src, dim)
+}
+
+// InsightsLatencyBucketBounds is the [lower, upper) range in ms of
+// histogram bucket k; the last bucket's upper bound is +Inf.
+func InsightsLatencyBucketBounds(k int) (lower, upper float64) {
+	return store.InsightsLatencyBucketBounds(k)
+}
+
 // InsightsModelRow is one group's model calls; InsightsToolRow one group's
 // tool calls.
 type (

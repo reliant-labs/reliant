@@ -14,7 +14,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/orgs"
-	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // MaxRangeDays bounds one request's range, inclusive of both ends.
@@ -39,15 +38,15 @@ const MemberNote = "One member's agent work in the organization. Cost counts onl
 const dateLayout = "2006-01-02"
 
 var groupDims = map[pb.InsightsGroupBy]db.InsightsDim{
-	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_DAY:       store.InsightsDimDay,
-	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_PROJECT:   store.InsightsDimProject,
-	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_WORKFLOW:  store.InsightsDimWorkflow,
-	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_PRESET:    store.InsightsDimPreset,
-	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_MODEL:     store.InsightsDimModel,
-	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_PROVIDER:  store.InsightsDimProvider,
-	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_PURPOSE:   store.InsightsDimPurpose,
-	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_TOOL:      store.InsightsDimTool,
-	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_TOOL_KIND: store.InsightsDimToolKind,
+	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_DAY:       db.InsightsDimDay,
+	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_PROJECT:   db.InsightsDimProject,
+	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_WORKFLOW:  db.InsightsDimWorkflow,
+	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_PRESET:    db.InsightsDimPreset,
+	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_MODEL:     db.InsightsDimModel,
+	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_PROVIDER:  db.InsightsDimProvider,
+	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_PURPOSE:   db.InsightsDimPurpose,
+	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_TOOL:      db.InsightsDimTool,
+	pb.InsightsGroupBy_INSIGHTS_GROUP_BY_TOOL_KIND: db.InsightsDimToolKind,
 }
 
 // query is a validated request: the org, the days, and the dimension.
@@ -299,15 +298,15 @@ func percentile(hist []int64, n int64, q float64) float64 {
 			if k == 0 {
 				return 0
 			}
-			lower, upper := store.InsightsLatencyBucketBounds(k)
-			if k >= store.InsightsLatencyBuckets-1 {
+			lower, upper := db.InsightsLatencyBucketBounds(k)
+			if k >= db.InsightsLatencyBuckets-1 {
 				return lower
 			}
 			return lower + (rank-float64(cum))/float64(c)*(upper-lower)
 		}
 		cum += c
 	}
-	lower, _ := store.InsightsLatencyBucketBounds(store.InsightsLatencyBuckets - 1)
+	lower, _ := db.InsightsLatencyBucketBounds(db.InsightsLatencyBuckets - 1)
 	return lower
 }
 

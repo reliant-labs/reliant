@@ -9,7 +9,6 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // GetTeamInsights is the org's totals by one dimension, for any live member.
@@ -39,7 +38,7 @@ func (s *Service) GetTeamInsights(
 	if err != nil {
 		return nil, err
 	}
-	byDay := q.dim == store.InsightsDimDay
+	byDay := q.dim == db.InsightsDimDay
 
 	resp := &pb.GetTeamInsightsResponse{
 		OrgId:           q.orgID,
@@ -50,25 +49,25 @@ func (s *Service) GetTeamInsights(
 		AsOf:            s.now().Format(time.RFC3339),
 		Note:            TeamNote,
 	}
-	if store.InsightsDimApplies(store.InsightsModelCalls, q.dim) {
+	if db.InsightsDimApplies(db.InsightsModelCalls, q.dim) {
 		rows, err := s.deps.Team.ListInsightsTeamModelCalls(ctx, q.orgID, q.start, q.end, q.dim)
 		if err != nil {
 			return nil, svcerr.Wrap(err)
 		}
 		keys, calls := modelKeys(rows)
-		shown, err := s.floor(ctx, store.InsightsModelCalls, q, keys, calls)
+		shown, err := s.floor(ctx, db.InsightsModelCalls, q, keys, calls)
 		if err != nil {
 			return nil, err
 		}
 		resp.ModelCalls = modelSection(rows, shown, byDay)
 	}
-	if store.InsightsDimApplies(store.InsightsToolCalls, q.dim) {
+	if db.InsightsDimApplies(db.InsightsToolCalls, q.dim) {
 		rows, err := s.deps.Team.ListInsightsTeamToolCalls(ctx, q.orgID, q.start, q.end, q.dim)
 		if err != nil {
 			return nil, svcerr.Wrap(err)
 		}
 		keys, calls := toolKeys(rows)
-		shown, err := s.floor(ctx, store.InsightsToolCalls, q, keys, calls)
+		shown, err := s.floor(ctx, db.InsightsToolCalls, q, keys, calls)
 		if err != nil {
 			return nil, err
 		}
@@ -84,7 +83,7 @@ func (s *Service) GetTeamInsights(
 
 // floor is the set of group keys the team view shows on their own, from the
 // contributors of each group of src's calls.
-func (s *Service) floor(ctx context.Context, src store.InsightsSource, q query, keys []string, calls map[string]int64) (map[string]bool, error) {
+func (s *Service) floor(ctx context.Context, src db.InsightsSource, q query, keys []string, calls map[string]int64) (map[string]bool, error) {
 	if len(keys) == 0 {
 		return map[string]bool{}, nil
 	}

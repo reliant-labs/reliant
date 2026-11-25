@@ -8,8 +8,8 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/orgs"
-	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // GetMemberInsights is one member's numbers in the org, for its owners and
@@ -75,16 +75,16 @@ func (s *Service) GetMemberInsights(
 // floor is for the team view; this is one member's view of themselves, or an
 // admin's audited drill-down).
 func (s *Service) memberSections(ctx context.Context, q query, userID string) (*pb.InsightsModelSection, *pb.InsightsToolSection, error) {
-	byDay := q.dim == store.InsightsDimDay
+	byDay := q.dim == db.InsightsDimDay
 	model, tool := modelSection(nil, nil, byDay), toolSection(nil, nil, byDay)
-	if store.InsightsDimApplies(store.InsightsModelCalls, q.dim) {
+	if db.InsightsDimApplies(db.InsightsModelCalls, q.dim) {
 		rows, err := s.deps.Members.ListInsightsMemberModelCalls(ctx, q.orgID, userID, q.start, q.end, q.dim)
 		if err != nil {
 			return nil, nil, svcerr.Wrap(err)
 		}
 		model = modelSection(rows, nil, byDay)
 	}
-	if store.InsightsDimApplies(store.InsightsToolCalls, q.dim) {
+	if db.InsightsDimApplies(db.InsightsToolCalls, q.dim) {
 		rows, err := s.deps.Members.ListInsightsMemberToolCalls(ctx, q.orgID, userID, q.start, q.end, q.dim)
 		if err != nil {
 			return nil, nil, svcerr.Wrap(err)
