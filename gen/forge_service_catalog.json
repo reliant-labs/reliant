@@ -58168,6 +58168,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "TriggerEvents",
+      "interface": "github.com/reliant-labs/reliant/internal/launch.TriggerEventStore",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Workflows",
       "interface": "github.com/reliant-labs/reliant/internal/launch.WorkflowLoader",
       "methods": [],

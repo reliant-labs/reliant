@@ -29,6 +29,9 @@ type Deps struct {
 	Store Store
 	// Chats reads the chat a launch starts, re-reads and reports on.
 	Chats ChatReader
+	// TriggerEvents is the trigger_events ledger a launch dedupes against and
+	// attaches its chat to (store.TriggerEventExtStore).
+	TriggerEvents TriggerEventStore
 	// Workflows reads the root workflow row a launch starts.
 	Workflows WorkflowLoader
 	// Worktrees reads the worktree a chat runs in.
@@ -100,8 +103,11 @@ type ChatWriter interface {
 }
 
 // TriggerEventStore is the trigger_events ledger a launch dedupes against.
+// store.TriggerEventExtStore satisfies it.
 type TriggerEventStore interface {
-	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
+	// InsertTriggerEventIfAbsent records a firing; created is false when one
+	// for (kind, dedupe key) already exists.
+	InsertTriggerEventIfAbsent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
 	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error
 	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error
@@ -183,7 +189,6 @@ type Transactor interface {
 // Store is everything a Launcher needs from the database. *db.Repo satisfies it.
 type Store interface {
 	ChatWriter
-	TriggerEventStore
 	WorkflowStore
 	WorkflowResolver
 	ProjectLookup

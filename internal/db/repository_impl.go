@@ -2933,6 +2933,10 @@ func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEvent
 	return store.GetTriggerEventByChat(ctx, r.ORM(), kind, chatID)
 }
 
+// UpdateTriggerEventOutcome is store.UpdateTriggerEventOutcome.
+//
+// Deprecated: use store.TriggerEventExtStore.UpdateTriggerEventOutcome; a launch reads the
+// ledger through launch.Deps.TriggerEvents.
 func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
@@ -2940,6 +2944,10 @@ func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome
 	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
 }
 
+// UpdateTriggerEventPayload is store.UpdateTriggerEventPayload.
+//
+// Deprecated: use store.TriggerEventExtStore.UpdateTriggerEventPayload; a launch reads the
+// ledger through launch.Deps.TriggerEvents.
 func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
@@ -3050,6 +3058,10 @@ func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*co
 	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
 }
 
+// ClaimPendingTriggerEvent is store.ClaimPendingTriggerEvent.
+//
+// Deprecated: use store.TriggerEventExtStore.ClaimPendingTriggerEvent; a launch reads the
+// ledger through launch.Deps.TriggerEvents.
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
 }

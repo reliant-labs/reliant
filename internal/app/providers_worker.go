@@ -348,18 +348,19 @@ type RunLauncherDeps struct {
 func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
 	pinner := daemonplacement.NewPinner(d.DB, d.Router.NATSDaemonRouter)
 	return launch.New(launch.Deps{
-		Store:       d.DB,
-		Chats:       store.NewChatsWithActivityExtStore(d.DB.ORM()),
-		Workflows:   store.NewWorkflowExtStore(d.DB.ORM()),
-		Worktrees:   store.NewWorktreeExtStore(d.DB.ORM()),
-		ProjectRows: store.NewProjectExtStore(d.DB.ORM()),
-		Projects:    d.Projects,
-		Selections:  store.NewChatSelectionExtStore(d.DB.ORM()),
-		Threads:     threads.New(threads.Deps{Repo: d.DB}),
-		Temporal:    d.Temporal.Client,
-		Runs:        d.Runs,
-		TaskQueue:   v2workflow.SharedTaskQueue,
-		Pinner:      pinner,
+		Store:         d.DB,
+		Chats:         store.NewChatsWithActivityExtStore(d.DB.ORM()),
+		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
+		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
+		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
+		TriggerEvents: store.NewTriggerEventExtStore(d.DB.ORM()),
+		Projects:      d.Projects,
+		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),
+		Threads:       threads.New(threads.Deps{Repo: d.DB}),
+		Temporal:      d.Temporal.Client,
+		Runs:          d.Runs,
+		TaskQueue:     v2workflow.SharedTaskQueue,
+		Pinner:        pinner,
 	}), nil
 }
 
@@ -392,6 +393,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
 		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
 		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
+		TriggerEvents: store.NewTriggerEventExtStore(d.DB.ORM()),
 		Questions:     store.NewQuestionExtStore(d.DB.ORM()),
 		Spawns:        store.NewToolCallExtStore(d.DB.ORM()),
 		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),
