@@ -365,7 +365,7 @@ test.describe('Onboarding Flow', () => {
     await expect(dialog.getByTestId('compute-cloud-toggle')).toBeVisible();
   });
 
-  // The daemonless home (U6, onboardingGate.ts homeTarget): a person who has
+  // The daemonless home (U6, onboardingGatePolicy.ts homeTarget): a person who has
   // not onboarded lands on their projects with a "Set up chats" card, and the
   // card is what walks them through onboarding.
   test('landing on / sends a not-yet-onboarded user to their projects, where Set up chats opens onboarding', async ({ page }) => {

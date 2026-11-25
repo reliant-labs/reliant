@@ -186,6 +186,31 @@ describe("Sidebar: which project a chat is in", () => {
     expect(within(web).getByText("feature/login")).not.toHaveClass("uppercase");
   });
 
+  // Owner, 2026-11-25: "reliant-labs · main" showed `+ + …`, the main
+  // workspace's New chat and the project's. One `+` per heading: the main
+  // checkout's is the project's, a branch keeps its own, and the project's
+  // menu stays on its first heading.
+  it("gives every heading one New chat: the main checkout's is the project's", () => {
+    renderSidebar();
+    for (const name of ["api", "web"]) {
+      for (const heading of section(name).querySelectorAll<HTMLElement>(".group\\/ws")) {
+        expect(heading.querySelectorAll(".lucide-plus")).toHaveLength(1);
+      }
+    }
+    // api: main only, so its one heading carries the project's New chat and menu.
+    const apiHeading = screen.getByTestId("sidebar-project-header-p-api-heading");
+    expect(within(apiHeading).getByRole("button", { name: "New chat in api" })).toBeInTheDocument();
+    expect(within(apiHeading).getByTestId("sidebar-project-actions-p-api")).toBeInTheDocument();
+    // web: the branch heads the section (its chat sorts first) with its own
+    // New chat and the project's menu; main's heading is the project's New chat.
+    const webHeading = screen.getByTestId("sidebar-project-header-p-web-heading");
+    expect(webHeading).toHaveTextContent(/web\s*·\s*feature\/login/);
+    expect(within(webHeading).getByRole("button", { name: "New chat in feature/login" })).toBeInTheDocument();
+    expect(within(webHeading).getByTestId("sidebar-project-actions-p-web")).toBeInTheDocument();
+    expect(within(section("web")).getAllByRole("button", { name: "New chat in web" })).toHaveLength(1);
+    expect(within(webHeading).queryByRole("button", { name: "New chat in web" })).toBeNull();
+  });
+
   it("has one project filter, the nav's switcher: the Chats heading has none of its own", () => {
     renderSidebar();
     const heading = screen.getByTestId("sidebar-chats-heading");

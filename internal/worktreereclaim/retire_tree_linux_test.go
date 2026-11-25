@@ -342,6 +342,76 @@ func TestRetirementTreeRemovesLinksWithoutTouchingTheirTargets(t *testing.T) {
 	}
 }
 
+// pnpm's store is content-addressed and hard-linked into every install, so
+// one inode has several names inside one tree and hundreds across a machine.
+// Unlinking one name moves the link count and ctime of every other: neither
+// the tree's own unlinks nor another tree's may stop the deletion. A write to
+// a shared file's content still does.
+func TestRetirementTreeRemovesSharedHardLinks(t *testing.T) {
+	store := filepath.Join(t.TempDir(), "store-LICENSE")
+	share := func(root string, names ...string) {
+		t.Helper()
+		for _, n := range names {
+			p := filepath.Join(root, "node_modules", ".pnpm", n, "LICENSE")
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Link(store, p); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	t.Run("names in the tree and elsewhere", func(t *testing.T) {
+		write(t, store, "MIT")
+		defer os.Remove(store)
+		root := retirementFixture(t)
+		share(root, "a@1.0.0", "b@1.0.0", "c@1.0.0")
+		elsewhere := t.TempDir()
+		share(elsewhere, "z@1.0.0")
+		tree, err := inspectRetirementTree(context.Background(), root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tree.close()
+		// Another install goes away between the inspection and the deletion.
+		if err := os.Remove(filepath.Join(elsewhere, "node_modules", ".pnpm", "z@1.0.0", "LICENSE")); err != nil {
+			t.Fatal(err)
+		}
+		if err := tree.validate(context.Background()); err != nil {
+			t.Fatalf("another tree's unlink changed this one: %v", err)
+		}
+		if err := tree.remove(context.Background(), func() error { return nil }); err != nil {
+			t.Fatalf("shared links stopped the deletion: %v", err)
+		}
+		if exists(root) {
+			t.Fatal("tree was not removed")
+		}
+		if b, err := os.ReadFile(store); err != nil || string(b) != "MIT" {
+			t.Fatalf("the store's copy was touched: %q %v", b, err)
+		}
+	})
+	t.Run("a write to the shared content", func(t *testing.T) {
+		write(t, store, "MIT")
+		defer os.Remove(store)
+		root := retirementFixture(t)
+		share(root, "a@1.0.0", "b@1.0.0")
+		tree, err := inspectRetirementTree(context.Background(), root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tree.close()
+		if err := os.WriteFile(store, []byte("rewritten, longer than before"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := tree.remove(context.Background(), func() error { return nil }); err == nil {
+			t.Fatal("a tree whose shared file was rewritten was removed")
+		}
+		if !exists(filepath.Join(root, ".git")) {
+			t.Fatal("recovery pointer removed")
+		}
+	})
+}
+
 // A regenerable subtree is removed whole, the directory itself included,
 // and holds like a checkout does on a protected name or a nested repository.
 func TestRegenerableTreeRemovesTheDirectoryAndHoldsLikeRetirement(t *testing.T) {

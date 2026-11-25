@@ -72,7 +72,7 @@ import { orgPath } from "../Forge/Console/paths";
 import { ProjectsOverview } from "../Forge/Console/ProjectsOverview";
 import { AreaShell } from "../Layout/AreaShell";
 import { useShellSeveral } from "../Layout/sidebar/shellProject";
-import { chatSetupNeeded } from "../OnboardingFlow/onboardingGate";
+import { chatSetupNeeded } from "../OnboardingFlow/onboardingGatePolicy";
 import { SetUpChatsCard } from "../OnboardingFlow/SetUpChatsCard";
 import { useChatSetup } from "../OnboardingFlow/useChatSetup";
 import { AppChip } from "./AppChip";

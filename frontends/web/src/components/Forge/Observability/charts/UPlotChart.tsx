@@ -67,7 +67,9 @@
  * page); the keyboard focuses the figure and steps with the arrow keys, Home
  * and End, and Escape clears, with the sample announced in a live region.
  * The state and the gestures are useChartHover's, the arithmetic chartHover's,
- * shared with LiveState/Sparkline.
+ * shared with the SVG charts (HeadlineBars, HeatmapChart). A word-sized line
+ * in a table row or beside a figure is this chart too (`compact`, a fixed
+ * width from `className`): there is no second sparkline.
  */
 
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
@@ -189,6 +191,12 @@ export interface UPlotChartProps {
   timestamps: number[];
   series: ChartSeries[];
   unit?: ValueUnit;
+  /**
+   * How a value reads, where `unit` is not precise enough (coverage to one
+   * decimal: "74.2%"). It replaces the unit's formatter everywhere the chart
+   * writes a value: the axis, the legend, the tooltip and the caption.
+   */
+  format?: (value: number) => string;
   height: number;
   /** The figure's accessible name ("Request rate for api"). */
   label: string;
@@ -231,6 +239,13 @@ export interface UPlotChartProps {
    * chart says which. `bucketSeconds` names the bucket in that note.
    */
   calendar?: { timezone: "UTC"; bucketSeconds?: number };
+  /**
+   * Whether the chart reads the sample under the pointer (HOVER, below).
+   * Default: yes, a sparkline included. `false` is for a picture that only
+   * stands for something else, a preview whose every pixel is a link: no
+   * crosshair, no tooltip, and not a stop for the keyboard.
+   */
+  hover?: boolean;
 }
 
 const NO_BANDS: readonly ChartBand[] = [];
@@ -239,6 +254,7 @@ export function UPlotChart({
   timestamps: timestampsProp,
   series: seriesProp,
   unit,
+  format,
   height,
   label,
   compact = false,
@@ -255,6 +271,7 @@ export function UPlotChart({
   onExemplarsPlaced,
   window: requested,
   calendar: calendarProp,
+  hover: hoverable = true,
 }: UPlotChartProps) {
   // Callers build these arrays afresh on every render, and the chart below is
   // rebuilt whenever one changes identity: a page re-render (a tour step, a
@@ -272,6 +289,14 @@ export function UPlotChart({
   placedCallback.current = onExemplarsPlaced;
   const cursorCallback = useRef(onCursor);
   cursorCallback.current = onCursor;
+  // Read through a ref: callers pass a fresh arrow each render, and the chart is not rebuilt for it.
+  const formatRef = useRef(format);
+  formatRef.current = format;
+  const valueText = useCallback(
+    (value: number | null | undefined, valueUnit: ValueUnit | undefined) =>
+      value === null || value === undefined || !Number.isFinite(value) || !formatRef.current ? formatValue(value, valueUnit) : formatRef.current(value),
+    []
+  );
   const chartRef = useRef<uPlot | null>(null);
   const figureRef = useRef<HTMLElement>(null);
   const captionId = useId();
@@ -397,6 +422,7 @@ export function UPlotChart({
       // the previous evening for anyone west of Greenwich.
       ...(calendar ? { tzDate: (ts: number) => uPlot.tzDate(new Date(ts * 1000), calendar.timezone) } : {}),
       cursor: {
+        show: hoverable,
         drag: { x: false, y: false },
         // A sparkline is a vertical rule only; a full chart keeps its horizontal guide.
         y: !compact,
@@ -430,7 +456,7 @@ export function UPlotChart({
           (u: uPlot) => {
             const idx = u.cursor.idx ?? null;
             cursorCallback.current?.(idx);
-            if (mirroringRef.current) return;
+            if (mirroringRef.current || !hoverable) return;
             const revision = ++selectionRevision.current;
             showSampleRef.current(idx, "pointer");
             // The mouse left, but the keys or a finger hold a sample (a tap is followed by
@@ -464,7 +490,7 @@ export function UPlotChart({
               grid: { stroke: palette.grid, width: 1 },
               ticks: { show: false },
               size: 64,
-              values: (_u, splits) => splits.map((value) => formatValue(value, unit)),
+              values: (_u, splits) => splits.map((value) => valueText(value, unit)),
             },
           ],
       series: [
@@ -498,8 +524,8 @@ export function UPlotChart({
             spanGaps: false,
             // A stacked column holds the running total; the cursor reads the series' own value.
             value: stacked
-              ? (_u: uPlot, _value: number | null, _seriesIdx: number, idx: number | null) => formatValue(idx === null ? null : (s.values[idx] ?? null), unit)
-              : (_u: uPlot, value: number | null) => formatValue(value, unit),
+              ? (_u: uPlot, _value: number | null, _seriesIdx: number, idx: number | null) => valueText(idx === null ? null : (s.values[idx] ?? null), unit)
+              : (_u: uPlot, value: number | null) => valueText(value, unit),
           };
         }),
       ],
@@ -530,7 +556,7 @@ export function UPlotChart({
       chart?.destroy();
       if (chartRef.current === chart) chartRef.current = null;
     };
-  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers, shown, legend, area, stacked, barred, exemplars, extent, calendar]);
+  }, [data, series, timestamps.length, height, unit, valueText, hoverable, compact, themeVersion, markers, shown, legend, area, stacked, barred, exemplars, extent, calendar]);
 
   // Highlight without a rebuild: uPlot dims every other series in place.
   // Re-applied after a rebuild too (a new chart starts unfocused).
@@ -547,14 +573,14 @@ export function UPlotChart({
 
   const bucket = calendar ? bucketName(calendar.bucketSeconds) : "";
   const calendarNote = calendar ? `${bucket ? `${bucket} buckets` : "Buckets"}: ${calendar.timezone} calendar dates` : "";
-  const caption = [describeSeries(series, unit), describeMarkers(markers), describeBands(shown), calendarNote && `${calendarNote}.`].filter(Boolean).join(" ");
+  const caption = [describeSeries(series, unit, valueText), describeMarkers(markers), describeBands(shown), calendarNote && `${calendarNote}.`].filter(Boolean).join(" ");
   const sampleSec = hover ? timestamps[hover.index] : undefined;
   const sampleTime = sampleSec === undefined ? "" : formatSampleTime(sampleSec, calendar);
   const rows = useMemo(
-    () => (hover ? sampleRows(series, hover.index, unit, (i) => tokenColor(series[i]!.color ?? (series[i]!.tone ? TONE_VAR[series[i]!.tone!] : chartToken(i)))) : []),
-    [hover, series, unit]
+    () => (hover ? sampleRows(series, hover.index, unit, (i) => tokenColor(series[i]!.color ?? (series[i]!.tone ? TONE_VAR[series[i]!.tone!] : chartToken(i))), valueText) : []),
+    [hover, series, unit, valueText]
   );
-  const interactive = timestamps.length > 0;
+  const interactive = hoverable && timestamps.length > 0;
 
   return (
     <figure
@@ -619,7 +645,7 @@ export function UPlotChart({
           </p>
         </>
       )}
-      {hover && sampleTime && <ChartTooltip anchor={hover.anchor} time={sampleTime} rows={rows} />}
+      {interactive && hover && sampleTime && <ChartTooltip anchor={hover.anchor} time={sampleTime} rows={rows} />}
     </figure>
   );
 }
@@ -792,7 +818,11 @@ export function isolatedIndexes(values: ArrayLike<number | null | undefined>): n
 }
 
 /** "Requests: latest 12/s, between 3/s and 40/s. Errors: no data." */
-export function describeSeries(series: ChartSeries[], unit: ValueUnit | undefined): string {
+export function describeSeries(
+  series: ChartSeries[],
+  unit: ValueUnit | undefined,
+  format: (value: number | null, unit: ValueUnit | undefined) => string = formatValue
+): string {
   return series
     .map((s) => {
       const present = s.values.filter((value): value is number => value !== null && Number.isFinite(value));
@@ -800,7 +830,7 @@ export function describeSeries(series: ChartSeries[], unit: ValueUnit | undefine
       const latest = present[present.length - 1];
       const min = Math.min(...present);
       const max = Math.max(...present);
-      return `${s.label}: latest ${formatValue(latest, unit)}, between ${formatValue(min, unit)} and ${formatValue(max, unit)}.`;
+      return `${s.label}: latest ${format(latest, unit)}, between ${format(min, unit)} and ${format(max, unit)}.`;
     })
     .join(" ");
 }

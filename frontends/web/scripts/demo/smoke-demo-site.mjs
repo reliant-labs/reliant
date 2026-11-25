@@ -20,7 +20,7 @@
 //    - the build story (/forge/demo?section=built) showing no recorded build;
 //    - a page with no `[data-shell=demo]` root, or not in the app's shell (no
 //      `[data-testid=shell-nav]`: every page of the demo is a page of the app's
-//      one shell, Layout/shell/AppShell.tsx, with the demo's nav, demoNav.ts);
+//      one shell, Layout/shell/AppShell.tsx, with the demo's nav, demoNavConfig.ts);
 //    - the sample image's preview (Storage, staging) not rendering, or its URL
 //      not same-origin or shaped like a presigned GCS/S3 link.
 //    Per page it also prints how often "Sample data isn't available" showed (an
@@ -31,7 +31,7 @@
 //    drawer, opened by the page header's toggle, `[data-testid=shell-nav-toggle]`).
 //    The nav is the shell's (`[data-testid=shell-nav]`), drawn from the
 //    signed-in app's own items in its order (Layout/sidebar/navConfig/hybrid.ts,
-//    Forge/Demo/demoNav.ts) plus the demo's own rows: Dashboards, Analytics,
+//    Forge/Demo/demoNavConfig.ts) plus the demo's own rows: Dashboards, Analytics,
 //    Deployments, Tests, Security and Configure are buttons that fold, and must
 //    hold their pages (navGroups below); Observability is a drill-in (navDrill):
 //    its row opens its Overview and its rows replace the nav under a "‹ Back"

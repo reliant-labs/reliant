@@ -54,7 +54,9 @@ export function ShellNavColumn({ config, slots, shell, pathname, search, onNavig
   return (
     <div
       ref={ref}
-      className="flex h-full flex-col bg-background"
+      // The space under the host's own rows (AppShell's macOS title strip), not
+      // h-full: 100% plus that strip pushed the footer (Settings) off a short window.
+      className="flex min-h-0 flex-1 flex-col bg-background"
       data-onboarding="left-sidebar"
       // Marks the focus context for the keyboard dispatcher and gives the pane
       // something focusable, so "focus the chat list" has a target.

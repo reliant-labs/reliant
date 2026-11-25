@@ -2,7 +2,7 @@
  * OnboardingGate — a user who has not finished onboarding goes through it
  * before a CHAT route, and comes back to the page they asked for. Every other
  * page works without a machine, so it never sends anyone to the wizard (U6:
- * the gate is scoped to the chat routes; onboardingGate.ts).
+ * the gate is scoped to the chat routes; onboardingGatePolicy.ts).
  *
  * These tests drive a real memory router and assert where the user ENDS UP,
  * not that something asked to navigate.
@@ -35,7 +35,7 @@ import {
   onboardingGateTarget,
   routeRequiresOnboarding,
   type ChatSetup,
-} from "../onboardingGate";
+} from "../onboardingGatePolicy";
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { resetShellForTests } from "@/lib/shell";
 import { onboardingSearchSchema } from "@/routeSchemas";

@@ -4,9 +4,9 @@
  * The pure half of a chart's hover read-out: which sample is under the
  * pointer, where the arrow keys move it, what the tooltip says about it and
  * where the tooltip goes. useChartHover.ts is the stateful half, ChartTooltip
- * the bubble; UPlotChart and LiveState/Sparkline both read through them, so a
- * dashboard line, a figure's sparkline and a gallery card's preview all read
- * a sample the same way.
+ * the bubble; UPlotChart, HeadlineBars and HeatmapChart all read through
+ * them, so a dashboard line, a figure's sparkline, a gallery card's preview, a
+ * headline's bars and a heatmap's column all read a sample the same way.
  */
 
 import { formatValue, type ValueUnit } from "../format";
@@ -31,6 +31,23 @@ export function nearestIndex(timestamps: readonly number[], sec: number): number
 export function indexAtFraction(timestamps: readonly number[], extent: readonly [number, number], fraction: number): number | null {
   const clamped = Math.min(1, Math.max(0, fraction));
   return nearestIndex(timestamps, extent[0] + clamped * (extent[1] - extent[0]));
+}
+
+/**
+ * The slot under viewport x `clientX` when a plot spanning `rect` is cut into
+ * `length` equal slots, one per sample (a bar chart's buckets, a heatmap's
+ * columns), clamped to the first and last; null when there are none.
+ */
+export function slotIndexAt(rect: { left: number; width: number }, clientX: number, length: number): number | null {
+  if (length <= 0 || !(rect.width > 0) || !Number.isFinite(clientX)) return null;
+  const fraction = (clientX - rect.left) / rect.width;
+  return Math.min(length - 1, Math.max(0, Math.floor(fraction * length)));
+}
+
+/** Where slot `index` of `length` equal slots across `rect` sits: its centre, and the plot's top and bottom. */
+export function slotAnchor(rect: { left: number; width: number; top: number; bottom: number }, index: number, length: number): SampleAnchor | null {
+  if (length <= 0 || index < 0 || index >= length) return null;
+  return { x: rect.left + ((index + 0.5) / length) * rect.width, top: rect.top, bottom: rect.bottom };
 }
 
 /**
