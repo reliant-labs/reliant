@@ -518,7 +518,7 @@ func (s *Service) SendMessage(
 		var existingWorkflow *db.Workflow
 
 		err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
-			wf, err := s.deps.Repo.GetWorkflow(txCtx, workflowID)
+			wf, err := s.deps.Workflows.LoadWorkflow(txCtx, workflowID)
 			if err != nil {
 				return err
 			}
