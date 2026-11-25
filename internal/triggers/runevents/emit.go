@@ -45,18 +45,6 @@ const (
 // an unbounded transcript in either place is a cost and an injection surface.
 const MaxTextBytes = 4096
 
-// Store is what the emitter reads and writes; every call honors the ambient
-// RunTx transaction. NewStore is the production one over the generated run
-// event and chat stores. The chat itself is read through chatviews.Of(store):
-// the store's own GetChat when it has one (NewStore's does), else the
-// generated chat store over its database handle.
-type Store interface {
-	HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error)
-	CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error)
-	LockChatForRunEvent(ctx context.Context, chatID string) error
-	CountOtherPendingBlockers(ctx context.Context, chatID, excludeID string) (int, error)
-}
-
 // Terminal describes a root run reaching a terminal state.
 type Terminal struct {
 	ChatID       string
