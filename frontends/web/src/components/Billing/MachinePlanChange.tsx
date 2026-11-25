@@ -1,14 +1,14 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 import {
-  BillingService,
   type ChangeMachinePlanResponse,
   type PreviewMachinePlanChangeResponse,
 } from "@/gen/controlplane/services/billing/v1/billing_pb";
-import { getControlPlaneClient } from "@/services/controlPlane/client";
+import { billingServiceKeys, billingServiceMutations, usePreviewMachinePlanChange } from "@/hooks/controlplane/billing-service-hooks_gen";
+import { CLOUD_BILLING_READS, refreshing } from "@/hooks/billingKeys";
 import { useActiveOrg } from "@/hooks/useOrgs";
-import { cloudBillingKeys } from "@/hooks/useCloudBillingQueries";
+import { keyNamesOrg } from "@/lib/orgScope";
 import { errorReason } from "@/lib/errorReasons";
 import Button from "@/components/forge-ui/button";
 import { settingsPath } from "@/lib/paths";
@@ -124,9 +124,7 @@ function OrgMachinePlanChange({
   onKeepCurrentPlan: (currentPlanId: string) => void;
 }) {
   const queryClient = useQueryClient();
-  const quote = useQuery({
-    queryKey: ["machine-plan-change", orgId, planId],
-    queryFn: () => getControlPlaneClient(BillingService).previewMachinePlanChange({ orgId, planId }),
+  const quote = usePreviewMachinePlanChange({ orgId, planId }, {
     enabled: !!orgId,
     retry: false,
     staleTime: 0,
@@ -135,23 +133,29 @@ function OrgMachinePlanChange({
   });
   const change = useMutation({
     mutationFn: (q: PreviewMachinePlanChangeResponse) =>
-      getControlPlaneClient(BillingService).changeMachinePlan({
-        orgId,
-        planId,
-        pricingVersion: q.pricingVersion,
-        prorationDate: q.prorationDate,
-        termsSha256: q.termsSha256,
-      }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: cloudBillingKeys.computeSubscription });
-      void queryClient.invalidateQueries({ queryKey: ["cloud-billing"] });
-      void queryClient.invalidateQueries({ queryKey: ["machine-plan-change", orgId] });
-    },
+      billingServiceMutations(queryClient).changeMachinePlan(
+        {
+          orgId,
+          planId,
+          pricingVersion: q.pricingVersion,
+          prorationDate: q.prorationDate,
+          termsSha256: q.termsSha256,
+        },
+        {
+          invalidate: (qc) => {
+            // The billing dashboard, and this org's plan-change quotes.
+            refreshing(...CLOUD_BILLING_READS)(qc);
+            void qc.invalidateQueries({
+              queryKey: billingServiceKeys.previewMachinePlanChange.all,
+              predicate: (query) => keyNamesOrg(query.queryKey, orgId),
+            });
+          },
+        },
+      ),
     onError: (err) => {
       if (!isDefinitiveRefusal(err)) {
         // The change may have been made: let the billing views catch up.
-        void queryClient.invalidateQueries({ queryKey: cloudBillingKeys.computeSubscription });
-        void queryClient.invalidateQueries({ queryKey: ["cloud-billing"] });
+        refreshing(...CLOUD_BILLING_READS)(queryClient);
         return;
       }
       const reason = errorReason(err);
