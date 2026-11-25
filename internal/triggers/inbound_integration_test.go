@@ -110,7 +110,7 @@ func TestInboundLaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *testi
 			require.NoError(t, err)
 			require.Equal(t, string(core.TriggerEventLaunched), out.Outcome)
 
-			chat, err := f.repo.GetChat(ctx, out.ChatID)
+			chat, err := store.GetChat(ctx, f.repo.ORM(), out.ChatID)
 			require.NoError(t, err)
 			require.NotNil(t, chat.ActiveDaemonID, "the run is pinned to a daemon")
 			assert.Equal(t, f.trigger.DaemonID, *chat.ActiveDaemonID, "the run is pinned to the trigger's daemon")

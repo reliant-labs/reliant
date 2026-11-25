@@ -245,7 +245,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	assert.Equal(t, "Invoice 1234 from Acme", data["subject"], "trigger.payload.data.subject reached the run")
 	assert.Equal(t, "Billing <billing@acme.example>", data["from"])
 	assert.NotContains(t, data, "text", "no body in the payload")
-	chat, err := repo.GetChat(ctx, *launched.ChatID)
+	chat, err := extstore.GetChat(ctx, repo.ORM(), *launched.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, ann.userID, chat.UserID)
 	// The newsletter was recorded and skipped by the CEL filter.

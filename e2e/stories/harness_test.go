@@ -913,7 +913,7 @@ func TextOf(m MessageWithBlocks) string {
 // Chat fetches the chat row.
 func (h *Harness) Chat(chatID string) *db.Chat {
 	h.T.Helper()
-	row, err := h.Stack.Repo.GetChat(h.Ctx, chatID)
+	row, err := store.GetChat(h.Ctx, h.Stack.Repo.ORM(), chatID)
 	require.NoError(h.T, err, "get chat")
 	return row
 }

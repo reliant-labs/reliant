@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonquery"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -150,7 +151,7 @@ func shortMachineWait() *machineWait {
 
 func (f *chatMachineRecovery) pinIs(t *testing.T, want string) {
 	t.Helper()
-	chat, err := f.h.Repo().GetChat(context.Background(), f.chat)
+	chat, err := store.GetChat(context.Background(), f.h.Repo().ORM(), f.chat)
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, want, *chat.ActiveDaemonID)
@@ -204,7 +205,7 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	require.NoError(t, err)
 	require.True(t, wakeOut.Waiting || wakeOut.NotComing != "", "nil snapshot must not consider online cicd ready for this chat")
 
-	chat, err := f.h.Repo().GetChat(ctx, f.chat)
+	chat, err := store.GetChat(ctx, f.h.Repo().ORM(), f.chat)
 	require.NoError(t, err)
 	sel := toolDaemonSelector("", chatDaemonSelector(chat, nil))
 	_, err = f.remote.EnsureWorkspace(ctx, f.user, sel, toolexec.WorkspaceEnsureRequest{Path: f.path})
@@ -214,7 +215,7 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	mcp := bound.MCP.EnsureProjectServersLoaded(toolCtx, f.path)
 	require.NotEmpty(t, mcp.Errors)
 	var toolsOut ExecuteToolsOutput
-	err = f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: f.remote, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, ExecuteToolsInput{
+	err = f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: f.remote, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, ExecuteToolsInput{
 		ChatID: f.chat, Thread: f.chat, ProjectPath: f.path,
 		ToolCalls: []message.ToolCall{{ID: uuid.NewString(), Name: "shell", Input: `{"command":"pwd"}`}},
 	}, &toolsOut)

@@ -16,6 +16,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The owner's report: the new-chat page let a chat start in a workspace that
@@ -76,7 +77,7 @@ func TestStartChatInAWorkspaceOnItsOwnMachine(t *testing.T) {
 		r.DaemonId = ptr.Of(machineB)
 	})
 	require.NoError(t, err)
-	chat, err := e.repo.GetChat(e.ctx, resp.Msg.GetChat().GetId())
+	chat, err := store.GetChat(e.ctx, e.repo.ORM(), resp.Msg.GetChat().GetId())
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, machineB, *chat.ActiveDaemonID)
