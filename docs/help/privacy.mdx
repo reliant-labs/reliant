@@ -166,6 +166,8 @@ Each total holds counts (calls, retried attempts, tokens, cost when it is known)
 
 **How long we keep them:** until you delete your account, which deletes your per-member totals. Deleting a project deletes the per-member totals of its calls, and folds the organization's totals for it into its totals with no project, so they no longer name the project. An organization's totals are kept after a member is deleted, because they name no one.
 
+**Who sees them:** every member of an organization sees its totals, and never a breakdown that fewer than five members contributed to: those are merged into "Other". What the organization paid is shown only to members who hold its billing:read permission. You always see your own per-member totals. An organization's owners and admins can also look at one member's totals; each time they do, we record who looked, at whom and over which days, and keep that record as long as the organization uses Reliant. Its admins can read every such record, and you can read the ones about you.
+
 ## Telemetry
 
 Both kinds of telemetry are **on by default**. To turn them off, go to **Settings → Privacy**.
@@ -312,6 +314,7 @@ Go to **Settings → Account → Delete account**, or email support@reliantlabs.
 | Model usage daily totals | Until you delete your account |
 | Insights daily totals per member | Until you delete your account, or the project they belong to |
 | Insights daily totals per organization (no account IDs) | As long as the organization uses Reliant |
+| Records of an admin looking at one member's Insights totals | As long as the organization uses Reliant |
 | Analytics events | Up to 90 days |
 | Usage data about the visitors to a hosted app, including the daily visitor code | Up to 90 days by default, or the shorter period the app is set to |
 | A day's random value for the daily visitor code | Held in memory only and deleted shortly after its day ends (never more than 48 hours). Never written to disk or to a backup |

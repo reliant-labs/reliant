@@ -790,6 +790,55 @@ func RequireOrgAdmin(ctx context.Context, userID, orgID string) error {
 	return ErrNotOrgAdmin
 }
 
+// RequireOrgMemberFresh decides a read every live member of an org may make
+// (the org's Insights team view, a member's own numbers in it;
+// dev-docs/design/agent-analytics.md §3.6): nil when userID holds a role in
+// orgID right now (owner, admin or member).
+//
+// The role is asked fresh (RoleFresh), never from the membership cache, so a
+// removed member stops at the next read. Any credential of the member may
+// ask; which credentials may is the caller's to narrow. It fails closed: a
+// credential bound to another org is ErrDenied, a non-member and a member
+// whose role control-plane cannot name are ErrNotOrgMemberRead, and a context
+// with no Membership, or one that cannot name roles, and an outage are
+// ErrMembershipUnavailable.
+func RequireOrgMemberFresh(ctx context.Context, userID, orgID string) error {
+	if userID == "" || orgID == "" {
+		return ErrDenied
+	}
+	if bound, ok := boundOrg(ctx); ok && bound != orgID {
+		logging.InfoContext(ctx, "[authz] a credential bound to another org; denying an org read", "user_id", userID, "credential_org", bound, "org_id", orgID)
+		recordCredentialRefusal(ctx, orgID)
+		return ErrDenied
+	}
+	m := membershipOf(ctx)
+	if m == nil {
+		logging.ErrorContext(ctx, "[authz] no membership on the context; denying an org read (a path was never wired with authz.WithMembership)",
+			"user_id", userID, "org_id", orgID)
+		return ErrMembershipUnavailable
+	}
+	roles, ok := m.(orgRoles)
+	if !ok {
+		logging.ErrorContext(ctx, "[authz] the membership on the context cannot name roles; denying an org read",
+			"user_id", userID, "org_id", orgID)
+		return ErrMembershipUnavailable
+	}
+	role, known, err := roles.RoleFresh(ctx, userID, orgID)
+	if err != nil {
+		logging.WarnContext(ctx, "[authz] could not read the org role; denying an org read", "user_id", userID, "org_id", orgID, "error", err)
+		return ErrMembershipUnavailable
+	}
+	switch {
+	case known && (role == "owner" || role == "admin" || role == "member"):
+		return nil
+	case known:
+		return ErrNotOrgMemberRead
+	default:
+		logging.InfoContext(ctx, "[authz] the org role is unknown (an older control plane?); denying an org read", "user_id", userID, "org_id", orgID)
+		return ErrNotOrgMemberRead
+	}
+}
+
 // orgScopes is a Membership that also names the org-administration scopes a
 // member is granted org-wide, asked of control-plane now rather than from a
 // cache. *orgs.Resolver is one. member is false for a non-member and when the

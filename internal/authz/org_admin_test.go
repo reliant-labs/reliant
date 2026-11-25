@@ -88,3 +88,48 @@ func TestRequireOrgAdminRecordsCredentialRefusal(t *testing.T) {
 		t.Fatalf("CredentialRefusal = %q, %q, %v; want globex, acme, true", bound, refused, ok)
 	}
 }
+
+func TestRequireOrgMemberFresh(t *testing.T) {
+	asks := 0
+	m := roleMembers{
+		roles:   map[string]map[string]string{"olive": {"acme": "owner"}, "adam": {"acme": "admin"}, "mia": {"acme": "member"}},
+		unknown: map[string]bool{"uma": true},
+		asks:    &asks,
+	}
+	ctx := WithMembership(context.Background(), m)
+	cases := []struct {
+		name      string
+		ctx       context.Context
+		user, org string
+		want      error
+	}{
+		{"owner", ctx, "olive", "acme", nil},
+		{"admin", ctx, "adam", "acme", nil},
+		{"member", ctx, "mia", "acme", nil},
+		{"a member through a software credential", WithCredentialKind(ctx, CredentialKindSoftware), "mia", "acme", nil},
+		{"non-member", ctx, "nora", "acme", ErrNotOrgMemberRead},
+		{"member of another org", ctx, "mia", "globex", ErrNotOrgMemberRead},
+		{"role unknown (older control plane)", ctx, "uma", "acme", ErrNotOrgMemberRead},
+		{"no caller", ctx, "", "acme", ErrDenied},
+		{"no org", ctx, "mia", "", ErrDenied},
+		{"credential bound to another org", WithCredentialOrg(ctx, "globex"), "mia", "acme", ErrDenied},
+		{"outage", WithMembership(context.Background(), roleMembers{err: errors.New("down")}), "mia", "acme", ErrMembershipUnavailable},
+		{"membership that cannot name roles", WithMembership(context.Background(), members{}), "mia", "acme", ErrMembershipUnavailable},
+		{"no membership wired", context.Background(), "mia", "acme", ErrMembershipUnavailable},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RequireOrgMemberFresh(tc.ctx, tc.user, tc.org); !errors.Is(got, tc.want) || (tc.want == nil && got != nil) {
+				t.Fatalf("RequireOrgMemberFresh(%q, %q) = %v, want %v", tc.user, tc.org, got, tc.want)
+			}
+		})
+	}
+
+	// Every decision asks afresh: two decisions, two asks.
+	asks = 0
+	_ = RequireOrgMemberFresh(ctx, "mia", "acme")
+	_ = RequireOrgMemberFresh(ctx, "mia", "acme")
+	if asks != 2 {
+		t.Fatalf("RequireOrgMemberFresh asked %d times for two decisions, want 2 (never cached)", asks)
+	}
+}

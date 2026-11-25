@@ -74,6 +74,15 @@ var userScopedReads = map[string]string{
 	// authz.ProjectDelete (its owner, a live member; or an admin of its org,
 	// asked fresh, once the owner left).
 	"ListUnlaunchedTriggerEvents": readCallersFilter,
+	// Agents › Insights (internal/handlers/insights): one member's rows of
+	// one org, read only after the handler decided it — the member
+	// themselves (RequireOrgMemberFresh), or an owner or admin of the org
+	// (RequireOrgAdmin, as a person) whose drill-down was recorded first. The
+	// drill-down audit: an admin reads the org's, any other member only the
+	// records about themselves.
+	"ListInsightsMemberModelCalls": readCallersFilter,
+	"ListInsightsMemberToolCalls":  readCallersFilter,
+	"ListInsightsDrilldowns":       readCallersFilter,
 	// The inbox passes each incident through authz.Visible (itemReads.incident:
 	// its chat and its project) before showing it.
 	"ListAttentionIncidents":       readCallersFilter,
