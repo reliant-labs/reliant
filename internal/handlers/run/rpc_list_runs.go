@@ -129,7 +129,7 @@ func (s *Service) listAllRuns(
 	var events []*db.UnlaunchedTriggerEvent
 	if req.GetIncludeUnlaunchedEvents() {
 		var eventsMore bool
-		events, eventsMore, err = s.deps.Repo.ListUnlaunchedTriggerEvents(ctx, filters)
+		events, eventsMore, err = s.deps.RunLists.ListUnlaunchedTriggerEvents(ctx, filters)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list runs"))
 		}

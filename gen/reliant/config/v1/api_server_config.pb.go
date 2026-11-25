@@ -80,6 +80,11 @@ type ApiServerConfig struct {
 	IdpLoginPolicy   string `protobuf:"bytes,107,opt,name=idp_login_policy,json=idpLoginPolicy,proto3" json:"idp_login_policy,omitempty"`
 	TrustedProxyHops int32  `protobuf:"varint,108,opt,name=trusted_proxy_hops,json=trustedProxyHops,proto3" json:"trusted_proxy_hops,omitempty"`
 	AuthSelfSignup   bool   `protobuf:"varint,109,opt,name=auth_self_signup,json=authSelfSignup,proto3" json:"auth_self_signup,omitempty"`
+	// The sign-in handoff (forge devidp.HandoffRoutes, mountHandoff in
+	// login_broker.go): where a person signed in here may hand a NEW session
+	// to. The desktop app's loopback listener is http://127.0.0.1/callback
+	// (any port matches, RFC 8252). Empty, the default, serves no handoff.
+	HandoffRedirects string `protobuf:"bytes,110,opt,name=handoff_redirects,json=handoffRedirects,proto3" json:"handoff_redirects,omitempty"`
 	// The email domains allowed to sign in, comma-separated; none allows every
 	// domain. The loader trims each element and drops blank ones, which the
 	// domain whitelist already did to every entry, so " B.com," still means
@@ -410,6 +415,13 @@ func (x *ApiServerConfig) GetAuthSelfSignup() bool {
 		return x.AuthSelfSignup
 	}
 	return false
+}
+
+func (x *ApiServerConfig) GetHandoffRedirects() string {
+	if x != nil {
+		return x.HandoffRedirects
+	}
+	return ""
 }
 
 func (x *ApiServerConfig) GetAllowedEmailDomains() []string {
@@ -795,7 +807,7 @@ var File_reliant_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xbcC\n" +
+	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\x9aF\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
@@ -849,7 +861,9 @@ const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x12trusted_proxy_hops\x18l \x01(\x05B\x95\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x89\x01\n" +
 	"\x12TRUSTED_PROXY_HOPS\x1a\x010*pReverse proxies in front of this server that append to X-Forwarded-For (the sign-in rate limits' client address)R\x10trustedProxyHops\x12\x90\x01\n" +
 	"\x10auth_self_signup\x18m \x01(\bBf\x82\xce\x18b\n" +
-	"\x10AUTH_SELF_SIGNUP*NServe POST /auth/register outside development (with no delivered login policy)R\x0eauthSelfSignup\x12\x93\x01\n" +
+	"\x10AUTH_SELF_SIGNUP*NServe POST /auth/register outside development (with no delivered login policy)R\x0eauthSelfSignup\x12\xdb\x02\n" +
+	"\x11handoff_redirects\x18n \x01(\tB\xad\x02\x82\xce\x18\xa8\x02\n" +
+	"\x11HANDOFF_REDIRECTS*\x92\x02Comma-separated EXACT redirect URIs a sign-in handoff may send its one-time code to: http://127.0.0.1/<path> (a desktop app's loopback, any port), https://<sibling host>/<path>, or a private-use scheme with a dot. One bad entry turns the handoff off. Empty serves no handoffR\x10handoffRedirects\x12\x93\x01\n" +
 	"\x15allowed_email_domains\x18\x04 \x03(\tB_\x82\xce\x18[\n" +
 	"\x15ALLOWED_EMAIL_DOMAINS*BComma-separated email domains allowed to sign in (none allows all)R\x13allowedEmailDomains\x12\x9f\x01\n" +
 	"\x11disable_forge_api\x18\x06 \x01(\bBs\x82\xce\x18o\n" +
