@@ -460,6 +460,47 @@ func TestCommandCgroupBoundsAndKillsTheTree(t *testing.T) {
 	tree.Release()
 }
 
+// Before Linux 5.14 there is no cgroup.kill: Kill freezes the cgroup and
+// SIGKILLs every process in it, a member that left the process group with
+// setsid included, and thaws it.
+func TestKillFreezesWhereThereIsNoCgroupKill(t *testing.T) {
+	testkit.Slow(t, "starts real process trees in a cgroup")
+	l := cgroupLimiter(t, 100, 1000)
+	old := cgroupKillFile
+	cgroupKillFile = "cgroup.kill-absent"
+	t.Cleanup(func() { cgroupKillFile = old })
+
+	cmd := exec.Command("bash", "-c", "setsid sleep 300 & sleep 300")
+	tree := l.Prepare(cmd, Owner{})
+	if err := cmd.Start(); err != nil {
+		tree.Started(0)
+		t.Fatal(err)
+	}
+	tree.Started(cmd.Process.Pid)
+	// Both sleeps are running once the cgroup holds three processes.
+	deadline := time.Now().Add(10 * time.Second)
+	for len(cgroupPids(tree.Cgroup())) < 3 {
+		if time.Now().After(deadline) {
+			t.Fatalf("the tree holds %v, want bash and its two sleeps", cgroupPids(tree.Cgroup()))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !tree.Kill() {
+		t.Fatal("Kill without cgroup.kill failed")
+	}
+	_ = cmd.Wait()
+	for tree.Populated() {
+		if time.Now().After(deadline) {
+			t.Fatalf("the frozen kill left %v in the tree", cgroupPids(tree.Cgroup()))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if b, err := os.ReadFile(filepath.Join(tree.Cgroup(), "cgroup.freeze")); err != nil || strings.TrimSpace(string(b)) != "0" {
+		t.Fatalf("cgroup.freeze = %q (%v) after the kill, want it thawed", b, err)
+	}
+	tree.Release()
+}
+
 // Without the cgroups, a command's RLIMIT_NPROC is the reserve.
 func TestNoCgroupLowersRlimit(t *testing.T) {
 	if os.Geteuid() == 0 {

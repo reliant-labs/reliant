@@ -15,6 +15,7 @@ func realDeps(repo *db.Repo, orgs OrgResolver) Deps {
 		// composition wires.
 		WorkflowDrafts: repo,
 		Shares:         store.NewShareEventExtStore(o),
+		Members:        store.NewChatMemberExtStore(o),
 		Tx:             o,
 		Orgs:           orgs,
 	}

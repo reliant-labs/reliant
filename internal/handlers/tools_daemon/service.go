@@ -111,6 +111,9 @@ type LifecyclePublisher interface {
 	Connected(daemonID, userID, daemonType string, build daemonwire.Build)
 	Disconnected(daemonID, userID, daemonType string)
 	Activity(daemonID, userID, daemonType, reason string)
+	// UpgradeChanged publishes the upgrade state the daemon changed to, as
+	// an upgrade event (upgrade.go).
+	UpgradeChanged(daemonID, userID, daemonType string, upgrade daemonwire.Upgrade)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -170,6 +173,11 @@ type Service struct {
 	// logMachineStats writes one machine health or machine volume line;
 	// logging.InfoContext, which tests replace to capture the lines.
 	logMachineStats func(ctx context.Context, msg string, args ...any)
+
+	// nestedPasses is the nested-clone pass running for each connection and
+	// checkout on this gateway (cloneNestedReposAsync), under nestedMu.
+	nestedPasses map[nestedPassKey]*nestedPassState
+	nestedMu     sync.Mutex
 }
 
 // New creates a new tools_daemon service instance with the supplied Deps.

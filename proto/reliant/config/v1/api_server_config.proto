@@ -419,6 +419,28 @@ message ApiServerConfig {
 
   // Organization features the API server gates while they roll out.
   OrgsConfig orgs = 85;
+
+  // Chat collaboration (per-person grants on a chat) while it rolls out.
+  ChatCollaborationConfig chat_collaboration = 98;
+}
+
+// ChatCollaborationConfig gates chat collaboration (control-plane
+// docs/design/chat-collaboration.md §12): the per-person grants of
+// chat_members, and later the reply and manage decisions built on them. The
+// rules every config here follows are in config.proto's header.
+message ChatCollaborationConfig {
+  // Lets a chat's owner, and its members at manage, grant a person view,
+  // reply or manage on it (SharingService.SetChatMember). Off by default:
+  // turn it on only once every API server AND worker, and the release a
+  // rollback would return to, read chat_members, so no grant can exist while
+  // an older process could misjudge one (an older release treats every chat
+  // as having no members, which fails closed). Removing a member and listing
+  // them are never gated, so a grant made while it was on can always be
+  // taken back.
+  bool enabled = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_CHAT_COLLABORATION_ENABLED"
+    description: "Let chat owners and managers grant people view, reply or manage on a chat"
+  }];
 }
 
 // OrgsConfig gates organization features that need every replica (and the

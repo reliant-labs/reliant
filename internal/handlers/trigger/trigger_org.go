@@ -6,6 +6,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -117,3 +118,11 @@ func (s *Service) updatedTriggerOrg(ctx context.Context, userID string, existing
 // errTriggerCrossesOrgs refuses an update that would move a trigger to a
 // project of another org.
 var errTriggerCrossesOrgs = svcerr.FailedPrecondition("that project belongs to another organization; a trigger stays in its organization")
+
+// writeTrigger runs an org-checked trigger write in its own transaction. READ
+// COMMITTED is correct: the org, project and trigger-row locks the write takes
+// serialize writers, so a second one waits and re-reads rather than failing at
+// commit (store/org_lock.go).
+func (s *Service) writeTrigger(ctx context.Context, write func(ctx context.Context) error) error {
+	return s.deps.Repo.RunTx(ctx, orm.ReadCommitted, write)
+}

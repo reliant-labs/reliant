@@ -1,10 +1,8 @@
 /**
  * TanStack-Query hooks for the managed-Reliant AI settings surface (the
- * "Reliant AI" tab of Billing). Mirrors the pattern
- * in `useOnboardingQueries.ts`:
- * thin `useQuery`/`useMutation` wrappers over the `services/controlPlane`
- * async functions, with a shared `['reliantAI', ...]` query-key namespace so
- * mutations can invalidate the reads.
+ * "Reliant AI" tab of Billing): thin wrappers over the generated BillingService
+ * and LLMGatewayService hooks (hooks/controlplane/), on their generated keys,
+ * that keep the shapes the UI reads.
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -13,28 +11,28 @@ import type {
   GetCurrentUserWalletOverviewResponse,
 } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { billingServiceKeys, billingServiceMutations, billingServiceQueries } from "@/hooks/controlplane/billing-service-hooks_gen";
+import type {
+  GetLLMSpendResponse,
+  ListAvailableModelsResponse,
+  ListLLMKeysResponse,
+} from "@/gen/controlplane/services/llm_gateway/v1/llm_gateway_pb";
+import {
+  llmGatewayServiceKeys,
+  llmGatewayServiceMutations,
+  useGetLLMSpend,
+  useListAvailableModels,
+  useListLLMKeys,
+} from "@/hooks/controlplane/llm-gateway-service-hooks_gen";
 import { refreshing } from "@/hooks/billingKeys";
 import {
-  listLLMKeys,
-  listAvailableModels,
-  getLLMSpend,
-  createManagedLLMKey,
-  revokeLLMKey,
-  rotateLLMKey,
   redeemCouponResult,
   type CreateManagedKeyArgs,
   type GetLLMSpendArgs,
+  type IssuedLLMKey,
+  type LLMKey,
+  type LLMSpend,
 } from "@/services/controlPlane/reliantAI";
 import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "@/lib/orgScope";
-
-// The BillingService reads (overviews) are on the generated keys; these are
-// LLMGatewayService's.
-const KEY = {
-  keys: (orgId: string) => ["reliantAI", "keys", orgId] as const,
-  models: (orgId: string) => ["reliantAI", "models", orgId] as const,
-  spend: (args: GetLLMSpendArgs) =>
-    ["reliantAI", "spend", args.orgId, args.startDate, args.endDate] as const,
-};
 
 const reliantOverviewOf = (res: GetCurrentUserReliantOverviewResponse) => res.overview;
 const walletOverviewOf = (res: GetCurrentUserWalletOverviewResponse) => res.overview;
@@ -121,67 +119,102 @@ export function useRedeemCoupon() {
   });
 }
 
+// ─── LLMGatewayService: Reliant-managed keys, spend, available models ───
+//
+// Reads and writes on the generated hooks (hooks/controlplane/
+// llm-gateway-service-hooks_gen.ts). These wrappers keep the UI's shapes:
+// each read maps its response in `select`, and each write keeps its call
+// signature so `mutate(keyId)` and `variables` mean what they did.
+
+const keysOf = (res: ListLLMKeysResponse): LLMKey[] => res.keys;
+const modelsOf = (res: ListAvailableModelsResponse): string[] => res.models;
+const spendOf = (res: GetLLMSpendResponse): LLMSpend => ({
+  entries: res.entries,
+  totalSpend: res.totalSpend,
+  sampleDays: res.sampleDays,
+});
+
 export function useLLMKeys(orgId: string) {
-  return useQuery({
-    queryKey: KEY.keys(orgId),
-    queryFn: () => listLLMKeys(orgId),
-    enabled: !!orgId,
-    staleTime: 15_000,
-  });
+  return useListLLMKeys({ orgId }, { enabled: !!orgId, staleTime: 15_000, select: keysOf });
 }
 
 export function useAvailableModels(orgId: string, enabled = true) {
-  return useQuery({
-    queryKey: KEY.models(orgId),
-    queryFn: () => listAvailableModels(orgId),
-    enabled: !!orgId && enabled,
-    staleTime: 60_000,
-  });
+  return useListAvailableModels({ orgId }, { enabled: !!orgId && enabled, staleTime: 60_000, select: modelsOf });
 }
 
 export function useLLMSpend(args: GetLLMSpendArgs) {
-  return useQuery({
-    queryKey: KEY.spend(args),
-    queryFn: () => getLLMSpend(args),
-    enabled: !!args.orgId,
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
+  return useGetLLMSpend(
+    { orgId: args.orgId, startDate: args.startDate, endDate: args.endDate, keyId: args.keyId },
+    { enabled: !!args.orgId, staleTime: 30_000, refetchOnWindowFocus: false, select: spendOf },
+  );
+}
+
+/**
+ * The reads a key write changes: `orgId`'s key list and every spend window of
+ * `orgId`. `getLLMSpend({ orgId })` is a prefix of each of the org's spend
+ * keys, because React Query matches a key's request object partially. With no
+ * org there is nothing to refresh (both reads are disabled without one), and
+ * an empty request would match every org's spend.
+ */
+function orgKeyReads(orgId: string) {
+  if (!orgId) return false as const;
+  return refreshing(llmGatewayServiceKeys.listLLMKeys({ orgId }), llmGatewayServiceKeys.getLLMSpend({ orgId }));
+}
+
+/**
+ * CreateLLMKey: provisions a managed key and returns the one-time plaintext
+ * secret. The caller MUST surface `plaintextKey` immediately; it is never
+ * retrievable again.
+ */
+export function useCreateLLMKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: CreateManagedKeyArgs): Promise<IssuedLLMKey> => {
+      // An empty org could be filled from a later selection after async auth.
+      if (!args.orgId) throw new Error("Choose an organization before creating a key.");
+      const res = await llmGatewayServiceMutations(queryClient).createLLMKey(
+        {
+          orgId: args.orgId,
+          name: args.name,
+          models: args.models,
+          maxBudget: args.maxBudget,
+          budgetDuration: args.budgetDuration ?? "",
+        },
+        { invalidate: orgKeyReads(args.orgId) },
+      );
+      return { key: res.key, plaintextKey: res.plaintextKey };
+    },
   });
 }
 
 /**
- * Invalidates every read scoped to `orgId` (keys + spend). Used by all three
- * key mutations so the list/spend cards refresh after create/revoke/rotate.
+ * RevokeLLMKey: permanently disables a key. The immutable key id pins its org
+ * (the server checks permission against the key's org), so `orgId` only names
+ * the reads to refresh.
  */
-function useInvalidateOrg() {
-  const qc = useQueryClient();
-  return (orgId: string) => {
-    qc.invalidateQueries({ queryKey: KEY.keys(orgId) });
-    qc.invalidateQueries({ queryKey: ["reliantAI", "spend", orgId] });
-  };
-}
-
-export function useCreateLLMKey() {
-  const invalidate = useInvalidateOrg();
-  return useMutation({
-    mutationFn: (args: CreateManagedKeyArgs) => createManagedLLMKey(args),
-    onSuccess: (_data, vars) => invalidate(vars.orgId),
-  });
-}
-
 export function useRevokeLLMKey(orgId: string) {
-  const invalidate = useInvalidateOrg();
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (keyId: string) => revokeLLMKey(keyId),
-    onSuccess: () => invalidate(orgId),
+    mutationFn: async (keyId: string): Promise<void> => {
+      await llmGatewayServiceMutations(queryClient).revokeLLMKey({ keyId }, { invalidate: orgKeyReads(orgId) });
+    },
   });
 }
 
+/**
+ * RotateLLMKey: issues a fresh secret for an existing key. `gracePeriod`
+ * (e.g. "24h") keeps the old secret valid during cut-over; empty = immediate.
+ * Resource-bound like revoke.
+ */
 export function useRotateLLMKey(orgId: string) {
-  const invalidate = useInvalidateOrg();
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { keyId: string; gracePeriod?: string }) =>
-      rotateLLMKey(vars.keyId, vars.gracePeriod ?? ""),
-    onSuccess: () => invalidate(orgId),
+    mutationFn: async (vars: { keyId: string; gracePeriod?: string }): Promise<IssuedLLMKey> => {
+      const res = await llmGatewayServiceMutations(queryClient).rotateLLMKey(
+        { keyId: vars.keyId, gracePeriod: vars.gracePeriod ?? "" },
+        { invalidate: orgKeyReads(orgId) },
+      );
+      return { key: res.key, plaintextKey: res.plaintextKey };
+    },
   });
 }

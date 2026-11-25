@@ -31,7 +31,7 @@ func (s *Service) PauseChat(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
+	if !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -56,7 +56,7 @@ func (s *Service) PauseChat(
 	// scoped to every thread of the chat instead of one, and do it first.
 	threadsSvc := s.threads
 	if threadsSvc == nil {
-		threadsSvc = threads.New(threads.Deps{Repo: s.deps.Repo, Signaler: s.deps.Temporal, ToolCanceler: s.deps.Router})
+		threadsSvc = threads.New(threads.Deps{Repo: s.deps.Repo, Chats: s.chats(), Signaler: s.deps.Temporal, ToolCanceler: s.deps.Router})
 	}
 	if _, err := threadsSvc.CancelChatToolCalls(ctx, threads.CancelChatToolCallsOpts{
 		UserID: userID,

@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -29,7 +30,7 @@ func TestCancelChatToolCalls_CancelsInFlightCallsOnAllThreads(t *testing.T) {
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
 	canceler := newRecordingThreadInterruptCanceler()
-	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
 
 	rootExecuting := "toolu_" + uuid.NewString()
 	rootPending := "toolu_" + uuid.NewString()
@@ -61,7 +62,7 @@ func TestCancelChatToolCalls_LeavesOtherChatsAlone(t *testing.T) {
 	fx := newInterruptFixture(t, repo, "test-user")
 	otherFx := newInterruptFixture(t, repo, "test-user")
 	canceler := newRecordingThreadInterruptCanceler()
-	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
 
 	pausedChatCall := "toolu_" + uuid.NewString()
 	otherChatCall := "toolu_" + uuid.NewString()
@@ -88,7 +89,7 @@ func TestCancelChatToolCalls_DaemonDeliveryFailureIsNonFatal(t *testing.T) {
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
 	canceler := newRecordingThreadInterruptCanceler()
-	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
 
 	reachable := "toolu_" + uuid.NewString()
 	unreachable := "toolu_" + uuid.NewString()
@@ -115,7 +116,7 @@ func TestCancelChatToolCalls_NothingInFlightSucceeds(t *testing.T) {
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
 	canceler := newRecordingThreadInterruptCanceler()
-	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
 
 	result, err := svc.CancelChatToolCalls(ctx, CancelChatToolCallsOpts{
 		UserID: fx.userID, ChatID: fx.chatID,
@@ -135,7 +136,7 @@ func TestCancelChatToolCalls_RejectsWrongOwner(t *testing.T) {
 
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "owner-user")
-	svc := New(Deps{Repo: repo, Signaler: &recordingThreadInterruptSignaler{}})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{}})
 
 	_, err := svc.CancelChatToolCalls(ctx, CancelChatToolCallsOpts{
 		UserID: "other-user", ChatID: fx.chatID,
@@ -151,7 +152,7 @@ func TestCancelChatToolCalls_RequiresChatAndUser(t *testing.T) {
 
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
-	svc := New(Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	svc := New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 
 	_, err := svc.CancelChatToolCalls(ctx, CancelChatToolCallsOpts{UserID: fx.userID})
 	require.ErrorIs(t, err, svcerr.ErrInvalidArgument)

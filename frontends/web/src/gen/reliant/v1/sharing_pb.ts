@@ -5,10 +5,12 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../buf/validate/validate_pb";
 import { file_forge_v1_forge } from "../../forge/v1/forge_pb";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Chat } from "./chat_pb";
 import { file_reliant_v1_chat } from "./chat_pb";
 import type { ResourceVisibility } from "./common_pb";
@@ -23,7 +25,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/sharing.proto.
  */
 export const file_reliant_v1_sharing: GenFile = /*@__PURE__*/
-  fileDesc("ChhyZWxpYW50L3YxL3NoYXJpbmcucHJvdG8SCnJlbGlhbnQudjEidAoYU2V0Q2hhdFZpc2liaWxpdHlSZXF1ZXN0EhgKB2NoYXRfaWQYASABKAlCB7pIBHICEAESPgoKdmlzaWJpbGl0eRgCIAEoDjIeLnJlbGlhbnQudjEuUmVzb3VyY2VWaXNpYmlsaXR5Qgq6SAeCAQQYARgCIkwKGVNldENoYXRWaXNpYmlsaXR5UmVzcG9uc2USHgoEY2hhdBgBIAEoCzIQLnJlbGlhbnQudjEuQ2hhdBIPCgdjaGFuZ2VkGAIgASgIInoKG1NldFByb2plY3RWaXNpYmlsaXR5UmVxdWVzdBIbCgpwcm9qZWN0X2lkGAEgASgJQge6SARyAhABEj4KCnZpc2liaWxpdHkYAiABKA4yHi5yZWxpYW50LnYxLlJlc291cmNlVmlzaWJpbGl0eUIKukgHggEEGAEYAiJVChxTZXRQcm9qZWN0VmlzaWJpbGl0eVJlc3BvbnNlEiQKB3Byb2plY3QYASABKAsyEy5yZWxpYW50LnYxLlByb2plY3QSDwoHY2hhbmdlZBgCIAEoCCLdAQoWTGlzdFNoYXJlZENoYXRzUmVxdWVzdBITCgZvcmdfaWQYASABKAlIAIgBARIXCgpwcm9qZWN0X2lkGAIgASgJSAGIAQESGAoFbGltaXQYAyABKAVCCbpIBhoEGGQoABIXCgZvZmZzZXQYBCABKAVCB7pIBBoCKAASFQoIYXBwX25hbWUYBSABKAlIAogBARIkCgtwcm9qZWN0X2lkcxgGIAMoCUIPukgMkgEJEMgBIgRyAhABQgkKB19vcmdfaWRCDQoLX3Byb2plY3RfaWRCCwoJX2FwcF9uYW1lIjoKF0xpc3RTaGFyZWRDaGF0c1Jlc3BvbnNlEh8KBWNoYXRzGAEgAygLMhAucmVsaWFudC52MS5DaGF0Im4KGUxpc3RTaGFyZWRQcm9qZWN0c1JlcXVlc3QSEwoGb3JnX2lkGAEgASgJSACIAQESGAoFbGltaXQYAiABKAVCCbpIBhoEGGQoABIXCgZvZmZzZXQYAyABKAVCB7pIBBoCKABCCQoHX29yZ19pZCJDChpMaXN0U2hhcmVkUHJvamVjdHNSZXNwb25zZRIlCghwcm9qZWN0cxgBIAMoCzITLnJlbGlhbnQudjEuUHJvamVjdCLSAgoTU2hhcmVkV29ya2Zsb3dEcmFmdBIKCgJpZBgBIAEoCRIMCgRzbHVnGAIgASgJEgwKBG5hbWUYAyABKAkSGAoLZGVzY3JpcHRpb24YBCABKAlIAIgBARIPCgd1c2VyX2lkGAUgASgJEg4KBm9yZ19pZBgGIAEoCRIvCgZzdGF0dXMYByABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXMSMgoKdmlzaWJpbGl0eRgIIAEoDjIeLnJlbGlhbnQudjEuUmVzb3VyY2VWaXNpYmlsaXR5EhUKDXZpZXdlcl9hY2Nlc3MYCSABKAgSFgoJc2hhcmVkX2F0GAogASgJSAGIAQESEgoKdXBkYXRlZF9hdBgLIAEoCRISCgpkZWZpbml0aW9uGAwgASgJQg4KDF9kZXNjcmlwdGlvbkIMCgpfc2hhcmVkX2F0In4KHlNldFdvcmtmbG93RHJhZnRTaGFyaW5nUmVxdWVzdBIcCgt3b3JrZmxvd19pZBgBIAEoCUIHukgEcgIQARI+Cgp2aXNpYmlsaXR5GAIgASgOMh4ucmVsaWFudC52MS5SZXNvdXJjZVZpc2liaWxpdHlCCrpIB4IBBBgBGAIiZQofU2V0V29ya2Zsb3dEcmFmdFNoYXJpbmdSZXNwb25zZRIxCgh3b3JrZmxvdxgBIAEoCzIfLnJlbGlhbnQudjEuU2hhcmVkV29ya2Zsb3dEcmFmdBIPCgdjaGFuZ2VkGAIgASgIInQKH0xpc3RTaGFyZWRXb3JrZmxvd0RyYWZ0c1JlcXVlc3QSEwoGb3JnX2lkGAEgASgJSACIAQESGAoFbGltaXQYAiABKAVCCbpIBhoEGGQoABIXCgZvZmZzZXQYAyABKAVCB7pIBBoCKABCCQoHX29yZ19pZCJWCiBMaXN0U2hhcmVkV29ya2Zsb3dEcmFmdHNSZXNwb25zZRIyCgl3b3JrZmxvd3MYASADKAsyHy5yZWxpYW50LnYxLlNoYXJlZFdvcmtmbG93RHJhZnQyqAgKDlNoYXJpbmdTZXJ2aWNlEqoBChFTZXRDaGF0VmlzaWJpbGl0eRIkLnJlbGlhbnQudjEuU2V0Q2hhdFZpc2liaWxpdHlSZXF1ZXN0GiUucmVsaWFudC52MS5TZXRDaGF0VmlzaWJpbGl0eVJlc3BvbnNlIkiiuxhEOkIKDnNldF92aXNpYmlsaXR5EiQKBGNoYXQSB2NoYXRfaWQaE3Jlc3BvbnNlLmNoYXQudGl0bGUqCnZpc2liaWxpdHkSuwEKFFNldFByb2plY3RWaXNpYmlsaXR5EicucmVsaWFudC52MS5TZXRQcm9qZWN0VmlzaWJpbGl0eVJlcXVlc3QaKC5yZWxpYW50LnYxLlNldFByb2plY3RWaXNpYmlsaXR5UmVzcG9uc2UiUKK7GEw6SgoOc2V0X3Zpc2liaWxpdHkSLAoHcHJvamVjdBIKcHJvamVjdF9pZBoVcmVzcG9uc2UucHJvamVjdC5uYW1lKgp2aXNpYmlsaXR5EosBCg9MaXN0U2hhcmVkQ2hhdHMSIi5yZWxpYW50LnYxLkxpc3RTaGFyZWRDaGF0c1JlcXVlc3QaIy5yZWxpYW50LnYxLkxpc3RTaGFyZWRDaGF0c1Jlc3BvbnNlIi+QAgGiuxgoOiY6JHJlYWRzIG9ubHk6IGxpc3RzIHdoYXQgb3RoZXJzIHNoYXJlZBKUAQoSTGlzdFNoYXJlZFByb2plY3RzEiUucmVsaWFudC52MS5MaXN0U2hhcmVkUHJvamVjdHNSZXF1ZXN0GiYucmVsaWFudC52MS5MaXN0U2hhcmVkUHJvamVjdHNSZXNwb25zZSIvkAIBorsYKDomOiRyZWFkcyBvbmx5OiBsaXN0cyB3aGF0IG90aGVycyBzaGFyZWQS3wEKF1NldFdvcmtmbG93RHJhZnRTaGFyaW5nEioucmVsaWFudC52MS5TZXRXb3JrZmxvd0RyYWZ0U2hhcmluZ1JlcXVlc3QaKy5yZWxpYW50LnYxLlNldFdvcmtmbG93RHJhZnRTaGFyaW5nUmVzcG9uc2Uia6K7GGc6ZQoOc2V0X3Zpc2liaWxpdHkSOgoId29ya2Zsb3cSFnJlc3BvbnNlLndvcmtmbG93LnNsdWcaFnJlc3BvbnNlLndvcmtmbG93Lm5hbWUqC3dvcmtmbG93X2lkKgp2aXNpYmlsaXR5EqMBChhMaXN0U2hhcmVkV29ya2Zsb3dEcmFmdHMSKy5yZWxpYW50LnYxLkxpc3RTaGFyZWRXb3JrZmxvd0RyYWZ0c1JlcXVlc3QaLC5yZWxpYW50LnYxLkxpc3RTaGFyZWRXb3JrZmxvd0RyYWZ0c1Jlc3BvbnNlIiyiuxgoOiY6JHJlYWRzIG9ubHk6IGxpc3RzIHdoYXQgb3RoZXJzIHNoYXJlZEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge, file_reliant_v1_chat, file_reliant_v1_common, file_reliant_v1_project, file_reliant_v1_workflow]);
+  fileDesc("ChhyZWxpYW50L3YxL3NoYXJpbmcucHJvdG8SCnJlbGlhbnQudjEidAoYU2V0Q2hhdFZpc2liaWxpdHlSZXF1ZXN0EhgKB2NoYXRfaWQYASABKAlCB7pIBHICEAESPgoKdmlzaWJpbGl0eRgCIAEoDjIeLnJlbGlhbnQudjEuUmVzb3VyY2VWaXNpYmlsaXR5Qgq6SAeCAQQYARgCIkwKGVNldENoYXRWaXNpYmlsaXR5UmVzcG9uc2USHgoEY2hhdBgBIAEoCzIQLnJlbGlhbnQudjEuQ2hhdBIPCgdjaGFuZ2VkGAIgASgIInoKG1NldFByb2plY3RWaXNpYmlsaXR5UmVxdWVzdBIbCgpwcm9qZWN0X2lkGAEgASgJQge6SARyAhABEj4KCnZpc2liaWxpdHkYAiABKA4yHi5yZWxpYW50LnYxLlJlc291cmNlVmlzaWJpbGl0eUIKukgHggEEGAEYAiJVChxTZXRQcm9qZWN0VmlzaWJpbGl0eVJlc3BvbnNlEiQKB3Byb2plY3QYASABKAsyEy5yZWxpYW50LnYxLlByb2plY3QSDwoHY2hhbmdlZBgCIAEoCCLdAQoWTGlzdFNoYXJlZENoYXRzUmVxdWVzdBITCgZvcmdfaWQYASABKAlIAIgBARIXCgpwcm9qZWN0X2lkGAIgASgJSAGIAQESGAoFbGltaXQYAyABKAVCCbpIBhoEGGQoABIXCgZvZmZzZXQYBCABKAVCB7pIBBoCKAASFQoIYXBwX25hbWUYBSABKAlIAogBARIkCgtwcm9qZWN0X2lkcxgGIAMoCUIPukgMkgEJEMgBIgRyAhABQgkKB19vcmdfaWRCDQoLX3Byb2plY3RfaWRCCwoJX2FwcF9uYW1lIjoKF0xpc3RTaGFyZWRDaGF0c1Jlc3BvbnNlEh8KBWNoYXRzGAEgAygLMhAucmVsaWFudC52MS5DaGF0Im4KGUxpc3RTaGFyZWRQcm9qZWN0c1JlcXVlc3QSEwoGb3JnX2lkGAEgASgJSACIAQESGAoFbGltaXQYAiABKAVCCbpIBhoEGGQoABIXCgZvZmZzZXQYAyABKAVCB7pIBBoCKABCCQoHX29yZ19pZCJDChpMaXN0U2hhcmVkUHJvamVjdHNSZXNwb25zZRIlCghwcm9qZWN0cxgBIAMoCzITLnJlbGlhbnQudjEuUHJvamVjdCLSAgoTU2hhcmVkV29ya2Zsb3dEcmFmdBIKCgJpZBgBIAEoCRIMCgRzbHVnGAIgASgJEgwKBG5hbWUYAyABKAkSGAoLZGVzY3JpcHRpb24YBCABKAlIAIgBARIPCgd1c2VyX2lkGAUgASgJEg4KBm9yZ19pZBgGIAEoCRIvCgZzdGF0dXMYByABKA4yHy5yZWxpYW50LnYxLldvcmtmbG93RHJhZnRTdGF0dXMSMgoKdmlzaWJpbGl0eRgIIAEoDjIeLnJlbGlhbnQudjEuUmVzb3VyY2VWaXNpYmlsaXR5EhUKDXZpZXdlcl9hY2Nlc3MYCSABKAgSFgoJc2hhcmVkX2F0GAogASgJSAGIAQESEgoKdXBkYXRlZF9hdBgLIAEoCRISCgpkZWZpbml0aW9uGAwgASgJQg4KDF9kZXNjcmlwdGlvbkIMCgpfc2hhcmVkX2F0In4KHlNldFdvcmtmbG93RHJhZnRTaGFyaW5nUmVxdWVzdBIcCgt3b3JrZmxvd19pZBgBIAEoCUIHukgEcgIQARI+Cgp2aXNpYmlsaXR5GAIgASgOMh4ucmVsaWFudC52MS5SZXNvdXJjZVZpc2liaWxpdHlCCrpIB4IBBBgBGAIiZQofU2V0V29ya2Zsb3dEcmFmdFNoYXJpbmdSZXNwb25zZRIxCgh3b3JrZmxvdxgBIAEoCzIfLnJlbGlhbnQudjEuU2hhcmVkV29ya2Zsb3dEcmFmdBIPCgdjaGFuZ2VkGAIgASgIInQKH0xpc3RTaGFyZWRXb3JrZmxvd0RyYWZ0c1JlcXVlc3QSEwoGb3JnX2lkGAEgASgJSACIAQESGAoFbGltaXQYAiABKAVCCbpIBhoEGGQoABIXCgZvZmZzZXQYAyABKAVCB7pIBBoCKABCCQoHX29yZ19pZCJWCiBMaXN0U2hhcmVkV29ya2Zsb3dEcmFmdHNSZXNwb25zZRIyCgl3b3JrZmxvd3MYASADKAsyHy5yZWxpYW50LnYxLlNoYXJlZFdvcmtmbG93RHJhZnQiiwEKCkNoYXRNZW1iZXISDwoHdXNlcl9pZBgBIAEoCRIoCgRyb2xlGAIgASgOMhoucmVsaWFudC52MS5DaGF0TWVtYmVyUm9sZRISCgpncmFudGVkX2J5GAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIoIBChRTZXRDaGF0TWVtYmVyUmVxdWVzdBIYCgdjaGF0X2lkGAEgASgJQge6SARyAhABEhgKB3VzZXJfaWQYAiABKAlCB7pIBHICEAESNgoEcm9sZRgDIAEoDjIaLnJlbGlhbnQudjEuQ2hhdE1lbWJlclJvbGVCDLpICYIBBhgBGAIYAyJQChVTZXRDaGF0TWVtYmVyUmVzcG9uc2USJgoGbWVtYmVyGAEgASgLMhYucmVsaWFudC52MS5DaGF0TWVtYmVyEg8KB2NoYW5nZWQYAiABKAgiTQoXUmVtb3ZlQ2hhdE1lbWJlclJlcXVlc3QSGAoHY2hhdF9pZBgBIAEoCUIHukgEcgIQARIYCgd1c2VyX2lkGAIgASgJQge6SARyAhABIisKGFJlbW92ZUNoYXRNZW1iZXJSZXNwb25zZRIPCgdjaGFuZ2VkGAEgASgIIjIKFkxpc3RDaGF0TWVtYmVyc1JlcXVlc3QSGAoHY2hhdF9pZBgBIAEoCUIHukgEcgIQASKgAQoXTGlzdENoYXRNZW1iZXJzUmVzcG9uc2USFQoNb3duZXJfdXNlcl9pZBgBIAEoCRInCgdtZW1iZXJzGAIgAygLMhYucmVsaWFudC52MS5DaGF0TWVtYmVyEhQKDG1lbWJlcl9jb3VudBgDIAEoBRIvCgtjYWxsZXJfcm9sZRgEIAEoDjIaLnJlbGlhbnQudjEuQ2hhdE1lbWJlclJvbGUqhgEKDkNoYXRNZW1iZXJSb2xlEiAKHENIQVRfTUVNQkVSX1JPTEVfVU5TUEVDSUZJRUQQABIZChVDSEFUX01FTUJFUl9ST0xFX1ZJRVcQARIaChZDSEFUX01FTUJFUl9ST0xFX1JFUExZEAISGwoXQ0hBVF9NRU1CRVJfUk9MRV9NQU5BR0UQAzLPCwoOU2hhcmluZ1NlcnZpY2USqgEKEVNldENoYXRWaXNpYmlsaXR5EiQucmVsaWFudC52MS5TZXRDaGF0VmlzaWJpbGl0eVJlcXVlc3QaJS5yZWxpYW50LnYxLlNldENoYXRWaXNpYmlsaXR5UmVzcG9uc2UiSKK7GEQ6QgoOc2V0X3Zpc2liaWxpdHkSJAoEY2hhdBIHY2hhdF9pZBoTcmVzcG9uc2UuY2hhdC50aXRsZSoKdmlzaWJpbGl0eRK7AQoUU2V0UHJvamVjdFZpc2liaWxpdHkSJy5yZWxpYW50LnYxLlNldFByb2plY3RWaXNpYmlsaXR5UmVxdWVzdBooLnJlbGlhbnQudjEuU2V0UHJvamVjdFZpc2liaWxpdHlSZXNwb25zZSJQorsYTDpKCg5zZXRfdmlzaWJpbGl0eRIsCgdwcm9qZWN0Egpwcm9qZWN0X2lkGhVyZXNwb25zZS5wcm9qZWN0Lm5hbWUqCnZpc2liaWxpdHkSiwEKD0xpc3RTaGFyZWRDaGF0cxIiLnJlbGlhbnQudjEuTGlzdFNoYXJlZENoYXRzUmVxdWVzdBojLnJlbGlhbnQudjEuTGlzdFNoYXJlZENoYXRzUmVzcG9uc2UiL5ACAaK7GCg6JjokcmVhZHMgb25seTogbGlzdHMgd2hhdCBvdGhlcnMgc2hhcmVkEpQBChJMaXN0U2hhcmVkUHJvamVjdHMSJS5yZWxpYW50LnYxLkxpc3RTaGFyZWRQcm9qZWN0c1JlcXVlc3QaJi5yZWxpYW50LnYxLkxpc3RTaGFyZWRQcm9qZWN0c1Jlc3BvbnNlIi+QAgGiuxgoOiY6JHJlYWRzIG9ubHk6IGxpc3RzIHdoYXQgb3RoZXJzIHNoYXJlZBLfAQoXU2V0V29ya2Zsb3dEcmFmdFNoYXJpbmcSKi5yZWxpYW50LnYxLlNldFdvcmtmbG93RHJhZnRTaGFyaW5nUmVxdWVzdBorLnJlbGlhbnQudjEuU2V0V29ya2Zsb3dEcmFmdFNoYXJpbmdSZXNwb25zZSJrorsYZzplCg5zZXRfdmlzaWJpbGl0eRI6Cgh3b3JrZmxvdxIWcmVzcG9uc2Uud29ya2Zsb3cuc2x1ZxoWcmVzcG9uc2Uud29ya2Zsb3cubmFtZSoLd29ya2Zsb3dfaWQqCnZpc2liaWxpdHkSowEKGExpc3RTaGFyZWRXb3JrZmxvd0RyYWZ0cxIrLnJlbGlhbnQudjEuTGlzdFNoYXJlZFdvcmtmbG93RHJhZnRzUmVxdWVzdBosLnJlbGlhbnQudjEuTGlzdFNoYXJlZFdvcmtmbG93RHJhZnRzUmVzcG9uc2UiLKK7GCg6JjokcmVhZHMgb25seTogbGlzdHMgd2hhdCBvdGhlcnMgc2hhcmVkEogBCg1TZXRDaGF0TWVtYmVyEiAucmVsaWFudC52MS5TZXRDaGF0TWVtYmVyUmVxdWVzdBohLnJlbGlhbnQudjEuU2V0Q2hhdE1lbWJlclJlc3BvbnNlIjKiuxguOiwKCnNldF9tZW1iZXISDwoEY2hhdBIHY2hhdF9pZCoHdXNlcl9pZCoEcm9sZRKOAQoQUmVtb3ZlQ2hhdE1lbWJlchIjLnJlbGlhbnQudjEuUmVtb3ZlQ2hhdE1lbWJlclJlcXVlc3QaJC5yZWxpYW50LnYxLlJlbW92ZUNoYXRNZW1iZXJSZXNwb25zZSIvorsYKzopCg1yZW1vdmVfbWVtYmVyEg8KBGNoYXQSB2NoYXRfaWQqB3VzZXJfaWQSiAEKD0xpc3RDaGF0TWVtYmVycxIiLnJlbGlhbnQudjEuTGlzdENoYXRNZW1iZXJzUmVxdWVzdBojLnJlbGlhbnQudjEuTGlzdENoYXRNZW1iZXJzUmVzcG9uc2UiLJACAaK7GCU6IzohcmVhZHMgb25seTogd2hvIG1heSBhY2Nlc3MgYSBjaGF0QjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_timestamp, file_reliant_v1_chat, file_reliant_v1_common, file_reliant_v1_project, file_reliant_v1_workflow]);
 
 /**
  * @generated from message reliant.v1.SetChatVisibilityRequest
@@ -460,6 +462,239 @@ export const ListSharedWorkflowDraftsResponseSchema: GenMessage<ListSharedWorkfl
   messageDesc(file_reliant_v1_sharing, 12);
 
 /**
+ * ChatMember is one person's grant on a chat.
+ *
+ * @generated from message reliant.v1.ChatMember
+ */
+export type ChatMember = Message<"reliant.v1.ChatMember"> & {
+  /**
+   * @generated from field: string user_id = 1;
+   */
+  userId: string;
+
+  /**
+   * @generated from field: reliant.v1.ChatMemberRole role = 2;
+   */
+  role: ChatMemberRole;
+
+  /**
+   * Who set the level they hold now.
+   *
+   * @generated from field: string granted_by = 3;
+   */
+  grantedBy: string;
+
+  /**
+   * When they first became a member.
+   *
+   * @generated from field: google.protobuf.Timestamp created_at = 4;
+   */
+  createdAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.ChatMember.
+ * Use `create(ChatMemberSchema)` to create a new message.
+ */
+export const ChatMemberSchema: GenMessage<ChatMember> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_sharing, 13);
+
+/**
+ * @generated from message reliant.v1.SetChatMemberRequest
+ */
+export type SetChatMemberRequest = Message<"reliant.v1.SetChatMemberRequest"> & {
+  /**
+   * @generated from field: string chat_id = 1;
+   */
+  chatId: string;
+
+  /**
+   * @generated from field: string user_id = 2;
+   */
+  userId: string;
+
+  /**
+   * VIEW, REPLY or MANAGE.
+   *
+   * @generated from field: reliant.v1.ChatMemberRole role = 3;
+   */
+  role: ChatMemberRole;
+};
+
+/**
+ * Describes the message reliant.v1.SetChatMemberRequest.
+ * Use `create(SetChatMemberRequestSchema)` to create a new message.
+ */
+export const SetChatMemberRequestSchema: GenMessage<SetChatMemberRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_sharing, 14);
+
+/**
+ * @generated from message reliant.v1.SetChatMemberResponse
+ */
+export type SetChatMemberResponse = Message<"reliant.v1.SetChatMemberResponse"> & {
+  /**
+   * The grant as it now stands.
+   *
+   * @generated from field: reliant.v1.ChatMember member = 1;
+   */
+  member?: ChatMember | undefined;
+
+  /**
+   * False when the person already held the level asked for.
+   *
+   * @generated from field: bool changed = 2;
+   */
+  changed: boolean;
+};
+
+/**
+ * Describes the message reliant.v1.SetChatMemberResponse.
+ * Use `create(SetChatMemberResponseSchema)` to create a new message.
+ */
+export const SetChatMemberResponseSchema: GenMessage<SetChatMemberResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_sharing, 15);
+
+/**
+ * @generated from message reliant.v1.RemoveChatMemberRequest
+ */
+export type RemoveChatMemberRequest = Message<"reliant.v1.RemoveChatMemberRequest"> & {
+  /**
+   * @generated from field: string chat_id = 1;
+   */
+  chatId: string;
+
+  /**
+   * @generated from field: string user_id = 2;
+   */
+  userId: string;
+};
+
+/**
+ * Describes the message reliant.v1.RemoveChatMemberRequest.
+ * Use `create(RemoveChatMemberRequestSchema)` to create a new message.
+ */
+export const RemoveChatMemberRequestSchema: GenMessage<RemoveChatMemberRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_sharing, 16);
+
+/**
+ * @generated from message reliant.v1.RemoveChatMemberResponse
+ */
+export type RemoveChatMemberResponse = Message<"reliant.v1.RemoveChatMemberResponse"> & {
+  /**
+   * False when the person held no grant.
+   *
+   * @generated from field: bool changed = 1;
+   */
+  changed: boolean;
+};
+
+/**
+ * Describes the message reliant.v1.RemoveChatMemberResponse.
+ * Use `create(RemoveChatMemberResponseSchema)` to create a new message.
+ */
+export const RemoveChatMemberResponseSchema: GenMessage<RemoveChatMemberResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_sharing, 17);
+
+/**
+ * @generated from message reliant.v1.ListChatMembersRequest
+ */
+export type ListChatMembersRequest = Message<"reliant.v1.ListChatMembersRequest"> & {
+  /**
+   * @generated from field: string chat_id = 1;
+   */
+  chatId: string;
+};
+
+/**
+ * Describes the message reliant.v1.ListChatMembersRequest.
+ * Use `create(ListChatMembersRequestSchema)` to create a new message.
+ */
+export const ListChatMembersRequestSchema: GenMessage<ListChatMembersRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_sharing, 18);
+
+/**
+ * @generated from message reliant.v1.ListChatMembersResponse
+ */
+export type ListChatMembersResponse = Message<"reliant.v1.ListChatMembersResponse"> & {
+  /**
+   * @generated from field: string owner_user_id = 1;
+   */
+  ownerUserId: string;
+
+  /**
+   * The members the caller may see (see ListChatMembers), oldest first.
+   *
+   * @generated from field: repeated reliant.v1.ChatMember members = 2;
+   */
+  members: ChatMember[];
+
+  /**
+   * How many members the chat has, including those not listed.
+   *
+   * @generated from field: int32 member_count = 3;
+   */
+  memberCount: number;
+
+  /**
+   * The level the caller reads the chat at: VIEW for a viewer (a VIEW grant,
+   * or any member of the organization a chat is shared with), REPLY or
+   * MANAGE for a member holding that grant, UNSPECIFIED for the owner.
+   *
+   * @generated from field: reliant.v1.ChatMemberRole caller_role = 4;
+   */
+  callerRole: ChatMemberRole;
+};
+
+/**
+ * Describes the message reliant.v1.ListChatMembersResponse.
+ * Use `create(ListChatMembersResponseSchema)` to create a new message.
+ */
+export const ListChatMembersResponseSchema: GenMessage<ListChatMembersResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_sharing, 19);
+
+/**
+ * ChatMemberRole is the level a person holds on a chat. Levels nest: each
+ * includes everything below it. The owner is never a member.
+ *
+ * @generated from enum reliant.v1.ChatMemberRole
+ */
+export enum ChatMemberRole {
+  /**
+   * A server that predates chat collaboration, or no grant.
+   *
+   * @generated from enum value: CHAT_MEMBER_ROLE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Read the chat, as an org-wide viewer of a shared chat does.
+   *
+   * @generated from enum value: CHAT_MEMBER_ROLE_VIEW = 1;
+   */
+  VIEW = 1,
+
+  /**
+   * View, plus send messages and answer what the chat asks.
+   *
+   * @generated from enum value: CHAT_MEMBER_ROLE_REPLY = 2;
+   */
+  REPLY = 2,
+
+  /**
+   * Reply, plus steer the run, change its settings and its members.
+   *
+   * @generated from enum value: CHAT_MEMBER_ROLE_MANAGE = 3;
+   */
+  MANAGE = 3,
+}
+
+/**
+ * Describes the enum reliant.v1.ChatMemberRole.
+ */
+export const ChatMemberRoleSchema: GenEnum<ChatMemberRole> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_sharing, 0);
+
+/**
  * SharingService is read-only sharing (control-plane
  * docs/design/org-sharing.md): an owner shares a chat, project or saved
  * workflow with the live members of its organization, who can then read it,
@@ -473,6 +708,13 @@ export const ListSharedWorkflowDraftsResponseSchema: GenMessage<ListSharedWorkfl
  * person's (a session in the app): an agent's CLI login is refused, so no
  * agent reads a teammate's transcript into its context. It is not part of the
  * public SDK (proto/public-api.txt).
+ *
+ * A chat can also be shared with one person at a time (SetChatMember;
+ * control-plane docs/design/chat-collaboration.md): a grant of VIEW, REPLY or
+ * MANAGE that admits its holder while they are a live member of the chat's
+ * organization. A grant at any level reads the chat as a viewer does, even a
+ * private one; what REPLY and MANAGE add arrives rpc by rpc, each documented
+ * where it does.
  *
  * @generated from service reliant.v1.SharingService
  */
@@ -570,6 +812,61 @@ export const SharingService: GenService<{
     methodKind: "unary";
     input: typeof ListSharedWorkflowDraftsRequestSchema;
     output: typeof ListSharedWorkflowDraftsResponseSchema;
+  },
+  /**
+   * SetChatMember grants a person a level on a chat (VIEW, REPLY or MANAGE),
+   * or changes the level they hold (control-plane
+   * docs/design/chat-collaboration.md §3). A grant admits its holder only
+   * while they are a live member of the chat's organization; a VIEW grant
+   * reads the chat even when it is private.
+   *
+   * The chat's owner and its members at MANAGE may grant, as a person
+   * (PERMISSION_DENIED for any other credential, or for a member below
+   * MANAGE); anyone who cannot read the chat is NOT_FOUND. The grantee must be
+   * a live member of the chat's organization and not its owner, and a chat
+   * with no organization has no members (FAILED_PRECONDITION). A chat holds at
+   * most 25 members (FAILED_PRECONDITION). The deployment must enable chat
+   * collaboration (chat_collaboration.enabled; FAILED_PRECONDITION
+   * otherwise). Each change records one share event; granting the level
+   * already held changes nothing (changed = false).
+   *
+   * @generated from rpc reliant.v1.SharingService.SetChatMember
+   */
+  setChatMember: {
+    methodKind: "unary";
+    input: typeof SetChatMemberRequestSchema;
+    output: typeof SetChatMemberResponseSchema;
+  },
+  /**
+   * RemoveChatMember takes a person's grant on a chat away: the owner or a
+   * member at MANAGE may remove anyone but the owner, and any member may
+   * remove their own grant. It is never gated by chat_collaboration.enabled,
+   * so a grant can always be taken back. It records one share event;
+   * removing a person who holds no grant changes nothing (changed = false).
+   *
+   * @generated from rpc reliant.v1.SharingService.RemoveChatMember
+   */
+  removeChatMember: {
+    methodKind: "unary";
+    input: typeof RemoveChatMemberRequestSchema;
+    output: typeof RemoveChatMemberResponseSchema;
+  },
+  /**
+   * forge:custom — decides the caller's level on the chat once and shapes the list for it
+   *
+   * ListChatMembers lists who holds access to a chat, as the caller may see
+   * it (chat-collaboration.md §2.2): the owner and members at MANAGE see every
+   * member and level; members at REPLY see the owner and the REPLY and MANAGE
+   * members; VIEW grantees and org-wide viewers see the owner and a count.
+   * Anyone who cannot read the chat is NOT_FOUND. Ids only: names come from
+   * the organization's roster.
+   *
+   * @generated from rpc reliant.v1.SharingService.ListChatMembers
+   */
+  listChatMembers: {
+    methodKind: "unary";
+    input: typeof ListChatMembersRequestSchema;
+    output: typeof ListChatMembersResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_sharing, 0);

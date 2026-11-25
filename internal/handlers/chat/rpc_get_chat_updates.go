@@ -9,10 +9,11 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"go.opentelemetry.io/otel/trace"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/messageproto"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // GetChatUpdates fetches chat updates since a sequence number

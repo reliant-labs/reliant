@@ -11,11 +11,27 @@ import (
 	"testing"
 )
 
+// alwaysObliged are the phases every gate runs beyond build and test, cheap
+// and red-producing anywhere in the tree: gateDir gives each a green row
+// unless rows names it (an rc of noRow leaves it out).
+var alwaysObliged = []string{"testbuild", "projectlint"}
+
+const noRow = -1
+
 // gateDir builds a merge-gate log directory: plan.json for pl and one
-// "<name> <rc> <secs> <start>" row per phase in rows.
+// "<name> <rc> <secs> <start>" row per phase in rows, plus a green row for
+// each of alwaysObliged that rows does not name.
 func gateDir(t *testing.T, pl *Plan, rows map[string]int) string {
 	t.Helper()
 	dir := t.TempDir()
+	all := map[string]int{}
+	for _, n := range alwaysObliged {
+		all[n] = 0
+	}
+	for n, rc := range rows {
+		all[n] = rc
+	}
+	rows = all
 	b, err := json.Marshal(pl)
 	if err != nil {
 		t.Fatal(err)
@@ -24,6 +40,9 @@ func gateDir(t *testing.T, pl *Plan, rows map[string]int) string {
 		t.Fatal(err)
 	}
 	for name, rc := range rows {
+		if rc == noRow {
+			continue
+		}
 		if err := os.WriteFile(filepath.Join(dir, name+".row"), []byte(fmt.Sprintf("%s %d 3 1\n", name, rc)), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -142,64 +161,56 @@ func TestMigrationChangeRequiresMigsafetyAndLintOnAPinMove(t *testing.T) {
 		t.Fatal("a migration and a pin bump passed without migsafety or lint")
 	}
 	v := verdict(t, dir)
-	for _, want := range []string{"migsafety", "closedsets", "lint"} {
+	for _, want := range []string{"migsafety", "lint"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("verdict %q does not name %s", v, want)
 		}
 	}
 }
 
-// forge lint --closed-sets is obliged whenever a migration or the forge pin
-// (go.mod, forge.yaml) moves, and not otherwise: a pin bump that grew
-// accesstoken.AllScopes merged without the widening migration and turned the
-// release gate red (#3382).
-func TestClosedSetsRunOnAMigrationOrAPinMove(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		files []string
-		want  bool
-	}{
-		{"a migration", []string{"db/migrations/1_a.up.sql"}, true},
-		{"go.mod", []string{"go.mod"}, true},
-		{"forge.yaml", []string{"forge.yaml"}, true},
-		{"go.sum alone", []string{"go.sum"}, false},
-		{"unrelated code", []string{"internal/x/x.go", "README.md"}, false},
+// testbuild (every test package compiles) and projectlint (forge lint
+// --graph --closed-sets --proto-format) are obliged on every diff, whatever it
+// touches: a fixture broken two imports away (#3489), an unreachable provider
+// (#3483), a closed set a pin bump grew (#3382) and an unformatted proto
+// (#3397, #3480) each fail on files the diff need not touch. projectlint
+// replaced the closedsets phase, obliged only on a migration or pin move.
+func TestTestbuildAndProjectlintAreAlwaysObliged(t *testing.T) {
+	for _, files := range [][]string{
+		{"db/migrations/1_a.up.sql"},
+		{"go.mod"},
+		{"internal/x/x.go"},
+		{"README.md"},
+		nil,
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var files []FileReport
-			for _, p := range tc.files {
-				files = append(files, FileReport{Path: p})
+		var fr []FileReport
+		for _, p := range files {
+			fr = append(fr, FileReport{Path: p})
+		}
+		for _, phase := range alwaysObliged {
+			dir := gateDir(t, &Plan{Files: fr}, map[string]int{"plan": 0, "build": 0, "test": 0, "migsafety": 0, "migorder": 0, "lint": 0, "golangci": 0, "vet": 0, phase: noRow})
+			if code, v := verify(t, dir); code == 0 || !strings.Contains(v, phase+" never completed") {
+				t.Errorf("%v passed without a %s row: %q", files, phase, v)
 			}
-			dir := gateDir(t, &Plan{Files: files}, map[string]int{"plan": 0, "build": 0, "test": 0, "migsafety": 0, "migorder": 0, "lint": 0, "golangci": 0, "vet": 0})
-			code, _ := verify(t, dir)
-			if tc.want {
-				if code == 0 || !strings.Contains(verdict(t, dir), "closedsets never completed") {
-					t.Fatalf("%v passed without a closedsets row: %q", tc.files, verdict(t, dir))
-				}
-				if err := os.WriteFile(filepath.Join(dir, "closedsets.row"), []byte("closedsets 0 1 0\n"), 0o644); err != nil {
-					t.Fatal(err)
-				}
-				if code, out := verify(t, dir); code != 0 {
-					t.Fatalf("%v with a closedsets row failed: %s", tc.files, out)
-				}
-				return
+			dir = gateDir(t, &Plan{Files: fr}, map[string]int{"plan": 0, "build": 0, "test": 0, "migsafety": 0, "migorder": 0, "lint": 0, "golangci": 0, "vet": 0, phase: 1})
+			if code, v := verify(t, dir); code == 0 || !strings.Contains(v, phase+" failed (rc 1)") {
+				t.Errorf("%v passed a failed %s row: %q", files, phase, v)
 			}
-			if code, out := verify(t, dir); code != 0 {
-				t.Fatalf("%v needs no closedsets row: %s", tc.files, out)
-			}
-		})
+		}
+		if code, v := verify(t, gateDir(t, &Plan{Files: fr}, map[string]int{"plan": 0, "build": 0, "test": 0, "migsafety": 0, "migorder": 0, "lint": 0, "golangci": 0, "vet": 0})); code != 0 {
+			t.Errorf("%v with every row green failed: %q", files, v)
+		}
+		// The retired phase is obliged no more.
+		if v := verdictOf(t, &Plan{Files: fr}); strings.Contains(v, "closedsets") {
+			t.Errorf("%v obliged the retired closedsets phase: %q", files, v)
+		}
 	}
 }
 
-// A closedsets phase that FAILED fails the gate, naming it.
-func TestFailedClosedSetsFailTheGate(t *testing.T) {
-	dir := gateDir(t, &Plan{Files: []FileReport{{Path: "go.mod"}}}, map[string]int{"plan": 0, "build": 0, "test": 0, "migsafety": 0, "closedsets": 1})
-	if code, _ := verify(t, dir); code == 0 {
-		t.Fatal("a failing closedsets row passed")
-	}
-	if v := verdict(t, dir); !strings.Contains(v, "closedsets") {
-		t.Fatalf("verdict %q does not name closedsets", v)
-	}
+// verdictOf verifies a gate with no row at all and returns its verdict.
+func verdictOf(t *testing.T, pl *Plan) string {
+	t.Helper()
+	_, v := verify(t, gateDir(t, pl, map[string]int{"testbuild": noRow, "projectlint": noRow}))
+	return v
 }
 
 // A diff that moves only root pins has no directory to scope lint to: the
@@ -207,7 +218,7 @@ func TestFailedClosedSetsFailTheGate(t *testing.T) {
 // not obliged to lint (migsafety still follows forge.yaml).
 func TestPinOnlyChangeDoesNotRequireLint(t *testing.T) {
 	pl := &Plan{Files: []FileReport{{Path: "go.mod"}, {Path: "go.sum"}, {Path: "forge.yaml"}}}
-	dir := gateDir(t, pl, map[string]int{"plan": 0, "build": 0, "test": 0, "migsafety": 0, "closedsets": 0})
+	dir := gateDir(t, pl, map[string]int{"plan": 0, "build": 0, "test": 0, "migsafety": 0})
 	if code, out := verify(t, dir); code != 0 {
 		t.Fatalf("a pin-only change must pass without a lint row: %s", out)
 	}
@@ -225,18 +236,18 @@ func TestQueueTierRequiresLintButNotVet(t *testing.T) {
 		Files: []FileReport{{Path: "internal/x/x.go"}, {Path: "db/migrations/1_a.up.sql"}},
 		Go:    GoPlan{Build: []string{"./internal/x"}, Packages: []string{"./internal/x"}},
 	}
-	dir := gateDir(t, pl, map[string]int{"plan": 0, "build": 0, "test": 0})
+	dir := gateDir(t, pl, map[string]int{"plan": 0, "build": 0, "test": 0, "testbuild": noRow, "projectlint": noRow})
 	for _, tc := range []struct {
 		tier       string
 		elsewhere  bool // the gate wrote golangci-elsewhere
 		obliged    []string
 		notObliged []string
 	}{
-		{"queue", true, []string{"migsafety", "closedsets", "lint"}, []string{"vet", "golangci"}},
-		{"skip-lint", true, []string{"migsafety", "closedsets"}, []string{"vet", "lint", "golangci"}},
-		{"skip-lint", false, []string{"migsafety", "closedsets", "golangci"}, []string{"vet", "lint"}},
-		{"", true, []string{"migsafety", "closedsets", "lint", "vet"}, []string{"golangci"}},
-		{"", false, []string{"migsafety", "closedsets", "lint", "vet", "golangci"}, nil},
+		{"queue", true, []string{"migsafety", "testbuild", "projectlint", "lint"}, []string{"vet", "golangci"}},
+		{"skip-lint", true, []string{"migsafety", "testbuild", "projectlint"}, []string{"vet", "lint", "golangci"}},
+		{"skip-lint", false, []string{"migsafety", "testbuild", "projectlint", "golangci"}, []string{"vet", "lint"}},
+		{"", true, []string{"migsafety", "testbuild", "projectlint", "lint", "vet"}, []string{"golangci"}},
+		{"", false, []string{"migsafety", "testbuild", "projectlint", "lint", "vet", "golangci"}, nil},
 	} {
 		_ = os.Remove(filepath.Join(dir, "tier"))
 		_ = os.Remove(filepath.Join(dir, "golangci-elsewhere"))
@@ -254,13 +265,21 @@ func TestQueueTierRequiresLintButNotVet(t *testing.T) {
 			t.Fatalf("the %q tier passed a migration without migsafety", tc.tier)
 		}
 		v := verdict(t, dir)
+		// By whole phase name: "lint never completed" is inside
+		// "projectlint never completed".
+		missing := map[string]bool{}
+		for _, p := range strings.Split(strings.TrimPrefix(v, "FAILED: "), "; ") {
+			if n, ok := strings.CutSuffix(strings.SplitN(p, " (", 2)[0], " never completed"); ok {
+				missing[n] = true
+			}
+		}
 		for _, want := range tc.obliged {
-			if !strings.Contains(v, want+" never completed") {
+			if !missing[want] {
 				t.Errorf("the %q tier did not oblige %s: %q", tc.tier, want, v)
 			}
 		}
 		for _, unwanted := range tc.notObliged {
-			if strings.Contains(v, unwanted+" never completed") {
+			if missing[unwanted] {
 				t.Errorf("the %q tier obliged %s: %q", tc.tier, unwanted, v)
 			}
 		}

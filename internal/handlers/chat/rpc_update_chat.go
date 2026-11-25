@@ -32,7 +32,7 @@ func (s *Service) UpdateChat(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	if !authz.CanWriteChat(ctx, userID, chat) {
+	if !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
 
