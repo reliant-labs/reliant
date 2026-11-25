@@ -150,27 +150,8 @@ function createForcedUpdate({ getStatus, isDownloading, check, download, install
 
   async function run(minVersion) {
     announce(minVersion);
-    const status = getStatus();
-    if (!status || status.type !== "downloaded") {
-      // Nothing found yet: look. A found or downloading update needs no check.
-      if (canCheckForUpdates(status, isDownloading()) && !(status && status.type === "available")) {
-        let result;
-        try {
-          result = await check();
-        } catch (error) {
-          return { outcome: "error", error: errorMessage(error) };
-        }
-        const found = classifyCheckResult(result);
-        if (found !== "available") return { outcome: found };
-      }
-      let downloaded;
-      try {
-        downloaded = await download();
-      } catch (error) {
-        return { outcome: "error", error: errorMessage(error) };
-      }
-      if (downloaded && downloaded.error) return { outcome: "error", error: downloaded.error };
-    }
+    const fetched = await checkAndDownload({ getStatus, isDownloading, check, download });
+    if (fetched.outcome !== "downloaded") return fetched;
     let installed;
     try {
       installed = await install();
@@ -190,6 +171,128 @@ function createForcedUpdate({ getStatus, isDownloading, check, download, install
     }
     return inFlight;
   };
+}
+
+/**
+ * Brings the update to "downloaded": checks when nothing has been found yet
+ * (a found or downloading update needs no check, and a check would discard a
+ * download in flight), then downloads, joining a download in flight. Never
+ * installs. Shared by the forced update and the daemon's upgrade request.
+ *
+ * Resolves "downloaded", "up-to-date" (the feed has nothing newer),
+ * "inactive" (an unpackaged build), or "error" with the message.
+ */
+async function checkAndDownload({ getStatus, isDownloading, check, download }) {
+  const status = getStatus();
+  if (status && status.type === "downloaded") return { outcome: "downloaded" };
+  if (canCheckForUpdates(status, isDownloading()) && !(status && status.type === "available")) {
+    let result;
+    try {
+      result = await check();
+    } catch (error) {
+      return { outcome: "error", error: errorMessage(error) };
+    }
+    const found = classifyCheckResult(result);
+    if (found !== "available") return { outcome: found };
+  }
+  let downloaded;
+  try {
+    downloaded = await download();
+  } catch (error) {
+    return { outcome: "error", error: errorMessage(error) };
+  }
+  if (downloaded && downloaded.error) return { outcome: "error", error: downloaded.error };
+  return { outcome: "downloaded" };
+}
+
+/**
+ * The daemon's upgrade request (phase E1 of forge
+ * docs/proposals/self-upgrade.md): the platform asked the daemon this app
+ * runs to upgrade, and the daemon printed it on stdout
+ * (daemon-contract.js DAEMON_UPGRADE_NOTICE_PREFIX). The daemon is inside
+ * this app's bundle, so this app's updater is what upgrades it.
+ *
+ * Owner decision D7: the app downloads the update by itself and asks the
+ * user to restart; it NEVER installs. There is no install dependency here to
+ * call. The windows show the ready update with the request attached
+ * (withDaemonUpgrade), which opens the update dialog when the download
+ * finishes. Owner decision D6: nothing blocks — the daemon keeps serving, and
+ * the user may say Later, even when the request is overdue (isUpgradeOverdue
+ * only strengthens the dialog's wording). The forced update's undismissable
+ * install (createForcedUpdate) is for a server that refuses this app, which
+ * is not the case here.
+ *
+ * Resolves the outcome of checkAndDownload. A notice while one is being acted
+ * on joins it, after `announce` has recorded the newer request. Failed checks,
+ * missing releases and failed downloads retry after one minute with exponential
+ * backoff capped at one hour; success stops retries without installing.
+ *
+ * @param {object} deps
+ * @param {() => object|null} deps.getStatus   the updater's state (nextUpdateState)
+ * @param {() => boolean} deps.isDownloading   a download has been asked for and not finished
+ * @param {() => Promise<object|null>} deps.check   autoUpdater.checkForUpdates
+ * @param {() => Promise<{success?: boolean, error?: string}>} deps.download   the download runner; joins one in flight
+ * @param {(request: object) => void} deps.announce   records the request and shows it with the update the windows have
+ */
+function createDaemonUpgradeResponder({
+  getStatus, isDownloading, check, download, announce,
+  schedule = setTimeout, cancel = clearTimeout,
+}) {
+  let inFlight = null;
+  let pendingRequest = null;
+  let retryTimer = null;
+  let retryDelay = 60 * 1000;
+  const maxRetryDelay = 60 * 60 * 1000;
+
+  // The daemon emits each request only once. Electron owns retries until the
+  // download succeeds, including when the feed has not published it yet.
+  function respond(request) {
+    pendingRequest = request;
+    announce(request);
+    if (!inFlight) {
+      if (retryTimer !== null) cancel(retryTimer);
+      retryTimer = null;
+      inFlight = checkAndDownload({ getStatus, isDownloading, check, download }).then((result) => {
+        if (result.outcome === "error" || result.outcome === "up-to-date") {
+          retryTimer = schedule(() => {
+            retryTimer = null;
+            return respond(pendingRequest);
+          }, retryDelay);
+          retryTimer.unref?.();
+          retryDelay = Math.min(retryDelay * 2, maxRetryDelay);
+        } else {
+          retryDelay = 60 * 1000;
+        }
+        return result;
+      }).finally(() => {
+        inFlight = null;
+      });
+    }
+    return inFlight;
+  }
+  return respond;
+}
+
+/**
+ * `status` as the windows should see it while the daemon has asked for an
+ * upgrade: with the request attached as `daemonUpgrade`, so the renderer
+ * opens the update dialog when it is downloaded and words it by urgency. A
+ * renderer that predates the field ignores it.
+ */
+function withDaemonUpgrade(status, request) {
+  if (!status || !request) return status;
+  return { ...status, daemonUpgrade: request };
+}
+
+/**
+ * Whether a daemon upgrade request is overdue: a security or emergency
+ * request whose deadline has passed at `nowMs`. The update dialog then says
+ * so plainly; it is still the user's choice when to restart.
+ */
+function isUpgradeOverdue(request, nowMs) {
+  if (!request) return false;
+  if (request.urgency !== "security" && request.urgency !== "emergency") return false;
+  return request.deadlineUnixMs > 0 && nowMs >= request.deadlineUnixMs;
 }
 
 /** A minimum version from the renderer, or "" when it is not a version token. */
@@ -281,9 +384,12 @@ module.exports = {
   canCheckForUpdates,
   classifyCheckResult,
   cleanMinVersion,
+  createDaemonUpgradeResponder,
   createDownloadRunner,
   createForcedUpdate,
   createMenuUpdateCheck,
   isUpdatePending,
+  isUpgradeOverdue,
   nextUpdateState,
+  withDaemonUpgrade,
 };

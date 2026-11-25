@@ -1,22 +1,20 @@
-import { useQuery } from "@tanstack/react-query";
-
 import { DaemonStatus, type DaemonInfo } from "../gen/reliant/v1/daemon_registry_pb";
 import { isManagedDaemon } from "../lib/daemonType";
 import { logger } from "../lib/logger";
 import { queryClient } from "../lib/query-client";
-import { getDaemon } from "../services/controlPlane/environments";
+import { daemonServiceQueries, useGetDaemon } from "./controlplane/daemon-service-hooks_gen";
 import { cachedDaemonList } from "./daemon-registry-queries";
 import { useDaemonStatus } from "./useDaemonStatus";
 
-/** The control-plane GetDaemon entry that carries a daemon's preview URL template. */
-export function daemonPreviewQuery(daemonId: string) {
-  return {
-    queryKey: ["controlPlane", "daemonPreview", daemonId] as const,
-    queryFn: () => getDaemon(daemonId),
-    staleTime: 5 * 60_000, // the URL shape is static per daemon
-    retry: 1,
-  };
-}
+/**
+ * How the preview template reads control-plane GetDaemon: the machine's one
+ * GetDaemon entry (daemonServiceKeys.getDaemon), which Settings › Machines and
+ * MachineCost read too.
+ */
+export const DAEMON_PREVIEW_READ = {
+  staleTime: 5 * 60_000, // the URL shape is static per daemon
+  retry: 1,
+} as const;
 
 /**
  * Only a managed (cloud) daemon's dev servers need a preview URL: a dev server
@@ -35,7 +33,7 @@ function previewDaemonId(daemon: DaemonInfo | undefined): string {
 export function useActiveDaemonPreviewTemplate(): string | undefined {
   const { activeDaemon } = useDaemonStatus();
   const daemonId = previewDaemonId(activeDaemon);
-  const { data } = useQuery({ ...daemonPreviewQuery(daemonId), enabled: Boolean(daemonId) });
+  const { data } = useGetDaemon({ daemonId }, { ...DAEMON_PREVIEW_READ, enabled: Boolean(daemonId) });
   return data?.workspaceBaseDomain || undefined;
 }
 
@@ -51,7 +49,7 @@ export async function readActiveDaemonPreviewTemplate(): Promise<string | undefi
   if (!daemonId) return undefined;
   try {
     // No retry: a click waits on this, and a miss only means localhost stays localhost.
-    return (await queryClient.fetchQuery({ ...daemonPreviewQuery(daemonId), retry: 0 })).workspaceBaseDomain || undefined;
+    return (await queryClient.fetchQuery(daemonServiceQueries.getDaemon({ daemonId }, { ...DAEMON_PREVIEW_READ, retry: 0 }))).workspaceBaseDomain || undefined;
   } catch (error) {
     logger.warn("[preview] Could not read the active daemon's preview URL:", error);
     return undefined;
