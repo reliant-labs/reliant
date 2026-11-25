@@ -32,7 +32,8 @@ vi.mock("@/services/controlPlane/config", async (importOriginal) => {
 });
 
 const { useChatWorkflowShare } = await import("../useChatWorkflowShare");
-const { useWorkflowDefinitionQuery } = await import("@/hooks/workflow-queries");
+const workflowQueries = await import("@/hooks/workflow-queries");
+const { useWorkflowDefinitionQuery } = workflowQueries;
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -94,11 +95,24 @@ describe("useChatWorkflowShare", () => {
     ["no chat", undefined],
     ["a builtin", { projectId: "p1", workflowName: "builtin://agent" }],
     ["no workflow", { projectId: "p1" }],
+    ["no project", { projectId: "", workflowName: "triage" }],
     ["a viewer's chat", { projectId: "p1", workflowName: "triage", viewerAccess: true }],
   ])("reads nothing for %s", async (_name, chat) => {
     const { result } = renderHook(() => useChatWorkflowShare(chat), { wrapper });
     expect(result.current).toBeNull();
     expect(state.getWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("disables reference resolution without a project", () => {
+    const query = vi.spyOn(workflowQueries, "useWorkflowDefinitionQuery");
+    try {
+      const { result } = renderHook(() => useChatWorkflowShare({ projectId: "", workflowName: "triage" }), { wrapper });
+      expect(query).toHaveBeenCalledWith(undefined, undefined);
+      expect(result.current).toBeNull();
+      expect(state.getWorkflow).not.toHaveBeenCalled();
+    } finally {
+      query.mockRestore();
+    }
   });
 
   it("reads nothing without a control plane", () => {

@@ -26,7 +26,7 @@ interface ChatWithWorkflow {
 /** Builtins are nobody's to share, so a builtin reference is never read. */
 function savedWorkflowRef(chat: ChatWithWorkflow | null | undefined): string | undefined {
   const ref = chat?.workflowName;
-  if (!chat || chat.viewerAccess || !ref || ref.startsWith("builtin://") || !sharingAvailable()) return undefined;
+  if (!chat?.projectId || chat.viewerAccess || !ref || ref.startsWith("builtin://") || !sharingAvailable()) return undefined;
   return ref;
 }
 
