@@ -45,6 +45,7 @@ An organization with no hosting billing can publish static sites for free, with 
 | Storage | **1 GiB** per site. A release is kept three times (live, its archive, the previous release), so a release of about 340 MiB or less fits |
 | Traffic | **10 GiB** per calendar month (UTC) for the organization. The owner is told at 80% and 100%, and past the limit the site answers `429` until the month rolls over |
 | Static headers | A site can add response headers with a `_headers` file, but not `Cache-Control`, `Set-Cookie`, `Strict-Transport-Security` or `Content-Type`: the platform owns those |
+| Static redirects | A `_redirects` file declares at most **1,000** rules, **2,048** characters per line and **64 KiB** per file. Statuses 301, 302, 307 and 308 only, with exact paths or a trailing `/*` and `:splat`. No rewrites (`200`), proxying or conditions. A line the platform cannot follow fails the deploy and is named in the error. An unclaimed site may redirect only within its own hostname |
 
 ## What needs billing
 
