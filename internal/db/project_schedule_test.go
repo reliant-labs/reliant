@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/projectpurge"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -454,6 +455,7 @@ func (f *deleteFixture) newTrigger(id string, enabled bool) *core.Trigger {
 // migration 20261118103211): whichever commits second sees the first. So a
 // deleted project never keeps an enabled trigger.
 func TestTriggerWritesSerializeWithScheduling(t *testing.T) {
+	testkit.Slow(t, "four real-Postgres lock-serialization scenarios")
 	after := deleteClock.Add(core.ProjectDeleteWindow)
 
 	t.Run("a create that commits first is paused by the schedule", func(t *testing.T) {
