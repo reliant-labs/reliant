@@ -168,13 +168,17 @@ func TestRelease_WatchesAPopulatedCgroupUntilItEmpties(t *testing.T) {
 	cg, root := fakeCgroup(t, true), fakeGoTmp(t)
 	tree := &Tree{dir: cg, goTmp: root, fd: -1}
 	done := tree.releaseGoTmp()
-	if done == nil || tree.goTmp != "" {
-		t.Fatalf("a populated cgroup's root was not handed to a watcher (goTmp %q)", tree.goTmp)
+	if done == nil || tree.goTmp != root {
+		t.Fatalf("scheduling a watcher lost the root reference (goTmp %q)", tree.goTmp)
 	}
 	if _, err := os.Stat(root); err != nil {
 		t.Fatalf("the root went while its cgroup was populated: %v", err)
 	}
-	setPopulated(t, cg, false)
+	// Plain files cannot emulate cgroup rmdir: remove the fixture to
+	// model successful kernel retirement, not merely populated=0.
+	if err := os.RemoveAll(cg); err != nil {
+		t.Fatal(err)
+	}
 	<-done
 	if _, err := os.Stat(root); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the root outlived its cgroup emptying: %v", err)
@@ -208,6 +212,10 @@ func TestWatchGoTmp_RemovedCgroupIsEmpty(t *testing.T) {
 func TestWatchGoTmp_GivesUpAndKeepsTheRoot(t *testing.T) {
 	for name, cg := range map[string]func(t *testing.T) string{
 		"populated": func(t *testing.T) string { return fakeCgroup(t, true) },
+		// populated=0 alone is insufficient. The ordinary events file
+		// makes rmdir fail, modelling a kernel refusal after a process
+		// attaches between the empty observation and retirement.
+		"empty but retirement refused": func(t *testing.T) string { return fakeCgroup(t, false) },
 		"unreadable": func(t *testing.T) string {
 			dir := t.TempDir()
 			if err := os.Mkdir(filepath.Join(dir, "cgroup.events"), 0o755); err != nil {
@@ -247,6 +255,24 @@ func TestRelease_NoFreeWatcherKeepsTheRoot(t *testing.T) {
 	}
 	if _, err := os.Stat(root); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The immediate release path must also require successful retirement.
+func TestRelease_EmptyCgroupWithRetirementRefusedKeepsRoot(t *testing.T) {
+	watchFast(t, 20*time.Millisecond, 1)
+	root := fakeGoTmp(t)
+	tree := &Tree{dir: fakeCgroup(t, false), goTmp: root, fd: -1}
+	done := tree.releaseGoTmp()
+	if done == nil {
+		t.Fatal("an empty observation bypassed retirement")
+	}
+	<-done
+	if tree.goTmp != root {
+		t.Fatal("release lost the root reference without retirement")
+	}
+	if _, err := os.Stat(root); err != nil {
+		t.Fatalf("release deleted a root without retiring its cgroup: %v", err)
 	}
 }
 

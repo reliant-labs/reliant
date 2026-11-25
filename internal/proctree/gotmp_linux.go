@@ -25,9 +25,9 @@ import (
 //
 // So every command the daemon starts gets a GOTMPDIR of its own,
 // <temp dir>/reliant-gotmp-<uid>/gotmp-<daemon pid>-<n>, and the daemon removes
-// it when the command's cgroup proves its processes are all gone: ownership is
-// a fact, not a guess from an mtime: at once when the cgroup is empty as the
-// command returns, else when a bounded watcher sees it empty (a killed
+// it only after the command's cgroup is retired: ownership is
+// a fact, not a guess from an mtime: at once when the cgroup can be removed as the
+// command returns, else when a bounded watcher retires it (a killed
 // command's processes still exiting; releaseGoTmp). One without a cgroup, or
 // one the command left processes running in for longer than the watcher
 // waits, stays; the daemon's go_work_dirs pass removes it
@@ -100,15 +100,14 @@ func (t *Tree) releaseGoTmp() (watched <-chan struct{}) {
 	if dir == "" || t.dir == "" {
 		return nil
 	}
-	if cgroupProvenEmpty(t.dir) {
+	if retireGoTmpCgroup(t.dir) {
 		t.goTmp = ""
 		go func() { _ = os.RemoveAll(dir) }()
 		return nil
 	}
-	done, ok := watchGoTmp(t.dir, dir)
-	if ok {
-		t.goTmp = ""
-	}
+	// Scheduling is not proof of retirement. Keep the reference even if
+	// the watcher times out; the disk watcher remains the fallback owner.
+	done, _ := watchGoTmp(t.dir, dir)
 	return done
 }
 
@@ -145,7 +144,7 @@ func watchGoTmp(cgroup, root string) (done <-chan struct{}, ok bool) {
 		deadline := time.NewTimer(wait)
 		defer deadline.Stop()
 		for {
-			if cgroupProvenEmpty(cgroup) {
+			if retireGoTmpCgroup(cgroup) {
 				_ = os.RemoveAll(root)
 				return
 			}
@@ -159,9 +158,23 @@ func watchGoTmp(cgroup, root string) (done <-chan struct{}, ok bool) {
 	return ch, true
 }
 
-// cgroupProvenEmpty reports whether the cgroup at dir is gone (Release
-// removes it only once empty) or reports itself unpopulated. A cgroup that
-// cannot be read proves nothing.
+// retireGoTmpCgroup requires retirement, not a transient populated=0.
+// The kernel's rmdir refuses a populated cgroup atomically with process
+// attachment. Once removed, even an open cgroup FD cannot start a process
+// in it. Command cgroup names are unique and are never reused. If removal
+// loses a race to a new process, keep the root and try again later.
+func retireGoTmpCgroup(dir string) bool {
+	if !cgroupProvenEmpty(dir) {
+		return false
+	}
+	if err := removeCgroup(dir); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return false
+	}
+	return true
+}
+
+// cgroupProvenEmpty is only a hint to attempt retirement, never permission
+// to delete GOTMPDIR. An unreadable cgroup proves nothing.
 func cgroupProvenEmpty(dir string) bool {
 	data, err := os.ReadFile(filepath.Join(dir, "cgroup.events"))
 	if errors.Is(err, os.ErrNotExist) {
