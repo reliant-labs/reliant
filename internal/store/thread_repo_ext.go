@@ -361,6 +361,17 @@ func CascadeTerminalStatusToThreadSubtree(ctx context.Context, db orm.Context, w
 // mailbox resolvable and its conversation finished), while a thread that
 // stays stranded a little longer is not.
 //
+// The same holds one level up: a thread is never reaped while any ANCESTOR
+// of its workflow is live. A sub-agent whose own spawn row completed can still
+// be given a turn by its live parent run — a message to the agent revives its
+// thread (ReviveThread) and the root drives the turn, without reviving the
+// spawn's row. Reaping then marked a thread finished mid-turn and paged as a
+// missed cascade (prod 179b8343, 2026-11-23: chat 21c602e2, thread f1149bae
+// reaped one and five seconds after each message to it, its root run still
+// running). Nothing is stranded by waiting: the live ancestor's own end
+// cascades its whole subtree (cascadeTerminalStatusToThreadSubtreeSQL), and
+// a root that ends without cascading leaves the thread for this reap.
+//
 // The thread inherits the workflow's stop REASON in the thread vocabulary,
 // the SQL twin of core.ThreadStatusForStopReason: a repaired cancel must not
 // read as a repaired success. It returns each thread it moved and the
@@ -379,6 +390,17 @@ FROM workflows w
 WHERE t.workflow_id = w.id
   AND w.state = 3 AND w.stop_reason IN (1, 2, 4)
   AND t.status IN (2, 6)
+  AND NOT EXISTS (
+      WITH RECURSIVE ancestors AS (
+          SELECT p.id, p.parent_id, p.state, p.stop_reason
+          FROM workflows p WHERE p.id = w.parent_id
+          UNION
+          SELECT p.id, p.parent_id, p.state, p.stop_reason
+          FROM workflows p JOIN ancestors a ON p.id = a.parent_id
+      )
+      SELECT 1 FROM ancestors
+      WHERE ancestors.state = 2 OR (ancestors.state = 3 AND ancestors.stop_reason = 3)
+  )
 RETURNING t.id AS thread_id, t.chat_id, w.id AS workflow_id, t.status`
 
 // ReapOrphanedThreads ends running/paused threads whose workflow is already

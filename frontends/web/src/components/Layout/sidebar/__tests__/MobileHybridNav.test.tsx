@@ -107,6 +107,18 @@ describe("the phone's nav", () => {
     expect(onNavigate).toHaveBeenLastCalledWith(consolePath("shopfront", { kind: "overview" }), { drill: true });
   });
 
+  it("lists the Inbox in Agents' drill-in on the phone's chats, a destination that closes the drawer", () => {
+    const onNavigate = renderAt(mobileChatPath("c1"));
+    const inbox = screen.getByTestId("sidebar-inbox-button");
+    expect(screen.getByTestId("nav-slot-agents-inbox")).toContainElement(inbox);
+    expect(screen.queryByTestId("nav-slot-inbox")).toBeNull();
+    expect(inbox).toHaveAttribute("href", inboxPath());
+    expect(inbox).not.toHaveAttribute("aria-current");
+    fireEvent.click(inbox);
+    // Not a drill: the Inbox is the top level's page, so the drawer closes on it.
+    expect(onNavigate).toHaveBeenLastCalledWith(inboxPath());
+  });
+
   it.each([
     ["a workflow's screen", mobileWorkflowPath("deploy"), "nav-workflows-library"],
     ["a workflow chat's run", mobileChatWorkflowPath("c1"), "nav-workflows-runs"],

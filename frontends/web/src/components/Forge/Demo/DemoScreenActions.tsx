@@ -6,8 +6,11 @@
  * every entry, the tour's route included), then Take the tour, Install Forge, Sign up free and the primary Deploy yours free.
  *
  * On a phone the row is one line, the status and Deploy yours free: the tour, Install
- * and the telemetry notice sit in the nav drawer (DemoDrawerActions, through
- * DemoNavExtras). "How it was built" is a nav row of its own, not an action.
+ * and the telemetry notice sit in the shell's nav drawer (DemoDrawerActions, the
+ * demo nav's `host-actions` slot: DemoNav). "How it was built" is a nav row of its own, not an action.
+ *
+ * The row sits under the page's bar (the console's ConsoleFrame header, on every
+ * page of the demo), above the page's scroll region.
  *
  * It takes no z-index: dialogs, the tour's overlay and its modal cards all
  * paint over it.
@@ -104,6 +107,9 @@ function ThemeToggle() {
   );
 }
 
+/** The page's bar the row sits under: the console's (ConsoleFrame's ShellPageHeader), on the console's pages and the demo's own. */
+const PAGE_BAR = "[data-testid='forge-console-header']";
+
 export function DemoScreenActions() {
   const [host, setHost] = useState<HTMLElement | null>(null);
   const drawerOpen = useConsoleDrawerOpen();
@@ -112,11 +118,11 @@ export function DemoScreenActions() {
     const slot = document.createElement("div");
     slot.className = "w-full shrink-0";
     const attach = () => {
-      const main = document.querySelector("main");
-      // A dedicated row below the existing header, outside its controls and
+      const header = document.querySelector(PAGE_BAR);
+      // A dedicated row below the page's bar, outside its controls and
       // above the retained scroll host. Never overlay data or the mobile drawer.
-      if (main?.parentElement && slot.parentElement !== main.parentElement) {
-        main.parentElement.insertBefore(slot, main);
+      if (header && slot.previousElementSibling !== header) {
+        header.after(slot);
         setHost(slot);
       }
     };

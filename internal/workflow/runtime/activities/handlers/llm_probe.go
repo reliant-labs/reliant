@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/invopop/jsonschema"
+
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"

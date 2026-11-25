@@ -5,8 +5,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
+
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
 
 // ValidateThreadOwnershipInput is the input for validating thread ownership

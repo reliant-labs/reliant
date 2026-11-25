@@ -53,8 +53,9 @@ try {
     for (const route of routes) {
       try {
         await page.goto(new URL(route, base).href);
-        await page.locator("main").waitFor({ timeout: 15000 });
-        await page.locator("main h1").waitFor({ timeout: 15000 });
+        // The page's one main region: the shell's (AppShellFrame, role="main").
+        await page.getByRole("main").first().waitFor({ timeout: 15000 });
+        await page.getByRole("main").first().locator("h1").first().waitFor({ timeout: 15000 });
         // A tour is a real visitor-facing control, not a mocked-away overlay.
         const done = page.getByRole("button", { name: "Done", exact: true });
         if (await done.isVisible()) await done.click();
@@ -90,18 +91,21 @@ try {
       await range.selectOption("1h");
       await page.waitForURL(/range=1h/);
       if (width < 768) {
-        const open = page.getByRole("button", { name: "Open navigation" });
+        // The nav is the app's shell's drawer (Layout/shell/AppShell.tsx), behind the page header's toggle.
+        const open = page.getByTestId("shell-nav-toggle");
         await reachable(open, "navigation trigger");
         await open.tap();
-        const drawer = page.getByRole("dialog", { name: "shop", exact: true });
+        const drawer = page.locator("[data-testid='shell-nav'][data-state='open']");
         await drawer.waitFor();
-        // Visible close + modal focus isolation are tracked in the upstream
-        // sidebar_layout fix; do not claim they passed before its adoption.
-        await page.keyboard.press("Escape");
-        await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Open navigation");
+        // A tap beside the drawer (its backdrop) closes it.
+        await page.mouse.click(width - 8, 400);
+        await page.locator("[data-testid='shell-nav'][data-state='closed']").waitFor();
         await open.tap();
+        await drawer.waitFor();
+        await drawer.getByTestId("nav-configure").tap();
         await drawer.getByRole("link", { name: "Secrets", exact: true }).tap();
         await page.waitForURL(/\/secrets/);
+        await page.locator("[data-testid='shell-nav'][data-state='closed']").waitFor();
         assert.equal(await drawer.count(), 0, "drawer closes after route selection");
       }
       console.log(`ok ${width} workload taps, filter and navigation`);

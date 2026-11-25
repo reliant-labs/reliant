@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A call the workflow refused is answered with the reason and recorded
@@ -25,7 +26,7 @@ func TestExecuteTools_RefusesCallTheWorkflowRefused(t *testing.T) {
 	const slackPost = "slack__message_post"
 	h, chatID := newValidationChat(t)
 	mockExecutor := newMockToolExecutor()
-	activity := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
+	activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 	refusedID := "toolu_" + uuid.NewString()
 	readID := "toolu_" + uuid.NewString()
 	reason := "The user did not approve slack__message_post, so it was not run. Do not attempt it another way."

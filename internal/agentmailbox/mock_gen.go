@@ -16,7 +16,7 @@ import (
 )
 
 // forge:section MockStore
-// forge:hash=7574f3e8bddd618fcc50dce88df0e7aae7d9d5eea1bb14f5398055d3343061e1
+// forge:hash=92bbfc8a10585419be8921691b291d57725bb4b2bfafc85d83bfdbce15bb116d
 
 // MockStore is a test mock for the Store interface.
 //
@@ -26,8 +26,10 @@ import (
 // "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
-	EnqueueAgentMessageFunc     func(context.Context, *db.AgentMessage) error
-	EnqueueAgentMessageOnceFunc func(context.Context, *db.AgentMessage) (bool, error)
+	EnqueueAgentMessageFunc         func(context.Context, *db.AgentMessage) error
+	EnqueueAgentMessageOnceFunc     func(context.Context, *db.AgentMessage) (bool, error)
+	EnqueueAgentMessageIfAbsentFunc func(context.Context, *db.AgentMessage) (bool, error)
+	EnqueueSpawnReportFunc          func(context.Context, *db.AgentMessage) (db.SpawnReportOutcome, error)
 }
 
 // EnqueueAgentMessage records the call and delegates to EnqueueAgentMessageFunc when set.
@@ -46,6 +48,24 @@ func (m *MockStore) EnqueueAgentMessageOnce(ctx context.Context, msg *db.AgentMe
 		return m.EnqueueAgentMessageOnceFunc(ctx, msg)
 	}
 	return false, contractkit.MockNotSet("MockStore", "EnqueueAgentMessageOnce")
+}
+
+// EnqueueAgentMessageIfAbsent records the call and delegates to EnqueueAgentMessageIfAbsentFunc when set.
+func (m *MockStore) EnqueueAgentMessageIfAbsent(ctx context.Context, msg *db.AgentMessage) (bool, error) {
+	m.Recorder.Record("EnqueueAgentMessageIfAbsent", ctx, msg)
+	if m.EnqueueAgentMessageIfAbsentFunc != nil {
+		return m.EnqueueAgentMessageIfAbsentFunc(ctx, msg)
+	}
+	return false, contractkit.MockNotSet("MockStore", "EnqueueAgentMessageIfAbsent")
+}
+
+// EnqueueSpawnReport records the call and delegates to EnqueueSpawnReportFunc when set.
+func (m *MockStore) EnqueueSpawnReport(ctx context.Context, msg *db.AgentMessage) (db.SpawnReportOutcome, error) {
+	m.Recorder.Record("EnqueueSpawnReport", ctx, msg)
+	if m.EnqueueSpawnReportFunc != nil {
+		return m.EnqueueSpawnReportFunc(ctx, msg)
+	}
+	return *new(db.SpawnReportOutcome), contractkit.MockNotSet("MockStore", "EnqueueSpawnReport")
 }
 
 // Compile-time check.

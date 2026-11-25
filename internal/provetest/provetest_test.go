@@ -533,7 +533,7 @@ func TestProve_RunsTheCommandInTheWorktreeThatHoldsTheFiles(t *testing.T) {
 	assert.Equal(t, VerdictProven, report.Verdict, "both runs saw the worktree, where the fix is")
 	assert.Equal(t, []string{realBranch, realBranch}, obs.ran)
 	assert.Equal(t, realBranch, report.RunDir)
-	assert.Contains(t, strings.Join(report.Warnings, "\n"), "another git worktree of the same repository")
+	assert.Contains(t, strings.Join(report.Warnings, "\n"), "another git worktree that a run there cannot reach")
 	assert.Equal(t, buggyCalc, readFile(t, repo, "calc.go"), "the main checkout is never touched")
 
 	t.Run("a subdirectory runs in the same subdirectory of the worktree, even one named ..config", func(t *testing.T) {
@@ -554,12 +554,35 @@ func TestProve_RunsTheCommandInTheWorktreeThatHoldsTheFiles(t *testing.T) {
 		assert.Equal(t, want, report.RunDir)
 	})
 
-	t.Run("a directory outside the repository is where the caller chose to run", func(t *testing.T) {
+	// The default dir is the project root, which in a multi-repo project is
+	// no repository. Run there, `go test ./pkg` finds no go.mod (or a
+	// relative cd reaches the main checkout), so both runs failed alike and
+	// the verdict was a misleading fails_with_fix (obs a4ef5a9f, 321b0ace).
+	t.Run("the project root outside any repository runs in the worktree it cannot reach", func(t *testing.T) {
 		var ran []string
 		report, err := Prove(context.Background(), Options{
 			Workspace: workspace,
 			Repos:     []string{workspace, repo},
 			Files:     []string{filepath.Join(branch, "calc.go")},
+			Run: func(_ context.Context, dir string) RunOutcome {
+				ran = append(ran, dir)
+				return RunOutcome{ExitCode: 1}
+			},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{realBranch, realBranch}, ran)
+		assert.Equal(t, realBranch, report.RunDir)
+		assert.Contains(t, strings.Join(report.Warnings, "\n"), "another git worktree")
+	})
+
+	t.Run("a directory outside any repository that holds the files is where the caller chose to run", func(t *testing.T) {
+		writeFile(t, repo, "calc.go", fixedCalc) // a fix in the main checkout this time
+		t.Cleanup(func() { git(t, repo, "checkout", "-q", "--", "calc.go") })
+		var ran []string
+		report, err := Prove(context.Background(), Options{
+			Workspace: workspace,
+			Repos:     []string{workspace, repo},
+			Files:     []string{filepath.Join(repo, "calc.go")},
 			Run: func(_ context.Context, dir string) RunOutcome {
 				ran = append(ran, dir)
 				return RunOutcome{ExitCode: 1}

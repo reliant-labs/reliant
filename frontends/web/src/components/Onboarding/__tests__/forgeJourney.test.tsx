@@ -326,7 +326,8 @@ describe("the forge journey", () => {
   });
 
   it("spotlights the anchors the demo renders", () => {
-    expect(step("fg-console").target).toBe("[data-tour='forge-console-nav'], [data-tour='forge-console'] aside");
+    // The shell's nav, on the demo host too (it runs in the app's shell): one anchor, no second frame's.
+    expect(step("fg-console").target).toBe("[data-tour='forge-console-nav']");
     // The console's own row, or the led Traces page's (the demo's console).
     expect(step("fg-trace").target).toBe(`[data-testid='obs-trace-row'][data-trace-id='${DEMO_TRACE_ID}'], [data-testid='lead-trace-row'][data-trace-id='${DEMO_TRACE_ID}']`);
     expect(step("fg-issue").target).toContain(`[data-testid='lead-featured-issue'][data-issue-id='${DEMO_ISSUE_ID}']`);

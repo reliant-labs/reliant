@@ -111,8 +111,22 @@ const EXPECTED_CODES: ReadonlySet<Code> = new Set([
  * Unimplemented). For these ANY Unimplemented is the answer the caller is
  * waiting for, not a defect: the route may be unmounted (the app is newer than
  * the server, so not version skew) or mounted as forge's scaffold stub.
+ *
+ * control-plane's TestsService and VulnerabilityService answer Unimplemented
+ * ("test runs are not configured on this deployment") when the deployment
+ * runs without their stores (internal/handlers/tests requireReads). The Tests
+ * and Security pages render that as "this control plane doesn't store test
+ * runs / report vulnerabilities yet", and the Overview and release surfaces
+ * hide their tiles (tests/errors.ts, vulnerabilities/errors.ts
+ * "not-configured"). Reported, every visit to a project on such a deployment
+ * was an error issue (reliant-web 49ea1812, fbb60d59, f0caae13, fb613140,
+ * 366f42eb, 2026-11-23..24).
  */
-const PROBED_SERVICES: ReadonlySet<string> = new Set(["reliant.v1.ProviderAccountService"]);
+const PROBED_SERVICES: ReadonlySet<string> = new Set([
+  "reliant.v1.ProviderAccountService",
+  "controlplane.v1.TestsService",
+  "controlplane.v1.VulnerabilityService",
+]);
 
 /**
  * The same, per procedure, on a service the server does serve: the chat's

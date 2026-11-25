@@ -136,6 +136,9 @@ type Attachments interface {
 	SetDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error
 	SetDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error
 	SetDaemonAttachmentHealth(ctx context.Context, daemonID string, health core.MachineHealth) error
+	// SetDaemonAttachmentResources records a heartbeat's resource reading
+	// (the resmetrics JSON) on the lease; a no-op without one.
+	SetDaemonAttachmentResources(ctx context.Context, daemonID, statsJSON string) error
 }
 
 // LocalModels stores the model inventory a daemon publishes.

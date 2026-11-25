@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The signal the drain's rollback depends on: a claim that cannot take the
@@ -49,19 +50,19 @@ func TestMarkAgentMessagesDelivered_PartialBatchReportsOnlyWhatItTook(t *testing
 	enqueueDrainTestMessage(t, h.Repo(), chatID, fromThreadID, chatID, "A", now)
 	enqueueDrainTestMessage(t, h.Repo(), chatID, fromThreadID, chatID, "B", now.Add(time.Minute))
 
-	queued, err := h.Repo().ListQueuedAgentMessagesForThread(ctx, chatID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	require.Len(t, queued, 2)
 	ids := []string{queued[0].ID, queued[1].ID}
 
 	// A racer takes the second row, exactly as a competing drain would.
-	stolen, err := h.Repo().MarkAgentMessagesDelivered(ctx, ids[1:], time.Now().UTC(), "")
+	stolen, err := store.MarkAgentMessagesDelivered(ctx, h.Repo().ORM(), ids[1:], time.Now().UTC(), "")
 	require.NoError(t, err)
 	require.Len(t, stolen, 1)
 
 	// A claim for the ORIGINAL two-row batch now comes back short. That
 	// shortfall is the whole signal: len(claimed) != len(ids).
-	claimed, err := h.Repo().MarkAgentMessagesDelivered(ctx, ids, time.Now().UTC(), "")
+	claimed, err := store.MarkAgentMessagesDelivered(ctx, h.Repo().ORM(), ids, time.Now().UTC(), "")
 	require.NoError(t, err)
 	assert.Len(t, claimed, 1, "only the still-queued row can be claimed")
 	assert.Equal(t, ids[0], claimed[0])
@@ -91,12 +92,12 @@ func TestDrainAgentMessages_BatchTakenDeliversNothingAndStrandsNothing(t *testin
 	enqueueDrainTestMessage(t, h.Repo(), chatID, fromThreadID, chatID, "only row",
 		time.Now().UTC().Add(-time.Hour))
 
-	queued, err := h.Repo().ListQueuedAgentMessagesForThread(ctx, chatID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 
 	// Someone delivers it first.
-	claimed, err := h.Repo().MarkAgentMessagesDelivered(ctx, []string{queued[0].ID}, time.Now().UTC(), "")
+	claimed, err := store.MarkAgentMessagesDelivered(ctx, h.Repo().ORM(), []string{queued[0].ID}, time.Now().UTC(), "")
 	require.NoError(t, err)
 	require.Len(t, claimed, 1)
 

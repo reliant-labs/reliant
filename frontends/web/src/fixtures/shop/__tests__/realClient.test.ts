@@ -150,7 +150,9 @@ describe.each(WHEN)("the real client over the shop pack, %s", (_when, at) => {
     // The built-in analytics dashboards' sql panels are answered by their dashboard (productAnalytics.ts): not blank.
     expect(answeredSql).toBeGreaterThan(40);
     await same((api) => api.listDashboardTemplates(DEMO_ORG));
-  });
+    // Every panel of every shipped dashboard, asked twice (model and wire): 3.5-5s on a CI runner,
+    // so the 5s default failed main under load. Its own budget, not a smaller sweep.
+  }, 30_000);
 
   it("answers the database panels and the databases a panel may read", async () => {
     await same((api) => api.listDashboardDatabases("env-prod"));
