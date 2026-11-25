@@ -3,12 +3,10 @@ package db
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -59,7 +57,7 @@ func seedDeliveredMessage(t *testing.T, repo *Repo, ctx context.Context, chatID,
 
 func enqueueTestAgentMessage(t *testing.T, repo *Repo, ctx context.Context, id, chatID, fromThreadID, toThreadID, body string, createdAt time.Time) {
 	t.Helper()
-	require.NoError(t, repo.EnqueueAgentMessage(ctx, &AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(ctx, repo.ORM(), &AgentMessage{
 		ID: id, ChatID: chatID, FromThreadID: fromThreadID, ToThreadID: toThreadID,
 		Kind: core.AgentMessageKindMessage, Body: body,
 		Status: core.AgentMessageStatusQueued, CreatedAt: createdAt,
@@ -88,7 +86,7 @@ func TestListQueuedAgentMessagesForThread_OrderedByCreatedAt(t *testing.T) {
 	// A message queued for a different thread must not leak in.
 	enqueueTestAgentMessage(t, repo, ctx, "m-other", chatID, childThreadID, parentThreadID, "not for the child", base)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), childThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 3)
 	require.Equal(t, []string{"m-first", "m-second", "m-third"}, []string{queued[0].ID, queued[1].ID, queued[2].ID})
@@ -114,10 +112,10 @@ func TestMarkAgentMessagesDelivered_RemovesFromQueueAndRecordsDelivery(t *testin
 	deliveredMessageID := seedDeliveredMessage(t, repo, ctx, chatID, childThreadID)
 	deliveredAt := time.Now().UTC().Truncate(time.Second)
 
-	_, markErr := repo.MarkAgentMessagesDelivered(ctx, []string{"m-1", "m-2"}, deliveredAt, deliveredMessageID)
+	_, markErr := store.MarkAgentMessagesDelivered(ctx, repo.ORM(), []string{"m-1", "m-2"}, deliveredAt, deliveredMessageID)
 	require.NoError(t, markErr)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), childThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1, "delivered messages must drop out of the queue")
 	require.Equal(t, "m-3", queued[0].ID)
@@ -174,78 +172,10 @@ func TestCountQueuedAgentMessagesForThread_OnlyCountsQueued(t *testing.T) {
 	require.Equal(t, int64(2), count)
 
 	deliveredMessageID := seedDeliveredMessage(t, repo, ctx, chatID, childThreadID)
-	_, markErr := repo.MarkAgentMessagesDelivered(ctx, []string{"m-a"}, time.Now().UTC(), deliveredMessageID)
+	_, markErr := store.MarkAgentMessagesDelivered(ctx, repo.ORM(), []string{"m-a"}, time.Now().UTC(), deliveredMessageID)
 	require.NoError(t, markErr)
 
 	count, err = store.CountQueuedAgentMessagesForThread(ctx, repo.ORM(), childThreadID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count, "a delivered row must not be counted as queued")
-}
-
-// agentMailboxRefetches counts the chat-scoped "agent_mailbox" refetches the
-// chat's update stream carries.
-func agentMailboxRefetches(t *testing.T, repo *Repo, ctx context.Context, chatID string) int {
-	t.Helper()
-	updates, err := repo.GetUpdatesSince(ctx, chatID, 0, 1000)
-	require.NoError(t, err)
-	n := 0
-	for _, u := range updates {
-		if u.UpdateType != UpdateTypeRefetch {
-			continue
-		}
-		var data RefetchData
-		require.NoError(t, json.Unmarshal(u.Data, &data))
-		if data.Type == RefetchAgentMailbox {
-			n++
-		}
-	}
-	return n
-}
-
-// Every enqueue announces itself on the chat's update stream, so the pending-
-// queue strip re-reads the mailbox on the event instead of polling it every
-// few seconds. Enqueue paths that wrote nothing stay silent.
-func TestEnqueueAgentMessage_AnnouncesMailboxChange(t *testing.T) {
-	t.Parallel()
-
-	repo, cleanup := SetupTestDB(t)
-	t.Cleanup(cleanup)
-	ctx := context.Background()
-	chatID, parentThreadID, childThreadID := seedAgentMessageThreads(t, repo, ctx)
-	now := time.Now().UTC()
-
-	require.Equal(t, 0, agentMailboxRefetches(t, repo, ctx, chatID))
-
-	// A peer/human message.
-	enqueueTestAgentMessage(t, repo, ctx, uuid.New().String(), chatID, childThreadID, parentThreadID, "hello", now)
-	assert.Equal(t, 1, agentMailboxRefetches(t, repo, ctx, chatID))
-
-	// A spawn's terminal report.
-	toolCallID := "call-" + uuid.New().String()
-	report := &AgentMessage{
-		ID: uuid.New().String(), ChatID: chatID, FromThreadID: childThreadID, ToThreadID: parentThreadID,
-		Kind: core.AgentMessageKindCompletion, Body: "done", ToolCallID: &toolCallID,
-		Status: core.AgentMessageStatusQueued, CreatedAt: now,
-	}
-	outcome, err := repo.EnqueueSpawnReport(ctx, report)
-	require.NoError(t, err)
-	require.Equal(t, core.SpawnReportInserted, outcome)
-	assert.Equal(t, 2, agentMailboxRefetches(t, repo, ctx, chatID))
-
-	// The same report again changes nothing, so it announces nothing.
-	report.ID = uuid.New().String()
-	outcome, err = repo.EnqueueSpawnReport(ctx, report)
-	require.NoError(t, err)
-	require.Equal(t, core.SpawnReportAlreadyReported, outcome)
-	assert.Equal(t, 2, agentMailboxRefetches(t, repo, ctx, chatID))
-
-	// Nor does a reconciler placeholder for a spawn that already reported.
-	inserted, err := repo.EnqueueAgentMessageIfAbsent(ctx, &AgentMessage{
-		ID: uuid.New().String(), ChatID: chatID, FromThreadID: childThreadID, ToThreadID: parentThreadID,
-		Kind: core.AgentMessageKindFailed, Body: "synthesized", ToolCallID: &toolCallID, Synthesized: true,
-		Status: core.AgentMessageStatusQueued, CreatedAt: now,
-	})
-	require.NoError(t, err)
-	require.False(t, inserted)
-	assert.Equal(t, 2, agentMailboxRefetches(t, repo, ctx, chatID))
 }

@@ -35,8 +35,9 @@ type CreateWorkflowResult struct {
 }
 
 type createWorkflowTool struct {
-	repo  createWorkflowStore
-	slugs WorkflowSlugChecker
+	repo   createWorkflowStore
+	drafts createWorkflowDrafts
+	slugs  WorkflowSlugChecker
 }
 
 const (
@@ -69,8 +70,8 @@ JSON with id, name, slug, and status.
 }`
 )
 
-func NewCreateWorkflowTool(repo createWorkflowStore, slugs WorkflowSlugChecker) Tool {
-	tool := &createWorkflowTool{repo: repo, slugs: slugs}
+func NewCreateWorkflowTool(repo createWorkflowStore, drafts createWorkflowDrafts, slugs WorkflowSlugChecker) Tool {
+	tool := &createWorkflowTool{repo: repo, drafts: drafts, slugs: slugs}
 	return NewToolWrapper[CreateWorkflowParams, ToolResponse](tool)
 }
 
@@ -87,7 +88,7 @@ func (t *createWorkflowTool) RequiresPermission(args CreateWorkflowParams) (bool
 }
 
 func (t *createWorkflowTool) Execute(ctx *rctx.ToolContext, args CreateWorkflowParams) (ToolResponse, error) {
-	if t.repo == nil || t.slugs == nil {
+	if t.repo == nil || t.slugs == nil || t.drafts == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -144,7 +145,7 @@ func (t *createWorkflowTool) Execute(ctx *rctx.ToolContext, args CreateWorkflowP
 	// Validate exactly as run start will. A draft stores despite errors; a
 	// complete workflow must pass.
 	status := resolveToolStatus(args.Complete, nil)
-	check := validateWorkflowForTool(ctx, t.repo, definition)
+	check := validateWorkflowForTool(ctx, t.repo, t.drafts, definition)
 	if rejection := check.gate("created", status); rejection != "" {
 		return NewTextErrorResponse(rejection), nil
 	}
@@ -164,7 +165,7 @@ func (t *createWorkflowTool) Execute(ctx *rctx.ToolContext, args CreateWorkflowP
 		UpdatedAt:  now,
 	}
 
-	if err := t.repo.CreateWorkflowDraft(ctx, draft); err != nil {
+	if err := t.drafts.CreateWorkflowDraft(ctx, draft); err != nil {
 		if errors.Is(err, db.ErrWorkflowSlugTaken) {
 			return NewTextErrorResponse(workflowSlugTakenMessage(slug)), nil
 		}
@@ -199,7 +200,8 @@ type EditWorkflowParams struct {
 }
 
 type editWorkflowTool struct {
-	repo workflowWriteStore
+	repo   workflowWriteStore
+	drafts writeWorkflowDrafts
 }
 
 const (
@@ -239,8 +241,8 @@ every current error and warning.
 }`
 )
 
-func NewEditWorkflowTool(repo workflowWriteStore) Tool {
-	tool := &editWorkflowTool{repo: repo}
+func NewEditWorkflowTool(repo workflowWriteStore, drafts writeWorkflowDrafts) Tool {
+	tool := &editWorkflowTool{repo: repo, drafts: drafts}
 	return NewToolWrapper[EditWorkflowParams, ToolResponse](tool)
 }
 
@@ -257,7 +259,7 @@ func (t *editWorkflowTool) RequiresPermission(args EditWorkflowParams) (bool, er
 }
 
 func (t *editWorkflowTool) Execute(ctx *rctx.ToolContext, args EditWorkflowParams) (ToolResponse, error) {
-	if t.repo == nil {
+	if t.repo == nil || t.drafts == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -295,7 +297,7 @@ const editWorkflowMaxAttempts = 5
 // editOnce applies args to the draft as it is now. conflict reports that the
 // draft was written between the read and the save, and nothing was saved.
 func (t *editWorkflowTool) editOnce(ctx *rctx.ToolContext, args EditWorkflowParams) (resp ToolResponse, conflict bool) {
-	draft, err := resolveWorkflowDraft(ctx, t.repo, args.ID)
+	draft, err := resolveWorkflowDraft(ctx, t.drafts, args.ID)
 	if err != nil {
 		return NewTextErrorResponse(err.Error()), false
 	}
@@ -338,7 +340,7 @@ func (t *editWorkflowTool) editOnce(ctx *rctx.ToolContext, args EditWorkflowPara
 	// workflow that is (or is being made) complete must pass, and on
 	// rejection the stored workflow is left as it was.
 	status := resolveToolStatus(args.Complete, draft)
-	check := validateWorkflowForTool(ctx, t.repo, newContent)
+	check := validateWorkflowForTool(ctx, t.repo, t.drafts, newContent)
 	if rejection := check.gate("updated", status); rejection != "" {
 		return NewTextErrorResponse(rejection), false
 	}
@@ -356,7 +358,7 @@ func (t *editWorkflowTool) editOnce(ctx *rctx.ToolContext, args EditWorkflowPara
 	slug := generateSlugFromName(workflowName)
 
 	// Save the updated draft with synced name, only over the version read.
-	if err := t.repo.UpdateWorkflowDraftDefinitionAtVersion(ctx, draft.ID, draft.Version, workflowName, slug, newContent, status); err != nil {
+	if err := t.drafts.UpdateWorkflowDraftDefinitionAtVersion(ctx, draft.ID, draft.Version, workflowName, slug, newContent, status); err != nil {
 		if errors.Is(err, db.ErrWorkflowDraftVersionConflict) {
 			return ToolResponse{}, true
 		}
@@ -398,7 +400,8 @@ type WriteWorkflowResult struct {
 }
 
 type writeWorkflowTool struct {
-	repo workflowWriteStore
+	repo   workflowWriteStore
+	drafts writeWorkflowDrafts
 }
 
 const (
@@ -435,8 +438,8 @@ JSON with id, name, slug, status, and created (false for updates).
 The slug can be used in ref: fields to reference this workflow.`
 )
 
-func NewWriteWorkflowTool(repo workflowWriteStore) Tool {
-	tool := &writeWorkflowTool{repo: repo}
+func NewWriteWorkflowTool(repo workflowWriteStore, drafts writeWorkflowDrafts) Tool {
+	tool := &writeWorkflowTool{repo: repo, drafts: drafts}
 	return NewToolWrapper[WriteWorkflowParams, ToolResponse](tool)
 }
 
@@ -453,7 +456,7 @@ func (t *writeWorkflowTool) RequiresPermission(args WriteWorkflowParams) (bool, 
 }
 
 func (t *writeWorkflowTool) Execute(ctx *rctx.ToolContext, args WriteWorkflowParams) (ToolResponse, error) {
-	if t.repo == nil {
+	if t.repo == nil || t.drafts == nil {
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
@@ -479,7 +482,7 @@ func (t *writeWorkflowTool) Execute(ctx *rctx.ToolContext, args WriteWorkflowPar
 		return NewTextErrorResponse("Workflow name is required. Provide it via the 'name' parameter or in the YAML content."), nil
 	}
 
-	draft, err := resolveWorkflowDraft(ctx, t.repo, args.ID)
+	draft, err := resolveWorkflowDraft(ctx, t.drafts, args.ID)
 	if err != nil {
 		return NewTextErrorResponse(err.Error()), nil
 	}
@@ -487,7 +490,7 @@ func (t *writeWorkflowTool) Execute(ctx *rctx.ToolContext, args WriteWorkflowPar
 	// Validate exactly as run start will. A draft stores despite errors; a
 	// workflow that is (or is being made) complete must pass.
 	status := resolveToolStatus(args.Complete, draft)
-	check := validateWorkflowForTool(ctx, t.repo, args.Content)
+	check := validateWorkflowForTool(ctx, t.repo, t.drafts, args.Content)
 	if rejection := check.gate("saved", status); rejection != "" {
 		return NewTextErrorResponse(rejection), nil
 	}
@@ -518,11 +521,11 @@ func (t *writeWorkflowTool) Execute(ctx *rctx.ToolContext, args WriteWorkflowPar
 	// above: a write between the two is a conflict too. Without one, a full
 	// replacement is the caller's intent whatever was there.
 	save := func() error {
-		return t.repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, draft.Name, draft.Slug, args.Content, status)
+		return t.drafts.UpdateWorkflowDraftDefinition(ctx, draft.ID, draft.Name, draft.Slug, args.Content, status)
 	}
 	if args.ExpectedVersion != nil {
 		save = func() error {
-			return t.repo.UpdateWorkflowDraftDefinitionAtVersion(ctx, draft.ID, *args.ExpectedVersion, draft.Name, draft.Slug, args.Content, status)
+			return t.drafts.UpdateWorkflowDraftDefinitionAtVersion(ctx, draft.ID, *args.ExpectedVersion, draft.Name, draft.Slug, args.Content, status)
 		}
 	}
 	if err := save(); err != nil {

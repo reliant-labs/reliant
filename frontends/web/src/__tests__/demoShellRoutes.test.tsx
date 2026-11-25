@@ -3,8 +3,9 @@
 /**
  * The demo shell (demo.reliantlabs.io): its route module boots the tour into
  * memory-only storage; every path it has no page for lands on the sample app's
- * console (`/forge/p/shop`), query kept, whose pages are all mounted; and a
- * compact card offers the optional forge tour, which never starts by itself.
+ * console (`/forge/p/shop`), query kept, whose pages are all mounted, each in
+ * the app's own shell (the frame and its nav column, with the demo's nav); and
+ * a compact card offers the optional forge tour, which never starts by itself.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,6 +26,15 @@ vi.mock("@/components/NewBuildPrompt", () => ({ NewBuildPrompt: () => null }));
 vi.mock("@/lib/toast", () => ({ Toaster: () => null }));
 vi.mock("@/components/Onboarding/JourneyTour", () => ({ JourneyTour: () => <div data-testid="journey-tour" /> }));
 vi.mock("@/components/Forge/Demo/DemoConsole", () => ({ DemoConsole: () => <main data-testid="demo-console" /> }));
+// The shell's frame and keyboard host are the app's, real; the demo's nav body
+// (its own test: Forge/Demo/__tests__/DemoNav.test.tsx) reads the catalog and the console model.
+vi.mock("@/components/Forge/Demo/DemoNav", async () => {
+  const { useSession } = await import("@/lib/session");
+  return { DemoNav: ({ pathname }: { pathname: string }) => {
+    const session = useSession();
+    return <nav data-testid="demo-nav" data-pathname={pathname} data-signed-in={session.signedIn} data-user={session.user?.id ?? "anonymous"} />;
+  } };
+});
 // The console's pages, one test id each; the layouts pass through.
 vi.mock("@/forgeConsolePages", async () => {
   const { Outlet } = await import("@tanstack/react-router");
@@ -63,6 +73,8 @@ function renderDemoShell(path: string) {
 const searchOf = (router: ReturnType<typeof renderDemoShell>) => router.state.location.search as Record<string, unknown>;
 
 beforeEach(() => {
+  // The shell's resizable nav column measures the panels beside it.
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   resetShellForTests("demo");
   resetDemoSessionForTests();
   tracked.length = 0;
@@ -126,6 +138,30 @@ describe("the demo shell's routes", () => {
     expect(page).toHaveAttribute("data-read-only", "true");
     expect(page).toHaveAttribute("data-read-only-reason", "Read-only demo");
     expect(router.state.location.pathname).toBe(path);
+  });
+
+  it.each([
+    ["/forge/p/shop", "console-overview"],
+    ["/forge/p/shop/observability/traces", "console-observabilityView"],
+    ["/forge/demo?section=home", "demo-console"],
+  ])("draws %s in the public-preview shell without authenticating the visitor", async (path, testId) => {
+    renderDemoShell(path);
+    const page = await screen.findByTestId(testId);
+    // Public-preview presentation only: the page in its one main region, the nav beside it.
+    expect(await screen.findByTestId("shell-nav")).toBeInTheDocument();
+    expect(screen.getByTestId("shell-main")).toContainElement(page);
+    expect(document.querySelector("[data-shell-frame]")).not.toBeNull();
+    expect(await screen.findByTestId("demo-nav")).toHaveAttribute("data-pathname", path.split("?")[0]);
+    expect(screen.getByTestId("demo-nav")).toHaveAttribute("data-signed-in", "false");
+    expect(screen.getByTestId("demo-nav")).toHaveAttribute("data-user", "anonymous");
+    // No Setup Guide: the demo has nothing to set up.
+    expect(screen.queryByTestId("setup-guide")).toBeNull();
+  });
+
+  it("draws the not-found page outside the shell: it is not a page of the console", async () => {
+    renderDemoShell("/forge/p/shop/nope");
+    expect(await screen.findByTestId("demo-not-found")).toBeInTheDocument();
+    expect(screen.queryByTestId("shell-nav")).toBeNull();
   });
 
   it("says a shop URL with no page is not found, instead of silently showing the Overview", async () => {

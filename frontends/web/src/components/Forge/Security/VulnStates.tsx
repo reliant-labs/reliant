@@ -48,7 +48,7 @@ export function vulnErrorCopy(kind: VulnErrorKind, subject: string): { title: st
     case "not-configured":
       return {
         title: "This control plane doesn't report vulnerabilities yet",
-        body: "It has no vulnerability service, or runs without the findings store behind it. Nothing here means this project is clean: its findings are unknown until the control plane is upgraded.",
+        body: "It has no vulnerability service, or runs without the findings store behind it. Nothing here means this project is clean: its findings are unknown until the control plane scans releases.",
       };
     case "denied":
       return {

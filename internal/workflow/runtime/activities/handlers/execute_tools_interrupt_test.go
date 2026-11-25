@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -157,7 +158,7 @@ func TestInterrupt_ContextCancellationDoesNotClaimCompletedSiblings(t *testing.T
 	ctx := context.Background()
 
 	finishedID := "toolu_" + uuid.New().String()
-	activityInstance := NewExecuteToolsActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), toolCallsOf(f.h.Repo()), newBlockingToolExecutor())
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: newBlockingToolExecutor(), Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
 
 	// Temporal's TestActivityEnvironment exposes no way to cancel a running
 	// activity's context from outside, and calling into activity code with a

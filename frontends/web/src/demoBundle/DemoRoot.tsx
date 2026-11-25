@@ -3,7 +3,10 @@
 /**
  * The forge demo bundle's root (demoBundle/main.tsx): the demo shell's router under
  * the app's query client and error boundary. No auth provider, no settings
- * hydration, no daemon: the demo shell has nothing to sign in to.
+ * hydration, no daemon: the demo shell has nothing to sign in to. The shell's
+ * session (lib/session) is explicitly signed out, mounted by
+ * the route tree's root (demoShellRoutes.tsx DEMO_SESSION) so that every
+ * mount of the tree, this one and the app bundle's `?shell=demo`, has it.
  */
 
 import { QueryClientProvider } from "@tanstack/react-query";
