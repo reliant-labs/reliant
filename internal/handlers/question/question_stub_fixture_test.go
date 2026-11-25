@@ -15,11 +15,19 @@ import (
 func emptyQuestionRepo() *question.MockRepository {
 	return &question.MockRepository{
 		GetQuestionByIDFunc: func(context.Context, string) (*db.Question, error) { return nil, nil },
-		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
-			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
-		},
-		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
-			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
-		},
 	}
+}
+
+// emptyChatRows and emptyChatViews answer a chat as the store does for a
+// missing row: core.ErrChatNotFound.
+func emptyChatRows() *question.MockChatRows {
+	return &question.MockChatRows{GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
+		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+	}}
+}
+
+func emptyChatViews() *question.MockChatViews {
+	return &question.MockChatViews{GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
+		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+	}}
 }

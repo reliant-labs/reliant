@@ -23,13 +23,19 @@
  * server. What the page hides from a member is a courtesy; the server refuses.
  */
 
-import { timestampDate } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
+import { timestampDate, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import type { OrgPolicy, OrgPolicyMode, SpendAppliesTo, SpendCap } from "@/gen/controlplane/controlplane/v1/org_policy_pb";
 import type { ListOrgLimitChangesResponse } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import {
+  GetOrgPolicyResponseSchema,
+  OrgPolicyRecordSchema,
   OrgPolicyService,
+  type GetMyPolicyUsageResponse,
+  type GetOrgPolicyResponse,
+  type ListOrgPolicyDenialsResponse,
   type OrgPolicyRecord,
   type PolicySpendUsage,
 } from "@/gen/controlplane/services/org_policy/v1/org_policy_pb";
@@ -37,17 +43,15 @@ import { errorReason, hasErrorReason } from "@/lib/errorReasons";
 
 import { getControlPlaneClient } from "./client";
 
-/**
- * Query keys. The root is in activeOrgStore's ORG_SCOPED_QUERY_ROOTS, so an
- * org switch drops every one of them. The history is BillingService's, on its
- * generated keys (`billingServiceKeys.listOrgLimitChangesInfinite`).
+/*
+ * Query keys: the page's reads (the document, the caller's usage, the
+ * denials) run on OrgPolicyService's generated hooks
+ * (`orgPolicyServiceKeys`), whose root "controlplane.v1.OrgPolicyService" is
+ * in activeOrgStore's ORG_SCOPED_QUERY_ROOTS, so an org switch drops every
+ * one of them. The history is BillingService's, on its generated keys
+ * (`billingServiceKeys.listOrgLimitChangesInfinite`). The mappings below are
+ * the hooks' `select`s.
  */
-export const orgPolicyKeys = {
-  all: ["org-policy"] as const,
-  policy: (orgId: string) => ["org-policy", orgId, "document"] as const,
-  usage: (orgId: string) => ["org-policy", orgId, "usage"] as const,
-  denials: (orgId: string, days: number) => ["org-policy", orgId, "denials", days] as const,
-};
 
 /** The org's policy as the page holds it. */
 export interface PolicyRecord {
@@ -70,10 +74,31 @@ function mapRecord(orgId: string, r: OrgPolicyRecord | undefined): PolicyRecord 
   };
 }
 
-/** GetOrgPolicy. No policy is an answer (version 0), never NotFound. */
-export async function getOrgPolicy(orgId: string): Promise<PolicyRecord> {
-  const res = await getControlPlaneClient(OrgPolicyService).getOrgPolicy({ orgId });
+/** GetOrgPolicy's answer as the page holds it. No policy is an answer (version 0), never NotFound. */
+export function policyRecordOf(orgId: string, res: GetOrgPolicyResponse): PolicyRecord {
   return mapRecord(orgId, res.policy);
+}
+
+/**
+ * A record the page already holds (a save's, or a newer version it read) as
+ * GetOrgPolicy's answer, to put in the document's cache entry
+ * (`orgPolicyServiceKeys.getOrgPolicy`) without asking again.
+ */
+export function orgPolicyResponseOf(record: PolicyRecord): GetOrgPolicyResponse {
+  return create(GetOrgPolicyResponseSchema, {
+    policy: create(OrgPolicyRecordSchema, {
+      orgId: record.orgId,
+      version: BigInt(record.version),
+      policy: record.policy,
+      updatedAt: record.updatedAt ? timestampFromDate(record.updatedAt) : undefined,
+      updatedByEmail: record.updatedByEmail,
+    }),
+  });
+}
+
+/** GetOrgPolicy, read fresh (a save's conflict check). */
+export async function getOrgPolicy(orgId: string): Promise<PolicyRecord> {
+  return policyRecordOf(orgId, await getControlPlaneClient(OrgPolicyService).getOrgPolicy({ orgId }));
 }
 
 export interface PolicyViolation {
@@ -167,12 +192,11 @@ function mapSpendUsage(u: PolicySpendUsage | undefined): SpendUsage | null {
 }
 
 /**
- * GetMyPolicyUsage: any member's own spend against the org's caps. A control
- * plane that does not serve org policies (a self-hosted one) answers
+ * GetMyPolicyUsage's answer: any member's own spend against the org's caps. A
+ * control plane that does not serve org policies (a self-hosted one) answers
  * Unimplemented; callers show that as "not available yet" (isUsageUnavailable).
  */
-export async function getMyPolicyUsage(orgId: string): Promise<MyPolicyUsage> {
-  const res = await getControlPlaneClient(OrgPolicyService).getMyPolicyUsage({ orgId });
+export function myPolicyUsageOf(res: GetMyPolicyUsageResponse): MyPolicyUsage {
   return {
     policyVersion: Number(res.policyVersion),
     mode: res.mode,
@@ -213,13 +237,12 @@ export interface PolicyDenials {
 }
 
 /**
- * ListOrgPolicyDenials (admin/owner): what the org's policies refused, and
- * what rules in audit would have refused, per UTC day over the last `days`
- * days (today included). A control plane that does not serve org policies
- * answers Unimplemented (isRpcNotDeployed).
+ * ListOrgPolicyDenials' answer (admin/owner): what the org's policies
+ * refused, and what rules in audit would have refused, per UTC day over the
+ * last `days` days (today included). A control plane that does not serve org
+ * policies answers Unimplemented (isRpcNotDeployed).
  */
-export async function listOrgPolicyDenials(orgId: string, days: number): Promise<PolicyDenials> {
-  const res = await getControlPlaneClient(OrgPolicyService).listOrgPolicyDenials({ orgId, days });
+export function policyDenialsOf(res: ListOrgPolicyDenialsResponse): PolicyDenials {
   return {
     counts: res.counts
       .filter((c) => c.outcome === "refused" || c.outcome === "audited")

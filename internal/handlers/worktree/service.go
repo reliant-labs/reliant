@@ -29,6 +29,8 @@ type Deps struct {
 	// Repo reads and writes worktrees, their projects, repos and chats
 	// (deps.go).
 	Repo Repository
+	// Chats reads the chat a worktree is placed for (store.ChatsWithActivityExtStore).
+	Chats Chats
 	// Rows reads a worktree, looks up a create's prior row and deletes a
 	// worktree (deps.go).
 	Rows Rows
@@ -100,6 +102,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("worktree: Deps.Repo is required")
+	}
+	if d.Chats == nil {
+		return fmt.Errorf("worktree: Deps.Chats is required")
 	}
 	if d.Rows == nil {
 		return fmt.Errorf("worktree: Deps.Rows is required")

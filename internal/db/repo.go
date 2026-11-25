@@ -149,6 +149,10 @@ type Repo struct {
 	draftsOnce sync.Once
 	drafts     workflowdrafts.Service
 	draftsErr  error
+	// pinned is the pinned workflow catalogs this Repo has read, built on
+	// first use (pinnedCatalogs).
+	pinnedOnce sync.Once
+	pinned     *pinnedCatalogCache
 }
 
 // backoffBeforeRetry sleeps calculateBackoff(attempt) before RunTx retries.

@@ -76,7 +76,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=a7cafc03c92fc7aa844384d1a3e3853b1322accd5f4413a8647394b88903aa06
+// forge:hash=6719fdd2931e18e65a47599f5957a82096b1eb37cae3bfdd09a834003f074c82
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -93,7 +93,7 @@ type MockRepository struct {
 	ListRootWorkflowsFunc           func(context.Context, string) ([]*db.Workflow, error)
 	ListRunsFunc                    func(context.Context, db.RunListFilters) ([]*db.RunListItem, bool, error)
 	ListUnlaunchedTriggerEventsFunc func(context.Context, db.RunListFilters) ([]*db.UnlaunchedTriggerEvent, bool, error)
-	LastRunPerWorkflowFunc          func(context.Context, db.RunListFilters) ([]*db.RunListItem, error)
+	LastRunPerWorkflowAndOrgFunc    func(context.Context, db.RunListFilters) ([]*db.RunListItem, error)
 }
 
 // AssignUnassignedOrg records the call and delegates to AssignUnassignedOrgFunc when set.
@@ -159,13 +159,13 @@ func (m *MockRepository) ListUnlaunchedTriggerEvents(ctx context.Context, f db.R
 	return nil, false, contractkit.MockNotSet("MockRepository", "ListUnlaunchedTriggerEvents")
 }
 
-// LastRunPerWorkflow records the call and delegates to LastRunPerWorkflowFunc when set.
-func (m *MockRepository) LastRunPerWorkflow(ctx context.Context, f db.RunListFilters) ([]*db.RunListItem, error) {
-	m.Recorder.Record("LastRunPerWorkflow", ctx, f)
-	if m.LastRunPerWorkflowFunc != nil {
-		return m.LastRunPerWorkflowFunc(ctx, f)
+// LastRunPerWorkflowAndOrg records the call and delegates to LastRunPerWorkflowAndOrgFunc when set.
+func (m *MockRepository) LastRunPerWorkflowAndOrg(ctx context.Context, f db.RunListFilters) ([]*db.RunListItem, error) {
+	m.Recorder.Record("LastRunPerWorkflowAndOrg", ctx, f)
+	if m.LastRunPerWorkflowAndOrgFunc != nil {
+		return m.LastRunPerWorkflowAndOrgFunc(ctx, f)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "LastRunPerWorkflow")
+	return nil, contractkit.MockNotSet("MockRepository", "LastRunPerWorkflowAndOrg")
 }
 
 // Compile-time check.

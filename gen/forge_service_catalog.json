@@ -7183,11 +7183,6 @@
               "Name": "tool_bodies",
               "ProtoType": "enum",
               "IsOptional": true
-            },
-            {
-              "Name": "skip_total",
-              "ProtoType": "bool",
-              "IsOptional": false
             }
           ],
           "ListMessagesResponse": [
@@ -7196,11 +7191,6 @@
               "ProtoType": "[]message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Message"
-            },
-            {
-              "Name": "total",
-              "ProtoType": "int32",
-              "IsOptional": false
             },
             {
               "Name": "count",
@@ -8973,10 +8963,6 @@
               "kind": "enum",
               "type_name": "reliant.v1.ToolBodyMode",
               "optional": true
-            },
-            {
-              "name": "skip_total",
-              "kind": "bool"
             }
           ],
           "reliant.v1.ListMessagesResponse": [
@@ -8985,10 +8971,6 @@
               "kind": "message",
               "type_name": "reliant.v1.Message",
               "repeated": true
-            },
-            {
-              "name": "total",
-              "kind": "int32"
             },
             {
               "name": "count",
@@ -31725,6 +31707,16 @@
               "Name": "workflow",
               "ProtoType": "[]string",
               "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "project_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "LastRunPerWorkflowResponse": [
@@ -31822,6 +31814,11 @@
               "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "project_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "ListRunsResponse": [
@@ -32058,6 +32055,16 @@
               "name": "workflow",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "project_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.LastRunPerWorkflowResponse": [
@@ -32154,6 +32161,11 @@
               "name": "org_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "project_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ListRunsResponse": [
@@ -49016,12 +49028,6 @@
               "name": "capabilities",
               "kind": "message",
               "type_name": "reliant.v1.ToolCapabilities"
-            },
-            {
-              "name": "refused_tool_calls",
-              "kind": "map",
-              "map_key_kind": "string",
-              "map_value_kind": "string"
             }
           ],
           "reliant.v1.ExportWorkflowRequest": [
@@ -49366,11 +49372,6 @@
             },
             {
               "name": "display_style",
-              "kind": "message",
-              "type_name": "reliant.v1.CelString"
-            },
-            {
-              "name": "legacy_attachments",
               "kind": "message",
               "type_name": "reliant.v1.CelString"
             },
@@ -50855,11 +50856,6 @@
             },
             {
               "name": "unattended_opt_in",
-              "kind": "string",
-              "repeated": true
-            },
-            {
-              "name": "approval_required",
               "kind": "string",
               "repeated": true
             },
@@ -59293,6 +59289,32 @@
     },
     {
       "consumer": "Question",
+      "field": "ChatRows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.ChatRows",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
+      "field": "ChatViews",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.ChatViews",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
       "field": "Mailbox",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/question.Mailbox",
       "methods": [],
@@ -59794,6 +59816,19 @@
       ],
       "providers": [
         "Daemonmirror"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "ChatRows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.ChatRows",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -60373,6 +60408,19 @@
       ],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Trigger",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Trigger",
@@ -61072,6 +61120,19 @@
       ],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Worktree",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Worktree",

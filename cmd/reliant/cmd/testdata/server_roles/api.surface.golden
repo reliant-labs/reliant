@@ -65,7 +65,7 @@ RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED kind=bool flag="" default="" required
 RELIANT_CLI_UPGRADE_COMMAND kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_CLI_UPGRADE_URL kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
-RELIANT_CONTROL_PLANE_URL kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[CONTROL_PLANE_API_URL(deprecated=true values=map[]) CONTROL_PLANE_BASE_URL(deprecated=true values=map[])]
+RELIANT_CONTROL_PLANE_URL kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_DAEMON_UPGRADE_COMMAND kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_DAEMON_UPGRADE_URL kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_DB_MAX_IDLE_CONNS kind=int32 flag="" default="20" required=false optional=false sensitive=false allowed=[] aliases=[]
