@@ -223,8 +223,9 @@ function noteUnknown(key: string): void {
  * empty message, held open) instead of Unimplemented, as the old fetch
  * shim's `{}` did (overlay.ts withEmptyReads), and is
  * still recorded in the probe's `unknown` (VISUAL_FXLOG prints it). Writes
- * never get here: the read-only guard refuses them first, and only reads (an
- * rpc whose proto declares NO_SIDE_EFFECTS) get an empty answer.
+ * never get here: the read-only guard refuses them first, and only a read the
+ * proto declares NO_SIDE_EFFECTS gets an empty answer (the rule the guard
+ * applies).
  *
  * The screenshot harness only: a read nobody wrote a fixture for renders as
  * "nothing there", not an error. Its layer holds only `defaults`, and no other

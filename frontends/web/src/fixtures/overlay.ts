@@ -211,17 +211,18 @@ const openEmptyStream = (method: DescMethod) =>
  * hosted preview, where a read nobody wrote a fixture for should render as
  * "nothing there" rather than an error toast; the public demo does not use it.
  *
- * "A read" is an rpc whose proto declares NO_SIDE_EFFECTS, what
- * `options.readOnly` lets through, so a write is never answered empty: with
+ * "A read" is what `options.readOnly` lets through (NO_SIDE_EFFECTS, or the
+ * deprecated classifier's verdict), so a write is never answered empty: with
  * readOnly on it is refused first, and with readOnly off it stays
  * Unimplemented. Built as defaults in a base layer under the pack, so every
  * route, scenario handler and service default the pack declares wins over it.
  */
 export function withEmptyReads(options: CreateFixtureTransportOptions, services: readonly DescService[]): CreateFixtureTransportOptions {
+  const reads = typeof options.readOnly === "function" ? options.readOnly : isRead;
   const empty: AnyServiceDefaults[] = services.map((service) => {
     const defaults: Record<string, unknown> = { $service: service };
     for (const method of service.methods) {
-      if (!isRead(method)) continue;
+      if (!reads(method)) continue;
       const streams = method.methodKind === "server_streaming" || method.methodKind === "bidi_streaming";
       defaults[method.localName] = streams ? openEmptyStream(method) : () => create(method.output);
     }
