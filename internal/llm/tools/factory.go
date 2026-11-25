@@ -340,7 +340,7 @@ func (f *ToolsFactory) store() toolStore {
 	if f.opts == nil || f.opts.Repo == nil {
 		return nil
 	}
-	return f.opts.Repo
+	return WithChats(f.opts.Repo)
 }
 
 // spawnStatusStore is store() as spawn_status's role: nil when there is no
