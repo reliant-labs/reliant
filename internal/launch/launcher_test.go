@@ -114,6 +114,7 @@ func (r *fakeWorkflowRun) GetRunID() string { return r.runID }
 // the run ids back onto the chat.
 type recordingRunRecorder struct {
 	repo  ChatWriter
+	chats ChatReader
 	mu    sync.Mutex // concurrent launches record through one recorder
 	calls []string
 }
@@ -122,7 +123,7 @@ func (r *recordingRunRecorder) RecordRun(ctx context.Context, chatID, workflowID
 	r.mu.Lock()
 	r.calls = append(r.calls, chatID+"/"+workflowID+"/"+runID)
 	r.mu.Unlock()
-	chat, err := r.repo.GetChat(ctx, chatID)
+	chat, err := r.chats.GetChat(ctx, chatID)
 	if err != nil {
 		return
 	}
@@ -189,9 +190,9 @@ func projectsOf(repo launchTestStore) projectaccess.Service {
 
 func newTestLauncher(t *testing.T, repo launchTestStore, starter *fakeStarter) (*Launcher, *recordingRunRecorder) {
 	t.Helper()
-	recorder := &recordingRunRecorder{repo: repo}
+	recorder := &recordingRunRecorder{repo: repo, chats: store.NewChatsWithActivityExtStore(repo.ORM())}
 	projects := projectsOf(repo)
-	return New(Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projects, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: recorder, TaskQueue: "test-task-queue"}), recorder
+	return New(Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projects, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: recorder, TaskQueue: "test-task-queue"}), recorder
 }
 
 // chatStartEvent is what an interactive first send produces.
