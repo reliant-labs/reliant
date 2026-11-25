@@ -16,9 +16,9 @@
  *
  *   export * from "@reliantlabs/forge-web-runtime/transport-scope";
  *
- * and no caller changes, just as src/fixtures/transport.ts stands in for
- * forge#2716. There are NO reliant extensions; keep it that way, and keep the
- * copy in step with forge's.
+ * and no caller changes, as src/fixtures/transport.ts did when web-runtime
+ * 0.13.22 published forge#2716. There are NO reliant extensions; keep it that
+ * way, and keep the copy in step with forge's.
  *
  * In reliant:
  *   - the fallback is the module transport: `useTransport(transport)` and

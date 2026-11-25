@@ -3,9 +3,9 @@
 /**
  * Helpers for the packs and overlays the screenshot harness and the hosted
  * preview compose over the shop pack. HARNESS POLICY, not part of forge's
- * fixture-transport API (./transport.ts mirrors that): everything here is
- * built from that API's public options alone, so it keeps working, unchanged,
- * when transport.ts becomes a re-export of forge's.
+ * fixture-transport API (./transport.ts serves forge's, plus reliant's
+ * extensions): everything here is built from that API's public options
+ * alone, so it keeps working as the extensions move into forge.
  *
  *   withEmptyReads(options, services)  an unanswered READ of these services
  *                                      answers the empty response (the old

@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The fixture transport's contract (forge#2716's, which transport.ts ports):
+ * The fixture transport's contract (forge#2716's, which transport.ts serves):
  * every answer crosses Connect's own in-memory router (serialized,
  * interceptors run), the dispatch ladder (readOnly guard → latest layer's
  * route or scenario handler → service defaults → Unimplemented), pack
@@ -268,6 +268,19 @@ describe("createFixtureTransport: readOnly", () => {
     await expect(createClient(UserService, transport).getCurrentUser({})).resolves.toBeDefined();
     await expect(deploy(transport).createTenant({})).rejects.toSatisfy((e) => e instanceof ConnectError && e.code === Code.PermissionDenied && e.rawMessage === MESSAGE);
   });
+
+  it("refuses a stream the way forge's own guard does, on the extension's path too: the call opens, its first read fails", async () => {
+    const connect = ToolsDaemonService.method.connectDaemon;
+    const scenario = { [`${ToolsDaemonService.typeName}/ConnectDaemon`]: () => [{}] };
+    const requests = async function* () {
+      yield create(connect.input);
+    };
+    // forge's guard (readOnly: true), then the interceptor guard (the classifier).
+    for (const transport of [createFixtureTransport({ readOnly: true, scenario }), createFixtureTransport({ readOnly: isDemoRead, scenario })]) {
+      const res = await transport.stream(connect, new AbortController().signal, undefined, undefined, requests(), undefined);
+      expect(await code(drain(res.message))).toBe(Code.PermissionDenied);
+    }
+  });
 });
 
 describe("fixture packs", () => {
@@ -334,8 +347,11 @@ describe("answers: writes a pack answers from fixtures anyway (reliant extension
   });
 
   it("refuses a listed write nothing answers", async () => {
-    const pack = defineFixturePack({ name: "app", services: [DeployService], answers: [CREATE_TENANT] });
+    const pack = defineFixturePack({ name: "app", services: [DeployService, StreamingService], answers: [CREATE_TENANT, `${StreamingService.typeName}/StreamUserUpdates`] });
     expect(await code(deploy(createFixtureTransport({ pack, readOnly: true })).createTenant({}))).toBe(Code.PermissionDenied);
+    // A stream too, when its first read fails (forge answers it Unimplemented).
+    const unannotated = createFixtureTransport({ pack, readOnly: () => false });
+    expect(await code(drain(streaming(unannotated).streamUserUpdates({})))).toBe(Code.PermissionDenied);
   });
 
   it("is unioned across extends, takes a descriptor too, and works with the deprecated classifier", async () => {
