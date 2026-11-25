@@ -2842,42 +2842,6 @@ func (r *Repo) lockTriggerProjects(ctx context.Context, triggerID, toProjectID s
 	return store.LockProjectsForWrite(ctx, r.ORM(), current, toProjectID)
 }
 
-// PauseTrigger is the system pausing a trigger that can no longer launch as
-// written, recording reason (core.TriggerPaused*) on the row and the pause in
-// its change history. paused is false when the trigger was already paused (a
-// person did, or a concurrent fire got here first): nothing is written, so a
-// burst of refused fires records one pause.
-func (r *Repo) PauseTrigger(ctx context.Context, id, reason string) (paused bool, err error) {
-	if id == "" {
-		return false, fmt.Errorf("trigger ID cannot be empty")
-	}
-	err = r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
-			return err
-		}
-		before, err := store.GetTrigger(ctx, r.ORM(), id)
-		if err != nil {
-			return err
-		}
-		if !before.Enabled {
-			return nil
-		}
-		if err := store.PauseTrigger(ctx, r.ORM(), id, reason); err != nil {
-			return err
-		}
-		after, err := store.GetTrigger(ctx, r.ORM(), id)
-		if err != nil {
-			return err
-		}
-		paused = true
-		return store.RecordTriggerChange(ctx, r.ORM(), "pause", before, after)
-	})
-	if err != nil {
-		return false, err
-	}
-	return paused, nil
-}
-
 func (r *Repo) LockActivationDependencies(ctx context.Context, userID, projectID string) error {
 	return store.LockActivationDependencies(ctx, r.ORM(), userID, projectID)
 }
@@ -2959,46 +2923,6 @@ func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters
 		return nil, false, fmt.Errorf("user ID cannot be empty")
 	}
 	return store.ListTriggerEventsPage(ctx, r.ORM(), f)
-}
-
-// CreateRunEvent inserts the event, doing nothing when its DedupeKey
-// already exists. created=false means the transition was already recorded.
-func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error) {
-	if ev == nil {
-		return false, fmt.Errorf("run event cannot be nil")
-	}
-	if ev.DedupeKey == "" {
-		// An empty key would collide every transition with every other one,
-		// and the second real event would silently read as a retry.
-		return false, fmt.Errorf("run event dedupe key cannot be empty")
-	}
-	return store.InsertRunEvent(ctx, r.ORM(), ev)
-}
-
-// HasEnabledTriggerOfKind reports whether the user owns an enabled trigger
-// of the kind.
-func (r *Repo) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error) {
-	if userID == "" {
-		return false, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.HasEnabledTriggerOfKind(ctx, r.ORM(), userID, kind)
-}
-
-// LockChatForRunEvent row-locks the chat until the transaction ends.
-func (r *Repo) LockChatForRunEvent(ctx context.Context, chatID string) error {
-	if chatID == "" {
-		return fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.LockChatForRunEvent(ctx, r.ORM(), chatID)
-}
-
-// CountOtherPendingBlockers counts the chat's pending approvals and
-// questions other than excludeID.
-func (r *Repo) CountOtherPendingBlockers(ctx context.Context, chatID, excludeID string) (int, error) {
-	if chatID == "" {
-		return 0, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.CountOtherPendingBlockers(ctx, r.ORM(), chatID, excludeID)
 }
 
 // ClaimRunEvents leases up to max undispatched events until leaseUntil.

@@ -194,7 +194,7 @@ func TestMoveProjectOrg_RestampsWhatMovesAndLeavesWhatStays(t *testing.T) {
 	f.trigger("t-personal", "p-move", true, strp("conn-mine"))
 	f.trigger("t-person-paused", "p-move", false, nil)
 	f.trigger("t-system-paused", "p-move", true, nil)
-	paused, err := f.repo.PauseTrigger(ctx, "t-system-paused", core.TriggerPausedCreatorLeftOrg)
+	paused, err := store.NewTriggerWritesExtStore(f.repo.ORM()).SystemPauseTrigger(ctx, "t-system-paused", core.TriggerPausedCreatorLeftOrg)
 	require.NoError(t, err)
 	require.True(t, paused)
 
