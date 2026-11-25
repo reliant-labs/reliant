@@ -213,6 +213,38 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Rejects rather than resolving falsy when the listener cannot start: the
   // renderer's fallback lives in one catch block, and a falsy resolve would
   // route past it (electron.d.ts states this contract).
+  // Forge sign-in (AUTH_PROVIDER "forge"; main.js forge-auth:*,
+  // forge-auth.js). Sign-in runs in the system browser through forge's
+  // sign-in handoff; the session it yields stays in the main process, which
+  // proxies the renderer's same-origin /_api/@… calls with it. Nothing here
+  // returns a credential: only who signed in. A build with Supabase sign-in
+  // answers success: false.
+  forgeAuth: {
+    signIn: () => ipcRenderer.invoke('forge-auth:sign-in'),
+    signOut: () => ipcRenderer.invoke('forge-auth:sign-out'),
+    sessionChanged: () => ipcRenderer.invoke('forge-auth:session-changed'),
+    onChanged: (callback) => {
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on('forge-auth:changed', listener);
+      return () => ipcRenderer.removeListener('forge-auth:changed', listener);
+    },
+    // The terminal websocket, relayed by the main process (it holds the
+    // socket and the session; frames cross IPC). The renderer passes only
+    // the terminal's query string, and its own id for the socket, which every
+    // event then carries. frontends/web lib/desktop-terminal-socket.ts.
+    terminal: {
+      open: (query, id) =>
+        ipcRenderer.invoke('forge-auth:terminal-open', String(query || ''), typeof id === 'string' ? id : undefined),
+      send: (id, data) => ipcRenderer.send('forge-auth:terminal-send', id, data),
+      close: (id, code, reason) => ipcRenderer.invoke('forge-auth:terminal-close', id, code, reason),
+      onEvent: (callback) => {
+        const listener = (_event, payload) => callback(payload);
+        ipcRenderer.on('forge-auth:terminal-event', listener);
+        return () => ipcRenderer.removeListener('forge-auth:terminal-event', listener);
+      },
+    },
+  },
+
   startOAuthRedirect: async () => {
     const result = await ipcRenderer.invoke('oauth:start-redirect');
     if (!result?.success || !result.redirectUri) {

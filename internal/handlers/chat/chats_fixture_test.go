@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -122,4 +123,28 @@ func ormOf(repo any) *orm.Client {
 		}
 	}
 	return nil
+}
+
+// A fixture that names no QuestionResolver resolves through its own repository
+// (a *db.Repo's ORM, as in production); one over a mock repository fails
+// loudly instead.
+func init() {
+	fixtureQuestionResolver = func(repo Repository) QuestionResolver {
+		if client := ormOf(repo); client != nil {
+			return questions.New(store.NewQuestionExtStore(client), activityOf(repo))
+		}
+		return &MockQuestionResolver{}
+	}
+}
+
+type noActivity struct{}
+
+func (noActivity) EmitChatActivityIfChanged(context.Context, string) error { return nil }
+
+// activityOf is the repository's chat-activity announcer, or none.
+func activityOf(repo any) questions.ChatActivity {
+	if a, ok := repo.(questions.ChatActivity); ok {
+		return a
+	}
+	return noActivity{}
 }

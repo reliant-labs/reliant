@@ -281,6 +281,28 @@ export interface ElectronAPI {
     onTabUpdate: (callback: (data: { id: string; title?: string; url?: string; favicon?: string; isLoading?: boolean; canGoBack?: boolean; canGoForward?: boolean }) => void) => () => void;
   };
 
+  // Desktop sign-in through forge's sign-in handoff (lib/desktop-forge-sign-in.ts):
+  // the main process opens the system browser and receives the code on a
+  // loopback listener. Optional: desktop builds before the handoff lack it.
+  forgeAuth?: {
+    signIn: () => Promise<{ success: boolean; error?: string; subject?: string; email?: string; name?: string }>;
+    signOut: () => Promise<{ success: boolean; error?: string }>;
+    sessionChanged: () => Promise<{ success: boolean }>;
+    // Fires when the main process's session changes (signed in, out, or ended
+    // at the server): a refetch trigger for /auth/session, not data.
+    onChanged?: (callback: (payload: { signedIn: boolean }) => void) => () => void;
+    // The terminal websocket, relayed by the main process (lib/desktop-terminal-socket.ts).
+    terminal?: {
+      // id: the renderer's own id for the socket, which every event carries.
+      open: (query: string, id?: string) => Promise<{ success: boolean; id?: string; error?: string }>;
+      send: (id: string, data: string) => void;
+      close: (id: string, code?: number, reason?: string) => Promise<{ success: boolean }>;
+      onEvent: (
+        callback: (event: { id: string; type: "open" | "message" | "error" | "close"; data?: string; code?: number; reason?: string; wasClean?: boolean }) => void,
+      ) => () => void;
+    };
+  };
+
   platform: string;
   isDevelopment: boolean;
 }

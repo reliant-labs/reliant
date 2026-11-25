@@ -127,7 +127,7 @@ func (m *MockChatViews) GetChat(ctx context.Context, id string) (*db.Chat, error
 var _ ChatViews = (*MockChatViews)(nil)
 
 // forge:section MockRepository
-// forge:hash=590acba69c3f521f8fe2c3bb098402c46f062694f93b5960ae0960322e173a09
+// forge:hash=d60c36c184de1cafa27af31270a7df13b82b065849c9e664b56c482c9098d25c
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -138,7 +138,6 @@ var _ ChatViews = (*MockChatViews)(nil)
 type MockRepository struct {
 	contractkit.Recorder
 	GetQuestionByIDFunc     func(context.Context, string) (*db.Question, error)
-	ResolveQuestionFunc     func(context.Context, string, *string) error
 	EmitQuestionUpdateFunc  func(context.Context, string, db.QuestionUpdate) error
 	SaveMessageToThreadFunc func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
 }
@@ -150,15 +149,6 @@ func (m *MockRepository) GetQuestionByID(ctx context.Context, id string) (*db.Qu
 		return m.GetQuestionByIDFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetQuestionByID")
-}
-
-// ResolveQuestion records the call and delegates to ResolveQuestionFunc when set.
-func (m *MockRepository) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
-	m.Recorder.Record("ResolveQuestion", ctx, id, responseData)
-	if m.ResolveQuestionFunc != nil {
-		return m.ResolveQuestionFunc(ctx, id, responseData)
-	}
-	return contractkit.MockNotSet("MockRepository", "ResolveQuestion")
 }
 
 // EmitQuestionUpdate records the call and delegates to EmitQuestionUpdateFunc when set.
@@ -181,6 +171,32 @@ func (m *MockRepository) SaveMessageToThread(ctx context.Context, chatID string,
 
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockResolver
+// forge:hash=d6b79bde1a52bb605ac3f8a18f44fd6961fb9b92417a8314caac53c431b1e443
+
+// MockResolver is a test mock for the Resolver interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockResolver.<Method>Func not set" error.
+type MockResolver struct {
+	contractkit.Recorder
+	ResolveQuestionFunc func(context.Context, string, *string) error
+}
+
+// ResolveQuestion records the call and delegates to ResolveQuestionFunc when set.
+func (m *MockResolver) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
+	m.Recorder.Record("ResolveQuestion", ctx, id, responseData)
+	if m.ResolveQuestionFunc != nil {
+		return m.ResolveQuestionFunc(ctx, id, responseData)
+	}
+	return contractkit.MockNotSet("MockResolver", "ResolveQuestion")
+}
+
+// Compile-time check.
+var _ Resolver = (*MockResolver)(nil)
 
 // forge:section MockSignaler
 // forge:hash=6edcfa0cf6724b6d895aa13359618ed50f22dfb2634e330c2d7366cd044d4dbd

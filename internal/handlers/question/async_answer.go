@@ -82,7 +82,7 @@ func (s *Service) resolveAsyncQuestion(
 	if responseData != "" {
 		stored = &responseData
 	}
-	if err := s.deps.Repo.ResolveQuestion(ctx, question.ID, stored); err != nil {
+	if err := s.deps.Resolver.ResolveQuestion(ctx, question.ID, stored); err != nil {
 		// Delivered but still pending: an answer sent again finds the
 		// message already queued and resolves it then.
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve question"))

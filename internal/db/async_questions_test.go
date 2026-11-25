@@ -24,7 +24,7 @@ func (c *liveGateChat) askAsync(id, rowID, thread string) {
 	c.t.Helper()
 	metadata := `{"type":"ask_user","async":true,"questions":[{"question":"` + id + `?"}]}`
 	toolCall := "call-" + id
-	if err := c.repo.CreateQuestion(context.Background(), &Question{
+	if err := createQuestionAnnounced(context.Background(), c.repo, &Question{
 		ID: id, ChatID: c.chatID, WorkflowID: rowID, TemporalWorkflowID: c.chatID,
 		ThreadID: thread, StepID: "agent_loop", Status: QuestionStatusPending,
 		Metadata: &metadata, ToolCallID: &toolCall, Async: true, CreatedAt: time.Now(),
@@ -102,7 +102,7 @@ func TestAsyncQuestion_ListedByListAsyncQuestionsByChat(t *testing.T) {
 	time.Sleep(2 * time.Millisecond)
 	c.askAsync("q-async-2", c.chatID, c.chatID)
 	answer := `{"answers":[{"question":"q-async-1?","selected":["Yes"]}]}`
-	require.NoError(t, c.repo.ResolveQuestion(context.Background(), "q-async-1", &answer))
+	require.NoError(t, resolveQuestionAnnounced(context.Background(), c.repo, "q-async-1", &answer))
 
 	got, err := store.NewQuestionExtStore(c.repo.ORM()).ListAsyncQuestionsByChat(context.Background(), c.chatID)
 	require.NoError(t, err)
@@ -135,7 +135,7 @@ func TestAsyncQuestion_StaysInTheInboxAfterItsRunsEnd(t *testing.T) {
 	assert.Equal(t, map[string]int32{"q-async": 1}, c.inboxQuestionKeys(),
 		"the async question outlives its runs in the inbox; the blocking one does not")
 
-	require.NoError(t, c.repo.ResolveQuestion(context.Background(), "q-async", nil))
+	require.NoError(t, resolveQuestionAnnounced(context.Background(), c.repo, "q-async", nil))
 	assert.Empty(t, c.inboxQuestionKeys(), "answered, it leaves the inbox")
 }
 
@@ -153,7 +153,7 @@ func TestAsyncQuestion_ThreadEndDoesNotCloseIt(t *testing.T) {
 	insertTestWorkflowWithParent(t, repo, "wf-ac-root", chatID, nil, Active())
 	insertTestThreadForWorkflow(t, repo, "th-ac-spawn", chatID, "wf-ac-root", ThreadStatusRunning)
 	insertTestQuestion(t, repo, "q-blocking", chatID, "wf-ac-root", "th-ac-spawn")
-	require.NoError(t, repo.CreateQuestion(ctx, &Question{
+	require.NoError(t, createQuestionAnnounced(ctx, repo, &Question{
 		ID: "q-async", ChatID: chatID, WorkflowID: "wf-ac-root", ThreadID: "th-ac-spawn",
 		StepID: "execute_tools", Status: QuestionStatusPending, Async: true, CreatedAt: time.Now().UTC(),
 	}))

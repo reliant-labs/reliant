@@ -15,8 +15,7 @@ import (
 
 // Records reads the rows placement decides over — a machine, a worktree, a
 // project, and where a project is installed — from the generated stores. It
-// satisfies WorktreeReader, DaemonReader and Installs (and, with a GetChat
-// beside it, WorkspaceReader), so a handler can carry it instead of reaching
+// satisfies WorktreeReader, DaemonReader, Installs and WorkspaceReader, so a handler can carry it instead of reaching
 // these reads through *db.Repo.
 //
 // Like the *db.Repo methods it replaces it checks no owner: every caller
@@ -28,6 +27,7 @@ type Records struct {
 	worktrees      store.WorktreeExtStore
 	projects       store.ProjectExtStore
 	projectDaemons store.ProjectDaemonExtStore
+	chats          store.ChatsWithActivityExtStore
 }
 
 // NewRecords returns the placement reads over db.
@@ -37,7 +37,16 @@ func NewRecords(db orm.Context) Records {
 		worktrees:      store.NewWorktreeExtStore(db),
 		projects:       store.NewProjectExtStore(db),
 		projectDaemons: store.NewProjectDaemonExtStore(db),
+		chats:          store.NewChatsWithActivityExtStore(db),
 	}
+}
+
+// GetChat reads the chat a request was made for, with its computed state.
+func (r Records) GetChat(ctx context.Context, id string) (*db.Chat, error) {
+	if id == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	return r.chats.GetChat(ctx, id)
 }
 
 // GetDaemon reads a machine's record.

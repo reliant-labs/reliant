@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -48,7 +49,7 @@ func setupFailedRunWithQuestion(t *testing.T, threadOf func(fx absorbFixture) st
 
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Failed())
 	questionID := uuid.NewString()
-	require.NoError(t, repo.CreateQuestion(ctx, &db.Question{
+	require.NoError(t, questions.NewFromRepo(repo).CreateQuestion(ctx, &db.Question{
 		ID: questionID, ChatID: fx.chatID, WorkflowID: fx.rootThreadID, TemporalWorkflowID: fx.rootThreadID,
 		ThreadID: threadOf(fx), StepID: "execute_tools", Status: db.QuestionStatusPending, CreatedAt: time.Now().UTC(),
 	}))
@@ -59,7 +60,7 @@ func setupFailedRunWithQuestion(t *testing.T, threadOf func(fx absorbFixture) st
 	pause := &questionSignalPause{}
 	service := &Service{
 		deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())},
-		runs: runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
+		runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
 	}
 	return repo, ctx, fx, service, pause, questionID
 }

@@ -44,7 +44,7 @@ func TestListInbox_LeavesOutItemsOfAnOrgTheCallerMayNotRead(t *testing.T) {
 	projectOrgs := map[string]*string{"p-acme": org("acme"), "p-home": org("home")}
 	newSvc := func() *Service {
 		repo := newInflightRepo(0)
-		repo.GetChatFunc = func(_ context.Context, id string) (*db.Chat, error) {
+		repo.chats.GetChatFunc = func(_ context.Context, id string) (*db.Chat, error) {
 			return &db.Chat{ID: id, UserID: "user-1", OrgID: chatOrgs[id]}, nil
 		}
 		repo.GetProjectFunc = func(_ context.Context, id string) (*db.Project, error) {
@@ -113,7 +113,7 @@ func TestListInbox_LeavesOutAttentionIncidentsOfAnOrgTheCallerMayNotRead(t *test
 	newSvc := func() *Service {
 		repo := newInflightRepo(0)
 		repo.ListTriggersFunc = func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return nil, nil }
-		repo.GetChatFunc = func(_ context.Context, id string) (*db.Chat, error) {
+		repo.chats.GetChatFunc = func(_ context.Context, id string) (*db.Chat, error) {
 			return &db.Chat{ID: id, UserID: "user-1", OrgID: orgOf[id]}, nil
 		}
 		repo.GetProjectFunc = func(_ context.Context, id string) (*db.Project, error) {
@@ -178,7 +178,7 @@ func TestListInbox_ScopedToTheNamedOrg(t *testing.T) {
 	newSvc := func() *Service {
 		repo := newInflightRepo(0)
 		repo.AssignUnassignedOrgFunc = func(context.Context, string, string) error { return nil }
-		repo.GetChatFunc = func(_ context.Context, id string) (*db.Chat, error) {
+		repo.chats.GetChatFunc = func(_ context.Context, id string) (*db.Chat, error) {
 			return &db.Chat{ID: id, UserID: "user-1", OrgID: chatOrgs[id]}, nil
 		}
 		repo.GetProjectFunc = func(_ context.Context, id string) (*db.Project, error) {

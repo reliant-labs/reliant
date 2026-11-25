@@ -39,9 +39,9 @@ type Detachments interface {
 type ProjectLookups interface {
 	GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*core.Project, error)
 	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error)
-	// GetProjectBySameRemoteAndUserInScope matches the remote in another
-	// spelling (SSH or HTTPS, with or without .git): the fallback after the
-	// exact lookup.
+	// GetProjectByRemoteKeyAndUserInScope matches the repository a remote
+	// names, in any form of it (projects.remote_key; not unique).
+	GetProjectByRemoteKeyAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error)
 	GetProjectBySameRemoteAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error)
 }
 

@@ -111,7 +111,7 @@ func (r *Repo) announceChatActivity(ctx context.Context, chatID string, fixed *C
 	var written *UserUpdate
 	err := r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		written = nil
-		chat, err := r.GetChat(txCtx, chatID)
+		chat, err := store.GetChat(txCtx, r.ORM(), chatID)
 		if svcerr.IsNotFound(err) {
 			logging.DebugContext(txCtx, "[ActivityEvent] chat is gone; no activity to announce", "chatID", chatID)
 			return nil

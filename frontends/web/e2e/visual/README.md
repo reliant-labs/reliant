@@ -106,8 +106,14 @@ that runs the PR's code can only read; the job that pushes runs main's
 `.github/scripts/visual-recapture-apply.sh` and nothing from the PR, refuses a
 symlink anywhere on a baseline's path in the PR's checkout, and dispatches no
 workflow (on the PR's branch that would run the PR's own definition with this
-repository's secrets): the new head's `CI result` comes from the pipeline's
-re-trigger of a required check no run reported. control-plane's pr-fix
+repository's secrets). The push is the Reliant App's, with a token minted for
+this repository alone in the push step (repository variable
+`RELIANT_APP_CLIENT_ID`, secret `RELIANT_APP_PRIVATE_KEY`); the job's
+`GITHUB_TOKEN` can only read, and without the App's credentials nothing is
+pushed. An App push starts `ci.yml` like any push, and control-plane's push gate
+(cp#3624) trusts a same-repository head the bot pushed, so its re-trigger of a
+required check no run reported is allowed too; it refuses a `GITHUB_TOKEN`
+push. control-plane's pr-fix
 dispatches it when a merge group failed only on `Visual baseline`. A run
 where every capture already matches pushes nothing: the failure came from an
 entry ahead in the queue, or a nondeterministic surface (below). Still list
