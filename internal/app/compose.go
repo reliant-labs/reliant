@@ -37,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/agentruns"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/chatupdates"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
@@ -1142,6 +1143,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Logger:        g.Log,
 		Config:        g.Cfg,
 		Repo:          g.Database(),
+		Chats:         chataccess.NewFromORM(g.Database().ORM()),
 		Workflows:     store.NewWorkflowExtStore(g.Database().ORM()),
 		Worktrees:     store.NewWorktreeExtStore(g.Database().ORM()),
 		ProjectRows:   store.NewProjectExtStore(g.Database().ORM()),
@@ -1453,6 +1455,7 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Store:       g.Database(),
+		Chats:       chataccess.NewFromORM(g.Database().ORM()),
 		Accounts:    g.CredentialsProvideraccounts(),
 		Funding:     store.NewChatPersonalFundingExtStore(g.Database().ORM()),
 		ValidateKey: keyvalidate.Validate,
