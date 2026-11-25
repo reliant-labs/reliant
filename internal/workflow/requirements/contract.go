@@ -13,12 +13,8 @@ import "context"
 // Machine runs one shell command on the run's machine, in the project root.
 // err is a transport failure (the command may not have run), never a
 // non-zero exit.
-//
-// Name is what `reliant machine login --machine` resolves the machine by: the
-// name its owner gave it, else its id; "" when it is not known.
 type Machine interface {
 	Run(ctx context.Context, command string) (stdout string, exitCode int, err error)
-	Name() string
 }
 
 // Credentials says whether an integration's connection resolves, authorized,
