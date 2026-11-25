@@ -103,13 +103,47 @@ func selectRuns(db orm.Context, userID string, parentChatID *string, distinctOn 
 	return q.ColumnExpr(runRowColumns)
 }
 
-// whereProjectAndWorkflows applies the two filters both list queries share.
+// whereProjectAndWorkflows applies the filters both run list queries share:
+// the projects, the workflows and the org.
 func whereProjectAndWorkflows(q *bun.SelectQuery, filters core.RunListFilters) *bun.SelectQuery {
-	if filters.ProjectID != nil {
-		q = q.Where("r.project_id = ?", *filters.ProjectID)
-	}
+	q = whereProjects(q, "r.project_id", filters)
 	if len(filters.Workflows) > 0 {
 		q = q.Where("r.workflow_name = ANY(?)", pgdialect.Array(filters.Workflows))
+	}
+	// A run's org is its chat's (workflows_inherit_chat_org).
+	return whereRunOrg(q, "r.org_id", filters.Org)
+}
+
+// projectSet is the union of filters.ProjectID and filters.ProjectIDs; nil
+// is every project.
+func projectSet(filters core.RunListFilters) []string {
+	if filters.ProjectID == nil && len(filters.ProjectIDs) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(filters.ProjectIDs)+1)
+	if filters.ProjectID != nil {
+		ids = append(ids, *filters.ProjectID)
+	}
+	return append(ids, filters.ProjectIDs...)
+}
+
+// whereProjects narrows column to the filters' projects, if they name any.
+func whereProjects(q *bun.SelectQuery, column string, filters core.RunListFilters) *bun.SelectQuery {
+	ids := projectSet(filters)
+	switch len(ids) {
+	case 0:
+		return q
+	case 1:
+		return q.Where("? = ?", bun.Ident(column), ids[0])
+	default:
+		return q.Where("? = ANY(?)", bun.Ident(column), pgdialect.Array(ids))
+	}
+}
+
+// whereRunOrg narrows column to org (whereOrg); nil is every org.
+func whereRunOrg(q *bun.SelectQuery, column string, org *core.OrgScope) *bun.SelectQuery {
+	if org != nil {
+		whereOrg(column, org)(q)
 	}
 	return q
 }
@@ -133,14 +167,6 @@ func ListRuns(ctx context.Context, db orm.Context, filters core.RunListFilters) 
 		q = q.Where("r.chat_state IS DISTINCT FROM ?", core.ChatStateArchived)
 	}
 	q = whereProjectAndWorkflows(q, filters)
-	if filters.Org != nil {
-		// A run's org is its chat's (workflows_inherit_chat_org).
-		if filters.Org.IncludeUnassigned {
-			q = q.Where("(r.org_id = ? OR r.org_id IS NULL)", filters.Org.OrgID)
-		} else {
-			q = q.Where("r.org_id = ?", filters.Org.OrgID)
-		}
-	}
 	if filters.TriggerID != nil {
 		q = q.Where("r.trigger_id = ?", *filters.TriggerID)
 	}
@@ -191,19 +217,34 @@ func ListRuns(ctx context.Context, db orm.Context, filters core.RunListFilters) 
 }
 
 // LastRunPerWorkflow returns each workflow name's newest run, ordered by
-// workflow name. Only UserID, ProjectID and Workflows of the filters apply.
+// workflow name. Only UserID, Org, ProjectID, ProjectIDs and Workflows of
+// the filters apply.
 // Archived runs count: an automation archives each run it finishes
 // successfully, so leaving them out would make a healthy automation's
 // workflow read as never having run.
 func LastRunPerWorkflow(ctx context.Context, db orm.Context, filters core.RunListFilters) ([]*core.RunListItem, error) {
+	items, err := LastRunPerWorkflowAndOrg(ctx, db, filters)
+	if err != nil {
+		return nil, err
+	}
+	return core.NewestRunPerWorkflow(items), nil
+}
+
+// LastRunPerWorkflowAndOrg returns the newest run of each (workflow name,
+// org) pair, under LastRunPerWorkflow's filters: the candidates a caller
+// narrows to the orgs a person may still see before it picks each
+// workflow's newest (core.NewestRunPerWorkflow). Picking per workflow first
+// would let a newer run of an org they left hide an older one they may see.
+// A person is in few orgs, so this is a few rows per workflow.
+func LastRunPerWorkflowAndOrg(ctx context.Context, db orm.Context, filters core.RunListFilters) ([]*core.RunListItem, error) {
 	if filters.UserID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	q := selectRuns(db, filters.UserID, nil, "r.workflow_name").
+	q := selectRuns(db, filters.UserID, nil, "r.workflow_name, r.org_id").
 		Where("r.launch_kind IS DISTINCT FROM 'builder.test'").
 		Where("r.workflow_name <> ''")
 	q = whereProjectAndWorkflows(q, filters).
-		OrderExpr("r.workflow_name, r.created_at DESC, r.chat_id DESC")
+		OrderExpr("r.workflow_name, r.org_id, r.created_at DESC, r.chat_id DESC")
 
 	var rows []runRow
 	if err := q.Scan(ctx, &rows); err != nil {
@@ -246,21 +287,13 @@ func ListUnlaunchedTriggerEvents(ctx context.Context, db orm.Context, filters co
 		Where("te.user_id = ?", filters.UserID).
 		Where("te.outcome IN (?, ?)", core.TriggerEventSkipped, core.TriggerEventFailed).
 		Where("te.chat_id IS NULL")
-	if filters.ProjectID != nil {
-		q = q.Where("t.project_id = ?", *filters.ProjectID)
-	}
+	q = whereProjects(q, "t.project_id", filters)
 	if len(filters.Workflows) > 0 {
 		q = q.Where("t.workflow = ANY(?)", pgdialect.Array(filters.Workflows))
 	}
 	// An event's org is its trigger's: the org-scoped run log lists only
 	// that org's events (with the caller's unassigned ones in their default).
-	if filters.Org != nil {
-		if filters.Org.IncludeUnassigned {
-			q = q.Where("(t.org_id = ? OR t.org_id IS NULL)", filters.Org.OrgID)
-		} else {
-			q = q.Where("t.org_id = ?", filters.Org.OrgID)
-		}
-	}
+	q = whereRunOrg(q, "t.org_id", filters.Org)
 	if filters.TriggerID != nil {
 		q = q.Where("te.trigger_id = ?", *filters.TriggerID)
 	}

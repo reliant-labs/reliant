@@ -19,7 +19,7 @@ func TestResolveQuestion_Generated(t *testing.T) {
 	t.Parallel()
 
 	// No question or chat exists (emptyQuestionRepo).
-	svc := question.NewTestQuestion(t, question.WithQuestionDeps(question.Deps{Mailbox: &question.MockMailbox{}, Repo: emptyQuestionRepo()}))
+	svc := question.NewTestQuestion(t, question.WithQuestionDeps(question.Deps{Mailbox: &question.MockMailbox{}, Repo: emptyQuestionRepo(), ChatRows: emptyChatRows(), ChatViews: emptyChatViews()}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ResolveQuestionRequest, pb.ResolveQuestionResponse]{
 		{

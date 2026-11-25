@@ -158,8 +158,34 @@ func (m *MockSiblings) ListRecentTranscriptSiblingMessages(ctx context.Context, 
 // Compile-time check.
 var _ Siblings = (*MockSiblings)(nil)
 
+// forge:section MockChatRows
+// forge:hash=479c6fae0633dba05b40c639c1ab5a13cae6eca18f56906cafab02341958a70a
+
+// MockChatRows is a test mock for the ChatRows interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockChatRows.<Method>Func not set" error.
+type MockChatRows struct {
+	contractkit.Recorder
+	GetChatRowFunc func(context.Context, string) (*db.ChatRow, error)
+}
+
+// GetChatRow records the call and delegates to GetChatRowFunc when set.
+func (m *MockChatRows) GetChatRow(ctx context.Context, id string) (*db.ChatRow, error) {
+	m.Recorder.Record("GetChatRow", ctx, id)
+	if m.GetChatRowFunc != nil {
+		return m.GetChatRowFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockChatRows", "GetChatRow")
+}
+
+// Compile-time check.
+var _ ChatRows = (*MockChatRows)(nil)
+
 // forge:section MockRepository
-// forge:hash=de0b08285de859b14b9793409c5048dc47d43f416a21f61418594300e2d65036
+// forge:hash=425ac79a5227671c8bd7b065918706790a796a9a6252202a87dd9697894991c3
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -169,7 +195,6 @@ var _ Siblings = (*MockSiblings)(nil)
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	GetChatRowFunc                                           func(context.Context, string) (*db.ChatRow, error)
 	GetTriggerEventByChatFunc                                func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	GetLatestUpdateSequenceFunc                              func(context.Context, string) (int64, error)
 	GetChatCompactedThroughFunc                              func(context.Context, string) (int64, error)
@@ -219,15 +244,6 @@ type MockRepository struct {
 	SeedSeqCounterForForkFunc                                func(context.Context, string, string) error
 	RunTxFunc                                                func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 	ListToolCallsByIDsFunc                                   func(context.Context, []string) ([]*db.ToolCall, error)
-}
-
-// GetChatRow records the call and delegates to GetChatRowFunc when set.
-func (m *MockRepository) GetChatRow(ctx context.Context, id string) (*db.ChatRow, error) {
-	m.Recorder.Record("GetChatRow", ctx, id)
-	if m.GetChatRowFunc != nil {
-		return m.GetChatRowFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetChatRow")
 }
 
 // GetTriggerEventByChat records the call and delegates to GetTriggerEventByChatFunc when set.

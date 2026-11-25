@@ -1,29 +1,32 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * THE WIRE TO controlplane.v1.ChangesService, hand-written for now: the
- * protojson readers (the call itself is changesTransport.ts).
+ * controlplane.v1.ChangesService's answers, read into the console's types
+ * (changesTypes.ts). The calls are the generated hooks
+ * (hooks/controlplane/changes-service-hooks_gen.ts, via
+ * hooks/changes-queries.ts); the requests are changesRequests.ts.
  *
- * WHY NOT A GENERATED CLIENT. Every other control-plane call goes through
- * `getControlPlaneClient(Service)` over clients generated from the vendored
- * protos (proto-vendor/controlplane, synced from control-plane main's
- * proto/public-api.txt). ChangesService is not on control-plane main yet, and
- * `task contract:controlplane:check` refuses a vendored proto its SOURCE
- * commit does not export — so it cannot be vendored ahead of the merge. Until
- * it is, this module speaks the Connect protocol's unary JSON form itself
- * (POST /controlplane.v1.ChangesService/<Method>, protojson bodies: camelCase
- * fields, enums by name, int64 as strings), with the same base URL and bearer
- * token the shared transport uses.
- *
- * WHEN THE PROTO IS VENDORED, replace changesTransport.ts's `callChanges` with the generated
- * client (`getControlPlaneClient(ChangesService)`) and the readers here
- * with the generated messages. ChangesApi (changesApi.ts) and everything
- * above it stays as it is.
- *
- * A failure is a ConnectError carrying the response headers as metadata, so
- * `hasErrorReason(err, "change_revision_conflict")` reads the server's
- * `x-forge-error-reason` exactly as it does for a generated client.
+ * The readers take a message's protojson form (`toJson`: camelCase fields,
+ * enums by name, int64 as strings, timestamps as RFC 3339), the form the
+ * control plane's JSON answers are in. Every field has a reader default, so
+ * a field the server leaves unset (proto3 omits defaults) reads as empty,
+ * never as a crash.
  */
+
+import { toJson } from "@bufbuild/protobuf";
+
+import {
+  ChangeSchema,
+  GetChangeReadoutResponseSchema,
+  ListChangeEventsResponseSchema,
+  ListChangesResponseSchema,
+  RequestChangeApprovalResponseSchema,
+  type Change as ChangeMessage,
+  type GetChangeReadoutResponse,
+  type ListChangeEventsResponse,
+  type ListChangesResponse,
+  type RequestChangeApprovalResponse,
+} from "@/gen/controlplane/services/changes/v1/changes_pb";
 
 import type {
   Change,
@@ -33,9 +36,12 @@ import type {
   ChangeReadoutEndReason,
   ChangeReadoutReason,
   ChangeReadoutVerdict,
+  ChangeApprovalCode,
   ChangeAudience,
   ChangeDeclaration,
   ChangeEvent,
+  ChangeEventPage,
+  ChangeList,
   ChangeMetric,
   ChangeMode,
   ChangePreviewEntry,
@@ -77,10 +83,6 @@ export function modeOf(v: unknown): ChangeMode {
 export function unitOf(v: unknown): ChangeUnit {
   const word = str(v).replace(/^CHANGE_UNIT_/, "").toLowerCase();
   return (UNITS as readonly string[]).includes(word) ? (word as ChangeUnit) : "user";
-}
-
-export function unitEnum(unit: ChangeUnit): string {
-  return `CHANGE_UNIT_${unit.toUpperCase()}`;
 }
 
 function audienceOf(v: unknown): ChangeAudience | null {
@@ -270,4 +272,30 @@ export function readoutOf(v: unknown): ChangeReadout {
     horizonNote: str(r.horizonNote),
     truncatedByRetention: r.truncatedByRetention === true,
   };
+}
+
+// ── generated messages → console types ──────────────────────────────────────
+
+/** A change as the console reads it; an answer without one reads as an empty change. */
+export function changeFrom(change: ChangeMessage | undefined): Change {
+  return changeOf(change ? toJson(ChangeSchema, change) : undefined);
+}
+
+export function changeListFrom(resp: ListChangesResponse): ChangeList {
+  const r = obj(toJson(ListChangesResponseSchema, resp));
+  return { changes: arr(r.changes).map(changeOf), nextPageToken: str(r.nextPageToken) };
+}
+
+export function changeEventPageFrom(resp: ListChangeEventsResponse): ChangeEventPage {
+  const r = obj(toJson(ListChangeEventsResponseSchema, resp));
+  return { events: arr(r.events).map(changeEventOf), nextPageToken: str(r.nextPageToken) };
+}
+
+export function readoutFrom(resp: GetChangeReadoutResponse): ChangeReadout {
+  return readoutOf(toJson(GetChangeReadoutResponseSchema, resp));
+}
+
+export function approvalCodeFrom(resp: RequestChangeApprovalResponse): ChangeApprovalCode {
+  const r = obj(toJson(RequestChangeApprovalResponseSchema, resp));
+  return { sentTo: str(r.sentTo), expiresAt: date(r.expiresAt) };
 }

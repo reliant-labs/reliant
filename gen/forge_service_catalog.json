@@ -31723,6 +31723,16 @@
               "Name": "workflow",
               "ProtoType": "[]string",
               "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "project_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "LastRunPerWorkflowResponse": [
@@ -31820,6 +31830,11 @@
               "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "project_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "ListRunsResponse": [
@@ -32056,6 +32071,16 @@
               "name": "workflow",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "project_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.LastRunPerWorkflowResponse": [
@@ -32152,6 +32177,11 @@
               "name": "org_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "project_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ListRunsResponse": [
@@ -59249,6 +59279,32 @@
     },
     {
       "consumer": "Question",
+      "field": "ChatRows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.ChatRows",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
+      "field": "ChatViews",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.ChatViews",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
       "field": "Mailbox",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/question.Mailbox",
       "methods": [],
@@ -59748,6 +59804,19 @@
       ],
       "providers": [
         "Daemonmirror"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "ChatRows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.ChatRows",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -60330,6 +60399,19 @@
     },
     {
       "consumer": "Trigger",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
       "field": "ControlPlane",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.AutomationTokens",
       "methods": [],
@@ -60685,6 +60767,17 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "WorkerChat",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "WorkerDaemonRouter",
       "field": "AutomationTokens",
       "interface": "github.com/reliant-labs/reliant/internal/credentials/automationtokens.Service",
@@ -61013,6 +61106,19 @@
       ],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Worktree",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Worktree",
@@ -61728,6 +61834,14 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewVault"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "WorkerChat.Updates",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewWorkerChat"
       }
     },
     {

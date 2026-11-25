@@ -34,6 +34,8 @@ type Deps struct {
 	// Projects reads the org of the project a user update is about
 	// (store.ProjectExtStore satisfies it).
 	Projects Projects
+	// ChatRows reads the chat a subscription is for (store.ChatExtStore).
+	ChatRows ChatRows
 	// Heads, UserLog, OrgFeed and Siblings are the update and message reads
 	// that have left the Repository (deps.go).
 	Heads    Heads
@@ -108,6 +110,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.SpawnCalls == nil {
 		return fmt.Errorf("streaming: Deps.SpawnCalls is required")
+	}
+	if d.ChatRows == nil {
+		return fmt.Errorf("streaming: Deps.ChatRows is required")
 	}
 	if d.Heads == nil || d.UserLog == nil || d.OrgFeed == nil || d.Siblings == nil {
 		return fmt.Errorf("streaming: Deps.Heads, UserLog, OrgFeed and Siblings are required")
