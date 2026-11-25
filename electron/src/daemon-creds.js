@@ -512,16 +512,17 @@ function entryOwnerSub({ apiUrl, sub, filePath, logger }) {
  *           sleep?: (ms: number) => Promise<void> }} args
  * @returns {Promise<{ token: string, tokenId?: string }>}
  */
-async function mintDaemonPAT({ apiUrl, accessToken, name, logger, sleep }) {
+async function mintDaemonPAT({ apiUrl, accessToken, cookie, name, logger, sleep }) {
   if (!apiUrl) throw new Error('mintDaemonPAT: missing apiUrl');
-  if (!accessToken) throw new Error('mintDaemonPAT: missing accessToken');
+  if (!accessToken && !cookie) throw new Error('mintDaemonPAT: missing accessToken');
 
   const url = `${apiUrl.replace(/\/+$/, '')}${MINT_RPC_PATH}`;
   const body = JSON.stringify({ name: name || os.hostname(), kind: MINT_TOKEN_KIND });
-  const headers = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${accessToken}`,
-  };
+  // Forge sign-in (forge-auth.js) holds a sign-in session, not a JWT: it is
+  // presented exactly as the web app presents it, as the broker's cookie.
+  const headers = cookie
+    ? { 'Content-Type': 'application/json', Cookie: cookie }
+    : { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` };
   const sleeper = typeof sleep === 'function'
     ? sleep
     : (ms) => new Promise((r) => setTimeout(r, ms));
@@ -897,6 +898,9 @@ async function ensureDaemonPATForOrigin({
     let session = authStorage.loadStoredAuth();
     let accessToken = session?.access_token;
     let currentSub = session?.user?.id;
+    // Forge sign-in: the session cookie (forge-auth.js storage()). The server
+    // renews its tokens, so there is nothing to refresh here.
+    const sessionCookie = typeof session?.cookie === 'string' ? session.cookie : '';
 
     // Look the entry up under the CURRENT user's account, not under the
     // origin alone. With the store keyed by (origin, account), another
@@ -939,7 +943,7 @@ async function ensureDaemonPATForOrigin({
     // Need to mint. If no session yet, the user hasn't signed in; the
     // daemon falls back to its own (headless-broken) flow, which is fine —
     // the renderer is about to surface the sign-in screen.
-    if (!accessToken) {
+    if (!accessToken && !sessionCookie) {
       log.info?.('[daemon-creds] ensureDaemonPATForOrigin: no stored session, skipping mint (user not signed in yet)');
       return ENSURE_NO_SESSION;
     }
@@ -956,7 +960,7 @@ async function ensureDaemonPATForOrigin({
     // deterministically. Refresh first when we can tell it's stale, and
     // persist the rotated session so the renderer (which reads the same
     // store at startup) doesn't replay the consumed refresh token later.
-    const canRefresh = Boolean(authUrl && authAnonKey && session?.refresh_token);
+    const canRefresh = Boolean(!sessionCookie && authUrl && authAnonKey && session?.refresh_token);
     let refreshed = false;
     const applyRefreshedSession = (next) => {
       session = next;
@@ -993,6 +997,7 @@ async function ensureDaemonPATForOrigin({
       minted = await mintDaemonPAT({
         apiUrl: mintApiUrl || apiUrl,
         accessToken,
+        cookie: sessionCookie,
         name: os.hostname(),
         logger: log,
       });
@@ -1019,6 +1024,7 @@ async function ensureDaemonPATForOrigin({
         minted = await mintDaemonPAT({
           apiUrl: mintApiUrl || apiUrl,
           accessToken,
+          cookie: sessionCookie,
           name: os.hostname(),
           logger: log,
         });
