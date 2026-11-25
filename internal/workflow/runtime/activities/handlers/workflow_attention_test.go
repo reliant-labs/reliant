@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func TestRecordAttentionDurableFailureAndIdentity(t *testing.T) {
@@ -130,7 +131,7 @@ func TestAttentionTerminalPersistenceLossKeepsLegacyFailureVisible(t *testing.T)
 	// The runtime turns exhausted terminal persistence into a true Temporal
 	// failure; the existing active-row reconciler then restores failed state.
 	require.NoError(t, f.h.Repo().UpdateWorkflowStatus(ctx, chatID, db.Failed()))
-	firings, err := f.h.Repo().FiringsSinceLastUnmanagedSuccess(ctx, f.userID, []string{f.triggerID}, 20)
+	firings, err := store.FiringsSinceLastUnmanagedSuccess(ctx, f.h.Repo().ORM(), f.userID, []string{f.triggerID}, 20)
 	require.NoError(t, err)
 	require.NotEmpty(t, firings[f.triggerID], "reconciled execution failure remains available to legacy inbox")
 }

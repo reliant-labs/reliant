@@ -80,14 +80,12 @@ var userScopedReads = map[string]string{
 	"GetProjectByPathAndUser":      readCallersFilter,
 	"GetProjectByRemoteURLAndUser": readCallersFilter,
 
-	"FiringsSinceLastSuccess":          readParentAuthorized,
-	"FiringsSinceLastUnmanagedSuccess": readParentAuthorized,
-	"GetPresetBySlugAndProject":        readParentAuthorized,
-	"ListPresetsByTag":                 readParentAuthorized,
-	"ListTriggerChanges":               readParentAuthorized,
-	"ListTriggerRegistrations":         readParentAuthorized,
-	"ListUserPresetsByProject":         readParentAuthorized,
-	"ListWorktrees":                    readParentAuthorized,
+	"FiringsSinceLastSuccess":   readParentAuthorized,
+	"GetPresetBySlugAndProject": readParentAuthorized,
+	"ListPresetsByTag":          readParentAuthorized,
+	"ListTriggerRegistrations":  readParentAuthorized,
+	"ListUserPresetsByProject":  readParentAuthorized,
+	"ListWorktrees":             readParentAuthorized,
 	// The caller's own connection, metadata only (the ciphertext is internal/credentials/connectionvault's
 	// alone): the trigger paths resolve an activation's owner and its connection through it.
 	"GetConnection":               readPersonal,
@@ -107,7 +105,6 @@ var userScopedReads = map[string]string{
 	"ListDaemonStorageState":            readOrgless,
 	"ListDaemonsByUserID":               readOrgless,
 	"ListFreshDaemonAttachmentsForUser": readOrgless,
-	"ListTriggerEvents":                 readOrgless,
 
 	"ListCapacityWakeTargets":    readBackground,
 	"ListChatsPausedForMachine":  readBackground,
