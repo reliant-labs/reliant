@@ -127,7 +127,7 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 			Temporal:      temporal,
 		},
 		threads: threads.New(threads.Deps{Repo: failingRepo}),
-		runs:    runs.New(runs.Deps{Repo: failingRepo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
+		runs:    runs.New(runs.Deps{Repo: failingRepo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
 	_, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
@@ -212,7 +212,7 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 			Temporal:      temporal,
 		},
 		threads: threads.New(threads.Deps{Repo: failingRepo}),
-		runs:    runs.New(runs.Deps{Repo: failingRepo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
+		runs:    runs.New(runs.Deps{Repo: failingRepo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
 	resp, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{

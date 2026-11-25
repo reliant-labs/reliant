@@ -140,7 +140,7 @@ func (m *MockOwners) AdoptTrigger(ctx context.Context, t *core.Trigger, previous
 var _ Owners = (*MockOwners)(nil)
 
 // forge:section MockRepository
-// forge:hash=1c6ef3a22c8b29062c3e03928ee319caaf2ed8bc4f12469c4eb3676aaeb63d0e
+// forge:hash=70d1a3acea2603a955ac892364bf6998bded7dd1f0ddc66a952c1e3604040c89
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -162,8 +162,6 @@ type MockRepository struct {
 	GetTriggerFunc                     func(context.Context, string) (*core.Trigger, error)
 	ListTriggerChangesFunc             func(context.Context, string, string) ([]core.TriggerChange, error)
 	UpdateTriggerFunc                  func(context.Context, *core.Trigger) error
-	CreateTriggerInOrgFunc             func(context.Context, *core.Trigger, ...db.OrgRead) error
-	UpdateTriggerInOrgFunc             func(context.Context, *core.Trigger, ...db.OrgRead) error
 	DeleteTriggerFunc                  func(context.Context, string) error
 	SetTriggerEnabledFunc              func(context.Context, string, bool) error
 	SetTriggerWebhookTokenHashFunc     func(context.Context, string, []byte) error
@@ -292,24 +290,6 @@ func (m *MockRepository) UpdateTrigger(ctx context.Context, t *core.Trigger) err
 		return m.UpdateTriggerFunc(ctx, t)
 	}
 	return contractkit.MockNotSet("MockRepository", "UpdateTrigger")
-}
-
-// CreateTriggerInOrg records the call and delegates to CreateTriggerInOrgFunc when set.
-func (m *MockRepository) CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error {
-	m.Recorder.Record("CreateTriggerInOrg", ctx, t, reads)
-	if m.CreateTriggerInOrgFunc != nil {
-		return m.CreateTriggerInOrgFunc(ctx, t, reads...)
-	}
-	return contractkit.MockNotSet("MockRepository", "CreateTriggerInOrg")
-}
-
-// UpdateTriggerInOrg records the call and delegates to UpdateTriggerInOrgFunc when set.
-func (m *MockRepository) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error {
-	m.Recorder.Record("UpdateTriggerInOrg", ctx, t, reads)
-	if m.UpdateTriggerInOrgFunc != nil {
-		return m.UpdateTriggerInOrgFunc(ctx, t, reads...)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpdateTriggerInOrg")
 }
 
 // DeleteTrigger records the call and delegates to DeleteTriggerFunc when set.
@@ -546,6 +526,42 @@ func (m *MockWebhookSecrets) SetTriggerWebhookSecret(ctx context.Context, id str
 
 // Compile-time check.
 var _ WebhookSecrets = (*MockWebhookSecrets)(nil)
+
+// forge:section MockTriggerWrites
+// forge:hash=1c8c5834b51297faaaf54364da35f8d9f120c40ad7a1c17f254a2955cba216c8
+
+// MockTriggerWrites is a test mock for the TriggerWrites interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockTriggerWrites.<Method>Func not set" error.
+type MockTriggerWrites struct {
+	contractkit.Recorder
+	CreateTriggerInOrgFunc func(context.Context, *core.Trigger, ...db.OrgRead) error
+	UpdateTriggerInOrgFunc func(context.Context, *core.Trigger, ...db.OrgRead) error
+}
+
+// CreateTriggerInOrg records the call and delegates to CreateTriggerInOrgFunc when set.
+func (m *MockTriggerWrites) CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error {
+	m.Recorder.Record("CreateTriggerInOrg", ctx, t, reads)
+	if m.CreateTriggerInOrgFunc != nil {
+		return m.CreateTriggerInOrgFunc(ctx, t, reads...)
+	}
+	return contractkit.MockNotSet("MockTriggerWrites", "CreateTriggerInOrg")
+}
+
+// UpdateTriggerInOrg records the call and delegates to UpdateTriggerInOrgFunc when set.
+func (m *MockTriggerWrites) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error {
+	m.Recorder.Record("UpdateTriggerInOrg", ctx, t, reads)
+	if m.UpdateTriggerInOrgFunc != nil {
+		return m.UpdateTriggerInOrgFunc(ctx, t, reads...)
+	}
+	return contractkit.MockNotSet("MockTriggerWrites", "UpdateTriggerInOrg")
+}
+
+// Compile-time check.
+var _ TriggerWrites = (*MockTriggerWrites)(nil)
 
 // forge:section MockPools
 // forge:hash=0a60e20a06d59a6dd96e6679b86dc7762b4c9b75965ec65ddc5e2a1994d580f1

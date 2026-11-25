@@ -32,7 +32,7 @@ import { cn } from "@/lib/utils";
 import { useForgeConsole } from "../Console/consoleContext";
 import { Header, NothingDeployed, Page } from "../Console/consolePageFrame";
 import { ENV_ALL } from "../Console/envScope";
-import { PAGE_SUBTITLES } from "../Console/groupedNav";
+import { PAGE_SUBTITLES } from "../Console/consoleCrumbs";
 import { formatBytes, formatCores, formatDuration, formatPercent, formatRate } from "../Observability/format";
 import { ObsAsOf, ObsError } from "../Observability/ObsStates";
 import { VariableSelect } from "../Observability/Dashboards/parts";

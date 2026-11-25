@@ -23,7 +23,11 @@ type Viewport = 'desktop' | 'mobile'
  * A wrong one fails its surface's `ready`.
  */
 const PROJECT_ID = 'shop-proj-shop'
-const CHAT_IDS = { long: 'shop-chat-cart-totals', tools: 'shop-chat-tax-rates', failure: 'shop-chat-stripe-sdk' }
+const CHAT_IDS = {
+  long: 'shop-chat-cart-totals', tools: 'shop-chat-tax-rates', failure: 'shop-chat-stripe-sdk',
+  /** Twelve sub-agents at once: the chat-agents overlay's chat (src/fixtures/shop/overlays/agents.ts), opened by URL, never listed. */
+  agents: 'shop-chat-agents',
+}
 const CHAT_TITLES = { tools: 'Move tax rates behind the pricing config', failure: 'Upgrade the Stripe SDK to v18' }
 /** The chat filter's three projects: shop, docs and mobile-api. */
 const FILTER_PROJECT_IDS = ['shop-proj-shop', 'shop-proj-docs', 'shop-proj-mobile-api']
@@ -60,8 +64,8 @@ const KNOWN_REFUSALS: Record<string, { why: string; surfaces?: string[]; except?
   },
   // reliant#3458.
   'reliant.v1.SettingsService/BatchUpsertSettings': {
-    why: 'ColorSchemeSelector saves the colour scheme every time the appearance page opens, and the chat filter saves each pick (settingsSync.setSetting, not setSettingIfChanged; reliant#3458)',
-    surfaces: ['settings-appearance', 'chat-filter-open'],
+    why: 'ColorSchemeSelector saves the colour scheme every time the appearance page opens (settingsSync.setSetting, not setSettingIfChanged; reliant#3458)',
+    surfaces: ['settings-appearance'],
   },
   'reliant.v1.ChatService/DismissChat': {
     why: 'opening a chat from the sidebar dismisses its unread state',
@@ -329,6 +333,30 @@ const SURFACES: Surface[] = [
     act: (page) => page.getByText(SHORT_CHAT_TITLE).first().click(),
   },
   {
+    // A turn that started twelve sub-agents at once (8 done, 3 running, 1
+    // failed): one group row, open while any runs, one dense row per agent.
+    // The whole fan-out fits on one screen.
+    name: 'chat-agents',
+    path: `/c/${CHAT_IDS.agents}`,
+    on: ['desktop'],
+    ready: (page) => page.getByText('Survey currency rounding rules').first(),
+    act: async (page) => {
+      await settle(page)
+      await scrollToEnd(page)
+    },
+    harness: { overlays: ['chat-agents'] },
+  },
+  {
+    // The same fan-out on a phone: touch has no hover, so each running
+    // agent's Open thread and Cancel are always shown.
+    name: 'chat-agents',
+    path: `/m/chats/${CHAT_IDS.agents}`,
+    on: ['mobile'],
+    ready: (page) => page.getByText('Survey currency rounding rules').first(),
+    act: (page) => mobileChatAtEnd(page, 'Survey currency rounding rules'),
+    harness: { overlays: ['chat-agents'] },
+  },
+  {
     name: 'chat-list',
     path: '/m/chats',
     on: ['mobile'],
@@ -435,6 +463,27 @@ const SURFACES: Surface[] = [
     act: (page) => mobileChatAtEnd(page, FAILURE_FIRST_LINE),
   },
   {
+    // The same turn with its errors opened: the failed step's error result
+    // and the provider error's detail, each a quiet line under the indent
+    // rule, not a tinted box or a bordered card.
+    name: 'chat-failure-open',
+    path: `/c/${CHAT_IDS.failure}`,
+    on: ['desktop'],
+    ready: (page) => page.getByText('The AI provider failed').first(),
+    act: async (page) => {
+      await expect(page.getByText(FAILURE_FIRST_LINE).first()).toBeVisible({ timeout: 20_000 })
+      await settle(page)
+      await transcript(page).getByRole('button', { name: /^Activity/ }).first().click()
+      await transcript(page).getByRole('button', { name: /Toggle tool details for shell/ }).last().click()
+      await transcript(page).getByRole('button', { name: /Click for details/ }).first().click()
+      // The click leaves focus on the error row, which reveals its Copy: blur
+      // it so the capture is the row at rest.
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+      await settle(page)
+      await scrollToEnd(page)
+    },
+  },
+  {
     // The Workflows tab: built-in and your own workflows, two on a schedule.
     name: 'workflows',
     path: '/workflows/library',
@@ -515,41 +564,38 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByTestId('project-selector-row-app:status-page'),
     act: async (page) => {
       // The home focuses its composer once it has rendered, and the selector
-      // closes on losing focus (as chat-filter-open says): open it after.
+      // closes on losing focus (as project-switcher-several says): open it after.
       await expect(page.getByTestId('chat-input')).toBeFocused()
       await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-project-switcher')))
     },
     harness: { overlays: ['project-selector'] },
   },
   {
-    // The chat list's project filter, choose N of M: the selector in
-    // multi-select mode, three projects of eight chosen. Desktop only, like
-    // the selector: the phone surface's chat list has its own project list.
-    name: 'chat-filter-open',
-    path: '/',
+    // The app's one project filter, choose N of M: the nav's switcher in
+    // multi-select mode ("Select several projects…"), three projects of
+    // eight chosen by the URL. Desktop only, like the selector: the phone
+    // surface's chat list has its own project list.
+    name: 'project-switcher-several',
+    path: `/?projects=${FILTER_PROJECT_IDS.join(',')}`,
     on: ['desktop'],
     ready: (page) => page.getByTestId('project-selector-chosen-count').getByText('3 chosen'),
     act: async (page) => {
-      // The home focuses its composer once it has rendered. Opening the filter
-      // before then lets that late focus land after the click, and the panel
-      // closes on losing focus. So wait for the composer to have it.
+      // The home focuses its composer once it has rendered. Opening the
+      // switcher before then lets that late focus land after the click, and
+      // the panel closes on losing focus. So wait for the composer to have it.
       await expect(page.getByTestId('chat-input')).toBeFocused()
-      await page.getByTestId('chat-project-filter-trigger').click()
-      // One at a time: each pick moves the URL (one project is `/project/<id>`,
-      // two or more `?projects=`), so wait for it to land before the next.
-      for (const [i, id] of FILTER_PROJECT_IDS.entries()) {
-        await page.getByTestId(`project-selector-row-${id}`).click()
-        await expect(page.getByTestId('project-selector-chosen-count')).toHaveText(`${i + 1} chosen`)
-      }
+      await page.getByTestId('shell-project-switcher').click()
+      await page.getByTestId('shell-switcher-select-several').click()
     },
     harness: { overlays: ['project-selector'] },
   },
   {
-    // The Chats heading once three projects are chosen, from the URL.
-    name: 'chat-filter-heading',
+    // The chat list once three projects are chosen, from the URL: the
+    // switcher names them; the Chats heading has no filter of its own.
+    name: 'chat-list-several',
     path: `/?projects=${FILTER_PROJECT_IDS.join(',')}`,
     on: ['desktop'],
-    ready: (page) => page.getByTestId('project-filter-label').getByText('3 projects'),
+    ready: (page) => page.getByTestId('shell-project-name').getByText('3 projects'),
     harness: { overlays: ['project-selector'] },
   },
   {
@@ -1051,7 +1097,7 @@ test.describe('visual baseline', () => {
 
         const probe = (await readProbe(page))!
         if (process.env.VISUAL_FXLOG) {
-          const report = { rpcs: Object.keys(probe.rpcs), unknown: [...new Set(probe.unknown)], refused: [...new Set(probe.refused)], unannotated: probe.unannotated }
+          const report = { rpcs: Object.keys(probe.rpcs), unknown: [...new Set(probe.unknown)], refused: [...new Set(probe.refused)] }
           console.log(`[visual] ${surface.name} (${testInfo.project.name}): ${JSON.stringify(report)}`)
         }
         await expect(page).toHaveScreenshot(`${surface.name}.png`, { ...SHOT, mask: masks(page) })

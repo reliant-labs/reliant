@@ -13,7 +13,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ProjectInstallState } from "@/gen/reliant/v1/project_pb";
+import { ProjectInstallState, ProjectMachineMoveCheck } from "@/gen/reliant/v1/project_pb";
 
 const daemonState = vi.hoisted(() => ({
   current: {
@@ -27,6 +27,8 @@ const installState = vi.hoisted(() => ({
   rows: [] as Array<{ project_id: string; daemon_id: string; install_state: number }>,
 }));
 const createProjectFromRepo = vi.hoisted(() => vi.fn(async () => ({ queued: true })));
+const detachProjectFromDaemon = vi.hoisted(() => vi.fn(async () => ({})));
+const previewRequests = vi.hoisted(() => [] as Array<{ projectId: string; daemonId: string }>);
 const project = vi.hoisted(() => ({
   current: {
     id: "temp",
@@ -52,6 +54,27 @@ vi.mock("@/hooks/project-queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
   useProjectDaemonInstalls: () => ({ data: installState.rows, isLoading: false }),
   createProjectFromRepo,
+}));
+// What stays on laptop when temp moves: one uncommitted file.
+vi.mock("@/hooks/project-service-hooks_gen", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-service-hooks_gen")>()),
+  usePreviewProjectMachineMove: (req: { projectId: string; daemonId: string }) => {
+    previewRequests.push(req);
+    return {
+      isLoading: false,
+      error: null,
+      data: {
+        daemonId: req.daemonId,
+        daemonName: "laptop",
+        path: "/home/workspace/projects/temp",
+        check: ProjectMachineMoveCheck.CHECKED,
+        checkError: "",
+        repos: [{ repoId: "r", name: "temp", relativePath: "", clonable: true, changedFileCount: 1, changedFiles: ["notes.md"], unpushedBranches: [], stashCount: 0, otherWorktrees: [], checkError: "" }],
+        workspaces: [],
+      },
+    };
+  },
+  useDetachProjectFromDaemon: () => ({ mutateAsync: detachProjectFromDaemon }),
 }));
 vi.mock("../../../hooks/chat-queries", () => ({
   useChatList: () => ({ data: [], isSuccess: true }),
@@ -132,6 +155,8 @@ const machineArg = () => (startChat.mock.calls[0] as unknown[])[6];
 beforeEach(() => {
   startChat.mockClear();
   createProjectFromRepo.mockClear();
+  detachProjectFromDaemon.mockClear();
+  previewRequests.length = 0;
   project.current = { ...project.current, remote_url: "https://github.com/acme/temp" };
   daemonState.current = { activeDaemon: cicd, daemons: [laptop, cicd], loading: false };
   installState.rows = [{ project_id: "temp", daemon_id: "d-laptop", install_state: ProjectInstallState.INSTALLED }];
@@ -178,6 +203,61 @@ describe("NewChatView: the project and machine always go together", () => {
     expect(screen.getByTestId("new-chat-placement-note")).toHaveTextContent(
       "Setting up temp on cicd. You can send once it's there.",
     );
+  });
+
+  it("lists what stays on the old machine before the set-up, and offers (never runs) a detach once it landed", async () => {
+    const view = render(<NewChatView tabId="t1" />);
+    fireEvent.click(screen.getByTestId("machine-picker"));
+    // Before anything is set up: what the clone leaves on laptop.
+    expect(screen.getByTestId("stays-on-machine")).toHaveTextContent("These stay on laptop");
+    expect(screen.getByTestId("stays-on-machine")).toHaveTextContent("temp: 1 uncommitted file (notes.md)");
+    expect(previewRequests[0]).toEqual({ projectId: "temp", daemonId: "d-laptop" });
+
+    createProjectFromRepo.mockImplementationOnce(async () => {
+      installState.rows = [
+        ...installState.rows,
+        { project_id: "temp", daemon_id: "d-cicd", install_state: ProjectInstallState.INSTALLING },
+      ];
+      return { queued: true };
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Set up temp on cicd" }));
+    });
+    // Still cloning: nothing to offer yet.
+    expect(screen.queryByTestId("detach-old-machine-offer")).toBeNull();
+
+    installState.rows = [
+      { project_id: "temp", daemon_id: "d-laptop", install_state: ProjectInstallState.INSTALLED },
+      { project_id: "temp", daemon_id: "d-cicd", install_state: ProjectInstallState.INSTALLED },
+    ];
+    view.rerender(<NewChatView tabId="t1" />);
+    const detach = screen.getByRole("button", { name: "Detach from laptop (keep files)" });
+    expect(detachProjectFromDaemon).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.click(detach);
+    });
+    expect(detachProjectFromDaemon).toHaveBeenCalledWith({ projectId: "temp", daemonId: "d-laptop" });
+    expect(screen.getByText("Detached from laptop. Its files stay on disk.")).toBeInTheDocument();
+  });
+
+  it("shows each nested repository's clone, and its git error, while the set-up is held", () => {
+    installState.rows = [
+      { project_id: "temp", daemon_id: "d-laptop", install_state: ProjectInstallState.INSTALLED },
+      {
+        project_id: "temp",
+        daemon_id: "d-cicd",
+        install_state: ProjectInstallState.INSTALLING,
+        nested_repos: [
+          { name: "forge", relative_path: "forge", install_state: ProjectInstallState.INSTALLING },
+          { name: "sdk", relative_path: "tools/sdk", install_state: ProjectInstallState.FAILED, install_error: "git clone failed: Permission denied (publickey)." },
+        ],
+      } as (typeof installState.rows)[number],
+    ];
+    render(<NewChatView tabId="t1" />);
+    fireEvent.click(screen.getByTestId("machine-picker"));
+    fireEvent.click(screen.getByRole("option", { name: /cicd/ }));
+    expect(screen.getByTestId("nested-repo-status")).toHaveTextContent("Cloning forge/…");
+    expect(screen.getByTestId("nested-repo-status")).toHaveTextContent("tools/sdk/: git clone failed: Permission denied (publickey).");
   });
 
   it("sends on that machine once the clone has landed", async () => {

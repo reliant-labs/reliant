@@ -18,7 +18,7 @@
  *
  * Writes never leave the browser either way: the transport refuses every RPC
  * that is not a read before the scenario or the gateway sees it (and the
- * console's read-only layer disables the controls first, readOnlyApi.ts).
+ * console's read-only layer disables the controls first, obsReadOnly.tsx).
  * The gateway's contract is research/2026-11-05-console-health/demo-plan.md,
  * "Phase 2: demo-data gateway contract".
  */

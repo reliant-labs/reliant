@@ -14,6 +14,7 @@ import { memo, useMemo } from 'react';
 import type { ToolContentProps } from './types';
 import { LightweightCodeViewer } from '../LightweightCodeViewer';
 import { CopyButton } from './CopyButton';
+import { ToolErrorText } from './ToolErrorText';
 
 // Threshold for showing command in expanded area vs relying on header
 const SHORT_COMMAND_THRESHOLD = 80;
@@ -185,9 +186,7 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
                 )}
               </div>
               {result.is_error ? (
-                <div className="px-2 py-1.5 text-xs text-warning-ink bg-warning/5">
-                  {result.content}
-                </div>
+                <ToolErrorText>{result.content}</ToolErrorText>
               ) : (
                 <LightweightCodeViewer
                   content={result.content || ''}

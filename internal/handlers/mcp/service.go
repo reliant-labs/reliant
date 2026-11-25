@@ -29,6 +29,9 @@ type Deps struct {
 	Repo Repository
 	// ProjectRows reads a project by id; the handler decides access on it.
 	ProjectRows ProjectReader
+	// Refetch tells the user\'s clients to re-read what a write changed
+	// (UserRefetch, deps.go).
+	Refetch UserRefetch
 	// Projects reads a project the caller may write (owner and org decided
 	// together: projectaccess).
 	Projects projectaccess.Service
@@ -60,6 +63,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.ProjectRows == nil {
 		return fmt.Errorf("mcp: Deps.ProjectRows is required")
+	}
+	if d.Refetch == nil {
+		return fmt.Errorf("mcp: Deps.Refetch is required")
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("mcp: Deps.Projects is required")

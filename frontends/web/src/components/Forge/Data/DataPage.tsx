@@ -7,7 +7,7 @@
  * environment as a configured object (EnvPage/envTabs.ts); everything an
  * environment HAS — releases, secrets, telemetry — is a project page scoped
  * by the top bar's environment control, the console's one environment
- * selector (ConsoleShell). An environment's rows are the same kind of thing
+ * selector (ConsoleFrame). An environment's rows are the same kind of thing
  * as its logs, so Data is a page beside Observability, read through the same
  * scope, and switching prod → staging in the top bar keeps the table open.
  *

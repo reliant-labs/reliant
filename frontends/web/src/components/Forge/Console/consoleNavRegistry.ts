@@ -25,7 +25,9 @@
  * (Analytics ▾ in the shell's nav; every app's nav draws it), and Security,
  * which the shell's nav declares but draws only once a row has joined it, so
  * it never shows an empty group or links to a page that is not mounted.
- * Without `group`, the row is a top-level row after `after`.
+ * Without `group`, the shell's nav lists it in Analytics (navConfig/items.tsx
+ * registeredRows). `after` placed a row in the console's own nav, which the
+ * shell's replaced (demo DI P3.4); the shell's nav does not read it.
  *
  * The page's path is `consolePath(app, { kind: "extension", id, segment })`
  * (paths.ts), and `consolePageOf` reads it back as that page while the entry
@@ -42,7 +44,7 @@
 
 import type { ReactNode } from "react";
 
-import type { GroupedNavInput } from "./groupedNav";
+import type { GroupedNavInput } from "./consoleNavModel";
 import type { ConsolePage } from "./paths";
 
 /** The built-in rows an entry can follow, in the nav's order. */

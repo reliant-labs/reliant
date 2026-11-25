@@ -6,7 +6,7 @@
  * interceptors run), the dispatch ladder (readOnly guard → latest layer's
  * route or scenario handler → service defaults → Unimplemented), pack
  * composition, strict JSON data and checkFixturePack. Then the reliant
- * extensions (the deprecated readOnly classifier, `answers`) and the harness
+ * extension (`answers`) and the harness
  * policy in overlay.ts (withEmptyReads, pending, fail).
  *
  * Schemas are real generated services: StorageBrowserService has NO_SIDE_EFFECTS
@@ -29,7 +29,6 @@ import { StreamingService } from "@/gen/reliant/v1/streaming_pb";
 import { ToolsDaemonService } from "@/gen/reliant/v1/tools_daemon_pb";
 
 import { fail, pending, withEmptyReads } from "../overlay";
-import { isDemoRead } from "../readOnly";
 import { assertPureFixturePack, checkFixturePack, createFixtureTransport, defineFixturePack, fixtureJson, fixturePackAnswers, type FixtureContext } from "../transport";
 
 const FIXED_NOW = Date.parse("2026-11-18T15:30:00Z");
@@ -262,10 +261,10 @@ describe("createFixtureTransport: readOnly", () => {
     expect(await code(drain(createClient(ToolsDaemonService, transport).connectDaemon((async function* () {})())))).toBe(Code.PermissionDenied);
   });
 
-  it("the deprecated isDemoRead classifier runs through the same guard", async () => {
-    const transport = createFixtureTransport({ defaults: [DeployService, UserService], readOnly: isDemoRead, readOnlyMessage: MESSAGE });
-    // An unannotated read, let through by its verb.
-    await expect(createClient(UserService, transport).getCurrentUser({})).resolves.toBeDefined();
+  it("true: an unannotated read is refused whatever its verb (no name heuristic)", async () => {
+    const transport = createFixtureTransport({ defaults: [DeployService, UserService], readOnly: true, readOnlyMessage: MESSAGE });
+    await expect(deploy(transport).getTenant({})).resolves.toBeDefined();
+    await expect(createClient(UserService, transport).getCurrentUser({})).rejects.toSatisfy((e) => e instanceof ConnectError && e.code === Code.PermissionDenied && e.rawMessage === MESSAGE);
     await expect(deploy(transport).createTenant({})).rejects.toSatisfy((e) => e instanceof ConnectError && e.code === Code.PermissionDenied && e.rawMessage === MESSAGE);
   });
 });
@@ -338,11 +337,11 @@ describe("answers: writes a pack answers from fixtures anyway (reliant extension
     expect(await code(deploy(createFixtureTransport({ pack, readOnly: true })).createTenant({}))).toBe(Code.PermissionDenied);
   });
 
-  it("is unioned across extends, takes a descriptor too, and works with the deprecated classifier", async () => {
+  it("is unioned across extends, and takes a descriptor too", async () => {
     const base = defineFixturePack({ name: "base", scenario: presign, defaults: [DeployService], answers: [StorageBrowserService.method.presignObjectDownload] });
     const child = defineFixturePack({ name: "child", extends: [base], answers: [CREATE_TENANT] });
     expect(fixturePackAnswers(child)).toEqual([PRESIGN, CREATE_TENANT]);
-    const transport = createFixtureTransport({ pack: child, readOnly: isDemoRead });
+    const transport = createFixtureTransport({ pack: child, readOnly: true });
     await expect(storage(transport).presignObjectDownload({})).resolves.toBeDefined();
     await expect(deploy(transport).createTenant({})).resolves.toBeDefined();
   });
