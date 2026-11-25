@@ -2056,6 +2056,12 @@ message DeclaredWorkload {
   // declaration carries neither: a bundle rendered by an older forge, a
   // hand-written manifest, or a workload only the shape names.
   string forge_kind = 18;
+  // A CronJob's schedule, as declared: a 5-field cron expression or a
+  // descriptor ("@daily"), prefixed "CRON_TZ=<zone> " when the CronJob names
+  // a time zone (Kubernetes' spec.timeZone). From a CronJob's spec.schedule,
+  // else a forge.dev Workload record's spec.schedule. Empty for any other
+  // kind, and from a bundle recorded before this field.
+  string schedule = 19;
 }
 
 // DeclaredSpecGap is why a declared workload's spec is not recorded.

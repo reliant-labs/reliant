@@ -5,7 +5,8 @@
  *
  * `useRedeemCoupon` invalidated four keys — the two wallet reads, the Reliant
  * overview, and the compute SUBSCRIPTION — but never
- * `computeEligibilityQueryKey` (`['onboarding', 'computeEligibility']`).
+ * `computeEligibilityQueryKey` (GetCurrentUserComputeEligibility's generated
+ * key scope).
  *
  * That is the one query `useOnboardingFacts` reads, and it is what
  * `requiresPayment` turns into "does this user still owe for a machine". A
@@ -26,7 +27,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Hoisted: `vi.mock` factories run before module-level initialization, so a
 // plain `const` here is in the temporal dead zone when the factory reads it.
@@ -39,12 +40,9 @@ const { mockRedeemCoupon } = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock("@/services/controlPlane/reliantAI", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/services/controlPlane/reliantAI")>();
-  return { ...actual, redeemCoupon: mockRedeemCoupon };
-});
-
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { redeemCouponHandlers } from "@/test/billingTransport";
 import { useRedeemCoupon } from "../useReliantAIQueries";
 import { computeEligibilityQueryKey } from "../useOnboardingQueries";
 
@@ -58,7 +56,10 @@ function wrapperFor(client: QueryClient) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // useRedeemCoupon runs on the generated BillingService mutation.
+  setTransport(mockTransport(redeemCouponHandlers(() => mockRedeemCoupon())));
 });
+afterEach(() => setTransport(null));
 
 describe("useRedeemCoupon — cache invalidation", () => {
   it("invalidates compute eligibility, the fact that gates starting a machine", async () => {

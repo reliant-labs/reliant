@@ -13,6 +13,66 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.31.0" description="November 25, 2026">
+### 9 new features, 14 fixes and 21 other changes
+
+Every pull request merged since v1.30.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **analytics: chat_pr_links — link chats to the pull requests they produced** [#3482](https://github.com/reliant-labs/reliant/pull/3482)
+- **tool-usage: record each tool call's outcome, closed error class and duration (agent analytics A2)** [#3483](https://github.com/reliant-labs/reliant/pull/3483)
+- **shell: every chat shell command carries RELIANT_THREAD_ID, so a chat's sub-agents can be told apart** [#3514](https://github.com/reliant-labs/reliant/pull/3514)
+- **daemon: heartbeat resource stats from forge/pkg/resmetrics** [#3233](https://github.com/reliant-labs/reliant/pull/3233)
+- **web: list the Inbox in the Agents nav too** [#3523](https://github.com/reliant-labs/reliant/pull/3523)
+- **web: the public demo runs in the app's shell** [#3519](https://github.com/reliant-labs/reliant/pull/3519)
+- **web: generate React Query hooks for the 24 control-plane services the app calls (forge.imported_hooks)** [#3530](https://github.com/reliant-labs/reliant/pull/3530)
+- **web: share a chat and its saved workflow from the chat row's ⋯ menu, and saved workflows from the library** [#3531](https://github.com/reliant-labs/reliant/pull/3531)
+- **deploy: preview env — the production web build on shop fixtures** [#3454](https://github.com/reliant-labs/reliant/pull/3454)
+
+#### Changed
+
+- **contract: re-vendor control-plane's public contract (NO_SIDE_EFFECTS markers from control-plane#3513 and #3523)** [#3467](https://github.com/reliant-labs/reliant/pull/3467)
+- **web: the local TransportScope matches forge#2735 byte for byte** [#3500](https://github.com/reliant-labs/reliant/pull/3500)
+- **web: the shell's nav body, nav config and keyboard overlays are seams** [#3501](https://github.com/reliant-labs/reliant/pull/3501)
+- **app: every root builds a service with the same Deps keys, or says why not** [#3505](https://github.com/reliant-labs/reliant/pull/3505)
+- **web: observability reads take their client from the scope** [#3509](https://github.com/reliant-labs/reliant/pull/3509)
+- **web: the release gate holds the demo bundle to a size budget** [#3491](https://github.com/reliant-labs/reliant/pull/3491)
+- **web: forge console reads take their client from the scope** [#3512](https://github.com/reliant-labs/reliant/pull/3512)
+- **web: tests, security, data and identity reads take their client from the scope** [#3513](https://github.com/reliant-labs/reliant/pull/3513)
+- **bump forge to abfa4d8c (forge.Fixtures, fixedSession, idempotency lint)** [#3511](https://github.com/reliant-labs/reliant/pull/3511)
+- **web: remove intermittent shell-scope and activity-indicator e2e tests (#3516, #3517)** [#3518](https://github.com/reliant-labs/reliant/pull/3518)
+- **threads: index live threads by workflow so the terminal cascade and the orphan reap stop scanning threads** [#3239](https://github.com/reliant-labs/reliant/pull/3239)
+- **db: repository_agent_messages.go leaves the facade (9 more methods); activities, reconciler and spawn_send take narrow mailbox roles** [#3345](https://github.com/reliant-labs/reliant/pull/3345)
+- **triggers: read a capacity scope's occupied slots through its partial index instead of scanning trigger_events** [#3237](https://github.com/reliant-labs/reliant/pull/3237)
+- **db: the workflow and scenario tools read and write drafts through workflowdrafts** [#3340](https://github.com/reliant-labs/reliant/pull/3340)
+- **a top-level Deploy your app page for agents and people; llms.txt points at the .md form** [#3524](https://github.com/reliant-labs/reliant/pull/3524)
+- **web: the every-dashboard realClient sweep gets a 30s budget (main red)** [#3537](https://github.com/reliant-labs/reliant/pull/3537)
+- **workflow: deprecate llm_gateway step keys and requires.cli_login** [#3421](https://github.com/reliant-labs/reliant/pull/3421)
+- **workflows: a ref'd child's outcome: failure does not fail its parent** [#3535](https://github.com/reliant-labs/reliant/pull/3535)
+- **facade: usage, org_usage and org_policy_impact handlers take the generated stores** [#3255](https://github.com/reliant-labs/reliant/pull/3255)
+- **triggers: a run event's dispatch reads and pins each catalog once, not once per trigger** [#3539](https://github.com/reliant-labs/reliant/pull/3539)
+- **web: BillingService calls run on its generated hooks** [#3548](https://github.com/reliant-labs/reliant/pull/3548)
+
+#### Fixed
+
+- **worker: wire the automation-token store into the worker's trigger service** [#3499](https://github.com/reliant-labs/reliant/pull/3499)
+- **web: Settings always opens Settings' own sections, never Agents › Sandboxes** [#3504](https://github.com/reliant-labs/reliant/pull/3504)
+- **accountpurge: account purge and project delete remove the chat-keyed tables they left behind** [#3510](https://github.com/reliant-labs/reliant/pull/3510)
+- **main red — re-version tool_call_usage migration above main (#3483) and fix release-gate parts test (#3491)** [#3515](https://github.com/reliant-labs/reliant/pull/3515)
+- **web: pin Settings opening its own page from Agents › Sandboxes, end to end** [#3521](https://github.com/reliant-labs/reliant/pull/3521)
+- **web: a control plane without the tests or vulnerability stores is a state, not an error report** [#3525](https://github.com/reliant-labs/reliant/pull/3525)
+- **prove_test: run in the files' worktree when the project root cannot reach it** [#3527](https://github.com/reliant-labs/reliant/pull/3527)
+- **workflows: accept tolerate_failure on action, call_llm and execute_tools nodes** [#3526](https://github.com/reliant-labs/reliant/pull/3526)
+- **workflows: stop advising loop args for inline bodies; warn that inline bodies ignore args, passthrough and presets** [#3528](https://github.com/reliant-labs/reliant/pull/3528)
+- **diskwatch: a process refused for capabilities we lack no longer fails the work-dir proof** [#3529](https://github.com/reliant-labs/reliant/pull/3529)
+- **tools: a resumed agent whose workspace was archived can still run machine-less tools** [#3536](https://github.com/reliant-labs/reliant/pull/3536)
+- **reconciler: don't reap a thread while an ancestor of its workflow is live** [#3541](https://github.com/reliant-labs/reliant/pull/3541)
+- **repo: commit the dev env's scaffold-ledger entry instead of ignoring it** [#3544](https://github.com/reliant-labs/reliant/pull/3544)
+- **reconciler: the background pass ends when the reconciler stops** [#3547](https://github.com/reliant-labs/reliant/pull/3547)
+
+</Update>
+
 <Update label="v1.30.0" description="November 24, 2026">
 ### 7 new features, 3 fixes and 2 other changes
 

@@ -31,9 +31,11 @@ import Link from "@/components/forge-ui/link";
 import PageHeader from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Tag from "@/components/forge-ui/tag";
-import { changeKeys, rememberChange, useChange } from "@/hooks/changes-queries";
-import { useChangesApi } from "@/services/controlPlane/changes/ChangesApiContext";
+import { changesServiceQueries } from "@/hooks/controlplane/changes-service-hooks_gen";
+import { NO_REFETCH, rememberChange, useChange, useChangeWrites, type ChangeReply } from "@/hooks/changes-queries";
+import { stopChangeRequest } from "@/services/controlPlane/changes/changesRequests";
 import type { Change, ChangeApprovalCode } from "@/services/controlPlane/changes/changesTypes";
+import { approvalCodeFrom, changeFrom } from "@/services/controlPlane/changes/changesWire";
 import { changeErrorKind, describeChangeError } from "@/services/controlPlane/changes/errors";
 
 import { FIELD } from "../controlStyles";
@@ -46,7 +48,7 @@ import { WhoGetsIt } from "./WhoGetsIt";
 
 interface PendingApproval {
   label: string;
-  write: (stepUpCode?: string) => Promise<Change>;
+  write: (stepUpCode?: string) => Promise<ChangeReply>;
   /** Set once a code was sent. */
   sent: ChangeApprovalCode | null;
   /** The code the reader typed was refused. */
@@ -56,7 +58,7 @@ interface PendingApproval {
 const WHO_VALUES: readonly Who[] = ["everyone", "some", "compare"];
 
 export function ChangeDetail({ changeId, envs, backHref }: { changeId: string; envs: NewChangeEnv[]; backHref: string }) {
-  const api = useChangesApi();
+  const writes = useChangeWrites();
   const queryClient = useQueryClient();
   const query = useChange(changeId);
   const search = useSearch({ strict: false }) as { who?: string };
@@ -69,24 +71,24 @@ export function ChangeDetail({ changeId, envs, backHref }: { changeId: string; e
   const change = query.data;
 
   const write = useCallback(
-    async (label: string, run: (stepUpCode?: string) => Promise<Change>, stepUpCode?: string): Promise<Change | null> => {
+    async (label: string, run: (stepUpCode?: string) => Promise<ChangeReply>, stepUpCode?: string): Promise<Change | null> => {
       if (!change) return null;
       setBusy(label);
       setError(null);
       try {
-        const next = await run(stepUpCode);
-        rememberChange(queryClient, next);
+        const reply = await run(stepUpCode);
+        rememberChange(queryClient, reply.change);
         setConflict(null);
         setApproval(null);
-        return next;
+        return changeFrom(reply.change);
       } catch (err) {
         const kind = changeErrorKind(err);
         if (kind === "conflict") {
           setApproval(null);
           try {
-            const latest = await api.getChange(change.id);
-            queryClient.setQueryData(changeKeys.change(change.id), latest);
-            setConflict(changedFields(change, latest));
+            // fetchQuery writes the answer into the change's cache entry.
+            const latest = await queryClient.fetchQuery(changesServiceQueries.getChange({ changeId: change.id }));
+            setConflict(changedFields(change, changeFrom(latest.change)));
           } catch (refetchErr) {
             setError(describeChangeError(refetchErr));
           }
@@ -100,9 +102,9 @@ export function ChangeDetail({ changeId, envs, backHref }: { changeId: string; e
         setBusy(null);
       }
     },
-    [api, change, queryClient]
+    [change, queryClient]
   );
-  const onWrite = useCallback((label: string, run: (stepUpCode?: string) => Promise<Change>) => write(label, run), [write]);
+  const onWrite = useCallback((label: string, run: (stepUpCode?: string) => Promise<ChangeReply>) => write(label, run), [write]);
 
   if (query.isLoading) {
     return (
@@ -186,7 +188,7 @@ export function ChangeDetail({ changeId, envs, backHref }: { changeId: string; e
           busy={busy}
           onSend={async () => {
             try {
-              const sent = await api.requestChangeApproval(change.id);
+              const sent = approvalCodeFrom(await writes.requestChangeApproval({ changeId: change.id }, NO_REFETCH));
               setApproval((current) => (current ? { ...current, sent, refused: false } : current));
             } catch (err) {
               setError(describeChangeError(err));
@@ -232,7 +234,7 @@ export function ChangeDetail({ changeId, envs, backHref }: { changeId: string; e
           setStopping(false);
           setApproval(null);
           // No revision: stopping never loses a race with another edit.
-          await write("Stop", () => api.stopChange(change.id));
+          await write("Stop", () => writes.stopChange(stopChangeRequest(change.id), NO_REFETCH));
         }}
       />
     </div>

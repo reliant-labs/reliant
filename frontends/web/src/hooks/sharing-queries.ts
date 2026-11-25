@@ -23,7 +23,9 @@ import {
   useListSharedChats,
   useSetChatVisibility,
   useSetProjectVisibility,
+  useSetWorkflowDraftSharing,
 } from "@/hooks/sharing-service-hooks_gen";
+import { workflowServiceKeys } from "@/hooks/workflow-service-hooks_gen";
 import { useMembers } from "@/components/Settings/cloud/members/useMembers";
 import { memberNamesBySubject } from "@/services/controlPlane/members";
 import { hasControlPlane } from "@/services/controlPlane/config";
@@ -161,5 +163,25 @@ export function useSetProjectShared() {
     ...mutation,
     share: (projectId: string) => mutation.mutateAsync({ projectId, visibility: ResourceVisibility.ORG }),
     unshare: (projectId: string) => mutation.mutateAsync({ projectId, visibility: ResourceVisibility.PRIVATE }),
+  };
+}
+
+/**
+ * Share a saved workflow with its org, or make it private: the owner's toggle
+ * in the Workflows library and on a chat row started from it. On success
+ * every shared list is re-read, and so is every workflow read (the library
+ * and a chat row read the workflow's visibility from them).
+ */
+export function useSetWorkflowDraftShared() {
+  const mutation = useSetWorkflowDraftSharing({
+    invalidate: (client) => {
+      void client.invalidateQueries({ queryKey: sharingServiceKeys.all });
+      void client.invalidateQueries({ queryKey: workflowServiceKeys.all });
+    },
+  });
+  return {
+    ...mutation,
+    share: (draftId: string) => mutation.mutateAsync({ workflowId: draftId, visibility: ResourceVisibility.ORG }),
+    unshare: (draftId: string) => mutation.mutateAsync({ workflowId: draftId, visibility: ResourceVisibility.PRIVATE }),
   };
 }
