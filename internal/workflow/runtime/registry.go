@@ -568,6 +568,16 @@ func spuriousHeartbeatCancel(ctx context.Context, workerStopCh <-chan struct{}) 
 // The SDK closes this channel at the top of Worker.Stop(), so a closed channel
 // means any error the activity produced after that point is shutdown fallout
 // rather than a real failure of the work.
+// verdictIndependentOfShutdown reports whether execErr is an answer the
+// activity reached on its own — the user's error, or a terminal one — rather
+// than how it unwound when the worker went away. A cancellation never is.
+func verdictIndependentOfShutdown(execErr error) bool {
+	if errors.Is(execErr, context.Canceled) || errors.Is(execErr, context.DeadlineExceeded) {
+		return false
+	}
+	return errclass.Classify(execErr) == svcerr.ClassUser || isTerminal(execErr)
+}
+
 func workerStopped(ch <-chan struct{}) bool {
 	if ch == nil {
 		return false
@@ -1105,7 +1115,13 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		)
 	}
 
-	if execErr != nil && workerStopped(workerStopCh) {
+	// Only an error the shutdown can have caused, though: a verdict that does
+	// not depend on the worker — the user's error, or one already terminal —
+	// is what the activity found, and the next worker would find it again.
+	// Rewritten, a workflow name that does not exist was retried as a
+	// shutdown and lost the class that keeps it off ERROR (prod 5fc6fce4,
+	// 23295ad3).
+	if execErr != nil && workerStopped(workerStopCh) && !verdictIndependentOfShutdown(execErr) {
 		logging.InfoContext(ctx, "[ActivityWrapper] Activity aborted by worker shutdown, returning retryable error",
 			"activityType", activityType,
 			"activityID", activityID,
