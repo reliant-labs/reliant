@@ -71,8 +71,15 @@ export type NavSlotId =
   /** A host's own actions in the footer: the public demo's tour, Install Forge and telemetry notice in a phone's drawer (Forge/Demo/demoNav.ts). */
   | "host-actions";
 
-/** A count or a dot after a row's label. */
-export type NavBadge = { type: "count"; value: number; tone?: "danger"; label?: string } | { type: "dot"; label: string };
+/**
+ * A count, a dot or a word after a row's label. A `label` is a stage the
+ * page is in (Experiments: "Beta"), not something asking for attention: a
+ * group draws only its own badge, so a closed group never carries one up.
+ */
+export type NavBadge =
+  | { type: "count"; value: number; tone?: "danger"; label?: string }
+  | { type: "dot"; label: string }
+  | { type: "label"; text: string };
 /**
  * A badge after an item's label: a row's, a group's (drawn open or closed)
  * or an area's. It reads the context only, so it is live from whatever the
