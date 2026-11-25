@@ -377,6 +377,23 @@ func (l *Limiter) Prepare(cmd *exec.Cmd, owner Owner) *Tree {
 	return t
 }
 
+// Reattach is the tree of a command this process started before it replaced
+// its own image in place (a self-update's exec keeps the pid, so the command
+// is still its child): pid is the command's leader and cgroup the directory
+// Prepare made for it (Tree.Cgroup, as journaled). l may be nil: the new
+// image restores its processes before it builds its limiter. The cgroup is
+// taken back only while it is still a command cgroup named for this process
+// and still holds a process; otherwise the tree has none, and a kill reaches
+// the process group alone.
+func (l *Limiter) Reattach(pid int, cgroup string, owner Owner) *Tree {
+	t := &Tree{l: l, owner: owner, fd: -1, pid: pid}
+	if cgroup != "" {
+		t.reattachCgroup(filepath.Clean(cgroup))
+	}
+	register(t)
+	return t
+}
+
 // Start starts cmd, which Prepare readied as this tree, and records it
 // (Started). ctx is the context cmd was made with (exec.CommandContext);
 // context.Background() for one made with exec.Command. A start the kernel refused because the tree's cgroup was

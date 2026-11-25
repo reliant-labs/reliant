@@ -44,6 +44,9 @@ type Deps struct {
 	// TriggerExtStore).
 	Firings        Firings
 	WebhookSecrets WebhookSecrets
+	// TriggerWrites inserts and replaces a trigger's definition (the
+	// generated TriggerWritesExtStore).
+	TriggerWrites TriggerWrites
 	// Projects reads a project the caller may write (owner and org decided
 	// together: projectaccess).
 	Projects projectaccess.Service
@@ -214,8 +217,8 @@ func (d Deps) validateDeps() error {
 	if d.ControlPlane != nil && d.AutomationKeys == nil {
 		return fmt.Errorf("trigger: Deps.AutomationKeys is required with Deps.ControlPlane")
 	}
-	if d.Firings == nil || d.WebhookSecrets == nil {
-		return fmt.Errorf("trigger: Deps.Firings and Deps.WebhookSecrets are required")
+	if d.Firings == nil || d.WebhookSecrets == nil || d.TriggerWrites == nil {
+		return fmt.Errorf("trigger: Deps.Firings, Deps.WebhookSecrets and Deps.TriggerWrites are required")
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("trigger: Deps.Projects is required")

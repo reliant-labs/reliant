@@ -651,7 +651,7 @@ func TestInterruptThread_ReadsOnlyLiveCalls(t *testing.T) {
 	ctx := context.Background()
 	fx := newInterruptFixture(t, repo, "test-user")
 	canceler := newRecordingThreadInterruptCanceler()
-	svc := New(Deps{Repo: historyRefusingRepo{repo}, Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
+	svc := New(Deps{Repo: historyRefusingRepo{repo}, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: &recordingThreadInterruptSignaler{}, ToolCanceler: canceler})
 
 	executing := "toolu_" + uuid.NewString()
 	pending := "toolu_" + uuid.NewString()

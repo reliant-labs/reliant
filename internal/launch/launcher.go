@@ -195,7 +195,7 @@ func (l *Launcher) replayOfNamedStart(ctx context.Context, ev Event, spec Spec, 
 		return nil, ErrClientMessageReused
 	}
 	chat, err := l.repo.GetChat(ctx, already.ChatID)
-	if err != nil || !authz.CanWriteChat(ctx, spec.OwnerUserID, chat) {
+	if err != nil || !authz.CanOwnChat(ctx, spec.OwnerUserID, chat) {
 		return nil, nil
 	}
 	result := &Result{Chat: chat, WorkflowID: chat.MainThreadID(), EventID: stored.ID}
@@ -696,7 +696,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	if err != nil && !errors.Is(err, core.ErrChatNotFound) {
 		return nil, &InternalError{Reason: "failed to load chat", Err: err}
 	}
-	if err != nil || !authz.CanWriteChat(ctx, userID, chat) {
+	if err != nil || !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, &NotFoundError{Reason: "chat not found", Err: err}
 	}
 
@@ -978,7 +978,7 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 	if err != nil && !errors.Is(err, core.ErrChatNotFound) {
 		return nil, &InternalError{Reason: "failed to load chat", Err: err}
 	}
-	if err != nil || !authz.CanWriteChat(ctx, spec.OwnerUserID, chat) {
+	if err != nil || !authz.CanOwnChat(ctx, spec.OwnerUserID, chat) {
 		return nil, &NotFoundError{Reason: "chat not found", Err: err}
 	}
 
@@ -1062,7 +1062,7 @@ func (l *Launcher) finishExisting(ctx context.Context, ev Event, spec Spec, seed
 	if err != nil && !errors.Is(err, core.ErrChatNotFound) {
 		return nil, &InternalError{Reason: "failed to load chat", Err: err}
 	}
-	if err != nil || !authz.CanWriteChat(ctx, spec.OwnerUserID, chat) {
+	if err != nil || !authz.CanOwnChat(ctx, spec.OwnerUserID, chat) {
 		return nil, &NotFoundError{Reason: "chat not found", Err: err}
 	}
 

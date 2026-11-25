@@ -952,6 +952,60 @@ func TestReachDirect(t *testing.T) {
 	}
 }
 
+// TestReachDirectWithinTheTransitiveBudget pins the merge gate's
+// -go-reach-cap: when the dependents beyond the direct cut number at most the
+// budget, they run too and the plan says reach all; above it they stay
+// Deferred, exactly as a plain ReachDirect plan.
+func TestReachDirectWithinTheTransitiveBudget(t *testing.T) {
+	pkg := func(n string) string { return mod + "/" + n }
+	g := testGraph()
+	g.DirectImports = map[string]map[string]bool{
+		pkg("internal/mid"): {pkg("internal/leaf"): true},
+		pkg("cmd/app"):      {pkg("internal/mid"): true},
+	}
+	within := ClassifyReachCap([]Change{{Path: "internal/leaf/leaf.go"}}, g, ReachDirect, 1)
+	if want := []string{"./cmd/app", "./internal/guard", "./internal/leaf", "./internal/mid"}; !slices.Equal(within.Go.Packages, want) {
+		t.Errorf("within the budget: packages %v, want %v", within.Go.Packages, want)
+	}
+	if len(within.Go.Deferred) != 0 || within.Go.Reach != ReachAll || within.Go.ReachCap != 1 {
+		t.Errorf("within the budget: reach %q cap %d deferred %v, want all, 1, none", within.Go.Reach, within.Go.ReachCap, within.Go.Deferred)
+	}
+	if why := within.Go.Why["./cmd/app"]; !strings.Contains(why, "transitively") || !strings.Contains(why, "leaf") {
+		t.Errorf("a transitive selection must say so and name the change: %q", why)
+	}
+	// The budget never narrows what the direct cut selects.
+	over := ClassifyReachCap([]Change{{Path: "internal/leaf/leaf.go"}}, g, ReachDirect, 0)
+	plain := ClassifyReach([]Change{{Path: "internal/leaf/leaf.go"}}, g, ReachDirect)
+	if !slices.Equal(over.Go.Packages, plain.Go.Packages) || !slices.Equal(over.Go.Deferred, []string{"./cmd/app"}) || over.Go.Reach != ReachDirect {
+		t.Errorf("a 0 budget: packages %v deferred %v reach %q, want the direct plan %v", over.Go.Packages, over.Go.Deferred, over.Go.Reach, plain.Go.Packages)
+	}
+	g.TestDeps[pkg("cmd/other")] = map[string]bool{pkg("cmd/other"): true, pkg("cmd/app"): true, pkg("internal/mid"): true, pkg("internal/leaf"): true}
+	hub := ClassifyReachCap([]Change{{Path: "internal/leaf/leaf.go"}}, g, ReachDirect, 1)
+	if want := []string{"./cmd/app", "./cmd/other"}; !slices.Equal(hub.Go.Deferred, want) || hub.Go.Reach != ReachDirect {
+		t.Errorf("over the budget: reach %q deferred %v, want direct %v", hub.Go.Reach, hub.Go.Deferred, want)
+	}
+}
+
+// The composition root is a forge input (graph_gen.go, routes_gen.go,
+// gen/forge_service_catalog.json are projected from it), its tests are not:
+// #3499 changed only internal/app's wiring and main's generate check went red
+// (control-plane#3571).
+func TestCompositionRootRunsForgeGenerate(t *testing.T) {
+	for _, p := range []string{"internal/app/compose.go", "internal/app/providers_worker.go"} {
+		if pl := classify(p); !pl.ForgeGen.Full || pl.ForgeGen.HooksOnly {
+			t.Errorf("%s: the whole forge-generate lane must run (full %v, hooks only %v)", p, pl.ForgeGen.Full, pl.ForgeGen.HooksOnly)
+		}
+	}
+	g := testGraph()
+	app := mod + "/internal/app"
+	g.DirPkg["internal/app"] = app
+	g.TestDeps[app] = map[string]bool{app: true}
+	g.Files["internal/app/providers_worker_trigger_test.go"] = FileInfo{Pkg: app, Kind: KindTest}
+	if pl := classifyIn(g, "internal/app/providers_worker_trigger_test.go"); pl.ForgeGen.Full {
+		t.Errorf("internal/app's hand-written tests are not a forge input: %v", pl.ForgeGen.Reasons)
+	}
+}
+
 // Deleting a whole Go package compiles the module (an importer left behind
 // no longer builds) instead of falling back to every lane.
 func TestDeletedGoPackageCompilesTheModule(t *testing.T) {

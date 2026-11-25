@@ -105,24 +105,87 @@ Windows), the runtime:
    Nothing newer is not news. A release that does not verify is `FAILED`, and
    the daemon tries again in 30 minutes.
 2. **Waits for a quiet moment**: no tool call running, no background process
-   running, and no tool or terminal activity (`isActivity`: tool requests,
-   terminal input, resize and attach, `exec.*`, `terminal.*` and
-   `mcp.call_tool` commands, and each tool call's end) for 10 minutes. A start
-   counts as activity. Background processes do not survive the exec yet (R5), so
-   the wait never kills one.
+   running that the exec would stop, and no tool or terminal activity
+   (`isActivity`: tool requests, terminal input, resize and attach, `exec.*`,
+   `terminal.*` and `mcp.call_tool` commands, and each tool call's end) for 10
+   minutes. A start counts as activity. Background processes survive the exec
+   (R5, below), so they do not hold an install back; the ones that cannot
+   (`SurvivesSelfUpdate` false: credentials-none commands, foreground commands
+   moved to the background) do, and the wait never kills one.
 3. A **RestartRequested** only makes it sooner: at security or emergency
    urgency, once its deadline has passed, the daemon installs without the idle
-   time and despite background processes. Any other urgency changes nothing.
+   time and despite those background processes. Any other urgency changes
+   nothing.
 4. **Drains** (`UPDATING`, refusing new tool requests with the undelivered
    class) for at most a minute. Work still running then declines the install
    unless it was forced. Nothing is swapped, and the daemon goes back to
    `STAGED`.
 5. **`DRAINED`**, then an upgrade exit stops the runtime. `daemon start`
-   (`runSelfUpdating`) stops background processes and calls `ExecPending`:
-   swap, then exec with the same argv, environment and pid. If the swap fails,
-   the old binary is still in place, so the runtime starts again on it with
-   auto-update off for that process (`Disable`). An unsupervised daemon is never
-   left down.
+   (`runSelfUpdating`) hands the background processes off
+   (`BackgroundManager.HandOffForExec`) and calls `ExecPending`: swap, then
+   exec with the same argv, environment and pid. If the swap fails, the old
+   binary is still in place, so the handoff is undone and the runtime starts
+   again on it with auto-update off for that process (`Disable`). An
+   unsupervised daemon is never left down.
+
+### Background processes across the exec (R5)
+
+Forge `docs/proposals/self-upgrade.md` §5. The exec keeps the pid, so the
+commands the daemon started are still its children; what used to kill them is
+that their output went through pipes whose read ends are close-on-exec.
+
+| Piece | Where |
+| --- | --- |
+| File-backed output: the child writes `<journal>/<id>.stdout` / `.stderr` (O_APPEND), the daemon tails them | `internal/llm/tools/shell/background_fileoutput.go` |
+| Handoff, the non-reaping exit wait, adoption, orphan stop | `internal/llm/tools/shell/background_survive.go` |
+| Journal: pid, start time, pgid, cgroup, handoff offsets; `Install` | `internal/llm/tools/shell/background_journal.go` |
+| Process identity (start time, parent, zombie) | `internal/osutil/identity_*.go` |
+
+- **Only an auto-updating daemon** (`installBackgroundJournal`'s
+  `restartsInPlace`) starts processes with file-backed output, on Linux and
+  macOS. Every other daemon keeps pipes: nothing changes for the desktop app,
+  managed machines or a daemon without `--auto-update`.
+- **Start gate**: the handoff first closes the manager's start gate. A
+  `StartProcess` (or a foreground command detaching to the background) is
+  then refused with `ErrRestartingForUpdate`, and closing waits for every
+  start already admitted to register and journal its process, so the
+  handoff's snapshot misses none. A successful exec leaves the gate closed;
+  an undo reopens it.
+- **Handoff** (just before the exec): each file-backed process's output is
+  read to the last whole line and journaled, and the record gets
+  `handed_off` with the byte offsets to read on from. Everything else is
+  stopped as at any restart: piped processes, credentials-none commands (they
+  die with the daemon by owner decision, 2026-11-10), foreground commands
+  moved to the background. PTY terminals die at the exec as before.
+- **Exit without reaping, and one owner**: a file-backed process's exit is
+  watched with `waitid(WNOWAIT)` (Linux; macOS polls `kinfo_proc` for its own
+  zombie child). Whether this image may then reap it is decided under the
+  process's ownership lock (`handoffState`: owned, handing off, handed off,
+  reaping). Only an owned process is reaped, and only the image that reaped
+  it finishes its output and removes its files. One that exits while handing
+  off or handed off stays a zombie with its files: the old image's waiter
+  parks, and the new image reaps it for its real exit status. An undo (the
+  exec failed, or the journal refused the handoff) makes it owned again and
+  restarts a parked waiter. A process whose handoff the journal refused is
+  undone first and only then stopped: the stop only signals its group and
+  waits for the waiter, which stays its one reaper; one that exited in that
+  window is not stopped at all, and keeps its own exit status. No wrapper
+  process and no exit file: the exec keeps the parent.
+- **Adoption** (`BackgroundJournal.Install` in the new image): a handed-off
+  record whose pid is alive (a zombie counts), whose parent is this process
+  and whose start time matches the journaled one is the same process. It keeps
+  its id, output and sequence numbers, is tailed from the offsets, waited for
+  with `wait4`, can be killed, and its proctree cgroup is taken back
+  (`proctree.Limiter.Reattach`). Anything else is marked `stale`, as before.
+- **Normal stop and crash are unchanged**: `KillAllRunning` still runs on
+  every other exit. After a crash the next daemon is a new process and adopts
+  nothing; a file-backed process the crash left running (no pipe breaks under
+  it) is stopped at the next start while its start time proves it is the
+  journaled one (`stopOrphan`).
+- **Disk**: the output files are removed when the process ends (the journal's
+  `.out` holds its output). While it runs, what was read is released with a
+  punched hole every MiB on Linux; on macOS a file keeps its whole output until
+  the process ends.
 
 Every self-update wait reads `upgradeDrain.now`, so the tests
 (`upgrade_self_test.go`) drive the idle time and deadlines on a fake clock.

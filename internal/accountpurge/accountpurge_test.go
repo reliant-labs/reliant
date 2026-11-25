@@ -730,6 +730,46 @@ func TestPurge_RemovesTheRunScopeOfModelCalls(t *testing.T) {
 	}
 }
 
+// A purged user's chat grants go with them (control-plane
+// docs/design/chat-collaboration.md §3.1): the grants they held on other
+// people's chats, and every grant on their own chats. Another person's
+// grants on another person's chat stay.
+func TestPurge_RemovesChatGrants(t *testing.T) {
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
+	defer cleanup()
+	ctx := context.Background()
+	const victim, bystander, third = "user-deleted", "user-retained", "user-third"
+	seedUser(t, rawDB, victim)
+	seedUser(t, rawDB, bystander)
+	// The victim holds a grant on the bystander's chat; the bystander and a
+	// third person hold grants on the victim's chat; the third person holds
+	// one on the bystander's chat.
+	mustExec(t, rawDB, `INSERT INTO chat_members (chat_id, user_id, role, granted_by) VALUES
+		('chat-user-retained', $1, 'reply', $2),
+		('chat-user-deleted', $2, 'manage', $1),
+		('chat-user-deleted', $3, 'view', $1),
+		('chat-user-retained', $3, 'view', $2)`, victim, bystander, third)
+
+	if _, err := purger.Purge(ctx, victim); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+	var held, onTheirs, kept int
+	if err := rawDB.QueryRowContext(ctx, `SELECT
+		(SELECT count(*) FROM chat_members WHERE user_id = $1),
+		(SELECT count(*) FROM chat_members WHERE chat_id = 'chat-user-deleted'),
+		(SELECT count(*) FROM chat_members WHERE chat_id = 'chat-user-retained' AND user_id = $2)`,
+		victim, third).Scan(&held, &onTheirs, &kept); err != nil {
+		t.Fatal(err)
+	}
+	if held != 0 || onTheirs != 0 {
+		t.Errorf("the purge left %d grants the victim held and %d on their chat, want none", held, onTheirs)
+	}
+	if kept != 1 {
+		t.Errorf("the purge removed another person's grant on another person's chat")
+	}
+}
+
 // A tool call in flight when its account is deleted finishes afterwards and
 // writes its usage record (tool_call_usage). It takes the model calls' lock
 // and fence, so the record either commits first and goes with the purge, or

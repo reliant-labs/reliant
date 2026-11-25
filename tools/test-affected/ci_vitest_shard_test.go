@@ -128,7 +128,7 @@ func TestSkipVitestOnlyBesideShards(t *testing.T) {
 // hands vitest off, re-passing the flag when it re-execs in a heavy slot.
 func TestVitestShardPlansLikeTheGate(t *testing.T) {
 	gate, leg := string(readRepo(t, "scripts/merge-gate.sh")), string(readRepo(t, "scripts/vitest-shard.sh"))
-	for _, s := range []string{`reach=${MG_REACH:-direct}`, `plan -json -reach "$reach" -base "$base"`, `-web-full reached`} {
+	for _, s := range []string{`reach=${MG_REACH:-direct} reach_cap=${MG_REACH_CAP:-20}`, `plan -json -reach "$reach" -go-reach-cap "$reach_cap" -base "$base"`, `-web-full reached`} {
 		if !strings.Contains(gate, s) || !strings.Contains(leg, s) {
 			t.Errorf("merge-gate.sh (%v) and vitest-shard.sh (%v) must both say %s", strings.Contains(gate, s), strings.Contains(leg, s), s)
 		}
@@ -193,7 +193,7 @@ esac
 	if !r.ok || !strings.Contains(r.out, "nothing to run") || strings.Contains(r.log, "pnpm") || strings.Contains(r.log, "test-affected run") {
 		t.Errorf("no vitest file selected: want a pass with no install and no run:\n%s\n%s", r.out, r.log)
 	}
-	if !strings.Contains(r.log, "go run ./tools/test-affected plan -json -reach direct -base abc123\n") {
+	if !strings.Contains(r.log, "go run ./tools/test-affected plan -json -reach direct -go-reach-cap 20 -base abc123\n") {
 		t.Errorf("the leg does not plan as the gate does:\n%s", r.log)
 	}
 

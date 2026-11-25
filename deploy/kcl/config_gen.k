@@ -24,8 +24,15 @@ schema ApiServerConfigOrgs:
     # Let orgs bind provider workspaces and pay for members' sign-ins in them as seats
     provider_workspace_seats_enabled: bool = False
 
+# forge:section schema ApiServerConfigChatCollaboration
+# forge:hash=8a58598f1c1a29e915ea81e61514bec1608c8abc541e39379a4aec7d2a234d73
+# ApiServerConfigChatCollaboration is the chat_collaboration block (ChatCollaborationConfig) — author its values in config.k as `chat_collaboration.<field> = ...`.
+schema ApiServerConfigChatCollaboration:
+    # Let chat owners and managers grant people view, reply or manage on a chat
+    enabled: bool = False
+
 # forge:section schema ApiServerConfig
-# forge:hash=ed6c730e5ddd820ad33ecc05660188f76f44577527fb01e219650d121901269a
+# forge:hash=b02ad5e8366d87108a11f3d789fb7f51115c518859230b12d049844470f4fd94
 schema ApiServerConfig:
     # JWT public key PEM for token validation
     jwt_public_key: str = ""
@@ -109,6 +116,8 @@ schema ApiServerConfig:
     readiness_paths: str = "/ready,/readyz"
     # orgs config block (OrgsConfig). Set its fields as `orgs.<field> = ...`.
     orgs: ApiServerConfigOrgs = ApiServerConfigOrgs {}
+    # chat_collaboration config block (ChatCollaborationConfig). Set its fields as `chat_collaboration.<field> = ...`.
+    chat_collaboration: ApiServerConfigChatCollaboration = ApiServerConfigChatCollaboration {}
 
     check:
         jwt_signing_method != "", "jwt_signing_method = \"\" cannot reach the process: an empty JWT_SIGNING_METHOD counts as unset, so it would load the default \"RS256\" — set a value, or pass --jwt-signing-method= in the workload's args to make it empty"
@@ -239,6 +248,10 @@ apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str
         "RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED" = "true" if c.orgs.provider_accounts_enabled else "false"
         "RELIANT_ORGS_PROJECT_MOVES_ENABLED" = "true" if c.orgs.project_moves_enabled else "false"
         "RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED" = "true" if c.orgs.provider_workspace_seats_enabled else "false"
+
+        # forge:section apiServerConfigEnvMap values chat_collaboration
+        # forge:hash=9d5a48d18189f5ffa38880550f528bbddb25a42a614391c2accb388a02181435
+        "RELIANT_CHAT_COLLABORATION_ENABLED" = "true" if c.chat_collaboration.enabled else "false"
 
         # forge:section apiServerConfigEnvMap values (end)
         # forge:hash=32b348156db484a6bfc9026984d82fa5308a88b0f1b77cb5e31845597dd30b46
@@ -2172,6 +2185,10 @@ ROOTS: {str: Root} = {
             "RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED",
             "RELIANT_ORGS_PROJECT_MOVES_ENABLED",
             "RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED",
+
+            # forge:section root api env chat_collaboration
+            # forge:hash=cbc82a94dea7cbff8d8b3de9ad7fb7a6194ab045a3e50a62e4a4fa13b35eabf7
+            "RELIANT_CHAT_COLLABORATION_ENABLED",
 
             # forge:section root api env (root) #2
             # forge:hash=88feb0d879ca0a87d6568e51505644e6f0f3af3872fee134526807dd1156aa57

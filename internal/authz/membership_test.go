@@ -51,7 +51,7 @@ func TestOrgResourcesNeedLiveMembership(t *testing.T) {
 	kinds := map[string]func(ctx context.Context, caller string, orgID *string) []bool{
 		"chat": func(ctx context.Context, caller string, orgID *string) []bool {
 			c, r := &core.Chat{UserID: caller, OrgID: orgID}, &core.ChatRow{UserID: caller, OrgID: orgID}
-			return []bool{CanReadChat(ctx, caller, c), CanWriteChat(ctx, caller, c), CanReadChat(ctx, caller, r), CanWriteChat(ctx, caller, r)}
+			return []bool{CanReadChat(ctx, caller, c), CanOwnChat(ctx, caller, c), CanReadChat(ctx, caller, r), CanOwnChat(ctx, caller, r)}
 		},
 		"project": func(ctx context.Context, caller string, orgID *string) []bool {
 			p := &core.Project{UserID: caller, OrgID: orgID}
@@ -115,7 +115,7 @@ func TestCredentialBoundToAnOrgActsOnlyThere(t *testing.T) {
 		c, p := &core.Chat{UserID: "alice", OrgID: orgID}, &core.Project{UserID: "alice", OrgID: orgID}
 		w, tr := &core.WorkflowDraft{UserID: "alice", OrgID: orgID}, &core.Trigger{UserID: "alice", OrgID: orgID}
 		return []bool{
-			CanReadChat(ctx, "alice", c), CanWriteChat(ctx, "alice", c),
+			CanReadChat(ctx, "alice", c), CanOwnChat(ctx, "alice", c),
 			CanReadProject(ctx, "alice", p), CanWriteProject(ctx, "alice", p),
 			CanReadWorkflow(ctx, "alice", w), CanWriteWorkflow(ctx, "alice", w),
 			CanReadTrigger(ctx, "alice", tr), CanWriteTrigger(ctx, "alice", tr),
