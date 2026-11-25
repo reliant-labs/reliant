@@ -5,6 +5,7 @@ import (
 	"errors"
 	"go/build"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -242,29 +243,18 @@ func TestScanProcRoot_UnreadableProcessFailsTheScan(t *testing.T) {
 	}
 }
 
-// One of this user's processes whose references the kernel refuses because it
-// holds a capability the scanner lacks (a lingering systemd --user with
-// CAP_WAKE_ALARM; reliant#3522) cannot hold a work directory, so it does not
-// fail the scan, as a non-dumpable one does not. A refusal the capabilities do
-// not explain still fails it: the proof stays complete for what can hold one.
-func TestScanProcRoot_RefusedForItsCapabilitiesIsNotIncomplete(t *testing.T) {
+// Capability masks explain a refusal, not the absence of work references.
+// Even a process with extra capabilities must fail an incomplete scan.
+func TestScanProcRoot_CapabilitiesDoNotExcuseUnreadableReferences(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root reads a mode-000 directory, so the refusal cannot be staged")
 	}
-	statusDir := t.TempDir()
-	self := filepath.Join(statusDir, "self")
-	writeStatus(t, self, "0000000000000000")
-	old := selfStatus
-	selfStatus = self
-	t.Cleanup(func() { selfStatus = old })
-
 	for _, tc := range []struct {
 		name, theirs string
-		wantErr      bool
 	}{
-		{"permitted a capability we lack", "0000000800000000", false},
-		{"permitted nothing beyond ours", "0000000000000000", true},
-		{"no readable status", "", true},
+		{"permitted extra capabilities", "ffffffffffffffff"},
+		{"permitted no capabilities", "0000000000000000"},
+		{"no readable status", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -280,17 +270,11 @@ func TestScanProcRoot_RefusedForItsCapabilitiesIsNotIncomplete(t *testing.T) {
 			t.Cleanup(func() { _ = os.Chmod(fd, 0o755) })
 
 			s, err := scanProcRoot(root, os.Geteuid(), time.Unix(0, 0))
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("a refusal the capabilities do not explain did not fail the scan")
-				}
-				return
+			if !errors.Is(err, fs.ErrPermission) {
+				t.Fatalf("scan error = %v, want permission denied", err)
 			}
-			if err != nil {
-				t.Fatalf("a process refused for its capabilities failed the scan: %v", err)
-			}
-			if !s.names["go-build1"] || len(s.goStarts) != 1 {
-				t.Fatalf("scan = %+v, want go-build1 referenced and one go command", s)
+			if len(s.names) != 0 || len(s.goStarts) != 0 {
+				t.Fatalf("incomplete scan returned partial snapshot: %+v", s)
 			}
 		})
 	}
