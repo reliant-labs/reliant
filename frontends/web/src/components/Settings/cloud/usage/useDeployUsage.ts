@@ -37,6 +37,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
+import { deployServiceKeys, deployServiceQueries } from "@/hooks/controlplane/deploy-service-hooks_gen";
 import { billingServiceKeys, billingServiceQueries } from "@/hooks/controlplane/billing-service-hooks_gen";
 import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "@/lib/orgScope";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
@@ -75,8 +76,8 @@ export const USAGE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
  */
 export const deployUsageKeys = {
   all: ["deploy-usage"] as const,
-  rows: (orgId: string | null, startMs: number, endMs: number) =>
-    ["deploy-usage", "rows", orgId ?? "", startMs, endMs] as const,
+  // Overage and attribution rows use the generated BillingService and
+  // DeployService keys. Names stay here: one entry over two rpcs.
   names: (orgId: string | null) => ["deploy-usage", "names", orgId ?? ""] as const,
 };
 
@@ -143,17 +144,16 @@ export function useDeployUsage(): DeployUsageState {
     [overage.data?.periodStart, overage.data?.periodEnd],
   );
 
+  // The generated read: its key is the request (org and window included), so
+  // it names the org and the window as deployUsageKeys.rows did.
   const rows = useQuery(
     withOrgFailure(
-      {
-        queryKey: deployUsageKeys.rows(org.orgId, window.start.getTime(), window.end.getTime()),
-        queryFn: () =>
-          getControlPlaneClient(DeployService).listUsage(orgRequest(listUsageRequest(window), org.orgId)),
+      deployServiceQueries.listUsage(orgRequest(listUsageRequest(window), org.orgId), {
         // Wait for the period: asking before it is known would fetch the fallback
         // window and then immediately refetch the real one.
         enabled: (overage.isSuccess || overage.isError) && orgQueryEnabled(org),
         staleTime: 60_000,
-      },
+      }),
       org,
     ),
   );
@@ -193,6 +193,7 @@ export function useDeployUsage(): DeployUsageState {
 
   const refetch = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: deployUsageKeys.all });
+    void queryClient.invalidateQueries({ queryKey: deployServiceKeys.listUsage.all });
     void queryClient.invalidateQueries({ queryKey: billingServiceKeys.getCurrentUserInfraOverage.all });
   }, [queryClient]);
 
