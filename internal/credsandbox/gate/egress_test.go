@@ -12,7 +12,8 @@ import (
 // The testdata dumps are iptables-save and ip6tables-save output (nf_tables
 // backend, iptables 1.8.10) from a throwaway network namespace holding a
 // docker-like DOCKER-USER chain, a ufw-like INPUT jump and an ip6tables
-// ACCEPT, after ProvisionScript with Allow 10.20.0.0/16 ran in it twice.
+// ACCEPT, after ProvisionScript with Allow 10.20.0.0/16 ran in it twice
+// (egress_netns_linux_test.go regenerates the same shape for real).
 func readDumps(t *testing.T) (string, string) {
 	t.Helper()
 	v4, err := os.ReadFile("testdata/provisioned-v4.dump")
@@ -43,26 +44,30 @@ func TestVerifyRulesAcceptsProvisionedRules(t *testing.T) {
 
 func TestVerifyRulesRefusesWeakenedRules(t *testing.T) {
 	v4, v6 := readDumps(t)
-	jump := "-A DOCKER-USER -i rgate+ -j RELIANT-GATE\n"
+	jump := "-A DOCKER-USER -i rgate+ -j RELIANT-GATE-G1\n"
 	host := "-A INPUT -i rgate+ -m comment --comment \"reliant-gate:host\" -j DROP\n"
 	cases := []struct {
 		name   string
 		v4, v6 string
 	}{
 		{"no rules at all", "*filter\n:INPUT ACCEPT [0:0]\nCOMMIT\n", v6},
-		{"a deny missing", strings.Replace(v4, "-A RELIANT-GATE -d 169.254.0.0/16 -m comment --comment \"reliant-gate:deny\" -j DROP\n", "", 1), v6},
+		{"a deny missing", strings.Replace(v4, "-A RELIANT-GATE-G1 -d 169.254.0.0/16 -m comment --comment \"reliant-gate:deny\" -j DROP\n", "", 1), v6},
 		{"no jump", strings.Replace(v4, jump, "", 1), v6},
 		{"jump after an ACCEPT", strings.Replace(v4, jump, "-A DOCKER-USER -j ACCEPT\n"+jump, 1), v6},
 		{"DOCKER-USER not first in FORWARD", strings.Replace(v4, "-A FORWARD -j DOCKER-USER\n", "-A FORWARD -j ACCEPT\n-A FORWARD -j DOCKER-USER\n", 1), v6},
 		{"host drop not first in INPUT", strings.Replace(v4, host, "", 1), v6},
 		{"host drop after ufw", strings.Replace(v4, host+"-A INPUT -j ufw-before-input\n", "-A INPUT -j ufw-before-input\n"+host, 1), v6},
-		{"an ACCEPT inside the chain", strings.Replace(v4, "-A RELIANT-GATE -d 10.20.0.0/16", "-A RELIANT-GATE -j ACCEPT\n-A RELIANT-GATE -d 10.20.0.0/16", 1), v6},
-		{"an allow after a deny", strings.Replace(v4, "COMMIT", "-A RELIANT-GATE -d 192.168.1.0/24 -m comment --comment \"reliant-gate:allow\" -j RETURN\nCOMMIT", 1), v6},
+		{"an ACCEPT inside the chain", strings.Replace(v4, "-A RELIANT-GATE-G1 -d 10.20.0.0/16", "-A RELIANT-GATE-G1 -j ACCEPT\n-A RELIANT-GATE-G1 -d 10.20.0.0/16", 1), v6},
+		{"an allow after a deny", strings.Replace(v4, "COMMIT", "-A RELIANT-GATE-G1 -d 192.168.1.0/24 -m comment --comment \"reliant-gate:allow\" -j RETURN\nCOMMIT", 1), v6},
 		{"a deny narrowed to one port", strings.Replace(v4, "-d 10.0.0.0/8 -m comment", "-d 10.0.0.0/8 -p tcp -m tcp --dport 80 -m comment", 1), v6},
-		{"a jump narrowed to tcp", strings.Replace(v4, jump, "-A DOCKER-USER -i rgate+ -p tcp -j RELIANT-GATE\n", 1), v6},
+		{"a jump narrowed to tcp", strings.Replace(v4, jump, "-A DOCKER-USER -i rgate+ -p tcp -j RELIANT-GATE-G1\n", 1), v6},
 		{"no IPv6 host drop", v4, strings.Replace(v6, host, "", 1)},
 		{"no IPv6 forward drop", v4, strings.Replace(v6, "-A DOCKER-USER -i rgate+ -m comment --comment \"reliant-gate:v6\" -j DROP\n", "", 1)},
 		{"no IPv6 dump", v4, ""},
+		{"the hooked generation is incomplete, a complete one hooked behind it", strings.Replace(
+			strings.Replace(v4, ":RELIANT-GATE-G1 - [0:0]\n", ":RELIANT-GATE-G1 - [0:0]\n:RELIANT-GATE-G2 - [0:0]\n", 1),
+			jump, "-A DOCKER-USER -i rgate+ -j RELIANT-GATE-G2\n"+jump, 1) + "*filter\n-A RELIANT-GATE-G2 -d 10.0.0.0/8 -m comment --comment \"reliant-gate:deny\" -j DROP\nCOMMIT\n", v6},
+		{"a jump to a chain that is not ours", strings.Replace(v4, jump, "-A DOCKER-USER -i rgate+ -j ACCEPT\n", 1), v6},
 	}
 	for _, c := range cases {
 		var v6Dumps []string
@@ -72,6 +77,21 @@ func TestVerifyRulesRefusesWeakenedRules(t *testing.T) {
 		if _, err := VerifyRules([]string{c.v4}, v6Dumps); err == nil {
 			t.Errorf("%s: VerifyRules passed", c.name)
 		}
+	}
+}
+
+// Whichever generation the first jump targets is the one checked; an
+// unhooked generation beside it (left by an interrupted run) changes nothing.
+func TestVerifyRulesChecksTheHookedGeneration(t *testing.T) {
+	v4, v6 := readDumps(t)
+	stale := strings.Replace(v4, ":RELIANT-GATE-G1 - [0:0]\n", ":RELIANT-GATE-G1 - [0:0]\n:RELIANT-GATE-NEXT - [0:0]\n", 1)
+	stale = strings.Replace(stale, "COMMIT", "-A RELIANT-GATE-NEXT -d 10.0.0.0/8 -j ACCEPT\nCOMMIT", 1)
+	if _, err := VerifyRules([]string{stale}, []string{v6}); err != nil {
+		t.Errorf("an unhooked stale generation beside the hooked one: %v", err)
+	}
+	renamed := strings.ReplaceAll(v4, "RELIANT-GATE-G1", "RELIANT-GATE-G9")
+	if _, err := VerifyRules([]string{renamed}, []string{v6}); err != nil {
+		t.Errorf("another generation's name: %v", err)
 	}
 }
 
@@ -100,9 +120,24 @@ func TestProvisionScriptCoversEveryDeny(t *testing.T) {
 	if allowAt < 0 || allowAt > firstDeny {
 		t.Errorf("the allow must be written, masked, before the denies:\n%s", script)
 	}
-	for _, want := range []string{"$IPT -I DOCKER-USER 1 -i rgate+", "$IPT -I INPUT 1 -i rgate+", "$IP6T -I INPUT 1 -i rgate+", "reliant-gate:v6", "set -eu"} {
+	for _, want := range []string{"set -eu", "flock -w", "-restore -w --noflush", `echo "-I DOCKER-USER 1 -i rgate+ -j $new"`,
+		"$IPT -I INPUT 1 -i rgate+", "$IP6T -I INPUT 1 -i rgate+", "reliant-gate:v6"} {
 		if !strings.Contains(script, want) {
 			t.Errorf("script lacks %q", want)
+		}
+	}
+	// The swap is one transaction, after the new chain was filled and read
+	// back; stale generations go only after it.
+	fill := strings.Index(script, `rules "$new"; echo COMMIT; } | $IPT_RESTORE`)
+	check := strings.Index(script, `"$(listing "$new")" != "$(rules "$new")"`)
+	swap := strings.Index(script, `echo "-I DOCKER-USER 1 -i rgate+ -j $new"; echo "$jumps" | sed -n 's/^-A /-D /p'; echo COMMIT; } | $IPT_RESTORE`)
+	drop := strings.Index(script, `$IPT -X "$c"`)
+	if fill < 0 || check < fill || swap < check || drop < swap {
+		t.Errorf("fill %d, check %d, swap %d, delete stale %d: want them in that order:\n%s", fill, check, swap, drop, script)
+	}
+	for _, bad := range []string{"$IPT -E ", "-F DOCKER-USER", "$IPT -D DOCKER-USER"} {
+		if strings.Contains(script, bad) {
+			t.Errorf("script holds %q: an unhook outside the swap transaction", bad)
 		}
 	}
 	for _, d := range []string{"169.254.169.254", "127.0.0.1"} {
