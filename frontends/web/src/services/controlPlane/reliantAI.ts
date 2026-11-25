@@ -1,18 +1,14 @@
 /**
- * Cloud-only wrappers around the managed-Reliant AI surface:
+ * The managed-Reliant AI surface's UI types and availability flag:
  *   - `controlplane.v1.LLMGatewayService` (LLM keys, spend, available models)
  *   - `controlplane.v1.BillingService`     (RedeemCoupon's answer, mapped)
  *
  * These back the "Reliant AI" tab of Billing (`ReliantAISection`), the
  * end-user view of Reliant-issued LLM keys + spend. Distinct from the BYO
- * provider accounts in Settings → AI → Providers.
- *
- * New file (per the multi-agent contract) — the existing `llm.ts` wrapper is
- * shared with onboarding and left untouched. Every call goes through the shared
- * `getControlPlaneClient` transport (auth + tracing + upgrade-modal chain).
+ * provider accounts in Settings → AI → Providers. The calls themselves run on
+ * the generated hooks, through hooks/useReliantAIQueries.ts.
  */
 
-import { LLMGatewayService } from "@/gen/controlplane/services/llm_gateway/v1/llm_gateway_pb";
 import {
   RedeemedCouponKind,
   type RedeemCouponResponse,
@@ -23,7 +19,6 @@ import type {
   WalletOverview,
   ReliantOverview,
 } from "@/gen/controlplane/controlplane/v1/shared_pb";
-import { getControlPlaneClient } from "./client";
 import { hasControlPlane } from "./config";
 
 export type { LLMKey, LLMSpendEntry, WalletOverview, ReliantOverview };
@@ -32,26 +27,10 @@ export { RedeemedCouponKind };
 /**
  * Whether the managed-AI surface is wired up in this build. `ReliantAISection`
  * reads this to render a graceful "cloud not configured" state instead of
- * letting `getControlPlaneClient` throw. Components must consume the flag from
- * a service module (never import `config.hasControlPlane` directly).
+ * calling a control plane that is not there. Components must consume the flag
+ * from a service module (never import `config.hasControlPlane` directly).
  */
 export const reliantAIAvailable = hasControlPlane;
-
-/** ListLLMKeys — Reliant-managed keys for the resolved org. */
-export async function listLLMKeys(orgId: string): Promise<LLMKey[]> {
-  const res = await getControlPlaneClient(LLMGatewayService).listLLMKeys({
-    orgId,
-  });
-  return res.keys;
-}
-
-/** ListAvailableModels — models the org's plan permits (drives key create). */
-export async function listAvailableModels(orgId: string): Promise<string[]> {
-  const res = await getControlPlaneClient(LLMGatewayService).listAvailableModels(
-    { orgId },
-  );
-  return res.models;
-}
 
 export interface CreateManagedKeyArgs {
   orgId: string;
@@ -63,47 +42,10 @@ export interface CreateManagedKeyArgs {
   budgetDuration?: string;
 }
 
-/**
- * CreateLLMKey — provisions a managed key and returns the one-time plaintext
- * secret. The caller MUST surface `plaintextKey` immediately; it is never
- * retrievable again.
- */
-export async function createManagedLLMKey(
-  args: CreateManagedKeyArgs,
-): Promise<{ key?: LLMKey; plaintextKey: string }> {
-  // An empty org could be filled from a later selection after async auth.
-  if (!args.orgId) throw new Error("Choose an organization before creating a key.");
-  const res = await getControlPlaneClient(LLMGatewayService).createLLMKey({
-    orgId: args.orgId,
-    name: args.name,
-    models: args.models,
-    maxBudget: args.maxBudget,
-    budgetDuration: args.budgetDuration ?? "",
-  });
-  return { key: res.key, plaintextKey: res.plaintextKey };
-}
-
-/** RevokeLLMKey — permanently disables a key. The immutable key id pins its
- * org: the server loads the key and checks permission against key.OrgID. */
-export async function revokeLLMKey(keyId: string): Promise<void> {
-  await getControlPlaneClient(LLMGatewayService).revokeLLMKey({ keyId });
-}
-
-/**
- * RotateLLMKey — issues a fresh secret for an existing key. `gracePeriod`
- * (e.g. "24h") keeps the old secret valid during cut-over; empty = immediate.
- * Returns the new one-time plaintext secret. Like revoke, this canonical RPC
- * is resource-bound: key_id fixes the org before authentication or retries.
- */
-export async function rotateLLMKey(
-  keyId: string,
-  gracePeriod = "",
-): Promise<{ key?: LLMKey; plaintextKey: string }> {
-  const res = await getControlPlaneClient(LLMGatewayService).rotateLLMKey({
-    keyId,
-    gracePeriod,
-  });
-  return { key: res.key, plaintextKey: res.plaintextKey };
+/** A created or rotated key, with its one-time plaintext secret. */
+export interface IssuedLLMKey {
+  key?: LLMKey;
+  plaintextKey: string;
 }
 
 export interface GetLLMSpendArgs {
@@ -113,8 +55,8 @@ export interface GetLLMSpendArgs {
   keyId?: string;
 }
 
-/** GetLLMSpend — per-key/per-model spend entries + total for a date range. */
-export async function getLLMSpend(args: GetLLMSpendArgs): Promise<{
+/** GetLLMSpend's answer: per-key/per-model spend entries + total for a date range. */
+export interface LLMSpend {
   entries: LLMSpendEntry[];
   totalSpend: number;
   /**
@@ -127,19 +69,8 @@ export async function getLLMSpend(args: GetLLMSpendArgs): Promise<{
    * "cannot say", and callers must withhold rather than substitute.
    */
   sampleDays: number;
-}> {
-  const res = await getControlPlaneClient(LLMGatewayService).getLLMSpend({
-    orgId: args.orgId,
-    startDate: args.startDate,
-    endDate: args.endDate,
-    keyId: args.keyId,
-  });
-  return {
-    entries: res.entries,
-    totalSpend: res.totalSpend,
-    sampleDays: res.sampleDays,
-  };
 }
+
 /** Result of redeeming a coupon code. */
 export interface RedeemCouponResult {
   /** WALLET_CREDIT only: credit added to the org wallet, in cents. */

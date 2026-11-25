@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -17,6 +18,7 @@ import (
 // All thread creation, forking, compaction, and interruption should go through this service.
 type Service struct {
 	repo             Repository
+	chats            chataccess.Service
 	messages         Messages
 	senders          Senders
 	temporalSignaler TemporalSignaler
@@ -26,7 +28,7 @@ type Service struct {
 // New builds a Service from deps. Deps.Repo is required; the signaler and the
 // tool canceler are only needed by InterruptThread and the pause path.
 func New(deps Deps) *Service {
-	return &Service{repo: deps.Repo, messages: deps.Messages, senders: deps.Senders, temporalSignaler: deps.Signaler, toolCanceler: deps.ToolCanceler}
+	return &Service{repo: deps.Repo, chats: deps.Chats, messages: deps.Messages, senders: deps.Senders, temporalSignaler: deps.Signaler, toolCanceler: deps.ToolCanceler}
 }
 
 // CreateThreadOpts contains options for creating a new root thread.
