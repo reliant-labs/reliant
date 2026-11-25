@@ -25745,6 +25745,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.ProjectService/PreviewProjectMachineMove",
+          "name": "PreviewProjectMachineMove",
+          "input": "reliant.v1.PreviewProjectMachineMoveRequest",
+          "output": "reliant.v1.PreviewProjectMachineMoveResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.ProjectService/PreviewProjectOrgMove",
           "name": "PreviewProjectOrgMove",
           "input": "reliant.v1.PreviewProjectOrgMoveRequest",
@@ -26518,6 +26528,25 @@
             "Activity": {
               "Mutating": false
             }
+          },
+          {
+            "Name": "PreviewProjectMachineMove",
+            "InputType": "PreviewProjectMachineMoveRequest",
+            "OutputType": "PreviewProjectMachineMoveResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.PreviewProjectMachineMoveRequest",
+            "OutputTypeFQ": "reliant.v1.PreviewProjectMachineMoveResponse",
+            "InputProtoFile": "reliant/v1/project.proto",
+            "OutputProtoFile": "reliant/v1/project.proto",
+            "Activity": {
+              "Mutating": false
+            }
           }
         ],
         "ProtoFile": "reliant/v1/project.proto",
@@ -27236,6 +27265,57 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.ProjectOrgMove"
+            }
+          ],
+          "PreviewProjectMachineMoveRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "PreviewProjectMachineMoveResponse": [
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "daemon_name",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "check",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "check_error",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "repos",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectMachineMoveRepo"
+            },
+            {
+              "Name": "workspaces",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectMachineMoveWorkspace"
+            },
+            {
+              "Name": "path",
+              "ProtoType": "string",
+              "IsOptional": false
             }
           ],
           "PreviewProjectOrgMoveRequest": [
@@ -28270,6 +28350,57 @@
               "type_name": "reliant.v1.ProjectOrgMove"
             }
           ],
+          "reliant.v1.PreviewProjectMachineMoveRequest": [
+            {
+              "name": "project_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            }
+          ],
+          "reliant.v1.PreviewProjectMachineMoveResponse": [
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "check",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProjectMachineMoveCheck"
+            },
+            {
+              "name": "check_error",
+              "kind": "string"
+            },
+            {
+              "name": "repos",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectMachineMoveRepo",
+              "repeated": true
+            },
+            {
+              "name": "workspaces",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectMachineMoveWorkspace",
+              "repeated": true
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.PreviewProjectOrgMoveRequest": [
             {
               "name": "project_id",
@@ -28475,6 +28606,116 @@
             },
             {
               "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "nested_repos",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectDaemonNestedRepo",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.ProjectDaemonNestedRepo": [
+            {
+              "name": "repo_id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "relative_path",
+              "kind": "string"
+            },
+            {
+              "name": "install_state",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProjectInstallState"
+            },
+            {
+              "name": "install_error",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ProjectMachineMoveBranch": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "unpushed_commits",
+              "kind": "int32"
+            }
+          ],
+          "reliant.v1.ProjectMachineMoveRepo": [
+            {
+              "name": "repo_id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "relative_path",
+              "kind": "string"
+            },
+            {
+              "name": "clonable",
+              "kind": "bool"
+            },
+            {
+              "name": "changed_file_count",
+              "kind": "int32"
+            },
+            {
+              "name": "changed_files",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "unpushed_branches",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectMachineMoveBranch",
+              "repeated": true
+            },
+            {
+              "name": "stash_count",
+              "kind": "int32"
+            },
+            {
+              "name": "other_worktrees",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectMachineMoveWorktree",
+              "repeated": true
+            },
+            {
+              "name": "check_error",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ProjectMachineMoveWorkspace": [
+            {
+              "name": "worktree_id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ProjectMachineMoveWorktree": [
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
               "kind": "string"
             }
           ],
@@ -29008,12 +29249,19 @@
           "reliant.v1.MarkProjectInstalledResponse": "reliant/v1/project.proto",
           "reliant.v1.MoveProjectToOrgRequest": "reliant/v1/project.proto",
           "reliant.v1.MoveProjectToOrgResponse": "reliant/v1/project.proto",
+          "reliant.v1.PreviewProjectMachineMoveRequest": "reliant/v1/project.proto",
+          "reliant.v1.PreviewProjectMachineMoveResponse": "reliant/v1/project.proto",
           "reliant.v1.PreviewProjectOrgMoveRequest": "reliant/v1/project.proto",
           "reliant.v1.PreviewProjectOrgMoveResponse": "reliant/v1/project.proto",
           "reliant.v1.Project": "reliant/v1/project.proto",
           "reliant.v1.ProjectApp": "reliant/v1/project.proto",
           "reliant.v1.ProjectCheckout": "reliant/v1/project.proto",
           "reliant.v1.ProjectDaemon": "reliant/v1/project.proto",
+          "reliant.v1.ProjectDaemonNestedRepo": "reliant/v1/project.proto",
+          "reliant.v1.ProjectMachineMoveBranch": "reliant/v1/project.proto",
+          "reliant.v1.ProjectMachineMoveRepo": "reliant/v1/project.proto",
+          "reliant.v1.ProjectMachineMoveWorkspace": "reliant/v1/project.proto",
+          "reliant.v1.ProjectMachineMoveWorktree": "reliant/v1/project.proto",
           "reliant.v1.ProjectMachineRemoval": "reliant/v1/project.proto",
           "reliant.v1.ProjectOrgMove": "reliant/v1/project.proto",
           "reliant.v1.ProjectOrgMoveBlockedChat": "reliant/v1/project.proto",
@@ -29080,6 +29328,14 @@
             "PROJECT_INSTALL_STATE_INSTALLED",
             "PROJECT_INSTALL_STATE_FAILED"
           ],
+          "reliant.v1.ProjectMachineMoveCheck": [
+            "PROJECT_MACHINE_MOVE_CHECK_UNSPECIFIED",
+            "PROJECT_MACHINE_MOVE_CHECK_CHECKED",
+            "PROJECT_MACHINE_MOVE_CHECK_MACHINE_OFFLINE",
+            "PROJECT_MACHINE_MOVE_CHECK_MACHINE_OUTDATED",
+            "PROJECT_MACHINE_MOVE_CHECK_NOT_ON_MACHINE",
+            "PROJECT_MACHINE_MOVE_CHECK_FAILED"
+          ],
           "reliant.v1.ProjectMachineRemovalStatus": [
             "PROJECT_MACHINE_REMOVAL_STATUS_UNSPECIFIED",
             "PROJECT_MACHINE_REMOVAL_STATUS_REMOVED",
@@ -29137,6 +29393,14 @@
             2,
             3
           ],
+          "reliant.v1.ProjectMachineMoveCheck": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
           "reliant.v1.ProjectMachineRemovalStatus": [
             0,
             1,
@@ -29178,6 +29442,10 @@
           "reliant.v1.ProjectInstallState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ProjectInstallState"
+          },
+          "reliant.v1.ProjectMachineMoveCheck": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProjectMachineMoveCheck"
           },
           "reliant.v1.ProjectMachineRemovalStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",

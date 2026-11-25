@@ -446,6 +446,20 @@ service ProjectService {
   rpc ListProjectsWithApps(ListProjectsWithAppsRequest) returns (ListProjectsWithAppsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // PreviewProjectMachineMove says what of the project's checkout on one
+  // machine would stay behind if the project were set up on another one:
+  // setting a project up on a machine is a fresh clone of each of its
+  // repositories (CreateProjectFromRepo), so uncommitted changes, branches
+  // not pushed anywhere, stashes and branch workspaces stay where they are.
+  // It changes nothing, and never wakes the machine: a machine that is not
+  // connected is reported as such (check_state), with only what Reliant
+  // itself records (the repositories and branch workspaces). The caller must
+  // own the machine and be able to write the project.
+  // forge:custom — asks one of the caller's machines about its checkout
+  rpc PreviewProjectMachineMove(PreviewProjectMachineMoveRequest) returns (PreviewProjectMachineMoveResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // Project represents a project in the system
@@ -529,6 +543,118 @@ message ProjectDaemon {
   // ListProjectDaemons, ListProjectDaemonsForDaemon and the attach and
   // create responses.
   string daemon_name = 9;
+  // The project's nested repositories (its repositories below the root)
+  // being set up on this machine with it, and how far each one's clone has
+  // got. A set-up clones them into their relative paths once the root has
+  // landed, and only then settles install_state: installed, or failed with
+  // install_error naming each repository that did not clone. Empty for a
+  // project with no nested repositories, and for a checkout recorded by a
+  // release before this field. Set by ListProjectDaemons.
+  repeated ProjectDaemonNestedRepo nested_repos = 10;
+}
+
+// ProjectDaemonNestedRepo is the clone of one nested repository of a
+// project on one machine.
+message ProjectDaemonNestedRepo {
+  string repo_id = 1;
+  string name = 2;
+  // Where it goes, relative to the project's path ("/"-separated).
+  string relative_path = 3;
+  // INSTALLING while it waits for the root, or is cloning.
+  ProjectInstallState install_state = 4;
+  // git's own words for a failed clone. Empty unless FAILED.
+  string install_error = 5;
+}
+
+// PreviewProjectMachineMoveRequest names the project and the machine whose
+// checkout of it would be left behind.
+message PreviewProjectMachineMoveRequest {
+  string project_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The machine the project is on now: one of the caller's.
+  string daemon_id = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+// ProjectMachineMoveCheck is whether the machine could be asked about its
+// checkout.
+enum ProjectMachineMoveCheck {
+  PROJECT_MACHINE_MOVE_CHECK_UNSPECIFIED = 0;
+  // The machine answered: the repositories' uncommitted changes, unpushed
+  // branches, stashes and git worktrees are filled in.
+  PROJECT_MACHINE_MOVE_CHECK_CHECKED = 1;
+  // The machine is not connected (asleep, or off), so what is on its disk
+  // cannot be told. It is not woken for this.
+  PROJECT_MACHINE_MOVE_CHECK_MACHINE_OFFLINE = 2;
+  // The machine runs a release of Reliant too old to answer. Updating it
+  // answers this.
+  PROJECT_MACHINE_MOVE_CHECK_MACHINE_OUTDATED = 3;
+  // The project has no checkout recorded on the machine, so nothing of it
+  // is there to stay behind.
+  PROJECT_MACHINE_MOVE_CHECK_NOT_ON_MACHINE = 4;
+  // The machine was asked and the check failed; check_error says why.
+  PROJECT_MACHINE_MOVE_CHECK_FAILED = 5;
+}
+
+message PreviewProjectMachineMoveResponse {
+  string daemon_id = 1;
+  // The machine's display name, for "These stay on <machine>".
+  string daemon_name = 2;
+  ProjectMachineMoveCheck check = 3;
+  // Why the check failed, in the machine's words. Empty unless FAILED.
+  string check_error = 4;
+  // Every repository of the project, the root first. Always set: which
+  // ones can be cloned is known without the machine.
+  repeated ProjectMachineMoveRepo repos = 5;
+  // The project's branch workspaces on the machine (live worktrees), from
+  // Reliant's records: known whether or not the machine is connected. Each
+  // stays there, with its chats; a detach from the machine is refused while
+  // any is live.
+  repeated ProjectMachineMoveWorkspace workspaces = 6;
+  // The checkout's path on the machine. Empty when NOT_ON_MACHINE.
+  string path = 7;
+}
+
+// ProjectMachineMoveRepo is what of one repository would stay behind.
+message ProjectMachineMoveRepo {
+  string repo_id = 1;
+  string name = 2;
+  // Relative to the project's path; empty for the root.
+  string relative_path = 3;
+  // False when no remote is recorded for it: a set-up elsewhere cannot clone
+  // it at all, so the whole repository stays.
+  bool clonable = 4;
+  // The fields below are set only when the check is CHECKED.
+  // Files with uncommitted changes (staged, unstaged or untracked), and the
+  // first of them by path (at most 20).
+  int32 changed_file_count = 5;
+  repeated string changed_files = 6;
+  // Local branches with commits on no remote.
+  repeated ProjectMachineMoveBranch unpushed_branches = 7;
+  // Entries in `git stash list`.
+  int32 stash_count = 8;
+  // Git worktrees of the repository other than its main checkout that are
+  // not one of the response's workspaces.
+  repeated ProjectMachineMoveWorktree other_worktrees = 9;
+  // Why this repository could not be checked (it is missing on the
+  // machine's disk, say), when the check of the others went through.
+  string check_error = 10;
+}
+
+message ProjectMachineMoveBranch {
+  string name = 1;
+  // Commits on the branch that are on no remote-tracking branch.
+  int32 unpushed_commits = 2;
+}
+
+message ProjectMachineMoveWorktree {
+  string path = 1;
+  // Empty for a detached HEAD.
+  string branch = 2;
+}
+
+message ProjectMachineMoveWorkspace {
+  string worktree_id = 1;
+  string name = 2;
+  string branch = 3;
 }
 
 // CreateProjectRequest creates a new project
