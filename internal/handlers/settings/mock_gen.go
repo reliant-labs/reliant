@@ -19,7 +19,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=dcdcdc54cb243072291a8904a85c0411090f6a1b36b6d181e5e41759cb2b32b1
+// forge:hash=0d78082d553dfe6005327154b4f44dcb3afb73e09f15dd0a1158b03cd40d505b
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -37,7 +37,6 @@ type MockRepository struct {
 	ListVisibilityOverridesFunc func(context.Context, string, int32) (map[string]bool, error)
 	SetVisibilityOverrideFunc   func(context.Context, string, int32, string, bool) error
 	ListHiddenItemDefaultsFunc  func(context.Context, int32) ([]string, error)
-	EmitUserRefetchFunc         func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 }
 
 // GetSetting records the call and delegates to GetSettingFunc when set.
@@ -110,15 +109,6 @@ func (m *MockRepository) ListHiddenItemDefaults(ctx context.Context, itemType in
 		return m.ListHiddenItemDefaultsFunc(ctx, itemType)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListHiddenItemDefaults")
-}
-
-// EmitUserRefetch records the call and delegates to EmitUserRefetchFunc when set.
-func (m *MockRepository) EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error {
-	m.Recorder.Record("EmitUserRefetch", ctx, userID, refetchType, opts)
-	if m.EmitUserRefetchFunc != nil {
-		return m.EmitUserRefetchFunc(ctx, userID, refetchType, opts)
-	}
-	return contractkit.MockNotSet("MockRepository", "EmitUserRefetch")
 }
 
 // Compile-time check.
@@ -287,3 +277,29 @@ func (m *MockSeatMatcher) MatchAccount(ctx context.Context, userID string, accou
 
 // Compile-time check.
 var _ SeatMatcher = (*MockSeatMatcher)(nil)
+
+// forge:section MockUserRefetch
+// forge:hash=033cac35f861599e4ee72a85e10b9f12c035126ba7c2043aa1d617de89e3ac3e
+
+// MockUserRefetch is a test mock for the UserRefetch interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockUserRefetch.<Method>Func not set" error.
+type MockUserRefetch struct {
+	contractkit.Recorder
+	EmitUserRefetchFunc func(context.Context, string, core.RefetchType, core.RefetchOpts) error
+}
+
+// EmitUserRefetch records the call and delegates to EmitUserRefetchFunc when set.
+func (m *MockUserRefetch) EmitUserRefetch(ctx context.Context, userID string, refetchType core.RefetchType, opts core.RefetchOpts) error {
+	m.Recorder.Record("EmitUserRefetch", ctx, userID, refetchType, opts)
+	if m.EmitUserRefetchFunc != nil {
+		return m.EmitUserRefetchFunc(ctx, userID, refetchType, opts)
+	}
+	return contractkit.MockNotSet("MockUserRefetch", "EmitUserRefetch")
+}
+
+// Compile-time check.
+var _ UserRefetch = (*MockUserRefetch)(nil)

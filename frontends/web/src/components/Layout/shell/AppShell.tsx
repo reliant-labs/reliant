@@ -15,9 +15,10 @@
  * nav on every move between a chat and any other page.
  *
  * WHAT IT IS ON. Signed in, on the desktop surface, under one of the two app
- * layouts — never /auth, /onboarding, the phone's /m/*, the workflow builder
- * (its own full-screen chrome) or the public forge demo (its own console
- * frame). The same rule as the keyboard host's (Shortcuts/ShortcutHost.tsx),
+ * layouts — never /auth, /onboarding, the phone's /m/* or the workflow builder
+ * (its own full-screen chrome). The public forge demo wears the same frame
+ * with its own nav and a fixed session (Forge/Demo/DemoShellFrame). The same
+ * rule as the keyboard host's (Shortcuts/ShortcutHost.tsx),
  * read from the same rendered matches. Off it, the frame renders nothing of its own and
  * its children sit where they always did (`display: contents`), so turning it
  * on or off never remounts the page under it.
@@ -98,10 +99,17 @@ export interface AppShellFrameProps {
   /** Public, read-only hosts may draw the frame without impersonating an authenticated session.
    * This affects presentation only: it grants no session or keyboard-host capabilities. */
   publicPreview?: boolean;
+  /**
+   * Draw the frame whatever routes are matched. For a dev preview harness that
+   * renders one console screen at a route of its own, outside the app's
+   * layouts (Forge/__preview__/PreviewShellFrame.tsx ConsolePreviewFrame).
+   * Omitted, the matched routes decide, as for every app page.
+   */
+  always?: boolean;
   children: ReactNode;
 }
 
-export function AppShellFrame({ nav, guide, publicPreview = false, children }: AppShellFrameProps) {
+export function AppShellFrame({ nav, guide, publicPreview = false, always = false, children }: AppShellFrameProps) {
   // The RENDERED matches, like the keyboard host: mid-navigation the location
   // already names the destination while the page on screen is still the old one.
   const pathname = useRouterState({
@@ -109,7 +117,7 @@ export function AppShellFrame({ nav, guide, publicPreview = false, children }: A
   });
   const routeIds = useRouterState({ select: (s) => s.matches.map((match) => match.routeId).join(" ") });
   const signedIn = useSignedIn();
-  const inShell = shellFrameScope({ routeIds: routeIds.split(" "), pathname, signedIn: signedIn || publicPreview });
+  const inShell = always || shellFrameScope({ routeIds: routeIds.split(" "), pathname, signedIn: signedIn || publicPreview });
 
   const expanded = useWorkspaceStateStore((state) => state.leftSidebarExpanded);
   const narrow = useNarrowViewport();

@@ -53,7 +53,7 @@ func TestSendMessage_PendingChatIsRejected(t *testing.T) {
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 			Temporal:      temporal,
 		},
-		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
+		runs: runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
 	before := transcriptBodies(t, ctx, repo, fx.chatID)
@@ -116,7 +116,7 @@ func TestChatProto_CarriesRootWorkflowState(t *testing.T) {
 					AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 					Temporal:      temporal,
 				},
-				runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
+				runs: runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 			}
 
 			resp, err := service.GetChat(ctx, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: fx.chatID}))

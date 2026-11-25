@@ -15,7 +15,7 @@
  *            3. the project the app is working in (projectStore), else the
  *               most recently active one.
  *          A route that names a project also becomes the last pick.
- *   many   several projects: the chat list's filter of several
+ *   many   several projects: "Select several projects…" in the switcher
  *          (hooks/useChatProjectFilter, `?projects=<id>,<id>`).
  *   all    every project ("All projects" in the switcher): `?projects=all`.
  *
@@ -54,6 +54,7 @@ import { useProjectStore } from "@/store/projectStore";
 
 import { useSelectorCatalog } from "../../Projects/ProjectSelector";
 import { consolePageOf, type ConsolePage } from "../../Forge/Console/paths";
+import { isSampleApp, SAMPLE_APP, SAMPLE_APP_LABEL } from "../../Forge/Sample/sampleApp";
 
 /** A project by id, or an app with no code here by name. */
 export type ShellProjectRef = { kind: "project"; id: string } | { kind: "app"; name: string };
@@ -162,6 +163,15 @@ export function sectionInAnotherApp(page: ConsolePage): ConsolePage {
 }
 
 // ── The last pick ───────────────────────────────────────────────────────────
+
+/**
+ * Whether a route's project may become the last pick (or the focus): any but
+ * the forge tour's sample app (Forge/Sample/sampleApp.ts), so leaving the tour
+ * leaves no sample in the nav, on a reload or in another tab.
+ */
+export function remembersPick(key: string): boolean {
+  return key !== refKey({ kind: "app", name: SAMPLE_APP });
+}
 
 /** The last pick's value for "All projects". */
 export const ALL_PROJECTS_PICK = "__all__";
@@ -297,7 +307,7 @@ export function useShellProject(pathname: string, search: Record<string, unknown
     if (urlScope && !useShellLastPick.getState().urlDecided) useShellLastPick.setState({ urlDecided: true });
     if (explicit) return;
     if (urlAll && lastPick !== ALL_PROJECTS_PICK) setLastPick(ALL_PROJECTS_PICK);
-    if (urlFocus && urlFocus !== pickedFocus) useShellLastPick.getState().setFocus(urlFocus);
+    if (urlFocus && urlFocus !== pickedFocus && remembersPick(urlFocus)) useShellLastPick.getState().setFocus(urlFocus);
   }, [urlScope, explicit, urlAll, urlFocus, lastPick, pickedFocus, setLastPick]);
 
   const resolved = useMemo((): ShellProject => {
@@ -336,7 +346,7 @@ export function useShellProject(pathname: string, search: Record<string, unknown
     if (!ref) return { ...base, key: null, name: null, projectId: null, app: consoleApp, deployed: !!consoleApp, row: undefined };
     const key = row ? row.key : refKey(ref);
     const projectId = row ? (row.kind === "project" ? row.project.id : null) : ref.kind === "project" ? ref.id : null;
-    const name = row ? row.name : ref.kind === "app" ? ref.name : null;
+    const name = row ? row.name : ref.kind === "app" ? (isSampleApp(ref.name) ? SAMPLE_APP_LABEL : ref.name) : null;
     // The console on screen always has its sections, whatever the catalog says.
     const app = consoleApp ?? sectionsAppOf(row) ?? (ref.kind === "app" ? ref.name : null);
     const deployed = !!deployedAppOf(row) || (!!consoleApp && !row);
@@ -347,8 +357,9 @@ export function useShellProject(pathname: string, search: Record<string, unknown
 
   // In one-project mode a route that names a project becomes the last pick;
   // in a choice of several only an explicit one does (and ends the choice).
+  // The tour's sample app never does (remembersPick).
   useEffect(() => {
-    if (!routeRefKey || !resolved.key) return;
+    if (!routeRefKey || !resolved.key || !remembersPick(resolved.key)) return;
     if (mode === "one" ? resolved.key !== lastPick : explicit) setLastPick(resolved.key);
   }, [routeRefKey, resolved.key, lastPick, setLastPick, mode, explicit]);
 
@@ -362,7 +373,9 @@ export function useShellProject(pathname: string, search: Record<string, unknown
  * the readers keep the chat list's filter.
  */
 export function usePublishShellScope(shell: ShellProject, search: Record<string, unknown>): void {
-  const focus = shell.mode === "one" ? null : (focusOfSearch(search) ?? useShellLastPick.getState().focus ?? null);
+  const named = shell.mode === "one" ? null : (focusOfSearch(search) ?? useShellLastPick.getState().focus ?? null);
+  // The tour's sample app is never published as a focus: the published scope is every tab's default for an empty URL.
+  const focus = named && remembersPick(named) ? named : null;
   const scopeKey =
     shell.mode === "one" ? (shell.projectId ? `one:${shell.projectId}` : "") : shell.mode === "many" ? `many:${shell.ids.join(",")}` : "all";
   useEffect(() => {

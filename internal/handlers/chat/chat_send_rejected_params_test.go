@@ -113,7 +113,7 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 					AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 					Temporal:      temporal,
 				},
-				runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: tc.pauseController}),
+				runs: runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: tc.pauseController}),
 			}
 
 			_, err := service.SendMessage(ctx, sendWithUnknownModel(t, fx.chatID, "continue"))

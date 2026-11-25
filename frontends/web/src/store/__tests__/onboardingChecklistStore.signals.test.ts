@@ -56,7 +56,11 @@ import {
   ProjectWithAppsSchema,
   ProjectRepoSummarySchema,
 } from "../../gen/reliant/v1/project_pb";
-import { memberKeys } from "../../services/controlPlane/members";
+import {
+  ListInvitationsResponseSchema,
+  ListMembersResponseSchema,
+} from "../../gen/controlplane/services/organization/v1/organization_pb";
+import { organizationServiceKeys } from "../../hooks/controlplane/organization-service-hooks_gen";
 import { trackEvent } from "../../lib/analytics";
 import { useOnboardingChecklistStore } from "../onboardingChecklistStore";
 
@@ -143,13 +147,16 @@ describe("Setup Guide signals", () => {
   });
 
   it("invite-teammate: a second member or a pending invitation, as the Members page caches them", () => {
-    queryClient.setQueryData(memberKeys.members("org-1"), {
-      pages: [{ members: [], nextPageToken: "", seats: { members: 1, pendingInvitations: 0, limit: -1 } }],
+    queryClient.setQueryData(organizationServiceKeys.listMembersInfinite({ orgId: "org-1", pageSize: 200 }), {
+      pages: [create(ListMembersResponseSchema, { seats: { members: 1, pendingInvitations: 0, limit: -1 } })],
       pageParams: [""],
     });
     expect(done().has("invite-teammate")).toBe(false);
 
-    queryClient.setQueryData(memberKeys.invitations("org-1"), [{ id: "i1", email: "sam@acme.dev", status: "pending" }]);
+    queryClient.setQueryData(
+      organizationServiceKeys.listInvitations({ orgId: "org-1", pageSize: 200 }),
+      create(ListInvitationsResponseSchema, { invitations: [{ id: "i1", email: "sam@acme.dev", status: "pending" }] }),
+    );
     expect(done().has("invite-teammate")).toBe(true);
   });
 });

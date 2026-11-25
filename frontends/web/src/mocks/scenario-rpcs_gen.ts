@@ -332,7 +332,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.ProjectService
-  // forge:hash=1aa185b83e43d7d85cfed58cd429b5a0a23ab41f9f033f94a3ff5b9997a11daa
+  // forge:hash=599f6f789f1bab3333752dd6d6bd26925cd314960f4125d11720de58ecfb4943
   & {
     "reliant.v1.ProjectService/CreateProject"?: (req: import("@/gen/reliant/v1/project_pb").CreateProjectRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").CreateProjectResponseSchema>>;
     "reliant.v1.ProjectService/ListProjects"?: (req: import("@/gen/reliant/v1/project_pb").ListProjectsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").ListProjectsResponseSchema>>;
@@ -368,6 +368,7 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ProjectService/GetProjectOrgMove"?: (req: import("@/gen/reliant/v1/project_pb").GetProjectOrgMoveRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").GetProjectOrgMoveResponseSchema>>;
     "reliant.v1.ProjectService/ListProjectOrgMoves"?: (req: import("@/gen/reliant/v1/project_pb").ListProjectOrgMovesRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").ListProjectOrgMovesResponseSchema>>;
     "reliant.v1.ProjectService/ListProjectsWithApps"?: (req: import("@/gen/reliant/v1/project_pb").ListProjectsWithAppsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").ListProjectsWithAppsResponseSchema>>;
+    "reliant.v1.ProjectService/PreviewProjectMachineMove"?: (req: import("@/gen/reliant/v1/project_pb").PreviewProjectMachineMoveRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").PreviewProjectMachineMoveResponseSchema>>;
   }
 
   // forge:section reliant.v1.ProviderAccountService
@@ -472,7 +473,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.SharingService
-  // forge:hash=39f3ea223726340585ba0470cf8901f4a94179a36a10015923d569ac0117f928
+  // forge:hash=7b0522eaf5cc2056956809e46048457826e556678d77544fb78ef1b2da0d0e73
   & {
     "reliant.v1.SharingService/SetChatVisibility"?: (req: import("@/gen/reliant/v1/sharing_pb").SetChatVisibilityRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").SetChatVisibilityResponseSchema>>;
     "reliant.v1.SharingService/SetProjectVisibility"?: (req: import("@/gen/reliant/v1/sharing_pb").SetProjectVisibilityRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").SetProjectVisibilityResponseSchema>>;
@@ -480,6 +481,9 @@ export type ScenarioRpcHandlers =
     "reliant.v1.SharingService/ListSharedProjects"?: (req: import("@/gen/reliant/v1/sharing_pb").ListSharedProjectsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").ListSharedProjectsResponseSchema>>;
     "reliant.v1.SharingService/SetWorkflowDraftSharing"?: (req: import("@/gen/reliant/v1/sharing_pb").SetWorkflowDraftSharingRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").SetWorkflowDraftSharingResponseSchema>>;
     "reliant.v1.SharingService/ListSharedWorkflowDrafts"?: (req: import("@/gen/reliant/v1/sharing_pb").ListSharedWorkflowDraftsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").ListSharedWorkflowDraftsResponseSchema>>;
+    "reliant.v1.SharingService/SetChatMember"?: (req: import("@/gen/reliant/v1/sharing_pb").SetChatMemberRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").SetChatMemberResponseSchema>>;
+    "reliant.v1.SharingService/RemoveChatMember"?: (req: import("@/gen/reliant/v1/sharing_pb").RemoveChatMemberRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").RemoveChatMemberResponseSchema>>;
+    "reliant.v1.SharingService/ListChatMembers"?: (req: import("@/gen/reliant/v1/sharing_pb").ListChatMembersRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").ListChatMembersResponseSchema>>;
   }
 
   // forge:section reliant.v1.SystemService

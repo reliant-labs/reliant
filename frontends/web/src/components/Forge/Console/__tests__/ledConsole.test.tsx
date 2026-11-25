@@ -3,7 +3,7 @@
 /**
  * The led console's additions (ledNavExtras) and its provider: the console's
  * default, which stands aside under a host's own (the public demo wraps the
- * console's layout in one, with its Home row and agent cards).
+ * console's layout in one, with its section crumbs and agent cards).
  */
 
 import { describe, expect, it } from "vitest";
@@ -13,11 +13,10 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { useConsoleNavExtras } from "../consoleNavExtras";
 import { LedConsoleProvider, ledNavExtras, type LedConsoleHost } from "../ledConsole";
 
-const INPUT = { project: "app", page: { kind: "overview" } as const, env: "prod", envs: [{ name: "prod", preview: false }] };
-
-function NavLabels() {
-  const { nav } = useConsoleNavExtras();
-  return <p data-testid="labels">{nav?.(INPUT)?.items.map((item) => item.label).join(",")}</p>;
+/** What the extras in force say: the environment order, and whether the led console is on. */
+function Extras() {
+  const { envOrder, led } = useConsoleNavExtras();
+  return <p data-testid="extras">{`${led ? "led" : "own"}:${(envOrder ?? []).join(",")}`}</p>;
 }
 
 function renderAt(ui: React.ReactNode) {
@@ -26,26 +25,25 @@ function renderAt(ui: React.ReactNode) {
 }
 
 describe("LedConsoleProvider", () => {
-  it("adds nothing under a host's own led console: the host's rows stand", async () => {
-    const host: LedConsoleHost = { navLead: [{ label: "Home", href: "/home" }] };
+  it("adds nothing under a host's own led console: the host's additions stand", async () => {
+    const host: LedConsoleHost = { envOrder: ["staging", "prod"] };
     renderAt(
       <LedConsoleProvider host={host}>
         <LedConsoleProvider>
-          <NavLabels />
+          <Extras />
         </LedConsoleProvider>
       </LedConsoleProvider>
     );
-    expect((await screen.findByTestId("labels")).textContent?.split(",")[0]).toBe("Home");
+    expect((await screen.findByTestId("extras")).textContent).toBe("led:staging,prod");
   });
 
-  it("is the grouped nav on its own, in the shell's groups", async () => {
+  it("is the led console on its own, with no host", async () => {
     renderAt(
       <LedConsoleProvider>
-        <NavLabels />
+        <Extras />
       </LedConsoleProvider>
     );
-    const labels = (await screen.findByTestId("labels")).textContent?.split(",") ?? [];
-    expect(labels.slice(0, 5)).toEqual(["Overview", "Dashboards", "Observability", "Analytics", "Deployments"]);
+    expect((await screen.findByTestId("extras")).textContent).toBe("led:");
   });
 });
 
@@ -67,16 +65,10 @@ describe("ledNavExtras", () => {
     expect(ledNavExtras({}, {}).subtitle?.("activity")).toBeNull();
   });
 
-  it("leaves out the pages the host does not serve", () => {
-    const labels = (host: LedConsoleHost) => ledNavExtras(host, {}).nav?.(INPUT)?.items.flatMap((item) => [item.label, ...(item.children ?? []).map((child) => child.label)]);
-    expect(labels({})).toContain("Usage");
-    expect(labels({ hiddenPages: ["usage"] })).not.toContain("Usage");
-  });
-
-  it("on a host page, lights no console row and draws no lead", () => {
+  it("on a host page, crumbs the host's page and draws no lead", () => {
     const extras = ledNavExtras({ hostPage: { crumbs: [{ label: "Home" }] } }, {});
     expect(extras.crumbs?.({ kind: "overview" }, [{ label: "Overview" }])).toEqual([{ label: "Home" }]);
     expect(extras.listPage?.("errors", null)).toBeNull();
-    expect(extras.nav?.(INPUT)?.items.some((item) => item.active)).toBe(false);
+    expect(extras.subtitle?.("traces")).toBeNull();
   });
 });

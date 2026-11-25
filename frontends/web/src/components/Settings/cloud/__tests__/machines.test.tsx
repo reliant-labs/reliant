@@ -36,13 +36,6 @@ const mocks = vi.hoisted(() => ({
   search: {} as Record<string, string>,
 }))
 
-// The machines gate reads compute eligibility from the server rather than
-// deriving it from the subscription, so this module must be mocked for the
-// section to render at all.
-vi.mock('@/services/controlPlane/billing', () => ({
-  getComputeEligibility: mocks.getComputeEligibility,
-}))
-
 vi.mock('@/lib/event-context', () => ({
   useEventBus: () => ({ emit: vi.fn(), on: vi.fn(() => () => {}) }),
 }))
@@ -94,15 +87,11 @@ vi.mock('@/services/controlPlane/environments', () => ({
   describeError: (_e: unknown, fallback = 'error') => fallback,
   // machines.tsx calls this at module scope to build its query-key table,
   // so it must exist on the mock or the module fails to evaluate.
-  portAccessRulesQueryKey: (daemonId: string) => ['cp', 'ports', daemonId],
   listDaemons: mocks.listDaemons,
   getComputeSubscription: mocks.getComputeSubscription,
-  getDaemon: vi.fn(),
   createEnvironment: vi.fn(),
-  deleteDaemon: vi.fn(),
   suspendDaemon: vi.fn(),
   resumeEnvironment: vi.fn(),
-  listPortAccessRules: vi.fn(async () => []),
   setPortAccess: vi.fn(),
   removePortAccess: vi.fn(),
 }))
@@ -111,10 +100,20 @@ import { MachinesSection, daemonDisplayName } from '@/components/Settings/cloud/
 import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 import { MachineHealthState } from '@/gen/reliant/v1/tools_daemon_pb'
 import { setTransport } from '@/lib/connect'
+import { cpDaemonHandlers } from '@/test/cpDaemonTransport'
 import { daemonRegistryTransport } from '@/test/daemonRegistry'
+import { eligibilityHandlers } from '@/test/billingTransport'
+
+// Control-plane DaemonService answers at the transport: Settings › Machines
+// reads GetDaemon and the port rules through the generated hooks.
+const cpDaemon = () =>
+  cpDaemonHandlers({
+    getDaemon: () => ({}),
+    listPortAccessRules: () => ({ rules: [] }),
+  })
 
 // The daemon list is read through connectClient(DaemonRegistryService).
-beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() }, cpDaemon(), eligibilityHandlers(() => mocks.getComputeEligibility()))))
 afterEach(() => setTransport(null))
 
 function renderSection() {

@@ -108,7 +108,7 @@ func TestSendMessageToALegacyUnpinnedChatPinsItToTheMachineWithTheProject(t *tes
 			Router: &placingRouter{wakeRecordingRouter: wake, defaultID: laptop, known: map[string]bool{vm: true, laptop: true}},
 		},
 		threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}),
-		runs:    runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
+		runs:    runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
 	_, err = svc.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "continue"))

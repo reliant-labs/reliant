@@ -14,10 +14,13 @@
  *                 app's page, to the same section of its app; else to its
  *                 chats, or (an app with no code here) its Overview.
  *                 "All projects" and "Select several…" lead the list.
- *   several       choose N of M (the selector's multi-select, the chat
- *                 list's filter of #3027: `?projects=` and the
+ *   several       choose N of M (the selector's multi-select,
+ *                 hooks/useChatProjectFilter: `?projects=` and the
  *                 `sidebar.projects` setting). One left is that project;
  *                 none is every project.
+ *
+ * This is the app's one project filter: the chat list follows it, and has
+ * no project filter of its own.
  */
 
 import { useCallback, useMemo, useState } from "react";

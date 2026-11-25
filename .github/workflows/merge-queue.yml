@@ -10,11 +10,16 @@ name: Merge queue
 # belongs in the pre-release gate").
 #
 # WHAT RUNS HERE: `task ci:merge -- --queue --skip-vitest`, the affected tier
-# relative to the group's base: build, the affected -short Go and electron
-# tests (direct importers), the web typecheck when web changed, forge lint's own lanes scoped to the changed
-# directories (--optional-deps-guard and --tracing among them), the forge demo
+# relative to the group's base: build, a compile of every test package
+# (testbuild), the affected -short Go and electron tests (direct importers,
+# and every transitive one when they add at most MG_REACH_CAP=20 packages),
+# the web typecheck when web changed, forge lint's own lanes scoped to the changed
+# directories (--optional-deps-guard and --tracing among them), its
+# whole-project --graph --closed-sets --proto-format lanes on every group
+# (projectlint), the forge demo
 # bundle's build when the change reaches it, forge generate / docs drift when
-# their inputs changed, migration safety and order when a migration changed,
+# their inputs changed, migration safety and order when a migration changed
+# (order against origin/main AND against HEAD^, the entries queued ahead),
 # buf lint when a proto changed; then each new or changed Go test three times,
 # the cheap repo checks, and the vendored control-plane contract check when the
 # group changes proto-vendor/controlplane/ (control-plane #2556). The scoped
@@ -31,6 +36,8 @@ name: Merge queue
 # and a job it does not require stops nothing. On 2026-11-08 main went red
 # three times on findings only the release gate's whole-module lint saw (staticcheck QF1001
 # from #2293 and #2427, gosec G101 from #2368); this job reproduces all three.
+# When the group deprecates a declaration, the same script also runs
+# staticcheck's SA1019 over the packages that use it (#3005).
 #
 # BESIDE IT TOO, the affected vitest files (owner, 2026-11-21): the `vitest`
 # job, four legs, each `scripts/vitest-shard.sh --shard <i>/4`. Every leg plans
@@ -57,8 +64,9 @@ name: Merge queue
 # ended at a median 374s (a median ~16s added, at most ~80s).
 # visual-nightly.yml runs it on main every night.
 #
-# WHAT DOES NOT: vet, forge lint's golangci, buf, whole-project and deploy
-# lanes, golangci over packages the group did not change, buf lint on an
+# WHAT DOES NOT: vet, forge lint's golangci, buf, frontend and deploy lanes
+# and its slow whole-project ones, golangci over packages the group did not
+# change (but SA1019 where it deprecates), buf lint on an
 # unchanged proto, the race detector, slow and integration tests, the whole
 # vitest suite, the renderer's release build, Playwright and the electron package smoke. ci.yml
 # runs every one of them on each push to main and nightly, and the release

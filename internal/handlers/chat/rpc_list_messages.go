@@ -10,7 +10,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/sync/errgroup"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -66,7 +65,6 @@ func (s *Service) ListMessages(
 	threadsSvc := threads.New(threads.Deps{Repo: s.deps.Repo})
 
 	var messages []*db.Message
-	var totalCount int
 	var oldestSeq int64
 	var hasMore bool
 
@@ -100,20 +98,12 @@ func (s *Service) ListMessages(
 		if err != nil {
 			return nil, messagesReadError(ctx, err)
 		}
-		// The display count, not the LLM one: listThreadMessages reads the
-		// transcript (which crosses compaction boundaries), so a total that
-		// stopped at the newest summary would describe a different list than
-		// the one being returned.
-		totalCount, err = threadsSvc.CountDisplayMessages(ctx, threadID)
-		if err != nil {
-			return nil, messagesReadError(ctx, err)
-		}
 		if len(messages) > 0 {
 			oldestSeq = messages[0].Seq
 		}
 
 	case recentLimit > 0:
-		messages, totalCount, oldestSeq, hasMore, err = s.listMessagesBounded(
+		messages, oldestSeq, hasMore, err = s.listMessagesBounded(
 			ctx, threadsSvc, req.Msg.ChatId, mainThreadID, beforeSeq, recentLimit)
 		if err != nil {
 			return nil, messagesReadError(ctx, err)
@@ -122,7 +112,7 @@ func (s *Service) ListMessages(
 		// No page size given: the caller wants the whole chat (e.g. the cold
 		// initial load before any pagination has happened). Resolve every
 		// thread's full history and hand it to paginateBySeq unbounded.
-		messages, totalCount, err = s.listMessagesUnbounded(ctx, threadsSvc, req.Msg.ChatId, mainThreadID)
+		messages, err = s.listMessagesUnbounded(ctx, threadsSvc, req.Msg.ChatId, mainThreadID)
 		if err != nil {
 			return nil, messagesReadError(ctx, err)
 		}
@@ -200,7 +190,6 @@ func (s *Service) ListMessages(
 
 	return connect.NewResponse(&reliantv1.ListMessagesResponse{
 		Messages:  protoMessages,
-		Total:     int32(totalCount), //nolint:staticcheck // SA1019: deprecated for clients; the server still fills it when skip_total is unset
 		Count:     int32(len(protoMessages)),
 		HasMore:   hasMore,
 		OldestSeq: oldestSeq,
@@ -250,10 +239,10 @@ func (s *Service) pageErrors(ctx context.Context, chatID, mainThreadID string, b
 // caller shape.
 func (s *Service) listMessagesUnbounded(
 	ctx context.Context, threadsSvc *threads.Service, chatID, mainThreadID string,
-) ([]*db.Message, int, error) {
+) ([]*db.Message, error) {
 	mainThreadMessages, err := threadsSvc.LoadDisplayMessages(ctx, mainThreadID)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to resolve main thread messages: %w", err)
+		return nil, fmt.Errorf("failed to resolve main thread messages: %w", err)
 	}
 	for _, msg := range mainThreadMessages {
 		if msg.ThreadID != mainThreadID {
@@ -298,7 +287,7 @@ func (s *Service) listMessagesUnbounded(
 		return messages[i].Seq < messages[j].Seq
 	})
 
-	return messages, len(messages), nil
+	return messages, nil
 }
 
 // listThreadMessages reads exactly one thread's visual thread — the read
@@ -354,45 +343,18 @@ func (s *Service) listThreadMessages(
 //     holds. Spawn threads are left out for the snapshot's reason: a spawn
 //     renders as one tool-call card that reads its own thread
 //     (ListMessages with thread_id) when expanded.
-//   - Total: CountDisplayMessages(main) covers the main thread's own
-//     CW-chain-resolved count -- the DISPLAY resolution, matching the
-//     transcript this page is a window into; the LLM count stops at a
-//     compaction summary and would undercount a compacted chat by its whole
-//     summarized history. The chat's messages on every other thread are the
-//     chat's total less the main thread's own rows, both read from the
-//     trigger-maintained per-thread counts (one row per thread, not a COUNT
-//     over the chat's messages; siblings don't inherit from elsewhere, so
-//     their own chat_id-scoped rows are their whole count).
 //   - HasMore: the main thread's own hasMoreOlder. seq is a chat-global order
 //     (the chat's seq counter, which a branch's fork raises past its
 //     inherited history), and the oldest page (no older main message) takes
 //     every sibling below it too, so no sibling message is left without a
 //     page. A chat whose main thread has nothing in range pages its siblings
 //     alone, recentLimit at a time, and HasMore comes from that read.
-//
-// The two counts depend on nothing the page read produces, so they run
-// beside it.
 func (s *Service) listMessagesBounded(
 	ctx context.Context, threadsSvc *threads.Service, chatID, mainThreadID string, beforeSeq int64, recentLimit int,
-) ([]*db.Message, int, int64, bool, error) {
-	var mainCount, siblingCount int
-	counts, countsCtx := errgroup.WithContext(ctx)
-	counts.Go(func() (err error) {
-		if mainCount, err = threadsSvc.CountDisplayMessages(countsCtx, mainThreadID); err != nil {
-			return fmt.Errorf("failed to count main thread messages: %w", err)
-		}
-		return nil
-	})
-	counts.Go(func() (err error) {
-		if siblingCount, err = s.deps.Repo.CountMessagesInChatOutsideThread(countsCtx, chatID, mainThreadID); err != nil {
-			return fmt.Errorf("failed to count sibling thread messages: %w", err)
-		}
-		return nil
-	})
-
+) ([]*db.Message, int64, bool, error) {
 	mainThreadMessages, mainHasMoreOlder, err := threadsSvc.LoadRecentMessagesBefore(ctx, mainThreadID, beforeSeq, recentLimit)
 	if err != nil {
-		return nil, 0, 0, false, fmt.Errorf("failed to load recent main thread messages: %w", err)
+		return nil, 0, false, fmt.Errorf("failed to load recent main thread messages: %w", err)
 	}
 	for _, msg := range mainThreadMessages {
 		if msg.ThreadID != mainThreadID {
@@ -431,7 +393,7 @@ func (s *Service) listMessagesBounded(
 
 	siblingMessages, err := s.deps.Repo.ListTranscriptSiblingMessagesInRange(ctx, chatID, mainThreadID, fromSeq, toSeq, siblingLimit)
 	if err != nil {
-		return nil, 0, 0, false, fmt.Errorf("failed to load sibling thread messages: %w", err)
+		return nil, 0, false, fmt.Errorf("failed to load sibling thread messages: %w", err)
 	}
 	if siblingLimit > 0 && len(siblingMessages) > recentLimit {
 		siblingMessages = siblingMessages[len(siblingMessages)-recentLimit:]
@@ -466,16 +428,12 @@ func (s *Service) listMessagesBounded(
 		messages = windowByMainThread(messages, mainThreadID, recentLimit)
 	}
 
-	if err := counts.Wait(); err != nil {
-		return nil, 0, 0, false, err
-	}
-
 	var oldestSeq int64
 	if len(messages) > 0 {
 		oldestSeq = messages[0].Seq
 	}
 
-	return messages, mainCount + siblingCount, oldestSeq, hasMore, nil
+	return messages, oldestSeq, hasMore, nil
 }
 
 // messagePage carries the cursor facts a paginated message read has to report

@@ -137,6 +137,9 @@ const (
 	// ProjectServiceListProjectsWithAppsProcedure is the fully-qualified name of the ProjectService's
 	// ListProjectsWithApps RPC.
 	ProjectServiceListProjectsWithAppsProcedure = "/reliant.v1.ProjectService/ListProjectsWithApps"
+	// ProjectServicePreviewProjectMachineMoveProcedure is the fully-qualified name of the
+	// ProjectService's PreviewProjectMachineMove RPC.
+	ProjectServicePreviewProjectMachineMoveProcedure = "/reliant.v1.ProjectService/PreviewProjectMachineMove"
 )
 
 // ProjectServiceClient is a client for the reliant.v1.ProjectService service.
@@ -331,6 +334,17 @@ type ProjectServiceClient interface {
 	// reliant's project authorization and control-plane's app authorization.
 	// forge:custom — joins caller-visible projects with the org's hosted apps
 	ListProjectsWithApps(context.Context, *connect.Request[v1.ListProjectsWithAppsRequest]) (*connect.Response[v1.ListProjectsWithAppsResponse], error)
+	// PreviewProjectMachineMove says what of the project's checkout on one
+	// machine would stay behind if the project were set up on another one:
+	// setting a project up on a machine is a fresh clone of each of its
+	// repositories (CreateProjectFromRepo), so uncommitted changes, branches
+	// not pushed anywhere, stashes and branch workspaces stay where they are.
+	// It changes nothing, and never wakes the machine: a machine that is not
+	// connected is reported as such (check_state), with only what Reliant
+	// itself records (the repositories and branch workspaces). The caller must
+	// own the machine and be able to write the project.
+	// forge:custom — asks one of the caller's machines about its checkout
+	PreviewProjectMachineMove(context.Context, *connect.Request[v1.PreviewProjectMachineMoveRequest]) (*connect.Response[v1.PreviewProjectMachineMoveResponse], error)
 }
 
 // NewProjectServiceClient constructs a client for the reliant.v1.ProjectService service. By
@@ -563,6 +577,13 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		previewProjectMachineMove: connect.NewClient[v1.PreviewProjectMachineMoveRequest, v1.PreviewProjectMachineMoveResponse](
+			httpClient,
+			baseURL+ProjectServicePreviewProjectMachineMoveProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("PreviewProjectMachineMove")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -602,6 +623,7 @@ type projectServiceClient struct {
 	getProjectOrgMove           *connect.Client[v1.GetProjectOrgMoveRequest, v1.GetProjectOrgMoveResponse]
 	listProjectOrgMoves         *connect.Client[v1.ListProjectOrgMovesRequest, v1.ListProjectOrgMovesResponse]
 	listProjectsWithApps        *connect.Client[v1.ListProjectsWithAppsRequest, v1.ListProjectsWithAppsResponse]
+	previewProjectMachineMove   *connect.Client[v1.PreviewProjectMachineMoveRequest, v1.PreviewProjectMachineMoveResponse]
 }
 
 // CreateProject calls reliant.v1.ProjectService.CreateProject.
@@ -772,6 +794,11 @@ func (c *projectServiceClient) ListProjectOrgMoves(ctx context.Context, req *con
 // ListProjectsWithApps calls reliant.v1.ProjectService.ListProjectsWithApps.
 func (c *projectServiceClient) ListProjectsWithApps(ctx context.Context, req *connect.Request[v1.ListProjectsWithAppsRequest]) (*connect.Response[v1.ListProjectsWithAppsResponse], error) {
 	return c.listProjectsWithApps.CallUnary(ctx, req)
+}
+
+// PreviewProjectMachineMove calls reliant.v1.ProjectService.PreviewProjectMachineMove.
+func (c *projectServiceClient) PreviewProjectMachineMove(ctx context.Context, req *connect.Request[v1.PreviewProjectMachineMoveRequest]) (*connect.Response[v1.PreviewProjectMachineMoveResponse], error) {
+	return c.previewProjectMachineMove.CallUnary(ctx, req)
 }
 
 // ProjectServiceHandler is an implementation of the reliant.v1.ProjectService service.
@@ -966,6 +993,17 @@ type ProjectServiceHandler interface {
 	// reliant's project authorization and control-plane's app authorization.
 	// forge:custom — joins caller-visible projects with the org's hosted apps
 	ListProjectsWithApps(context.Context, *connect.Request[v1.ListProjectsWithAppsRequest]) (*connect.Response[v1.ListProjectsWithAppsResponse], error)
+	// PreviewProjectMachineMove says what of the project's checkout on one
+	// machine would stay behind if the project were set up on another one:
+	// setting a project up on a machine is a fresh clone of each of its
+	// repositories (CreateProjectFromRepo), so uncommitted changes, branches
+	// not pushed anywhere, stashes and branch workspaces stay where they are.
+	// It changes nothing, and never wakes the machine: a machine that is not
+	// connected is reported as such (check_state), with only what Reliant
+	// itself records (the repositories and branch workspaces). The caller must
+	// own the machine and be able to write the project.
+	// forge:custom — asks one of the caller's machines about its checkout
+	PreviewProjectMachineMove(context.Context, *connect.Request[v1.PreviewProjectMachineMoveRequest]) (*connect.Response[v1.PreviewProjectMachineMoveResponse], error)
 }
 
 // NewProjectServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -1194,6 +1232,13 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	projectServicePreviewProjectMachineMoveHandler := connect.NewUnaryHandler(
+		ProjectServicePreviewProjectMachineMoveProcedure,
+		svc.PreviewProjectMachineMove,
+		connect.WithSchema(projectServiceMethods.ByName("PreviewProjectMachineMove")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.ProjectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProjectServiceCreateProjectProcedure:
@@ -1264,6 +1309,8 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 			projectServiceListProjectOrgMovesHandler.ServeHTTP(w, r)
 		case ProjectServiceListProjectsWithAppsProcedure:
 			projectServiceListProjectsWithAppsHandler.ServeHTTP(w, r)
+		case ProjectServicePreviewProjectMachineMoveProcedure:
+			projectServicePreviewProjectMachineMoveHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1407,4 +1454,8 @@ func (UnimplementedProjectServiceHandler) ListProjectOrgMoves(context.Context, *
 
 func (UnimplementedProjectServiceHandler) ListProjectsWithApps(context.Context, *connect.Request[v1.ListProjectsWithAppsRequest]) (*connect.Response[v1.ListProjectsWithAppsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.ListProjectsWithApps is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) PreviewProjectMachineMove(context.Context, *connect.Request[v1.PreviewProjectMachineMoveRequest]) (*connect.Response[v1.PreviewProjectMachineMoveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.PreviewProjectMachineMove is not implemented"))
 }

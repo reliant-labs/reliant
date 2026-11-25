@@ -53,11 +53,17 @@
 #   docs       every docs generator must be a no-op; only when a docs input changed
 #   build      compile (go list -export: no link) every package whose build
 #              contains a change (the plan's go.build), or ./... on a full Go lane
+#   testbuild  scripts/test-build.sh: compile (no link, no run) EVERY test
+#              package, the build-tagged ones under their tag, in every tier,
+#              so a fixture a required field or signature change broke fails
+#              here wherever it is (#3489); seconds on a warm cache
 #   test       tools/test-affected run -plan <the plan> (-short, cached, no
-#              -race): the changed packages and their DIRECT importers, the
+#              -race): the changed packages and their DIRECT importers, plus
+#              every transitive dependent when they number at most
+#              MG_REACH_CAP (default 20; 0 for direct only), the
 #              vitest files within two imports of a changed module, and the
-#              electron tests when electron/ changed; deeper dependents run in
-#              the release gate (MG_REACH=all for all). A change the rules cannot
+#              electron tests when electron/ changed; deeper dependents of a
+#              hub run in the release gate (MG_REACH=all for all). A change the rules cannot
 #              scope (go.mod, package.json, config) runs its whole Go and
 #              electron lane; a full web fallback runs tsc here, the vitest
 #              files the diff's own web modules reach (-web-full reached), and
@@ -95,13 +101,18 @@
 #              when the plan's web-demo lane is selected: a change in the
 #              bundle's import graph, its build config, or a FULL web lane
 #   migsafety  forge lint --migration-safety, only when a migration or forge.yaml changed
-#   closedsets forge lint --closed-sets, only when a migration, go.mod or forge.yaml changed: a
-#              CHECK declared forge:closed-set must list exactly the forge set the pin
-#              carries. A pin bump that grows accesstoken.AllScopes (mcp:oauth, mcp:forge)
-#              merged without the widening migration and turned the release gate red
-#              (#3382); the whole-project forge lint that names it is the release gate's.
+#   projectlint forge lint --graph --closed-sets --proto-format, unscoped, in every
+#              tier: the whole-project lanes that take seconds. --graph: every
+#              provider reached by a root (#3483). --closed-sets: a CHECK declared
+#              forge:closed-set lists exactly the set the pinned forge carries (a pin
+#              bump that grew accesstoken.AllScopes merged without the widening
+#              migration, #3382). --proto-format: buf format is a no-op (#3397,
+#              #3480). It replaced the closedsets phase, which ran only on a
+#              migration, go.mod or forge.yaml change.
 #   migorder   every migration is versioned above origin/main's newest (fetched
-#              first, fail closed), only when a migration changed
+#              first, fail closed), only when a migration changed; under --queue
+#              also every migration the entry adds above HEAD^'s newest (main
+#              plus the entries queued ahead, control-plane#3571)
 # When the gate may rewrite the tree it judges (--amend, or a dirty tree),
 # generate and docs run FIRST, in place, and only then do build, test,
 # typecheck, golangci, lint and migsafety run, at the same time, on the regenerated tree:
@@ -347,9 +358,15 @@ gen_docs() {
 }
 
 # ── plan ──────────────────────────────────────────────────────────────────
-# The merge tier's Go fan-out: direct importers only (owner, 2026-10-24).
-reach=${MG_REACH:-direct}
-phase plan go run ./tools/test-affected plan -json -reach "$reach" -base "$base" || { cat "$L/plan.log"; exit 1; }
+# The merge tier's Go fan-out: direct importers (owner, 2026-10-24), plus
+# every transitive dependent when they number at most MG_REACH_CAP (default
+# 20; 0 is direct importers only). A leaf change then runs every test binary
+# it reaches; a hub change (internal/db: 46 beyond its 119 direct; a
+# narrow-role package under internal/llm/tools: 151 beyond 15) keeps the
+# direct cut, and testbuild still compiles every test package. 20 bounds what
+# the queue's 4-CPU runner adds to some 20 test binaries.
+reach=${MG_REACH:-direct} reach_cap=${MG_REACH_CAP:-20}
+phase plan go run ./tools/test-affected plan -json -reach "$reach" -go-reach-cap "$reach_cap" -base "$base" || { cat "$L/plan.log"; exit 1; }
 sed -n '/^{/,$p' "$L/plan.log" >"$L/plan.json"
 # Fail closed: without jq, or with a plan it cannot parse, every lane would read
 # as "not selected" and be silently skipped.
@@ -372,7 +389,7 @@ load_selection() {
   if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || echo "$files" | grep -q '^frontends/web/'; then typecheck=true; fi
 }
 load_selection || exit 1
-notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo "FULL ($nweb reached file(s))" || echo "$nweb file(s)"); typecheck $typecheck; demo-build $webdemo; web-build $webbuild; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
+notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $(j .go.reach) (transitive budget $reach_cap), $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo "FULL ($nweb reached file(s))" || echo "$nweb file(s)"); typecheck $typecheck; demo-build $webdemo; web-build $webbuild; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
 
 # ── pnpm installs a selected lane needs ───────────────────────────────────
 # npm_install <dir>: pnpm's frozen install in <dir> unless its install is
@@ -473,7 +490,7 @@ if [ "$fail" = 0 ] && [ "$inplace" = 1 ]; then
   fi
   # Dirty-tree generation can expand reach too, even without --amend.
   if [ "$fail" = 0 ]; then
-    phase plan-2 go run ./tools/test-affected plan -json -reach "$reach" -base "$base" || fail=1
+    phase plan-2 go run ./tools/test-affected plan -json -reach "$reach" -go-reach-cap "$reach_cap" -base "$base" || fail=1
     if [ "$fail" = 0 ]; then
       sed -n '/^{/,$p' "$L/plan-2.log" >"$L/plan-2.json"
       run_plan=$L/plan-2.json
@@ -567,7 +584,16 @@ demo_build() {
   return "$rc"
 }
 if [ "$fail" = 0 ]; then
-  phase build build_check & pids+=($!)
+  # Every test package compiles, in every tier (scripts/test-build.sh says
+  # why): a fixture broken by a required field or a signature change in a
+  # package no lane selected (#3489). After build, whose compiles it reuses,
+  # and never the packages the test phase runs (it compiles those itself):
+  # side by side the two would compile the same packages twice. Seconds on a
+  # warm cache.
+  if [ "$gofull" = true ]; then echo ./... >"$L/tested.txt"; else jq -r '.go.packages // [] | .[]' "$run_plan" >"$L/tested.txt"; fi
+  { phase build build_check; rc=$?
+    phase testbuild env GOMAXPROCS="$quarter" scripts/test-build.sh -p "$quarter" --exclude "$L/tested.txt" || rc=1
+    exit "$rc"; } & pids+=($!)
   phase test env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" \
     go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes "$test_lanes" -web-full reached -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" -capture & pids+=($!)
   if [ "$typecheck" = true ]; then
@@ -651,17 +677,24 @@ if [ "$fail" = 0 ]; then
     # Reliant bot on the owner's instruction (scripts/check-compat.sh).
     phase migsafety env CI_BASE="$base" CI_QUEUE_ENTRY="$queue" bash -c '"$@" && scripts/check-compat.sh migrations' _ "${forge[@]}" lint --migration-safety --no-fix & pids+=($!)
   fi
-  # A forge:closed-set CHECK must list the set the pinned forge carries, so the
-  # lane runs whenever a migration or the pin (go.mod, forge.yaml) moves. It is
-  # not part of the scoped lint above: a pin bump has no directory to scope to.
-  if echo "$files" | grep -qE '^db/migrations/|^go\.mod$|^forge\.yaml$'; then
-    phase closedsets "${forge[@]}" lint --closed-sets --no-fix & pids+=($!)
-  fi
+  # forge lint's whole-project lanes that take seconds, in every tier: the
+  # scoped lint above skips a lane that cannot be scoped, and each of these
+  # judges files the diff need not touch. --graph: every provider reached by
+  # a root (#3483's unreachable internal/planning). --closed-sets: a
+  # forge:closed-set CHECK lists exactly the pinned forge's set (#3382's pin
+  # bump). --proto-format: buf format leaves every .proto alone (#3397,
+  # #3480). 12-24s together at load 270 on 48 CPUs; the other whole-project
+  # lanes (golangci over the module, the frontends) stay in the release gate.
+  phase projectlint env GOMAXPROCS="$quarter" "${forge[@]}" lint --quiet --no-fix --skip-frontends --graph --closed-sets --proto-format & pids+=($!)
   # A migration below main's newest is never applied and reliant's migrator
   # refuses to start on it (reliant#1399). The check fetches origin/main
-  # itself, so it judges main as it is now, not as this clone last saw it.
+  # itself, so it judges main as it is now, not as this clone last saw it. In
+  # the queue it also judges this entry against HEAD^, main plus the entries
+  # queued ahead, none of them on origin/main yet: #3483 merged a migration
+  # below #3482's that way (control-plane#3571).
   if echo "$files" | grep -qE '^db/migrations/'; then
-    phase migorder go run ./tools/test-affected migration-order & pids+=($!)
+    also=(); [ "$queue" = 1 ] && also=(-also HEAD^)
+    phase migorder go run ./tools/test-affected migration-order ${also[@]+"${also[@]}"} & pids+=($!)
   fi
 fi
 # Every launched phase is waited for, the generators too when the gate failed
@@ -715,7 +748,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan pnpm-frontends-web pnpm-electron pnpm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo webbuild golangci lint proto vet migsafety closedsets migorder; do
+  for f in plan pnpm-frontends-web pnpm-electron pnpm-tools-protoc-gen-es pgtest generate docs plan-2 build testbuild test typecheck demo webbuild golangci lint projectlint proto vet migsafety migorder; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"

@@ -43,8 +43,6 @@ const (
 // takes a user id or a *Filters struct. A new one fails
 // TestEveryUserScopedReadIsClassified until it is added here.
 var userScopedReads = map[string]string{
-	"GetChatRowWithUserCheck":  readRepoChecks,
-	"GetChatWithUserCheck":     readRepoChecks,
 	"GetProjectWithUserCheck":  readRepoChecks,
 	"GetUsableWorkflowBySlug":  readRepoChecks,
 	"GetWorkflowDraftByName":   readRepoChecks,
@@ -99,8 +97,6 @@ var userScopedReads = map[string]string{
 	"GetPresetBySlug":             readPersonal,
 	"GetSetting":                  readPersonal,
 	"GetSettingValue":             readPersonal,
-	"ListLLMUsageDaily":           readPersonal,
-	"ListLLMUsageDetail":          readPersonal,
 	"ListSettings":                readPersonal,
 	"ListSettingsByKey":           readPersonal,
 	"ListVisibilityOverrides":     readPersonal,

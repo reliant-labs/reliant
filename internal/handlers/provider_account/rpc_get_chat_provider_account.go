@@ -29,7 +29,7 @@ func (s *Service) GetChatProviderAccount(
 	if chatID == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("chat_id is required"))
 	}
-	chat, err := s.deps.Store.GetChatRowWithUserCheck(ctx, chatID, userID)
+	chat, err := s.deps.Chats.GetChatRowWithUserCheck(ctx, chatID, userID)
 	if err != nil {
 		return nil, notFoundOr(err, "chat")
 	}

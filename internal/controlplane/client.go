@@ -272,7 +272,7 @@ func (c *client) PreviewAccountDeletionWallet(ctx context.Context, jwt string) (
 	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
 	resp, err := c.users.PreviewAccountDeletion(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, classifyAccountDeleted(err)
 	}
 	w := resp.Msg.GetWallet()
 	if w == nil {
@@ -291,7 +291,7 @@ func (c *client) DeleteCurrentUserAccount(ctx context.Context, jwt string) (*Acc
 	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
 	resp, err := c.users.DeleteCurrentUserAccount(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, classifyAccountDeleted(err)
 	}
 	out := &AccountDeletionResult{RefundPending: resp.Msg.GetRefundPending()}
 	for _, b := range resp.Msg.GetBlockers() {

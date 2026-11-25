@@ -33,7 +33,6 @@ type Repository interface {
 	ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]string, error)
 
 	// The refetch every settings write pushes to the user's other clients.
-	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 }
 
 // Accounts is the person's provider accounts: sign-in, re-label, limits and the usage poll a new
@@ -64,4 +63,10 @@ type ChatWaker interface {
 // or signed in to again; seatmatch.Service satisfies it.
 type SeatMatcher interface {
 	MatchAccount(ctx context.Context, userID, accountID string) (seatmatch.Outcome, error)
+}
+
+// UserRefetch tells a user's clients to re-read data of a given type (a
+// user_updates refetch). chatupdates.Service satisfies it.
+type UserRefetch interface {
+	EmitUserRefetch(ctx context.Context, userID string, refetchType core.RefetchType, opts core.RefetchOpts) error
 }

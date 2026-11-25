@@ -43,12 +43,12 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 	}
 	noMachine := false
 	if chatID != nil && *chatID != "" {
-		chat, err := s.deps.Repo.GetChat(ctx, *chatID)
+		chat, err := s.deps.Chats.GetChat(ctx, *chatID)
 		if err != nil {
 			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 		}
 		// Someone else's chat is not found, so the answer never reveals it.
-		if !authz.CanWriteChat(ctx, userID, chat) {
+		if !authz.CanOwnChat(ctx, userID, chat) {
 			return machinewake.Target{}, svcerr.NotFound("chat")
 		}
 		if chat.ProjectID != projectID {
@@ -102,11 +102,11 @@ func (s *Service) placeOnRequestedMachine(ctx context.Context, userID, projectID
 		}
 	}
 	if chatID != nil && *chatID != "" {
-		chat, err := s.deps.Repo.GetChat(ctx, *chatID)
+		chat, err := s.deps.Chats.GetChat(ctx, *chatID)
 		if err != nil {
 			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 		}
-		if !authz.CanWriteChat(ctx, userID, chat) {
+		if !authz.CanOwnChat(ctx, userID, chat) {
 			return machinewake.Target{}, svcerr.NotFound("chat")
 		}
 		if chat.ProjectID != projectID {

@@ -33,12 +33,8 @@ vi.mock("@/store/authStore", () => ({
 vi.mock("@/hooks/useOrgs", () => ({
   useActiveOrg: () => ({ active: mocks.org, orgs: mocks.org ? [mocks.org] : [], isLoading: false }),
 }));
-// The roster is read for real (useMembers' infinite query) over a fake
-// control plane: two pages, Ada on the first, Bea on the second.
-vi.mock("@/services/controlPlane/members", async (importActual) => ({
-  ...(await importActual<typeof import("@/services/controlPlane/members")>()),
-  listMembers: (orgId: string, pageToken: string) => mocks.listMembers(orgId, pageToken),
-}));
+// The roster is read for real (useMembers' generated infinite query) over a
+// fake control plane: two pages, Ada on the first, Bea on the second.
 
 const member = (externalId: string, name: string) => ({ userId: `cp-${externalId}`, externalId, name, email: `${externalId}@acme.com` });
 const rosterPages = (_orgId: string, pageToken: string) =>
@@ -113,7 +109,15 @@ beforeEach(() => {
   mocks.read.mockReset();
   mocks.org = acme;
   mocks.read.mockImplementation((req: { groupBy: OrgLLMUsageGroupBy }) => answer(req.groupBy));
-  setTransport(mockTransport({ "OrgUsageService.GetOrgLLMUsage": (req) => mocks.read(req) }));
+  setTransport(
+    mockTransport({
+      "OrgUsageService.GetOrgLLMUsage": (req) => mocks.read(req),
+      "OrganizationService.ListMembers": (req) => {
+        const { orgId, pageToken } = req as { orgId: string; pageToken: string };
+        return mocks.listMembers(orgId, pageToken);
+      },
+    }),
+  );
 });
 
 describe("OrgAIUsagePage", () => {

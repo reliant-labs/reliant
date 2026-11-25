@@ -5,6 +5,7 @@ import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type Client } from "@connectrpc/connect";
 import { ObservabilityBillingService } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
+import { deployServiceKeys } from "@/hooks/controlplane/deploy-service-hooks_gen";
 import { transport as appTransport } from "@/lib/connect";
 import { useTransport } from "@/lib/transportScope";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
@@ -70,6 +71,11 @@ export function useUpdateObsLimits(orgId: string) {
       // variables, never the current render's organization, own the result.
       const key = obsBillingKey(request.orgId ?? null);
       if (response.limits) cache.setQueryData([...key, "limits"], response.limits);
-      await cache.invalidateQueries({ queryKey: key });
+      await Promise.all([
+        cache.invalidateQueries({ queryKey: key }),
+        // The org's collection policy (ObservabilityCollectionPolicy) refetches after a save, as it
+        // did under this prefix before it moved to the generated DeployService.ListEnvironments key.
+        ...(request.orgId ? [cache.invalidateQueries({ queryKey: deployServiceKeys.listEnvironments({ orgId: request.orgId }) })] : []),
+      ]);
     } });
 }

@@ -85,9 +85,6 @@ type Repository interface {
 	ListChats(ctx context.Context, filters db.ChatFilters) ([]*db.Chat, error)
 	// Ownership and the chat's own columns, from the chats row alone.
 	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
-	GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*db.ChatRow, error)
-	// The chat with its activity-derived fields, for a handler that reads one.
-	GetChatWithUserCheck(ctx context.Context, id, userID string) (*db.Chat, error)
 	SearchChats(ctx context.Context, filters db.ChatSearchFilters) ([]*db.Chat, error)
 	ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope, page db.ArchivedChatPage) ([]*db.ArchivedChatInfo, bool, error)
 	DeleteChat(ctx context.Context, id string) error
@@ -117,7 +114,6 @@ type Repository interface {
 	// first typed message ever) once, durably, and reports whether this call
 	// did (user_first_message).
 	ClaimUserActivation(ctx context.Context, userID, chatID, messageID string) (bool, error)
-	CountMessagesInChatOutsideThread(ctx context.Context, chatID, threadID string) (int, error)
 	ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64, limit int) ([]*db.Message, error)
 	GetWorkflowByThread(ctx context.Context, chatID, thread string) (*db.Workflow, error)
 	ListWorkflowsByChat(ctx context.Context, chatID string) ([]*db.Workflow, error)
@@ -174,6 +170,10 @@ type Repository interface {
 	threads.Repository
 	runs.Repository
 	launch.Store
+	// GetChat is the chat read this package still makes through its
+	// repository (the handlers' own wave moves it); runs and launch take
+	// their own chat readers.
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	// GetProjectWithUserCheck is the org-aware project read the handlers and the
 	// launcher share; db.Repo delegates it to projectaccess.
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)

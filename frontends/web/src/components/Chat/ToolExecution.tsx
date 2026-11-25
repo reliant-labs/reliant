@@ -7,17 +7,16 @@
  * A spinner while it runs, a destructive mark when it failed; no card, no
  * stripe, no tint.
  *
- * Two calls are cards instead, because they are not records of work: a call
- * waiting on the user's approval (one primary action, Approve), and a spawned
- * sub-agent (its name, its state, and its thread).
+ * One call is a card instead, because it is not a record of work: a call
+ * waiting on the user's approval (one primary action, Approve). A spawned
+ * sub-agent is a row too — its state, its title, its elapsed time, and its
+ * thread and Cancel on hover or focus — so a dozen of them stay one screen.
  */
 
 import Tooltip from "../forge-ui/tooltip";
 import { useState, memo, useCallback, useMemo, useEffect } from "react";
 import {
-  ChevronRight,
   AlertCircle,
-  Bot,
   ExternalLink,
   Shield,
   Loader2,
@@ -25,6 +24,8 @@ import {
   XCircle,
   Play,
   Maximize2,
+  Check,
+  CircleSlash,
 } from "lucide-react";
 import { QuietRow } from "./QuietRow";
 import { editDiffStat, toolRowIcon, type DiffStat } from "./toolRowParts";
@@ -1051,80 +1052,86 @@ function ToolExecutionComponent({
     );
   }
 
-  // A sub-agent is the third card: who it is, whether it is still working,
-  // and the one way in — its thread. Its live progress opens beneath.
+  // A sub-agent is one dense row, like a tool's: its state in the icon, its
+  // title, how long it has run (or how it ended), and — on hover or focus —
+  // its thread and, while it runs, Cancel. An agent that spawns twelve at once
+  // gets twelve lines, not twelve cards (SubAgentGroup heads them).
   if (isSpawnToolFlag && !isInputPreparing) {
     const formatted = formatToolParams(toolCall.name, headerInput as ToolInput);
     const agentTitle = spawnTitleFromInput(headerInput) || formatted?.summary || "Sub-agent";
-    const agentState = hasFailed
-      ? { label: statusText === "Failed" ? "Failed" : "Stopped", dot: "bg-warning" }
+    const agentElapsedMs = spawnChildWorkflow
+      ? toolDurationMs(spawnChildWorkflow.createdAt, spawnChildWorkflow.completedAt ?? (isLive ? new Date().toISOString() : undefined))
+      : null;
+    const agentEnd = hasFailed
+      ? (statusText === "Failed" ? "Failed" : "Stopped")
       : isCancelled
-        ? { label: "Cancelled", dot: "bg-muted-foreground" }
+        ? "Cancelled"
         : isCancelling
-          ? { label: "Stopping…", dot: "bg-warning motion-safe:animate-pulse" }
-          : isCompleted
-            ? { label: "Done", dot: "bg-success" }
-            : isDenied
-              ? { label: "Denied", dot: "bg-muted-foreground" }
-              : { label: "Working", dot: "bg-primary motion-safe:animate-pulse" };
-    // Stopping a running sub-agent is the card's secondary action, beside
-    // its thread: the same control (and accessible name) as a tool row's.
+          ? "Stopping…"
+          : isDenied
+            ? "Denied"
+            : null;
+    const agentMark = hasFailed ? (
+      <XCircle className="size-4 text-destructive-ink" />
+    ) : isCancelled || isDenied ? (
+      <CircleSlash className="size-3.5" />
+    ) : isCompleted ? (
+      <Check className="size-4 text-success-ink" />
+    ) : (
+      <Loader2 className="size-3.5 animate-spin text-primary-ink" />
+    );
     const canCancel = (isExecuting || isCancelling) && !!onCancel;
     return (
-      <div className="rounded-xl border border-border p-4 sm:p-5" data-testid="sub-agent-card">
-        <div className="flex min-w-0 items-center gap-3">
-          <Bot className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-ui font-medium text-foreground">{agentTitle}</div>
-            <div className="flex items-center gap-1.5 text-meta text-muted-foreground">
-              <span className={cn("size-1.5 rounded-full", agentState.dot)} aria-hidden="true" />
-              <span>{actionVerb ?? "Sub-agent"}</span>
-              <span aria-hidden="true">·</span>
-              <span>{agentState.label}</span>
-              {statusText !== agentState.label && <span className="sr-only">{statusText}</span>}
-            </div>
-          </div>
-          {canCancel && (
-            <Tooltip content="Stop sub-agent" side="bottom" delay={300} triggerClassName="inline-flex">
-              <button
-                type="button"
-                onClick={() => onCancel?.(toolCall.id)}
-                aria-label="Cancel tool execution"
-                disabled={isCancelling}
-                className="touch-target inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:bg-transparent"
-              >
-                <Square className={cn("size-3", isCancelling && "animate-pulse")} aria-hidden="true" />
-              </button>
-            </Tooltip>
-          )}
-          {canOpenThread && (
-            <button
-              type="button"
-              onClick={() => onSelectThread?.(spawnThreadId ?? null)}
-              aria-label="Open full thread view"
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 text-ui font-medium text-foreground transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Open thread
-            </button>
-          )}
-        </div>
-        {isExpandable && (
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={onToggleRow}
-              aria-expanded={isExpanded}
-              aria-label={`Toggle tool details for ${toolCall.name}`}
-              className="inline-flex items-center gap-1 rounded-md text-ui text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <ChevronRight className={cn("size-3.5 transition-transform", isExpanded && "rotate-90")} aria-hidden="true" />
-              {isExpanded ? "Hide progress" : "Show progress"}
-            </button>
-            {isExpanded && <div className="mt-2">{detail}</div>}
-          </div>
-        )}
+      <div data-testid="sub-agent-row" data-state={hasFailed ? "failed" : isCancelled || isDenied ? "cancelled" : isCompleted ? "done" : "running"}>
+        <QuietRow
+          icon={agentMark}
+          expanded={isExpandable && isExpanded}
+          onToggle={isExpandable ? onToggleRow : undefined}
+          ariaLabel={`Toggle tool details for ${toolCall.name}`}
+          tone={hasFailed ? "destructive" : "default"}
+          trailing={
+            <>
+              {agentEnd ? (
+                <span className="text-meta">{agentEnd}</span>
+              ) : (
+                <span className="sr-only">{statusText}</span>
+              )}
+              {agentElapsedMs !== null && (
+                <span className="text-meta tabular-nums text-muted-foreground">{formatToolDuration(agentElapsedMs)}</span>
+              )}
+              {canOpenThread && (
+                <Tooltip content="Open thread" side="bottom" delay={300} triggerClassName="inline-flex">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onSelectThread?.(spawnThreadId ?? null); }}
+                    className={cn(ROW_ACTION_CLASS, revealOnHover)}
+                    aria-label="Open full thread view"
+                    type="button"
+                  >
+                    <Maximize2 className="size-3.5" />
+                  </button>
+                </Tooltip>
+              )}
+              {canCancel && (
+                <Tooltip content="Stop sub-agent" side="bottom" delay={300} triggerClassName="inline-flex">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onCancel?.(toolCall.id); }}
+                    className={cn(ROW_ACTION_CLASS, !isCancelling && revealOnHover)}
+                    aria-label="Cancel tool execution"
+                    disabled={isCancelling}
+                    type="button"
+                  >
+                    <Square className={cn("size-3", isCancelling && "animate-pulse")} />
+                  </button>
+                </Tooltip>
+              )}
+            </>
+          }
+          detail={isExpandable ? detail : undefined}
+        >
+          <span className="min-w-0 truncate text-foreground/80">{agentTitle}</span>
+        </QuietRow>
         {isDenied && approval?.denialReason && (
-          <p className="mt-3 pl-7 text-meta text-destructive-ink">Denied: {approval.denialReason}</p>
+          <p className="ml-6 text-meta text-destructive-ink">Denied: {approval.denialReason}</p>
         )}
       </div>
     );

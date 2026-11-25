@@ -34,16 +34,15 @@ const mocks = vi.hoisted(() => ({
   suspendDaemon: vi.fn(async () => {}),
   resumeEnvironment: vi.fn(async () => {}),
   renameMachine: vi.fn(async (_req: { daemonId: string; name: string }) => ({})),
+  cpSuspendDaemon: vi.fn(async (_req: { daemonId: string }) => ({})),
+  listPortAccessRules: vi.fn(async (_req: { daemonId: string }) => ({ rules: [] as unknown[] })),
+  setPortAccess: vi.fn(async (_req: { daemonId: string; port: number; accessMode: number }) => ({})),
   navigate: vi.fn(),
 }))
 
 // The Add machine sheet (billing checkout, catalog) is not under test here.
 vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
 vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
-vi.mock('@/services/controlPlane/billing', () => ({
-  getComputeEligibility: mocks.getComputeEligibility,
-}))
-
 vi.mock('@/lib/event-context', () => ({
   useEventBus: () => ({ emit: vi.fn(), on: vi.fn(() => () => {}) }),
 }))
@@ -81,15 +80,11 @@ vi.mock('@/services/controlPlane/environments', () => ({
   DaemonType: { UNSPECIFIED: 0, MANAGED: 1, EXTERNAL: 2 },
   PortAccessMode: { UNSPECIFIED: 0, PUBLIC: 1, AUTHENTICATED: 2, TOKEN: 3 },
   describeError: (_e: unknown, fallback = 'error') => fallback,
-  portAccessRulesQueryKey: (daemonId: string) => ['cp', 'ports', daemonId],
   listDaemons: mocks.listDaemons,
   getComputeSubscription: mocks.getComputeSubscription,
-  getDaemon: mocks.getDaemon,
   createEnvironment: vi.fn(),
-  deleteDaemon: vi.fn(),
   suspendDaemon: mocks.suspendDaemon,
   resumeEnvironment: mocks.resumeEnvironment,
-  listPortAccessRules: vi.fn(async () => []),
   setPortAccess: vi.fn(),
   removePortAccess: vi.fn(),
 }))
@@ -97,7 +92,19 @@ vi.mock('@/services/controlPlane/environments', () => ({
 import { MachinesSection } from '@/components/Settings/cloud/machines'
 import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 import { setTransport } from '@/lib/connect'
+import { cpDaemonHandlers } from '@/test/cpDaemonTransport'
 import { daemonRegistryTransport } from '@/test/daemonRegistry'
+import { eligibilityHandlers } from '@/test/billingTransport'
+
+// Control-plane DaemonService answers at the transport: Settings › Machines
+// reads GetDaemon and the port rules through the generated hooks.
+const cpDaemon = () =>
+  cpDaemonHandlers({
+    getDaemon: (req: { daemonId: string }) => mocks.getDaemon(req.daemonId),
+    suspendDaemon: (req: { daemonId: string }) => mocks.cpSuspendDaemon(req),
+    listPortAccessRules: (req: { daemonId: string }) => mocks.listPortAccessRules(req),
+    setPortAccess: (req: { daemonId: string; port: number; accessMode: number }) => mocks.setPortAccess(req),
+  })
 
 // The daemon list is read through connectClient(DaemonRegistryService).
 beforeEach(() =>
@@ -105,7 +112,7 @@ beforeEach(() =>
     daemonRegistryTransport({
       listDaemons: () => mocks.listDaemons(),
       renameMachine: (req: { daemonId: string; name: string }) => mocks.renameMachine(req),
-    }),
+    }, cpDaemon(), eligibilityHandlers(() => mocks.getComputeEligibility())),
   ),
 )
 afterEach(() => setTransport(null))
@@ -357,5 +364,47 @@ describe('machine detail — rename', () => {
 
     const header = await screen.findByTestId('machine-detail-header')
     expect(within(header).queryByRole('button', { name: /^rename/i })).not.toBeInTheDocument()
+  })
+})
+
+// The single-call writes run on DaemonService's generated hooks, each told
+// exactly what to refresh (never the generated whole-service default).
+describe('machine detail — what a write refreshes', () => {
+  beforeEach(() => {
+    mocks.caps.cloudDaemons = true
+    vi.clearAllMocks()
+  })
+
+  it('Suspend re-reads this machine (GetDaemon) and the daemon list', async () => {
+    const user = userEvent.setup()
+    showMachine(cloudDaemon())
+    renderDetail()
+
+    const suspend = await screen.findByRole('button', { name: /^suspend$/i })
+    await waitFor(() => expect(mocks.getDaemon).toHaveBeenCalled())
+    const before = { detail: mocks.getDaemon.mock.calls.length, list: mocks.listDaemons.mock.calls.length }
+    await user.click(suspend)
+
+    await waitFor(() => expect(mocks.cpSuspendDaemon).toHaveBeenCalledTimes(1))
+    expect(mocks.cpSuspendDaemon.mock.calls[0][0]).toMatchObject({ daemonId: 'd-1' })
+    // The restart choreography is the hand-written path; a plain Suspend is not it.
+    expect(mocks.suspendDaemon).not.toHaveBeenCalled()
+    await waitFor(() => expect(mocks.getDaemon.mock.calls.length).toBeGreaterThan(before.detail))
+    await waitFor(() => expect(mocks.listDaemons.mock.calls.length).toBeGreaterThan(before.list))
+  })
+
+  it("adding a port rule re-reads this machine's rules", async () => {
+    const user = userEvent.setup()
+    showMachine(cloudDaemon())
+    renderDetail()
+
+    await waitFor(() => expect(mocks.listPortAccessRules).toHaveBeenCalledTimes(1))
+    await user.type(await screen.findByLabelText('Port'), '3000')
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+
+    await waitFor(() => expect(mocks.setPortAccess).toHaveBeenCalledTimes(1))
+    expect(mocks.setPortAccess.mock.calls[0][0]).toMatchObject({ daemonId: 'd-1', port: 3000 })
+    await waitFor(() => expect(mocks.listPortAccessRules).toHaveBeenCalledTimes(2))
+    expect(mocks.listPortAccessRules.mock.calls[1][0]).toMatchObject({ daemonId: 'd-1' })
   })
 })

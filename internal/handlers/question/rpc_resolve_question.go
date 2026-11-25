@@ -43,11 +43,11 @@ func (s *Service) ResolveQuestion(
 	if !ok || userID == "" {
 		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
-	chat, err := s.deps.Repo.GetChat(ctx, question.ChatID)
+	chat, err := s.deps.ChatViews.GetChat(ctx, question.ChatID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get question"))
 	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
+	if !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("question")
 	}
 

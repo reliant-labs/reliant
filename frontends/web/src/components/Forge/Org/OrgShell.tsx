@@ -2,8 +2,8 @@
 
 /**
  * The ORG console's chrome — nav, top bar, rail — with no data fetching and no
- * routing, the counterpart of Console/ConsoleShell for the pages that are about
- * the whole organization rather than one app.
+ * routing, for the pages that are about the whole organization rather than
+ * one app (an app's console is a page of the one shell: Console/ConsoleFrame).
  *
  *   Apps ›                    All apps (the /apps list), then each app as a
  *                             door into that app's console

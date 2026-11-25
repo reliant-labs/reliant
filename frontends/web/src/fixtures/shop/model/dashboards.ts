@@ -18,12 +18,12 @@ import type { DashboardDocument, DashboardRef, DashboardSummary, DashboardUser }
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { Dashboard, Panel } from "@/services/controlPlane/observability/types";
 
+import { DEMO_PROJECT } from "../handlers/scope";
 import { DAY, DEMO_DB_TABLES, demoPerson, HOUR, MINUTE, RUNNING } from "../shopStory";
 import forgeDashboardsRaw from "./forge-dashboards.json?raw";
 import { shopDatabasePanel } from "./panels";
 import { demoWriteRefused, type DashboardKeys } from "./shopApi";
 
-const PROJECT = "shop";
 const PROD = "env-prod";
 const STAGING = "env-staging";
 
@@ -115,7 +115,7 @@ interface Row {
   history: { version: number; releaseVersion: string; author: DashboardUser; message: string; atMs: number }[];
 }
 
-function rowsOf(now: number): Row[] {
+function rowsOf(now: number, app: string): Row[] {
   const generated = (JSON.parse(forgeDashboardsRaw) as { dashboards: (Dashboard & { annotations?: { source: string; label?: string }[] })[] }).dashboards.map((d) => ({
     ...d,
     filters: d.filters ?? [],
@@ -126,7 +126,7 @@ function rowsOf(now: number): Row[] {
   const shipped = (spec: Dashboard, source: "generated" | "repo", version: string, filePath: string): Row => {
     const promoted = now - RUNNING["env-staging"].age;
     return {
-      ref: { kind: "release", projectId: PROJECT, key: spec.id },
+      ref: { kind: "release", projectId: app, key: spec.id },
       spec,
       source,
       release: { releaseVersion: version, shippedAtMs: promoted, filePath, envIds: [PROD, STAGING] },
@@ -141,7 +141,7 @@ function rowsOf(now: number): Row[] {
     const history = versions.map(([message, ago], i) => ({ version: i + 1, releaseVersion: "", author: user(author), message, atMs: now - ago }));
     const head = history[history.length - 1];
     return {
-      ref: { kind: "workspace", projectId: PROJECT, key: spec.id },
+      ref: { kind: "workspace", projectId: app, key: spec.id },
       spec,
       source: "workspace",
       release: null,
@@ -157,8 +157,8 @@ function rowsOf(now: number): Row[] {
   ];
 }
 
-export function shopDashboards(now: number): Pick<ObservabilityApi, DashboardKeys> {
-  const rows = rowsOf(now);
+export function shopDashboards(now: number, app: string = DEMO_PROJECT): Pick<ObservabilityApi, DashboardKeys> {
+  const rows = rowsOf(now, app);
   const stars = new Set(["release/overview", "workspace/payments-provider"]);
   const viewed = new Map<string, number>([
     ["workspace/payments-provider", now - 22 * MINUTE],

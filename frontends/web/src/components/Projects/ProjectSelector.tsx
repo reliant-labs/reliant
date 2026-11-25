@@ -70,6 +70,7 @@ import {
   type ProjectCatalogRow,
 } from "@/services/projects/catalog";
 import { openAddProject } from "@/store/addProjectDialogStore";
+import { useSampleTour, withSampleApp } from "@/fixtures/scope";
 
 import { AppChip } from "./AppChip";
 import { ProjectRowSummary } from "./ProjectRowSummary";
@@ -237,12 +238,15 @@ export function buildItems(args: {
 export function useSelectorCatalog(orgId: string | null | undefined): { catalog: ProjectCatalog | undefined; loading: boolean } {
   const view = useProjectCatalog(orgId);
   const plain = useProjects();
+  // While the forge tour walks its sample app, the catalog lists it (fixtures/scope.tsx withSampleApp).
+  const sampleTour = useSampleTour((state) => state.active);
   return useMemo(() => {
-    if (view.catalog) return { catalog: view.catalog, loading: false };
+    const decorated = (catalog: ProjectCatalog) => (sampleTour ? withSampleApp(catalog) : catalog);
+    if (view.catalog) return { catalog: decorated(view.catalog), loading: false };
     const plainReady = !plain.isLoading && (plain.projects.length > 0 || view.error !== null);
-    if (plainReady) return { catalog: catalogFromProjects(orgId ?? "", plain.projects), loading: false };
+    if (plainReady) return { catalog: decorated(catalogFromProjects(orgId ?? "", plain.projects)), loading: false };
     return { catalog: undefined, loading: view.isLoading || plain.isLoading };
-  }, [view.catalog, view.isLoading, view.error, plain.isLoading, plain.projects, orgId]);
+  }, [view.catalog, view.isLoading, view.error, plain.isLoading, plain.projects, orgId, sampleTour]);
 }
 
 // ── The panel ───────────────────────────────────────────────────────────────
