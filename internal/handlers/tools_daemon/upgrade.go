@@ -8,6 +8,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
 // The drain protocol, from the gateway's side (RestartRequested; the daemon's
@@ -25,10 +26,18 @@ import (
 //   - tools.online answers with the drain's deadline (DaemonUpdatingUntil), so
 //     a waiting call waits for the drain and the restart, not just the 90s a
 //     reconnect takes.
+//   - Each change of that state is published to the control plane as an
+//     upgrade event (daemonwire.EventUpgrade), so a fleet roller can replace
+//     a managed machine the moment it is DRAINED. On the change only, never
+//     per heartbeat; the first heartbeat of an ordinary stream (nothing to
+//     CURRENT) is not a change. Never as a connected or activity event:
+//     consumers re-mirror a build on the one and keep the machine awake on
+//     the other.
 
-// recordUpgradeStatus takes the upgrade status a heartbeat carried. Called
-// from the receive loop, so routing stops the moment the heartbeat is read.
-func (c *daemonConnection) recordUpgradeStatus(st *reliantv1.DaemonUpgradeStatus) {
+// recordUpgradeStatus takes the upgrade status a heartbeat carried and
+// reports whether its state changed. Called from the receive loop, so routing
+// stops the moment the heartbeat is read.
+func (c *daemonConnection) recordUpgradeStatus(st *reliantv1.DaemonUpgradeStatus) bool {
 	state := st.GetState()
 	if state == reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UNSPECIFIED {
 		state = reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_CURRENT
@@ -36,11 +45,11 @@ func (c *daemonConnection) recordUpgradeStatus(st *reliantv1.DaemonUpgradeStatus
 	c.upgradeDeadlineMs.Store(st.GetDeadlineUnixMs())
 	prev := reliantv1.DaemonUpgradeState(c.upgradeState.Swap(int32(state)))
 	if prev == state {
-		return
+		return false
 	}
 	if prev == reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UNSPECIFIED &&
 		state == reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_CURRENT {
-		return // the first heartbeat of an ordinary stream
+		return false // the first heartbeat of an ordinary stream
 	}
 	logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Daemon restart state changed",
 		"daemonID", c.daemonID, "userID", c.userID,
@@ -48,6 +57,57 @@ func (c *daemonConnection) recordUpgradeStatus(st *reliantv1.DaemonUpgradeStatus
 		"deadline_unix_ms", st.GetDeadlineUnixMs(), "rollout_id", st.GetRolloutId(),
 		"target_version", st.GetTargetVersion(), "tool_calls_running", st.GetToolCallsRunning(),
 		"detail", st.GetDetail())
+	return true
+}
+
+// publishUpgradeState tells the control plane the daemon's upgrade state
+// changed. Called from the receive loop on a change only; a core NATS
+// publish never blocks it.
+func (s *Service) publishUpgradeState(conn *daemonConnection, st *reliantv1.DaemonUpgradeStatus) {
+	if s.deps.StatePublisher == nil {
+		return
+	}
+	up, ok := wireUpgrade(st)
+	if !ok {
+		return
+	}
+	s.deps.StatePublisher.UpgradeChanged(conn.daemonID, conn.userID, conn.daemonType, up)
+}
+
+// wireUpgrade is the upgrade status as the upgrade event carries it. A
+// state this gateway has no name for (a newer daemon's) is not published:
+// consumers could not act on it either.
+func wireUpgrade(st *reliantv1.DaemonUpgradeStatus) (daemonwire.Upgrade, bool) {
+	var state daemonwire.UpgradeState
+	switch st.GetState() {
+	case reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UNSPECIFIED,
+		reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_CURRENT:
+		state = daemonwire.UpgradeStateCurrent
+	case reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UPDATING:
+		state = daemonwire.UpgradeStateUpdating
+	case reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_DRAINED:
+		state = daemonwire.UpgradeStateDrained
+	case reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_AWAITING_OWNER:
+		state = daemonwire.UpgradeStateAwaitingOwner
+	case reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_FAILED:
+		state = daemonwire.UpgradeStateFailed
+	case reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_STAGED:
+		state = daemonwire.UpgradeStateStaged
+	default:
+		return daemonwire.Upgrade{}, false
+	}
+	up := daemonwire.Upgrade{
+		State:            state,
+		RolloutID:        st.GetRolloutId(),
+		TargetVersion:    st.GetTargetVersion(),
+		ToolCallsRunning: st.GetToolCallsRunning(),
+		Detail:           st.GetDetail(),
+	}
+	if ms := st.GetDeadlineUnixMs(); ms > 0 {
+		deadline := time.UnixMilli(ms).UTC()
+		up.Deadline = &deadline
+	}
+	return up, true
 }
 
 // refusesToolRequests reports whether the daemon is draining for a restart,

@@ -22,12 +22,14 @@ vi.mock("@/lib/constants", async (importOriginal) => ({
 
 import { renderWithQuery } from "@/test/renderWithQuery";
 import { DevicePairing } from "../DevicePairing";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { myOrgsHandlers } from "@/test/orgsTransport";
+
+beforeEach(() => setTransport(mockTransport(myOrgsHandlers({ listMyOrganizations: () => listMyOrganizations() }))));
+afterEach(() => setTransport(null));
 
 const listMyOrganizations = vi.fn();
-vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/controlPlane/orgs")>()),
-  listMyOrganizations: () => listMyOrganizations(),
-}));
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://admin.example.test", hasControlPlane: true }));
 
 const org = (id: string, name: string, isDefault = false) => ({ id, name, slug: id, role: "owner", isOwner: true, isDefault });

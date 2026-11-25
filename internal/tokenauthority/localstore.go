@@ -54,7 +54,11 @@ func (s *LocalStore) Introspect(ctx context.Context, token string) (*fat.Princip
 		return nil, accesstokenclient.ErrInactive
 	}
 	p := fat.Principal{TokenID: rec.ID, OrgID: rec.OrgID, ActingUserID: rec.ActingUserID, Ephemeral: rec.Ephemeral, ExpiresAt: rec.ExpiresAt}
-	if p.Scopes, err = fat.NewSet(rec.Scopes); err != nil {
+	// A stored row is read tolerantly: an entry this binary does not know (a
+	// row a newer release wrote, read after a rollback) is skipped, logged and
+	// counted, never a reason to refuse the token; one that resolves to
+	// nothing is refused (accesstokenclient.ResolveStoredScopes).
+	if p.Scopes, err = accesstokenclient.ResolveStoredScopes(ctx, p.TokenID, rec.Scopes); err != nil {
 		return nil, fmt.Errorf("tokenauthority: token %s: %w", p.TokenID, err)
 	}
 	if rec.ResourceKind != "" {

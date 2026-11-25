@@ -63,9 +63,14 @@ function makeRouter(initial: string, firstVisitProps?: Record<string, string>) {
     path: "project/$projectId",
     component: () => null,
   });
+  const app = createRoute({
+    getParentRoute: () => layout,
+    path: "forge/p/$project",
+    component: () => null,
+  });
   return createRouter({
     routeTree: root.addChildren([
-      layout.addChildren([index, project]),
+      layout.addChildren([index, project, app]),
       leaf("/settings"),
       leaf("/claim"),
     ]),
@@ -124,6 +129,17 @@ describe("PageVisitTracker", () => {
     await act(() => router.navigate({ to: "/settings" }));
     await waitFor(() => expect(pageEvents()).toHaveLength(2));
     expect(pageEvents()[1][1]).toEqual({ surface: "reliant", page_name: "/settings", previous_page: "/" });
+  });
+
+  it("tags a visit to the forge tour's sample app sample=true, and no one's own app", async () => {
+    const router = makeRouter("/forge/p/sample_shop");
+    render(<RouterProvider router={router} />);
+    await waitFor(() => expect(pageEvents()).toHaveLength(1));
+    expect(pageEvents()[0][1]).toEqual({ surface: "reliant", page_name: "/forge/p/$project", sample: "true" });
+
+    await act(() => router.navigate({ to: "/forge/p/$project", params: { project: "shop" } } as never));
+    await waitFor(() => expect(pageEvents()).toHaveLength(2));
+    expect(pageEvents()[1][1]).toEqual({ surface: "reliant", page_name: "/forge/p/$project", previous_page: "/forge/p/$project" });
   });
 
   it("does not count a search-only change as a visit", async () => {

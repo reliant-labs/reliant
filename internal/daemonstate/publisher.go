@@ -64,6 +64,28 @@ func (p *Publisher) Connected(daemonID, userID, daemonType string, build daemonw
 	p.publish(evt)
 }
 
+// UpgradeChanged publishes an upgrade event: the daemon's drain-protocol
+// state changed (daemonwire.EventUpgrade). The caller publishes on a change
+// of state only, never per heartbeat, so it is not rate-limited.
+//
+// It carries the daemon's identity and the upgrade report, and nothing else.
+// It is neither a connect, which consumers answer by re-mirroring a build
+// observation stamped with At, nor activity, which keeps a machine awake. A
+// consumer that predates the type drops it at parse.
+func (p *Publisher) UpgradeChanged(daemonID, userID, daemonType string, upgrade daemonwire.Upgrade) {
+	if p == nil || p.nc == nil || daemonID == "" {
+		return
+	}
+	p.publish(daemonwire.Event{
+		DaemonID:   daemonID,
+		UserID:     userID,
+		Type:       daemonwire.EventUpgrade,
+		At:         time.Now().UTC(),
+		DaemonType: daemonType,
+		Upgrade:    &upgrade,
+	})
+}
+
 // Disconnected publishes a one-shot disconnected event. Not rate-limited.
 // The userID/daemonType are best-effort: the gateway knows them at teardown
 // time but the consumer treats this as a pure transition signal — the

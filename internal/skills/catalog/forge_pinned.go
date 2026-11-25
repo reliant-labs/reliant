@@ -23,11 +23,9 @@ import (
 // forgepin says why this matters everywhere).
 //
 // So inside a project that pins another forge, the shipped skills come from
-// THAT forge: `forge agent skill list --json --with-bodies` (one call for the whole
-// catalog), or — from a pin that predates the flag — `agent skill list --json`
-// and `agent skill load <path>` per body. A pin older than the `agent` noun
-// (forge v1.4.0) has only the old spelling, `skill …`, which is tried last.
-// forgepin caches them per pinned forge.
+// THAT forge: `forge agent skill list --json --with-bodies`, one call for the
+// whole catalog (`skill list --json --with-bodies` from a pin older than the
+// `agent` noun, forge v1.4.0). forgepin caches it per pinned forge.
 //
 // What stays on the embedded forge: user (~/.forge/skills) and project
 // (.forge/skills) skills, which are the user's files rather than any forge's
@@ -71,16 +69,22 @@ func pinnedShippedSkills(pf forgecli.PinnedForge, baseDir string) ([]forgecli.Sk
 	return e.loadList(pf, baseDir)
 }
 
+// pinnedCatalogCacheName is the name forgepin keeps the pinned forge's
+// catalog under, on disk across restarts. It names the format: every entry
+// carries its body. Earlier releases kept `skill list --json` (metadata only,
+// from a pin that predates --with-bodies) under "skills-list.json"; reading
+// that file now would list skills whose bodies cannot load, and nothing would
+// ever replace it. A new name leaves the old file unread.
+const pinnedCatalogCacheName = "skills-list.v2.json"
+
 // loadList reads the pinned forge's catalog once. e.mu is held.
 func (e *pinnedForgeEntry) loadList(pf forgecli.PinnedForge, baseDir string) ([]forgecli.Skill, error) {
 	if e.list != nil {
 		return e.list, nil
 	}
-	raw, err := pinnedForge.Output(pf, baseDir, "skills-list.json",
+	raw, err := pinnedForge.Output(pf, baseDir, pinnedCatalogCacheName,
 		[]string{"agent", "skill", "list", "--json", "--with-bodies"},
-		[]string{"agent", "skill", "list", "--json"},
-		[]string{"skill", "list", "--json", "--with-bodies"},
-		[]string{"skill", "list", "--json"})
+		[]string{"skill", "list", "--json", "--with-bodies"})
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +114,7 @@ func (e *pinnedForgeEntry) loadList(pf forgecli.PinnedForge, baseDir string) ([]
 	return skills, nil
 }
 
-// pinnedSkillBody is `agent skill load <path>` as the pinned forge prints it.
+// pinnedSkillBody is the body the pinned forge's catalog lists for path.
 func pinnedSkillBody(pf forgecli.PinnedForge, baseDir, path string) (string, error) {
 	e := pinnedEntry(pf.Key)
 	e.mu.Lock()
@@ -121,14 +125,7 @@ func pinnedSkillBody(pf forgecli.PinnedForge, baseDir, path string) (string, err
 	if body, ok := e.bodies[path]; ok {
 		return body, nil
 	}
-	raw, err := pinnedForge.Output(pf, baseDir, "skill-"+forgepin.Fingerprint([]byte(path))+".md",
-		[]string{"agent", "skill", "load", path},
-		[]string{"skill", "load", path})
-	if err != nil {
-		return "", err
-	}
-	e.bodies[path] = string(raw)
-	return string(raw), nil
+	return "", fmt.Errorf("%s ships no skill %q", pf.Want, path)
 }
 
 // shippedSkillsFor returns the forge-shipped skills baseDir's agents should
