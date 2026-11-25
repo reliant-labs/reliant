@@ -10,7 +10,10 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -31,8 +34,11 @@ type fakeDocker struct {
 	imageEnv     []string
 	state        containerState
 	sizeFails    bool                            // volume create --opt size fails
-	attach       func(ctx context.Context) error // docker start --attach
+	attach       func(ctx context.Context) error // docker start --attach; default: the CLI's exit for state
 	killed       chan struct{}
+	killOnce     sync.Once
+	slotSize     int64 // what every disk slot holds
+	wiped        []string
 	listed       map[string]string // list command (first two args) -> ids
 	copiedTar    bytes.Buffer
 }
@@ -56,8 +62,15 @@ func (f *fakeDocker) backend(cfg SysboxConfig) *Sysbox {
 	}
 	s := NewSysbox(cfg)
 	s.exec = f.exec
+	s.slotSize = func(_, slot string) (int64, error) { return f.slotSize, nil }
 	return s
 }
+
+// exitStatus is an exit error with a code, as *exec.ExitError is.
+type exitStatus int
+
+func (e exitStatus) Error() string { return fmt.Sprintf("exit status %d", int(e)) }
+func (e exitStatus) ExitCode() int { return int(e) }
 
 func (f *fakeDocker) exec(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, args ...string) error {
 	f.mu.Lock()
@@ -72,6 +85,14 @@ func (f *fakeDocker) exec(ctx context.Context, stdin io.Reader, stdout, stderr i
 		case "{{json .FirewallBackend}}":
 			fmt.Fprintln(stdout, `{"Driver":"iptables"}`)
 		}
+	case args[0] == "run" && slices.Contains(args, wipeScript):
+		f.mu.Lock()
+		for _, a := range args {
+			if strings.HasPrefix(a, "type=bind,src=") {
+				f.wiped = append(f.wiped, a)
+			}
+		}
+		f.mu.Unlock()
 	case args[0] == "run": // the egress probe
 		fmt.Fprintf(stdout, "%siptables iptables-save\n%s%sip6tables ip6tables-save\n%s", dumpMarker, f.v4, dumpMarker, f.v6)
 	case head == "volume create":
@@ -96,8 +117,11 @@ func (f *fakeDocker) exec(ctx context.Context, stdin io.Reader, stdout, stderr i
 		if f.attach != nil {
 			return f.attach(ctx)
 		}
+		if f.state.ExitCode != 0 {
+			return exitStatus(f.state.ExitCode) // what the CLI does: it exits with the container's status
+		}
 	case args[0] == "kill":
-		close(f.killed)
+		f.killOnce.Do(func() { close(f.killed) })
 	case head == "ps -aq", head == "volume ls", head == "network ls":
 		fmt.Fprint(stdout, f.listed[args[0]])
 	}
@@ -110,10 +134,11 @@ func (f *fakeDocker) commands() [][]string {
 	return slices.Clone(f.calls)
 }
 
-func (f *fakeDocker) createCall() []string {
-	for _, c := range f.commands() {
-		if c[0] == "create" {
-			return c
+func (f *fakeDocker) createCall() []string { // the latest
+	cmds := f.commands()
+	for i := len(cmds) - 1; i >= 0; i-- {
+		if cmds[i][0] == "create" {
+			return cmds[i]
 		}
 	}
 	return nil
@@ -373,7 +398,7 @@ func TestRunWallTimeIsUnprovenAndKills(t *testing.T) {
 	f.attach = func(ctx context.Context) error {
 		select {
 		case <-f.killed:
-			return errors.New("exit status 137")
+			return exitStatus(137)
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -406,17 +431,151 @@ func TestRunCanceledKillsAndReturnsError(t *testing.T) {
 	}
 }
 
-func TestRunDiskLimitFallsBackWithLimitation(t *testing.T) {
+// A lost connection to the engine is never a verdict: only an exit the
+// attach itself reported, from a container in a terminal exited state, is.
+func TestRunLostConnectionIsUnproven(t *testing.T) {
+	lost := errors.New("error during connect: unexpected EOF")
+	cases := []struct {
+		name   string
+		state  containerState
+		attach error
+		want   Class
+		killed bool
+	}{
+		{"clean exit 0", containerState{Status: "exited"}, nil, ClassPass, false},
+		{"exit 1, reported by the attach", containerState{Status: "exited", ExitCode: 1}, exitStatus(1), ClassFail, false},
+		{"attach lost, gate still running", containerState{Status: "running"}, lost, ClassUnproven, true},
+		{"attach lost, gate exited 0", containerState{Status: "exited"}, lost, ClassUnproven, false},
+		{"attach lost with its own exit code, gate exited 0", containerState{Status: "exited"}, exitStatus(1), ClassUnproven, false},
+		{"attach lost, gate exited 1", containerState{Status: "exited", ExitCode: 1}, lost, ClassUnproven, false},
+		{"attach reports another code than the gate's", containerState{Status: "exited", ExitCode: 3}, exitStatus(1), ClassUnproven, false},
+		{"attach ended cleanly, gate exited 1", containerState{Status: "exited", ExitCode: 1}, nil, ClassUnproven, false},
+		{"attach ended cleanly, gate still running", containerState{Status: "running"}, nil, ClassUnproven, true},
+		{"gate paused", containerState{Status: "paused"}, lost, ClassUnproven, true},
+		{"gate dead", containerState{Status: "dead", ExitCode: 0}, lost, ClassUnproven, true},
+	}
+	for _, c := range cases {
+		f := newFake(t)
+		f.state = c.state
+		attachErr := c.attach
+		f.attach = func(context.Context) error { return attachErr }
+		spec := testSpec(t)
+		res, err := f.backend(SysboxConfig{}).Run(context.Background(), spec)
+		if err != nil {
+			t.Fatalf("%s: Run: %v", c.name, err)
+		}
+		if res.Class != c.want {
+			t.Errorf("%s: class = %s (%+v), want %s", c.name, res.Class, res, c.want)
+		}
+		if res.Class == ClassUnproven && res.Reason == "" {
+			t.Errorf("%s: unproven with no reason", c.name)
+		}
+		if c.state.Status != "exited" && res.ExitCode != -1 {
+			t.Errorf("%s: exit code %d read from a gate that never exited", c.name, res.ExitCode)
+		}
+		if got := f.ran("kill", namesFor(spec.RunID).container); got != c.killed {
+			t.Errorf("%s: killed = %v, want %v", c.name, got, c.killed)
+		}
+	}
+}
+
+// ext4, or xfs without project quotas, cannot bound a volume: the gate is
+// refused before anything runs.
+func TestRunRefusesUnenforceableDiskLimit(t *testing.T) {
 	f := newFake(t)
 	f.sizeFails = true
+	_, err := f.backend(SysboxConfig{}).Run(context.Background(), testSpec(t))
+	if !errors.Is(err, ErrDiskLimitNotEnforced) {
+		t.Fatalf("Run = %v, want ErrDiskLimitNotEnforced", err)
+	}
+	if f.ran("create") || f.ran("start") {
+		t.Error("a gate whose disk cannot be bounded was created")
+	}
+	for _, c := range f.commands() {
+		if c[0] == "volume" && c[1] == "create" && !slices.Contains(c, "size="+strconv.FormatInt(testSpec(t).Limits.DiskBytes, 10)) {
+			t.Errorf("an unlimited volume was created: %q", c)
+		}
+	}
+}
+
+func slotsDir(t *testing.T, n int) string {
+	dir := t.TempDir()
+	for i := range n {
+		if err := os.Mkdir(filepath.Join(dir, fmt.Sprintf("slot-%d", i)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func TestRunOnDiskSlot(t *testing.T) {
+	f := newFake(t)
+	f.slotSize = 10 << 30
+	dir := slotsDir(t, 1)
+	s := f.backend(SysboxConfig{DiskSlotsDir: dir})
 	spec := testSpec(t)
-	spec.Limits.DiskBytes = 20 << 30
-	res, err := f.backend(SysboxConfig{}).Run(context.Background(), spec)
-	if err != nil {
+	spec.Limits.DiskBytes = 10 << 30
+	if _, err := s.Run(context.Background(), spec); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if len(res.Limitations) != 2 || !strings.Contains(res.Limitations[0], "no disk limit") {
-		t.Errorf("limitations = %q", res.Limitations)
+	slot := filepath.Join(dir, "slot-0")
+	if want := []string{"type=bind,src=" + slot + ",dst=/slot"}; !slices.Equal(f.wiped, want) {
+		t.Errorf("wipes = %q, want the slot alone mounted: %q", f.wiped, want)
+	}
+	for _, role := range []string{"work", "engine"} {
+		if !f.ran("volume", "create", "--driver", "local", "--label", LabelRunID+"="+spec.RunID) {
+			t.Errorf("no labelled local volume")
+		}
+		found := false
+		for _, c := range f.commands() {
+			found = found || (c[0] == "volume" && slices.Contains(c, "device="+filepath.Join(slot, role)) && slices.Contains(c, "o=bind"))
+		}
+		if !found {
+			t.Errorf("the %s volume is not a bind volume on the slot: %q", role, f.commands())
+		}
+	}
+	// The slot is held: a second gate finds none free.
+	other := testSpec(t)
+	other.RunID = "run-2"
+	if _, err := s.Run(context.Background(), other); err == nil || !strings.Contains(err.Error(), "in use") {
+		t.Errorf("a second gate on a held slot: %v", err)
+	}
+	// Teardown wipes and frees it.
+	if err := s.Teardown(context.Background(), spec.RunID); err != nil {
+		t.Fatalf("Teardown: %v", err)
+	}
+	if len(f.wiped) != 2 {
+		t.Errorf("teardown did not wipe the slot: %q", f.wiped)
+	}
+	if _, err := s.Run(context.Background(), other); err != nil {
+		t.Errorf("the freed slot: %v", err)
+	}
+}
+
+func TestRunRefusesUnboundingDiskSlots(t *testing.T) {
+	f := newFake(t)
+	f.slotSize = 100 << 30
+	spec := testSpec(t)
+	spec.Limits.DiskBytes = 10 << 30
+	_, err := f.backend(SysboxConfig{DiskSlotsDir: slotsDir(t, 1)}).Run(context.Background(), spec)
+	if !errors.Is(err, ErrDiskLimitNotEnforced) || !strings.Contains(err.Error(), "more than") {
+		t.Errorf("a slot larger than the limit: %v", err)
+	}
+	f = newFake(t)
+	_, err = f.backend(SysboxConfig{DiskSlotsDir: slotsDir(t, 0)}).Run(context.Background(), testSpec(t))
+	if !errors.Is(err, ErrDiskLimitNotEnforced) {
+		t.Errorf("no slots: %v", err)
+	}
+	if f.ran("create") {
+		t.Error("a refused gate created its container")
+	}
+}
+
+// A slot that is only a directory on its parent's filesystem bounds nothing.
+func TestSlotSizeNeedsItsOwnFilesystem(t *testing.T) {
+	dir := slotsDir(t, 1)
+	if _, err := slotSize(dir, filepath.Join(dir, "slot-0")); err == nil {
+		t.Error("a plain directory passed as a disk slot")
 	}
 }
 
@@ -542,8 +701,12 @@ func TestPreflightReport(t *testing.T) {
 	if !slices.Equal(r.EgressAllow, []netip.Prefix{netip.MustParsePrefix("10.20.0.0/16")}) {
 		t.Errorf("allow = %v", r.EgressAllow)
 	}
-	if r.Ready() != nil {
-		t.Errorf("Ready = %v", r.Ready())
+	if err := r.Ready(); !errors.Is(err, ErrDiskLimitNotEnforced) {
+		t.Errorf("Ready without quota support = %v, want ErrDiskLimitNotEnforced", err)
+	}
+	f.sizeFails = false
+	if r, _ := f.backend(SysboxConfig{}).Preflight(context.Background()); r.Ready() != nil {
+		t.Errorf("Ready with quota support = %v", r.Ready())
 	}
 	// Everything the probe created is torn down by its label.
 	if !f.ran("ps", "-aq", "--filter") {

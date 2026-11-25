@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -37,6 +38,8 @@ type SysboxConfig struct {
 	// ProbeImage is the trusted, machine-chosen image (holding iptables-save
 	// and ip6tables-save) the backend runs with the host's network namespace
 	// and CAP_NET_ADMIN to read the host's filter tables before each gate.
+	// With DiskSlotsDir it also wipes a slot (sh, find, rm, mkdir), with the
+	// slot alone bind-mounted.
 	// It is never the gate's image, which the repository chooses. Required:
 	// without it the egress rules cannot be checked, and every gate is
 	// refused.
@@ -45,6 +48,16 @@ type SysboxConfig struct {
 	// it where the host's resolver is in a denied range (GCP's is
 	// 169.254.169.254), or name resolution inside the gate fails.
 	DNS []string
+	// DiskSlotsDir, when set, is a machine-provided directory of disk slots,
+	// slot-0, slot-1, …: each the mount point of a filesystem of its own (a
+	// loop-backed image or a partition, provisioned by gate-check, pipeline
+	// build plan E9c), with this process able to create a lock file beside
+	// it. A gate claims a free slot and keeps its volumes on it, so the
+	// slot's size is the gate's disk limit, enforced by the filesystem. Left
+	// empty, the gate's volumes are the engine's own with a size= limit,
+	// which needs the engine's volumes directory on xfs with project quotas.
+	// Without either, every gate is refused (ErrDiskLimitNotEnforced).
+	DiskSlotsDir string
 	// EngineWait bounds the nested engine's start (default 60s).
 	EngineWait time.Duration
 	// Docker is the docker CLI to run (default "docker").
@@ -63,6 +76,12 @@ type dockerExec func(ctx context.Context, stdin io.Reader, stdout, stderr io.Wri
 type Sysbox struct {
 	cfg  SysboxConfig
 	exec dockerExec
+
+	// slotSize measures a disk slot (disk_linux.go); tests replace it.
+	slotSize func(parent, slot string) (int64, error)
+
+	mu    sync.Mutex
+	slots map[string]*diskSlot // run id -> its claimed disk slot
 }
 
 var _ Backend = (*Sysbox)(nil)
@@ -75,7 +94,7 @@ func NewSysbox(cfg SysboxConfig) *Sysbox {
 	if cfg.Docker == "" {
 		cfg.Docker = "docker"
 	}
-	return &Sysbox{cfg: cfg, exec: cliExec(cfg.Docker)}
+	return &Sysbox{cfg: cfg, exec: cliExec(cfg.Docker), slotSize: slotSize, slots: map[string]*diskSlot{}}
 }
 
 // Name is "sysbox".
@@ -124,8 +143,8 @@ func (s *Sysbox) Detect(ctx context.Context) Availability {
 	return Availability{Available: true, Reason: SysboxRuntime + " is registered with the engine"}
 }
 
-// Preflight checks the runtime, the host's egress rules and disk-limit
-// support.
+// Preflight checks the runtime, the host's egress rules and that the disk
+// limit can be enforced (disk.go).
 func (s *Sysbox) Preflight(ctx context.Context) (Report, error) {
 	r := Report{Backend: s.Name(), Availability: s.Detect(ctx)}
 	if !r.Availability.Available {
@@ -134,13 +153,7 @@ func (s *Sysbox) Preflight(ctx context.Context) (Report, error) {
 	probeID := "preflight-" + randomSuffix()
 	defer func() { _ = s.Teardown(context.WithoutCancel(ctx), probeID) }()
 	r.EgressAllow, r.Egress = s.readEgress(ctx, probeID)
-	vol := volumeName(probeID, "probe")
-	if err := s.createVolume(ctx, probeID, vol, "probe", 1<<20); err != nil {
-		r.DiskLimitReason = fmt.Sprintf("the engine cannot size-limit volumes (it needs the local driver on xfs with project quotas): %v", err)
-	} else {
-		r.DiskLimit = true
-		r.DiskLimitReason = "volumes take a size limit"
-	}
+	r.DiskLimit, r.DiskLimitReason = s.diskPreflight(ctx, probeID)
 	return r, nil
 }
 
@@ -327,16 +340,8 @@ func (s *Sysbox) Run(ctx context.Context, spec Spec) (Result, error) {
 	if _, err := s.output(ctx, nil, networkCreateArgs(spec.RunID, n)...); err != nil {
 		return Result{}, err
 	}
-	var limitations []string
-	for _, v := range []struct{ name, role string }{{n.work, "work"}, {n.engine, "engine"}} {
-		err := s.createVolume(ctx, spec.RunID, v.name, v.role, spec.Limits.DiskBytes)
-		if err != nil && spec.Limits.DiskBytes > 0 {
-			limitations = append(limitations, fmt.Sprintf("the %s volume has no disk limit: %v", v.role, err))
-			err = s.createVolume(ctx, spec.RunID, v.name, v.role, 0)
-		}
-		if err != nil {
-			return Result{}, err
-		}
+	if err := s.createVolumes(ctx, spec, n); err != nil {
+		return Result{}, err
 	}
 	if _, err := s.output(ctx, nil, createArgs(spec, n, env, s.cfg)...); err != nil {
 		return Result{}, err
@@ -347,7 +352,7 @@ func (s *Sysbox) Run(ctx context.Context, spec Spec) (Result, error) {
 	if err := s.copyIn(ctx, spec, n); err != nil {
 		return Result{}, err
 	}
-	return s.execute(ctx, spec, n, limitations)
+	return s.execute(ctx, spec, n)
 }
 
 func (s *Sysbox) createVolume(ctx context.Context, runID, name, role string, size int64) error {
@@ -464,7 +469,7 @@ type containerState struct {
 
 // execute starts the gate attached, enforces the wall-time limit, and reads
 // its verdict from the engine.
-func (s *Sysbox) execute(ctx context.Context, spec Spec, n names, limitations []string) (Result, error) {
+func (s *Sysbox) execute(ctx context.Context, spec Spec, n names) (Result, error) {
 	stdout, stderr := spec.Stdout, spec.Stderr
 	if stdout == nil {
 		stdout = io.Discard
@@ -492,9 +497,7 @@ func (s *Sysbox) execute(ctx context.Context, spec Spec, n names, limitations []
 		canceled = true
 	}
 	if timedOut || canceled {
-		killCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), stopGrace)
-		_, _ = s.output(killCtx, nil, "kill", n.container) // fails only when it already exited
-		cancel()
+		s.kill(ctx, n.container)
 		select {
 		case attachErr = <-done:
 		case <-time.After(stopGrace):
@@ -504,26 +507,78 @@ func (s *Sysbox) execute(ctx context.Context, spec Spec, n names, limitations []
 	}
 	elapsed := time.Since(start)
 
-	inspectCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), stopGrace)
-	defer cancel()
-	out, err := s.output(inspectCtx, nil, "container", "inspect", "--format", "{{json .State}}", n.container)
+	st, err := s.inspectState(ctx, n.container)
 	if err != nil {
-		return Result{}, fmt.Errorf("reading the gate's exit: %w", err)
-	}
-	var st containerState
-	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &st); err != nil {
-		return Result{}, fmt.Errorf("reading the gate's exit: %w", err)
+		return Result{}, err
 	}
 	if st.Status == "created" {
 		return Result{}, fmt.Errorf("the gate container did not start: %v %s", attachErr, st.Error)
 	}
-	res := Result{ExitCode: st.ExitCode, OOMKilled: st.OOMKilled, TimedOut: timedOut, Duration: elapsed, Limitations: limitations}
+	res := Result{ExitCode: -1, OOMKilled: st.OOMKilled, TimedOut: timedOut, Duration: elapsed}
+	if st.Status != "exited" {
+		// Only a terminal exit carries a verdict. A gate still running (the
+		// attach lost the engine, or the kill did not land) is stopped, and
+		// whatever it would have exited is never read.
+		s.kill(ctx, n.container)
+		res.Class, res.Reason = ClassUnproven, fmt.Sprintf("the gate had not exited (state %q) when its attach ended (%v); it was killed", st.Status, attachErr)
+		if timedOut {
+			res.Reason = fmt.Sprintf("the gate exceeded its wall-time limit of %s and had not exited after the kill", spec.Limits.Wall)
+		}
+		if canceled {
+			res.Reason = "the gate was canceled"
+			return res, ctx.Err()
+		}
+		return res, nil
+	}
+	res.ExitCode = st.ExitCode
 	res.Class, res.Reason = classify(st.ExitCode, st.OOMKilled, timedOut, spec.Limits.Wall)
-	if canceled {
+	switch {
+	case canceled:
 		res.Class, res.Reason = ClassUnproven, "the gate was canceled"
 		return res, ctx.Err()
+	case timedOut:
+		return res, nil
+	case !attachSawExit(attachErr, st.ExitCode):
+		// The engine says the gate exited, but the attach did not end by
+		// reporting that exit: the connection was lost, and the gate's
+		// output may not all have been seen. Not a verdict either way.
+		res.Class, res.Reason = ClassUnproven, fmt.Sprintf("the connection to the gate was lost (%v); it exited %d, but its full output was not seen", attachErr, st.ExitCode)
 	}
 	return res, nil
+}
+
+// inspectState reads the gate container's state from the engine.
+func (s *Sysbox) inspectState(ctx context.Context, container string) (containerState, error) {
+	inspectCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), stopGrace)
+	defer cancel()
+	out, err := s.output(inspectCtx, nil, "container", "inspect", "--format", "{{json .State}}", container)
+	if err != nil {
+		return containerState{}, fmt.Errorf("reading the gate's exit: %w", err)
+	}
+	var st containerState
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &st); err != nil {
+		return containerState{}, fmt.Errorf("reading the gate's exit: %w", err)
+	}
+	return st, nil
+}
+
+func (s *Sysbox) kill(ctx context.Context, container string) {
+	killCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), stopGrace)
+	defer cancel()
+	_, _ = s.output(killCtx, nil, "kill", container) // fails only when it already exited
+}
+
+// attachSawExit: the attach ended by reporting the container's own exit.
+// `docker start --attach` exits with the container's status, so a clean
+// exit is a nil error and any other is an exit error carrying the same code;
+// anything else (the CLI's own failure, a different code) means the attach
+// ended for another reason, such as a lost connection.
+func attachSawExit(attachErr error, exitCode int) bool {
+	if attachErr == nil {
+		return exitCode == 0
+	}
+	var ec interface{ ExitCode() int }
+	return exitCode != 0 && errors.As(attachErr, &ec) && ec.ExitCode() == exitCode
 }
 
 // classify turns how a gate ended into its verdict. An exceeded limit is
@@ -621,6 +676,9 @@ func (s *Sysbox) Teardown(ctx context.Context, runID string) error {
 		if _, err := s.output(ctx, nil, append(append([]string{}, kind.rm...), ids...)...); err != nil {
 			errs = append(errs, err)
 		}
+	}
+	if err := s.releaseSlot(ctx, runID); err != nil {
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }

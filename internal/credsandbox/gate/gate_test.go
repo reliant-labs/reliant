@@ -55,7 +55,7 @@ func validSpec() Spec {
 		Image:     "gate:1",
 		Command:   []string{"task", "ci:full"},
 		SourceDir: "/src",
-		Limits:    Limits{CPUs: 4, MemoryBytes: 8 << 30, Pids: 4096, Wall: 30 * time.Minute},
+		Limits:    Limits{CPUs: 4, MemoryBytes: 8 << 30, Pids: 4096, DiskBytes: 50 << 30, Wall: 30 * time.Minute},
 	}
 }
 
@@ -75,6 +75,7 @@ func TestSpecValidate(t *testing.T) {
 		"no memory limit":      func(s *Spec) { s.Limits.MemoryBytes = 0 },
 		"no pids limit":        func(s *Spec) { s.Limits.Pids = 0 },
 		"no wall limit":        func(s *Spec) { s.Limits.Wall = 0 },
+		"no disk limit":        func(s *Spec) { s.Limits.DiskBytes = 0 },
 		"negative disk":        func(s *Spec) { s.Limits.DiskBytes = -1 },
 		"reserved env":         func(s *Spec) { s.Env = map[string]string{"HOME": "/root"} },
 		"bad env name":         func(s *Spec) { s.Env = map[string]string{"A-B": "x"} },
@@ -91,7 +92,7 @@ func TestSpecValidate(t *testing.T) {
 }
 
 func TestReportReady(t *testing.T) {
-	r := Report{Availability: Availability{Available: true}}
+	r := Report{Availability: Availability{Available: true}, DiskLimit: true}
 	if err := r.Ready(); err != nil {
 		t.Fatalf("ready report: %v", err)
 	}
@@ -103,7 +104,7 @@ func TestReportReady(t *testing.T) {
 		t.Errorf("no egress rules: %v", err)
 	}
 	r.Egress, r.DiskLimit = nil, false
-	if err := r.Ready(); err != nil {
-		t.Errorf("a missing disk limit is a limitation, not a refusal: %v", err)
+	if err := r.Ready(); !errors.Is(err, ErrDiskLimitNotEnforced) {
+		t.Errorf("a disk limit the machine cannot enforce must refuse, not run unbounded: %v", err)
 	}
 }

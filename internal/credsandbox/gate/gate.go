@@ -27,8 +27,9 @@
 //
 // It fails closed: a backend that cannot provide the boundary on this machine
 // reports so from Detect and Preflight, and its Run refuses with a typed error
-// (ErrUnavailable, ErrEgressNotEnforced) rather than running the gate with
-// less. Nothing falls back to a weaker runtime.
+// (ErrUnavailable, ErrEgressNotEnforced, ErrDiskLimitNotEnforced) rather than
+// running the gate with less. Nothing falls back to a weaker runtime, and a
+// gate whose end was not seen whole is unproven, never a pass.
 //
 // The sysbox backend (sysbox.go) is the one implemented; a per-gate microVM
 // backend (`vm`) is planned to satisfy the same interface. Nothing in the
@@ -142,19 +143,23 @@ type Report struct {
 	// EgressAllow is the set of ranges this machine's rules let gates reach
 	// despite the default deny. A Spec must declare exactly what these cover.
 	EgressAllow []netip.Prefix
-	// DiskLimit is true when per-gate volumes can be size-limited here.
+	// DiskLimit is true when a gate's disk can be bounded here; Run refuses
+	// every gate otherwise (disk.go).
 	DiskLimit       bool
 	DiskLimitReason string
 }
 
-// Ready is nil when a gate can run on this machine; a disk limit the host
-// cannot enforce is a recorded limitation, not a refusal.
+// Ready is nil when a gate can run on this machine: the runtime, the egress
+// rules and an enforceable disk limit, each required.
 func (r Report) Ready() error {
 	if !r.Availability.Available {
 		return fmt.Errorf("%w: %s", ErrUnavailable, r.Availability.Reason)
 	}
 	if r.Egress != nil {
 		return fmt.Errorf("%w: %v", ErrEgressNotEnforced, r.Egress)
+	}
+	if !r.DiskLimit {
+		return fmt.Errorf("%w: %s", ErrDiskLimitNotEnforced, r.DiskLimitReason)
 	}
 	return nil
 }
@@ -189,9 +194,10 @@ type Spec struct {
 	Stdout, Stderr io.Writer
 }
 
-// Limits bound one gate. CPUs, MemoryBytes, Pids and Wall are required: no
-// gate runs unbounded. DiskBytes is optional, and caps each of the gate's
-// volumes where the host supports it (Report.DiskLimit).
+// Limits bound one gate. Every one is required: no gate runs unbounded.
+// DiskBytes caps each of the gate's two volumes (xfs project quotas), or is
+// the most its disk slot may hold (SysboxConfig.DiskSlotsDir); a machine that
+// can do neither refuses the gate (ErrDiskLimitNotEnforced).
 type Limits struct {
 	CPUs        float64
 	MemoryBytes int64
@@ -202,16 +208,15 @@ type Limits struct {
 
 // Result is a gate's verdict and how it was reached.
 type Result struct {
-	Class    Class
+	Class Class
+	// ExitCode is the gate command's exit, or -1 when the gate never reached
+	// a terminal exit. It is not a verdict by itself: Class is.
 	ExitCode int
 	// Reason says why a gate is unproven when no exit code decided it.
 	Reason    string
 	TimedOut  bool
 	OOMKilled bool
 	Duration  time.Duration
-	// Limitations are the requirements this machine could not enforce for
-	// this run (a disk limit without quota support).
-	Limitations []string
 }
 
 var (
@@ -221,6 +226,10 @@ var (
 	// ErrEgressNotEnforced: the host-side egress rules a gate needs are not in
 	// force, or do not match what the gate declared.
 	ErrEgressNotEnforced = errors.New("gate egress policy not enforced on this machine")
+	// ErrDiskLimitNotEnforced: the machine cannot bound the gate's disk (no
+	// xfs project quotas, no usable disk slot). The gate is refused rather
+	// than run unbounded.
+	ErrDiskLimitNotEnforced = errors.New("gate disk limit not enforceable on this machine")
 	// ErrInvalidSpec: the Spec cannot be run as given.
 	ErrInvalidSpec = errors.New("invalid gate spec")
 	// ErrEnvInjected: the created container's environment held a variable
@@ -245,10 +254,8 @@ func (s Spec) Validate() error {
 		return bad("no command")
 	case (s.SourceDir == "") == (s.SourceTar == nil):
 		return bad("exactly one of SourceDir and SourceTar is required")
-	case s.Limits.CPUs <= 0, s.Limits.MemoryBytes <= 0, s.Limits.Pids <= 0, s.Limits.Wall <= 0:
-		return bad("cpu, memory, pids and wall limits are all required (got %+v)", s.Limits)
-	case s.Limits.DiskBytes < 0:
-		return bad("negative disk limit")
+	case s.Limits.CPUs <= 0, s.Limits.MemoryBytes <= 0, s.Limits.Pids <= 0, s.Limits.DiskBytes <= 0, s.Limits.Wall <= 0:
+		return bad("cpu, memory, pids, disk and wall limits are all required (got %+v)", s.Limits)
 	}
 	if _, err := GateEnv(s.RunID, s.Env); err != nil {
 		return err
