@@ -67,7 +67,6 @@ import {
   runServiceKeys,
   runServiceQueries,
   useCancelRun,
-  useLastRunPerWorkflow as useLastRunPerWorkflowRpc,
   usePauseRun,
   useResumeRun,
 } from "./run-service-hooks_gen";
@@ -230,8 +229,10 @@ export const DEFAULT_RUN_RANGE: RunRangeKey = "24h";
 export type RunListFilters = Omit<RunsSearch, "allProjects" | "group" | "parent" | "project"> & {
   /** Only runs an agent started from this chat (`?parent=`). */
   parentChatId?: string;
-  /** Set to scope to one project; unset lists every project. */
+  /** Set to scope to one project; unset (and no projectIds) lists every project. */
   projectId?: string;
+  /** Several projects (the side nav's choice of several): the union with projectId. */
+  projectIds?: readonly string[];
   /**
    * Also list the trigger events that started no run, in the same pages. Only
    * with no state filter and no parent: an event has neither (the server
@@ -259,6 +260,7 @@ export function buildListRunsRequest(
   const query = filters.q?.trim();
   return create(ListRunsRequestSchema, {
     projectId: filters.projectId || undefined,
+    projectIds: [...(filters.projectIds ?? [])],
     workflow: filters.workflow ?? [],
     triggerId: filters.trigger || undefined,
     launchKind: filters.kind ?? [],
@@ -632,18 +634,35 @@ function lastRunsByWorkflow(response: LastRunPerWorkflowResponse): Map<string, R
 }
 
 /**
- * The newest run of every workflow, in one project or (allProjects) in every
- * one, for the Workflows list's "Last run" column and
+ * The newest run of every workflow, in one project, several (projectIds) or
+ * (allProjects) every one, for the Workflows list's "Last run" column and
  * workflow detail, keyed by workflow name (the stored ref, e.g.
  * `builtin://agent`). One request for the whole list (LastRunPerWorkflow),
- * never one per row.
+ * never one per row. In the tab's org, and not before it is known: a request
+ * naming no org reads every org's runs.
  */
-export function useLastRunPerWorkflow(projectId: string | undefined, allProjects = false) {
-  return useLastRunPerWorkflowRpc(
-    { projectId: allProjects ? undefined : projectId },
-    { enabled: allProjects || !!projectId, select: lastRunsByWorkflow },
+export function useLastRunPerWorkflow(
+  projectId: string | undefined,
+  allProjects = false,
+  projectIds: readonly string[] = NO_PROJECT_IDS,
+) {
+  const org = useOrgScope();
+  const several = !allProjects && projectIds.length > 0;
+  return useQuery(
+    withOrgFailure(
+      runServiceQueries.lastRunPerWorkflow(
+        orgRequest(
+          several ? { projectIds: [...projectIds] } : { projectId: allProjects ? undefined : projectId },
+          org.orgId,
+        ),
+        { enabled: (allProjects || several || !!projectId) && orgQueryEnabled(org), select: lastRunsByWorkflow },
+      ),
+      org,
+    ),
   );
 }
+
+const NO_PROJECT_IDS: readonly string[] = [];
 
 // ============================================
 // Writes
@@ -755,7 +774,19 @@ export function summarizeLiveAutomations(
 }
 
 /**
- * Live runs across every project, for the sidebar footer pill.
+ * The projects a live-run count covers: the side nav's scope (one project,
+ * several, or every one), so the count beside its Workflows row is about
+ * what the nav shows. `none`: the nav shows an app with no code here, which
+ * has no runs.
+ */
+export type LiveRunsScope =
+  | { kind: "all" }
+  | { kind: "projects"; projectIds: readonly string[] }
+  | { kind: "none" };
+
+/**
+ * Live runs in the tab's org and `scope`'s projects, for the Workflows row's
+ * "N running".
  *
  * Under `runServiceKeys.all`, so it does not poll: the global updates store
  * already invalidates that prefix on chat_state_change, chat_activity_changed
@@ -763,19 +794,32 @@ export function summarizeLiveAutomations(
  * run. No time window: a run that started three days ago and is still going is
  * still live.
  */
-export function useLiveRuns() {
+export function useLiveRuns(scope: LiveRunsScope = ALL_PROJECTS_SCOPE) {
   const org = useOrgScope();
-  return useQuery(
+  const projectIds = scope.kind === "projects" ? scope.projectIds : NO_PROJECT_IDS;
+  // A scope with no projects (an app with no code here) reads nothing. Its
+  // request would be every project's, so it shares that cache entry, and a
+  // disabled query still returns cached data: answer none, never that count.
+  const reads = scope.kind === "all" || projectIds.length > 0;
+  const query = useQuery(
     withOrgFailure(
       runServiceQueries.listRuns(
         orgRequest(
-          { displayStates: [...LIVE_AUTOMATION_STATES], limit: LIVE_AUTOMATION_LIMIT, includeArchived: false },
+          {
+            displayStates: [...LIVE_AUTOMATION_STATES],
+            limit: LIVE_AUTOMATION_LIMIT,
+            includeArchived: false,
+            ...(projectIds.length > 0 ? { projectIds: [...projectIds] } : {}),
+          },
           org.orgId,
         ),
-        { enabled: orgQueryEnabled(org), select: runPageFromProto },
+        { enabled: orgQueryEnabled(org) && reads, select: runPageFromProto },
       ),
       org,
     ),
   );
+  return reads ? query : { ...query, data: undefined };
 }
+
+const ALL_PROJECTS_SCOPE: LiveRunsScope = { kind: "all" };
 
