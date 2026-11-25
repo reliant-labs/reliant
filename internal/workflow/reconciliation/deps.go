@@ -73,6 +73,14 @@ type Deps struct {
 	Workflows WorkflowLoader
 	// Daemons reads the daemon a backgrounded process runs on.
 	Daemons DaemonReader
+	// Chats reads a chat's owner, activity, main thread and run, with no
+	// owner check. store.ChatsWithActivityExtStore satisfies it.
+	Chats Chats
+}
+
+// Chats reads a chat with its computed state.
+type Chats interface {
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }
 
 // WorkflowLoader reads a workflow row by id. store.WorkflowExtStore
@@ -119,7 +127,8 @@ type ReconcilerStore interface {
 	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 
-	// GetChat, GetToolCall and SaveMessageToThread are called directly too;
+	// GetToolCall and SaveMessageToThread are called directly too (and GetChat,
+	// through handlers.ChatTransitioner);
 	// the roles below already declare them.
 
 	// handlers.TransitionChatOnCompletion, EmitTransitionMessage and

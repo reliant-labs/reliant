@@ -3,11 +3,16 @@ import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useListProjectDaemons, useDetachProjectFromDaemon, usePullProjectOnDaemon } from "@/hooks/project-service-hooks_gen";
 import { createProjectFromRepo, type Project } from "@/hooks/project-queries";
 import { ProjectInstallState } from "@/gen/reliant/v1/project_pb";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import { moveSourceDaemonIds, nestedRepoInstalls } from "@/lib/projectPlacement";
 import { daemonStatusLabel } from "@/components/Automations/daemonChoices";
 import { machineDisplayName } from "@/lib/machineName";
 import { AttachProjectFolderDialog } from "@/components/Projects/AttachProjectFolderDialog";
 import { MachineSelect } from "@/components/Projects/MachineSelect";
 import { describeMachineFolderError } from "@/components/Projects/machineFolderErrors";
+import { DetachOldMachineOffer, type OldMachine } from "@/components/Projects/DetachOldMachineOffer";
+import { NestedRepoStatus } from "@/components/Projects/NestedRepoStatus";
+import { StaysOnMachineList } from "@/components/Projects/StaysOnMachineList";
 import Modal from "@/components/forge-ui/modal";
 
 /**
@@ -30,8 +35,28 @@ export function ProjectMachines({ project }: { project: Project }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A clone queued from here, and the machines the project was on then: once
+  // it lands, detaching those is offered (never done for the user).
+  const [movedOnto, setMovedOnto] = useState<{ targetId: string; oldMachines: OldMachine[] } | null>(null);
   const installs = (rows.data?.projectDaemons ?? []).filter((row) => row.projectId === project.id);
   const available = daemons.filter((daemon) => !installs.some((row) => row.daemonId === daemon.daemonId));
+  const nameOf = (daemonId: string) => {
+    const row = installs.find((r) => r.daemonId === daemonId);
+    const daemon = daemons.find((d) => d.daemonId === daemonId);
+    return row?.daemonName || machineDisplayName(daemon ?? { daemonId });
+  };
+  const isOnline = (daemonId: string) => {
+    const status = daemons.find((d) => d.daemonId === daemonId)?.status;
+    return status === DaemonStatus.ACTIVE || status === DaemonStatus.IDLE;
+  };
+  const sourcesFor = (targetId: string | null) => moveSourceDaemonIds(
+    installs.map((row) => ({ project_id: row.projectId, daemon_id: row.daemonId, install_state: row.installState })),
+    project.id,
+    targetId ?? undefined,
+    isOnline,
+  );
+  const cloneSource = sourcesFor(target)[0];
+  const movedTarget = movedOnto ? installs.find((row) => row.daemonId === movedOnto.targetId) : undefined;
   const run = async (action: () => Promise<unknown>, success: string, machine: string) => {
     setBusy(true); setError(null); setNotice(null);
     try { await action(); setNotice(success); }
@@ -60,12 +85,22 @@ export function ProjectMachines({ project }: { project: Project }) {
           <p className="break-all font-mono text-xs text-muted-foreground">{row.path}</p>
           <p className="text-xs text-muted-foreground">Last verified: {row.verifiedAt ? new Date(row.verifiedAt).toLocaleString() : "Not yet verified"}</p>
           {row.installError && <p role="alert" className="text-sm text-destructive-ink">{row.installError}</p>}
+          <NestedRepoStatus repos={nestedRepoInstalls(row.nestedRepos)} />
           <div className="flex flex-wrap gap-2 pt-1">
             {project.remote_url && <button className={button} disabled={busy || installing} onClick={() => void run(() => pull.mutateAsync({ projectId: project.id, daemonId: row.daemonId }), `Pulled on ${name}`, name)}>Pull</button>}
             <button className={button} disabled={busy || installing || installs.length <= 1} title={installs.length <= 1 ? "The project's only machine cannot be detached" : "Keeps files on disk"} onClick={() => void run(() => detach.mutateAsync({ projectId: project.id, daemonId: row.daemonId }), `Detached from ${name}; files kept`, name)}>Detach (keep files)</button>
           </div>
         </div>;
       })}
+      {movedOnto && (
+        <DetachOldMachineOffer
+          projectId={project.id}
+          projectName={project.name}
+          targetName={nameOf(movedOnto.targetId)}
+          targetInstalled={movedTarget?.installState === ProjectInstallState.INSTALLED}
+          oldMachines={movedOnto.oldMachines}
+        />
+      )}
       {notice && <p role="status" className="text-sm text-success-ink">{notice}</p>}
       {error && <p role="alert" className="text-sm text-destructive-ink">{error}</p>}
       {attaching && <AttachProjectFolderDialog open project={project} onClose={() => setAttaching(false)} />}
@@ -77,9 +112,12 @@ export function ProjectMachines({ project }: { project: Project }) {
             <input aria-label="Clone destination folder" className="mt-1 w-full rounded-md border border-input bg-background p-2" value={path} onChange={(event) => setPath(event.target.value)} placeholder="Machine's default projects directory" />
           </label>
           <p className="text-xs text-muted-foreground">An offline machine clones when it is ready.</p>
+          {target && cloneSource && <StaysOnMachineList projectId={project.id} daemonId={cloneSource} machineName={nameOf(cloneSource)} />}
           {error && <p role="alert" className="text-destructive-ink">{error}</p>}
           <button className={button} disabled={!target || busy} onClick={() => void run(async () => {
+            const oldMachines = sourcesFor(target).map((daemonId) => ({ daemonId, name: nameOf(daemonId) }));
             await createProjectFromRepo({ cloneUrl: project.remote_url!, daemonId: target!, name: project.name, ...(path.trim() ? { path: path.trim() } : {}) }); setCloning(false);
+            setMovedOnto({ targetId: target!, oldMachines });
           }, "Clone queued", "the selected machine")}>Queue clone</button>
         </div>
       </Modal>}

@@ -5,7 +5,6 @@ import { afterEach, assert, expect, it } from "vitest";
 
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 
-import { isDemoRead } from "../../readOnly";
 import { createFixtureTransport } from "../../transport";
 import { shopAppPack } from "../app";
 import { SHOP_READ_ONLY_MESSAGE } from "../index";
@@ -17,7 +16,7 @@ it.each([1, 18, 30])("reconciles shop's daily costs and month-to-date summaries 
   const transport = createFixtureTransport({
     pack: shopAppPack({ now: Date.UTC(2026, 10, day, 15, 30) }),
     now: demoNow,
-    readOnly: isDemoRead,
+    readOnly: true,
     readOnlyMessage: SHOP_READ_ONLY_MESSAGE,
   });
   const cost = await createClient(BillingService, transport).getProjectCost({ projectId: "shop" });

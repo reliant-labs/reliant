@@ -18,7 +18,17 @@ import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPl
 import type { DashboardIndex, DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
 import { obsRetry } from "@/services/controlPlane/observability/errors";
 import { clientBuiltinDocument, isClientBuiltin, withClientBuiltins } from "@/services/controlPlane/observability/clientBuiltins";
-import { isDemoShell } from "@/lib/shell";
+import { useObsReadOnly } from "@/components/Forge/Observability/obsReadOnly";
+
+/**
+ * Whether the console reads the person's own account, so the client's own
+ * built-ins (clientBuiltins.ts: their LLM usage) belong in it. A read-only
+ * console is sample data (the public demo, the forge tour's sample app:
+ * obsReadOnly.tsx), never theirs.
+ */
+function useOwnData(): boolean {
+  return !useObsReadOnly().readOnly;
+}
 
 /** A dashboard that is not there (NotFound) is an answer, not a blip: never retried. Otherwise the area's policy. */
 export function dashboardRetry(failureCount: number, error: unknown): boolean {
@@ -45,11 +55,12 @@ export const dashboardKeys = {
  */
 export function useDashboardIndex(orgId: string | null, projectId: string | undefined, envId: string | undefined) {
   const api = useObservabilityApi();
+  const ownData = useOwnData();
   return useQuery({
     queryKey: dashboardKeys.index(orgId, projectId ?? null, envId ?? ""),
     queryFn: () => api.listDashboards({ orgId: orgId as string, projectId, envId }),
-    // The demo's sample app is not the visitor's Reliant account: no LLM usage of theirs to show.
-    select: (index: DashboardIndex) => (isDemoShell() ? index : withClientBuiltins(index, { projectId, envId })),
+    // The client's own built-ins are the person's (their LLM usage): never listed on sample data.
+    select: (index: DashboardIndex) => (ownData ? withClientBuiltins(index, { projectId, envId }) : index),
     enabled: !!orgId,
     staleTime: 60_000,
     retry: dashboardRetry,
@@ -70,10 +81,15 @@ export function useDashboardTemplates(orgId: string | null, enabled = true) {
 /** One dashboard; `version` (workspace) or `release` (release) opens it as it was. */
 export function useDashboard(orgId: string | null, ref: DashboardRef | null, version?: number, release?: string) {
   const api = useObservabilityApi();
+  const ownData = useOwnData();
   return useQuery({
     queryKey: dashboardKeys.doc(orgId, ref, version ?? 0, release ?? ""),
-    // A client-owned built-in has no DashboardService document to fetch.
-    queryFn: () => (isClientBuiltin(ref) ? Promise.resolve(clientBuiltinDocument()) : api.getDashboard({ orgId: orgId as string, ref: ref as DashboardRef, version, releaseVersion: release })),
+    // A client-owned built-in has no DashboardService document to fetch. On sample data it is not one: the
+    // console's own API answers for it (not found), so a link to it never opens the person's usage there.
+    queryFn: () =>
+      isClientBuiltin(ref) && ownData
+        ? Promise.resolve(clientBuiltinDocument())
+        : api.getDashboard({ orgId: orgId as string, ref: ref as DashboardRef, version, releaseVersion: release }),
     enabled: !!orgId && !!ref,
     staleTime: 30_000,
     retry: dashboardRetry,

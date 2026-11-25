@@ -49,4 +49,17 @@ test.describe('console overview and workload page', () => {
 
     expect(errors).toEqual([]);
   });
+
+  // The owner's report (2026-11-24): a job whose run completed read yellow on
+  // the Overview because none of its pods was running. A job reads its runs:
+  // the completed migration is green and says when it ran, the failed seed red.
+  test('the project Overview reads a completed job as healthy and a failed one as failed', async ({ page }) => {
+    await openHarness(page, '?env=prod&case=jobs&shell=1');
+    await expect(page.getByTestId('overview')).toHaveAttribute('data-state', 'ready');
+    const migrate = page.getByTestId('overview-strip-w:prod/shop-migrate');
+    await expect(migrate).toHaveAttribute('data-tone', 'success');
+    await expect(migrate).toContainText('ran');
+    await expect(migrate).not.toContainText('0/1');
+    await expect(page.getByTestId('overview-strip-w:prod/seed')).toHaveAttribute('data-tone', 'danger');
+  });
 });

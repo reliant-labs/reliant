@@ -269,6 +269,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env stop`](#reliant-forge-env-stop) | Suspend a HOSTED environment's workloads on the control plane (not local processes) |
 | [`reliant forge env up`](#reliant-forge-env-up) | Bring the whole dev loop up on this machine: build + deploy + host + frontend |
 | [`reliant forge env verify`](#reliant-forge-env-verify) | Prove, without deploying anything, that what forge would ship is what is running |
+| [`reliant forge explain`](#reliant-forge-explain) | Explain a forge failure: what it means, the command to run next, and whether retrying helps |
 | [`reliant forge fix`](#reliant-forge-fix) | Rewrite your code to what a lint asks for (codemods, run on request) |
 | [`reliant forge fix build-images-vuln-scan`](#reliant-forge-fix-build-images-vuln-scan) | Move the scaffolded build-images.yml from the anchore SBOM action and Trivy to forge vuln scan |
 | [`reliant forge fix composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
@@ -1153,8 +1154,10 @@ RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.
 
 --auto-update (RELIANT_DAEMON_AUTO_UPDATE) has the daemon install new signed
 releases by itself: it stages each one in the background and installs it at a
-quiet moment (no tool call or background process running, and no activity for
-ten minutes), restarting in place. Only a reliant nothing else owns does: one
+quiet moment (no tool call running and no activity for ten minutes),
+restarting in place. Background processes keep running across the restart,
+and the new daemon goes on tracking them; it waits only for a credentials-none
+one, which cannot outlive the old daemon. Only a reliant nothing else owns does: one
 unpacked from a release archive into a directory you can write. The desktop
 app's, Homebrew's or a system package's is left to them, and the log says so.
 Off by default; 'reliant update' updates by hand.
@@ -1487,6 +1490,7 @@ reliant forge
 | [`doctor`](#reliant-forge-doctor) | Check that the PROJECT is well-formed (deployability, payload caps, tooling, cluster capability) |
 | [`domain`](#reliant-forge-domain) | Manage custom domains and what they serve |
 | [`env`](#reliant-forge-env) | Manage deploy environments: bring stacks up/down, deploy releases, and inspect |
+| [`explain`](#reliant-forge-explain) | Explain a forge failure: what it means, the command to run next, and whether retrying helps |
 | [`fix`](#reliant-forge-fix) | Rewrite your code to what a lint asks for (codemods, run on request) |
 | [`frontend`](#reliant-forge-frontend) | Operate on built frontends |
 | [`gate`](#reliant-forge-gate) | Record and read check evidence against a promotion |
@@ -8003,7 +8007,11 @@ a running stack's ports.
 
 Freeing a block lets the NEXT new worktree take it (blocks are filled
 densely, lowest free index first), so pruning is what keeps the block range
-from being exhausted by worktrees nobody remembers to clean up.
+from being exhausted by worktrees nobody remembers to clean up. Prune also
+drops the freed blocks' reservations from the shared .forge/host-ports.json
+("block:`<key>`:`<base>`"), so the next key given a freed block can reserve its
+ports. Checkout-scoped resolve_port reservations are left alone: a missing
+directory does not prove that its reserved ports are no longer in use.
 
 By default this only PRINTS what would be reclaimed and changes nothing —
 pass --apply to actually rewrite the registry. This mutates machine-local
@@ -10611,6 +10619,46 @@ reliant forge env verify <environment> [flags]
 | `--image` | `stringArray` | `[]` | Expected image of a workload, as name=repo@sha256:`<digest>` (repeatable); wins over the env's promotion |
 | `--json` | `bool` | - | Print the report as one JSON document |
 | `--workload` | `stringArray` | `[]` | Verify only the named workload(s) (repeatable) |
+
+---
+
+### reliant forge explain
+
+Explain a forge failure: what it means, the command to run next, and whether retrying helps
+
+Explain a forge failure from its error_reason (the field a --json document
+carries), its exit code, or its error text: what happened, the exact command to
+run next, and whether re-running the same command can succeed ("now", "later",
+or "no"). It is the MCP explain_error tool on the command line, and reads the
+same table.
+
+An error_reason decides when this forge knows it; otherwise the error text
+(--error); otherwise the exit code. Pass both a reason and a code when you have
+them, so a reason newer than this forge still gets the code's answer. Works
+anywhere: it reads nothing from the directory.
+
+  forge explain                          every error_reason and exit code it knows
+  forge explain claimable_throttled      one reason
+  forge explain 7                        one exit code
+  forge explain claimable_throttled 4    a reason, falling back to its exit code
+  forge explain --error "`<text>`"         the error text forge printed
+  forge explain 8 --env staging          next commands name the env (default prod)
+  forge explain 4 --json                 the explain_error tool's document
+
+Something it does not know exits 1 and lists what it does.
+
+```
+reliant forge explain [error_reason|exit_code] [exit_code] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--env` | `string` | `prod` | The env the failing command acted on, so the next commands name it |
+| `--error` | `string` | - | The error text forge printed, for a failure with no error_reason |
+| `--json` | `bool` | - | Print the explain_error tool's document (meaning, next, retry); with no argument, every known reason and code |
 
 ---
 

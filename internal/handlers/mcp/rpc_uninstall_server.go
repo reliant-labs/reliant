@@ -6,9 +6,10 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -54,7 +55,7 @@ func (s *Service) UninstallServer(
 
 	logging.InfoContext(ctx, "MCP server uninstalled successfully", "name", name)
 
-	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: &projectID}); err != nil {
+	if err := s.deps.Refetch.EmitUserRefetch(ctx, userID, core.RefetchConfigHealth, core.RefetchOpts{ProjectID: &projectID}); err != nil {
 		logging.WarnContext(ctx, "Failed to emit config_health refetch after UninstallServer", "error", err)
 	}
 

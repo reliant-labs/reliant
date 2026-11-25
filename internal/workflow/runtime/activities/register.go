@@ -179,6 +179,11 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// A node's save_message is written by the worker that executes the node,
 	// through the same write path as the SaveMessage activity.
 	registry.SetMessageWriter(saveMessage)
+	// A node's observe: block is recorded by the same worker, after its
+	// save_message (a nil *db.Repo would be a non-nil interface that panics).
+	if deps.Repo != nil {
+		registry.SetObservationWriter(deps.Repo)
+	}
 	var modelEndpoints local.EndpointSource
 	var spawnTree handlers.SpawnTree
 	if deps.Repo != nil {
@@ -268,9 +273,6 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// ========================================================================
 
 	runStep := handlers.NewExecuteRunStepActivity(deps.Repo, workspaceRows, deps.ToolExecutor, deps.RunExecutor).WithDaemonRouter(deps.DaemonRouter)
-	if deps.StepKeys != nil {
-		runStep = runStep.WithStepKeys(deps.StepKeys)
-	}
 	if deps.DaemonRouter != nil {
 		// A command that never reached its machine watches the machine while
 		// it waits, as wait_for_machine does.

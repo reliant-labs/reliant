@@ -220,4 +220,15 @@ message WorkerConfig {
     default_value: "1h"
     description: "Wait after worker start before the first ledger retention pass, so an api-server rollout completes first (0: at once)"
   }];
+  // What workflow nodes' observe: blocks recorded (node_observations) is
+  // deleted once its run completed or was cancelled more than
+  // node_observation_retention ago, by the same hourly pass. Its own period,
+  // apart from step_execution_retention, because a decision is worth keeping
+  // longer than the internal step output it explains. OFF (0) by default, as
+  // retention deletes data.
+  google.protobuf.Duration node_observation_retention = 35 [(forge.v1.config) = {
+    env_var: "RELIANT_WORKER_NODE_OBSERVATION_RETENTION"
+    default_value: "0s"
+    description: "Age past which a finished run's recorded node observations (observe: attributes and events) are deleted (0: never)"
+  }];
 }

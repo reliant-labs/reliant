@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { fixedSession, SessionProvider, useSession, useSignedIn } from "..";
 
@@ -29,6 +29,19 @@ describe("the session port", () => {
     );
     expect(screen.getByTestId("reader")).toHaveAttribute("data-loading", "false");
     expect(screen.getByTestId("reader")).toHaveAttribute("data-signed-in", "false");
+  });
+
+  it("names no user while nobody is signed in, whatever the token's claims say", async () => {
+    // A JWT whose claims name a subject: forge's session falls back to them; the port's user does not.
+    const claims = btoa(JSON.stringify({ sub: "from-token" })).replace(/=+$/, "");
+    const getToken = vi.fn(async () => `e30.${claims}.sig`);
+    render(
+      <SessionProvider auth={{ user: null, isAuthenticated: false, isLoading: false, getToken }}>
+        <Reader />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(getToken).toHaveBeenCalled());
+    expect(screen.getByTestId("reader")).toHaveAttribute("data-user", "");
   });
 
   it("is the fixed user, signed in and settled, under fixedSession", async () => {

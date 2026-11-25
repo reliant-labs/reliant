@@ -41,6 +41,8 @@ import {
   MobileScreenHeader,
 } from "./MobileChrome";
 import { authPath } from "@/lib/paths";
+import { isForgeAuth } from "@/lib/auth/forge-api";
+import { useAuthIdentity } from "@/lib/auth/use-auth";
 
 /**
  * Read the mode from the DOM rather than from settings.
@@ -150,17 +152,26 @@ export function MobileAccountScreen({ onBack }: MobileAccountScreenProps = {}) {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [error, setError] = useState("");
 
-  const name =
-    (user?.user_metadata?.full_name as string | undefined) ??
-    (user?.user_metadata?.name as string | undefined);
-  const email = user?.email;
-  const providers = [
-    ...new Set(
-      (user?.identities ?? [])
-        .map((i) => i.provider)
-        .filter((p) => p !== "anonymous"),
-    ),
-  ];
+  // forge mode (AUTH_PROVIDER "forge"): the store's `user` is a synthetic
+  // stand-in with no identities, so who is signed in comes from the
+  // provider-neutral identity. Supabase mode reads the user as before.
+  const forge = isForgeAuth();
+  const identity = useAuthIdentity();
+
+  const name = forge
+    ? (identity?.name ?? undefined)
+    : ((user?.user_metadata?.full_name as string | undefined) ??
+      (user?.user_metadata?.name as string | undefined));
+  const email = forge ? (identity?.email ?? undefined) : user?.email;
+  const providers = forge
+    ? []
+    : [
+        ...new Set(
+          (user?.identities ?? [])
+            .map((i) => i.provider)
+            .filter((p) => p !== "anonymous"),
+        ),
+      ];
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
@@ -211,7 +222,9 @@ export function MobileAccountScreen({ onBack }: MobileAccountScreenProps = {}) {
                   ? email
                   : providers.length > 0
                     ? `Connected via ${providers.join(", ")}`
-                    : "Anonymous session"}
+                    : forge
+                      ? "Signed in"
+                      : "Anonymous session"}
               </p>
             </div>
           </div>

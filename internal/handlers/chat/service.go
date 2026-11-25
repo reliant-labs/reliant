@@ -41,6 +41,10 @@ type Deps struct {
 	// Chats reads a chat the caller may write, the owner check and the org
 	// check in one call (chataccess).
 	Chats chataccess.Service
+	// ChatRows and ChatViews read a chat's own row and its computed view
+	// (ChatRows, ChatViews; deps.go).
+	ChatRows  ChatRows
+	ChatViews ChatViews
 	// Backoff reads and releases the provider-backoff markers of the chats' runs.
 	Backoff Backoff
 	// Questions lists the chat's open questions (Questions, deps.go).
@@ -139,6 +143,12 @@ func (d Deps) validateDeps() error {
 	if d.Chats == nil {
 		return fmt.Errorf("chat: Deps.Chats is required")
 	}
+	if d.ChatRows == nil {
+		return fmt.Errorf("chat: Deps.ChatRows is required")
+	}
+	if d.ChatViews == nil {
+		return fmt.Errorf("chat: Deps.ChatViews is required")
+	}
 	if d.Backoff == nil {
 		return fmt.Errorf("chat: Deps.Backoff is required")
 	}
@@ -215,18 +225,61 @@ func (s *Service) chats() chataccess.Service {
 	return s.deps.Chats
 }
 
+// fixtureChatReads fills ChatRows and ChatViews for the tests (nil in every
+// binary, like fixtureChats). The generated test harness hands an unnamed role
+// its mock, so a fixture that named neither is recognized by that mock and
+// reads through its own repository instead.
+var fixtureChatReads func(Repository) (ChatRows, ChatViews)
+
+// isMockReads reports a role the harness filled with its generated mock.
+func isMockReads(v any) bool {
+	switch v.(type) {
+	case nil, *MockChatRows, *MockChatViews:
+		return true
+	}
+	return false
+}
+
+// chatRows is Deps.ChatRows; in this package's tests, a fixture that left it
+// unnamed gets the one fixtureChatReads builds over its repository.
+func (s *Service) chatRows() ChatRows {
+	if isMockReads(s.deps.ChatRows) && fixtureChatReads != nil {
+		rows, _ := fixtureChatReads(s.deps.Repo)
+		return rows
+	}
+	return s.deps.ChatRows
+}
+
+// chatViews is Deps.ChatViews, with the same fixture default.
+func (s *Service) chatViews() ChatViews {
+	if isMockReads(s.deps.ChatViews) && fixtureChatReads != nil {
+		_, views := fixtureChatReads(s.deps.Repo)
+		return views
+	}
+	return s.deps.ChatViews
+}
+
 // New creates a new chat service instance with the supplied Deps.
 // Returns an error when validateDeps rejects a nil required field.
 func New(deps Deps) (*Service, error) {
 	if deps.Chats == nil && fixtureChats != nil {
 		deps.Chats = fixtureChats(deps.Repo)
 	}
+	if fixtureChatReads != nil {
+		rows, views := fixtureChatReads(deps.Repo)
+		if isMockReads(deps.ChatRows) {
+			deps.ChatRows = rows
+		}
+		if isMockReads(deps.ChatViews) {
+			deps.ChatViews = views
+		}
+	}
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
 	}
 	return &Service{
 		deps:    deps,
-		runs:    runs.New(runs.Deps{Repo: deps.Repo, Workflows: deps.Workflows, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
+		runs:    runs.New(runs.Deps{Repo: deps.Repo, Chats: deps.ChatViews, Workflows: deps.Workflows, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
 		threads: threads.New(threads.Deps{Repo: deps.Repo, Chats: deps.Chats, Signaler: deps.Temporal, ToolCanceler: deps.Router}),
 	}, nil
 }
@@ -241,7 +294,7 @@ func New(deps Deps) (*Service, error) {
 // disagree.
 func (s *Service) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Workflows: s.deps.Workflows, Worktrees: s.deps.Worktrees, ProjectRows: s.deps.ProjectRows, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
+		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Chats: s.chatViews(), Workflows: s.deps.Workflows, Worktrees: s.deps.Worktrees, ProjectRows: s.deps.ProjectRows, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
 	})
 	return s.launcherImpl
 }

@@ -203,6 +203,7 @@ func runMigrationOrder(args []string, stdout, stderr io.Writer) int {
 	root := fs.String("root", ".", "repository root")
 	dir := fs.String("dir", "db/migrations", "migrations directory, relative to the root")
 	base := fs.String("base", "origin/main", "branch a new migration must be versioned above")
+	also := fs.String("also", "", "a commit a new migration must ALSO be versioned above, judged as it is (never fetched): the merge queue passes HEAD^, main plus the entries queued ahead of this one")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -220,10 +221,28 @@ func runMigrationOrder(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "migration-order:", err)
 		return 1
 	}
+	// -also: in a merge group HEAD is this entry's squash on top of main AND
+	// the entries queued ahead of it, none of them on origin/main yet. Two
+	// entries that each add a migration both clear main's newest, and the
+	// second lands below the first: #3482 merged 20261124204326, then #3483
+	// merged 20261124202455 under it (control-plane#3571). Judged against
+	// HEAD^, only this entry's own migrations are new, and they must clear
+	// the newest the entries ahead carry.
+	if *also != "" {
+		more, err := checkMigrationOrder(orderOptions{Root: abs, Dir: *dir, BaseRef: *also})
+		if err != nil {
+			fmt.Fprintln(stderr, "migration-order:", err)
+			return 1
+		}
+		vs = append(vs, more...)
+	}
 	if len(vs) > 0 {
 		formatOrderViolations(stderr, vs)
 		return 1
 	}
 	fmt.Fprintf(stdout, "migration-order: every migration on this branch is above %s's newest\n", *base)
+	if *also != "" {
+		fmt.Fprintf(stdout, "migration-order: and every migration this change adds is above %s's newest\n", *also)
+	}
 	return 0
 }

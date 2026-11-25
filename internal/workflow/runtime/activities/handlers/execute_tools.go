@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/reliant-labs/forge/pkg/orm"
 	"go.temporal.io/sdk/activity"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -115,7 +117,7 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 	}
 
 	// Load chat directly from chatID
-	chat, err := a.repo.GetChat(ctx, chatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, chatID)
 	if err != nil {
 		return nil, fmt.Sprintf("Failed to load chat context: %v", err)
 	}

@@ -39,11 +39,11 @@ import { listSecrets } from "@/services/forge/secretStore";
 import { DEMO_DOMAINS, DEMO_ENVS, DEMO_PROJECT, DEMO_RELEASES, DEMO_SECRETS, DEMO_WORKLOADS, consoleScenarioHandlers } from "../handlers/console";
 import { DEMO_DEFAULT_SERVICES } from "../handlers/defaults";
 import { outsideDemo } from "../handlers/scope";
-import { isDemoRead } from "../../readOnly";
 import { createShopTransport } from "..";
 import { FIXTURE_ENVS, FIXTURE_PROJECT } from "@/components/Forge/Observability/__fixtures__/fixtureApi";
 import { shopPromotions } from "../model/delivery";
 import { demoNow, resetDemoNowForTests } from "../shopStory";
+import { isDemoAnswered } from "./reads";
 import { describePromotion } from "@/components/Forge/Observability/releaseMarkers";
 
 const { OPTIONAL: LABEL_OPTIONAL, REPEATED: LABEL_REPEATED } = FieldDescriptorProto_Label;
@@ -257,7 +257,7 @@ describe("every console read is answered; every write is refused", () => {
       const service = DEMO_DEFAULT_SERVICES.find((s) => s.name === svc);
       const method = service?.methods.find((m) => m.name === name);
       expect(method, key).toBeDefined();
-      expect(isDemoRead(method!), key).toBe(true);
+      expect(isDemoAnswered(method!), key).toBe(true);
     }
   });
 
@@ -265,7 +265,7 @@ describe("every console read is answered; every write is refused", () => {
     const t = (await import("@/lib/connect")).transport;
     // The demo has no billing: its reads answer as a control plane without the billing API (handlers/observabilityBilling.ts).
     const billing = createClient(ObservabilityBillingService, t) as unknown as Record<string, (req: object) => Promise<unknown>>;
-    for (const method of methodsOf(ObservabilityBillingService).filter((m) => isDemoRead(m))) {
+    for (const method of methodsOf(ObservabilityBillingService).filter((m) => isDemoAnswered(m))) {
       await expect(billing[method.localName]({ orgId: "org-acme" }), method.name).rejects.toSatisfy((err: unknown) => ConnectError.from(err).code === Code.Unimplemented);
     }
   });
@@ -275,7 +275,7 @@ describe("every console read is answered; every write is refused", () => {
     let writes = 0;
     for (const service of DEMO_DEFAULT_SERVICES) {
       const client = createClient(service, t) as unknown as Record<string, (req: object) => Promise<unknown>>;
-      for (const method of methodsOf(service).filter((m) => !isDemoRead(m))) {
+      for (const method of methodsOf(service).filter((m) => !isDemoAnswered(m))) {
         await expect(client[method.localName]({}), `${service.typeName}/${method.name}`).rejects.toSatisfy(
           (err: unknown) => ConnectError.from(err).code === Code.PermissionDenied,
         );
@@ -312,7 +312,7 @@ describe("nothing outside shop", () => {
     let checked = 0;
     for (const service of DEMO_DEFAULT_SERVICES) {
       const client = createClient(service, t) as unknown as Record<string, (req: object) => Promise<unknown>>;
-      for (const method of service.methods.filter((m) => m.methodKind === "unary" && isDemoRead(m))) {
+      for (const method of service.methods.filter((m) => m.methodKind === "unary" && isDemoAnswered(m))) {
         if (!method.input.fields.some((field) => field.name === "org_id")) continue;
         const response = await client[method.localName]({ orgId: "org-foreign" });
         expect(response, `${service.typeName}/${method.name}`).toEqual(create(method.output));
@@ -385,7 +385,7 @@ describe("nothing outside shop", () => {
     let scoped = 0;
     for (const service of DEMO_DEFAULT_SERVICES) {
       const c = createClient(service, t) as unknown as Record<string, (req: object) => Promise<object>>;
-      for (const method of service.methods.filter((m) => m.methodKind === "unary" && isDemoRead(m))) {
+      for (const method of service.methods.filter((m) => m.methodKind === "unary" && isDemoAnswered(m))) {
         const req = foreign(method.input);
         if (!req) continue;
         expect(outsideDemo(method.input, create(method.input, req as never)), `${service.typeName}/${method.name}`).toBe(true);

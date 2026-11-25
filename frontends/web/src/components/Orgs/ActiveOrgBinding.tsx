@@ -5,9 +5,9 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { resetAfterLeavingOrg } from "@/lib/orgScope";
+import { useAuthUserId } from "@/lib/auth/use-auth";
 import { ORG_MEMBER_READS } from "@/services/controlPlane/members";
 import { orgKeys } from "@/services/controlPlane/orgs";
-import { useAuthStore } from "@/store/authStore";
 import {
   ORG_SCOPED_QUERY_ROOTS,
   bindActiveOrgUser,
@@ -57,7 +57,7 @@ export interface OrgChange {
 export function ActiveOrgBinding({
   onSwitch,
 }: { onSwitch?: (orgId: string | null, client: QueryClient, change: OrgChange) => void } = {}) {
-  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const userId = useAuthUserId();
   bindActiveOrgUser(userId);
 
   const qc = useQueryClient();

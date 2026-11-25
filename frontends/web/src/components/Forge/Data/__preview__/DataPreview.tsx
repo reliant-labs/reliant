@@ -3,7 +3,7 @@
 /**
  * DEV-ONLY proving harness for the data browser. NOT a product surface.
  *
- * The real DataBrowser, inside the real console chrome (ConsolePreviewShell),
+ * The real DataBrowser, inside the app's shell and the console's bar (ConsolePreviewFrame),
  * on its real client over the shop fixture pack (src/fixtures/shop,
  * <FixturePreview>) — unauthenticated, no backend — so every state can be
  * looked at in every colour scheme and screenshotted. A case is a named
@@ -23,7 +23,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import PageHeader from "@/components/forge-ui/page_header";
-import { FixturePreview, type FixtureServeOptions } from "@/fixtures/preview";
+import type { FixtureServeOptions } from "@/fixtures/preview";
 import { latency } from "@/fixtures/overlay";
 import { SHOP_SERVE, shopPack } from "@/fixtures/shop";
 import { DEMO_ENVS } from "@/fixtures/shop/handlers/scope";
@@ -31,8 +31,8 @@ import { browserOverlays } from "@/fixtures/shop/overlays";
 import type { FixturePack } from "@/fixtures/transport";
 
 import { createFixtureReader, FixtureReaderProvider } from "../../AuditedAccess/readerSession";
-import { ConsolePreviewShell } from "../../Console/ConsolePreviewShell";
 import { withSearch } from "../../Console/paths";
+import { ConsolePreviewFrame } from "../../__preview__/PreviewShellFrame";
 import { DataBrowser } from "../DataBrowser";
 import { DATA_SEARCH_KEYS, type DataSearch } from "../dataUrl-model";
 
@@ -94,10 +94,12 @@ export default function DataPreview() {
   const href = (next: DataSearch) => withSearch(BASE, { ...own, ...next });
 
   return (
-    <ConsolePreviewShell
+    // A fresh transport and cache per case (the nav's too); the browser remounts per environment.
+    <ConsolePreviewFrame
       page={{ kind: "data" }}
-      project="shop"
-      envs={DEMO_ENVS.map((candidate) => ({ name: candidate.name, preview: false }))}
+      pack={SHOP}
+      overlay={active.overlay}
+      serve={active.serve ?? SHOP_SERVE}
       env={env.name}
       onEnvChange={(next) => go({ env: next })}
       controls={
@@ -127,13 +129,10 @@ export default function DataPreview() {
     >
       <div className="space-y-4">
         <PageHeader density="compact" title="Data" className="mb-0" />
-        {/* A fresh transport and cache per case; the browser remounts per environment. */}
-        <FixturePreview pack={SHOP} overlay={active.overlay} serve={active.serve ?? SHOP_SERVE}>
-          <FixtureReaderProvider reader={reader}>
-            <DataBrowser key={`${caseId}-${env.id}`} env={env} search={data} onNavigate={onNavigate} href={href} />
-          </FixtureReaderProvider>
-        </FixturePreview>
+        <FixtureReaderProvider reader={reader}>
+          <DataBrowser key={`${caseId}-${env.id}`} env={env} search={data} onNavigate={onNavigate} href={href} />
+        </FixtureReaderProvider>
       </div>
-    </ConsolePreviewShell>
+    </ConsolePreviewFrame>
   );
 }

@@ -109,7 +109,7 @@ func cancelFixture(t *testing.T) (*fakeRepo, *cancellingTemporal, *Service, *fak
 	repo, temporal, pause, _ := fixture(t)
 	repo.workflow = &db.Workflow{ID: "wf-1", Status: db.Active()}
 	c := &cancellingTemporal{fakeTemporal: temporal}
-	svc := New(Deps{Repo: repo, Workflows: repo, Questions: repo, Temporal: c, Pause: pause, Waits: repo})
+	svc := New(Deps{Repo: repo, Chats: repo, Workflows: repo, Questions: repo, Temporal: c, Pause: pause, Waits: repo})
 	clock := &fakeClock{t: clockEpoch}
 	svc.cancelGrace, svc.cancelSettle, svc.cancelPoll = testGrace, testSettle, testPoll
 	svc.now, svc.sleep = clock.now, clock.sleep

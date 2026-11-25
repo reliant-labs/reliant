@@ -34,11 +34,11 @@ import { useNavigate } from "@tanstack/react-router";
 import { SHOP_SERVE, shopPack } from "@/fixtures/shop";
 import { DEMO_ENVS, DEMO_PROJECT } from "@/fixtures/shop/handlers/scope";
 import { observabilityOverlays, readCap } from "@/fixtures/shop/overlays";
-import { FixturePreview, type FixtureServeOptions } from "@/fixtures/preview";
+import type { FixtureServeOptions } from "@/fixtures/preview";
 import type { FixturePack } from "@/fixtures/transport";
 import type { Panel } from "@/services/controlPlane/observability/types";
 
-import { ConsolePreviewShell } from "../../../Console/ConsolePreviewShell";
+import { ConsolePreviewFrame } from "../../../__preview__/PreviewShellFrame";
 import { consolePath } from "../../../Console/paths";
 import { CONSOLE_SERVE, ConsoleFixturePreview, isDark, PreviewControls, usePageSearch, withPageSearch } from "../../../__preview__/ConsoleFixturePreview";
 import { isDashboardPageKind } from "../dashboardModel";
@@ -161,11 +161,9 @@ export default function DashboardsPreview() {
   // The galleries: the real console chrome around them, the pack under the panel editor's reads.
   if (page === "chart-gallery" || page === "panel-editor" || page === "chart-correctness") {
     return (
-      <ConsolePreviewShell page={{ kind: "obs-view", view: "dashboards" }} controls={controls}>
-        <FixturePreview pack={SHOP} serve={SHOP_SERVE}>
-          {page === "chart-gallery" ? <ChartGalleryPreview /> : page === "panel-editor" ? <PanelEditorPreview /> : <ChartCorrectnessPreview />}
-        </FixturePreview>
-      </ConsolePreviewShell>
+      <ConsolePreviewFrame page={{ kind: "obs-view", view: "dashboards" }} controls={controls} pack={SHOP} serve={SHOP_SERVE}>
+        {page === "chart-gallery" ? <ChartGalleryPreview /> : page === "panel-editor" ? <PanelEditorPreview /> : <ChartCorrectnessPreview />}
+      </ConsolePreviewFrame>
     );
   }
 

@@ -534,27 +534,7 @@ func TestGolangciChangedFailsOnAG101(t *testing.T) {
 			t.Skipf("%s not on PATH", tool)
 		}
 	}
-	// The pin, read as the script reads it in this repository.
-	mod, err := exec.Command("go", "mod", "download", "-json", "github.com/reliant-labs/forge").Output()
-	if err != nil {
-		t.Skipf("cannot download the pinned forge module: %v", err)
-	}
-	var fm struct{ Dir string }
-	if err := json.Unmarshal(mod, &fm); err != nil {
-		t.Fatal(err)
-	}
-	tv, err := os.ReadFile(filepath.Join(fm.Dir, "internal", "templates", "toolversions.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	m := regexp.MustCompile(`(?m)^const GolangciLintVersion = "v([0-9.]+)"$`).FindSubmatch(tv)
-	if m == nil {
-		t.Fatal("no GolangciLintVersion in the pinned forge")
-	}
-	pin := string(m[1])
-	if v, _ := exec.Command("golangci-lint", "version").CombinedOutput(); !strings.Contains(string(v), "has version "+pin+" ") {
-		t.Skipf("golangci-lint on PATH is not the pinned %s: %s", pin, v)
-	}
+	pin := pinnedGolangci(t)
 
 	dir := t.TempDir()
 	write := func(rel, body string) {
@@ -606,6 +586,99 @@ func TestGolangciChangedFailsOnAG101(t *testing.T) {
 	var exit *exec.ExitError
 	if !errors.As(err, &exit) || exit.ExitCode() != 1 || !strings.Contains(out, "G101") {
 		t.Errorf("a G101 finding: err=%v, want golangci-lint's exit 1 naming G101:\n%s", err, out)
+	}
+}
+
+// pinnedGolangci is the golangci-lint release the pinned forge names, read as
+// the script reads it in this repository; the test skips unless the
+// golangci-lint on PATH is that release.
+func pinnedGolangci(t *testing.T) string {
+	t.Helper()
+	mod, err := exec.Command("go", "mod", "download", "-json", "github.com/reliant-labs/forge").Output()
+	if err != nil {
+		t.Skipf("cannot download the pinned forge module: %v", err)
+	}
+	var fm struct{ Dir string }
+	if err := json.Unmarshal(mod, &fm); err != nil {
+		t.Fatal(err)
+	}
+	tv, err := os.ReadFile(filepath.Join(fm.Dir, "internal", "templates", "toolversions.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`(?m)^const GolangciLintVersion = "v([0-9.]+)"$`).FindSubmatch(tv)
+	if m == nil {
+		t.Fatal("no GolangciLintVersion in the pinned forge")
+	}
+	pin := string(m[1])
+	if v, _ := exec.Command("golangci-lint", "version").CombinedOutput(); !strings.Contains(string(v), "has version "+pin+" ") {
+		t.Skipf("golangci-lint on PATH is not the pinned %s: %s", pin, v)
+	}
+	return pin
+}
+
+// TestGolangciChangedFailsOnANewDeprecationsUse is #3005's shape: the diff
+// deprecates a function and leaves its one caller, in a package and a file
+// the diff never touches, still calling it. The changed-files pass cannot see
+// that SA1019; the deprecations pass runs staticcheck over the package that
+// names it and fails, naming the line. Once the caller moves off it, it passes.
+func TestGolangciChangedFailsOnANewDeprecationsUse(t *testing.T) {
+	testkit.Slow(t, "runs the real golangci-lint (go list and type-checking) over a throwaway module",
+		testkit.Inputs("scripts/golangci-changed.sh", "scripts/lint-scope.sh", ".golangci.yml"))
+	for _, tool := range []string{"bash", "git", "go", "jq", "golangci-lint"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("%s not on PATH", tool)
+		}
+	}
+	pin := pinnedGolangci(t)
+	dir := t.TempDir()
+	write := func(rel, body string) {
+		t.Helper()
+		putFixture(t, dir, rel, body, 0o644)
+	}
+	sh := func(args ...string) (string, error) {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t", "GOFLAGS=-mod=mod", "GOLANGCI_LINT_VERSION="+pin)
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+	must := func(args ...string) string {
+		t.Helper()
+		out, err := sh(args...)
+		if err != nil {
+			t.Fatalf("%v: %v\n%s", args, err, out)
+		}
+		return out
+	}
+	const dep = "// Package dep is a fixture.\npackage dep\n\n// Old answers.\n%sfunc Old() int { return 1 }\n\n// New answers.\nfunc New() int { return 2 }\n"
+	write("go.mod", "module example.com/m\n\ngo 1.22\n")
+	write(".golangci.yml", string(readRepo(t, ".golangci.yml")))
+	write("scripts/golangci-changed.sh", string(readRepo(t, "scripts/golangci-changed.sh")))
+	write("scripts/lint-scope.sh", string(readRepo(t, "scripts/lint-scope.sh")))
+	write("dep/dep.go", fmt.Sprintf(dep, ""))
+	write("user/user.go", "// Package user is a fixture.\npackage user\n\nimport \"example.com/m/dep\"\n\n// Answer answers.\nfunc Answer() int { return dep.Old() }\n")
+	must("chmod", "+x", "scripts/golangci-changed.sh", "scripts/lint-scope.sh")
+	must("git", "init", "-q", "-b", "main")
+	must("git", "add", "-A")
+	must("git", "commit", "-qm", "base")
+	base := strings.TrimSpace(must("git", "rev-parse", "HEAD"))
+
+	write("dep/dep.go", fmt.Sprintf(dep, "//\n// Deprecated: use New.\n"))
+	must("git", "commit", "-qam", "deprecate Old")
+	out, err := sh("bash", "scripts/golangci-changed.sh", "--base", base)
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 1 || !strings.Contains(out, "user/user.go:7") || !strings.Contains(out, "SA1019") {
+		t.Errorf("a use of what the diff deprecates: err=%v, want exit 1 naming user/user.go:7's SA1019:\n%s", err, out)
+	}
+	if !strings.Contains(out, "the diff deprecates: dep.Old") {
+		t.Errorf("the script does not name what the diff deprecates:\n%s", out)
+	}
+
+	write("user/user.go", "// Package user is a fixture.\npackage user\n\nimport \"example.com/m/dep\"\n\n// Answer answers.\nfunc Answer() int { return dep.New() }\n")
+	must("git", "commit", "-qam", "move off Old")
+	if out, err := sh("bash", "scripts/golangci-changed.sh", "--base", base); err != nil {
+		t.Errorf("no use left: err=%v, want a pass:\n%s", err, out)
 	}
 }
 

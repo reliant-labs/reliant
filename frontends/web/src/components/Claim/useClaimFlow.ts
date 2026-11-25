@@ -73,6 +73,7 @@ import {
   type FreeSiteKeep,
   type ReleasedSession,
 } from "@/services/controlPlane/claim";
+import { getAuthIdentity, useAuthIdentity } from "@/lib/auth/use-auth";
 import { useAuthStore } from "@/store/authStore";
 
 import { useGoToBilling } from "@/hooks/useGoToBilling";
@@ -134,7 +135,7 @@ function messageOf(err: unknown, fallback: string): string {
 
 export function useClaimFlow(): ClaimFlow {
   const navigate = useNavigate();
-  const user = useAuthStore((s) => s.user);
+  const user = useAuthIdentity();
   const initialized = useAuthStore((s) => s.initialized);
   const authLoading = useAuthStore((s) => s.loading);
   const initialize = useAuthStore((s) => s.initialize);
@@ -361,7 +362,7 @@ export function useClaimFlow(): ClaimFlow {
       try {
         // A different account in this browser is replaced, not merged: sign it
         // out first so nothing cached for it is read as the claimant's.
-        if (useAuthStore.getState().user) await signOut();
+        if (getAuthIdentity()) await signOut();
         const adopted = await adoptSession(session);
         released.current = null;
         updatePendingClaim({ anonUserId: adopted.id });
@@ -431,7 +432,7 @@ export function useClaimFlow(): ClaimFlow {
       setView({ kind: "no-link" });
       return;
     }
-    void loadPreview(pending, claimSituation(useAuthStore.getState().user, pending));
+    void loadPreview(pending, claimSituation(getAuthIdentity(), pending));
   }, [loadPreview]);
 
   return { view, claim, claimIntoAccount, freeSiteDialog, answerFreeSite, cancelFreeSite, retryFinish, retryPreview };

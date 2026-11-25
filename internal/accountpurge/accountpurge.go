@@ -246,6 +246,10 @@ var purgeSteps = []step{
 	{"step_executions", `
 		DELETE FROM step_executions WHERE workflow_id IN (
 			SELECT w.id FROM workflows w JOIN chats c ON c.id = w.chat_id WHERE c.user_id = $1)`},
+	// What workflow nodes' observe: blocks recorded, keyed by chat with no
+	// foreign key.
+	{"node_observations", `
+		DELETE FROM node_observations WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
 	{"workflow_checkpoints", `
 		DELETE FROM workflow_checkpoints WHERE chat_id IN (
 			SELECT id FROM chats WHERE user_id = $1)`},
@@ -257,6 +261,12 @@ var purgeSteps = []step{
 	// payloads included, keyed by chat with no foreign key.
 	{"chat_update_heads", `
 		DELETE FROM chat_update_heads WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
+	// Per-person grants (chat-collaboration.md §3.1): the grants the user
+	// holds on other people's chats, and every grant on their own chats
+	// (which chats would cascade, deleted explicitly so a future FK change
+	// cannot silently orphan them).
+	{"chat_members", `
+		DELETE FROM chat_members WHERE user_id = $1 OR chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
 	// The per-thread message counts the messages triggers maintain, and the
 	// chats still waiting for theirs to be counted: keyed by chat with no
 	// foreign key. They follow messages, whose delete writes the counts.

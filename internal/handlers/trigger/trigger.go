@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
 )
 
 // syncs reports whether a trigger is converged onto a Temporal Schedule:
@@ -444,7 +445,7 @@ func (s *Service) render(ctx context.Context, t *core.Trigger) *reliantv1.Trigge
 	if err != nil {
 		logging.WarnContext(ctx, "could not resolve a trigger's source state", "trigger_id", t.ID, "error", err)
 	}
-	return s.renderWithWorkflows(ctx, t, s.nextFireAt(ctx, t), recent[t.ID], regs[t.ID], triggers.LaunchWorkflows{Repo: s.deps.Repo}, s.deps.Repo)
+	return s.renderWithWorkflows(ctx, t, s.nextFireAt(ctx, t), recent[t.ID], regs[t.ID], triggers.LaunchWorkflows{Repo: s.deps.Repo}, newWorkflowDescriber(s.deps.Repo))
 }
 
 // nextFireBudget bounds the wait for next fire times: one trigger's in
@@ -556,7 +557,7 @@ feed:
 // declaration through workflows so that a broken one reports BROKEN health.
 // It is computed on read, from the workflow as it is now: a stored verdict
 // would go stale the moment someone fixed the YAML.
-func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration, workflows triggers.WorkflowResolver, sources launch.WorkflowResolver) *reliantv1.Trigger {
+func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration, workflows triggers.WorkflowResolver, sources *workflowDescriber) *reliantv1.Trigger {
 	proto := s.renderFirings(ctx, t, nextFireAt, firings, reg)
 	if t.WorkflowTrigger == nil {
 		return proto
@@ -586,14 +587,46 @@ func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, next
 // definitionSource says where an activation's runs read its workflow from,
 // resolved exactly as they resolve it (on its machine, project first), and
 // what about that choice the owner should know. Nil when it does not resolve
-// right now: the declaration's health already says so. It reads through
-// sources: a list passes its request resolver.
-func definitionSource(ctx context.Context, sources launch.WorkflowResolver, t *core.Trigger) *reliantv1.TriggerDefinitionSource {
-	desc, err := launch.DescribeRunWorkflow(ctx, sources, launch.AutomationScope(t.UserID, t.ProjectID, t.DaemonID), t.Workflow)
+// right now: the declaration's health already says so.
+func definitionSource(ctx context.Context, sources *workflowDescriber, t *core.Trigger) *reliantv1.TriggerDefinitionSource {
+	desc, err := sources.describe(ctx, t)
 	if err != nil {
 		return nil
 	}
 	return triggers.DefinitionSource(desc, t)
+}
+
+// workflowDescriber describes activations' workflows
+// (launch.DescribeRunWorkflow) through one resolver, each workflow of one
+// owner, project and machine once. A list passes its request resolver: its
+// activations mostly run a few workflows, and each description parses the
+// workflow's whole YAML (pr-review.yaml is ~800 KB, ~38ms to parse), which
+// was half of prod ListTriggers' CPU (2026-11-24) before this memo. Not safe
+// for concurrent use; one request renders its list in order.
+type workflowDescriber struct {
+	sources launch.WorkflowResolver
+	seen    map[[4]string]describedWorkflow
+}
+
+type describedWorkflow struct {
+	desc *workflowsource.Description
+	err  error
+}
+
+func newWorkflowDescriber(sources launch.WorkflowResolver) *workflowDescriber {
+	return &workflowDescriber{sources: sources, seen: map[[4]string]describedWorkflow{}}
+}
+
+// describe is t's workflow's description, shared with every activation of
+// the same workflow, owner, project and machine: read it, never write it.
+func (d *workflowDescriber) describe(ctx context.Context, t *core.Trigger) (*workflowsource.Description, error) {
+	key := [4]string{t.UserID, t.ProjectID, t.DaemonID, t.Workflow}
+	if hit, ok := d.seen[key]; ok {
+		return hit.desc, hit.err
+	}
+	desc, err := launch.DescribeRunWorkflow(ctx, d.sources, launch.AutomationScope(t.UserID, t.ProjectID, t.DaemonID), t.Workflow)
+	d.seen[key] = describedWorkflow{desc, err}
+	return desc, err
 }
 
 // requireSetupComplete refuses to turn on or run an activation whose params do

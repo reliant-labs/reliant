@@ -10,9 +10,9 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
 	"github.com/reliant-labs/reliant/internal/llm/providerusage"
@@ -54,7 +54,6 @@ func unidentified(provider string) string { return core.PlaceholderIdentityKey("
 
 // connectAccount stores a completed sign-in as a provider account.
 func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, error) {
-	repo := s.deps.Repo
 	accounts := s.deps.Accounts
 	if in.upsert.IdentityKey == "" {
 		in.upsert.IdentityKey = unidentified(in.provider)
@@ -117,7 +116,7 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 	analytics.ForUser(ctx, in.userID).TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
 		Provider: in.provider, Action: "connected", AuthMethod: "oauth",
 	})
-	if err := repo.EmitUserRefetch(ctx, in.userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+	if err := s.deps.Refetch.EmitUserRefetch(ctx, in.userID, core.RefetchConfigHealth, core.RefetchOpts{}); err != nil {
 		logging.WarnContext(ctx, "Failed to emit config_health refetch after provider sign-in", "provider", in.provider, "error", err)
 	}
 	// A sign-in adds capacity (a new account) or restores it (a re-auth):

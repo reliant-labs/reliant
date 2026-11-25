@@ -27,7 +27,7 @@ import type { ManagedSecretSummary, ManagedSecretVersion } from "@/services/forg
 import type { SecretSurfaceMode } from "@/services/forge/secretSurface";
 import type { StepUpState } from "@/services/forge/stepUp";
 
-import { ConsolePreviewShell } from "../../Console/ConsolePreviewShell";
+import { ConsolePreviewFrame } from "../../__preview__/PreviewShellFrame";
 import { ManagedSecretsView } from "../ManagedSecretsView";
 import { SetSecretModal } from "../SetSecretModal";
 import { StepUpDialog } from "../StepUpDialog";
@@ -260,8 +260,9 @@ export default function SecretsPreview() {
   }
 
   /*
-   * The preview renders inside the REAL shell (ConsoleShell — the same
-   * component ConsoleLayout renders), not bare.
+   * The preview renders inside the REAL shell (ConsolePreviewFrame: the
+   * app's frame and nav, and the console's bar ConsoleLayout renders), not
+   * bare.
    *
    * This is not decoration. A harness that drew the screen without the sidebar
    * looked exactly like the product to anyone reading a screenshot, and was
@@ -271,7 +272,7 @@ export default function SecretsPreview() {
    * discouraged.
    */
   return (
-    <ConsolePreviewShell
+    <ConsolePreviewFrame
       page={{ kind: "secrets" }}
       controls={
         <>
@@ -380,6 +381,6 @@ export default function SecretsPreview() {
           error={null}
         />
       </div>
-    </ConsolePreviewShell>
+    </ConsolePreviewFrame>
   );
 }

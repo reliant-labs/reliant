@@ -47,7 +47,7 @@ func (s *Service) ResolveQuestion(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get question"))
 	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
+	if !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("question")
 	}
 

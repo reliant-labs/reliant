@@ -264,6 +264,39 @@ export const JOB_STATUS: Record<WorkloadJob["result"], { tone: StatusTone; label
   unknown: { tone: "neutral", label: "Unknown" },
 };
 
+/**
+ * The server's verdict for a Job or CronJob, in a run's words, for when no
+ * run is in the window. The server judges a job on its runs (its latest
+ * run, else what the deploy ledger last saw), never on its replicas: a
+ * completed run with no pod running is healthy, which reads "Succeeded" — or
+ * "Scheduled" for a CronJob, whose healthy is "installed, between runs".
+ */
+const JOB_VERDICT: Record<WorkloadHealth, { tone: StatusTone; label: string }> = {
+  healthy: { tone: "success", label: "Succeeded" },
+  degraded: { tone: "danger", label: "Failed" },
+  crash_looping: { tone: "danger", label: "Failing" },
+  pending: { tone: "neutral", label: "Running" },
+  suspended: { tone: "neutral", label: "Suspended" },
+  unknown: { tone: "neutral", label: "Unknown" },
+};
+
+/**
+ * How a Job or CronJob reads (owner, 2026-11-24: a completed job read yellow
+ * on the Overview because no pod of it was running). Its latest run decides
+ * when one is in the window — succeeded, failed, running — else the server's
+ * verdict in a run's words. Never its replicas: a job has no replica claim.
+ */
+export function jobStatusOf(workload: Pick<Workload, "kind" | "health">, latest: WorkloadJob | null): { tone: StatusTone; label: string } {
+  if (latest && latest.result !== "unknown") return JOB_STATUS[latest.result];
+  if (workload.kind === "cronjob" && workload.health === "healthy") return { tone: "success", label: "Scheduled" };
+  return JOB_VERDICT[workload.health];
+}
+
+/** The latest run of each (environment, job), keyed `env/workload`, from ListWorkloads' runs (newest first). */
+export function latestRunsByWorkload(jobs: readonly WorkloadJob[]): Map<string, WorkloadJob> {
+  return new Map(jobRows(jobs, ENV_ALL).map((row) => [row.key, row.latest] as const));
+}
+
 export type StatusFilter = (typeof OVERVIEW_STATUS_FILTERS)[number];
 export type KindFilter = (typeof OVERVIEW_KIND_FILTERS)[number];
 

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -58,12 +57,6 @@ const defaultExecTimeout = 60_000 // 60 seconds
 // caller's command allowlist actually binds. Command goes through the
 // platform shell, which is what first-party callers want (pipelines,
 // redirection, expansion) and what a confined caller must not get.
-// errStepEnvNotHere refuses a step environment (an LLM gateway step key) sent
-// as a daemon command: only a run step's shell tool, on this machine, applies
-// and redacts one (daemon.LocalClient.RunCommand). Refused rather than run
-// without it.
-var errStepEnvNotHere = errors.New("a run step's step_env is applied only to the run step's own command; refusing to run it without its environment")
-
 func buildExecCommand(ctx context.Context, req daemon.RunCommandRequest) *exec.Cmd {
 	if len(req.Argv) > 0 {
 		return exec.CommandContext(ctx, req.Argv[0], req.Argv[1:]...)
@@ -78,9 +71,6 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	var req daemon.RunCommandRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
-	}
-	if !req.StepEnv.Empty() {
-		return nil, errStepEnvNotHere
 	}
 
 	// An absent working directory means the process inherits the DAEMON's cwd,
@@ -175,6 +165,13 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// the two paths cannot bound it differently.
 	cmd.WaitDelay = daemon.ExecWaitDelay
 
+	// Its own cgroup with a process limit where the machine allows, so a
+	// runaway command fails alone (internal/proctree), and a cancel's
+	// escalation reaches everything it started, wherever it went (below).
+	// After the heavy-slot and sandbox rewrites above, which change what cmd
+	// execs.
+	tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
+
 	// Cancellation terminates the process GROUP (set just above) and escalates
 	// to a kill only after ExecGraceDelay, instead of os/exec's default of an
 	// immediate SIGKILL that runs no signal handler and loses every cleanup
@@ -185,17 +182,12 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// manager below, outliving this function, and the timer must stay armed
 	// for as long as cancellation can still fire. It is stopped on every path
 	// where this function owns the command through to completion.
-	stopGrace := osutil.ApplyGracefulCancel(cmd, daemon.ExecGraceDelay)
+	stopGrace := osutil.ApplyGracefulCancelIn(cmd, daemon.ExecGraceDelay, tree)
 
 	// Snapshot the cgroup's oom_kill counter so a SIGKILL during the
 	// command's lifetime can be attributed to the kernel OOM killer.
 	// Invalid (and therefore inert) on hosts without cgroup v2 accounting.
 	oomSnap := memReader.SnapshotOOMKills()
-
-	// Its own cgroup with a process limit where the machine allows, so a
-	// runaway command fails alone (internal/proctree). Last before Start:
-	// the heavy-slot and sandbox rewrites above change what cmd execs.
-	tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
 
 	start := time.Now()
 	err = tree.Start(deadline.Context(), cmd)
@@ -277,9 +269,6 @@ func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
 	var req daemon.RunCommandRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
-	}
-	if !req.StepEnv.Empty() {
-		return nil, errStepEnvNotHere
 	}
 
 	// Same reasoning as exec.run: an absent working directory would inherit

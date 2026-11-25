@@ -53,6 +53,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/background"
 	"github.com/reliant-labs/reliant/internal/handlers/catalog"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/chat_trace"
 	"github.com/reliant-labs/reliant/internal/handlers/connection"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
 	"github.com/reliant-labs/reliant/internal/handlers/coverage_source"
@@ -107,6 +108,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/providerusage"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llmusage"
+	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/privacy"
@@ -211,6 +213,7 @@ func (g *Graph) newPprof() (*serverkit.Pprof, error) {
 
 func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 	return tools_daemon.New(tools_daemon.Deps{
+		Refetch:         g.chatUpdates(),
 		Logger:          g.Log,
 		Config:          g.Cfg,
 		Repo:            g.Database(),
@@ -589,23 +592,44 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 
 func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 	return NewWorkerToolsFactory(WorkerToolsFactoryDeps{
-		ConnectionVault:  g.CredentialsConnectionvault(),
-		Network:          g.ServerProcessConfig.GetNetwork(),
-		Temporal:         g.TemporalClient(),
-		AgentRuns:        g.AgentRuns(),
-		Triggers:         g.WorkerTrigger(),
-		Credentials:      g.WorkerIntegrationCredentials(),
-		WriteLedger:      g.IntegrationsWriteledger(),
-		CatalogSearch:    g.WorkerCatalogSearch(),
-		Router:           g.WorkerDaemonRouter(),
-		DB:               g.Database(),
-		Membership:       g.OrgResolver(),
-		Logger:           g.Log,
-		Config:           g.Cfg,
-		Backoff:          g.Providerbackoff(),
-		ChangeController: g.ChangeController(),
-		Mirror:           g.Daemonmirror(),
-		WorkflowDrafts:   g.Workflowdrafts(),
+		ConnectionVault:   g.CredentialsConnectionvault(),
+		Network:           g.ServerProcessConfig.GetNetwork(),
+		Temporal:          g.TemporalClient(),
+		AgentRuns:         g.AgentRuns(),
+		Triggers:          g.WorkerTrigger(),
+		Credentials:       g.WorkerIntegrationCredentials(),
+		WriteLedger:       g.IntegrationsWriteledger(),
+		CatalogSearch:     g.WorkerCatalogSearch(),
+		Router:            g.WorkerDaemonRouter(),
+		DB:                g.Database(),
+		Membership:        g.OrgResolver(),
+		Logger:            g.Log,
+		Config:            g.Cfg,
+		Backoff:           g.Providerbackoff(),
+		ChangeController:  g.ChangeController(),
+		MachineController: g.MachineController(),
+		WorkflowDrafts:    g.Workflowdrafts(),
+	})
+}
+
+func (g *Graph) newMachineController() (tools.MachineController, error) {
+	return NewMachineController(MachineControllerDeps{
+		DB:     g.Database(),
+		Router: g.WorkerDaemonRouter(),
+		Mirror: g.Daemonmirror(),
+		Logger: g.Log,
+		Config: g.Cfg,
+	})
+}
+
+func (g *Graph) newOrgMoves() (orgmove.Service, error) {
+	return NewOrgMoves(OrgMovesDeps{
+		DB:           g.Database(),
+		Router:       g.WorkerDaemonRouter(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		Triggers:     g.WorkerTrigger(),
+		Membership:   g.OrgResolver(),
+		Updates:      g.chatUpdates(),
 	})
 }
 
@@ -636,6 +660,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 	return NewTemporalWorker(TemporalWorkerDeps{
 		Checks:           g.RecordOnlyChecks(),
 		ConnectionVault:  g.CredentialsConnectionvault(),
+		Updates:          g.chatUpdates(),
 		ProviderAccounts: g.CredentialsProvideraccounts(),
 		OrgAccounts:      g.CredentialsOrgaccounts(),
 		Temporal:         g.TemporalClient(),
@@ -662,7 +687,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		Membership: g.OrgResolver(),
 		// ... and the org policy resolver beside it (orgpolicy).
 		Policies: g.OrgPolicyResolver(),
-		Triggers: g.WorkerTrigger(),
+		OrgMoves: g.OrgMoves(),
 	})
 }
 
@@ -706,6 +731,7 @@ func (g *Graph) newLedgerRetention() (*LedgerRetention, error) {
 		DB:                     g.Database(),
 		ChatUpdateRetention:    g.WorkerConfig.GetChatUpdateRetention().AsDuration(),
 		StepExecutionRetention: g.WorkerConfig.GetStepExecutionRetention().AsDuration(),
+		ObservationRetention:   g.WorkerConfig.GetNodeObservationRetention().AsDuration(),
 		StartDelay:             g.WorkerConfig.GetLedgerRetentionStartDelay().AsDuration(),
 	})
 }
@@ -734,6 +760,21 @@ func (g *Graph) newUserAuth() (*grpcserver.UserAuth, error) {
 	return NewUserAuth(UserAuthDeps{
 		Settings: g.APISettings(),
 		Tokens:   g.TokenAuthority(),
+		Sessions: g.SignInSessions(),
+	})
+}
+
+func (g *Graph) newSignInSessions() (*SignInSessions, error) {
+	return NewSignInSessions(SignInSessionsDeps{
+		API:    g.ApiServerConfig,
+		DB:     g.Database(),
+		Logger: g.Log,
+	})
+}
+
+func (g *Graph) newControlPlaneAccounts() (*ControlPlaneAccounts, error) {
+	return NewControlPlaneAccounts(ControlPlaneAccountsDeps{
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 	})
 }
 
@@ -777,6 +818,11 @@ func (g *Graph) newAPIListener() (*grpcserver.APIListener, error) {
 		// ... and the org policy resolver beside it (orgpolicy).
 		Policies:       g.OrgPolicyResolver(),
 		ClientVersions: g.ServerProcessConfig.GetClientVersions(),
+		// Native sign-in (/auth/*), only with a configured identity.
+		SignIn:       g.SignInSessions(),
+		Accounts:     g.ControlPlaneAccounts(),
+		Auth:         g.UserAuth(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 	})
 }
 
@@ -910,6 +956,7 @@ func (g *Graph) newDaemonEventsConsumer() (*DaemonEventsConsumer, error) {
 
 func (g *Graph) newWorktreeSweep() (*worktreesweep.Sweeper, error) {
 	return NewWorktreeSweep(WorktreeSweepDeps{
+		Updates:      g.chatUpdates(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		Router:       g.APIDaemonRouter(),
 		Settings:     g.APISettings(),
@@ -1033,6 +1080,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		OrgPolicyImpact:    g.OrgPolicyImpact(),
 		CoverageSource:     g.CoverageSource(),
 		PullRequestRecord:  g.PullRequestRecord(),
+		ChatTrace:          g.ChatTrace(),
 	})
 }
 
@@ -1119,6 +1167,7 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 		return nil, err
 	}
 	return worktree.New(worktree.Deps{
+		Refetch:        g.chatUpdates(),
 		GitCredentials: recoveryCredentials{client: credentials},
 		Logger:         g.Log,
 		Config:         g.Cfg,
@@ -1144,6 +1193,8 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Config:        g.Cfg,
 		Repo:          g.Database(),
 		Chats:         chataccess.NewFromORM(g.Database().ORM()),
+		ChatRows:      store.NewChatExtStore(g.Database().ORM()),
+		ChatViews:     store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Workflows:     store.NewWorkflowExtStore(g.Database().ORM()),
 		Worktrees:     store.NewWorktreeExtStore(g.Database().ORM()),
 		ProjectRows:   store.NewProjectExtStore(g.Database().ORM()),
@@ -1202,7 +1253,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Chats:          store.NewChatExtStore(g.Database().ORM()),
 		Owners:         g.Triggerowner(),
 		Firings:        store.NewTriggerEventExtStore(g.Database().ORM()),
-		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()), TriggerWrites: store.NewTriggerWritesExtStore(g.Database().ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(g.Database().ORM()),
 		Pools:          store.NewMachinePoolExtStore(g.Database().ORM()),
 		Syncer:         syncer,
@@ -1312,6 +1363,7 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 // newMCP constructs the mcp handler (internal/handlers/mcp).
 func (g *Graph) newMCP() (*mcp.Service, error) {
 	return mcp.New(mcp.Deps{
+		Refetch:        g.chatUpdates(),
 		Projects:       g.Projectaccess(),
 		ProjectConfigs: store.NewProjectConfigExtStore(g.Database().ORM()),
 		Logger:         g.Log,
@@ -1452,6 +1504,7 @@ func (g *Graph) newProject() (*project.Service, error) {
 // a live request.
 func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 	return provider_account.New(provider_account.Deps{
+		Refetch:     g.chatUpdates(),
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Store:       g.Database(),
@@ -1474,6 +1527,7 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 // newQuestion constructs the question handler (internal/handlers/question).
 func (g *Graph) newQuestion() (*question.Service, error) {
 	return question.New(question.Deps{
+		Refetch:   g.chatUpdates(),
 		Logger:    g.Log,
 		Config:    g.Cfg,
 		Repo:      g.Database(),
@@ -1515,6 +1569,7 @@ func (g *Graph) newScenario() (*scenario.Service, error) {
 // newSettings constructs the settings handler (internal/handlers/settings).
 func (g *Graph) newSettings() (*settings.Service, error) {
 	return settings.New(settings.Deps{
+		Refetch:                 g.chatUpdates(),
 		Logger:                  g.Log,
 		Config:                  g.Cfg,
 		Repo:                    g.Database(),
@@ -1677,8 +1732,11 @@ func (g *Graph) newSharing() (*sharing.Service, error) {
 		Projects:       store.NewProjectExtStore(o),
 		WorkflowDrafts: g.Workflowdrafts(),
 		Shares:         store.NewShareEventExtStore(o),
+		Members:        store.NewChatMemberExtStore(o),
 		Tx:             o,
 		Orgs:           g.OrgResolver(),
+		// SetChatMember grants only with chat_collaboration.enabled.
+		Collaboration: g.ApiServerConfig.GetChatCollaboration(),
 	})
 }
 
@@ -1991,6 +2049,19 @@ func (g *Graph) newProjectpurge() (projectpurge.Service, error) {
 	return projectpurge.NewServiceWithForgeMiddleware(projectpurge.New(projectpurge.Deps{
 		DB: g.Database().ORM(), // the project's ORM client
 	})), nil
+}
+
+// newChatTrace constructs the chat-trace handler (internal/handlers/chat_trace):
+// a chat's Trace/Cost tab, its spans read through control-plane
+// (ChatTraceSpans; nil answers every trace without spans, PARTIAL).
+func (g *Graph) newChatTrace() (*chat_trace.Service, error) {
+	return chat_trace.New(chat_trace.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Store:  g.Database(),
+		Spans:  ChatTraceSpans(g.ServerProcessConfig.GetControlPlane()),
+		Now:    nil, // optional — no provider
+	})
 }
 
 // newChatprlinks constructs the chatprlinks package (internal/chatprlinks).
