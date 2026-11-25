@@ -108,7 +108,7 @@ func TestReconcilerRecoversAFireStuckPending(t *testing.T) {
 	require.NoError(t, triggertest.Create(ctx, repo, trigger))
 
 	starter := &switchableStarter{}
-	firer := triggers.NewFirer(triggers.NewStores(repo), launch.New(launch.Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: discardRunRecorder{}, TaskQueue: "test-queue"}))
+	firer := triggers.NewFirer(triggers.NewStores(repo), launch.New(launch.Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: discardRunRecorder{}, TaskQueue: "test-queue"}))
 	fireAt := func(day int) triggers.FireRequest {
 		scheduled := time.Date(2026, 1, day, 9, 0, 0, 0, time.UTC)
 		return triggers.FireRequest{
