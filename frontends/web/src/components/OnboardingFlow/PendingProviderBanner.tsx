@@ -5,7 +5,7 @@ import { hasAnyConfiguredProvider, useProviderStatuses } from "@/hooks/settings-
 import { trackEvent } from "@/lib/analytics";
 import { useAuthIdentity } from "@/lib/auth/use-auth";
 import { pendingProviderCopy } from "@/lib/changes_gen";
-import { changesStore, userChangeContext } from "@/lib/changesStore";
+import { changesStore, startChanges, userChangeContext } from "@/lib/changesStore";
 import { REDIRECT_OAUTH_DISPLAY_NAMES } from "@/lib/oauth-providers";
 import { clearPendingProvider, readPendingProvider } from "@/lib/pendingProvider";
 import { useModalStore } from "@/store/modalStore";
@@ -35,6 +35,17 @@ export function PendingProviderBanner() {
   const openModal = useModalStore((s) => s.openModal);
   const identity = useAuthIdentity();
   const outcomeFirst = useRef<boolean | null>(null);
+  const [changesReady, setChangesReady] = useState(() => changesStore() !== null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void startChanges().then(() => {
+      if (!cancelled) setChangesReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,11 +81,11 @@ export function PendingProviderBanner() {
     setProvider(null);
   }, [provider]);
 
-  if (!provider || configured) return null;
+  if (!provider || configured || !changesReady) return null;
   const name = REDIRECT_OAUTH_DISPLAY_NAMES[provider];
   if (outcomeFirst.current === null) {
     const store = changesStore();
-    // No store yet (or the desktop app): `current`, and no enrollment.
+    // The bounded load has settled; desktop has no store or enrollment.
     outcomeFirst.current = store ? pendingProviderCopy(store, userChangeContext(identity)) : false;
   }
 

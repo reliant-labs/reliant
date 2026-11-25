@@ -7,7 +7,7 @@ vi.mock("@/lib/constants", async (importOriginal) => ({
 }));
 
 import type { AuthIdentity } from "@/lib/auth/identity";
-import { changesStore, setChangesStoreForTests, startChanges, userChangeContext } from "@/lib/changesStore";
+import { CHANGES_LOAD_TIMEOUT_MS, changesStore, setChangesStoreForTests, startChanges, timedFetch, userChangeContext } from "@/lib/changesStore";
 
 const snapshot = { schema: "forge.changes/v1", revision: 9, changes: {} };
 
@@ -42,6 +42,37 @@ describe("startChanges — the page's one snapshot load", () => {
 
     expect(changesStore()?.revision).toBe(0);
     expect(changesStore()?.evaluate("pending-provider-copy", { targetingKey: "u_1" }).reason).toBe("unknown");
+  });
+
+  it("settles on defaults on timeout without AbortSignal.timeout", async () => {
+    vi.useFakeTimers();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation(() => { throw new Error("unsupported"); });
+    vi.stubGlobal("fetch", vi.fn((_input, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+    })));
+    try {
+      const loading = startChanges();
+      await vi.advanceTimersByTimeAsync(CHANGES_LOAD_TIMEOUT_MS);
+      expect((await loading)?.revision).toBe(0);
+      expect(timeout).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      timeout.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([false, true])("preserves caller cancellation (already aborted: %s)", async (alreadyAborted) => {
+    const controller = new AbortController();
+    if (alreadyAborted) controller.abort();
+    vi.stubGlobal("fetch", vi.fn((_input, init) => new Promise((_resolve, reject) => {
+      if (init.signal.aborted) reject(new Error("aborted"));
+      else init.signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+    })));
+    const request = timedFetch("/_forge/changes.json", { signal: controller.signal });
+    const rejected = expect(request).rejects.toThrow("aborted");
+    controller.abort();
+    await rejected;
   });
 
   it("never fetches in the desktop app, which has no snapshot origin", async () => {

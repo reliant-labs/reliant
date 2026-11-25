@@ -6,12 +6,10 @@
  * control plane's, set per environment in the console (Analytics ›
  * Experiments); nothing in this repo launches or ramps a change.
  *
- * startChanges() runs once at boot (main.tsx), so the snapshot is in hand long
- * before a surface that asks for a change renders. changesStore() is what such
- * a surface reads: null until the load settles, then fixed for the page's
- * life, so a treatment never switches under the person. A surface asks once,
- * when it is first shown, and keeps the answer: one that shows before the
- * load settled takes its default and enrolls no one.
+ * startChanges() runs once at boot (main.tsx). Surfaces await that bounded
+ * load before first exposure, then ask once and keep the answer so a
+ * treatment never switches under the person. changesStore() is null until
+ * the load settles (and always null on desktop).
  *
  * The snapshot is `/_forge/changes.json` on the page's own origin, which the
  * platform serves for a hosted static site (app.reliantlabs.io and the custom
@@ -32,11 +30,29 @@ export const CHANGES_LOAD_TIMEOUT_MS = 3000;
 let store: ChangesStore | null = null;
 let loading: Promise<ChangesStore | null> | null = null;
 
-const timedFetch: typeof fetch = (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(CHANGES_LOAD_TIMEOUT_MS) });
+/** Bound both the request and body read; retain any caller cancellation. */
+export const timedFetch: typeof fetch = async (input, init) => {
+  const controller = new AbortController();
+  const signal = init?.signal ?? (input instanceof Request ? input.signal : null);
+  const abort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) abort();
+  else signal?.addEventListener("abort", abort, { once: true });
+  const timer = setTimeout(() => controller.abort(), CHANGES_LOAD_TIMEOUT_MS);
+  try {
+    const response = await fetch(input, { ...init, signal: controller.signal });
+    // loadChanges reads text, so include that read in the timeout as well.
+    const body = await response.text();
+    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", abort);
+  }
+};
 
 /** Load the snapshot, once per page. Never rejects (loadChanges's contract). */
 export function startChanges(): Promise<ChangesStore | null> {
   if (loading) return loading;
+  if (store) return Promise.resolve(store);
   loading = isElectron()
     ? Promise.resolve(null)
     : loadChanges({ fetch: timedFetch }).then((loaded) => {

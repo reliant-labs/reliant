@@ -36,9 +36,13 @@ beforeEach(() => {
   mocks.statuses = { data: { providers: [] } };
   mocks.identity = person("u_1");
   setChangesStoreForTests(null);
+  vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 404 })));
 });
 
-afterEach(() => setChangesStoreForTests(null));
+afterEach(() => {
+  vi.unstubAllGlobals();
+  setChangesStoreForTests(null);
+});
 
 function person(id: string, over: Partial<AuthIdentity> = {}): AuthIdentity {
   return {
@@ -120,7 +124,27 @@ describe("PendingProviderBanner — finish the sign-in the user chose in onboard
 });
 
 describe("PendingProviderBanner — the pending-provider-copy change", () => {
-  it("is today's banner when no snapshot is loaded (every change at its default)", async () => {
+  it("waits for a delayed snapshot before exposing the selected variant", async () => {
+    let resolve!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((done) => { resolve = done; })));
+    const { rerender } = render(<PendingProviderBanner />);
+    await waitFor(() => expect(mocks.readPendingProvider).toHaveBeenCalled());
+    expect(screen.queryByTestId("pending-provider-banner")).toBeNull();
+
+    resolve(new Response(JSON.stringify({
+      schema: "forge.changes/v1", revision: 7, changes: {
+        "pending-provider-copy": {
+          variants: { current: false, "outcome-first": true }, default_variant: "current",
+          delivery: { mode: "rollout", unit: "user", run: "r_test1", salt: "r_test1", percent_bp: 10000, rollout_variant: "outcome-first" },
+        },
+      },
+    }), { status: 200 }));
+    expect(await screen.findByText(/connect a model to start chatting/i)).toBeInTheDocument();
+    rerender(<PendingProviderBanner />);
+    expect(screen.getByTestId("pending-provider-banner")).toHaveAttribute("data-change-variant", "outcome-first");
+  });
+
+  it("is today's banner when the snapshot is missing (every change at its default)", async () => {
     render(<PendingProviderBanner />);
 
     expect(await screen.findByText(/connect your claude subscription/i)).toBeInTheDocument();
