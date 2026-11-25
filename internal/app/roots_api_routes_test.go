@@ -31,6 +31,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/background"
 	"github.com/reliant-labs/reliant/internal/handlers/catalog"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/chat_trace"
 	"github.com/reliant-labs/reliant/internal/handlers/connection"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
 	"github.com/reliant-labs/reliant/internal/handlers/coverage_source"
@@ -91,6 +92,7 @@ var userServices = []string{
 	reliantv1connect.WorktreeReclaimServiceName, reliantv1connect.SharingServiceName, reliantv1connect.AutomationTakeoverServiceName,
 	reliantv1connect.OrgProviderAccountServiceName, reliantv1connect.OrgUsageServiceName, reliantv1connect.OrgPolicyImpactServiceName,
 	reliantv1connect.CoverageSourceServiceName, reliantv1connect.PullRequestRecordServiceName,
+	reliantv1connect.ChatTraceServiceName,
 }
 
 // testUserRoutes is the api's route set over services that are never called
@@ -113,6 +115,7 @@ func testUserRoutes(t *testing.T, opts MountOptions) *UserRoutes {
 		AutomationTakeover: &automation_takeover.Service{}, OrgProviderAccount: &org_provider_account.Service{},
 		OrgUsage: &org_usage.Service{}, OrgPolicyImpact: &org_policy_impact.Service{}, CoverageSource: &coverage_source.Service{},
 		PullRequestRecord: &pull_request_record.Service{},
+		ChatTrace:         &chat_trace.Service{},
 		Logger:            slog.Default(),
 		Options:           opts,
 	})
