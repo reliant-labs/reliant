@@ -1,45 +1,45 @@
 // Copyright (c) 2025 Reliant Labs
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
-import { useConsoleDrawerOpen } from "../DemoCorner";
+
+import { useNavDrawer } from "@/components/Layout/shell/shellFrame";
+
+import { DemoCorner, useConsoleDrawerOpen } from "../DemoCorner";
 
 function Probe() {
   return <output data-testid="drawer-state">{String(useConsoleDrawerOpen())}</output>;
 }
-const fixtures: HTMLElement[] = [];
-afterEach(() => { fixtures.splice(0).forEach(node => node.remove()); });
 
-it("tracks a uniquely identified controlled drawer portal mounting and unmounting", async () => {
-  render(<Probe />);
-  const trigger = document.createElement("button");
-  trigger.setAttribute("aria-controls", "drawer-unique-42");
-  trigger.setAttribute("aria-expanded", "true");
-  const drawer = document.createElement("aside");
-  drawer.id = "drawer-unique-42";
-  drawer.setAttribute("role", "dialog");
-  drawer.setAttribute("aria-modal", "true");
-  drawer.append(document.createElement("nav"));
-  fixtures.push(trigger, drawer);
-  act(() => { document.body.append(trigger, drawer); });
-  await waitFor(() => expect(screen.getByTestId("drawer-state")).toHaveTextContent("true"));
-  act(() => drawer.remove());
-  await waitFor(() => expect(screen.getByTestId("drawer-state")).toHaveTextContent("false"));
-  act(() => document.body.append(drawer));
-  await waitFor(() => expect(screen.getByTestId("drawer-state")).toHaveTextContent("true"));
-  act(() => trigger.setAttribute("aria-expanded", "false"));
-  await waitFor(() => expect(screen.getByTestId("drawer-state")).toHaveTextContent("false"));
+afterEach(() => {
+  act(() => useNavDrawer.getState().setOpen(false));
+  document.getElementById("forge-demo-corner")?.remove();
 });
 
-it("does not mistake the How modal or an uncontrolled modal aside for navigation", async () => {
-  const modal = document.createElement("div");
-  modal.setAttribute("role", "dialog");
-  modal.setAttribute("aria-modal", "true");
+it("follows the shell's nav drawer (the phone's nav), open and closed", () => {
+  render(<Probe />);
+  expect(screen.getByTestId("drawer-state")).toHaveTextContent("false");
+  act(() => useNavDrawer.getState().setOpen(true));
+  expect(screen.getByTestId("drawer-state")).toHaveTextContent("true");
+  act(() => useNavDrawer.getState().setOpen(false));
+  expect(screen.getByTestId("drawer-state")).toHaveTextContent("false");
+});
+
+it("steps the corner's cards aside while the drawer is open, so they never cover its rows", () => {
+  render(<DemoCorner order={1}><p data-testid="corner-card">tip</p></DemoCorner>);
+  expect(screen.getByTestId("corner-card")).toBeInTheDocument();
+  act(() => useNavDrawer.getState().setOpen(true));
+  expect(screen.queryByTestId("corner-card")).toBeNull();
+  act(() => useNavDrawer.getState().setOpen(false));
+  expect(screen.getByTestId("corner-card")).toBeInTheDocument();
+});
+
+it("does not mistake a modal aside with a nav (a dialog, the old console drawer's shape) for the shell's drawer", () => {
   const unrelated = document.createElement("aside");
   unrelated.setAttribute("role", "dialog");
   unrelated.setAttribute("aria-modal", "true");
   unrelated.append(document.createElement("nav"));
-  fixtures.push(modal, unrelated);
-  document.body.append(modal, unrelated);
+  document.body.append(unrelated);
   render(<Probe />);
   expect(screen.getByTestId("drawer-state")).toHaveTextContent("false");
+  unrelated.remove();
 });

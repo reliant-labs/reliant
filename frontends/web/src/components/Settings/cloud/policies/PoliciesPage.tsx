@@ -26,6 +26,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import Button from "@/components/forge-ui/button";
 import Tabs from "@/components/forge-ui/tabs";
 import type { OrgPolicy } from "@/gen/controlplane/controlplane/v1/org_policy_pb";
+import { billingServiceKeys } from "@/hooks/controlplane/billing-service-hooks_gen";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { toast } from "@/lib/toast-manager";
@@ -33,6 +34,7 @@ import {
   canEditPolicy,
   orgPolicyKeys,
   policyErrorMessage,
+  policyHistoryRequest,
   type PolicyRecord,
   type PolicyViolation,
 } from "@/services/controlPlane/orgPolicy";
@@ -259,7 +261,7 @@ function OrgPoliciesPage({ org }: { org: MyOrg }) {
           onViolations={setViolations}
           onSaved={(record, changed) => {
             qc.setQueryData(orgPolicyKeys.policy(org.id), record);
-            void qc.invalidateQueries({ queryKey: orgPolicyKeys.history(org.id) });
+            void qc.invalidateQueries({ queryKey: billingServiceKeys.listOrgLimitChangesInfinite(policyHistoryRequest(org.id)) });
             // The caps the usage is measured against may have changed.
             void qc.invalidateQueries({ queryKey: orgPolicyKeys.usage(org.id) });
             load(record);

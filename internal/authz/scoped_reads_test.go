@@ -48,6 +48,7 @@ var userScopedReads = map[string]string{
 	"GetWorkflowDraftByName":   readRepoChecks,
 	"GetWorkflowDraftBySlug":   readRepoChecks,
 	"GetWorkflowDraftsBySlugs": readRepoChecks,
+	// Deprecated forwarders still decide visibility through workflowdrafts.
 	"ListWorkflowDraftsByUser": readRepoChecks,
 
 	"ListArchivedChats":        readCallersFilter,
@@ -96,8 +97,6 @@ var userScopedReads = map[string]string{
 	"GetPresetBySlug":             readPersonal,
 	"GetSetting":                  readPersonal,
 	"GetSettingValue":             readPersonal,
-	"ListLLMUsageDaily":           readPersonal,
-	"ListLLMUsageDetail":          readPersonal,
 	"ListSettings":                readPersonal,
 	"ListSettingsByKey":           readPersonal,
 	"ListVisibilityOverrides":     readPersonal,

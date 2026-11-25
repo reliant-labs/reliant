@@ -2087,7 +2087,7 @@ func (r *Reconciler) findResetPoint(ctx context.Context, workflowID string, stat
 func (r *Reconciler) reapOrphanedDescendants(ctx context.Context, stats *passStats) (int, error) {
 	reaped, err := r.repo.ReapOrphanedWorkflowDescendants(ctx)
 	if err != nil {
-		logging.ErrorContext(ctx, "[Reconciler] Failed to reap orphaned workflow descendants", "error", err)
+		logPassFailure(ctx, "[Reconciler] Failed to reap orphaned workflow descendants", err)
 		return 0, fmt.Errorf("failed to reap orphaned workflow descendants: %w", err)
 	}
 	if len(reaped) == 0 {
@@ -2182,7 +2182,7 @@ func (r *Reconciler) groupReapedWorkflowsByRun(ctx context.Context, reaped []db.
 func (r *Reconciler) reapOrphanedThreads(ctx context.Context, stats *passStats) (int, error) {
 	reaped, err := r.repo.ReapOrphanedThreads(ctx)
 	if err != nil {
-		logging.ErrorContext(ctx, "[Reconciler] Failed to reap orphaned threads", "error", err)
+		logPassFailure(ctx, "[Reconciler] Failed to reap orphaned threads", err)
 		return 0, fmt.Errorf("failed to reap orphaned threads: %w", err)
 	}
 	if len(reaped) == 0 {
@@ -2339,7 +2339,7 @@ func closeStatusLabel(status enums.WorkflowExecutionStatus) string {
 func (r *Reconciler) repairStrandedSpawnToolCalls(ctx context.Context, stats *passStats) (int, error) {
 	stranded, err := r.repo.ListStrandedSpawnToolCalls(ctx)
 	if err != nil {
-		logging.ErrorContext(ctx, "[Reconciler] Failed to list stranded spawn tool calls", "error", err)
+		logPassFailure(ctx, "[Reconciler] Failed to list stranded spawn tool calls", err)
 		return 0, fmt.Errorf("failed to list stranded spawn tool calls: %w", err)
 	}
 	if len(stranded) == 0 {
@@ -2464,7 +2464,7 @@ func mailboxKindForTerminalWorkflowStatus(status core.WorkflowStatus) core.Agent
 func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *passStats) (int, error) {
 	stranded, err := r.repo.ListStrandedBackgroundSpawnToolCalls(ctx)
 	if err != nil {
-		logging.ErrorContext(ctx, "[Reconciler] Failed to list stranded background spawn tool calls", "error", err)
+		logPassFailure(ctx, "[Reconciler] Failed to list stranded background spawn tool calls", err)
 		return 0, fmt.Errorf("failed to list stranded background spawn tool calls: %w", err)
 	}
 	if len(stranded) == 0 {
@@ -2799,7 +2799,7 @@ func strandedBackgroundSpawnBody(call *db.StrandedBackgroundSpawn, recipientDead
 func (r *Reconciler) resolveOrphanedAgentMessages(ctx context.Context, stats *passStats) (int, error) {
 	threadIDs, err := r.orphans.ListThreadsWithOrphanedAgentMessages(ctx)
 	if err != nil {
-		logging.ErrorContext(ctx, "[Reconciler] Failed to list threads with orphaned agent messages", "error", err)
+		logPassFailure(ctx, "[Reconciler] Failed to list threads with orphaned agent messages", err)
 		return 0, fmt.Errorf("failed to list threads with orphaned agent messages: %w", err)
 	}
 	if len(threadIDs) == 0 {
@@ -3311,6 +3311,15 @@ func rootCauseIsBenign(f *failurepb.Failure) bool {
 	return benign
 }
 
+// passTimeout bounds one background pass.
+const passTimeout = 30 * time.Second
+
+// stopWait bounds how long Stop waits for the pass it cancelled to return. It
+// was 5s while the pass ignored the cancel and ran on to passTimeout, so the
+// process closed its database under a live pass. Kept well inside the
+// server's SHUTDOWN_TIMEOUT (30s), which every component's Close shares.
+const stopWait = 10 * time.Second
+
 // StartBackgroundReconciliation starts the background reconciliation loop.
 // It periodically checks all running workflows and reconciles any stale state.
 // Call Stop() to stop the background loop.
@@ -3329,8 +3338,23 @@ func (r *Reconciler) StartBackgroundReconciliation(ctx context.Context) {
 		"interval", r.pollInterval,
 	)
 
+	// A pass in flight ends when the loop does — ctx done or Stop — rather
+	// than running on to its own timeout: the process shuts down right after,
+	// and a pass that outlived Stop's wait ran its queries on a closed pool
+	// ("sql: database is closed", prod 758bde53, one ERROR per deploy).
+	loopCtx, cancelLoop := context.WithCancel(ctx)
+	stopPolling := r.stopPolling
+	go func() {
+		select {
+		case <-stopPolling:
+			cancelLoop()
+		case <-loopCtx.Done():
+		}
+	}()
+
 	go func() {
 		defer close(r.pollDone)
+		defer cancelLoop()
 
 		ticker := time.NewTicker(r.pollInterval)
 		defer ticker.Stop()
@@ -3350,13 +3374,15 @@ func (r *Reconciler) StartBackgroundReconciliation(ctx context.Context) {
 				var reconciled int
 				var errors []error
 				_ = observe.RunRoot(context.WithoutCancel(ctx), "worker.reconcile.running_workflows", func(ctx context.Context) error {
-					reconcileCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+					reconcileCtx, cancel := context.WithTimeout(ctx, passTimeout)
 					defer cancel()
+					stopCancel := context.AfterFunc(loopCtx, cancel)
+					defer stopCancel()
 					reconciled, errors = r.ReconcileRunningWorkflows(reconcileCtx)
 					return nil
 				})
 
-				if len(errors) > 0 {
+				if len(errors) > 0 && loopCtx.Err() == nil {
 					logging.WarnContext(ctx, "[Reconciler] Background reconciliation had errors",
 						"reconciled", reconciled,
 						"errors", len(errors),
@@ -3381,11 +3407,13 @@ func (r *Reconciler) Stop() {
 	// Signal stop
 	close(r.stopPolling)
 
-	// Wait for completion with timeout
+	// Wait for the pass in flight to end. Stop cancelled it, so this is as
+	// long as its current query or Temporal call takes to return; stopWait
+	// only bounds a call that ignores its context.
 	select {
 	case <-r.pollDone:
 		logging.Info("[Reconciler] Background reconciliation stopped")
-	case <-time.After(5 * time.Second):
+	case <-time.After(stopWait):
 		logging.Warn("[Reconciler] Timeout waiting for background reconciliation to stop")
 	}
 

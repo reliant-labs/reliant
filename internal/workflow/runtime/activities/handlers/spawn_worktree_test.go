@@ -238,6 +238,18 @@ func TestLoadWorktreeInfo_ThreadBoundRoutesToWorktreeOwner(t *testing.T) {
 	_, _, err = a.loadWorktreeInfo(ctx, chat, project, spawned.ThreadID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "archived")
+
+	// That refusal is for machine tools. A tool that never touches the
+	// machine still runs, so an agent resumed after its workspace was
+	// archived can report and message its parent (obs 7d1425f4, c405d76f).
+	_, errMsg := a.loadToolExecutionContext(ctx, f.chatID, spawned.ThreadID, "shell", "{}", "call-1", "")
+	assert.Contains(t, errMsg, "archived", "a machine tool is still refused")
+	for _, name := range []string{"spawn_send", "report_bug", "load_tool"} {
+		tec, errMsg := a.loadToolExecutionContext(ctx, f.chatID, spawned.ThreadID, name, "{}", "call-1", "")
+		require.Empty(t, errMsg, name)
+		assert.Empty(t, tec.worktree.Path, "%s runs without the archived workspace", name)
+		assert.False(t, tec.worktreeThreadBound, name)
+	}
 }
 
 // capturingExecutor records the ToolRequest it is handed.

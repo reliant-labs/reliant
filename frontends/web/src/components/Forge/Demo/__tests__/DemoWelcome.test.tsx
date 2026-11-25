@@ -12,10 +12,11 @@ import { DemoHome } from "../sections/DemoHome";
 import { demoEntryHref } from "../demoEntry";
 import { DEMO_TIP_KEYS, demoTipKey } from "../tips/tipKeys";
 import { resetDemoSessionForTests } from "../demoSession";
+import { useNavDrawer } from "@/components/Layout/shell/navDrawer";
 
 function mount(path = "/forge/p/shop/observability/logs?range=6h", entry = false) {
   const root = createRootRoute({ component: () => <><Outlet /><DemoTips /></> });
-  const route = createRoute({ getParentRoute: () => root, path: "$", validateSearch: (s: Record<string, unknown>) => s, component: () => <main>{entry && <DemoHome />}<button>Page action</button></main> });
+  const route = createRoute({ getParentRoute: () => root, path: "$", validateSearch: (s: Record<string, unknown>) => s, component: () => <div><header data-testid="forge-console-header" /><main data-testid="forge-console-page">{entry && <DemoHome />}<button>Page action</button></main></div> });
   const router = createRouter({ routeTree: root.addChildren([route]), history: createMemoryHistory({ initialEntries: [path] }) });
   // The Home's trace story reads the sample app (its slowest request's timeline), over the demo's transport.
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -67,15 +68,14 @@ it("on a phone the tip is a closed one-line disclosure in the page's flow, hidde
   expect(screen.queryByTestId("tour-callout")).toBeNull();
   fireEvent.click(about);
   expect(await screen.findByTestId("tour-callout")).toBeVisible();
-  const trigger = document.createElement("button"); trigger.setAttribute("aria-controls", "drawer-welcome-unique"); trigger.setAttribute("aria-expanded", "true");
-  const drawer = document.createElement("aside"); drawer.id="drawer-welcome-unique"; drawer.setAttribute("role", "dialog"); drawer.append(document.createElement("nav")); document.body.append(trigger, drawer);
+  // The shell's nav drawer (a phone's nav) open: the tip and the action row step aside.
   try {
-    act(() => drawer.setAttribute("aria-modal", "true"));
+    act(() => useNavDrawer.getState().setOpen(true));
     await waitFor(() => expect(screen.queryByTestId("demo-page-info")).toBeNull());
     expect(screen.queryByTestId("demo-screen-actions")).toBeNull();
-    act(() => drawer.removeAttribute("aria-modal"));
+    act(() => useNavDrawer.getState().setOpen(false));
     expect(await screen.findByTestId("demo-page-info")).toBeVisible();
-  } finally { drawer.remove(); trigger.remove(); }
+  } finally { act(() => useNavDrawer.getState().setOpen(false)); }
 });
 it("every page has an explanation, and none repeats the build-page action", async () => {
   const paths = ["/forge/p/shop", "/forge/p/shop/releases", "/forge/p/shop/releases/v1", "/forge/p/shop/environments", "/forge/p/shop/environments/prod", "/forge/p/shop/secrets", "/forge/p/shop/domains", "/forge/p/shop/activity", "/forge/p/shop/users", "/forge/p/shop/workloads/prod/api", ...["services", "storage", "data", "security/vulnerabilities", "security/sboms", "tests", "tests/coverage", "tests/runs", "tests/flaky", "analytics", "analytics/events", "events", "observability", "speed-insights"].map((page) => `/forge/p/shop/${page}`), ...["dashboards","errors","traces","logs","profiles","alerts","sessions","metrics","rpc","graph"].map(view=>`/forge/demo?view=${view}`), "/forge/demo?view=traces&trace=demo"];

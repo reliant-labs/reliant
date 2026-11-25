@@ -36,6 +36,7 @@ import {
   type WorkflowListItem as ProtoWorkflowListItem,
   type ValidationError,
 } from "../gen/reliant/v1/workflow_pb";
+import { ResourceVisibility } from "../gen/reliant/v1/common_pb";
 import {
   draftStatusFromProto,
   draftStatusToProto,
@@ -119,6 +120,17 @@ export interface WorkflowResponse {
   triggers?: ProtoWorkflowListItem["triggers"];
   /** The definition's declared `permissions:` (e.g. "approvals:decide"). */
   permissions?: string[];
+  /**
+   * A saved workflow's (source "user") organization; absent for builtin and
+   * project workflows, and for a saved workflow with no org (not shareable).
+   */
+  orgId?: string;
+  /**
+   * Whether a saved workflow is shared with its org's members, to read and
+   * fork (SharingService.SetWorkflowDraftSharing). Absent for builtin and
+   * project workflows, and from a server older than the field.
+   */
+  shared?: boolean;
 }
 
 export interface InvalidWorkflow {
@@ -170,6 +182,10 @@ export interface GetWorkflowResult {
   yamlDefinition?: string;
   status: DraftStatus;
   validationErrors: ValidationError[];
+  /** As WorkflowResponse.orgId: a saved workflow's organization. */
+  orgId?: string;
+  /** As WorkflowResponse.shared: whether a saved workflow is shared with its org. */
+  shared?: boolean;
 }
 
 export interface ValidationResult {
@@ -250,7 +266,16 @@ function listItemFromProto(proto: ProtoWorkflowListItem): WorkflowResponse {
     automationOnly: proto.automationOnly || false,
     triggers: [...(proto.triggers || [])],
     permissions: [...(proto.permissions || [])],
+    orgId: proto.orgId || undefined,
+    shared: sharedFromProto(proto.visibility),
   };
+}
+
+/** ORG is shared, PRIVATE is not; UNSPECIFIED (builtin, project, an older server) is unknown. */
+function sharedFromProto(visibility: ResourceVisibility): boolean | undefined {
+  if (visibility === ResourceVisibility.ORG) return true;
+  if (visibility === ResourceVisibility.PRIVATE) return false;
+  return undefined;
 }
 
 /** A ListWorkflows response as the views read it (a `select`). */
@@ -300,6 +325,8 @@ export function workflowFromProto(response: GetWorkflowResponse): GetWorkflowRes
     yamlDefinition: response.yamlDefinition || undefined,
     status: draftStatusFromProto(response.status),
     validationErrors: [...(response.validationErrors || [])],
+    orgId: response.orgId || undefined,
+    shared: sharedFromProto(response.visibility),
   };
   if (response.parseError) {
     return { ...common, parseError: response.parseError, rawDefinition: response.rawDefinition || undefined };

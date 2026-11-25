@@ -47,7 +47,8 @@ import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { invalidateDaemonList } from "@/hooks/daemon-registry-queries";
 import { computeEligibilityQuery } from "@/hooks/computeEligibilityKey";
 import { useOrgScope } from "@/lib/orgScope";
-import { usePlans, useComputeSubscription, cloudBillingKeys } from "@/hooks/useCloudBillingQueries";
+import { usePlans, useComputeSubscription } from "@/hooks/useCloudBillingQueries";
+import { billingServiceKeys } from "@/hooks/controlplane/billing-service-hooks_gen";
 import { useAccountGate } from "@/hooks/useAccountGate";
 import { classifyDaemonWait } from "@/lib/daemon-wait";
 import { cloudPathForRepo } from "@/lib/cloudProjectPath";
@@ -263,7 +264,7 @@ function AddMachineSheetBody({
     if (!row) return false;
     try {
       const { data } = await eligibilityQ.refetch();
-      void qc.invalidateQueries({ queryKey: cloudBillingKeys.computeSubscription });
+      void qc.invalidateQueries({ queryKey: billingServiceKeys.getCurrentUserComputeSubscription.all });
       return (data?.allowedDaemonSizes ?? []).map((s) => s.toLowerCase()).includes(row.size);
     } catch {
       return false;
