@@ -224,6 +224,10 @@ export const GetPlanByChatIdResponseSchema: GenMessage<GetPlanByChatIdResponse> 
 /**
  * UpdatePlanRequest updates a plan
  *
+ * Wire change (owner-approved, breaking:approved, 2026-11-25; reliant#3253):
+ * this message took forge's native CRUD shape. Clients built before it must
+ * upgrade; it is not wire-compatible with the previous layout.
+ *
  * @generated from message reliant.v1.UpdatePlanRequest
  */
 export type UpdatePlanRequest = Message<"reliant.v1.UpdatePlanRequest"> & {

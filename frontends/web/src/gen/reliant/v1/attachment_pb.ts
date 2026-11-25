@@ -201,6 +201,9 @@ export const CreateFileReferenceResponseSchema: GenMessage<CreateFileReferenceRe
 
 /**
  * AttachmentService handles file attachment operations
+ * Wire change (owner-approved, breaking:approved, 2026-11-25; reliant#3253):
+ * the attachment rpcs took forge's native CRUD shapes (timestamps and the
+ * Get/Upload response layouts changed). Clients built before it must upgrade.
  *
  * @generated from service reliant.v1.AttachmentService
  */

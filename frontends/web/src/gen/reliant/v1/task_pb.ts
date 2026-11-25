@@ -286,6 +286,10 @@ export const ListTasksResponseSchema: GenMessage<ListTasksResponse> = /*@__PURE_
 /**
  * UpdateTaskRequest updates a task
  *
+ * Wire change (owner-approved, breaking:approved, 2026-11-25; reliant#3253):
+ * this message took forge's native CRUD shape. Clients built before it must
+ * upgrade; it is not wire-compatible with the previous layout.
+ *
  * @generated from message reliant.v1.UpdateTaskRequest
  */
 export type UpdateTaskRequest = Message<"reliant.v1.UpdateTaskRequest"> & {

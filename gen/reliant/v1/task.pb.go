@@ -685,6 +685,10 @@ func (x *ListTasksResponse) GetTotalCount() int32 {
 }
 
 // UpdateTaskRequest updates a task
+//
+// Wire change (owner-approved, breaking:approved, 2026-11-25; reliant#3253):
+// this message took forge's native CRUD shape. Clients built before it must
+// upgrade; it is not wire-compatible with the previous layout.
 type UpdateTaskRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The task, carrying its id and the fields update_mask names.
