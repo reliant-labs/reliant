@@ -586,6 +586,7 @@ tasks:
       - .githooks/check-binary-files.sh --range {{.BASE}} HEAD
       - node .github/scripts/sync-release-config.mjs --check
       - node --test .github/scripts/*.test.mjs
+      - python3 scripts/test_main_bisect.py
       - ./scripts/test-fmt-staged.sh
       - ./scripts/test-binary-files.sh
 
