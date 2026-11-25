@@ -1,0 +1,115 @@
+package testretry
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+const fixturePackage = "example.com/fixture/pkg"
+
+func eventPath(t *testing.T, items ...event) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "go.ndjson")
+	file, err := os.Create(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = file.Close() }()
+	enc := json.NewEncoder(file)
+	for _, item := range items {
+		if item.Package == "" {
+			item.Package = fixturePackage
+		}
+		if err := enc.Encode(item); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return p
+}
+
+func TestExactFailureAndRetry(t *testing.T) {
+	p := eventPath(t, event{Action: "start"}, event{Action: "run", Test: "TestOriginal"},
+		event{Action: "output", Test: "TestOriginal", Output: "expected true"},
+		event{Action: "fail", Test: "TestOriginal"}, event{Action: "fail"})
+	selected := map[string]bool{fixturePackage: true}
+	failed, err := judge(p, selected, nil)
+	want := failure{identity{fixturePackage, "TestOriginal"}, "expected true"}
+	if err != nil || len(failed) != 1 || failed[0] != want {
+		t.Fatalf("got %+v, %v", failed, err)
+	}
+	p = eventPath(t, event{Action: "start"}, event{Action: "run", Test: "TestOriginal"},
+		event{Action: "pass", Test: "TestOriginal"}, event{Action: "pass"})
+	if _, err = judge(p, selected, &want.identity); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestIneligibleEventStreamsStayRed(t *testing.T) {
+	start := event{Action: "start"}
+	run := event{Action: "run", Test: "TestOriginal"}
+	fail := event{Action: "fail", Test: "TestOriginal"}
+	output := event{Action: "output", Test: "TestOriginal", Output: "expected true"}
+	cases := []struct {
+		name  string
+		items []event
+		retry *identity
+	}{
+		{"package-only", []event{start, {Action: "fail"}}, nil},
+		{"build", []event{start, {Action: "build-fail"}}, nil},
+		{"race", []event{start, run, {Action: "output", Test: "TestOriginal", Output: "WARNING: DATA RACE"}, fail, {Action: "fail"}}, nil},
+		{"panic", []event{start, run, {Action: "output", Test: "TestOriginal", Output: "panic: timed out"}, fail, {Action: "fail"}}, nil},
+		{"infra", []event{start, run, {Action: "output", Test: "TestOriginal", Output: "write failed: no space left on device"}, fail, {Action: "fail"}}, nil},
+		{"incomplete", []event{start, run, output, fail}, nil},
+		{"repeated", []event{start, run, output, fail, run, {Action: "pass", Test: "TestOriginal"}, {Action: "pass"}}, nil},
+		{"subtest", []event{start, run, {Action: "run", Test: "TestOriginal/a"}, {Action: "fail", Test: "TestOriginal/a"}, fail, {Action: "fail"}}, nil},
+		{"passing subtest", []event{start, run, {Action: "run", Test: "TestOriginal/a"}, {Action: "pass", Test: "TestOriginal/a"}, output, fail, {Action: "fail"}}, nil},
+		{"skipped sibling", []event{start, {Action: "run", Test: "TestSibling"}, {Action: "skip", Test: "TestSibling"}, run, output, fail, {Action: "fail"}}, nil},
+		{"skip", []event{start, run, {Action: "skip", Test: "TestOriginal"}, {Action: "pass"}}, &identity{fixturePackage, "TestOriginal"}},
+		{"zero-ran", []event{start, {Action: "pass"}}, &identity{fixturePackage, "TestOriginal"}},
+		{"unrelated", []event{start, {Action: "run", Test: "TestDifferent"}, {Action: "pass", Test: "TestDifferent"}, {Action: "pass"}}, &identity{fixturePackage, "TestOriginal"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := judge(eventPath(t, tc.items...), map[string]bool{fixturePackage: true}, tc.retry); err == nil {
+				t.Fatal("ineligible evidence accepted")
+			}
+		})
+	}
+}
+
+func TestStrictPackageAndGOFLAGS(t *testing.T) {
+	for _, arg := range []string{"./...", "./../pkg", "--race", "./pkg;false", "./pkg/../../", "another.example/x"} {
+		if _, err := packageSet("example.com/fixture", []string{arg}); err == nil {
+			t.Errorf("admitted %s", arg)
+		}
+	}
+	for _, flags := range []string{"-race", "-trimpath -race=true", "-cpu=1,2,4", "-run=TestOther", "-count=3", "-parallel=1", "-tags=integration", "-toolexec=runner", "-overlay=/tmp/edit"} {
+		if ordinaryFlags(flags) {
+			t.Errorf("admitted %s", flags)
+		}
+	}
+	if !ordinaryFlags("-trimpath -mod=readonly -skip=^TestQuarantined$") {
+		t.Fatal("ordinary flags refused")
+	}
+}
+
+func TestSourceIsParsedRatherThanMatchedAsText(t *testing.T) {
+	valid := []byte("package p\nimport alias \"testing\"\nfunc TestOriginal(t *alias.T) {}\n")
+	if fn, err := testDeclaration(valid, "TestOriginal"); err != nil || fn == nil {
+		t.Fatalf("AST did not identify plain Go test: %v", err)
+	}
+	method := []byte("package p\nimport \"testing\"\nfunc (r R) TestOriginal(t *testing.T) {}\n")
+	if fn, err := testDeclaration(method, "TestOriginal"); err != nil || fn != nil {
+		t.Fatalf("method was not ignored: %v", err)
+	}
+	fake := []byte("package p\nvar x = `func TestOriginal(t *testing.T) {}`")
+	if fn, err := testDeclaration(fake, "TestOriginal"); err != nil || fn != nil {
+		t.Fatalf("string masqueraded as test: %v", err)
+	}
+	generated := append([]byte("// Code generated by x. DO NOT EDIT.\n"), valid...)
+	if _, err := testDeclaration(generated, "TestOriginal"); err == nil {
+		t.Fatal("generated declaration accepted")
+	}
+}

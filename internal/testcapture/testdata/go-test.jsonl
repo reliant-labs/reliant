@@ -1,0 +1,47 @@
+{"Action":"start","Package":"example.com/x/a"}
+{"Action":"start","Package":"example.com/x/b"}
+{"Action":"run","Package":"example.com/x/b","Test":"TestOK"}
+{"Action":"output","Package":"example.com/x/b","Test":"TestOK","Output":"=== RUN   TestOK\n","OutputType":"frame"}
+{"Action":"output","Package":"example.com/x/b","Test":"TestOK","Output":"stdout line\n"}
+{"Action":"output","Package":"example.com/x/b","Test":"TestOK","Output":"--- PASS: TestOK (0.00s)\n","OutputType":"frame"}
+{"Action":"pass","Package":"example.com/x/b","Test":"TestOK","Elapsed":0}
+{"Action":"output","Package":"example.com/x/b","Output":"PASS\n","OutputType":"frame"}
+{"Action":"output","Package":"example.com/x/b","Output":"ok  \texample.com/x/b\t(cached)\n"}
+{"Action":"pass","Package":"example.com/x/b","Elapsed":0}
+{"Action":"run","Package":"example.com/x/a","Test":"TestOK"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestOK","Output":"=== RUN   TestOK\n","OutputType":"frame"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestOK","Output":"    a_test.go:3: hello\n"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestOK","Output":"--- PASS: TestOK (0.00s)\n","OutputType":"frame"}
+{"Action":"pass","Package":"example.com/x/a","Test":"TestOK","Elapsed":0}
+{"Action":"run","Package":"example.com/x/a","Test":"TestSkip"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestSkip","Output":"=== RUN   TestSkip\n","OutputType":"frame"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestSkip","Output":"    a_test.go:4: nope\n"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestSkip","Output":"--- SKIP: TestSkip (0.00s)\n","OutputType":"frame"}
+{"Action":"skip","Package":"example.com/x/a","Test":"TestSkip","Elapsed":0}
+{"Action":"run","Package":"example.com/x/a","Test":"TestFail"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestFail","Output":"=== RUN   TestFail\n","OutputType":"frame"}
+{"Action":"run","Package":"example.com/x/a","Test":"TestFail/sub"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestFail/sub","Output":"=== RUN   TestFail/sub\n","OutputType":"frame"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestFail/sub","Output":"    a_test.go:5: boom\n","OutputType":"error"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestFail/sub","Output":"--- FAIL: TestFail/sub (0.00s)\n","OutputType":"frame"}
+{"Action":"fail","Package":"example.com/x/a","Test":"TestFail/sub","Elapsed":0}
+{"Action":"run","Package":"example.com/x/a","Test":"TestFail/fine"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestFail/fine","Output":"=== RUN   TestFail/fine\n","OutputType":"frame"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestFail/fine","Output":"    a_test.go:5: quiet\n"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestFail/fine","Output":"--- PASS: TestFail/fine (0.00s)\n","OutputType":"frame"}
+{"Action":"pass","Package":"example.com/x/a","Test":"TestFail/fine","Elapsed":0}
+{"Action":"output","Package":"example.com/x/a","Test":"TestFail","Output":"    a_test.go:5: parent log\n"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestFail","Output":"--- FAIL: TestFail (0.00s)\n","OutputType":"frame"}
+{"Action":"fail","Package":"example.com/x/a","Test":"TestFail","Elapsed":0}
+{"Action":"run","Package":"example.com/x/a","Test":"TestPar"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestPar","Output":"=== RUN   TestPar\n","OutputType":"frame"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestPar","Output":"=== PAUSE TestPar\n","OutputType":"frame"}
+{"Action":"pause","Package":"example.com/x/a","Test":"TestPar"}
+{"Action":"cont","Package":"example.com/x/a","Test":"TestPar"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestPar","Output":"=== CONT  TestPar\n","OutputType":"frame"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestPar","Output":"    a_test.go:6: par\n","OutputType":"error"}
+{"Action":"output","Package":"example.com/x/a","Test":"TestPar","Output":"--- FAIL: TestPar (0.00s)\n","OutputType":"frame"}
+{"Action":"fail","Package":"example.com/x/a","Test":"TestPar","Elapsed":0}
+{"Action":"output","Package":"example.com/x/a","Output":"FAIL\n","OutputType":"frame"}
+{"Action":"output","Package":"example.com/x/a","Output":"FAIL\texample.com/x/a\t0.00s\n","OutputType":"frame"}
+{"Action":"fail","Package":"example.com/x/a","Elapsed":0}

@@ -1,0 +1,4 @@
+deploy
+.forge
+secrets
+__pycache__

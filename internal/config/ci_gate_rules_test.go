@@ -1,0 +1,74 @@
+package config
+
+import (
+	"strings"
+	"testing"
+)
+
+const gateRulesBase = "name: demo\nmodule_path: github.com/example/demo\nci:\n  gate:\n"
+
+func TestCIGateAffectedRules_Load(t *testing.T) {
+	in := gateRulesBase + `    affected_rules:
+      - paths: ["db/migrations/**"]
+        except: ["db/migrations/README.md"]
+        packages: ["./internal/store/...", "./internal/db"]
+      - paths: ["frontends/web/**"]
+        frontends: [web]
+      - paths: ["deploy/kcl/**"]
+        full: true
+        reason: KCL is read by the render tests
+    extra_checks:
+      - name: electron
+        command: [npm, test]
+        paths: ["electron/**"]
+`
+	cfg, err := LoadProject([]byte(in), "forge.yaml")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	rules := cfg.CI.Gate.AffectedRules
+	if len(rules) != 3 || rules[0].Except[0] != "db/migrations/README.md" || rules[1].Frontends[0] != "web" || !rules[2].Full || rules[2].Reason == "" {
+		t.Fatalf("rules = %+v", rules)
+	}
+	if got := cfg.CI.Gate.ExtraChecks[0].Paths; len(got) != 1 || got[0] != "electron/**" {
+		t.Fatalf("extra check paths = %v", got)
+	}
+}
+
+func TestCIGateAffectedRules_Invalid(t *testing.T) {
+	for _, tc := range []struct {
+		name, yaml string
+		want       []string
+	}{
+		{"no paths", "    affected_rules:\n      - frontends: [web]\n", []string{"forge.yaml:6", "ci.gate.affected_rules[0] has no paths"}},
+		{"empty paths", "    affected_rules:\n      - paths: []\n        frontends: [web]\n", []string{"ci.gate.affected_rules[0] has no paths"}},
+		{"selects nothing", "    affected_rules:\n      - paths: [\"x/**\"]\n", []string{"ci.gate.affected_rules[0] selects nothing", "affected_ignore"}},
+		{"full and packages", "    affected_rules:\n      - paths: [\"x/**\"]\n        full: true\n        packages: [./a]\n", []string{"sets full: true and also packages"}},
+		{"bad glob", "    affected_rules:\n      - paths: [\"x/[\"]\n        full: true\n", []string{"forge.yaml:6", `ci.gate.affected_rules[0].paths[0] "x/[" is not a valid glob`}},
+		{"escaping glob", "    affected_rules:\n      - paths: [\"../other/**\"]\n        full: true\n", []string{"leaves the project"}},
+		{"absolute except", "    affected_rules:\n      - paths: [\"x/**\"]\n        except: [/etc/x]\n        full: true\n", []string{"except[0]", "is absolute"}},
+		{"empty package", "    affected_rules:\n      - paths: [\"x/**\"]\n        packages: [\"\"]\n", []string{"packages[0] \"\" is not a Go package pattern"}},
+		{"empty frontend", "    affected_rules:\n      - paths: [\"x/**\"]\n        frontends: [\"\"]\n", []string{"frontends[0] is empty"}},
+		{"unknown key", "    affected_rules:\n      - paths: [\"x/**\"]\n        frontend: [web]\n", []string{"unknown key", "affected_rules[0].frontend"}},
+		{"extra check bad paths", "    extra_checks:\n      - name: e\n        command: [x]\n        paths: [\"\"]\n", []string{"ci.gate.extra_checks[0].paths[0] \"\" is empty"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := LoadProject([]byte(gateRulesBase+tc.yaml), "forge.yaml")
+			ve := requireValidationError(t, err)
+			if !containsAll(ve.Error(), tc.want...) {
+				t.Errorf("error missing %q:\n%s", tc.want, ve.Error())
+			}
+		})
+	}
+}
+
+// Without the new keys a config loads exactly as before: no rules, no paths.
+func TestCIGateAffectedRules_AbsentIsEmpty(t *testing.T) {
+	cfg, err := LoadProject([]byte(gateRulesBase+"    affected_ignore: [\"*.md\"]\n"), "forge.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CI.Gate.AffectedRules != nil || strings.Join(cfg.CI.Gate.AffectedIgnore, ",") != "*.md" {
+		t.Fatalf("gate = %+v", cfg.CI.Gate)
+	}
+}

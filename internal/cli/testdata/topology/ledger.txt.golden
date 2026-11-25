@@ -1,0 +1,79 @@
+Release topology for project
+  ledger    <ledger-home>/test-project (per-env override: an env declaring forge.ControlPlane records on its control plane)
+  latest    v1.5.15 (cut 2026-09-10T13:53:22Z, 3 release(s) on record)
+  clusters  NOT READ — every image state below is the LEDGER's declaration, not what is running. Add --verify to reconcile.
+
+branchy
+  release   v9.9.9-branch
+  promoted  2026-10-01T00:00:00Z (promote time, NOT deploy time)
+  cluster   test-context (namespace test-ns)
+  note      could not render this environment to resolve where it runs: boom
+    NOT-VERIFIED control-plane      sha256:6272616e63687900000000000000000000000000000000000000000000000000
+
+broken
+  release   (unbound)
+  note      could not resolve this environment's release ledger: control plane https://cp.example.test: 401 unauthenticated
+
+cloud
+  ledger    memory://promotions (hosted)
+  release   20261014.042859-cd678a0d6531  [current]
+  promoted  2026-10-14T05:00:00Z (promote time, NOT deploy time)
+  cut from  c-14 (tag v2.0.0)
+    NOT-VERIFIED web                sha256:6565653100000000000000000000000000000000000000000000000000000000
+
+cloud2
+  ledger    memory://promotions (hosted)
+  release   20261014.042859-cd678a0d6531  [current]
+  promoted  2026-10-14T06:00:00Z (promote time, NOT deploy time)
+  cut from  c-14 (tag v2.0.0)
+  cluster   test-context (namespace test-ns)
+  note      rollout phase unavailable: deadline exceeded
+    NOT-VERIFIED web                sha256:6565653100000000000000000000000000000000000000000000000000000000
+
+failed
+  release   v1.4.0  [1 release(s) behind v1.5.15, 52d13h older]
+  NOT APPLIED  bound to v1.4.0, but its apply FAILED: apply: deployment/api: ImagePullBackOff
+  promoted  2026-07-22T00:00:00Z (promote time, NOT deploy time)
+  cut from  commit-v1.4.0
+  cluster   test-context (namespace test-ns)
+    NOT-VERIFIED control-plane      sha256:6161613400000000000000000000000000000000000000000000000000000000
+
+hotfix
+  release   v1.4.0  [1 release(s) behind v1.5.15, 52d13h older]
+  promoted  2026-07-21T00:00:00Z (promote time, NOT deploy time)
+  cut from  commit-v1.4.0
+  note      not declared in this checkout (<project>/deploy/kcl/hotfix/main.k does not exist) — it may be declared on another branch
+    NOT-VERIFIED control-plane      sha256:6161613400000000000000000000000000000000000000000000000000000000
+
+preprod
+  release   (unbound)
+  note      never promoted — no release is bound to this environment
+
+prod
+  release   v1.5.15  [current]
+  promoted  2026-09-10T13:53:22Z (promote time, NOT deploy time)
+  cut from  commit-v1.5.15
+  cluster   test-context (namespace test-ns)
+    NOT-VERIFIED control-plane      sha256:6161613135000000000000000000000000000000000000000000000000000000
+    NOT-VERIFIED internal-console   sha256:6363633135000000000000000000000000000000000000000000000000000000
+    NOT-VERIFIED reliant            sha256:6262623135000000000000000000000000000000000000000000000000000000
+
+staging
+  release   v1.3.0  [2 release(s) behind v1.5.15, 71d13h older]
+  promoted  2026-07-01T00:25:15Z (promote time, NOT deploy time)
+  cut from  commit-v1.3.0  [DIRTY TREE — these bytes match no reviewable commit]
+  cluster   test-context (namespace test-ns)
+    NOT-VERIFIED control-plane      sha256:6161613300000000000000000000000000000000000000000000000000000000
+    NOT-VERIFIED reliant            sha256:6262623300000000000000000000000000000000000000000000000000000000
+
+unreadable
+  release   (unbound)
+  note      could not read the promotion ledger: context deadline exceeded
+
+Images by environment (· = not in this environment's release)
+  image             branchy         broken          cloud           cloud2          failed          hotfix          preprod         prod            staging         unreadable    
+  control-plane     6272616e6368    ·               ·               ·               616161340000    616161340000    ·               616161313500    616161330000    ·             
+  internal-console  ·               ·               ·               ·               ·               ·               ·               636363313500    ·               ·             
+  reliant           ·               ·               ·               ·               ·               ·               ·               626262313500    626262330000    ·             
+  web               ·               ·               656565310000    656565310000    ·               ·               ·               ·               ·               ·             
+exit: 0
