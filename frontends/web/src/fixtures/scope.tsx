@@ -21,9 +21,10 @@
  *   withSampleApp        the roster decorator: the sample's row in the app
  *                        catalog (the switcher), only while the tour is
  *                        active. Never fetched, never persisted.
- *   the tour flag        useSampleTour / setSampleTourActive: set by the
- *                        forge journey while it walks the sample; on its way
- *                        down the sample's cache is cleared.
+ *   the tour flag        useSampleTour / setSampleTourActive
+ *                        (Forge/Sample/sampleTour.ts): set by the forge
+ *                        journey while it walks the sample; on its way down
+ *                        the sample's cache is cleared.
  *
  * The backstop beside this is lib/sampleGuard.ts: the live transport refuses
  * any request carrying the sample's name or one of its ids, so a read that
@@ -35,11 +36,11 @@
 
 import { useMemo, type ReactNode } from "react";
 import type { Transport } from "@connectrpc/connect";
-import { create } from "zustand";
 
 import { AskAgentModeProvider } from "@/components/Forge/Observability/AskReliant/askAgentMode";
 import { ObsReadOnlyProvider, type ObsReadOnly } from "@/components/Forge/Observability/obsReadOnly";
 import { SAMPLE_APP, SAMPLE_APP_LABEL, SAMPLE_ID_PREFIX, isSampleApp } from "@/components/Forge/Sample/sampleApp";
+import { setSampleTourActive, useSampleTour } from "@/components/Forge/Sample/sampleTour";
 import { createAppQueryClient } from "@/lib/query-client";
 import { createTransportScope, TransportScopeProvider, type TransportScope } from "@/lib/transportScope";
 import { appRowKey, type AppOnlyCatalogRow, type ProjectCatalog } from "@/services/projects/catalog";
@@ -101,18 +102,8 @@ export function AppScopeProvider({ app, children }: { app: string | null | undef
 
 // ── The tour flag ───────────────────────────────────────────────────────────
 
-/**
- * Whether the forge tour is walking the sample right now. Memory only: a
- * reload, or another tab, starts without it. The forge journey sets it when it
- * starts walking the sample in the shell and clears it when it ends (finish,
- * exit, skip); until then nothing here shows the sample anywhere a person's
- * own apps are listed.
- */
-export const useSampleTour = create<{ active: boolean }>(() => ({ active: false }));
-
-export function setSampleTourActive(active: boolean): void {
-  if (useSampleTour.getState().active !== active) useSampleTour.setState({ active });
-}
+// The flag itself is Forge/Sample/sampleTour.ts (the journey sets it while it walks the sample); re-exported here.
+export { setSampleTourActive, useSampleTour };
 
 // Leaving the tour leaves nothing of the sample in memory: its cache goes with it.
 useSampleTour.subscribe((state, prev) => {

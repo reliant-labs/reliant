@@ -33,13 +33,12 @@
  * and removed by P4.1. Even before that, the live transport refuses any of
  * them that carries a sample id (lib/sampleGuard.ts), so nothing leaks.
  *
- * The tour's routes are the forge journey's steps in the shell (#3415): its
- * stops' pages, and the trace and issue a step opens. P4.4 replaces this list
- * with the journey's own route list.
+ * The tour's routes are the forge journey's own: each step's page in its
+ * signed-in cut, and the pages a step's action leads to (journeyRoutes).
  */
 
 import type { ReactNode } from "react";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render } from "@testing-library/react";
 import { Code, ConnectError, type Transport } from "@connectrpc/connect";
 import { create, isMessage, type DescMessage, type DescMethod } from "@bufbuild/protobuf";
@@ -90,7 +89,11 @@ import { hybridNav } from "@/components/Layout/sidebar/navConfig/hybrid";
 import { ShellNavBody } from "@/components/Layout/sidebar/ShellNavBody";
 import { useShellProject } from "@/components/Layout/sidebar/shellProject";
 import { SAMPLE_APP, SAMPLE_ID_PREFIX } from "@/components/Forge/Sample/sampleApp";
-import { DEMO_ISSUE_ID, DEMO_TRACE_ID } from "@/components/Onboarding/journeys/forge";
+import { DEMO_INVENTORY_SPAN_ID, DEMO_TRACE_ID } from "@/components/Onboarding/journeys/forge";
+import { activeJourneySteps, presentStep } from "@/components/Onboarding/journeys/registry";
+import type { RouteTarget } from "@/components/Onboarding/types";
+import { setReliantTourHooks } from "@/components/Onboarding/tourShell";
+import { withSearch } from "@/components/Forge/Console/paths";
 import { resetSampleScopeForTests } from "@/fixtures/scope";
 import { resetDemoNowForTests } from "@/fixtures/shop/shopStory";
 import { createForgeConsoleRoutes } from "@/forgeConsoleRoutes";
@@ -102,6 +105,8 @@ import { useActiveOrgStore } from "@/store/activeOrgStore";
 import { useAuthStore } from "@/store/authStore";
 
 const ORG = "org-person";
+/** The shop story's "now" for this file. */
+const STORY_NOW = Date.UTC(2026, 10, 10, 15, 0, 0);
 
 /**
  * The person's own reads the shell makes beside the sample, answered as the
@@ -131,20 +136,44 @@ const GLOBAL_READS: Record<string, { why: string; answer: () => object }> = {
  */
 const PENDING_P4_1: Record<string, string> = {};
 
-/** The tour's pages in the shell (#3415's journey): each stop, and the trace and issue its steps open. */
+/**
+ * The tour's pages in the shell: the page each step of the forge journey's
+ * signed-in cut opens (journeys/forge.tsx, read here, so a step the journey
+ * gains is checked with no edit to this file), and the pages a step's
+ * required action leads to, which no route names, and the few pages one
+ * click away that would show the person's own data on a real app.
+ */
 const SAMPLE = `/forge/p/${SAMPLE_APP}`;
-const TOUR_ROUTES = [
-  `${SAMPLE}/observability/traces`,
-  `${SAMPLE}/observability/traces?trace=${SAMPLE_ID_PREFIX}${DEMO_TRACE_ID}`,
-  `${SAMPLE}/observability/graph`,
-  `${SAMPLE}/observability/errors`,
-  `${SAMPLE}/observability/errors?issue=${SAMPLE_ID_PREFIX}${DEMO_ISSUE_ID}`,
-  `${SAMPLE}/observability/alerts`,
-  `${SAMPLE}/releases`,
-  `${SAMPLE}/tests`,
-  `${SAMPLE}/security/vulnerabilities`,
-  `${SAMPLE}/secrets`,
+const TRACE = `${SAMPLE_ID_PREFIX}${DEMO_TRACE_ID}`;
+const AFTER_ACTIONS = [
+  `${SAMPLE}/observability/traces?trace=${TRACE}&span=${SAMPLE_ID_PREFIX}${DEMO_INVENTORY_SPAN_ID}`, // fg-hops: the hop opened
+  `${SAMPLE}/observability/logs?trace=${TRACE}`, // fg-logs: the trace's logs
+  `${SAMPLE}/observability/graph`, // the service graph, one click off the traces
+  // One click off the tour, and the person's own data on any real app: the dashboards, and the client's own
+  // built-in among them (LLM usage, the caller's model calls and the org's spend: clientBuiltins.ts).
+  `${SAMPLE}/observability/dashboards`,
+  `${SAMPLE}/observability/dashboards/builtin/org-llm`,
 ];
+
+/** Signed in: the forge journey walks the sample in the shell (journeys/catalog.ts installs this in the app). */
+const signedInHooks = { landOnChat: async () => undefined, afterTour: async () => undefined, inAppShell: () => true };
+
+function journeyRoutes(): string[] {
+  setReliantTourHooks(signedInHooks);
+  try {
+    const opened = activeJourneySteps("forge").flatMap((step) => {
+      const open = step.route?.open;
+      if (!open || typeof open === "function") return [];
+      const search = Object.fromEntries(Object.entries(open.search ?? {}).filter(([, value]) => value !== undefined)) as Record<string, string>;
+      return [withSearch(open.to, search)];
+    });
+    return [...new Set([...opened, ...AFTER_ACTIONS])];
+  } finally {
+    setReliantTourHooks(null);
+  }
+}
+
+const TOUR_ROUTES = journeyRoutes();
 
 /** Every call the app's transport was asked to make: the rpc and its request. */
 const liveCalls: { rpc: string; method: DescMethod; input: unknown }[] = [];
@@ -218,7 +247,7 @@ const keyText = (key: readonly unknown[]) => JSON.stringify(key, (_k, value) => 
 
 let restore = () => undefined as void;
 beforeAll(() => {
-  resetDemoNowForTests(Date.UTC(2026, 10, 10, 15, 0, 0));
+  resetDemoNowForTests(STORY_NOW);
   restore = setTransport(recordingLive);
   // Signed in, in the person's own org: the tour runs in the signed-in shell.
   useAuthStore.setState({ user: { id: "u-ada", email: "ada@example.com", user_metadata: {} }, session: { access_token: "t" }, initialized: true } as never);
@@ -237,6 +266,15 @@ beforeEach(() => {
 });
 
 describe("every page the forge tour walks reads the sample's scope, never the live backends", () => {
+  it("walks every page of the journey's signed-in cut", () => {
+    // The cut's own pages (fg-intro's Overview to fg-configure's Secrets), each a page of the sample app.
+    for (const page of ["", "/releases", "/observability/traces", "/observability/errors", "/observability/alerts", "/tests", "/security/vulnerabilities", "/secrets"]) {
+      expect(TOUR_ROUTES).toContain(`${SAMPLE}${page}`);
+    }
+    expect(TOUR_ROUTES.every((path) => path.startsWith(`${SAMPLE}`)), TOUR_ROUTES.join("\n")).toBe(true);
+    expect(TOUR_ROUTES.some((path) => path.includes(`issue=${SAMPLE_ID_PREFIX}`)), "the issue fg-ask opens, by the sample's id").toBe(true);
+  });
+
   it.each(TOUR_ROUTES)("%s", async (path) => {
     const app = renderAt(path);
     await settle();
@@ -257,3 +295,46 @@ describe("every page the forge tour walks reads the sample's scope, never the li
     expect(document.body.textContent).not.toContain("appears once this project is deployed");
   }, 30_000);
 });
+
+/**
+ * Steps whose target this file cannot see, with what it checks instead. Short
+ * on purpose: e2e/journey-forge.spec.ts walks them in a browser.
+ */
+const NOT_IN_JSDOM: Record<string, { why: string; instead: string }> = {
+  "fg-instrumented": {
+    why: "its anchors (obs-overview, overview-services) are on no console Overview today: the card shows unanchored, on the demo host too",
+    instead: "[data-testid='forge-console-page']",
+  },
+  "fg-hops": { why: "the span rows are a virtualized list, and jsdom lays nothing out", instead: "[data-testid='trace-detail']" },
+};
+
+describe("each step of the forge tour finds its target on the sample's pages", () => {
+  setReliantTourHooks(signedInHooks);
+  const STEPS = activeJourneySteps("forge").filter((step) => step.route?.open && typeof step.route.open !== "function" && presentStep(step).target);
+  setReliantTourHooks(null);
+
+  beforeEach(() => {
+    setReliantTourHooks(signedInHooks);
+    // The pages' clock at the story's (beforeAll): their time windows (the last hour of traces) then hold its requests.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(STORY_NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    setReliantTourHooks(null);
+  });
+
+  it.each(STEPS.map((step) => [step.id, step] as const))("%s", async (_id, step) => {
+    const open = step.route!.open as RouteTarget;
+    const search = Object.fromEntries(Object.entries(open.search ?? {}).filter(([, value]) => value !== undefined)) as Record<string, string>;
+    renderAt(withSearch(open.to, search));
+    await settle();
+    const target = NOT_IN_JSDOM[step.id]?.instead ?? presentStep(step).target!;
+    // The spotlight's selector, on the sample's own data: the nav's anchors, a trace row, a span, an issue.
+    await act(async () => {
+      for (let i = 0; i < 100 && !document.querySelector(target); i++) await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(document.querySelector(target), target).not.toBeNull();
+  }, 30_000);
+});
+

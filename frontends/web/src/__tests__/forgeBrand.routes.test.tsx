@@ -65,7 +65,8 @@ async function loadTree(brand: "forge" | "reliant") {
   const { useAuthStore } = await import("@/store/authStore");
   const { routeTree } = await import("@/routes");
   const signOut = () => useAuthStore.setState({ user: null, session: null, initialized: true, loading: false });
-  return { routeTree: routeTree as AnyRoute, tour, shell, signOut };
+  const signIn = () => useAuthStore.setState({ user: { id: "u-1" } as never, initialized: true, loading: false });
+  return { routeTree: routeTree as AnyRoute, tour, shell, signOut, signIn };
 }
 
 type Loaded = Awaited<ReturnType<typeof loadTree>>;
@@ -81,12 +82,14 @@ function renderAt(routeTree: AnyRoute, path: string) {
 }
 
 /** Where the tree's route at `path` sends a visit with `searchStr`: the href of the redirect its beforeLoad throws. */
-function handoffOf(routeTree: AnyRoute, path: string, searchStr: string): string | undefined {
+/** Where `path` sends a visitor (its beforeLoad's redirect): an href off the app, or a path in it. */
+async function handoffOf(routeTree: AnyRoute, path: string, searchStr: string): Promise<string | undefined> {
   const route = createRouter({ routeTree }).routesByPath[path as never] as AnyRoute;
+  const search = Object.fromEntries(new URLSearchParams(searchStr));
   try {
-    (route.options.beforeLoad as (ctx: unknown) => unknown)({ location: { searchStr } });
+    await (route.options.beforeLoad as (ctx: unknown) => unknown)({ location: { searchStr, search } });
   } catch (err) {
-    if (isRedirect(err)) return err.options.href;
+    if (isRedirect(err)) return err.options.href ?? err.options.to;
     throw err;
   }
   return undefined;
@@ -100,6 +103,7 @@ describe("the forge brand", () => {
   let app: Loaded;
   let tree: AnyRoute;
   const signOut = () => app.signOut();
+  const signIn = () => app.signIn();
   beforeAll(async () => {
     window.history.replaceState(null, "", "/?journey=forge&utm_campaign=c-1");
     app = await loadTree("forge");
@@ -139,9 +143,16 @@ describe("the forge brand", () => {
     cleanup();
   });
 
-  it("sends /forge/demo and /demo to the demo bundle, keeping the query", () => {
-    expect(handoffOf(tree, "/forge/demo", "?tour=forge:fg-console")).toBe("https://demo.reliantlabs.io/forge/demo?tour=forge:fg-console");
-    expect(handoffOf(tree, "/demo", "?tour=forge&view=traces")).toBe("https://demo.reliantlabs.io/forge/demo?tour=forge&view=traces");
+  it("sends /forge/demo and /demo to the demo bundle, keeping the query, signed out", async () => {
+    signOut();
+    expect(await handoffOf(tree, "/forge/demo", "?tour=forge:fg-console")).toBe("https://demo.reliantlabs.io/forge/demo?tour=forge:fg-console");
+    expect(await handoffOf(tree, "/demo", "?tour=forge&view=traces")).toBe("https://demo.reliantlabs.io/forge/demo?tour=forge&view=traces");
+  });
+
+  it("opens the page they name on the forge tour's sample app, in the shell, signed in", async () => {
+    signIn();
+    expect(await handoffOf(tree, "/forge/demo", "?view=traces")).toBe("/forge/p/sample_shop/observability/traces");
+    expect(await handoffOf(tree, "/demo", "")).toBe("/forge/p/sample_shop");
   });
 
   it.each(["/apps", "/sites", "/forge/p/shop/environments"])("keeps %s behind the sign-in guard", async (path) => {
