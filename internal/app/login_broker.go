@@ -62,6 +62,17 @@ const (
 	VerifyResendPath          = devidp.VerifyResendPath
 )
 
+// The sign-in handoff: a signed-in session here gives the desktop app a NEW
+// session of its own (devidp.HandoffRoutes, PKCE one-time codes). Mounted only
+// when handoff_redirects lists a redirect — see mountHandoff. Depth:
+// `forge skill load auth/handoff`.
+const (
+	HandoffStartPath     = devidp.HandoffStartPath
+	HandoffAuthorizePath = devidp.HandoffAuthorizePath
+	HandoffConsentPath   = devidp.HandoffConsentPath
+	HandoffRedeemPath    = devidp.HandoffRedeemPath
+)
+
 // SessionCookieName holds the session: an opaque server-side session id
 // (forge/pkg/session) when the broker is mounted WithSessions, else the
 // access token itself.
@@ -188,6 +199,9 @@ func RegisterLoginBroker(appMux *http.ServeMux, cfg *config.ApiServerConfig, log
 		}
 	}
 	broker.mountSignInMethods(mux, cfg)
+	// The sign-in handoff, OFF unless handoff_redirects lists where a
+	// handoff may go (an exact allowlist): the desktop app's loopback.
+	broker.mountHandoff(mux, cfg.HandoffRedirects)
 	mux.Handle(LoginPath, http.HandlerFunc(broker.handleLogin))
 	mux.Handle(LogoutPath, http.HandlerFunc(broker.handleLogout))
 	mux.Handle(SessionPath, http.HandlerFunc(broker.handleSession))
@@ -401,6 +415,69 @@ func (b *loginBroker) mountSignInMethods(mux *devidp.GuardedMux, cfg *config.Api
 	mux.Handle(InviteAcceptPath, http.HandlerFunc(methods.HandleInviteAccept))
 	mux.Handle(VerifyPath, http.HandlerFunc(methods.HandleVerify))
 	mux.Handle(VerifyResendPath, http.HandlerFunc(methods.HandleVerifyResend))
+}
+
+// mountHandoff serves the sign-in handoff when redirects (handoff_redirects,
+// comma-separated) lists where a handoff may go: loopback
+// http://127.0.0.1/<path> (any port), exact https URIs of sibling hosts and
+// private-use schemes. Empty is OFF, which is the default.
+//
+// The desktop app (electron/src/forge-handoff.js) starts a handoff, the person
+// approves it on the web app's consent page (/auth/handoff: it reads
+// HandoffAuthorizePath and posts HandoffConsentPath), and the app redeems the
+// one-time code for a NEW session: a native (loopback) redirect gets an fs_
+// session id, which the app keeps in its main process's cookie jar and sends
+// as this broker's session cookie. It needs server-side sessions
+// (WithSessions) and the auth_handoffs table.
+func (b *loginBroker) mountHandoff(mux *devidp.GuardedMux, redirects string) {
+	allowed := devidp.SplitHandoffRedirects(redirects)
+	if len(allowed) == 0 {
+		return
+	}
+	if b.sessions == nil {
+		b.logger.Error("handoff_redirects is set but sessions are not kept server-side (WithSessions): the sign-in handoff is OFF")
+		return
+	}
+	store, ok := b.sessions.Store().(session.HandoffStore)
+	if !ok {
+		b.logger.Error("the session store keeps no handoffs (session.HandoffStore): the sign-in handoff is OFF")
+		return
+	}
+	routes, err := devidp.NewHandoffRoutes(devidp.HandoffConfig{
+		Client:           b.client,
+		Flow:             b.flow,
+		Sessions:         b.sessions,
+		Store:            store,
+		AppBase:          b.appBase,
+		Redirects:        allowed,
+		TrustedProxyHops: b.proxyHops,
+		Logger:           b.logger,
+		// The approving session: this browser's session cookie.
+		PrimarySession: func(r *http.Request) string {
+			c, err := r.Cookie(b.sessionCookie())
+			if err != nil || !session.IsID(c.Value) {
+				return ""
+			}
+			return c.Value
+		},
+		// An https redeem signs the redeeming host's browser in, exactly
+		// as a sign-in here does.
+		SignedIn: func(w http.ResponseWriter, r *http.Request, issued session.Issued) error {
+			b.endPreviousSession(r)
+			b.writeSessionCookie(w, issued.ID, int(time.Until(issued.ExpiresAt).Seconds()))
+			return nil
+		},
+	})
+	if err != nil {
+		// An allowlist entry that is not exact (a wildcard, http off
+		// loopback, …) turns the whole handoff off rather than serve part.
+		b.logger.Error("handoff_redirects is unusable: the sign-in handoff is OFF", "error", err)
+		return
+	}
+	mux.Handle(HandoffStartPath, http.HandlerFunc(routes.HandleStart))
+	mux.Handle(HandoffAuthorizePath, http.HandlerFunc(routes.HandleAuthorize))
+	mux.Handle(HandoffConsentPath, http.HandlerFunc(routes.HandleConsent))
+	mux.Handle(HandoffRedeemPath, http.HandlerFunc(routes.HandleRedeem))
 }
 
 // identity is the ONLY thing the browser learns about the session: who is
@@ -793,13 +870,21 @@ func firstNonEmpty(values ...string) string {
 func (b *loginBroker) handleLogout(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	subject := ""
+	presented, found := "", false
 	if c, err := r.Cookie(b.sessionCookie()); err == nil {
-		if b.sessions != nil && session.IsID(c.Value) {
+		presented, found = c.Value, true
+	} else if bearer, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok && session.IsID(bearer) {
+		// A native client signed in by a handoff may hold its session as a
+		// bearer credential, not a cookie: it signs out the same way.
+		presented, found = bearer, true
+	}
+	if found {
+		if b.sessions != nil && session.IsID(presented) {
 			// Sign-out is a DELETE: the session stops working on the next
 			// request (on another replica, within its cache TTL), and the
 			// refresh token it held is revoked at the issuer, so no copy
 			// of it can mint access tokens either.
-			tokens, info, err := b.sessions.Revoke(ctx, c.Value)
+			tokens, info, err := b.sessions.Revoke(ctx, presented)
 			switch {
 			case err == nil:
 				subject = info.Subject
@@ -809,7 +894,7 @@ func (b *loginBroker) handleLogout(w http.ResponseWriter, r *http.Request) {
 				// session ends at its idle or absolute expiry.
 				b.logger.ErrorContext(ctx, "sign-out could not delete the session", "error", err)
 			}
-		} else if claims, ok := presentationClaimsFrom(c.Value); ok {
+		} else if claims, ok := presentationClaimsFrom(presented); ok {
 			// An access-token cookie: whom it was for, presentation-only
 			// (as identityFrom).
 			subject = claims.Sub
@@ -875,18 +960,33 @@ func (b *loginBroker) setSession(w http.ResponseWriter, r *http.Request, tokens 
 		if subject == "" {
 			subject = identityFrom(tokens.AccessToken).Subject
 		}
+		// The issuer session the sign-in finalized is sealed with the
+		// tokens (devidp.SessionTokens); its id is kept as a reference, and
+		// it is what lets a handoff mint this person a second token set.
 		issued, err := b.sessions.Create(r.Context(), devidp.SessionTokens(tokens, time.Now()),
-			session.Meta{Subject: subject, UserAgent: r.UserAgent()})
+			session.Meta{Subject: subject, UserAgent: r.UserAgent(), IssuerSession: tokens.IssuerSession.ID})
 		if err != nil {
 			return err
 		}
-		if old, err := r.Cookie(b.sessionCookie()); err == nil && session.IsID(old.Value) {
-			if prev, _, err := b.sessions.Revoke(r.Context(), old.Value); err == nil {
-				b.revokeAtIssuer(r.Context(), prev)
-			}
-		}
+		b.endPreviousSession(r)
 		value, maxAge = issued.ID, int(time.Until(issued.ExpiresAt).Seconds())
 	}
+	b.writeSessionCookie(w, value, maxAge)
+	return nil
+}
+
+// endPreviousSession ends the server-side session the request's cookie
+// names, if any: a new sign-in never leaves the previous one behind.
+func (b *loginBroker) endPreviousSession(r *http.Request) {
+	if old, err := r.Cookie(b.sessionCookie()); err == nil && session.IsID(old.Value) {
+		if prev, _, err := b.sessions.Revoke(r.Context(), old.Value); err == nil {
+			b.revokeAtIssuer(r.Context(), prev)
+		}
+	}
+}
+
+// writeSessionCookie sets the session cookie to value for maxAge seconds.
+func (b *loginBroker) writeSessionCookie(w http.ResponseWriter, value string, maxAge int) {
 	//nolint:gosec // G124: HttpOnly and SameSite are set; Secure is off only in local development (plain http)
 	http.SetCookie(w, &http.Cookie{
 		// Host-only: no Domain, ever, so the cookie goes to this host
@@ -903,7 +1003,6 @@ func (b *loginBroker) setSession(w http.ResponseWriter, r *http.Request, tokens 
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   maxAge,
 	})
-	return nil
 }
 
 // sessionUnavailable answers a sign-in whose credentials were right but whose
