@@ -660,6 +660,14 @@ func (e *InlineWorkflowExecutor) Execute() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to load sub-workflow %s: %w", e.subWorkflowName, err)
 	}
 
+	// A review node (lowered to this workflow node, review_node.go) runs as
+	// a reviewer session: every model call in it is held to the reviewer's
+	// tools, at any depth.
+	review := model.IsLoweredReviewNode(e.node)
+	if review {
+		e.execContext = reviewerSession(e.execContext)
+	}
+
 	// Execute sub-workflow. A ref'd child with its own on_failure runs it
 	// when it fails, before the failure reaches the parent.
 	failureScope := e.beginChildFailureScope()
@@ -667,6 +675,15 @@ func (e *InlineWorkflowExecutor) Execute() (map[string]interface{}, error) {
 	e.finishChildFailureScope(failureScope, err)
 	if err != nil {
 		return nil, fmt.Errorf("sub-workflow %s failed: %w", e.subWorkflowName, err)
+	}
+
+	// The review node's output is its verdict, checked, with the session it
+	// ran in and its role; a missing or malformed verdict fails the node.
+	if review {
+		outputs, err = reviewNodeOutputs(outputs, e.execContext)
+		if err != nil {
+			return nil, fmt.Errorf("review node %s: %w", e.nodeID, err)
+		}
 	}
 
 	// Emit thread_completed for all threads this node owns

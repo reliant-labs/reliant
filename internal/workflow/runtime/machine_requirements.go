@@ -71,6 +71,12 @@ func (a *machineAnalysis) workflow(wf *reliantv1.Workflow, inputs map[string]any
 	if wf == nil {
 		return
 	}
+	// Analysed as it will run: a review node is the reviewer workflow it is
+	// lowered to. A definition that cannot be lowered fails validation; it
+	// is analysed as written.
+	if lowered, err := LowerForExecution(wf); err == nil {
+		wf = lowered
+	}
 	if wf.GetDaemon() != nil {
 		a.hard = append(a.hard, fmt.Sprintf("%starget a machine with `daemon:`", prefix(path)))
 	}

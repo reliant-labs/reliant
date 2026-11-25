@@ -939,6 +939,10 @@ func (e *StepExecutor) startAction(
 ) (workflow.Future, string, bool) {
 	activityName := nodeTypeToActivityName(node.GetType())
 
+	// A model call in a review node's session is offered the reviewer's
+	// tools and nothing else, whatever its definition declares (review_node.go).
+	clampReviewerStep(e.execContext, node.GetType(), evalResult)
+
 	// Special handling for ExecuteTools - intercept "spawn" tool calls
 	if node.GetType() == model.NodeTypeExecuteTools {
 		// expected_response_tools is `repeated string`, so ResolveCELFields

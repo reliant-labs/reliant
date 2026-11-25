@@ -93,6 +93,13 @@ type Options struct {
 	// been sent. The runner never executes a command; this is how a test gets
 	// the rendered command to inspect it, or to run it inside a sandbox.
 	OnRunStep func(nodePath, command string)
+	// OnNodeActivity, when set, receives every node activity the runtime
+	// dispatches (CallLLM, ExecuteTools, SaveMessage, ...), with its qualified
+	// node path and the input exactly as the runtime built it: the evaluated
+	// node and its runtime context (thread, node path). The runner still
+	// answers it from the scenario; this is how a test inspects what an
+	// activity would have been sent, such as the tools a model is offered.
+	OnNodeActivity func(nodePath, activityName string, in types.ActivityInput)
 }
 
 // Runner executes scenarios for a single workflow definition against
@@ -114,6 +121,12 @@ type Runner struct {
 
 	// onRunStep is Options.OnRunStep.
 	onRunStep func(nodePath, command string)
+	// onNodeActivity is Options.OnNodeActivity.
+	onNodeActivity func(nodePath, activityName string, in types.ActivityInput)
+
+	// lowerErr is why the workflow could not be prepared to run
+	// (runtime.LowerForExecution); every run reports it.
+	lowerErr error
 
 	// cancelAtRunStep, when set, is the path of a `run` node whose dispatch
 	// cancels the whole run, the way control_run cancel does, while the
@@ -156,7 +169,14 @@ func New(wf *reliantv1.Workflow, opts Options) *Runner {
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
-	return &Runner{workflow: wf, loader: loader, timeout: timeout, onRunStep: opts.OnRunStep}
+	// The runner sees the definition the runtime runs: a review node is the
+	// workflow node it is lowered to, so its body is a ref the scenario can
+	// reach into (review.agent_loop.call_llm) or mock as a whole.
+	lowered, lowerErr := runtime.LowerForExecution(wf)
+	if lowerErr == nil {
+		wf = lowered
+	}
+	return &Runner{workflow: wf, loader: loader, timeout: timeout, onRunStep: opts.OnRunStep, onNodeActivity: opts.OnNodeActivity, lowerErr: lowerErr}
 }
 
 // LoadBuiltinWorkflow resolves builtin:// refs by the one resolution rule
@@ -846,6 +866,10 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 			result = errorResult(sc, fmt.Errorf("scenario runner panicked: %v", p), start)
 		}
 	}()
+
+	if r.lowerErr != nil {
+		return errorResult(sc, r.lowerErr, start)
+	}
 
 	validation := scenario.ValidateScenario(sc, r.workflow)
 	if !validation.Valid {
@@ -2309,6 +2333,9 @@ func (r *Runner) registerActivities(
 				return nil, err
 			}
 			id := qualifiedNodeID(in.Runtime)
+			if r.onNodeActivity != nil {
+				r.onNodeActivity(id, activityName, in)
+			}
 			if routerID, ok := nodeRoutingDecisionRouter(id); ok {
 				return nodeRoutingDecisionOutput(events, rec, routerID, activityName)
 			}

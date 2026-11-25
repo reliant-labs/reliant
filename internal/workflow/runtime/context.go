@@ -97,6 +97,13 @@ type ExecutionContext struct {
 	// root's context across continue-as-new, which is how the run id
 	// survives the boundary.
 	Telemetry *types.RunTelemetry `json:",omitempty"`
+
+	// Reviewer marks a review node's session (model.IsLoweredReviewNode):
+	// every call_llm in it, at any depth, is narrowed to the reviewer's tool
+	// allowlist (model.ClampReviewerTools), whatever the definition it runs
+	// declares. Set once, by the inline executor running the review node, and
+	// inherited by every context derived from it; never cleared below it.
+	Reviewer bool `json:",omitempty"`
 }
 
 // DaemonSelectorValue holds a resolved daemon selector for runtime routing.
@@ -322,6 +329,7 @@ func (ctx *ExecutionContext) ForIteration(iteration int, reuseThread bool) *Exec
 		ExcludeAmbientMemory: ctx.ExcludeAmbientMemory,
 		UserJWT:              ctx.UserJWT, // Reliant provider is JWT-gated; dropping it here would exclude it from availableProviders inside the loop.
 		Telemetry:            ctx.Telemetry,
+		Reviewer:             ctx.Reviewer, // A loop inside a reviewer session is still the reviewer's.
 	}
 
 	if reuseThread {
@@ -361,6 +369,7 @@ func (ctx *ExecutionContext) ForChild(stepID string, mode string, workflowName s
 		ExcludeAmbientMemory: ctx.ExcludeAmbientMemory,
 		UserJWT:              ctx.UserJWT,   // Reliant provider is JWT-gated; child contexts must carry it.
 		Telemetry:            ctx.Telemetry, // An inline child is part of the same run.
+		Reviewer:             ctx.Reviewer,  // Nothing below a reviewer session can widen its tools.
 		Parent: &ParentContext{
 			WorkflowID: ctx.WorkflowID,
 			StepPath:   stepID,
@@ -437,6 +446,7 @@ func (ctx *ExecutionContext) Clone() *ExecutionContext {
 		CatalogPin:           ctx.CatalogPin,
 		ExcludeAmbientMemory: ctx.ExcludeAmbientMemory,
 		Telemetry:            ctx.Telemetry,
+		Reviewer:             ctx.Reviewer,
 	}
 
 	if ctx.Loop != nil {
