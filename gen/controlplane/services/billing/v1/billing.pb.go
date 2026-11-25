@@ -4844,8 +4844,10 @@ type GetFreeHostingStatusResponse struct {
 	CallerIsFounder bool `protobuf:"varint,3,opt,name=caller_is_founder,json=callerIsFounder,proto3" json:"caller_is_founder,omitempty"`
 	// The org's live static sites counted against the allowance (only when
 	// is_designated).
-	Sites      []*FreeHostingSite `protobuf:"bytes,4,rep,name=sites,proto3" json:"sites,omitempty"`
-	SitesLimit int32              `protobuf:"varint,5,opt,name=sites_limit,json=sitesLimit,proto3" json:"sites_limit,omitempty"`
+	Sites []*FreeHostingSite `protobuf:"bytes,4,rep,name=sites,proto3" json:"sites,omitempty"`
+	// Site-count limit of the allowance. 0 means no limit (signed-in free
+	// hosting has none); a positive value is a cap.
+	SitesLimit int32 `protobuf:"varint,5,opt,name=sites_limit,json=sitesLimit,proto3" json:"sites_limit,omitempty"`
 	// Aggregate static storage of those sites, and its limit.
 	StorageBytes      int64 `protobuf:"varint,6,opt,name=storage_bytes,json=storageBytes,proto3" json:"storage_bytes,omitempty"`
 	StorageLimitBytes int64 `protobuf:"varint,7,opt,name=storage_limit_bytes,json=storageLimitBytes,proto3" json:"storage_limit_bytes,omitempty"`
