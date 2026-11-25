@@ -1223,7 +1223,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Chats:          store.NewChatExtStore(g.Database().ORM()),
 		Owners:         g.Triggerowner(),
 		Firings:        store.NewTriggerEventExtStore(g.Database().ORM()),
-		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()), TriggerWrites: store.NewTriggerWritesExtStore(g.Database().ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(g.Database().ORM()),
 		Pools:          store.NewMachinePoolExtStore(g.Database().ORM()),
 		Syncer:         syncer,
