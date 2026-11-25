@@ -344,7 +344,7 @@
 }
 
 /*
- * THE CONSOLE'S CONTROL EDGE. The forge console (ConsoleShell, OrgShell,
+ * THE CONSOLE'S CONTROL EDGE. The forge console (ConsoleFrame, OrgShell,
  * ForgeShellLayout) puts filters, toggles and selects directly above charts,
  * and forge's control edge, `border-strong` (--input, 1.45-1.75:1 against the
  * card), drew them as faintly as the chart's own frame. Inside the console it
