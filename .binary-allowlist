@@ -1,0 +1,24 @@
+# Files scripts/check-no-binaries.sh lets a change add even though git cannot
+# diff them as text. One path or glob per line; * also crosses /.
+
+# README screenshots and the README's demo recording (docs/images/README.md
+# says how they are captured).
+docs/images/*.png
+docs/images/*.gif
+
+# Go coverage data (GOCOVERDIR output of a -cover binary: covmeta.<hash> and
+# covcounters.<hash>.<pid>.<nanotime>), the input pkg/testreport's
+# ConvertCovdata reads. Real `go build -cover` output is the point of the
+# fixture; pkg/testreport/coverage_test.go says how each one was made.
+pkg/testreport/testdata/cover/cov*/covmeta.*
+pkg/testreport/testdata/cover/cov*/covcounters.*
+
+# The reliant-forge agent plugin's directory logo (the reliantlabs.io touch
+# icon), which the Claude Code, Codex and Cursor manifests reference by path;
+# the marketplaces read it from this repository.
+plugins/reliant-forge/assets/*.png
+
+# The favicon every fresh frontend ships (16x16 and 32x32 in one .ico), which
+# browsers request at /favicon.ico whatever the page declares; the scaffold
+# copies it verbatim from these embedded templates.
+internal/templates/frontend/shared-web/public/favicon.ico

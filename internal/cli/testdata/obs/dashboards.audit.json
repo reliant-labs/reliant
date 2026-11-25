@@ -1,0 +1,102 @@
+{
+  "schema": "forge.obs.dashboards_audit/v1",
+  "ok": false,
+  "exit_code": 2,
+  "error": "1 of 2 panel(s) of prod are empty and 0 partial (see probable_cause)",
+  "scope": {
+    "env": "prod",
+    "backend": "cloud",
+    "env_id": "env-prod",
+    "from": "2026-10-22T11:00:00Z",
+    "to": "2026-10-22T12:00:00Z"
+  },
+  "query_mode": "structured",
+  "project": "proj",
+  "window": {
+    "since": "1h",
+    "source": "console_default",
+    "from": "2026-10-22T11:00:00Z",
+    "to": "2026-10-22T12:00:00Z",
+    "probe_since": "7d"
+  },
+  "summary": {
+    "dashboards": 1,
+    "panels": 2,
+    "ok": 1,
+    "partial": 0,
+    "empty": 1,
+    "error": 0,
+    "not_applicable": 0,
+    "all_zero": 0,
+    "dashboards_unread": 0
+  },
+  "dashboards": [
+    {
+      "id": "d1",
+      "title": "Usage",
+      "source": "generated",
+      "release_version": "v7",
+      "status": "empty",
+      "range": "1h",
+      "panels": [
+        {
+          "id": "empty",
+          "title": "empty",
+          "kind": "line",
+          "signal": "traces",
+          "status": "empty",
+          "reason": "data_outside_window",
+          "probable_cause": "the data exists: the panel has points over the last 7d, newest 2026-10-22T11:31:00Z, but none in the last 1h; the window is shorter than the signal's cadence, or the emitter went quiet",
+          "series": 0,
+          "rows": 0,
+          "points": 0,
+          "non_null_points": 0,
+          "non_zero_points": 0,
+          "buckets": 0,
+          "items": 0,
+          "from": "2026-10-22T11:00:00Z",
+          "to": "2026-10-22T12:00:00Z",
+          "window_source": "console_default",
+          "step_seconds": 30,
+          "attempts": 1,
+          "probe": {
+            "from": "2026-10-15T12:00:00Z",
+            "to": "2026-10-22T12:00:00Z",
+            "verdict": "data_outside_window",
+            "steps": [
+              {
+                "name": "wider_window",
+                "has_data": true,
+                "non_zero_points": 2,
+                "last_data_at": "2026-10-22T11:31:00Z"
+              }
+            ]
+          }
+        },
+        {
+          "id": "ok",
+          "title": "ok",
+          "kind": "line",
+          "signal": "traces",
+          "status": "ok",
+          "series": 1,
+          "rows": 0,
+          "points": 2,
+          "non_null_points": 2,
+          "non_zero_points": 2,
+          "buckets": 2,
+          "items": 0,
+          "last_data_at": "2026-10-22T11:31:00Z",
+          "from": "2026-10-22T11:00:00Z",
+          "to": "2026-10-22T12:00:00Z",
+          "window_source": "console_default",
+          "step_seconds": 30,
+          "attempts": 1
+        }
+      ]
+    }
+  ],
+  "suggested": [
+    "forge obs dashboards audit prod --dashboard d1 --panel empty --since 168h"
+  ]
+}

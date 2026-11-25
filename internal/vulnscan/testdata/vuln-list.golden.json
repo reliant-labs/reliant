@@ -1,0 +1,212 @@
+{
+  "schema": "forge.dev/vuln-list/v1",
+  "env": "prod",
+  "release": "v1.2.0",
+  "coverage": {
+    "artifacts": 3,
+    "with_sbom": 2,
+    "scanned": 2,
+    "unscanned": [
+      {
+        "artifact": "web",
+        "reason": "no SBOM"
+      }
+    ]
+  },
+  "db": {
+    "scanner": "grype",
+    "version": "v0.122.1",
+    "schema": "v6.1.10",
+    "built_at": "2026-11-19T18:41:05Z",
+    "stale": false
+  },
+  "gate": {
+    "mode": "enforce",
+    "graded_as": "enforce",
+    "verdict": "block",
+    "blocking": [
+      "CVE-2026-4738"
+    ],
+    "determined": true
+  },
+  "counts": {
+    "critical": 1,
+    "high": 2,
+    "medium": 3,
+    "low": 0,
+    "unknown": 0
+  },
+  "findings": [
+    {
+      "id": "CVE-2026-4738",
+      "severity": "critical",
+      "cvss": 9.4,
+      "kev": false,
+      "epss": 0.00269,
+      "epss_percentile": 0.19248,
+      "package": {
+        "name": "zlib",
+        "version": "1.3.2-r1",
+        "purl": "pkg:apk/alpine/zlib@1.3.2-r1?arch=x86_64&distro=alpine-3.21.10",
+        "type": "apk"
+      },
+      "fixed_in": [
+        "1.4-r0"
+      ],
+      "fix_state": "fixed",
+      "match_type": "exact-direct-match",
+      "confidence": "high",
+      "locations": [
+        "/lib/apk/db/installed"
+      ],
+      "url": "https://security.alpinelinux.org/vuln/CVE-2026-4738",
+      "artifacts": [
+        "api",
+        "worker"
+      ],
+      "first_seen": "2026-11-18T07:00:11.41065994Z",
+      "action": "block"
+    },
+    {
+      "id": "CVE-2026-82560",
+      "severity": "high",
+      "cvss": 7.5,
+      "kev": false,
+      "epss": 0.0063,
+      "epss_percentile": 0.50919,
+      "package": {
+        "name": "perl-base",
+        "version": "5.40.1-6+deb13u1",
+        "purl": "pkg:deb/debian/perl-base@5.40.1-6%2Bdeb13u1?arch=amd64&distro=debian-13.7&upstream=perl",
+        "type": "deb"
+      },
+      "fix_state": "wont-fix",
+      "match_type": "exact-indirect-match",
+      "confidence": "high",
+      "locations": [
+        "/var/lib/dpkg/info/perl-base.list",
+        "/var/lib/dpkg/status",
+        "/usr/share/doc/perl-base/copyright",
+        "/var/lib/dpkg/info/perl-base.md5sums"
+      ],
+      "url": "https://security-tracker.debian.org/tracker/CVE-2026-82560",
+      "artifacts": [
+        "api",
+        "worker"
+      ],
+      "first_seen": "2026-11-20T07:00:11.41065994Z",
+      "action": "warn"
+    },
+    {
+      "id": "GHSA-chx6-hx7r-mcp5",
+      "aliases": [
+        "CVE-2026-55685"
+      ],
+      "severity": "high",
+      "cvss": 8.7,
+      "kev": false,
+      "epss": 0.00708,
+      "epss_percentile": 0.5418,
+      "package": {
+        "name": "react-router",
+        "version": "7.14.0",
+        "purl": "pkg:npm/react-router@7.14.0",
+        "type": "npm"
+      },
+      "fixed_in": [
+        "7.18.0"
+      ],
+      "fix_state": "fixed",
+      "match_type": "exact-direct-match",
+      "confidence": "high",
+      "locations": [
+        "/package-lock.json"
+      ],
+      "url": "https://github.com/advisories/GHSA-chx6-hx7r-mcp5",
+      "artifacts": [
+        "api",
+        "worker"
+      ],
+      "first_seen": "2026-11-20T07:00:11.41065994Z",
+      "action": "warn"
+    },
+    {
+      "id": "CVE-2025-60876",
+      "severity": "medium",
+      "cvss": 6.5,
+      "kev": false,
+      "epss": 0.00312,
+      "epss_percentile": 0.24493,
+      "package": {
+        "name": "busybox-binsh",
+        "version": "1.37.0-r14",
+        "purl": "pkg:apk/alpine/busybox-binsh@1.37.0-r14?arch=x86_64&distro=alpine-3.21.10&upstream=busybox",
+        "type": "apk"
+      },
+      "match_type": "cpe-match",
+      "confidence": "low",
+      "locations": [
+        "/lib/apk/db/installed"
+      ],
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-60876",
+      "artifacts": [
+        "api",
+        "worker"
+      ],
+      "first_seen": "2026-11-20T07:00:11.41065994Z",
+      "action": "none"
+    },
+    {
+      "id": "CVE-2025-60876",
+      "severity": "medium",
+      "cvss": 6.5,
+      "kev": false,
+      "epss": 0.00312,
+      "epss_percentile": 0.24493,
+      "package": {
+        "name": "busybox",
+        "version": "1.37.0-r14",
+        "purl": "pkg:apk/alpine/busybox@1.37.0-r14?arch=x86_64&distro=alpine-3.21.10",
+        "type": "apk"
+      },
+      "match_type": "cpe-match",
+      "confidence": "low",
+      "locations": [
+        "/lib/apk/db/installed"
+      ],
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-60876",
+      "artifacts": [
+        "api",
+        "worker"
+      ],
+      "first_seen": "2026-11-20T07:00:11.41065994Z",
+      "action": "none"
+    },
+    {
+      "id": "CVE-2025-60876",
+      "severity": "medium",
+      "cvss": 6.5,
+      "kev": false,
+      "epss": 0.00312,
+      "epss_percentile": 0.24493,
+      "package": {
+        "name": "ssl_client",
+        "version": "1.37.0-r14",
+        "purl": "pkg:apk/alpine/ssl_client@1.37.0-r14?arch=x86_64&distro=alpine-3.21.10&upstream=busybox",
+        "type": "apk"
+      },
+      "match_type": "cpe-match",
+      "confidence": "low",
+      "locations": [
+        "/lib/apk/db/installed"
+      ],
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-60876",
+      "artifacts": [
+        "api",
+        "worker"
+      ],
+      "first_seen": "2026-11-20T07:00:11.41065994Z",
+      "action": "none"
+    }
+  ]
+}

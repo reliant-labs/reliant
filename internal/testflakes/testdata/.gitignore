@@ -1,0 +1,2 @@
+# Fixtures are CI log samples: the root .gitignore ignores *.log.
+!*.log

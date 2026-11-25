@@ -1,0 +1,308 @@
+{
+  "version": "forge.dashboards/v1",
+  "scope": "platform",
+  "sections": [
+    {
+      "id": "collection",
+      "title": "Collection"
+    },
+    {
+      "id": "resources",
+      "title": "Resources"
+    },
+    {
+      "id": "logs",
+      "title": "Logs"
+    }
+  ],
+  "id": "telemetry-clickhouse",
+  "title": "shop: clickhouse",
+  "description": "Declared telemetry for clickhouse, a system forge did not build (forge.Telemetry): collection health, CPU, memory and restarts, log volume and errors. Signal-generic: what its own series mean is drawn in the dashboards the Telemetry declares.",
+  "group": "platform",
+  "tags": [
+    "telemetry",
+    "metrics"
+  ],
+  "panels": [
+    {
+      "section": "collection",
+      "id": "scrape-up",
+      "title": "Scrape up",
+      "description": "1 when the endpoint's last scrape succeeded, 0 when it failed: the target is down, the scrape timed out, or it returned more samples than its sample_limit. One line per scraped endpoint (service.instance.id).",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "up",
+          "agg": "min",
+          "field": "up",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "clickhouse"
+        }
+      ],
+      "groupBy": [
+        "resource.attr.service.instance.id"
+      ],
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "collection",
+      "id": "scrape-samples",
+      "title": "Samples per scrape",
+      "description": "Samples each scrape returned, and the ones kept after the allow/deny lists. A scrape over its sample_limit (5000) fails and stores nothing.",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "scraped",
+          "agg": "max",
+          "field": "scrape_samples_scraped",
+          "metricType": "gauge"
+        },
+        {
+          "label": "kept",
+          "agg": "max",
+          "field": "scrape_samples_post_metric_relabeling",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "clickhouse"
+        }
+      ],
+      "unit": "count",
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "collection",
+      "id": "scrape-duration",
+      "title": "Scrape duration",
+      "description": "How long each scrape took; one near its timeout is about to fail.",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "duration",
+          "agg": "max",
+          "field": "scrape_duration_seconds",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "clickhouse"
+        }
+      ],
+      "groupBy": [
+        "resource.attr.service.instance.id"
+      ],
+      "unit": "s",
+      "width": 24,
+      "height": 7
+    },
+    {
+      "section": "resources",
+      "id": "cpu-usage",
+      "title": "CPU usage",
+      "description": "Average CPU cores used per container, one line per workload.",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "cpu",
+          "agg": "avg",
+          "field": "container.cpu.usage",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "clickhouse"
+        }
+      ],
+      "groupBy": [
+        "resource.attr.k8s.workload.name"
+      ],
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "resources",
+      "id": "memory-working-set",
+      "title": "Memory working set",
+      "description": "Average working-set bytes per container, one line per workload.",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "memory",
+          "agg": "avg",
+          "field": "container.memory.working_set",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "clickhouse"
+        }
+      ],
+      "groupBy": [
+        "resource.attr.k8s.workload.name"
+      ],
+      "unit": "bytes",
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "resources",
+      "id": "restarts",
+      "title": "Container restarts",
+      "description": "The highest restart count among each workload's containers; a step is a restart.",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "restarts",
+          "agg": "max",
+          "field": "k8s.container.restarts",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "clickhouse"
+        }
+      ],
+      "groupBy": [
+        "resource.attr.k8s.workload.name"
+      ],
+      "unit": "count",
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "resources",
+      "id": "restarts-by-exit-reason",
+      "title": "Restarts by last exit reason",
+      "description": "The same restart count split by why the container last terminated (OOMKilled, Error, Completed, ...).",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "restarts",
+          "agg": "max",
+          "field": "k8s.container.restarts",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "clickhouse"
+        }
+      ],
+      "groupBy": [
+        "metric.attr.k8s.container.last_terminated_reason"
+      ],
+      "unit": "count",
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "logs",
+      "id": "log-volume",
+      "title": "Log volume by severity",
+      "description": "Log records per time bucket, one line per severity. A system whose lines are not parsed reports them unspecified; Telemetry.logs maps its levels.",
+      "kind": "line",
+      "signal": "logs",
+      "series": [
+        {
+          "label": "records",
+          "agg": "count"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "clickhouse"
+        }
+      ],
+      "groupBy": [
+        "log.severity"
+      ],
+      "unit": "count",
+      "width": 24,
+      "height": 7
+    },
+    {
+      "section": "logs",
+      "id": "error-logs",
+      "title": "Error lines",
+      "kind": "search",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "clickhouse"
+        },
+        {
+          "field": "log.severity",
+          "op": "eq",
+          "value": "error"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ],
+      "width": 24,
+      "height": 8
+    },
+    {
+      "section": "logs",
+      "id": "logs",
+      "title": "Recent lines",
+      "kind": "search",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "clickhouse"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ],
+      "width": 24,
+      "height": 8
+    }
+  ]
+}

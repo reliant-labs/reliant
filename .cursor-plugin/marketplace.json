@@ -1,0 +1,17 @@
+{
+  "name": "reliant-labs",
+  "owner": {
+    "name": "Reliant Labs",
+    "url": "https://reliantlabs.io"
+  },
+  "metadata": {
+    "description": "Reliant Labs plugins for Cursor: Reliant Forge, deploys your agent can verify."
+  },
+  "plugins": [
+    {
+      "name": "reliant-forge",
+      "source": "plugins/reliant-forge",
+      "description": "Deploy what your coding agent built, and let it prove the release works. Deploys need no account."
+    }
+  ]
+}

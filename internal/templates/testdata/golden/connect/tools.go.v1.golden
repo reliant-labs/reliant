@@ -1,0 +1,28 @@
+//go:build tools
+// +build tools
+
+// Package tools tracks build-time tool dependencies that aren't imported
+// by any production code, but ARE required to regenerate this project's
+// proto / Connect code via 'forge generate' (which delegates to 'buf
+// generate' with `local:` plugins by default).
+//
+// `go install` resolves these blank imports to binaries under
+// $(go env GOBIN), which 'buf generate' picks up via $PATH. To install
+// every tool listed here in one shot:
+//
+//	forge tools install
+//
+// Or manually:
+//
+//	go install google.golang.org/protobuf/cmd/protoc-gen-go
+//	go install connectrpc.com/connect/cmd/protoc-gen-connect-go
+//
+// This file MUST live under a //go:build tools constraint so the imports
+// don't leak into production builds. They exist purely so `go mod tidy`
+// keeps the relevant modules in go.mod / go.sum.
+package tools
+
+import (
+	_ "connectrpc.com/connect/cmd/protoc-gen-connect-go"
+	_ "google.golang.org/protobuf/cmd/protoc-gen-go"
+)

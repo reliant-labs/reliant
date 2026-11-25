@@ -1,0 +1,107 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Adapter tests; canonical pattern in `forge skill load testing/patterns`.
+package {{.Name}}
+
+{{if .ConfigBlock -}}
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"{{.Module}}/pkg/config"
+)
+
+// TestHealthCheck_OK exercises the adapter against an httptest stub.
+// The pattern: spin up an httptest.Server that returns whatever the
+// downstream would, point the adapter's base URL at it, and assert the adapter
+// translates the response correctly.
+func TestHealthCheck_OK(t *testing.T) {
+	t.Parallel()
+
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/health" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer stub.Close()
+
+	svc, err := New(Deps{
+		Logger:     slog.Default(),
+		HTTPClient: stub.Client(),
+		Cfg:        &config.{{.ConfigBlock}}{BaseUrl: stub.URL},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if err := svc.HealthCheck(context.Background()); err != nil {
+		t.Fatalf("HealthCheck: %v", err)
+	}
+}
+
+// TestHealthCheck_Down asserts a 5xx downstream response is mapped to
+// an error — the caller must see the failure rather than silently treat
+// the dependency as healthy.
+func TestHealthCheck_Down(t *testing.T) {
+	t.Parallel()
+
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer stub.Close()
+
+	svc, err := New(Deps{
+		Logger:     slog.Default(),
+		HTTPClient: stub.Client(),
+		Cfg:        &config.{{.ConfigBlock}}{BaseUrl: stub.URL},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if err := svc.HealthCheck(context.Background()); err == nil {
+		t.Fatal("HealthCheck should error when downstream is unhealthy")
+	}
+}
+{{- else -}}
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"testing"
+)
+
+// TestNew_DefaultsTheTracedHTTPClient pins the minimal wiring: a logger is
+// enough, and the adapter gets the traced client production wiring passes.
+func TestNew_DefaultsTheTracedHTTPClient(t *testing.T) {
+	t.Parallel()
+
+	svc, err := New(Deps{Logger: slog.Default()})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if svc.(*service).deps.HTTPClient == nil {
+		t.Fatal("New left HTTPClient nil; every downstream call would panic")
+	}
+}
+
+// TestHealthCheck_FailsUntilImplemented pins the scaffold's honest default:
+// HealthCheck probes nothing yet, so it must not report healthy. Replace this
+// test with one against a stub server (or the SDK's fake) when you write
+// the probe.
+func TestHealthCheck_FailsUntilImplemented(t *testing.T) {
+	t.Parallel()
+
+	svc, err := New(Deps{Logger: slog.Default()})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := svc.HealthCheck(context.Background()); !errors.Is(err, errNoHealthProbe) {
+		t.Fatalf("HealthCheck = %v, want errNoHealthProbe until a probe is written", err)
+	}
+}
+{{- end}}
