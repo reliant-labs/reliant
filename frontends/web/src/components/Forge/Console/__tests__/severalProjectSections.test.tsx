@@ -9,6 +9,17 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+const { listSecrets } = vi.hoisted(() => ({
+  listSecrets: vi.fn(async (projectId: string | null) => ({
+    availability: "available",
+    secrets: [{ name: `${projectId}-secret` }],
+  })),
+}));
+
+// Keep the real SecretsPage and SecretsMatrix, replacing only their I/O.
+vi.mock("../../EnvPage/EnvTabPanels", () => ({ SecretsTab: () => null }));
 
 vi.mock("../consoleHost", () => ({
   useConsoleReliantProject: (app: string, options: { select?: boolean; pinned?: string | null }) => {
@@ -19,6 +30,11 @@ vi.mock("../consoleHost", () => ({
 }));
 
 vi.mock("@/hooks/forge-queries", () => ({
+  managedSecretsQueryOptions: (_transport: unknown, projectId: string | null, env: string) => ({
+    queryKey: ["section-secrets", projectId, env],
+    queryFn: () => listSecrets(projectId),
+  }),
+  useEnvironmentShapes: () => new Map(),
   useForgeRoster: (projectId: string | null, app: string) => ({
     isLoading: false,
     resolvingName: false,
@@ -41,6 +57,7 @@ const { SeveralProjectSections } = await import("../severalProjectSections");
 const { ForgeConsoleContext } = await import("../consoleContextValue");
 const { useForgeConsole } = await import("../consoleContext");
 const { Header } = await import("../consolePageFrame");
+const { SecretsPage } = await import("../SecretsPage");
 const { severalModeOf } = await import("../severalProjects");
 
 const APPS = [
@@ -61,7 +78,7 @@ function SecretsProbe() {
   );
 }
 
-function renderAt(path: string) {
+function renderAt(path: string, component = SecretsProbe) {
   const outer = {
     forgeProject: "shop",
     projectId: "pid-shop",
@@ -83,14 +100,32 @@ function renderAt(path: string) {
       </ForgeConsoleContext.Provider>
     ),
   });
-  const page = createRoute({ getParentRoute: () => layout, path: "secrets", component: SecretsProbe });
+  const page = createRoute({ getParentRoute: () => layout, path: "secrets", component });
   const router = createRouter({ routeTree: root.addChildren([layout.addChildren([page])]), history: createMemoryHistory({ initialEntries: [path] }) });
-  render(<RouterProvider router={router} />);
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
 }
 
 afterEach(cleanup);
 
 describe("a console page across several projects", () => {
+  it("runs the real routed Secrets page queries independently in each project scope", async () => {
+    listSecrets.mockClear();
+    renderAt("/forge/p/shop/secrets?env=all", SecretsPage);
+    const shop = await screen.findByTestId("several-section-shop");
+    const blog = screen.getByTestId("several-section-blog");
+    expect(await within(shop).findByText("pid-shop-secret")).toBeInTheDocument();
+    expect(await within(blog).findByText("pid-blog-secret")).toBeInTheDocument();
+    expect(within(shop).queryByText("pid-blog-secret")).not.toBeInTheDocument();
+    expect(within(blog).queryByText("pid-shop-secret")).not.toBeInTheDocument();
+    expect(listSecrets.mock.calls.map(([id]) => id).sort()).toEqual(["pid-blog", "pid-shop"]);
+    expect(within(shop).getByRole("link", { name: "prod" })).toHaveAttribute("href", "/forge/p/shop/secrets?env=prod");
+    expect(within(blog).getByRole("link", { name: "prod" })).toHaveAttribute("href", "/forge/p/blog/secrets?env=prod");
+  });
+
   it("renders the page once per project, each in its own project's console context", async () => {
     renderAt("/forge/p/shop/secrets?env=prod");
     const shop = await screen.findByTestId("several-section-shop");
