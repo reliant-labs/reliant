@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v1.10.1-0.20261125040729-73664c6256d3
+forge_version: v1.11.1-0.20261125173122-732aa53947a1
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
@@ -310,11 +310,12 @@ ci:
               requires: [task, python3]
               heavy: true
               mutates_tree: true
-            # forge's own row for frontends/web has the same name (one
-            # lint-<frontend> per frontend), and an extra check may not
-            # shadow it silently: this takes it over, unchanged.
+            # forge's own lint row for frontends/web, taken over unchanged.
+            # Since forge#2802 a directory several frontends share (desktop,
+            # forge-demo, web) gets one row, named for the first frontend
+            # forge lists: lint-forge-demo.
             - name: lint-web
-              replaces: lint-web
+              replaces: lint-forge-demo
               dir: frontends/web
               command: [npm, run, lint]
               requires: [npm]
