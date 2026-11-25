@@ -33,6 +33,7 @@ var rawComparisonAllowed = map[string]string{
 	"internal/handlers/automation_takeover/takeover.go:offerState":                     "matches a trigger to the owner its offer was made for (adopted or not since), no caller",
 	"internal/handlers/inbox/attention.go:attentionInboxItems":                         "a defensive re-check of rows failingAutomations already passed through authz.Visible, and matching a trigger to an incident of the same owner for display metadata; not an access decision",
 	"internal/handlers/org_usage/rpc_get_org_llm_usage.go:GetOrgLLMUsage":              "a request filter (only this member's calls) over the org rollup the caller was already authorized to read whole (billing:read); not an access decision",
+	"internal/handlers/chat_trace/rpc_get_chat_trace.go:modelCalls":                    "spend, not access: a call's cost is shown only when the chat's owner made it, so another person's spend is never disclosed; the read was already authorized (ReadChatAccess)",
 	"internal/handlers/streaming/rpc_stream_org_updates.go:sendOrgUpdates":             "leaves the caller's own rows out of the org feed they may already read in full; not an access decision",
 	"internal/tokenauthority/localstore.go:MintForUser":                                "self-hosted orgs: the only org a user has is their own id",
 	"internal/tokenauthority/memory.go:MintForUser":                                    "self-hosted orgs: the only org a user has is their own id",
@@ -273,6 +274,7 @@ var shareGuard = struct {
 		"internal/handlers/chat/rpc_get_content_block_bodies.go":       "GetContentBlockBodies: input and thinking bodies only, never a tool result",
 		"internal/handlers/chat/rpc_list_step_executions.go":           "ListStepExecutions (chatproto.ElideStepsForViewer)",
 		"internal/handlers/chat/rpc_get_workflow_executions.go":        "GetWorkflowExecutions (chatproto.ElideWorkflowsForViewer)",
+		"internal/handlers/chat_trace/rpc_get_chat_trace.go":           "GetChatTrace: stubbed spans (viewerSpan), model calls with no cost or ids (modelCalls)",
 		"internal/handlers/message/rpc_get_message.go":                 "GetMessage (messageproto.ElideForViewer)",
 		"internal/handlers/plan/rpc_get_plan_by_chat_id.go":            "GetPlanByChatId: the agent's plan",
 		"internal/handlers/task/rpc_list_tasks.go":                     "ListTasks: the plan's tasks",
@@ -287,11 +289,17 @@ var shareGuard = struct {
 		"internal/handlers/sharing/rpc_set_workflow_draft_sharing.go":  "decides who may change a shared saved workflow",
 		"internal/handlers/sharing/rpc_list_shared_workflow_drafts.go": "the shared list of saved workflows (pb.SharedWorkflowDraft: no source path, origin or version)",
 		"internal/handlers/streaming/rpc_stream_chat_updates.go":       "StreamChatUpdates (messageproto.ViewerChatUpdate; re-reads the row every tick)",
+		// control-plane docs/design/chat-collaboration.md §2.2, §3.2.
+		"internal/handlers/sharing/rpc_list_chat_members.go": "ListChatMembers: the member list shaped for the caller's level, ids only",
+		"internal/handlers/sharing/members.go":               "decides who may change a chat's members (authz.ChatMemberChange)",
 	},
 	shareRPCs: []string{
+		"sharing.proto:ListChatMembers",
 		"sharing.proto:ListSharedChats",
 		"sharing.proto:ListSharedProjects",
 		"sharing.proto:ListSharedWorkflowDrafts",
+		"sharing.proto:RemoveChatMember",
+		"sharing.proto:SetChatMember",
 		"sharing.proto:SetChatVisibility",
 		"sharing.proto:SetProjectVisibility",
 		"sharing.proto:SetWorkflowDraftSharing",
@@ -333,7 +341,7 @@ func goSources(t *testing.T, fn func(rel string, src []byte)) {
 
 // TestSharingReachesOnlyWhatIsListed pins where sharing reaches: the one
 // writer of a visibility column is store.ApplyShareChange, only SharingService
-// calls it, the share rpcs are SharingService's six and StreamOrgUpdates, and the read sites that
+// calls it, the share rpcs are SharingService's nine and StreamOrgUpdates, and the read sites that
 // serve viewers are exactly shareGuard.viewerReadSites. A new one is a
 // deliberate change here, with its redaction and its viewer-matrix row.
 func TestSharingReachesOnlyWhatIsListed(t *testing.T) {
@@ -375,7 +383,7 @@ func TestSharingReachesOnlyWhatIsListed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rpc := regexp.MustCompile(`(?m)^\s*rpc\s+(Set\w*Visibility|SetWorkflowDraftSharing|ListShared\w*|StreamOrgUpdates)\s*\(`)
+	rpc := regexp.MustCompile(`(?m)^\s*rpc\s+(Set\w*Visibility|SetWorkflowDraftSharing|ListShared\w*|StreamOrgUpdates|\w+ChatMembers?)\s*\(`)
 	var found []string
 	for _, p := range protos {
 		src, err := os.ReadFile(p)
@@ -457,5 +465,89 @@ func TestViewerReadSitesDecideOnce(t *testing.T) {
 	})
 	if sites == 0 {
 		t.Fatal("found no read site that serves viewers: the guard is reading the wrong tree")
+	}
+}
+
+// TestCanWriteChatStaysGone pins the split of chat-collaboration.md §4.1:
+// CanWriteChat answered four different questions, so it was removed and
+// every site asks CanOwnChat, CanReplyChat or CanManageChat. A
+// reintroduced CanWriteChat would hide which one a site means. It parses
+// every Go file of internal/ and cmd/, tests included, and reads each itself
+// so Go's test cache sees it.
+func TestCanWriteChatStaysGone(t *testing.T) {
+	root := filepath.Join("..", "..")
+	for _, dir := range []string{"internal", "cmd"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() || !strings.HasSuffix(path, ".go") {
+				return nil
+			}
+			src, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			if !bytes.Contains(src, []byte("CanWriteChat")) {
+				return nil
+			}
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, path, src, parser.SkipObjectResolution)
+			if err != nil {
+				return err
+			}
+			ast.Inspect(file, func(n ast.Node) bool {
+				if id, ok := n.(*ast.Ident); ok && id.Name == "CanWriteChat" {
+					t.Errorf("%s: CanWriteChat is gone: ask CanOwnChat (the owner), CanReplyChat or CanManageChat, and say which in the PR that moves the site", fset.Position(id.Pos()))
+				}
+				return true
+			})
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// chatMemberReadersAllowed may read or write a chat_members row: the store
+// that maps it, the rule itself, and the few that only move rows the rule
+// decided about.
+var chatMemberReadersAllowed = map[string]string{
+	"internal/store/":                 "the one reader and writer of chat_members",
+	"internal/authz/":                 "the rule itself (Grants)",
+	"internal/handlers/sharing/":      "SetChatMember / RemoveChatMember / ListChatMembers: decided by authz.ChatMemberChange and authz.ReadChatAccess",
+	"internal/db/core/chat_member.go": "the row's domain types (core.ChatMember, ChatMemberChange)",
+	"internal/accountpurge/":          "deletes a purged user's grants",
+	"internal/app/":                   "wires the store into authz (SetProcessGrants) and SharingService",
+	"internal/viewertest/":            "the viewer-matrix fixture's Grants; imported by _test.go files only",
+}
+
+// chatMemberAccess matches a use of chat_members: SQL naming the table, or the
+// store's API over it.
+var chatMemberAccess = regexp.MustCompile(`\bchat_members\b|\b(New)?ChatMemberExtStore\b|\bstore\.(ChatMember\w*|ListChatMembers|GetChatMember|ApplyChatMemberChange)\b`)
+
+// TestChatMembersReadOnlyInAuthzAndStore keeps the member rule in one place
+// (chat-collaboration.md §4.4), as TestNoVisibilityReadsOutsideAuthz does for
+// visibility: no code outside chatMemberReadersAllowed reads a chat_members
+// row. Decide with CanReplyChat / CanManageChat / ReadChatAccess instead.
+func TestChatMembersReadOnlyInAuthzAndStore(t *testing.T) {
+	seen := map[string]bool{}
+	goSources(t, func(rel string, src []byte) {
+		if !chatMemberAccess.Match(src) {
+			return
+		}
+		for prefix := range chatMemberReadersAllowed {
+			if strings.HasPrefix(rel, prefix) {
+				seen[prefix] = true
+				return
+			}
+		}
+		t.Errorf("%s reads chat_members: ask internal/authz (CanReplyChat, CanManageChat, ReadChatAccess) instead, or add it to chatMemberReadersAllowed with the reason", rel)
+	})
+	for prefix := range chatMemberReadersAllowed {
+		if !seen[prefix] {
+			t.Errorf("chatMemberReadersAllowed[%q] reads chat_members no more: remove it", prefix)
+		}
 	}
 }

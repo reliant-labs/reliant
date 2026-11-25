@@ -17,6 +17,7 @@ import { Link } from "@tanstack/react-router";
 import { ArrowRight, Bot } from "lucide-react";
 
 import type { ToolContentProps } from "./types";
+import { ToolErrorText } from "./ToolErrorText";
 import { formatErrorMessage } from "../../../lib/utils";
 import { runPath } from "@/lib/paths";
 
@@ -90,7 +91,7 @@ function RunToolRendererComponent({ ctx }: ToolContentProps) {
         </p>
       )}
       {isError && result?.content && (
-        <p className="mt-1 text-warning-ink">{formatErrorMessage(result.content)}</p>
+        <ToolErrorText className="mt-1 px-0 py-0">{formatErrorMessage(result.content)}</ToolErrorText>
       )}
     </div>
   );

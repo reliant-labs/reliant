@@ -24,7 +24,7 @@ func insertPendingQuestionTest(t *testing.T, repo *Repo, id, chatID, threadID, s
 		Metadata:           &metadata,
 		CreatedAt:          createdAt,
 	}
-	if err := repo.CreateQuestion(context.Background(), q); err != nil {
+	if err := createQuestionAnnounced(context.Background(), repo, q); err != nil {
 		t.Fatalf("CreateQuestion(%s): %v", id, err)
 	}
 }

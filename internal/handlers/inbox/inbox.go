@@ -412,7 +412,7 @@ func (r *itemReads) chat(ctx context.Context, userID, id string) bool {
 	defer r.mu.Unlock()
 	ok, seen := r.chats[id]
 	if !seen {
-		chat, err := r.s.deps.Repo.GetChat(ctx, id)
+		chat, err := r.s.deps.Chats.GetChat(ctx, id)
 		ok = err == nil && authz.CanReadChat(ctx, userID, chat)
 		r.chats[id] = ok
 		if err == nil {

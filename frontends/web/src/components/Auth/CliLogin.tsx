@@ -6,6 +6,9 @@ import Button from "@/components/forge-ui/button";
 import { logger } from "../../lib/logger";
 import { AuthorizeOrgPicker, useAuthorizeOrg } from "../Orgs/AuthorizeOrgPicker";
 import { authPath, oauthCliPath } from "@/lib/paths";
+import { controlPlaneForgeBase, credentialedFetch, isForgeAuth } from "@/lib/auth/forge-api";
+import { getAuthIdentity } from "@/lib/auth/use-auth";
+import { useAuthStore } from "@/store/authStore";
 
 /**
  * CLI login consent: the human half of `forge cloud login` / `reliant auth login`.
@@ -19,7 +22,9 @@ import { authPath, oauthCliPath } from "@/lib/paths";
  *      query so the request survives the detour);
  *   2. shows which CLI is asking, on which machine, for what;
  *   3. POSTs the decision to the control plane's /oauth/approve with the
- *      session JWT, the same way ProxyAuth mints a proxy session;
+ *      session JWT, the same way ProxyAuth mints a proxy session (forge
+ *      sign-in: same-origin under /_api/@cp with the session cookie and no
+ *      Authorization header, which is how the control plane reads it);
  *   4. navigates to the loopback URL the control plane returns, which carries
  *      either a one-time code or an error for the waiting CLI.
  *
@@ -116,6 +121,21 @@ type Phase =
   | { kind: "done"; target: string; granted: string[]; approved: boolean }
   | { kind: "error"; message: string };
 
+/**
+ * The signed-in person's address ("" when they have none), or null when no one
+ * is signed in. Supabase: its session. forge: the login broker's session, as
+ * the auth store restored it from the cookie.
+ */
+async function signedInEmail(): Promise<string | null> {
+  if (isForgeAuth()) {
+    await useAuthStore.getState().initialize();
+    const identity = getAuthIdentity();
+    return identity ? (identity.email ?? "") : null;
+  }
+  const { data: { session } } = await supabase.auth.getSession();
+  return session ? (session.user.email ?? "") : null;
+}
+
 export function CliLogin() {
   const query = window.location.search;
   const params = new URLSearchParams(query);
@@ -150,9 +170,9 @@ export function CliLogin() {
         });
         return;
       }
-      const { data: { session } } = await supabase.auth.getSession();
+      const email = await signedInEmail();
       if (cancelled) return;
-      if (!session) {
+      if (email === null) {
         // Keep the whole request across sign-in, or the user comes back to a
         // page that no longer knows which CLI was waiting.
         window.location.href = `${authPath()}?redirect=${encodeURIComponent(`${oauthCliPath()}${query}`)}`;
@@ -170,7 +190,7 @@ export function CliLogin() {
         return;
       }
       setClient(resolved);
-      setPhase({ kind: "ready", email: session.user.email ?? "your account" });
+      setPhase({ kind: "ready", email: email || "your account" });
     })();
     return () => {
       cancelled = true;
@@ -188,27 +208,44 @@ export function CliLogin() {
         setPhase({ kind: "error", message: "Control plane API URL not configured." });
         return;
       }
+      // The confirmed org wins over the request's `org` (docs/orgs.md).
+      // Approval is disabled until this choice can be shown and confirmed.
+      // A human login takes no org at all.
+      const body = JSON.stringify({
+        query,
+        approved: decision === "approve",
+        ...(!humanLogin && authorizeOrg.orgId ? { org_id: authorizeOrg.orgId } : {}),
+      });
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
+        let response: Response;
+        if (isForgeAuth()) {
+          // The session cookie is the credential: same-origin, so it is
+          // first-party and passes the control plane's cross-origin check.
+          // No Authorization header — a header, valid or not, decides there.
+          response = await credentialedFetch(`${controlPlaneForgeBase()}/oauth/approve`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+          });
+        } else {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) {
+            setPhase({ kind: "error", message: "Your session ended. Sign in and run the login again." });
+            return;
+          }
+          response = await fetch(`${controlPlaneURL}/oauth/approve`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body,
+          });
+        }
+        if (isForgeAuth() && response.status === 401) {
           setPhase({ kind: "error", message: "Your session ended. Sign in and run the login again." });
           return;
         }
-        const response = await fetch(`${controlPlaneURL}/oauth/approve`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          // The confirmed org wins over the request's `org` (docs/orgs.md).
-          // Approval is disabled until this choice can be shown and confirmed.
-          // A human login takes no org at all.
-          body: JSON.stringify({
-            query,
-            approved: decision === "approve",
-            ...(!humanLogin && authorizeOrg.orgId ? { org_id: authorizeOrg.orgId } : {}),
-          }),
-        });
         const data = (await response.json().catch(() => ({}))) as {
           redirect_to?: string;
           scopes?: string[];

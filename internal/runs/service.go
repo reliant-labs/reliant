@@ -22,6 +22,8 @@ import (
 // execute again. See the package doc for what that ownership covers.
 type Service struct {
 	repo      Repository
+	chats     Chats
+	resolver  QuestionResolver
 	workflows WorkflowLoader
 	questions Questions
 	temporal  TemporalClient
@@ -45,7 +47,7 @@ type Service struct {
 // Deps, not a forge contract package: it is built by hand in the worker and the
 // chat handler.
 func New(deps Deps) *Service {
-	return &Service{repo: deps.Repo, workflows: deps.Workflows, questions: deps.Questions, temporal: deps.Temporal, pause: deps.Pause, waits: deps.Waits}
+	return &Service{repo: deps.Repo, chats: deps.Chats, resolver: deps.Resolver, workflows: deps.Workflows, questions: deps.Questions, temporal: deps.Temporal, pause: deps.Pause, waits: deps.Waits}
 }
 
 // LockRunControl serializes the chat's run-control operations — pause, resume,
@@ -590,7 +592,7 @@ func (s *Service) State(ctx context.Context, workflowID string) (RunState, error
 // Best-effort: a stale run id degrades later lookups but never stops a run that
 // is already executing, and failing a request over it would be worse.
 func (s *Service) RecordRun(ctx context.Context, chatID, workflowID, runID string) {
-	chat, err := s.repo.GetChat(ctx, chatID)
+	chat, err := s.chats.GetChat(ctx, chatID)
 	if err != nil {
 		logging.ErrorContext(ctx, "[runs] Failed to load chat to record run ids",
 			"chatID", chatID, "error", err)
@@ -706,7 +708,7 @@ func (s *Service) voidPendingQuestions(ctx context.Context, chatID string) {
 
 	terminatedResponse := `{"action":"terminated","reason":"workflow terminated by operator"}`
 	for _, q := range questions {
-		if err := s.repo.ResolveQuestion(ctx, q.ID, &terminatedResponse); err != nil {
+		if err := s.resolver.ResolveQuestion(ctx, q.ID, &terminatedResponse); err != nil {
 			logging.WarnContext(ctx, "[runs] Failed to resolve pending question while terminating",
 				"chatID", chatID, "questionID", q.ID, "error", err)
 			continue
@@ -729,7 +731,7 @@ func (s *Service) voidPendingQuestions(ctx context.Context, chatID string) {
 // chatRun resolves a chat id to the chat and its root workflow id, which every
 // lifecycle entry point needs before it can do anything.
 func (s *Service) chatRun(ctx context.Context, chatID string) (*db.Chat, string, error) {
-	chat, err := s.repo.GetChat(ctx, chatID)
+	chat, err := s.chats.GetChat(ctx, chatID)
 	if err != nil {
 		return nil, "", fmt.Errorf("load chat %s: %w", chatID, err)
 	}
@@ -770,7 +772,7 @@ func (s *Service) refreshRunID(ctx context.Context, chatID, workflowID string) s
 		return state.RunID
 	}
 
-	if chat, chatErr := s.repo.GetChat(ctx, chatID); chatErr == nil && chat.RunID != nil {
+	if chat, chatErr := s.chats.GetChat(ctx, chatID); chatErr == nil && chat.RunID != nil {
 		return *chat.RunID
 	}
 	return ""
@@ -779,7 +781,7 @@ func (s *Service) refreshRunID(ctx context.Context, chatID, workflowID string) s
 // recordRunIfChanged writes the run id back only when it differs from what the
 // chat already holds, so an unchanged resume costs no write.
 func (s *Service) recordRunIfChanged(ctx context.Context, chatID, workflowID, runID string) {
-	chat, err := s.repo.GetChat(ctx, chatID)
+	chat, err := s.chats.GetChat(ctx, chatID)
 	if err != nil {
 		logging.ErrorContext(ctx, "[runs] Failed to load chat to record run ids",
 			"chatID", chatID, "error", err)

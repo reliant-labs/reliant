@@ -546,7 +546,7 @@ func (s *Service) processesItem(ctx context.Context, userID string, m *worktrees
 		}
 		// Only the caller's own chats are named: the id came from a machine,
 		// and a title is not the machine's to reveal.
-		if c, err := s.deps.Repo.GetChat(ctx, t.ChatId); err == nil && authz.CanReadChat(ctx, userID, c) {
+		if c, err := s.deps.Chats.GetChat(ctx, t.ChatId); err == nil && authz.CanReadChat(ctx, userID, c) {
 			t.ChatTitle = c.Title
 		}
 	}

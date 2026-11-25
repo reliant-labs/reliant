@@ -66,7 +66,6 @@ export interface Probe {
   unknown: string[]
   escaped: string[]
   outside: string[]
-  unannotated: string[]
 }
 
 export const readProbe = (page: Page): Promise<Probe | null> =>

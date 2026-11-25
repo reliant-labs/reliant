@@ -179,6 +179,11 @@ type Service struct {
 	// logMachineStats writes one machine health or machine volume line;
 	// logging.InfoContext, which tests replace to capture the lines.
 	logMachineStats func(ctx context.Context, msg string, args ...any)
+
+	// nestedPasses is the nested-clone pass running for each connection and
+	// checkout on this gateway (cloneNestedReposAsync), under nestedMu.
+	nestedPasses map[nestedPassKey]*nestedPassState
+	nestedMu     sync.Mutex
 }
 
 // New creates a new tools_daemon service instance with the supplied Deps.

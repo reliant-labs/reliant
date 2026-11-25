@@ -39,6 +39,13 @@ type Project struct {
 	IsGitRepo     bool    `json:"is_git_repo"`
 	DefaultBranch *string `json:"default_branch,omitempty"`
 	RemoteURL     *string `json:"remote_url,omitempty"`
+	// RemoteKey is RemoteURL reduced to the repository it names, computed by
+	// the database (projects.remote_key, git_remote_key): on GitHub, GitLab
+	// and Bitbucket the SSH and HTTPS forms share it; elsewhere only the same
+	// server and path do. Read-only: nil when RemoteURL is unset or names no
+	// server (a local path). Two of a user's projects
+	// with one key are duplicates of one repository.
+	RemoteKey *string `json:"remote_key,omitempty"`
 	// IsForge is true when the project's repo root contains a forge.yaml.
 	// Set by the project lifecycle when a clone / create happens; not lazily
 	// recomputed on read. See [internal/skills/catalog/forge.go] for the
@@ -182,6 +189,56 @@ const (
 	// ProjectInstallFailed means the clone ran and failed.
 	ProjectInstallFailed ProjectInstallState = "failed"
 )
+
+// NestedRepoState is how far the clone of one nested repository of a
+// project has got on one machine (project_daemon_repos).
+type NestedRepoState string
+
+const (
+	// NestedRepoPending waits for the project root's clone to land.
+	NestedRepoPending NestedRepoState = "pending"
+	// NestedRepoCloning is claimed by a gateway that is cloning it.
+	NestedRepoCloning NestedRepoState = "cloning"
+	// NestedRepoInstalled is on the machine's disk.
+	NestedRepoInstalled NestedRepoState = "installed"
+	// NestedRepoFailed did not clone; Error says why.
+	NestedRepoFailed NestedRepoState = "failed"
+)
+
+// Unsettled reports whether a clone of the repository is still to run or
+// running.
+func (s NestedRepoState) Unsettled() bool {
+	return s == NestedRepoPending || s == NestedRepoCloning
+}
+
+// ProjectDaemonRepo is the clone of one nested repository of a project on
+// one machine: a repository below the project root, cloned into its
+// relative path once the root clone (the ProjectDaemon) has landed. The
+// repository's name, path and remote are read from its Repo row.
+type ProjectDaemonRepo struct {
+	ProjectID string
+	DaemonID  string
+	RepoID    string
+	// Name, RelativePath and RemoteURL are the Repo row's.
+	Name           string
+	RelativePath   string
+	RemoteURL      string
+	State          NestedRepoState
+	Error          string
+	StateChangedAt time.Time
+	// LeaseUntil is until when the claim of the pass cloning it holds
+	// (state cloning); nil otherwise.
+	LeaseUntil *time.Time
+}
+
+// NestedRepoClaim is one nested repository a gateway pass claimed to clone.
+type NestedRepoClaim struct {
+	Repo *ProjectDaemonRepo
+	// InsideFailed: a repository it sits in failed to clone. It must not be
+	// cloned (its clone would create the parent's directory, and the parent
+	// could never be cloned there again); the claimer settles it failed.
+	InsideFailed bool
+}
 
 // CleanupMetadata tracks what became of an archived worktree's directory.
 //

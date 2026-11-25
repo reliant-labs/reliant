@@ -29,7 +29,6 @@ import { controlPlaneTestApi } from "@/services/controlPlane/tests/TestApiContex
 import { controlPlaneVulnerabilityApi } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
 import { fetchCoverageSource, gitBlobId, sourceLineCount, verifySource } from "@/services/coverageSource/coverageSource";
 
-import { isDemoRead } from "../../readOnly";
 import { createShopTransport } from "..";
 import { COVERAGE_SOURCE_RPC } from "../handlers/coverageSource";
 import { SECURITY_RPCS } from "../handlers/security";
@@ -37,6 +36,7 @@ import { TESTS_RPCS } from "../handlers/tests";
 import { SHOP_ADVISORIES } from "../model/security";
 import { SHOP_BRANCH_COMMIT, SHOP_CHARGE_BLOB, SHOP_CHARGE_PATH, SHOP_CHARGE_SOURCE, SHOP_FIX_BRANCH, SHOP_TESTS } from "../model/tests";
 import { DEMO_CAST, DEMO_CI_ACTOR, DEMO_ENV_IDS, DEMO_RELEASES, DEMO_SERVICE_NAMES, demoLedger, resetDemoNowForTests, RUNNING } from "../shopStory";
+import { isDeclaredRead } from "./reads";
 
 const NOW = Date.UTC(2026, 10, 10, 15, 0, 0);
 const req = { orgId: null, project: "shop" };
@@ -348,11 +348,11 @@ describe("the demo transport's Security and Tests RPCs", () => {
     asked.clear();
     for (const [name, call] of Object.entries(calls)) await expect(call(), name).resolves.toBeDefined();
     expect([...asked].sort()).toEqual([...Object.values(SECURITY_RPCS), ...Object.values(TESTS_RPCS), COVERAGE_SOURCE_RPC].sort());
-    // And the guard reads them as reads (fixtures/readOnly.ts), so no write slipped through as one.
+    // And their protos declare them reads (NO_SIDE_EFFECTS), so no write slipped through as one.
     const methods = new Map<string, DescMethod>(
       [VulnerabilityService, TestsService, CoverageSourceService].flatMap((s) => s.methods.map((m): [string, DescMethod] => [`${s.typeName}/${m.name}`, m]))
     );
-    for (const rpc of asked) expect(isDemoRead(methods.get(rpc)!), rpc).toBe(true);
+    for (const rpc of asked) expect(isDeclaredRead(methods.get(rpc)!), rpc).toBe(true);
   });
 
   it("refuses their writes", async () => {

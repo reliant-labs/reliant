@@ -81,6 +81,7 @@ import forge.workloads as fw
 import config_gen
 import ..workloads as wl
 import ..dev_sign_in as dsi
+import ..identity as idn
 import .config as appcfg
 import .ports
 
@@ -241,7 +242,29 @@ _bundle = forge.Bundle {
             temporal_namespaces = ["reliant"]
             temporal_ui_port = ports.temporal_ui
         }
+        # The dev identity provider (Zitadel, a single static binary,
+        # supervised like the rest); its state lives in its own database on
+        # the postgres above. reliant's users sign in to it through
+        # reliant-api's /auth/* (internal/app/login_broker.go).
+        forge.HostInfra {
+            name = "idp"
+            engine = "zitadel"
+            port = ports.idp
+            idp_database_port = ports.postgres
+        }
+        # Where the IdP's verification codes, password resets and magic links
+        # land: the web UI on ports.mail + 7000.
+        forge.HostInfra {
+            name = "mail"
+            engine = "mailpit"
+            port = ports.mail
+        }
     ]
+    # THE USERS (deploy/kcl/identity.k), run on the dev IdP above. `forge env
+    # up` converges them and fills reliant-api's issuer, audience, client id,
+    # redirect and login URIs, IdP base and broker token (forge.IdentityRef).
+    # The shared API key (AUTH_MODE=apikey) keeps working beside it.
+    identity = idn.for_env("dev", forge.IdentityOnHost {infra = "idp", mail = "mail"})
     secret_provider = forge.FileSecrets {
         path = "secrets/dev.yaml"
         generate = {

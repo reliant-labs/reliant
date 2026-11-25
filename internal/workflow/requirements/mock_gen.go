@@ -14,7 +14,7 @@ import (
 )
 
 // forge:section MockMachine
-// forge:hash=e2f867a1e0c58e375c70d15970b2b594e6e2df874ded4423b4b36511f63b984e
+// forge:hash=1ddb94bf7858f7ab28e549802c01f3b82055f10269457d9f844fc0b39ad74493
 
 // MockMachine is a test mock for the Machine interface.
 //
@@ -24,8 +24,7 @@ import (
 // "MockMachine.<Method>Func not set" error.
 type MockMachine struct {
 	contractkit.Recorder
-	RunFunc  func(context.Context, string) (string, int, error)
-	NameFunc func() string
+	RunFunc func(context.Context, string) (string, int, error)
 }
 
 // Run records the call and delegates to RunFunc when set.
@@ -35,15 +34,6 @@ func (m *MockMachine) Run(ctx context.Context, command string) (string, int, err
 		return m.RunFunc(ctx, command)
 	}
 	return "", 0, contractkit.MockNotSet("MockMachine", "Run")
-}
-
-// Name records the call and delegates to NameFunc when set.
-func (m *MockMachine) Name() string {
-	m.Recorder.Record("Name")
-	if m.NameFunc != nil {
-		return m.NameFunc()
-	}
-	return ""
 }
 
 // Compile-time check.

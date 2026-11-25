@@ -33,14 +33,15 @@ func TestLedgerRetentionDefaultReachesTheWorker(t *testing.T) {
 		"RELIANT_WORKER_CHAT_UPDATE_RETENTION",
 		"RELIANT_WORKER_STEP_EXECUTION_RETENTION",
 		"RELIANT_WORKER_LEDGER_RETENTION_START_DELAY",
+		"RELIANT_WORKER_NODE_OBSERVATION_RETENTION",
 	}
 	for _, tc := range []struct {
-		selector                string
-		want                    map[string]string
-		chats, steps, startWait time.Duration
+		selector                              string
+		want                                  map[string]string
+		chats, steps, startWait, observations time.Duration
 	}{
-		{"default_worker", map[string]string{names[0]: "0s", names[1]: "0s", names[2]: "1h"}, 0, 0, time.Hour},
-		{"enabled_worker", map[string]string{names[0]: "720h", names[1]: "2160h", names[2]: "0s"}, 720 * time.Hour, 2160 * time.Hour, 0},
+		{"default_worker", map[string]string{names[0]: "0s", names[1]: "0s", names[2]: "1h", names[3]: "0s"}, 0, 0, time.Hour, 0},
+		{"enabled_worker", map[string]string{names[0]: "720h", names[1]: "2160h", names[2]: "0s", names[3]: "4320h"}, 720 * time.Hour, 2160 * time.Hour, 0, 4320 * time.Hour},
 	} {
 		t.Run(tc.selector, func(t *testing.T) {
 			var env map[string]any
@@ -63,6 +64,7 @@ func TestLedgerRetentionDefaultReachesTheWorker(t *testing.T) {
 			require.Equal(t, tc.chats, worker.GetChatUpdateRetention().AsDuration())
 			require.Equal(t, tc.steps, worker.GetStepExecutionRetention().AsDuration())
 			require.Equal(t, tc.startWait, worker.GetLedgerRetentionStartDelay().AsDuration())
+			require.Equal(t, tc.observations, worker.GetNodeObservationRetention().AsDuration())
 		})
 	}
 }

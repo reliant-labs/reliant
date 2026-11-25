@@ -17,6 +17,7 @@ import (
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/gitremote"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
@@ -126,12 +127,35 @@ func (s *Service) handleFileSystemChanged(ctx context.Context, conn *daemonConne
 			"error", err, "daemonID", conn.daemonID, "path", projectPath)
 		return nil
 	}
-	project, err := s.deps.Projects.GetProjectByPathAndUserInScope(ctx, projectPath, conn.userID, scope)
-	if err != nil {
+	project := s.projectForAnnouncedPath(ctx, conn, projectPath, scope)
+	if project == nil {
 		return nil // project might not exist yet, that's fine
 	}
-	if project == nil {
+
+	// The checkout's nested repositories are cloned into it now that its
+	// root is there, and the row is settled when they are
+	// (tools_daemon_nested_clone.go), not here.
+	// A checkout with nested repositories that all settled is settled from
+	// them: failed when one did not clone, so a repeated announcement never
+	// turns a checkout missing one into installed. A failed read settles
+	// nothing: the next connect does.
+	nested, err := s.deps.Installs.ListProjectDaemonReposForPair(ctx, project.ID, conn.daemonID)
+	if err != nil {
+		logging.WarnContext(ctx, "could not read a checkout's nested repositories; not settling it (the next connect does)",
+			"error", err, "project_id", project.ID, "daemon_id", conn.daemonID)
 		return nil
+	}
+	if hasUnsettledNestedRepos(nested) {
+		s.cloneNestedReposAsync(ctx, conn, project.ID, projectPath, func(context.Context) (bool, error) { return true, nil })
+		return s.deps.Refetch.EmitUserRefetch(ctx, conn.userID, db.RefetchFileTree, db.RefetchOpts{
+			ProjectID: &project.ID,
+		})
+	}
+	if nestedFailureReason(nested) != "" {
+		settleNestedCheckout(ctx, nestedCloneAdapter{s.deps.Repo, s.deps.Installs}, project.ID, conn.daemonID, nested, scope)
+		return s.deps.Refetch.EmitUserRefetch(ctx, conn.userID, db.RefetchFileTree, db.RefetchOpts{
+			ProjectID: &project.ID,
+		})
 	}
 
 	// A clone dispatched by CreateProjectFromRepo left a project_daemons row
@@ -159,6 +183,34 @@ func (s *Service) handleFileSystemChanged(ctx context.Context, conn *daemonConne
 	return s.deps.Refetch.EmitUserRefetch(ctx, conn.userID, core.RefetchFileTree, core.RefetchOpts{
 		ProjectID: &project.ID,
 	})
+}
+
+// projectForAnnouncedPath is the user's project whose checkout on this
+// machine is at path, in the machine's scope, or nil.
+//
+// The machine's own checkout row is read first: a project set up on a second
+// machine lives at that machine's path (a Linux host's, for a project added
+// on a Mac), which is not the project's creation path, so a lookup by
+// projects.path alone never found it and its clone sat installing until a
+// connect's stale-clone pass. The creation path is the fallback, for a
+// checkout this machine has no row for yet.
+func (s *Service) projectForAnnouncedPath(ctx context.Context, conn *daemonConnection, path string, scope *core.OrgScope) *db.Project {
+	if rows, err := s.deps.Installs.ListProjectDaemonsForDaemon(ctx, conn.daemonID); err == nil {
+		for _, row := range rows {
+			if row == nil || normalizeProjectPath(row.Path) != path {
+				continue
+			}
+			project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, row.ProjectID, conn.userID)
+			if err == nil && project != nil && scope.Includes(project.OrgID) {
+				return project
+			}
+		}
+	}
+	project, err := s.deps.Projects.GetProjectByPathAndUserInScope(ctx, path, conn.userID, scope)
+	if err != nil {
+		return nil
+	}
+	return project
 }
 
 // learnForgeNameForProject reads forge.yaml's `name` off the daemon that just
@@ -493,6 +545,13 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 		}
 		project, err = s.deps.Projects.GetProjectByPathAndUserInScope(ctx, path, conn.userID, scope)
 		if err != nil {
+			// Or the winner was another machine's discovery of the same
+			// repository at its own path, whose remote_url this create's
+			// collided with: this folder joins it, as it would have had the
+			// winner committed first.
+			project, err = s.joinLostRepositoryRace(ctx, conn, discoveredRemote(discovered), scope)
+		}
+		if err != nil || project == nil {
 			return nil, fmt.Errorf("failed to create discovered project %s: %w", path, lost.err)
 		}
 		// The winner is usually another machine's discovery of the same
@@ -606,6 +665,26 @@ func (s *Service) resolveProjectForPath(ctx context.Context, conn *daemonConnect
 		return nil, false, err
 	}
 
+	// A checkout of a repository the user already has as a project — on
+	// another machine, at another path — is that project, here: the
+	// machine's checkout of it is recorded at this path (unrecorded), and no
+	// second project is made. Matched by repository (projects.remote_key),
+	// so the SSH form one machine reports and the HTTPS form another does
+	// are one repository. A daemon older than DiscoveredProject.remote_url
+	// reports none, and its folder is resolved by path alone, as before.
+	remote := discoveredRemote(discovered)
+	var remoteClaimed bool
+	if remote != "" {
+		joined, claimed, err := s.repositoryProjectToJoin(ctx, conn, remote, scope, detached)
+		if err != nil {
+			return nil, false, err
+		}
+		if joined != nil {
+			return joined, true, nil
+		}
+		remoteClaimed = claimed
+	}
+
 	// ospath.Base, not filepath.Base: on a Linux server the latter returns
 	// `C:\Users\sean\src\proj` whole, so a Windows daemon's discovered
 	// project would be named after its entire path.
@@ -628,7 +707,10 @@ func (s *Service) resolveProjectForPath(ctx context.Context, conn *daemonConnect
 		// The machine's org, when known: the project the machine reported
 		// is one of its org's. Unknown, no org, as before (the backfill
 		// stamps the owner's default later).
-		OrgID:      daemonStringPtrOrNil(conn.orgID),
+		OrgID: daemonStringPtrOrNil(conn.orgID),
+		// The repository, so the next machine that reports a checkout of
+		// it joins this project (above).
+		RemoteURL:  s.newProjectRemote(ctx, conn, remote, remoteClaimed),
 		CreatedAt:  now,
 		UpdatedAt:  now,
 		LastActive: now,
@@ -642,6 +724,92 @@ func (s *Service) resolveProjectForPath(ctx context.Context, conn *daemonConnect
 		return nil, false, err
 	}
 	return project, true, nil
+}
+
+// discoveredRemote is the git remote a daemon reported for a discovered
+// folder, "" for none (or a daemon that predates the field).
+func discoveredRemote(discovered *reliantv1.DiscoveredProject) string {
+	if discovered == nil {
+		return ""
+	}
+	return strings.TrimSpace(gitremote.StripCredentials(discovered.GetRemoteUrl()))
+}
+
+// repositoryProjectToJoin is the user's project, in scope, of the repository
+// remote names (any form of its remote: projects.remote_key), when the
+// connected machine's folder may join it as the machine's checkout of it.
+// claimed reports that the user has a project of the repository at all, so a
+// folder that may not join it is not given its remote either (newProjectRemote).
+//
+// It never joins — the folder falls back to the path rules, as before the key
+// existed — when:
+//   - the connection names no machine: there is no checkout to record;
+//   - the machine already holds the project (at another path: one machine
+//     holds one checkout of a project, and recording this folder would move
+//     that checkout);
+//   - the user detached the project from this machine: joining would undo it;
+//   - the project is scheduled for deletion.
+//
+// Existing projects are never merged here, even when several match (a user's
+// duplicates from before the key): the oldest is joined, the rest are the
+// user's to merge.
+func (s *Service) repositoryProjectToJoin(ctx context.Context, conn *daemonConnection, remote string, scope *core.OrgScope, detached machineDetachments) (*db.Project, bool, error) {
+	project, err := s.deps.Projects.GetProjectByRemoteKeyAndUserInScope(ctx, remote, conn.userID, scope)
+	if isNotFoundErr(err) || (err == nil && project == nil) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	if strings.TrimSpace(conn.daemonID) == "" || detached.project(project.ID) || project.DeleteAfter != nil {
+		return nil, true, nil
+	}
+	held, err := s.machineHoldsProject(ctx, conn, project.ID)
+	if err != nil {
+		return nil, false, err
+	}
+	if held {
+		return nil, true, nil
+	}
+	logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" A discovered folder is a checkout of an existing project's repository; recording it as the machine's checkout",
+		"projectID", project.ID, "daemonID", conn.daemonID, "remote", gitremote.Redacted(remote))
+	return project, true, nil
+}
+
+// joinLostRepositoryRace is repositoryProjectToJoin for a create that lost a
+// race (ensureOwnedProjectForPath): nil when there is no remote, or no
+// project of it this machine may join.
+func (s *Service) joinLostRepositoryRace(ctx context.Context, conn *daemonConnection, remote string, scope *core.OrgScope) (*db.Project, error) {
+	if remote == "" {
+		return nil, nil
+	}
+	detached, err := s.detachedProjects(ctx, conn.daemonID)
+	if err != nil {
+		return nil, err
+	}
+	project, _, err := s.repositoryProjectToJoin(ctx, conn, remote, scope, detached)
+	return project, err
+}
+
+// newProjectRemote is the remote_url of a project created for a discovered
+// folder: its remote, unless the user already has a project of the
+// repository (claimed: the folder could not join it, so it stays a project
+// of its own without the repository's identity, as before the key) or of
+// that exact remote string in the org it is created in (the
+// projects_org_user_remote_url_key index would refuse the row; a remote
+// naming no host has no key, so only this check sees it). nil for none.
+func (s *Service) newProjectRemote(ctx context.Context, conn *daemonConnection, remote string, claimed bool) *string {
+	if remote == "" || claimed {
+		return nil
+	}
+	var bucket *core.OrgScope // no org: every org's, as backfillProjectRemoteURL
+	if conn.orgID != "" {
+		bucket = &core.OrgScope{OrgID: conn.orgID}
+	}
+	if _, err := s.deps.Projects.GetProjectByRemoteURLAndUserInScope(ctx, remote, conn.userID, bucket); !isNotFoundErr(err) {
+		return nil // taken, or unknown: the project is still made, without it
+	}
+	return &remote
 }
 
 // errProjectDetached is ensureOwnedProjectForPath's answer for a path, or a

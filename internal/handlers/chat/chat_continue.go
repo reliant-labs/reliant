@@ -48,7 +48,7 @@ func (s *Service) ContinueQueued(ctx context.Context, chatID string) (bool, erro
 	release := s.runs.LockRunControl(ctx, chatID)
 	defer release()
 
-	chat, err := s.deps.Repo.GetChat(ctx, chatID)
+	chat, err := s.chatViews().GetChat(ctx, chatID)
 	if err != nil || chat == nil {
 		return false, fmt.Errorf("load chat %s: %w", chatID, err)
 	}
@@ -166,7 +166,7 @@ func (s *Service) ResumePausedForMachine(ctx context.Context, chatID string) (bo
 	release := s.runs.LockRunControl(ctx, chatID)
 	defer release()
 
-	chat, err := s.deps.Repo.GetChat(ctx, chatID)
+	chat, err := s.chatViews().GetChat(ctx, chatID)
 	if err != nil || chat == nil {
 		return false, fmt.Errorf("load chat %s: %w", chatID, err)
 	}

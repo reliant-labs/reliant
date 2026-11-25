@@ -11,7 +11,9 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/kcleval"
 	"github.com/reliant-labs/forge/pkg/testkit"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/app"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -62,11 +64,22 @@ func testOrgUsageControlPlaneLoad(t *testing.T, url string) {
 	process, err := config.LoadServerProcessConfig(cmd)
 	require.NoError(t, err)
 	assert.Equal(t, url, process.GetControlPlane().GetUrl())
-	assert.NotNil(t, app.OrgUsageListPrices(process.GetControlPlane()), "a hosted api server with the secret prices org usage")
+	assert.NotNil(t, internalControlPlane(t, process.GetControlPlane()), "a hosted api server with the secret prices org usage")
+	assert.NotNil(t, app.ChatTraceSpans(process.GetControlPlane()), "a hosted api server with the secret reads chat traces' spans")
 
 	t.Setenv("INTERNAL_SERVICE_SECRET", "") // restored afterwards
 	require.NoError(t, os.Unsetenv("INTERNAL_SERVICE_SECRET"))
 	process, err = config.LoadServerProcessConfig(cmd)
 	require.NoError(t, err)
-	assert.Nil(t, app.OrgUsageListPrices(process.GetControlPlane()), "without the secret there is nothing to sign with: no estimates, never a typed nil")
+	assert.Nil(t, internalControlPlane(t, process.GetControlPlane()), "without the secret there is nothing to sign with: no estimates, never a typed nil")
+	assert.Nil(t, app.ChatTraceSpans(process.GetControlPlane()), "without the secret a chat trace has no spans (PARTIAL), never a typed nil")
+}
+
+// internalControlPlane is the org usage view's price source: the api-server's
+// InternalControlPlane node, as the plain client compose.go hands it.
+func internalControlPlane(t *testing.T, cfg *configv1.ControlPlaneConfig) controlplane.Service {
+	t.Helper()
+	cp, err := app.NewInternalControlPlane(app.InternalControlPlaneDeps{ControlPlane: cfg})
+	require.NoError(t, err)
+	return cp.Client()
 }

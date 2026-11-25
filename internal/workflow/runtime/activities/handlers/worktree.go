@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/reliant-labs/reliant/internal/copypath"
@@ -96,7 +98,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 	}
 
 	// Get chat to access project and userID
-	chat, err := a.repo.GetChat(ctx, rtx.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, rtx.ChatID)
 	if err != nil {
 		return CreateWorktreeOutput{}, fmt.Errorf("failed to get chat: %w", err)
 	}
@@ -329,7 +331,7 @@ func (a *DeleteWorktreeActivity) Execute(ctx context.Context, input DeleteWorktr
 	}
 
 	// Get chat to access project and userID
-	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 	if err != nil {
 		return DeleteWorktreeOutput{}, fmt.Errorf("failed to get chat: %w", err)
 	}

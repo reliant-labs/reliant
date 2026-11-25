@@ -128,4 +128,97 @@ case "$ver" in
   *"has version ${pin} "*|*"has version v${pin} "*|*"has version ${pin}") ;;
   *) echo "golangci-changed: $(command -v golangci-lint) is not golangci-lint ${pin}, the pinned forge's release that the merge queue lints with; install it: ${install}" >&2; exit 2 ;;
 esac
-GOFLAGS="${GOFLAGS:+${GOFLAGS} }-trimpath" exec golangci-lint run "$lock" --new-from-rev="$base" --whole-files "${pkgs[@]}"
+rc=0
+GOFLAGS="${GOFLAGS:+${GOFLAGS} }-trimpath" golangci-lint run "$lock" --new-from-rev="$base" --whole-files "${pkgs[@]}" || rc=$?
+
+# ── deprecations: staticcheck's SA1019 where the diff deprecates ────────────
+# A declaration this diff marks `Deprecated:` (by hand, or in the code a proto
+# `deprecated = true` generates) turns every use of it into an SA1019 finding,
+# in files the diff did not change, so the pass above, which reports only the
+# changed files, never sees them; the release gate's whole-module lint did
+# (#3005: #2930 deprecated ListMessagesResponse.Total, and
+# internal/handlers/chat/rpc_list_messages.go, untouched, still wrote it). So
+# for each declaration the diff deprecates, staticcheck runs over the packages
+# that declare or import it and name it, and fails on an SA1019 finding
+# there. Usually none: then it costs only the scan.
+#
+# deprecated_names prints "<dir> <name>" for each: the first identifier of the
+# declaration a `Deprecated:` line the diff adds documents (the next code line
+# after the comment, or the same line for a trailing comment). A deprecated
+# block (`const (`) names nothing and is left to the release gate.
+deprecated_names() {
+  local f lines
+  for f in $changed; do
+    case "$f" in sdk/go/*|*/testdata/*) continue ;; esac
+    [ -f "$f" ] || continue
+    if git cat-file -e "${base}:${f}" 2>/dev/null; then
+      lines=$(git diff -U0 "$base" -- "$f" | awk '
+        /^@@/ { split($3, a, ","); n = substr(a[1], 2) + 0; next }
+        /^\+\+\+/ { next }
+        /^\+/ { if ($0 ~ /Deprecated:/) print n; n++; next }
+        /^-/ { next }')
+    else
+      lines=$(grep -n 'Deprecated:' "$f" | cut -d: -f1 || true)
+    fi
+    [ -n "$lines" ] || continue
+    # shellcheck disable=SC2086 # one word per line number
+    awk -v lines=" $(printf '%s ' $lines)" -v dir="$(dirname "$f")" '
+      function name(s) {
+        if (match(s, /^[[:space:]]*func[[:space:]]*(\([^)]*\)[[:space:]]*)?[A-Za-z_][A-Za-z0-9_]*/)) { s = substr(s, 1, RLENGTH); sub(/.*[^A-Za-z0-9_]/, "", s); return s }
+        if (s ~ /^[[:space:]]*(type|var|const)[[:space:]]*\(/) return ""
+        if (match(s, /^[[:space:]]*(type|var|const)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*/)) { s = substr(s, 1, RLENGTH); sub(/.*[^A-Za-z0-9_]/, "", s); return s }
+        if (match(s, /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*/)) { s = substr(s, 1, RLENGTH); gsub(/[[:space:]]/, "", s); return s }
+        return ""
+      }
+      index(lines, " " NR " ") {
+        if ($0 !~ /^[[:space:]]*\/\//) { n = name($0); if (n != "") print dir, n; next }
+        want = 1; next
+      }
+      want && ($0 ~ /^[[:space:]]*\/\// || $0 ~ /^[[:space:]]*$/) { next }
+      want { n = name($0); if (n != "") print dir, n; want = 0 }
+    ' "$f"
+  done | sort -u
+}
+deps=$(deprecated_names)
+if [ -n "$deps" ]; then
+  names=$(echo "$deps" | awk '{ print $2 }' | sort -u | paste -sd'|' -)
+  echo "golangci-changed: the diff deprecates: $(echo "$deps" | awk '{ print $1 "." $2 }' | tr '\n' ' ')"
+  declared=$(echo "$deps" | awk '{ print "./" $1 }' | sort -u)
+  # shellcheck disable=SC2086 # one word per directory
+  dep_paths=$(go list -e -f '{{.ImportPath}}' $declared | sort -u) ||
+    { echo "golangci-changed: go list over the deprecating packages failed" >&2; exit 2; }
+  graph=$(go list -e -f '{{.Dir}}{{"\t"}}{{.ImportPath}} {{join .Imports " "}} {{join .TestImports " "}} {{join .XTestImports " "}}' ./...) ||
+    { echo "golangci-changed: go list ./... failed; cannot find who uses what the diff deprecates" >&2; exit 2; }
+  users=()
+  while IFS=$'\t' read -r dir imports; do
+    [ -n "$dir" ] || continue
+    hit=0
+    for p in $dep_paths; do case " $imports " in *" $p "*) hit=1; break ;; esac; done
+    [ "$hit" = 1 ] || continue
+    # Only a package whose source names a deprecated identifier can use it.
+    grep -qwE "$names" "$dir"/*.go 2>/dev/null || continue
+    users+=("$(printf '%s\n' "$dir" | sed "s|^$(pwd -P)/|./|")")
+  done <<<"$graph"
+  if [ "${#users[@]}" -eq 0 ]; then
+    echo "golangci-changed: no package uses what the diff deprecates"
+  else
+    echo "golangci-changed: staticcheck SA1019 over ${#users[@]} package(s) that use it:"
+    printf '  %s\n' "${users[@]}"
+    report=$(mktemp)
+    drc=0
+    GOFLAGS="${GOFLAGS:+${GOFLAGS} }-trimpath" golangci-lint run "$lock" --enable-only staticcheck \
+      --output.text.path /dev/null --output.json.path "$report" "${users[@]}" || drc=$?
+    if [ "$drc" -gt 1 ] || ! jq -e 'has("Issues")' "$report" >/dev/null 2>&1; then
+      echo "golangci-changed: the SA1019 pass could not run (golangci-lint exit ${drc})" >&2
+      rm -f "$report"; exit 2
+    fi
+    found=$(jq -r '.Issues[]? | select(.Text | startswith("SA1019")) | "\(.Pos.Filename):\(.Pos.Line):\(.Pos.Column): \(.Text) (staticcheck)"' "$report")
+    rm -f "$report"
+    if [ -n "$found" ]; then
+      echo "$found"
+      echo "golangci-changed: the diff deprecates what these lines still use (SA1019): move them off it, or keep a justified //nolint:staticcheck // SA1019 where the use must stay (an old client's field)" >&2
+      [ "$rc" != 0 ] || rc=1
+    fi
+  fi
+fi
+exit "$rc"

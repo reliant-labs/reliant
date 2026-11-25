@@ -1006,6 +1006,11 @@ func (e *StepExecutor) startAction(
 		if !toolBatchAssembledByWorkflow(evalResult) {
 			rtx.SaveMessage = e.saveMessageRequest(node)
 			delegated = rtx.SaveMessage != nil
+			// The same rule observes it: the activity's result is the
+			// node's. A batch the workflow assembles is observed
+			// workflow-side (not yet: dev-docs/design/workflow-observe.md,
+			// section 15, PR 3).
+			rtx.Observe = e.observeRequest(node)
 		}
 
 		logging.Debug("[StepExecutor] startAction ExecuteTools",
@@ -1036,6 +1041,7 @@ func (e *StepExecutor) startAction(
 	rtx.AssistantMessageID = preallocatedMessageID
 	rtx.CutOffMessageID = e.takeCutOffTurn(node.GetId())
 	rtx.SaveMessage = e.saveMessageRequest(node)
+	rtx.Observe = e.observeRequest(node)
 	input := types.ActivityInput{Runtime: rtx, Node: evalResult}
 
 	future := workflow.ExecuteActivity(e.activityOptions(node), activityName, input)
@@ -1142,6 +1148,11 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 		runInputs["telemetry"] = rt
 	}
 	runInputs["node_type"] = model.NodeTypeRun
+	// A node a run recorded before llm_gateway's removal declared it on:
+	// ExecuteRunStep refuses its command (removed_definition_keys.go).
+	if gw, ok := removedLLMGatewayOf(node.GetRun()); ok {
+		runInputs["llm_gateway"] = gw
+	}
 	if e.loopNodeID != "" {
 		runInputs["loop_node_id"] = e.loopNodeID
 		runInputs["loop_iteration"] = e.loopIteration
@@ -1163,6 +1174,9 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 	saveReq := e.saveMessageRequest(node)
 	if saveReq != nil {
 		runInputs[types.RunStepSaveMessageKey] = saveReq
+	}
+	if observeReq := e.observeRequest(node); observeReq != nil {
+		runInputs[types.RunStepObserveKey] = observeReq
 	}
 
 	// The node's timeout bounds the COMMAND: it is the command timeout the

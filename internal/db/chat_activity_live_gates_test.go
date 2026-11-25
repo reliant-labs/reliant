@@ -85,7 +85,7 @@ func (c *liveGateChat) setStatus(rowID string, status WorkflowStatus) {
 func (c *liveGateChat) ask(id, rowID, thread string) {
 	c.t.Helper()
 	metadata := `{"questions":[{"question":"` + id + `?"}]}`
-	if err := c.repo.CreateQuestion(context.Background(), &Question{
+	if err := createQuestionAnnounced(context.Background(), c.repo, &Question{
 		ID: id, ChatID: c.chatID, WorkflowID: rowID, TemporalWorkflowID: c.chatID,
 		ThreadID: thread, StepID: "agent_loop", Status: QuestionStatusPending,
 		Metadata: &metadata, CreatedAt: time.Now(),
@@ -164,7 +164,7 @@ func TestChatActivity_QuestionOnRunningThreadWhileOthersRun(t *testing.T) {
 	c.expect(activityAwaitingInput, 2)
 
 	// Answered: the asking thread works again.
-	if err := c.repo.ResolveQuestion(context.Background(), "q-3", nil); err != nil {
+	if err := resolveQuestionAnnounced(context.Background(), c.repo, "q-3", nil); err != nil {
 		t.Fatalf("ResolveQuestion: %v", err)
 	}
 	c.expect(activityRunning, 3)
@@ -207,7 +207,7 @@ func TestChatActivity_QuestionOnPausedThreadStillCounts(t *testing.T) {
 	c.expect(activityAwaitingInput, 0)
 
 	// The question gone, the chat reads as the paused run it is.
-	if err := c.repo.ResolveQuestion(context.Background(), "q-3", nil); err != nil {
+	if err := resolveQuestionAnnounced(context.Background(), c.repo, "q-3", nil); err != nil {
 		t.Fatalf("ResolveQuestion: %v", err)
 	}
 	c.expect(activityPaused, 0)

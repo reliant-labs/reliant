@@ -72,6 +72,43 @@ const ALLOWED_ROUTE: Record<string, { why: string; texts: readonly string[] }> =
     why: "Control-plane HTTP endpoints (`/oauth/device/lookup`), not pages of this app.",
     texts: ["/oauth/device/lookup", "/oauth/device/approve"],
   },
+  "lib/auth/native-login.ts": {
+    why: "reliant-api login-broker HTTP endpoints (`POST /auth/login`, reached at reliantForgeBase()), not pages of this app. The SPA pages that share a few of these paths (`/auth/reset`, `/auth/verify`, `/auth/social/callback`) are built by lib/paths.",
+    texts: [
+      "/auth/login",
+      "/auth/register",
+      "/auth/logout",
+      "/auth/forgot",
+      "/auth/reset",
+      "/auth/passkey/begin",
+      "/auth/passkey/finish",
+      "/auth/passkey/register/begin",
+      "/auth/passkey/register/finish",
+      "/auth/magic/request",
+      "/auth/magic/consume",
+      "/auth/social/start",
+      "/auth/social/callback",
+      "/auth/invite/accept",
+      "/auth/verify",
+      "/auth/verify/resend",
+    ],
+  },
+  "lib/auth/account.ts": {
+    why: "reliant-api login-broker account-settings HTTP endpoints (`GET /auth/account`, forge#2663), not pages of this app. The page a confirmation email opens (`/auth/account/email/confirm`) is built by lib/paths.",
+    texts: [
+      "/auth/account",
+      "/auth/reauth",
+      "/auth/account/email",
+      "/auth/account/email/confirm",
+      "/auth/account/password",
+      "/auth/account/links/start",
+      "/auth/account/links/${segment(provider)}",
+      "/auth/account/passkeys/${segment(id)}",
+      "/auth/account/sessions",
+      "/auth/account/sessions/${segment(handle)}",
+      "/auth/account/sessions/revoke-others",
+    ],
+  },
 };
 
 /** Files allowed to navigate to a path literal, by why. */

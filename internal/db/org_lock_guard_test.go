@@ -53,6 +53,7 @@ var orgWritingDecls = map[string]string{
 	// A project move's statement set (MoveProjectOrg, orgSensitiveStoreWrites).
 	"moveProjectOrgProjectSQL":     "restamps the moved project's org (MoveProjectOrg, orgSensitiveStoreWrites)",
 	"moveProjectOrgSharedChatsSQL": "restamps the moved project's shared chats (MoveProjectOrg, orgSensitiveStoreWrites)",
+	"moveProjectOrgChatMembersSQL": "records the moved chats' cleared grants in their source org (MoveProjectOrg, orgSensitiveStoreWrites)",
 	"moveProjectOrgChatsSQL":       "restamps the moved project's chats (MoveProjectOrg, orgSensitiveStoreWrites)",
 	"moveProjectOrgRunsSQL":        "restamps the moved chats' runs (MoveProjectOrg, orgSensitiveStoreWrites)",
 	"moveProjectOrgTriggerSQL":     "restamps a moved trigger (MoveProjectOrg, orgSensitiveStoreWrites)",

@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/questions"
 )
 
 type inboxFixture struct {
@@ -77,7 +78,7 @@ func (f *inboxFixture) approval(t *testing.T, id, chatID string, at time.Time) {
 func (f *inboxFixture) question(t *testing.T, id, chatID string, at time.Time) {
 	t.Helper()
 	meta := `{"type":"ask_user","questions":[{"question":"Which branch?"}]}`
-	require.NoError(t, f.repo.CreateQuestion(f.ctx, &db.Question{
+	require.NoError(t, questions.NewFromRepo(f.repo).CreateQuestion(f.ctx, &db.Question{
 		ID: id, ChatID: chatID, WorkflowID: chatID, ThreadID: chatID, Status: 1,
 		Metadata: &meta, CreatedAt: at,
 	}))
@@ -192,7 +193,7 @@ func TestListInbox_QuestionAppearsAndClearsWhenAnswered(t *testing.T) {
 	assert.Equal(t, "q-1", resp.Items[0].GetQuestion().QuestionId)
 	assert.Equal(t, "Which branch?", resp.Items[0].GetQuestion().Prompt)
 
-	require.NoError(t, f.repo.ResolveQuestion(f.ctx, "q-1", nil))
+	require.NoError(t, questions.NewFromRepo(f.repo).ResolveQuestion(f.ctx, "q-1", nil))
 	assert.Empty(t, f.list(t, nil).Items)
 }
 
@@ -545,7 +546,7 @@ func TestListInbox_ScopedToCallerAcrossEveryKind(t *testing.T) {
 	}
 	require.NoError(t, f.repo.CreateApproval(otherCtx, &db.Approval{ID: "o-appr", ChatID: "o-a", ApprovalType: 1, EntityID: "o-appr", Status: 1, Title: "t", CreatedAt: now}))
 	meta := `{}`
-	require.NoError(t, f.repo.CreateQuestion(otherCtx, &db.Question{ID: "o-ques", ChatID: "o-q", WorkflowID: "o-q", Status: 1, Metadata: &meta, CreatedAt: now}))
+	require.NoError(t, questions.NewFromRepo(f.repo).CreateQuestion(otherCtx, &db.Question{ID: "o-ques", ChatID: "o-q", WorkflowID: "o-q", Status: 1, Metadata: &meta, CreatedAt: now}))
 	require.NoError(t, f.repo.SetChatDaemonBlocked(otherCtx, "o-w", true))
 	cfg, _ := json.Marshal(core.ScheduleConfig{Cron: []string{"0 9 * * *"}})
 	require.NoError(t, f.repo.CreateTrigger(otherCtx, &core.Trigger{

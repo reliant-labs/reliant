@@ -16,6 +16,7 @@ import { NoMachineState } from "../NoMachineState";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useSidebarStore } from "../../store/sidebarStore";
 import { reliantApiBaseUrl } from "../../lib/connect";
+import { isForgeAuth } from "../../lib/auth/forge-api";
 import { daemonLabel } from "../Automations/daemonChoices";
 import { isAwakeMachine } from "../../lib/chatMachine";
 import { pageActivity } from "../../lib/pageActivity";
@@ -24,6 +25,7 @@ import {
   startTerminalSessionSpan,
   type TerminalSessionSpan,
 } from "./terminalTrace";
+import { desktopTerminalSocket } from "@/lib/desktop-terminal-socket";
 
 interface TerminalProps {
   sessionId: string;
@@ -599,9 +601,15 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, chatId,
       const host = baseURL.replace(/^https?:\/\//, "");
       logger.info("[Terminal] Using gRPC base URL for terminal WS", { baseURL });
 
-      // Get auth token
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || "";
+      // Get auth token. forge sign-in sends none: the base is this page's
+      // origin (`/_api/@reliant`, reliantApiBaseUrl), so the session cookie
+      // rides the same-origin upgrade, and a token in the URL would only leak
+      // into logs.
+      let token = "";
+      if (!isForgeAuth()) {
+        const { data: { session } } = await supabase.auth.getSession();
+        token = session?.access_token || "";
+      }
       if (disposed || seq !== connectSeq || attemptTimedOut) return () => {};
 
       const params = new URLSearchParams();
@@ -625,7 +633,9 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, chatId,
       // working directory are none of the log's business.
       logger.info("[Terminal] Connecting to WebSocket", { url: redactedTerminalWSURL(wsBase, params) });
 
-      const ws = new WebSocket(wsUrl);
+      // The packaged desktop app on forge sign-in: its main process holds the
+      // session and relays the socket (lib/desktop-terminal-socket.ts).
+      const ws = desktopTerminalSocket(params) ?? new WebSocket(wsUrl);
       wsRef.current = ws;
       sessionSpanRef.current = span;
       socketCreatedAtRef.current = Date.now();

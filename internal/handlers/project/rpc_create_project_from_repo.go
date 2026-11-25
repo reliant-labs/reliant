@@ -86,11 +86,10 @@ func (s *Service) CreateProjectFromRepo(
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("could not derive a project name from %q — pass name explicitly", cloneURL))
 	}
 	branch := strings.TrimSpace(req.Msg.GetBranch())
+	// An empty path is defaulted once the machine is read: where it keeps
+	// projects depends on the machine (defaultClonePath).
 	path := strings.TrimSpace(req.Msg.GetPath())
-	if path == "" {
-		path = cloudProjectPath(name)
-	}
-	if !ospath.IsAbs(path) {
+	if path != "" && !ospath.IsAbs(path) {
 		// ospath, not filepath: the path names a directory on the user's
 		// DAEMON, which may be Windows while this server is Linux.
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("project path must be absolute, got: %q", path))
@@ -131,6 +130,9 @@ func (s *Service) CreateProjectFromRepo(
 		if scope, err = s.machineScope(ctx, userID, machine); err != nil {
 			return nil, err
 		}
+	}
+	if path == "" {
+		path = s.defaultClonePath(ctx, machine, name)
 	}
 	existing, err := s.existingProjectForRepo(ctx, userID, path, cloneURL, scope)
 	if err != nil {
@@ -182,12 +184,17 @@ func (s *Service) CreateProjectFromRepo(
 		branchPtr = &branch
 	}
 
-	// Record where the checkout will live, in the state it is actually in.
+	// Record where the checkout will live, in the state it is actually in,
+	// with the nested repositories the machine's gateway clones into it
+	// once the root lands (tools_daemon nested_clone.go): the project stays
+	// installing until they have, and fails naming each one that did not.
 	installState := core.ProjectInstallInstalled
+	var nested []string
 	if cloneResult.Queued {
 		installState = core.ProjectInstallInstalling
+		nested = s.nestedRepoIDs(ctx, project.ID)
 		if err := s.deps.Repo.UpsertQueuedProjectDaemon(
-			ctx, project.ID, daemonID, clonedPath, branchPtr, requestID,
+			ctx, project.ID, daemonID, clonedPath, branchPtr, requestID, nested,
 		); err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to record project installation"))
 		}
@@ -205,7 +212,7 @@ func (s *Service) CreateProjectFromRepo(
 
 	logging.InfoContext(ctx, "CreateProjectFromRepo: project added",
 		"project_id", project.ID, "daemon_id", daemonID,
-		"queued", cloneResult.Queued, "repo", gitremote.Redacted(cloneURL))
+		"queued", cloneResult.Queued, "nested_repos", len(nested), "repo", gitremote.Redacted(cloneURL))
 
 	return connect.NewResponse(&reliantv1.CreateProjectFromRepoResponse{
 		Project:       projectToProto(project),
@@ -220,19 +227,62 @@ func (s *Service) CreateProjectFromRepo(
 //
 // Re-adding a repo the user already has is a normal thing to do — they may be
 // putting it on a SECOND machine — so the add is find-or-create rather than an
-// error. Matching on remote URL first and path second mirrors how the old
-// client chain recovered from AlreadyExists. Both match in scope only (nil:
-// any org): the same repo may be a project in each of the caller's orgs.
-// A found project the caller may no longer act in is refused
-// (reusableProject), never re-added.
+// error. Matching on the repository first (projectOfRepository: any form of
+// its remote) and path second mirrors how the old client chain recovered from
+// AlreadyExists. Both match in scope only (nil: any org): the same repo may be
+// a project in each of the caller's orgs. A found project the caller may no
+// longer act in is refused (reusableProject), never re-added.
 func (s *Service) existingProjectForRepo(ctx context.Context, userID, path, cloneURL string, scope *core.OrgScope) (*core.Project, error) {
-	if existing, err := s.deps.Lookups.GetProjectByRemoteURLAndUserInScope(ctx, cloneURL, userID, scope); err == nil && existing != nil {
+	if existing := s.projectOfRepository(ctx, cloneURL, userID, scope); existing != nil {
+		return existing, reusableProject(ctx, userID, existing)
+	}
+	if existing, err := s.deps.Lookups.GetProjectBySameRemoteAndUserInScope(ctx, cloneURL, userID, scope); err == nil && existing != nil {
 		return existing, reusableProject(ctx, userID, existing)
 	}
 	if existing, err := s.deps.Lookups.GetProjectByPathAndUserInScope(ctx, path, userID, scope); err == nil && existing != nil {
 		return existing, reusableProject(ctx, userID, existing)
 	}
 	return nil, nil
+}
+
+// projectOfRepository is the caller's project, in scope, of the repository
+// remote names, nil when there is none: matched by repository
+// (projects.remote_key, git_remote_key), so the SSH form of a GitHub remote
+// finds a project created from its HTTPS form and the reverse. A remote that
+// names no server (a local path, relative or absolute) has no key and matches
+// nothing: the same local path on two machines names two repositories. The
+// oldest when several match.
+func (s *Service) projectOfRepository(ctx context.Context, remote, userID string, scope *core.OrgScope) *core.Project {
+	remote = strings.TrimSpace(remote)
+	if remote == "" {
+		return nil
+	}
+	if existing, err := s.deps.Lookups.GetProjectByRemoteKeyAndUserInScope(ctx, remote, userID, scope); err == nil && existing != nil {
+		return existing
+	}
+	return nil
+}
+
+// freeRemoteURL is remote when no project of the user's in org already holds
+// that exact remote_url, else nil: projects_org_user_remote_url_key (user,
+// remote_url, org) would refuse the row, and a remote that matched no
+// project by repository (projectOfRepository) is one with no key, a local
+// path, which identifies nothing. The project is created without it, as one
+// with no remote is. A lookup that fails keeps the remote: the insert then
+// decides, as before.
+func (s *Service) freeRemoteURL(ctx context.Context, remote *string, userID string, orgID *string) *string {
+	if remote == nil || strings.TrimSpace(*remote) == "" {
+		return remote
+	}
+	// The index's bucket: the org, or the rows with no org ('' names none).
+	bucket := &core.OrgScope{IncludeUnassigned: true}
+	if orgID != nil {
+		bucket = &core.OrgScope{OrgID: *orgID}
+	}
+	if existing, err := s.deps.Lookups.GetProjectByRemoteURLAndUserInScope(ctx, *remote, userID, bucket); err == nil && existing != nil {
+		return nil
+	}
+	return remote
 }
 
 // createProjectForRepo creates the project row for a repo being added, under

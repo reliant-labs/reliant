@@ -28,7 +28,7 @@
 
 import Tooltip from "../forge-ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Bot, ChevronDown, Terminal, HelpCircle, RotateCw, Square, X } from "lucide-react";
+import { Bot, ChevronDown, Terminal, HelpCircle, RotateCw, Square, X, XCircle } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
@@ -44,6 +44,7 @@ import {
 } from "./useBackgroundWork";
 import * as chatActions from "../../hooks/chat-actions";
 import { statusBannerFrame, useStatusSlotCollapsed, useStatusSlotSummary } from "./ComposerStatusSlot";
+import { ERROR_ROW_REVEAL_CLASS } from "./ErrorRow";
 
 interface BackgroundWorkPillProps {
   chatId?: string;
@@ -282,15 +283,18 @@ function FailedSpawnRow({
           handleSelect();
         }
       }}
-      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
+      className="group/err flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       data-testid={`background-work-failed-${spawn.threadId}`}
     >
-      <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 text-warning-ink" />
+      {/* The same quiet line as the transcript's failed agent row: the icon
+          carries the state, the words read in plain ink. */}
+      <XCircle className="size-3.5 flex-shrink-0 text-destructive-ink" aria-hidden="true" />
       <span className="truncate font-medium text-foreground">{spawn.title}</span>
-      <span className={cn("truncate", retry === "requested" ? "text-muted-foreground" : "text-warning-ink")}>
+      <span className="truncate text-muted-foreground">
         {retry === "requested" ? "Retry requested" : "Stopped on an error"}
       </span>
-      <span className="ml-auto flex flex-shrink-0 items-center gap-1.5">
+      {/* Retry and Dismiss show on hover or focus, and always on touch. */}
+      <span className={cn("ml-auto flex flex-shrink-0 items-center gap-1.5", retry === "idle" && ERROR_ROW_REVEAL_CLASS)}>
         <Tooltip
           content={
             spawn.parentThreadId
@@ -306,7 +310,7 @@ function FailedSpawnRow({
             onClick={handleRetry}
             aria-label={`Retry failed agent ${spawn.title}`}
             disabled={retry !== "idle" || !spawn.parentThreadId}
-            className="rounded p-0.5 transition-colors hover:bg-muted disabled:opacity-60"
+            className="touch-target rounded-md p-0.5 transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
           >
             <RotateCw className={cn("h-3.5 w-3.5 text-foreground", retry === "sending" && "animate-spin")} />
           </button>
@@ -316,7 +320,7 @@ function FailedSpawnRow({
             type="button"
             onClick={handleDismiss}
             aria-label={`Dismiss failed agent ${spawn.title}`}
-            className="rounded p-0.5 transition-colors hover:bg-muted"
+            className="touch-target rounded-md p-0.5 transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
@@ -434,7 +438,7 @@ export function BackgroundWorkPill({
           <span className="relative inline-flex h-2 w-2 rounded-full bg-warning" />
         </span>
       ) : hasFailed ? (
-        <span className="relative inline-flex h-2 w-2 flex-shrink-0 rounded-full bg-warning" />
+        <XCircle className="size-3.5 flex-shrink-0 text-destructive-ink" aria-hidden="true" />
       ) : (
         <span className="relative flex h-2 w-2 flex-shrink-0">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
@@ -445,7 +449,7 @@ export function BackgroundWorkPill({
       <span
         className={cn(
           "font-medium",
-          isBlocked ? "text-warning-ink" : hasFailed ? "text-warning-ink" : "text-foreground",
+          isBlocked ? "text-warning-ink" : "text-foreground",
         )}
       >
         {isBlocked
@@ -456,7 +460,7 @@ export function BackgroundWorkPill({
       </span>
 
       {isBlocked && hasFailed && (
-        <span className="text-warning-ink">· {failedLabel}</span>
+        <span className="text-muted-foreground">· {failedLabel}</span>
       )}
       {(isBlocked || hasFailed) && summary && (
         <span className="text-muted-foreground">· {summary} running</span>
@@ -474,7 +478,7 @@ export function BackgroundWorkPill({
   );
 
   return (
-    <div className={statusBannerFrame(inSheet, "flex-shrink-0 border-t border-border bg-muted/20 px-3 py-1.5")}>
+    <div className={statusBannerFrame(inSheet, "flex-shrink-0 border-t border-border-subtle px-3 py-1.5")}>
       {inSheet ? (
         <div className="flex w-full items-center gap-2 text-xs" data-testid="background-work-pill">
           {header}

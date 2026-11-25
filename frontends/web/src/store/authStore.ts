@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+import { create, type StateCreator } from 'zustand'
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase, setAuthStorageUnreadableHandler } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
@@ -17,6 +17,15 @@ import {
   oauthCallbackTransport,
   type OAuthProvider,
 } from '@/lib/oauth-signin'
+import { isForgeAuth } from '@/lib/auth/forge-api'
+import { identityOf, sameIdentity, type AuthIdentity } from '@/lib/auth/identity'
+import { forgeSessionOf, forgeUserOf } from '@/lib/auth/forge-session'
+import {
+  fetchIdentity as fetchForgeIdentity,
+  signIn as forgeSignIn,
+  signOut as forgeSignOut,
+  type Identity as ForgeIdentity,
+} from '@/lib/auth/native-login'
 
 const isElectron = !!window.electronAPI
 
@@ -386,6 +395,12 @@ const trackAuthFunnelEvent = (eventName: string, metadata: Record<string, string
 interface AuthState {
   user: User | null
   session: Session | null
+  /**
+   * Who is signed in, provider-neutral: derived from `user` on every write
+   * (withIdentity below), whichever provider installed it. Read it through
+   * lib/auth/use-auth.ts.
+   */
+  identity: AuthIdentity | null
   loading: boolean
   initialized: boolean
   authError: string | null // For OAuth callback errors
@@ -431,6 +446,13 @@ interface AuthState {
   installIdentity: (user: User | null, session: Session | null, mark?: number) => Promise<boolean>
   signOut: () => Promise<void>
   setApiKeySession: (apiKey: string) => void
+  /**
+   * forge mode: install the identity the login broker answered (a sign-up,
+   * social or magic-link sign-in, a password reset) through the same
+   * serialized transition as every other sign-in. False when nothing was
+   * installed (authError says why) or the identity is not signed in.
+   */
+  installForgeIdentity: (identity: ForgeIdentity) => Promise<boolean>
 
   initialize: () => Promise<void>
   refreshSession: () => Promise<void>
@@ -460,6 +482,7 @@ const runOAuthSignIn = async (
   // browser navigated to the provider — indistinguishable from a page refresh.
   // AuthScreen already shows a per-provider pending state on the button that
   // was clicked, which acknowledges the click without unmounting anything.
+  supabaseOnly('Provider sign-in')
   const startedAt = Date.now()
   const transport = oauthCallbackTransport()
 
@@ -485,9 +508,74 @@ const runOAuthSignIn = async (
 /** The auth restore in flight (initialize), shared by its concurrent callers. */
 let initializing: Promise<void> | null = null
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+/** Refused in forge mode: the action is Supabase's, and forge's screens use the broker. */
+const supabaseOnly = (action: string): void => {
+  if (isForgeAuth()) throw new Error(`${action} is not available with forge sign-in`)
+}
+
+/**
+ * Derives `identity` from `user` on every write, including a test's or a
+ * caller's `useAuthStore.setState`, so the two can never disagree. The
+ * previous object is kept while nothing about the identity changed (a token
+ * refresh), so `useAuthStore((s) => s.identity)` does not re-render for it.
+ */
+const withIdentity =
+  (config: StateCreator<AuthState>): StateCreator<AuthState> =>
+  (set, get, api) => {
+    const derive = (partial: Partial<AuthState>): Partial<AuthState> => {
+      if (!('user' in partial)) return partial
+      const next = identityOf(partial.user)
+      const previous = get()?.identity ?? null
+      return { ...partial, identity: sameIdentity(previous, next) ? previous : next }
+    }
+    const rawSetState = api.setState
+    const setState: typeof api.setState = (partial, replace) => {
+      const resolved = typeof partial === 'function' ? partial(get()) : partial
+      ;(rawSetState as (p: Partial<AuthState>, r?: boolean) => void)(derive(resolved as Partial<AuthState>), replace as boolean | undefined)
+    }
+    api.setState = setState
+    return config(setState as typeof set, get, api)
+  }
+
+/**
+ * forge mode: install what the broker's /auth/session says, through the
+ * serialized transition (a different subject clears the previous account's
+ * state first, exactly as for Supabase).
+ */
+const adoptForgeIdentity = (set: SetAuthState, identity: ForgeIdentity, forceClear = false): Promise<boolean> => {
+  const user = forgeUserOf(identity)
+  return adoptIdentity(set, user, user ? forgeSessionOf(user) : null, forceClear)
+}
+
+// forge mode: every identity action this page starts (restore, refresh, sign
+// in, sign out, an identity answered elsewhere) takes the next number. A
+// /auth/session answer is adopted only while its read is still the newest
+// action: a refresh that started before a sign-out, or before a newer
+// refresh, answers about a cookie that has since moved on, and installing it
+// would put back an identity the page no longer holds. adoptIdentity
+// serializes installs, not reads, so it cannot see this on its own.
+// Actions whose answer moves the cookie (sign-in, sign-out) take a number
+// again once that answer is in, so a read that began before it is stale too.
+let forgeActions = 0
+const beginForgeAction = (): number => ++forgeActions
+const isLatestForgeAction = (action: number): boolean => action === forgeActions
+
+// forge mode: another tab or host signing in or out reaches this page only
+// through the cookie, so the session is re-read when the page is shown again.
+let forgeRecheckInstalled = false
+const installForgeRecheck = (recheck: () => void): void => {
+  if (forgeRecheckInstalled || typeof window === 'undefined') return
+  forgeRecheckInstalled = true
+  window.addEventListener('focus', recheck)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') recheck()
+  })
+}
+
+export const useAuthStore = create<AuthState>()(withIdentity((set, get) => ({
   user: null,
   session: null,
+  identity: null,
   loading: true,
   authError: null,
   initialized: false,
@@ -503,6 +591,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     trackAuthFunnelEvent('login_attempted', {
       auth_method: 'password',
     })
+
+    if (isForgeAuth()) {
+      beginForgeAction()
+      let identity: ForgeIdentity
+      try {
+        identity = await forgeSignIn({ email, password })
+      } catch (error) {
+        trackAuthFunnelEvent('login_failed', {
+          auth_method: 'password',
+          failure_reason: normalizeFailureReason(error),
+          latency_ms: Date.now() - startedAt,
+        })
+        throw error
+      }
+      // A recheck that read the cookie before this answer set it is stale.
+      beginForgeAction()
+      if (!(await adoptForgeIdentity(set, identity))) {
+        throw new Error(CLEANUP_FAILED_MESSAGE)
+      }
+      return
+    }
 
     // Don't set loading state here to avoid remounting components
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -575,6 +684,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
    * done, and the only thing left is verification.
    */
   linkEmailIdentity: async (email: string, password: string, state?: OAuthRedirectState) => {
+    supabaseOnly('Linking an email')
     const redirectTo = withOAuthState(await getOAuthRedirectUrl(), {
       source: 'link',
       ...state,
@@ -669,6 +779,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
 
   signInAnonymously: async () => {
+    supabaseOnly('Anonymous sign-in')
     const mark = identityActionMark()
     trackAuthFunnelEvent('login_attempted', {
       auth_method: 'anonymous',
@@ -730,8 +841,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Clear API key if present
       localStorage.removeItem('reliant-api-key')
 
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
+      if (isForgeAuth()) {
+        beginForgeAction()
+        // The broker ends the server-side session and expires the cookie.
+        // A failure leaves the cookie live, so it is thrown like Supabase's.
+        await forgeSignOut()
+        // Taken again once the cookie is gone: a recheck that started
+        // while the logout was in flight read the cookie before it went.
+        beginForgeAction()
+      } else {
+        const { error } = await supabase.auth.signOut()
+        if (error) throw error
+      }
 
       // NOTE: supabase.auth.signOut() will automatically call our storage adapter's
       // removeItem() which clears the auth file. No need for manual authClear().
@@ -761,6 +882,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // (LinkIdentityForm's pendingProvider -> OAuthButton), which leaves the page
   // on screen. Same reasoning as signIn's note above.
   linkOAuthIdentity: async (provider: LinkableProvider, state?: OAuthRedirectState) => {
+    supabaseOnly('Linking an account')
     try {
       // Thread OAuth round-trip state (source/returnTo) onto the redirect URL
       // so the /auth/callback handler can land the user back where the link
@@ -872,6 +994,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
    * generically — so the code and the link finish the same sign-in.
    */
   sendEmailSignInCode: async (email: string, state?: OAuthRedirectState) => {
+    supabaseOnly('Email sign-in codes')
     trackAuthFunnelEvent('login_attempted', { auth_method: 'email_otp' })
 
     const { error } = await supabase.auth.signInWithOtp({
@@ -1140,6 +1263,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  installForgeIdentity: async (identity: ForgeIdentity) => {
+    if (!identity.authenticated) return false
+    beginForgeAction()
+    const installed = await adoptForgeIdentity(set, identity)
+    if (installed) set({ loading: false, initialized: true })
+    return installed
+  },
+
   setApiKeySession: (apiKey: string) => {
     // API-key sessions share a synthetic id: explicit replacement must still
     // invalidate reader authority without putting the credential in a key.
@@ -1213,6 +1344,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       set({ loading: true })
 
+      if (isForgeAuth()) {
+        // The broker's session is the cookie: nothing in browser storage to
+        // restore, and no Supabase client is touched. A broker that cannot
+        // answer (native-login fetchIdentity rejects) installs nobody, so the
+        // page fails closed to the sign-in screen; the cookie is untouched,
+        // and the next recheck restores the session once the broker answers.
+        const action = beginForgeAction()
+        try {
+          const identity = await fetchForgeIdentity()
+          if (isLatestForgeAction(action)) await adoptForgeIdentity(set, identity)
+        } catch (error) {
+          logger.warn('[AuthStore] The sign-in service could not say who is signed in:', error)
+        }
+        set({ loading: false, initialized: true })
+        installForgeRecheck(() => {
+          if (get().initialized) void get().refreshSession()
+        })
+        return
+      }
+
       // A permanently unreadable stored session must become a real auth state.
       //
       // Without this the app half-authenticates: the storage adapter can only
@@ -1278,6 +1429,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   refreshSession: async () => {
     const mark = identityActionMark()
+    if (isForgeAuth()) {
+      // The broker refreshes the tokens it holds server-side; this only asks
+      // whether the cookie still names a session, and whose. An API-key
+      // session is not the broker's and stays as it is.
+      if (get().identity?.isApiKey) return
+      const action = beginForgeAction()
+      let identity: ForgeIdentity
+      try {
+        identity = await fetchForgeIdentity()
+      } catch (error) {
+        // Not an answer about the session (the broker unreachable, or its
+        // store): the session may well be live, so the page keeps it. Only
+        // a definitive signed-out answer signs anyone out.
+        logger.warn('[AuthStore] Session recheck failed; keeping the current session:', error)
+        return
+      }
+      // Superseded by a sign-in, sign-out or newer recheck while in flight.
+      if (!isLatestForgeAction(action)) return
+      await adoptForgeIdentity(set, identity)
+      return
+    }
     try {
       const { data: { session }, error } = await supabase.auth.refreshSession()
 
@@ -1292,17 +1464,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       })
     }
   },
-}))
+})))
 
 // One synchronous boundary covers every writer: explicit sign-in/out, adoptSession,
 // auth events, restoration, refresh failure and setUser. Token refresh for the same
 // identity is NOT a new reader. The neutral consumer never imports real auth.
-const readerId = (state: Pick<AuthState, 'user' | 'session'>) => {
-  // Split setter writes may temporarily disagree: fail closed until user and
-  // session are aligned, rather than reading with A's view and B's credential.
+const readerId = (state: Pick<AuthState, 'identity' | 'session'>) => {
+  // Split setter writes may temporarily disagree: fail closed until the
+  // identity (derived from user) and session are aligned, rather than reading
+  // with A's view and B's credential.
   if (!state.session) return null
-  if (state.session.user?.id && state.session.user.id !== state.user?.id) return null
-  return state.user?.is_anonymous ? null : state.user?.id ?? null
+  if (state.session.user?.id && state.session.user.id !== state.identity?.id) return null
+  return state.identity?.isAnonymous ? null : state.identity?.id ?? null
 }
 setReaderPrincipal(readerId(useAuthStore.getState()))
 useAuthStore.subscribe((state, previous) => {
@@ -1313,5 +1486,5 @@ useAuthStore.subscribe((state, previous) => {
 // at the same synchronous boundary, so no read between a sign-in and the
 // ActiveOrgBinding's next render sees the previous person's org, or no person
 // at all (lib/orgScope would take that for "signed out: nothing to wait for").
-bindActiveOrgUser(useAuthStore.getState().user?.id ?? null)
-useAuthStore.subscribe((state) => bindActiveOrgUser(state.user?.id ?? null))
+bindActiveOrgUser(useAuthStore.getState().identity?.id ?? null)
+useAuthStore.subscribe((state) => bindActiveOrgUser(state.identity?.id ?? null))

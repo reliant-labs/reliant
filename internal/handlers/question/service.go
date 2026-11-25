@@ -30,6 +30,8 @@ type Deps struct {
 	ChatViews ChatViews
 	// Questions lists the questions a chat or a user has open.
 	Questions Questions
+	// Resolver resolves a question (Resolver, deps.go).
+	Resolver Resolver
 	// Mailbox queues an answer given behind a blocking question (Mailbox,
 	// deps.go).
 	Mailbox Mailbox
@@ -62,6 +64,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.ChatViews == nil {
 		return fmt.Errorf("question: Deps.ChatViews is required")
+	}
+	if d.Resolver == nil {
+		return fmt.Errorf("question: Deps.Resolver is required")
 	}
 	if d.Questions == nil {
 		return fmt.Errorf("question: Deps.Questions is required")

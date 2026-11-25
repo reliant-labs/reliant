@@ -22,15 +22,12 @@ type fakeMachine struct {
 	code    int
 	err     error
 	command string
-	name    string
 }
 
 func (m *fakeMachine) Run(_ context.Context, command string) (string, int, error) {
 	m.command = command
 	return m.out, m.code, m.err
 }
-
-func (m *fakeMachine) Name() string { return m.name }
 
 // fakeCredentials is a connection store: integrations it holds resolve;
 // reauth ones fail as an expired connection does.

@@ -55,6 +55,13 @@ type Service interface {
 	// credential is refused there: it has no orgs to list.
 	ListMyOrganizations(ctx context.Context, jwt string) ([]MyOrganization, error)
 
+	// GetCurrentAccount is the caller's control-plane account
+	// (UserService.GetCurrentUser): what the sign-in session reports beside
+	// the identity's own claims, because onboarding decides from it (its
+	// created_at, not the identity's: an imported user's identity record is
+	// as old as the import).
+	GetCurrentAccount(ctx context.Context, jwt string) (*Account, error)
+
 	// PreviewAccountDeletionWallet asks the control plane what deleting the
 	// caller's account would refund and forfeit. Changes nothing. The error
 	// wraps ErrAccountDeletionConfirmed when the platform account is already
@@ -209,22 +216,20 @@ type Service interface {
 	// control-plane's code (unavailable: no catalog could be read).
 	GetModelListPrices(ctx context.Context, refs []ModelRef) ([]ModelListPrice, time.Time, error)
 
-	// MintStepKey mints a workflow run step's LLM gateway step key
-	// (LLMStepKeyInternalService.MintStepKey): a short-lived `rlsk_` bearer
-	// capped to the step's models, budget and lifetime and billed to the
-	// run's org, idempotent by r.RequestID (a repeat rotates the key). Signed
-	// with this process's internal-service identity. The plaintext is
-	// returned once, as a StepKeySecret that never prints. Errors:
-	// ErrStepKeysUnsupported when the control plane has no such service, has
-	// no gateway configured for it, or this adapter cannot sign; otherwise a
-	// *StepKeyError carrying control-plane's code and reason
-	// (ReasonStepKey*).
-	MintStepKey(ctx context.Context, r StepKeyRequest) (StepKey, error)
-
-	// RevokeStepKey revokes the step key minted under requestID and reports
-	// what it spent. Idempotent: an unknown or already revoked request id
-	// answers Revoked false and no error. Errors as MintStepKey.
-	RevokeStepKey(ctx context.Context, requestID string) (StepKeyRevocation, error)
+	// GetConversationTrace reads one page of a chat's spans from control-plane's
+	// ConversationTraceInternalService (tenant zero's span store;
+	// dev-docs/design/agent-analytics.md §2.3): the spans whose org.id is
+	// q.OrgID and whose gen_ai.conversation.id is q.ConversationID, started in
+	// [q.Start, q.End), oldest first, allowlisted attributes only. Signed with
+	// this process's internal-service identity; control-plane checks nothing
+	// about people, so the caller MUST have decided the person may read the
+	// chat (authz.ReadChatAccess) and pass only that chat's own id and org.
+	// Errors: ErrConversationTraceUnsupported when the control plane has no
+	// such service or this adapter cannot sign; otherwise a
+	// *ProjectOrgMoveError carrying control-plane's code
+	// (resource_exhausted: rate limited; unavailable / failed_precondition:
+	// no span store there).
+	GetConversationTrace(ctx context.Context, q ConversationTraceQuery) (ConversationTrace, error)
 
 	// HasCoverageBlob asks whether a retained coverage report of the forge
 	// project names the git blob (TestsService.HasCoverageBlob), as the

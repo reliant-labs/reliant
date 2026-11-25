@@ -88,10 +88,15 @@ export function QuietRow({
       };
 
   return (
-    <div className={cn("group/row min-w-0", className)} data-testid={testId}>
+    <div className={cn("min-w-0", className)} data-testid={testId}>
+      {/* The hover group is the header line alone, not the whole row: a row's
+          open detail can hold rows of its own (a group of sub-agents, a fold
+          of tool calls), and hovering one of those must reveal its actions
+          only, never every row's in the group. */}
       <Header
         {...headerProps}
         className={cn(
+          "group/row",
           QUIET_ROW_LINE_CLASS,
           "-mx-1.5 w-[calc(100%+0.75rem)] px-1.5 text-left transition-colors duration-150",
           tone === "destructive" && "text-destructive-ink",

@@ -4,7 +4,7 @@
  * DEV-ONLY proving harness for the storage browser. NOT a product surface.
  *
  * The real StorageBrowser, inside the real console chrome
- * (ConsolePreviewShell), on its real client over the shop fixture pack
+ * (ConsolePreviewFrame: the app's shell and the console's bar), on its real client over the shop fixture pack
  * (src/fixtures/shop, <FixturePreview>) — unauthenticated, no backend — so
  * every state can be looked at in every colour scheme and screenshotted. A
  * case is a named overlay over the pack (src/fixtures/shop/overlays.ts
@@ -26,15 +26,15 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import PageHeader from "@/components/forge-ui/page_header";
 import { latency } from "@/fixtures/overlay";
-import { FixturePreview, type FixtureServeOptions } from "@/fixtures/preview";
+import type { FixtureServeOptions } from "@/fixtures/preview";
 import { SHOP_SERVE, shopPack } from "@/fixtures/shop";
 import { DEMO_ENVS } from "@/fixtures/shop/handlers/scope";
 import { browserOverlays } from "@/fixtures/shop/overlays";
 import type { FixturePack } from "@/fixtures/transport";
 
 import { createFixtureReader, FixtureReaderProvider } from "../../AuditedAccess/readerSession";
-import { ConsolePreviewShell } from "../../Console/ConsolePreviewShell";
 import { withSearch } from "../../Console/paths";
+import { ConsolePreviewFrame } from "../../__preview__/PreviewShellFrame";
 import { StorageBrowser } from "../StorageBrowser";
 import { pickStorageSearch, type StorageSearch } from "../storageUrl-model";
 
@@ -95,10 +95,12 @@ export default function StoragePreview() {
   const href = (next: StorageSearch) => withSearch(BASE, { ...own, ...next });
 
   return (
-    <ConsolePreviewShell
+    // A fresh transport and cache per case (the nav's too); the browser remounts per environment.
+    <ConsolePreviewFrame
       page={{ kind: "storage" }}
-      project="shop"
-      envs={DEMO_ENVS.map((candidate) => ({ name: candidate.name, preview: false }))}
+      pack={SHOP}
+      overlay={active.overlay}
+      serve={active.serve ?? SHOP_SERVE}
       env={env.name}
       onEnvChange={(next) => go({ env: next })}
       controls={
@@ -128,13 +130,10 @@ export default function StoragePreview() {
     >
       <div className="space-y-4">
         <PageHeader density="compact" title="Storage" className="mb-0" />
-        {/* A fresh transport and cache per case; the browser remounts per environment. */}
-        <FixturePreview pack={SHOP} overlay={active.overlay} serve={active.serve ?? SHOP_SERVE}>
-          <FixtureReaderProvider reader={reader}>
-            <StorageBrowser key={`${caseId}-${env.id}`} env={env} search={storage} onNavigate={onNavigate} href={href} />
-          </FixtureReaderProvider>
-        </FixturePreview>
+        <FixtureReaderProvider reader={reader}>
+          <StorageBrowser key={`${caseId}-${env.id}`} env={env} search={storage} onNavigate={onNavigate} href={href} />
+        </FixtureReaderProvider>
       </div>
-    </ConsolePreviewShell>
+    </ConsolePreviewFrame>
   );
 }

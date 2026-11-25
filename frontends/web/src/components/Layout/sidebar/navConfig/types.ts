@@ -25,7 +25,7 @@
 import type { ReactNode } from "react";
 
 import type { ConsolePage, OrgPage } from "../../../Forge/Console/paths";
-import type { GroupedNavInput } from "../../../Forge/Console/groupedNav";
+import type { GroupedNavInput } from "../../../Forge/Console/consoleNavModel";
 import type { ShellMode } from "../shellProject";
 
 /** Everything an item's href, match or availability reads: the route and the shell's scope. */
@@ -77,7 +77,7 @@ export type NavBadge = { type: "count"; value: number; tone?: "danger"; label?: 
  * A badge after an item's label: a row's, a group's (drawn open or closed)
  * or an area's. It reads the context only, so it is live from whatever the
  * nav already holds: `ctx.console?.navCounts?.<source>` for a console count
- * (Forge/Console/groupedNav.tsx), `ctx.console?.alertsFiring`, … Undefined:
+ * (Forge/Console/consoleNavModel.ts), `ctx.console?.alertsFiring`, … Undefined:
  * no badge. See countBadge (navConfig/model.ts) for the usual count.
  */
 export type NavBadgeOf = (ctx: NavCtx) => NavBadge | undefined;

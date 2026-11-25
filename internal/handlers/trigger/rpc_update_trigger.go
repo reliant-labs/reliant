@@ -77,7 +77,9 @@ func (s *Service) UpdateTrigger(
 		return nil, err
 	}
 
-	if err := s.deps.Repo.UpdateTriggerInOrg(ctx, updated, reads...); err != nil {
+	if err := s.writeTrigger(ctx, func(ctx context.Context) error {
+		return s.deps.TriggerWrites.UpdateTriggerInOrg(ctx, updated, reads...)
+	}); err != nil {
 		return nil, triggerDBError("update trigger", err)
 	}
 

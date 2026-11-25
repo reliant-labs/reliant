@@ -41,6 +41,58 @@ func (m *MockQuestions) ListPendingQuestionsByChat(ctx context.Context, chatID s
 // Compile-time check.
 var _ Questions = (*MockQuestions)(nil)
 
+// forge:section MockChats
+// forge:hash=31c2cd871f3d0a9b0fca72ff139635fd6accae1d2080b86d6656595bde427c7d
+
+// MockChats is a test mock for the Chats interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockChats.<Method>Func not set" error.
+type MockChats struct {
+	contractkit.Recorder
+	GetChatFunc func(context.Context, string) (*db.Chat, error)
+}
+
+// GetChat records the call and delegates to GetChatFunc when set.
+func (m *MockChats) GetChat(ctx context.Context, id string) (*db.Chat, error) {
+	m.Recorder.Record("GetChat", ctx, id)
+	if m.GetChatFunc != nil {
+		return m.GetChatFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockChats", "GetChat")
+}
+
+// Compile-time check.
+var _ Chats = (*MockChats)(nil)
+
+// forge:section MockQuestionResolver
+// forge:hash=3f3d9b7dd6b010f14241170cfb730403484f82ad2df6f10164d14087dc7ebe63
+
+// MockQuestionResolver is a test mock for the QuestionResolver interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockQuestionResolver.<Method>Func not set" error.
+type MockQuestionResolver struct {
+	contractkit.Recorder
+	ResolveQuestionFunc func(context.Context, string, *string) error
+}
+
+// ResolveQuestion records the call and delegates to ResolveQuestionFunc when set.
+func (m *MockQuestionResolver) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
+	m.Recorder.Record("ResolveQuestion", ctx, id, responseData)
+	if m.ResolveQuestionFunc != nil {
+		return m.ResolveQuestionFunc(ctx, id, responseData)
+	}
+	return contractkit.MockNotSet("MockQuestionResolver", "ResolveQuestion")
+}
+
+// Compile-time check.
+var _ QuestionResolver = (*MockQuestionResolver)(nil)
+
 // forge:section MockWorkflowLoader
 // forge:hash=27de9052bc714bd51848a573063fd6021638e3ab686dcdb35a3c160c957c4b7a
 

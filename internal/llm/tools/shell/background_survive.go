@@ -235,10 +235,30 @@ func (m *BackgroundManager) waitForFileProcess(process *BackgroundProcess, reap 
 	process.recordSurvivors()
 	process.tree.Release()
 	process.fileOut.finish()
-	// Journaled before the completion is reported: the files are gone now,
-	// so a crash past this point must find every line in the journal.
-	m.flushProcessOutput(process)
+	// Do not report completion until the final output is committed. In
+	// particular, closing done would stop the periodic flusher after just one
+	// more attempt. Keep this waiter (and its final lines) retryable instead.
+	m.commitFinalOutput(process)
 	m.handleProcessCompletion(process, err)
+}
+
+// commitFinalOutput retries a configured journal until it accepts the final
+// lines. With no persistence configured there is nothing to retry; keep the
+// files rather than claiming they were journaled.
+func (m *BackgroundManager) commitFinalOutput(process *BackgroundProcess) {
+	for {
+		if m.flushProcessOutput(process) {
+			process.fileOut.remove()
+			return
+		}
+		m.persistenceMu.RLock()
+		configured := m.persistenceCallback != nil && m.persistenceCallback.OnOutput != nil
+		m.persistenceMu.RUnlock()
+		if !configured {
+			return
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
 }
 
 // undoHandOff takes process back after a handoff the exec did not follow:
@@ -275,11 +295,17 @@ func reapAdopted(proc *os.Process) func() error {
 	}
 }
 
-// flushProcessOutput journals the process's output lines not journaled yet.
-func (m *BackgroundManager) flushProcessOutput(process *BackgroundProcess) {
+// flushProcessOutput journals the process's output lines not journaled yet. It
+// reports whether the journal now has every line the process has produced: a
+// write that failed leaves the rest unjournaled, and the caller keeps what the
+// lines can still be recovered from.
+func (m *BackgroundManager) flushProcessOutput(process *BackgroundProcess) bool {
 	process.flushMu.Lock()
 	defer process.flushMu.Unlock()
 	process.flushedSeq = m.flushNewOutputLines(process, process.flushedSeq)
+	process.outputMu.RLock()
+	defer process.outputMu.RUnlock()
+	return process.flushedSeq >= process.outputSeq
 }
 
 // ErrRestartingForUpdate refuses a background process while the daemon hands

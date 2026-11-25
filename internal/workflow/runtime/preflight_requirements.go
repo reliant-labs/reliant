@@ -36,14 +36,17 @@ const preflightRequirementsTimeout = 5 * time.Minute
 //
 // inheritedMachine is whether any node routes to the machine the run
 // inherits (the workflow-level one, else the chat's). When none does — every
-// machine-bound node is placed on a pool — the tools, checkouts and CLI
-// sign-ins are not
+// machine-bound node is placed on a pool — the tools and checkouts are not
 // checked here, on a machine no node uses: each pool member is checked when a
 // step is first placed on it (placedRequirements). The integrations, which
 // are the server's, are still checked here.
-func checkRequirements(ctx workflow.Context, input WorkflowInput, execCtx *ExecutionContext, wf *reliantv1.Workflow, workflowID, thread string, inheritedMachine bool) error {
+//
+// legacyCLILogin is the removed requires.cli_login of a run recorded while it
+// existed (legacyRequiresCLILogin): it made the inherited machine's check run
+// then, so it still schedules it on replay, though nothing checks it now.
+func checkRequirements(ctx workflow.Context, input WorkflowInput, execCtx *ExecutionContext, wf *reliantv1.Workflow, workflowID, thread string, inheritedMachine bool, legacyCLILogin []string) error {
 	req := wf.GetRequires()
-	if requirements.Empty(req) || execCtx.Parent != nil {
+	if (requirements.Empty(req) && len(legacyCLILogin) == 0) || execCtx.Parent != nil {
 		return nil
 	}
 	if !inheritedMachine {
@@ -97,7 +100,6 @@ func requirementsActivityInput(input WorkflowInput, workflowID string, req *reli
 		"tools":           req.GetTools(),
 		"integrations":    req.GetIntegrations(),
 		"repos":           req.GetRepos(),
-		"cli_login":       req.GetCliLogin(),
 		"acting_identity": ActingIdentity(input.Inputs),
 	}
 	if automation, ok := input.Inputs[InputKeyAutomation].(string); ok {
@@ -129,18 +131,16 @@ func requirementsFailureMessage(err error) string {
 // newer than every history recorded without it.
 const placedRequirementsChangeID = "placed-machine-requirements"
 
-// placedRequirements checks the run's `requires:` tools, checkouts and CLI
-// sign-ins on each pool member a step is placed on, once per member per run,
-// before the first
+// placedRequirements checks the run's `requires:` tools and checkouts on each
+// pool member a step is placed on, once per member per run, before the first
 // machine step there dispatches. The startup check (checkRequirements) covers
 // the machine the run inherits; a placed member is a different machine, so
 // what the run requires of a machine is checked again where it actually
 // runs. One per root run, shared by every thread; deterministic workflow
 // state, rebuilt on replay.
 type placedRequirements struct {
-	// base is the activity input minus the machine: tools, repos and CLI
-	// sign-ins only (integrations are the server's, and checked once at
-	// startup).
+	// base is the activity input minus the machine: tools and repos only
+	// (integrations are the server's, and checked once at startup).
 	base map[string]interface{}
 	// byMachine is each member's check, by daemon id: done is set once it
 	// is decided, so a parallel step placed there meanwhile waits for it.
@@ -155,16 +155,18 @@ type placedRequirementsEntry struct {
 }
 
 // newPlacedRequirements returns the run's checker, or nil when there is
-// nothing to check on a machine (no tools, repos or CLI sign-ins required) or the run is a
+// nothing to check on a machine (no tools or repos required) or the run is a
 // child (its root checked). checkedID is a machine the startup check already
 // probed ("" when none), which a placement onto it does not probe again.
-func newPlacedRequirements(input WorkflowInput, execCtx *ExecutionContext, wf *reliantv1.Workflow, workflowID, checkedID string) *placedRequirements {
+// legacyCLILogin is checkRequirements': a run recorded while requires.cli_login
+// existed checked each placed member for it, and keeps scheduling that check.
+func newPlacedRequirements(input WorkflowInput, execCtx *ExecutionContext, wf *reliantv1.Workflow, workflowID, checkedID string, legacyCLILogin []string) *placedRequirements {
 	req := wf.GetRequires()
-	if !requirements.NeedsMachine(req) || execCtx.Parent != nil {
+	if (!requirements.NeedsMachine(req) && len(legacyCLILogin) == 0) || execCtx.Parent != nil {
 		return nil
 	}
 	return &placedRequirements{
-		base:      requirementsActivityInput(input, workflowID, &reliantv1.WorkflowRequirements{Tools: req.GetTools(), Repos: req.GetRepos(), CliLogin: req.GetCliLogin()}),
+		base:      requirementsActivityInput(input, workflowID, &reliantv1.WorkflowRequirements{Tools: req.GetTools(), Repos: req.GetRepos()}),
 		byMachine: map[string]*placedRequirementsEntry{},
 		checkedID: checkedID,
 	}

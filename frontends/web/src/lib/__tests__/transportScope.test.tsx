@@ -100,13 +100,17 @@ describe("a generated read", () => {
   });
 
   it("under a scope over the shop pack reads the pack, and never the live backend", async () => {
+    // A read the shop pack's read-only transport answers: its proto declares NO_SIDE_EFFECTS.
+    // (GetCurrentUser does not: it writes on read, so the demo pack refuses it.)
     const shop = createShopTransport();
-    const expected = (await createClient(UserService, shop).getCurrentUser({})).user?.name;
-    expect(expected).toBeTruthy();
+    const expected = (await createClient(OrganizationService, shop).listMyOrganizations({})).organizations.map((org) => org.id);
+    expect(expected.length).toBeGreaterThan(0);
+    const orgClientOf = scopedClient(OrganizationService, connectClient(OrganizationService));
+    const useMyOrgs = () => useQuery({ queryKey: ["controlplane.v1.OrganizationService", "ListMyOrganizations"], queryFn: (ctx) => orgClientOf(ctx).listMyOrganizations({}), retry: false });
     const scope = createTransportScope({ id: "sample", transport: shop, queryClient: createAppQueryClient(), readOnly: true });
-    const { result } = renderHook(useCurrentUser, { wrapper: inScope(scope) });
+    const { result } = renderHook(useMyOrgs, { wrapper: inScope(scope) });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.user?.name).toBe(expected);
+    expect(result.current.data?.organizations.map((org) => org.id)).toEqual(expected);
     expect(live.seen).toEqual([]);
   });
 

@@ -15,7 +15,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/chatupdates"
-	"github.com/reliant-labs/reliant/internal/daemonmirror"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -50,7 +49,6 @@ func TestWorkerToolsFactoryAnnouncesPlanWritesThroughUpdates(t *testing.T) {
 	factory, err := NewWorkerToolsFactory(WorkerToolsFactoryDeps{
 		DB:            repo,
 		Updates:       updates,
-		Mirror:        &daemonmirror.MockService{},
 		Triggers:      &WorkerTrigger{},
 		Credentials:   &WorkerIntegrationCredentials{},
 		CatalogSearch: &WorkerCatalogSearch{},

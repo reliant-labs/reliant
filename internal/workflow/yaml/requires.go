@@ -14,13 +14,12 @@ import (
 //	  tools: [git, gh, task]
 //	  integrations: [github]
 //	  repos: [control-plane, reliant]
-//	  cli_login: [claude, codex]
 //
 // Each list is plain names (no templates: a requirement is checked before
 // anything is evaluated), unique within its list.
 func unmarshalWorkflowRequirements(node *yaml.Node) (*reliantv1.WorkflowRequirements, error) {
 	if node.Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("requires must be a mapping of tools, integrations, repos and cli_login")
+		return nil, fmt.Errorf("requires must be a mapping of tools, integrations and repos")
 	}
 	req := &reliantv1.WorkflowRequirements{}
 	for i := 0; i+1 < len(node.Content); i += 2 {
@@ -36,10 +35,8 @@ func unmarshalWorkflowRequirements(node *yaml.Node) (*reliantv1.WorkflowRequirem
 			req.Integrations = list
 		case "repos":
 			req.Repos = list
-		case "cli_login":
-			req.CliLogin = list
 		default:
-			return nil, unknownField(key, "unknown requires field: %q (tools, integrations, repos, cli_login)", key)
+			return nil, unknownField(key, "unknown requires field: %q (tools, integrations, repos)", key)
 		}
 	}
 	return req, nil
@@ -68,7 +65,7 @@ func requirementList(key string, val *yaml.Node) ([]string, error) {
 }
 
 func marshalWorkflowRequirements(req *reliantv1.WorkflowRequirements) *yaml.Node {
-	if req == nil || (len(req.GetTools()) == 0 && len(req.GetIntegrations()) == 0 && len(req.GetRepos()) == 0 && len(req.GetCliLogin()) == 0) {
+	if req == nil || (len(req.GetTools()) == 0 && len(req.GetIntegrations()) == 0 && len(req.GetRepos()) == 0) {
 		return nil
 	}
 	m := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
@@ -85,6 +82,5 @@ func marshalWorkflowRequirements(req *reliantv1.WorkflowRequirements) *yaml.Node
 	add("tools", req.GetTools())
 	add("integrations", req.GetIntegrations())
 	add("repos", req.GetRepos())
-	add("cli_login", req.GetCliLogin())
 	return m
 }

@@ -3,8 +3,19 @@ import { ResetPassword } from './ResetPassword'
 import { useAuthStore } from '@/store/authStore'
 import { BrandMark } from './icons/BrandMark'
 import { authPath } from '@/lib/paths'
+import { isForgeAuth } from '@/lib/auth/forge-api'
+import { ForgeResetPasswordPage } from './Auth/forge/ForgeResetPassword'
 
+/**
+ * Choosing a new password. With forge sign-in this is `/auth/reset?userID=…&code=…`,
+ * the page the broker's reset email opens (Auth/forge/ForgeResetPassword);
+ * otherwise `/reset-password`, reached signed in after Supabase's code.
+ */
 export function ResetPasswordScreen() {
+  return isForgeAuth() ? <ForgeResetPasswordPage /> : <SupabaseResetPasswordScreen />
+}
+
+function SupabaseResetPasswordScreen() {
   const navigate = useNavigate()
   const { updatePassword } = useAuthStore()
 

@@ -4,13 +4,11 @@ package db
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -104,10 +102,16 @@ func (r *Repo) ListRuns(ctx context.Context, filters RunListFilters) ([]*RunList
 
 // ListUnlaunchedTriggerEvents is the run log's other half: the trigger
 // events that started no run, under the same filters and keyset as ListRuns.
+//
+// Deprecated: use store.RunListExtStore.ListUnlaunchedTriggerEvents; the run
+// handler reads it through Deps.RunLists.
 func (r *Repo) ListUnlaunchedTriggerEvents(ctx context.Context, filters RunListFilters) ([]*UnlaunchedTriggerEvent, bool, error) {
 	return store.ListUnlaunchedTriggerEvents(ctx, r.ORM(), filters)
 }
 
+// LastRunPerWorkflow is store.LastRunPerWorkflow.
+//
+// Deprecated: use store.RunListExtStore.LastRunPerWorkflow.
 func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
 	return store.LastRunPerWorkflow(ctx, r.ORM(), filters)
 }
@@ -115,6 +119,9 @@ func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) (
 // LastRunPerWorkflowAndOrg is the newest run of each (workflow, org) pair:
 // LastRunPerWorkflow's candidates, before a caller drops the orgs a person
 // may no longer see (store.LastRunPerWorkflowAndOrg).
+//
+// Deprecated: use store.RunListExtStore.LastRunPerWorkflowAndOrg; the run
+// handler reads it through Deps.RunLists.
 func (r *Repo) LastRunPerWorkflowAndOrg(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
 	return store.LastRunPerWorkflowAndOrg(ctx, r.ORM(), filters)
 }
@@ -1081,8 +1088,10 @@ func (r *Repo) RecordObservedProjectDaemonInScope(ctx context.Context, projectID
 	return recorded, err
 }
 
-// UpsertQueuedProjectDaemon records a clone that is queued but has not run.
-func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error {
+// UpsertQueuedProjectDaemon records a clone that is queued but has not run,
+// and the nested repositories (nestedRepoIDs, the project's repos below its
+// root) to clone into it once it lands, in one transaction.
+func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string, nestedRepoIDs []string) error {
 	if projectID == "" {
 		return fmt.Errorf("project ID cannot be empty")
 	}
@@ -1102,6 +1111,9 @@ func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonI
 			return err
 		}
 		if err := store.RecordProjectDaemonQueued(ctx, r.ORM(), projectID, daemonID, path, defaultBranch, requestID); err != nil {
+			return err
+		}
+		if err := store.PlanProjectDaemonRepos(ctx, r.ORM(), projectID, daemonID, nestedRepoIDs); err != nil {
 			return err
 		}
 		return store.ClearProjectDaemonDetachment(ctx, r.ORM(), projectID, daemonID)
@@ -1189,6 +1201,41 @@ func (r *Repo) FailProjectDaemonInstallInScope(ctx context.Context, projectID, d
 		return err
 	})
 	return failed, err
+}
+
+// SettleProjectDaemonFromNestedReposInScope settles the machine's checkout
+// of the project from its nested repositories' outcomes, once none is left
+// to clone: failed with installErr when installErr is set (one did not
+// clone; from installing or installed, see
+// store.FailProjectDaemonFromNestedRepos), else installed (every one
+// cloned). Both are fenced on the nested plan in the same statement, so a
+// set-up planned again meanwhile is never settled by the old plan's outcome,
+// and a checkout with a failed nested repository never reads installed. The
+// org is re-read under the same locks as MarkProjectDaemonInstalledInScope.
+// It reports whether the row is in the settled state now: installed for a
+// success, marked failed by this call for a failure.
+func (r *Repo) SettleProjectDaemonFromNestedReposInScope(ctx context.Context, projectID, daemonID, installErr string, scope *core.OrgScope) (bool, error) {
+	if projectID == "" || daemonID == "" {
+		return false, fmt.Errorf("project ID and daemon ID cannot be empty")
+	}
+	settled := false
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		settled = false
+		inScope, err := r.lockProjectInScope(ctx, projectID, scope)
+		if err != nil || !inScope {
+			return err
+		}
+		if installErr != "" {
+			settled, err = store.FailProjectDaemonFromNestedRepos(ctx, r.ORM(), projectID, daemonID, installErr)
+			return err
+		}
+		if err := store.MarkProjectDaemonInstalledFromNestedRepos(ctx, r.ORM(), projectID, daemonID); err != nil {
+			return err
+		}
+		settled, err = store.ProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
+		return err
+	})
+	return settled, err
 }
 
 // RecordFailedProjectDaemonRestoreInScope records that putting a pool
@@ -2704,19 +2751,6 @@ func (r *Repo) ResumeWorkflowsByChat(ctx context.Context, chatID string) error {
 // the SAME transaction as the chat it launches: either both commit or neither
 // does, and there is no window where a chat exists with nothing recording why.
 
-// mapTriggerNameConflict turns a unique violation on the trigger's
-// (user, project, name) key into core.ErrTriggerNameTaken: AlreadyExists to the
-// caller instead of an opaque Internal "database error". Like
-// mapWorkflowSlugConflict, the PgError is not wrapped (%w), so the retry ladder
-// does not re-run a permanent conflict.
-func mapTriggerNameConflict(err error, name string) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == store.TriggerConstraintUserIDProjectIDNameKey {
-		return fmt.Errorf("%w: %q", core.ErrTriggerNameTaken, name)
-	}
-	return err
-}
-
 // OrgRead is the org a write's decision read from one row (store.OrgRead):
 // the write re-checks it under its owner's org lock.
 type OrgRead = store.OrgRead
@@ -2732,33 +2766,10 @@ func (r *Repo) LockUserOrgs(ctx context.Context, userID string, reads ...OrgRead
 	return store.LockUserOrgs(ctx, r.ORM(), userID, reads...)
 }
 
+// CreateTrigger inserts t with no org reads, in its own transaction.
 func (r *Repo) CreateTrigger(ctx context.Context, t *core.Trigger) error {
-	return r.CreateTriggerInOrg(ctx, t)
-}
-
-// CreateTriggerInOrg inserts t, under its owner's org lock, only while each
-// read (the org t's was decided from: its project's) still holds.
-func (r *Repo) CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...OrgRead) error {
-	if t == nil {
-		return fmt.Errorf("trigger cannot be nil")
-	}
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		if err := store.LockUserOrgs(ctx, r.ORM(), t.UserID, reads...); err != nil {
-			return err
-		}
-		// Then its project: refused while scheduled for deletion, and a
-		// schedule waits for this insert (store.LockProjectsForWrite).
-		if err := store.LockProjectsForWrite(ctx, r.ORM(), t.ProjectID); err != nil {
-			return err
-		}
-		if err := store.InsertTrigger(ctx, r.ORM(), t); err != nil {
-			return mapTriggerNameConflict(err, t.Name)
-		}
-		after, err := store.GetTrigger(ctx, r.ORM(), t.ID)
-		if err != nil {
-			return err
-		}
-		return store.RecordTriggerChange(ctx, r.ORM(), "create", nil, after)
+		return store.CreateTriggerInOrg(ctx, r.ORM(), t)
 	})
 }
 
@@ -2776,54 +2787,11 @@ func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core
 	return store.ListTriggersForUser(ctx, r.ORM(), f)
 }
 
-// UpdateTrigger is UpdateTriggerInOrg with no org reads: a write back of a
-// row as it was (restoreActivation).
+// UpdateTrigger replaces the trigger's definition with no org reads, in its
+// own transaction: a write back of a row as it was (restoreActivation).
 func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
-	return r.UpdateTriggerInOrg(ctx, t)
-}
-
-// UpdateTriggerInOrg replaces the trigger's definition under its owner's org
-// lock, only while each read still holds: the orgs the update's decision read
-// (the trigger's, its project's, the target project's). A backfill that
-// stamped any of them between the decision and this write makes it
-// ErrOrgChanged, and nothing is written; a NULL org read is compared like
-// any other.
-func (r *Repo) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...OrgRead) error {
-	if t == nil {
-		return fmt.Errorf("trigger cannot be nil")
-	}
-	if t.ID == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		// The org lock first, then the projects the trigger is in and moves
-		// to, then the trigger's row (store/org_lock.go,
-		// store.LockProjectsForWrite). A trigger left on, or moved, in a
-		// project scheduled for deletion is refused.
-		if err := store.LockUserOrgs(ctx, r.ORM(), t.UserID, reads...); err != nil {
-			return err
-		}
-		if err := r.lockTriggerProjects(ctx, t.ID, t.ProjectID, t.Enabled); err != nil {
-			return err
-		}
-		if err := store.LockTrigger(ctx, r.ORM(), t.ID); err != nil {
-			return err
-		}
-		before, err := store.GetTrigger(ctx, r.ORM(), t.ID)
-		if err != nil {
-			return err
-		}
-		if revision, ok := automationpolicy.Revision(ctx); ok && !before.UpdatedAt.Equal(revision) {
-			return svcerr.FailedPrecondition("Activation changed after approval; request a new approval")
-		}
-		if err := store.ReplaceTrigger(ctx, r.ORM(), t); err != nil {
-			return mapTriggerNameConflict(err, t.Name)
-		}
-		after, err := store.GetTrigger(ctx, r.ORM(), t.ID)
-		if err != nil {
-			return err
-		}
-		return store.RecordTriggerChange(ctx, r.ORM(), "update", before, after)
+		return store.UpdateTriggerInOrg(ctx, r.ORM(), t)
 	})
 }
 
@@ -2974,6 +2942,10 @@ func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEvent
 	return store.GetTriggerEventByChat(ctx, r.ORM(), kind, chatID)
 }
 
+// UpdateTriggerEventOutcome is store.UpdateTriggerEventOutcome.
+//
+// Deprecated: use store.TriggerEventExtStore.UpdateTriggerEventOutcome; a launch reads the
+// ledger through launch.Deps.TriggerEvents.
 func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
@@ -2981,6 +2953,10 @@ func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome
 	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
 }
 
+// UpdateTriggerEventPayload is store.UpdateTriggerEventPayload.
+//
+// Deprecated: use store.TriggerEventExtStore.UpdateTriggerEventPayload; a launch reads the
+// ledger through launch.Deps.TriggerEvents.
 func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
@@ -3091,6 +3067,10 @@ func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*co
 	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
 }
 
+// ClaimPendingTriggerEvent is store.ClaimPendingTriggerEvent.
+//
+// Deprecated: use store.TriggerEventExtStore.ClaimPendingTriggerEvent; a launch reads the
+// ledger through launch.Deps.TriggerEvents.
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
 }
@@ -3570,42 +3550,11 @@ func (r *Repo) DeleteWorkflowScenario(ctx context.Context, id string) error {
 
 // ==================== Questions ====================
 
-func (r *Repo) CreateQuestion(ctx context.Context, question *Question) error {
-	if question == nil {
-		return fmt.Errorf("question cannot be nil")
-	}
-	if question.ID == "" {
-		return fmt.Errorf("question ID cannot be empty")
-	}
-	if err := store.InsertQuestion(ctx, r.ORM(), question); err != nil {
-		return err
-	}
-	_ = r.emitChatActivityIfChanged(ctx, question.ChatID)
-	return nil
-}
-
 func (r *Repo) GetQuestionByID(ctx context.Context, id string) (*Question, error) {
 	if id == "" {
 		return nil, fmt.Errorf("question ID cannot be empty")
 	}
 	return store.GetQuestion(ctx, r.ORM(), id)
-}
-
-func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
-	if id == "" {
-		return fmt.Errorf("question ID cannot be empty")
-	}
-	if err := store.ResolveQuestion(ctx, r.ORM(), id, responseData, time.Now().UTC()); err != nil {
-		return err
-	}
-
-	// Emit activity change
-	q, err := r.GetQuestionByID(ctx, id)
-	if err == nil && q != nil {
-		_ = r.emitChatActivityIfChanged(ctx, q.ChatID)
-	}
-
-	return nil
 }
 
 // ==================== Helper Functions ====================

@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
@@ -21,7 +22,7 @@ func TestQuestionServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo})}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), Resolver: questions.NewFromRepo(repo), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo})}))
 	viewertest.RunService(t, f, svc, "reliant.v1.QuestionService", nil)
 }
 
@@ -45,11 +46,11 @@ func TestViewerQuestionsCarryNoResolvedPrompt(t *testing.T) {
 		{ID: "q-ask-" + f.ChatID, ChatID: f.ChatID, WorkflowID: step.WorkflowID, ThreadID: step.WorkflowID, StepID: "ask_user",
 			Status: core.QuestionStatusPending, Metadata: &asked, ToolCallID: &callID, Async: true, CreatedAt: viewertest.SeededAt},
 	} {
-		if err := repo.CreateQuestion(ctx, q); err != nil {
+		if err := questions.NewFromRepo(repo).CreateQuestion(ctx, q); err != nil {
 			t.Fatal(err)
 		}
 	}
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo})}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), Resolver: questions.NewFromRepo(repo), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo})}))
 	list := func(ctx context.Context) map[string]*reliantv1.QuestionInfo {
 		resp, err := svc.ListAsyncQuestions(ctx, connect.NewRequest(&reliantv1.ListAsyncQuestionsRequest{ChatId: f.ChatID}))
 		if err != nil {

@@ -108,6 +108,11 @@ type ProjectReconcileRepo interface {
 	// checkout is installed now).
 	MarkProjectDaemonInstalledInScope(ctx context.Context, projectID, daemonID string, scope *core.OrgScope) (bool, error)
 	FailProjectDaemonInstallInScope(ctx context.Context, projectID, daemonID, installErr string, scope *core.OrgScope) (bool, error)
+	// SettleProjectDaemonFromNestedReposInScope settles a checkout with
+	// nested repositories from their outcomes once none is left to clone:
+	// failed naming them (also from installed), else installed. Fenced on
+	// the nested plan and scoped like the two above.
+	SettleProjectDaemonFromNestedReposInScope(ctx context.Context, projectID, daemonID, installErr string, scope *core.OrgScope) (bool, error)
 	// The machine's detachments and cleanup of other orgs' checkouts are the
 	// service's Checkouts (MachineCheckouts), joined to this by reconcileStore.
 	// UpdateProject also serves projectfacts.ReconcileGitRepo.
@@ -152,6 +157,10 @@ type ProjectLookups interface {
 	// remote in one org (nil scope: any): the remote backfill's uniqueness
 	// check, per (org, user, remote_url).
 	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error)
+	// GetProjectByRemoteKeyAndUserInScope finds the user's project of the
+	// repository a remote names, in any form of it (projects.remote_key):
+	// the project a discovered checkout of it joins.
+	GetProjectByRemoteKeyAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error)
 }
 
 // ProjectDaemons is the machine's checkout rows. store.ProjectDaemonExtStore
@@ -166,6 +175,14 @@ type ProjectDaemons interface {
 	// ResolveQueuedProjectDaemon applies the outcome a daemon reported for a
 	// clone queued to it.
 	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
+
+	// The nested repositories cloned into a checkout once its root lands
+	// (tools_daemon_nested_clone.go): claim the ones to clone, record each
+	// outcome, read them back, and list the checkouts with some to run.
+	ClaimNextProjectDaemonRepo(ctx context.Context, projectID, daemonID, claimID string, lease time.Duration) (*core.NestedRepoClaim, error)
+	SettleProjectDaemonRepo(ctx context.Context, projectID, daemonID, repoID, claimID, installErr string) (bool, error)
+	ListProjectDaemonReposForPair(ctx context.Context, projectID, daemonID string) ([]*core.ProjectDaemonRepo, error)
+	ListProjectsWithUnsettledDaemonRepos(ctx context.Context, daemonID string) ([]string, error)
 }
 
 // UserRefetch tells a user's clients to re-read data of a given type (a

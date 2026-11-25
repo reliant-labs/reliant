@@ -83,7 +83,7 @@ func WorkspaceDaemon(ctx context.Context, r WorkspaceReader, userID, projectID, 
 		return Workspace{}, fmt.Errorf("load chat %s: %w", chatID, err)
 	case chat == nil:
 		return Workspace{DaemonID: owner}, nil
-	case !authz.CanWriteChat(ctx, userID, chat):
+	case !authz.CanOwnChat(ctx, userID, chat):
 		return Workspace{}, ErrForeignChat
 	case projectID != "" && chat.ProjectID != projectID:
 		return Workspace{DaemonID: owner}, nil
@@ -189,21 +189,6 @@ func MachineName(ctx context.Context, r DaemonReader, daemonID string) string {
 		}
 	}
 	return fmt.Sprintf("self-hosted machine %s", short)
-}
-
-// MachineArg is how a command line names a machine (`--machine <arg>`, which
-// takes a name or an id): the name its owner gave it, else its id. A record
-// that cannot be read is named by its id.
-func MachineArg(ctx context.Context, r DaemonReader, daemonID string) string {
-	if r == nil || daemonID == "" {
-		return daemonID
-	}
-	if d, _ := r.GetDaemon(ctx, daemonID); d != nil {
-		if name := strings.TrimSpace(d.Name); !isPlaceholderLabel(name, daemonID) {
-			return name
-		}
-	}
-	return daemonID
 }
 
 // isPlaceholderLabel reports whether a machine's name or hostname names
