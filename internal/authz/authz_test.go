@@ -37,8 +37,8 @@ func TestEveryKindAllowsOnlyItsOwner(t *testing.T) {
 				c, r = &core.Chat{UserID: owner}, &core.ChatRow{UserID: owner}
 			}
 			return []bool{
-				CanReadChat(ctx, caller, c), CanWriteChat(ctx, caller, c),
-				CanReadChat(ctx, caller, r), CanWriteChat(ctx, caller, r),
+				CanReadChat(ctx, caller, c), CanOwnChat(ctx, caller, c),
+				CanReadChat(ctx, caller, r), CanOwnChat(ctx, caller, r),
 			}
 		},
 		"project": func(caller, owner string, nilRow bool) []bool {
@@ -104,7 +104,7 @@ func TestNilChatPointersAreMissing(t *testing.T) {
 	ctx := context.Background()
 	var c *core.Chat
 	var r *core.ChatRow
-	if CanReadChat(ctx, "", c) || CanWriteChat(ctx, "", r) {
+	if CanReadChat(ctx, "", c) || CanOwnChat(ctx, "", r) {
 		t.Fatal("a nil chat with an empty caller must be denied")
 	}
 }

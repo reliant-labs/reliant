@@ -124,7 +124,7 @@ The reference was `origin/feat/data-browser` (PR #2339), read but not imported.
   Legacy environment-only keys are discarded, not migrated as authority. Both
   surfaces use reader+epoch-scoped keys: a reason for reading rows does not
   silently authorize a different reason for reading files.
-- Keep Data and Storage adjacent in ConsoleShell, before Configure. This branch
+- Keep Data and Storage adjacent in the shell's nav (Layout/sidebar/navConfig), before Configure. This branch
   adds only Storage because Data's page and route have not landed here.
 - Combine the overlapping stable error reasons and `ENV_IN_SENTENCE` verb sets.
   Share the already-exported StateFrame; retain surface-specific error copy.

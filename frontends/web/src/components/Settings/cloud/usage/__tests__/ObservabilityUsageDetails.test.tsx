@@ -1,12 +1,17 @@
 import { create } from "@bufbuild/protobuf";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { GetObservabilityLimitsResponseSchema, GetObservabilityStorageResponseSchema, ListObservabilityUsageResponseSchema } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import { ObservabilityBillingApiContext } from "@/hooks/observability-billing-queries";
 import { ObservabilityUsageDetails } from "../ObservabilityUsageDetails";
-vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => ({ listOrgLimitChanges: async () => ({ changes: [], nextPageToken: "" }), listEnvironments: async () => ({ environments: [] }) }) }));
+vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => ({ listOrgLimitChanges: async () => ({ changes: [], nextPageToken: "" }) }) }));
+// The collection policy reads DeployService.ListEnvironments through its generated hook, on the app transport.
+beforeEach(() => setTransport(mockTransport({ "DeployService.ListEnvironments": { response: { environments: [] } } })));
+afterEach(() => setTransport(null));
 
 describe("estimated split", () => {
   it("says the daily per-service split is estimated only for a billing-exempt org", async () => {

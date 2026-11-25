@@ -112,3 +112,43 @@ func TestPublisher_LifecycleAndRateLimit(t *testing.T) {
 		}
 	}
 }
+
+// UpgradeChanged publishes an upgrade event on its own subject, with the
+// upgrade intact and no build: it is not a connect.
+func TestPublisher_UpgradeChangedIsAnUpgradeEvent(t *testing.T) {
+	nc := startTestNATS(t)
+	sub, err := nc.SubscribeSync(daemonwire.SubjectWildcard)
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	if err := nc.Flush(); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+
+	deadline := time.UnixMilli(1792800123456).UTC()
+	want := daemonwire.Upgrade{State: daemonwire.UpgradeStateDrained, RolloutID: "roll-1", Deadline: &deadline}
+	NewPublisher(nc).UpgradeChanged("d-1", "u-1", "cloud", want)
+
+	msg, err := sub.NextMsg(30 * time.Second)
+	if err != nil {
+		t.Fatalf("no event published: %v", err)
+	}
+	if msg.Subject != daemonwire.Subject("d-1", daemonwire.EventUpgrade) {
+		t.Fatalf("subject = %q, want the upgrade subject", msg.Subject)
+	}
+	evt, err := daemonwire.UnmarshalEvent(msg.Data)
+	if err != nil {
+		t.Fatalf("UnmarshalEvent: %v", err)
+	}
+	if evt.Type != daemonwire.EventUpgrade || evt.UserID != "u-1" || evt.DaemonType != "cloud" {
+		t.Fatalf("event = %+v", evt)
+	}
+	if evt.Build != nil || evt.Reason != "" {
+		t.Fatalf("an upgrade event carries a build or a reason: %+v", evt)
+	}
+	if evt.Upgrade == nil || evt.Upgrade.State != want.State || evt.Upgrade.RolloutID != want.RolloutID ||
+		evt.Upgrade.Deadline == nil || !evt.Upgrade.Deadline.Equal(deadline) {
+		t.Fatalf("Upgrade = %+v, want %+v", evt.Upgrade, want)
+	}
+}

@@ -23,9 +23,8 @@ import type { Project } from "@/store/projectStore";
 
 import { displayTitle, hubOf, hubsOf, hubTabLabel } from "../Observability/Dashboards/dashboardHubs";
 import { useConsoleReliantProject } from "./consoleHost";
-import type { ConsoleNavDashboard, ConsoleNavEnv } from "./ConsoleShell";
+import type { ConsoleNavDashboard, ConsoleNavEnv, GroupedNavInput, ProductAnalyticsHub } from "./consoleNavModel";
 import { ENV_ALL, rememberedEnv, resolveEnvScope, scopeOptions } from "./envScope";
-import type { GroupedNavInput, ProductAnalyticsHub } from "./groupedNav";
 import { consolePageOf, type ConsolePage } from "./paths";
 import { useOptionalViews } from "./useOptionalViews";
 import { useTestsNavCount } from "../Tests/surfaces/useTestsNavCount";

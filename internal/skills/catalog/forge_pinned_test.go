@@ -3,6 +3,8 @@ package catalog
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"os"
@@ -18,28 +20,29 @@ import (
 )
 
 // fakePinnedForge stands in for the forge a project pins: resolve says which
-// one (or why it cannot be had), run plays its `skill list --json` and
-// `skill load` (`agent skill …` when agentNoun), and counts the calls.
+// one (or why it cannot be had), run plays its `skill list --json
+// --with-bodies` (`agent skill …` when agentNoun), and counts the calls.
 type fakePinnedForge struct {
 	mu         sync.Mutex
 	resolveErr error
 	unpinned   bool
 	runs       []string
 	resolves   int
-	// withBodies: the pinned forge has `skill list --with-bodies`.
-	withBodies bool
 	// agentNoun: the pinned forge spells its skill commands `agent skill …`
 	// (forge v1.4.0 and later). Without it the pin predates the noun and
 	// knows only `skill …`.
 	agentNoun bool
 	// restart stands in for a new process: fresh memory, the same disk cache.
 	restart func()
+	// cache is forgepin's disk cache directory.
+	cache string
 }
 
 func useFakePinnedForge(t *testing.T, f *fakePinnedForge) {
 	t.Helper()
 	prev := pinnedForge
 	cache := t.TempDir()
+	f.cache = cache
 	t.Cleanup(func() {
 		pinnedForge = prev
 		clearPinnedCatalog()
@@ -67,18 +70,14 @@ func useFakePinnedForge(t *testing.T, f *fakePinnedForge) {
 			args = args[1:]
 		}
 		switch {
-		case strings.Join(args, " ") == "skill list --json --with-bodies" && f.withBodies:
-			return []byte(`[{"path": "only-in-v104", "name": "only-in-v104", "description": "a skill only the pin ships", "scope": "forge", "body": "# only-in-v104, listed with its body\n"}]`), nil
-		case strings.Join(args, " ") == "skill list --json":
+		case strings.Join(args, " ") == "skill list --json --with-bodies":
 			return []byte(`[
-  {"path": "forge", "name": "forge", "description": "v1.0.4 start here", "scope": "forge"},
-  {"path": "db", "name": "db", "description": "v1.0.4 db", "scope": "forge", "emit": "both"},
-  {"path": "only-in-v104", "name": "only-in-v104", "description": "a skill only the pin ships", "scope": "forge"},
-  {"path": "general-agent", "name": "general-agent", "description": "methodology", "scope": "forge", "emit": "general"},
+  {"path": "forge", "name": "forge", "description": "v1.0.4 start here", "scope": "forge", "body": "# forge as forge v1.0.4 renders it\n"},
+  {"path": "db", "name": "db", "description": "v1.0.4 db", "scope": "forge", "emit": "both", "body": "# db as forge v1.0.4 renders it\n"},
+  {"path": "only-in-v104", "name": "only-in-v104", "description": "a skill only the pin ships", "scope": "forge", "body": "# only-in-v104 as forge v1.0.4 renders it\n"},
+  {"path": "general-agent", "name": "general-agent", "description": "methodology", "scope": "forge", "emit": "general", "body": "# general-agent as forge v1.0.4 renders it\n"},
   {"path": "mine", "name": "mine", "description": "a user skill, read where it is", "scope": "user"}
 ]`), nil
-		case len(args) == 3 && args[0] == "skill" && args[1] == "load":
-			return []byte("# " + args[2] + " as forge v1.0.4 renders it\n"), nil
 		}
 		return nil, errors.New("unexpected " + strings.Join(args, " "))
 	}
@@ -141,14 +140,44 @@ func TestPinnedProject_SkillsComeFromThePinnedForge(t *testing.T) {
 	f.restart()
 	_ = discoverForgeSkills(dir, "", false)
 	_, _ = loadForgeDefinition(defs["forge/only-in-v104"])
-	// v1.0.4 predates the `agent` noun: each new spelling is refused once,
+	// v1.0.4 predates the `agent` noun: the new spelling is refused once,
 	// and the old one answers.
-	assert.Equal(t, []string{
-		"agent skill list --json --with-bodies", "agent skill list --json", "skill list --json --with-bodies", "skill list --json",
-		"agent skill load only-in-v104", "skill load only-in-v104",
-	}, f.runs, "the pinned forge was asked again for what it already said")
+	assert.Equal(t, []string{"agent skill list --json --with-bodies", "skill list --json --with-bodies"}, f.runs, "the pinned forge was asked again for what it already said")
 	// One resolution per process: the restart asked again.
 	assert.Equal(t, 2, f.resolves, "which forge the project pins was resolved more than once per process")
+}
+
+// A disk cache an earlier release wrote, of `skill list --json` with no
+// bodies, under the old name, is not read: the catalog is asked for again,
+// with bodies, and every listed skill loads.
+func TestPinnedProject_MetadataOnlyCacheFromAnEarlierReleaseIsNotRead(t *testing.T) {
+	isolateHome(t)
+	f := &fakePinnedForge{}
+	useFakePinnedForge(t, f)
+	dir := pinnedProject(t)
+
+	sum := sha256.Sum256([]byte("pin:v1.0.4")) // forgepin's per-pin directory
+	old := filepath.Join(f.cache, hex.EncodeToString(sum[:12]))
+	require.NoError(t, os.MkdirAll(old, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(old, "skills-list.json"), []byte(`[
+  {"path": "forge", "name": "forge", "description": "v1.0.4 start here", "scope": "forge"},
+  {"path": "only-in-v104", "name": "only-in-v104", "description": "a skill only the pin ships", "scope": "forge"}
+]`), 0o644))
+
+	defs := paths(discoverForgeSkills(dir, "", false))
+	require.Contains(t, defs, "forge/only-in-v104")
+	loaded, err := loadForgeDefinition(defs["forge/only-in-v104"])
+	require.NoError(t, err, "a skill listed by the old metadata-only cache cannot load its body")
+	assert.Equal(t, "# only-in-v104 as forge v1.0.4 renders it\n", loaded.Body)
+	assert.Equal(t, []string{"agent skill list --json --with-bodies", "skill list --json --with-bodies"}, f.runs)
+
+	// And the catalog it fetched is what the next process reads.
+	f.restart()
+	defs = paths(discoverForgeSkills(dir, "", false))
+	loaded, err = loadForgeDefinition(defs["forge/only-in-v104"])
+	require.NoError(t, err)
+	assert.Equal(t, "# only-in-v104 as forge v1.0.4 renders it\n", loaded.Body)
+	assert.Equal(t, []string{"agent skill list --json --with-bodies", "skill list --json --with-bodies"}, f.runs, "the refreshed catalog was not kept on disk")
 }
 
 // With no pin (or the pin is the embedded forge), nothing changes.
@@ -190,20 +219,6 @@ func TestPinnedProject_UnobtainablePinSaysSoAndServesNoOtherForge(t *testing.T) 
 	require.Error(t, err, "a framework skill loaded from the embedded forge")
 }
 
-// A pinned forge that lists every body in one call is asked once, for all of
-// them.
-func TestPinnedProject_ACatalogWithBodiesIsReadInOneCall(t *testing.T) {
-	isolateHome(t)
-	f := &fakePinnedForge{withBodies: true}
-	useFakePinnedForge(t, f)
-	dir := pinnedProject(t)
-
-	defs := paths(discoverForgeSkills(dir, "", true))
-	require.Contains(t, defs, "forge/only-in-v104")
-	assert.Equal(t, "# only-in-v104, listed with its body\n", defs["forge/only-in-v104"].Body)
-	assert.Equal(t, []string{"agent skill list --json --with-bodies", "agent skill list --json", "skill list --json --with-bodies"}, f.runs)
-}
-
 // A pin that has the `agent` noun is asked in the new spelling only.
 func TestPinnedProject_APinWithTheAgentNounIsAskedInTheNewSpelling(t *testing.T) {
 	isolateHome(t)
@@ -216,5 +231,5 @@ func TestPinnedProject_APinWithTheAgentNounIsAskedInTheNewSpelling(t *testing.T)
 	loaded, err := loadForgeDefinition(defs["forge/only-in-v104"])
 	require.NoError(t, err)
 	assert.Equal(t, "# only-in-v104 as forge v1.0.4 renders it\n", loaded.Body)
-	assert.Equal(t, []string{"agent skill list --json --with-bodies", "agent skill list --json", "agent skill load only-in-v104"}, f.runs)
+	assert.Equal(t, []string{"agent skill list --json --with-bodies"}, f.runs)
 }

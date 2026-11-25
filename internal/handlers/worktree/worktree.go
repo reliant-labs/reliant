@@ -590,7 +590,7 @@ func (m worktreeMachine) Send(ctx context.Context, commandType string, payload, 
 // asynchronous creation safe on a phone: an app backgrounded through the whole
 // 30-120s create reconnects and receives the completion it slept through.
 func (s *Service) emitWorktreeChanged(ctx context.Context, userID, projectID, worktreeID string) {
-	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{
+	if err := s.deps.Refetch.EmitUserRefetch(ctx, userID, core.RefetchWorktreeChanges, core.RefetchOpts{
 		ProjectID:  &projectID,
 		WorktreeID: &worktreeID,
 	}); err != nil {

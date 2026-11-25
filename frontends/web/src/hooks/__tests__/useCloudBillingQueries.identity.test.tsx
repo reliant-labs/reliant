@@ -11,18 +11,24 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { billingHandlers } from "@/test/billingTransport";
 
 const createCheckout = vi.fn();
 const createTopup = vi.fn();
+const createUsageCheckout = vi.fn();
 const subscription = vi.fn();
 
+// The machine-terms recheck reads the client directly; the purchases run on
+// the generated BillingService mutations, so they are answered at the
+// transport, where a gate that let one through would reach them.
 vi.mock("@/services/controlPlane/client", () => ({
   getControlPlaneClient: () => ({
     getCurrentUserComputeSubscription: subscription,
     getMachinePricingReadiness: async () => (await subscription())?.subscription ? { effectivePeriodStart: { seconds: 1900000000n } } : {},
-    createCurrentUserCheckoutSession: createCheckout,
-    createCurrentUserWalletTopupSession: createTopup,
   }),
 }));
 
@@ -56,11 +62,22 @@ function wrapper({ children }: { children: ReactNode }) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  setTransport(
+    mockTransport(
+      billingHandlers({
+        createCurrentUserCheckoutSession: (r) => createCheckout(r),
+        createCurrentUserWalletTopupSession: (r) => createTopup(r),
+        createCurrentUserUsageBillingCheckout: (r) => createUsageCheckout(r),
+      }),
+    ),
+  );
   authState.user = null;
   subscription.mockResolvedValue({ subscription: { id: "incumbent-subscription" } });
   createCheckout.mockResolvedValue({ checkoutUrl: "https://checkout.stripe.com/x" });
   createTopup.mockResolvedValue({ checkoutUrl: "https://checkout.stripe.com/y" });
 });
+
+afterEach(() => setTransport(null));
 
 describe("checkout identity guard", () => {
   it("holds unversioned new machine sales instead of falling back to incumbent prices", async () => {
@@ -74,6 +91,7 @@ describe("checkout identity guard", () => {
     authState.user = { is_anonymous: true };
     const { result } = renderHook(() => useUsageBillingCheckout(), { wrapper });
     await expect(result.current.mutateAsync({ orgId: "org-a", policyVersion: "p1", infraBudgetCents: 1000n, successUrl: "https://app.test/settings/billing?tab=usage", cancelUrl: "https://app.test/settings/billing?tab=usage" })).rejects.toBeInstanceOf(CheckoutIdentityRequiredError);
+    expect(createUsageCheckout).not.toHaveBeenCalled();
   });
   it("refuses to mint a checkout session for an anonymous user", async () => {
     authState.user = { is_anonymous: true };

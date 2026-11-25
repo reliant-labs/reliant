@@ -12,6 +12,7 @@ import { getIsDev } from './lib/constants'
 import { createWorkflowsAreaRoutes } from './workflowsAreaRoutes'
 import { retainTourParam } from './components/Onboarding/tourParam'
 import { createForgeDemoHandoffRoutes } from './components/Forge/Demo/demoHandoff'
+import { enterForgeDemo } from './components/Forge/Sample/ForgeDemoEntry'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { forgeConsolePages } from './forgeConsolePages'
 import { createRetiredPageRoutes } from './legacyRedirectRoutes'
@@ -62,6 +63,7 @@ import { SwitchProjectDialog } from './components/Projects/SwitchProjectDialog'
 import { AppShellFrame } from './components/Layout/shell/AppShell'
 import { PageVisitTracker } from './components/PageVisitTracker'
 import { JourneyTour } from './components/Onboarding/JourneyTour'
+import { JourneyLiveWatch } from './components/Onboarding/JourneyLiveWatch'
 import { ForgeLandingJourney } from './components/ForgeShell/ForgeLandingJourney'
 import { captureForgeEntry } from './components/ForgeShell/forgeEntry'
 import { bootForgeTour } from './components/ForgeShell/forgeTourBoot'
@@ -379,6 +381,8 @@ function RootShell() {
       <GlobalUpdateHandler />
       <ContextualTipsLayer />
       <GitHubSyncStatus />
+      {/* Tells a journey when it goes live and when it stops (the forge journey's sample app). */}
+      <JourneyLiveWatch />
       {forgeBrand ? (
         // The journeys (Onboarding/JOURNEYS.md) at the root, signed in or not,
         // so a step follows the visitor between the public demo and the
@@ -1109,7 +1113,9 @@ const orgOrgScopedRoutes = createOrgScopedRoutes(() => orgAppLayoutRoute, () => 
 // and `/demo` leave for it, query kept, so the forge journey's steps and the
 // landing page's `?journey=forge` (ForgeShell/ForgeLandingJourney) continue there.
 // Public, at the root and outside every guard (components/Forge/Demo/demoHandoff.ts).
-const [forgeDemoRoute, forgeDemoRedirectRoute] = createForgeDemoHandoffRoutes(() => rootRoute)
+// Signed in, they open the sample app in the shell instead, where the forge
+// journey walks it (components/Forge/Sample/ForgeDemoEntry.ts).
+const [forgeDemoRoute, forgeDemoRedirectRoute] = createForgeDemoHandoffRoutes(() => rootRoute, enterForgeDemo)
 
 const onboardingRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,

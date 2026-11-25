@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 
 	"connectrpc.com/connect"
@@ -370,7 +371,7 @@ func TestCreateProjectFromRepo_FailedQueuedCloneIsMarkedFailed(t *testing.T) {
 // what a daemon sends.
 func dialToolsDaemon(t *testing.T, repo *db.Repo, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
 	t.Helper()
-	gateway, err := tools_daemon.New(tools_daemon.Deps{
+	gateway, err := tools_daemon.New(tools_daemon.Deps{Refetch: chatupdates.NewFromORM(repo.ORM(), repo, nil),
 		Logger:      slog.New(slog.DiscardHandler),
 		Config:      &typedconfig.Config{},
 		Repo:        repo,

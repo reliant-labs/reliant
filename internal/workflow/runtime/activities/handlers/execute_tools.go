@@ -139,6 +139,13 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 
 	// Load worktree (defaults to project path if not set or not found)
 	wt, threadBound, err := a.loadWorktreeInfo(ctx, chat, project, thread)
+	if errors.Is(err, errThreadWorkspaceArchived) && !tools.NeedsMachine(toolName) {
+		// A tool that never touches the machine (spawn_send, report_bug,
+		// load_tool, the GitHub tools) has no use for the workspace, so an
+		// agent resumed after its workspace was archived can still report
+		// and message its parent. It runs as an unbound thread would.
+		wt, threadBound, err = &rctx.WorktreeInfo{}, false, nil
+	}
 	if err != nil {
 		return nil, err.Error()
 	}
@@ -153,6 +160,10 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 
 	return tec, ""
 }
+
+// errThreadWorkspaceArchived: the thread is bound to a workspace that was
+// archived. Machine tools are refused; the rest run without it.
+var errThreadWorkspaceArchived = errors.New("workspace archived")
 
 // loadWorktreeInfo loads the call's branch worktree, if it runs in one.
 //
@@ -182,7 +193,7 @@ func (a *ExecuteToolsActivity) loadWorktreeInfo(ctx context.Context, chat *db.Ch
 		return &rctx.WorktreeInfo{}, false, nil
 	}
 	if threadBound && worktree.DeletedAt != nil {
-		return nil, true, fmt.Errorf("this agent's workspace %q was archived, so its tools cannot run there", worktree.Name)
+		return nil, true, fmt.Errorf("this agent's workspace %q was archived, so its tools cannot run there: %w", worktree.Name, errThreadWorkspaceArchived)
 	}
 
 	// The main row mirrors projects.path: no path here. A thread bound to
@@ -463,21 +474,10 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	// to the call that resolves the credential. See package actingidentity.
 	ctx = actingidentity.With(ctx, actingidentity.Identity{Kind: rtx.ActingIdentity, Automation: rtx.Automation})
 
-	// Calls the workflow decided must not run, each answered with its reason.
-	// Only a run that recorded the removed integration action approval prompt
-	// sends any: a call the person attending did not approve
-	// (runtime/action_approval_legacy.go).
-	refusedByWorkflow := protoArgs.GetRefusedToolCalls() //nolint:staticcheck // SA1019: legacy approval gate
-	if len(rtx.ActivationRefusals) > 0 {
-		merged := make(map[string]string, len(refusedByWorkflow)+len(rtx.ActivationRefusals))
-		for k, v := range refusedByWorkflow {
-			merged[k] = v
-		}
-		for k, v := range rtx.ActivationRefusals {
-			merged[k] = v
-		}
-		refusedByWorkflow = merged
-	}
+	// Calls the workflow decided must not run, each answered with its reason:
+	// an activation change the person attending did not approve
+	// (runtime/activation_approval.go).
+	refusedByWorkflow := rtx.ActivationRefusals
 
 	// Build set for O(1) response tool lookups in worker goroutines
 	responseToolSet := make(map[string]bool, len(expectedResponseTools))

@@ -2,26 +2,18 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Experiments' place in the console: its URLs read back to the same pages,
- * and its nav row is hidden until the deployment turns CHANGES_UI on — except
- * while one of its pages is open, so a shared link never lands on a page the
- * nav pretends does not exist. Plus the page's arithmetic.
+ * Experiments' place in the console: its URLs read back to the same pages.
+ * (Its nav row, hidden until the deployment turns CHANGES_UI on except while
+ * one of its pages is open, is the shell's: Layout/sidebar/__tests__/
+ * navConfig.test.tsx.) Plus the page's arithmetic.
  */
 
 import { describe, expect, it } from "vitest";
 
-import type { SidebarNavItem } from "@/components/forge-ui/sidebar_layout";
 import type { Change } from "@/services/controlPlane/changes/changesTypes";
 
-import { buildConsoleNav } from "../../Console/ConsoleShell";
-import { buildGroupedConsoleNav } from "../../Console/groupedNav";
-import { consolePageOf, consolePath, type ConsolePage } from "../../Console/paths";
+import { consolePageOf, consolePath } from "../../Console/paths";
 import { changedFields, evenSplit, formatBp, parsePercent } from "../changeModel";
-
-/** Every row and child: the grouped nav lists Experiments inside Analytics. */
-const flat = (items: SidebarNavItem[]): SidebarNavItem[] => items.flatMap((item) => [item, ...flat(item.children ?? [])]);
-const labels = (items: SidebarNavItem[]) => flat(items).map((item) => item.label);
-const input = (page: ConsolePage, experiments?: boolean) => ({ project: "shop", page, env: "prod", envs: [{ name: "prod", preview: false }], experiments });
 
 describe("Experiments in the console", () => {
   it("has URLs that read back to the same pages", () => {
@@ -30,15 +22,6 @@ describe("Experiments in the console", () => {
     expect(consolePageOf("/forge/p/shop/experiments")).toEqual({ project: "shop", page: { kind: "experiments" } });
     expect(consolePageOf("/forge/p/shop/experiments/chg%201")).toEqual({ project: "shop", page: { kind: "experiment", changeId: "chg 1" } });
     expect(consolePageOf("/forge/p/shop/experiments/chg-1/extra")).toBeNull();
-  });
-
-  it("lists the nav row only with the flag on, or while its page is open", () => {
-    for (const build of [buildConsoleNav, buildGroupedConsoleNav]) {
-      expect(labels(build(input({ kind: "overview" })).items)).not.toContain("Experiments");
-      expect(labels(build(input({ kind: "overview" }, true)).items)).toContain("Experiments");
-      const open = flat(build(input({ kind: "experiment", changeId: "chg-1" })).items).find((item) => item.label === "Experiments");
-      expect(open?.active).toBe(true);
-    }
   });
 });
 

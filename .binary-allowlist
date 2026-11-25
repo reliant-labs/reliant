@@ -24,3 +24,9 @@ research/*.png
 
 # Playwright snapshots and screenshots.
 frontends/web/e2e/*.png
+
+# Go PGO profiles (gzipped pprof) that forge pgo pull writes and the weekly
+# pgo-refresh workflow refreshes; every go build ./cmd/<bin> reads its own
+# under -pgo=auto. Data, not a build output, and checked byte for byte by
+# control-plane pr-review's PGO lane.
+cmd/*/default.pgo

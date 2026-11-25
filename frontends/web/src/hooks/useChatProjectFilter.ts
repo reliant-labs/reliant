@@ -1,8 +1,12 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The chat list's project filter, choose N of M (lib/chatProjectFilter): what
- * the sidebar lists, read and changed in one place.
+ * The shell's project scope, choose N of M (lib/chatProjectFilter): what the
+ * sidebar lists, read and changed in one place. Its only control is the
+ * nav's project switcher (Layout/sidebar/ProjectSwitcher.tsx, "Select several
+ * projects…"); the Chats heading's own filter button is gone (owner: one
+ * project filter, the global one), and the URLs it wrote (`/project/<id>`,
+ * `?projects=`) are the switcher's, so they still load.
  *
  *   none   every project: `/`, no filter;
  *   one    the single-project filter old builds read and write, unchanged:

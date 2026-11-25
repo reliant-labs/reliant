@@ -100,7 +100,7 @@ var now = time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
 func newService(t *testing.T, store *calls) *org_policy_impact.Service {
 	t.Helper()
 	return org_policy_impact.NewTestOrgPolicyImpact(t, org_policy_impact.WithOrgPolicyImpactDeps(org_policy_impact.Deps{
-		Store: store, Chats: store, Now: func() time.Time { return now },
+		Calls: store, Chats: store, Now: func() time.Time { return now },
 		// The activities' own attendance rule, the one each call is scoped with.
 		Attendance: activityhandlers.Attendance{Store: store},
 	}))

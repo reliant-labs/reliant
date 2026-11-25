@@ -1,8 +1,8 @@
 /**
  * React-Query hooks for the in-app cloud billing dashboard
- * (`/settings/billing`). Every hook talks to the PUBLIC
- * `controlplane.v1.BillingService` through the shared control-plane transport
- * (`getControlPlaneClient`) — the same interceptor chain (auth, tracing,
+ * (`/settings/billing`). Every hook runs on the generated BillingService hooks
+ * (hooks/controlplane/billing-service-hooks_gen.ts) over the shared
+ * control-plane transport — the same interceptor chain (auth, tracing,
  * upgrade/billing-email modal) every other cloud RPC in the app uses.
  *
  * These are the end-user "current user" reads/writes only — never the admin
@@ -10,13 +10,28 @@
  * (checkout / top-up / portal) return a hosted URL the caller redirects to;
  * the hook only invalidates the affected cache scopes so a dev-mode
  * same-origin completion (no Stripe redirect) reflects immediately.
+ *
+ * The writes keep their own signatures and gates (assertPurchaseIdentity, the
+ * machine-sale terms check) and call the generated `billingServiceMutations`,
+ * each naming exactly the reads it refreshes.
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
-import type { CheckoutUiMode } from "@/gen/controlplane/services/billing/v1/billing_pb";
+import type { CheckoutUiMode, CreateCurrentUserUsageBillingCheckoutRequestSchema } from "@/gen/controlplane/services/billing/v1/billing_pb";
+import type { MessageInitShape } from "@bufbuild/protobuf";
+import {
+  billingServiceKeys,
+  billingServiceMutations,
+  billingServiceQueries,
+  useGetCurrentUserBillingEmail,
+  useGetCurrentUserComputeSubscription,
+  useGetCurrentUserWalletTopupQuote,
+  useListPlans,
+} from "@/hooks/controlplane/billing-service-hooks_gen";
+import { refreshing } from "@/hooks/billingKeys";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { getAuthIdentity } from "@/lib/auth/use-auth";
 import { hasErrorReason } from "@/lib/errorReasons";
@@ -95,60 +110,37 @@ function assertPurchaseIdentity(): void {
   }
 }
 
-/**
- * The org-scoped reads (their request has an org_id: the wallet, compute
- * usage, invoices, auto-recharge) are read in the tab's org, which their key
- * and request both name after the family below (`[...family, org]`), and not
- * before it is known (lib/orgScope). The family alone still matches every
- * org's entry, for an invalidation.
- */
-export const cloudBillingKeys = {
-  all: ["cloud-billing"] as const,
-  computeSubscription: ["cloud-billing", "compute-subscription"] as const,
-  walletOverview: ["cloud-billing", "wallet-overview"] as const,
-  computeUsage: (period: string) =>
-    ["cloud-billing", "compute-usage", period] as const,
-  plans: ["cloud-billing", "plans"] as const,
-  invoices: ["cloud-billing", "invoices"] as const,
-  billingEmail: ["cloud-billing", "billing-email"] as const,
-  topupQuote: (creditCents: number) =>
-    ["cloud-billing", "topup-quote", creditCents] as const,
-  autoRecharge: ["cloud-billing", "auto-recharge"] as const,
-};
+// The org-scoped reads (their request has an org_id: the wallet, compute
+// usage, invoices, auto-recharge) are read in the tab's org, which their
+// request (and so their generated key) names, and not before it is known
+// (lib/orgScope). `billingServiceKeys.<method>.all` matches every org's entry,
+// for an invalidation.
 
 // ── Queries ───────────────────────────────────────────────────────────
 
 // Independent hosted usage consent; machine checkout remains untouched.
 export function useUsageBillingCheckout() {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (request: Parameters<ReturnType<typeof billingClient>["createCurrentUserUsageBillingCheckout"]>[0]) => {
+    mutationFn: (request: MessageInitShape<typeof CreateCurrentUserUsageBillingCheckoutRequestSchema>) => {
       assertPurchaseIdentity();
-      return billingClient().createCurrentUserUsageBillingCheckout(request);
+      return billingServiceMutations(queryClient).createCurrentUserUsageBillingCheckout(request, { invalidate: false });
     },
   });
 }
 
 export function useComputeSubscription() {
-  return useQuery({
-    queryKey: cloudBillingKeys.computeSubscription,
-    queryFn: () => billingClient().getCurrentUserComputeSubscription({}),
-    staleTime: 30_000,
-  });
+  return useGetCurrentUserComputeSubscription({}, { staleTime: 30_000 });
 }
 
 export function useWalletOverview() {
   const org = useOrgScope();
   return useQuery(
     withOrgFailure(
-      {
-        queryKey: [...cloudBillingKeys.walletOverview, org.orgId ?? ""],
-        queryFn: () =>
-          billingClient().getCurrentUserWalletOverview(
-            orgRequest({ ledgerPage: 1, ledgerPageSize: 5 }, org.orgId),
-          ),
+      billingServiceQueries.getCurrentUserWalletOverview(orgRequest({ ledgerPage: 1, ledgerPageSize: 5 }, org.orgId), {
         enabled: orgQueryEnabled(org),
         staleTime: 30_000,
-      },
+      }),
       org,
     ),
   );
@@ -162,47 +154,34 @@ export function useComputeUsage(period: "current", { enabled = true }: { enabled
   const org = useOrgScope();
   return useQuery(
     withOrgFailure(
-      {
+      billingServiceQueries.getCurrentUserComputeUsage(orgRequest({ period }, org.orgId), {
         enabled: enabled && orgQueryEnabled(org),
-        queryKey: [...cloudBillingKeys.computeUsage(period), org.orgId ?? ""],
-        queryFn: () => billingClient().getCurrentUserComputeUsage(orgRequest({ period }, org.orgId)),
         staleTime: 30_000,
-      },
+      }),
       org,
     ),
   );
 }
 
 export function usePlans({ enabled = true }: { enabled?: boolean } = {}) {
-  return useQuery({
-    queryKey: cloudBillingKeys.plans,
-    queryFn: () => billingClient().listPlans({}),
-    staleTime: 5 * 60_000,
-    enabled,
-  });
+  return useListPlans({}, { staleTime: 5 * 60_000, enabled });
 }
 
 export function useCurrentUserInvoices() {
   const org = useOrgScope();
   return useQuery(
     withOrgFailure(
-      {
-        queryKey: [...cloudBillingKeys.invoices, org.orgId ?? ""],
-        queryFn: () => billingClient().listCurrentUserInvoices(orgRequest({}, org.orgId)),
+      billingServiceQueries.listCurrentUserInvoices(orgRequest({}, org.orgId), {
         enabled: orgQueryEnabled(org),
         staleTime: 60_000,
-      },
+      }),
       org,
     ),
   );
 }
 
 export function useBillingEmail() {
-  return useQuery({
-    queryKey: cloudBillingKeys.billingEmail,
-    queryFn: () => billingClient().getCurrentUserBillingEmail({}),
-    staleTime: 60_000,
-  });
+  return useGetCurrentUserBillingEmail({}, { staleTime: 60_000 });
 }
 
 // ── Mutations ─────────────────────────────────────────────────────────
@@ -230,12 +209,10 @@ export function useSetComputeOverage() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ enabled, budgetCents }: ComputeOverageSettings) =>
-      billingClient().setCurrentUserComputeOverage({ enabled, budgetCents }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: cloudBillingKeys.computeSubscription,
-      });
-    },
+      billingServiceMutations(queryClient).setCurrentUserComputeOverage(
+        { enabled, budgetCents },
+        { invalidate: refreshing(billingServiceKeys.getCurrentUserComputeSubscription.all) },
+      ),
   });
 }
 
@@ -264,12 +241,10 @@ export function useCreateCheckoutSession() {
     mutationFn: async (args: CheckoutArgs) => {
       assertPurchaseIdentity();
       const terms = await machineSaleRequest(args.planId, consent);
-      return billingClient().createCurrentUserCheckoutSession({ ...args, ...terms });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: cloudBillingKeys.computeSubscription,
-      });
+      return billingServiceMutations(queryClient).createCurrentUserCheckoutSession(
+        { ...args, ...terms },
+        { invalidate: refreshing(billingServiceKeys.getCurrentUserComputeSubscription.all) },
+      );
     },
   });
 }
@@ -288,11 +263,8 @@ export function useCreateWalletTopupSession() {
   return useMutation({
     mutationFn: (args: TopupArgs) => {
       assertPurchaseIdentity();
-      return billingClient().createCurrentUserWalletTopupSession(args);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: cloudBillingKeys.walletOverview,
+      return billingServiceMutations(queryClient).createCurrentUserWalletTopupSession(args, {
+        invalidate: refreshing(billingServiceKeys.getCurrentUserWalletOverview.all),
       });
     },
   });
@@ -312,12 +284,11 @@ export function useCreateWalletTopupSession() {
  * that cannot have changed yet and teach the UI to expect it.
  */
 export function useCreateWalletTopupPaymentIntent() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (amountCents: bigint) => {
       assertPurchaseIdentity();
-      return billingClient().createCurrentUserWalletTopupPaymentIntent({
-        amountCents,
-      });
+      return billingServiceMutations(queryClient).createCurrentUserWalletTopupPaymentIntent({ amountCents }, { invalidate: false });
     },
   });
 }
@@ -333,12 +304,13 @@ export function useCreateWalletTopupPaymentIntent() {
  * subscription that cannot have changed yet and teach the UI to expect one.
  */
 export function useCreateComputeSubscriptionIntent() {
+  const queryClient = useQueryClient();
   const consent = useMachineSaleTerms();
   return useMutation({
     mutationFn: async (planId: string) => {
       assertPurchaseIdentity();
       const terms = await machineSaleRequest(planId, consent);
-      return billingClient().createCurrentUserComputeSubscriptionIntent({ planId, ...terms });
+      return billingServiceMutations(queryClient).createCurrentUserComputeSubscriptionIntent({ planId, ...terms }, { invalidate: false });
     },
   });
 }
@@ -358,17 +330,18 @@ export function useCreateComputeSubscriptionIntent() {
  * failed request.
  */
 export function useWalletTopupQuote(creditCents: number, enabled = true) {
-  return useQuery({
-    queryKey: cloudBillingKeys.topupQuote(creditCents),
-    queryFn: () =>
-      billingClient().getCurrentUserWalletTopupQuote({
-        creditCents: BigInt(creditCents),
-      }),
-    enabled: enabled && creditCents > 0,
-    // A price, not a balance: it changes when we change the rate, which is a
-    // deploy, not a user action.
-    staleTime: 5 * 60_000,
-  });
+  // The request is built on every render (it is the key), so a fractional
+  // amount, which BigInt() throws on, is never quotable rather than a crash.
+  const quotable = Number.isSafeInteger(creditCents) && creditCents > 0;
+  return useGetCurrentUserWalletTopupQuote(
+    { creditCents: quotable ? BigInt(creditCents) : 0n },
+    {
+      enabled: enabled && quotable,
+      // A price, not a balance: it changes when we change the rate, which is a
+      // deploy, not a user action.
+      staleTime: 5 * 60_000,
+    },
+  );
 }
 
 /** The caller's auto-recharge rule and saved card, if any. */
@@ -376,12 +349,10 @@ export function useWalletAutoRecharge(enabled = true) {
   const org = useOrgScope();
   return useQuery(
     withOrgFailure(
-      {
-        queryKey: [...cloudBillingKeys.autoRecharge, org.orgId ?? ""],
-        queryFn: () => billingClient().getCurrentUserWalletAutoRecharge(orgRequest({}, org.orgId)),
+      billingServiceQueries.getCurrentUserWalletAutoRecharge(orgRequest({}, org.orgId), {
         enabled: enabled && orgQueryEnabled(org),
         staleTime: 30_000,
-      },
+      }),
       org,
     ),
   );
@@ -403,17 +374,15 @@ export function useSetWalletAutoRecharge() {
       maxPerMonthCents: number;
     }) => {
       assertPurchaseIdentity();
-      return billingClient().setCurrentUserWalletAutoRecharge({
-        enabled: rule.enabled,
-        thresholdCents: BigInt(rule.thresholdCents),
-        amountCents: BigInt(rule.amountCents),
-        maxPerMonthCents: BigInt(rule.maxPerMonthCents),
-      });
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: cloudBillingKeys.autoRecharge,
-      });
+      return billingServiceMutations(queryClient).setCurrentUserWalletAutoRecharge(
+        {
+          enabled: rule.enabled,
+          thresholdCents: BigInt(rule.thresholdCents),
+          amountCents: BigInt(rule.amountCents),
+          maxPerMonthCents: BigInt(rule.maxPerMonthCents),
+        },
+        { invalidate: refreshing(billingServiceKeys.getCurrentUserWalletAutoRecharge.all) },
+      );
     },
   });
 }
@@ -431,20 +400,19 @@ export function useCreateWalletPaymentMethodSetup() {
   return useMutation({
     mutationFn: () => {
       assertPurchaseIdentity();
-      return billingClient().createCurrentUserWalletPaymentMethodSetup({});
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: cloudBillingKeys.autoRecharge,
-      });
+      return billingServiceMutations(queryClient).createCurrentUserWalletPaymentMethodSetup(
+        {},
+        { invalidate: refreshing(billingServiceKeys.getCurrentUserWalletAutoRecharge.all) },
+      );
     },
   });
 }
 
 export function useCreateBillingPortalSession() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (returnUrl: string) =>
-      billingClient().createCurrentUserBillingPortalSession({ returnUrl }),
+      billingServiceMutations(queryClient).createCurrentUserBillingPortalSession({ returnUrl }, { invalidate: false }),
   });
 }
 
@@ -452,11 +420,9 @@ export function useUpdateBillingEmail() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (email: string) =>
-      billingClient().updateBillingEmail({ email }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: cloudBillingKeys.billingEmail,
-      });
-    },
+      billingServiceMutations(queryClient).updateBillingEmail(
+        { email },
+        { invalidate: refreshing(billingServiceKeys.getCurrentUserBillingEmail.all) },
+      ),
   });
 }

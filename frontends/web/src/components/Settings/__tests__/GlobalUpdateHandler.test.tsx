@@ -122,3 +122,49 @@ describe("GlobalUpdateHandler, not forced", () => {
     expect(useAppUpdateStore.getState().dialogOpen).toBe(false);
   });
 });
+
+// The platform asked this app's daemon to upgrade, and the app downloaded the
+// update by itself (electron/src/update-check.js createDaemonUpgradeResponder).
+// The ready update opens the dialog, and the restart is still the user's:
+// Later stays, nothing installs until they click, and an overdue security
+// request only strengthens the wording.
+describe("GlobalUpdateHandler, the daemon asked for an upgrade", () => {
+  const request = {
+    targetVersion: "1.14.0",
+    urgency: "security",
+    // Long past, whatever the clock says: the test does not read it.
+    deadlineUnixMs: 1,
+    reason: "a fix for a credential leak",
+    rolloutId: "roll-7",
+  };
+
+  it("opens the restart prompt when the update is downloaded, and waits for the user", async () => {
+    const { api, listeners } = fakeElectron(async () => ({ outcome: "installing" }));
+    render(<GlobalUpdateHandler />);
+
+    act(() => listeners.status?.({ type: "downloaded", version: "1.14.0", daemonUpgrade: { ...request, urgency: "normal" } }));
+    expect(await screen.findByText("Update Ready")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(api.installUpdate).not.toHaveBeenCalled();
+    expect(api.forceUpdate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Later" }));
+    expect(useAppUpdateStore.getState().dialogOpen).toBe(false);
+    expect(api.installUpdate).not.toHaveBeenCalled();
+  });
+
+  it("says plainly that an overdue security update is overdue, and still lets the user wait", async () => {
+    const { api, listeners } = fakeElectron(async () => ({ outcome: "installing" }));
+    render(<GlobalUpdateHandler />);
+
+    act(() => listeners.status?.({ type: "downloaded", version: "1.14.0", daemonUpgrade: request }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/security issue and is overdue/);
+    expect(alert).toHaveTextContent(request.reason);
+    expect(screen.getByRole("button", { name: "Later" })).toBeInTheDocument();
+    expect(api.installUpdate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /Restart & Update/ }));
+    expect(api.installUpdate).toHaveBeenCalledTimes(1);
+  });
+});

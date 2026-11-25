@@ -30,7 +30,7 @@ import { useForgeConsole } from "../Console/consoleContext";
 import { consoleNavEntries, consoleNavEntryTarget } from "../Console/consoleNavRegistry";
 import { Header, Page } from "../Console/consolePageFrame";
 import { ENV_ALL } from "../Console/envScope";
-import { PAGE_SUBTITLES } from "../Console/groupedNav";
+import { PAGE_SUBTITLES } from "../Console/consoleCrumbs";
 import { ANALYTICS_TAB_LABELS, ANALYTICS_TABS, type AnalyticsTab } from "../Console/paths";
 import { PRODUCT_OVERVIEW_KEY } from "../Observability/Dashboards/dashboardGroups";
 import { hubsOf } from "../Observability/Dashboards/dashboardHubs";

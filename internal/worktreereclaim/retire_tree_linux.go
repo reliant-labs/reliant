@@ -35,6 +35,8 @@ type retirementTree struct {
 	// git pointer, a .git anywhere in it is a nested repository and a hold,
 	// and remove takes the directory itself last.
 	subtree bool
+	// scratch allows arbitrary contents, authorized by the scratch git/use checks.
+	scratch bool
 	// path is the checkout's absolute path, for the git questions below.
 	path string
 	// tracked is every regular file HEAD tracks in the checkout and every
@@ -409,14 +411,14 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 			if rel != "" {
 				path = rel + "/" + name
 			}
-			if name == ".git" && (rel != "" || t.subtree) {
+			if !t.scratch && name == ".git" && (rel != "" || t.subtree) {
 				return errors.New("nested repository in retirement tree")
 			}
 			var s unix.Stat_t
 			if err := unix.Fstatat(int(dir.Fd()), name, &s, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 				return err
 			}
-			if !inPackage && neverListed(path) && !t.trackedPath(ctx, path, s.Mode) {
+			if !t.scratch && !inPackage && neverListed(path) && !t.trackedPath(ctx, path, s.Mode) {
 				return fmt.Errorf("protected descendant: %s", path)
 			}
 			if s.Dev != st.Dev {
@@ -636,7 +638,7 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 	}
 	paths := make([]string, 0, len(t.entries))
 	for p := range t.entries {
-		if p != "" && p != ".git" {
+		if p != "" && (p != ".git" || t.scratch) {
 			paths = append(paths, p)
 		}
 	}
@@ -753,6 +755,20 @@ func (t *retirementTree) removeRoot() error {
 // retirement inventory with the same holds — a protected descendant, a nested
 // repository, a mount, a special file — except that the directory has no git
 // pointer of its own and remove takes the directory itself.
+func inspectScratchTree(ctx context.Context, path string) (*retirementTree, error) {
+	t, err := retirementRoot(path)
+	if err != nil {
+		return nil, err
+	}
+	t.subtree, t.scratch = true, true
+	t.entries, t.bytes, t.newest, err = t.inventory(ctx)
+	if err != nil {
+		t.close()
+		return nil, err
+	}
+	return t, nil
+}
+
 func inspectRegenerableTree(ctx context.Context, path string) (*retirementTree, error) {
 	t, err := retirementRoot(path)
 	if err != nil {

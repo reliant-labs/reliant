@@ -9,6 +9,7 @@ vi.mock("@/components/Projects/AttachProjectFolderDialog", () => ({ AttachProjec
 vi.mock("@/hooks/project-service-hooks_gen", () => ({
   useListProjectDaemons: () => ({ data: { projectDaemons: [{ projectId: "p", daemonId: "a", daemonName: "Laptop", path: "/code", installState: 0, verifiedAt: "2026-11-06T12:00:00Z" }, { projectId: "p", daemonId: "b", daemonName: "Server", path: "/repo", installState: 0 }] } }),
   useDetachProjectFromDaemon: () => ({ mutateAsync: rpc.detach }), usePullProjectOnDaemon: () => ({ mutateAsync: rpc.pull }),
+  usePreviewProjectMachineMove: () => ({ isLoading: false, error: null, data: undefined }),
 }));
 const project = { id: "p", name: "API", remote_url: "https://example.com/api.git" } as Project;
 beforeEach(() => { Object.values(rpc).forEach((fn) => fn.mockReset()); });

@@ -21,10 +21,16 @@ import (
 // failingStreamRepo fails the user log read with logErr and the chat read
 // with chatErr. Everything else is unreachable: any other read fails with the
 // mock's "Func not set" error.
-func failingStreamRepo(logErr, chatErr error) *streaming.MockRepository {
+func failingStreamRepo(logErr error) *streaming.MockRepository {
 	return &streaming.MockRepository{
 		GetLatestUserUpdateSequenceFunc: func(context.Context, string) (int64, error) { return 0, logErr },
-		GetChatRowFunc:                  func(context.Context, string) (*db.ChatRow, error) { return nil, chatErr },
+	}
+}
+
+// failingChatRows fails the chat read with chatErr.
+func failingChatRows(chatErr error) *streaming.MockChatRows {
+	return &streaming.MockChatRows{
+		GetChatRowFunc: func(context.Context, string) (*db.ChatRow, error) { return nil, chatErr },
 	}
 }
 
@@ -56,19 +62,20 @@ func TestStreams_RepositoryFailureCodes(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		repo *streaming.MockRepository
+		rows *streaming.MockChatRows
 		open func(context.Context, reliantv1connect.StreamingServiceClient) error
 		want connect.Code
 	}{
-		{"the user log times out", failingStreamRepo(context.DeadlineExceeded, nil), userStream, connect.CodeDeadlineExceeded},
-		{"the user log fails opaquely", failingStreamRepo(errors.New("dsn=postgres://u:secret@h"), nil), userStream, connect.CodeInternal},
-		{"the chat is missing", failingStreamRepo(nil, svcerr.NotFound("chat")), chatStream, connect.CodeNotFound},
-		{"the chat read times out", failingStreamRepo(nil, context.DeadlineExceeded), chatStream, connect.CodeDeadlineExceeded},
-		{"the chat read fails opaquely", failingStreamRepo(nil, errors.New("dsn=postgres://u:secret@h")), chatStream, connect.CodeInternal},
+		{"the user log times out", failingStreamRepo(context.DeadlineExceeded), failingChatRows(nil), userStream, connect.CodeDeadlineExceeded},
+		{"the user log fails opaquely", failingStreamRepo(errors.New("dsn=postgres://u:secret@h")), failingChatRows(nil), userStream, connect.CodeInternal},
+		{"the chat is missing", failingStreamRepo(nil), failingChatRows(svcerr.NotFound("chat")), chatStream, connect.CodeNotFound},
+		{"the chat read times out", failingStreamRepo(nil), failingChatRows(context.DeadlineExceeded), chatStream, connect.CodeDeadlineExceeded},
+		{"the chat read fails opaquely", failingStreamRepo(nil), failingChatRows(errors.New("dsn=postgres://u:secret@h")), chatStream, connect.CodeInternal},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			_, client := streaming.NewTestStreamingServer(t,
-				streaming.WithStreamingDeps(streaming.Deps{Repo: tc.repo}),
+				streaming.WithStreamingDeps(streaming.Deps{Repo: tc.repo, ChatRows: tc.rows}),
 				streaming.WithPrincipal(testkit.WithUserID("test-user")))
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()

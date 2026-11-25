@@ -66,7 +66,9 @@ func (s *Service) CreateTrigger(
 
 	// Under the owner's org lock, only while the project's org this decision
 	// read still holds.
-	if err := s.deps.Repo.CreateTriggerInOrg(ctx, trigger, db.OrgRead{Table: "projects", ID: project.ID, Org: project.OrgID}); err != nil {
+	if err := s.writeTrigger(ctx, func(ctx context.Context) error {
+		return s.deps.TriggerWrites.CreateTriggerInOrg(ctx, trigger, db.OrgRead{Table: "projects", ID: project.ID, Org: project.OrgID})
+	}); err != nil {
 		return nil, triggerDBError("create trigger", err)
 	}
 

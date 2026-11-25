@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -87,7 +89,7 @@ func TestChatReadsCarryRootWorkflowStatus(t *testing.T) {
 		})
 
 		t.Run("GetChatWithUserCheck/"+tc.name, func(t *testing.T) {
-			chat, err := repo.GetChatWithUserCheck(ctx, tc.chatID, "test-user")
+			chat, err := store.GetChatWithUserCheck(ctx, repo.ORM(), tc.chatID, "test-user")
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, chat.RootStatus)
 		})
