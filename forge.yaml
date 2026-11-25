@@ -283,33 +283,222 @@ ci:
                 performs plugin privilege validation.
               expires: "2026-12-31"
     gate:
-        # `task ci` = forge's checks + these. Files no Go test reads.
-        affected_ignore: ["*.md", "docs/**", "research/**", "dev-docs/**"]
+        # `task ci` = forge's checks + these. forge's affected mode chooses
+        # the Go tests (unit-tests), the sdk/go module's (test-mod-sdk-go) and
+        # which path-gated rows run; `task ci:merge` (scripts/merge-gate.sh)
+        # reads the same decision through `forge ci gate --plan --json`
+        # (tools/test-affected plan). dev-docs/testing-affected.md is the
+        # design: what forge selects, what reliant keeps.
+        #
+        # Claimed here without running the Go suite: no Go package owns these
+        # and none needs to run whole for them. A Go test whose sources name
+        # one still runs (affected_readers below reads claimed and ignored
+        # files too). The web, electron and codegen rows judge them instead.
+        affected_ignore:
+            # docs, lint config and CI plumbing
+            - "*.md"
+            - "*.mdx"
+            - "docs/**"
+            - "research/**"
+            - "dev-docs/**"
+            - "contributing/**"
+            - LICENSE
+            - LICENSES.txt
+            - .license-allowlist
+            - .license-allowlist-npm
+            - ".githooks/**"
+            - ".github/**"
+            - ".reliant/**"
+            - .golangci.yml
+            - .goreleaser.yml
+            - .gitignore
+            - .dockerignore
+            - ".air*.toml"
+            - "Dockerfile*"
+            - "docker-compose*.yml"
+            - "tools/protoc-gen-es/**"
+            - "tmp/**"
+            # data a Go test reads only if its sources name it
+            - "deploy/**"
+            - "config/**"
+            - "scripts/**"
+            - "e2e/**"
+            - "docker/**"
+            - "assets/**"
+            - "generated/**"
+            - "examples/**"
+            - gen/forge_descriptor.json
+            - gen/forge_service_catalog.json
+            - ".forge/**"
+            - bindings_generated.go
+            - proto/public-api.txt
+            # the codegen rows' inputs: forge generate, the docs generators
+            - Taskfile.yml
+            - buf.yaml
+            - buf.gen.yaml
+            - buf.gen.controlplane.yaml
+            - buf.gen.sdk-ts.yaml
+            - buf.gen.sdk-go.yaml
+            # the web, electron and Node rows' inputs
+            - package.json
+            - package-lock.json
+            - pnpm-lock.yaml
+            - .nvmrc
+            - .npmrc
+            - "frontends/web/**"
+            - "electron/**"
+            - "sdk/ts/**"
+        # A non-Go file selects the Go packages whose sources name it.
+        affected_readers: true
+        # The merge tier's reach (owner, 2026-10-24): the changed packages and
+        # their direct importers, plus every transitive importer when they
+        # number at most 20; past that they are listed as deferred and run in
+        # the release gate (scripts/release-gate.sh, the whole suite).
+        affected_reach:
+            mode: direct
+            transitive_cap: 20
+        # sdk/go is its own module, which go.mod replaces with ./sdk/go: a
+        # change there tests the root packages that link it and the module's
+        # own affected tests (test-mod-sdk-go).
+        affected_modules: auto
+        affected_rules:
+            # go.mod first: every root-locating test spells "go.mod", so the
+            # reader scan would otherwise take it for a data file.
+            - paths: [go.mod, go.sum, go.work, go.work.sum, tools/tools.go]
+              full: true
+              reason: a Go dependency or toolchain pin changed (a subset cannot judge a new version)
+            - paths: [forge.yaml]
+              full: true
+              reason: the forge pin or forge's configuration changed
+            # (A bare glob matches a base name at any depth; `**` only ends one.)
+            - paths: ["proto/**", "proto-vendor/**"]
+              except: ["*.proto", "*.md", public-api.txt]
+              full: true
+              reason: proto tooling configuration changed (it regenerates every client)
+            # A .proto regenerates its Go package (and its connect package).
+            - paths: ["proto/**"]
+              except: ["*.md", public-api.txt]
+              packages: ["./gen/{dir}", "./gen/{dir}/..."]
+              reason: regenerates its Go client
+            - paths: ["proto-vendor/**"]
+              except: ["*.md"]
+              packages: ["./gen/{dir}", "./gen/{dir}/..."]
+              reason: regenerates its Go client
+            # A migration reaches every DB-backed test: their test files take a
+            # migrated database from internal/db's or storetest's helpers.
+            - paths: ["db/migrations/**"]
+              packages_importing: [./internal/db, ./internal/store/storetest]
+              reason: a migration reaches the DB-backed tests
+            # Tree-wide guard tests read every Go file of the module.
+            # TestWalkerPackagesAreListed (tools/test-affected) holds this list
+            # to the tests that walk the tree.
+            - on: go-source
+              packages:
+                - ./internal/architecture
+                - ./internal/authz
+                - ./internal/buildmode
+                - ./internal/db
+                - ./internal/handlers/chat
+                - ./internal/handlers/trigger
+                - ./internal/llm/drivers
+                - ./internal/temporal/temporaltest
+                - ./internal/toolexec
+                - ./internal/workflow
+                - ./internal/workflow/runtime/activities/handlers
+                - ./internal/workflow/workflowref
+                - ./tools/test-affected
+              reason: walks every Go file of the module
         extra_checks:
-            # tools/test-affected in place of forge's unit-tests: it selects
-            # web, electron and codegen lanes too, and maps a migration to the
-            # DB-backed packages (forge's affected mode is Go-only and runs the
-            # whole suite on any non-Go change). Each lane is its own row.
-            - name: test-affected
+            # forge's unit-tests row, as the merge tier runs Go tests: -short,
+            # cached, no -race (task test:short). In affected mode forge
+            # appends `-- <packages>`; the release gate runs `task test`.
+            - name: unit-tests
               replaces: unit-tests
-              command: [go, run, ./tools/test-affected, run, -lanes, go]
+              command: [task, test:short]
               heavy: true
+            # The web lane stays reliant's (tools/test-affected): the vitest
+            # files within two imports of a changed module, the tests that
+            # read a changed file, and the merge tier's FULL policy
+            # (dev-docs/testing-affected.md, "The web lane").
             - name: web
               lane: test
               command: [go, run, ./tools/test-affected, run, -lanes, web]
               requires: [npm]
               heavy: true
+            # electron/ and the root Node manifests, and the files outside
+            # electron/ its tests read (tools/test-affected also selects the
+            # lane for any file an electron test names).
             - name: electron
               lane: test
-              command: [go, run, ./tools/test-affected, run, -lanes, electron]
-              requires: [npm]
+              command: [task, test:electron]
+              requires: [task, pnpm]
+              paths:
+                - "electron/**"
+                - package.json
+                - package-lock.json
+                - pnpm-lock.yaml
+                - .nvmrc
+                - .npmrc
+                - .github/workflows/release.yml
+                - ".github/scripts/**"
+                - deploy/kcl/desktop_release.k
+                - deploy/kcl/lib/env.k
+                - scripts/build-electron.sh
+                - scripts/build-electron-prod-local.sh
+                - scripts/pack-desktop.js
+                - scripts/wait-and-start
+                - internal/auth/daemon_file.go
+                - internal/auth/oauthcallback/oauthcallback.go
+                - "internal/toolexec/daemonstate/**"
+                - frontends/web/src/lib/pkce.ts
             # The docs generators are a no-op (task generate:docs:check), when
             # the diff reaches one. It rewrites what it regenerates.
             - name: docs-generate
-              command: [go, run, ./tools/test-affected, run, -lanes, docs-generate]
+              command: [task, generate:docs:check]
               requires: [task, python3]
               heavy: true
               mutates_tree: true
+              paths:
+                - "tools/docgen/**"
+                - scripts/generate-mintlify-reference.py
+                - go.mod
+                - go.sum
+                - Taskfile.yml
+                - config/shortcuts.yaml
+                - internal/workflow/scenario/types.go
+                - "internal/workflow/builtin/presets/*.yaml"
+                - "docs/data/releases/**"
+                - "generated/docs-source/**"
+                - "docs/reference/*.mdx"
+                - docs/changelog.mdx
+                - frontends/web/src/store/shortcutsData.generated.ts
+                - internal/workflow/runtime/schema/field_descriptions.go
+                - internal/skills/catalog/builtin/workflow-builder/SKILL.md
+                # a .proto regenerates the gen/ packages the generators compile
+                - "proto/**"
+              paths_go_closure: ["./tools/docgen/..."]
+            # The forge demo bundle's build: its guard plugin fails on a
+            # Reliant-only module in the bundle. Which change reaches the
+            # bundle is the demo import graph's to say (tools/test-affected).
+            - name: web-demo
+              lane: test
+              command: [go, run, ./tools/test-affected, run, -lanes, web-demo]
+              requires: [npm]
+              heavy: true
+            # The renderer's release bundle: what vitest and tsc -b cannot
+            # judge, a dependency the bundler refuses (reliant#2850). Its build
+            # config, its HTML entry, and every reason the web lane runs whole
+            # (tools/test-affected decides).
+            - name: web-build
+              lane: test
+              command: [go, run, ./tools/test-affected, run, -lanes, web-build]
+              requires: [pnpm]
+              heavy: true
+            # A migration added on a branch is versioned above origin/main's
+            # newest, or reliant's migrator refuses to start on it (reliant#1399).
+            - name: migration-order
+              command: [go, run, ./tools/test-affected, migration-order]
+              paths: ["db/migrations/**"]
             # forge's own lint row for frontends/web, taken over unchanged.
             # Since forge#2802 a directory several frontends share (desktop,
             # forge-demo, web) gets one row, named for the first frontend
