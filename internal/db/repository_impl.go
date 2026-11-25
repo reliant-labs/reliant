@@ -2846,13 +2846,6 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
-func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {
-	if id == "" {
-		return nil, core.ErrTriggerNotFound
-	}
-	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
-}
-
 // ClaimPendingTriggerEvent is store.ClaimPendingTriggerEvent.
 //
 // Deprecated: use store.TriggerEventExtStore.ClaimPendingTriggerEvent; a launch reads the
