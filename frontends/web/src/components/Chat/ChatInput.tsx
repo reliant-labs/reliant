@@ -2125,12 +2125,13 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                                   <button
                                     {...triggerProps}
                                     type="button"
+                                    // The toolbar params' pill (InlineParamInput): same shape, fill and open state.
                                     className={cn(
-                                      "flex items-center gap-1.5 rounded-lg px-2.5 text-ui transition-colors",
+                                      "flex items-center gap-1.5 rounded-full px-2.5 text-xs font-medium transition-colors",
                                       COMPOSER_CONTROL,
                                       settingsPage === 'model'
-                                        ? "bg-foreground/5 text-foreground"
-                                        : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                                        ? "bg-primary/20 text-primary-ink"
+                                        : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
                                     )}
                                     disabled={disabled || !isMessagingAllowed}
                                     aria-label="Model settings"
@@ -2172,6 +2173,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                             orgId={chatForProjects?.orgId}
                             showPrimary={false}
                             addLabel="Project"
+                            addSize="toolbar"
                             disabled={disabled}
                           />
                         </div>
