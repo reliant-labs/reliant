@@ -129,6 +129,7 @@ func TestListMessages_ThreadScoped_ReturnsOnlyThatThread(t *testing.T) {
 // there is no window sized for somebody else.
 func TestListMessages_ThreadScoped_UnaffectedByMainThreadVolume(t *testing.T) {
 	t.Parallel()
+	testkit.Slow(t, "seeds 252 messages one write at a time against pgtest's Postgres")
 
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()

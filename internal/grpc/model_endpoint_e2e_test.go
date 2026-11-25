@@ -24,6 +24,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/chatupdates"
 	userconfig "github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"connectrpc.com/connect"
@@ -70,7 +71,7 @@ func TestModelEndpointE2E(t *testing.T) {
 	nc := e2eStartNATS(t)
 
 	authority := tokenauthority.NewMemory()
-	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{Refetch: chatupdates.NewFromORM(repo.ORM(), repo, nil), Logger: slog.Default(), Config: &typedconfig.Config{}, Projects: store.NewProjectExtStore(repo.ORM()), Installs: store.NewProjectDaemonExtStore(repo.ORM()), Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()), LocalModels: store.NewDaemonExtStore(repo.ORM()), Repo: repo, Checkouts: store.NewProjectDaemonDetachmentExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM())})
+	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{Refetch: chatupdates.NewFromORM(repo.ORM(), repo, nil), Logger: slog.Default(), Config: &typedconfig.Config{}, Projects: store.NewProjectExtStore(repo.ORM()), Installs: store.NewProjectDaemonExtStore(repo.ORM()), Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()), LocalModels: store.NewDaemonExtStore(repo.ORM()), Repo: rowreads.WithRepo(repo), Checkouts: store.NewProjectDaemonDetachmentExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM())})
 	require.NoError(t, err)
 	bridge := toolexec.NewNATSToolBridge(nc, nil, toolsSvc)
 	toolsSvc.AddConnectionListener(bridge)
@@ -115,7 +116,7 @@ func TestModelEndpointE2E(t *testing.T) {
 		Logger:    slog.Default(),
 		Config:    &typedconfig.Config{},
 		Endpoints: store.NewModelEndpointExtStore(repo.ORM()),
-		Machines:  repo,
+		Machines:  rowreads.WithRepo(repo),
 		Router:    router,
 		// Self-hosted: the operator allows private egress, so loopback is a
 		// legitimate DIRECT target.
@@ -251,7 +252,7 @@ func TestModelEndpointE2E(t *testing.T) {
 			Logger:    slog.Default(),
 			Config:    &typedconfig.Config{},
 			Endpoints: store.NewModelEndpointExtStore(repo.ORM()),
-			Machines:  repo,
+			Machines:  rowreads.WithRepo(repo),
 			Router:    router,
 			// Hosted: an empty network block refuses private targets.
 			Network: &configv1.NetworkConfig{},
