@@ -154,4 +154,95 @@ func TestMachineProjectsDir_ADaemonStartedInsideACheckoutUsesItsParent(t *testin
 	assert.Equal(t, "/home/workspace/projects/new", svc.defaultClonePath(ctx, root, "new"), "the filesystem root is no projects directory")
 }
 
+// TestCreateProjectFromRepo_ClonesAGitHubSSHRemoteOverHTTPS: the clone is
+// queued only when the control plane holds the user's GitHub token, and the
+// machine's git authenticates with that token through a credential helper,
+// which SSH never consults. control-plane's remote is
+// git@github.com:reliant-labs/control-plane.git: on a machine with no SSH key
+// for it the clone could only fail ("Permission denied (publickey)"). So the
+// clone goes over the https form, and the project keeps the remote as given.
+// A remote on another host keeps SSH: the token answers github.com alone.
+func TestCreateProjectFromRepo_ClonesAGitHubSSHRemoteOverHTTPS(t *testing.T) {
+	cp := &cloneStubControlPlane{result: controlplane.CloneRepoResult{Queued: true}}
+	svc, repo, cleanup := newFromRepoService(t, cp)
+	defer cleanup()
+	ctx, userID := fromRepoCtx()
+
+	name := "control-plane-" + uuid.NewString()[:8]
+	sshRemote := "git@github.com:reliant-labs/" + name + ".git"
+	resp, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+		CloneUrl: sshRemote, DaemonId: "daemon-abc",
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, "https://github.com/reliant-labs/"+name+".git", cp.lastReq.CloneURL, "a token cannot authenticate an SSH clone")
+	assert.Equal(t, sshRemote, resp.Msg.GetProject().GetRemoteUrl(), "the project's remote is left as given")
+	projects, err := repo.ListProjects(ctx, db.ProjectFilters{UserID: userID})
+	require.NoError(t, err)
+	require.Len(t, projects, 1)
+	require.NotNil(t, projects[0].RemoteURL)
+	assert.Equal(t, sshRemote, *projects[0].RemoteURL)
+
+	gitlab := "git@gitlab.com:acme/" + name + ".git"
+	_, err = svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+		CloneUrl: gitlab, DaemonId: "daemon-abc",
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, gitlab, cp.lastReq.CloneURL, "another host's SSH remote keeps SSH")
+}
+
+// TestCreateProjectFromRepo_IgnoresAnotherPlatformsCheckoutPath is the prod
+// failure of 2026-11-23: control-plane sat at /Users/.../control-plane on two
+// Macs, and the new-chat "Set up on ovh-build-1" sent that path to the Linux
+// box, whose daemon failed at once with "mkdir /Users: permission denied". A
+// path only machines of another OS hold the project at is never a
+// destination for this one, whatever an (older) client sends: the clone
+// takes the target's default instead. The same path on a machine of the SAME
+// OS (a second Mac) is honored, and so is any other explicit destination
+// (Settings' "Clone onto a machine…").
+func TestCreateProjectFromRepo_IgnoresAnotherPlatformsCheckoutPath(t *testing.T) {
+	cp := &cloneStubControlPlane{result: controlplane.CloneRepoResult{Queued: true}}
+	svc, repo, cleanup := newFromRepoService(t, cp)
+	defer cleanup()
+	ctx, userID := fromRepoCtx()
+
+	suffix := uuid.NewString()[:8]
+	mac, mac2, linuxBox := "mac-"+suffix, "mac2-"+suffix, "ovh-"+suffix
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: mac, UserID: userID, Platform: ptrStr("darwin/arm64")}))
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: mac2, UserID: userID, Platform: ptrStr("darwin/arm64")}))
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: linuxBox, UserID: userID, Platform: ptrStr("linux/amd64")}))
+
+	name := "control-plane-" + suffix
+	cloneURL := "https://github.com/reliant-labs/" + name + ".git"
+	macPath := "/Users/me/src/reliant-labs/" + name
+	resp, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+		CloneUrl: cloneURL, DaemonId: mac, Name: &name, Path: &macPath,
+	}))
+	require.NoError(t, err)
+	projectID := resp.Msg.GetProject().GetId()
+	require.NoError(t, repo.UpsertProjectDaemon(ctx, projectID, mac, macPath, nil))
+
+	// The Mac's path, sent for the Linux box: the box's default instead.
+	resp, err = svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+		CloneUrl: cloneURL, DaemonId: linuxBox, Name: &name, Path: &macPath,
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, projectID, resp.Msg.GetProject().GetId(), "the same project, on a second machine")
+	assert.Equal(t, "/home/workspace/projects/"+name, cp.lastReq.Path, "the clone must not be sent the Mac's path")
+	assert.Equal(t, "/home/workspace/projects/"+name, resp.Msg.GetProjectDaemon().GetPath())
+
+	// A destination chosen for the Linux box is its own: honored.
+	_, err = svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+		CloneUrl: cloneURL, DaemonId: linuxBox, Name: &name, Path: ptrStr("/srv/checkouts/" + name),
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, "/srv/checkouts/"+name, cp.lastReq.Path)
+
+	// The same path on a second Mac is a real destination: honored.
+	_, err = svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+		CloneUrl: cloneURL, DaemonId: mac2, Name: &name, Path: &macPath,
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, macPath, cp.lastReq.Path)
+}
+
 func ptrStr(s string) *string { return &s }

@@ -134,8 +134,10 @@ export function CheckoutMissing({
         daemonId,
         name: projectName,
         // The machine's own path when the detail has one; otherwise the
-        // server places it where that machine keeps projects.
-        path: missing.daemonId ? missing.path : undefined,
+        // server places it where that machine keeps projects. Never the
+        // path a failed clone could not create: retried there it fails the
+        // same way (prod, 2026-11-23: a Mac's /Users/... on a Linux box).
+        path: missing.daemonId && checkoutMissingKind(missing) !== "clone-failed" ? missing.path : undefined,
       });
       onRetry?.();
     } catch (err) {

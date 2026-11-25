@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -13,9 +15,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/planproto"
 )
 
-// chatOfPlan resolves the chat a plan belongs to, through the plan's thread.
-func (s *Service) chatOfPlan(ctx context.Context, plan *core.Plan) (*core.ChatRow, error) {
-	thread, err := s.deps.Threads.GetThread(ctx, plan.ThreadID)
+// chatOfThread resolves the chat a plan belongs to, through the plan's thread.
+func (s *Service) chatOfThread(ctx context.Context, threadID string) (*core.ChatRow, error) {
+	thread, err := s.deps.Threads.GetThread(ctx, threadID)
 	if err != nil {
 		return nil, svcerr.WrapOr(fmt.Errorf("failed to get thread for plan: %w", err), svcerr.Internal("failed to get chat"))
 	}
@@ -26,24 +28,23 @@ func (s *Service) chatOfPlan(ctx context.Context, plan *core.Plan) (*core.ChatRo
 	return chat, nil
 }
 
-// writablePlan reads a plan and its chat (plan → thread → chat) and refuses a
-// caller who may not write that chat.
-func (s *Service) writablePlan(ctx context.Context, userID, planID string) (*core.Plan, *core.ChatRow, error) {
-	if planID == "" {
-		return nil, nil, svcerr.InvalidArgument("plan_id is required")
-	}
-	plan, err := s.deps.Plans.GetPlan(ctx, planID)
+// writableChatOfThread is the chat of threadID when userID may write it. A
+// caller who may not gets the same NotFound a missing plan does, so a plan's
+// existence in another tenant is never revealed.
+//
+// TODO(forge#2461): a plan reaches its owner through thread -> chat, which
+// authz decides with org membership and sharing, so no one-column forge:owner
+// can say it. Replace this check with a declaration once forge's CRUD
+// ownership can follow a join.
+func (s *Service) writableChatOfThread(ctx context.Context, userID, threadID string) (*core.ChatRow, error) {
+	chat, err := s.chatOfThread(ctx, threadID)
 	if err != nil {
-		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
-	}
-	chat, err := s.chatOfPlan(ctx, plan)
-	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if !authz.CanOwnChat(ctx, userID, chat) {
-		return nil, nil, svcerr.PermissionDenied("access denied")
+		return nil, svcerr.NotFound("plan")
 	}
-	return plan, chat, nil
+	return chat, nil
 }
 
 // emitPlanTasksRefetch tells the chat's clients to re-read its plan and
@@ -54,15 +55,16 @@ func (s *Service) emitPlanTasksRefetch(ctx context.Context, chatID string) {
 	}
 }
 
-// planToProto is the wire shape of a plan in chatID.
-func planToProto(plan *core.Plan, chatID string) *reliantv1.Plan {
+// corePlanToProto is the wire shape of a plan read through the stores, in
+// chatID.
+func corePlanToProto(plan *core.Plan, chatID string) *reliantv1.Plan {
 	out := &reliantv1.Plan{
 		Id:        plan.ID,
 		ChatId:    chatID,
 		Title:     plan.Title,
 		Status:    planproto.PlanStatus(plan.Status),
-		CreatedAt: plan.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt: plan.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		CreatedAt: timestamppb.New(plan.CreatedAt),
+		UpdatedAt: timestamppb.New(plan.UpdatedAt),
 	}
 	if plan.Description != nil {
 		out.Description = *plan.Description

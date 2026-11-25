@@ -14,6 +14,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/gitremote"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 )
@@ -394,7 +395,12 @@ func (p *nestedClonePass) cloneOne(ctx context.Context, claim *core.NestedRepoCl
 	case rel == "" || strings.TrimSpace(repo.RemoteURL) == "":
 		cloneErr = "no remote is recorded for it"
 	default:
-		if err := p.run(ctx, cloneStep{Repo: strings.TrimSpace(repo.RemoteURL), Path: ospath.Join(p.rootPath, rel)}); err != nil {
+		// The root was cloned with the user's token (the control plane
+		// queues it only then), and these authenticate the same way: a
+		// github.com SSH remote goes over https, which the token can
+		// authenticate and SSH cannot (gitremote.TokenCloneURL).
+		cloneURL := gitremote.TokenCloneURL(strings.TrimSpace(repo.RemoteURL))
+		if err := p.run(ctx, cloneStep{Repo: cloneURL, Path: ospath.Join(p.rootPath, rel)}); err != nil {
 			if ctx.Err() != nil || errors.Is(err, errCloneConnectionGone) {
 				return
 			}

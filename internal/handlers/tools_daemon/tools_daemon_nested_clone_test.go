@@ -175,10 +175,12 @@ func TestCloneNestedRepos_ClonesEachIntoItsPathShallowestFirst(t *testing.T) {
 	if !pass.runPass(context.Background()) {
 		t.Fatal("the checkout was not settled")
 	}
+	// A github.com SSH remote clones over https: the machine's git
+	// authenticates with the user's token, which SSH never consults.
 	want := []cloneStep{
-		{Repo: "git@github.com:acme/forge.git", Path: "/srv/projects/acme/forge"},
+		{Repo: "https://github.com/acme/forge.git", Path: "/srv/projects/acme/forge"},
 		{Repo: "https://github.com/acme/tools", Path: "/srv/projects/acme/tools"},
-		{Repo: "git@github.com:acme/inner.git", Path: "/srv/projects/acme/tools/inner"},
+		{Repo: "https://github.com/acme/inner.git", Path: "/srv/projects/acme/tools/inner"},
 	}
 	if len(ran) != len(want) {
 		t.Fatalf("clones = %+v, want %+v", ran, want)

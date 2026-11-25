@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -177,7 +178,7 @@ func (e *pollCredEnv) githubTrigger(t *testing.T, userID string, connID string) 
 		ID: "trg-" + uuid.NewString(), UserID: userID, ProjectID: projectID, Name: "poll", Kind: core.TriggerKindIntegration,
 		Enabled: true, Workflow: "builtin://agent", DaemonID: "d", Config: cfg, ConnectionID: &connID, CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, e.repo.CreateTrigger(ctx, trigger))
+	require.NoError(t, triggertest.Create(ctx, e.repo, trigger))
 	return trigger
 }
 

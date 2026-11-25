@@ -112,11 +112,22 @@ describe("setUpPathOn", () => {
     expect(pathOn("ovh", [installed("mac1", macPath), installed("box", "/home/me/cp")])).toBe("/home/me/cp");
   });
 
-  it("keeps the project's folder when there is nothing to judge by", () => {
-    expect(pathOn("ovh", [])).toBe(macPath);
-    expect(pathOn("odd", [installed("mac1", macPath)])).toBe(macPath);
-    expect(pathOn("ovh", [installed("odd", macPath)])).toBe(macPath);
+  // The project's path is a folder on the machine it was added from. With
+  // nothing to show it fits this one, the server's default for this machine
+  // is the safe answer: it is always creatable there.
+  it("lets the server choose when nothing shows the project's folder fits this machine", () => {
+    expect(pathOn("ovh", [])).toBeUndefined();
+    expect(pathOn("odd", [installed("mac1", macPath)])).toBeUndefined();
+    expect(pathOn("ovh", [installed("odd", macPath)])).toBeUndefined();
     expect(pathOn("ovh", [], "  ")).toBeUndefined();
+  });
+
+  // "Try again" after the prod failure: the only record of the project is
+  // the failed row itself, at the path that failed. A retry must not send it
+  // again (it fails the same way, every time).
+  it("never resends the folder a failed set-up could not create", () => {
+    const failedOnly = [{ ...row("cp", "ovh", ProjectInstallState.FAILED), path: macPath }];
+    expect(pathOn("ovh", failedOnly)).toBeUndefined();
   });
 });
 

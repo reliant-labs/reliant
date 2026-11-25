@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -122,14 +123,15 @@ func parseTaskStatus(s string) (int32, bool) {
 
 // CreatePlanTool allows agents to create structured plans with tasks
 type CreatePlanTool struct {
-	repo  createPlanStore
-	plans createPlanPlanning
+	repo    createPlanStore
+	refetch Refetcher
+	plans   createPlanPlanning
 }
 
 // NewCreatePlanTool creates a new plan creation tool
-func NewCreatePlanTool(repo createPlanStore, plans createPlanPlanning) Tool {
+func NewCreatePlanTool(repo createPlanStore, plans createPlanPlanning, refetch Refetcher) Tool {
 	return NewToolWrapper(&CreatePlanTool{
-		repo:  repo,
+		repo: repo, refetch: refetch,
 		plans: plans,
 	})
 }
@@ -487,7 +489,7 @@ Tasks (%d created):
 
 	responseText += "\nThe plan has been associated with the current thread."
 
-	if err := p.repo.EmitChatRefetch(rctx.Context, rctx.ChatID, db.RefetchPlanTasks); err != nil {
+	if err := emitChatRefetch(p.refetch, rctx.Context, rctx.ChatID, core.RefetchPlanTasks); err != nil {
 		logging.Warn("[CreatePlanTool] Failed to emit plan_tasks refetch", "error", err)
 	}
 
@@ -501,14 +503,15 @@ Tasks (%d created):
 
 // UpdatePlanTool allows agents to update existing plans
 type UpdatePlanTool struct {
-	repo  updatePlanStore
-	plans updatePlanPlanning
+	repo    updatePlanStore
+	refetch Refetcher
+	plans   updatePlanPlanning
 }
 
 // NewUpdatePlanTool creates a new plan update tool
-func NewUpdatePlanTool(repo updatePlanStore, plans updatePlanPlanning) Tool {
+func NewUpdatePlanTool(repo updatePlanStore, plans updatePlanPlanning, refetch Refetcher) Tool {
 	return NewToolWrapper[UpdatePlanParams, ToolResponse](&UpdatePlanTool{
-		repo:  repo,
+		repo: repo, refetch: refetch,
 		plans: plans,
 	})
 }
@@ -664,7 +667,7 @@ Description:
 		)
 	}
 
-	if err := u.repo.EmitChatRefetch(rctx.Context, rctx.ChatID, db.RefetchPlanTasks); err != nil {
+	if err := emitChatRefetch(u.refetch, rctx.Context, rctx.ChatID, core.RefetchPlanTasks); err != nil {
 		logging.Warn("[UpdatePlanTool] Failed to emit plan_tasks refetch", "error", err)
 	}
 

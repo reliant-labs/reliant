@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/triggerowner"
 )
 
@@ -31,7 +32,7 @@ func takeoverTrigger(t *testing.T, repo *db.Repo, creator string) *core.Trigger 
 		Kind: core.TriggerKindSchedule, Enabled: false, Workflow: "builtin://agent", Message: "go", NoMachine: true,
 		Config: json.RawMessage(`{"cron":["0 3 * * *"]}`), CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.CreateTrigger(ctx, trig))
+	require.NoError(t, triggertest.Create(ctx, repo, trig))
 	return trig
 }
 

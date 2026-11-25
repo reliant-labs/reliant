@@ -185,7 +185,7 @@ export function chatHandlers() {
       // The fixture chat's turn 2 image ("checkout-total.png"); its markdown spec is listed on the message, never fetched.
       getAttachment: (req) => {
         const answer = packJson(GetAttachmentResponseSchema, checkoutTotalJson);
-        if (req.attachmentId !== answer.attachment?.id) throw new ConnectError("attachment not found", Code.NotFound);
+        if (req.id !== answer.attachment?.id) throw new ConnectError("attachment not found", Code.NotFound);
         return answer;
       },
     }),

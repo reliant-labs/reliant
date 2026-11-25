@@ -152,6 +152,16 @@ describe("ExperimentsPage", () => {
     expect(service.of("ListChanges")[0]!.body).not.toHaveProperty("environmentId");
   });
 
+  it("labels the page Beta beside its title", async () => {
+    renderPage(fakeService({ ListChanges: () => ({ changes: [wireChange()] }) }));
+    await screen.findByTestId("change-row-new-checkout");
+    const beta = screen.getByTestId("experiments-beta");
+    expect(beta).toHaveTextContent(/^Beta/);
+    expect(beta).toHaveTextContent("Experiments is in beta");
+    // Beside the title, not in it: the page's heading stays its name.
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Experiments$/);
+  });
+
   it("reads every page of a project's changes", async () => {
     const service = fakeService({
       ListChanges: (body) =>
@@ -321,6 +331,7 @@ describe("ChangeDetail", () => {
     });
     renderDetail(service);
     expect(await screen.findByTestId("results-not-deployed")).toHaveTextContent("Results appear once the readout service ships");
+    expect(screen.getByTestId("experiments-beta")).toHaveTextContent(/^Beta/);
     const history = await screen.findByTestId("change-history");
     expect(history).toHaveTextContent("alice (an agent acting for them) edited the draft");
     expect(history).toHaveTextContent("percent_bp: 500 → 1000");

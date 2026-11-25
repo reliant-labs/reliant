@@ -12,7 +12,7 @@ Product analytics tells you how people use your app: how many there are, whether
 
 In the project sidebar, open **Analytics**. It has one tab per built-in dashboard, **Product overview**, **Users**, **Product** and **Acquisition**, and an **Events & metrics** tab for what your own code sends. Each tab is a link, so a colleague can open the same view. The dashboards also appear under **Dashboards** with your other charts, where you can star or copy them.
 
-An **Experiments** tab is reserved for a later feature. There is no feature-flag or experiment product in Reliant today, so you won't see one unless it has been added for you; what the Product dashboard shows about experiments is descriptive and only appears if your app reports flag exposures.
+**Experiments**, in beta, is where you run feature flags, gradual rollouts and A/B tests; see [Feature flags and experiments](/forge/observability/changes). What the Product dashboard shows about experiments is descriptive and only appears if your app reports flag exposures.
 
 ## What each tab shows
 
@@ -54,12 +54,13 @@ Declare goals, the activation event and extra channel rules in the environment's
 - Product events are kept up to 90 days without a paid compute subscription and up to 400 days with one, bounded by the environment's declaration. See [retention](/hosting/observability/where-it-goes#retention-and-usage).
 - Each event is one log record, and [billed as log ingestion](/hosting/observability-billing) like any other. Automatic CRUD events can be switched off with `signals = forge.ObservabilitySignals {product_events = False}`.
 - Visitor counts are an approximation by design. People behind one office address with the same browser collapse into one visitor, and bots aren't counted.
-- Experiments and feature flags are not built into Reliant. An app that already uses an OpenFeature provider can report exposures with `forgeExposureHook`.
+- Feature flags and experiments are [Forge Changes](/forge/observability/changes), in beta. An app that already uses another OpenFeature provider can report exposures with `forgeExposureHook`.
 
 ## Related topics
 
 - [Hosted dashboards, alerts and issues](/hosting/observability/dashboards-and-alerts): the dashboard model, copies and code dashboards
 - [Speed insights](/forge/observability/speed-insights): how fast each page is
+- [Feature flags and experiments](/forge/observability/changes): rollouts and A/B tests measured with these events
 - [Session timelines](/hosting/observability/session-timelines): what one visitor did
 - [Observability](/hosting/observability), and [`forge obs users`](/reference/cli#reliant-forge-obs-users) for the same user counts in a terminal
 - [Visitors to apps you host with us](/help/privacy#visitors-to-apps-you-host-with-us)
