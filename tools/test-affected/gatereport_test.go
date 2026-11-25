@@ -63,15 +63,10 @@ func TestBudgetFilterFailureIncludesPackage(t *testing.T) {
 // command, intercepting go rather than compiling a nested module. This stays
 // fast under -short and reads the script in-process for cache correctness.
 func TestMergeVetIncludesProductionPackageWithoutTests(t *testing.T) {
-	g := noWalkers()
 	// An ordinary importer with no tests must be vetted as well as the
-	// changed production package; neither appears in TestDeps.
-	g.DirPkg["cmd/no_tests"] = mod + "/cmd/no_tests"
-	g.BuildDeps[mod+"/cmd/no_tests"] = map[string]bool{mod + "/cmd/no_tests": true, mod + "/tools/docgen/cli": true}
-	pl := ClassifyReach([]Change{{Path: "tools/docgen/cli/main.go"}}, g, ReachDirect)
-	if len(pl.Go.Packages) != 0 || !reflect.DeepEqual(pl.Go.Build, []string{"./cmd/no_tests", "./tools/docgen/cli"}) {
-		t.Fatalf("fixture must select production build only: %+v", pl.Go)
-	}
+	// changed production package: forge's build set names both, its test
+	// packages neither.
+	pl := &Plan{Files: []FileReport{{Path: "tools/docgen/cli/main.go"}}, Go: GoPlan{Build: []string{"./cmd/no_tests", "./tools/docgen/cli"}}}
 	dir := gateDir(t, pl, map[string]int{"build": 0, "test": 0, "proto": 0, "lint": 0, "docs": 0, "golangci": 0})
 	problems := strings.Join(verifyGate(filepath.Join(dir, "plan.json"), dir), ";")
 	if !strings.Contains(problems, "vet never completed") {

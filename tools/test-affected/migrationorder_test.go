@@ -396,7 +396,7 @@ func TestMigrationOrderLaneSelection(t *testing.T) {
 		}
 	}
 	// A deletion cannot put a file below the head.
-	if pl := ClassifyReach([]Change{{Path: "db/migrations/20261024024221_x.up.sql", Deleted: true}}, testGraph(), ReachAll); pl.MigOrder.Full {
+	if pl := Classify([]Change{{Path: "db/migrations/20261024024221_x.up.sql", Deleted: true}}, nil, testGraph(), ReachAll); pl.MigOrder.Full {
 		t.Errorf("a deleted migration must not run the lane: %v", pl.MigOrder.Reasons)
 	}
 }

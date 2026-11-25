@@ -26,7 +26,7 @@ func TestWebBuildRunsWhenTheBundlersInputsChange(t *testing.T) {
 		{"frontends/web/vite.config.ts", true, "the renderer's release build reads it"},
 		{"frontends/web/vite-plugin-csp.ts", true, "the renderer's release build reads it"},
 		{"frontends/web/index.html", true, "the renderer's release build reads it"},
-		{"some-new-top-level-thing/x.dat", true, "some-new-top-level-thing/x.dat"},
+		{"some-new-top-level-thing/x.dat", true, "fail-safe"},
 		// Sources are tsc -b's and vitest's; the bundle of a source change is
 		// the release gate's.
 		{"frontends/web/src/lib/leaf.ts", false, ""},
@@ -35,7 +35,11 @@ func TestWebBuildRunsWhenTheBundlersInputsChange(t *testing.T) {
 		{"electron/package.json", false, ""},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
-			pl := classify(tc.path)
+			var fd *ForgeDecision
+			if strings.HasPrefix(tc.path, "some-new-top-level-thing/") {
+				fd = unplacedFile
+			}
+			pl := classifyWith(testGraph(), fd, ReachAll, tc.path)
 			if pl.WebBuild.Full != tc.want {
 				t.Fatalf("web-build full = %v, want %v (reasons %v)", pl.WebBuild.Full, tc.want, pl.WebBuild.Reasons)
 			}

@@ -75,7 +75,7 @@ func TestWebDemoBuildFollowsTheBundlesImportGraph(t *testing.T) {
 			if tc.twin {
 				src["frontends/web/src/hooks/useOrgs.demo.ts"] = `export const useOrgs = () => []`
 			}
-			pl := ClassifyReach([]Change{{Path: tc.path}}, demoGraphOf(src), ReachDirect)
+			pl := Classify([]Change{{Path: tc.path}}, nil, demoGraphOf(src), ReachDirect)
 			if pl.WebDemo.Full != tc.want {
 				t.Fatalf("web-demo full = %v, want %v (reasons %v)", pl.WebDemo.Full, tc.want, pl.WebDemo.Reasons)
 			}
@@ -100,13 +100,13 @@ func TestWebDemoBuildFailsSafeWithoutItsEntry(t *testing.T) {
 }
 
 func TestWebDemoBuildRunsOnAnUnclaimedPath(t *testing.T) {
-	if pl := classify("some-new-top-level-thing/x.dat"); !pl.WebDemo.Full {
+	if pl := classifyWith(testGraph(), unplacedFile, ReachAll, "some-new-top-level-thing/x.dat"); !pl.WebDemo.Full {
 		t.Fatal("a path nothing claims must run the demo build too")
 	}
 }
 
 func TestRunnerBuildsTheDemoBundleWhenSelected(t *testing.T) {
-	pl := ClassifyReach([]Change{{Path: "frontends/web/src/hooks/useOrgs.ts"}}, demoGraphOf(demoSrc()), ReachDirect)
+	pl := Classify([]Change{{Path: "frontends/web/src/hooks/useOrgs.ts"}}, nil, demoGraphOf(demoSrc()), ReachDirect)
 	r := &runner{root: "/repo"}
 	var demo *step
 	for _, s := range r.steps(pl, laneSet(defaultLanes)) {
@@ -132,7 +132,7 @@ func TestRunnerBuildsTheDemoBundleWhenSelected(t *testing.T) {
 // web modules reach: #2669's failing tests were among them while #2693's
 // package.json made its queue group's web lane FULL.
 func TestRunnerWebFullFallbackRunsTheReachedFiles(t *testing.T) {
-	pl := ClassifyReach([]Change{{Path: "frontends/web/package.json"}, {Path: "frontends/web/src/lib/leaf.ts"}}, testGraph(), ReachDirect)
+	pl := Classify([]Change{{Path: "frontends/web/package.json"}, {Path: "frontends/web/src/lib/leaf.ts"}}, nil, testGraph(), ReachDirect)
 	if !pl.Web.Full || !slices.Contains(pl.Web.Tests, "src/lib/__tests__/leaf.test.ts") {
 		t.Fatalf("plan: full=%v tests=%v", pl.Web.Full, pl.Web.Tests)
 	}
@@ -152,7 +152,7 @@ func TestRunnerWebFullFallbackRunsTheReachedFiles(t *testing.T) {
 		t.Fatalf("reached FULL web step = %v, want vitest over %v", got, pl.Web.Tests)
 	}
 	// A FULL fallback with no source change runs no vitest here.
-	pl = ClassifyReach([]Change{{Path: "frontends/web/package.json"}}, testGraph(), ReachDirect)
+	pl = Classify([]Change{{Path: "frontends/web/package.json"}}, nil, testGraph(), ReachDirect)
 	if got := webStep(&runner{root: "/repo", webFull: webFullReached}, pl); got != nil {
 		t.Fatalf("a manifest-only FULL fallback ran %v", got)
 	}

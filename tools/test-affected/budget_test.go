@@ -145,7 +145,7 @@ func TestRunnerGoStepUsesJSONOnlyUnderABudget(t *testing.T) {
 func TestRunnerCaptureRecordsTheGoAndWebSteps(t *testing.T) {
 	script := "/repo/scripts/test-capture.sh"
 	pl := &Plan{
-		Go:    GoPlan{Packages: []string{"./internal/leaf"}},
+		Go:    GoPlan{Packages: []string{"./internal/leaf"}, Modules: []ModulePlan{{Dir: "sdk/go", Packages: []string{"./reliant"}}}},
 		Web:   WebPlan{Tests: []string{"src/lib/leaf.test.ts"}},
 		Files: []FileReport{{Path: "sdk/go/reliant/client.go"}},
 	}
@@ -166,7 +166,7 @@ func TestRunnerCaptureRecordsTheGoAndWebSteps(t *testing.T) {
 	if got := byName["web"]; !slices.Equal(got, want) {
 		t.Errorf("captured web step:\n got %q\nwant %q", got, want)
 	}
-	if got := byName["go (sdk module)"]; len(got) == 0 || got[0] != "go" {
+	if got := byName["go (sdk/go module)"]; len(got) == 0 || got[0] != "go" {
 		t.Errorf("the sdk module's step must stay plain go test: %q", got)
 	}
 	r.budget = time.Second

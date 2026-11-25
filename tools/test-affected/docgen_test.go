@@ -28,7 +28,7 @@ const repoRoot = "../.."
 //     one;
 //   - every path those tasks pass (their inputs and outputs), every repo
 //     path a generator's Go source names, and every directory the Mintlify
-//     script joins onto the repo root is in docGenPaths;
+//     script joins onto the repo root is in forge.yaml's docs-generate paths;
 //   - the gates CI runs check the whole list (the release gate runs `task
 //     generate:docs:check`, the merge gate `task generate:docs` when the
 //     diff reaches a docs input), and neither they nor ci.yml spell a docs
@@ -86,7 +86,7 @@ func TestDocGenTargetsCoverEveryDocsGenerator(t *testing.T) {
 					continue
 				}
 				if !docGenCovers(t, p) {
-					t.Errorf("task %s passes %s, which is not in docGenPaths (tools/test-affected/rules.go): a change to it would not run the docs check", name, p)
+					t.Errorf("task %s passes %s, which is not in forge.yaml's docs-generate paths (ci.gate.extra_checks): a change to it would not run the docs check", name, p)
 				}
 			}
 		}
@@ -107,7 +107,7 @@ func TestDocGenTargetsCoverEveryDocsGenerator(t *testing.T) {
 				continue // not a path in this repo
 			}
 			if !docGenCovers(t, lit) {
-				t.Errorf("%s names %s, which is not in docGenPaths (tools/test-affected/rules.go): a change to it would not run the docs check", filepath.ToSlash(src), lit)
+				t.Errorf("%s names %s, which is not in forge.yaml's docs-generate paths (ci.gate.extra_checks): a change to it would not run the docs check", filepath.ToSlash(src), lit)
 			}
 		}
 		return nil
@@ -125,7 +125,7 @@ func TestDocGenTargetsCoverEveryDocsGenerator(t *testing.T) {
 			parts = append(parts, s[1])
 		}
 		if dir := path.Join(parts...); !docGenCovers(t, dir) {
-			t.Errorf("scripts/generate-mintlify-reference.py reads or writes %s, which is not in docGenPaths (tools/test-affected/rules.go)", dir)
+			t.Errorf("scripts/generate-mintlify-reference.py reads or writes %s, which is not in forge.yaml's docs-generate paths (ci.gate.extra_checks)", dir)
 		}
 	}
 
@@ -157,7 +157,7 @@ func TestDocGenTargetsCoverEveryDocsGenerator(t *testing.T) {
 }
 
 // docGenCovers reports whether the repo path p is a docs-generate input: a
-// file (or a path not yet written) by docGenPaths, a directory when any file
+// file (or a path not yet written) by forge.yaml's docs-generate paths, a directory when any file
 // directly in it is.
 func docGenCovers(t *testing.T, p string) bool {
 	t.Helper()

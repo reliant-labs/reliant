@@ -1,8 +1,12 @@
 // Command test-affected runs only the tests a diff can reach.
 //
 // It diffs the working tree against the merge-base with origin/main (committed,
-// staged, unstaged and untracked), maps every changed path to the tests that
-// can observe it, prints why each runs, and executes them:
+// staged, unstaged and untracked), asks forge which Go tests, nested modules
+// and path-gated rows the change reaches (`forge ci gate --plan --json
+// --files`, forge.yaml's ci.gate), adds the lanes forge does not have (the
+// web lane's vitest files, the demo and release bundles, the forge-generate
+// hooks-only narrowing, migration order), prints why each runs, and executes
+// them:
 //
 //	go run ./tools/test-affected            # print the plan, run nothing
 //	go run ./tools/test-affected run        # print the plan, then run it
@@ -16,10 +20,10 @@
 //	go run ./tools/test-affected changed-tests   # ./pkg<TAB>^(TestA|TestB)$
 //
 // `task test:affected` is the front door. The decision is Classify (plan.go)
-// over rules.go, the Go package graph (graph.go) and the web import graph
-// (webgraph.go); this file is the I/O. A path no rule and no Go package claims,
-// a dependency or config pin, or a failure to compute the diff makes the
-// answer "run everything" for the lanes it touches.
+// over forge's decision (forge.go), rules.go, the generate hooks' packages
+// (graph.go) and the web import graph (webgraph.go); this file is the I/O. A
+// path forge cannot place, or a failure to compute the diff or ask forge,
+// makes the answer "run everything".
 package main
 
 import (
@@ -81,13 +85,10 @@ func main() {
 	webFullFlag := fs.String("web-full", webFullAll, "with run: what a FULL web lane runs: all (the whole vitest suite) or reached (only the vitest files the diff's own web modules reach, at -reach's cut; the merge gate's choice, dev-docs/testing-affected.md)")
 	webShardFlag := fs.String("web-shard", "", "with run: run only shard i of n of the web lane's vitest files (i/n, vitest --shard): the merge queue's vitest job splits the SAME selected file list across n runners, one leg each")
 	captureFlag := fs.Bool("capture", false, "with run: record the Go and web steps through scripts/test-capture.sh (`forge test capture`, lanes "+captureLaneGo+" and "+captureLaneWeb+"): results and coverage under .forge/tests/runs/, the verdict unchanged; the merge gate's choice")
-	reachFlag := fs.String("reach", "", "Go and web lane fan-out: all (every package whose test binary, every vitest file whose import closure, contains a change; the default, also $TEST_REACH) or direct (changed packages + their direct importers; the vitest files that import a changed module or a module importing it: the merge tier)")
-	reachCapFlag := fs.Int("go-reach-cap", 0, "with -reach direct: also select the Go packages -reach all would add when they number at most this (the merge gate's transitive budget, MG_REACH_CAP); 0 keeps the direct cut")
+	reachFlag := fs.String("reach", "", "web lane fan-out (the Go lane's is forge.yaml's ci.gate.affected_reach): all (every package whose test binary, every vitest file whose import closure, contains a change; the default, also $TEST_REACH) or direct (changed packages + their direct importers; the vitest files that import a changed module or a module importing it: the merge tier)")
+	// Deprecated: the Go lane's reach is forge.yaml's ci.gate.affected_reach.
+	_ = fs.Int("go-reach-cap", 0, "ignored: the Go lane's reach and transitive cap are forge.yaml's ci.gate.affected_reach")
 	if err := fs.Parse(args); err != nil {
-		os.Exit(2)
-	}
-	if *reachCapFlag < 0 {
-		fmt.Fprintln(os.Stderr, "test-affected: -go-reach-cap must not be negative")
 		os.Exit(2)
 	}
 	if *jobs < 1 {
@@ -129,7 +130,7 @@ func main() {
 	if *planFile != "" {
 		pl, err = readPlan(ctx, *root, *baseFlag, *planFile)
 	} else {
-		pl, err = plan(ctx, *root, *baseFlag, *full, splitList(*files), *reachFlag, *reachCapFlag)
+		pl, err = plan(ctx, *root, *baseFlag, *full, splitList(*files), *reachFlag)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "test-affected:", err)
@@ -196,7 +197,7 @@ func laneSet(s string) map[lane]bool {
 }
 
 // plan computes the decision for the tree at root.
-func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []string, reachMode string, reachCap int) (result *Plan, resultErr error) {
+func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []string, reachMode string) (result *Plan, resultErr error) {
 	root = mustAbs(root)
 	before, err := checkoutDigest(ctx, root)
 	if err != nil {
@@ -233,13 +234,24 @@ func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []s
 	if terr != nil {
 		return failSafe(base, head, "cannot list repo files ("+terr.Error()+")"), nil
 	}
-	g, gerr := LoadGraph(ctx, root, module, tracked)
+	var fd *ForgeDecision
+	if len(changes) > 0 {
+		paths := make([]string, len(changes))
+		for i, ch := range changes {
+			paths[i] = ch.Path
+		}
+		var ferr error
+		if fd, ferr = forgeDecide(ctx, root, paths); ferr != nil {
+			return failSafe(base, head, "cannot get forge's affected decision ("+firstLine(ferr.Error())+")"), nil
+		}
+	}
+	g, gerr := LoadGraph(ctx, root, module)
 	if gerr != nil {
-		return failSafe(base, head, "cannot load the Go package graph ("+firstLine(gerr.Error())+")"), nil
+		return failSafe(base, head, "cannot list the generate hooks' packages ("+firstLine(gerr.Error())+")"), nil
 	}
 	g.Web = BuildWebGraph(append(append([]string{}, tracked...), untracked...), diskReader(root))
 	g.ElectronText = electronTexts(root)
-	pl := ClassifyReachCap(changes, g, reachMode, reachCap)
+	pl := Classify(changes, fd, g, reachMode)
 	pl.Base, pl.Head = base, head
 	if pl.ForgeGen.HooksOnly {
 		cmds, err := hookCommands(root, pl.ForgeGen.Hooks)
@@ -801,27 +813,24 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 // deploy sets it). scripts/merge-gate.sh's demo phase runs the same build.
 func demoBuildArgv() []string { return []string{"npx", "vite", "build", "--logLevel", "warn"} }
 
-// sdkModuleDir is the SDK's own Go module: the root module's `./...` stops at
-// its go.mod, so its tests are a step of their own.
-const sdkModuleDir = "sdk/go"
-
-// touchesSDK reports whether the change includes a file of the SDK module.
-func touchesSDK(pl *Plan) bool {
-	return slices.ContainsFunc(pl.Files, func(f FileReport) bool {
-		return strings.HasPrefix(f.Path, sdkModuleDir+"/")
-	})
-}
-
 func (r *runner) goSteps(pl *Plan) []step {
 	steps := r.rootGoSteps(pl)
-	// Only when the change touches the SDK: a full lane runs the root module's
+	// The nested modules go.mod replaces (sdk/go), as forge's
+	// affected_modules decided: a full root lane runs the root module's
 	// ./... and has always meant exactly that. The release gate's `task test`
 	// runs the SDK module too (Taskfile.yml).
-	if touchesSDK(pl) {
+	for _, m := range pl.Go.Modules {
+		pkgs := m.Packages
+		if m.Full {
+			pkgs = []string{"./..."}
+		}
+		if len(pkgs) == 0 {
+			continue
+		}
 		steps = append(steps, step{
-			name: "go (sdk module)",
-			dir:  filepath.Join(r.root, sdkModuleDir),
-			argv: []string{"go", "test", "-buildvcs=false", "-short", "-timeout", "5m", "./..."},
+			name: "go (" + m.Dir + " module)",
+			dir:  filepath.Join(r.root, filepath.FromSlash(m.Dir)),
+			argv: append([]string{"go", "test", "-buildvcs=false", "-short", "-timeout", "5m"}, pkgs...),
 		})
 	}
 	return steps

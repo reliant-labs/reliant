@@ -14,62 +14,10 @@ import (
 
 const mod = "github.com/reliant-labs/reliant"
 
-// testGraph is a small module:
-//
-//	internal/leaf   <- internal/mid  <- cmd/app
-//	internal/other                       (no relation)
-//	internal/db     embeds db/migrations (not in the dir): DB-backed tests
-//	internal/guard  walks every Go file
-//	internal/deploy reads deploy/kcl/main.k
-//	tools/docgen/cli a docs generator: compiles cmd/app (so mid and leaf),
-//	                 internal/fixture (and its embedded data) and gen/reliant/v1
+// testGraph is the web import graph (webSrc), an electron test that names a
+// workflow, and no generate-hook packages (TestForgeGenHooksOnly adds some).
 func testGraph() *Graph {
-	pkg := func(n string) string { return mod + "/" + n }
-	g := &Graph{
-		Module:    mod,
-		DirPkg:    map[string]string{},
-		Files:     map[string]FileInfo{},
-		HasEmbed:  map[string]bool{},
-		TestDeps:  map[string]map[string]bool{},
-		Readers:   map[string][]string{},
-		Walkers:   map[string]bool{},
-		DBTests:   map[string]bool{},
-		BuildDeps: map[string]map[string]bool{},
-	}
-	for _, n := range []string{"internal/leaf", "internal/mid", "cmd/app", "internal/other", "internal/db", "internal/guard", "internal/deploy", "gen/reliant/v1", "internal/fixture"} {
-		g.DirPkg[n] = pkg(n)
-		g.Files[n+"/"+path0(n)+".go"] = FileInfo{Pkg: pkg(n), Kind: KindCode}
-		g.Files[n+"/"+path0(n)+"_test.go"] = FileInfo{Pkg: pkg(n), Kind: KindTest}
-	}
-	g.Files["internal/leaf/live_test.go"] = FileInfo{Pkg: pkg("internal/leaf"), Kind: KindIgnored}
-	g.Files["internal/fixture/data/x.json"] = FileInfo{Pkg: pkg("internal/fixture"), Kind: KindCode, Embedded: true}
-	g.HasEmbed[pkg("internal/fixture")] = true
-	dep := func(p string, ds ...string) {
-		s := map[string]bool{pkg(p): true}
-		for _, d := range ds {
-			s[pkg(d)] = true
-		}
-		g.TestDeps[pkg(p)] = s
-	}
-	dep("internal/leaf")
-	dep("internal/mid", "internal/leaf")
-	dep("cmd/app", "internal/mid", "internal/leaf")
-	dep("internal/other")
-	dep("internal/db")
-	dep("internal/guard")
-	dep("internal/deploy")
-	dep("internal/fixture")
-	dep("gen/reliant/v1")
-	// A generator has no tests: BuildDeps only, so it selects no Go package.
-	g.DirPkg["tools/docgen/cli"] = pkg("tools/docgen/cli")
-	g.Files["tools/docgen/cli/main.go"] = FileInfo{Pkg: pkg("tools/docgen/cli"), Kind: KindCode}
-	g.BuildDeps[pkg("tools/docgen/cli")] = map[string]bool{}
-	for _, d := range []string{"tools/docgen/cli", "cmd/app", "internal/mid", "internal/leaf", "internal/fixture", "gen/reliant/v1"} {
-		g.BuildDeps[pkg("tools/docgen/cli")][pkg(d)] = true
-	}
-	g.DBTests[pkg("internal/db")] = true
-	g.Walkers[pkg("internal/guard")] = true
-	g.Readers[pkg("internal/deploy")] = []string{"deploy/kcl/main.k"}
+	g := &Graph{Module: mod, DirPkg: map[string]string{}, Files: map[string]FileInfo{}, BuildDeps: map[string]map[string]bool{}}
 	g.Web = BuildWebGraph(webFiles(), func(p string) (string, bool) { s, ok := webSrc[p]; return s, ok })
 	g.ElectronText = map[string]string{
 		"electron/test/release.test.js": `fs.readFileSync(path.join(REPO_ROOT, '.github/workflows/release.yml'))`,
@@ -117,163 +65,35 @@ func classify(paths ...string) *Plan {
 }
 
 func classifyIn(g *Graph, paths ...string) *Plan {
+	return classifyWith(g, nil, ReachAll, paths...)
+}
+
+// classifyWith is Classify over paths with forge's decision fd (nil: forge
+// selects nothing and runs no path-gated row).
+// goModFull is forge's decision for a go.mod change: the whole Go lane, by a
+// rule (not the fail-safe).
+var goModFull = &ForgeDecision{Full: true, Reason: "go.mod changed — a Go dependency or toolchain pin changed (ci.gate.affected_rules[0])"}
+
+// unplacedFile is forge's decision for a file it cannot place: the fail-safe.
+var unplacedFile = &ForgeDecision{Full: true, Reason: "some-new-top-level-thing/x.dat changed, and it is not Go source, an embedded file or testdata of a package — nothing proves which tests read it"}
+
+// forgeSelects is a forge decision that runs these packages (./relative).
+func forgeSelects(pkgs ...string) *ForgeDecision {
+	fd := &ForgeDecision{}
+	for _, p := range pkgs {
+		fd.Packages = append(fd.Packages, mod+"/"+strings.TrimPrefix(p, "./"))
+	}
+	return fd
+}
+
+func classifyWith(g *Graph, fd *ForgeDecision, reachMode string, paths ...string) *Plan {
 	var ch []Change
 	for _, p := range paths {
 		ch = append(ch, Change{Path: p})
 	}
-	return Classify(ch, g)
+	return Classify(ch, fd, g, reachMode)
 }
 
-// noWalkers is the test graph without the tree-walking guard package, whose
-// "runs on any Go change" rule would otherwise appear in every selection.
-func noWalkers() *Graph {
-	g := testGraph()
-	g.Walkers = map[string]bool{}
-	return g
-}
-
-func goPkgs(pl *Plan) []string { return pl.Go.Packages }
-
-func TestGoReverseDependencies(t *testing.T) {
-	pl := classifyIn(noWalkers(), "internal/leaf/leaf.go")
-	want := []string{"./cmd/app", "./internal/leaf", "./internal/mid"}
-	if got := goPkgs(pl); !slices.Equal(got, want) {
-		t.Fatalf("leaf code change selects %v, want %v", got, want)
-	}
-	if pl.Go.Full {
-		t.Fatalf("leaf change must not be full: %v", pl.Go.Reasons)
-	}
-	if pl.Web.Full || len(pl.Web.Tests) != 0 {
-		t.Fatalf("a Go change selects no web tests, got %v", pl.Web.Tests)
-	}
-}
-
-func TestGoTestFileSelectsOnlyItsOwnPackage(t *testing.T) {
-	pl := classifyIn(noWalkers(), "internal/leaf/leaf_test.go")
-	if got, want := goPkgs(pl), []string{"./internal/leaf"}; !slices.Equal(got, want) {
-		t.Fatalf("a _test.go change selects %v, want only %v", got, want)
-	}
-}
-
-func TestGoTaggedFileSelectsNothing(t *testing.T) {
-	pl := classify("internal/leaf/live_test.go")
-	for _, p := range goPkgs(pl) {
-		if p == "./internal/leaf" || p == "./cmd/app" {
-			t.Fatalf("a build-tagged test must not select %s", p)
-		}
-	}
-}
-
-func TestGoAnyGoChangeSelectsTreeWalkers(t *testing.T) {
-	pl := classify("internal/other/other.go")
-	if !slices.Contains(goPkgs(pl), "./internal/guard") {
-		t.Fatalf("a package that walks every Go file must run on any Go change, got %v", goPkgs(pl))
-	}
-}
-
-func TestGoEmbeddedFileFansOutLikeCode(t *testing.T) {
-	pl := classify("internal/fixture/data/x.json")
-	if !slices.Contains(goPkgs(pl), "./internal/fixture") {
-		t.Fatalf("an embedded file selects its package, got %v", goPkgs(pl))
-	}
-}
-
-func TestGoReaderSelectsTheTestThatNamesTheFile(t *testing.T) {
-	pl := classify("deploy/kcl/main.k")
-	if got, want := goPkgs(pl), []string{"./internal/deploy"}; !slices.Equal(got, want) {
-		t.Fatalf("deploy/kcl/main.k selects %v, want %v", got, want)
-	}
-	if pl.Go.Full {
-		t.Fatal("a data file a test names must not force the full run")
-	}
-}
-
-func TestMigrationReachesOnlyDBBackedTests(t *testing.T) {
-	pl := classify("db/migrations/20261101000000_x.up.sql")
-	if got, want := goPkgs(pl), []string{"./internal/db"}; !slices.Equal(got, want) {
-		t.Fatalf("a migration selects %v, want %v", got, want)
-	}
-	if pl.Go.Full {
-		t.Fatalf("a migration must not force the full run: %v", pl.Go.Reasons)
-	}
-}
-
-func TestPinsAndConfigForceFull(t *testing.T) {
-	cases := []struct {
-		path  string
-		lanes []lane
-	}{
-		// The docs generators build against go.mod's pins too (cli.md
-		// documents forge's command tree).
-		{"go.mod", []lane{laneGo, laneForgeGen, laneDocGen}},
-		{"go.sum", []lane{laneGo, laneForgeGen, laneDocGen}},
-		// The codegen lanes run through the Taskfile; the test lanes do not.
-		{"Taskfile.yml", []lane{laneForgeGen, laneDocGen}},
-		// The forge pin and forge's own config reach Go and codegen, never a
-		// vitest file or electron: a forge bump must not run the whole web lane.
-		{"forge.yaml", []lane{laneGo, laneForgeGen}},
-		{"frontends/web/package.json", []lane{laneWeb, laneWebDemo, laneWebBuild}},
-		{"frontends/web/pnpm-lock.yaml", []lane{laneWeb, laneWebDemo, laneWebBuild}},
-		{"frontends/web/vite.config.ts", []lane{laneWeb, laneWebDemo, laneWebBuild}},
-		{"frontends/web/src/test/setup.ts", []lane{laneWeb, laneWebDemo, laneWebBuild}},
-		{"package-lock.json", []lane{laneWeb, laneElectron, laneWebDemo, laneWebBuild}},
-		{"proto/buf.yaml", []lane{laneGo, laneWeb, laneForgeGen, laneWebDemo, laneWebBuild}},
-		// buf's root configuration reaches tests only through the code it
-		// generates, which the diff carries (or forge-generate fails).
-		{"buf.yaml", []lane{laneForgeGen}},
-		{"buf.gen.controlplane.yaml", []lane{laneForgeGen}},
-	}
-	for _, tc := range cases {
-		pl := classify(tc.path)
-		for _, l := range allLanes {
-			want := slices.Contains(tc.lanes, l)
-			var got bool
-			switch l {
-			case laneGo:
-				got = pl.Go.Full
-			case laneWeb:
-				got = pl.Web.Full
-			case laneElectron:
-				got = pl.Electron.Full
-			case laneForgeGen:
-				got = pl.ForgeGen.Full
-			case laneDocGen:
-				got = pl.DocGen.Full
-			case laneWebDemo:
-				got = pl.WebDemo.Full
-			case laneWebBuild:
-				got = pl.WebBuild.Full
-			}
-			if got != want {
-				t.Errorf("%s: lane %s full = %v, want %v", tc.path, l, got, want)
-			}
-		}
-	}
-}
-
-func TestUnclaimedPathFailsSafe(t *testing.T) {
-	pl := classify("some-new-top-level-thing/x.dat")
-	if !pl.Go.Full || !pl.Web.Full || !pl.Electron.Full || !pl.ForgeGen.Full || !pl.DocGen.Full {
-		t.Fatalf("a path nothing claims must run everything: go=%v web=%v electron=%v forge-generate=%v docs-generate=%v", pl.Go.Full, pl.Web.Full, pl.Electron.Full, pl.ForgeGen.Full, pl.DocGen.Full)
-	}
-	if !strings.Contains(strings.Join(pl.Go.Reasons, " "), "some-new-top-level-thing/x.dat") {
-		t.Fatalf("the reason must name the path: %v", pl.Go.Reasons)
-	}
-}
-
-func TestInertPathsSelectNothing(t *testing.T) {
-	for _, p := range []string{"docs/automations/overview.mdx", "README.md", ".github/workflows/ci.yml", "research/x/PLAN.md"} {
-		pl := classify(p)
-		if pl.Go.Full || pl.Web.Full || len(pl.Go.Packages) != 0 || len(pl.Web.Tests) != 0 {
-			t.Errorf("%s selected something: go=%v/%v web=%v/%v", p, pl.Go.Full, pl.Go.Packages, pl.Web.Full, pl.Web.Tests)
-		}
-	}
-}
-
-// cp#2189: unclaimed, each of these ran every lane in full (23 of 60 merge
-// gates in one day did so for no other reason). Claimed, each selects only
-// the tests that read it: the service catalog none (forge-generate judges
-// it), the demo files the tests naming them.
 func TestServiceCatalogAndDemoFilesSelectOnlyTheirReaders(t *testing.T) {
 	g := testGraph()
 	src := maps.Clone(webSrc)
@@ -293,7 +113,7 @@ read("scripts/demo/capture-forge-scaffold.mjs"); read("scripts/demo/capture-forg
 		"frontends/web/scripts/demo/smoke-demo-site.mjs":        {walker},
 	} {
 		for _, mode := range []string{ReachAll, ReachDirect} {
-			pl := ClassifyReach([]Change{{Path: p}}, g, mode)
+			pl := Classify([]Change{{Path: p}}, nil, g, mode)
 			if pl.Go.Full || pl.Web.Full || pl.Electron.Full || pl.DocGen.Full {
 				t.Errorf("%s (%s) is claimed: no lane may run in full: go=%v web=%v electron=%v docs-generate=%v (%v)",
 					p, mode, pl.Go.Full, pl.Web.Full, pl.Electron.Full, pl.DocGen.Full, pl.Go.Reasons)
@@ -332,12 +152,6 @@ func TestForgeInputsRunForgeGenerate(t *testing.T) {
 	}
 	// A handler package's hand-written tests: forge reads none of them.
 	g := testGraph()
-	chat := mod + "/internal/handlers/chat"
-	g.DirPkg["internal/handlers/chat"] = chat
-	g.TestDeps[chat] = map[string]bool{chat: true}
-	for _, f := range []string{"rpc_send_test.go", "handlers_scaffold_send_test.go"} {
-		g.Files["internal/handlers/chat/"+f] = FileInfo{Pkg: chat, Kind: KindTest}
-	}
 	for _, p := range []string{"internal/leaf/leaf.go", "frontends/web/src/lib/leaf.ts", "electron/src/menu-shortcuts.js", "docs/x.md", ".github/workflows/ci.yml",
 		"internal/handlers/chat/rpc_send_test.go", "internal/handlers/chat/handlers_scaffold_send_test.go"} {
 		if pl := classifyIn(g, p); pl.ForgeGen.Full {
@@ -352,77 +166,6 @@ func TestForgeInputClaimsNothingForTheTestLanes(t *testing.T) {
 	pl := classify("deploy/observability/x.json")
 	if pl.Go.Full || pl.Web.Full || pl.Electron.Full {
 		t.Fatalf("a forge input must not widen the test lanes: go=%v web=%v electron=%v", pl.Go.Full, pl.Web.Full, pl.Electron.Full)
-	}
-}
-
-// The hand edit #1228 made: SKILL.md is generated (tools/docgen/assembler), so
-// editing it must run the docs check, which regenerates it and fails.
-func TestHandEditedSkillMDRunsTheDocsCheck(t *testing.T) {
-	const skill = "internal/skills/catalog/builtin/workflow-builder/SKILL.md"
-	pl := classify(skill)
-	if !pl.DocGen.Full {
-		t.Fatalf("%s is a docs generator's output: the docs-generate lane must run", skill)
-	}
-	if !strings.Contains(strings.Join(pl.DocGen.Reasons, " "), skill) {
-		t.Fatalf("the reason must name the path: %v", pl.DocGen.Reasons)
-	}
-	if pl.Go.Full || pl.Web.Full || pl.Electron.Full || pl.ForgeGen.Full {
-		t.Fatalf("a docs output must not widen the other lanes: go=%v web=%v electron=%v forge-generate=%v", pl.Go.Full, pl.Web.Full, pl.Electron.Full, pl.ForgeGen.Full)
-	}
-}
-
-func TestUnrelatedWebChangeSkipsTheDocsCheck(t *testing.T) {
-	for _, p := range []string{"frontends/web/src/lib/leaf.ts", "frontends/web/src/lib/__tests__/leaf.test.ts", "frontends/web/e2e/observability.spec.ts"} {
-		if pl := classify(p); pl.DocGen.Full {
-			t.Errorf("%s reaches no docs generator: docs-generate must not run (%v)", p, pl.DocGen.Reasons)
-		}
-	}
-}
-
-func TestDocGenInputsRunTheDocsCheck(t *testing.T) {
-	for _, tc := range []struct{ path, why string }{
-		{"tools/docgen/cli/main.go", "a docs generator reads or writes it"},
-		{"generated/docs-source/reference/cli.md", "a docs generator reads or writes it"},
-		{"docs/reference/cli.mdx", "a docs generator reads or writes it"},
-		{"docs/changelog.mdx", "a docs generator reads or writes it"},
-		{"docs/data/releases/v1.yaml", "a docs generator reads or writes it"},
-		{"config/shortcuts.yaml", "a docs generator reads or writes it"},
-		{"frontends/web/src/store/shortcutsData.generated.ts", "a docs generator reads or writes it"},
-		{"scripts/generate-mintlify-reference.py", "a docs generator reads or writes it"},
-		// Compiled into a generator, directly or transitively, or embedded by
-		// a package that is.
-		{"internal/leaf/leaf.go", "tools/docgen/cli compiles internal/leaf"},
-		{"internal/fixture/data/x.json", "tools/docgen/cli compiles internal/fixture"},
-		// A proto, through the gen/ package it regenerates.
-		{"proto/reliant/v1/chat.proto", "tools/docgen/cli compiles gen/reliant/v1"},
-		// A Go file the graph no longer lists, in a compiled package.
-		{"internal/mid/gone.go", "tools/docgen/cli compiles internal/mid"},
-	} {
-		pl := classify(tc.path)
-		if !pl.DocGen.Full {
-			t.Errorf("%s: the docs-generate lane must run", tc.path)
-			continue
-		}
-		if want := tc.path + ": " + tc.why; !slices.Contains(pl.DocGen.Reasons, want) {
-			t.Errorf("%s: reasons %v, want %q", tc.path, pl.DocGen.Reasons, want)
-		}
-	}
-	// Not in any generator's build: another package, a test file, a
-	// build-tagged file, docs prose.
-	for _, p := range []string{"internal/other/other.go", "internal/leaf/leaf_test.go", "internal/leaf/live_test.go", "docs/automations/overview.mdx", ".github/workflows/ci.yml"} {
-		if pl := classify(p); pl.DocGen.Full {
-			t.Errorf("%s reaches no docs generator: docs-generate must not run (%v)", p, pl.DocGen.Reasons)
-		}
-	}
-}
-
-func TestElectronChangeRunsElectronOnly(t *testing.T) {
-	pl := classify("electron/src/menu-shortcuts.js")
-	if !pl.Electron.Full {
-		t.Fatal("electron source change must run the electron lane")
-	}
-	if pl.Go.Full || pl.Web.Full {
-		t.Fatal("electron source change must not widen other lanes")
 	}
 }
 
@@ -461,7 +204,7 @@ func TestWebDynamicImportIsAnEdge(t *testing.T) {
 		s, ok := webSrc[p]
 		return s, ok
 	})
-	pl := Classify([]Change{{Path: "frontends/web/src/lib/leaf.ts"}}, g)
+	pl := Classify([]Change{{Path: "frontends/web/src/lib/leaf.ts"}}, nil, g, ReachAll)
 	if !slices.Contains(pl.Web.Tests, "src/lib/__tests__/dyn.test.ts") {
 		t.Fatalf("import() must be followed: %v", pl.Web.Tests)
 	}
@@ -499,42 +242,6 @@ func TestWebTreeWalkersRunOnAnySourceChange(t *testing.T) {
 	}
 }
 
-// TestBuildIsEveryPackageWhoseBuildContainsAChange pins the build phase's
-// set: every package compiling a changed one, at any distance and whatever
-// the test reach (a deferred package must still fail to COMPILE before the
-// merge), and nothing a test-only change cannot affect.
-func TestBuildIsEveryPackageWhoseBuildContainsAChange(t *testing.T) {
-	pkg := func(n string) string { return mod + "/" + n }
-	g := testGraph()
-	set := func(p string, deps ...string) {
-		g.BuildDeps[pkg(p)] = map[string]bool{pkg(p): true}
-		for _, d := range deps {
-			g.BuildDeps[pkg(p)][pkg(d)] = true
-		}
-	}
-	set("internal/leaf")
-	set("internal/mid", "internal/leaf")
-	set("cmd/app", "internal/mid", "internal/leaf")
-	set("internal/other")
-	for _, reach := range []string{ReachAll, ReachDirect} {
-		pl := ClassifyReach([]Change{{Path: "internal/leaf/leaf.go"}}, g, reach)
-		if want := []string{"./cmd/app", "./internal/leaf", "./internal/mid", "./tools/docgen/cli"}; !slices.Equal(pl.Go.Build, want) {
-			t.Errorf("reach %s: build %v, want %v", reach, pl.Go.Build, want)
-		}
-	}
-	if pl := ClassifyReach([]Change{{Path: "internal/leaf/leaf_test.go"}}, g, ReachDirect); len(pl.Go.Build) != 0 {
-		t.Errorf("a test-only change compiles no package (its test binary does): %v", pl.Go.Build)
-	}
-	if pl := classifyIn(g, "go.work"); !pl.Go.Full || len(pl.Go.Build) != 0 {
-		t.Errorf("a full Go lane builds ./... (Build empty): full=%v build=%v", pl.Go.Full, pl.Go.Build)
-	}
-}
-
-// TestWebDeletedModuleSelectsWhatStillReachesIt: deleting a module does not
-// run every vitest file (it did: 71 of 97 full web runs in the merge queue).
-// Its former importers changed too and select their own tests; a module that
-// still imports it resolves against the base tree's file list and selects the
-// tests reaching it.
 func TestWebDeletedModuleSelectsWhatStillReachesIt(t *testing.T) {
 	g := testGraph()
 	// leaf.ts is deleted: it is absent from disk (read fails) but present in
@@ -546,7 +253,7 @@ func TestWebDeletedModuleSelectsWhatStillReachesIt(t *testing.T) {
 		s, ok := webSrc[p]
 		return s, ok
 	})
-	pl := Classify([]Change{{Path: "frontends/web/src/lib/leaf.ts", Deleted: true}}, g)
+	pl := Classify([]Change{{Path: "frontends/web/src/lib/leaf.ts", Deleted: true}}, nil, g, ReachAll)
 	if pl.Web.Full {
 		t.Fatalf("a deleted module must not force the full web lane: %v", pl.Web.Reasons)
 	}
@@ -558,21 +265,14 @@ func TestWebDeletedModuleSelectsWhatStillReachesIt(t *testing.T) {
 	if slices.Contains(pl.Web.Tests, "src/lib/__tests__/unrelated.test.ts") {
 		t.Errorf("unrelated test selected: %v", pl.Web.Tests)
 	}
-	pl = Classify([]Change{{Path: "frontends/web/src/lib/__tests__/leaf.test.ts", Deleted: true}}, testGraph())
+	pl = Classify([]Change{{Path: "frontends/web/src/lib/__tests__/leaf.test.ts", Deleted: true}}, nil, testGraph(), ReachAll)
 	if pl.Web.Full || len(pl.Web.Tests) != 0 {
 		t.Fatalf("a deleted TEST file selects nothing: full=%v tests=%v", pl.Web.Full, pl.Web.Tests)
 	}
 }
 
-// TestWebReachDirect pins the merge tier's web fan-out, the same cut as the
-// Go lane's: a changed module runs the tests that import it and the tests of
-// the modules importing it by name; tests further away are Deferred.
-//
-//	leaf.ts <- mid.ts <- alias.ts <- alias.test.ts   (3 edges: deferred)
-//	        <- mid.test.ts via mid.ts                (2 edges: runs)
-//	        <- leaf.test.ts, mock.test.ts            (1 edge: runs)
 func TestWebReachDirect(t *testing.T) {
-	direct := ClassifyReach([]Change{{Path: "frontends/web/src/lib/leaf.ts"}}, testGraph(), ReachDirect)
+	direct := Classify([]Change{{Path: "frontends/web/src/lib/leaf.ts"}}, nil, testGraph(), ReachDirect)
 	for _, w := range []string{"src/lib/__tests__/leaf.test.ts", "src/lib/__tests__/mid.test.ts", "src/lib/__tests__/mock.test.ts", "src/lib/__tests__/guard.test.ts"} {
 		if !slices.Contains(direct.Web.Tests, w) {
 			t.Errorf("direct: %s must run; got %v", w, direct.Web.Tests)
@@ -595,14 +295,14 @@ func TestWebReachDirect(t *testing.T) {
 	}
 	files := slices.Collect(maps.Keys(src))
 	g.Web = BuildWebGraph(files, func(p string) (string, bool) { s, ok := src[p]; return s, ok })
-	hub := ClassifyReach([]Change{{Path: "frontends/web/src/store/hub.ts"}}, g, ReachDirect)
+	hub := Classify([]Change{{Path: "frontends/web/src/store/hub.ts"}}, nil, g, ReachDirect)
 	if want := []string{"src/store/__tests__/hub.test.ts"}; !slices.Equal(hub.Web.Tests, want) {
 		t.Errorf("direct: a hub runs only its by-name importers' tests: %v, want %v", hub.Web.Tests, want)
 	}
 	if len(hub.Web.Deferred) != webHubFanout+1 {
 		t.Errorf("direct: the hub's %d further tests are deferred, got %d", webHubFanout+1, len(hub.Web.Deferred))
 	}
-	if all := ClassifyReach([]Change{{Path: "frontends/web/src/store/hub.ts"}}, g, ReachAll); len(all.Web.Tests) != webHubFanout+2 {
+	if all := Classify([]Change{{Path: "frontends/web/src/store/hub.ts"}}, nil, g, ReachAll); len(all.Web.Tests) != webHubFanout+2 {
 		t.Errorf("all: every test reaching the hub runs, got %d", len(all.Web.Tests))
 	}
 
@@ -627,11 +327,11 @@ func TestWebReachDirect(t *testing.T) {
 	}
 	files = slices.Collect(maps.Keys(src))
 	g.Web = BuildWebGraph(files, func(p string) (string, bool) { s, ok := src[p]; return s, ok })
-	wide := ClassifyReach(changed, g, ReachDirect)
+	wide := Classify(changed, nil, g, ReachDirect)
 	if want := []string{"src/__tests__/m0.test.ts", "src/__tests__/m1.test.ts", "src/__tests__/m2.test.ts"}; !slices.Equal(wide.Web.Tests, want) || wide.Web.Edges != 1 {
 		t.Errorf("direct: past webNearBudget each module runs only its by-name tests: edges %d, %v, want %v", wide.Web.Edges, wide.Web.Tests, want)
 	}
-	if narrow := ClassifyReach(changed[:1], g, ReachDirect); len(narrow.Web.Tests) != per+1 || narrow.Web.Edges != 2 {
+	if narrow := Classify(changed[:1], nil, g, ReachDirect); len(narrow.Web.Tests) != per+1 || narrow.Web.Edges != 2 {
 		t.Errorf("direct: one such module alone keeps two edges: edges %d, %d tests, want %d", narrow.Web.Edges, len(narrow.Web.Tests), per+1)
 	}
 
@@ -641,11 +341,11 @@ func TestWebReachDirect(t *testing.T) {
 	}
 	// A changed test runs whatever its distance, and a proto's generated
 	// client fans out under the same cut.
-	pl := ClassifyReach([]Change{{Path: "frontends/web/src/lib/__tests__/alias.test.ts"}}, testGraph(), ReachDirect)
+	pl := Classify([]Change{{Path: "frontends/web/src/lib/__tests__/alias.test.ts"}}, nil, testGraph(), ReachDirect)
 	if !slices.Equal(pl.Web.Tests, []string{"src/lib/__tests__/alias.test.ts"}) {
 		t.Errorf("direct: a changed test selects itself: %v", pl.Web.Tests)
 	}
-	pl = ClassifyReach([]Change{{Path: "proto/reliant/v1/chat.proto"}}, testGraph(), ReachDirect)
+	pl = Classify([]Change{{Path: "proto/reliant/v1/chat.proto"}}, nil, testGraph(), ReachDirect)
 	if !slices.Contains(pl.Web.Tests, "src/lib/__tests__/genclient.test.ts") {
 		t.Errorf("direct: a proto change must run the tests importing its client: %v", pl.Web.Tests)
 	}
@@ -660,35 +360,11 @@ func TestPlaywrightSpecsRunNoVitest(t *testing.T) {
 
 func TestProtoSelectsItsGeneratedClients(t *testing.T) {
 	pl := classify("proto/reliant/v1/chat.proto")
-	if !slices.Contains(goPkgs(pl), "./gen/reliant/v1") {
-		t.Fatalf("a proto must select its generated Go package: %v", goPkgs(pl))
-	}
 	if !slices.Contains(pl.Web.Tests, "src/lib/__tests__/genclient.test.ts") {
 		t.Fatalf("a proto must select the web tests importing its generated client: %v", pl.Web.Tests)
 	}
-	if pl.Go.Full {
-		t.Fatalf("a proto with a known generated package must not force full: %v", pl.Go.Reasons)
-	}
-}
-
-func TestProtoWithoutGeneratedPackageFailsSafe(t *testing.T) {
-	pl := classify("proto/brandnew/v1/x.proto")
-	if !pl.Go.Full {
-		t.Fatal("a proto whose generated package is unknown must run the whole Go lane")
-	}
-}
-
-func TestSelectorChangesItsOwnPackageTests(t *testing.T) {
-	g := testGraph()
-	g.DirPkg["tools/test-affected"] = mod + "/tools/test-affected"
-	g.Files["tools/test-affected/plan.go"] = FileInfo{Pkg: mod + "/tools/test-affected", Kind: KindCode}
-	g.TestDeps[mod+"/tools/test-affected"] = map[string]bool{mod + "/tools/test-affected": true}
-	pl := Classify([]Change{{Path: "tools/test-affected/plan.go"}}, g)
-	if pl.Go.Full {
-		t.Fatalf("the selector's own source is a Go package: %v", pl.Go.Reasons)
-	}
-	if !slices.Contains(goPkgs(pl), "./tools/test-affected") {
-		t.Fatalf("got %v", goPkgs(pl))
+	if pl.Web.Full {
+		t.Fatalf("a proto must not force the web lane: %v", pl.Web.Reasons)
 	}
 }
 
@@ -724,17 +400,14 @@ func TestEveryRuleIdIsUnique(t *testing.T) {
 		if len(r.patterns) == 0 {
 			t.Errorf("rule %q has no patterns", r.id)
 		}
-		if len(r.full) > 0 && r.reason == "" {
+		if r.full && r.reason == "" {
 			t.Errorf("rule %q forces full without a reason", r.id)
 		}
 	}
 }
 
-// DB-backed tests run under -short (each gets its own copy of a migrated
-// template on pgtest's server), so a package a migration selects runs in the
-// one go step with every other, with no database configuration in its env.
 func TestRunnerStepsUseExplicitFilesAndRunDBTestsInline(t *testing.T) {
-	pl := classify("internal/leaf/leaf.go", "db/migrations/20261101000000_x.up.sql", "frontends/web/src/lib/leaf.ts")
+	pl := classifyWith(testGraph(), forgeSelects("./internal/db", "./internal/leaf"), ReachAll, "internal/leaf/leaf.go", "db/migrations/20261101000000_x.up.sql", "frontends/web/src/lib/leaf.ts")
 	r := &runner{root: "/repo"}
 	steps := r.steps(pl, laneSet("go,web,electron"))
 	var names []string
@@ -766,7 +439,7 @@ func TestRunnerStepsUseExplicitFilesAndRunDBTestsInline(t *testing.T) {
 }
 
 func TestRunnerFullLanesRunEverything(t *testing.T) {
-	pl := classify("go.mod", "frontends/web/package.json")
+	pl := classifyWith(testGraph(), goModFull, ReachAll, "go.mod", "frontends/web/package.json")
 	steps := (&runner{root: "/repo"}).steps(pl, laneSet("go,web"))
 	var got []string
 	for _, s := range steps {
@@ -778,9 +451,6 @@ func TestRunnerFullLanesRunEverything(t *testing.T) {
 	}
 }
 
-// A changed manifest or lockfile proves `npm ci` still accepts it, before any
-// test runs against the node_modules already on disk (reliant #1343 shipped a
-// lockfile every fresh install rejected, with every local test green).
 func TestLockfileChangeChecksTheInstallFirst(t *testing.T) {
 	r := &runner{root: "/repo"}
 	for _, tc := range []struct {
@@ -816,10 +486,6 @@ func TestLockfileChangeChecksTheInstallFirst(t *testing.T) {
 	}
 }
 
-// npmProjects must name every committed lockfile, or a project's drift goes
-// unchecked; and every entry must still be a project. Globbing (rather than
-// `git ls-files`) keeps the test cache-sound: the test process reads the
-// directories itself.
 func TestNPMProjectsNameEveryLockfile(t *testing.T) {
 	// The repository root and two levels below it, minus node_modules and
 	// hidden directories. Not filepath.Glob("*/*/<lock>"): that lists every
@@ -867,11 +533,9 @@ func TestNPMProjectsNameEveryLockfile(t *testing.T) {
 	}
 }
 
-// A FULL lane is a whole-module run and queues for a host heavy slot; a scoped
-// run is the inner loop and never does.
 func TestRunnerRunsOnlyFullLanesInAHeavySlot(t *testing.T) {
 	r := &runner{root: "/repo", slot: []string{"forge", "machine", "slot", "run", "--class", "heavy", "--"}}
-	for _, s := range r.steps(classify("go.mod", "frontends/web/package.json"), laneSet("go,web")) {
+	for _, s := range r.steps(classifyWith(testGraph(), goModFull, ReachAll, "go.mod", "frontends/web/package.json"), laneSet("go,web")) {
 		if strings.HasPrefix(s.name, "npm lockfile") {
 			continue // a ~10s check, not a lane
 		}
@@ -879,7 +543,7 @@ func TestRunnerRunsOnlyFullLanesInAHeavySlot(t *testing.T) {
 			t.Errorf("full step %q runs outside a heavy slot: %s", s.name, joined)
 		}
 	}
-	for _, s := range r.steps(classify("internal/leaf/leaf.go", "frontends/web/src/lib/leaf.ts"), laneSet("go,web")) {
+	for _, s := range r.steps(classifyWith(testGraph(), forgeSelects("./internal/leaf"), ReachAll, "internal/leaf/leaf.go", "frontends/web/src/lib/leaf.ts"), laneSet("go,web")) {
 		if s.argv[0] == "forge" {
 			t.Errorf("scoped step %q queues for a heavy slot: %s", s.name, strings.Join(s.argv, " "))
 		}
@@ -900,7 +564,9 @@ func TestRunnerRunsTheForgeGenerateCheckFirst(t *testing.T) {
 }
 
 func TestRunnerRunsTheDocsCheckAfterForgeAndBeforeTests(t *testing.T) {
-	pl := classify("internal/vault/contract.go", "internal/leaf/leaf.go")
+	fd := forgeSelects("./internal/leaf")
+	fd.Checks = []forgeCheck{{Name: "docs-generate", Runs: true, Note: "affected mode: internal/leaf/leaf.go changed"}}
+	pl := classifyWith(testGraph(), fd, ReachAll, "internal/vault/contract.go", "internal/leaf/leaf.go")
 	r := &runner{root: "/repo", slot: []string{"forge", "machine", "slot", "run", "--class", "heavy", "--"}}
 	var got []string
 	for _, s := range r.steps(pl, laneSet("go,web,electron,forge-generate,docs-generate")) {
@@ -924,114 +590,23 @@ func TestNothingToRunRunsNothing(t *testing.T) {
 	}
 }
 
-// TestReachDirect pins the merge tier's fan-out: a changed package runs its
-// own tests and those of the packages importing it by name; deeper dependents
-// are Deferred to the full lane, which ReachAll (the default) still runs.
-func TestReachDirect(t *testing.T) {
-	pkg := func(n string) string { return mod + "/" + n }
-	g := testGraph()
-	g.DirectImports = map[string]map[string]bool{
-		pkg("internal/mid"): {pkg("internal/leaf"): true},
-		pkg("cmd/app"):      {pkg("internal/mid"): true},
-	}
-	direct := ClassifyReach([]Change{{Path: "internal/leaf/leaf.go"}}, g, ReachDirect)
-	if want := []string{"./internal/guard", "./internal/leaf", "./internal/mid"}; !slices.Equal(direct.Go.Packages, want) {
-		t.Errorf("direct: packages %v, want %v", direct.Go.Packages, want)
-	}
-	if want := []string{"./cmd/app"}; !slices.Equal(direct.Go.Deferred, want) || direct.Go.Reach != ReachDirect {
-		t.Errorf("direct: reach %q deferred %v, want direct %v", direct.Go.Reach, direct.Go.Deferred, want)
-	}
-	all := classifyIn(g, "internal/leaf/leaf.go")
-	if want := []string{"./cmd/app", "./internal/guard", "./internal/leaf", "./internal/mid"}; !slices.Equal(all.Go.Packages, want) || len(all.Go.Deferred) != 0 || all.Go.Reach != ReachAll {
-		t.Errorf("all: packages %v deferred %v reach %q, want %v", all.Go.Packages, all.Go.Deferred, all.Go.Reach, want)
-	}
-	// A migration still reaches every DB-backed package, however far.
-	mig := ClassifyReach([]Change{{Path: "db/migrations/20260101000000_x.up.sql"}}, g, ReachDirect)
-	if !slices.Contains(mig.Go.Packages, "./internal/db") {
-		t.Errorf("direct: a migration must still select the DB-backed packages, got %v", mig.Go.Packages)
-	}
-}
-
-// TestReachDirectWithinTheTransitiveBudget pins the merge gate's
-// -go-reach-cap: when the dependents beyond the direct cut number at most the
-// budget, they run too and the plan says reach all; above it they stay
-// Deferred, exactly as a plain ReachDirect plan.
-func TestReachDirectWithinTheTransitiveBudget(t *testing.T) {
-	pkg := func(n string) string { return mod + "/" + n }
-	g := testGraph()
-	g.DirectImports = map[string]map[string]bool{
-		pkg("internal/mid"): {pkg("internal/leaf"): true},
-		pkg("cmd/app"):      {pkg("internal/mid"): true},
-	}
-	within := ClassifyReachCap([]Change{{Path: "internal/leaf/leaf.go"}}, g, ReachDirect, 1)
-	if want := []string{"./cmd/app", "./internal/guard", "./internal/leaf", "./internal/mid"}; !slices.Equal(within.Go.Packages, want) {
-		t.Errorf("within the budget: packages %v, want %v", within.Go.Packages, want)
-	}
-	if len(within.Go.Deferred) != 0 || within.Go.Reach != ReachAll || within.Go.ReachCap != 1 {
-		t.Errorf("within the budget: reach %q cap %d deferred %v, want all, 1, none", within.Go.Reach, within.Go.ReachCap, within.Go.Deferred)
-	}
-	if why := within.Go.Why["./cmd/app"]; !strings.Contains(why, "transitively") || !strings.Contains(why, "leaf") {
-		t.Errorf("a transitive selection must say so and name the change: %q", why)
-	}
-	// The budget never narrows what the direct cut selects.
-	over := ClassifyReachCap([]Change{{Path: "internal/leaf/leaf.go"}}, g, ReachDirect, 0)
-	plain := ClassifyReach([]Change{{Path: "internal/leaf/leaf.go"}}, g, ReachDirect)
-	if !slices.Equal(over.Go.Packages, plain.Go.Packages) || !slices.Equal(over.Go.Deferred, []string{"./cmd/app"}) || over.Go.Reach != ReachDirect {
-		t.Errorf("a 0 budget: packages %v deferred %v reach %q, want the direct plan %v", over.Go.Packages, over.Go.Deferred, over.Go.Reach, plain.Go.Packages)
-	}
-	g.TestDeps[pkg("cmd/other")] = map[string]bool{pkg("cmd/other"): true, pkg("cmd/app"): true, pkg("internal/mid"): true, pkg("internal/leaf"): true}
-	hub := ClassifyReachCap([]Change{{Path: "internal/leaf/leaf.go"}}, g, ReachDirect, 1)
-	if want := []string{"./cmd/app", "./cmd/other"}; !slices.Equal(hub.Go.Deferred, want) || hub.Go.Reach != ReachDirect {
-		t.Errorf("over the budget: reach %q deferred %v, want direct %v", hub.Go.Reach, hub.Go.Deferred, want)
-	}
-}
-
-// The composition root is a forge input (graph_gen.go, routes_gen.go,
-// gen/forge_service_catalog.json are projected from it), its tests are not:
-// #3499 changed only internal/app's wiring and main's generate check went red
-// (control-plane#3571).
 func TestCompositionRootRunsForgeGenerate(t *testing.T) {
 	for _, p := range []string{"internal/app/compose.go", "internal/app/providers_worker.go"} {
 		if pl := classify(p); !pl.ForgeGen.Full || pl.ForgeGen.HooksOnly {
 			t.Errorf("%s: the whole forge-generate lane must run (full %v, hooks only %v)", p, pl.ForgeGen.Full, pl.ForgeGen.HooksOnly)
 		}
 	}
-	g := testGraph()
-	app := mod + "/internal/app"
-	g.DirPkg["internal/app"] = app
-	g.TestDeps[app] = map[string]bool{app: true}
-	g.Files["internal/app/providers_worker_trigger_test.go"] = FileInfo{Pkg: app, Kind: KindTest}
-	if pl := classifyIn(g, "internal/app/providers_worker_trigger_test.go"); pl.ForgeGen.Full {
+	if pl := classify("internal/app/providers_worker_trigger_test.go"); pl.ForgeGen.Full {
 		t.Errorf("internal/app's hand-written tests are not a forge input: %v", pl.ForgeGen.Reasons)
 	}
 }
 
-// Deleting a whole Go package compiles the module (an importer left behind
-// no longer builds) instead of falling back to every lane.
-func TestDeletedGoPackageCompilesTheModule(t *testing.T) {
-	pl := Classify([]Change{{Path: "internal/gone/gone.go", Deleted: true}, {Path: "internal/gone/gone_test.go", Deleted: true}}, noWalkers())
-	if pl.Go.Full || pl.Web.Full || pl.Electron.Full {
-		t.Fatalf("a deleted package must not force full lanes: go %v web %v electron %v", pl.Go.Reasons, pl.Web.Reasons, pl.Electron.Reasons)
-	}
-	if !slices.Equal(pl.Go.Build, []string{"./..."}) {
-		t.Fatalf("build = %v, want the whole module", pl.Go.Build)
-	}
-	for _, f := range pl.Files {
-		if f.Note == "UNCLAIMED" {
-			t.Fatalf("%s left unclaimed", f.Path)
-		}
-	}
-}
-
-// sdk/go is a nested module: `go list ./...` never sees it, so no package owns
-// its files and the "claimed by no rule" fail-safe would run every lane (web and
-// electron included) for a doc edit. It is claimed, and it runs its own tests.
 func TestSDKModuleChangeIsClaimedAndRunsItsOwnTests(t *testing.T) {
-	pl := classify("sdk/go/reliant/runs.go")
-	for _, f := range pl.Files {
-		if f.Note == "UNCLAIMED" {
-			t.Fatalf("%s fell through to the fail-safe: %+v", f.Path, f)
-		}
+	fd := forgeSelects("./internal/sdkuser")
+	fd.Modules = []forgeModule{{Dir: "sdk/go", Path: mod + "/sdk/go", Packages: []string{mod + "/sdk/go/reliant"}}}
+	pl := classifyWith(testGraph(), fd, ReachAll, "sdk/go/reliant/runs.go")
+	if !slices.Contains(pl.Go.Packages, "./internal/sdkuser") {
+		t.Fatalf("forge's root packages that link the SDK must run: %v", pl.Go.Packages)
 	}
 	if pl.Web.Full || pl.Electron.Full {
 		t.Fatalf("an SDK edit forced the web or electron lane: web=%v electron=%v", pl.Web.Full, pl.Electron.Full)
@@ -1044,56 +619,18 @@ func TestSDKModuleChangeIsClaimedAndRunsItsOwnTests(t *testing.T) {
 	steps := r.steps(pl, laneSet("go"))
 	var sdk *step
 	for i := range steps {
-		if steps[i].name == "go (sdk module)" {
+		if steps[i].name == "go (sdk/go module)" {
 			sdk = &steps[i]
 		}
 	}
 	if sdk == nil {
 		t.Fatalf("no step runs the SDK module's tests: %+v", steps)
 	}
-	if sdk.dir != "/repo/sdk/go" || sdk.argv[len(sdk.argv)-1] != "./..." {
+	if sdk.dir != "/repo/sdk/go" || sdk.argv[len(sdk.argv)-1] != "./reliant" {
 		t.Fatalf("SDK step = %+v", *sdk)
 	}
 }
 
-// go.mod replaces the SDK with ./sdk/go (reliant#2824), so the app builds the
-// SDK package an edit is in: the root packages containing it run, and the
-// SDK's own test files select only the SDK module's step.
-func TestSDKCodeChangeSelectsTheAppPackagesThatContainIt(t *testing.T) {
-	g := noWalkers()
-	sdkPkg := mod + "/sdk/go/reliant"
-	g.TestDeps[mod+"/cmd/app"][sdkPkg] = true
-	g.BuildDeps[mod+"/cmd/app"] = map[string]bool{mod + "/cmd/app": true, sdkPkg: true}
-
-	pl := classifyIn(g, "sdk/go/reliant/runs.go")
-	if got, want := goPkgs(pl), []string{"./cmd/app"}; !slices.Equal(got, want) {
-		t.Fatalf("an SDK code change selects %v, want %v (the app package that contains it)", got, want)
-	}
-	if !slices.Contains(pl.Go.Build, "./cmd/app") {
-		t.Fatalf("an SDK code change does not build the app package that contains it: %v", pl.Go.Build)
-	}
-	if pl.Go.Full {
-		t.Fatalf("an SDK code change ran the whole Go lane: %v", pl.Go.Reasons)
-	}
-
-	if got := goPkgs(classifyIn(g, "sdk/go/reliant/runs_test.go")); len(got) != 0 {
-		t.Fatalf("an SDK test file selected app packages %v; it runs in the SDK module's step", got)
-	}
-}
-
-// A change that does not touch the SDK must not pay for its tests.
-func TestSDKTestsAreNotRunForUnrelatedChanges(t *testing.T) {
-	pl := classify("internal/leaf/leaf.go")
-	r := &runner{root: "/repo"}
-	for _, s := range r.steps(pl, laneSet("go")) {
-		if s.name == "go (sdk module)" {
-			t.Fatalf("an unrelated change ran the SDK module's tests: %+v", s)
-		}
-	}
-}
-
-// proto/public-api.txt is read by a Go test and judged by forge-generate; it is
-// not proto tooling, and must not force the whole web suite.
 func TestPublicAPIAllowlistDoesNotForceTheWebLane(t *testing.T) {
 	pl := classify("proto/public-api.txt")
 	if pl.Web.Full {
@@ -1101,5 +638,53 @@ func TestPublicAPIAllowlistDoesNotForceTheWebLane(t *testing.T) {
 	}
 	if !pl.ForgeGen.Full {
 		t.Fatal("the allowlist decides what is generated into the SDK; forge-generate must judge it")
+	}
+}
+
+// The fail-safe: forge could not place a changed file, so nothing proves what
+// reads it and every lane runs whole. A rule's full suite (go.mod) is not
+// that: it reaches the Go lane only.
+func TestForgeFailSafeRunsEveryLane(t *testing.T) {
+	unplaced := &ForgeDecision{Full: true, Reason: "x.dat changed, and it is not Go source, an embedded file or testdata of a package — nothing proves which tests read it"}
+	pl := classifyWith(testGraph(), unplaced, ReachAll, "x.dat")
+	if !pl.Go.Full || !pl.Web.Full || !pl.Electron.Full || !pl.ForgeGen.Full || !pl.DocGen.Full || !pl.WebDemo.Full || !pl.WebBuild.Full {
+		t.Fatalf("an unplaced file must run every lane: %+v", pl)
+	}
+	if pl.MigOrder.Full {
+		t.Fatal("an unplaced file is no migration")
+	}
+	pl = classifyWith(testGraph(), goModFull, ReachAll, "go.mod")
+	if !pl.Go.Full || pl.Web.Full || pl.Electron.Full || pl.WebDemo.Full {
+		t.Fatalf("go.mod reaches the Go lane (and forge-generate), never web or electron: go=%v web=%v electron=%v", pl.Go.Full, pl.Web.Full, pl.Electron.Full)
+	}
+	if !pl.ForgeGen.Full {
+		t.Fatal("go.mod is a forge generate input")
+	}
+}
+
+// forge's Go decision passes through: packages, build set, deferred
+// importers and why, in this plan's ./relative shape.
+func TestForgeGoDecisionPassesThrough(t *testing.T) {
+	fd := &ForgeDecision{
+		Packages: []string{mod + "/internal/leaf", mod + "/internal/mid"}, Build: []string{mod + "/internal/leaf"},
+		Deferred: []string{mod + "/cmd/app"}, TransitiveCap: 20,
+		Why:    []forgeWhy{{Package: mod + "/internal/mid", File: "internal/leaf/leaf.go", Edge: "imports " + mod + "/internal/leaf"}},
+		Checks: []forgeCheck{{Name: "electron", Runs: false}, {Name: "docs-generate", Runs: false}},
+	}
+	pl := classifyWith(testGraph(), fd, ReachDirect, "internal/leaf/leaf.go")
+	gp := pl.Go
+	if !slices.Equal(gp.Packages, []string{"./internal/leaf", "./internal/mid"}) || !slices.Equal(gp.Build, []string{"./internal/leaf"}) ||
+		!slices.Equal(gp.Deferred, []string{"./cmd/app"}) || gp.Reach != ReachDirect || gp.ReachCap != 20 || gp.Full {
+		t.Fatalf("go plan = %+v", gp)
+	}
+	if !strings.Contains(gp.Why["./internal/mid"], "internal/leaf/leaf.go") {
+		t.Fatalf("why = %v", gp.Why)
+	}
+	if pl.Electron.Full || pl.DocGen.Full {
+		t.Fatal("rows forge does not run must not run here")
+	}
+	fd.Checks = []forgeCheck{{Name: "electron", Runs: true, Note: "affected mode: electron/x.js changed"}}
+	if pl := classifyWith(testGraph(), fd, ReachDirect, "electron/x.js"); !pl.Electron.Full {
+		t.Fatal("forge's electron row runs: so does the electron lane")
 	}
 }

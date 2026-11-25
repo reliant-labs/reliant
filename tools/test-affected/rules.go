@@ -67,12 +67,11 @@ var demoBuildInputs = []string{
 // generator compiles is not listed: Classify derives it from the graph
 // (forgeHookGenerators).
 //
-// They are deliberately not rules: a rule claims a path for the test lanes,
-// and these claim nothing there, so a path only they name still fails safe.
 // The blind spot is a `//forge:` directive in a Go file that is not doc.go;
 // CI's "forge generate is a no-op" job checks the whole tree regardless.
 var forgeInputs = []string{
-	"forge.yaml", "go.mod", "go.sum", "buf.yaml", "buf.gen.yaml",
+	// Taskfile.yml: forge-generate runs through `task generate:forge`.
+	"forge.yaml", "go.mod", "go.sum", "buf.yaml", "buf.gen.yaml", "Taskfile.yml",
 	"proto/**", "db/**",
 	"**/contract.go", "**/doc.go", "internal/handlers/**",
 	// The composition root: forge reads compose.go and the providers into
@@ -91,7 +90,9 @@ var forgeInputs = []string{
 	// (buf.gen.sdk-go.yaml), and proto/public-api.txt decides which rpcs get a
 	// client. proto/** above already covers the allowlist; this is the
 	// generated half.
-	"sdk/go/gen/**",
+	// The rest of the SDK module: its generated protos must match proto/
+	// (a hand edit beside them is judged the same way).
+	"sdk/go/**",
 	".forge/hashes.json", ".forge/scaffolded.json", ".forge/disowned.json",
 	// generate.hooks: controlplane-client, sdk-ts-gen.
 	"proto-vendor/**", "buf.gen.controlplane.yaml", "scripts/proto-generate-atomic.sh",
@@ -163,76 +164,26 @@ func isForgeInput(p string) bool {
 	return false
 }
 
-// docGenPaths are what the docs generators (Taskfile.yml's generate:docs:
-// tools/docgen and scripts/generate-mintlify-reference.py) read or write
-// other than compiled Go: their recipes' arguments and the paths their sources
-// name. A change to one runs the docs-generate lane: a hand edit of an output
-// is drift too (reliant #1228 edited SKILL.md; regenerating reverted it).
-//
-// The Go they compile is not listed: Classify derives it from the graph (the
-// build deps of every tools/docgen package, embedded files included), and a
-// .proto through the gen/ package it regenerates.
-// TestDocGenTargetsCoverEveryDocsGenerator checks this list against the
-// Taskfile's docs tasks and the generators' sources.
-//
-// Like forgeInputs, these are not rules: they claim nothing for the test lanes.
-var docGenPaths = []string{
-	// The generators, and the module they build against: cli.md documents
-	// forge's whole command tree, so a forge bump changes it.
-	"tools/docgen/**", "scripts/generate-mintlify-reference.py", "go.mod", "go.sum",
-	// Inputs read at run time.
-	"config/shortcuts.yaml",                    // generate-shortcuts
-	"internal/workflow/scenario/types.go",      // generate-scenario-schema parses it
-	"internal/workflow/builtin/presets/*.yaml", // generate-presets
-	"docs/data/releases/**",                    // generate-changelog
-	// Outputs (generated/docs-source/** is also read: by the assembler and the
-	// Mintlify conversion).
-	"generated/docs-source/**",
-	"docs/reference/*.mdx",
-	"docs/changelog.mdx",
-	"frontends/web/src/store/shortcutsData.generated.ts",
-	"internal/workflow/runtime/schema/field_descriptions.go",
-	"internal/skills/catalog/builtin/workflow-builder/SKILL.md",
-}
-
-func isDocGenPath(p string) bool {
-	for _, pat := range docGenPaths {
-		if matchGlob(pat, p) {
-			return true
-		}
-	}
-	return false
-}
-
-// rule claims paths and says what a change to them selects. A path claimed by
-// no rule and by no Go package forces the full run: that is the fail-safe.
-// Rules are a union: a path may match several and gets all of their effects.
+// rule claims paths for the web lanes and says what a change to them selects.
+// The Go, electron and docs-generate lanes are forge's (forge.yaml's
+// ci.gate), and so is the fail-safe: a path forge cannot place makes every
+// lane here FULL too (Classify). Rules are a union: a path may match several
+// and gets all of their effects.
 type rule struct {
 	id       string
 	patterns []string
 	except   []string
 
-	// full: a change here cannot be judged by a subset in these lanes; reason
-	// is printed. A lane absent from full is unaffected by the rule.
-	full   []lane
+	// full: a change here cannot be judged by a subset of the web lane;
+	// reason is printed.
+	full   bool
 	reason string
 
-	// noGraph: do not also map the file to the Go package owning its directory.
-	noGraph bool
-	// replacedModule: the file is in a nested Go module that the root go.mod
-	// replaces with its directory (sdk/go). The root's `go list` does not list
-	// its packages, but the root's packages depend on them by import path, so
-	// a non-test .go file is a code change to <module>/<its directory>.
-	replacedModule bool
-	// protoGen: map proto/<dir>/x.proto to gen/<dir> (Go) and frontends/web/src/gen/<dir>.
+	// protoGen: a .proto regenerates frontends/web/src/gen/<dir>/<name>_pb.ts.
 	protoGen bool
-	// dbFan: select every package with DB-backed tests.
-	dbFan bool
 	// webSrc: the file is a web module (or a file a module imports): run the
 	// vitest tests that import it.
 	webSrc bool
-	// electron: run the electron tests.
-	electron bool
 	// note is printed in the plan, to explain a claim that selects nothing.
 	note string
 }
@@ -256,22 +207,14 @@ func (r *rule) matches(p string) bool {
 	return true
 }
 
-// rules is the table dev-docs/testing-affected.md prints.
+// rules is the web table dev-docs/testing-affected.md prints.
 var rules = []rule{
-	{
-		id: "go-toolchain",
-		patterns: []string{
-			"go.mod", "go.sum", "go.work", "go.work.sum", "tools/tools.go",
-		},
-		full:   []lane{laneGo},
-		reason: "a Go dependency or toolchain pin changed (a subset cannot judge a new version)",
-	},
 	{
 		id: "node-toolchain",
 		patterns: []string{
 			"package.json", "package-lock.json", "pnpm-lock.yaml", ".nvmrc", ".npmrc",
 		},
-		full:   []lane{laneWeb, laneElectron},
+		full:   true,
 		reason: "a root Node manifest or toolchain pin changed",
 	},
 	{
@@ -287,71 +230,24 @@ var rules = []rule{
 			// part of web's lockfile and dependency graph.
 			"sdk/ts/package.json",
 		},
-		full:   []lane{laneWeb},
+		full:   true,
 		reason: "web build/test configuration or dependencies changed (every vitest file runs through it)",
-	},
-	{
-		id:       "electron",
-		patterns: []string{"electron/**"},
-		electron: true,
-	},
-	{
-		// buf's configuration reaches the tests only through the code buf
-		// generates. That code is committed: a change that regenerates it
-		// selects its own packages and clients, and one that does not is
-		// what the forge-generate lane (a no-op check) fails. Running every
-		// lane for it cost three merge-queue gates the whole web suite.
-		id: "global-config",
-		patterns: []string{
-			"buf.yaml", "buf.gen.yaml", "buf.gen.controlplane.yaml", "buf.gen.sdk-ts.yaml", "buf.gen.sdk-go.yaml",
-		},
-		full:   []lane{laneForgeGen},
-		reason: "buf's generation configuration changed: the generated code must match it",
-	},
-	{
-		// The Taskfile is what the codegen lanes run: `task generate:forge`
-		// and `task generate:docs`. The Go, web and electron lanes do not go through it
-		// (they run go test, vitest and npm test themselves), so a Taskfile
-		// edit no longer runs the whole module, every vitest file and
-		// electron before a merge (17+ minutes); `task test` itself is
-		// judged by the release gate (dev-docs/merge-and-release-gates.md).
-		id:       "task-runner",
-		patterns: []string{"Taskfile.yml"},
-		full:     []lane{laneForgeGen, laneDocGen},
-		reason:   "the task runner the codegen lanes run changed",
-	},
-	{
-		// The forge pin (forge_version) and forge's own config reach the Go
-		// code forge generates and lints, and nothing vitest or electron
-		// runs. It changes on every forge bump, several a day, and running
-		// every vitest file for each cost four runners.
-		id:       "forge-config",
-		patterns: []string{"forge.yaml"},
-		full:     []lane{laneGo, laneForgeGen},
-		reason:   "the forge pin or forge's configuration changed",
 	},
 	{
 		id:       "proto-source",
 		patterns: []string{"proto/**/*.proto", "proto-vendor/**/*.proto"},
 		protoGen: true,
-		note:     "regenerates its Go and TypeScript clients",
+		note:     "regenerates its TypeScript client",
 	},
 	{
 		id:       "proto-config",
 		patterns: []string{"proto/**", "proto-vendor/**"},
-		// public-api.txt is read by internal/buildmode's tests and regenerates
-		// through buf.gen.sdk-go.yaml's filters; the forge-generate lane judges it, so
-		// it does not force the web suite.
+		// public-api.txt regenerates through buf.gen.sdk-go.yaml's filters
+		// only; the forge-generate lane judges it, so it does not force the
+		// web suite.
 		except: []string{"**/*.proto", "**/*.md", "proto/public-api.txt"},
-		full:   []lane{laneGo, laneWeb},
+		full:   true,
 		reason: "proto tooling configuration changed (it regenerates every client)",
-	},
-	{
-		id:       "migrations",
-		patterns: []string{"db/migrations/**"},
-		noGraph:  true,
-		dbFan:    true,
-		note:     "reaches only DB-backed tests",
 	},
 	{
 		// @reliantlabs/sdk is a workspace member of frontends/web and the web app
@@ -360,7 +256,7 @@ var rules = []rule{
 		// (frontends/web/vite.config.ts test.include).
 		id:       "sdk-ts",
 		patterns: []string{"sdk/ts/**"},
-		full:     []lane{laneWeb},
+		full:     true,
 		reason:   "@reliantlabs/sdk changed: the web app compiles it from source, and the web lane runs its tests",
 	},
 	{
@@ -378,28 +274,10 @@ var rules = []rule{
 		// vitest): the fixtures test reads the capture script's text, a web
 		// module importing one reaches it through the import graph, and the
 		// tests that walk frontends/web/ run as for any web module.
-		// Unclaimed, each edit ran every lane in full (cp#2189: 8 of 60 merge
-		// gates in one day).
 		id:       "web-demo-scripts",
 		patterns: []string{"frontends/web/scripts/demo/**"},
 		webSrc:   true,
 		note:     "the forge demo's scripts: only tests that import or name the file run",
-	},
-	{
-		// sdk/go is its own Go module (go.mod), which the root `go list ./...`
-		// does not see, so no package owns its files. Its generated half is
-		// forge's output (a forge input above), so a change runs
-		// forge-generate; its own tests run as a step in the module (goSteps).
-		// The app builds against this tree's sdk/go (go.mod replaces it with
-		// ./sdk/go, reliant#2824), so a code change also selects the root
-		// packages that contain the SDK package it is in.
-		id:             "sdk-go",
-		patterns:       []string{"sdk/go/**"},
-		full:           []lane{laneForgeGen},
-		reason:         "the SDK module changed: its generated protos must match proto/, and its own tests run in the module",
-		noGraph:        true,
-		replacedModule: true,
-		note:           "sdk/go is its own Go module; its tests run with the Go lane, and the app packages that contain it run too",
 	},
 	{
 		id: "web-inert",
@@ -408,31 +286,6 @@ var rules = []rule{
 			"frontends/web/playwright.config.ts", "frontends/web/playwright.visual.config.ts", "frontends/web/e2e/**",
 		},
 		note: "lint config and Playwright specs: no vitest file reads them (run Playwright separately)",
-	},
-	{
-		// Data a Go test may read: claimed here so a path no test names is not
-		// "unknown"; the reader scan finds the packages that do name it.
-		id: "data",
-		patterns: []string{
-			"deploy/**", "config/**", "scripts/**", "e2e/**", "docker/**", "assets/**",
-			// gen/forge_service_catalog.json is forge generate's output, read by
-			// forge (deploy, obs) and by no test: the forge-generate lane judges
-			// it. Unclaimed, it ran every lane in full (cp#2189: 19 of 60).
-			"generated/**", "examples/**", "gen/forge_descriptor.json", "gen/forge_service_catalog.json", ".forge/**",
-			"bindings_generated.go", "proto/public-api.txt",
-		},
-		note: "data a test reads only if its sources name it",
-	},
-	{
-		id: "inert",
-		patterns: []string{
-			"docs/**", "**/*.md", "**/*.mdx", "research/**", "dev-docs/**", "contributing/**",
-			"LICENSE", "LICENSES.txt", ".license-allowlist", ".license-allowlist-npm",
-			".githooks/**", ".github/**", ".reliant/**", ".golangci.yml", ".goreleaser.yml",
-			".gitignore", ".dockerignore", ".air*.toml", "Dockerfile*", "docker-compose*.yml",
-			"tools/protoc-gen-es/**", "tmp/**",
-		},
-		note: "docs, lint config and CI plumbing: only tests that name the file run",
 	},
 }
 

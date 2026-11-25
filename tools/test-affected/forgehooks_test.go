@@ -107,9 +107,13 @@ func TestForgeGenHooksOnly(t *testing.T) {
 	tools, yaml := "internal/llm/tools/cmd/toolconfiggen", "internal/workflow/yaml/cmd/yamlbindingsgen"
 	for _, gen := range []string{tools, yaml} {
 		g.DirPkg[gen] = pkg(gen)
-		g.Files[gen+"/main.go"] = FileInfo{Pkg: pkg(gen), Kind: KindCode}
+		g.Files[gen+"/main.go"] = FileInfo{Pkg: pkg(gen)}
 	}
 	// toolconfiggen compiles leaf and mid; yamlbindingsgen compiles leaf.
+	for _, n := range []string{"internal/leaf", "internal/mid"} {
+		g.DirPkg[n] = pkg(n)
+		g.Files[n+"/"+path0(n)+".go"] = FileInfo{Pkg: pkg(n)}
+	}
 	g.BuildDeps[pkg(tools)] = map[string]bool{pkg(tools): true, pkg("internal/mid"): true, pkg("internal/leaf"): true}
 	g.BuildDeps[pkg(yaml)] = map[string]bool{pkg(yaml): true, pkg("internal/leaf"): true}
 
