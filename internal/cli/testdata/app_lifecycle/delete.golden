@@ -1,0 +1,20 @@
+--- stdout
+This will schedule app "shop" on https://cp.example for deletion.
+  ENV       ID
+  prod      env_prod
+  staging   env_stg
+
+Now: every env is stopped (compute stops billing), and deploys, promotions and new envs of the app are refused.
+After the grace window (7 days): the control plane purges everything that names the app — every env and
+  its data, kept databases, release history and registry images, custom domains and their certificates,
+  secrets — and frees the name. Activity, audit and spend history are kept.
+Until the purge starts, `forge app delete --cancel` keeps the app and starts again what this stopped.
+To keep the app's name and releases but stop every charge, use `forge app teardown` instead.
+
+Type the app name (shop) to confirm: 
+Scheduled app "shop" for deletion; stopped 3 deployment(s).
+  scheduled:     2026-11-18 10:00 UTC by user usr_ada
+  purge after:   2026-11-25 10:00 UTC
+  purge started: not yet (cancel with `forge app delete --cancel`)
+`forge app delete --status` shows it; `forge app delete --cancel` cancels it until the purge starts.
+--- error

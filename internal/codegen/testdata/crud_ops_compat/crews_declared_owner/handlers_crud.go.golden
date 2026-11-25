@@ -1,0 +1,77 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Each method delegates to github.com/reliant-labs/forge/pkg/crud (error mapping, cursor
+// pagination, page-size clamping, ordering, total counts, update masks); the per-entity wiring is
+// regenerated in handlers_crud_ops_gen.go.
+// pkg/crud never reads the caller on its own. The interceptor already turned away anyone without a
+// valid token (unless the rpc declares auth_required: false; pkg/middleware/procedures_gen.go).
+// For a table whose migration declares `forge:owner=`, the generated op asks your
+// crud.OwnerResolver (Deps.Owners) who the caller is and scopes every read and write to their
+// rows. For every other table, WHO MAY DO WHAT and WHICH ROWS THEY MAY SEE are yours: import
+// "example.com/test/pkg/middleware", resolve the caller with middleware.GetUser(ctx), and wrap the
+// op's Filters in a WHERE on those claims. See `forge skill load auth`.
+// EACH METHOD'S `Auth:` LINE says which case it is, read from its rpc's auth_required and its
+// table's forge:owner declaration:
+// SCOPED by the table's forge:owner= declaration — the generated op asks Deps.Owners who the
+// caller is and scopes every read and write to their rows: no caller is Unauthenticated, another
+// tenant's row is NotFound, and a write they would not own is PermissionDenied. Wrap the op here
+// only to narrow it further.
+// Customize an RPC by replacing its delegation here; CRUD RPCs added later are appended by `forge
+// generate`, and your content is never modified.
+package crews
+
+import (
+	"context"
+
+	"connectrpc.com/connect"
+	pb "example.com/test/gen/proto/services/crews/v1"
+	"example.com/test/internal/metrics"
+	"github.com/reliant-labs/forge/pkg/crud"
+)
+
+// CreateCrew delegates CRUD create to pkg/crud.
+// Auth: SCOPED by the table's forge:owner= declaration — the generated op resolves the caller with s.deps.Owners and scopes every read and write.
+func (s *Service) CreateCrew(
+	ctx context.Context,
+	req *connect.Request[pb.CreateCrewRequest],
+) (*connect.Response[pb.CreateCrewResponse], error) {
+	resp, err := crud.HandleCreate(s.crudCreateCrewOp())(ctx, req)
+	metrics.RecordCreated(ctx, "Crew", err)
+	return resp, err
+}
+
+// GetCrew delegates CRUD get to pkg/crud.
+// Auth: SCOPED by the table's forge:owner= declaration — the generated op resolves the caller with s.deps.Owners and scopes every read and write.
+func (s *Service) GetCrew(
+	ctx context.Context,
+	req *connect.Request[pb.GetCrewRequest],
+) (*connect.Response[pb.GetCrewResponse], error) {
+	return crud.HandleGet(s.crudGetCrewOp())(ctx, req)
+}
+
+// ListCrews delegates CRUD list to pkg/crud.
+// Auth: SCOPED by the table's forge:owner= declaration — the generated op resolves the caller with s.deps.Owners and scopes every read and write.
+func (s *Service) ListCrews(
+	ctx context.Context,
+	req *connect.Request[pb.ListCrewsRequest],
+) (*connect.Response[pb.ListCrewsResponse], error) {
+	return crud.HandleList(s.crudListCrewsOp())(ctx, req)
+}
+
+// UpdateCrew delegates CRUD update to pkg/crud.
+// Auth: SCOPED by the table's forge:owner= declaration — the generated op resolves the caller with s.deps.Owners and scopes every read and write.
+// No update_mask field, so every Update is a whole-row write (op.ReadOnly columns are still kept); add one for AIP-134 partial updates.
+func (s *Service) UpdateCrew(
+	ctx context.Context,
+	req *connect.Request[pb.UpdateCrewRequest],
+) (*connect.Response[pb.UpdateCrewResponse], error) {
+	return crud.HandleUpdate(s.crudUpdateCrewOp())(ctx, req)
+}
+
+// DeleteCrew delegates CRUD delete to pkg/crud.
+// Auth: SCOPED by the table's forge:owner= declaration — the generated op resolves the caller with s.deps.Owners and scopes every read and write.
+func (s *Service) DeleteCrew(
+	ctx context.Context,
+	req *connect.Request[pb.DeleteCrewRequest],
+) (*connect.Response[pb.DeleteCrewResponse], error) {
+	return crud.HandleDelete(s.crudDeleteCrewOp())(ctx, req)
+}

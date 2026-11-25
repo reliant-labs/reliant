@@ -1,0 +1,45 @@
+{
+  "name": "reliant-forge",
+  "version": "1.10.0",
+  "description": "Guardrails for apps in any agent harness. Deploy with no account: a live URL plus a claim link. The Forge MCP server and a deploy skill: put a Vite, Next.js or Dockerfile app live from Codex, with or without a Reliant account.",
+  "author": {
+    "name": "Reliant Labs",
+    "url": "https://reliantlabs.io"
+  },
+  "homepage": "https://reliantlabs.io",
+  "repository": "https://github.com/reliant-labs/forge",
+  "license": "Apache-2.0",
+  "keywords": [
+    "deploy",
+    "deployment",
+    "hosting",
+    "static-site-hosting",
+    "no-signup",
+    "claimable",
+    "mcp",
+    "forge",
+    "reliant",
+    "guardrails"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Reliant Forge",
+    "shortDescription": "Deploy any app with no account: a live URL plus a claim link.",
+    "longDescription": "Forge is an open-source framework and CLI that puts guardrails on any app and deploys it with no account: `npx -y @reliantlabs/forge@1.10.0 env deploy prod --claimable`. This plugin runs the Forge MCP server and adds a deploy skill. With no Reliant account it puts a Vite or Next.js app, or an app with its own Dockerfile, live and returns a URL plus a claim link that is good for 72 hours. With an account it deploys to the account and checks the release's health.",
+    "developerName": "Reliant Labs",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "websiteURL": "https://reliantlabs.io",
+    "privacyPolicyURL": "https://reliantlabs.io/privacy",
+    "termsOfServiceURL": "https://reliantlabs.io/terms",
+    "defaultPrompt": [
+      "Deploy this app with Reliant Forge and give me the live URL and the claim link.",
+      "Why did my last Forge deploy fail, and what do I run next?"
+    ],
+    "brandColor": "#0D8CFF",
+    "composerIcon": "./assets/logo.png",
+    "logo": "./assets/logo.png",
+    "screenshots": []
+  }
+}

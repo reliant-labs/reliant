@@ -1,0 +1,39 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file.
+// ONE RPC PER FILE, no package-level identifiers, so two RPCs' owners never collide; CRUD RPCs are
+// tested in handlers_crud_test.go.
+// TestPing_Generated: rows for `tdd.RunRPCCasesV2`. The scaffold row is SELF-DESTRUCTING: it matches only
+// forge's stub sentinel (not a bare CodeUnimplemented), so it fails once you implement Ping —
+// replace it then with Check / WantErr rows. Depth: `forge skill load testing/patterns`.
+package items_test
+
+import (
+	"testing"
+
+	"github.com/reliant-labs/forge/pkg/tdd"
+
+	pb "example.com/v2app/gen/services/items/v1"
+
+	items "example.com/v2app/internal/handlers/items"
+)
+
+// TestPing_Generated runs the canonical scaffold rows for Ping.
+// Add more rows by appending tdd.RPCCaseV2 entries — never write a new
+// Test<X> function for what is really a new row in this table.
+func TestPing_Generated(t *testing.T) {
+	t.Parallel()
+
+	// items.NewTestItems (helpers_gen_test.go) returns the
+	// items *Service wired with stubbed dependencies. Override one
+	// with items.WithItemsDeps(...), or per-row via Case.Setup.
+	svc := items.NewTestItems(t)
+
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.PingRequest, pb.PingResponse]{
+		{
+			Name: "unimplemented_scaffold", // delete this row once you implement Ping; it only asserts nobody has
+			Req:  &pb.PingRequest{},
+			Ctx:  items.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
+			// replace with Check: func(t *testing.T, resp *pb.PingResponse) {...}, or WantErr: connect.CodeInvalidArgument
+			WantScaffoldStub: true,
+		},
+	}, svc.Ping)
+}

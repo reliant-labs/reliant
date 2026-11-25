@@ -1,0 +1,24 @@
+package crews
+
+import (
+	"fmt"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+)
+
+type Deps struct {
+	DB orm.Context
+	// Add your dependencies here.
+}
+
+func (d Deps) validateDeps() error {
+	if d.DB == nil {
+		return fmt.Errorf("Deps.DB is required by the generated CRUD handlers — set DATABASE_URL (the generated bootstrap constructs the ORM client from it)")
+	}
+	// Add checks for your required Deps fields here.
+	return fmt.Errorf("x")
+}
+
+type Service struct {
+	deps Deps
+}

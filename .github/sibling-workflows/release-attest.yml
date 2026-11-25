@@ -1,0 +1,163 @@
+# Signs a forge GitHub release's assets: one Sigstore attestation over every
+# forge_<os>_<arch>.tar.gz and checksums.txt, attached to the release as
+# forge-release.sigstore.json.
+#
+# WHY. checksums.txt comes from the same release as the archives it covers, so
+# it detects corruption but not tampering: whoever can write one release asset
+# can rewrite both. The signature cannot be rewritten that way. It is keyless
+# (no key to hold or leak): Fulcio certifies this workflow's OIDC identity,
+# https://github.com/reliant-labs/forge/.github/workflows/release-attest.yml@<ref>,
+# and the signing is recorded in the public Rekor transparency log. install.sh
+# and release-npm.yml accept only that identity, for a release tag or main,
+# so the same file run from any other branch cannot sign. The predicate names
+# the release ({repository, release, commit}), and every verifier requires it
+# to equal the release being installed or pinned, so a signed set cannot be
+# replayed under another tag.
+#
+# WHAT IT DOES NOT PROVE. The archives are built by scripts/release-forge.sh on
+# the machine that cuts the release, not here, so this attests "these are the
+# assets forge's release published", not "this binary was built from commit X".
+# It is fixed at first signing: a signature is never replaced (below), so an
+# asset swapped after this ran fails every install that verifies.
+#
+# WHO VERIFIES. install.sh, with gh or cosign (docs/releasing.md, "Signed
+# release assets"). release-npm.yml verifies before it pins the release's
+# checksums into the npm package, which then trusts the pin alone.
+#
+# The identity and the predicate type below are a contract with install.sh and
+# release-npm.yml; internal/installers holds the three equal.
+#
+# BACKFILL. `gh workflow run release-attest.yml -f version=vX.Y.Z` signs a
+# release that predates this file, from main.
+name: Release attest
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "forge release to sign (vX.Y.Z; its GitHub release must exist)"
+        required: true
+        type: string
+
+permissions:
+  # gh release upload of the bundle.
+  contents: write
+  # The OIDC token Fulcio certifies, and the attestations API that stores it.
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-attest-${{ github.event.release.tag_name || inputs.version }}
+  cancel-in-progress: false
+
+env:
+  SIGNATURE_ASSET: forge-release.sigstore.json
+  SIGNER_IDENTITY: '^https://github\.com/reliant-labs/forge/\.github/workflows/release-attest\.yml@refs/(heads/main|tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$'
+  PREDICATE_TYPE: https://github.com/reliant-labs/forge/attestations/release-assets/v1
+
+jobs:
+  attest:
+    name: Sign the release assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: tag
+        env:
+          RAW: ${{ github.event.release.tag_name || inputs.version }}
+        run: |
+          TAG="v${RAW#v}"
+          if ! echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::version must look like vX.Y.Z (got: '$RAW')"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Download and check the release's assets
+        id: assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets >"$RUNNER_TEMP/release.json"
+          # First signature wins: re-signing would bless whatever the release
+          # holds NOW, which is exactly what an attacker who swapped an asset
+          # wants. Deleting a bundle to get it re-signed shows in Rekor.
+          if jq -e --arg a "$SIGNATURE_ASSET" 'any(.assets[]; .name == $a)' "$RUNNER_TEMP/release.json" >/dev/null; then
+            echo "::notice::$TAG already carries $SIGNATURE_ASSET; a signature is never replaced"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mkdir assets
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets \
+            --pattern checksums.txt --pattern 'forge_*.tar.gz'
+          missing=0
+          for asset in forge_{linux,darwin,windows}_{amd64,arm64}.tar.gz; do
+            [ -f "assets/$asset" ] || { echo "::error::the $TAG release has no $asset"; missing=1; }
+          done
+          [ "$missing" = 0 ]
+          # checksums.txt names exactly the archives present, and each matches.
+          listed="$(awk '{ sub(/^\*/, "", $2); print $2 }' assets/checksums.txt | sort)"
+          present="$(cd assets && ls forge_*.tar.gz | sort)"
+          if [ "$listed" != "$present" ]; then
+            echo "::error::checksums.txt lists [$listed] but the release has [$present]"
+            exit 1
+          fi
+          (cd assets && sha256sum --strict -c checksums.txt)
+          COMMIT="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          jq -cn --arg release "$TAG" --arg commit "$COMMIT" --arg repo "$GITHUB_REPOSITORY" \
+            '{repository: $repo, release: $release, commit: $commit}' >"$RUNNER_TEMP/predicate.json"
+          cat "$RUNNER_TEMP/predicate.json"
+          echo "signed=false" >> "$GITHUB_OUTPUT"
+
+      - name: Sign
+        id: attest
+        if: ${{ steps.assets.outputs.signed != 'true' }}
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            assets/forge_*.tar.gz
+            assets/checksums.txt
+          predicate-type: ${{ env.PREDICATE_TYPE }}
+          predicate-path: ${{ runner.temp }}/predicate.json
+
+      - name: Check the signature as installers will, then attach it
+        if: ${{ steps.assets.outputs.signed != 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          cp "$BUNDLE" "$RUNNER_TEMP/$SIGNATURE_ASSET"
+          # Installers also require the signed statement to name the release
+          # (install.sh, release-npm.yml); prove this bundle does.
+          for f in assets/forge_*.tar.gz assets/checksums.txt; do
+            gh attestation verify "$f" --bundle "$RUNNER_TEMP/$SIGNATURE_ASSET" --repo "$GITHUB_REPOSITORY" \
+              --cert-identity-regex "$SIGNER_IDENTITY" --predicate-type "$PREDICATE_TYPE" --deny-self-hosted-runners \
+              --format json >"$RUNNER_TEMP/verified.json"
+            jq -e --arg release "$TAG" --arg repo "$GITHUB_REPOSITORY" \
+              'length > 0 and all(.[]; .verificationResult.statement.predicate.release == $release and .verificationResult.statement.predicate.repository == $repo)' \
+              "$RUNNER_TEMP/verified.json" >/dev/null
+          done
+          # No --clobber: a bundle uploaded meanwhile is kept, and this fails.
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" "$RUNNER_TEMP/$SIGNATURE_ASSET"
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Prove install.sh installs it with a verified signature
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          OUT="$(FORGE_VERSION="$TAG" FORGE_REQUIRE_SIGNATURE=1 FORGE_INSTALL_DIR="$RUNNER_TEMP/bin" sh install.sh 2>&1)" || {
+            echo "$OUT"
+            echo "::error::install.sh refused the signed $TAG release"
+            exit 1
+          }
+          echo "$OUT"
+          echo "$OUT" | grep -q "against the release signature (gh;" || {
+            echo "::error::install.sh did not verify the signature with gh"
+            exit 1
+          }
