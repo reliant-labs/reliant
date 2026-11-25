@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 )
@@ -20,7 +21,12 @@ import (
 // err when it is set.
 type presetReadFailingStore struct {
 	LoadWorkflowStore
-	err error
+	chats chatviews.Reader
+	err   error
+}
+
+func (s presetReadFailingStore) GetChat(ctx context.Context, id string) (*db.Chat, error) {
+	return s.chats.GetChat(ctx, id)
 }
 
 func (s presetReadFailingStore) PinProjectCatalog(context.Context, db.CatalogPinScope) (string, error) {
@@ -85,7 +91,7 @@ func TestLoadWorkflowActivity_PresetReadFailureRetriesInsteadOfNotFound(t *testi
 		ActiveDaemonID: &daemonID, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 	load := func(readErr error, workflow string) error {
-		activity := NewLoadWorkflowActivity(presetReadFailingStore{LoadWorkflowStore: repo, err: readErr}, workspaceRowsOf(repo))
+		activity := NewLoadWorkflowActivity(presetReadFailingStore{LoadWorkflowStore: repo, chats: chatviews.Of(repo), err: readErr}, workspaceRowsOf(repo))
 		_, err := activity.Execute(ctx, LoadWorkflowInput{ChatID: chatID, WorkflowName: workflow})
 		return err
 	}

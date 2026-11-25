@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chatviews"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -106,7 +107,7 @@ func (r *machineStateRouter) MachineState(context.Context, string, *toolexec.Dae
 
 // chatActivity is the chat's activity as the chat list reads it
 // (chats_with_activity).
-func chatActivity(t *testing.T, repo RunOwnerReader, chatID string) reliantv1.ChatActivity {
+func chatActivity(t *testing.T, repo chatviews.Reader, chatID string) reliantv1.ChatActivity {
 	t.Helper()
 	chat, err := repo.GetChat(context.Background(), chatID)
 	require.NoError(t, err)
@@ -207,7 +208,7 @@ func TestPreflightWait_FinalSliceFailsAndClearsMarker(t *testing.T) {
 	assert.Contains(t, err.Error(), "didn't come online within 10 minutes", "the message names the workflow's budget")
 	assert.Contains(t, err.Error(), queuedForMachineNote, "the message is not dropped with the run")
 	assert.Equal(t, []bool{true, false}, repo.got())
-	assert.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, repo, chatID))
+	assert.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, chatviews.Of(repo), chatID))
 }
 
 // The 6-hour cap reads as hours, not as 360 minutes.
@@ -228,7 +229,7 @@ func TestPreflightWait_HardWakeErrorFailsWithCause(t *testing.T) {
 	assert.Contains(t, err.Error(), "this workflow requires a daemon but none is available")
 	assert.Contains(t, err.Error(), "no daemon registered for this account")
 	assert.NotContains(t, repo.got(), true, "an unavailable daemon never parks the run")
-	assert.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, repo, chatID),
+	assert.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, chatviews.Of(repo), chatID),
 		"the message waits for a machine to connect rather than being dropped")
 }
 
@@ -283,7 +284,7 @@ func TestPreflightWait_FailedMachineEndsTheWaitAndQueuesTheMessage(t *testing.T)
 	assert.Contains(t, err.Error(), "Your machine failed to start: tools-daemon exited with code 1.")
 	assert.Contains(t, err.Error(), queuedForMachineNote)
 	assert.NotContains(t, repo.got(), true, "a machine that stayed failed never parks the run")
-	assert.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, repo, chatID))
+	assert.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, chatviews.Of(repo), chatID))
 }
 
 // runPreflightSlices runs one preflight slice per state, the way the workflow
@@ -332,7 +333,7 @@ func TestPreflightWait_TransientFailedKeepsWaiting(t *testing.T) {
 	require.NotNil(t, runs[1])
 	assert.True(t, runs[0].Equal(*runs[1]), "the next slice carries the same run on")
 	assert.Nil(t, runs[2], "a machine that left Failed clears it")
-	assert.NotEqual(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, repo, chatID))
+	assert.NotEqual(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, chatviews.Of(repo), chatID))
 }
 
 // A Failed report that holds across slices ends the wait once it has held for
@@ -357,7 +358,7 @@ func TestPreflightWait_PersistentFailedEndsOnceItHolds(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Your machine failed to start: out of capacity")
 	assert.Contains(t, err.Error(), queuedForMachineNote)
-	assert.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, repo, chatID))
+	assert.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, chatviews.Of(repo), chatID))
 }
 
 // A machine that fails (or is removed) while the run waits ends the wait at
@@ -385,7 +386,7 @@ func TestPreflightWait_MachineRemovedDuringTheSliceEndsTheWait(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "This chat's machine was removed")
 	assert.Equal(t, []bool{true, false}, repo.got())
-	assert.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, repo, chatID))
+	assert.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, chatviews.Of(repo), chatID))
 }
 
 // The run that finds the machine up is the one that reads the queued message:
@@ -399,13 +400,13 @@ func TestPreflightWait_ReadyMachineClearsTheQueuedMarker(t *testing.T) {
 	changed, err := repo.SetChatQueuedForMachine(context.Background(), chatID, true)
 	require.NoError(t, err)
 	require.True(t, changed)
-	require.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, repo, chatID))
+	require.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, chatviews.Of(repo), chatID))
 
 	out, err := runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, WaitSeconds: 5})
 
 	require.NoError(t, err)
 	assert.True(t, out.DaemonAvailable)
-	assert.NotEqual(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, repo, chatID))
+	assert.NotEqual(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, chatActivity(t, chatviews.Of(repo), chatID))
 }
 
 func TestPreflightWait_NoMachineNeverWakes(t *testing.T) {

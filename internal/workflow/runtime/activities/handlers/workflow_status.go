@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"go.temporal.io/sdk/activity"
@@ -339,7 +341,7 @@ func (a *WorkflowStatusActivity) completionNotifies(ctx context.Context, input W
 	if input.Outcome == model.OutcomeFailure || !input.LaunchRun {
 		return true
 	}
-	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 	if err != nil || chat == nil {
 		// Unknown origin: surface the result rather than silently drop it.
 		logging.WarnContext(ctx, "[WorkflowStatus] Could not read chat launch kind; notifying", "chat_id", input.ChatID, "error", err)
@@ -369,7 +371,7 @@ func (a *WorkflowStatusActivity) failureNotifies(ctx context.Context, input Work
 	if !input.LaunchRun {
 		return true
 	}
-	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 	if err != nil || chat == nil {
 		return true
 	}
@@ -467,7 +469,7 @@ func (a *WorkflowStatusActivity) pauseTriggerRefusedByPolicy(ctx context.Context
 	if !ok {
 		return
 	}
-	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 	if err != nil || chat == nil {
 		return
 	}
@@ -753,7 +755,7 @@ func (a *WorkflowStatusActivity) markWorkflowStarted(ctx context.Context, input 
 			SpawnedByNodeID: spawnedByNodeID,
 			LoopIteration:   input.LoopIteration,
 			CreatedAt:       time.Now().UTC(),
-			OwnerUserID:     resolveRunOwner(ctx, a.workflows, a.repo, nil, input.ChatID),
+			OwnerUserID:     resolveRunOwner(ctx, a.workflows, chatviews.Of(a.repo), nil, input.ChatID),
 		}
 
 		// Root workflow - thread already exists from ChatService
@@ -792,7 +794,7 @@ func (a *WorkflowStatusActivity) markWorkflowStarted(ctx context.Context, input 
 				SpawnedByNodeID: spawnedByNodeID,
 				LoopIteration:   input.LoopIteration,
 				CreatedAt:       time.Now().UTC(),
-				OwnerUserID:     resolveRunOwner(ctx, a.workflows, a.repo, &parentID, input.ChatID),
+				OwnerUserID:     resolveRunOwner(ctx, a.workflows, chatviews.Of(a.repo), &parentID, input.ChatID),
 			}
 			if createErr := a.repo.CreateWorkflow(ctx, childWorkflow); createErr != nil {
 				return fmt.Errorf("child workflow %s does not exist (lookup: %v) and create-on-missing failed: %w", input.WorkflowID, err, createErr)
@@ -1088,7 +1090,7 @@ func (a *WorkflowStatusActivity) trackAnalytics(ctx context.Context, input Workf
 
 	var userID string
 	var presets []string
-	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 	if err != nil {
 		logging.WarnContext(ctx, "[WorkflowStatus] Failed to load chat for analytics", "chatID", input.ChatID, "error", err)
 	} else {

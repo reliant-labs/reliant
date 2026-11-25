@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/google/uuid"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -139,7 +141,6 @@ type codePresenceResult struct {
 
 // greenfieldStore is the slice of the repository the probe touches.
 type greenfieldStore interface {
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetMessage(ctx context.Context, id string) (*db.Message, error)
 	SaveMessageToThreadWithID(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*db.Message, error)
 }
@@ -229,7 +230,7 @@ func (a *GreenfieldProbeActivity) run(ctx context.Context, input GreenfieldProbe
 	if input.ChatID == "" || input.Thread == "" {
 		return GreenfieldOutcomeProbeFailed, 0, errors.New("chat_id and thread are required")
 	}
-	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 	if err != nil {
 		return GreenfieldOutcomeProbeFailed, 0, fmt.Errorf("load chat: %w", err)
 	}

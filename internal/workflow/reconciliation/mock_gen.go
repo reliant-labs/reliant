@@ -243,7 +243,7 @@ func (m *MockDaemonReader) GetDaemon(ctx context.Context, id string) (*db.Daemon
 var _ DaemonReader = (*MockDaemonReader)(nil)
 
 // forge:section MockReconcilerStore
-// forge:hash=cf7e1559de4781059ce561eb7671d4de9acbc763a77fa9ea59c87c78d11bd077
+// forge:hash=920a82274b8bc2ce550308fdaded573372314ab96b228a11c3788fd82c061a9b
 
 // MockReconcilerStore is a test mock for the ReconcilerStore interface.
 //
@@ -272,7 +272,6 @@ type MockReconcilerStore struct {
 	ListBackgroundedProcessToolCallsFunc     func(context.Context) ([]*db.BackgroundedProcessCall, error)
 	UpsertToolCallResultFunc                 func(context.Context, string, *db.ToolCallResult) error
 	EmitToolCallUpdateFunc                   func(context.Context, string, db.ToolCallUpdate) error
-	GetChatFunc                              func(context.Context, string) (*db.Chat, error)
 	UpdateChatFunc                           func(context.Context, *db.Chat) error
 	GetPinnedProjectCatalogFunc              func(context.Context, string) (*db.PinnedCatalog, bool, error)
 	GetProjectFunc                           func(context.Context, string) (*db.Project, error)
@@ -465,15 +464,6 @@ func (m *MockReconcilerStore) EmitToolCallUpdate(ctx context.Context, chatID str
 		return m.EmitToolCallUpdateFunc(ctx, chatID, update)
 	}
 	return contractkit.MockNotSet("MockReconcilerStore", "EmitToolCallUpdate")
-}
-
-// GetChat records the call and delegates to GetChatFunc when set.
-func (m *MockReconcilerStore) GetChat(ctx context.Context, id string) (*db.Chat, error) {
-	m.Recorder.Record("GetChat", ctx, id)
-	if m.GetChatFunc != nil {
-		return m.GetChatFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockReconcilerStore", "GetChat")
 }
 
 // UpdateChat records the call and delegates to UpdateChatFunc when set.
