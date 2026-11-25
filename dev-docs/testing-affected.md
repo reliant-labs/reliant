@@ -1,8 +1,9 @@
 # Run only the tests your change can reach
 
 ```bash
-task test:affected        # run them
-task test:affected:plan   # print what would run, and why, without running it
+task test:affected                 # run them
+task test:affected:plan            # print what would run, and why, without running it
+task test:affected:plan FILES=a,b  # what would these paths run? (a what-if)
 ```
 
 `task test:affected` diffs your tree against the merge-base with `origin/main`
@@ -12,220 +13,154 @@ next to every selection, so a surprising test is one line away from its cause.
 
 It is the first thing to run before pushing. It does not replace the full lane
 (`task test`): that is what the release gate runs, and what a `go.mod` bump
-needs.
+needs. It is also the test step of the **merge gate** (`task ci:merge`), whose
+other half is the **release gate** (`task release:gate`) that runs everything
+on main before a release: `dev-docs/merge-and-release-gates.md`.
 
-It is also the test step of the **merge gate** (`task ci:merge`), whose other
-half is the **release gate** (`task release:gate`) that runs everything on main
-before a release: `dev-docs/merge-and-release-gates.md`.
+## Who decides what: forge, then reliant
 
-## What runs
+The selection has two owners.
+
+- **forge's affected mode decides the Go tests and the path-gated rows.** It is
+  configured in `forge.yaml`'s `ci.gate` (`affected_ignore`, `affected_rules`,
+  `affected_readers`, `affected_reach`, `affected_modules`, and `paths` /
+  `paths_go_closure` on extra checks). `forge ci gate --plan --json --files
+  <changed>` prints its decision: the Go test packages, why each runs, the
+  build set, the transitive importers deferred to the release gate, the
+  `sdk/go` module's affected packages, and which path-gated rows run
+  (electron, docs-generate, migration-order). `forge ci gate test` runs it.
+  Load forge's `ci/gate/affected` skill for the semantics.
+- **reliant keeps what forge does not have** (owner decision, 2026-11-25), in a
+  much smaller `tools/test-affected`: the web lane's vitest selection and its
+  merge-tier FULL policy, the forge demo bundle (G11) and the renderer's
+  release build, the forge-generate hooks-only narrowing, the per-test time
+  budget and gate-verify (G14), and the migration-order check. Its `plan`
+  asks forge first (through `scripts/forge.sh`), takes forge's Go and
+  path-gated decisions as they are, and adds its own lanes; the merge gate,
+  the merge queue's vitest shards and `gate-verify` read that one plan.
+
+`task test:affected` runs `forge ci gate test` (the narrowed `unit-tests` row
+as `task test:short -- <packages>`, the `test-mod-sdk-go` row, the flake
+check, and the electron, web, web-demo and web-build rows), then
+`tools/test-affected run -lanes forge-generate,docs-generate,migration-order`.
+`task test:affected LANES=web` runs one of reliant's lanes alone.
+
+## What forge selects (forge.yaml `ci.gate`)
+
+| Changed path | forge's effect |
+|---|---|
+| a `.go` file | its package, its **direct importers**, and every transitive importer when there are at most 20 more (`affected_reach: {mode: direct, transitive_cap: 20}`); past that the rest are listed as deferred and run in the release gate |
+| a `.go` file anywhere | also the packages whose tests walk every Go file of the module (`on: go-source`; `TestWalkerPackagesAreListed` holds the list to the tree) |
+| a file a package `go:embed`s or keeps under `testdata/` | that package, fanned out like code |
+| `db/migrations/**` | through `db/embed_gen.go`'s embed: `internal/db` and its importers; plus every test package whose test files import `internal/db` or `internal/store/storetest` (`packages_importing`: the DB-backed tests) |
+| `proto/**/*.proto`, `proto-vendor/**/*.proto` | its generated Go package (`./gen/{dir}` and its connect subpackage). The regenerated `gen/` files the change commits are Go and fan out from there |
+| `sdk/go/**` | the root packages that link it (go.mod replaces it with `./sdk/go`), and the module's own affected tests in a `test-mod-sdk-go` row (`affected_modules: auto`) |
+| a non-Go file a Go test names in a path literal (`deploy/kcl/...`) | the packages that name it (`affected_readers: true`), whether or not `affected_ignore` lists the file |
+| `go.mod`, `go.sum`, `go.work*`, `tools/tools.go`, `forge.yaml`, `proto/**` that is not a `.proto` | **the whole Go suite** (a rule's `full: true`, with its reason) |
+| a file `affected_ignore` lists (docs, CI plumbing, the web, electron and Node trees, the codegen inputs, data) | no Go package, unless a test names it (above) |
+| anything else no package owns | **the whole Go suite**, and every reliant lane runs whole too (the fail-safe) |
+
+And the path-gated extra checks:
+
+| Row | Runs when |
+|---|---|
+| `electron` (`task test:electron`) | a change under `electron/`, the root Node manifests, or a file outside `electron/` its tests read (listed in its `paths`; `tools/test-affected` also selects the lane for any file an electron test names) |
+| `docs-generate` (`task generate:docs:check`) | its `paths` (the generators, the files they read, every output) or a file in the build closure of `./tools/docgen/...` (`paths_go_closure`). `TestDocGenTargetsCoverEveryDocsGenerator` holds `paths` to the Taskfile's docs tasks and the generators' sources |
+| `migration-order` | `db/migrations/**` |
+
+## What reliant keeps (tools/test-affected)
 
 | Lane | Command it runs | Selected by |
 |---|---|---|
-| Go | `go test -short -timeout 5m <pkgs>` (cached, no `-race`) | the changed package, **plus every package whose test binary imports it** |
-| web | `npx vitest run <files>` in `frontends/web/` | every vitest file that imports a changed module, transitively |
-| electron | `pnpm test` in `electron/` | any change under `electron/`, or a changed file an electron test names |
-| forge-generate | `task generate:check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**` (not its hand-written `_test.go` files, which forge never reads), every generated file (`*_gen.go`, `*_gen.ts`, `*_gen_test.go`, ...), `gen/**`, `deploy/**`, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml` (`forgeInputs` in `rules.go`) |
-| docs-generate | `task generate:docs:check`, second (in a heavy slot): every docs generator (`Taskfile.yml`'s `generate:docs`), failing (and naming each file) if it changed anything | a change to something a docs generator reads or writes (below) |
-| web-demo | `WEB_BUILD_TARGET=demo npx vite build` in `frontends/web/` (the forge demo bundle; its `vite-plugin-demo-bundle.ts` guard fails on a Reliant-only module in it) | a changed file in the demo bundle's import graph (`WebGraph.Demo`, below), the demo build's own inputs (`demoBuildInputs` in `rules.go`: `vite.config.ts`, `vite-plugin-*.ts`, `demo.html`), or a FULL web lane |
-| web-build | `scripts/web-release-build.sh`: `NODE_ENV=production npx vite build` in `frontends/web/` into a temporary directory, then `.github/scripts/verify-bundle.mjs` (the release gate's webbuild, minus eslint and `tsc -b`) | a FULL web lane (its dependencies, lockfile or build config changed; reliant#2850) or the release build's own inputs (`webBuildInputs` in `rules.go`: `vite.config.ts`, `vite-plugin-*.ts`, `index.html`) |
-| migration-order | `go run ./tools/test-affected migration-order`, first: fetches `origin/main` and fails a migration the branch added whose version is at or below main's newest (never applied; the migrator refuses to start on it, reliant#1399). Fails closed when `origin/main` cannot be fetched (`MIGRATION_ORDER_OFFLINE=1` to override) | any added or changed file under `db/migrations/` (a deletion cannot put a file below the head) |
+| web | `npx vitest run <files>` in `frontends/web/` | every vitest file that imports a changed module (the merge gate: within two edges), the vitest files importing a changed `.proto`'s `_pb.ts`, and tests that read a changed file at run time |
+| web-demo | `WEB_BUILD_TARGET=demo npx vite build` (its `vite-plugin-demo-bundle.ts` guard fails on a Reliant-only module in the bundle) | a changed file in the demo bundle's import graph (`WebGraph.Demo`), the demo build's own inputs (`vite.config.ts`, `vite-plugin-*.ts`, `demo.html`), or a FULL web lane |
+| web-build | `scripts/web-release-build.sh` (the renderer's release bundle, then `verify-bundle.mjs`) | a FULL web lane (its dependencies, lockfile or build config changed; reliant#2850) or the release build's own inputs (`vite.config.ts`, `vite-plugin-*.ts`, `index.html`) |
+| forge-generate | `task generate:check`; in the merge gate only the reached `generate.hooks` when every reason is Go a hook generator compiles (`hooks_only`) | a path forge reads or writes (`forgeInputs` in `rules.go`), or code a hook generator compiles (`go list -deps` of the generators) |
+| migration-order | `go run ./tools/test-affected migration-order`: fetches `origin/main` and fails a migration the branch added whose version is at or below main's newest (reliant#1399) | an added or changed file under `db/migrations/` |
 
-The forge-generate lane is the merge gate's **generate** phase, run locally
-(the merge gate runs only the affected `generate.hooks` when nothing forge
-itself reads changed; this lane always runs the whole forge generate).
-It leaves what it regenerated in your tree, so the fix is to commit those
-files. It judges only what generate changes, not whether the tree is clean, so
-your uncommitted edits are fine; do not edit files while it runs. Its blind
-spot is a `//forge:` directive in a Go file other than `doc.go`.
+The web rules (`rules.go`): a root Node manifest or toolchain pin, the web
+config (`frontends/web/package.json`, lockfile, `vite.config.ts`,
+`tsconfig*.json`, tailwind/postcss config, `src/test/setup.ts`, patches,
+`sdk/ts/package.json`), `sdk/ts/**` and `proto/**` that is not a `.proto` make
+the web lane FULL; `frontends/web/src/**` is a web module; served assets and
+Playwright specs select only the tests that name them.
 
-The docs-generate lane is the gates' **docs** check, run locally: the merge
-gate runs `task generate:docs` when the diff reaches a docs input, the release
-gate runs the same `task generate:docs:check` on every release, and
-`Taskfile.yml`'s `generate:docs` is the one list of docs generators (every task
-that runs a `tools/docgen` program or `scripts/generate-mintlify-reference.py`). It exists because a hand edit to a
-generated doc passed every local check: #1228 edited the generated
-workflow-builder `SKILL.md`, the next regeneration reverted it, and #1230 had to
-move the text into `tools/docgen/assembler`. Like forge-generate, it judges only
-what regenerating changes and leaves the result in your tree: commit it, or, if
-it reverted an edit of yours, put the text in the generator's source. What
-selects it (`docGenInput` in `plan.go`):
+The plan (`go run ./tools/test-affected plan -json`) keeps its shape: `go`
+(forge's packages, `build`, `deferred`, `modules`), `web`, `electron`,
+`forge_generate`, `docs_generate`, `migration_order`, `web_demo`,
+`web_build`, `npm_lockfiles`. `-reach direct|all` is the web lane's reach; the
+Go lane's is forge.yaml's. `run` keeps `-plan`, `-web-full`, `-web-shard`,
+`-test-budget` and `-capture`. `TEST_BASE=<rev>` moves the diff base,
+`TEST_FULL=1` runs every lane in full, `-files a,b` asks "what if only these
+changed?".
 
-- **Go a generator compiles**: code (or a `go:embed`ded file) of any package
-  in the build deps of a `tools/docgen/*` package, taken from the same
-  `go list` graph as the Go lane. `tools/docgen/cli` documents the whole
-  command tree, so this is most of the module's non-test code. A `.proto`
-  counts through the `gen/` package it regenerates. Test files and
-  build-tagged files do not.
-- **`docGenPaths` in `rules.go`**: the generators themselves
-  (`tools/docgen/**`, the Mintlify script), `go.mod`/`go.sum`, the files they
-  read at run time (`config/shortcuts.yaml`, the scenario `types.go`, the
-  preset YAMLs, `docs/data/releases/**`) and every output
-  (`generated/docs-source/**`, `docs/reference/*.mdx`, `docs/changelog.mdx`,
-  `shortcutsData.generated.ts`, `field_descriptions.go`, the workflow-builder
-  `SKILL.md`). `TestDocGenTargetsCoverEveryDocsGenerator` checks the list
-  against the Taskfile's docs tasks and the generators' own sources, and checks
-  that `generate:docs` names every docs generator and that the gates (and
-  `ci.yml`) run the list instead of naming a docs task themselves.
+**Lockfiles.** Every lane tests against the `node_modules` already on disk,
+so none of them notices a lockfile a frozen install would reject. When a diff
+changes a `package.json`, `pnpm-lock.yaml` or `pnpm-workspace.yaml` of a Node
+project (`npmProjects` in `plan.go`: the root, `frontends/web`, `electron`,
+`tools/protoc-gen-es`), the runner first runs `pnpm install --frozen-lockfile
+--lockfile-only --ignore-scripts` there (#1343). forge's `lockfile-<fe>` row
+does the same for `frontends/web` in `forge ci gate`.
 
-The web-demo lane exists because `tsc -b` cannot see what the demo bundle's
-guard refuses: #2669 made `hooks/useOrgs.ts` import `store/authStore.ts`,
-type-checked clean, and failed the v1.17.0-rc.3 cut on
-`[reliant:demo-bundle-guard] … useOrgs.ts → authStore.ts`. Its graph
-(`demoGraph` in `webgraph.go`) is the web graph's forward closure from
-`src/demoBundle/main.tsx`, the entry `demo.html` loads, with the demo build's
-substitution applied: a module `x.ts` with a sibling `x.demo.ts` (a **demo
-twin**) is replaced by the twin, so the twin is followed and the original is a
-member but its own imports are not (after #2699 gave `useOrgs.ts` a twin,
-`authStore.ts` left the graph). Unlike the test graph it also follows a
-stylesheet's `@import`s, since vite inlines them: `index.css` imports the
-`styles/` and `themes/` sheets, and a broken nested `@import` breaks the demo
-build. Like the test graph it over-approximates
-(every quoted specifier is an edge); a missing entry selects the lane for any
-web change. It takes 1.8-2.0 minutes on a loaded host; most web changes reach
-it, since the demo shares the console pages, hooks and stores.
+## The web lane's FULL policy: related files in the merge tier, the whole suite at release
 
-`-reach direct` (or `TEST_REACH=direct`) stops the Go fan-out after one hop:
-the changed packages and the packages that import one by name. The plan lists
-what it left out as `deferred`. `-go-reach-cap N` gives it a transitive budget:
-when the packages `-reach all` would add number at most N, they are selected
-too (the plan's `go.reach` is then `all`, `go.reach_cap` N). The merge gate runs
-`-reach direct -go-reach-cap 20` (`MG_REACH_CAP`;
-`dev-docs/merge-and-release-gates.md`). The default, `-reach all`, is the full
-closure described below.
+Owner decision (2026-11-13, kept 2026-11-25). A FULL web lane means the rules
+cannot scope the change: `frontends/web/package.json`, a lockfile, the vite or
+tsconfig config.
 
-**Reach.** `-reach all` (the default, `task test:affected`) runs every Go
-package whose test binary contains a change and every vitest file whose import
-closure does. `-reach direct` (the merge gate) runs the changed Go packages and
-their direct importers (and, within `-go-reach-cap`, the rest of the closure),
-and the vitest files within two import edges of a
-changed module (one edge for a hub, a module more than 60 test files reach in
-two, and for every module when together they reach more than 150 at two:
-`web.edges`); the rest are listed in the plan as `deferred` and run in the release
-gate (dev-docs/merge-and-release-gates.md). The plan's `go.build` lists every
-package whose build contains a change, for the merge gate's compile check.
+- **Merge tier:** only the vitest files the diff's own web modules reach (at
+  the merge gate's two-edge cut), beside `tsc -b` over every web source:
+  `run -web-full reached` in `scripts/merge-gate.sh` and
+  `scripts/vitest-shard.sh`. Speed over completeness.
+- **Release gate:** the whole suite, `task test:web` (`npm test -- --run`),
+  from `task test`.
 
-**`run` options.** `-plan <file>` runs a plan an earlier `plan -json` wrote
-instead of computing one. `-web-full all|reached` says what a FULL web lane
-runs: `all` (the default, `task test:affected`) the whole vitest suite,
-`reached` (the merge gate) only the files the plan lists (next section). `-test-budget auto|<duration>` times every Go test
-(`go test -json`) and fails one the diff adds or edits that runs over the
-budget, reporting the others (budget.go).
-
-Knobs (environment): `TEST_BASE=<rev>` moves the diff base (a stacked branch),
-`TEST_FULL=1` runs every lane in full; `task test:affected LANES=go,web` picks
-lanes. For other
-flags: `go run ./tools/test-affected -h` (`-json` prints the plan,
-`-files a,b` or `-files @list.txt` asks "what if only these changed?").
-
-## A FULL web lane in the merge gate
-
-A FULL web lane means the rules cannot scope the change: `frontends/web/package.json`,
-a lockfile, the vite or tsconfig config. The plan still lists, in `web.tests`,
-the vitest files the diff's own web modules reach (at the merge gate's two-edge
-cut). The merge gate runs exactly those (`run -web-full reached`), beside
-`tsc -b` over every web source; the whole suite (1033 files, ~20 min on a
-loaded host) stays in the release gate. In the merge queue the selected files,
-scoped or FULL, run in the `vitest` job's four shards (`run -web-shard <i>/4`,
-`scripts/vitest-shard.sh`) instead of on the gate's runner
-(merge-and-release-gates.md, "The merge queue's vitest files, in four shards").
+forge has no merge-versus-release distinction for a frontend row: its
+`test-<fe>` row runs `test:related` with the changed files, and the whole
+`test` script when a non-source file under the frontend changed. So the policy
+is expressed reliant-side, as before: the merge gate passes `-web-full
+reached` to `tools/test-affected`, and the release gate runs the full `test`
+script. That is also why the web lane is a reliant extra check rather than
+forge's `test-web` row: forge's row would run the whole ~20-minute suite on
+every config change in the merge tier.
 
 **Why this and not the alternatives** (decided 2026-11-13):
 
 - **None, as before.** The fallback ran no vitest at all, so a source change
   queued with a change no rule can scope merged untested: #2669's 13 failures
-  (CliLogin, DevicePairing, PairMachinePanel) reached main behind the queue
-  entries for #2677 (`proto-vendor/controlplane/SOURCE`) and #2693
-  (`frontends/web/package.json`), both FULL with #2669 ahead of them in the
-  group. Replayed through the planner, each entry's plan lists all three files
-  among 122 (they import the regenerated `organization_pb.ts`).
+  reached main behind the queue entries for #2677 and #2693, both FULL.
 - **The whole suite.** It is the only run that judges the dependency change
   itself, but ~20 minutes is four times the queue's five-minute budget (owner,
   2026-10-28: slow suites gate releases), and the release gate already runs it.
 - **The reached files (chosen).** The same selection the lane makes when no
   manifest changed, so a FULL fallback is never weaker than a scoped run of the
   same source diff. What it misses is a dependency bump that breaks a test no
-  changed module reaches; that is the release gate's, as before.
+  changed module reaches; that is the release gate's.
 
-## The rule table
+## Trade-offs against the old selector
 
-A changed path is matched against these rules (`tools/test-affected/rules.go`),
-and also mapped to its Go package and to the tests that name it. A path that no
-rule claims and no Go package owns runs **everything** (fail-safe).
+forge's selection is at least as wide as the old `tools/test-affected` Go lane
+on every sample measured when the swap landed (a hub package, a migration, a
+proto with and without its regenerated code, `sdk/go`, the web config,
+`electron/`, a KCL file a test reads, `Taskfile.yml`, `go.mod`), with two
+documented narrowings:
 
-| Changed path | Effect |
-|---|---|
-| a `.go` file | its package + reverse dependencies (test binary imports it); packages that walk every Go file (`architecture`, `features`, ...) |
-| a `_test.go` file | only its own package |
-| a Go file behind a build tag (`e2e`, `live`, ...) | nothing: `go test -short` does not build it |
-| a file a package `go:embed`s | its package + reverse dependencies, like code |
-| a file a Go test names in a path literal (`deploy/...`, `config/...`) | only the packages that name it |
-| `db/migrations/**`, `internal/db/migrations/**` | the packages with DB-backed tests (the migrations reach them through `go:embed`, which the import graph does not see). They run in the same `-short` step as everything else: each test copies a migrated template on forge pgtest's server, which needs no configuration |
-| `proto/**/*.proto`, `proto-vendor/**/*.proto` | its generated Go package and the vitest files importing its `_pb.ts` |
-| `frontends/web/src/**` module | the vitest files importing it (import graph below) |
-| `frontends/web/src/**/*.test.ts(x)` | that test only |
-| a file a web or electron test reads at run time | those tests |
-| `frontends/web/e2e/**` | nothing (Playwright is separate) |
-| `electron/**` | the electron lane |
-| `docs/**`, `**/*.md`, `.github/**`, `research/**`, lint config | nothing, unless a test names the file |
-| `go.mod`, `go.sum`, `tools/tools.go` | **Go: full** (`go.mod`/`go.sum` also run forge-generate and docs-generate) |
-| `package.json`, lockfiles at the root | **web and electron: full** |
-| `frontends/web/package.json`, `vite.config.ts`, `tsconfig*.json`, `tailwind`/`postcss` config, `frontends/web/src/test/setup.ts` | **web: full** (the merge gate runs the reached files; above), the demo build, and the renderer's release build |
-| `buf*.yaml` (root) | forge-generate only: the code it generates is in the diff and selects its own tests, or the no-op check fails |
-| `Taskfile.yml` | **forge-generate and docs-generate: full** (the tasks they run); the test lanes do not run through the Taskfile |
-| `forge.yaml` (the forge pin) | Go and forge-generate: full |
-| `proto/**` that is not a `.proto` | **Go and web: full** |
-| a deleted web module | the vitest files that still reach it (the graph resolves specifiers against the base tree's files too); its importers changed too and select their own |
-| anything else | **everything: full** |
+- **A `.proto` changed without its regenerated `gen/` code** selects only the
+  generated packages' own tests, not their importers: forge's `packages:`
+  rule selects test packages and does not fan out. A `.proto` change always
+  commits the regenerated `gen/*.pb.go`, which fans out as Go (the same
+  selection as before); one that does not fails the forge-generate check,
+  which the same change selects.
+- **`sdk/go` runs the module's affected packages**, not its whole `./...`:
+  forge applies the root module's reach rule inside the module. Its
+  `go.mod`/`go.sum` still run the module's whole suite.
 
-**Lockfiles.** Every lane tests against the `node_modules` already on disk,
-so none of them notices a lockfile a frozen install would reject. When a diff
-changes a `package.json`, `pnpm-lock.yaml` or `pnpm-workspace.yaml` of a Node
-project (`npmProjects` in `tools/test-affected/plan.go`: the root,
-`frontends/web`, `electron`, `tools/protoc-gen-es`, all pnpm), the runner first
-runs `pnpm install --frozen-lockfile --lockfile-only --ignore-scripts` there
-(~3s; it validates the lockfile against the manifest and writes nothing),
-provided a lane that installs from that project is enabled. #1343 shipped a
-lockfile every fresh install rejected ("Missing: zone.js from lock file") with
-every local test green. The gates and CI install with a plain frozen install
-for the same reason: an `npm ci || npm install` fallback repaired the drift on
-the runner and hid it.
+The migration lane is wider: forge also runs `internal/db`'s importers
+(through the embed), and the packages whose test files import the DB helpers
+(`packages_importing`), where the old one ran only the packages its text scan
+marked DB-backed.
 
-## How the selection works, and where it errs
-
-**Go.** `go list -test -json ./...` gives each package's test-binary
-dependency set; a package runs when that set contains a changed package. This
-is exact for compiled code. The inexact part is data a test reads from disk: the
-selector scans each package's Go sources for string literals that name a tracked
-repo path (`filepath.Join(root, "deploy", "kcl")`) and selects those packages
-when that path changes. It over-approximates on purpose: a test run for no
-reason costs seconds, a test wrongly skipped costs a red main.
-
-What counts as naming a path (`scanSources`, `literalCandidates` in
-`tools/test-affected/graph.go`):
-
-- **A `filepath.Join` / `path.Join` is judged by its anchor**, the first
-  argument, because that is the directory the literals after it are relative to
-  (package string constants count as literals):
-  - joined from the first argument on, the path is relative to the package
-    directory, where `go test` runs: `filepath.Join("..", "..", "frontends", "web", "src")` in
-    `internal/grpc` names `frontends/web/src`;
-  - joined onto the repo root, it names that path under the root:
-    `filepath.Join(repoRoot(t), "scripts", name)` names `scripts/`. The root is
-    whatever the package's sources derive from `os.Getwd()`,
-    `runtime.Caller`, `filepath.Abs("<relative>")`, a `".."`,
-    `git rev-parse --show-toplevel`, or a function, variable or struct field
-    that returns or holds one of those (`rootfacts.go`);
-  - joined onto anything else (`t.TempDir()`, a fixture's checkout, a parameter)
-    it names a directory outside the repo and is **no read at all**:
-    `filepath.Join(ws, "web")` builds a fixture's `web` checkout, not a read of
-    `frontends/web/`. Before this rule such fixtures made every web-only diff run their
-    Go packages.
-- **Any other literal is judged alone**: a multi-segment one that is a tracked
-  file or directory (`"deploy/kcl/main.k"` in a table) is a read wherever it is
-  used, and a bare word (`"web"`, `"db"`) only when it is a file at the repo
-  root (`"go.mod"`) or the lone literal argument of another path call
-  (`readTree(root, "deploy")`).
+## How the web selection works, and where it errs
 
 **Web.** vitest's own `related` mode builds the same graph by transforming every
 test file: `vitest list --changed` took 65 seconds of wall time and 26 seconds of
@@ -245,7 +180,7 @@ cannot see).
 **Known blind spots** (both directions are over-selection except these):
 
 - A Go test that builds a path at run time from non-literal parts reads a file
-  the scan cannot name. It still runs when its own package or a dependency changes.
+  forge's reader scan (`affected_readers`) cannot name. It still runs when its own package or a dependency changes.
   So does one that joins literals onto a root it was handed as a parameter
   (`func readUnder(root string) { filepath.Join(root, "web") }`): a parameter
   is not traced back to its callers, so name the path in the caller, or join it
@@ -271,7 +206,7 @@ release, the two gates run (`dev-docs/merge-and-release-gates.md`):
 
 | Gate | Go | Everything else |
 |---|---|---|
-| **merge** (`task ci:merge`) | this selector with `-reach direct -go-reach-cap 20`, `-short`, cached, no `-race`: the changed packages and their direct importers, and the whole closure when it adds at most 20 | the web and electron lanes this selector picks (a FULL web lane: the reached files), `go build ./...`, a compile of every test package (`scripts/test-build.sh`), `forge lint --scope <changed dirs>` (the merge queue too), `forge lint --graph --closed-sets --proto-format` on every diff, the demo build, the renderer's release build on a web dependency or build-config change, and the forge-generate / docs-generate / migration checks when their inputs changed |
+| **merge** (`task ci:merge`) | forge's affected decision (forge.yaml `affected_reach`), `-short`, cached, no `-race`: the changed packages and their direct importers, and the whole closure when it adds at most 20 | the web and electron lanes this selector picks (a FULL web lane: the reached files), `go build ./...`, a compile of every test package (`scripts/test-build.sh`), `forge lint --scope <changed dirs>` (the merge queue too), `forge lint --graph --closed-sets --proto-format` on every diff, the demo build, the renderer's release build on a web dependency or build-config change, and the forge-generate / docs-generate / migration checks when their inputs changed |
 | **release** (`task release:gate`) | `task test`: every package, `-race -count=1`, no `-short`, so every slow test runs; then `task test:integration` and `task test:e2e` | unscoped `forge lint` (golangci-lint, buf, the frontends), `go vet`, `task generate:check`, `task generate:docs:check` |
 
 Nothing the merge gate skips is deleted; it runs in the release gate, and a
@@ -360,10 +295,14 @@ so it cannot disagree with a local run:
   `VITEST_TIMEOUT_MS` override both.
 - **go test**: `-p` defaults to `GOMAXPROCS`, which is right when one `go test`
   runs. Pass `go run ./tools/test-affected run -p N` to lower it when several
-  agents run builds at once.
+  agents run builds at once (the merge gate does).
 
 ## Changing the selector
 
-`tools/test-affected` is a plain Go package with table tests
-(`plan_test.go`). A change to it selects its own tests, like any package. The
-rules live in one table in `rules.go`; add the path there and a test row here.
+What a path selects in Go, and which path-gated rows run, is `forge.yaml`'s
+`ci.gate`: add an `affected_rules` entry, an `affected_ignore` glob, or a
+row's `paths`, then check it with `task test:affected:plan FILES=<path>`.
+A defect in forge's selection is fixed in forge (`ci/gate/affected` skill).
+The web rules and the forge-generate inputs live in `tools/test-affected`'s
+`rules.go`, with table tests in `plan_test.go`; a change to either selects its
+own tests, like any package.

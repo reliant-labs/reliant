@@ -37,7 +37,7 @@ Neither gate keeps a second copy of it.
 
 | Tier | Command | What it runs | When |
 |---|---|---|---|
-| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, plus every **transitive** dependent when there are at most 20 more (`MG_REACH_CAP`), and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change, and of **every test package** (`testbuild`); golangci-lint over the packages with a changed `.go` file, findings in the changed files, plus staticcheck's SA1019 over the packages that use what the diff deprecates (`scripts/golangci-changed.sh`, the merge queue's `golangci (changed)` job, outside the queue); forge lint's whole-project `--graph --closed-sets --proto-format` lanes on every diff (`projectlint`); the web `tsc -b` (incremental on state this checkout wrote; `--force` on a first run or copied state) when a web lane is selected or a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint), in the merge queue too; the forge demo bundle's build when the diff reaches its import graph; migration-safety when a migration or forge.yaml changed, and migration order against main's newest (in the queue, also against the entries queued ahead); electron's tests when electron reads a changed file; the whole lane when the rules cannot scope a change; and the forge-generate and docs-generate no-op checks only when one of their inputs changed (`internal/app` included) | before **every merge**. The merge queue runs it on the squash it is about to land |
+| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, plus every **transitive** dependent when there are at most 20 more (forge.yaml's `ci.gate.affected_reach`), and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change, and of **every test package** (`testbuild`); golangci-lint over the packages with a changed `.go` file, findings in the changed files, plus staticcheck's SA1019 over the packages that use what the diff deprecates (`scripts/golangci-changed.sh`, the merge queue's `golangci (changed)` job, outside the queue); forge lint's whole-project `--graph --closed-sets --proto-format` lanes on every diff (`projectlint`); the web `tsc -b` (incremental on state this checkout wrote; `--force` on a first run or copied state) when a web lane is selected or a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint), in the merge queue too; the forge demo bundle's build when the diff reaches its import graph; migration-safety when a migration or forge.yaml changed, and migration order against main's newest (in the queue, also against the entries queued ahead); electron's tests when electron reads a changed file; the whole lane when the rules cannot scope a change; and the forge-generate and docs-generate no-op checks only when one of their inputs changed (`internal/app` included) | before **every merge**. The merge queue runs it on the squash it is about to land |
 | **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, the forge demo bundle's size budget (`task demo:bundle-size`), `go vet ./...`, `task test` as three steps (Go `-race -count=1` without `-short`, so every slow test runs, then web and electron in full), `task test:integration` and `task test:e2e`. CI runs them as parallel parts (below) | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
 
 ## The merge gate
@@ -152,8 +152,8 @@ The phases:
      -test-budget auto`. It runs the plan the plan phase wrote (re-planning
      loaded the whole package graph again: 17-141s), so the changed packages
      and the packages that import one by name, plus the rest of the
-     reverse-dependency closure when it adds at most `MG_REACH_CAP` (20)
-     packages, and the vitest files within two imports of a changed module
+     reverse-dependency closure when it adds at most 20 packages
+     (forge.yaml's `ci.gate.affected_reach`), and the vitest files within two imports of a changed module
      ([below](#direct-importers-and-a-transitive-budget)). A Go test the change adds or edits that runs past
      the per-test budget fails it (below). On a **FULL web fallback** (a
      `package.json`, lockfile or web build-config change, which no rule can
@@ -359,8 +359,9 @@ packages, the packages whose files or tests import one of them directly, the
 tree-walking guards, and every DB-backed package when a migration changed.
 
 The rest of the closure runs too when it is small: when it adds at most
-`MG_REACH_CAP` packages (default 20; `tools/test-affected plan -go-reach-cap`,
-the plan's `go.reach_cap`), and the plan then says `reach all`. Above it, every
+20 packages (forge.yaml's `ci.gate.affected_reach: {mode: direct,
+transitive_cap: 20}`; forge's affected mode decides it, dev-docs/testing-affected.md),
+and the plan then says `reach all`. Above it, every
 deeper dependent is listed in the plan as `deferred` and runs in the release
 gate. Measured on 48 CPUs at load 45-95, `-p 24` (2026-11-25), a synthetic
 export added to each package:
@@ -377,7 +378,7 @@ minutes to every internal/db change. 20 bounds it to some 20 links and runs.
 
 `testbuild` compiles every test package on every diff, so a deferred package
 can still only fail at test time, never at compile time, before the merge.
-`MG_REACH_CAP=0` restores direct importers only.
+`transitive_cap: 0` in forge.yaml restores direct importers only.
 
 The web lane takes the same cut (`-reach direct`): a changed module runs the
 vitest files that import it, and those importing a module that imports it (two
@@ -428,7 +429,7 @@ size".
 These are the trade-offs. Each is caught by the release gate:
 
 - **Tests of transitive dependents of a hub.** When a change reaches more than
-  `MG_REACH_CAP` packages beyond its direct importers, a behaviour change that
+  20 packages beyond its direct importers (`affected_reach`), a behaviour change that
   breaks a package two or more imports away merges green (a fixture that stops
   compiling does not: `testbuild`). It is caught at release time, which makes it
   harder to bisect.
