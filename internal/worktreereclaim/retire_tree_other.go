@@ -16,6 +16,18 @@ func retirementMatchesPath(*retirementTree, string) (bool, error) {
 type retirementTree struct {
 	bytes  int64
 	newest time.Time
+	path   string
+}
+
+type parkedTree struct{}
+
+func (*parkedTree) close()            {}
+func (*parkedTree) files() []*os.File { return nil }
+func (t *retirementTree) park(string) (*parkedTree, error) {
+	return nil, errors.New("mount-safe retirement unsupported")
+}
+func (t *retirementTree) unpark(*parkedTree) error {
+	return errors.New("mount-safe retirement unsupported")
 }
 
 func inspectRetirementTree(context.Context, string) (*retirementTree, error) {

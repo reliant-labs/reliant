@@ -17,6 +17,11 @@ import (
 
 const day = 24 * time.Hour
 
+// harnessEpoch is the harness's fixed clock. The tests date their fixtures
+// relative to it (age); none reads the wall clock. A file a test writes
+// without dating it is in this clock's future, so it reads as just used.
+var harnessEpoch = time.Date(2020, time.March, 4, 12, 0, 0, 0, time.UTC)
+
 // harness is a scratch root, a worktree root and a state dir in t.TempDir(),
 // a fixed clock, and fakes for what only the daemon has.
 type harness struct {
@@ -34,7 +39,7 @@ type harness struct {
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	base := t.TempDir()
-	h := &harness{t: t, now: time.Now(), busy: map[string]bool{}, scratchUse: map[string]time.Time{}, chatUse: map[string]time.Time{}}
+	h := &harness{t: t, now: harnessEpoch, busy: map[string]bool{}, scratchUse: map[string]time.Time{}, chatUse: map[string]time.Time{}}
 	state := filepath.Join(base, "state")
 	h.r = &Reclaimer{
 		Config:       Config{Mode: ModeOn, ScratchStripIdle: DefaultScratchStripIdle, ScratchRemoveIdle: DefaultScratchRemoveIdle, WorktreeNodeModulesIdle: DefaultWorktreeNodeModulesIdle},

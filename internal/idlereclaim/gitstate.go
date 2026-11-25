@@ -4,12 +4,15 @@ package idlereclaim
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
 // gitWall bounds one git command.
@@ -234,15 +237,36 @@ func removableWorktree(ctx context.Context, wt string, stripped map[string]bool)
 	return ""
 }
 
-// removeWorktree runs `git worktree remove` (never --force) for the linked
-// worktree wt, from its repository: git refuses a worktree that is dirty or
-// locked, so a change made since it was checked is not lost.
-func removeWorktree(ctx context.Context, wt string) error {
+// removeWorktree removes the linked worktree wt the way the quarantine
+// removes a directory: `git worktree move` parks it in trash (one rename,
+// which git records), q.InUse checks both paths once nothing can reach it by
+// its old name, and only then `git worktree remove` (never --force) deletes
+// it. git refuses a worktree that is dirty or locked, so a change made since
+// it was checked is not lost. A failed check or removal moves it back.
+func removeWorktree(ctx context.Context, wt string, q worktreereclaim.Quarantine) error {
+	if q.InUse == nil || q.Trash == "" {
+		return errors.New("no quarantine for the removal")
+	}
 	common := commonDir(wt)
 	if common == "" {
 		return fmt.Errorf("the repository of %s cannot be found", wt)
 	}
-	_, err := git(ctx, common, "worktree", "remove", wt)
+	if err := os.MkdirAll(q.Trash, 0o700); err != nil {
+		return err
+	}
+	parked := filepath.Join(q.Trash, filepath.Base(wt)+"-worktree")
+	if _, err := git(ctx, common, "worktree", "move", wt, parked); err != nil {
+		return err
+	}
+	err := q.InUse(ctx, []string{wt, parked})
+	if err == nil {
+		if _, err = git(ctx, common, "worktree", "remove", parked); err == nil {
+			return nil
+		}
+	}
+	if _, merr := git(context.WithoutCancel(ctx), common, "worktree", "move", parked, wt); merr != nil {
+		return fmt.Errorf("%w; it stays at %s: %v", err, parked, merr)
+	}
 	return err
 }
 

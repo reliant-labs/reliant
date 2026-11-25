@@ -72,6 +72,10 @@ type Reclaimer struct {
 	WorktreeSweepOn bool
 	// Records is the removal record the command note reads.
 	Records *Records
+	// BoundaryCheckEvery paces the lease and process checks at deletion
+	// boundaries (worktreereclaim.Quarantine.CheckEvery); 0 checks before
+	// every entry. NewReclaimer sets worktreereclaim.DefaultDisposalCheckEvery.
+	BoundaryCheckEvery time.Duration
 	Deps
 
 	mu sync.Mutex // one pass at a time
@@ -105,7 +109,8 @@ func NewReclaimer(cfg Config) (*Reclaimer, error) {
 	}
 	return &Reclaimer{
 		Config: cfg, ScratchRoot: scratch, WorktreeRoot: worktrees, StateDir: state,
-		Records: NewRecords(filepath.Join(state, RecordFile)),
+		Records:            NewRecords(filepath.Join(state, RecordFile)),
+		BoundaryCheckEvery: worktreereclaim.DefaultDisposalCheckEvery,
 		Deps: Deps{
 			ProcessUse:  worktreereclaim.CheckProcessUse,
 			Inspect:     worktreereclaim.InspectRegenerable,
@@ -138,13 +143,14 @@ func latest(ts ...time.Time) time.Time {
 	return out
 }
 
-func (r *Reclaimer) inUse(ctx context.Context, path string) error {
+// inUse reports a live process using any of paths.
+func (r *Reclaimer) inUse(ctx context.Context, paths ...string) error {
 	if r.ProcessUse == nil {
 		return fmt.Errorf("process inspection unavailable")
 	}
 	probe, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	return r.ProcessUse(probe, []string{path})
+	return r.ProcessUse(probe, paths)
 }
 
 // Run runs a pass every PassInterval until ctx is done, when the mode says
@@ -204,8 +210,8 @@ func (r *Reclaimer) Pass(ctx context.Context, dryRun bool, trigger string) (rep 
 			"duration", rep.FinishedAt.Sub(rep.StartedAt).Round(time.Second))
 	}()
 	if !dryRun {
-		emptyTrash(ctx, r.ScratchRoot)
-		emptyTrash(ctx, r.WorktreeRoot)
+		r.emptyTrash(ctx, r.ScratchRoot)
+		r.emptyTrash(ctx, r.WorktreeRoot)
 	}
 	if r.ScratchRoot != "" {
 		rep.Scratch = r.scratchPass(ctx, dryRun)
@@ -214,8 +220,8 @@ func (r *Reclaimer) Pass(ctx context.Context, dryRun bool, trigger string) (rep 
 		rep.Worktrees = r.worktreePass(ctx, dryRun)
 	}
 	if !dryRun {
-		emptyTrash(ctx, r.ScratchRoot)
-		emptyTrash(ctx, r.WorktreeRoot)
+		r.emptyTrash(ctx, r.ScratchRoot)
+		r.emptyTrash(ctx, r.WorktreeRoot)
 	}
 	return rep
 }

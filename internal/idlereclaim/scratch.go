@@ -64,8 +64,8 @@ func (r *Reclaimer) scratchDir(ctx context.Context, dir string, dryRun bool) Ent
 		return r.scratchDirAdmitted(ctx, dir, true)
 	}
 	var e Entry
-	err := r.underLease(ctx, dir, func() error {
-		e = r.scratchDirAdmitted(context.WithValue(ctx, admissionKey{}, dir), dir, false)
+	err := r.underLease(ctx, dir, r.ScratchRoot, func(ctx context.Context) error {
+		e = r.scratchDirAdmitted(ctx, dir, false)
 		return nil
 	})
 	if err != nil {
@@ -136,7 +136,9 @@ func (r *Reclaimer) removeScratchDir(ctx context.Context, dir string, s dirScan,
 			}
 		}
 	}
-	if err := worktreereclaim.RemoveInventoriedScratch(ctx, dir, func(ctx context.Context) error {
+	// The content checks run again here, under the admission, on the tree as
+	// inventoried; the process and lease checks run once it is parked.
+	if err := worktreereclaim.RemoveInventoriedScratch(ctx, dir, r.quarantine(ctx, dir, func(ctx context.Context) error {
 		fresh := scanDir(ctx, dir)
 		if fresh.Keep || fresh.unmeasured() != "" || r.now().Sub(latest(fresh.Newest, lastOf(r.ScratchUse, dir), lastOf(r.ChatUse, dir))) < r.Config.ScratchRemoveIdle {
 			return fmt.Errorf("scratch authorization changed")
@@ -146,8 +148,8 @@ func (r *Reclaimer) removeScratchDir(ctx context.Context, dir string, s dirScan,
 				return fmt.Errorf("%s", reason)
 			}
 		}
-		return r.inUse(ctx, dir)
-	}); err != nil {
+		return nil
+	})); err != nil {
 		e.Action, e.Reason, e.Bytes, e.Removed = ActionHeld, "removing it: "+err.Error(), 0, nil
 		return e
 	}
@@ -188,12 +190,12 @@ func (r *Reclaimer) stripScratch(ctx context.Context, dir string, s dirScan, e *
 		}
 		if !dryRun {
 			if err := keepingMtime(filepath.Dir(t), r.ScratchRoot, func() error {
-				return worktreereclaim.RemoveInventoriedOutput(ctx, t, r.Config.ScratchStripIdle, now, func(ctx context.Context) error {
+				return worktreereclaim.RemoveInventoriedOutput(ctx, t, r.Config.ScratchStripIdle, now, r.quarantine(ctx, dir, func(ctx context.Context) error {
 					if gr := enclosingGitRoot(s.GitRoots, t); gr != nil && !untrackedOutput(ctx, gr.Path, t) {
 						return fmt.Errorf("output contains tracked files or is not ignored")
 					}
-					return r.inUse(ctx, dir)
-				})
+					return nil
+				}))
 			}); err != nil {
 				e.Held = append(e.Held, rel+": "+err.Error())
 				continue
@@ -228,8 +230,8 @@ func (r *Reclaimer) stripScratch(ctx context.Context, dir string, s dirScan, e *
 		}
 		n := dirBytes(root.Path, stripped)
 		if !dryRun {
-			err := r.underLease(ctx, dir, func() error {
-				return keepingMtime(filepath.Dir(root.Path), r.ScratchRoot, func() error { return removeWorktree(ctx, root.Path) })
+			err := r.underLease(ctx, dir, r.ScratchRoot, func(ctx context.Context) error {
+				return keepingMtime(filepath.Dir(root.Path), r.ScratchRoot, func() error { return removeWorktree(ctx, root.Path, r.quarantine(ctx, dir, nil)) })
 			})
 			if err != nil {
 				e.Held = append(e.Held, rel+": removing the git worktree: "+err.Error())

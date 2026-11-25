@@ -107,17 +107,17 @@ func (r *Reclaimer) worktreeCheckout(ctx context.Context, checkout string, dryRu
 			continue
 		}
 		if !dryRun {
-			if err := r.underLease(ctx, checkout, func() error {
+			if err := r.underLease(ctx, checkout, r.WorktreeRoot, func(ctx context.Context) error {
 				deep, why := checkoutNewest(ctx, checkout)
 				if why != "" || now.Sub(latest(deep, shallowActivity(checkout), lastOf(r.WorktreeUse, checkout))) < quiet {
 					return fmt.Errorf("checkout activity changed")
 				}
-				return worktreereclaim.RemoveInventoriedOutput(ctx, t, quiet, now, func(ctx context.Context) error {
+				return worktreereclaim.RemoveInventoriedOutput(ctx, t, quiet, now, r.quarantine(ctx, checkout, func(ctx context.Context) error {
 					if !untrackedOutput(ctx, checkout, t) {
 						return fmt.Errorf("output contains tracked files or is not ignored")
 					}
-					return r.inUse(ctx, checkout)
-				})
+					return nil
+				}))
 			}); err != nil {
 				e.Held = append(e.Held, rel+": "+err.Error())
 				continue

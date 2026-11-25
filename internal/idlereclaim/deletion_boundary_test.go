@@ -3,6 +3,7 @@ package idlereclaim
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -36,6 +37,48 @@ func TestScratchRevalidatesAfterAdmission(t *testing.T) {
 			require.True(t, exists(filepath.Join(dir, "app/dist/output.js")))
 		})
 	}
+}
+
+// The final process check runs once the directory is parked in the trash,
+// and again at deletion boundaries: a shell that enters it after that check
+// stops the deletion at the next boundary, and what is left goes back to its
+// path.
+func TestScratchStopsWhenAProcessEntersMidDelete(t *testing.T) {
+	h := newHarness(t)
+	dir := h.chat("c1")
+	for _, n := range []string{"a.md", "b.md", "c.md"} {
+		write(t, dir, "notes/"+n, n)
+	}
+	h.age(dir, 8*day)
+	trashRoot := filepath.Join(h.r.ScratchRoot, TrashDir)
+	processUse := h.r.ProcessUse
+	parkedChecks := 0
+	h.r.ProcessUse = func(ctx context.Context, paths []string) error {
+		for _, p := range paths {
+			if filepath.Dir(filepath.Dir(p)) != trashRoot {
+				continue
+			}
+			_, err := os.Lstat(dir)
+			require.ErrorIs(t, err, os.ErrNotExist, "the directory is parked before any check that covers its parked path")
+			parkedChecks++
+			// 1: the final check, before anything is deleted; 2: the boundary
+			// before notes/a.md; 3: before notes/b.md, where a shell has entered.
+			if parkedChecks >= 3 {
+				return errors.New("process 42 has its cwd in " + p)
+			}
+		}
+		return processUse(ctx, paths)
+	}
+
+	e := h.entry(h.pass(), dir)
+	require.Equal(t, ActionHeld, e.Action)
+	require.Contains(t, e.Reason, "deletion stopped")
+	require.Equal(t, 3, parkedChecks, "no boundary is crossed after the use is seen")
+	require.False(t, exists(filepath.Join(dir, "notes/a.md")))
+	for _, rel := range []string{"notes/b.md", "notes/c.md", "briefing.md"} {
+		require.True(t, exists(filepath.Join(dir, rel)), "%s is restored to its path", rel)
+	}
+	require.False(t, exists(trashRoot), "nothing stays parked")
 }
 
 func TestScratchPreservesForceAddedOutput(t *testing.T) {
