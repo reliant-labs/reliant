@@ -1421,13 +1421,13 @@ const file_services_storage_browser_v1_storage_browser_proto_rawDesc = "" +
 	"\x1fOBJECT_PREVIEW_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19OBJECT_PREVIEW_KIND_IMAGE\x10\x01\x12\x1c\n" +
 	"\x18OBJECT_PREVIEW_KIND_TEXT\x10\x02\x12\x1c\n" +
-	"\x18OBJECT_PREVIEW_KIND_JSON\x10\x032\xbe\x04\n" +
+	"\x18OBJECT_PREVIEW_KIND_JSON\x10\x032\xaf\x04\n" +
 	"\x15StorageBrowserService\x12x\n" +
-	"\x14ListBrowsableBuckets\x12,.controlplane.v1.ListBrowsableBucketsRequest\x1a-.controlplane.v1.ListBrowsableBucketsResponse\"\x03\x90\x02\x01\x12]\n" +
-	"\vListObjects\x12#.controlplane.v1.ListObjectsRequest\x1a$.controlplane.v1.ListObjectsResponse\"\x03\x90\x02\x01\x12o\n" +
-	"\x11GetObjectMetadata\x12).controlplane.v1.GetObjectMetadataRequest\x1a*.controlplane.v1.GetObjectMetadataResponse\"\x03\x90\x02\x01\x12v\n" +
-	"\x15PresignObjectDownload\x12-.controlplane.v1.PresignObjectDownloadRequest\x1a..controlplane.v1.PresignObjectDownloadResponse\x12c\n" +
-	"\rPreviewObject\x12%.controlplane.v1.PreviewObjectRequest\x1a&.controlplane.v1.PreviewObjectResponse\"\x03\x90\x02\x01B\xe4\x01\n" +
+	"\x14ListBrowsableBuckets\x12,.controlplane.v1.ListBrowsableBucketsRequest\x1a-.controlplane.v1.ListBrowsableBucketsResponse\"\x03\x90\x02\x01\x12X\n" +
+	"\vListObjects\x12#.controlplane.v1.ListObjectsRequest\x1a$.controlplane.v1.ListObjectsResponse\x12j\n" +
+	"\x11GetObjectMetadata\x12).controlplane.v1.GetObjectMetadataRequest\x1a*.controlplane.v1.GetObjectMetadataResponse\x12v\n" +
+	"\x15PresignObjectDownload\x12-.controlplane.v1.PresignObjectDownloadRequest\x1a..controlplane.v1.PresignObjectDownloadResponse\x12^\n" +
+	"\rPreviewObject\x12%.controlplane.v1.PreviewObjectRequest\x1a&.controlplane.v1.PreviewObjectResponseB\xe4\x01\n" +
 	"\x13com.controlplane.v1B\x13StorageBrowserProtoP\x01Z[github.com/reliant-labs/reliant/gen/controlplane/services/storage_browser/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (

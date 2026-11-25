@@ -31,13 +31,6 @@ vi.mock("@/lib/constants", async (importOriginal) => ({
 
 const mockLookup = vi.fn();
 const mockDecide = vi.fn();
-vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/controlPlane/orgs")>()),
-  listMyOrganizations: async () => ({
-    orgs: [{ id: "org-a", name: "Acme", slug: "acme", role: "owner", isOwner: true, isDefault: true }],
-    defaultOrgId: "org-a",
-  }),
-}));
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.example.test", hasControlPlane: true }));
 vi.mock("@/services/controlPlane/pairing", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/controlPlane/pairing")>();
@@ -52,6 +45,12 @@ import { describeTerminal } from "@/components/ReliantDownloadOptions";
 import { expectEveryCommandCopyable } from "@/test/commandBlocks";
 import { useAuthStore } from "@/store/authStore";
 import { PairMachinePanel } from "../PairMachinePanel";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { myOrgsHandlers } from "@/test/orgsTransport";
+
+beforeEach(() => setTransport(mockTransport(myOrgsHandlers({ listMyOrganizations: async () => ({ orgs: [{ id: "org-a", name: "Acme", slug: "acme", role: "owner", isOwner: true, isDefault: true }], defaultOrgId: "org-a" }) }))));
+afterEach(() => setTransport(null));
 
 function setPlatform(platform: string) {
   Object.defineProperty(navigator, "platform", { value: platform, configurable: true });

@@ -126,12 +126,35 @@ func (s *Service) handleFileSystemChanged(ctx context.Context, conn *daemonConne
 			"error", err, "daemonID", conn.daemonID, "path", projectPath)
 		return nil
 	}
-	project, err := s.deps.Projects.GetProjectByPathAndUserInScope(ctx, projectPath, conn.userID, scope)
-	if err != nil {
+	project := s.projectForAnnouncedPath(ctx, conn, projectPath, scope)
+	if project == nil {
 		return nil // project might not exist yet, that's fine
 	}
-	if project == nil {
+
+	// The checkout's nested repositories are cloned into it now that its
+	// root is there, and the row is settled when they are
+	// (tools_daemon_nested_clone.go), not here.
+	// A checkout with nested repositories that all settled is settled from
+	// them: failed when one did not clone, so a repeated announcement never
+	// turns a checkout missing one into installed. A failed read settles
+	// nothing: the next connect does.
+	nested, err := s.deps.Installs.ListProjectDaemonReposForPair(ctx, project.ID, conn.daemonID)
+	if err != nil {
+		logging.WarnContext(ctx, "could not read a checkout's nested repositories; not settling it (the next connect does)",
+			"error", err, "project_id", project.ID, "daemon_id", conn.daemonID)
 		return nil
+	}
+	if hasUnsettledNestedRepos(nested) {
+		s.cloneNestedReposAsync(ctx, conn, project.ID, projectPath, func(context.Context) (bool, error) { return true, nil })
+		return s.deps.Refetch.EmitUserRefetch(ctx, conn.userID, db.RefetchFileTree, db.RefetchOpts{
+			ProjectID: &project.ID,
+		})
+	}
+	if nestedFailureReason(nested) != "" {
+		settleNestedCheckout(ctx, nestedCloneAdapter{s.deps.Repo, s.deps.Installs}, project.ID, conn.daemonID, nested, scope)
+		return s.deps.Refetch.EmitUserRefetch(ctx, conn.userID, db.RefetchFileTree, db.RefetchOpts{
+			ProjectID: &project.ID,
+		})
 	}
 
 	// A clone dispatched by CreateProjectFromRepo left a project_daemons row
@@ -156,9 +179,37 @@ func (s *Service) handleFileSystemChanged(ctx context.Context, conn *daemonConne
 		s.learnForgeNameForProject(ctx, conn, project, projectPath)
 	}
 
-	return s.deps.Repo.EmitUserRefetch(ctx, conn.userID, db.RefetchFileTree, db.RefetchOpts{
+	return s.deps.Refetch.EmitUserRefetch(ctx, conn.userID, core.RefetchFileTree, core.RefetchOpts{
 		ProjectID: &project.ID,
 	})
+}
+
+// projectForAnnouncedPath is the user's project whose checkout on this
+// machine is at path, in the machine's scope, or nil.
+//
+// The machine's own checkout row is read first: a project set up on a second
+// machine lives at that machine's path (a Linux host's, for a project added
+// on a Mac), which is not the project's creation path, so a lookup by
+// projects.path alone never found it and its clone sat installing until a
+// connect's stale-clone pass. The creation path is the fallback, for a
+// checkout this machine has no row for yet.
+func (s *Service) projectForAnnouncedPath(ctx context.Context, conn *daemonConnection, path string, scope *core.OrgScope) *db.Project {
+	if rows, err := s.deps.Installs.ListProjectDaemonsForDaemon(ctx, conn.daemonID); err == nil {
+		for _, row := range rows {
+			if row == nil || normalizeProjectPath(row.Path) != path {
+				continue
+			}
+			project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, row.ProjectID, conn.userID)
+			if err == nil && project != nil && scope.Includes(project.OrgID) {
+				return project
+			}
+		}
+	}
+	project, err := s.deps.Projects.GetProjectByPathAndUserInScope(ctx, path, conn.userID, scope)
+	if err != nil {
+		return nil
+	}
+	return project
 }
 
 // learnForgeNameForProject reads forge.yaml's `name` off the daemon that just

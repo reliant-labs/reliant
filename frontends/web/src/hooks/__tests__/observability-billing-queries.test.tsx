@@ -2,7 +2,10 @@ import type { ReactNode } from "react";
 import { create } from "@bufbuild/protobuf";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { deployServiceKeys, useListEnvironments } from "@/hooks/controlplane/deploy-service-hooks_gen";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { GetObservabilityLimitsResponseSchema, UpdateObservabilityLimitsResponseSchema } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import { obsBillingKey, ObservabilityBillingApiContext, useObsBillingLimits, useUpdateObsLimits } from "../observability-billing-queries";
 
@@ -31,8 +34,9 @@ describe("observability limits pending writes", () => {
     await act(async () => { finish(create(UpdateObservabilityLimitsResponseSchema, { limits: savedA })); await completion; });
     expect(cache.getQueryData(limitsKey("A"))).toEqual(savedA);
     expect(cache.getQueryData(limitsKey("B"))).toEqual(b);
-    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledTimes(2);
     expect(invalidate).toHaveBeenCalledWith({ queryKey: obsBillingKey("A") });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: deployServiceKeys.listEnvironments({ orgId: "A" }) });
     expect(result.current.update.isIdle).toBe(true);
     expect(result.current.update.data).toBeUndefined();
     await act(async () => {
@@ -43,6 +47,28 @@ describe("observability limits pending writes", () => {
     expect(cache.getQueryState(limitsKey("B"))?.status).toBe("error");
     expect(result.current.limits.data).toEqual(b);
     expect(cache.getQueryData(limitsKey("B"))).toEqual(b);
+    unmount(); cache.clear();
+  });
+});
+
+describe("saving observability limits", () => {
+  afterEach(() => setTransport(null));
+
+  it("refetches that org's collection policy (DeployService.ListEnvironments), not another org's", async () => {
+    const listEnvironments = vi.fn((_req: unknown) => ({ environments: [] }));
+    setTransport(mockTransport({ "DeployService.ListEnvironments": listEnvironments }));
+    const saved = create(GetObservabilityLimitsResponseSchema, { spendCapCents: 6000n, version: 2n });
+    const api = { getObservabilityLimits: vi.fn(), updateObservabilityLimits: vi.fn(async () => create(UpdateObservabilityLimitsResponseSchema, { limits: saved })), getObservabilityUsage: vi.fn(), getObservabilityStorage: vi.fn(), listObservabilityUsage: vi.fn() };
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity }, mutations: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={cache}><ObservabilityBillingApiContext.Provider value={api}>{children}</ObservabilityBillingApiContext.Provider></QueryClientProvider>;
+    const { result, unmount } = renderHook(() => ({ update: useUpdateObsLimits("A"), policyA: useListEnvironments({ orgId: "A" }), policyB: useListEnvironments({ orgId: "B" }) }), { wrapper });
+    await waitFor(() => expect(result.current.policyA.isSuccess && result.current.policyB.isSuccess).toBe(true));
+    const orgsRead = () => listEnvironments.mock.calls.map(([req]) => (req as { orgId: string }).orgId);
+    expect(orgsRead().sort()).toEqual(["A", "B"]);
+
+    await act(async () => { await result.current.update.mutateAsync({ orgId: "A", expectedVersion: 1n, spendCapCents: 6000n }); });
+    await waitFor(() => expect(orgsRead().filter((org) => org === "A")).toHaveLength(2));
+    expect(orgsRead().filter((org) => org === "B")).toHaveLength(1);
     unmount(); cache.clear();
   });
 });

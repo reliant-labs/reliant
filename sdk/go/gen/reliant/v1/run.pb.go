@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -1143,7 +1144,15 @@ type ListRunsRequest struct {
 	// list under the caller's default org. Unset lists every one the caller
 	// owns, in any org, as before this field existed.
 	// A run belongs to its chat's org.
-	OrgId         *string `protobuf:"bytes,18,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	OrgId *string `protobuf:"bytes,18,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// List the runs of several projects at once: the side nav's choice of
+	// several projects (ListChatsRequest.project_ids). The projects listed are
+	// the union of project_id and project_ids; with both empty every project
+	// is listed, as before this field existed. Cross-cutting list only, and
+	// it narrows the unlaunched events the same way. Runs are still the
+	// caller's own, so an id that is not theirs contributes nothing. At most
+	// 200 ids, none of them empty (INVALID_ARGUMENT otherwise).
+	ProjectIds    []string `protobuf:"bytes,19,rep,name=project_ids,json=projectIds,proto3" json:"project_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1295,6 +1304,13 @@ func (x *ListRunsRequest) GetOrgId() string {
 		return *x.OrgId
 	}
 	return ""
+}
+
+func (x *ListRunsRequest) GetProjectIds() []string {
+	if x != nil {
+		return x.ProjectIds
+	}
+	return nil
 }
 
 type ListRunsResponse struct {
@@ -1503,7 +1519,17 @@ type LastRunPerWorkflowRequest struct {
 	ProjectId *string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
 	// Workflow restricts the result to these workflow names. Empty returns every
 	// workflow the caller has run.
-	Workflow      []string `protobuf:"bytes,2,rep,name=workflow,proto3" json:"workflow,omitempty"`
+	Workflow []string `protobuf:"bytes,2,rep,name=workflow,proto3" json:"workflow,omitempty"`
+	// Only this organization's runs (ListRunsRequest.org_id): it must be one
+	// the caller is a live member of (PERMISSION_DENIED otherwise), and runs
+	// created before orgs count under the caller's default org. Unset counts
+	// every run the caller owns, in any org, as before this field existed,
+	// except runs of an org they have left, which no list shows.
+	OrgId *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// Several projects at once (ListRunsRequest.project_ids): the union of
+	// project_id and project_ids; both empty is every project. At most 200
+	// ids, none of them empty (INVALID_ARGUMENT otherwise).
+	ProjectIds    []string `protobuf:"bytes,4,rep,name=project_ids,json=projectIds,proto3" json:"project_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1548,6 +1574,20 @@ func (x *LastRunPerWorkflowRequest) GetProjectId() string {
 func (x *LastRunPerWorkflowRequest) GetWorkflow() []string {
 	if x != nil {
 		return x.Workflow
+	}
+	return nil
+}
+
+func (x *LastRunPerWorkflowRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
+func (x *LastRunPerWorkflowRequest) GetProjectIds() []string {
+	if x != nil {
+		return x.ProjectIds
 	}
 	return nil
 }
@@ -2017,7 +2057,7 @@ var File_reliant_v1_run_proto protoreflect.FileDescriptor
 const file_reliant_v1_run_proto_rawDesc = "" +
 	"\n" +
 	"\x14reliant/v1/run.proto\x12\n" +
-	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15reliant/v1/chat.proto\"\xe8\a\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15reliant/v1/chat.proto\"\xe8\a\n" +
 	"\x03Run\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rworkflow_name\x18\x02 \x01(\tR\fworkflowName\x12\x16\n" +
@@ -2111,7 +2151,7 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\f_duration_msB\f\n" +
 	"\n" +
 	"_exit_codeB\x11\n" +
-	"\x0f_loop_iteration\"\x96\a\n" +
+	"\x0f_loop_iteration\"\xc8\a\n" +
 	"\x0fListRunsRequest\x12\"\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tH\x00R\tsessionId\x88\x01\x01\x12 \n" +
@@ -2136,7 +2176,9 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\x0eparent_chat_id\x18\x10 \x01(\tH\bR\fparentChatId\x88\x01\x01\x12?\n" +
 	"\x19include_unlaunched_events\x18\x11 \x01(\bH\tR\x17includeUnlaunchedEvents\x88\x01\x01\x12\x1a\n" +
 	"\x06org_id\x18\x12 \x01(\tH\n" +
-	"R\x05orgId\x88\x01\x01B\r\n" +
+	"R\x05orgId\x88\x01\x01\x120\n" +
+	"\vproject_ids\x18\x13 \x03(\tB\x0f\xbaH\f\x92\x01\t\x10\xc8\x01\"\x04r\x02\x10\x01R\n" +
+	"projectIdsB\r\n" +
 	"\v_session_idB\f\n" +
 	"\n" +
 	"_parent_idB\b\n" +
@@ -2168,12 +2210,16 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\aoutcome\x18\b \x01(\x0e2).reliant.v1.UnlaunchedTriggerEventOutcomeR\aoutcome\x12%\n" +
 	"\x0eoutcome_detail\x18\t \x01(\tR\routcomeDetail\x12)\n" +
 	"\x10workflow_trigger\x18\n" +
-	" \x01(\tR\x0fworkflowTrigger\"j\n" +
+	" \x01(\tR\x0fworkflowTrigger\"\xc3\x01\n" +
 	"\x19LastRunPerWorkflowRequest\x12\"\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x1a\n" +
-	"\bworkflow\x18\x02 \x03(\tR\bworkflowB\r\n" +
-	"\v_project_id\"A\n" +
+	"\bworkflow\x18\x02 \x03(\tR\bworkflow\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x01R\x05orgId\x88\x01\x01\x120\n" +
+	"\vproject_ids\x18\x04 \x03(\tB\x0f\xbaH\f\x92\x01\t\x10\xc8\x01\"\x04r\x02\x10\x01R\n" +
+	"projectIdsB\r\n" +
+	"\v_project_idB\t\n" +
+	"\a_org_id\"A\n" +
 	"\x1aLastRunPerWorkflowResponse\x12#\n" +
 	"\x04runs\x18\x01 \x03(\v2\x0f.reliant.v1.RunR\x04runs\"(\n" +
 	"\x0fPauseRunRequest\x12\x15\n" +

@@ -2,14 +2,19 @@ import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { UsageView } from "@/components/Forge/Observability/UsageView";
 import { ObservabilityBillingApiContext } from "@/hooks/observability-billing-queries";
 import { GetObservabilityUsageResponseSchema, GetObservabilityLimitsResponseSchema, GetObservabilityStorageResponseSchema, ListObservabilityUsageResponseSchema } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 
 const legacy = vi.hoisted(() => vi.fn(() => ({ isLoading: false, data: null, error: new Error("Legacy read failed"), refetch: vi.fn() })));
 vi.mock("@/hooks/observability-queries", () => ({ useObservabilityUsage: legacy }));
-vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => ({ listOrgLimitChanges: async () => ({ changes: [], nextPageToken: "" }), listEnvironments: async () => ({ environments: [] }) }) }));
+vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => ({ listOrgLimitChanges: async () => ({ changes: [], nextPageToken: "" }) }) }));
+// The collection policy reads DeployService.ListEnvironments through its generated hook, on the app transport.
+beforeEach(() => setTransport(mockTransport({ "DeployService.ListEnvironments": { response: { environments: [] } } })));
+afterEach(() => setTransport(null));
 function renderUsage(failure?: Code, exempt = false) {
   const get = vi.fn(async () => { if (failure) throw new ConnectError("billing read", failure); return create(GetObservabilityUsageResponseSchema, { usedBytes: 20n * 1073741824n, allowanceBytes: 10n * 1073741824n, chargedCents: 250n, unchargedBytes: 1073741824n, spendCapCents: 5000n, rateCentsPerGb: "25", state: 1, exempt }); });
   const api = { getObservabilityUsage: get, getObservabilityLimits: async () => create(GetObservabilityLimitsResponseSchema), getObservabilityStorage: async () => create(GetObservabilityStorageResponseSchema), listObservabilityUsage: async () => create(ListObservabilityUsageResponseSchema), updateObservabilityLimits: vi.fn() };

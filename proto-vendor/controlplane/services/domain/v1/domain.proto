@@ -60,10 +60,12 @@ service DomainService {
   }
   // GetDomain returns one domain of the caller's org, with its binding.
   rpc GetDomain(GetDomainRequest) returns (GetDomainResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   // ListDomains returns every domain of the caller's org, by hostname.
   rpc ListDomains(ListDomainsRequest) returns (ListDomainsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   // DeleteDomain removes a domain and its binding, and stops serving it.
@@ -131,6 +133,7 @@ service DomainService {
   // ListDomainBindings returns the caller org's bindings, optionally only
   // those in one environment.
   rpc ListDomainBindings(ListDomainBindingsRequest) returns (ListDomainBindingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 }

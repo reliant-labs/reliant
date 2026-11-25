@@ -139,12 +139,12 @@ func (membershipOnlyAcme) IsMember(_ context.Context, _, orgID string) (bool, bo
 func TestWorkerOptionsCarryMembershipToActivities(t *testing.T) {
 	acme, globex := "acme", "globex"
 	ctx := workerOptions(&Config{Membership: membershipOnlyAcme{}}, nil, 3).BackgroundActivityContext
-	if !authz.CanWriteChat(ctx, "u", &core.Chat{UserID: "u", OrgID: &acme}) ||
-		authz.CanWriteChat(ctx, "u", &core.Chat{UserID: "u", OrgID: &globex}) {
+	if !authz.CanOwnChat(ctx, "u", &core.Chat{UserID: "u", OrgID: &acme}) ||
+		authz.CanOwnChat(ctx, "u", &core.Chat{UserID: "u", OrgID: &globex}) {
 		t.Fatal("the activity context does not decide with the worker's membership")
 	}
 	noOrgs := workerOptions(&Config{}, nil, 3).BackgroundActivityContext
-	if !authz.CanWriteChat(noOrgs, "u", &core.Chat{UserID: "u", OrgID: &globex}) {
+	if !authz.CanOwnChat(noOrgs, "u", &core.Chat{UserID: "u", OrgID: &globex}) {
 		t.Fatal("with no membership configured the worker has no orgs: owner-only")
 	}
 }
@@ -158,7 +158,7 @@ func TestWorkerOptionsCarryTheOrgPolicyResolverToActivities(t *testing.T) {
 	if orgpolicy.ResolverFrom(ctx) != r {
 		t.Fatal("the activity context does not carry the worker's org policy resolver")
 	}
-	if !authz.CanWriteChat(ctx, "u", &core.Chat{UserID: "u", OrgID: ptr("acme")}) {
+	if !authz.CanOwnChat(ctx, "u", &core.Chat{UserID: "u", OrgID: ptr("acme")}) {
 		t.Fatal("membership is no longer on the activity context")
 	}
 }

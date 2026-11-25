@@ -220,7 +220,8 @@ const invoices = () =>
   [5_812n, 5_240n, 4_675n].map((cents, i) => ({
     id: `in_shop_${i + 1}`, amountDue: cents, amountPaid: cents, currency: "usd", status: "paid",
     periodStart: ts(monthStart(-1 - i)), periodEnd: ts(monthStart(-i)),
-    hostedInvoiceUrl: "https://invoice.stripe.com/i/shop", pdfUrl: "https://pay.stripe.com/invoice/shop/pdf",
+    // Bearer links in production (why ListCurrentUserInvoices declares no NO_SIDE_EFFECTS): obviously fake here.
+    hostedInvoiceUrl: "https://invoice.stripe.invalid/i/shop", pdfUrl: "https://pay.stripe.invalid/invoice/shop/pdf",
     createdAt: ts(monthStart(-i) + HOUR),
   }));
 

@@ -13,11 +13,13 @@
  * + port-access RPCs the section needs on top.
  *
  * Daemon lifecycle + billing go through `getControlPlaneClient(...)`
- * (controlplane.v1 public, dials platform-api). Access tokens are not here:
+ * (controlplane.v1 public, dials platform-api). Each takes an optional
+ * trailing `transport`, a TransportScope's (lib/transportScope.tsx), as
+ * getControlPlaneClient does; none is the app's. Access tokens are not here:
  * they are reliant.v1.TokenService on forge's generated hooks
  * (`hooks/token-queries.ts`).
  */
-import { ConnectError } from "@connectrpc/connect";
+import { ConnectError, type Transport } from "@connectrpc/connect";
 
 import { DaemonService } from "@/gen/controlplane/services/daemon/v1/daemon_pb";
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
@@ -57,16 +59,11 @@ export function describeError(err: unknown, fallback = "Something went wrong"): 
 }
 
 // ── Daemon lifecycle (controlplane.v1.DaemonService) ────────────────────────
-
-export interface GetDaemonResult {
-  daemon: Daemon | undefined;
-  workspaceBaseDomain: string;
-}
-
-export async function getDaemon(daemonId: string): Promise<GetDaemonResult> {
-  const res = await getControlPlaneClient(DaemonService).getDaemon({ daemonId });
-  return { daemon: res.daemon, workspaceBaseDomain: res.workspaceBaseDomain };
-}
+// GetDaemon, ListPortAccessRules, DeleteDaemon, SetDefaultPortAccess and the
+// single-call writes run on DaemonService's generated hooks
+// (hooks/controlplane/daemon-service-hooks_gen.ts). What stays here is called
+// outside a single mutation: the restart/resize/grow choreography
+// (Settings › Machines) and the chip's set-or-remove toggle (DetectedPortsChip).
 
 export interface CreateEnvironmentArgs {
   name: string;
@@ -77,8 +74,8 @@ export interface CreateEnvironmentArgs {
   gitBranch?: string;
 }
 
-export async function createEnvironment(args: CreateEnvironmentArgs): Promise<Daemon | undefined> {
-  const res = await getControlPlaneClient(DaemonService).createDaemon({
+export async function createEnvironment(args: CreateEnvironmentArgs, transport?: Transport): Promise<Daemon | undefined> {
+  const res = await getControlPlaneClient(DaemonService, transport).createDaemon({
     name: args.name,
     daemonType: DaemonType.MANAGED,
     size: args.size,
@@ -97,8 +94,8 @@ export async function createEnvironment(args: CreateEnvironmentArgs): Promise<Da
  * (control-plane docs/design/daemon-resize.md); resizing a running machine is
  * stop → resize → start, which `restartMachine`'s `resize` step drives.
  */
-export async function resizeDaemon(daemonId: string, size: DaemonSize): Promise<void> {
-  await getControlPlaneClient(DaemonService).resizeDaemon({ daemonId, size });
+export async function resizeDaemon(daemonId: string, size: DaemonSize, transport?: Transport): Promise<void> {
+  await getControlPlaneClient(DaemonService, transport).resizeDaemon({ daemonId, size });
 }
 
 /**
@@ -108,36 +105,20 @@ export async function resizeDaemon(daemonId: string, size: DaemonSize): Promise<
  * at once, running or suspended. A running machine USES the space only after
  * its next restart, which is why the detail view offers to restart it.
  */
-export async function growDaemonDisk(daemonId: string, storageGib: number): Promise<Daemon | undefined> {
-  const res = await getControlPlaneClient(DaemonService).growDaemonDisk({ daemonId, storageGib });
+export async function growDaemonDisk(daemonId: string, storageGib: number, transport?: Transport): Promise<Daemon | undefined> {
+  const res = await getControlPlaneClient(DaemonService, transport).growDaemonDisk({ daemonId, storageGib });
   return res.daemon;
 }
 
-export async function suspendDaemon(daemonId: string): Promise<void> {
-  await getControlPlaneClient(DaemonService).suspendDaemon({ daemonId });
+export async function suspendDaemon(daemonId: string, transport?: Transport): Promise<void> {
+  await getControlPlaneClient(DaemonService, transport).suspendDaemon({ daemonId });
 }
 
-export async function resumeEnvironment(daemonId: string): Promise<void> {
-  await getControlPlaneClient(DaemonService).resumeDaemon({ daemonId });
-}
-
-export async function deleteDaemon(daemonId: string): Promise<void> {
-  await getControlPlaneClient(DaemonService).deleteDaemon({ daemonId });
+export async function resumeEnvironment(daemonId: string, transport?: Transport): Promise<void> {
+  await getControlPlaneClient(DaemonService, transport).resumeDaemon({ daemonId });
 }
 
 // ── Port access ─────────────────────────────────────────────────────────────
-
-// Shared React Query key for a daemon's port-access rules. Exported so every
-// surface that reads or mutates rules (the Settings → Environments panel AND
-// the header DetectedPortsChip one-click-public toggle) keys the same cache
-// entry — a "Make public" in the chip invalidates the panel and vice-versa.
-export const portAccessRulesQueryKey = (daemonId: string) =>
-  ["cp", "environments", "ports", daemonId] as const;
-
-export async function listPortAccessRules(daemonId: string): Promise<PortAccessRule[]> {
-  const res = await getControlPlaneClient(DaemonService).listPortAccessRules({ daemonId });
-  return res.rules;
-}
 
 export interface SetPortAccessResult {
   rule: PortAccessRule | undefined;
@@ -149,32 +130,18 @@ export async function setPortAccess(args: {
   daemonId: string;
   port: number;
   accessMode: PortAccessMode;
-}): Promise<SetPortAccessResult> {
-  const res = await getControlPlaneClient(DaemonService).setPortAccess(args);
+}, transport?: Transport): Promise<SetPortAccessResult> {
+  const res = await getControlPlaneClient(DaemonService, transport).setPortAccess(args);
   return { rule: res.rule, accessToken: res.accessToken };
 }
 
-export async function removePortAccess(daemonId: string, port: number): Promise<void> {
-  await getControlPlaneClient(DaemonService).removePortAccess({ daemonId, port });
-}
-
-// ── Default port access (workspace-level) ────────────────────────────────────
-// The policy the preview proxy applies to a listening port that has NO explicit
-// per-port rule. AUTHENTICATED (safe: only the owner) is the global default;
-// PUBLIC opts the whole workspace into zero-click sharing (every unruled port
-// reachable by URL). Explicit per-port rules always override this. Read the
-// current value from getDaemon(...).daemon.defaultPortAccess.
-export async function setDefaultPortAccess(args: {
-  daemonId: string;
-  defaultAccessMode: PortAccessMode;
-}): Promise<Daemon | undefined> {
-  const res = await getControlPlaneClient(DaemonService).setDefaultPortAccess(args);
-  return res.daemon;
+export async function removePortAccess(daemonId: string, port: number, transport?: Transport): Promise<void> {
+  await getControlPlaneClient(DaemonService, transport).removePortAccess({ daemonId, port });
 }
 
 // ── Compute subscription (plan-gated size picker) ───────────────────────────
 
-export async function getComputeSubscription(): Promise<Subscription | null> {
-  const res = await getControlPlaneClient(BillingService).getCurrentUserComputeSubscription({});
+export async function getComputeSubscription(transport?: Transport): Promise<Subscription | null> {
+  const res = await getControlPlaneClient(BillingService, transport).getCurrentUserComputeSubscription({});
   return res.subscription ?? null;
 }

@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"go.temporal.io/sdk/activity"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/toolbindings"
-	"go.temporal.io/sdk/activity"
 )
 
 // leveledLogger is the narrow slice of logging this file needs, declared at

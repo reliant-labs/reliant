@@ -173,6 +173,8 @@ func (p *projector) snapshot(provider string, ev Event, repository string, pr ma
 		SnapshotAt:   updated.UTC(),
 		ObservedAt:   now,
 		Full:         full,
+		// head.repo is absent when the head repository was deleted.
+		HeadRepository: strOf(mapOf(head["repo"])["full_name"]),
 	}
 	if id, ok := intOf(user["id"]); ok {
 		s.AuthorID = strconv.FormatInt(int64(id), 10)

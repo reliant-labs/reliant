@@ -27,7 +27,7 @@ import (
 func (f *noMachineFixture) turnAs(t *testing.T, cfg *reliantv1.ToolsConfig, rtx RuntimeContext) *reliantv1.CallLLMOutput {
 	t.Helper()
 	rtx.ChatID, rtx.Thread = f.chat.ID, f.chat.ID
-	callLLM := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(f.h.Repo()), Store: f.h.Repo(), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: f.h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: f.callLLM.driverResolver, MCPBinder: f.callLLM.mcpBinder})
+	callLLM := NewCallLLMActivity(CallLLMDeps{Store: f.h.Repo(), Mailbox: store.NewAgentMessageExtStore(f.h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: f.h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: f.callLLM.driverResolver, MCPBinder: f.callLLM.mcpBinder})
 	var output CallLLMOutput
 	require.NoError(t, f.h.ExecuteActivity(callLLM.Execute, ActivityInput{
 		Runtime: rtx,

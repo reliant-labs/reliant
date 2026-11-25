@@ -274,7 +274,9 @@ jobs:
   # was one of the three jobs that set the run's wall time (~15 min). The
   # webbuild part is also the renderer's release build on main: the
   # `web-bundle` job runs the same `task build:web:verify` and now runs only on
-  # a ci:run pull request, where no release gate runs. The RC train
+  # a ci:run pull request, where no release gate runs. It also holds the
+  # forge demo bundle to its size budget (demo-size, task demo:bundle-size)
+  # after the renderer's build: release-only. The RC train
   # (control-plane scripts/rc/rl-gate.sh) still runs static whole; assemble
   # takes either.
   #

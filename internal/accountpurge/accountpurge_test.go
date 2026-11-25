@@ -120,7 +120,13 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 	      VALUES ($1,$2,$3,'anthropic','m','byok','chat','success',1,$4)`, id("llm"), userID, id("chat"), now)
 	exec(`INSERT INTO llm_call_usage_daily (user_id, day, provider, model, auth_mode, purpose, calls)
 	      VALUES ($1,$2,'anthropic','m','byok','chat',1)`, userID, now)
+	exec(`INSERT INTO tool_call_usage (id, attempt, user_id, chat_id, tool_name, tool_kind, location, outcome, created_at)
+	      VALUES ($1,1,$2,$3,'shell','builtin','daemon','success',$4)`, id("tool"), userID, id("chat"), now)
 	exec(`INSERT INTO user_app_sessions (user_id, first_session_at) VALUES ($1,$2)`, userID, now)
+	exec(`INSERT INTO insights_model_calls_member_daily (user_id, day, provider, model, auth_mode, purpose, outcome, calls, latency_ms_hist, ttft_ms_hist)
+	      VALUES ($1,$2,'anthropic','m','byok','chat','success',1,array_fill(0::bigint, ARRAY[48]),array_fill(0::bigint, ARRAY[48]))`, userID, now)
+	exec(`INSERT INTO insights_tool_calls_member_daily (user_id, day, tool_name, tool_kind, location, outcome, calls, duration_ms_hist)
+	      VALUES ($1,$2,'shell','builtin','daemon','success',1,array_fill(0::bigint, ARRAY[48]))`, userID, now)
 }
 
 // ownershipCount maps a table to the query that counts one user's rows in it.
@@ -128,15 +134,18 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 // workflows through chat_id, which is exactly the kind of detail a purge gets
 // wrong, so the test spells the real path out rather than assuming a column.
 var ownershipCount = map[string]string{
-	"projects":                `SELECT COUNT(*) FROM projects WHERE user_id = $1`,
-	"chats":                   `SELECT COUNT(*) FROM chats WHERE user_id = $1`,
-	"settings":                `SELECT COUNT(*) FROM settings WHERE user_id = $1`,
-	"llm_call_usage":          `SELECT COUNT(*) FROM llm_call_usage WHERE user_id = $1`,
-	"llm_call_usage_daily":    `SELECT COUNT(*) FROM llm_call_usage_daily WHERE user_id = $1`,
-	"user_app_sessions":       `SELECT COUNT(*) FROM user_app_sessions WHERE user_id = $1`,
-	"api_keys":                `SELECT COUNT(*) FROM api_keys WHERE user_id = $1`,
-	"provider_accounts":       `SELECT COUNT(*) FROM provider_accounts WHERE user_id = $1`,
-	"provider_account_limits": `SELECT COUNT(*) FROM provider_account_limits WHERE user_id = $1`,
+	"projects":                          `SELECT COUNT(*) FROM projects WHERE user_id = $1`,
+	"chats":                             `SELECT COUNT(*) FROM chats WHERE user_id = $1`,
+	"settings":                          `SELECT COUNT(*) FROM settings WHERE user_id = $1`,
+	"llm_call_usage":                    `SELECT COUNT(*) FROM llm_call_usage WHERE user_id = $1`,
+	"llm_call_usage_daily":              `SELECT COUNT(*) FROM llm_call_usage_daily WHERE user_id = $1`,
+	"tool_call_usage":                   `SELECT COUNT(*) FROM tool_call_usage WHERE user_id = $1`,
+	"user_app_sessions":                 `SELECT COUNT(*) FROM user_app_sessions WHERE user_id = $1`,
+	"insights_model_calls_member_daily": `SELECT COUNT(*) FROM insights_model_calls_member_daily WHERE user_id = $1`,
+	"insights_tool_calls_member_daily":  `SELECT COUNT(*) FROM insights_tool_calls_member_daily WHERE user_id = $1`,
+	"api_keys":                          `SELECT COUNT(*) FROM api_keys WHERE user_id = $1`,
+	"provider_accounts":                 `SELECT COUNT(*) FROM provider_accounts WHERE user_id = $1`,
+	"provider_account_limits":           `SELECT COUNT(*) FROM provider_account_limits WHERE user_id = $1`,
 	"thread_provider_accounts": `SELECT COUNT(*) FROM thread_provider_accounts t
 	                               JOIN provider_accounts a ON a.id = t.account_id WHERE a.user_id = $1`,
 	"worktrees": `SELECT COUNT(*) FROM worktrees w
@@ -191,8 +200,9 @@ func TestPurge_RemovesEverythingForUser(t *testing.T) {
 	// Includes the join-reached tables (messages, threads, tool_calls,
 	// worktrees) — the ones a user_id-only purge would silently orphan.
 	for _, table := range append([]string{
-		"projects", "chats", "worktrees", "settings", "llm_call_usage", "llm_call_usage_daily",
+		"projects", "chats", "worktrees", "settings", "llm_call_usage", "llm_call_usage_daily", "tool_call_usage",
 		"user_app_sessions", "messages", "threads", "tool_calls",
+		"insights_model_calls_member_daily", "insights_tool_calls_member_daily",
 		"provider_account_limits", "thread_provider_accounts",
 		"chat_updates", "chat_update_heads",
 	}, credentialTables...) {
@@ -713,5 +723,141 @@ func TestPurge_RemovesTheRunScopeOfModelCalls(t *testing.T) {
 	}
 	if n != 0 {
 		t.Errorf("llm_call_usage: %d rows still name the purged account's runs, want 0", n)
+	}
+}
+
+// A purged user's chat grants go with them (control-plane
+// docs/design/chat-collaboration.md §3.1): the grants they held on other
+// people's chats, and every grant on their own chats. Another person's
+// grants on another person's chat stay.
+func TestPurge_RemovesChatGrants(t *testing.T) {
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
+	defer cleanup()
+	ctx := context.Background()
+	const victim, bystander, third = "user-deleted", "user-retained", "user-third"
+	seedUser(t, rawDB, victim)
+	seedUser(t, rawDB, bystander)
+	// The victim holds a grant on the bystander's chat; the bystander and a
+	// third person hold grants on the victim's chat; the third person holds
+	// one on the bystander's chat.
+	mustExec(t, rawDB, `INSERT INTO chat_members (chat_id, user_id, role, granted_by) VALUES
+		('chat-user-retained', $1, 'reply', $2),
+		('chat-user-deleted', $2, 'manage', $1),
+		('chat-user-deleted', $3, 'view', $1),
+		('chat-user-retained', $3, 'view', $2)`, victim, bystander, third)
+
+	if _, err := purger.Purge(ctx, victim); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+	var held, onTheirs, kept int
+	if err := rawDB.QueryRowContext(ctx, `SELECT
+		(SELECT count(*) FROM chat_members WHERE user_id = $1),
+		(SELECT count(*) FROM chat_members WHERE chat_id = 'chat-user-deleted'),
+		(SELECT count(*) FROM chat_members WHERE chat_id = 'chat-user-retained' AND user_id = $2)`,
+		victim, third).Scan(&held, &onTheirs, &kept); err != nil {
+		t.Fatal(err)
+	}
+	if held != 0 || onTheirs != 0 {
+		t.Errorf("the purge left %d grants the victim held and %d on their chat, want none", held, onTheirs)
+	}
+	if kept != 1 {
+		t.Errorf("the purge removed another person's grant on another person's chat")
+	}
+}
+
+// A tool call in flight when its account is deleted finishes afterwards and
+// writes its usage record (tool_call_usage). It takes the model calls' lock
+// and fence, so the record either commits first and goes with the purge, or
+// is refused: none outlives the account.
+func TestPurge_AnInFlightToolCallCannotRecreateUsage(t *testing.T) {
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
+	defer cleanup()
+	ctx := context.Background()
+	at := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC) // fixture data, not a clock
+
+	const userID = "user-tool-in-flight"
+	seedUser(t, rawDB, userID)
+	rec := func(id string) store.ToolCallUsageRecord {
+		return store.ToolCallUsageRecord{
+			ID: id, Attempt: 1, UserID: userID, ChatID: "chat-" + userID, ToolName: "shell",
+			ToolKind: store.ToolKindBuiltin, Location: "daemon", Outcome: store.ToolOutcomeSuccess, CreatedAt: at,
+		}
+	}
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			// The account purge tombstones no chat, so the table's write
+			// admission admits a late write; the fence refuses it.
+			if _, err := llmusagetest.New(t, repo).RecordToolCallUsage(ctx, rec(fmt.Sprintf("late-%d", i))); err != nil {
+				t.Errorf("RecordToolCallUsage: %v", err)
+			}
+		}()
+	}
+	close(start)
+	if _, err := purger.Purge(ctx, userID); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+	wg.Wait()
+	if n := countRows(t, rawDB, "tool_call_usage", userID); n != 0 {
+		t.Errorf("tool_call_usage: %d rows for a purged account, want 0", n)
+	}
+
+	written, err := llmusagetest.New(t, repo).RecordToolCallUsage(ctx, rec("much-later"))
+	if err != nil || written {
+		t.Fatalf("a tool call after the purge: written=%v err=%v, want refused", written, err)
+	}
+}
+
+// A member's insights rollups (agent-analytics.md §3.1) go with the account;
+// the org's team totals, which name no one, stay. A call that predates the
+// rollups goes with the purge too, so the backfill folds nothing for the
+// account afterwards.
+func TestPurge_RemovesInsightsMemberRowsKeepsTeamTotals(t *testing.T) {
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
+	defer cleanup()
+	ctx := context.Background()
+	at := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC) // fixture data, not a clock
+
+	const userID = "user-insights"
+	seedUser(t, rawDB, userID)
+	ledger := llmusagetest.New(t, repo)
+	call := func(id string) db.LLMCallUsage {
+		return db.LLMCallUsage{ID: id, UserID: userID, OrgID: "org-insights", ChatID: "chat-" + userID, Provider: "reliant",
+			Model: "m", AuthMode: "managed", Purpose: "chat", Outcome: "success", Attempt: 1, CreatedAt: at}
+	}
+	for _, id := range []string{"a", "b"} {
+		if written, err := ledger.RecordLLMCallUsage(ctx, call(id)); err != nil || !written {
+			t.Fatalf("RecordLLMCallUsage: written=%v err=%v", written, err)
+		}
+	}
+	if _, err := rawDB.Exec(`UPDATE llm_call_usage SET insights_folded = false WHERE id = 'b'`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := purger.Purge(ctx, userID); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+	if n, err := ledger.FoldInsights(ctx); err != nil || n != 0 {
+		t.Fatalf("FoldInsights after the purge: folded=%d err=%v, want nothing left to fold", n, err)
+	}
+	for _, table := range []string{"insights_model_calls_member_daily", "insights_tool_calls_member_daily"} {
+		if n := countRows(t, rawDB, table, userID); n != 0 {
+			t.Errorf("%s: %d rows survived the purge, want 0", table, n)
+		}
+	}
+	var team int
+	if err := rawDB.QueryRow(`SELECT coalesce(sum(calls), 0) FROM insights_model_calls_daily WHERE org_id = 'org-insights'`).Scan(&team); err != nil {
+		t.Fatal(err)
+	}
+	if team != 2 {
+		t.Errorf("the org's team totals after the purge: %d calls, want 2", team)
 	}
 }

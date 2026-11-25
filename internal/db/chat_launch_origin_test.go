@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -75,7 +77,7 @@ func TestChatReadsCarryLaunchOrigin(t *testing.T) {
 		assert.Equal(t, triggerID, *chat.TriggerID)
 	})
 	t.Run("GetChatWithUserCheck interactive", func(t *testing.T) {
-		chat, err := repo.GetChatWithUserCheck(ctx, "origin-interactive", "test-user")
+		chat, err := store.GetChatWithUserCheck(ctx, repo.ORM(), "origin-interactive", "test-user")
 		require.NoError(t, err)
 		assert.Equal(t, "chat.start", chat.LaunchKind)
 		assert.Nil(t, chat.TriggerID)

@@ -99,8 +99,34 @@ func (m *MockProjectReader) GetProject(ctx context.Context, id string) (*db.Proj
 // Compile-time check.
 var _ ProjectReader = (*MockProjectReader)(nil)
 
+// forge:section MockChatReader
+// forge:hash=210130601684bfdb66362ca1ac208e8d50eb0a2ea91e01e2c58b875a799f519e
+
+// MockChatReader is a test mock for the ChatReader interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockChatReader.<Method>Func not set" error.
+type MockChatReader struct {
+	contractkit.Recorder
+	GetChatFunc func(context.Context, string) (*db.Chat, error)
+}
+
+// GetChat records the call and delegates to GetChatFunc when set.
+func (m *MockChatReader) GetChat(ctx context.Context, id string) (*db.Chat, error) {
+	m.Recorder.Record("GetChat", ctx, id)
+	if m.GetChatFunc != nil {
+		return m.GetChatFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockChatReader", "GetChat")
+}
+
+// Compile-time check.
+var _ ChatReader = (*MockChatReader)(nil)
+
 // forge:section MockChatWriter
-// forge:hash=3cc972b7dfc8843493cd9fe0f29c71bddfc9c827677ca3791d807164a52a7498
+// forge:hash=9a07deb2b182753e4ee444fecf5136cfe74b7c8c786290fa1d67d0d378a2f204
 
 // MockChatWriter is a test mock for the ChatWriter interface.
 //
@@ -112,7 +138,6 @@ type MockChatWriter struct {
 	contractkit.Recorder
 	LockUserOrgsFunc            func(context.Context, string, ...db.OrgRead) error
 	CreateChatFunc              func(context.Context, *db.Chat) error
-	GetChatFunc                 func(context.Context, string) (*db.Chat, error)
 	UpdateChatFunc              func(context.Context, *db.Chat) error
 	UpdateChatActiveDaemonFunc  func(context.Context, string, *string) error
 	CountMessagesInChatFunc     func(context.Context, string) (int, error)
@@ -137,15 +162,6 @@ func (m *MockChatWriter) CreateChat(ctx context.Context, chat *db.Chat) error {
 		return m.CreateChatFunc(ctx, chat)
 	}
 	return contractkit.MockNotSet("MockChatWriter", "CreateChat")
-}
-
-// GetChat records the call and delegates to GetChatFunc when set.
-func (m *MockChatWriter) GetChat(ctx context.Context, id string) (*db.Chat, error) {
-	m.Recorder.Record("GetChat", ctx, id)
-	if m.GetChatFunc != nil {
-		return m.GetChatFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockChatWriter", "GetChat")
 }
 
 // UpdateChat records the call and delegates to UpdateChatFunc when set.
@@ -684,7 +700,7 @@ func (m *MockTransactor) RunTx(p0 context.Context, policy orm.TxPolicy, f func(c
 var _ Transactor = (*MockTransactor)(nil)
 
 // forge:section MockStore
-// forge:hash=0cc284fc4cd16c6b356b1d0bea20e82bb6f36a0cbce19ec3c7b3826adcc3ec25
+// forge:hash=5b78dc20c3a9d6f4a917523b2282bc2f432138339444e3677dae43a7e5b338ce
 
 // MockStore is a test mock for the Store interface.
 //
@@ -696,7 +712,6 @@ type MockStore struct {
 	contractkit.Recorder
 	LockUserOrgsFunc                   func(context.Context, string, ...db.OrgRead) error
 	CreateChatFunc                     func(context.Context, *db.Chat) error
-	GetChatFunc                        func(context.Context, string) (*db.Chat, error)
 	UpdateChatFunc                     func(context.Context, *db.Chat) error
 	UpdateChatActiveDaemonFunc         func(context.Context, string, *string) error
 	CountMessagesInChatFunc            func(context.Context, string) (int, error)
@@ -744,15 +759,6 @@ func (m *MockStore) CreateChat(ctx context.Context, chat *db.Chat) error {
 		return m.CreateChatFunc(ctx, chat)
 	}
 	return contractkit.MockNotSet("MockStore", "CreateChat")
-}
-
-// GetChat records the call and delegates to GetChatFunc when set.
-func (m *MockStore) GetChat(ctx context.Context, id string) (*db.Chat, error) {
-	m.Recorder.Record("GetChat", ctx, id)
-	if m.GetChatFunc != nil {
-		return m.GetChatFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockStore", "GetChat")
 }
 
 // UpdateChat records the call and delegates to UpdateChatFunc when set.

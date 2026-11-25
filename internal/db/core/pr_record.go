@@ -62,6 +62,12 @@ type PRRecordSnapshot struct {
 	SnapshotAt   time.Time
 	ObservedAt   time.Time
 	Full         bool
+	// HeadRepository is owner/name of the repository the head branch lives
+	// in: a fork's for a fork's pull request, "" when the event did not say
+	// (GitHub sends no head repository once it was deleted). Not stored on
+	// the record: only the chat link inference reads it (chat_pr_links), to
+	// tell the PR's own branch from a fork's branch of the same name.
+	HeadRepository string
 	// Delta is what this event's own action changed. GitHub's updated_at has
 	// one-second resolution, so two events of one pull request can carry the
 	// same snapshot time; then neither snapshot is newer, and each applies

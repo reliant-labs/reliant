@@ -13,7 +13,8 @@ import { X } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
-import { useChangesApi } from "@/services/controlPlane/changes/ChangesApiContext";
+import { NO_REFETCH, useChangeWrites } from "@/hooks/changes-queries";
+import { setChangePreviewRequest } from "@/services/controlPlane/changes/changesRequests";
 import type { Change, ChangePreviewInput } from "@/services/controlPlane/changes/changesTypes";
 
 import { FIELD } from "../controlStyles";
@@ -27,7 +28,7 @@ interface Row extends ChangePreviewInput {
 const rowsOf = (change: Change): Row[] => change.preview.map((e) => ({ rowKey: `h:${e.unitHash}`, unitHash: e.unitHash, variant: e.variant, label: e.label }));
 
 export function PreviewEditor({ change, busy, onWrite }: { change: Change; busy: string | null; onWrite: ChangeWrite }) {
-  const api = useChangesApi();
+  const writes = useChangeWrites();
   const id = useId();
   const variants = change.declaration?.variants.map((v) => v.name) ?? [];
   const [rows, setRows] = useState<Row[]>(() => rowsOf(change));
@@ -52,11 +53,14 @@ export function PreviewEditor({ change, busy, onWrite }: { change: Change; busy:
   };
   const save = () =>
     onWrite("Save preview list", () =>
-      api.setChangePreview(
-        change.id,
-        change.revision,
-        rows.map(({ rowKey: _k, ...r }) => r),
-        activate && change.mode === "off"
+      writes.setChangePreview(
+        setChangePreviewRequest(
+          change.id,
+          change.revision,
+          rows.map(({ rowKey: _k, ...r }) => r),
+          activate && change.mode === "off"
+        ),
+        NO_REFETCH
       )
     );
 

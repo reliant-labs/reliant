@@ -11,6 +11,7 @@
  * The forge demo's bundle (demo.html) never imports this module.
  */
 
+import { useAuthStore } from "../../../store/authStore";
 import { useChatStore } from "../../../store/chatStore";
 import { useProjectStore } from "../../../store/projectStore";
 import { chatRouteAfterTour } from "../../OnboardingFlow/useOnboardingComplete";
@@ -32,4 +33,5 @@ setReliantTourHooks({
     useApiKeySetupStore.setState({ hasChecked: false });
     await useApiKeySetupStore.getState().ensureApiKeyOrShowModal();
   },
+  inAppShell: () => useAuthStore.getState().user != null,
 });

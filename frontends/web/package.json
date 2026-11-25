@@ -46,6 +46,38 @@
       "WorkflowService",
       "WorktreeReclaimService",
       "WorktreeService"
+    ],
+    "imported_hooks": [
+      {
+        "proto_root": "../../proto-vendor/controlplane",
+        "gen_dir": "controlplane",
+        "services": [
+          "controlplane.v1.AccessTokenService",
+          "controlplane.v1.ActivityService",
+          "controlplane.v1.AlertingService",
+          "controlplane.v1.AppDatabaseService",
+          "controlplane.v1.BillingService",
+          "controlplane.v1.ChangesService",
+          "controlplane.v1.DaemonService",
+          "controlplane.v1.DashboardService",
+          "controlplane.v1.DeliveryInsightsService",
+          "controlplane.v1.DeployService",
+          "controlplane.v1.GitCredentialService",
+          "controlplane.v1.IdentityService",
+          "controlplane.v1.IssuesService",
+          "controlplane.v1.LLMGatewayService",
+          "controlplane.v1.ObservabilityService",
+          "controlplane.v1.OrgPolicyService",
+          "controlplane.v1.OrganizationService",
+          "controlplane.v1.RumService",
+          "controlplane.v1.SecretStoreService",
+          "controlplane.v1.StorageBrowserService",
+          "controlplane.v1.TestsService",
+          "controlplane.v1.UserService",
+          "controlplane.v1.VulnerabilityService",
+          "observability_billing.v1.ObservabilityBillingService"
+        ]
+      }
     ]
   },
   "scripts": {
@@ -79,7 +111,7 @@
     "@monaco-editor/loader": "^1.7.0",
     "@monaco-editor/react": "^4.7.0",
     "@opentelemetry/api": "^1.9.1",
-    "@reliantlabs/forge-web-runtime": "^0.13.21",
+    "@reliantlabs/forge-web-runtime": "^0.13.22",
     "@reliantlabs/sdk": "workspace:*",
     "@rrweb/replay": "2.1.7",
     "@stripe/react-stripe-js": "3.10.0",

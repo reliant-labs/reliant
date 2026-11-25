@@ -45,7 +45,7 @@ import type { MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport
 import { shopTestsAnswers } from "../model/tests";
 import { demoNow } from "../shopStory";
 import { withMessageRequests } from "./defaults";
-import { scopedToDemo } from "./scope";
+import { DEMO_SCOPE, scopedToDemo, type PackScope } from "./scope";
 
 const rpc = (method: string) => `${TestsService.typeName}/${method}`;
 
@@ -107,10 +107,10 @@ function targetOf(target: GetCoverageRequest["target"]): CoverageTarget {
  * requests normalized to messages and reads outside shop answered empty
  * (scope.ts).
  */
-export function testsHandlers(now: () => number = demoNow): MockHandlers {
+export function testsHandlers(now: () => number = demoNow, scope: PackScope = DEMO_SCOPE): MockHandlers {
   // One model per transport: its answers are fixed by the pack clock, which never moves.
   let model: ReturnType<typeof shopTestsAnswers> | null = null;
-  const answers = () => (model ??= shopTestsAnswers(now()));
+  const answers = () => (model ??= shopTestsAnswers(now(), scope.app));
   const handlers: MockHandlers = {
     [TESTS_RPCS.getTestSummary]: (req: GetTestSummaryRequest) =>
       create(GetTestSummaryResponseSchema, answers().getTestSummary({ environmentId: req.environmentId || undefined })),
@@ -160,5 +160,5 @@ export function testsHandlers(now: () => number = demoNow): MockHandlers {
       ),
     [TESTS_RPCS.getTest]: (req: GetTestRequest) => create(GetTestResponseSchema, answers().getTest({ testId: req.testId })),
   };
-  return withMessageRequests(scopedToDemo(handlers, [TestsService]), [TestsService]);
+  return withMessageRequests(scopedToDemo(handlers, [TestsService], scope), [TestsService]);
 }

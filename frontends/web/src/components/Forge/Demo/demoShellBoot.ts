@@ -4,7 +4,9 @@
  * The demo shell's boot (demoShellRoutes.tsx), once, before anything renders
  * the tour:
  *
- *  - the tour runs as the forge shell does (forge copy, `forge …` commands);
+ *  - the tour runs as the forge shell does (forge copy, `forge …` commands),
+ *    on the demo's own app (its tour hooks: the journeys walk shop's pages and
+ *    end on a call to action);
  *  - its progress lives in memory only, so a finish is never remembered (the
  *    toast that offers the tour remembers its dismissal for the session:
  *    demoSession.ts);
@@ -15,7 +17,8 @@
  *    gateway when DEMO_DATA_SOURCE says so. No real backend is reachable.
  */
 
-import { memoryTourStorage, setTourShell, setTourStorage } from "@/components/Onboarding/tourShell";
+import { FIXTURE_PROJECT } from "@/components/Forge/Observability/__fixtures__/fixtureApi";
+import { memoryTourStorage, setDemoTourHooks, setTourShell, setTourStorage } from "@/components/Onboarding/tourShell";
 import { installShellTransport } from "@/lib/connect";
 import { initTelemetry } from "@/lib/telemetry";
 import { yieldToMain } from "@/lib/yieldToMain";
@@ -23,6 +26,7 @@ import { yieldToMain } from "@/lib/yieldToMain";
 export function bootDemoShell(): void {
   setTourShell("forge");
   setTourStorage(memoryTourStorage());
+  setDemoTourHooks({ app: FIXTURE_PROJECT });
   // Lazily: the scenario carries the sample data, which only the console needs.
   // Built in a task of its own, after the chunk has evaluated, so neither blocks the first paint for long.
   installShellTransport(

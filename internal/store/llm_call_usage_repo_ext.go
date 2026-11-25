@@ -103,7 +103,8 @@ type LLMCallUsageRecord struct {
 	// the org the account is attributed to. "" when no org is known to have
 	// paid (a person's own account, or the org-less managed key, whose wallet
 	// is the person's default org rather than necessarily the chat's). Only
-	// what an org is known to have paid for reaches that org's rollup.
+	// what an org is known to have paid for reaches that org's rollup. Stored
+	// as llm_call_usage.funding_org_id, NULL when "".
 	FundingOrgID string
 
 	// What the call was part of (agent-analytics.md §3.2), from the run
@@ -188,16 +189,17 @@ func RecordLLMCallUsage(ctx context.Context, db orm.Context, rec LLMCallUsageRec
 	res, err := db.Bun().NewRaw(`INSERT INTO llm_call_usage (id, user_id, org_id, chat_id, run_id, provider, model, auth_mode, purpose,
 		input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, outcome, error_class, latency_ms, attempt, created_at,
 		account_id, funding, workflow_id, thread_id, workflow_name, node_id, preset, project_id, ai_run_id, ai_root_run_id,
-		provider_request_id, ttft_ms, cost_usd_nanos, cost_basis)
+		provider_request_id, ttft_ms, cost_usd_nanos, cost_basis, insights_folded, funding_org_id)
 		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19,
-		?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31)
+		?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, true, ?32)
 		ON CONFLICT (id, attempt) DO NOTHING`,
 		rec.ID, rec.UserID, rec.OrgID, rec.ChatID, rec.RunID, rec.Provider, rec.Model, rec.AuthMode, rec.Purpose,
 		rec.InputTokens, rec.OutputTokens, rec.CacheReadTokens, rec.CacheWriteTokens, rec.Outcome, rec.ErrorClass,
 		rec.LatencyMs, rec.Attempt, rec.CreatedAt, rec.AccountID, rec.Funding,
 		emptyToNil(rec.WorkflowID), emptyToNil(rec.ThreadID), emptyToNil(rec.WorkflowName), emptyToNil(rec.NodeID),
 		emptyToNil(rec.Preset), emptyToNil(rec.ProjectID), emptyToNil(rec.AIRunID), emptyToNil(rec.AIRootRunID),
-		emptyToNil(rec.ProviderRequestID), rec.TTFTMs, rec.CostUSDNanos, emptyToNil(rec.CostBasis)).Exec(ctx)
+		emptyToNil(rec.ProviderRequestID), rec.TTFTMs, rec.CostUSDNanos, emptyToNil(rec.CostBasis),
+		emptyToNil(rec.FundingOrgID)).Exec(ctx)
 	if err != nil {
 		return false, fmt.Errorf("insert llm call usage %s: %w", rec.ID, err)
 	}
@@ -212,7 +214,20 @@ func RecordLLMCallUsage(ctx context.Context, db orm.Context, rec LLMCallUsageRec
 	if err := addLLMOrgUsageDaily(ctx, db, rec); err != nil {
 		return false, err
 	}
+	// The row was inserted folded: it is counted here, never by the backlog fold.
+	if err := llmInsights.foldOne(ctx, db, rec.ID, rec.Attempt, rec.ProjectID, insightsModelTeam, insightsModelMember); err != nil {
+		return false, err
+	}
 	return true, nil
+}
+
+// FoldLLMCallUsageIntoInsights adds up to batch of the oldest per-call rows
+// the insights rollups do not count yet (written before them, or by a previous
+// release) and returns how many. Each row is counted exactly once: it is
+// marked in the transaction that adds it. Call it until it returns less than
+// batch. The caller's ctx must be a transaction (db.Repo.RunTx).
+func FoldLLMCallUsageIntoInsights(ctx context.Context, db orm.Context, batch int) (int64, error) {
+	return llmInsights.foldBacklog(ctx, db, batch, insightsModelTeam, insightsModelMember)
 }
 
 // orgFunded is the funding classes llm_org_usage_daily holds: what an org pays for.
@@ -289,13 +304,15 @@ func llmErrorCalls(rec LLMCallUsageRecord) int64 {
 
 // PruneLLMCallUsage deletes per-call rows created before cutoff, at most batch
 // of them, and returns how many. The daily rollup is untouched: it already holds
-// their totals. Call it until it returns less than batch.
+// their totals. A row the insights rollups do not count yet is kept until
+// FoldLLMCallUsageIntoInsights has folded it. Call it until it returns less
+// than batch.
 func PruneLLMCallUsage(ctx context.Context, db orm.Context, cutoff time.Time, batch int) (int64, error) {
 	if batch <= 0 {
 		return 0, errors.New("prune llm call usage: batch must be positive")
 	}
 	res, err := db.Bun().NewRaw(`DELETE FROM llm_call_usage WHERE (id, attempt) IN (
-		SELECT id, attempt FROM llm_call_usage WHERE created_at < ? ORDER BY created_at LIMIT ? FOR UPDATE SKIP LOCKED)`,
+		SELECT id, attempt FROM llm_call_usage WHERE created_at < ? AND insights_folded ORDER BY created_at LIMIT ? FOR UPDATE SKIP LOCKED)`,
 		cutoff.UTC(), batch).Exec(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("prune llm call usage: %w", err)
@@ -307,6 +324,9 @@ func PruneLLMCallUsage(ctx context.Context, db orm.Context, cutoff time.Time, ba
 // dates), oldest first. It is what the usage API reads: the per-call rows are
 // deleted after the retention period, the rollup is not.
 func ListLLMUsageDaily(ctx context.Context, db orm.Context, userID string, from, to time.Time) ([]*LlmCallUsageDaily, error) {
+	if userID == "" {
+		return nil, errors.New("llm call usage: user id is required")
+	}
 	var rows []*LlmCallUsageDaily
 	err := db.Bun().NewSelect().Model(&rows).
 		Where("user_id = ?", userID).
@@ -456,6 +476,12 @@ type OrgChatCall struct {
 // created_at index; the org and the chat's own org are both matched, so a
 // call billed to the org from a chat that has since moved is not counted.
 func LatestOrgChatCalls(ctx context.Context, db orm.Context, orgID string, since time.Time, limit int) ([]OrgChatCall, error) {
+	if orgID == "" {
+		return nil, errors.New("llm call usage: org id is required")
+	}
+	if limit <= 0 {
+		return nil, errors.New("llm call usage: limit must be positive")
+	}
 	var rows []OrgChatCall
 	err := db.Bun().NewRaw(`SELECT chat_id, provider, model, funding FROM (
 		SELECT DISTINCT ON (u.chat_id) u.chat_id, u.provider, u.model, u.funding, u.created_at

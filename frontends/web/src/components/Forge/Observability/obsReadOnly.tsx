@@ -7,8 +7,8 @@
  *
  * Controls that write read it and render disabled with the reason as their
  * title, so a visitor sees "Read-only demo" on hover instead of clicking and
- * meeting an error. The API underneath refuses writes regardless
- * (readOnlyApi.ts).
+ * meeting an error. The transport underneath refuses writes regardless
+ * (the shop fixture pack's read-only guard, fixtures/shop SHOP_SERVE).
  */
 
 import { createContext, useContext, type ReactNode } from "react";

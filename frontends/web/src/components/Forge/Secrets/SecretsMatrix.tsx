@@ -4,6 +4,8 @@ import { useQueries } from "@tanstack/react-query";
 import Card from "@/components/forge-ui/card";
 import { STACK } from "@/components/forge-ui/data_table";
 import Link from "@/components/forge-ui/link";
+import { transport as appTransport } from "@/lib/connect";
+import { useTransport } from "@/lib/transportScope";
 import { cn } from "@/lib/utils";
 import { managedSecretsQueryOptions, useEnvironmentShapes } from "@/hooks/forge-queries";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
@@ -18,13 +20,14 @@ export function SecretsMatrix({ envs, projectId, secretHref }: {
   projectId: string | null;
   secretHref: (env: string, name?: string) => string;
 }) {
+  const transport = useTransport(appTransport);
   const listings = useQueries({ queries: envs.map((env) => {
     const target: ManagedStoreTarget = !CONTROL_PLANE_API_URL
       ? { kind: "none", availability: "no-control-plane" }
       : env.live
         ? { kind: "lookup", environmentId: env.live.id, endpoint: normalizeEndpoint(CONTROL_PLANE_API_URL) }
         : { kind: "none", availability: "provider-unknown" };
-    return managedSecretsQueryOptions(projectId, env.name, target);
+    return managedSecretsQueryOptions(transport, projectId, env.name, target);
   }) });
   // Each environment's declared secrets come from its declared shape, fetched
   // per environment: the roster row carries only whether one exists.

@@ -148,7 +148,7 @@ func (e jsonEncodedValue) Get(ptr interface{}) error {
 }
 
 func lateMessageService(repo *db.Repo, temporal *closingRunTemporalClient) *Service {
-	return &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
+	return &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, runs: runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
 }
 
 func countOf(bodies []string, body string) int {
@@ -205,7 +205,7 @@ func TestSendMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T) {
 	assert.Equal(t, db.ThreadStatusRunning, threadStatusAtStart,
 		"the thread must be revived before the run starts, or the sweep can mark the row undelivered in between")
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1, "queued once, for the new run's first call_llm — not also written to history")
 	assert.Equal(t, "and one more thing", queued[0].Body)
@@ -296,7 +296,7 @@ func TestSendAgentMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T
 	assert.Equal(t, db.ThreadStatusRunning, threadStatusAtStart,
 		"the thread must be revived before the run starts, or the sweep can mark the row undelivered in between")
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1, "the row stays queued for the new run's first call_llm to drain")
 	assert.Equal(t, "queued as it finished", queued[0].Body)
@@ -375,7 +375,7 @@ func TestSendAgentMessage_EndedMainRunGetsARunStarted(t *testing.T) {
 				assert.Zero(t, temporal.wakes, "a stopping run never reads its doorbell; ringing it instead would strand the row")
 			}
 
-			queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+			queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 			require.NoError(t, err)
 			require.Len(t, queued, 1, "queued once, for the new run's first call_llm to drain")
 			assert.Equal(t, "sent as the reply ended", queued[0].Body)
@@ -406,7 +406,7 @@ func TestSendAgentMessage_CompletedMainRunStillFinishingTakesTheWake(t *testing.
 	require.True(t, resp.Msg.Success, resp.Msg.Message)
 	assert.Empty(t, temporal.runsStarted(), "a run that will read the wake must not be replaced")
 	assert.Equal(t, 1, temporal.wakes)
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 }
@@ -432,7 +432,7 @@ func TestSendAgentMessage_FailedMainRunIsStillRefused(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, resp.Msg.Success)
 	assert.Empty(t, temporal.runsStarted())
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "nothing is left queued behind a refusal")
 }
@@ -454,7 +454,7 @@ func TestSendAgentMessage_RunThatClosesAndCannotBeRestartedIsRefusedHonestly(t *
 	require.NoError(t, err)
 	assert.False(t, resp.Msg.Success)
 	assert.Contains(t, resp.Msg.Message, "Send it as a normal message")
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "nothing is left queued behind a refusal")
 	assert.Empty(t, temporal.runsStarted())

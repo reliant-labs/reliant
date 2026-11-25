@@ -68,7 +68,7 @@ func TestFileSystemProxy_GetFileTree_QueuedCloneIsCloningNotInternal(t *testing.
 	ctx := fsProxyContext()
 	remote := "https://github.com/reliant-labs/forge.git"
 	require.NoError(t, repo.UpdateProject(ctx, &db.Project{ID: projectID, Name: "forge", Path: base, UserID: fsProxyTestUser, RemoteURL: &remote}, fsProxyTestUser))
-	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, projectID, "2aab1465", base, nil, "clone:"+projectID+":2aab1465"))
+	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, projectID, "2aab1465", base, nil, "clone:"+projectID+":2aab1465", nil))
 
 	svc := newProxy(t, &fsMissingDirRouter{daemonID: "2aab1465"}, repo)
 	_, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "/"}))
@@ -97,7 +97,7 @@ func TestFileSystemProxy_GetFileTree_ProjectNotOnThisMachineIsAbsent(t *testing.
 	require.NoError(t, repo.UpdateProject(ctx, &db.Project{ID: projectID, Name: "houndersclub", Path: base, UserID: fsProxyTestUser, RemoteURL: &remote}, fsProxyTestUser))
 	// Cloned onto a DIFFERENT machine, still installing there: that must not
 	// make this machine read as "cloning".
-	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, projectID, "old-machine", base, nil, "clone:"+projectID+":old-machine"))
+	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, projectID, "old-machine", base, nil, "clone:"+projectID+":old-machine", nil))
 
 	svc := newProxy(t, &fsMissingDirRouter{daemonID: "2aab1465"}, repo)
 	_, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID}))

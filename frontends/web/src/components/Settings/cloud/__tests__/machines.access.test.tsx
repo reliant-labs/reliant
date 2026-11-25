@@ -41,10 +41,6 @@ const mocks = vi.hoisted(() => ({
 // The Add machine sheet (billing checkout, catalog) is not under test here.
 vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
 vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
-vi.mock('@/services/controlPlane/billing', () => ({
-  getComputeEligibility: mocks.getComputeEligibility,
-}))
-
 vi.mock('@/lib/event-context', () => ({
   useEventBus: () => ({ emit: vi.fn(), on: vi.fn(() => () => {}) }),
 }))
@@ -72,14 +68,10 @@ vi.mock('@/services/controlPlane/environments', () => ({
   DaemonSize: { UNSPECIFIED: 0, SMALL: 1, MEDIUM: 2, LARGE: 3, XL: 4 },
   PortAccessMode: { UNSPECIFIED: 0, PUBLIC: 1, AUTHENTICATED: 2, TOKEN: 3 },
   describeError: (_e: unknown, fallback = 'error') => fallback,
-  portAccessRulesQueryKey: (daemonId: string) => ['cp', 'ports', daemonId],
   getComputeSubscription: vi.fn(async () => ({})),
-  getDaemon: mocks.getDaemon,
   createEnvironment: vi.fn(),
-  deleteDaemon: vi.fn(),
   suspendDaemon: vi.fn(),
   resumeEnvironment: vi.fn(),
-  listPortAccessRules: vi.fn(async () => []),
   setPortAccess: vi.fn(),
   removePortAccess: vi.fn(),
 }))
@@ -88,8 +80,18 @@ import { MachinesSection } from '@/components/Settings/cloud/machines'
 import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 import { ConnectorExecMode } from '@/gen/reliant/v1/connector_pb'
 import { setTransport } from '@/lib/connect'
+import { cpDaemonHandlers } from '@/test/cpDaemonTransport'
 import { daemonRegistryTransport } from '@/test/daemonRegistry'
+import { eligibilityHandlers } from '@/test/billingTransport'
 import { serviceHandlers } from '@/test/serviceTransport'
+
+// Control-plane DaemonService answers at the transport: Settings › Machines
+// reads GetDaemon and the port rules through the generated hooks.
+const cpDaemon = () =>
+  cpDaemonHandlers({
+    getDaemon: (req: { daemonId: string }) => mocks.getDaemon(req.daemonId),
+    listPortAccessRules: () => ({ rules: [] }),
+  })
 
 // The daemon list and the grants are read through connectClient
 // (DaemonRegistryService, ConnectorService), so both answer at the transport.
@@ -97,13 +99,17 @@ beforeEach(() =>
   setTransport(
     daemonRegistryTransport(
       { listDaemons: () => mocks.listDaemons() },
-      serviceHandlers('ConnectorService', {
-        listConnectors: (req) => mocks.listConnectors(req),
-        listAvailableTools: (req) => mocks.listAvailableTools(req),
-        listConnectorActivity: (req) => mocks.listConnectorActivity(req),
-        createConnector: (req) => mocks.createConnector(req),
-        revokeConnector: (req) => mocks.revokeConnector(req),
-      }),
+      {
+        ...cpDaemon(),
+        ...eligibilityHandlers(() => mocks.getComputeEligibility()),
+        ...serviceHandlers('ConnectorService', {
+          listConnectors: (req) => mocks.listConnectors(req),
+          listAvailableTools: (req) => mocks.listAvailableTools(req),
+          listConnectorActivity: (req) => mocks.listConnectorActivity(req),
+          createConnector: (req) => mocks.createConnector(req),
+          revokeConnector: (req) => mocks.revokeConnector(req),
+        }),
+      },
     ),
   ),
 )

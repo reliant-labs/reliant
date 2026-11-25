@@ -16,12 +16,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"go.temporal.io/sdk/activity"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/approvalkind"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
 )
 
 // ============================================================================
@@ -52,6 +54,11 @@ type ApprovalCreateInput struct {
 	// node. Its approval is APPROVAL_TYPE_TOOL_CALL: the run answers the call
 	// itself, approved or denied.
 	ToolCallID string `json:"tool_call_id,omitempty" reliant:"-"`
+	// ToolName is that tool call's tool, which decides who may approve it
+	// (approvalkind.For: a trigger change needs manage, the machine the
+	// owner). Empty for a workflow approval node, and from workflow code
+	// that predates the field, whose tool-call approval is then owner-only.
+	ToolName string `json:"tool_name,omitempty" reliant:"-"`
 	// BatchID is shared by the approvals one step raised together, so they
 	// can be decided together. Empty for an approval raised on its own.
 	BatchID string `json:"batch_id,omitempty" reliant:"-"`
@@ -215,6 +222,15 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		threadID = &input.ThreadID
 	}
 
+	// Who may decide it is fixed now, once, and never re-derived: the row
+	// carries no tool name to derive it from later (chat-collaboration.md
+	// §2.4).
+	minRole := approvalkind.For(approvalkind.Source{
+		ToolCall:           input.ToolCallID != "",
+		ToolName:           input.ToolName,
+		ConnectionProposal: input.ConnectionProposal != nil,
+	}).String()
+
 	approval := &db.Approval{
 		ID:                 approvalID,
 		ChatID:             input.ChatID,
@@ -228,6 +244,7 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		ResolvedAt:         nil,
 		ThreadID:           threadID,
 		BatchID:            batchID,
+		MinRole:            &minRole,
 	}
 
 	// Dual-write: create approval record + chat_update + mark chat unread atomically.

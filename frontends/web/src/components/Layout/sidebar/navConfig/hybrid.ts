@@ -11,6 +11,9 @@
  *   Security ▾ · Configure ▾ (Secrets, Domains, Usage, Activity)
  *   footer: Usage & billing · Help · Settings
  *
+ * Agents › also lists the Inbox (under New chat), so a chat's drill-in reaches
+ * it in one click; /inbox itself is the top level, its row there the one lit.
+ *
  * Only Agents and Observability drill in (their rows replace the nav, under a
  * "‹ Area" header, on their routes). Everything else is an accordion or a
  * link. Settings is a plain link; on its pages its sections take the column.
@@ -31,9 +34,10 @@ import {
   observabilityArea,
   overview,
   securityGroup,
-  settingsSections,
   storage,
 } from "./items";
+// The one importer of Settings' sections: they are the app's (settings.tsx).
+import { settingsSections } from "./settings";
 import { testsGroup } from "./tests";
 import type { NavConfig } from "./types";
 

@@ -26,6 +26,7 @@ import { ProjectSchema, type Project } from "@/gen/reliant/v1/project_pb";
 import { WorktreeSchema, WorktreeStatus, WorktreeSummarySchema, type Worktree, type WorktreeSummary } from "@/gen/reliant/v1/worktree_pb";
 
 import { DAY, DEMO_REPO, HOUR, MINUTE, demoNow } from "./shopStory";
+import { APP_USER } from "./user";
 
 // ── Clock ────────────────────────────────────────────────────────────────────
 
@@ -38,8 +39,8 @@ export const tsAgo = (ago = 0) => timestampFromMs(demoNow() - ago);
 
 // ── People and places ────────────────────────────────────────────────────────
 
-/** The signed-in person. */
-export const APP_USER = { id: "00000000-0000-4000-8000-00000000a1ec", email: "alex@example.com", name: "Alex Demo" } as const;
+/** The signed-in person (user.ts). */
+export { APP_USER };
 
 /** shop's repository, as a git remote. */
 export const SHOP_REMOTE = `https://${DEMO_REPO}.git`;
@@ -177,7 +178,7 @@ interface ChatInit {
   appName?: string;
 }
 
-function chat(o: ChatInit): Chat {
+export function chat(o: ChatInit): Chat {
   const at = isoAgo(o.ago);
   return create(ChatSchema, {
     id: o.id, title: o.title, userId: APP_USER.id, projectId: o.projectId ?? PROJECT_IDS.shop,

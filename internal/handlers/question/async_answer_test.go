@@ -14,10 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/testkit"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 )
@@ -113,7 +115,7 @@ func newAsyncAnswerFixture(t *testing.T) *asyncAnswerFixture {
 	}))
 
 	messages := &recordingMessenger{}
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Messages: messages, Signals: noSignals{t}}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Messages: messages, Signals: noSignals{t}}))
 	return &asyncAnswerFixture{
 		repo: repo, chatID: chatID, mainID: chatID, spawnID: "spawn-" + uuid.NewString(),
 		svc: svc, messages: messages,
@@ -150,6 +152,50 @@ func (f *asyncAnswerFixture) status(t *testing.T, id string) *db.Question {
 const sqliteAnswer = `{"answers":[{"question":"Which database?","selected":["SQLite"],"freetext":"small footprint"}]}`
 
 const wantSQLiteAnswer = "Q: Which database?\nA: SQLite — small footprint"
+
+// Inbox invalidation belongs only to the answered chat's owner. Neither an
+// unauthorized tenant nor a failed delivery may announce a resolved question.
+func TestResolveAsyncQuestion_RefetchIsScopedToOwnerAfterResolution(t *testing.T) {
+	f := newAsyncAnswerFixture(t)
+	f.askAsync(t, "q-inbox", f.mainID)
+	type notification struct {
+		userID string
+		kind   core.RefetchType
+		opts   core.RefetchOpts
+	}
+	var notifications []notification
+	f.svc.deps.Refetch = &MockUserRefetch{
+		EmitUserRefetchFunc: func(_ context.Context, userID string, kind core.RefetchType, opts core.RefetchOpts) error {
+			assert.Equal(t, db.QuestionStatusResolved, f.status(t, "q-inbox").Status,
+				"persist resolution before notifying the inbox")
+			notifications = append(notifications, notification{userID, kind, opts})
+			return nil
+		},
+	}
+
+	otherTenant := AuthedContext(t, testkit.WithUserID("other-user"))
+	answer := sqliteAnswer
+	_, err := f.svc.ResolveQuestion(otherTenant, connect.NewRequest(&reliantv1.ResolveQuestionRequest{
+		QuestionId: "q-inbox", Action: "reply", ResponseData: &answer,
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Empty(t, notifications, "a foreign tenant cannot trigger an inbox notification")
+	assert.Empty(t, f.messages.mainSends)
+	assert.Equal(t, db.QuestionStatusPending, f.status(t, "q-inbox").Status)
+
+	f.messages.mainErr = errors.New("delivery unavailable")
+	require.Error(t, f.answer(t, "q-inbox", sqliteAnswer))
+	assert.Empty(t, notifications, "a failed delivery leaves the inbox unchanged")
+	assert.Equal(t, db.QuestionStatusPending, f.status(t, "q-inbox").Status)
+
+	f.messages.mainErr = nil
+	require.NoError(t, f.answer(t, "q-inbox", sqliteAnswer))
+	require.Equal(t, []notification{{
+		userID: "test-user", kind: core.RefetchInbox,
+		opts: core.RefetchOpts{ChatID: &f.chatID},
+	}}, notifications, "exactly one inbox refetch, scoped to the owning user and chat")
+}
 
 // A live sub-agent gets the answer in its mailbox (SendAgentMessage), and the
 // question is resolved with the answer kept.
@@ -342,7 +388,7 @@ func TestResolveAsyncQuestion_ThreadParkedOnABlockingQuestionGetsItInItsMailboxO
 			assert.Equal(t, db.QuestionStatusResolved, f.status(t, "q-a").Status, "A is answered")
 			assert.Equal(t, db.QuestionStatusPending, f.status(t, "q-b").Status, "B stays the user's to answer")
 
-			queued, err := f.repo.ListQueuedAgentMessagesForThread(ctx, asker)
+			queued, err := store.ListQueuedAgentMessagesForThread(ctx, f.repo.ORM(), asker)
 			require.NoError(t, err)
 			require.Len(t, queued, 1, "A's answer waits in the asking thread's mailbox")
 			assert.Equal(t, asyncAnswerBody("q-a", wantSQLiteAnswer), queued[0].Body)
@@ -352,7 +398,7 @@ func TestResolveAsyncQuestion_ThreadParkedOnABlockingQuestionGetsItInItsMailboxO
 
 			// The thread failing while parked does not lose it: its pending
 			// question is what resumes it.
-			moved, err := f.repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, asker)
+			moved, err := store.MarkQueuedAgentMessagesUndeliveredForThread(ctx, f.repo.ORM(), asker)
 			require.NoError(t, err)
 			assert.Zero(t, moved, "a parked thread's mailbox is not swept")
 		})

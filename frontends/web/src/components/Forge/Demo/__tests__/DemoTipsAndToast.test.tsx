@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
-import { memoryTourStorage, setTourShell, setTourStorage } from "@/components/Onboarding/tourShell";
+import { memoryTourStorage, setDemoTourHooks, setTourShell, setTourStorage } from "@/components/Onboarding/tourShell";
 import { JourneyTour } from "@/components/Onboarding/JourneyTour";
 import { resetShellForTests } from "@/lib/shell";
 import { DemoTips } from "../tips/DemoTips";
@@ -10,16 +10,18 @@ import { demoSession, resetDemoSessionForTests } from "../demoSession";
 import { DEMO_TIPS, DEMO_TIP_KEYS } from "../tips";
 import { DEMO_TRACE_ID } from "@/components/Onboarding/journeys/forge";
 import { isLegacyDemoTourLink } from "@/components/Onboarding/legacyDemoTour";
+import { useNavDrawer } from "@/components/Layout/shell/navDrawer";
 
 function renderDemo(path: string) {
   const root = createRootRoute({ component: () => <><Outlet /><DemoTips /><JourneyTour /></> });
-  const any = createRoute({ getParentRoute: () => root, path: "$", component: () => <main data-testid="page"><h1>Console page</h1><div data-testid="obs-log-row" /><div data-testid="obs-trace-row" /><div data-testid="obs-alerts-firing" /><div data-testid="obs-issue-iss-orders-deadline" /></main>, validateSearch: (s: Record<string, unknown>) => s });
+  const any = createRoute({ getParentRoute: () => root, path: "$", component: () => <div data-testid="page"><header data-testid="forge-console-header" /><main data-testid="forge-console-page"><h1>Console page</h1><div data-testid="obs-log-row" /><div data-testid="obs-trace-row" /><div data-testid="obs-alerts-firing" /><div data-testid="obs-issue-iss-orders-deadline" /></main></div>, validateSearch: (s: Record<string, unknown>) => s });
   const router = createRouter({ routeTree: root.addChildren([any]), history: createMemoryHistory({ initialEntries: [path] }) });
   render(<RouterProvider router={router} />);
   return { router, go: (to: string) => act(async () => { await router.navigate({ href: to }); }) };
 }
-beforeEach(() => { resetShellForTests("demo"); setTourShell("forge"); setTourStorage(memoryTourStorage()); resetDemoSessionForTests(); });
-afterEach(() => { cleanup(); setTourShell(null); resetShellForTests(); });
+// As the demo's boot leaves it (demoShellBoot.ts): the forge shell's tour, in memory, on the demo's own app.
+beforeEach(() => { resetShellForTests("demo"); setTourShell("forge"); setTourStorage(memoryTourStorage()); setDemoTourHooks({ app: "shop" }); resetDemoSessionForTests(); });
+afterEach(() => { cleanup(); setTourShell(null); setDemoTourHooks(null); resetShellForTests(); });
 
 it("opens a page's tip by itself on its first visit this session, as a single Done card", async () => {
   const {router} = renderDemo("/forge/p/shop/observability/logs");
@@ -110,20 +112,20 @@ it("a reload in the same session keeps a seen page's tip closed", async () => {
   expect(screen.queryByTestId("tour-callout")).toBeNull();
 });
 it("drawer hides the callout, then closing it reveals the new page without consuming dismissal", async () => {
+  // The shell's nav drawer (a phone's nav): the page's card steps aside while it is open.
   const {go} = renderDemo("/forge/p/shop"); await screen.findByTestId("tour-callout");
-  const trigger = document.createElement("button"); trigger.setAttribute("aria-controls", "drawer-tips-unique"); trigger.setAttribute("aria-expanded", "true");
-  const drawer = document.createElement("aside"); drawer.id="drawer-tips-unique"; drawer.setAttribute("role", "dialog"); drawer.append(document.createElement("nav")); document.body.append(trigger, drawer);
+  const setDrawer = (open: boolean) => act(() => useNavDrawer.getState().setOpen(open));
   try {
-    act(()=>drawer.setAttribute("aria-modal","true"));
+    setDrawer(true);
     await waitFor(()=>expect(screen.queryByTestId("tour-callout")).toBeNull());
     await go("/forge/p/shop/observability/alerts");
     expect(screen.queryByTestId("tour-callout")).toBeNull();
-    act(()=>drawer.removeAttribute("aria-modal"));
+    setDrawer(false);
     expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.alerts.body);
     fireEvent.click(screen.getByTestId("tour-next"));
-    act(()=>drawer.setAttribute("aria-modal","true")); act(()=>drawer.removeAttribute("aria-modal"));
+    setDrawer(true); setDrawer(false);
     expect(screen.queryByTestId("tour-callout")).toBeNull();
-  }finally{drawer.remove();trigger.remove();}
+  }finally{setDrawer(false);}
 });
 it("explicit guided tour links suppress the automatic page card", async () => {
   renderDemo("/forge/p/shop?tour=forge:fg-intro");
@@ -151,7 +153,9 @@ it("only a trace-less link to a trace step is legacy; one that carries its trace
   expect(isLegacyDemoTourLink({ view: "overview", tour: "forge:fg-intro" })).toBe(false);
   expect(isLegacyDemoTourLink({ view: "traces", tour: "forge:fg-trace" })).toBe(false);
   expect(isLegacyDemoTourLink({ view: "logs" })).toBe(false);
+  // Off the demo (no demo tour hooks): there are no page cards, so every tour link is guided.
   resetShellForTests("reliant");
+  setDemoTourHooks(null);
   expect(isLegacyDemoTourLink({ view: "logs", tour: "forge:fg-logs" })).toBe(false);
 });
 it("a logs tour link that carries its trace runs the guided step, not the page card", async () => {

@@ -121,8 +121,8 @@ func TestChatCreateGetUpdateDelete(t *testing.T) {
 		if _, err := store.GetChatWithUserCheck(ctx, env.ORM, c.id, c.user); !errors.Is(err, core.ErrChatNotFound) {
 			t.Fatalf("GetChatWithUserCheck(%s, %s) err = %v, want ErrChatNotFound", c.id, c.user, err)
 		}
-		if _, err := env.Repo.GetChatWithUserCheck(ctx, c.id, c.user); !errors.Is(err, core.ErrChatNotFound) {
-			t.Fatalf("Repo.GetChatWithUserCheck(%s, %s) err = %v, want ErrChatNotFound", c.id, c.user, err)
+		if _, err := store.GetChatWithUserCheck(ctx, env.Repo.ORM(), c.id, c.user); !errors.Is(err, core.ErrChatNotFound) {
+			t.Fatalf("GetChatWithUserCheck(%s, %s) err = %v, want ErrChatNotFound", c.id, c.user, err)
 		}
 	}
 	if _, err := store.GetChat(ctx, env.ORM, "chat-none"); !errors.Is(err, core.ErrChatNotFound) {

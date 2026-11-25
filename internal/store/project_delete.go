@@ -84,8 +84,8 @@ const (
 	// is around ten thousand rows.
 	projectThinMessageSlice = 2000
 	// projectThinRowSlice is how many rows of a flat table (chat_updates,
-	// user_updates, step_executions) one transaction removes. Nothing hangs
-	// off those rows.
+	// user_updates, step_executions and the others in flatThinSteps) one
+	// transaction removes. Nothing hangs off those rows.
 	projectThinRowSlice = 5000
 	// projectDeleteWorktreeBatch is how many worktrees one transaction removes.
 	projectDeleteWorktreeBatch = 50
@@ -145,9 +145,34 @@ var chatPurgeSteps = []struct{ name, sql string }{
 	{"questions", `DELETE FROM questions WHERE chat_id = ANY(?0)`},
 	{"chat_updates", `DELETE FROM chat_updates WHERE chat_id = ANY(?0)`},
 	{"chat_update_heads", `DELETE FROM chat_update_heads WHERE chat_id = ANY(?0)`},
+	// The chats' tool calls' usage records (tool_call_usage): a project's
+	// deletion takes them, as an account's does (accountpurge).
+	{"tool_call_usage", `DELETE FROM tool_call_usage WHERE chat_id = ANY(?0)`},
 	{"workflows", `DELETE FROM workflows WHERE chat_id = ANY(?0)`},
 	{"update_stream_counters", `
 		DELETE FROM update_stream_counters WHERE stream_kind = 'chat' AND stream_id = ANY(?0)`},
+	// The per-thread message counts the messages triggers maintain (deleting
+	// the messages above wrote them) and the chats still pending a count.
+	{"chat_thread_message_counts", `DELETE FROM chat_thread_message_counts WHERE chat_id = ANY(?0)`},
+	{"chat_message_counts_pending", `DELETE FROM chat_message_counts_pending WHERE chat_id = ANY(?0)`},
+	{"provider_backoff", `DELETE FROM provider_backoff WHERE chat_id = ANY(?0)`},
+	// (integration_writes, trigger_changes and video_generation_jobs, also
+	// keyed by chat, have no chat_id index: the thinning slices take them for
+	// the whole project, one scan a slice rather than one a chat batch.)
+
+	// Rows whose chat_id is ON DELETE SET NULL: the chats' delete would keep
+	// them with no chat, and the project row's cascade sets their trigger or
+	// project to NULL too, so nothing reaches them afterwards. Before chats.
+	// The bulk of a process's output went in the thinning slices.
+	{"trigger_events", `DELETE FROM trigger_events WHERE chat_id = ANY(?0)`},
+	{"background_process_output", `
+		DELETE FROM background_process_output
+		WHERE process_id IN (SELECT id FROM background_processes WHERE chat_id = ANY(?0))`},
+	{"background_processes", `DELETE FROM background_processes WHERE chat_id = ANY(?0)`},
+	// The pull requests the chats produced: keyed by chat with no foreign
+	// key. A link writer selects its chat FOR KEY SHARE, so one in flight is
+	// waited for by this batch's FOR UPDATE and its row is deleted here.
+	{"chat_pr_links", `DELETE FROM chat_pr_links WHERE chat_id = ANY(?0)`},
 
 	// The chats, and what still cascades from them (user_updates, run_events,
 	// chat_selections).
@@ -333,9 +358,9 @@ var messageThinSteps = []struct{ name, sql string }{
 	{"messages", `DELETE FROM messages WHERE id = ANY(?0)`},
 }
 
-// flatThinSteps each remove up to ?1 rows of one flat table under the
-// project's chats, ?0 being the project's id: tables nothing restricts and
-// nothing hangs off, which a chat can hold millions of.
+// flatThinSteps each remove up to ?1 rows under the project or its chats,
+// ?0 being the project's id. Process output precedes its parent processes;
+// the other tables are flat history that can hold millions of rows.
 var flatThinSteps = []struct{ name, sql string }{
 	{"chat_updates", `
 		DELETE FROM chat_updates WHERE id IN (
@@ -347,6 +372,41 @@ var flatThinSteps = []struct{ name, sql string }{
 		DELETE FROM step_executions WHERE id IN (
 			SELECT id FROM step_executions WHERE workflow_id IN (
 				SELECT id FROM workflows WHERE chat_id IN (` + projectChatIDs + `)) LIMIT ?1)`},
+	// Keyed by chat with no foreign key and no chat_id index, so they are
+	// taken here, for all the project's chats at once, rather than in each
+	// chat batch: what the chats' agents wrote to integrations, the trigger
+	// edits they made (those of the project's own triggers would also go with
+	// the project row's cascade), and their video generation jobs.
+	{"integration_writes", `
+		DELETE FROM integration_writes WHERE id IN (
+			SELECT id FROM integration_writes WHERE chat_id IN (` + projectChatIDs + `) LIMIT ?1)`},
+	{"trigger_changes", `
+		DELETE FROM trigger_changes WHERE id IN (
+			SELECT id FROM trigger_changes WHERE chat_id IN (` + projectChatIDs + `) LIMIT ?1)`},
+	{"video_generation_jobs", `
+		DELETE FROM video_generation_jobs WHERE tool_call_id IN (
+			SELECT tool_call_id FROM video_generation_jobs WHERE chat_id IN (` + projectChatIDs + `) LIMIT ?1)`},
+	// Firings with no chat still belong to the project's triggers. Delete
+	// them before the project cascade removes the trigger and nulls the FK.
+	{"project trigger_events", `
+		DELETE FROM trigger_events WHERE id IN (
+			SELECT id FROM trigger_events WHERE trigger_id IN (
+				SELECT id FROM triggers WHERE project_id = ?0) LIMIT ?1)`},
+	// One row per line a background process printed: a dev server left
+	// running prints hundreds of thousands. Include manual/package commands
+	// that name the project but have no chat, before deleting their processes.
+	{"background_process_output", `
+		DELETE FROM background_process_output WHERE id IN (
+			SELECT id FROM background_process_output WHERE process_id IN (
+				SELECT id FROM background_processes WHERE project_id = ?0
+				OR chat_id IN (` + projectChatIDs + `)) LIMIT ?1)`},
+	{"project background_processes", `
+		DELETE FROM background_processes WHERE id IN (
+			SELECT id FROM background_processes WHERE project_id = ?0 LIMIT ?1)`},
+	// One row per tool call: a long chat holds as many as it has messages.
+	{"tool_call_usage", `
+		DELETE FROM tool_call_usage WHERE (id, attempt) IN (
+			SELECT id, attempt FROM tool_call_usage WHERE chat_id IN (` + projectChatIDs + `) LIMIT ?1)`},
 }
 
 // thinProjectChats removes the bulk stored under the project's chats in
@@ -392,9 +452,9 @@ func thinProjectChats(ctx context.Context, db orm.Context, id string, sizes proj
 // deleteProjectRow deletes the project row, and the little that still
 // cascades from it: its repos, plans, triggers, configs, machine catalogs and
 // any update written since the loops passed. It reports false, deleting
-// nothing, when a chat or worktree arrived after the loops passed it: a chat's
-// workflows, chat_updates and other rows with no foreign key would not go with
-// the cascade, so the caller runs the loops again instead.
+// nothing, when a chat, worktree, process or trigger event arrived after the
+// loops passed it: history without a cascading foreign key would otherwise
+// survive, so the caller runs the loops again instead.
 //
 // FOR UPDATE on the project row is what makes the recheck the last word: every
 // insert of a chat or worktree takes a key share on it, which conflicts, so
@@ -411,15 +471,37 @@ func deleteProjectRow(ctx context.Context, db orm.Context, id, userID string) (b
 			deleted = true // gone already (a concurrent delete)
 			return nil
 		}
+		// Event inserts take a key share on their trigger, not the project.
+		// Lock those too before checking for late firings, so none can slip
+		// between the recheck and the cascade that nulls trigger_id.
+		var triggers []string
+		if err := db.Bun().NewRaw(`SELECT id FROM triggers WHERE project_id = ?0 FOR UPDATE`, id).Scan(ctx, &triggers); err != nil {
+			return fmt.Errorf("lock the project's triggers: %w", err)
+		}
 		var arrived bool
 		if err := db.Bun().NewRaw(`SELECT EXISTS (SELECT 1 FROM chats WHERE project_id = ?0)
-			OR EXISTS (SELECT 1 FROM worktrees WHERE project_id = ?0)`, id).Scan(ctx, &arrived); err != nil {
-			return fmt.Errorf("recheck the project's chats and worktrees: %w", err)
+			OR EXISTS (SELECT 1 FROM worktrees WHERE project_id = ?0)
+			OR EXISTS (SELECT 1 FROM background_processes WHERE project_id = ?0)
+			OR EXISTS (SELECT 1 FROM trigger_events WHERE trigger_id IN (
+				SELECT id FROM triggers WHERE project_id = ?0))`, id).Scan(ctx, &arrived); err != nil {
+			return fmt.Errorf("recheck the project's contents: %w", err)
 		}
 		if arrived {
 			return nil
 		}
 		if _, err := db.Bun().NewRaw(`DELETE FROM projects WHERE id = ?0 AND user_id = ?1`, id, userID).Exec(ctx); err != nil {
+			return err
+		}
+		// The insights rows that name the project (no foreign key). Here,
+		// after the row's delete: a usage write folding into them holds a key
+		// share on the project, so the FOR UPDATE above waited for it and its
+		// rows are seen, and a later one finds no project. The member rows go;
+		// the org's team rows move to the no-project bucket, so its totals
+		// stay whole and keep no trace of the project's id.
+		if err := deleteInsightsMemberRowsOfProject(ctx, db, id); err != nil {
+			return err
+		}
+		if err := mergeInsightsTeamRowsOfProject(ctx, db, id); err != nil {
 			return err
 		}
 		deleted = true

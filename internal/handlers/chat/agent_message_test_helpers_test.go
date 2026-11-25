@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // queueHumanMessage puts a human message in a thread's mailbox, exactly as
@@ -17,7 +18,7 @@ import (
 func queueHumanMessage(t *testing.T, repo *db.Repo, chatID, fromThreadID, toThreadID, body string, createdAt time.Time) string {
 	t.Helper()
 	id := uuid.NewString()
-	require.NoError(t, repo.EnqueueAgentMessage(t.Context(), &db.AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(t.Context(), repo.ORM(), &db.AgentMessage{
 		ID:           id,
 		ChatID:       chatID,
 		FromThreadID: fromThreadID,

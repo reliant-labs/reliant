@@ -5934,8 +5934,10 @@ type DeploySourceAttestation struct {
 	Subject string `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
 	RunId   string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	// WRITE-ONLY, and empty on every read. The raw OIDC JWT the server
-	// verifies; see DeploySourceProvenance.attestation.
-	Token         string `protobuf:"bytes,4,opt,name=token,proto3" json:"token,omitempty"`
+	// verifies; see DeploySourceProvenance.attestation. forge:secret records
+	// that no read returns it, so the reads that carry this message can still
+	// declare NO_SIDE_EFFECTS.
+	Token         string `protobuf:"bytes,4,opt,name=token,proto3" json:"token,omitempty"` // forge:secret
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6224,7 +6226,13 @@ type DeclaredWorkload struct {
 	// objects it renders (the pod template's, else the object's). Empty when the
 	// declaration carries neither: a bundle rendered by an older forge, a
 	// hand-written manifest, or a workload only the shape names.
-	ForgeKind     string `protobuf:"bytes,18,opt,name=forge_kind,json=forgeKind,proto3" json:"forge_kind,omitempty"`
+	ForgeKind string `protobuf:"bytes,18,opt,name=forge_kind,json=forgeKind,proto3" json:"forge_kind,omitempty"`
+	// A CronJob's schedule, as declared: a 5-field cron expression or a
+	// descriptor ("@daily"), prefixed "CRON_TZ=<zone> " when the CronJob names
+	// a time zone (Kubernetes' spec.timeZone). From a CronJob's spec.schedule,
+	// else a forge.dev Workload record's spec.schedule. Empty for any other
+	// kind, and from a bundle recorded before this field.
+	Schedule      string `protobuf:"bytes,19,opt,name=schedule,proto3" json:"schedule,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6381,6 +6389,13 @@ func (x *DeclaredWorkload) GetSpecGap() DeclaredSpecGap {
 func (x *DeclaredWorkload) GetForgeKind() string {
 	if x != nil {
 		return x.ForgeKind
+	}
+	return ""
+}
+
+func (x *DeclaredWorkload) GetSchedule() string {
+	if x != nil {
+		return x.Schedule
 	}
 	return ""
 }
@@ -8768,7 +8783,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12'\n" +
 	"\x0fsnapshot_digest\x18\r \x01(\tR\x0esnapshotDigest\x123\n" +
 	"\bsnapshot\x18\x0e \x01(\v2\x17.google.protobuf.StructR\bsnapshotJ\x04\b\t\x10\n" +
-	"\"\xe1\x05\n" +
+	"\"\xfd\x05\n" +
 	"\x10DeclaredWorkload\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x121\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1d.controlplane.v1.WorkloadKindR\x04kind\x12#\n" +
@@ -8791,7 +8806,8 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\rtelemetry_off\x18\x10 \x03(\tR\ftelemetryOff\x12;\n" +
 	"\bspec_gap\x18\x11 \x01(\x0e2 .controlplane.v1.DeclaredSpecGapR\aspecGap\x12\x1d\n" +
 	"\n" +
-	"forge_kind\x18\x12 \x01(\tR\tforgeKindB\v\n" +
+	"forge_kind\x18\x12 \x01(\tR\tforgeKind\x12\x1a\n" +
+	"\bschedule\x18\x13 \x01(\tR\bscheduleB\v\n" +
 	"\t_replicas\"R\n" +
 	"\fDeclaredPort\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +

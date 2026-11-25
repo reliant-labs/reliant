@@ -11,7 +11,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { inboxPath, newChatPath, projectChatsPath, runsPath, settingsPath } from "@/lib/paths";
+import { inboxPath, machineSettingsPath, newChatPath, projectChatsPath, runsPath, sandboxesPath, settingsPath } from "@/lib/paths";
+
+import { getVisibleSettingsSectionIds, SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME } from "../../../Settings/SettingsNavigation";
 
 import { registerConsoleNavEntry } from "../../../Forge/Console/consoleNavRegistry";
 import { consolePageOf, consolePath, obsOverviewPath, orgPageOf, orgPath } from "../../../Forge/Console/paths";
@@ -88,11 +90,14 @@ describe("the hybrid nav's shape", () => {
     expect(drillInIds(hybridNav)).toEqual(["agents", "observability"]);
   });
 
-  it("lists Dashboards and Inbox exactly once", () => {
+  it("lists Dashboards once, and Inbox once at the top level and once in Agents", () => {
     const ctx = ctxAt(inboxPath());
     const ids = [...flattenIds(hybridNav.items, ctx), ...flattenIds(hybridNav.footer, ctx)];
     expect(ids.filter((id) => id === "dashboards")).toHaveLength(1);
     expect(ids.filter((id) => id === "slot-inbox")).toHaveLength(1);
+    expect(ids.filter((id) => id === "slot-agents-inbox")).toHaveLength(1);
+    // Ids stay unique within the config, the two Inbox rows included.
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("keeps Sign-in users out of Configure (it is Auth now), and Configure is Secrets, Domains, Usage, Activity", () => {
@@ -189,6 +194,62 @@ describe("the hybrid nav's shape", () => {
   });
 });
 
+describe("the Inbox, at the top level and in Agents ›", () => {
+  const agents = () => hybridNav.items.find((item) => item.id === "agents")!;
+  // A stand-in for the shell's Inbox row: it renders whatever the slot is handed, lit on /inbox.
+  const inboxSlot = (ctx: NavCtx, onNavigate: (href: string) => void) => ({
+    "new-chat": () => <span>New chat</span>,
+    inbox: () => (
+      <a href={inboxPath()} aria-current={ctx.pathname === inboxPath() ? ("page" as const) : undefined} data-testid="inbox-row" onClick={(e) => (e.preventDefault(), onNavigate(inboxPath()))}>
+        Inbox <span data-testid="inbox-row-badge">3</span>
+      </a>
+    ),
+  });
+  const renderWithInbox = (href: string, onNavigate = vi.fn()) => {
+    const ctx = ctxAt(href);
+    render(<NavRenderer config={hybridNav} ctx={ctx} slots={inboxSlot(ctx, onNavigate)} onNavigate={onNavigate} />);
+    return onNavigate;
+  };
+
+  it("puts Agents' Inbox right under New chat, on the same slot as the top level's", () => {
+    const ctx = ctxAt(projectChatsPath("p1"));
+    expect(childrenOf(agents(), ctx).map((item) => item.id)).toEqual(["slot-new-chat", "slot-agents-inbox", "workflows", "sandboxes", "connectors", "slot-chat-list"]);
+    const agentsInbox = childrenOf(agents(), ctx).find((item) => item.id === "slot-agents-inbox")!;
+    const topInbox = hybridNav.items.find((item) => item.id === "slot-inbox")!;
+    expect(agentsInbox.kind === "slot" && agentsInbox.slot).toBe("inbox");
+    expect(topInbox.kind === "slot" && topInbox.slot).toBe("inbox");
+  });
+
+  it("keeps /inbox on the top level (it is not an Agents route), its top-level row the one drawn and lit", () => {
+    expect(activeArea(hybridNav, ctxAt(inboxPath()))).toBeNull();
+    expect(isCurrent(agents(), ctxAt(inboxPath()))).toBe(false);
+    renderWithInbox(inboxPath());
+    expect(screen.getByTestId("nav-top")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-slot-inbox")).toBeInTheDocument();
+    expect(screen.queryByTestId("nav-slot-agents-inbox")).toBeNull();
+    expect(screen.getAllByTestId("inbox-row")).toHaveLength(1);
+    expect(screen.getByTestId("inbox-row")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("inbox-row-badge")).toHaveTextContent("3");
+  });
+
+  it.each([projectChatsPath("p1"), newChatPath(), runsPath(), sandboxesPath()])("draws Agents' Inbox, with its badge, in the drill-in on %s", (href) => {
+    const onNavigate = renderWithInbox(href);
+    const drill = screen.getByTestId("nav-drill-in");
+    expect(drill).toHaveAttribute("data-area", "agents");
+    expect(screen.queryByTestId("nav-slot-inbox")).toBeNull();
+    const row = screen.getByTestId("inbox-row");
+    expect(screen.getByTestId("nav-slot-agents-inbox")).toContainElement(row);
+    expect(row).toHaveAttribute("href", inboxPath());
+    expect(row).not.toHaveAttribute("aria-current");
+    expect(screen.getByTestId("inbox-row-badge")).toHaveTextContent("3");
+    // Under New chat, above Workflows.
+    const order = ["nav-slot-new-chat", "nav-slot-agents-inbox", "nav-workflows"].map((id) => screen.getByTestId(id));
+    for (let i = 1; i < order.length; i++) expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(row);
+    expect(onNavigate).toHaveBeenLastCalledWith(inboxPath());
+  });
+});
+
 describe("drill-in is derived from the route", () => {
   const logs = consolePath("shopfront", { kind: "obs-view", view: "logs" });
   it.each([
@@ -264,6 +325,24 @@ describe("Settings", () => {
     expect(screen.getByTestId("nav-settings-ai")).toHaveAttribute("aria-current", "page");
     expect(screen.getByTestId("sidebar-settings-button")).toHaveAttribute("aria-current", "page");
   });
+
+  // Every Settings section's page shows Settings' sections in the nav, except
+  // the ones another area owns, which Settings must then neither light up nor
+  // reopen (SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME). A section moved under
+  // another area without being listed there fails here: that is how bare
+  // /settings came to open Agents › Sandboxes with no way back to Settings.
+  it.each(getVisibleSettingsSectionIds())("%s's page is Settings', or listed as another area's", (section) => {
+    const area = activeArea(hybridNav, ctxAt(settingsPath(section)))?.id ?? null;
+    if (SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME.includes(section)) expect(area).not.toBe("settings");
+    else expect(area).toBe("settings");
+  });
+
+  it.each([sandboxesPath(), machineSettingsPath("d-1")])("leaves %s to Agents › Sandboxes, with Settings unlit", (href) => {
+    renderAt(href);
+    expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "agents");
+    expect(screen.getByTestId("nav-sandboxes")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("sidebar-settings-button")).not.toHaveAttribute("aria-current");
+  });
 });
 
 describe("accordions", () => {
@@ -285,5 +364,28 @@ describe("accordions", () => {
 
     rerender(<NavRenderer config={hybridNav} ctx={ctx(consolePath("shopfront", { kind: "domains" }))} slots={{}} onNavigate={onNavigate} />);
     expect(configure()).toHaveAttribute("aria-expanded", "true");
+  });
+});
+
+describe("the nav's tour anchors", () => {
+  it("anchors Overview and the app's section groups by data-tour (one set, for the demo's journey and the sample tour)", () => {
+    const unregister = registerConsoleNavEntry({ id: "advisories", label: "Advisories", segment: "advisories", after: "more-tools", group: "security" });
+    try {
+      const href = consolePath("shopfront", { kind: "secrets" });
+      const console = { project: "shopfront", page: { kind: "secrets" as const }, env: "prod", envs: [] };
+      const { container } = render(<NavRenderer config={hybridNav} ctx={ctxAt(href, { console })} slots={{}} onNavigate={vi.fn()} />);
+      const anchors = [...container.querySelectorAll("[data-tour]")].map((el) => el.getAttribute("data-tour"));
+      for (const id of ["forge-console-nav", "nav-overview", "nav-observability", "nav-deployments", "nav-tests", "nav-security", "nav-configure"]) {
+        expect(anchors, id).toContain(id);
+      }
+      // A group's anchor holds the group: its row, and its rows while open (Configure, on Secrets).
+      const configure = container.querySelector("[data-tour='nav-configure']")!;
+      expect(configure.querySelector("[data-testid='nav-configure']")).not.toBeNull();
+      expect(configure.querySelector("[data-testid='nav-secrets']")).not.toBeNull();
+      expect(container.querySelector("[data-tour='nav-overview'] [data-testid='sidebar-home-button']")).not.toBeNull();
+      expect(container.querySelector("[data-tour='nav-observability'] [data-testid='nav-observability']")).not.toBeNull();
+    } finally {
+      unregister();
+    }
   });
 });

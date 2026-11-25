@@ -86,6 +86,7 @@ func (s *Service) listAllRuns(
 		UserID:          userID,
 		Org:             scope,
 		ProjectID:       req.ProjectId,
+		ProjectIDs:      req.ProjectIds,
 		Workflows:       req.Workflow,
 		TriggerID:       req.TriggerId,
 		LaunchKinds:     req.LaunchKind,

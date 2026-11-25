@@ -91,7 +91,7 @@ func idempotentService(t *testing.T, repo *db.Repo, status db.WorkflowStatus, te
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 			Temporal:      temporal,
 		},
-		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: succeedingPauseController{}}),
+		runs: runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: succeedingPauseController{}}),
 	}, temporal
 }
 
@@ -109,7 +109,7 @@ func seedAssistantTurn(t *testing.T, ctx context.Context, repo *db.Repo, fx abso
 
 func newSendAgentMessageService(repo *db.Repo) *Service {
 	tc := &signaltest.Recorder{}
-	return &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: tc, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc, Pause: nil})}
+	return &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: tc, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, runs: runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: tc, Pause: nil})}
 }
 
 func sendNamed(t *testing.T, chatID, content, id string) *connect.Request[reliantv1.SendMessageRequest] {
@@ -236,7 +236,7 @@ func TestSendMessage_RepeatOfAQueuedMessageQueuesOnce(t *testing.T) {
 	second, err := service.SendMessage(ctx, sendNamed(t, fx.chatID, "steer", id))
 	require.NoError(t, err)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1, "the repeat must not queue the message a second time")
 	assert.Equal(t, id, queued[0].ID)
@@ -261,14 +261,14 @@ func TestSendMessage_RepeatOfADrainedQueuedMessageDoesNotRequeueIt(t *testing.T)
 
 	// The agent's next turn drains it into history.
 	envelope := seedAssistantTurn(t, ctx, repo, fx)
-	moved, err := repo.MarkAgentMessagesDelivered(ctx, []string{id}, timeNow(), envelope)
+	moved, err := store.MarkAgentMessagesDelivered(ctx, repo.ORM(), []string{id}, timeNow(), envelope)
 	require.NoError(t, err)
 	require.Equal(t, []string{id}, moved)
 
 	second, err := service.SendMessage(ctx, sendNamed(t, fx.chatID, "steer", id))
 	require.NoError(t, err)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "a message the agent already read must not be queued again")
 	assert.Equal(t, id, second.Msg.MessageId, "the receipt is the one the first attempt got: the queued row's id")
@@ -307,7 +307,7 @@ func TestSendMessage_SameIDDifferentContentIsRefused(t *testing.T) {
 			assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
 
 			assert.Zero(t, countUserMessages(t, ctx, repo, fx.chatID, "different text"))
-			queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+			queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 			require.NoError(t, err)
 			for _, row := range queued {
 				assert.NotEqual(t, "different text", row.Body)
@@ -458,7 +458,7 @@ func TestSendMessage_ConcurrentQueuedDuplicatesQueueOnce(t *testing.T) {
 	for i, err := range errs {
 		require.NoError(t, err, "attempt %d", i)
 	}
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Len(t, queued, 1)
 }
@@ -513,7 +513,7 @@ func TestSendMessage_WithoutAnIDEveryCallIsANewMessage(t *testing.T) {
 		_, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "again"))
 		require.NoError(t, err)
 	}
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Len(t, queued, 2)
 }
@@ -532,7 +532,7 @@ func TestSendMessage_RepeatOfAnUndeliveredMessageSendsItAgain(t *testing.T) {
 
 	_, err := service.SendMessage(ctx, sendNamed(t, fx.chatID, "lost", id))
 	require.NoError(t, err)
-	moved, err := repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, fx.rootThreadID)
+	moved, err := store.MarkQueuedAgentMessagesUndeliveredForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, moved)
 
@@ -540,7 +540,7 @@ func TestSendMessage_RepeatOfAnUndeliveredMessageSendsItAgain(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, id, resp.Msg.MessageId)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1, "the message that was never read goes to the agent now")
 	assert.Equal(t, id, queued[0].ID)
@@ -716,13 +716,13 @@ func TestSendMessage_RepeatOfAFirstMessageStartChatSavedIsAReplay(t *testing.T) 
 		absorbTestTemporalClient: absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING},
 	}}
 	e.svc.deps.Temporal = temporal
-	e.svc.runs = runs.New(runs.Deps{Repo: e.repo, Workflows: store.NewWorkflowExtStore(e.repo.ORM()), Questions: store.NewQuestionExtStore(e.repo.ORM()), Temporal: temporal, Pause: succeedingPauseController{}})
+	e.svc.runs = runs.New(runs.Deps{Repo: e.repo, Chats: store.NewChatsWithActivityExtStore(e.repo.ORM()), Workflows: store.NewWorkflowExtStore(e.repo.ORM()), Questions: store.NewQuestionExtStore(e.repo.ORM()), Temporal: temporal, Pause: succeedingPauseController{}})
 
 	resp, err := e.svc.SendMessage(e.ctx, sendNamed(t, started.Msg.Chat.Id, "first words", id))
 	require.NoError(t, err)
 	assert.Equal(t, id, resp.Msg.MessageId)
 	assert.Equal(t, 1, countUserMessages(t, e.ctx, e.repo, started.Msg.Chat.Id, "first words"))
-	queued, err := e.repo.ListQueuedAgentMessagesForThread(e.ctx, started.Msg.Chat.Id)
+	queued, err := store.ListQueuedAgentMessagesForThread(e.ctx, e.repo.ORM(), started.Msg.Chat.Id)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "the run was started with the message in history; it is not queued again")
 }
@@ -751,14 +751,14 @@ func TestSendAgentMessage_RepeatedWithTheSameIDQueuesOnce(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, second.Msg.Success)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	assert.Len(t, queued, 1, "a repeat must not queue the message a second time")
 
 	_, err = send("steer right")
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
-	queued, err = repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	queued, err = store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	assert.Len(t, queued, 1)
 

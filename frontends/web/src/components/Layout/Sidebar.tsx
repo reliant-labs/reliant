@@ -36,10 +36,12 @@ import {
   Eye,
   EyeOff,
   MoreHorizontal,
+  Users,
+  Workflow as WorkflowIcon,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, useChatListWithWorkspaces, useArchivedChats, useArchiveChat, usePermanentlyDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
-import { useAdoptRun, useUnadoptRun } from "../../hooks/run-queries";
+import { useAdoptRun, useUnadoptRun, type LiveRunsScope } from "../../hooks/run-queries";
 import { useTriggerName } from "../../hooks/trigger-queries";
 import { isAdoptedAutomation, isRun, withOpenChatPinned } from "../../lib/sidebarChatList";
 import { useSidebarPinStore } from "../../store/sidebarPinStore";
@@ -47,8 +49,11 @@ import { LaunchKindIcon } from "../runs/LaunchKindIcon";
 import { AutomationActivityPill } from "./AutomationActivityPill";
 import { InboxNavItem } from "../inbox/InboxNavItem";
 import { SharedWithOrgSection } from "../Sharing/SharedWithOrgSection";
+import { ShareChatDialog } from "../Sharing/ShareChatDialog";
+import { ShareWorkflowDialog } from "../Sharing/ShareWorkflowDialog";
+import { canShareChat, type ShareableWorkflow } from "../Sharing/shareTargets";
+import { useChatWorkflowShare } from "../Sharing/useChatWorkflowShare";
 import { useChatProjectFilter } from "../../hooks/useChatProjectFilter";
-import { ChatProjectFilterButton, ChatProjectFilterScope } from "../Projects/ChatProjectFilter";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import { HelpMenu } from "./sidebar/HelpMenu";
 import type { RunsSearch } from "../../routeSchemas";
@@ -100,11 +105,10 @@ import {
   SidebarSubRow,
   ChatSectionHeading,
 } from "./sidebar/primitives";
-import { OrgHeaderRow, ProjectSwitcherRow } from "./sidebar/ProjectSwitcher";
 import { usePublishShellScope, useShellProject } from "./sidebar/shellProject";
-import { FindBox } from "./sidebar/FindBox";
 import type { NavigateOptions, NavSlots } from "./sidebar/NavRenderer";
-import { ShellNavBody } from "./sidebar/ShellNavBody";
+import { hybridNav } from "./sidebar/navConfig";
+import { ShellNavColumn } from "./sidebar/ShellNavColumn";
 import { useNarrowViewport } from "../../hooks/useNarrowViewport";
 import { chatSetupNeeded, chatSetupPath } from "../OnboardingFlow/onboardingGate";
 import { ConnectSandboxCta } from "../EmptyState/ConnectSandboxCta";
@@ -122,6 +126,7 @@ import {
 import { archiveWorktree } from "../../hooks/worktree-actions";
 import { MoveChatToProjectDialog } from "../Chat/MoveChatToProjectDialog";
 import { ChatAppTag } from "../Projects/ChatAppTag";
+import { ResourceVisibility } from "../../gen/reliant/v1/common_pb";
 
 interface SidebarProps {
   /** The page on screen (the router's): which row is current, which app is open. */
@@ -730,15 +735,16 @@ function SidebarComponent({
     (href: string, options?: NavigateOptions) => (options ? onNavigate?.(href, options) : onNavigate?.(href)),
     [onNavigate],
   );
-  // What the list shows is the project shell's scope (U6b, sidebar/shellProject.ts):
-  // one project's chats, several projects' (the chat filter of several,
-  // hooks/useChatProjectFilter), or every project's — grouped by project
-  // unless it is one.
+  // What the list shows is the project shell's scope (U6b, sidebar/shellProject.ts),
+  // the one project filter (the switcher at the top of the nav): one project's
+  // chats, several projects' (`?projects=`, hooks/useChatProjectFilter), or
+  // every project's — grouped by project unless it is one. The Chats heading
+  // has no project filter of its own (owner: one project filter, the global one).
   const shell = useShellProject(pathname, search);
   // Every other reader of the scope (the chat list load, the keyboard, a new chat) takes what this shows.
   usePublishShellScope(shell, search);
-  // The bridges of the chat filter of several (URL, remembered choice, org), run once, here.
-  const chatProjectFilter = useChatProjectFilter({ sync: { pathname, search } });
+  // The bridges of the scope's choice of several (URL, remembered choice, org), run once, here.
+  useChatProjectFilter({ sync: { pathname, search } });
   const projectFilterId = shell.mode === "one" ? shell.projectId : null;
   const severalProjects = shell.mode === "many" ? shell.ids : null;
   // One app with no code here has no chats to list.
@@ -840,6 +846,18 @@ function SidebarComponent({
   // The rows the list renders: a run counted here has its own row, so the
   // automation pill does not count it again.
   const listedChatIds = useMemo(() => new Set(chats.map((chat) => chat.id)), [chats]);
+  // The Workflows row's live count is about the projects the nav shows.
+  const liveRunsScope = useMemo(
+    (): LiveRunsScope =>
+      severalProjects
+        ? { kind: "projects", projectIds: severalProjects }
+        : shell.mode === "all"
+          ? { kind: "all" }
+          : projectFilterId
+            ? { kind: "projects", projectIds: [projectFilterId] }
+            : { kind: "none" },
+    [severalProjects, shell.mode, projectFilterId],
+  );
   // Where each place is, in the form the links use (lib/paths), and whether
   // its page is the one on screen.
   // New chat starts in the shell's one project; across several, wherever openNewChat would.
@@ -904,6 +922,9 @@ function SidebarComponent({
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [movingChatId, setMovingChatId] = useState<string | null>(null);
+  // The chat, or the saved workflow behind one, whose share dialog is open.
+  const [sharingChatId, setSharingChatId] = useState<string | null>(null);
+  const [sharingWorkflow, setSharingWorkflow] = useState<ShareableWorkflow | null>(null);
 
   // Ref for scroll container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1253,6 +1274,11 @@ function SidebarComponent({
     setEditingTitle("");
   }, []);
 
+  // The saved workflow the open chat menu's chat was started from, when its
+  // owner can share it: read only while that menu is open.
+  const menuChat = contextMenu?.type === "chat" ? chats.find((c) => c.id === contextMenu.chatId) : undefined;
+  const menuChatWorkflow = useChatWorkflowShare(menuChat);
+
   const getChatContextMenuItems = (chatId: string): MenuGroup[] => {
     const chat = chats.find((c) => c.id === chatId);
     if (!chat) return [];
@@ -1270,12 +1296,32 @@ function SidebarComponent({
         icon: <FolderInput className="w-4 h-4" />,
         onClick: () => setMovingChatId(chatId),
       },
+    ];
+
+    // The chat header's share toggle, from the row: its owner only.
+    if (canShareChat(chat)) {
+      menuItems.push({
+        label: chat.visibility === ResourceVisibility.ORG ? "Stop sharing…" : "Share…",
+        icon: <Users className="w-4 h-4" />,
+        onClick: () => setSharingChatId(chatId),
+      });
+    }
+    const chatWorkflow = menuChat?.id === chatId ? menuChatWorkflow : null;
+    if (chatWorkflow) {
+      menuItems.push({
+        label: chatWorkflow.shared ? "Stop sharing workflow…" : "Share workflow…",
+        icon: <WorkflowIcon className="w-4 h-4" />,
+        onClick: () => setSharingWorkflow(chatWorkflow),
+      });
+    }
+
+    menuItems.push(
       {
         label: "Copy Chat ID",
         icon: <Copy className="w-4 h-4" />,
         onClick: () => copyToClipboard(chatId),
       },
-    ];
+    );
 
     const chatWorktree = getWorktreeForChat(chat);
     if (chatWorktree?.path) {
@@ -1888,17 +1934,8 @@ function SidebarComponent({
           data-onboarding="project-filter"
           data-testid="sidebar-chats-heading"
         >
-          <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
-            Chats
-            {/* "· 3 projects ×" while the list is a choice of several (#3027). */}
-            <ChatProjectFilterScope filter={chatProjectFilter} clearClassName={SIDEBAR_ICON_BUTTON} />
-          </span>
-          {!setupNeeded && !noChatsHere && (
-            // The project filter, choose N of M (#3027); at rest only on hover unless it filters.
-            <span className={cn("flex", chatProjectFilter.mode === "all" && SIDEBAR_HEADING_HOVER_ACTION)}>
-              <ChatProjectFilterButton filter={chatProjectFilter} needsYouByProject={needsYouByProject} className={SIDEBAR_ICON_BUTTON} />
-            </span>
-          )}
+          {/* Which projects it lists is the switcher's (ProjectSwitcherRow), never a filter here. */}
+          <span className="flex min-w-0 flex-1 items-center gap-1 truncate">Chats</span>
           {chatListActions}
         </div>
         {/* No agent sandbox can run a chat yet: connect one (your machine, or a Reliant sandbox), in place of the list. */}
@@ -2090,7 +2127,7 @@ function SidebarComponent({
         )}
       </div>
     ),
-    "workflows-pill": () => <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />,
+    "workflows-pill": () => <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} scope={liveRunsScope} />,
     "chats-need-you": () =>
       chatsNeedYou > 0 ? (
         <span role="img" aria-label="A chat needs you" title="A chat needs you" className="size-2 rounded-full bg-warning" />
@@ -2108,24 +2145,16 @@ function SidebarComponent({
   };
 
   return (
-    <div
+    <ShellNavColumn
       ref={sidebarRootRef}
-      className="flex h-full flex-col bg-background"
-      data-onboarding="left-sidebar"
-      // Marks the focus context for the keyboard dispatcher and gives the pane
-      // something focusable, so "focus the chat list" has a target.
-      data-context="left-sidebar"
-      tabIndex={-1}
+      config={hybridNav}
+      slots={slots}
+      shell={shell}
+      pathname={pathname}
+      search={search}
+      onNavigate={go}
+      flat={narrow}
     >
-      {/* The header (U6, owner): the org row on the nav's top bar, then Find (the command palette), then the project(s) every row below is about. */}
-      <OrgHeaderRow />
-      <FindBox />
-      <ProjectSwitcherRow shell={shell} pathname={pathname} />
-
-      {/* The nav as data (U6c): the variant's rows, or the area the route is in, then the footer.
-          On a phone it is a drawer, where every row is drawn as a top-level row (NavRenderer `flat`). */}
-      <ShellNavBody shell={shell} pathname={pathname} search={search} slots={slots} onNavigate={go} flat={narrow} />
-
       {/* One context menu for every row; its items follow the row. */}
       {contextMenu && (
         <ContextMenu
@@ -2149,11 +2178,13 @@ function SidebarComponent({
           }}
         />
       )}
+      {sharingChatId && <ShareChatDialog chatId={sharingChatId} open onClose={() => setSharingChatId(null)} />}
+      <ShareWorkflowDialog workflow={sharingWorkflow} onClose={() => setSharingWorkflow(null)} />
       {movingChatId && (
         <MoveChatToProjectDialog chatId={movingChatId} open onClose={() => setMovingChatId(null)} />
       )}
       {/* Render complete */}
-    </div>
+    </ShellNavColumn>
   );
 }
 

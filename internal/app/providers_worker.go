@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/reliant-labs/forge/pkg/observe"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+
+	"github.com/reliant-labs/forge/pkg/observe"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
@@ -21,6 +22,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/changetools"
+	"github.com/reliant-labs/reliant/internal/chataccess"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/connectionproposer"
@@ -30,12 +33,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
-	"github.com/reliant-labs/reliant/internal/daemonmirror"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
-	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/hosteduse"
@@ -82,6 +84,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/workflowcheck"
+	"github.com/reliant-labs/reliant/internal/workflowdrafts"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
@@ -326,7 +329,7 @@ type RunLifecycleDeps struct {
 // NewRunLifecycle is the run service: it records runs and drives their
 // workflows.
 func NewRunLifecycle(d RunLifecycleDeps) (*runs.Service, error) {
-	return runs.New(runs.Deps{Repo: d.DB, Workflows: store.NewWorkflowExtStore(d.DB.ORM()), Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause, Waits: d.Backoff}), nil
+	return runs.New(runs.Deps{Repo: d.DB, Chats: store.NewChatsWithActivityExtStore(d.DB.ORM()), Workflows: store.NewWorkflowExtStore(d.DB.ORM()), Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause, Waits: d.Backoff}), nil
 }
 
 // RunLauncherDeps is what a launch creates and starts.
@@ -346,6 +349,7 @@ func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
 	pinner := daemonplacement.NewPinner(d.DB, d.Router.NATSDaemonRouter)
 	return launch.New(launch.Deps{
 		Store:       d.DB,
+		Chats:       store.NewChatsWithActivityExtStore(d.DB.ORM()),
 		Workflows:   store.NewWorkflowExtStore(d.DB.ORM()),
 		Worktrees:   store.NewWorktreeExtStore(d.DB.ORM()),
 		ProjectRows: store.NewProjectExtStore(d.DB.ORM()),
@@ -371,6 +375,8 @@ type WorkerChatDeps struct {
 	Temporal *TemporalClient
 	Pause    *v2workflow.PauseService
 	Router   *WorkerDaemonRouter
+	// Updates writes the chat's refetch signals and publishes them to the hubs.
+	Updates chatupdates.Service
 }
 
 // NewWorkerChat builds the chat service the run tools act through, as the
@@ -382,6 +388,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Logger:        d.Logger,
 		Config:        d.Config,
 		Repo:          d.DB,
+		Chats:         chataccess.NewFromORM(d.DB.ORM()),
 		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
 		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
 		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
@@ -396,7 +403,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Pause:         d.Pause,
 		Router:        d.Router,
 		LocalModels:   local.NewRepoDirectory(d.DB, store.NewModelEndpointExtStore(d.DB.ORM())),
-		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
+		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.Updates}),
 		AgentMessages: store.NewAgentMessageExtStore(d.DB.ORM()),
 	})
 	if err != nil {
@@ -469,6 +476,9 @@ type WorkerTriggerDeps struct {
 	Pollers         *webhook.Registry
 	Integrations    *IntegrationSettings
 	ControlPlane    *configv1.ControlPlaneConfig
+	// AutomationKeys holds each daemon's delegated automation token;
+	// trigger.New requires it whenever ControlPlane is set (hosted).
+	AutomationKeys automationtokens.Service
 	// Owners re-owns an orphaned trigger; trigger.New requires it.
 	Owners triggerowner.Service
 }
@@ -506,8 +516,9 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Logger:         d.Logger,
 		Config:         d.Config,
 		Repo:           repo,
+		Chats:          store.NewChatExtStore(repo.ORM()),
 		Firings:        store.NewTriggerEventExtStore(repo.ORM()),
-		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(repo.ORM()),
 		Owners:         d.Owners,
 		Projects:       projectaccess.NewFromORM(repo.ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(repo.ORM()),
@@ -515,6 +526,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Syncer:         syncer,
 		Fires:          fires,
 		ControlPlane:   hostedControlPlane(d.ControlPlane),
+		AutomationKeys: d.AutomationKeys,
 		Access:         access,
 		Integrations:   d.Integrations.Config,
 		Sealer:         d.Vault,
@@ -548,7 +560,9 @@ type WorkerToolsFactoryDeps struct {
 	WriteLedger     writeledger.Service
 	CatalogSearch   *WorkerCatalogSearch
 	Router          *WorkerDaemonRouter
-	Mirror          daemonmirror.Service
+	// WorkflowDrafts is the saved workflows the workflow and scenario tools
+	// read and write.
+	WorkflowDrafts workflowdrafts.Service
 	// Membership names a person's org role for propose_connection, which
 	// offers an org-wide connection only to an org owner or admin.
 	Membership *orgs.Resolver
@@ -558,7 +572,12 @@ type WorkerToolsFactoryDeps struct {
 	Config *config.Config
 	// ChangeController runs Forge Changes for list_changes / get_change /
 	// manage_change; nil when self-hosted.
+	// forge:optional-dep
 	ChangeController tools.ChangeController
+	// MachineController acts on the user's machines for list_machines /
+	// manage_machine; nil when self-hosted.
+	// forge:optional-dep
+	MachineController tools.MachineController
 }
 
 // ChangeControllerDeps are what NewChangeController reads.
@@ -570,6 +589,7 @@ type ChangeControllerDeps struct {
 // NewChangeController is nil when self-hosted: Changes live in the control
 // plane, and the tools say so.
 //
+//forge:optional-component: Changes live in the control plane; a self-hosted worker has none
 //forge:root-only worker
 func NewChangeController(d ChangeControllerDeps) tools.ChangeController {
 	if !ControlPlaneEndpoint(d.ControlPlane).Hosted() {
@@ -587,17 +607,6 @@ func NewChangeController(d ChangeControllerDeps) tools.ChangeController {
 func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
 	runMachine := toolexec.NewRunMachine(d.Router)
-	// The registry service is a library here, not a mount: the label and
-	// pool tools call its rpcs in-process, as the run's owner. Its
-	// IdleTimeouts is the worker's control plane (nil when self-hosted).
-	registryDeps := daemon_registry.Deps{Logger: d.Logger, Config: d.Config, Repo: repo, Pools: store.NewMachinePoolExtStore(repo.ORM()), Mirror: d.Mirror}
-	if d.Router != nil && d.Router.ControlPlane != nil {
-		registryDeps.IdleTimeouts = d.Router.ControlPlane
-	}
-	registry, err := daemon_registry.New(registryDeps)
-	if err != nil {
-		return nil, err
-	}
 	planner, err := newToolPlanning(d.Logger, d.Config, repo)
 	if err != nil {
 		return nil, err
@@ -606,6 +615,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		Repo:               repo,
 		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
 		SpawnTree:          store.NewToolCallExtStore(repo.ORM()),
+		SpawnMailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
 		Scenarios:          store.NewWorkflowScenarioExtStore(repo.ORM()),
 		LaunchedRuns:       store.NewTriggerEventExtStore(repo.ORM()),
 		WorktreeChats:      store.NewChatExtStore(repo.ORM()),
@@ -634,6 +644,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		// run_scenario / write_scenario execute on the real runtime via the
 		// scenario runner; injected because the runner imports this package's
 		// dependents.
+		WorkflowDrafts: d.WorkflowDrafts,
 		ScenarioRunner: scenariorunner.RunScenario,
 		// start_run / control_run / send_to_run execute here, inside the
 		// ExecuteTools activity.
@@ -647,7 +658,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		ActivationManager:  d.Triggers.Service,
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
-		MachineController: newMachineController(repo, d.Router, registry),
+		MachineController: d.MachineController,
 		// list_changes / get_change / manage_change run Forge Changes as the
 		// user, through the control plane's ChangesService.
 		ChangeController: d.ChangeController,
@@ -755,9 +766,11 @@ func (a *AccountRecorder) Close(context.Context) error {
 type TemporalWorkerDeps struct {
 	// Checks is the record-only workflowcheck the fire and run activities
 	// report to; the WorkflowCheckSyncer writes GitHub.
-	Checks           *RecordOnlyChecks
-	ConnectionVault  connectionvault.Service
-	DB               *db.Repo
+	Checks          *RecordOnlyChecks
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	// Updates writes refetch signals and publishes them to the hubs.
+	Updates          chatupdates.Service
 	ProviderAccounts provideraccounts.Service
 	OrgAccounts      orgaccounts.Service
 	Temporal         *TemporalClient
@@ -789,9 +802,10 @@ type TemporalWorkerDeps struct {
 	// Policies is the org policy resolver every activity carries
 	// (orgpolicy).
 	Policies *orgpolicy.Resolver
-	// Triggers turns a moved project's triggers back on in their new org
-	// (orgmove's ResumeTriggers step).
-	Triggers *WorkerTrigger
+	// OrgMoves is the steps of a project's move to another org; nil, so
+	// the activities are not registered, where NewOrgMoves says.
+	// forge:optional-dep
+	OrgMoves orgmove.Service
 }
 
 // orgAdminNotifier is the control plane as the worker's notifier of an org's
@@ -817,10 +831,10 @@ func stepKeyIssuer(d TemporalWorkerDeps) handlers.StepKeyIssuer {
 
 // projectMoveAnnouncer is orgmove's Announcer: one refetch for the project's
 // owner, written in the commit's own transaction (the ctx it is called with).
-type projectMoveAnnouncer struct{ repo *db.Repo }
+type projectMoveAnnouncer struct{ updates chatupdates.Service }
 
 func (a projectMoveAnnouncer) AnnounceProjectMoved(ctx context.Context, ownerUserID, projectID string) error {
-	return a.repo.EmitUserRefetch(ctx, ownerUserID, db.RefetchProjectOrgMoved, db.RefetchOpts{ProjectID: &projectID})
+	return a.updates.EmitUserRefetch(ctx, ownerUserID, core.RefetchProjectOrgMoved, core.RefetchOpts{ProjectID: &projectID})
 }
 
 // orgMembers is the resolver as orgmove's Members, nil for a deployment with
@@ -832,11 +846,27 @@ func orgMembers(r *orgs.Resolver) orgmove.Members {
 	return r
 }
 
-// workerOrgMoves is the steps of a project's move to another org on this
+// OrgMovesDeps are what NewOrgMoves reads.
+type OrgMovesDeps struct {
+	DB           *db.Repo
+	Router       *WorkerDaemonRouter
+	ControlPlane *configv1.ControlPlaneConfig
+	// Triggers turns a moved project's triggers back on in their new org
+	// (orgmove's ResumeTriggers step).
+	Triggers   *WorkerTrigger
+	Membership *orgs.Resolver
+	// Updates announces the move to the owner's clients.
+	Updates chatupdates.Service
+}
+
+// NewOrgMoves is the steps of a project's move to another org on this
 // worker: nil, so the activities are not registered, without a control plane
 // signed as the internal service (it cannot Prepare, Abort or Record) or the
 // trigger service.
-func workerOrgMoves(d TemporalWorkerDeps) (orgmove.Service, error) {
+//
+//forge:optional-component: a worker without a control plane signed as the internal service cannot move a project
+//forge:root-only worker
+func NewOrgMoves(d OrgMovesDeps) (orgmove.Service, error) {
 	if d.Router == nil || d.Router.ControlPlane == nil || d.Triggers == nil || d.Triggers.Service == nil {
 		return nil, nil
 	}
@@ -848,7 +878,7 @@ func workerOrgMoves(d TemporalWorkerDeps) (orgmove.Service, error) {
 		Logger:       slog.Default(),
 		Store:        store.NewProjectOrgMoveExtStore(o),
 		Projects:     store.NewProjectExtStore(o),
-		Announcer:    projectMoveAnnouncer{repo: d.DB},
+		Announcer:    projectMoveAnnouncer{updates: d.Updates},
 		ControlPlane: d.Router.ControlPlane,
 		Triggers:     d.Triggers.Service,
 		Members:      orgMembers(d.Membership),
@@ -940,12 +970,8 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		slog.Default().Warn("stop nudges are DISABLED on this worker: pause and interrupt reach running activities on their next heartbeat",
 			"subject", stopnudge.Subject, "error", err)
 	}
-	moves, err := workerOrgMoves(d)
-	if err != nil {
-		return nil, err
-	}
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
-		OrgMoves:               moves,
+		OrgMoves:               d.OrgMoves,
 		StopNudges:             nudges,
 		AccountLimits:          d.Recorder.Recorder,
 		OrgAdmins:              orgAdminNotifier(d),

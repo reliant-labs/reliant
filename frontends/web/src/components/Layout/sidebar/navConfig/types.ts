@@ -25,7 +25,7 @@
 import type { ReactNode } from "react";
 
 import type { ConsolePage, OrgPage } from "../../../Forge/Console/paths";
-import type { GroupedNavInput } from "../../../Forge/Console/groupedNav";
+import type { GroupedNavInput } from "../../../Forge/Console/consoleNavModel";
 import type { ShellMode } from "../shellProject";
 
 /** Everything an item's href, match or availability reads: the route and the shell's scope. */
@@ -67,7 +67,9 @@ export type NavSlotId =
   /** A row's control: the desktop app's update button (Settings). */
   | "update-button"
   /** The footer's Help row: a tour, the docs, keyboard shortcuts (sidebar/HelpMenu). */
-  | "help";
+  | "help"
+  /** A host's own actions in the footer: the public demo's tour, Install Forge and telemetry notice in a phone's drawer (Forge/Demo/demoNav.ts). */
+  | "host-actions";
 
 /** A count or a dot after a row's label. */
 export type NavBadge = { type: "count"; value: number; tone?: "danger"; label?: string } | { type: "dot"; label: string };
@@ -75,7 +77,7 @@ export type NavBadge = { type: "count"; value: number; tone?: "danger"; label?: 
  * A badge after an item's label: a row's, a group's (drawn open or closed)
  * or an area's. It reads the context only, so it is live from whatever the
  * nav already holds: `ctx.console?.navCounts?.<source>` for a console count
- * (Forge/Console/groupedNav.tsx), `ctx.console?.alertsFiring`, … Undefined:
+ * (Forge/Console/consoleNavModel.ts), `ctx.console?.alertsFiring`, … Undefined:
  * no badge. See countBadge (navConfig/model.ts) for the usual count.
  */
 export type NavBadgeOf = (ctx: NavCtx) => NavBadge | undefined;
@@ -87,6 +89,12 @@ interface NavItemBase {
   available?: (ctx: NavCtx) => boolean;
   /** The row's test id, when it is not `nav-<id>` (ids tests and tours already name). */
   testId?: string;
+  /**
+   * The item's tour anchor (`data-tour`, Onboarding/JOURNEYS.md "Anchors"):
+   * on a group, its whole block (the row and, open, its rows). Set only on
+   * the items a journey points at; tourAnchors.test pins each one.
+   */
+  tour?: string;
 }
 
 export interface NavRow extends NavItemBase {
@@ -102,6 +110,13 @@ export interface NavRow extends NavItemBase {
   flatIcon?: ReactNode;
   href: NavHref;
   match?: NavMatch;
+  /**
+   * The kind of console page the row opens, when it always opens one kind
+   * (Services, Usage, Speed insights…). It is what a host that does not serve
+   * a page prunes by (navConfig/prune.ts `withoutPages`); rows that open no
+   * console page, or several kinds, leave it unset.
+   */
+  page?: ConsolePage["kind"];
   /** Leaves the current area for another place (AI providers ↗ in Settings). */
   external?: boolean;
   badge?: NavBadgeOf;

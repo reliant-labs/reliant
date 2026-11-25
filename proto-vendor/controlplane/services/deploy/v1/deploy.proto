@@ -74,6 +74,7 @@ service DeployService {
   }
   // Feature negotiation is mandatory before sending immutable snapshot documents.
   rpc GetCapabilities(GetDeployCapabilitiesRequest) returns (GetDeployCapabilitiesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -83,6 +84,7 @@ service DeployService {
   // no enrollment: the deploy product is open to every org, so every live org
   // is a tenant (slug and namespace prefix = the org id).
   rpc GetTenant(GetDeployTenantRequest) returns (GetDeployTenantResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -121,9 +123,11 @@ service DeployService {
     };
   }
   rpc GetEnvironment(GetDeployEnvironmentRequest) returns (GetDeployEnvironmentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc ListEnvironments(ListDeployEnvironmentsRequest) returns (ListDeployEnvironmentsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   // ListApps lists the org's apps — its hosted projects, one per forge.yaml
@@ -176,6 +180,7 @@ service DeployService {
   // deleted environment (DeleteEnvironment with keep_data). Their data still
   // exists and still bills as storage.
   rpc ListRetainedDatabases(ListRetainedDatabasesRequest) returns (ListRetainedDatabasesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   // DeleteRetainedDatabase destroys one retained database's cluster, volumes
@@ -302,6 +307,7 @@ service DeployService {
   // GetAppDeletion reports the app's scheduled deletion, if any. MEMBER
   // (machine: deploy:read).
   rpc GetAppDeletion(GetAppDeletionRequest) returns (GetAppDeletionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -360,9 +366,11 @@ service DeployService {
     };
   }
   rpc GetDeployment(GetDeploymentRequest) returns (GetDeploymentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc ListDeployments(ListDeploymentsRequest) returns (ListDeploymentsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   // UpdateDeployment replaces the DECLARED state. Reserved capacity changes
@@ -492,6 +500,7 @@ service DeployService {
   // ListRollbackFloors returns an environment's floors, oldest first: the
   // active ones, or every one with include_lifted.
   rpc ListRollbackFloors(ListRollbackFloorsRequest) returns (ListRollbackFloorsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -587,6 +596,7 @@ service DeployService {
   // observed — plus the derived drift the UI badges. The 15s poll on the
   // /deploy detail page calls this.
   rpc GetStatus(GetDeploymentStatusRequest) returns (GetDeploymentStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -599,6 +609,7 @@ service DeployService {
   // transient disconnect a gap of milliseconds instead of a re-read of the
   // whole buffer.
   rpc StreamLogs(StreamDeploymentLogsRequest) returns (stream StreamDeploymentLogsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "reads only: computes and returns, changes nothing"}
@@ -670,9 +681,11 @@ service DeployService {
   // is deliberately no UpdateRelease anywhere in this service — a correction
   // is a new release.
   rpc ListReleases(ListDeployReleasesRequest) returns (ListDeployReleasesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc GetRelease(GetDeployReleaseRequest) returns (GetDeployReleaseResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   // ListPromotions returns an environment's ledger, newest first — the
@@ -680,6 +693,7 @@ service DeployService {
   // including every release the env moved away from, which a current-pointer
   // read cannot show.
   rpc ListPromotions(ListDeployPromotionsRequest) returns (ListDeployPromotionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -695,6 +709,7 @@ service DeployService {
   // it adds; the other way round sets commits.reverts and lists what moving
   // to it takes away.
   rpc CompareReleases(CompareDeployReleasesRequest) returns (CompareDeployReleasesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "reads only: computes and returns, changes nothing"}
@@ -717,6 +732,7 @@ service DeployService {
   // promotion fixes the first; a server-computed phase (which folds
   // mid-rollout divergence into PROGRESSING) fixes the second.
   rpc GetRollout(GetDeployRolloutRequest) returns (GetDeployRolloutResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -753,6 +769,7 @@ service DeployService {
   // ListGates returns a promotion's whole evidence trail: the gates claimed at
   // promote time first, then the recorded ones oldest-first.
   rpc ListGates(ListDeployGatesRequest) returns (ListDeployGatesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -765,6 +782,7 @@ service DeployService {
   // second copy of it that could disagree. A client polls this exactly as the
   // deploy detail page already polls GetStatus.
   rpc GetRun(GetDeployRunRequest) returns (GetDeployRunResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -779,6 +797,7 @@ service DeployService {
   // (org owners and admins), the rule of every other cost read, and without it
   // the rows come back with costs_withheld set.
   rpc ListUsage(ListDeployUsageRequest) returns (ListDeployUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -819,12 +838,14 @@ service DeployService {
   }
 
   rpc GetBundle(GetDeployBundleRequest) returns (GetDeployBundleResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
   // Values require BOTH deploy:read and deploy:config:read. Every read is
   // synchronously audited. The names-only GetBundle endpoint is unchanged.
   rpc GetWorkloadConfig(GetWorkloadConfigRequest) returns (GetWorkloadConfigResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -870,6 +891,7 @@ service DeployService {
   //
   // MEMBER. This is the deploy history of a team's own environment.
   rpc ListConvergences(ListDeployConvergencesRequest) returns (ListDeployConvergencesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -928,6 +950,7 @@ service DeployService {
   // forge:custom — keyset-paged by (started_at, id) with a derived state, not
   // the generated CRUD list.
   rpc ListDeployAttempts(ListDeployAttemptsRequest) returns (ListDeployAttemptsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -936,6 +959,7 @@ service DeployService {
   // forge:custom — returns the log and report beside the attempt, and derives
   // its state.
   rpc GetDeployAttempt(GetDeployAttemptRequest) returns (GetDeployAttemptResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -952,6 +976,7 @@ service DeployService {
   // empty list, never an error: a project nobody has deployed yet is a normal
   // state, not a failure.
   rpc GetLiveView(GetDeployLiveViewRequest) returns (GetDeployLiveViewResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -973,6 +998,7 @@ service DeployService {
   // A NEVER-DECLARED ENVIRONMENT IS NOT AN ERROR: the response comes back
   // with no shape, which is the "never built" state, never an empty shape.
   rpc GetEnvironmentShape(GetDeployEnvironmentShapeRequest) returns (GetDeployEnvironmentShapeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -994,6 +1020,7 @@ service DeployService {
   // the same answer: a report with no environments. It names no secret value
   // and no machine path.
   rpc GetProjectTopology(GetDeployProjectTopologyRequest) returns (GetDeployProjectTopologyResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -1010,6 +1037,7 @@ service DeployService {
   // the plan rather than trusting the one the caller approved. That is what
   // makes the digest a guarantee instead of a claim.
   rpc PlanDeploy(PlanDeployRequest) returns (PlanDeployResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "dry run: computes a plan, changes nothing"}
@@ -1130,6 +1158,7 @@ service DeployService {
   // edited. The next apply reverts such an edit silently, which is why it has
   // to be visible BEFORE the deploy rather than discovered after.
   rpc GetDrift(GetDeployDriftRequest) returns (GetDeployDriftResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 }
@@ -3048,6 +3077,11 @@ enum DeployCapacityCode {
   // The demand fits the claimable plan but the platform will not take it right
   // now (compute is off, or the platform-wide ceiling is full). Retry later.
   DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE = 8;
+  // The org has billing and the demand would take it past its live
+  // static-site limit (100 by default; each environment's site counts as
+  // one). Refused, never queued. The limit is a soft one: the fix says how to
+  // have support raise it.
+  DEPLOY_CAPACITY_CODE_STATIC_SITE_LIMIT_REACHED = 9;
 }
 
 message CheckDeployCapacityResponse {
