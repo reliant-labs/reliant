@@ -62,6 +62,13 @@ func toolsDaemonLogPath(dataDir string) string {
 // The level is RELIANT_LOG_LEVEL (default INFO) and the format is LOG_FORMAT
 // (text, or JSON for a hosted daemon), both from the root config's log
 // settings; see logging.SetupDaemon.
+// daemonSupervisor is who spawned this daemon and supervises it, as the
+// parent declared it (daemonstate.SupervisorEnv; the desktop app sets
+// "electron"). Empty when nothing declared itself.
+func daemonSupervisor() string {
+	return os.Getenv(daemonstate.SupervisorEnv) //nolint:forbidigo // the parent process declaring itself (daemonstate.SupervisorEnv), a process signal, not configuration
+}
+
 func setupToolsDaemonLogging(dataDir string, verboseOutput, managed bool, log logging.Settings) {
 	logging.SetupDaemon(logging.DaemonLogConfig{
 		Rotation: &logging.RotationConfig{
@@ -1119,6 +1126,7 @@ keeps running.
 							Name:          daemonName,
 							MachineLabels: machineLabels,
 							Verbose:       verbose,
+							Supervisor:    daemonSupervisor(),
 						},
 						Host:               host,
 						ChromeBrowserURL:   dcfg.GetChromeBrowserUrl(),
@@ -1191,6 +1199,7 @@ keeps running.
 							ServerMode: false,
 							ListenPort: listenPort,
 							Verbose:    verbose,
+							Supervisor: daemonSupervisor(),
 						},
 						Host:               host,
 						ChromeBrowserURL:   dcfg.GetChromeBrowserUrl(),
