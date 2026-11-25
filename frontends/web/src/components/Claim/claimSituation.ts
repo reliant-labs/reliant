@@ -18,6 +18,7 @@
  *                                                            (join the org as its owner)
  */
 
+import type { AuthIdentity } from "@/lib/auth/use-auth";
 import type { PendingClaim } from "@/lib/claimLink";
 
 export type ClaimSituation =
@@ -27,15 +28,12 @@ export type ClaimSituation =
   | "replace-anonymous"
   | "existing-account";
 
-/** The slice of a Supabase user the decision reads. */
-export interface ClaimUser {
-  id: string;
-  is_anonymous?: boolean;
-}
+/** The slice of the signed-in identity (lib/auth/use-auth) the decision reads. */
+export type ClaimUser = Pick<AuthIdentity, "id" | "isAnonymous">;
 
 export function claimSituation(user: ClaimUser | null, pending: Pick<PendingClaim, "anonUserId">): ClaimSituation {
   if (!user) return "signed-out";
   const isClaimsUser = pending.anonUserId !== undefined && pending.anonUserId === user.id;
-  if (user.is_anonymous === true) return isClaimsUser ? "resume-upgrade" : "replace-anonymous";
+  if (user.isAnonymous) return isClaimsUser ? "resume-upgrade" : "replace-anonymous";
   return isClaimsUser ? "finish" : "existing-account";
 }

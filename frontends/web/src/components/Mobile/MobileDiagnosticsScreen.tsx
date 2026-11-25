@@ -18,7 +18,7 @@ import { serverVersionLabel, useVersionInfo } from "@/hooks/useVersionInfo";
 import { clearClientErrors, useClientErrors, type ClientErrorEntry } from "@/lib/clientDiagnostics";
 import { formatDiagnosticsReport, type DiagnosticsFacts } from "@/lib/diagnosticsReport";
 import { useSurface } from "@/lib/surfaceContext";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthUserId } from "@/lib/auth/use-auth";
 import { useGlobalUpdatesStore } from "@/store/globalUpdatesStore";
 import { useProjectStore } from "@/store/projectStore";
 import { cn } from "@/lib/utils";
@@ -92,7 +92,7 @@ export function MobileDiagnosticsScreen({ onBack }: { onBack: () => void }) {
       daemonLastSeen: s.daemonLastSeen,
     })),
   );
-  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const userId = useAuthUserId();
   const project = useProjectStore((s) => s.currentProject);
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
 

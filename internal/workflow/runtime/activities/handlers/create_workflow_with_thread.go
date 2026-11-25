@@ -9,6 +9,7 @@ import (
 
 	"go.temporal.io/sdk/activity"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -185,7 +186,7 @@ func (a *CreateWorkflowWithThreadActivity) Execute(ctx context.Context, input Cr
 		SpawnedByNodeID: input.SpawnedByNodeID,
 		LoopIteration:   input.LoopIteration,
 		CreatedAt:       time.Now().UTC(),
-		OwnerUserID:     resolveRunOwner(ctx, a.workflows, a.repo, input.ParentWorkflowID, input.ChatID),
+		OwnerUserID:     resolveRunOwner(ctx, a.workflows, chatviews.Of(a.repo), input.ParentWorkflowID, input.ChatID),
 	}
 
 	// Build the options for CreateWorkflowWithThread

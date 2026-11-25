@@ -1091,7 +1091,7 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 	// takes it before changing a chat binding/state; no transaction spans I/O.
 	err := r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(ctx context.Context) error {
 		var err error
-		chat, err = r.GetChat(ctx, chatID)
+		chat, err = store.GetChat(ctx, r.ORM(), chatID)
 		if err != nil {
 			return fmt.Errorf("failed to get chat: %w", err)
 		}
@@ -1355,7 +1355,7 @@ func (r *Repo) ListChatsWaitingForMachine(ctx context.Context, userID string) ([
 // write has aborted it, so the error is the caller's.
 func (r *Repo) UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error {
 	err := r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
-		chat, err := r.GetChat(txCtx, chatID)
+		chat, err := store.GetChat(txCtx, r.ORM(), chatID)
 		if err != nil {
 			return fmt.Errorf("failed to get chat: %w", err)
 		}

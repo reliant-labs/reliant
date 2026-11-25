@@ -15,7 +15,7 @@
 import { useEffect, useMemo } from "react";
 
 import { useProjects } from "@/hooks/project-queries";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthIdentity } from "@/lib/auth/use-auth";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
 /**
@@ -100,20 +100,16 @@ export interface ConsoleUser {
 
 /** The signed-in user, as the console's rail shows them. */
 export function useConsoleUser(): ConsoleUser | undefined {
-  const authUser = useAuthStore((state) => state.user);
+  const identity = useAuthIdentity();
   // One object per signed-in user: it is a prop of the console's memoized chrome.
   return useMemo(
     () =>
-      authUser
+      identity
         ? {
-            name:
-              (authUser.user_metadata?.full_name as string | undefined) ??
-              (authUser.user_metadata?.name as string | undefined) ??
-              authUser.email?.split("@")[0] ??
-              "You",
-            email: authUser.email ?? undefined,
+            name: identity.name ?? identity.email?.split("@")[0] ?? "You",
+            email: identity.email ?? undefined,
           }
         : undefined,
-    [authUser]
+    [identity]
   );
 }

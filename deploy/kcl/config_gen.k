@@ -32,7 +32,7 @@ schema ApiServerConfigChatCollaboration:
     enabled: bool = False
 
 # forge:section schema ApiServerConfig
-# forge:hash=4cfa37ea97a36a554a4f1fe7f51d3c9d0ac5fb6f3d8be4b717d8d21ce5ba5f9f
+# forge:hash=628c3c70b9018420832ca06b2263b7d24df999393334f3e2f3a3dcb787ad4201
 schema ApiServerConfig:
     # JWT public key PEM for token validation
     jwt_public_key: str = ""
@@ -82,6 +82,8 @@ schema ApiServerConfig:
     trusted_proxy_hops: int = 0
     # Serve POST /auth/register outside development (with no delivered login policy)
     auth_self_signup: bool = False
+    # Comma-separated EXACT redirect URIs a sign-in handoff may send its one-time code to: http://127.0.0.1/<path> (a desktop app's loopback, any port), https://<sibling host>/<path>, or a private-use scheme with a dot. One bad entry turns the handoff off. Empty serves no handoff
+    handoff_redirects: str = ""
     # Comma-separated email domains allowed to sign in (none allows all)
     allowed_email_domains: str = ""
     # Turn the forge RPC surface off at this server (its rpcs answer FailedPrecondition)
@@ -231,7 +233,7 @@ apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str
         "apiServerConfigEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _sensitive]}, which is not a `sensitive` field of ApiServerConfig. Sensitive fields: ${sorted([_k for _k in _sensitive])}. Add `sensitive: true` to the field's (forge.v1.config) annotation in its config proto, or drop the name from this workload's config_secrets."
     {
         # forge:section apiServerConfigEnvMap values (root)
-        # forge:hash=7dec8f56a4db88034ed82e2b95c744ff446a6e7782115de03914d4f617fdebcf
+        # forge:hash=a346fe940ccde50de518d80658a27c2a2c91aa6dff78780b97bbf73949cff472
         "JWT_PUBLIC_KEY" = c.jwt_public_key
         "JWT_PUBLIC_KEY_FILE" = c.jwt_public_key_file
         "RELIANT_JWKS_URL" = c.jwks_url
@@ -253,6 +255,7 @@ apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str
         "IDP_BROKER_TOKEN_FILE" = c.idp_broker_token_file
         "TRUSTED_PROXY_HOPS" = str(c.trusted_proxy_hops)
         "AUTH_SELF_SIGNUP" = "true" if c.auth_self_signup else "false"
+        "HANDOFF_REDIRECTS" = c.handoff_redirects
         "ALLOWED_EMAIL_DOMAINS" = c.allowed_email_domains
         "RELIANT_DISABLE_FORGE_API" = "true" if c.disable_forge_api else "false"
         "GRPC_PORT" = str(c.grpc_port)
@@ -1897,7 +1900,7 @@ vaultMaintenanceConfigEnvMap = lambda c: VaultMaintenanceConfig, config_secrets:
 }
 
 # forge:section schema WorkerConfig
-# forge:hash=19c9837fa805f7ade03a50abad415e4177942517cc7203b45570d3069910740f
+# forge:hash=b886b9e15f7cbab88cea14d98ac8871540b0f0146dbf82024c98f6fc1d072dbc
 schema WorkerConfig:
     # Private HTTPS workspace-controller endpoint for fixed hosted actions
     hosted_actions_url: str = ""
@@ -1937,6 +1940,8 @@ schema WorkerConfig:
     step_execution_retention: str = "0s"
     # Wait after worker start before the first ledger retention pass, so an api-server rollout completes first (0: at once)
     ledger_retention_start_delay: str = "1h"
+    # Age past which a finished run's recorded node observations (observe: attributes and events) are deleted (0: never)
+    node_observation_retention: str = "0s"
 
     check:
         pre_stop_delay != "", "pre_stop_delay = \"\" cannot reach the process: an empty PRE_STOP_DELAY counts as unset, so it would load the default \"5s\" — set a value"
@@ -1946,6 +1951,7 @@ schema WorkerConfig:
         chat_update_retention != "", "chat_update_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_CHAT_UPDATE_RETENTION counts as unset, so it would load the default \"0s\" — set a value"
         step_execution_retention != "", "step_execution_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_STEP_EXECUTION_RETENTION counts as unset, so it would load the default \"0s\" — set a value"
         ledger_retention_start_delay != "", "ledger_retention_start_delay = \"\" cannot reach the process: an empty RELIANT_WORKER_LEDGER_RETENTION_START_DELAY counts as unset, so it would load the default \"1h\" — set a value"
+        node_observation_retention != "", "node_observation_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_NODE_OBSERVATION_RETENTION counts as unset, so it would load the default \"0s\" — set a value"
 
 # forge:section env-map workerConfigEnvMap
 # forge:hash=73c8553dedb9f5b3bcefc972bda5c8ae27cb0bf15a6e1addcc5f36ef1a92c4d7
@@ -1992,7 +1998,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
         "workerConfigEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _sensitive]}, which is not a `sensitive` field of WorkerConfig. Sensitive fields: ${sorted([_k for _k in _sensitive])}. Add `sensitive: true` to the field's (forge.v1.config) annotation in its config proto, or drop the name from this workload's config_secrets."
     {
         # forge:section workerConfigEnvMap values (root)
-        # forge:hash=dd30d3a5fea347b0bc051e9c5a037bcde4685d3aee23340bed4ffd6f2ab21445
+        # forge:hash=332d9678c869ea4b0a455eda103e315639930151792e6adb703537974125ef11
         if c.hosted_actions_url != "":
             "RELIANT_WORKER_HOSTED_ACTIONS_URL" = c.hosted_actions_url
         if c.hosted_actions_ca_file != "":
@@ -2014,6 +2020,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
         "RELIANT_WORKER_CHAT_UPDATE_RETENTION" = c.chat_update_retention
         "RELIANT_WORKER_STEP_EXECUTION_RETENTION" = c.step_execution_retention
         "RELIANT_WORKER_LEDGER_RETENTION_START_DELAY" = c.ledger_retention_start_delay
+        "RELIANT_WORKER_NODE_OBSERVATION_RETENTION" = c.node_observation_retention
 
         # forge:section workerConfigEnvMap values (end)
         # forge:hash=fa178fe4044cdbd75d3e720bd63a7af32e878a5551d581a0f83e855bb2cb706b
@@ -2173,7 +2180,7 @@ ROOTS: {str: Root} = {
             "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
 
             # forge:section root api env (root)
-            # forge:hash=adc81f5862fdefac7a0d6566d4ab77a766cb0c7d9adb68cf6929449e87a101de
+            # forge:hash=5305b56f25d75cda0413c1c63d9abe6b9b80e689bc28041cc9fcd22b02b3dd2e
             "JWT_PUBLIC_KEY",
             "JWT_PUBLIC_KEY_FILE",
             "RELIANT_JWKS_URL",
@@ -2195,6 +2202,7 @@ ROOTS: {str: Root} = {
             "IDP_BROKER_TOKEN_FILE",
             "TRUSTED_PROXY_HOPS",
             "AUTH_SELF_SIGNUP",
+            "HANDOFF_REDIRECTS",
             "ALLOWED_EMAIL_DOMAINS",
             "RELIANT_DISABLE_FORGE_API",
             "GRPC_PORT",
@@ -2663,7 +2671,7 @@ ROOTS: {str: Root} = {
             "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS",
 
             # forge:section root worker env (root) #3
-            # forge:hash=33186553e2570e695146dbb443e158dedd4a02085ce6b22ae7db9558e2cda91a
+            # forge:hash=70d220a87f5a1a77143da462766d214493a2c6a59bee71c9f8c96ba9896ae6b8
             "RELIANT_WORKER_HOSTED_ACTIONS_URL",
             "RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE",
             "HEALTH_PORT",
@@ -2683,6 +2691,7 @@ ROOTS: {str: Root} = {
             "RELIANT_WORKER_CHAT_UPDATE_RETENTION",
             "RELIANT_WORKER_STEP_EXECUTION_RETENTION",
             "RELIANT_WORKER_LEDGER_RETENTION_START_DELAY",
+            "RELIANT_WORKER_NODE_OBSERVATION_RETENTION",
 
             # forge:section root worker env (end)
             # forge:hash=870d2e1cb19ff2c9d8d3359b10e1fe506b0ea907940a4ad023f3f6bc6b0cdf3d

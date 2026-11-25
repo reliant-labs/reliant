@@ -23,7 +23,7 @@ import (
 
 func insertTestQuestion(t *testing.T, repo *Repo, id, chatID, workflowID, threadID string) {
 	t.Helper()
-	require.NoError(t, repo.CreateQuestion(context.Background(), &Question{
+	require.NoError(t, createQuestionAnnounced(context.Background(), repo, &Question{
 		ID: id, ChatID: chatID, WorkflowID: workflowID, ThreadID: threadID,
 		StepID: "execute_tools", Status: QuestionStatusPending, CreatedAt: time.Now().UTC(),
 	}))
@@ -82,7 +82,7 @@ func TestUpdateThreadStatus_FinishingAThreadClosesItsQuestions(t *testing.T) {
 			insertTestQuestion(t, repo, "q-root", chatID, "wf-qc-root", "th-qc-root")
 			insertTestQuestion(t, repo, "q-spawn-answered", chatID, "wf-qc-root", "th-qc-spawn")
 			answer := `{"answers":[{"selected":["Bold"]}]}`
-			require.NoError(t, repo.ResolveQuestion(ctx, "q-spawn-answered", &answer))
+			require.NoError(t, resolveQuestionAnnounced(ctx, repo, "q-spawn-answered", &answer))
 
 			now := time.Now().UTC()
 			_, err := repo.UpdateThreadStatus(ctx, "th-qc-spawn", status, &now)

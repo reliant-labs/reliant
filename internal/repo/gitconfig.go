@@ -37,6 +37,18 @@ func originURL(commonDir string) string {
 	return gitremote.StripCredentials(remoteURLFromConfig(bufio.NewReader(io.LimitReader(f, gitConfigMaxBytes)), "origin"))
 }
 
+// RootRemoteURL is remote.origin.url of the checkout at dir, credentials
+// stripped: "" when dir is not itself a git checkout (no .git of its own; a
+// parent repository is never consulted, unlike `git -C dir config`), or the
+// checkout has no origin. Read from the config file, without exec'ing git,
+// as Discover reads each repository's.
+func RootRemoteURL(dir string) string {
+	if dir == "" || !isGitDir(dir) {
+		return ""
+	}
+	return originURL(identifyCheckout(dir).commonDir)
+}
+
 // remoteURLFromConfig reads remote.<remote>.url from git config text: the
 // `[remote "<remote>"]` section (the subsection is case-sensitive; the legacy
 // `[remote.<remote>]` spelling is not), the `url` key in any case, values with

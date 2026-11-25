@@ -55,7 +55,7 @@ func TestMailboxOfAThreadParkedOnABlockingQuestionIsNotSwept(t *testing.T) {
 
 	// The blocking question gone (answered, or closed with the thread), the
 	// mailbox of the terminal thread is swept as it always was.
-	require.NoError(t, repo.ResolveQuestion(ctx, "q-blocking", nil))
+	require.NoError(t, resolveQuestionAnnounced(ctx, repo, "q-blocking", nil))
 	orphaned, err = store.ListThreadsWithOrphanedAgentMessages(ctx, repo.ORM())
 	require.NoError(t, err)
 	assert.Contains(t, orphaned, "th-pm-spawn")

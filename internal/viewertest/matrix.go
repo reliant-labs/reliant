@@ -58,6 +58,10 @@ var Matrix = map[string]Viewer{
 	// read shows: a tool call's input, never a tool result.
 	"reliant.v1.ChatService/GetContentBlockBodies": Answered,
 
+	// The chat's Trace/Cost tab: stubbed spans and model calls, no cost
+	// (dev-docs/design/agent-analytics.md §2.2, D4).
+	"reliant.v1.ChatTraceService/GetChatTrace": Answered,
+
 	"reliant.v1.StreamingService/StreamChatUpdates": Stream,
 	"reliant.v1.StreamingService/StreamUserUpdates": Stream,
 

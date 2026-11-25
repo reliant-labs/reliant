@@ -37,7 +37,7 @@ import {
   type InvitationPreview,
 } from "@/services/controlPlane/members";
 import { switchToJoinedOrg, type MyOrg } from "@/services/controlPlane/orgs";
-import { useAuthStore } from "@/store/authStore";
+import { getAuthIdentity, useAuth } from "@/lib/auth/use-auth";
 import { authPath } from "@/lib/paths";
 
 /** Where signing in returns to: this page, which picks the invitation up from storage. */
@@ -87,10 +87,8 @@ export function useAcceptInvite(): AcceptInviteFlow {
   // Read once per mount: the boot capture wrote it, and a different link
   // pasted into this tab reloads the page (inviteLinkBoot).
   const [token] = useState(() => readPendingInvite()?.token ?? null);
-  const user = useAuthStore((s) => s.user);
-  const initialized = useAuthStore((s) => s.initialized);
-  const signOut = useAuthStore((s) => s.signOut);
-  const signedIn = !!user && user.is_anonymous !== true;
+  const { identity: user, initialized, signOut } = useAuth();
+  const signedIn = !!user && !user.isAnonymous;
 
   // Keyed by the invitation as well as the person: the preview shown is
   // always the preview of the token accept() sends. gcTime 0 drops it when
@@ -143,7 +141,7 @@ export function useAcceptInvite(): AcceptInviteFlow {
     setSigningIn(true);
     void (async () => {
       try {
-        if (useAuthStore.getState().user) await signOut();
+        if (getAuthIdentity()) await signOut();
       } catch (err) {
         // Signing in replaces the session anyway; a failed sign-out must not trap them here.
         logger.warn("[AcceptInvite] sign-out before signing in failed", { message: err instanceof Error ? err.message : "unknown" });

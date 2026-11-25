@@ -5,6 +5,8 @@ import { useAuthStore } from '@/store/authStore'
 import { cn } from '../lib/utils'
 import { CheckSpamNote } from './CheckSpamNote'
 import { resetPasswordPath } from '@/lib/paths'
+import { isForgeAuth } from '@/lib/auth/forge-api'
+import { ForgeForgotPassword } from './Auth/forge/ForgeForgotPassword'
 
 interface ForgotPasswordProps {
   onBackToSignIn: () => void
@@ -12,7 +14,15 @@ interface ForgotPasswordProps {
 
 type Step = 'email' | 'code'
 
-export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
+/**
+ * "Forgot password". With forge sign-in the broker mails a reset LINK
+ * (Auth/forge/ForgeForgotPassword); otherwise Supabase mails a code, below.
+ */
+export function ForgotPassword(props: ForgotPasswordProps) {
+  return isForgeAuth() ? <ForgeForgotPassword {...props} /> : <SupabaseForgotPassword {...props} />
+}
+
+function SupabaseForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
   const navigate = useNavigate()
   const { sendPasswordResetOTP, verifyPasswordResetOTP } = useAuthStore()
   

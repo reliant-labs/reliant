@@ -65,3 +65,10 @@ test('configScript assigns window.__FORGE_CONFIG__ exactly as forge renders it f
   vm.runInNewContext(body, { window });
   assert.deepStrictEqual(JSON.parse(JSON.stringify(window.__FORGE_CONFIG__)), doc);
 });
+
+test('AUTH_PROVIDER comes from the release document, and RELIANT_AUTH_PROVIDER overrides it only when set', () => {
+  assert.equal(resolveRendererConfig({ release: { AUTH_PROVIDER: 'forge' } }).AUTH_PROVIDER, 'forge');
+  assert.equal(resolveRendererConfig({ release: { AUTH_PROVIDER: 'forge' }, env: { RELIANT_AUTH_PROVIDER: '' } }).AUTH_PROVIDER, 'forge');
+  assert.equal(resolveRendererConfig({ release: {}, env: { RELIANT_AUTH_PROVIDER: 'forge' } }).AUTH_PROVIDER, 'forge');
+  assert.equal(resolveRendererConfig({ release: {} }).AUTH_PROVIDER, undefined, 'no flag: Supabase, as before');
+});

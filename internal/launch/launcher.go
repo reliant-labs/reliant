@@ -60,6 +60,7 @@ type RunRecorder interface {
 type Launcher struct {
 	repo        Store
 	chats       ChatReader
+	events      TriggerEventStore
 	workflows   WorkflowLoader
 	worktrees   WorktreeReader
 	projectRows ProjectReader
@@ -116,9 +117,13 @@ type ChatPinner interface {
 
 // New builds a launcher over its Deps.
 func New(deps Deps) *Launcher {
+	if deps.Store != nil && deps.TriggerEvents == nil {
+		panic("launch: New requires Deps.TriggerEvents beside Deps.Store")
+	}
 	return &Launcher{
 		repo:        deps.Store,
 		chats:       deps.Chats,
+		events:      deps.TriggerEvents,
 		workflows:   deps.Workflows,
 		worktrees:   deps.Worktrees,
 		projectRows: deps.ProjectRows,
@@ -186,7 +191,7 @@ func (l *Launcher) replayOfNamedStart(ctx context.Context, ev Event, spec Spec, 
 	if ev.DedupeKey == "" {
 		return nil, nil
 	}
-	stored, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
+	stored, err := l.events.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
 	if err != nil {
 		return nil, nil
 	}
@@ -284,7 +289,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// adopted (claimed inside the launch transaction) rather than inserted.
 	var pending *core.TriggerEvent
 	if ev.DedupeKey != "" {
-		if existing, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey); err == nil {
+		if existing, err := l.events.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey); err == nil {
 			if existing.Outcome != core.TriggerEventPending {
 				return l.finishExisting(ctx, ev, spec, seed)
 			}
@@ -558,7 +563,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		if pending != nil {
 			// The outcome predicate on the claim is what decides between two
 			// fires of one inbound event, as the unique key does for inserts.
-			claimed, err := l.repo.ClaimPendingTriggerEvent(txCtx, pending.ID, insertRow.Payload, insertRow.Definition)
+			claimed, err := l.events.ClaimPendingTriggerEvent(txCtx, pending.ID, insertRow.Payload, insertRow.Definition)
 			if err != nil {
 				return fmt.Errorf("failed to claim trigger event: %w", err)
 			}
@@ -566,7 +571,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 				return errEventExists
 			}
 		} else {
-			created, err := l.repo.CreateTriggerEvent(txCtx, &insertRow)
+			created, err := l.events.InsertTriggerEventIfAbsent(txCtx, &insertRow)
 			if err != nil {
 				return fmt.Errorf("failed to record trigger event: %w", err)
 			}
@@ -587,7 +592,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 			return err
 		}
 
-		if err := l.repo.UpdateTriggerEventOutcome(txCtx, eventRow.ID, core.TriggerEventLaunched, "", &chatID); err != nil {
+		if err := l.events.UpdateTriggerEventOutcome(txCtx, eventRow.ID, core.TriggerEventLaunched, "", &chatID); err != nil {
 			return fmt.Errorf("failed to attach chat to trigger event: %w", err)
 		}
 		if spec.PrepareExecution != nil {
@@ -731,7 +736,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	// while the chat is still pending, and report "already launched" once the
 	// run has started — never "use SendMessage", which is only the answer to a
 	// NEW event aimed at a chat that has already begun.
-	existing, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
+	existing, err := l.events.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
 	switch {
 	case err == nil:
 		if isRetryOf(existing, ev.Kind, fingerprint) {
@@ -838,12 +843,12 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 			Prompt:          seed.userContent,
 		})
 
-		created, err := l.repo.CreateTriggerEvent(txCtx, eventRow)
+		created, err := l.events.InsertTriggerEventIfAbsent(txCtx, eventRow)
 		if err != nil {
 			return fmt.Errorf("failed to record trigger event: %w", err)
 		}
 		if !created {
-			stored, err := l.repo.GetTriggerEventByDedupe(txCtx, ev.Kind, ev.DedupeKey)
+			stored, err := l.events.GetTriggerEventByDedupe(txCtx, ev.Kind, ev.DedupeKey)
 			if err != nil {
 				return fmt.Errorf("failed to load earlier trigger event: %w", err)
 			}
@@ -852,7 +857,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 				// are already on the thread.
 				return nil
 			}
-			if err := l.repo.UpdateTriggerEventPayload(txCtx, stored.ID, eventRow.Payload); err != nil {
+			if err := l.events.UpdateTriggerEventPayload(txCtx, stored.ID, eventRow.Payload); err != nil {
 				return fmt.Errorf("failed to record the new start: %w", err)
 			}
 		}
@@ -892,7 +897,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		if errors.Is(err, ErrNotPending) {
 			// The chat started between the check above and the transaction.
 			// If that start was a duplicate of this very event, say so.
-			if stored, lookupErr := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey); lookupErr == nil && isRetryOf(stored, ev.Kind, fingerprint) {
+			if stored, lookupErr := l.events.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey); lookupErr == nil && isRetryOf(stored, ev.Kind, fingerprint) {
 				return nil, &AlreadyLaunchedError{ChatID: chat.ID, EventID: stored.ID}
 			}
 			return nil, ErrNotPending
@@ -904,7 +909,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		return nil, &InternalError{Reason: "failed to start chat", Err: err}
 	}
 
-	recorded, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
+	recorded, err := l.events.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
 	if err != nil {
 		return nil, &InternalError{Reason: "failed to reload the recorded start", Err: err}
 	}
@@ -1052,7 +1057,7 @@ func recordedCatalogPin(recorded *core.TriggerEvent) string {
 // event. When that launch's chat is still pending, its attempt committed but
 // never started Temporal, so this finishes it; otherwise it already launched.
 func (l *Launcher) finishExisting(ctx context.Context, ev Event, spec Spec, seed seedContent) (*Result, error) {
-	existing, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
+	existing, err := l.events.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
 	if err != nil {
 		return nil, &InternalError{Reason: "failed to load earlier launch", Err: err}
 	}

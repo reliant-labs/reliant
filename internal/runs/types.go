@@ -39,7 +39,6 @@ type Repository interface {
 	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
 	CascadeTerminalStatusToDescendants(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error
-	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 	LockChatRunControl(ctx context.Context, chatID string) (release func(), err error)
 	// RunTx runs f in one transaction; a terminal status and its cascade

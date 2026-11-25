@@ -20,6 +20,9 @@ import type { RangePreset } from "@/services/controlPlane/observability/window";
 
 import { useAppLiveState } from "../../LiveState/useAppLiveState";
 import { formatRate } from "../../Observability/format";
+import { runOfRow, runsToCompletion } from "../../Services/servicesModel";
+import { jobFailurePhrase } from "../plainHealth";
+import { RunWhen } from "../workloadParts";
 
 export interface ServicesStripLinks {
   services: string;
@@ -59,6 +62,10 @@ export function OverviewServicesStrip({ app, env, range, links }: { app: string;
           {rows.map((row) => {
             const href = row.type === "database" && links.data ? links.data(row.envName) : links.service(row.name, row.envName);
             const health = row.type === "workload" ? row.health : undefined;
+            // A Job or CronJob shows when it last ran, never ready of desired: it has no replica claim.
+            const job = runsToCompletion(row);
+            const run = runOfRow(row);
+            const why = run?.result === "failed" ? jobFailurePhrase(run.reason) : row.type === "workload" && row.tone !== "success" ? row.workload.healthReason : "";
             return (
               <li key={row.key}>
                 <Link
@@ -67,13 +74,15 @@ export function OverviewServicesStrip({ app, env, range, links }: { app: string;
                     "no-color inline-flex h-9 items-center gap-2 rounded-md border bg-surface px-3 text-ui text-ink transition-colors hover:bg-ink/5",
                     row.tone === "danger" ? "border-danger-border" : row.tone === "warning" ? "border-warning/40" : "border-border"
                   )}
-                  title={`${row.name} (${row.kindLabel}): ${row.statusNote ?? row.status}`}
+                  title={`${row.name} (${row.kindLabel}): ${row.statusNote ?? row.status}${why ? `. ${why}` : ""}`}
                   data-testid={`overview-strip-${row.key}`}
+                  data-tone={row.tone}
                 >
                   {row.statusNote ? <span className="size-2 rounded-full border border-ink-muted" aria-label={row.statusNote} role="img" /> : <Status tone={row.tone} label={row.status} hideLabel />}
                   <span className="font-medium">{row.name}</span>
                   {showEnv && <span className="text-meta text-ink-muted">{row.envName}</span>}
-                  {row.type === "workload" && <span className={cn("text-meta tabular-nums", row.short ? "text-warning-ink" : "text-ink-muted")}>{row.ready}</span>}
+                  {row.type === "workload" && !job && <span className={cn("text-meta tabular-nums", row.short ? "text-warning-ink" : "text-ink-muted")}>{row.ready}</span>}
+                  {run && <RunWhen run={run} className="text-meta text-ink-muted" />}
                   {health && health.requestRate > 0 && <span className="text-meta tabular-nums text-ink-muted">{formatRate(health.requestRate)}</span>}
                 </Link>
               </li>

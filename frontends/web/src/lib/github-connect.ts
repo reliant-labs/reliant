@@ -15,6 +15,12 @@
  *            and signed state to it without exchanging, and THIS renderer
  *            exchanges them — so the app that asked is the app that finishes.
  *
+ * forge sign-in (AUTH_PROVIDER "forge") holds no token for `?token=`: the web
+ * flow navigates to the same route under this page's `/_api/@cp`, where the
+ * session cookie is first-party and rides the top-level GET. The desktop
+ * flow opens the system browser, which holds no session at all, so it is
+ * refused there until the control plane offers a cookie-free start.
+ *
  * A GitHub App user token only lists repos of accounts the App is INSTALLED
  * on, so authorizing is not enough for a new user. The exchange reports
  * `needsInstall`; on desktop we open the install page right away.
@@ -27,6 +33,8 @@ import { logger } from '@/lib/logger'
 import { connectsThroughSystemBrowser } from '@/lib/connection-oauth'
 import { GITHUB_CREDENTIAL_QUERY_KEY } from '@/hooks/useGitHubCredential'
 import { crossShellReturnTo } from '@/lib/crossShellReturn'
+import { controlPlaneForgeBase, isForgeAuth } from '@/lib/auth/forge-api'
+import { getControlPlaneURL } from '@/lib/constants'
 
 const GITHUB_REPOS_QUERY_KEY = ['onboarding', 'gitRepos'] as const
 
@@ -83,6 +91,12 @@ async function freshAccessToken(): Promise<string> {
     throw new Error('Your session expired. Sign in again to connect GitHub.')
   }
   return data.session.access_token
+}
+
+/** The authorize URL forge sign-in navigates to: same-origin, no token (the cookie). */
+function forgeAuthorizeURL(returnTo: string): string | null {
+  if (!getControlPlaneURL()) return null
+  return `${controlPlaneForgeBase()}/auth/github/authorize?${new URLSearchParams({ returnTo }).toString()}`
 }
 
 function relayedErrorMessage(raw: string): string {
@@ -168,6 +182,15 @@ export async function connectGitHub(
   const returnTo = options.returnTo ?? currentLocation()
   try {
     const api = bridge()
+    if (isForgeAuth()) {
+      if (connectsThroughSystemBrowser()) {
+        throw new Error('Connecting GitHub from the desktop app is not available with this sign-in yet. Connect it from the web app.')
+      }
+      const authorizeUrl = forgeAuthorizeURL(returnTo)
+      if (!authorizeUrl) throw new Error('Control plane URL not configured')
+      window.location.assign(authorizeUrl)
+      return { kind: 'redirecting' }
+    }
     if (
       connectsThroughSystemBrowser() &&
       api?.startConnectionOAuthReceiver &&

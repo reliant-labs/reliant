@@ -42,18 +42,18 @@ func newChatRepo() *chat.MockRepository {
 		}
 		return &c, nil
 	}
-	repo := &chat.MockRepository{
-		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
+	repo := chat.BindChatReads(&chat.MockRepository{},
+		func(_ context.Context, id string) (*db.Chat, error) {
 			return get(id)
 		},
-		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
+		func(_ context.Context, id string) (*db.ChatRow, error) {
 			c, err := get(id)
 			if err != nil {
 				return nil, err
 			}
 			return chatRowOf(c), nil
 		},
-	}
+	)
 	// The owner-checked reads belong to chataccess, bound to this repository.
 	return chataccesstest.Bound(repo,
 		func(_ context.Context, id, userID string) (*db.ChatRow, error) {

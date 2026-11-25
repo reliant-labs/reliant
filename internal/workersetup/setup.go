@@ -147,10 +147,6 @@ type Config struct {
 	// command, a request); nil refuses every step that uses one.
 	SecretResolver handlers.SecretResolver
 
-	// StepKeys mints and revokes the LLM gateway step key a run node with
-	// llm_gateway runs with (the control plane); nil refuses every such node.
-	StepKeys handlers.StepKeyIssuer
-
 	// AllowPrivateEgress is ServerProcessConfig.network.allow_private_egress:
 	// whether a user-supplied model endpoint may resolve to a private,
 	// loopback or link-local address. False is the default.
@@ -302,7 +298,6 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	activityDeps.Connections = cfg.IntegrationCredentials
 	activityDeps.HostedActions = cfg.HostedActions
 	activityDeps.SecretResolver = cfg.SecretResolver
-	activityDeps.StepKeys = cfg.StepKeys
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
 	if cfg.Database != nil {
@@ -586,7 +581,7 @@ func chatOwners(cfg *Config) *telemetry.ChatOwnerCache {
 	}
 	repo := cfg.Database
 	return telemetry.NewChatOwnerOrgCache(func(ctx context.Context, chatID string) (telemetry.ChatOwner, error) {
-		chat, err := repo.GetChat(ctx, chatID)
+		chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 		if err != nil || chat == nil {
 			return telemetry.ChatOwner{}, err
 		}

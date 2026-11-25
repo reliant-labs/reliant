@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/reliant-labs/forge/pkg/orm"
 	"go.temporal.io/sdk/activity"
 
@@ -128,7 +130,7 @@ func (a *CompactActivity) Execute(ctx context.Context, input ActivityInput) (Com
 	rtx := input.Runtime
 
 	// Load the chat to get current context
-	chat, err := a.repo.GetChat(ctx, rtx.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, rtx.ChatID)
 	if err != nil {
 		return CompactOutput{}, fmt.Errorf("failed to get chat: %w", err)
 	}
@@ -314,7 +316,7 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 	// Just the business logic - middleware handles everything else!
 
 	// 1. Get the chat
-	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 	if err != nil {
 		return GenerateTitleOutput{}, fmt.Errorf("failed to get chat: %w", err)
 	}
@@ -385,7 +387,7 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 	// 3. Update chat with generated title using RunTx for parallelism
 	err = a.repo.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 		// Get the chat again inside the transaction
-		chat, err := a.repo.GetChat(ctx, input.ChatID)
+		chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 		if err != nil {
 			return fmt.Errorf("failed to get chat in transaction: %w", err)
 		}

@@ -1,6 +1,7 @@
 import { getControlPlaneURL } from "./constants";
 import { logger } from "./logger";
 import { supabase } from "./supabase";
+import { controlPlaneForgeBase, credentialedFetch, isForgeAuth } from "./auth/forge-api";
 
 /**
  * Workspace-proxy sign-in, done up front.
@@ -16,23 +17,43 @@ import { supabase } from "./supabase";
  * bounce lands on a sign-in page. The app itself IS signed in, so it mints the
  * token here and opens the callback directly: the user sees the preview and
  * nothing else.
+ *
+ * forge sign-in: the mint authenticates with the login broker's session
+ * cookie instead of a bearer — same-origin under /_api/@cp, no Authorization
+ * header (the control plane reads the cookie only on a header-less request).
  */
 
-/** Mints a proxy session for returnURL and returns its `/__proxy/callback` URL. Throws on failure. */
-export async function mintProxySessionCallbackUrl(returnURL: string, accessToken: string): Promise<string> {
+/**
+ * Mints a proxy session for returnURL and returns its `/__proxy/callback` URL. Throws on failure.
+ *
+ * accessToken is the Supabase session's bearer. forge sign-in ignores it (pass
+ * null): the session cookie is the credential.
+ */
+export async function mintProxySessionCallbackUrl(returnURL: string, accessToken: string | null): Promise<string> {
   const controlPlaneURL = getControlPlaneURL();
   if (!controlPlaneURL) throw new Error("Control plane API URL not configured.");
 
   // This must hit platform-api (the control-plane API), NOT admin-web. In
   // cloud-dev they are separate origins.
-  const response = await fetch(`${controlPlaneURL}/api/proxy-session`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ return_url: returnURL }),
-  });
+  const body = JSON.stringify({ return_url: returnURL });
+  let response: Response;
+  if (isForgeAuth()) {
+    response = await credentialedFetch(`${controlPlaneForgeBase()}/api/proxy-session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+  } else {
+    if (!accessToken) throw new Error("Not signed in.");
+    response = await fetch(`${controlPlaneURL}/api/proxy-session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body,
+    });
+  }
   if (!response.ok) {
     const text = await response.text();
     logger.error("[proxy-session] Token mint failed", { status: response.status, body: text });
@@ -50,6 +71,9 @@ export async function mintProxySessionCallbackUrl(returnURL: string, accessToken
  */
 export async function signedInPreviewUrl(previewUrl: string): Promise<string> {
   try {
+    // forge sign-in: the cookie is the session, so the mint itself is the
+    // check; signed out, it is refused and the preview opens as before.
+    if (isForgeAuth()) return await mintProxySessionCallbackUrl(previewUrl, null);
     const {
       data: { session },
     } = await supabase.auth.getSession();

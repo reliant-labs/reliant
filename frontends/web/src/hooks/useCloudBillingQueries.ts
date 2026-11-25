@@ -33,7 +33,7 @@ import {
 } from "@/hooks/controlplane/billing-service-hooks_gen";
 import { refreshing } from "@/hooks/billingKeys";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
-import { useAuthStore } from "@/store/authStore";
+import { getAuthIdentity } from "@/lib/auth/use-auth";
 import { hasErrorReason } from "@/lib/errorReasons";
 import { useMachineSaleTerms, type MachineSaleTerms } from "@/lib/machine-sale-terms";
 import { getActiveOrgId } from "@/store/activeOrgStore";
@@ -98,15 +98,14 @@ export function isCheckoutIdentityRequired(err: unknown): boolean {
 }
 
 /**
- * Only genuine anonymous Supabase sessions carry `is_anonymous === true`;
- * api-key / mock / dev synthetic users set it false and must not be pushed
+ * Only genuine anonymous Supabase sessions are anonymous; api-key / mock /
+ * dev synthetic users and forge sessions are not, and must not be pushed
  * through an identity link they cannot complete. Read imperatively (not via the
  * hook selector) so the check runs against the session as it stands at the
  * moment of purchase, not whatever was current when the component mounted.
  */
 function assertPurchaseIdentity(): void {
-  const user = useAuthStore.getState().user;
-  if (user && (user as { is_anonymous?: boolean }).is_anonymous === true) {
+  if (getAuthIdentity()?.isAnonymous === true) {
     throw new CheckoutIdentityRequiredError();
   }
 }

@@ -5532,10 +5532,18 @@ func (x *ProjectDiscovery) GetProjects() []*DiscoveredProject {
 
 // DiscoveredProject describes a local project path known by the daemon.
 type DiscoveredProject struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	IsGitRepo     bool                   `protobuf:"varint,3,opt,name=is_git_repo,json=isGitRepo,proto3" json:"is_git_repo,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Path      string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Name      string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	IsGitRepo bool                   `protobuf:"varint,3,opt,name=is_git_repo,json=isGitRepo,proto3" json:"is_git_repo,omitempty"`
+	// remote_url is remote.origin.url of the checkout at path, credentials
+	// stripped; empty when path is not itself a git checkout, has no origin, or
+	// the daemon predates this field. The server matches it by repository
+	// (projects.remote_key: on GitHub, GitLab and Bitbucket its SSH and HTTPS
+	// forms are one; a local path matches nothing) against the user's
+	// projects before it creates one: a repository already a project on another machine joins
+	// that project here, at this path, instead of becoming a second one.
+	RemoteUrl     string `protobuf:"bytes,4,opt,name=remote_url,json=remoteUrl,proto3" json:"remote_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5589,6 +5597,13 @@ func (x *DiscoveredProject) GetIsGitRepo() bool {
 		return x.IsGitRepo
 	}
 	return false
+}
+
+func (x *DiscoveredProject) GetRemoteUrl() string {
+	if x != nil {
+		return x.RemoteUrl
+	}
+	return ""
 }
 
 // ToolExecutionCancel asks daemon to cancel an in-flight tool execution.
@@ -7208,11 +7223,13 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"M\n" +
 	"\x10ProjectDiscovery\x129\n" +
-	"\bprojects\x18\x01 \x03(\v2\x1d.reliant.v1.DiscoveredProjectR\bprojects\"[\n" +
+	"\bprojects\x18\x01 \x03(\v2\x1d.reliant.v1.DiscoveredProjectR\bprojects\"z\n" +
 	"\x11DiscoveredProject\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1e\n" +
-	"\vis_git_repo\x18\x03 \x01(\bR\tisGitRepo\"L\n" +
+	"\vis_git_repo\x18\x03 \x01(\bR\tisGitRepo\x12\x1d\n" +
+	"\n" +
+	"remote_url\x18\x04 \x01(\tR\tremoteUrl\"L\n" +
 	"\x13ToolExecutionCancel\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x16\n" +

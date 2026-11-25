@@ -28,6 +28,7 @@ import (
 type inflightRepo struct {
 	*MockRepository
 	*MockProjectReader
+	chats     *MockChats
 	rec       *MockRecoveries
 	items     *MockItems
 	firings   *MockFirings
@@ -38,7 +39,7 @@ type inflightRepo struct {
 
 // deps is the service's Deps over r: its repository and its recovery list.
 func (r *inflightRepo) deps() Deps {
-	return Deps{Repo: r, ProjectRows: r.MockProjectReader, Items: r.items, Firings: r.firings, Notices: r.notices, Storage: r.storage, Recoveries: r.rec, Marks: &MockMarkDecisionStore{}}
+	return Deps{Repo: r, Chats: r.chats, ProjectRows: r.MockProjectReader, Items: r.items, Firings: r.firings, Notices: r.notices, Storage: r.storage, Recoveries: r.rec, Marks: &MockMarkDecisionStore{}}
 }
 
 func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
@@ -57,7 +58,7 @@ func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
 }
 
 func newInflightRepo(hold time.Duration) *inflightRepo {
-	r := &inflightRepo{MockRepository: &MockRepository{}, MockProjectReader: &MockProjectReader{}, rec: &MockRecoveries{}, items: &MockItems{}, firings: &MockFirings{}, notices: &MockNotices{}, storage: &MockStorage{}}
+	r := &inflightRepo{MockRepository: &MockRepository{}, MockProjectReader: &MockProjectReader{}, chats: &MockChats{}, rec: &MockRecoveries{}, items: &MockItems{}, firings: &MockFirings{}, notices: &MockNotices{}, storage: &MockStorage{}}
 	m := r.MockRepository
 	// The org account notices: nothing paused, nothing on personal accounts.
 	r.notices.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return false, nil }

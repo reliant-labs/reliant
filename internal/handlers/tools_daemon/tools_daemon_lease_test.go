@@ -221,6 +221,10 @@ func (r *leaseRecordingRepo) GetProjectByRemoteURLAndUserInScope(context.Context
 	return nil, nil
 }
 
+func (r *leaseRecordingRepo) GetProjectByRemoteKeyAndUserInScope(context.Context, string, string, *core.OrgScope) (*core.Project, error) {
+	return nil, nil
+}
+
 var _ ProjectLookups = (*leaseRecordingRepo)(nil)
 
 func (r *leaseRecordingRepo) GetProjectByPathAndUserInScope(context.Context, string, string, *core.OrgScope) (*core.Project, error) {

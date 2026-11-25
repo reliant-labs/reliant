@@ -587,7 +587,12 @@ export type CreateProjectRequest = Message<"reliant.v1.CreateProjectRequest"> & 
 
   /**
    * The machine the folder is on, one of the caller's daemons. Unset (or
-   * empty) is the user's default machine, as before this field existed.
+   * empty) is the user's default machine, as before this field existed;
+   * there too, a folder that is a git checkout of one of the caller's
+   * projects' repository (by Project.remote_key: on GitHub, GitLab and
+   * Bitbucket its SSH and HTTPS forms are one; a local path matches nothing)
+   * is attached to that project on the machine that read it
+   * (response.attached), not made a second project.
    *
    * Set, everything runs on that machine (which must be online), and an
    * existing project is attached rather than refused: when the folder is
@@ -632,8 +637,8 @@ export type CreateProjectResponse = Message<"reliant.v1.CreateProjectResponse"> 
   project?: Project | undefined;
 
   /**
-   * The project's checkout on the requested machine. Set only when the
-   * request named daemon_id.
+   * The project's checkout on the requested machine. Set when the request
+   * named daemon_id, or when the folder was attached (attached).
    *
    * @generated from field: reliant.v1.ProjectDaemon project_daemon = 2;
    */

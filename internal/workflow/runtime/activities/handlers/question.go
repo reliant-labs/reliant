@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"go.temporal.io/sdk/activity"
@@ -73,12 +75,13 @@ type QuestionResolveOutput struct {
 // The workflow then waits on a signal channel for resolution — no polling needed.
 type QuestionCreateActivity struct {
 	repo      QuestionCreateStore
+	writer    QuestionWriter
 	questions QuestionsByStep
 }
 
 // NewQuestionCreateActivity creates a new QuestionCreateActivity
-func NewQuestionCreateActivity(repo QuestionCreateStore, questions QuestionsByStep) *QuestionCreateActivity {
-	return &QuestionCreateActivity{repo: repo, questions: questions}
+func NewQuestionCreateActivity(repo QuestionCreateStore, writer QuestionWriter, questions QuestionsByStep) *QuestionCreateActivity {
+	return &QuestionCreateActivity{repo: repo, writer: writer, questions: questions}
 }
 
 // Name returns the activity name for registration
@@ -203,7 +206,7 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 	// idempotency read was already outside the transaction, so the level
 	// never protected it.
 	err = a.repo.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
-		if err := a.repo.CreateQuestion(txCtx, question); err != nil {
+		if err := a.writer.CreateQuestion(txCtx, question); err != nil {
 			return fmt.Errorf("failed to create question: %w", err)
 		}
 
@@ -246,7 +249,7 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 		// in the user's inbox, which no activity change announces, so the
 		// inbox is told to re-read.
 		if input.Async {
-			if chat, err := a.repo.GetChat(txCtx, input.ChatID); err == nil && chat != nil {
+			if chat, err := chatviews.Of(a.repo).GetChat(txCtx, input.ChatID); err == nil && chat != nil {
 				if err := a.repo.EmitUserRefetch(txCtx, chat.UserID, db.RefetchInbox, db.RefetchOpts{ChatID: &input.ChatID}); err != nil {
 					logger.Warn("[QuestionCreate] Failed to announce an async question to the inbox", "error", err, "chatID", input.ChatID)
 				}
@@ -290,12 +293,13 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 // when it stops waiting on a question without an answer: the signal timer
 // expired, or (ask_user) the asking thread was messaged or interrupted.
 type QuestionResolveActivity struct {
-	repo QuestionResolveStore
+	repo   QuestionResolveStore
+	writer QuestionWriter
 }
 
 // NewQuestionResolveActivity creates a new QuestionResolveActivity
-func NewQuestionResolveActivity(repo QuestionResolveStore) *QuestionResolveActivity {
-	return &QuestionResolveActivity{repo: repo}
+func NewQuestionResolveActivity(repo QuestionResolveStore, writer QuestionWriter) *QuestionResolveActivity {
+	return &QuestionResolveActivity{repo: repo, writer: writer}
 }
 
 // Name returns the activity name for registration
@@ -351,7 +355,7 @@ func (a *QuestionResolveActivity) Execute(ctx context.Context, input QuestionRes
 		return out, nil
 	}
 
-	if err := a.repo.ResolveQuestion(ctx, input.QuestionID, responseData); err != nil {
+	if err := a.writer.ResolveQuestion(ctx, input.QuestionID, responseData); err != nil {
 		return QuestionResolveOutput{}, fmt.Errorf("failed to resolve question: %w", err)
 	}
 
