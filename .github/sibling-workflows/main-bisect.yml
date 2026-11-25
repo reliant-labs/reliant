@@ -1,0 +1,180 @@
+# Judges one commit of main by re-running only the Go tests that failed on a
+# red main, on a GitHub runner, as one job.
+#
+# WHO DISPATCHES IT: control-plane's main-revert workflow (owner, 2026-11-20,
+# "land, then verify": control-plane docs/pipeline/land-then-verify.md), through
+# control-plane scripts/main-revert/actions-bisect.sh, as the Reliant bot. When
+# main goes red it bisects the commits since the last green main by dispatching
+# this once per candidate commit, finds the run by its run-name (which carries
+# the dispatch's `token`), and reads its conclusion and log: `MAIN_BISECT_EXIT=`
+# is go test's exit code, and `--- FAIL: <test>` / `FAIL\t<pkg>` tell a
+# reproduced failure from a build error.
+#
+# WHY NOT RE-RUN MAIN'S OWN RUN: a superseded main run is cancelled before any
+# job exists, and re-running a push run joins main's concurrency group, where
+# it would cancel main's own pending run.
+#
+# DISPATCH ONLY. No push, pull_request, merge_group or schedule trigger: it
+# costs nothing unless dispatched and is never a required check. No
+# concurrency group either: each dispatch is its own judgement, and runs in
+# parallel with the others (never in main's `ci-push-...` group).
+#
+# THE TWO CHECKOUTS. The workspace root is this workflow's own commit (only
+# .github and the root files, sparse), so the local actions below always match
+# this file; the commit under judgement is checked out in `candidate/`, where
+# the tests run. A candidate older than one of these actions would otherwise
+# fail on the action, not on its tests, and be misjudged.
+
+name: Main bisect
+run-name: main-bisect ${{ inputs.token }} ${{ inputs.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: The commit of main to judge (40 lowercase hex).
+        type: string
+        required: true
+      token:
+        description: Correlation id the dispatcher finds the run by (^[A-Za-z0-9-]{1,40}$).
+        type: string
+        required: true
+      pkgs:
+        description: Space-separated package directories relative to the repo root (`.` is the root), at most 20.
+        type: string
+        required: true
+      run:
+        description: "`|`-separated top-level Go test names, at most 50. Empty: the whole packages."
+        type: string
+        required: false
+        default: ""
+      tags:
+        description: Go build tags (^[a-z0-9_,]*$), e.g. e2e or integration.
+        type: string
+        required: false
+        default: ""
+      os:
+        description: The runner.
+        type: choice
+        options:
+          - ubuntu-latest
+          - windows-latest
+        default: ubuntu-latest
+      race:
+        description: Run with -race (ignored on windows).
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  judge:
+    name: Judge ${{ inputs.sha }}
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        # Git Bash on windows-latest, as ci.yml's windows job.
+        shell: bash
+    steps:
+      # Inputs are read from env, never interpolated into the script.
+      - name: Validate the inputs
+        env:
+          SHA: ${{ inputs.sha }}
+          TOKEN: ${{ inputs.token }}
+          PKGS: ${{ inputs.pkgs }}
+          RUN: ${{ inputs.run }}
+          TAGS: ${{ inputs.tags }}
+          OS: ${{ inputs.os }}
+          RACE: ${{ inputs.race }}
+        run: |
+          invalid() { echo "MAIN_BISECT=invalid $*"; exit 1; }
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || invalid "sha is not 40 lowercase hex: '$SHA'"
+          [[ "$TOKEN" =~ ^[A-Za-z0-9-]{1,40}$ ]] || invalid "token does not match ^[A-Za-z0-9-]{1,40}\$: '$TOKEN'"
+          read -ra dirs <<<"$PKGS"
+          (( ${#dirs[@]} >= 1 )) || invalid "pkgs is empty"
+          (( ${#dirs[@]} <= 20 )) || invalid "pkgs names ${#dirs[@]} packages; at most 20"
+          for p in "${dirs[@]}"; do
+            [[ "$p" == . || "$p" =~ ^[A-Za-z0-9_][A-Za-z0-9_./-]*$ ]] || invalid "package '$p' is not a repo-relative directory"
+            [[ "/$p/" != */../* ]] || invalid "package '$p' has a .. segment"
+          done
+          if [[ -n "$RUN" ]]; then
+            IFS='|' read -ra tests <<<"$RUN"
+            (( ${#tests[@]} <= 50 )) || invalid "run names ${#tests[@]} tests; at most 50"
+            [[ "$RUN" != *'|' ]] || invalid "run ends in an empty name"
+            for t in "${tests[@]}"; do
+              [[ "$t" =~ ^(Test|Example|Fuzz|Benchmark)[A-Za-z0-9_]*$ ]] || invalid "run name '$t' is not a top-level Go test"
+            done
+          fi
+          [[ "$TAGS" =~ ^[a-z0-9_,]*$ ]] || invalid "tags does not match ^[a-z0-9_,]*\$: '$TAGS'"
+          [[ "$OS" == ubuntu-latest || "$OS" == windows-latest ]] || invalid "os is '$OS'"
+          [[ "$RACE" == true || "$RACE" == false ]] || invalid "race is '$RACE'"
+          echo "MAIN_BISECT=valid sha=$SHA pkgs=${#dirs[@]}"
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+          path: candidate
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: candidate/go.mod
+          cache: false
+      # Restore only (nothing here saves a cache). The race scope is ci.yml's
+      # `test` job's; Windows keeps off this action as ci.yml's windows job does.
+      - uses: ./.github/actions/restore-go-caches
+        if: ${{ runner.os == 'Linux' }}
+        with:
+          scope: ${{ inputs.race && 'test' || 'short' }}
+          refresh: ${{ inputs.race && 'daily' || 'commit' }}
+      # pkg/pgtest boots postgres for the DB-backed tests; see the action.
+      - uses: ./.github/actions/embedded-postgres-cache
+      # The tools ci.yml's test jobs install: under CI a test treats a missing
+      # buf or migrate as a provisioning bug and fails, which would misjudge
+      # every candidate. install-release-tool pins linux assets, so Windows
+      # skips them and sets FORGE_E2E_REQUIRE_TOOLS=0, as ci.yml's windows job.
+      - name: Install buf
+        if: ${{ runner.os == 'Linux' }}
+        uses: ./.github/actions/install-release-tool
+        with:
+          tool: buf
+      - name: Install Task
+        if: ${{ runner.os == 'Linux' }}
+        uses: ./.github/actions/install-release-tool
+        with:
+          tool: task
+      - name: Install golang-migrate CLI
+        if: ${{ runner.os == 'Linux' }}
+        uses: ./.github/actions/install-migrate
+      - name: Go tests
+        working-directory: candidate
+        env:
+          PKGS: ${{ inputs.pkgs }}
+          RUN: ${{ inputs.run }}
+          TAGS: ${{ inputs.tags }}
+          RACE: ${{ inputs.race }}
+        run: |
+          args=(-count=1 -timeout=25m)
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            export CGO_ENABLED=0 FORGE_E2E_REQUIRE_TOOLS=0
+          elif [[ "$RACE" == true ]]; then
+            args+=(-race)
+          fi
+          [[ -z "$TAGS" ]] || args+=(-tags "$TAGS")
+          [[ -z "$RUN" ]] || args+=(-run "^($RUN)\$")
+          read -ra dirs <<<"$PKGS"
+          for p in "${dirs[@]}"; do
+            if [[ "$p" == . ]]; then args+=(./); else args+=("./${p%/}/"); fi
+          done
+          echo "+ go test ${args[*]}"
+          set +e
+          go test "${args[@]}"
+          code=$?
+          set -e
+          echo "MAIN_BISECT_EXIT=$code"
+          exit "$code"

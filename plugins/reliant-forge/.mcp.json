@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "forge": {
+      "command": "npx",
+      "args": ["-y", "@reliantlabs/forge@1.11.0", "mcp"]
+    }
+  }
+}
