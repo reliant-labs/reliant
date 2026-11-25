@@ -27,7 +27,7 @@ import type { ForgeHostedWorkload } from "@/services/forge/topology";
 import { ENV_ALL } from "../Console/envScope";
 import { ENV_KEY, SERVICE_KEY } from "../Observability/attributes";
 import { defaultSeriesFor } from "../Observability/Metrics/model/explorerState";
-import { HEALTH_STATUS, JOB_STATUS, KIND_LABEL, jobRows } from "../Workloads/workloadModel";
+import { HEALTH_STATUS, JOB_STATUS, KIND_LABEL, isJobKind, jobRows, jobStatusOf, latestRunsByWorkload } from "../Workloads/workloadModel";
 
 export interface ContainerFigure {
   container: string;
@@ -51,8 +51,11 @@ export type ServicesRow =
   | (RowBase & {
       type: "workload";
       workload: Workload;
+      /** Ready of desired; "—" for a Job or CronJob, which has no replica claim. */
       ready: string;
       short: boolean;
+      /** A Job or CronJob's latest run in the window; null for anything else, or with no run in the window. */
+      lastRun: WorkloadJob | null;
       cpu: number | null;
       memory: number | null;
       containers: ContainerFigure[];
@@ -114,22 +117,29 @@ export function servicesRows({ workloads, jobs, telemetry, hosted, envs, env }: 
   const releaseOf = (envName: string) => envs.find((e) => e.name === envName)?.release ?? "";
   const rows: ServicesRow[] = [];
   const seen = new Set<string>();
+  const latestRuns = latestRunsByWorkload(jobs);
   for (const w of workloads) {
     if (!inScope(w.envName)) continue;
-    seen.add(`${w.envName}/${w.workload}`);
-    const status = HEALTH_STATUS[w.health];
+    const key = `${w.envName}/${w.workload}`;
+    seen.add(key);
+    // A Job or CronJob is judged on its runs, never on ready of desired: no
+    // pod running after a completed run is its normal state, not a shortfall.
+    const runs = isJobKind(w.kind);
+    const lastRun = runs ? (latestRuns.get(key) ?? null) : null;
+    const status = runs ? jobStatusOf(w, lastRun) : HEALTH_STATUS[w.health];
     const containers = containerFigures(w.containers);
     rows.push({
       type: "workload",
-      key: `w:${w.envName}/${w.workload}`,
+      key: `w:${key}`,
       name: w.workload,
       envName: w.envName,
       kindLabel: KIND_LABEL[w.kind] || "Workload",
       tone: status.tone,
       status: status.label,
       workload: w,
-      ready: w.desiredReplicas !== null ? `${w.readyReplicas ?? 0}/${w.desiredReplicas}` : w.readyReplicas !== null ? String(w.readyReplicas) : "—",
-      short: w.desiredReplicas !== null && (w.readyReplicas ?? 0) < w.desiredReplicas,
+      ready: runs ? "—" : w.desiredReplicas !== null ? `${w.readyReplicas ?? 0}/${w.desiredReplicas}` : w.readyReplicas !== null ? String(w.readyReplicas) : "—",
+      short: !runs && w.desiredReplicas !== null && (w.readyReplicas ?? 0) < w.desiredReplicas,
+      lastRun,
       cpu: sumOf(containers.map((c) => c.cpu)),
       memory: sumOf(containers.map((c) => c.memory)),
       containers,
@@ -186,6 +196,17 @@ export function servicesRows({ workloads, jobs, telemetry, hosted, envs, env }: 
   return rows.sort(
     (a, b) => TONE_RANK[a.tone] - TONE_RANK[b.tone] || TYPE_RANK[a.type] - TYPE_RANK[b.type] || a.name.localeCompare(b.name) || a.envName.localeCompare(b.envName)
   );
+}
+
+/** A Job or CronJob row's latest run in the window (a workload's own, or a job's seen only in its runs); null for anything else. */
+export function runOfRow(row: ServicesRow): WorkloadJob | null {
+  if (row.type === "job") return row.latest;
+  return row.type === "workload" ? row.lastRun : null;
+}
+
+/** Whether a row is a Job or CronJob: what has no replica claim and is judged on its runs. */
+export function runsToCompletion(row: ServicesRow): boolean {
+  return row.type === "job" || (row.type === "workload" && isJobKind(row.workload.kind));
 }
 
 /** The database deployments GetStatus reports, by environment: what the Services page's database row and page read. */

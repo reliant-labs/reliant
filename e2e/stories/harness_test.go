@@ -422,6 +422,8 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Config:        &typedconfig.Config{},
 		Repo:          s.Repo,
 		Chats:         chataccess.NewFromORM(s.Repo.ORM()),
+		ChatRows:      store.NewChatExtStore(s.Repo.ORM()),
+		ChatViews:     store.NewChatsWithActivityExtStore(s.Repo.ORM()),
 		Workflows:     store.NewWorkflowExtStore(s.Repo.ORM()),
 		Worktrees:     store.NewWorktreeExtStore(s.Repo.ORM()),
 		ProjectRows:   store.NewProjectExtStore(s.Repo.ORM()),

@@ -56,7 +56,7 @@ func (s *Service) GetContentBlockBodies(
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("at most 100 block_ids per request"))
 	}
 	ctx = authz.WithViewerReads(ctx)
-	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	chat, err := s.chatRows().GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

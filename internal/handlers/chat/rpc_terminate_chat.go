@@ -21,7 +21,7 @@ func (s *Service) TerminateChat(
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
-	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	chat, err := s.chatRows().GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
