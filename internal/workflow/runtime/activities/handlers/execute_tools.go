@@ -474,21 +474,10 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	// to the call that resolves the credential. See package actingidentity.
 	ctx = actingidentity.With(ctx, actingidentity.Identity{Kind: rtx.ActingIdentity, Automation: rtx.Automation})
 
-	// Calls the workflow decided must not run, each answered with its reason.
-	// Only a run that recorded the removed integration action approval prompt
-	// sends any: a call the person attending did not approve
-	// (runtime/action_approval_legacy.go).
-	refusedByWorkflow := protoArgs.GetRefusedToolCalls() //nolint:staticcheck // SA1019: legacy approval gate
-	if len(rtx.ActivationRefusals) > 0 {
-		merged := make(map[string]string, len(refusedByWorkflow)+len(rtx.ActivationRefusals))
-		for k, v := range refusedByWorkflow {
-			merged[k] = v
-		}
-		for k, v := range rtx.ActivationRefusals {
-			merged[k] = v
-		}
-		refusedByWorkflow = merged
-	}
+	// Calls the workflow decided must not run, each answered with its reason:
+	// an activation change the person attending did not approve
+	// (runtime/activation_approval.go).
+	refusedByWorkflow := rtx.ActivationRefusals
 
 	// Build set for O(1) response tool lookups in worker goroutines
 	responseToolSet := make(map[string]bool, len(expectedResponseTools))
