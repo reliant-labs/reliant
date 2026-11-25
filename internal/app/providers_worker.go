@@ -221,7 +221,7 @@ func newWorkerConnectionResolver(repo *db.Repo, vaultStore connectionvault.Servi
 		return nil, fmt.Errorf("connections: %w", err)
 	}
 	tokens := connections.NewTokenSource(vaultStore, keys, providers, nil)
-	return connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: store.NewWorkflowExtStore(repo.ORM()), Store: vaultStore, Tokens: tokens}), nil
+	return connections.NewResolver(connections.ResolverDeps{Owners: connections.NewOwners(repo.ORM()), Runs: store.NewWorkflowExtStore(repo.ORM()), Store: vaultStore, Tokens: tokens}), nil
 }
 
 // newWorkerIntegrationCredentials is the credential source integration

@@ -585,7 +585,7 @@ func NewInputOptions(d InputOptionsDeps) (inputoptions.Service, error) {
 		return nil, fmt.Errorf("input options: %w", err)
 	}
 	repo := d.DB
-	creds, err := credwire.New(connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: store.NewWorkflowExtStore(repo.ORM()), Store: d.ConnectionVault, Tokens: d.Connections.Tokens}), d.ControlPlane)
+	creds, err := credwire.New(connections.NewResolver(connections.ResolverDeps{Owners: connections.NewOwners(repo.ORM()), Runs: store.NewWorkflowExtStore(repo.ORM()), Store: d.ConnectionVault, Tokens: d.Connections.Tokens}), d.ControlPlane)
 	if err != nil {
 		return nil, err
 	}

@@ -58056,6 +58056,19 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Firings",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Firings",
       "methods": [],

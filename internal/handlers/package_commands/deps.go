@@ -24,8 +24,6 @@ type Router interface {
 
 // Repository is the slice of *db.Repo the package-commands handlers use.
 type Repository interface {
-	// GetChat completes daemonplacement.WorkspaceReader with Placement.
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	// ListDaemonsByUserID lists the user's machines for ListProcesses.
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
 }
@@ -42,6 +40,8 @@ type Favorites interface {
 // by (daemonplacement.Records in production). It checks no owner: the
 // handlers check the returned rows against the caller.
 type Placement interface {
+	// GetChat completes daemonplacement.WorkspaceReader.
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	// Installs places the main checkout's commands where the project is

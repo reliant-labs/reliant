@@ -262,7 +262,7 @@ func newEnv(t *testing.T) *env {
 	return &env{
 		t: t, repo: repo, raw: raw, vault: v, store: store, gh: gh, providers: providers,
 		tokens: tokens, broker: broker, svc: svc,
-		resolver: connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: ormstore.NewWorkflowExtStore(repo.ORM()), Store: store, Tokens: tokens}),
+		resolver: connections.NewResolver(connections.ResolverDeps{Owners: connections.NewOwners(repo.ORM()), Runs: ormstore.NewWorkflowExtStore(repo.ORM()), Store: store, Tokens: tokens}),
 		now:      time.Now,
 	}
 }

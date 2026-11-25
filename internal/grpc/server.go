@@ -110,22 +110,11 @@ type APIHTTPRoutesDeps struct {
 // machine (daemonplacement.Records in production). It checks no owner: the
 // websocket checks each row against the caller.
 type TerminalPlacement interface {
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
-}
-
-// terminalCheckouts is the chat from Repo beside TerminalPlacement.
-type terminalCheckouts struct {
-	chats interface {
-		GetChat(ctx context.Context, id string) (*db.Chat, error)
-	}
-	TerminalPlacement
-}
-
-func (c terminalCheckouts) GetChat(ctx context.Context, id string) (*db.Chat, error) {
-	return c.chats.GetChat(ctx, id)
 }
 
 // APIHTTPRoutesStore is what the routes read from the database. The routes
@@ -135,9 +124,6 @@ func (c terminalCheckouts) GetChat(ctx context.Context, id string) (*db.Chat, er
 type APIHTTPRoutesStore interface {
 	attachment.ContentReader
 	mcpserver.AttachmentReader
-	// GetChat is the terminal websocket's chat; with TerminalPlacement it
-	// is terminal.WithTerminalCheckouts.
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }
 
 // NewAPIHTTPRoutes builds the routes; nothing is mounted until Register.
@@ -157,7 +143,7 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	// the listener's drain ends it (with a reconnect close code) when it
 	// begins.
 	handle("/api/v2/terminal/ws", serverkit.LongLived(
-		terminal.TerminalWSHandler(deps.Router, deps.Auth.Authenticator().TokenValidator(), terminal.WithTerminalCheckouts(terminalCheckouts{chats: deps.Repo, TerminalPlacement: deps.Placement}))))
+		terminal.TerminalWSHandler(deps.Router, deps.Auth.Authenticator().TokenValidator(), terminal.WithTerminalCheckouts(deps.Placement))))
 	// Range-capable byte serving for <video>; Connect GetAttachment is whole-blob.
 	handle(attachment.AttachmentContentPathPrefix, attachment.AttachmentContentHandler(deps.Repo, deps.Auth.AuthenticateHTTP))
 	deps.OAuth.Register(handle)

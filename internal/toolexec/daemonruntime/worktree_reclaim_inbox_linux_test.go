@@ -135,6 +135,7 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 	inboxSvc, err := inbox.New(inbox.Deps{
 		Logger: logger, Config: config.Defaults(), Repo: repo,
 		OrgKeys:     db.TestOrgAccounts(t, repo),
+		Chats:       store.NewChatsWithActivityExtStore(repo.ORM()),
 		ProjectRows: store.NewProjectExtStore(repo.ORM()),
 		Machines:    store.NewDaemonExtStore(repo.ORM()),
 		Items:       store.NewInboxDismissalExtStore(repo.ORM()),

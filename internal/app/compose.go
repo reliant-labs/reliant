@@ -1261,7 +1261,7 @@ func (g *Graph) newFileSystem() (*file_system.Service, error) {
 		Logger:    g.Log,
 		Config:    g.Cfg,
 		Router:    g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:      g.Database(),
+		Repo:      store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Placement: daemonplacement.NewRecords(g.Database().ORM()),
 	})
 }
@@ -1286,6 +1286,7 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Chats:       store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		ProjectRows: store.NewProjectExtStore(g.Database().ORM()),
 		Machines:    store.NewDaemonExtStore(g.Database().ORM()),
 		OrgKeys:     g.CredentialsOrgaccounts(),
@@ -1900,7 +1901,7 @@ func (g *Graph) newPullRequestRecord() (*pull_request_record.Service, error) {
 func (g *Graph) newIntegrationsWriteledger() (writeledger.Service, error) {
 	return writeledger.NewServiceWithForgeMiddleware(writeledger.New(writeledger.Deps{
 		Store:     g.WriteLedgerStore(),
-		Runs:      g.Database(),
+		Runs:      writeledger.NewRuns(g.Database().ORM()),
 		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
 		PRLinks:   g.Chatprlinks(),
 		Now:       time.Now, // framework clock
@@ -1993,7 +1994,7 @@ func (g *Graph) newProjectpurge() (projectpurge.Service, error) {
 func (g *Graph) newChatprlinks() (chatprlinks.Service, error) {
 	svc, err := chatprlinks.New(chatprlinks.Deps{
 		Store: store.NewChatPrLinkExtStore(g.Database().ORM()),
-		Chats: g.Database(),
+		Chats: store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Now:   time.Now, // framework clock
 	})
 	if err != nil {

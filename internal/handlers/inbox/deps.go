@@ -116,8 +116,12 @@ type Repository interface {
 	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
 
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
-	// GetChat names the agents whose processes fill a machine near its
-	// process limit.
+}
+
+// Chats reads the chat an item or a machine process names, to decide whether
+// the caller may see its title or its state. store.ChatsWithActivityExtStore
+// satisfies it.
+type Chats interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }
 
