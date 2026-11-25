@@ -28,9 +28,8 @@ import (
 // questions:answer. Approve, Deny, BatchApprove and BatchDeny need
 // approvals:decide (owner decision 2026-11-06), EXPLICITLY: reliant:api does not
 // satisfy them here (explicitScopeProcedures), though Set.Permits implies it
-// elsewhere. This is only the first gate: the approval handler refuses every
-// access token, approvals:decide included (auth.RequireApprovalDecider; owner
-// decision 2026-11-19: only a person's browser session decides an approval). CleanupStorage and ForgetStorageWorktree
+// elsewhere. The approval handler repeats the check and also refuses machine-bound
+// tokens (auth.RequireApprovalDecider). CleanupStorage and ForgetStorageWorktree
 // (they manage a machine) need reliant:api.
 var procedureScopes = map[string]fat.Scope{
 	reliantv1connect.RunServiceStartRunProcedure:           fat.ScopeRunsStart,

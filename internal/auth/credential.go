@@ -242,8 +242,8 @@ func MachineBound(p *fat.Principal) bool {
 }
 
 // RequireApprovalDecider is the one gate on deciding an approval: an
-// approval means "a person said yes" (owner decision 2026-11-19: approvals
-// need a cookie session; bearer and rlat_ tokens never approve). It admits:
+// browser sessions are preferred, while explicitly scoped unbound access
+// tokens retain their v1 approval authority. It admits:
 //
 //   - a browser session (CredentialBrowserSession) whose request forge's
 //     authn.Method also calls one (IsBrowserSession: a server-side session
@@ -256,14 +256,14 @@ func MachineBound(p *fat.Principal) bool {
 //     R8 cutover, removed in R10);
 //   - the self-host shared key (CredentialSharedKey): that mode has one
 //     credential and no sign-in at all, so it is trusted as its single
-//     operator (RequirePerson).
+//     operator (RequirePerson);
+//   - an unbound access token explicitly granted approvals:decide, retained
+//     for v1 SDK and workflow compatibility. reliant:api does not imply this
+//     grant. Machine-bound tokens are refused before checking scopes.
 //
-// Everything else is refused: an `rlat_` access token whatever scopes it
-// holds (approvals:decide included; one bound to a machine with
-// ReasonMachineCredentialCannotDecide), the managed identity's token as a
-// bearer, a session id presented as a bearer, a token presented as the
-// cookie (refused before it gets here), an OAuth client's token, and an
-// unclassified context.
+// Everything else is refused: the managed identity's token as a bearer, a
+// session id presented as a bearer, a token presented as the cookie (refused
+// before it gets here), an OAuth client's token, and an unclassified context.
 func RequireApprovalDecider(ctx context.Context, action string) error {
 	switch CredentialFromContext(ctx) {
 	case CredentialBrowserSession:
@@ -273,14 +273,22 @@ func RequireApprovalDecider(ctx context.Context, action string) error {
 	case CredentialSession, CredentialSharedKey:
 		return nil
 	case CredentialAccessToken:
-		if p, ok := MachineTokenFromContext(ctx); ok && MachineBound(p) {
+		p, ok := MachineTokenFromContext(ctx)
+		if !ok {
+			break // An access token with no authenticated principal fails closed.
+		}
+		if MachineBound(p) {
 			return MachineCredentialRefusal()
 		}
+		if !p.Scopes.Has(fat.ScopeApprovalsDecide) {
+			return ScopeMissing(fat.ScopeApprovalsDecide)
+		}
+		return nil
 	}
 	return svcerr.WithReason(svcerr.PermissionDenied(
 		"Only a person signed in to the Reliant app can "+action+". This request was made with "+
 			article(CredentialFromContext(ctx))+CredentialFromContext(ctx).String()+", which software can hold "+
-			"(an API token or the CLI login included, whatever its scopes): open it in the Reliant app, "+
+			"(except an unbound access token explicitly granted approvals:decide): open it in the Reliant app, "+
 			"on the web or desktop, to decide it."),
 		ReasonPersonRequired)
 }
