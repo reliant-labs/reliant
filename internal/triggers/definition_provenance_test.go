@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 const provenanceWorkflow = `name: release
@@ -69,7 +70,7 @@ func newProvenanceProject(t *testing.T) *provenanceProject {
 		DaemonID: p.daemonID, Presets: map[string]string{}, Params: map[string]any{}, Config: cfg,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.CreateTrigger(ctx, p.schedule))
+	require.NoError(t, triggertest.Create(ctx, repo, p.schedule))
 	p.webhook = &core.Trigger{
 		ID: uuid.NewString(), UserID: p.userID, ProjectID: p.projectID, Name: "Release on push",
 		Kind: core.TriggerKindWebhook, Enabled: true, Workflow: "release", Message: "release",
@@ -79,7 +80,7 @@ func newProvenanceProject(t *testing.T) *provenanceProject {
 		DaemonID: p.daemonID, Presets: map[string]string{}, Params: map[string]any{}, Config: json.RawMessage(`{}`),
 		CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.CreateTrigger(ctx, p.webhook))
+	require.NoError(t, triggertest.Create(ctx, repo, p.webhook))
 	return p
 }
 

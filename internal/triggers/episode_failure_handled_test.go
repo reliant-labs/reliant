@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // A run that completed only because its failure path ran (run_outcome
@@ -33,7 +34,7 @@ func TestFailureEpisode_AHandledFailureDoesNotEndIt(t *testing.T) {
 		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "nightly", Message: "go", DaemonID: "d",
 		CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.CreateTrigger(ctx, tr))
+	require.NoError(t, triggertest.Create(ctx, repo, tr))
 	base := now.Add(-time.Hour)
 
 	fire := func(id string, at time.Time, outcome core.TriggerEventOutcome) {

@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // newStoreTrigger is a trigger with every column the definition carries set,
@@ -57,7 +58,7 @@ func TestTriggerQueries(t *testing.T) {
 	}
 	b := newStoreTrigger("trg-b", "b", base.Add(time.Minute))
 	b.DaemonID, b.NoMachine, b.ActingIdentity, b.Presets, b.Params = "", true, "", nil, nil
-	if err := env.Repo.CreateTrigger(ctx, b); err != nil {
+	if err := triggertest.Create(ctx, env.Repo, b); err != nil {
 		t.Fatalf("Repo.CreateTrigger: %v", err)
 	}
 	for _, id := range []string{"trg-a", "trg-b"} {
@@ -146,7 +147,7 @@ func TestTriggerQueries(t *testing.T) {
 		t.Fatalf("after ReplaceTrigger Repo.GetTrigger = %+v, want the edit, updated_at stamped, kind and owner kept", twin)
 	}
 	twin.Name = "a-twin"
-	if err := env.Repo.UpdateTrigger(ctx, twin); err != nil {
+	if err := triggertest.Update(ctx, env.Repo, twin); err != nil {
 		t.Fatalf("Repo.UpdateTrigger: %v", err)
 	}
 	if got, _ := store.GetTrigger(ctx, env.ORM, "trg-a"); got.Name != "a-twin" {
@@ -218,12 +219,12 @@ func TestTriggerQueries(t *testing.T) {
 	if err := store.InsertTrigger(ctx, env.ORM, act); err != nil {
 		t.Fatalf("InsertTrigger(activation): %v", err)
 	}
-	if err := env.Repo.CreateTrigger(ctx, func() *core.Trigger {
+	if err := triggertest.Create(ctx, env.Repo, func() *core.Trigger {
 		tr := newStoreTrigger("trg-act2", "act2", base.Add(4*time.Minute))
 		tr.WorkflowTrigger = strp("weekly")
 		return tr
 	}()); err != nil {
-		t.Fatalf("Repo.CreateTrigger(activation): %v", err)
+		t.Fatalf("triggertest.Create(activation): %v", err)
 	}
 	if err := store.SetTriggerProjection(ctx, env.ORM, "trg-act", core.TriggerProjection{Config: json.RawMessage(`{"cron":["0 * * * *"]}`), Filter: "trigger.ok"}); err != nil {
 		t.Fatalf("SetTriggerProjection: %v", err)

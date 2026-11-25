@@ -140,7 +140,7 @@ func (m *MockOwners) AdoptTrigger(ctx context.Context, t *core.Trigger, previous
 var _ Owners = (*MockOwners)(nil)
 
 // forge:section MockRepository
-// forge:hash=70d1a3acea2603a955ac892364bf6998bded7dd1f0ddc66a952c1e3604040c89
+// forge:hash=2068d100618719cd8fca0dffa55932c5c3f60bf1728240c17da007e57629b5e5
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -158,10 +158,8 @@ type MockRepository struct {
 	LockActivationDependenciesFunc     func(context.Context, string, string) error
 	ListSettingsByKeyFunc              func(context.Context, string, string) ([]*db.Setting, error)
 	ListRunNodeExecutionsFunc          func(context.Context, string, int) ([]*db.StepExecution, error)
-	CreateTriggerFunc                  func(context.Context, *core.Trigger) error
 	GetTriggerFunc                     func(context.Context, string) (*core.Trigger, error)
 	ListTriggerChangesFunc             func(context.Context, string, string) ([]core.TriggerChange, error)
-	UpdateTriggerFunc                  func(context.Context, *core.Trigger) error
 	DeleteTriggerFunc                  func(context.Context, string) error
 	SetTriggerEnabledFunc              func(context.Context, string, bool) error
 	SetTriggerWebhookTokenHashFunc     func(context.Context, string, []byte) error
@@ -256,15 +254,6 @@ func (m *MockRepository) ListRunNodeExecutions(ctx context.Context, workflowID s
 	return nil, contractkit.MockNotSet("MockRepository", "ListRunNodeExecutions")
 }
 
-// CreateTrigger records the call and delegates to CreateTriggerFunc when set.
-func (m *MockRepository) CreateTrigger(ctx context.Context, t *core.Trigger) error {
-	m.Recorder.Record("CreateTrigger", ctx, t)
-	if m.CreateTriggerFunc != nil {
-		return m.CreateTriggerFunc(ctx, t)
-	}
-	return contractkit.MockNotSet("MockRepository", "CreateTrigger")
-}
-
 // GetTrigger records the call and delegates to GetTriggerFunc when set.
 func (m *MockRepository) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
 	m.Recorder.Record("GetTrigger", ctx, id)
@@ -281,15 +270,6 @@ func (m *MockRepository) ListTriggerChanges(ctx context.Context, userID string, 
 		return m.ListTriggerChangesFunc(ctx, userID, triggerID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListTriggerChanges")
-}
-
-// UpdateTrigger records the call and delegates to UpdateTriggerFunc when set.
-func (m *MockRepository) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
-	m.Recorder.Record("UpdateTrigger", ctx, t)
-	if m.UpdateTriggerFunc != nil {
-		return m.UpdateTriggerFunc(ctx, t)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpdateTrigger")
 }
 
 // DeleteTrigger records the call and delegates to DeleteTriggerFunc when set.
