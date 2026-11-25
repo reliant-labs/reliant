@@ -26,7 +26,6 @@ import { StreamingService, type StreamChatUpdatesRequest } from "@/gen/reliant/v
 import { TestsService } from "@/gen/controlplane/services/tests/v1/tests_pb";
 
 import { fail, pending, withEmptyReads } from "../overlay";
-import { isDemoRead } from "../readOnly";
 import { defineFixturePack, type FixturePack } from "../transport";
 import catalogJson from "./data/catalog.json?raw";
 import { chatHandlers } from "./handlers/reliant/chats";
@@ -225,8 +224,9 @@ function noteUnknown(key: string): void {
  * empty message, held open) instead of Unimplemented, as the old fetch
  * shim's `{}` did (overlay.ts withEmptyReads), and is
  * still recorded in the probe's `unknown` (VISUAL_FXLOG prints it). Writes
- * never get here: the read-only guard refuses them first, and only reads get
- * an empty answer (the deprecated classifier install.ts also reads by).
+ * never get here: the read-only guard refuses them first, and only a read the
+ * proto declares NO_SIDE_EFFECTS gets an empty answer (the rule the guard
+ * applies).
  *
  * The screenshot harness only: a read nobody wrote a fixture for renders as
  * "nothing there", not an error. Its layer holds only `defaults`, and no other
@@ -234,7 +234,7 @@ function noteUnknown(key: string): void {
  * wins over it wherever it sits in the overlay list.
  */
 function emptyReads(): FixturePack {
-  const base = withEmptyReads({ readOnly: isDemoRead }, APP_SERVICES).pack!;
+  const base = withEmptyReads({ readOnly: true }, APP_SERVICES).pack!;
   const defaults = (base.defaults ?? []).map((entry) => {
     const service = (entry as AnyServiceDefaults).$service;
     const out: Record<string, unknown> = { $service: service };

@@ -1097,7 +1097,7 @@ test.describe('visual baseline', () => {
 
         const probe = (await readProbe(page))!
         if (process.env.VISUAL_FXLOG) {
-          const report = { rpcs: Object.keys(probe.rpcs), unknown: [...new Set(probe.unknown)], refused: [...new Set(probe.refused)], unannotated: probe.unannotated }
+          const report = { rpcs: Object.keys(probe.rpcs), unknown: [...new Set(probe.unknown)], refused: [...new Set(probe.refused)] }
           console.log(`[visual] ${surface.name} (${testInfo.project.name}): ${JSON.stringify(report)}`)
         }
         await expect(page).toHaveScreenshot(`${surface.name}.png`, { ...SHOT, mask: masks(page) })

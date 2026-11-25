@@ -15,7 +15,6 @@ import { SettingsService } from "@/gen/reliant/v1/settings_pb";
 import { StreamingService } from "@/gen/reliant/v1/streaming_pb";
 import { SystemService } from "@/gen/reliant/v1/system_pb";
 
-import { isDemoRead } from "../../readOnly";
 import { createFixtureTransport, defineFixturePack } from "../../transport";
 import { shopAppPack } from "../app";
 import { SHOP_READ_ONLY_MESSAGE } from "../index";
@@ -29,7 +28,7 @@ const FIXED_NOW = Date.UTC(2026, 10, 18, 15, 30);
 function served(...overlays: string[]) {
   const app = shopAppPack({ now: FIXED_NOW });
   const pack = defineFixturePack({ name: "test", extends: [app, ...overlays.map((name) => SHOP_OVERLAYS[name]())] });
-  return createFixtureTransport({ pack, now: demoNow, readOnly: isDemoRead, readOnlyMessage: SHOP_READ_ONLY_MESSAGE });
+  return createFixtureTransport({ pack, now: demoNow, readOnly: true, readOnlyMessage: SHOP_READ_ONLY_MESSAGE });
 }
 
 beforeEach(() => resetDemoNowForTests());

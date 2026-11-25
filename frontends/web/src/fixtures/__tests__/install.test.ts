@@ -94,9 +94,8 @@ describe("installFixtures", () => {
     expect((await connectClient(DaemonRegistryService).listDaemons({})).daemons.length).toBeGreaterThan(0);
     expect(probe().rpcs["reliant.v1.ProjectService/GetProject"]).toBe(1);
     expect(probe().inflight).toBe(0);
-    // ListDaemons is proto-annotated; GetProject is one of the pack's named `answers`.
-    expect(probe().unannotated).not.toContain("reliant.v1.DaemonRegistryService/ListDaemons");
-    expect(probe().unannotated).not.toContain("reliant.v1.ProjectService/GetProject");
+    // GetProject answers as one of the pack's named `answers`, ListDaemons as a NO_SIDE_EFFECTS read: neither is refused.
+    expect(probe().refused).toEqual([]);
   });
 
   it("refuses a write and records it", async () => {

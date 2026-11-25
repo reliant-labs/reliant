@@ -1,6 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
 
-/** Public sample files only. Never mint a URL, contact storage or accept a foreign scope. */
+/**
+ * Public sample files only. Never mint a URL, contact storage or accept a
+ * foreign scope. The one image's preview URL is a same-origin static asset
+ * (SAMPLE_IMAGE_URL), never anything shaped like a presigned GCS/S3 link.
+ */
 import { Code, ConnectError } from "@connectrpc/connect";
 import { mockService } from "@reliantlabs/forge-web-runtime/mock-transport";
 import { BucketRuntimeKind, ObjectPreviewKind, StorageAccessPolicy, StorageBrowserService } from "@/gen/controlplane/services/storage_browser/v1/storage_browser_pb";
@@ -10,7 +14,22 @@ import { demoEnvId } from "./scope";
 const files = {
   "README.txt": { type: "text/plain", text: "Synthetic shop uploads. These sample files never contact a real backend." },
   "orders/sample.json": { type: "application/json", text: '{"order":"demo-order-001","status":"paid","synthetic":true}' },
+  "product-photo.png": { type: "image/png", text: "" },
 } as const;
+
+/**
+ * PreviewObject's IMAGE url: the app's own icon, same-origin, marked as a
+ * fixture. A real one is a 2-minute presigned GET minted per call; this is
+ * obviously not one (no storage host, no signature), and loads nothing off
+ * the page's origin.
+ */
+export const SAMPLE_IMAGE_URL = "/apple-touch-icon.png?fixture=shop-sample";
+/** The sample image's stated size (bytes): the icon's, roughly; nothing reads it. */
+const SAMPLE_IMAGE_SIZE = 4_096n;
+
+const isImage = (key: keyof typeof files) => files[key].type.startsWith("image/");
+const kindOf = (key: keyof typeof files) => (isImage(key) ? ObjectPreviewKind.IMAGE : key.endsWith(".json") ? ObjectPreviewKind.JSON : ObjectPreviewKind.TEXT);
+const sizeOf = (key: keyof typeof files) => (isImage(key) ? SAMPLE_IMAGE_SIZE : BigInt(bytes(key).length));
 /**
  * Which environments declare shop's one bucket. dev declares none, so the
  * demo shows the browser's "declares no storage buckets" state there (switch
@@ -39,15 +58,16 @@ export function storageScenarioHandlers() {
       if (req.pageToken) throw new ConnectError("No such sample page.", Code.InvalidArgument);
       const prefix = req.prefix ?? "";
       if (prefix !== "" && prefix !== "orders/") throw new ConnectError("No such sample folder.", Code.NotFound);
-      return { prefixes: prefix ? [] : ["orders/"], objects: Object.keys(files).filter((key) => key.startsWith(prefix) && !key.slice(prefix.length).includes("/")).map((key) => ({ key, size: BigInt(bytes(key as keyof typeof files).length), etag: "synthetic-sample" })), nextPageToken: "" };
+      return { prefixes: prefix ? [] : ["orders/"], objects: Object.keys(files).filter((key) => key.startsWith(prefix) && !key.slice(prefix.length).includes("/")).map((key) => ({ key, size: sizeOf(key as keyof typeof files), etag: "synthetic-sample" })), nextPageToken: "" };
     },
     getObjectMetadata: (req) => {
       admit(req); const key = file(req);
-      return { object: { key, size: BigInt(bytes(key).length), contentType: files[key].type, etag: "synthetic-sample", metadata: { source: "public-demo-fixtures" }, preview: key.endsWith(".json") ? ObjectPreviewKind.JSON : ObjectPreviewKind.TEXT } };
+      return { object: { key, size: sizeOf(key), contentType: files[key].type, etag: "synthetic-sample", metadata: { source: "public-demo-fixtures" }, preview: kindOf(key) } };
     },
     previewObject: (req) => {
       admit(req); const key = file(req);
-      return { kind: key.endsWith(".json") ? ObjectPreviewKind.JSON : ObjectPreviewKind.TEXT, contentType: files[key].type, size: BigInt(bytes(key).length), body: { case: "content", value: bytes(key) } };
+      if (isImage(key)) return { kind: ObjectPreviewKind.IMAGE, contentType: files[key].type, size: sizeOf(key), body: { case: "image", value: { url: SAMPLE_IMAGE_URL } } };
+      return { kind: kindOf(key), contentType: files[key].type, size: sizeOf(key), body: { case: "content", value: bytes(key) } };
     },
     // Issuance remains a mutation even for sample bytes. The demo never mints it.
     presignObjectDownload: () => { throw new ConnectError("This is a demo. Downloads and changes are turned off.", Code.PermissionDenied); },
