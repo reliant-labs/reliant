@@ -30,7 +30,8 @@ import { z } from "zod";
 // ─── Auth store double ───────────────────────────────────────────────────────
 
 const authState = vi.hoisted(() => ({
-  current: { user: null as unknown } as { user: unknown },
+  // identity: what the real store derives from user on every write.
+  current: { user: null as unknown, identity: null as unknown } as { user: unknown; identity: unknown },
 }));
 
 vi.mock("../../../store/authStore", () => ({
@@ -243,12 +244,12 @@ describe("OnboardingWizard — authentication gate", () => {
     vi.clearAllMocks();
     tourStoreState.state.isInitialized = true;
     useOnboardingChecklistStore.getState().isInitialized = true;
-    authState.current = { user: null };
+    authState.current = { user: null, identity: null };
   });
 
   it("draws no Setup Guide of its own, signed in or not: the guide is the nav's", async () => {
     // The store says "expanded, nothing complete": the floater would have painted here.
-    authState.current = { user: { id: "user-1" } };
+    authState.current = { user: { id: "user-1" }, identity: { id: "user-1" } };
     const router = makeRouter(["/"]);
     render(React.createElement(RouterProvider as any, { router }));
 

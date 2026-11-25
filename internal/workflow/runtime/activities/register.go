@@ -179,6 +179,11 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// A node's save_message is written by the worker that executes the node,
 	// through the same write path as the SaveMessage activity.
 	registry.SetMessageWriter(saveMessage)
+	// A node's observe: block is recorded by the same worker, after its
+	// save_message (a nil *db.Repo would be a non-nil interface that panics).
+	if deps.Repo != nil {
+		registry.SetObservationWriter(deps.Repo)
+	}
 	var modelEndpoints local.EndpointSource
 	var spawnTree handlers.SpawnTree
 	if deps.Repo != nil {

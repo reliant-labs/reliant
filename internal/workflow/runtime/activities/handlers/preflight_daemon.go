@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/automationcred"
@@ -106,7 +108,7 @@ func (a *PreflightDaemonCheckActivity) Category() schema.ActivityCategory {
 
 func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input PreflightDaemonCheckInput) (PreflightDaemonCheckOutput, error) {
 	// Resolve the user ID from the chat
-	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 	if err != nil {
 		return PreflightDaemonCheckOutput{}, fmt.Errorf("failed to get chat for preflight check: %w", err)
 	}

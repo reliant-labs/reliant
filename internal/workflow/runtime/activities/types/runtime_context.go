@@ -42,6 +42,12 @@ type RuntimeContext struct {
 	// anything (no save_message, or the workflow saves it itself).
 	SaveMessage *SaveMessageRequest `json:"save_message,omitempty"`
 
+	// Observe, when set, hands this node's observe: block to the
+	// ActivityWrapper, which evaluates and records it after the activity
+	// returns (and after the save_message). Nil means the node is not
+	// observed here.
+	Observe *ObserveRequest `json:"observe,omitempty"`
+
 	// Loop context
 	LoopNodeID    string `json:"loop_node_id,omitempty"`
 	LoopIteration int    `json:"loop_iteration,omitempty"`

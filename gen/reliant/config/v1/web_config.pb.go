@@ -78,6 +78,7 @@ type ReliantWebConfig struct {
 	DisableTls         string `protobuf:"bytes,5,opt,name=disable_tls,json=disableTls,proto3" json:"disable_tls,omitempty"`
 	// ── Identity ──────────────────────────────────────────────────────────
 	AuthMode         string `protobuf:"bytes,6,opt,name=auth_mode,json=authMode,proto3" json:"auth_mode,omitempty"`
+	AuthProvider     string `protobuf:"bytes,33,opt,name=auth_provider,json=authProvider,proto3" json:"auth_provider,omitempty"`
 	SupabaseUrl      string `protobuf:"bytes,7,opt,name=supabase_url,json=supabaseUrl,proto3" json:"supabase_url,omitempty"`
 	SupabaseAnonKey  string `protobuf:"bytes,8,opt,name=supabase_anon_key,json=supabaseAnonKey,proto3" json:"supabase_anon_key,omitempty"`
 	AuthCookieDomain string `protobuf:"bytes,29,opt,name=auth_cookie_domain,json=authCookieDomain,proto3" json:"auth_cookie_domain,omitempty"`
@@ -207,6 +208,13 @@ func (x *ReliantWebConfig) GetAuthMode() string {
 	return ""
 }
 
+func (x *ReliantWebConfig) GetAuthProvider() string {
+	if x != nil {
+		return x.AuthProvider
+	}
+	return ""
+}
+
 func (x *ReliantWebConfig) GetSupabaseUrl() string {
 	if x != nil {
 		return x.SupabaseUrl
@@ -309,7 +317,7 @@ var File_reliant_config_v1_web_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xa7<\n" +
+	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xe0@\n" +
 	"\x10ReliantWebConfig\x12\xa0\x03\n" +
 	"\aapi_url\x18\x01 \x01(\tB\x86\x03\x82\xce\x18\x81\x03\n" +
 	"\aAPI_URL*\xe1\x02Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there.r\x12\n" +
@@ -336,7 +344,9 @@ const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\vDISABLE_TLS*\xa1\x01\"true\": build loopback and WebSocket URLs with http/ws instead of https/wss (a plain-http local stack). The desktop app takes this from its main process instead.R\n" +
 	"disableTls\x12\x93\x03\n" +
 	"\tauth_mode\x18\x06 \x01(\tB\xf5\x02\x82\xce\x18\xf0\x02\n" +
-	"\tAUTH_MODE*\xce\x02\"cloud\": the managed deployment. Sessions use browser storage, and the document must also carry API_URL, CONTROL_PLANE_API_URL, SUPABASE_URL and SUPABASE_ANON_KEY, or the app refuses to start and names what is missing. \"self-hosted\" or unset: self-hosted or local dev. A document rendered by another project must state one of the two.J\x05cloudJ\vself-hostedR\bauthMode\x12\xba\x01\n" +
+	"\tAUTH_MODE*\xce\x02\"cloud\": the managed deployment. Sessions use browser storage, and the document must also carry API_URL, CONTROL_PLANE_API_URL, SUPABASE_URL and SUPABASE_ANON_KEY, or the app refuses to start and names what is missing. \"self-hosted\" or unset: self-hosted or local dev. A document rendered by another project must state one of the two.J\x05cloudJ\vself-hostedR\bauthMode\x12\xb6\x04\n" +
+	"\rauth_provider\x18! \x01(\tB\x90\x04\x82\xce\x18\x8b\x04\n" +
+	"\rAUTH_PROVIDER\x1a\bsupabase*\xde\x03Who signs people in. \"supabase\" (the default): Supabase sessions, sent to both APIs as a bearer token. \"forge\": the managed identity's login broker on reliant-api (/auth/*); the browser holds only its session cookie, every RPC goes same-origin through /_api/@reliant and /_api/@cp with credentials included and no Authorization header, and the sign-in screens are the native ones. The desktop app reads the same key from config.js. Turning it back to \"supabase\" is the rollback.J\bsupabaseJ\x05forgeR\fauthProvider\x12\xba\x01\n" +
 	"\fsupabase_url\x18\a \x01(\tB\x96\x01\x82\xce\x18\x91\x01\n" +
 	"\fSUPABASE_URL\x1a\x16http://127.0.0.1:54321*UThe Supabase project the browser signs in against. Default: a local `supabase start`.r\x12\n" +
 	"\tauth_mode\x12\x05cloudR\vsupabaseUrl\x12\xd7\x01\n" +

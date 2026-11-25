@@ -7,8 +7,16 @@ import { LinkedAccounts } from '../LinkedAccounts'
 import { DeleteAccountDialog } from './DeleteAccountDialog'
 import { SettingsPageHeader } from "./SettingsPageHeader";
 import { authPath } from "@/lib/paths";
+import { isForgeAuth } from "@/lib/auth/forge-api";
+import { ForgeAccountSettings } from "./forge/ForgeAccountSettings";
 
+// forge's login broker (AUTH_PROVIDER "forge") serves its own account routes;
+// Supabase mode is unchanged below.
 export function AccountSettings() {
+  return isForgeAuth() ? <ForgeAccountSettings /> : <SupabaseAccountSettings />
+}
+
+function SupabaseAccountSettings() {
   const {
     user,
     signOut,

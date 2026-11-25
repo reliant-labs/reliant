@@ -34,6 +34,12 @@ const (
 	stepRetentionPage = 100
 	// stepRetentionCursorName is the step prune's ledger_retention_cursors row.
 	stepRetentionCursorName = "step_executions"
+	// observationPruneBatch is the most node observations one delete takes.
+	// A row is small (8 KiB at its cap), so the batch is the step batch's.
+	observationPruneBatch = 500
+	// observationRetentionCursorName is the observation prune's
+	// ledger_retention_cursors row.
+	observationRetentionCursorName = "node_observations"
 )
 
 // LedgerRetentionPause is the pause between two batches of a pass, so a large
@@ -204,4 +210,93 @@ func (r *Repo) pruneRunSteps(ctx context.Context, rootID string, cutoff time.Tim
 		return store.DeferStepRetentionRoot(ctx, r.ORM(), rootID)
 	}
 	return store.ClearStepRetentionRoot(ctx, r.ORM(), rootID)
+}
+
+// PruneNodeObservations deletes what the observe: blocks of every root run
+// that completed or was cancelled before cutoff recorded
+// (store.PruneRunObservations): first the runs an earlier pass deferred, then
+// the new ones after its own cursor. The same walk and judgment as
+// PruneStepExecutions, on its own retention period (worker config
+// node_observation_retention). It returns what it did, also on error.
+func (r *Repo) PruneNodeObservations(ctx context.Context, cutoff time.Time, pause LedgerRetentionPause) (StepRetentionResult, error) {
+	var res StepRetentionResult
+	ctx = orm.Detached(ctx)
+
+	after := ""
+	for {
+		deferred, err := store.DeferredObservationRetentionRoots(ctx, r.ORM(), after, stepRetentionPage)
+		if err != nil {
+			return res, err
+		}
+		for _, root := range deferred {
+			if err := r.pruneRunObservations(ctx, root, cutoff, pause, &res); err != nil {
+				return res, err
+			}
+			after = root
+		}
+		if len(deferred) < stepRetentionPage {
+			break
+		}
+	}
+
+	at, id, err := store.ReadLedgerRetentionCursor(ctx, r.ORM(), observationRetentionCursorName)
+	if err != nil {
+		return res, err
+	}
+	for {
+		roots, err := store.StepRetentionRoots(ctx, r.ORM(), cutoff, at, id, stepRetentionPage)
+		if err != nil {
+			return res, err
+		}
+		for _, root := range roots {
+			if err := r.pruneRunObservations(ctx, root.ID, cutoff, pause, &res); err != nil {
+				return res, err
+			}
+			if err := store.AdvanceLedgerRetentionCursor(ctx, r.ORM(), observationRetentionCursorName, root.CompletedAt, root.ID); err != nil {
+				return res, err
+			}
+			at, id = root.CompletedAt, root.ID
+		}
+		if len(roots) < stepRetentionPage {
+			return res, nil
+		}
+	}
+}
+
+// pruneRunObservations prunes one root run's tree until none of its prunable
+// observations is left, then records it deferred (part of the tree is not
+// prunable yet) or done.
+func (r *Repo) pruneRunObservations(ctx context.Context, rootID string, cutoff time.Time, pause LedgerRetentionPause, res *StepRetentionResult) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		n, err := store.PruneRunObservations(ctx, r.ORM(), rootID, cutoff, observationPruneBatch)
+		res.Deleted += n
+		if err != nil {
+			return fmt.Errorf("prune run %s observations: %w", rootID, err)
+		}
+		if n < observationPruneBatch {
+			left, err := store.RunObservationsLeft(ctx, r.ORM(), rootID, cutoff)
+			if err != nil {
+				return fmt.Errorf("prune run %s observations: %w", rootID, err)
+			}
+			if !left {
+				break
+			}
+		}
+		if err := pause.wait(ctx); err != nil {
+			return err
+		}
+	}
+	pending, err := store.RunHasUnprunableWorkflows(ctx, r.ORM(), rootID, cutoff)
+	if err != nil {
+		return fmt.Errorf("prune run %s observations: %w", rootID, err)
+	}
+	res.Runs++
+	if pending {
+		res.Deferred++
+		return store.DeferObservationRetentionRoot(ctx, r.ORM(), rootID)
+	}
+	return store.ClearObservationRetentionRoot(ctx, r.ORM(), rootID)
 }

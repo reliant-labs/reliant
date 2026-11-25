@@ -50,8 +50,16 @@ vi.mock('@/lib/query-client', () => ({ queryClient: { invalidateQueries: (arg: u
 
 // ── a controllable auth store ──────────────────────────────────────────────
 type TestUser = { id: string; email?: string; is_anonymous?: boolean } | null
+// The real store derives `identity` from `user` on every write; this one
+// derives it on read, one object per user so effects keyed on it settle.
+let identityFor: { user: TestUser; identity: ReturnType<typeof identityOf> } = { user: null, identity: null }
 const auth = {
   user: null as TestUser,
+  get identity() {
+    if (identityFor.user !== this.user) identityFor = { user: this.user, identity: identityOf(this.user as never) }
+    return identityFor.identity
+  },
+  authError: null,
   initialized: true,
   loading: false,
   initialize: vi.fn(),
@@ -77,6 +85,7 @@ import { captureClaimLinkFromUrl, readPendingClaim, resetClaimLinkMemoryForTests
 import { setTransport } from '@/lib/connect'
 import { mockTransport, type MockHandlers } from '@/lib/test-utils'
 import { ClaimPage } from '../ClaimPage'
+import { identityOf } from '@/lib/auth/identity'
 import { resetShellForTests } from '@/lib/shell'
 
 const TOKEN = 'rcl_9f3KQeAbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_'

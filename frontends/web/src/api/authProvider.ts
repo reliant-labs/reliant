@@ -26,6 +26,7 @@
  */
 
 import { logger } from "../lib/logger";
+import { isForgeAuth } from "../lib/auth/forge-api";
 
 /** Where the transport gets bearer tokens and session-liveness answers. */
 export interface AuthTokenProvider {
@@ -134,21 +135,59 @@ export const browserAuthTokenProvider: AuthTokenProvider = {
   },
 };
 
+/**
+ * forge mode (AUTH_PROVIDER "forge", lib/auth/forge-api.ts): the session is
+ * the login broker's HttpOnly cookie, sent by the browser on every
+ * same-origin request (`credentials: "include"`), so there is no bearer to
+ * attach. An API key (self-host `apikey` mode) is still a bearer.
+ *
+ * `refresh()` never produces a token: the broker refreshes the tokens it holds
+ * server-side. A 401 in this mode is judged by asking the broker whether the
+ * cookie still names a session (transport.ts cookie recovery), never by
+ * swapping credentials.
+ */
+export const cookieSessionTokenProvider: AuthTokenProvider = {
+  async getToken() {
+    return readApiKey();
+  },
+
+  async hasSession() {
+    if (readApiKey()) return true;
+    const { useAuthStore } = await import("../store/authStore");
+    return useAuthStore.getState().identity !== null;
+  },
+
+  isApiKey() {
+    return !!readApiKey();
+  },
+
+  async refresh() {
+    return null;
+  },
+};
+
+/** The browser default for this page's sign-in provider. */
+function defaultProvider(): AuthTokenProvider {
+  return isForgeAuth() ? cookieSessionTokenProvider : browserAuthTokenProvider;
+}
+
 // Module-level rather than React context on purpose: interceptors are built at
 // transport-construction time, which happens outside React (and before the
 // first render) in `lib/connect.ts`. A context would invert that lifecycle.
-// `ReliantProvider` sets this during its initialization effect.
-let _provider: AuthTokenProvider = browserAuthTokenProvider;
+// `ReliantProvider` sets this during its initialization effect. Null: the
+// browser default for the configured provider, decided per request so a
+// config.js that loads after this module still decides it.
+let _provider: AuthTokenProvider | null = null;
 
 /**
  * Swap the token source. Call once during app/embed bootstrap, before the
  * first RPC. Passing null restores the browser default.
  */
 export function setAuthTokenProvider(provider: AuthTokenProvider | null): void {
-  _provider = provider ?? browserAuthTokenProvider;
+  _provider = provider;
 }
 
 /** Current token source. Interceptors call this per-request. */
 export function getAuthTokenProvider(): AuthTokenProvider {
-  return _provider;
+  return _provider ?? defaultProvider();
 }

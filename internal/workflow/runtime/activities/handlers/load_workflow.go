@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"google.golang.org/protobuf/encoding/protojson"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -259,7 +261,7 @@ func (a *LoadWorkflowActivity) resolveWorkflowContext(ctx context.Context, chatI
 		return nil, fmt.Errorf("repository not available")
 	}
 
-	chat, err := a.repo.GetChat(ctx, chatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, chatID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chat: %w", err)
 	}
