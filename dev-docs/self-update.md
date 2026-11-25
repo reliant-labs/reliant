@@ -159,7 +159,11 @@ that their output went through pipes whose read ends are close-on-exec.
   it finishes its output and removes its files. One that exits while handing
   off or handed off stays a zombie with its files: the old image's waiter
   parks, and the new image reaps it for its real exit status. An undo (the
-  exec failed) makes it owned again and restarts a parked waiter. No wrapper
+  exec failed, or the journal refused the handoff) makes it owned again and
+  restarts a parked waiter. A process whose handoff the journal refused is
+  undone first and only then stopped: the stop only signals its group and
+  waits for the waiter, which stays its one reaper; one that exited in that
+  window is not stopped at all, and keeps its own exit status. No wrapper
   process and no exit file: the exec keeps the parent.
 - **Adoption** (`BackgroundJournal.Install` in the new image): a handed-off
   record whose pid is alive (a zombie counts), whose parent is this process

@@ -129,6 +129,16 @@ type handoffState struct {
 	// parkedC closes when the waiter parks during this handoff (made by
 	// begin): the moment the image has decided, for good, not to reap.
 	parkedC chan struct{}
+	// reaps counts the times this image went on to reap the process: at
+	// most one, since only owned becomes reaping and nothing leaves reaping.
+	reaps int
+}
+
+// reapCount is how many times this image reaped (or is reaping) the process.
+func (h *handoffState) reapCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.reaps
 }
 
 // parkedSignal is closed once the waiter parked during the current handoff;
@@ -146,6 +156,7 @@ func (h *handoffState) mayReap() bool {
 	defer h.mu.Unlock()
 	if h.state == owned {
 		h.state = reaping
+		h.reaps++
 		return true
 	}
 	if !h.parked {
@@ -232,12 +243,21 @@ func (m *BackgroundManager) waitForFileProcess(process *BackgroundProcess, reap 
 
 // undoHandOff takes process back after a handoff the exec did not follow:
 // tailed again first, then owned, so a waiter restarted for an exit seen
-// meanwhile finishes the output after tailing resumed, never before.
-func (m *BackgroundManager) undoHandOff(process *BackgroundProcess) {
+// meanwhile finishes the output after tailing resumed, never before. exited
+// reports that the process exited while handed off: its waiter had parked
+// and is restarted here, and reaps it at once.
+//
+// Either way the process has exactly one reaper again, its waiter. Whatever
+// stops it afterwards (KillProcess) only signals its group and waits on the
+// waiter's done; it never reaps, finishes the output or removes the files.
+func (m *BackgroundManager) undoHandOff(process *BackgroundProcess) (exited bool) {
 	process.fileOut.startTailing()
-	if reap := process.handoff.undo(); reap != nil {
-		go m.waitForFileProcess(process, reap)
+	reap := process.handoff.undo()
+	if reap == nil {
+		return false
 	}
+	go m.waitForFileProcess(process, reap)
+	return true
 }
 
 // reapAdopted reaps an adopted process: it is this process's child, so wait4
@@ -325,8 +345,18 @@ func (m *BackgroundManager) handOff(process *BackgroundProcess, cb *PersistenceC
 	offsets := process.fileOut.pause()
 	m.flushProcessOutput(process)
 	if err := cb.OnHandOff(process.ID, offsets); err != nil {
+		// Undone first, and only then stopped: the stop then meets a
+		// process with one reaper, its waiter, whose done it waits on.
+		if m.undoHandOff(process) {
+			// It exited during the handoff: its restarted waiter reaps it
+			// now, with its own exit status. There is nothing to stop.
+			select {
+			case <-process.done:
+				return false, true
+			case <-time.After(KillGraceTimeout):
+			}
+		}
 		logging.Warn("Background process could not be handed off to the next daemon image; it is stopped", "id", process.ID, "error", err)
-		m.undoHandOff(process)
 		return false, false
 	}
 	process.handoff.commit()

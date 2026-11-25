@@ -438,3 +438,91 @@ func TestBackgroundFileOutputIsCompleteAtCompletion(t *testing.T) {
 	require.Equal(t, "line-1\nline-2\nline-3\nno newline\n", stdout)
 	require.Equal(t, "oops\n", stderr)
 }
+
+// failHandOff makes m's journal refuse every handoff (a full disk), running
+// during first, inside the window between the handoff's output read and the
+// undo.
+func failHandOff(m *BackgroundManager, dir string, during func()) {
+	cb := newTestJournal(dir).Callback()
+	cb.OnHandOff = func(string, [2]int64) error {
+		during()
+		return errors.New("no space left on device")
+	}
+	m.SetPersistenceCallback(cb)
+}
+
+// A handoff the journal refuses is undone, and then the process is stopped,
+// as any process that cannot survive the exec is. One reaper throughout: the
+// stop only signals and waits for the process's own waiter, which reaps it
+// once and only then removes its files.
+func TestBackgroundFailedHandOffOfALiveProcessIsStoppedByItsOneReaper(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "journal")
+	m := survivingManager(t, dir)
+	ready, gate := newFIFO(t, "ready"), newFIFO(t, "gate")
+	proc, err := m.StartProcess(context.Background(), StartProcessOptions{
+		Command:    fmt.Sprintf(`echo one; echo > %s; read _ < %s`, ready, gate),
+		WorkingDir: t.TempDir(),
+	})
+	require.NoError(t, err)
+	pid := proc.GetPID()
+	ready.awaitSignal(t)
+	failHandOff(m, dir, func() {
+		require.True(t, alive(pid), "the process is alive when the handoff fails")
+		requireFiles(t, dir, proc.ID, true, "files are kept during a handoff")
+		require.Zero(t, proc.handoff.reapCount())
+	})
+
+	m.HandOffForExec()
+
+	status, _ := waitDone(t, proc)
+	require.Equal(t, "killed", status, "a process that cannot be handed off is stopped")
+	require.False(t, alive(pid))
+	require.Equal(t, 1, proc.handoff.reapCount(), "reaped exactly once, by its own waiter")
+	requireFiles(t, dir, proc.ID, false, "removed by the one reaper, after it reaped")
+	rec := readJournalRecord(t, dir, proc.ID)
+	require.False(t, rec.HandedOff)
+	require.Equal(t, "killed", rec.Status)
+	require.Equal(t, []string{"one"}, texts(t, m, proc.ID, 0))
+}
+
+// A process that exits inside the window of a handoff the journal refuses is
+// not stopped: the undo restarts its parked waiter, which reaps it once with
+// its own exit status; its files stay until then.
+func TestBackgroundFailedHandOffOfAProcessThatExitsInTheWindowIsReapedOnce(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "journal")
+	m := survivingManager(t, dir)
+	ready, gate := newFIFO(t, "ready"), newFIFO(t, "gate")
+	proc, err := m.StartProcess(context.Background(), StartProcessOptions{
+		Command:    fmt.Sprintf(`echo one; echo > %s; read _ < %s; echo two; exit 3`, ready, gate),
+		WorkingDir: t.TempDir(),
+	})
+	require.NoError(t, err)
+	pid := proc.GetPID()
+	ready.awaitSignal(t)
+	failHandOff(m, dir, func() {
+		gate.open(t)
+		awaitReturn(t, "the child to exit", func() error { return waitExited(pid) })
+		await(t, proc.handoff.parkedSignal(), "the waiter to decline to reap during the handoff")
+		require.Zero(t, proc.handoff.reapCount(), "not reaped while handing off")
+		requireFiles(t, dir, proc.ID, true, "files are kept until the reap")
+		select {
+		case <-proc.done:
+			t.Fatal("completed while handing off")
+		default:
+		}
+	})
+
+	m.HandOffForExec()
+
+	status, exitCode := waitDone(t, proc)
+	require.Equal(t, "failed", status, "it exited by itself: not stopped, not marked killed")
+	require.NotNil(t, exitCode)
+	require.Equal(t, 3, *exitCode)
+	require.Equal(t, 1, proc.handoff.reapCount(), "reaped exactly once, by its restarted waiter")
+	requireFiles(t, dir, proc.ID, false, "removed by the one reaper, after it reaped")
+	require.Equal(t, []string{"one", "two"}, texts(t, m, proc.ID, 0))
+	rec := readJournalRecord(t, dir, proc.ID)
+	require.False(t, rec.HandedOff)
+	require.Equal(t, "failed", rec.Status)
+	require.Equal(t, 3, *rec.ExitCode)
+}
