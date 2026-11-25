@@ -46,7 +46,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/handlers/org_policy_impact"
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
-	"github.com/reliant-labs/reliant/internal/handlers/org_usage"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -1705,16 +1704,6 @@ func hostedControlPlane(cfg *configv1.ControlPlaneConfig) controlplane.Service {
 	return controlplane.NewInstrumented(controlplane.Deps{ControlPlane: cfg})
 }
 
-// projectHostedApps is where ListProjectsWithApps reads an org's hosted apps:
-// the control plane, with the caller's own bearer. nil — never a typed nil in
-// the handler's interface — when the control plane is not hosted.
-func projectHostedApps(cfg *configv1.ControlPlaneConfig) project.HostedApps {
-	if cp := hostedControlPlane(cfg); cp != nil {
-		return cp
-	}
-	return nil
-}
-
 // controlPlaneClient is the control-plane client SettingsService mints LLM
 // keys through, authenticated as the signed-in user.
 func controlPlaneClient(cfg *configv1.ControlPlaneConfig) controlplane.Service {
@@ -1766,40 +1755,6 @@ func ProjectOrgRollout(api *configv1.ApiServerConfig) *configv1.OrgsConfig {
 	return api.GetOrgs()
 }
 
-// ProjectOrgMoveFacts is control-plane's half of the project-move preview
-// (ProjectOrgMoveInternalService.PreviewProjectOrgMove), signed as the
-// internal service. nil — the preview shows those facts as unknown — when
-// the control plane is not hosted or this process has no internal-service
-// secret.
-func ProjectOrgMoveFacts(cfg *configv1.ControlPlaneConfig) project.MoveFacts {
-	cp := ControlPlaneEndpoint(cfg)
-	if !cp.Hosted() || cp.InternalServiceSecret == "" {
-		return nil
-	}
-	secret := cp.InternalServiceSecret
-	return controlplane.NewInstrumented(controlplane.Deps{
-		ControlPlane: cfg,
-		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
-	})
-}
-
-// OrgUsageListPrices is where the org usage view reads list prices:
-// control-plane's LLMPriceInternalService, signed as the internal service.
-// nil — usage is shown without cost estimates — when the control plane is
-// not hosted or this process has no internal-service secret; never a typed
-// nil in the handler's interface.
-func OrgUsageListPrices(cfg *configv1.ControlPlaneConfig) org_usage.ListPrices {
-	cp := ControlPlaneEndpoint(cfg)
-	if !cp.Hosted() || cp.InternalServiceSecret == "" {
-		return nil
-	}
-	secret := cp.InternalServiceSecret
-	return controlplane.NewInstrumented(controlplane.Deps{
-		ControlPlane: cfg,
-		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
-	})
-}
-
 // ChatTraceSpans is where a chat's Trace tab reads its spans: control-plane's
 // ConversationTraceInternalService, signed as the internal service. nil —
 // every trace is answered without spans, PARTIAL — when the control plane is
@@ -1815,17 +1770,6 @@ func ChatTraceSpans(cfg *configv1.ControlPlaneConfig) chat_trace.Spans {
 		ControlPlane: cfg,
 		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
-}
-
-// CoverageSourceReports is where the coverage-source handler asks whether a
-// retained coverage report names a blob: control-plane's TestsService, with
-// the viewer's own bearer (so no internal-service secret is needed). nil —
-// every read NOT_YET_AVAILABLE — when self-hosted; never a typed nil.
-func CoverageSourceReports(cfg *configv1.ControlPlaneConfig) coverage_source.Reports {
-	if !ControlPlaneEndpoint(cfg).Hosted() {
-		return nil
-	}
-	return controlplane.NewInstrumented(controlplane.Deps{ControlPlane: cfg})
 }
 
 // CoverageSourceBlobs is how the coverage-source handler reads a blob from
