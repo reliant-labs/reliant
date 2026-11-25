@@ -85,7 +85,13 @@ With `psycopg` (or `psycopg2`) in `requirements.txt`, the detector adds a manage
         env.DJANGO_SECRET_KEY = forge.ManagedSecret {name = "DJANGO_SECRET_KEY"}
         env.DJANGO_ALLOWED_HOSTS = "<your-host>.reliantlabs.dev"
     }
+    _hosted(wl.migrate) | {
+        env.DATABASE_URL = _database_url
+        env.DJANGO_SECRET_KEY = forge.ManagedSecret {name = "DJANGO_SECRET_KEY"}
+    }
     ```
+
+    Replace the existing `api` and `migrate` bindings with these entries; don't add duplicate bindings. Both workloads reference the same managed secret, so set its value once:
 
     ```bash terminal
     python3 -c 'import secrets; print(secrets.token_urlsafe(50))' | reliant forge env secret set --env prod DJANGO_SECRET_KEY
