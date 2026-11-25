@@ -60496,6 +60496,17 @@
     },
     {
       "consumer": "Trigger",
+      "field": "TriggerWrites",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.TriggerWrites",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
       "field": "WebhookSecrets",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.WebhookSecrets",
       "methods": [],
