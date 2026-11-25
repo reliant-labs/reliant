@@ -432,8 +432,7 @@ function registeredRows(ctx: NavCtx, group: ConsoleNavGroup): NavRow[] {
 
 /**
  * Experiments: the project's Forge Changes (Forge/Experiments). Listed behind
- * the web config's CHANGES_UI, as the console's own navs list it
- * (ConsoleShell experimentsListed), and always while one of its pages is open.
+ * the web config's CHANGES_UI, and always while one of its pages is open.
  */
 const experimentsRow: NavRow = {
   ...consoleRow("experiments", "Experiments", { kind: "experiments" }, undefined, ["experiments", "experiment"]),

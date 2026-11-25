@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 
 import { useForgeConsole } from "../Console/consoleContext";
 import { Header, Page } from "../Console/consolePageFrame";
-import { PAGE_SUBTITLES } from "../Console/groupedNav";
+import { PAGE_SUBTITLES } from "../Console/consoleCrumbs";
 import { DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
 import { UPlotChart } from "../Observability/charts/UPlotChart";
 import { formatPercent } from "../Observability/format";

@@ -14,7 +14,7 @@
 import { useMemo } from "react";
 
 import { consolePageOf, orgPageOf } from "../../Forge/Console/paths";
-import type { GroupedNavInput } from "../../Forge/Console/groupedNav";
+import type { GroupedNavInput } from "../../Forge/Console/consoleNavModel";
 import { useConsoleNavModel } from "../../Forge/Console/useConsoleNavModel";
 import type { NavConfig, NavCtx } from "./navConfig/types";
 import { NavRenderer, type NavigateOptions, type NavSlots } from "./NavRenderer";

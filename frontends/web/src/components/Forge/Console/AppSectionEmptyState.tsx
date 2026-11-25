@@ -14,7 +14,7 @@ import { ProjectEmptyCta } from "@/components/EmptyState/ProjectEmptyCta";
 
 import { learnSectionOf } from "./consoleLearn";
 import { consoleNavEntries } from "./consoleNavRegistry";
-import { PAGE_SUBTITLES } from "./groupedNav";
+import { PAGE_SUBTITLES } from "./consoleCrumbs";
 import { OBS_NAV_LABELS, type ConsolePage } from "./paths";
 
 /** The page's name and what it shows, in the nav's words. */

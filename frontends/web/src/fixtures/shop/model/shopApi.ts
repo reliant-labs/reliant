@@ -8,8 +8,8 @@
  * (__tests__/realClient.test.ts holds the two to one answer). Only
  * /forge/demo outside the demo host reads it directly (DemoConsole.tsx).
  *
- * Writes never reach it: the transport's read-only guard (and, off the demo
- * host, Observability/readOnlyApi.ts) refuses them first. A module's write
+ * Writes never reach it: the transport's read-only guard refuses them
+ * first. A module's write
  * methods therefore only refuse (`demoWriteRefused`).
  */
 

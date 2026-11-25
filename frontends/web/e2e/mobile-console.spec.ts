@@ -92,12 +92,14 @@ test.describe('console on a phone', () => {
   test('release comparison and dashboard panel tables stack', async ({ page }) => {
     await open(page, '/forge-dashboards-preview', '?page=dashboard&dash=workspace/payments-provider', 'dashboard-header');
     await fitsTheScreen(page);
-    // The console nav is a drawer here: it opens, and Escape closes it.
-    await page.getByRole('button', { name: 'Open navigation' }).click();
-    const drawer = page.getByRole('dialog', { name: 'shop' });
-    await expect(drawer).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(drawer).toBeHidden();
+    // The console nav is the shell's drawer here: it opens, and a tap beside it closes it
+    // (Escape on a console page leaves the console).
+    await page.getByTestId('shell-nav-toggle').click();
+    const drawer = page.getByTestId('shell-nav');
+    await expect(drawer).toHaveAttribute('data-state', 'open');
+    const viewport = page.viewportSize()!;
+    await page.mouse.click(viewport.width - 8, Math.round(viewport.height / 2));
+    await expect(drawer).toHaveAttribute('data-state', 'closed');
     await fitsTheScreen(page);
     const tables = page.getByTestId('obs-panel-table');
     if ((await tables.count()) > 0) await isStacked(page, 'obs-panel-table');

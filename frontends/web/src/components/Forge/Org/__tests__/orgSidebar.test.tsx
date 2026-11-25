@@ -1,11 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The console sidebar as the reader sees it: Observability is expanded on
- * every page, its chevron collapses it, the choice is remembered, and the
+ * The org console's sidebar as the reader sees it: Observability is expanded
+ * on every page, its chevron collapses it, the choice is remembered, and the
  * collapsed icon rail is unchanged. Rendered through the real forge-ui
- * SidebarLayout with the nav the console builds, wired the way ConsoleLayout
- * wires it (useObsNavOpen).
+ * SidebarLayout with the nav the org console builds, wired the way
+ * OrgConsoleLayout wires it (useObsNavOpen).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,9 +14,9 @@ import userEvent from "@testing-library/user-event";
 
 import SidebarLayout from "@/components/forge-ui/sidebar_layout";
 
-import { buildConsoleNav } from "../ConsoleShell";
-import { OBS_NAV_OPEN_KEY, useObsNavOpen } from "../obsNavOpen";
-import type { ConsolePage } from "../paths";
+import { OBS_NAV_OPEN_KEY, useObsNavOpen } from "../../Console/obsNavOpen";
+import { orgPath, type OrgPage } from "../../Console/paths";
+import { buildOrgNav } from "../OrgShell";
 
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
@@ -24,19 +24,18 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
   useNavigate: () => navigate,
 }));
 
-const ENVS = [{ name: "prod", preview: false }];
+/** A footer row, so the drawer's last link stays put while Observability folds. */
+const FOOTER = [{ label: "Activity", href: "/activity", active: false }];
 
-function Sidebar({ page, rail = false, remembered = true }: { page: ConsolePage; rail?: boolean; remembered?: boolean }) {
+function Sidebar({ page, rail = false, remembered = true }: { page: OrgPage; rail?: boolean; remembered?: boolean }) {
   const [obsOpen, setObsOpen] = useObsNavOpen();
-  const { items, footer } = buildConsoleNav({
-    project: "shop",
+  const { items } = buildOrgNav({
     page,
-    env: "prod",
-    envs: ENVS,
+    apps: ["shop"],
     ...(remembered ? { obsOpen, onObsOpenChange: setObsOpen } : {}),
   });
   return (
-    <SidebarLayout brand="shop" navItems={items} footerItems={footer} collapsed={rail} onToggle={() => {}}>
+    <SidebarLayout brand="shop" navItems={items} footerItems={FOOTER} collapsed={rail} onToggle={() => {}}>
       page
     </SidebarLayout>
   );
@@ -59,18 +58,16 @@ function mobileViewport() {
   })));
 }
 
-describe("the console sidebar's Observability group", () => {
+describe("the org console sidebar's Observability group", () => {
   it("is expanded on a page outside it", () => {
-    render(<Sidebar page={{ kind: "overview" }} />);
+    render(<Sidebar page={{ kind: "observability" }} />);
     expect(obsToggle()).toHaveAttribute("aria-expanded", "true");
     expect(logsLink()).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Alerts" })).toBeInTheDocument();
-    // The accordion groups are unchanged: Environments opens only on its own pages.
-    expect(screen.queryByRole("link", { name: "prod" })).not.toBeInTheDocument();
   });
 
   it("collapses from its chevron without navigating, and the choice is remembered", () => {
-    const { unmount } = render(<Sidebar page={{ kind: "overview" }} />);
+    const { unmount } = render(<Sidebar page={{ kind: "observability" }} />);
     fireEvent.click(obsToggle());
     expect(obsToggle()).toHaveAttribute("aria-expanded", "false");
     expect(logsLink()).not.toBeInTheDocument();
@@ -78,7 +75,7 @@ describe("the console sidebar's Observability group", () => {
     expect(window.localStorage.getItem(OBS_NAV_OPEN_KEY)).toBe("0");
 
     unmount();
-    render(<Sidebar page={{ kind: "secrets" }} />);
+    render(<Sidebar page={{ kind: "obs-view", view: "errors" }} />);
     expect(obsToggle()).toHaveAttribute("aria-expanded", "false");
     expect(logsLink()).not.toBeInTheDocument();
 
@@ -96,15 +93,15 @@ describe("the console sidebar's Observability group", () => {
 
   it("reopens when its row is followed", () => {
     window.localStorage.setItem(OBS_NAV_OPEN_KEY, "0");
-    render(<Sidebar page={{ kind: "overview" }} />);
+    render(<Sidebar page={{ kind: "obs-view", view: "errors" }} />);
     fireEvent.click(screen.getByRole("link", { name: "Observability" }));
-    expect(navigate).toHaveBeenCalledWith({ to: "/forge/p/shop/observability/dashboards", search: { env: "prod" } });
+    expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ to: orgPath({ kind: "observability" }) }));
     expect(logsLink()).toBeInTheDocument();
     expect(window.localStorage.getItem(OBS_NAV_OPEN_KEY)).toBe("1");
   });
 
-  it("toggles for the visit when no choice is kept (the previews, the demo)", () => {
-    render(<Sidebar page={{ kind: "overview" }} remembered={false} />);
+  it("toggles for the visit when no choice is kept", () => {
+    render(<Sidebar page={{ kind: "observability" }} remembered={false} />);
     expect(logsLink()).toBeInTheDocument();
     fireEvent.click(obsToggle());
     expect(logsLink()).not.toBeInTheDocument();
@@ -114,11 +111,12 @@ describe("the console sidebar's Observability group", () => {
   it("cycles mobile keyboard focus inside the live nav, not the page or external portals", async () => {
     mobileViewport();
     const user = userEvent.setup();
-    render(<><button>Outside shell</button><Sidebar page={{ kind: "overview" }} /></>);
+    render(<><button>Outside shell</button><Sidebar page={{ kind: "observability" }} /></>);
     const trigger = screen.getByRole("button", { name: "Open navigation" });
     await user.click(trigger);
     const drawer = screen.getByRole("dialog");
-    const first = within(drawer).getAllByRole("link")[0];
+    // Apps is the first row: a group that opens in place (no page of its own), so a button.
+    const first = within(drawer).getByRole("button", { name: "Apps" });
     const last = within(drawer).getByRole("link", { name: "Activity" });
     // jsdom has no Tailwind layout. Model the desktop-only collapse button's CSS.
     within(drawer).getByRole("button", { name: "Collapse sidebar" }).style.display = "none";
@@ -166,7 +164,7 @@ describe("the console sidebar's Observability group", () => {
 
   it("does not contain desktop keyboard focus", async () => {
     const user = userEvent.setup();
-    render(<><Sidebar page={{ kind: "overview" }} /><button>Outside shell</button></>);
+    render(<><Sidebar page={{ kind: "observability" }} /><button>Outside shell</button></>);
     const last = screen.getByRole("button", { name: "Collapse sidebar" });
     last.focus();
     await user.tab();

@@ -5,8 +5,8 @@
  * a reader needs first ("62" on the density scale the public demo was tuned
  * on, research/2026-11-10-demo-errors/density-scale-brief.md):
  *
- *  - the nav grouped by what a reader is after, the technical names kept,
- *    with a plain subtitle under each page's title (groupedNav.tsx);
+ *  - a plain subtitle under each page's title, and a breadcrumb that names
+ *    the group of the shell's nav a page sits in (consoleCrumbs.ts);
  *  - Errors, Traces and Sessions lead with one sentence and their one item
  *    worth opening (the newest issue, the slowest request with its timeline,
  *    the replay worth watching), then compact rows with "Show all"; a filter
@@ -21,14 +21,14 @@
  * Every sentence is built from the page's own data (Observability/Leads/
  * leadStory.ts), so it reads the same for any project. It is the console's
  * default (ConsoleLayout); a host adds what is its own through
- * LedConsoleHost: the demo its Home and "How it was built" rows, its agent
- * cards and its sample shop's plain explanations.
+ * LedConsoleHost: the demo its section crumbs, its agent cards and its
+ * sample shop's plain explanations. The nav is the shell's (Layout/sidebar/
+ * navConfig/), whichever host draws it.
  */
 
 import { useMemo, type ReactNode } from "react";
 import { useRouterState } from "@tanstack/react-router";
 
-import type { SidebarNavItem } from "@/components/forge-ui/sidebar_layout";
 import { useObservabilityOrg } from "@/hooks/observability-queries";
 import type { Issue } from "@/services/controlPlane/observability/issuesTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
@@ -40,18 +40,13 @@ import { ErrorsLead, SessionsLead, TracesLead, type LeadHref } from "../Observab
 import { useForgeConsole } from "./consoleContext";
 import { ConsoleNavExtrasProvider, useConsoleNavExtras, type ConsoleNavExtras } from "./consoleNavExtras";
 import { ENV_ALL } from "./envScope";
-import { buildGroupedConsoleNav, groupedCrumbs, PAGE_SUBTITLES, type ProductAnalyticsHub } from "./groupedNav";
-import type { ConsolePage, ObsNavView } from "./paths";
-
-type Crumb = { label: string; href?: string };
+import { groupedCrumbs, PAGE_SUBTITLES, type Crumb } from "./consoleCrumbs";
+import type { ProductAnalyticsHub } from "./consoleNavModel";
+import type { ObsNavView } from "./paths";
 
 /** What a host adds to the led console. Everything is optional: the product needs none of it. */
 export interface LedConsoleHost {
-  /** Rows above Overview (the demo's Home). */
-  navLead?: SidebarNavItem[];
-  /** Rows above Activity in the footer (the demo's "How it was built"). */
-  navFooter?: SidebarNavItem[];
-  /** A page of the host's own is open (not a console page): its breadcrumb; no console row is lit, and no lead is drawn. */
+  /** A page of the host's own is open (not a console page): its breadcrumb, and no lead is drawn. */
   hostPage?: { crumbs: Crumb[] } | null;
   /** Where Product analytics leads; omitted, the nav has no such row. */
   productAnalytics?: ProductAnalyticsHub;
@@ -62,9 +57,6 @@ export interface LedConsoleHost {
   /** "How releases work", from the Releases sentence. */
   releasesExplainer?: { href: string; label: string };
   envOrder?: readonly string[];
-  drawerAppendix?: ReactNode;
-  /** Console pages the host does not serve: the nav has no row for them (the demo's Usage). */
-  hiddenPages?: readonly ConsolePage["kind"][];
 }
 
 const CHART_DENSITY: ChartDensity = { maxSeries: 2, headline: true };
@@ -136,11 +128,6 @@ export function ledNavExtras(host: LedConsoleHost, search: Record<string, unknow
   const { hostPage, productAnalytics } = host;
   return {
     envOrder: host.envOrder,
-    drawerAppendix: host.drawerAppendix,
-    nav: (input) => {
-      const grouped = buildGroupedConsoleNav({ ...input, productAnalytics, hostPageActive: !!hostPage, hiddenPages: host.hiddenPages });
-      return { items: [...(host.navLead ?? []), ...grouped.items], footer: [...(host.navFooter ?? []), ...grouped.footer] };
-    },
     crumbs: (page, own) => (hostPage ? hostPage.crumbs : groupedCrumbs(page, own, productAnalytics)),
     subtitle: (key) => (hostPage || detailOpen(search) ? null : (PAGE_SUBTITLES[key] ?? null)),
     intro: (key) => {
