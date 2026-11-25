@@ -51,9 +51,8 @@ partial  QuestionService
 export   QuestionService/ListPendingQuestions
 export   QuestionService/ResolveQuestion
 
-# Owner decision (2026-11-06): the SDK may decide approvals; superseded by the
-# owner decision of 2026-11-19: only the app's signed-in browser session decides
-# one, and the server refuses every token, approvals:decide included.
+# Owner decision (2026-11-06): the SDK may decide approvals. The server requires
+# the approvals:decide scope and refuses a token bound to a machine (daemon).
 partial  ApprovalService
 export   ApprovalService/ListApprovalsByChat
 export   ApprovalService/Approve

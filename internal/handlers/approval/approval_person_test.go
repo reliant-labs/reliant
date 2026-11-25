@@ -173,11 +173,11 @@ func TestDecisionsCredentialMatrix(t *testing.T) {
 		{"browser session credential, bearer method", asMethod(auth.CredentialBrowserSession, authn.Method{Channel: authn.ChannelAuthorization, Credential: forgeauth.CredentialSession}), auth.ReasonPersonRequired, ""},
 		{"browser session credential, token in the cookie", asMethod(auth.CredentialBrowserSession, authn.Method{Channel: authn.ChannelCookie, Credential: forgeauth.CredentialToken}), auth.ReasonPersonRequired, ""},
 		{"identity bearer token", asCaller(auth.CredentialIdentityToken), auth.ReasonPersonRequired, ""},
-		// rlat_ never decides (owner decision 2026-11-19), approvals:decide included.
-		{"approvals:decide", asToken(principal(nil, fat.ScopeApprovalsDecide)), auth.ReasonPersonRequired, ""},
-		{"approvals:decide with other scopes", asToken(principal(nil, fat.ScopeApprovalsDecide, fat.ScopeInboxManage, fat.ScopeRunsControl)), auth.ReasonPersonRequired, ""},
-		{"reliant:api", asToken(principal(nil, fat.ScopeReliantAPI)), auth.ReasonPersonRequired, ""},
-		{"wrong scope", asToken(principal(nil, fat.ScopeInboxManage, fat.ScopeQuestionsAnswer)), auth.ReasonPersonRequired, ""},
+		// Explicitly scoped unbound tokens retain v1 decision authority.
+		{"approvals:decide", asToken(principal(nil, fat.ScopeApprovalsDecide)), "", ""},
+		{"approvals:decide with other scopes", asToken(principal(nil, fat.ScopeApprovalsDecide, fat.ScopeInboxManage, fat.ScopeRunsControl)), "", ""},
+		{"reliant:api", asToken(principal(nil, fat.ScopeReliantAPI)), fat.ReasonScopeMissing, string(fat.ScopeApprovalsDecide)},
+		{"wrong scope", asToken(principal(nil, fat.ScopeInboxManage, fat.ScopeQuestionsAnswer)), fat.ReasonScopeMissing, string(fat.ScopeApprovalsDecide)},
 		{"daemon-bound reliant:api", asToken(principal(daemon, fat.ScopeReliantAPI)), auth.ReasonMachineCredentialCannotDecide, ""},
 		{"daemon-bound approvals:decide", asToken(principal(daemon, fat.ScopeApprovalsDecide)), auth.ReasonMachineCredentialCannotDecide, ""},
 		{"daemon PAT", asToken(principal(nil, fat.ScopeDaemonConnect, fat.ScopeApprovalsDecide)), auth.ReasonMachineCredentialCannotDecide, ""},
