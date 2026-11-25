@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,9 +48,10 @@ const (
 // directory is control-plane's membership answer: each org's members and
 // their roles. It counts the asks, to prove a role is read fresh.
 type directory struct {
-	mu    sync.Mutex
-	roles map[string]map[string]string // org -> user -> role
-	asks  int
+	mu     sync.Mutex
+	roles  map[string]map[string]string   // org -> user -> role
+	grants map[string]map[string][]string // org -> user -> org-wide scopes
+	asks   int
 }
 
 func (d *directory) ResolveOrgMembership(_ context.Context, userID, orgID string) (accesstokenclient.OrgMembership, error) {
@@ -60,7 +62,17 @@ func (d *directory) ResolveOrgMembership(_ context.Context, userID, orgID string
 	if !ok {
 		return accesstokenclient.OrgMembership{OrgID: orgID}, nil
 	}
-	return accesstokenclient.OrgMembership{OrgID: orgID, Member: true, Role: role}, nil
+	return accesstokenclient.OrgMembership{OrgID: orgID, Member: true, Role: role,
+		OrgScopes: accesstokenclient.NewOrgScopeSet(d.grants[orgID][userID]...)}, nil
+}
+
+func (d *directory) grant(orgID, userID string, scopes ...string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.grants[orgID] == nil {
+		d.grants[orgID] = map[string][]string{}
+	}
+	d.grants[orgID][userID] = scopes
 }
 
 func (d *directory) set(orgID, userID, role string) {
@@ -88,13 +100,14 @@ type env struct {
 	seq int
 }
 
-// The org's people: ada and owen administer it, the m* are members.
+// The org's people: ada and owen administer it, the m* are members. ada and
+// m8 hold billing:read; owen does not.
 var members = []string{"m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8"}
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	s := storetest.New(t)
-	e := &env{t: t, store: s, ledger: llmusagetest.New(t, s.Repo), dir: &directory{roles: map[string]map[string]string{}}}
+	e := &env{t: t, store: s, ledger: llmusagetest.New(t, s.Repo), dir: &directory{roles: map[string]map[string]string{}, grants: map[string]map[string][]string{}}}
 	e.res = orgs.New(e.dir)
 	e.svc = e.service(s.Repo)
 	e.dir.set(org, "ada", orgs.RoleAdmin)
@@ -103,6 +116,9 @@ func newEnv(t *testing.T) *env {
 		e.dir.set(org, m, orgs.RoleMember)
 	}
 	e.dir.set(other, "gus", orgs.RoleAdmin)
+	e.dir.grant(org, "ada", string(fat.ScopeBillingRead))
+	e.dir.grant(org, "m8", string(fat.ScopeBillingRead))
+	e.dir.grant(other, "gus", string(fat.ScopeBillingRead))
 	for _, p := range []string{"proj-solo", "proj-shared"} {
 		e.exec(`INSERT INTO projects (id, name, path, user_id, created_at, updated_at, last_active)
 			VALUES ($1, $1, '/srv/' || $1, $2, $3, $3, $3)`, p, storetest.SeedUserID, day)
@@ -647,8 +663,9 @@ func TestPersonallyFundedCostIsBlankNotZero(t *testing.T) {
 		e.model(call{user: m, model: "m-free", funding: "org_wallet", basis: store.LLMCostBasisReported, cost: 0})
 		e.model(call{user: m, model: "m-paid", funding: "org_key", basis: store.LLMCostBasisEstimated, cost: 7_000})
 	}
-	team, err := e.team(e.asPerson("m2"), pb.InsightsGroupBy_INSIGHTS_GROUP_BY_MODEL)
+	team, err := e.team(e.asPerson("m8"), pb.InsightsGroupBy_INSIGHTS_GROUP_BY_MODEL)
 	require.NoError(t, err)
+	require.False(t, team.GetCostHidden())
 	require.ElementsMatch(t, []string{"m-personal", "m-free", "m-paid"}, modelKeys(team.GetModelCalls()))
 	teamCost := map[string]*pb.InsightsCost{}
 	for _, b := range team.GetModelCalls().GetBuckets() {
@@ -689,4 +706,115 @@ func TestInsightsRejectsBadRanges(t *testing.T) {
 		_, err := e.svc.GetMyInsights(e.asPerson("m1"), connect.NewRequest(req))
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), name)
 	}
+}
+
+func scopes(t *testing.T, names ...fat.Scope) fat.Set {
+	t.Helper()
+	raw := make([]string, len(names))
+	for i, n := range names {
+		raw[i] = string(n)
+	}
+	set, err := fat.NewSet(raw)
+	require.NoError(t, err)
+	return set
+}
+
+// costSeen reports whether any cost figure in a model section is present.
+func costSeen(sec *pb.InsightsModelSection) bool {
+	stats := []*pb.InsightsModelStats{sec.GetTotals(), sec.GetOther()}
+	for _, b := range sec.GetBuckets() {
+		stats = append(stats, b.GetStats())
+	}
+	for _, st := range stats {
+		if c := st.GetCost(); c != nil && (c.ReportedUsdNanos != nil || c.EstimatedUsdNanos != nil) {
+			return true
+		}
+	}
+	return false
+}
+
+// The team view's cost is for billing:read holders only, the rule
+// GetOrgLLMUsage applies: anyone else sees calls, tokens, rates and latency,
+// every cost figure blank (never zero) and cost_hidden set.
+func TestTeamInsightsCostNeedsBillingRead(t *testing.T) {
+	e := newEnv(t)
+	for _, m := range members[:5] {
+		e.model(call{user: m, model: "m-large", funding: "org_wallet", basis: store.LLMCostBasisReported, cost: 2_000})
+		e.model(call{user: m, model: "m-large", funding: "org_key", basis: store.LLMCostBasisEstimated, cost: 3_000})
+	}
+	base := func(user string) context.Context {
+		return authz.WithMembership(auth.WithUser(context.Background(), user, "authenticated", ""), e.res)
+	}
+	machine := func(user string, s ...fat.Scope) context.Context {
+		return auth.WithMachineToken(auth.WithCredential(base(user), auth.CredentialAccessToken),
+			&fat.Principal{ActingUserID: user, OrgID: org, Scopes: scopes(t, s...)})
+	}
+
+	for name, ctx := range map[string]context.Context{
+		"member holding billing:read":                     e.asPerson("m8"),
+		"admin holding billing:read":                      e.asPerson("ada"),
+		"access token carrying billing:read, of a holder": machine("m8", fat.ScopeReliantAPI, fat.ScopeBillingRead),
+	} {
+		t.Run("shown/"+name, func(t *testing.T) {
+			resp, err := e.team(ctx, pb.InsightsGroupBy_INSIGHTS_GROUP_BY_MODEL)
+			require.NoError(t, err)
+			assert.False(t, resp.GetCostHidden())
+			c := resp.GetModelCalls().GetTotals().GetCost()
+			assert.Equal(t, int64(10_000), c.GetReportedUsdNanos())
+			assert.Equal(t, int64(15_000), c.GetEstimatedUsdNanos())
+			assert.NotContains(t, resp.GetNote(), insights.CostHiddenNote)
+		})
+	}
+	for name, ctx := range map[string]context.Context{
+		"member without the grant":                     e.asPerson("m1"),
+		"admin without the grant (the role is not it)": e.asPerson("owen"),
+		"holder's CLI login":                           e.as("m8", auth.CredentialAccessToken),
+		"holder's access token without billing:read":   machine("m8", fat.ScopeReliantAPI),
+	} {
+		t.Run("hidden/"+name, func(t *testing.T) {
+			resp, err := e.team(ctx, pb.InsightsGroupBy_INSIGHTS_GROUP_BY_MODEL)
+			require.NoError(t, err)
+			assert.True(t, resp.GetCostHidden())
+			assert.False(t, costSeen(resp.GetModelCalls()), "a cost figure reached a caller without billing:read")
+			assert.Contains(t, resp.GetNote(), insights.CostHiddenNote)
+			tot := resp.GetModelCalls().GetTotals()
+			assert.Equal(t, int64(10), tot.GetCalls())
+			assert.Equal(t, int64(1000), tot.GetInputTokens())
+			assert.Equal(t, int64(10), tot.GetLatency().GetCount())
+			assert.Equal(t, int64(10), tot.GetCost().GetOrgFundedCalls(), "call counts stay")
+			require.Len(t, resp.GetModelCalls().GetBuckets(), 1)
+		})
+	}
+
+	// The grant is read fresh: revoked a moment ago, the cost is hidden.
+	e.dir.grant(org, "m8")
+	resp, err := e.team(e.asPerson("m8"), pb.InsightsGroupBy_INSIGHTS_GROUP_BY_MODEL)
+	require.NoError(t, err)
+	assert.True(t, resp.GetCostHidden())
+	assert.False(t, costSeen(resp.GetModelCalls()))
+}
+
+// A member's own org-funded cost stays visible to them without billing:read,
+// and an admin without the grant sees it blank in a drill-down (which is
+// still recorded).
+func TestOwnCostShownWithoutBillingRead(t *testing.T) {
+	e := newEnv(t)
+	e.model(call{user: "m1", funding: "org_wallet", basis: store.LLMCostBasisReported, cost: 2_000})
+
+	mine, err := e.mine(e.asPerson("m1"), pb.InsightsGroupBy_INSIGHTS_GROUP_BY_DAY)
+	require.NoError(t, err)
+	require.NotNil(t, mine.GetModelCalls().GetTotals().GetCost().ReportedUsdNanos)
+	assert.Equal(t, int64(2_000), mine.GetModelCalls().GetTotals().GetCost().GetReportedUsdNanos())
+
+	owen, err := e.drill(e.asPerson("owen"), "m1")
+	require.NoError(t, err)
+	assert.True(t, owen.GetCostHidden())
+	assert.False(t, costSeen(owen.GetModelCalls()))
+	assert.Equal(t, int64(1), owen.GetModelCalls().GetTotals().GetCalls())
+	assert.Equal(t, 1, e.auditRows())
+
+	ada, err := e.drill(e.asPerson("ada"), "m1")
+	require.NoError(t, err)
+	assert.False(t, ada.GetCostHidden())
+	assert.Equal(t, int64(2_000), ada.GetModelCalls().GetTotals().GetCost().GetReportedUsdNanos())
 }

@@ -895,7 +895,12 @@ type GetTeamInsightsResponse struct {
 	// accumulating.
 	AsOf string `protobuf:"bytes,6,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
 	// Human-readable account of what is and is not included, for display.
-	Note          string `protobuf:"bytes,7,opt,name=note,proto3" json:"note,omitempty"`
+	Note string `protobuf:"bytes,7,opt,name=note,proto3" json:"note,omitempty"`
+	// True when the caller does not hold billing:read in the org: every
+	// reported_usd_nanos and estimated_usd_nanos in the response is then
+	// absent because it was withheld, not because nothing was priced. The
+	// call counts of InsightsCost are still given.
+	CostHidden    bool `protobuf:"varint,8,opt,name=cost_hidden,json=costHidden,proto3" json:"cost_hidden,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -977,6 +982,13 @@ func (x *GetTeamInsightsResponse) GetNote() string {
 		return x.Note
 	}
 	return ""
+}
+
+func (x *GetTeamInsightsResponse) GetCostHidden() bool {
+	if x != nil {
+		return x.CostHidden
+	}
+	return false
 }
 
 type GetMemberInsightsRequest struct {
@@ -1066,7 +1078,10 @@ type GetMemberInsightsResponse struct {
 	AsOf       string                 `protobuf:"bytes,6,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
 	Note       string                 `protobuf:"bytes,7,opt,name=note,proto3" json:"note,omitempty"`
 	// The id of the audit record this drill-down wrote.
-	AuditId       string `protobuf:"bytes,8,opt,name=audit_id,json=auditId,proto3" json:"audit_id,omitempty"`
+	AuditId string `protobuf:"bytes,8,opt,name=audit_id,json=auditId,proto3" json:"audit_id,omitempty"`
+	// As GetTeamInsightsResponse.cost_hidden: the caller does not hold
+	// billing:read, so the member's org-funded cost figures were withheld.
+	CostHidden    bool `protobuf:"varint,9,opt,name=cost_hidden,json=costHidden,proto3" json:"cost_hidden,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1155,6 +1170,13 @@ func (x *GetMemberInsightsResponse) GetAuditId() string {
 		return x.AuditId
 	}
 	return ""
+}
+
+func (x *GetMemberInsightsResponse) GetCostHidden() bool {
+	if x != nil {
+		return x.CostHidden
+	}
+	return false
 }
 
 type GetMyInsightsRequest struct {
@@ -1589,7 +1611,7 @@ const file_reliant_v1_insights_proto_rawDesc = "" +
 	"\n" +
 	"start_date\x18\x02 \x01(\tB\x1a\xbaH\x17r\x152\x13^\\d{4}-\\d{2}-\\d{2}$R\tstartDate\x125\n" +
 	"\bend_date\x18\x03 \x01(\tB\x1a\xbaH\x17r\x152\x13^\\d{4}-\\d{2}-\\d{2}$R\aendDate\x126\n" +
-	"\bgroup_by\x18\x04 \x01(\x0e2\x1b.reliant.v1.InsightsGroupByR\agroupBy\"\xbf\x02\n" +
+	"\bgroup_by\x18\x04 \x01(\x0e2\x1b.reliant.v1.InsightsGroupByR\agroupBy\"\xe0\x02\n" +
 	"\x17GetTeamInsightsResponse\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x126\n" +
 	"\bgroup_by\x18\x02 \x01(\x0e2\x1b.reliant.v1.InsightsGroupByR\agroupBy\x12A\n" +
@@ -1599,14 +1621,16 @@ const file_reliant_v1_insights_proto_rawDesc = "" +
 	"tool_calls\x18\x04 \x01(\v2\x1f.reliant.v1.InsightsToolSectionR\ttoolCalls\x12)\n" +
 	"\x10min_contributors\x18\x05 \x01(\x05R\x0fminContributors\x12\x13\n" +
 	"\x05as_of\x18\x06 \x01(\tR\x04asOf\x12\x12\n" +
-	"\x04note\x18\a \x01(\tR\x04note\"\x86\x02\n" +
+	"\x04note\x18\a \x01(\tR\x04note\x12\x1f\n" +
+	"\vcost_hidden\x18\b \x01(\bR\n" +
+	"costHidden\"\x86\x02\n" +
 	"\x18GetMemberInsightsRequest\x12\x1e\n" +
 	"\x06org_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05orgId\x12 \n" +
 	"\auser_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06userId\x129\n" +
 	"\n" +
 	"start_date\x18\x03 \x01(\tB\x1a\xbaH\x17r\x152\x13^\\d{4}-\\d{2}-\\d{2}$R\tstartDate\x125\n" +
 	"\bend_date\x18\x04 \x01(\tB\x1a\xbaH\x17r\x152\x13^\\d{4}-\\d{2}-\\d{2}$R\aendDate\x126\n" +
-	"\bgroup_by\x18\x05 \x01(\x0e2\x1b.reliant.v1.InsightsGroupByR\agroupBy\"\xca\x02\n" +
+	"\bgroup_by\x18\x05 \x01(\x0e2\x1b.reliant.v1.InsightsGroupByR\agroupBy\"\xeb\x02\n" +
 	"\x19GetMemberInsightsResponse\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x126\n" +
@@ -1617,7 +1641,9 @@ const file_reliant_v1_insights_proto_rawDesc = "" +
 	"tool_calls\x18\x05 \x01(\v2\x1f.reliant.v1.InsightsToolSectionR\ttoolCalls\x12\x13\n" +
 	"\x05as_of\x18\x06 \x01(\tR\x04asOf\x12\x12\n" +
 	"\x04note\x18\a \x01(\tR\x04note\x12\x19\n" +
-	"\baudit_id\x18\b \x01(\tR\aauditId\"\xe0\x01\n" +
+	"\baudit_id\x18\b \x01(\tR\aauditId\x12\x1f\n" +
+	"\vcost_hidden\x18\t \x01(\bR\n" +
+	"costHidden\"\xe0\x01\n" +
 	"\x14GetMyInsightsRequest\x12\x1e\n" +
 	"\x06org_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x05orgId\x129\n" +
 	"\n" +

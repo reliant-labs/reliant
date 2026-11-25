@@ -19302,6 +19302,11 @@
               "Name": "audit_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "cost_hidden",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "GetMyInsightsRequest": [
@@ -19419,6 +19424,11 @@
               "Name": "note",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "cost_hidden",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "ListDrillDownAuditRequest": [
@@ -19529,6 +19539,10 @@
             {
               "name": "audit_id",
               "kind": "string"
+            },
+            {
+              "name": "cost_hidden",
+              "kind": "bool"
             }
           ],
           "reliant.v1.GetMyInsightsRequest": [
@@ -19647,6 +19661,10 @@
             {
               "name": "note",
               "kind": "string"
+            },
+            {
+              "name": "cost_hidden",
+              "kind": "bool"
             }
           ],
           "reliant.v1.InsightsCost": [

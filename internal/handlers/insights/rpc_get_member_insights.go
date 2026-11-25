@@ -17,7 +17,8 @@ import (
 // to the app may ask (orgs.RequireAdmin: a CLI login, an access token or an
 // agent is refused with reason human_only, a member with
 // org_admin_required). The drill-down is recorded before anything is read; a
-// drill-down that cannot be recorded is not answered.
+// drill-down that cannot be recorded is not answered. An admin who does not
+// hold billing:read sees the member's cost blank (canSeeOrgCost).
 func (s *Service) GetMemberInsights(
 	ctx context.Context,
 	req *connect.Request[pb.GetMemberInsightsRequest],
@@ -39,6 +40,11 @@ func (s *Service) GetMemberInsights(
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("user_id is required"))
 	}
 
+	seeCost, err := canSeeOrgCost(ctx, userID, q.orgID)
+	if err != nil {
+		return nil, err
+	}
+
 	auditID, err := s.deps.Members.RecordInsightsDrilldown(ctx, q.orgID, userID, subject, q.start, q.end, s.now())
 	if err != nil {
 		return nil, svcerr.Wrap(svcerr.WithCause(svcerr.Unavailable("the drill-down could not be recorded, so it was not shown; try again"), err))
@@ -47,6 +53,11 @@ func (s *Service) GetMemberInsights(
 	if err != nil {
 		return nil, err
 	}
+	note := MemberNote
+	if !seeCost {
+		hideModelCost(model)
+		note += " " + CostHiddenNote
+	}
 	return connect.NewResponse(&pb.GetMemberInsightsResponse{
 		OrgId:      q.orgID,
 		UserId:     subject,
@@ -54,8 +65,9 @@ func (s *Service) GetMemberInsights(
 		ModelCalls: model,
 		ToolCalls:  tool,
 		AsOf:       s.now().Format(time.RFC3339),
-		Note:       MemberNote,
+		Note:       note,
 		AuditId:    auditID,
+		CostHidden: !seeCost,
 	}), nil
 }
 

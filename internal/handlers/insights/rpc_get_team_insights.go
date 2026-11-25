@@ -18,6 +18,7 @@ import (
 // "other" (floorKeys), counting contributors per group of the dimension
 // asked for: per project when grouping by project, since a project belongs
 // to one member and its bucket would otherwise be that member's numbers.
+// Cost figures are for billing:read holders only (canSeeOrgCost).
 func (s *Service) GetTeamInsights(
 	ctx context.Context,
 	req *connect.Request[pb.GetTeamInsightsRequest],
@@ -33,6 +34,10 @@ func (s *Service) GetTeamInsights(
 	q, err := parseQuery(msg.GetOrgId(), msg.GetStartDate(), msg.GetEndDate(), msg.GetGroupBy())
 	if err != nil {
 		return nil, svcerr.Wrap(err)
+	}
+	seeCost, err := canSeeOrgCost(ctx, userID, q.orgID)
+	if err != nil {
+		return nil, err
 	}
 	byDay := q.dim == store.InsightsDimDay
 
@@ -68,6 +73,11 @@ func (s *Service) GetTeamInsights(
 			return nil, err
 		}
 		resp.ToolCalls = toolSection(rows, shown, byDay)
+	}
+	if !seeCost {
+		hideModelCost(resp.ModelCalls)
+		resp.CostHidden = true
+		resp.Note += " " + CostHiddenNote
 	}
 	return connect.NewResponse(resp), nil
 }

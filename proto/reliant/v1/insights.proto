@@ -19,6 +19,10 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 //     never names a person: it reads the team rollups, which have no user
 //     column, and a breakdown bucket with fewer than five contributing
 //     members is merged into "other" (the small-group floor, decision D5).
+//     Its cost figures are shown only to a member holding the org's
+//     billing:read grant, the rule GetOrgLLMUsage uses (OrgUsageService);
+//     anyone else sees calls, tokens, rates and latency with every cost
+//     figure blank and cost_hidden set.
 //   - The MEMBER drill-down (GetMemberInsights) is one member's numbers, for
 //     an owner or admin of the org only, by a fresh read of their role, from
 //     a person signed in to the app (never a CLI login, an access token or an
@@ -41,6 +45,12 @@ service InsightsService {
   // bucket is shown that fewer than five members contributed to: those are
   // merged into `other`, and further buckets are merged until `other` has at
   // least five contributors too (or holds everything).
+  //
+  // Cost figures (reported_usd_nanos, estimated_usd_nanos) are shown only
+  // when the caller holds billing:read in the org, read from control-plane
+  // at the call, through a person's credential or an access token that also
+  // carries billing:read itself: the rule GetOrgLLMUsage applies. For anyone
+  // else they are absent and cost_hidden is true; the call counts stay.
   rpc GetTeamInsights(GetTeamInsightsRequest) returns (GetTeamInsightsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
@@ -53,6 +63,8 @@ service InsightsService {
   // only a person signed in to the app may ask (reason human_only otherwise).
   // Each call records who looked, at whom and over which days before it
   // answers; when the record cannot be written, nothing is answered.
+  // Cost figures follow GetTeamInsights' rule: an admin who does not hold
+  // billing:read sees them blank, with cost_hidden set.
   rpc GetMemberInsights(GetMemberInsightsRequest) returns (GetMemberInsightsResponse) {
     option (forge.v1.method) = {
       activity: {none: "records the drill-down in the insights audit; changes nothing else"}
@@ -236,6 +248,11 @@ message GetTeamInsightsResponse {
   string as_of = 6;
   // Human-readable account of what is and is not included, for display.
   string note = 7;
+  // True when the caller does not hold billing:read in the org: every
+  // reported_usd_nanos and estimated_usd_nanos in the response is then
+  // absent because it was withheld, not because nothing was priced. The
+  // call counts of InsightsCost are still given.
+  bool cost_hidden = 8;
 }
 
 message GetMemberInsightsRequest {
@@ -257,6 +274,9 @@ message GetMemberInsightsResponse {
   string note = 7;
   // The id of the audit record this drill-down wrote.
   string audit_id = 8;
+  // As GetTeamInsightsResponse.cost_hidden: the caller does not hold
+  // billing:read, so the member's org-funded cost figures were withheld.
+  bool cost_hidden = 9;
 }
 
 message GetMyInsightsRequest {

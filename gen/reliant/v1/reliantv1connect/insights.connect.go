@@ -57,12 +57,20 @@ type InsightsServiceClient interface {
 	// bucket is shown that fewer than five members contributed to: those are
 	// merged into `other`, and further buckets are merged until `other` has at
 	// least five contributors too (or holds everything).
+	//
+	// Cost figures (reported_usd_nanos, estimated_usd_nanos) are shown only
+	// when the caller holds billing:read in the org, read from control-plane
+	// at the call, through a person's credential or an access token that also
+	// carries billing:read itself: the rule GetOrgLLMUsage applies. For anyone
+	// else they are absent and cost_hidden is true; the call counts stay.
 	GetTeamInsights(context.Context, *connect.Request[v1.GetTeamInsightsRequest]) (*connect.Response[v1.GetTeamInsightsResponse], error)
 	// GetMemberInsights is one member's totals in the org, for the org's owners
 	// and admins only. The role is read from control-plane at the call, and
 	// only a person signed in to the app may ask (reason human_only otherwise).
 	// Each call records who looked, at whom and over which days before it
 	// answers; when the record cannot be written, nothing is answered.
+	// Cost figures follow GetTeamInsights' rule: an admin who does not hold
+	// billing:read sees them blank, with cost_hidden set.
 	GetMemberInsights(context.Context, *connect.Request[v1.GetMemberInsightsRequest]) (*connect.Response[v1.GetMemberInsightsResponse], error)
 	// GetMyInsights is the caller's own totals in the org ("My analytics"):
 	// exactly what an admin's drill-down would show about them.
@@ -151,12 +159,20 @@ type InsightsServiceHandler interface {
 	// bucket is shown that fewer than five members contributed to: those are
 	// merged into `other`, and further buckets are merged until `other` has at
 	// least five contributors too (or holds everything).
+	//
+	// Cost figures (reported_usd_nanos, estimated_usd_nanos) are shown only
+	// when the caller holds billing:read in the org, read from control-plane
+	// at the call, through a person's credential or an access token that also
+	// carries billing:read itself: the rule GetOrgLLMUsage applies. For anyone
+	// else they are absent and cost_hidden is true; the call counts stay.
 	GetTeamInsights(context.Context, *connect.Request[v1.GetTeamInsightsRequest]) (*connect.Response[v1.GetTeamInsightsResponse], error)
 	// GetMemberInsights is one member's totals in the org, for the org's owners
 	// and admins only. The role is read from control-plane at the call, and
 	// only a person signed in to the app may ask (reason human_only otherwise).
 	// Each call records who looked, at whom and over which days before it
 	// answers; when the record cannot be written, nothing is answered.
+	// Cost figures follow GetTeamInsights' rule: an admin who does not hold
+	// billing:read sees them blank, with cost_hidden set.
 	GetMemberInsights(context.Context, *connect.Request[v1.GetMemberInsightsRequest]) (*connect.Response[v1.GetMemberInsightsResponse], error)
 	// GetMyInsights is the caller's own totals in the org ("My analytics"):
 	// exactly what an admin's drill-down would show about them.
