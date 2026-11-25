@@ -64,7 +64,7 @@ func TestRepoKeepsTheWholeFacadeMethodSet(t *testing.T) {
 		require.True(t, w.IsValid(), "rowreads.Repo lost the facade method %s", name)
 		require.Equal(t, facade.Method(i).Type(), w.Type(), "rowreads.Repo changed the signature of %s", name)
 	}
-	for _, name := range []string{"GetDaemon", "ListReposByProject"} {
+	for _, name := range []string{"GetDaemon", "ListReposByProject", "GetProject", "GetWorktree"} {
 		require.True(t, wrapped.MethodByName(name).IsValid(), "rowreads.Repo has no %s", name)
 		require.False(t, facade.MethodByName(name).IsValid(), "the facade still has %s: delete it", name)
 	}
