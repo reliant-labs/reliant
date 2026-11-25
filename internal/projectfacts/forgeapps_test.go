@@ -8,6 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -91,7 +94,7 @@ func seedWorkspaceProject(t *testing.T, repo *db.Repo, userID string) (*db.Proje
 func appsByRepoPath(t *testing.T, repo *db.Repo, projectID string) (map[string][]string, map[string]*time.Time) {
 	t.Helper()
 	ctx := context.Background()
-	repos, err := repo.ListReposByProject(ctx, projectID)
+	repos, err := store.ListReposByProject(ctx, repo.ORM(), projectID)
 	require.NoError(t, err)
 	pathOf := map[string]string{}
 	stamps := map[string]*time.Time{}
@@ -117,7 +120,7 @@ func TestRefreshForgeApps_RecordsEveryAppInAWorkspace(t *testing.T) {
 	daemonID := uuid.NewString()
 	daemon := &fakeDiscoverDaemon{answer: []byte(workspaceAnswer)}
 
-	RefreshForgeApps(context.Background(), daemon, repo, userID, daemonID, project.ID, project.Path, 0)
+	RefreshForgeApps(context.Background(), daemon, rowreads.WithRepo(repo), userID, daemonID, project.ID, project.Path, 0)
 
 	require.Equal(t, 1, daemon.asked)
 	assert.Equal(t, []string{daemonID}, daemon.daemons, "asked of the machine holding the checkout")
@@ -152,7 +155,7 @@ func TestRefreshForgeApps_AnOldDaemonReportsNothingAndBreaksNothing(t *testing.T
 	project, _ := seedWorkspaceProject(t, repo, userID)
 
 	old := &fakeDiscoverDaemon{answer: []byte(oldDaemonAnswer)}
-	RefreshForgeApps(context.Background(), old, repo, userID, uuid.NewString(), project.ID, project.Path, 0)
+	RefreshForgeApps(context.Background(), old, rowreads.WithRepo(repo), userID, uuid.NewString(), project.ID, project.Path, 0)
 	require.Equal(t, 1, old.asked)
 
 	got, stamps := appsByRepoPath(t, repo, project.ID)
@@ -163,14 +166,14 @@ func TestRefreshForgeApps_AnOldDaemonReportsNothingAndBreaksNothing(t *testing.T
 
 	// A newer daemon records them; an old one answering later keeps them.
 	RefreshForgeApps(context.Background(), &fakeDiscoverDaemon{answer: []byte(workspaceAnswer)},
-		repo, userID, uuid.NewString(), project.ID, project.Path, 0)
-	RefreshForgeApps(context.Background(), old, repo, userID, uuid.NewString(), project.ID, project.Path, 0)
+		rowreads.WithRepo(repo), userID, uuid.NewString(), project.ID, project.Path, 0)
+	RefreshForgeApps(context.Background(), old, rowreads.WithRepo(repo), userID, uuid.NewString(), project.ID, project.Path, 0)
 	got, _ = appsByRepoPath(t, repo, project.ID)
 	assert.Len(t, got, 3, "an old daemon's silence erased nothing")
 
 	// A daemon that dropped mid-read defers, it does not corrupt.
 	RefreshForgeApps(context.Background(), &fakeDiscoverDaemon{err: fmt.Errorf("daemon disconnected")},
-		repo, userID, uuid.NewString(), project.ID, project.Path, 0)
+		rowreads.WithRepo(repo), userID, uuid.NewString(), project.ID, project.Path, 0)
 	got, _ = appsByRepoPath(t, repo, project.ID)
 	assert.Len(t, got, 3)
 }
@@ -184,14 +187,14 @@ func TestRecordForgeApps_CompleteReplacesPartialOnlyAdds(t *testing.T) {
 	project, _ := seedWorkspaceProject(t, repo, userID)
 	scan, ok := ParseForgeApps([]byte(workspaceAnswer))
 	require.True(t, ok)
-	require.Equal(t, 3, RecordForgeApps(ctx, repo, project.ID, scan))
+	require.Equal(t, 3, RecordForgeApps(ctx, rowreads.WithRepo(repo), project.ID, scan))
 
 	// reliant's nested site was deleted and its root app renamed; the walk
 	// covered the repo, so the set is replaced.
 	scan, ok = ParseForgeApps([]byte(`{"forge_apps_scanned": true, "discovered": [
 	  {"relative_path": "reliant", "forge_apps": [{"subpath": "", "name": "reliant-2"}]}]}`))
 	require.True(t, ok)
-	require.Equal(t, 1, RecordForgeApps(ctx, repo, project.ID, scan))
+	require.Equal(t, 1, RecordForgeApps(ctx, rowreads.WithRepo(repo), project.ID, scan))
 	got, _ := appsByRepoPath(t, repo, project.ID)
 	assert.Equal(t, []string{"=reliant-2"}, got["reliant"])
 	assert.Equal(t, []string{"=forge"}, got["forge"], "a repo the scan does not mention is left as it is")
@@ -202,7 +205,7 @@ func TestRecordForgeApps_CompleteReplacesPartialOnlyAdds(t *testing.T) {
 	scan, ok = ParseForgeApps([]byte(`{"forge_apps_scanned": true, "discovered": [
 	  {"relative_path": "forge", "forge_apps_truncated": true, "forge_apps": [{"subpath": "docs/site", "name": "forge-docs"}]}]}`))
 	require.True(t, ok)
-	RecordForgeApps(ctx, repo, project.ID, scan)
+	RecordForgeApps(ctx, rowreads.WithRepo(repo), project.ID, scan)
 	got, stamps = appsByRepoPath(t, repo, project.ID)
 	assert.Equal(t, []string{"=forge", "docs/site=forge-docs"}, got["forge"])
 	assert.Equal(t, before["reliant"], got["reliant"])
@@ -211,7 +214,7 @@ func TestRecordForgeApps_CompleteReplacesPartialOnlyAdds(t *testing.T) {
 	// A complete scan that finds nothing means the repo has no app.
 	scan, ok = ParseForgeApps([]byte(`{"forge_apps_scanned": true, "discovered": [{"relative_path": "control-plane"}]}`))
 	require.True(t, ok)
-	RecordForgeApps(ctx, repo, project.ID, scan)
+	RecordForgeApps(ctx, rowreads.WithRepo(repo), project.ID, scan)
 	got, stamps = appsByRepoPath(t, repo, project.ID)
 	assert.Empty(t, got["control-plane"])
 	assert.NotNil(t, stamps["control-plane"], "known, and none")
@@ -227,11 +230,11 @@ func TestRefreshForgeApps_SkipsWhileFresh(t *testing.T) {
 	project, _ := seedWorkspaceProject(t, repo, userID)
 	daemon := &fakeDiscoverDaemon{answer: []byte(workspaceAnswer)}
 
-	RefreshForgeApps(context.Background(), daemon, repo, userID, "d", project.ID, project.Path, time.Hour)
+	RefreshForgeApps(context.Background(), daemon, rowreads.WithRepo(repo), userID, "d", project.ID, project.Path, time.Hour)
 	require.Equal(t, 1, daemon.asked, "never scanned: asked")
-	RefreshForgeApps(context.Background(), daemon, repo, userID, "d", project.ID, project.Path, time.Hour)
+	RefreshForgeApps(context.Background(), daemon, rowreads.WithRepo(repo), userID, "d", project.ID, project.Path, time.Hour)
 	assert.Equal(t, 1, daemon.asked, "scanned within the hour: not asked again")
-	RefreshForgeApps(context.Background(), daemon, repo, userID, "d", project.ID, project.Path, 0)
+	RefreshForgeApps(context.Background(), daemon, rowreads.WithRepo(repo), userID, "d", project.ID, project.Path, 0)
 	assert.Equal(t, 2, daemon.asked, "a clone or attach always asks")
 }
 
@@ -267,7 +270,7 @@ func TestRecordForgeApps_AnUnreadablePartOfTheTreeDeletesNothing(t *testing.T) {
 	project, _ := seedWorkspaceProject(t, repo, userID)
 	scan, ok := ParseForgeApps([]byte(workspaceAnswer))
 	require.True(t, ok)
-	RecordForgeApps(ctx, repo, project.ID, scan)
+	RecordForgeApps(ctx, rowreads.WithRepo(repo), project.ID, scan)
 	before, stamps := appsByRepoPath(t, repo, project.ID)
 	stampBefore := *stamps["reliant"]
 
@@ -276,7 +279,7 @@ func TestRecordForgeApps_AnUnreadablePartOfTheTreeDeletesNothing(t *testing.T) {
 	scan, ok = ParseForgeApps([]byte(`{"forge_apps_scanned": true, "discovered": [
 	  {"relative_path": "reliant", "forge_apps_truncated": true, "forge_apps": [{"subpath": "", "name": "reliant"}]}]}`))
 	require.True(t, ok)
-	RecordForgeApps(ctx, repo, project.ID, scan)
+	RecordForgeApps(ctx, rowreads.WithRepo(repo), project.ID, scan)
 
 	got, stamps := appsByRepoPath(t, repo, project.ID)
 	assert.Equal(t, before, got, "the site the daemon could not see is still recorded")

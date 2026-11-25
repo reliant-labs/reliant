@@ -7,10 +7,12 @@ import (
 	"testing"
 	"time"
 
-	forgedb "github.com/reliant-labs/reliant/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	forgedb "github.com/reliant-labs/reliant/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The token below is a fixture, not a credential.
@@ -77,7 +79,7 @@ func TestStoreNeverPersistsRemoteCredentials(t *testing.T) {
 	gr, err := repo.GetRepo(ctx, r.ID)
 	require.NoError(t, err)
 	assert.Equal(t, cleanRemote, *gr.RemoteURL, "GetRepo")
-	lr, err := repo.ListReposByProject(ctx, p.ID)
+	lr, err := store.ListReposByProject(ctx, repo.ORM(), p.ID)
 	require.NoError(t, err)
 	require.Len(t, lr, 1)
 	assert.Equal(t, cleanRemote, *lr[0].RemoteURL, "ListReposByProject")

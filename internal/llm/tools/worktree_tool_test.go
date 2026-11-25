@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/store"
 
@@ -149,7 +151,7 @@ func newWorktreeToolFixture(t *testing.T, repos ...*core.Repo) *worktreeToolFixt
 
 func (f *worktreeToolFixture) call(t *testing.T, params WorktreeParams) ToolResponse {
 	t.Helper()
-	return callRunTool(t, NewWorktreeTool(f.repo, f.repo, store.NewChatExtStore(f.repo.ORM()), f.machine, f.settler, chatupdates.NewFromORM(f.repo.ORM(), f.repo, nil)), f.rc, WorktreeToolName, params)
+	return callRunTool(t, NewWorktreeTool(rowreads.WithRepo(f.repo), f.repo, store.NewChatExtStore(f.repo.ORM()), f.machine, f.settler, chatupdates.NewFromORM(f.repo.ORM(), f.repo, nil)), f.rc, WorktreeToolName, params)
 }
 
 func (f *worktreeToolFixture) row(t *testing.T, name string) *db.Worktree {
@@ -612,7 +614,7 @@ func TestWorktreeTool_RefusesANameThatIsAPath(t *testing.T) {
 func TestWorktreeTool_WithoutAMachine_DoesNothingLocally(t *testing.T) {
 	f := newWorktreeToolFixture(t)
 
-	resp := callRunTool(t, NewWorktreeTool(f.repo, f.repo, store.NewChatExtStore(f.repo.ORM()), nil, nil, chatupdates.NewFromORM(f.repo.ORM(), f.repo, nil)), f.rc, WorktreeToolName, WorktreeParams{Action: "create", Name: "feature-auth"})
+	resp := callRunTool(t, NewWorktreeTool(rowreads.WithRepo(f.repo), f.repo, store.NewChatExtStore(f.repo.ORM()), nil, nil, chatupdates.NewFromORM(f.repo.ORM(), f.repo, nil)), f.rc, WorktreeToolName, WorktreeParams{Action: "create", Name: "feature-auth"})
 	require.True(t, resp.IsError)
 	assert.Contains(t, resp.Content, "no machine can be reached")
 	assert.Nil(t, f.row(t, "feature-auth"))

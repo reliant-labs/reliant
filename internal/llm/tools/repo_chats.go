@@ -6,16 +6,20 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/chatviews"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 )
 
 // RepoWithChats is the repository as the tools' roles see it: the facade plus
 // the chat read the roles name, which the generated chat store answers.
 type RepoWithChats struct {
 	*db.Repo
+	rowreads.Reads
 }
 
 // WithChats wraps repo for a caller that builds a tool's role itself.
-func WithChats(repo *db.Repo) RepoWithChats { return RepoWithChats{Repo: repo} }
+func WithChats(repo *db.Repo) RepoWithChats {
+	return RepoWithChats{Repo: repo, Reads: rowreads.Of(repo)}
+}
 
 // GetChat reads the chat id with its computed state.
 func (r RepoWithChats) GetChat(ctx context.Context, id string) (*db.Chat, error) {

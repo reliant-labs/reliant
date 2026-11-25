@@ -1792,13 +1792,6 @@ func (r *Repo) GetRepoByProjectAndPath(ctx context.Context, projectID, relativeP
 	return store.GetRepoByProjectAndPath(ctx, r.ORM(), projectID, relativePath)
 }
 
-func (r *Repo) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
-	if projectID == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
-	}
-	return store.ListReposByProject(ctx, r.ORM(), projectID)
-}
-
 func (r *Repo) DeleteRepo(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("repo ID cannot be empty")

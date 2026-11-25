@@ -33,6 +33,7 @@ var ErrNoDatabase = errors.New("rowreads: no database")
 // nothing.
 type Reads struct {
 	daemons store.DaemonExtStore
+	repos   store.RepoExtStore
 }
 
 // New returns the reads over db. A nil db yields reads that all fail with
@@ -41,7 +42,7 @@ func New(db orm.Context) Reads {
 	if db == nil {
 		return Reads{}
 	}
-	return Reads{daemons: store.NewDaemonExtStore(db)}
+	return Reads{daemons: store.NewDaemonExtStore(db), repos: store.NewRepoExtStore(db)}
 }
 
 // Of is the reads over the database handle of s (a *db.Repo), or reads that
@@ -70,6 +71,17 @@ func (r Reads) GetDaemon(ctx context.Context, id string) (*core.Daemon, error) {
 		return nil, fmt.Errorf("failed to get daemon %s: %w", id, err)
 	}
 	return d, err
+}
+
+// ListReposByProject lists a project's repos, ordered by relative path.
+func (r Reads) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
+	if r.repos == nil {
+		return nil, ErrNoDatabase
+	}
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
+	return r.repos.ListReposByProject(ctx, projectID)
 }
 
 // Repo is the repository facade with the by-id row reads served by the

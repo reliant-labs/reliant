@@ -217,7 +217,7 @@ func TestCreateProjectFromRepo_RegistersTheRootRepo(t *testing.T) {
 	resp, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(req))
 	require.NoError(t, err)
 
-	repos, err := repo.ListReposByProject(ctx, resp.Msg.GetProject().GetId())
+	repos, err := store.ListReposByProject(ctx, repo.ORM(), resp.Msg.GetProject().GetId())
 	require.NoError(t, err)
 	require.Len(t, repos, 1)
 	assert.Equal(t, "", repos[0].RelativePath)
@@ -229,7 +229,7 @@ func TestCreateProjectFromRepo_RegistersTheRootRepo(t *testing.T) {
 	// alone.
 	_, err = svc.CreateProjectFromRepo(ctx, connect.NewRequest(req))
 	require.NoError(t, err)
-	repos, err = repo.ListReposByProject(ctx, resp.Msg.GetProject().GetId())
+	repos, err = store.ListReposByProject(ctx, repo.ORM(), resp.Msg.GetProject().GetId())
 	require.NoError(t, err)
 	assert.Len(t, repos, 1)
 }

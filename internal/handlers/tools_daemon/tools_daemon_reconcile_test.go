@@ -59,7 +59,7 @@ func TestReconcileProjectDaemonsUpsertsOnlyExistingPaths(t *testing.T) {
 		}
 	}
 
-	reconcileProjectDaemons(ctx, reconcileStore{repo, store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, daemonID, userID, nil, "", check)
+	reconcileProjectDaemons(ctx, reconcileStore{rowreads.WithRepo(repo), store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, daemonID, userID, nil, "", check)
 
 	// present1 + present2 have rows; absent does not.
 	rows1, err := repo.ListProjectDaemonsForProject(ctx, present1.ID)
@@ -121,7 +121,7 @@ func TestReconcileProjectDaemonsSkipsRemoteBackfillOnCollision(t *testing.T) {
 		return projectPathState{Exists: true, RemoteURL: ""}, nil
 	}
 
-	reconcileProjectDaemons(ctx, reconcileStore{repo, store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, daemonID, userID, nil, "", check)
+	reconcileProjectDaemons(ctx, reconcileStore{rowreads.WithRepo(repo), store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, daemonID, userID, nil, "", check)
 
 	// candidate got its project_daemons row despite the remote collision.
 	rows, err := repo.ListProjectDaemonsForProject(ctx, candidate.ID)
@@ -161,7 +161,7 @@ func TestReconcileProjectDaemonsNeverOverwritesTheMachinesRecord(t *testing.T) {
 	everythingExists := func(context.Context, string) (projectPathState, error) {
 		return projectPathState{Exists: true}, nil
 	}
-	_, added, err := reconcileProjectDaemons(ctx, reconcileStore{repo, store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, daemonID, userID, nil, "", everythingExists)
+	_, added, err := reconcileProjectDaemons(ctx, reconcileStore{rowreads.WithRepo(repo), store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, daemonID, userID, nil, "", everythingExists)
 	require.NoError(t, err)
 	require.Equal(t, []string{fresh.Path}, added, "only the checkout the machine had no row for is new")
 
@@ -221,7 +221,7 @@ func TestReconcileSettlesAStaleInstallFromItsOwnPath(t *testing.T) {
 		checked = append(checked, path)
 		return projectPathState{Exists: path == clonePath(landed)}, nil
 	}
-	_, added, err := reconcileProjectDaemons(ctx, reconcileStore{repo, store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, daemonID, userID, nil, "", onDisk)
+	_, added, err := reconcileProjectDaemons(ctx, reconcileStore{rowreads.WithRepo(repo), store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, daemonID, userID, nil, "", onDisk)
 	require.NoError(t, err)
 	require.Equal(t, []string{clonePath(landed)}, added, "the settled checkout is watched from now")
 	require.NotContains(t, checked, landed.Path, "a clone is judged at its own path, never the creation path")
@@ -289,7 +289,7 @@ func TestReconcileTimesAStuckCloneFromTheConnectThatLetItStart(t *testing.T) {
 
 	// The machine wakes. Its clone starts now, so it is not stuck, however
 	// long ago it was queued.
-	_, _, err = reconcileProjectDaemons(ctx, reconcileStore{repo, store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, asleep, userID, nil, "", nothingOnDisk)
+	_, _, err = reconcileProjectDaemons(ctx, reconcileStore{rowreads.WithRepo(repo), store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, asleep, userID, nil, "", nothingOnDisk)
 	require.NoError(t, err)
 	woke := rowOn(asleep)
 	require.Equal(t, core.ProjectInstallInstalling, woke.InstallState, "the clone the wake just started is not settled")
@@ -297,7 +297,7 @@ func TestReconcileTimesAStuckCloneFromTheConnectThatLetItStart(t *testing.T) {
 	require.WithinDuration(t, time.Now(), *woke.CloneStartedAt, time.Minute)
 
 	// A later connect within the timeout keeps the clock it started.
-	_, _, err = reconcileProjectDaemons(ctx, reconcileStore{repo, store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, asleep, userID, nil, "", nothingOnDisk)
+	_, _, err = reconcileProjectDaemons(ctx, reconcileStore{rowreads.WithRepo(repo), store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, asleep, userID, nil, "", nothingOnDisk)
 	require.NoError(t, err)
 	require.Equal(t, core.ProjectInstallInstalling, rowOn(asleep).InstallState)
 	require.True(t, woke.CloneStartedAt.Equal(*rowOn(asleep).CloneStartedAt), "a connect does not restart a clock already running")
@@ -306,7 +306,7 @@ func TestReconcileTimesAStuckCloneFromTheConnectThatLetItStart(t *testing.T) {
 	// more than the timeout after the clone started settles it.
 	_, err = repo.ORM().Bun().NewRaw(`UPDATE project_daemons SET clone_started_at = NOW() - interval '31 minutes' WHERE daemon_id = ?`, asleep).Exec(ctx)
 	require.NoError(t, err)
-	_, _, err = reconcileProjectDaemons(ctx, reconcileStore{repo, store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, asleep, userID, nil, "", nothingOnDisk)
+	_, _, err = reconcileProjectDaemons(ctx, reconcileStore{rowreads.WithRepo(repo), store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, asleep, userID, nil, "", nothingOnDisk)
 	require.NoError(t, err)
 	require.Equal(t, core.ProjectInstallFailed, rowOn(asleep).InstallState)
 	require.Equal(t, staleInstallReason, rowOn(asleep).InstallError)
@@ -316,7 +316,7 @@ func TestReconcileTimesAStuckCloneFromTheConnectThatLetItStart(t *testing.T) {
 	// settled clone's stale start stays. The fresh re-clone is not stuck.
 	_, err = repo.ORM().Bun().NewRaw(`UPDATE project_daemons SET install_state = 'installing', install_error = '', cloned_at = NOW() WHERE daemon_id = ?`, asleep).Exec(ctx)
 	require.NoError(t, err)
-	_, _, err = reconcileProjectDaemons(ctx, reconcileStore{repo, store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, asleep, userID, nil, "", nothingOnDisk)
+	_, _, err = reconcileProjectDaemons(ctx, reconcileStore{rowreads.WithRepo(repo), store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, asleep, userID, nil, "", nothingOnDisk)
 	require.NoError(t, err)
 	require.Equal(t, core.ProjectInstallInstalling, rowOn(asleep).InstallState, "a re-clone the previous release just queued is not settled")
 }

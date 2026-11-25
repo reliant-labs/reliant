@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -66,7 +67,7 @@ func TestCreateProjectAutoInitRegistersRootRepo(t *testing.T) {
 	require.True(t, router.gitInitCalled, "auto git-init should run for a fresh empty dir")
 	require.True(t, resp.Msg.Project.IsGitRepo, "project should be git after auto-init")
 
-	repos, err := repo.ListReposByProject(ctx, resp.Msg.Project.Id)
+	repos, err := store.ListReposByProject(ctx, repo.ORM(), resp.Msg.Project.Id)
 	require.NoError(t, err)
 	require.Len(t, repos, 1, "auto-init must register the root repo row (worktrees gate on it)")
 	assert.Equal(t, "", repos[0].RelativePath)
