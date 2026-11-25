@@ -1,17 +1,20 @@
 // @vitest-environment node
 /**
- * The forge shell's personal-token client (forgeTokens.ts), through the real
- * generated client and request/response types over a mock transport.
+ * The forge shell's personal-token module (forgeTokens.ts): createForgeToken
+ * through the real generated client over a mock transport, and the `select`
+ * mappers the generated list hooks use. ForgeTokensSection.test.tsx covers the
+ * hooks themselves (org on every rpc, revoke, refresh).
  *
- * What is pinned: every rpc carries the active org, scopes and expiry reach
+ * What is pinned: a create carries the active org, scopes and expiry reach
  * the wire as chosen, revoked and ephemeral credentials are never listed, a
- * refused mutation stays an error, the scope labels disclose what each
+ * refused create stays an error, the scope labels disclose what each
  * scope really authorizes, every scope the server accepts unbound is offered,
  * and an upload-only scope (sourcemaps:write, tests:write) is minted alone as
  * an org token.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
+import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -22,6 +25,7 @@ vi.mock("@/services/controlPlane/config", () => ({
   hasControlPlane: true,
 }));
 
+import { ListMyTokensResponseSchema, ListTokensResponseSchema } from "@/gen/controlplane/services/access_token/v1/access_token_pb";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
 import {
@@ -30,10 +34,8 @@ import {
   FORGE_TOKEN_SCOPE_GROUPS,
   FORGE_TOKEN_SCOPES,
   isOrgTokenOnlyScope,
-  listForgeTokens,
-  listOrgForgeTokens,
-  revokeForgeToken,
-  revokeOrgForgeToken,
+  liveForgeTokens,
+  liveOrgForgeTokens,
 } from "../forgeTokens";
 
 const ORG = "org_acme";
@@ -63,32 +65,17 @@ const CREATED = new Date("2026-10-01T00:00:00Z");
 
 afterEach(() => setTransport(null));
 
-describe("listForgeTokens", () => {
-  it("asks for the active org's tokens", async () => {
-    const seen = vi.fn(() => ({ tokens: [] }));
-    setTransport(mockTransport({ "AccessTokenService.ListMyTokens": seen }));
-
-    await listForgeTokens(ORG);
-
-    expect(seen).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG }));
-  });
-
-  it("lists live tokens only: a revoked or ephemeral credential is never shown", async () => {
-    setTransport(
-      mockTransport({
-        "AccessTokenService.ListMyTokens": {
-          response: {
-            tokens: [
-              { id: "t_live", name: "ci-deploy", displayPrefix: "rlt_ab", scopes: ["deploy:write"], createdAt: timestampFromDate(CREATED) },
-              { id: "t_revoked", name: "old", revokedAt: timestampFromDate(CREATED) },
-              { id: "t_ephemeral", name: "session", ephemeral: true },
-            ],
-          },
-        },
+describe("liveForgeTokens", () => {
+  it("lists live tokens only: a revoked or ephemeral credential is never shown", () => {
+    const tokens = liveForgeTokens(
+      create(ListMyTokensResponseSchema, {
+        tokens: [
+          { id: "t_live", name: "ci-deploy", displayPrefix: "rlt_ab", scopes: ["deploy:write"], createdAt: timestampFromDate(CREATED) },
+          { id: "t_revoked", name: "old", revokedAt: timestampFromDate(CREATED) },
+          { id: "t_ephemeral", name: "session", ephemeral: true },
+        ],
       }),
     );
-
-    const tokens = await listForgeTokens(ORG);
 
     expect(tokens).toEqual([
       {
@@ -102,17 +89,6 @@ describe("listForgeTokens", () => {
         lastUsedAt: undefined,
       },
     ]);
-  });
-
-  it("a refused list is an error, not an empty list", async () => {
-    setTransport(
-      mockTransport({
-        "AccessTokenService.ListMyTokens": () => {
-          throw new ConnectError("denied", Code.PermissionDenied);
-        },
-      }),
-    );
-    await expect(listForgeTokens(ORG)).rejects.toMatchObject({ code: Code.PermissionDenied });
   });
 });
 
@@ -211,53 +187,20 @@ describe("createForgeToken with tests:write", () => {
   });
 });
 
-describe("listOrgForgeTokens", () => {
-  it("lists the org's live automation tokens only: no person's token, revoked or ephemeral one", async () => {
-    const seen = vi.fn(() => ({
-      tokens: [
-        { id: "t_maps", name: "desktop-maps", displayPrefix: "rlat_m", scopes: ["sourcemaps:write"] },
-        { id: "t_person", name: "laptop", actingUserId: "u_1", scopes: ["deploy:read"] },
-        { id: "t_revoked", name: "old", revokedAt: timestampFromDate(CREATED) },
-        { id: "t_ephemeral", name: "session", ephemeral: true },
-      ],
-    }));
-    setTransport(mockTransport({ "AccessTokenService.ListTokens": seen }));
-
-    const tokens = await listOrgForgeTokens(ORG);
-
-    expect(seen).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG }));
-    expect(tokens.map((t) => t.id)).toEqual(["t_maps"]);
-  });
-
-  it("revokes an org token through RevokeToken in the active org", async () => {
-    const seen = vi.fn(() => ({}));
-    setTransport(mockTransport({ "AccessTokenService.RevokeToken": seen }));
-
-    await revokeOrgForgeToken(ORG, "t_maps");
-
-    expect(seen).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, id: "t_maps" }));
-  });
-});
-
-describe("revokeForgeToken", () => {
-  it("revokes the token in the active org", async () => {
-    const seen = vi.fn(() => ({}));
-    setTransport(mockTransport({ "AccessTokenService.RevokeMyToken": seen }));
-
-    await revokeForgeToken(ORG, "t_live");
-
-    expect(seen).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, id: "t_live" }));
-  });
-
-  it("a refused revoke rejects", async () => {
-    setTransport(
-      mockTransport({
-        "AccessTokenService.RevokeMyToken": () => {
-          throw new ConnectError("not found", Code.NotFound);
-        },
+describe("liveOrgForgeTokens", () => {
+  it("lists the org's live automation tokens only: no person's token, revoked or ephemeral one", () => {
+    const tokens = liveOrgForgeTokens(
+      create(ListTokensResponseSchema, {
+        tokens: [
+          { id: "t_maps", name: "desktop-maps", displayPrefix: "rlat_m", scopes: ["sourcemaps:write"] },
+          { id: "t_person", name: "laptop", actingUserId: "u_1", scopes: ["deploy:read"] },
+          { id: "t_revoked", name: "old", revokedAt: timestampFromDate(CREATED) },
+          { id: "t_ephemeral", name: "session", ephemeral: true },
+        ],
       }),
     );
-    await expect(revokeForgeToken(ORG, "t_gone")).rejects.toMatchObject({ code: Code.NotFound });
+
+    expect(tokens.map((t) => t.id)).toEqual(["t_maps"]);
   });
 });
 
