@@ -62,6 +62,7 @@ import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
 import { machineDisplayName } from "@/lib/machineName";
 import { useProjectStore } from "../../store/projectStore";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { ChatViewTabs, type ChatView } from "./Trace/ChatViewTabs";
 
 interface ChatHeaderProps {
   chatId: string | null;
@@ -93,6 +94,12 @@ interface ChatHeaderProps {
    * you scrolled away from (InterleavedTimeline's `pinnedPromptSlot`).
    */
   pinnedPromptSlotRef?: (el: HTMLElement | null) => void;
+  /**
+   * The chat's view, conversation or Trace (timing and cost), and its switch.
+   * Omit `onViewChange` and the bar shows no switch.
+   */
+  view?: ChatView;
+  onViewChange?: (view: ChatView) => void;
 }
 
 export function ChatHeader({
@@ -106,6 +113,8 @@ export function ChatHeader({
   isWorkflowViewerOpen,
   hideTitle = false,
   pinnedPromptSlotRef,
+  view = "chat",
+  onViewChange,
 }: ChatHeaderProps) {
   const chatQuery = useChat(chatId || undefined);
   const chat = chatQuery.data;
@@ -336,6 +345,9 @@ export function ChatHeader({
           data-testid="chat-pinned-prompt-slot"
         />
       )}
+
+      {/* The conversation or its Trace (timing and cost), for owner and viewer alike. */}
+      {!isNewChat && chatId && onViewChange && <ChatViewTabs view={view} onChange={onViewChange} />}
 
       {/* Threads: one switcher, only when there is more than one. */}
       {!isNewChat && hasMultipleThreads && onSelectThread && (
