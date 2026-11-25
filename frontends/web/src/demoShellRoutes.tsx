@@ -28,7 +28,7 @@
  * THE APP'S SHELL. Every page under that layout is a page of the app's one
  * shell (Layout/shell/AppShell.tsx): the same frame, nav column, drill-ins and
  * phone drawer as the signed-in app, with the demo's nav (Forge/Demo/DemoNav,
- * demoNav.ts) in it. The frame opts into public-preview presentation under
+ * demoNavConfig.ts) in it. The frame opts into public-preview presentation under
  * an app layout without claiming authentication. The root explicitly mounts
  * a signed-out session, also for the deprecated app-bundle mount (`?shell=demo`,
  * App.tsx). The keyboard host stays signed out and has no overlays (no palette,

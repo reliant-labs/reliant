@@ -403,7 +403,7 @@ by ForgeShell/landingJourney.ts:
 The public demo host (`demo.reliantlabs.io`, the `demo` shell,
 `demoShellRoutes.tsx`) boots the tour as the forge shell does, but with
 `memoryTourStorage()`: nothing is remembered. Its pages render in the app's
-one shell with the demo's nav (`Forge/Demo/demoNav.ts`), so its steps ring the
+one shell with the demo's nav (`Forge/Demo/demoNavConfig.ts`), so its steps ring the
 same anchors as the app's ("The nav's anchors", above). A bare entry **opens
 on the Home** (`/forge/demo?section=home`), free to explore:
 - The Home's hero and the action row under every page's header offer **Take

@@ -2,7 +2,7 @@
 
 /**
  * demoNav ⊂ hybridNav, in order: the public demo draws the app's own nav
- * (Forge/Demo/demoNav.ts), so with the demo's own rows (Home, How it was
+ * (Forge/Demo/demoNavConfig.ts), so with the demo's own rows (Home, How it was
  * built, its phone actions) taken out, every row it draws is one the app
  * draws, under the same label, in the same order. A row the app moves,
  * renames or regroups moves in the demo too; this fails if the demo forks.
@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 import { consolePageOf, consolePath, orgPageOf } from "../../Console/paths";
 import { flattenIds, hybridNav, visibleItems, childrenOf, type NavConfig, type NavCtx, type NavItem } from "@/components/Layout/sidebar/navConfig";
 import { DEMO_HIDDEN_PAGES, FORGE_DEMO_PATH } from "../demoPath";
-import { DEMO_OWN_ITEMS, demoNav } from "../demoNav";
+import { DEMO_OWN_ITEMS, demoNav } from "../demoNavConfig";
 
 vi.mock("@/lib/changesFeature", () => ({ changesUIEnabled: () => false }));
 
