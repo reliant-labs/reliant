@@ -22,7 +22,15 @@ vi.mock("../../../lib/constants", async (importOriginal) => ({
   getControlPlaneURL: () => "https://admin.example.test",
 }));
 
+// forge sign-in is switched per test; everything else in forge-api is real.
+const forge = vi.hoisted(() => ({ on: false }));
+vi.mock("@/lib/auth/forge-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/forge-api")>()),
+  isForgeAuth: () => forge.on,
+}));
+
 import { renderWithQuery } from "@/test/renderWithQuery";
+import { forgeUserOf } from "@/lib/auth/forge-session";
 import { CliLogin } from "../CliLogin";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
@@ -63,6 +71,8 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
+  forge.on = false;
+  useAuthStore.setState({ initialized: false });
   vi.restoreAllMocks();
 });
 
@@ -324,5 +334,71 @@ describe("CliLogin", () => {
     renderWithQuery(<CliLogin />);
     expect(await screen.findByTestId("authorize-org-single")).toHaveTextContent("Acme");
     expect(screen.queryByRole("radiogroup")).toBeNull();
+  });
+});
+
+// AUTH_PROVIDER "forge": the broker's session cookie is the credential. The
+// control plane reads it only on a request with NO Authorization header, and
+// only same-origin, so the approval goes to this page's /_api/@cp.
+describe("CliLogin with forge sign-in", () => {
+  const ORIGIN = "https://app.example.test";
+  beforeEach(() => {
+    forge.on = true;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        origin: ORIGIN,
+        search: QUERY,
+        get href() {
+          return href;
+        },
+        set href(v: string) {
+          href = v;
+        },
+      },
+    });
+  });
+
+  it("approves same-origin with the session cookie and no Authorization header", async () => {
+    useAuthStore.setState({
+      user: forgeUserOf({ authenticated: true, subject: "alice", email: "a@forge.test" }),
+      initialized: true,
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ redirect_to: "http://127.0.0.1:5000/callback?code=c1&state=st" }), { status: 200 }),
+    );
+    renderWithQuery(<CliLogin />);
+    expect(await screen.findByText("a@forge.test")).toBeTruthy();
+    await userEvent.click(await screen.findByRole("button", { name: "Approve" }));
+    await waitFor(() => expect(href).toBe("http://127.0.0.1:5000/callback?code=c1&state=st"));
+
+    const approve = fetchMock.mock.calls.find(([u]) => String(u).endsWith("/oauth/approve")) as [string, RequestInit];
+    expect(approve[0]).toBe(`${ORIGIN}/_api/@cp/oauth/approve`);
+    expect(approve[1].credentials).toBe("include");
+    expect(new Headers(approve[1].headers).has("Authorization")).toBe(false);
+    expect(JSON.parse(approve[1].body as string)).toEqual({ query: QUERY, approved: true, org_id: "org-a" });
+    expect(getSession).not.toHaveBeenCalled();
+  });
+
+  it("sends a person with no broker session to /auth and back with the whole request", async () => {
+    useAuthStore.setState({ user: null, initialized: true });
+    renderWithQuery(<CliLogin />);
+    await waitFor(() => expect(href).not.toBe(""));
+    expect(href).toBe(`/auth?redirect=${encodeURIComponent(`/oauth/cli${QUERY}`)}`);
+    expect(getSession).not.toHaveBeenCalled();
+  });
+
+  it("says the session ended when the control plane refuses the cookie", async () => {
+    useAuthStore.setState({
+      user: forgeUserOf({ authenticated: true, subject: "alice", email: "a@forge.test" }),
+      initialized: true,
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("unauthorized", { status: 401 }));
+    renderWithQuery(<CliLogin />);
+    await userEvent.click(await screen.findByRole("button", { name: "Approve" }));
+    expect((await screen.findByTestId("cli-login-error")).textContent).toBe(
+      "Your session ended. Sign in and run the login again.",
+    );
+    expect(href).toBe("");
   });
 });

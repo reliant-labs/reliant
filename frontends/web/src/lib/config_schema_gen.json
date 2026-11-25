@@ -36,6 +36,11 @@
       "source": "config"
     },
     {
+      "name": "AUTH_PROVIDER",
+      "type": "string",
+      "source": "config"
+    },
+    {
       "name": "AUTO_ANON_SIGN_IN",
       "type": "string",
       "source": "config"

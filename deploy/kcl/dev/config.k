@@ -12,6 +12,7 @@ import kcl_plugin.forge as plugin
 
 import config_gen
 import .ports
+import ..identity as idn
 
 _web_origin = "http://localhost:${ports.web}"
 
@@ -25,6 +26,9 @@ api_server_config: config_gen.ApiServerConfig = {
     # One shared bearer key: there is no identity provider in this stack.
     auth_mode = "apikey"
     auth_api_key = config_gen.ConfigSecretRef {name = "reliant-secrets", key = "AUTH_API_KEY"}
+    # The desktop app signs in by a handoff from the web app's session
+    # (inert until the identity's broker is configured).
+    handoff_redirects = idn.DESKTOP_HANDOFF_REDIRECTS
 }
 
 # Every process at or below `reliant auth`, `reliant daemon`, `reliant project`, `reliant trigger`, `reliant workflow`.

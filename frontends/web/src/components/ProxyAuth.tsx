@@ -3,6 +3,9 @@ import { useNavigate, useSearch } from '@tanstack/react-router'
 import { supabase } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
 import { mintProxySessionCallbackUrl } from '@/lib/proxy-session'
+import { isForgeAuth } from '@/lib/auth/forge-api'
+import { getAuthIdentity } from '@/lib/auth/use-auth'
+import { useAuthStore } from '@/store/authStore'
 import { GradientBackground } from './GradientBackground'
 import Logo from '../assets/logo.svg'
 import { authPath, homePath, proxyAuthPath } from '@/lib/paths'
@@ -12,9 +15,10 @@ import { authPath, homePath, proxyAuthPath } from '@/lib/paths'
  *
  * Flow:
  * 1. Proxy redirects browser to /auth/proxy?return={originalURL}
- * 2. This component checks for a valid Supabase session
+ * 2. This component checks for a valid session (Supabase's, or forge's cookie session)
  * 3. If no session → redirect to /auth with return back here
  * 4. If session → POST to platform-api (control-plane) /api/proxy-session to mint a proxy token
+ *    (forge sign-in: same-origin under /_api/@cp with the cookie, no Authorization header)
  * 5. Redirect to {return_url_origin}/__proxy/callback?token={token}
  *
  * The embedded browser skips this bounce: lib/proxy-session mints the token
@@ -45,10 +49,20 @@ export function ProxyAuth() {
         return
       }
 
-      // Check for existing Supabase session.
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      // Check for an existing session: Supabase's, or (forge sign-in) the
+      // login broker's, as the auth store restored it from the cookie.
+      let accessToken: string | null = null
+      let signedIn: boolean
+      if (isForgeAuth()) {
+        await useAuthStore.getState().initialize()
+        signedIn = getAuthIdentity() !== null
+      } else {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        signedIn = !sessionError && !!session
+        accessToken = session?.access_token ?? null
+      }
 
-      if (sessionError || !session) {
+      if (!signedIn) {
         // No session — redirect to login, then back here.
         logger.info('[ProxyAuth] No session, redirecting to login')
         navigate({
@@ -62,7 +76,7 @@ export function ProxyAuth() {
       // redirect to the proxy callback on the workspace domain.
       try {
         logger.info('[ProxyAuth] Minting proxy session token')
-        const callbackURL = await mintProxySessionCallbackUrl(returnURL, session.access_token)
+        const callbackURL = await mintProxySessionCallbackUrl(returnURL, accessToken)
         logger.info('[ProxyAuth] Redirecting to proxy callback', { origin: parsedReturn.origin })
         window.location.href = callbackURL
       } catch (err) {

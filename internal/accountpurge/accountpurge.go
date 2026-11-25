@@ -246,6 +246,10 @@ var purgeSteps = []step{
 	{"step_executions", `
 		DELETE FROM step_executions WHERE workflow_id IN (
 			SELECT w.id FROM workflows w JOIN chats c ON c.id = w.chat_id WHERE c.user_id = $1)`},
+	// What workflow nodes' observe: blocks recorded, keyed by chat with no
+	// foreign key.
+	{"node_observations", `
+		DELETE FROM node_observations WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
 	{"workflow_checkpoints", `
 		DELETE FROM workflow_checkpoints WHERE chat_id IN (
 			SELECT id FROM chats WHERE user_id = $1)`},

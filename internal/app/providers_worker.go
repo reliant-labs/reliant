@@ -389,6 +389,8 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Config:        d.Config,
 		Repo:          d.DB,
 		Chats:         chataccess.NewFromORM(d.DB.ORM()),
+		ChatRows:      store.NewChatExtStore(d.DB.ORM()),
+		ChatViews:     store.NewChatsWithActivityExtStore(d.DB.ORM()),
 		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
 		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
 		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
@@ -818,18 +820,6 @@ func orgAdminNotifier(d TemporalWorkerDeps) workersetup.OrgAdminNotifier {
 	return d.Router.ControlPlane
 }
 
-// stepKeyIssuer is the control plane as the issuer of run steps' LLM gateway
-// step keys, nil without one (a nil interface, never a nil client in one):
-// every run node with llm_gateway is then refused. A control plane the worker
-// cannot sign for answers controlplane.ErrStepKeysUnsupported, which refuses
-// the same way.
-func stepKeyIssuer(d TemporalWorkerDeps) handlers.StepKeyIssuer {
-	if d.Router == nil || d.Router.ControlPlane == nil {
-		return nil
-	}
-	return d.Router.ControlPlane
-}
-
 // projectMoveAnnouncer is orgmove's Announcer: one refetch for the project's
 // owner, written in the commit's own transaction (the ctx it is called with).
 type projectMoveAnnouncer struct{ updates chatupdates.Service }
@@ -994,7 +984,6 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,
-		StepKeys:               stepKeyIssuer(d),
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},
@@ -1161,28 +1150,33 @@ const ledgerRetentionInterval = time.Hour
 const ledgerRetentionPause = db.LedgerRetentionPause(20 * time.Millisecond)
 
 // LedgerRetention compacts chat update logs and prunes finished runs' internal
-// steps past their retention (internal/db/ledger_retention.go), hourly. Every
+// steps and node observations past their retention
+// (internal/db/ledger_retention.go), hourly. Every
 // replica runs it: the work is idempotent and skips what another replica is
 // deleting.
 type LedgerRetention struct {
-	repo        *db.Repo
-	chatUpdates time.Duration
-	steps       time.Duration
-	startDelay  time.Duration
-	deleted     metric.Int64Counter
+	repo         *db.Repo
+	chatUpdates  time.Duration
+	steps        time.Duration
+	observations time.Duration
+	startDelay   time.Duration
+	deleted      metric.Int64Counter
 
 	// after and runPass are time.After and pass; a test replaces them.
 	after   func(time.Duration) <-chan time.Time
 	runPass func(ctx context.Context, now time.Time)
 }
 
-// LedgerRetentionDeps is the repository, the two retention periods (0: off)
+// LedgerRetentionDeps is the repository, the three retention periods (0: off)
 // and how long after start the first pass waits (0: at once).
 type LedgerRetentionDeps struct {
 	DB                     *db.Repo
 	ChatUpdateRetention    time.Duration
 	StepExecutionRetention time.Duration
-	StartDelay             time.Duration
+	// ObservationRetention is node_observations' period (worker config
+	// node_observation_retention).
+	ObservationRetention time.Duration
+	StartDelay           time.Duration
 }
 
 // NewLedgerRetention builds the retention loop.
@@ -1197,7 +1191,7 @@ func NewLedgerRetention(d LedgerRetentionDeps) (*LedgerRetention, error) {
 	otel.Handle(err)
 	l := &LedgerRetention{
 		repo: d.DB, chatUpdates: d.ChatUpdateRetention, steps: d.StepExecutionRetention,
-		startDelay: d.StartDelay, deleted: deleted, after: time.After,
+		observations: d.ObservationRetention, startDelay: d.StartDelay, deleted: deleted, after: time.After,
 	}
 	l.runPass = l.pass
 	return l, nil
@@ -1215,8 +1209,8 @@ func NewLedgerRetention(d LedgerRetentionDeps) (*LedgerRetention, error) {
 // that introduces the watermark has such servers at all: every later release
 // reads it.
 func (l *LedgerRetention) Run(ctx context.Context) error {
-	if l.chatUpdates <= 0 && l.steps <= 0 {
-		logging.InfoContext(ctx, "ledger retention is off: both retention periods are 0")
+	if l.chatUpdates <= 0 && l.steps <= 0 && l.observations <= 0 {
+		logging.InfoContext(ctx, "ledger retention is off: every retention period is 0")
 		return nil
 	}
 	if l.startDelay > 0 {
@@ -1275,6 +1269,23 @@ func (l *LedgerRetention) pass(ctx context.Context, now time.Time) {
 			logging.WarnContext(ctx, "ledger retention: pruning step executions failed", append(attrs, "error", err)...)
 		case res.Runs > 0:
 			logging.InfoContext(ctx, "ledger retention: pruned step executions", attrs...)
+		}
+	}
+	if l.observations > 0 {
+		cutoff := now.Add(-l.observations)
+		var res db.StepRetentionResult
+		err := observe.RunRoot(ctx, "worker.ledger_retention.node_observations", func(ctx context.Context) error {
+			var err error
+			res, err = l.repo.PruneNodeObservations(ctx, cutoff, ledgerRetentionPause)
+			return err
+		})
+		l.deleted.Add(context.WithoutCancel(ctx), res.Deleted, metric.WithAttributes(attribute.String("table", "node_observations")))
+		attrs := []any{"runs", res.Runs, "deleted", res.Deleted, "cutoff", cutoff}
+		switch {
+		case err != nil && ctx.Err() == nil:
+			logging.WarnContext(ctx, "ledger retention: pruning node observations failed", append(attrs, "error", err)...)
+		case res.Runs > 0:
+			logging.InfoContext(ctx, "ledger retention: pruned node observations", attrs...)
 		}
 	}
 }

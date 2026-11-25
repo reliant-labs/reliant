@@ -1,11 +1,20 @@
 /**
  * Cloud implementation of the onboarding service. Talks to
  * `controlplane.v1.UserService` for the current-user / completion calls.
+ *
+ * forge sign-in (AUTH_PROVIDER "forge") reads the current user from the login
+ * broker's /auth/session instead: reliant's broker adds the control-plane
+ * account to it (`account`), and the control plane's Connect chain does not
+ * read the session cookie yet. The account's `created_at` is the control-plane
+ * account's creation (an imported user keeps theirs, not the import's), which
+ * is what onboarding's returning-user heal compares daemons against.
  */
 
 import { UserService } from "@/gen/controlplane/services/user/v1/user_pb";
 import { getControlPlaneClient } from "../client";
 import { syncReliantProvider } from "@/hooks/settings-queries";
+import { isForgeAuth } from "@/lib/auth/forge-api";
+import { fetchIdentity, type SessionAccount } from "@/lib/auth/native-login";
 import type { OnboardingUser } from "./types";
 
 /** Cache the in-flight GetCurrentUser promise for 30s so that the dozen-odd
@@ -17,6 +26,13 @@ const USER_CACHE_TTL_MS = 30_000;
 export async function getCurrentUser(): Promise<OnboardingUser | null> {
   if (_userPromise) return _userPromise;
   _userPromise = (async () => {
+    if (isForgeAuth()) {
+      const identity = await fetchIdentity();
+      if (!identity.authenticated) return null;
+      // A broker that names no account (an older reliant-api) falls through
+      // to the rpc, which answers once the control plane reads the cookie.
+      if (identity.account) return fromSessionAccount(identity.account);
+    }
     const res = await getControlPlaneClient(UserService).getCurrentUser({});
     if (!res.user) return null;
     return {
@@ -36,6 +52,18 @@ export async function getCurrentUser(): Promise<OnboardingUser | null> {
   return _userPromise;
 }
 
+/** The onboarding user of the control-plane account the broker's session names. */
+function fromSessionAccount(account: SessionAccount): OnboardingUser {
+  const createdAtMs = account.created_at ? Date.parse(account.created_at) : NaN;
+  return {
+    onboardingCompleted: account.onboarding_completed,
+    id: account.id,
+    email: account.email,
+    name: account.name,
+    createdAtMs: Number.isFinite(createdAtMs) ? createdAtMs : undefined,
+  };
+}
+
 /**
  * Forget the cached current user.
  *
@@ -48,6 +76,10 @@ export function resetUserCache(): void {
   _userPromise = null;
 }
 
+/**
+ * Mark onboarding done. Always the rpc, forge sign-in included: there it needs
+ * the control plane's Connect chain to accept the session cookie.
+ */
 export async function completeOnboarding(
   data: Record<string, unknown>,
 ): Promise<void> {

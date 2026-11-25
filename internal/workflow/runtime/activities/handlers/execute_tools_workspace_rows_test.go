@@ -9,11 +9,9 @@ import (
 )
 
 func TestLoadToolExecutionContextWithoutWorkspaceRows(t *testing.T) {
-	repo := &MockExecuteToolsStore{
-		GetChatFunc: func(context.Context, string) (*db.Chat, error) {
-			return &db.Chat{ID: "chat", ProjectID: "project"}, nil
-		},
-	}
+	repo := withChatExecuteTools{GetChatFunc: func(context.Context, string) (*db.Chat, error) {
+		return &db.Chat{ID: "chat", ProjectID: "project"}, nil
+	}, MockExecuteToolsStore: &MockExecuteToolsStore{}}
 	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: repo})
 
 	tec, errMsg := a.loadToolExecutionContext(context.Background(), "chat", "root", "shell", "{}", "call", "")

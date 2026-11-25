@@ -25,6 +25,16 @@ vi.mock('sonner', () => ({ toast: { success: mocks.toastSuccess } }))
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }))
 vi.mock('@/hooks/useGitHubCredential', () => ({ GITHUB_CREDENTIAL_QUERY_KEY: ['gitCredential', 'github'] }))
 
+const forge = vi.hoisted(() => ({ on: false }))
+vi.mock('@/lib/auth/forge-api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/auth/forge-api')>()),
+  isForgeAuth: () => forge.on,
+}))
+vi.mock('@/lib/constants', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/constants')>()),
+  getControlPlaneURL: () => 'https://cp.example',
+}))
+
 import { connectGitHub } from '@/lib/github-connect'
 
 const nowSeconds = () => Math.floor(Date.now() / 1000)
@@ -215,6 +225,47 @@ describe('connectGitHub', () => {
       setBridge({ openExternal: vi.fn() })
       expect(await connectGitHub()).toEqual({ kind: 'redirecting' })
       expect(assign).toHaveBeenCalled()
+    })
+  })
+
+  // AUTH_PROVIDER "forge": no token for `?token=`. The web flow navigates to
+  // the authorize route under this page's /_api/@cp, where the session cookie
+  // is first-party; the desktop flow's system browser holds no session.
+  describe('forge sign-in', () => {
+    beforeEach(() => {
+      forge.on = true
+      vi.stubGlobal('location', {
+        ...window.location,
+        assign,
+        origin: 'https://app.example',
+        pathname: '/settings',
+        search: '?tab=git',
+      })
+    })
+    afterEach(() => {
+      forge.on = false
+    })
+
+    it('navigates to the same-origin authorize route with no token', async () => {
+      expect(await connectGitHub()).toEqual({ kind: 'redirecting' })
+      expect(assign).toHaveBeenCalledWith(
+        'https://app.example/_api/@cp/auth/github/authorize?returnTo=%2Fsettings%3Ftab%3Dgit',
+      )
+      expect(mocks.getSession).not.toHaveBeenCalled()
+      expect(mocks.buildOAuthURL).not.toHaveBeenCalled()
+    })
+
+    it('refuses the desktop flow rather than open a sessionless system browser', async () => {
+      const openExternal = vi.fn()
+      setBridge({
+        startConnectionOAuthReceiver: vi.fn(),
+        waitForProviderOAuth: vi.fn(),
+        openExternal,
+      })
+      const outcome = await connectGitHub()
+      expect(outcome.kind).toBe('error')
+      expect(openExternal).not.toHaveBeenCalled()
+      expect(assign).not.toHaveBeenCalled()
     })
   })
 })

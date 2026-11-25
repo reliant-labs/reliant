@@ -35,6 +35,7 @@ import (
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow/lifecycle"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	wfobserve "github.com/reliant-labs/reliant/internal/workflow/observe"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
@@ -661,6 +662,15 @@ type ActivityWrapper[I any, O any] struct {
 	messageWriter func() MessageWriter
 	// messageWriteRetry is how that writer's failed writes are retried.
 	messageWriteRetry messageWriteRetry
+	// observationWriter supplies the store a node's observation is recorded
+	// in (activity_observe.go); nil, or a nil result, records telemetry only.
+	observationWriter func() ObservationWriter
+	// observeEvaluator, observeRecorder and observeClock evaluate a node's
+	// observe block, emit its metrics and stamp its row. The zero values are
+	// production's; tests set their own per registry.
+	observeEvaluator wfobserve.Evaluator
+	observeRecorder  *wfobserve.Recorder
+	observeClock     func() time.Time
 	// dbOutage is how long, and how often, this wrapper waits for a database
 	// that stopped answering (db_outage.go).
 	dbOutage dbOutagePolicy
@@ -1241,6 +1251,14 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		errMsg := saveErr.Error()
 		w.emitNodeExecutionEvent(ctx, "failed", false, stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, nil, &errMsg)
 		return zeroOutput, saveErr
+	}
+
+	// Rule 3: the node's observe block is evaluated and recorded here, by
+	// the executor of the node, after its message is saved (a failed save
+	// retried above, so nothing is observed twice) and while the result is
+	// still whole. It never fails the activity (activity_observe.go).
+	if ctx.Err() == nil {
+		w.observeNode(ctx, input, inputInfo, info, result, durationMs)
 	}
 
 	// Rule 2: message-only fields were persisted with the message above (or
@@ -2212,6 +2230,13 @@ type ActivityRegistry struct {
 	outputTypes map[string]reflect.Type // activity name -> output type for schema introspection
 	// messageWriter writes a node's delegated save_message; see SetMessageWriter.
 	messageWriter MessageWriter
+	// observationWriter stores a node's observation; see SetObservationWriter.
+	observationWriter ObservationWriter
+	// observeEvaluator, observeRecorder and observeClock are copied into each
+	// wrapper at registration (zero: production's). Tests set them.
+	observeEvaluator wfobserve.Evaluator
+	observeRecorder  *wfobserve.Recorder
+	observeClock     func() time.Time
 	// messageWriteRetry is the retry policy for messageWriter's writes,
 	// copied into each wrapper at registration. Tests shrink it per registry.
 	messageWriteRetry messageWriteRetry
@@ -2337,6 +2362,10 @@ func wrapActivity[TInput any, TOutput any](
 	wrapper.directHeartbeat = registry.directHeartbeat
 	wrapper.stopNudges = func() stopNudgeSource { return registry.stopNudges }
 	wrapper.messageWriter = func() MessageWriter { return registry.messageWriter }
+	wrapper.observationWriter = func() ObservationWriter { return registry.observationWriter }
+	wrapper.observeEvaluator = registry.observeEvaluator
+	wrapper.observeRecorder = registry.observeRecorder
+	wrapper.observeClock = registry.observeClock
 	wrapper.messageWriteRetry = registry.messageWriteRetry
 	wrapper.dbOutage = registry.dbOutage
 

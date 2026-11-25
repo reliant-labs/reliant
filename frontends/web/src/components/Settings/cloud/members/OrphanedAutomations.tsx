@@ -33,7 +33,7 @@ import { formatRelativeTime } from "@/lib/relativeTime";
 import { toast } from "@/lib/toast-manager";
 import type { OrgMember } from "@/services/controlPlane/members";
 import type { MyOrg } from "@/services/controlPlane/orgs";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthIdentity } from "@/lib/auth/use-auth";
 
 import { AdoptAutomationDialog, type AdoptTarget } from "./AdoptAutomationDialog";
 import { memberLabel } from "./MemberRoster";
@@ -209,7 +209,7 @@ function OfferDialog({
   onDone: () => void;
 }) {
   const fieldId = useId();
-  const me = useAuthStore((s) => s.user);
+  const me = useAuthIdentity();
   const others = useMemo(() => members.filter((m) => !me || m.userId !== me.id), [members, me]);
   const [to, setTo] = useState("");
   const [error, setError] = useState<string | null>(null);

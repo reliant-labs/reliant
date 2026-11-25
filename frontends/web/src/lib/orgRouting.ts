@@ -43,6 +43,7 @@ import {
   learnOrgSegments,
   useActiveOrgStore,
 } from "@/store/activeOrgStore";
+import { getAuthIdentity } from "@/lib/auth/use-auth";
 import { useAuthStore } from "@/store/authStore";
 
 import { rememberOrgsForNotice } from "./orgArrivalNotice";
@@ -64,7 +65,7 @@ export const defaultOrgRoutingDeps: OrgRoutingDeps = {
     // A first load restores the session here, before any guard renders; the
     // guard's own call joins this one (authStore.initialize is shared).
     if (!useAuthStore.getState().initialized) await useAuthStore.getState().initialize();
-    return useAuthStore.getState().user?.id ?? null;
+    return getAuthIdentity()?.id ?? null;
   },
   hasOrgs: () => hasControlPlane,
   listOrgs: fetchMyOrgs,
