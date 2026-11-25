@@ -93,7 +93,7 @@ func (s *rendezvousStarter) ExecuteWorkflow(
 func TestLaunchStartsTitleConcurrentlyWithRoot(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := newRendezvousStarter(repo)
-	launcher := New(Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo, chats: store.NewChatsWithActivityExtStore(repo.ORM())}, TaskQueue: "test-task-queue"})
+	launcher := New(Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo, chats: store.NewChatsWithActivityExtStore(repo.ORM())}, TaskQueue: "test-task-queue"})
 
 	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID:   launchTestUserID,
@@ -120,7 +120,7 @@ func TestLaunchSucceedsWhenTitleStartFails(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := newRendezvousStarter(repo)
 	starter.failTitle = true
-	launcher := New(Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo, chats: store.NewChatsWithActivityExtStore(repo.ORM())}, TaskQueue: "test-task-queue"})
+	launcher := New(Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo, chats: store.NewChatsWithActivityExtStore(repo.ORM())}, TaskQueue: "test-task-queue"})
 
 	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID:   launchTestUserID,

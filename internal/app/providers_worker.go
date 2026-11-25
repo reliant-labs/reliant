@@ -348,18 +348,19 @@ type RunLauncherDeps struct {
 func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
 	pinner := daemonplacement.NewPinner(d.DB, d.Router.NATSDaemonRouter)
 	return launch.New(launch.Deps{
-		Store:       d.DB,
-		Chats:       store.NewChatsWithActivityExtStore(d.DB.ORM()),
-		Workflows:   store.NewWorkflowExtStore(d.DB.ORM()),
-		Worktrees:   store.NewWorktreeExtStore(d.DB.ORM()),
-		ProjectRows: store.NewProjectExtStore(d.DB.ORM()),
-		Projects:    d.Projects,
-		Selections:  store.NewChatSelectionExtStore(d.DB.ORM()),
-		Threads:     threads.New(threads.Deps{Repo: d.DB}),
-		Temporal:    d.Temporal.Client,
-		Runs:        d.Runs,
-		TaskQueue:   v2workflow.SharedTaskQueue,
-		Pinner:      pinner,
+		Store:         d.DB,
+		Chats:         store.NewChatsWithActivityExtStore(d.DB.ORM()),
+		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
+		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
+		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
+		TriggerEvents: store.NewTriggerEventExtStore(d.DB.ORM()),
+		Projects:      d.Projects,
+		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),
+		Threads:       threads.New(threads.Deps{Repo: d.DB}),
+		Temporal:      d.Temporal.Client,
+		Runs:          d.Runs,
+		TaskQueue:     v2workflow.SharedTaskQueue,
+		Pinner:        pinner,
 	}), nil
 }
 
@@ -394,6 +395,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
 		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
 		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
+		TriggerEvents: store.NewTriggerEventExtStore(d.DB.ORM()),
 		Questions:     store.NewQuestionExtStore(d.DB.ORM()),
 		Spawns:        store.NewToolCallExtStore(d.DB.ORM()),
 		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),
@@ -434,6 +436,7 @@ func NewWorkerRun(d WorkerRunDeps) (*WorkerRun, error) {
 		Logger:    d.Logger,
 		Config:    d.Config,
 		Repo:      d.DB,
+		RunLists:  store.NewRunListExtStore(d.DB.ORM()),
 		Workflows: store.NewWorkflowExtStore(d.DB.ORM()),
 		ChatRows:  store.NewChatExtStore(d.DB.ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(d.DB.ORM()),
@@ -819,18 +822,6 @@ func orgAdminNotifier(d TemporalWorkerDeps) workersetup.OrgAdminNotifier {
 	return d.Router.ControlPlane
 }
 
-// stepKeyIssuer is the control plane as the issuer of run steps' LLM gateway
-// step keys, nil without one (a nil interface, never a nil client in one):
-// every run node with llm_gateway is then refused. A control plane the worker
-// cannot sign for answers controlplane.ErrStepKeysUnsupported, which refuses
-// the same way.
-func stepKeyIssuer(d TemporalWorkerDeps) handlers.StepKeyIssuer {
-	if d.Router == nil || d.Router.ControlPlane == nil {
-		return nil
-	}
-	return d.Router.ControlPlane
-}
-
 // projectMoveAnnouncer is orgmove's Announcer: one refetch for the project's
 // owner, written in the commit's own transaction (the ctx it is called with).
 type projectMoveAnnouncer struct{ updates chatupdates.Service }
@@ -995,7 +986,6 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,
-		StepKeys:               stepKeyIssuer(d),
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},

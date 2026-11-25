@@ -66,6 +66,15 @@ const defaultTriggerEventLimit = 50
 // retried scheduled fire launches once" are the same database constraint, and
 // the affected-row count is how a caller learns which side of it it landed on.
 func InsertTriggerEventIfAbsent(ctx context.Context, db orm.Context, ev *core.TriggerEvent) (bool, error) {
+	if ev == nil {
+		return false, fmt.Errorf("trigger event cannot be nil")
+	}
+	if ev.DedupeKey == "" {
+		// An empty dedupe key would make every firing of this kind collide
+		// with every other one, which is far worse than a missing row: the
+		// second real firing would silently report "already launched".
+		return false, fmt.Errorf("trigger event dedupe key cannot be empty")
+	}
 	row, err := triggerEventFromCore(ev)
 	if err != nil {
 		return false, err
@@ -86,6 +95,9 @@ func InsertTriggerEventIfAbsent(ctx context.Context, db orm.Context, ev *core.Tr
 // GetTriggerEventByDedupe returns the firing recorded for (kind, dedupeKey),
 // or core.ErrTriggerEventNotFound.
 func GetTriggerEventByDedupe(ctx context.Context, db orm.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error) {
+	if dedupeKey == "" {
+		return nil, fmt.Errorf("trigger event dedupe key cannot be empty")
+	}
 	return firstTriggerEvent(ctx, db, "get trigger event by dedupe key",
 		orm.WhereEq(TriggerEventFieldKind, kind),
 		orm.WhereEq(TriggerEventFieldDedupeKey, dedupeKey))
@@ -173,6 +185,9 @@ func CountLiveLaunchedRuns(ctx context.Context, db orm.Context, userID string, k
 // UpdateTriggerEventOutcome records a firing's outcome and the chat it
 // launched (nil for none), or returns core.ErrTriggerEventNotFound.
 func UpdateTriggerEventOutcome(ctx context.Context, db orm.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
+	if id == "" {
+		return fmt.Errorf("trigger event ID cannot be empty")
+	}
 	row := &TriggerEvent{ID: id, Outcome: outcome, OutcomeDetail: detail, ChatID: chatID}
 	return writeTriggerEvent(ctx, db, row, "outcome",
 		TriggerEventFieldOutcome, TriggerEventFieldOutcomeDetail, TriggerEventFieldChatID)
@@ -181,6 +196,9 @@ func UpdateTriggerEventOutcome(ctx context.Context, db orm.Context, id string, o
 // UpdateTriggerEventPayload replaces a firing's payload, or returns
 // core.ErrTriggerEventNotFound.
 func UpdateTriggerEventPayload(ctx context.Context, db orm.Context, id string, payload map[string]any) error {
+	if id == "" {
+		return fmt.Errorf("trigger event ID cannot be empty")
+	}
 	encoded, err := triggerJSONObject(payload)
 	if err != nil {
 		return fmt.Errorf("marshal trigger event payload: %w", err)

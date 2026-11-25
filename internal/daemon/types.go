@@ -248,14 +248,6 @@ type RunCommandRequest struct {
 	// hand-off directories in the cache directory. A daemon older than the
 	// field ignores it with WritableCheckouts.
 	WritableCheckoutsScope string `json:"writable_checkouts_scope,omitempty"`
-	// StepEnv is a workflow run step's own environment (an LLM gateway step
-	// key), applied after everything else builds the command's environment;
-	// see StepEnv. Only the shell tool sets it, for a run step, from the
-	// server-built context. RunCommand alone applies it: StartBackground
-	// refuses a request that carries one, and a daemon older than the field
-	// ignores it, which is why the server sends one only to a daemon that
-	// registered CapabilityRunStepEnv.
-	StepEnv *StepEnv `json:"step_env,omitempty"`
 	// Heavy declares the command heavy — a whole-module build, a test suite,
 	// codegen — whatever its words are, so it queues for one of the machine's
 	// heavy slots like the commands the daemon recognizes by itself (see

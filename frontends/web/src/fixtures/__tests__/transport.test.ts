@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The fixture transport's contract (forge#2716's, which transport.ts ports):
+ * The fixture transport's contract (forge#2716's, which transport.ts serves):
  * every answer crosses Connect's own in-memory router (serialized,
  * interceptors run), the dispatch ladder (readOnly guard → latest layer's
  * route or scenario handler → service defaults → Unimplemented), pack
@@ -17,9 +17,10 @@
  * StreamingService/StreamUserUpdates is an annotated server stream.
  */
 
-import { create, isMessage } from "@bufbuild/protobuf";
-import { MethodOptions_IdempotencyLevel } from "@bufbuild/protobuf/wkt";
-import { Code, ConnectError, createClient, type Interceptor, type Transport } from "@connectrpc/connect";
+import { create, createFileRegistry, isMessage, type DescMessage } from "@bufbuild/protobuf";
+import type { GenService } from "@bufbuild/protobuf/codegenv2";
+import { FileDescriptorProtoSchema, MethodOptions_IdempotencyLevel } from "@bufbuild/protobuf/wkt";
+import { Code, ConnectError, createClient, type Interceptor, type StreamResponse, type Transport } from "@connectrpc/connect";
 import { describe, expect, it, vi } from "vitest";
 
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
@@ -37,11 +38,32 @@ const BUCKETS = `${StorageBrowserService.typeName}/ListBrowsableBuckets`;
 const PRESIGN = `${StorageBrowserService.typeName}/PresignObjectDownload`;
 const CREATE_TENANT = `${DeployService.typeName}/CreateTenant`;
 const USER_UPDATES = `${StreamingService.typeName}/StreamUserUpdates`;
+const CONNECT_DAEMON = `${ToolsDaemonService.typeName}/ConnectDaemon`;
 const MESSAGE = "Changes are turned off.";
 
 const storage = (t: Transport) => createClient(StorageBrowserService, t);
 const deploy = (t: Transport) => createClient(DeployService, t);
 const streaming = (t: Transport) => createClient(StreamingService, t);
+
+/**
+ * A server stream that declares no idempotency, so `readOnly: true` takes it
+ * for a write. Every generated server stream is annotated NO_SIDE_EFFECTS, so
+ * the tests that need an unannotated one build it here.
+ */
+const TickService = createFileRegistry(
+  create(FileDescriptorProtoSchema, {
+    name: "fixture_test/v1/tick.proto",
+    package: "fixture_test.v1",
+    syntax: "proto3",
+    messageType: [{ name: "TickRequest" }, { name: "Tick" }],
+    service: [{ name: "TickService", method: [{ name: "Ticks", inputType: ".fixture_test.v1.TickRequest", outputType: ".fixture_test.v1.Tick", serverStreaming: true }] }],
+  }),
+  () => undefined,
+).getService("fixture_test.v1.TickService") as GenService<{ ticks: { methodKind: "server_streaming"; input: DescMessage; output: DescMessage } }>;
+const TICKS = `${TickService.typeName}/Ticks`;
+const ticks = (t: Transport) => createClient(TickService, t).ticks({});
+/** Options that list a write in `answers`, so the extension's guard (not forge's) is the one that refuses. */
+const EXTENSION_PATH = { services: [StorageBrowserService], answers: [PRESIGN], scenario: { [PRESIGN]: () => ({}) } };
 
 async function code(p: Promise<unknown>): Promise<Code | undefined> {
   try {
@@ -267,6 +289,52 @@ describe("createFixtureTransport: readOnly", () => {
     await expect(createClient(UserService, transport).getCurrentUser({})).rejects.toSatisfy((e) => e instanceof ConnectError && e.code === Code.PermissionDenied && e.rawMessage === MESSAGE);
     await expect(deploy(transport).createTenant({})).rejects.toSatisfy((e) => e instanceof ConnectError && e.code === Code.PermissionDenied && e.rawMessage === MESSAGE);
   });
+
+  it("refuses a stream the way forge's own guard does, on the extension's path too: the call opens, its first read fails", async () => {
+    const connect = ToolsDaemonService.method.connectDaemon;
+    const scenario = { [`${ToolsDaemonService.typeName}/ConnectDaemon`]: () => [{}] };
+    const requests = async function* () {
+      yield create(connect.input);
+    };
+    // forge's guard (no answers), then the extension's (a pack that lists some).
+    for (const transport of [createFixtureTransport({ readOnly: true, scenario }), createFixtureTransport({ readOnly: true, ...EXTENSION_PATH, scenario: { ...EXTENSION_PATH.scenario, ...scenario } })]) {
+      const res = await transport.stream(connect, new AbortController().signal, undefined, undefined, requests(), undefined);
+      expect(await code(drain(res.message))).toBe(Code.PermissionDenied);
+    }
+  });
+
+  it("a refused stream is a well-formed stream response, and honours the caller's cancellation", async () => {
+    const connect = ToolsDaemonService.method.connectDaemon;
+    let seen: StreamResponse | undefined;
+    // A caller interceptor sits outside the guard, so it sees the guard's own response.
+    const capture: Interceptor = (next) => async (req) => {
+      const res = await next(req);
+      if (res.stream) seen = res;
+      return res;
+    };
+    const transport = createFixtureTransport({ readOnly: true, readOnlyMessage: MESSAGE, interceptors: [capture], ...EXTENSION_PATH, scenario: { ...EXTENSION_PATH.scenario, [CONNECT_DAEMON]: () => [{}] } });
+    const open = (signal = new AbortController().signal) => transport.stream(connect, signal, undefined, undefined, (async function* () {})(), undefined);
+    await open();
+    expect(seen?.stream).toBe(true);
+    expect(seen?.header).toBeInstanceOf(Headers);
+    expect(seen?.trailer).toBeInstanceOf(Headers);
+    // A complete async iterator: an interceptor may close the body unread.
+    const body = seen!.message[Symbol.asyncIterator]();
+    await expect(body.return!()).resolves.toEqual({ done: true, value: undefined });
+    await expect(body.next()).resolves.toEqual({ done: true, value: undefined });
+    // Read, it fails with the configured refusal.
+    const refused = ConnectError.from(await drain((await open()).message).catch((e: unknown) => e));
+    expect([refused.code, refused.rawMessage]).toEqual([Code.PermissionDenied, MESSAGE]);
+    // Cancelled before it is read, the caller sees its own cancellation, as on forge's own guard.
+    const native = createFixtureTransport({ readOnly: true, readOnlyMessage: MESSAGE, scenario: { [CONNECT_DAEMON]: () => [{}] } });
+    for (const t of [transport, native]) {
+      const abort = new AbortController();
+      const res = await t.stream(connect, abort.signal, undefined, undefined, (async function* () {})(), undefined);
+      cancel(abort);
+      const cancelled = ConnectError.from(await drain(res.message).catch((e: unknown) => e));
+      expect([cancelled.code, cancelled.rawMessage]).toEqual([Code.Canceled, "the caller went away"]);
+    }
+  });
 });
 
 describe("fixture packs", () => {
@@ -333,8 +401,61 @@ describe("answers: writes a pack answers from fixtures anyway (reliant extension
   });
 
   it("refuses a listed write nothing answers", async () => {
+    const pack = defineFixturePack({ name: "app", services: [DeployService, TickService], answers: [CREATE_TENANT, TICKS] });
+    const transport = createFixtureTransport({ pack, readOnly: true });
+    expect(await code(deploy(transport).createTenant({}))).toBe(Code.PermissionDenied);
+    // A stream too, when its first read fails (forge answers it Unimplemented).
+    expect(await code(drain(ticks(transport)))).toBe(Code.PermissionDenied);
+  });
+
+  it("refuses a listed unary write nothing answers with the configured message", async () => {
     const pack = defineFixturePack({ name: "app", services: [DeployService], answers: [CREATE_TENANT] });
-    expect(await code(deploy(createFixtureTransport({ pack, readOnly: true })).createTenant({}))).toBe(Code.PermissionDenied);
+    const refused = ConnectError.from(await deploy(createFixtureTransport({ pack, readOnly: true, readOnlyMessage: MESSAGE })).createTenant({}).catch((e: unknown) => e));
+    expect([refused.code, refused.rawMessage]).toEqual([Code.PermissionDenied, MESSAGE]);
+    // Unconfigured, it carries forge's own refusal message.
+    const plain = ConnectError.from(await deploy(createFixtureTransport({ pack, readOnly: true })).createTenant({}).catch((e: unknown) => e));
+    expect(plain.rawMessage).toBe(`fixture-transport: ${CREATE_TENANT} is not a read (no idempotency_level = NO_SIDE_EFFECTS)`);
+  });
+
+  it("refuses a listed streamed write nothing answers with the configured message: the call opens, reading it fails", async () => {
+    const pack = defineFixturePack({ name: "app", services: [TickService, ToolsDaemonService], answers: [TICKS, CONNECT_DAEMON] });
+    const requests = async function* () {
+      yield create(ToolsDaemonService.method.connectDaemon.input);
+    };
+    const cases: { name: string; transport: Transport; read: (t: Transport) => AsyncIterable<unknown> }[] = [
+      // A server stream and a bidi stream, both unannotated, so writes to readOnly: true.
+      { name: "server stream", transport: createFixtureTransport({ pack, readOnly: true, readOnlyMessage: MESSAGE }), read: ticks },
+      { name: "bidi", transport: createFixtureTransport({ pack, readOnly: true, readOnlyMessage: MESSAGE }), read: (t) => createClient(ToolsDaemonService, t).connectDaemon(requests()) },
+    ];
+    for (const { name, transport, read } of cases) {
+      const refused = ConnectError.from(await drain(read(transport)).catch((e: unknown) => e));
+      expect([name, refused.code, refused.rawMessage]).toEqual([name, Code.PermissionDenied, MESSAGE]);
+    }
+  });
+
+  it("a listed streamed write that is answered passes the caller's cancellation through to its route", async () => {
+    let aborted = false;
+    const pack = defineFixturePack({
+      name: "app",
+      services: [TickService],
+      answers: [TICKS],
+      routes: (router) =>
+        router.service(TickService, {
+          async *ticks(_req, ctx) {
+            yield {};
+            ctx.signal.addEventListener("abort", () => (aborted = true));
+            await pending(ctx.signal);
+          },
+        }),
+    });
+    const abort = new AbortController();
+    const it = createClient(TickService, createFixtureTransport({ pack, readOnly: true })).ticks({}, { signal: abort.signal })[Symbol.asyncIterator]();
+    expect((await it.next()).done).toBe(false);
+    const next = it.next();
+    expect(await stillPending(next)).toBe(true);
+    cancel(abort);
+    expect(await code(next)).toBe(Code.Canceled);
+    await vi.waitFor(() => expect(aborted).toBe(true));
   });
 
   it("is unioned across extends, and takes a descriptor too", async () => {

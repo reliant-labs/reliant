@@ -108,7 +108,7 @@ var toolHints = map[string]string{
 	"timeout": "A Go duration from 1m to 72h (default 6h), from the firing: a check still not concluded then " +
 		"concludes timed_out.",
 	"requires": "What a run needs from outside its definition, checked after its machine is up and before its " +
-		"first node: {tools, integrations, repos, cli_login}. A run missing anything fails at once, naming every " +
+		"first node: {tools, integrations, repos}. A run missing anything fails at once, naming every " +
 		"missing item with its fix. See WorkflowRequirements below.",
 	// WorkflowRequirements' fields, qualified: tools means something else on
 	// other types of this page.
@@ -117,10 +117,6 @@ var toolHints = map[string]string{
 		"authorized, for the run's owner and acting identity.",
 	"WorkflowRequirements.repos": "Checkouts relative to the project root (\".\" for the root) that must exist, " +
 		"reach their origin (git ls-remote, which writes nothing) and have no local tag diverged from origin's.",
-	"WorkflowRequirements.cli_login": "Deprecated: kept working throughout v1, slated for removal in a future major. Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be " +
-		"installed and signed in on the run's machine, each checked with the vendor's own status command, whose " +
-		"output never leaves the machine. Sign one in with `reliant machine login <vendor> --machine <name>`; a " +
-		"step that calls claude, codex or copilot needs credentials: inherit.",
 	"on_failure": "A finally-style handler: an inline graph ({entry, nodes, edges}) that runs once when a run FAILS (an " +
 		"unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). " +
 		"Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, " +
@@ -202,18 +198,13 @@ func extractTypesFromProto() []TypeInfo {
 			"A GitHub check run whose lifecycle the engine owns (`check:`): one per firing, posted as the Reliant "+
 				"App on the event's head commit, details_url the run's page. Example: `check: {name: reliant/ci, "+
 				"output: '{{ nodes.report.check }}', timeout: 2h}`.", 6),
-		extractTypeFromMessage("WorkflowRequirements",
-			(&reliantv1.WorkflowRequirements{}).ProtoReflect().Descriptor(),
-			"What a run checks before its first node (`requires:`), once its machine is up, on the machine the run "+
-				"inherits and on each pool member the first time a step is placed there. Nothing it checks writes. "+
-				"Example: `requires: {tools: [git, gh], integrations: [github], repos: [.], cli_login: [claude]}`.", 7),
 		extractTypeFromMessage("DaemonSelector",
 			(&reliantv1.DaemonSelectorProto{}).ProtoReflect().Descriptor(),
 			"Where tools run (`daemon:` on the workflow or a node; node > workflow > the chat's or automation's "+
 				"machine > the default machine). A string is shorthand: `local`, `cloud` or `any` is a kind, anything "+
 				"else a machine name. `{pool: <name>}` places the run (workflow level) or "+
 				"the node (node level, reused by every loop iteration) ONCE on one machine and holds a slot on it while "+
-				"the run is live, so the run is not tied to any one machine being there and free. Example: `daemon: {pool: ci}`.", 8),
+				"the run is live, so the run is not tied to any one machine being there and free. Example: `daemon: {pool: ci}`.", 7),
 	}
 }
 

@@ -50683,21 +50683,6 @@
             }
           ],
           "reliant.v1.JoinArgs": [],
-          "reliant.v1.LLMGatewayStep": [
-            {
-              "name": "cli",
-              "kind": "string"
-            },
-            {
-              "name": "budget_usd",
-              "kind": "double"
-            },
-            {
-              "name": "models",
-              "kind": "string",
-              "repeated": true
-            }
-          ],
           "reliant.v1.ListWorkflowsRequest": [
             {
               "name": "project_id",
@@ -51349,11 +51334,6 @@
               "name": "writable_checkouts",
               "kind": "string",
               "repeated": true
-            },
-            {
-              "name": "llm_gateway",
-              "kind": "message",
-              "type_name": "reliant.v1.LLMGatewayStep"
             }
           ],
           "reliant.v1.SaveMessageConfig": [
@@ -52430,11 +52410,6 @@
               "name": "repos",
               "kind": "string",
               "repeated": true
-            },
-            {
-              "name": "cli_login",
-              "kind": "string",
-              "repeated": true
             }
           ],
           "reliant.v1.WorkflowTrigger": [
@@ -52574,7 +52549,6 @@
           "reliant.v1.InvalidWorkflow": "reliant/v1/workflow.proto",
           "reliant.v1.InvokeToolArgs": "reliant/v1/workflow_v2.proto",
           "reliant.v1.JoinArgs": "reliant/v1/workflow_v2.proto",
-          "reliant.v1.LLMGatewayStep": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ListWorkflowsRequest": "reliant/v1/workflow.proto",
           "reliant.v1.ListWorkflowsResponse": "reliant/v1/workflow.proto",
           "reliant.v1.LoopArgs": "reliant/v1/workflow_v2.proto",
@@ -58695,6 +58669,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "TriggerEvents",
+      "interface": "github.com/reliant-labs/reliant/internal/launch.TriggerEventStore",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Workflows",
       "interface": "github.com/reliant-labs/reliant/internal/launch.WorkflowLoader",
       "methods": [],
@@ -60722,6 +60707,19 @@
       "consumer": "Run",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/run.Repository",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Run",
+      "field": "RunLists",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/run.RunLists",
       "methods": [],
       "candidates": [
         "Database"

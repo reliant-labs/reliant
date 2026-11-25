@@ -179,21 +179,6 @@ func TestMachineName_AnIdForANameIsAPlaceholder(t *testing.T) {
 	}
 }
 
-// MachineArg is what `--machine` resolves: a chosen name, else the full id
-// (never a short tag or a hostname, which the CLI cannot resolve).
-func TestMachineArg_ANameElseTheID(t *testing.T) {
-	const mac = "46e3682b-33cd-4e88-aecb-52a3a919a354"
-	r := fakeWorkspaces{daemons: map[string]*db.Daemon{
-		"named": {ID: "named", Name: " gpu-box "},
-		mac:     {ID: mac, Name: mac, Hostname: strp("Seans-MacBook-Pro.local")},
-	}}
-	ctx := context.Background()
-	assert.Equal(t, "gpu-box", MachineArg(ctx, r, "named"))
-	assert.Equal(t, mac, MachineArg(ctx, r, mac), "an id for a name is a placeholder")
-	assert.Equal(t, "unknown-id", MachineArg(ctx, r, "unknown-id"))
-	assert.Equal(t, "", MachineArg(ctx, r, ""))
-}
-
 // ChatDaemonID is where the chat's tools run: a branch workspace's owner
 // beats a pin naming another machine (a session pin yields, as in
 // toolDaemonSelector); the main checkout and no workspace keep the pin.
