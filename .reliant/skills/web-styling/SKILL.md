@@ -167,7 +167,10 @@ mobile against fixture data, in the pinned Playwright Linux image (needs
 Docker), and compares them with committed baselines
 (`frontends/web/e2e/visual/README.md`). A UI change runs it, re-captures with
 `-- --update-snapshots`, and commits the PNGs: the PR's image diff is its
-before and after. A diff outside the PR's surface is a finding.
+before and after. A diff outside the PR's surface is a finding. The merge
+queue runs it compare-only on the merge group whenever the change reaches the
+web UI (`scripts/visual-gate.sh`), so capture on a branch rebased onto current
+main, and re-capture after any later commit that moves a surface.
 
 ## Color schemes
 

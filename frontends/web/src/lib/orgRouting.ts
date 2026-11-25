@@ -47,6 +47,7 @@ import {
 import { getAuthIdentity } from "@/lib/auth/use-auth";
 import { useAuthStore } from "@/store/authStore";
 
+import { rememberOrgsForNotice } from "./orgArrivalNotice";
 import { orgLinksEnabled } from "./orgRoutesFlag";
 import { currentRouteOrgEpoch, type OrgRouteContext } from "./routeOrg";
 
@@ -138,6 +139,7 @@ export async function resolveOrgRoute(
   // redirect the router. The auth transition schedules a fresh resolution.
   if (orgRouteEpoch !== currentRouteOrgEpoch()) return { orgRoute: { kind: "signed-out" }, orgRouteEpoch };
   learnOrgSegments(mine.orgs);
+  rememberOrgsForNotice(mine.orgs, mine.defaultOrgId);
   const org = findOrg(mine.orgs, segment);
   if (!org) {
     return {

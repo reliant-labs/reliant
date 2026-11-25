@@ -30,6 +30,9 @@ type Activities struct {
 	// LLMUsage records every model request in the usage ledger. Optional: nil
 	// records nothing.
 	LLMUsage handlers.LLMUsageRecorder
+	// ToolUsage records every tool call in the tool usage ledger. Optional:
+	// nil records nothing.
+	ToolUsage handlers.ToolUsageRecorder
 	// ProviderBackoff marks a thread parked on a provider (the driver's retry
 	// ladder, a usage-limit wait). Required with Repo.
 	ProviderBackoff handlers.ProviderBackoffMarkers

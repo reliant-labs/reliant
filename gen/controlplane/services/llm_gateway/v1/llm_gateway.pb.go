@@ -797,15 +797,15 @@ const file_services_llm_gateway_v1_llm_gateway_proto_rawDesc = "" +
 	"\x1aListAvailableModelsRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"5\n" +
 	"\x1bListAvailableModelsResponse\x12\x16\n" +
-	"\x06models\x18\x01 \x03(\tR\x06models2\xa4\x05\n" +
+	"\x06models\x18\x01 \x03(\tR\x06models2\xb8\x05\n" +
 	"\x11LLMGatewayService\x12[\n" +
-	"\fCreateLLMKey\x12$.controlplane.v1.CreateLLMKeyRequest\x1a%.controlplane.v1.CreateLLMKeyResponse\x12X\n" +
-	"\vListLLMKeys\x12#.controlplane.v1.ListLLMKeysRequest\x1a$.controlplane.v1.ListLLMKeysResponse\x12R\n" +
-	"\tGetLLMKey\x12!.controlplane.v1.GetLLMKeyRequest\x1a\".controlplane.v1.GetLLMKeyResponse\x12[\n" +
+	"\fCreateLLMKey\x12$.controlplane.v1.CreateLLMKeyRequest\x1a%.controlplane.v1.CreateLLMKeyResponse\x12]\n" +
+	"\vListLLMKeys\x12#.controlplane.v1.ListLLMKeysRequest\x1a$.controlplane.v1.ListLLMKeysResponse\"\x03\x90\x02\x01\x12W\n" +
+	"\tGetLLMKey\x12!.controlplane.v1.GetLLMKeyRequest\x1a\".controlplane.v1.GetLLMKeyResponse\"\x03\x90\x02\x01\x12[\n" +
 	"\fRevokeLLMKey\x12$.controlplane.v1.RevokeLLMKeyRequest\x1a%.controlplane.v1.RevokeLLMKeyResponse\x12[\n" +
-	"\fRotateLLMKey\x12$.controlplane.v1.RotateLLMKeyRequest\x1a%.controlplane.v1.RotateLLMKeyResponse\x12X\n" +
-	"\vGetLLMSpend\x12#.controlplane.v1.GetLLMSpendRequest\x1a$.controlplane.v1.GetLLMSpendResponse\x12p\n" +
-	"\x13ListAvailableModels\x12+.controlplane.v1.ListAvailableModelsRequest\x1a,.controlplane.v1.ListAvailableModelsResponseB\xdc\x01\n" +
+	"\fRotateLLMKey\x12$.controlplane.v1.RotateLLMKeyRequest\x1a%.controlplane.v1.RotateLLMKeyResponse\x12]\n" +
+	"\vGetLLMSpend\x12#.controlplane.v1.GetLLMSpendRequest\x1a$.controlplane.v1.GetLLMSpendResponse\"\x03\x90\x02\x01\x12u\n" +
+	"\x13ListAvailableModels\x12+.controlplane.v1.ListAvailableModelsRequest\x1a,.controlplane.v1.ListAvailableModelsResponse\"\x03\x90\x02\x01B\xdc\x01\n" +
 	"\x13com.controlplane.v1B\x0fLlmGatewayProtoP\x01ZWgithub.com/reliant-labs/reliant/gen/controlplane/services/llm_gateway/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (

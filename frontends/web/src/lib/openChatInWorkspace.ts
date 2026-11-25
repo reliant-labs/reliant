@@ -100,7 +100,7 @@ export async function openChatInWorkspace(
     // selectProject commits synchronously in this mode, without restoring a
     // remembered chat/worktree over this open or starting unfenced async work.
     const selected = useProjectStore.getState().selectProject(project, {
-      restoreChat: false,
+      opensChat: true,
       restoreWorkspace: false,
       isCurrent: isLatest,
     });

@@ -26,6 +26,7 @@ import (
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
@@ -548,6 +549,7 @@ func NewAPIToolsFactory(d APIToolsFactoryDeps) (*tools.ToolsFactory, error) {
 		Repo:               repo,
 		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
 		SpawnTree:          store.NewToolCallExtStore(repo.ORM()),
+		SpawnMailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
@@ -1414,6 +1416,8 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	r := reconciliation.New(reconciliation.Deps{
 		Store:     d.DB,
 		Questions: store.NewQuestionExtStore(d.DB.ORM()),
+		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
+		Orphans:   store.NewAgentMessageExtStore(d.DB.ORM()),
 		Temporal:  d.Temporal.Client,
 		Config:    cfg,
 		Workflows: store.NewWorkflowExtStore(d.DB.ORM()),
@@ -1572,7 +1576,7 @@ func (b *ChatUpdateHeadsBackfill) pass(ctx context.Context) {
 // deletes only what has aged out, so an hour keeps the backlog small.
 const llmUsageRetentionInterval = time.Hour
 
-// LLMUsageRetention deletes per-call LLM usage rows older than
+// LLMUsageRetention deletes per-call LLM and tool usage rows older than
 // llmusage.Retention. The daily rollup is kept. Every replica runs it;
 // the delete is idempotent and skips rows another replica is deleting.
 type LLMUsageRetention struct{ ledger llmusage.Service }
@@ -1598,6 +1602,11 @@ func (l *LLMUsageRetention) Run(ctx context.Context) error {
 			logging.WarnContext(ctx, "pruning LLM call usage failed", "deleted", n, "error", err)
 		} else if n > 0 {
 			logging.InfoContext(ctx, "pruned LLM call usage past retention", "deleted", n)
+		}
+		if n, err := l.ledger.PruneToolCallUsage(ctx, time.Now()); err != nil {
+			logging.WarnContext(ctx, "pruning tool call usage failed", "deleted", n, "error", err)
+		} else if n > 0 {
+			logging.InfoContext(ctx, "pruned tool call usage past retention", "deleted", n)
 		}
 		if _, err := l.ledger.PruneLLMUsagePurgeFences(ctx, time.Now()); err != nil {
 			logging.WarnContext(ctx, "pruning LLM usage purge fences failed", "error", err)

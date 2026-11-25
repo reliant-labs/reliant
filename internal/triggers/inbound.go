@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 
@@ -152,6 +153,7 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	if ev.DedupeKey == "" {
 		return nil, errors.New("triggers: an inbound event needs a dedupe key")
 	}
+	began := time.Now()
 	if ev.Sender == nil {
 		// Every receiver knows who authenticated its request; one that
 		// forgot to say would record an event an allowlist can never pass,
@@ -262,6 +264,12 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	}
 	if err != nil {
 		return nil, fmt.Errorf("record %s event for trigger %s: %w", ev.Kind, trigger.ID, err)
+	}
+	if created && row.Outcome != core.TriggerEventPending {
+		// Settled here, so no fire follows: this is its trigger.fire span. A
+		// pending event's span is its fire's (EventFirer.Fire); a duplicate
+		// delivery recorded nothing.
+		traceSettled(ctx, trigger, row, row.Outcome, row.OutcomeDetail, trace.WithTimestamp(began))
 	}
 	return in.startRecordedEvent(ctx, trigger.ID, row, !created, opts.Manual), nil
 }

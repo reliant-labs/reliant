@@ -11,13 +11,13 @@
  *   - the root carries `data-shell="forge"` and mounts JourneyTour (and the
  *     landing journey) in place of Reliant's OnboardingWizard, so the tour
  *     runs on the public demo, signed out;
- *   - `/forge/demo` and `/demo` are public on both brands; every app page is
- *     still behind the sign-in guard.
+ *   - `/forge/demo` and `/demo` leave for the demo bundle on both brands,
+ *     signed out too; every app page is still behind the sign-in guard.
  */
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { createMemoryHistory, createRouter, RouterProvider, type AnyRoute } from "@tanstack/react-router";
+import { createMemoryHistory, createRouter, isRedirect, RouterProvider, type AnyRoute } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const firstVisitProps = vi.hoisted(() => ({ seen: [] as unknown[] }));
@@ -47,7 +47,6 @@ vi.mock("@/components/Layout/GitHubSyncBanner", () => ({ GitHubSyncStatus: () =>
 vi.mock("@/components/Forge/QueuedDeployWatch", () => ({ QueuedDeployWatch: () => null }));
 vi.mock("@/components/Onboarding/JourneyTour", () => ({ JourneyTour: () => <div data-testid="journey-tour" /> }));
 vi.mock("@/components/ForgeShell/ForgeLandingJourney", () => ({ ForgeLandingJourney: () => <div data-testid="landing-journey" /> }));
-vi.mock("@/components/Forge/Demo/DemoConsole", () => ({ DemoConsole: () => <div data-testid="demo-console" /> }));
 vi.mock("@/components/AuthScreen", () => ({ AuthScreen: () => <div data-testid="auth-screen" /> }));
 vi.mock("@/hooks/useAuthMode", () => ({ useAuthMode: () => ({ authMode: "supabase", loading: false }) }));
 
@@ -79,6 +78,18 @@ function renderAt(routeTree: AnyRoute, path: string) {
     </QueryClientProvider>,
   );
   return router;
+}
+
+/** Where the tree's route at `path` sends a visit with `searchStr`: the href of the redirect its beforeLoad throws. */
+function handoffOf(routeTree: AnyRoute, path: string, searchStr: string): string | undefined {
+  const route = createRouter({ routeTree }).routesByPath[path as never] as AnyRoute;
+  try {
+    (route.options.beforeLoad as (ctx: unknown) => unknown)({ location: { searchStr } });
+  } catch (err) {
+    if (isRedirect(err)) return err.options.href;
+    throw err;
+  }
+  return undefined;
 }
 
 afterAll(() => {
@@ -113,13 +124,11 @@ describe("the forge brand", () => {
     expect(window.location.hostname).not.toBe("forge.reliantlabs.io");
   });
 
-  it("serves /forge/demo to a signed-out visitor, with the tour and the landing journey at the root", async () => {
+  it("mounts the tour and the landing journey at the root, signed out", async () => {
     signOut();
     firstVisitProps.seen.length = 0;
-    const router = renderAt(tree, "/forge/demo?tour=forge:fg-console");
-    expect(await screen.findByTestId("demo-console", {}, { timeout: 15_000 })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/forge/demo");
-    expect((router.state.location.search as { tour?: string }).tour).toBe("forge:fg-console");
+    renderAt(tree, "/auth");
+    expect(await screen.findByTestId("auth-screen", {}, { timeout: 15_000 })).toBeInTheDocument();
     expect(screen.getByTestId("journey-tour")).toBeInTheDocument();
     expect(screen.getByTestId("landing-journey")).toBeInTheDocument();
     // Reliant's checklist and wizard are not the forge brand's.
@@ -130,20 +139,15 @@ describe("the forge brand", () => {
     cleanup();
   });
 
-  it("sends /demo to /forge/demo, keeping the query", async () => {
-    signOut();
-    const router = renderAt(tree, "/demo?tour=forge&view=traces");
-    expect(await screen.findByTestId("demo-console", {}, { timeout: 15_000 })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/forge/demo");
-    expect(router.state.location.search).toMatchObject({ tour: "forge", view: "traces" });
-    cleanup();
+  it("sends /forge/demo and /demo to the demo bundle, keeping the query", () => {
+    expect(handoffOf(tree, "/forge/demo", "?tour=forge:fg-console")).toBe("https://demo.reliantlabs.io/forge/demo?tour=forge:fg-console");
+    expect(handoffOf(tree, "/demo", "?tour=forge&view=traces")).toBe("https://demo.reliantlabs.io/forge/demo?tour=forge&view=traces");
   });
 
   it.each(["/apps", "/sites", "/forge/p/shop/environments"])("keeps %s behind the sign-in guard", async (path) => {
     signOut();
     const router = renderAt(tree, path);
     await waitFor(() => expect(router.state.location.pathname).toBe("/auth"), { timeout: 15_000 });
-    expect(screen.queryByTestId("demo-console")).not.toBeInTheDocument();
     cleanup();
   }, 30_000);
 });
@@ -161,8 +165,8 @@ describe("the Reliant brand", () => {
     expect(app.tour.getTourStorage().kind).toBe("settings");
     app.signOut();
     firstVisitProps.seen.length = 0;
-    renderAt(tree, "/forge/demo");
-    expect(await screen.findByTestId("demo-console", {}, { timeout: 15_000 })).toBeInTheDocument();
+    renderAt(tree, "/auth");
+    expect(await screen.findByTestId("auth-screen", {}, { timeout: 15_000 })).toBeInTheDocument();
     expect(screen.getByTestId("onboarding-wizard")).toBeInTheDocument();
     expect(screen.queryByTestId("landing-journey")).not.toBeInTheDocument();
     expect(document.querySelector("[data-shell]")).toBeNull();

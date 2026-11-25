@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	dbstore "github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -79,8 +80,8 @@ func (e *waitingExecutor) wasArmed(toolCallID string) bool {
 // make every preempted wait here cost a second of nothing.
 const testPreemptionPoll = 50 * time.Millisecond
 
-func newPreemptionTestActivity(store ExecuteToolsStore, rows WorkspaceRows, toolCalls ToolCalls, executor toolexec.ToolExecutor) *ExecuteToolsActivity {
-	a := NewExecuteToolsActivity(store, rows, toolCalls, executor)
+func newPreemptionTestActivity(store ExecuteToolsStore, rows WorkspaceRows, toolCalls ToolCalls, preemption MailboxPreempter, executor toolexec.ToolExecutor) *ExecuteToolsActivity {
+	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: store, Rows: rows, ToolCalls: toolCalls, ToolExecutor: executor, Preemption: preemption})
 	a.preemptionPoll = testPreemptionPoll
 	return a
 }
@@ -88,7 +89,7 @@ func newPreemptionTestActivity(store ExecuteToolsStore, rows WorkspaceRows, tool
 func (f *durableStatusFixture) runBatch(t *testing.T, executor toolexec.ToolExecutor, calls ...message.ToolCall) *ExecuteToolsOutput {
 	t.Helper()
 	var output ExecuteToolsOutput
-	err := f.h.ExecuteActivity(newPreemptionTestActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), toolCallsOf(f.h.Repo()), executor).Execute, ExecuteToolsInput{
+	err := f.h.ExecuteActivity(newPreemptionTestActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), toolCallsOf(f.h.Repo()), dbstore.NewAgentMessageExtStore(f.h.Repo().ORM()), executor).Execute, ExecuteToolsInput{
 		ChatID:    f.chatID,
 		Thread:    f.chatID,
 		ToolCalls: calls,
@@ -103,7 +104,7 @@ func (f *durableStatusFixture) runBatch(t *testing.T, executor toolexec.ToolExec
 func (f *durableStatusFixture) queueMessage(t *testing.T) string {
 	t.Helper()
 	id := uuid.New().String()
-	require.NoError(t, f.h.Repo().EnqueueAgentMessage(context.Background(), &core.AgentMessage{
+	require.NoError(t, dbstore.EnqueueAgentMessage(context.Background(), f.h.Repo().ORM(), &core.AgentMessage{
 		ID:           id,
 		ChatID:       f.chatID,
 		FromThreadID: f.chatID,
@@ -160,7 +161,7 @@ func TestPreemption_AMessageEndsAWaitEarly(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, got.GetContent(), result.Content, "the durable result is what the agent saw")
 
-	msg, err := f.h.Repo().GetAgentMessage(ctx, <-messageIDs)
+	msg, err := dbstore.GetAgentMessage(ctx, f.h.Repo().ORM(), <-messageIDs)
 	require.NoError(t, err)
 	assert.Equal(t, core.AgentMessageStatusQueued, msg.Status, "preemption must not consume the message; the next turn delivers it")
 }
@@ -198,6 +199,7 @@ func TestPreemption_ALostAnswerIsStillAStoppedEarlyResult(t *testing.T) {
 // without slowing down the executor or changing production's poll interval.
 type preemptionBarrierStore struct {
 	ExecuteToolsStore
+	MailboxPreempter
 	beforeExecuting func(*core.ToolCall)
 	beforePoll      func()
 }
@@ -211,7 +213,7 @@ func (s *preemptionBarrierStore) UpsertToolCall(ctx context.Context, call *core.
 
 func (s *preemptionBarrierStore) MarkQueuedAgentMessagesPreempting(ctx context.Context, thread string, at time.Time) (int64, error) {
 	s.beforePoll()
-	return s.ExecuteToolsStore.MarkQueuedAgentMessagesPreempting(ctx, thread, at)
+	return s.MailboxPreempter.MarkQueuedAgentMessagesPreempting(ctx, thread, at)
 }
 
 // One message ends EVERY wait, including a sibling still preparing to execute.
@@ -235,7 +237,7 @@ func TestPreemption_OneMessageEndsEveryWaitInTheBatch(t *testing.T) {
 			executor.entered = make(chan string, 2)
 			first, second := waitCall(), waitCall()
 			ready := make(chan struct{})
-			store := &preemptionBarrierStore{ExecuteToolsStore: f.h.Repo(), beforePoll: func() { <-ready }}
+			store := &preemptionBarrierStore{ExecuteToolsStore: f.h.Repo(), MailboxPreempter: dbstore.NewAgentMessageExtStore(f.h.Repo().ORM()), beforePoll: func() { <-ready }}
 			if lateSibling {
 				preempted := make(chan struct{})
 				answer := executor.onPreempt
@@ -261,7 +263,7 @@ func TestPreemption_OneMessageEndsEveryWaitInTheBatch(t *testing.T) {
 
 			start := time.Now()
 			var output ExecuteToolsOutput
-			err := f.h.ExecuteActivity(newPreemptionTestActivity(store, workspaceRowsOf(f.h.Repo()), toolCallsOf(f.h.Repo()), executor).Execute, ExecuteToolsInput{
+			err := f.h.ExecuteActivity(newPreemptionTestActivity(store, workspaceRowsOf(f.h.Repo()), toolCallsOf(f.h.Repo()), store, executor).Execute, ExecuteToolsInput{
 				ChatID: f.chatID, Thread: f.chatID, ToolCalls: []message.ToolCall{first, second},
 			}, &output)
 			require.NoError(t, err)
@@ -324,7 +326,7 @@ func TestPreemption_AMessagePreemptsOnlyOnce(t *testing.T) {
 	ctx := context.Background()
 
 	f.queueMessage(t)
-	marked, err := f.h.Repo().MarkQueuedAgentMessagesPreempting(ctx, f.chatID, time.Now())
+	marked, err := dbstore.MarkQueuedAgentMessagesPreempting(ctx, f.h.Repo().ORM(), f.chatID, time.Now())
 	require.NoError(t, err)
 	require.EqualValues(t, 1, marked)
 

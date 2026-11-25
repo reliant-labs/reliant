@@ -13,6 +13,8 @@ import {
 import { ChevronDown, Plus, GitBranch, Layers } from "lucide-react";
 import { useCapability, useSurface } from "../../lib/surfaceContext";
 import { ComposerOptions, type AttachKind, type ComposerOptionsPage } from "./ComposerOptions";
+import { ChatProjectAddPanel, ChatProjectChips } from "./ChatProjectChips";
+import { useChatProjects } from "../../hooks/useChatProjects";
 import { usePriorityFold } from "./composerPriority";
 import { useCoarsePointer } from "./useCoarsePointer";
 import { CodeContextChip } from "./CodeContextChip";
@@ -341,7 +343,14 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     // thread must not answer (or be queued past) another's. Questions on other
     // threads surface in the background-work pill, which navigates to them.
     const pendingQuestionsQuery = usePendingQuestions(chatId || undefined);
-    const questionMainThreadId = useChat(chatId || undefined).data?.workflowId;
+    const chatForProjects = useChat(chatId || undefined).data;
+    const questionMainThreadId = chatForProjects?.workflowId;
+    // The projects this chat works in (hooks/useChatProjects). Nothing for a
+    // new chat (its view shows the draft's), a viewer of a shared chat, a
+    // chat with no machine, or a server that cannot keep them.
+    const chatProjects = useChatProjects(chatId ? chatForProjects : undefined);
+    const showProjectChips =
+      chatProjects.supported && (chatProjects.projects.length > 1 || chatProjects.setUp !== null);
     const pendingQuestion = useMemo(
       () =>
         questionForThread(
@@ -1544,6 +1553,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       ...(isPendingChat ? ["workflow"] : []),
       ...(modelInlineAllowed ? ["model"] : []),
       ...(canConfigure ? toolbarParams.map(([name]) => `param:${name}`) : []),
+      // A chat in one project: "+ Project" (more than one: the chip row).
+      ...(chatProjects.supported && !showProjectChips ? ["projects"] : []),
       // Situational, not a control: renders only when someone other than
       // you pays, or the account is near a limit.
       "account",
@@ -1997,8 +2008,10 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   <div className="composer-grid">
                     {/* Armed state, only when there is some: what this send
                         carries beyond its text. No chips, no row. */}
+                    {(hasChips || showProjectChips) && (
+                    <div className="composer-chips mb-1 flex min-w-0 flex-col gap-1 px-1 pt-1">
                     {hasChips && (
-                      <div className="composer-chips mb-1 flex gap-1.5 overflow-x-auto px-1 pt-1" data-testid="composer-chips">
+                      <div className="flex gap-1.5 overflow-x-auto" data-testid="composer-chips">
                         {contexts.map((context) => (
                           <CodeContextChip
                             key={context.id}
@@ -2041,6 +2054,15 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                           />
                         ))}
                       </div>
+                    )}
+                    {/* The chat's projects, once it has more than its own (or
+                        one is being set up): the chips, each removable, and
+                        Add project. With one project the tools row's "+
+                        Project" is all there is. */}
+                    {showProjectChips && (
+                      <ChatProjectChips control={chatProjects} orgId={chatForProjects?.orgId} disabled={disabled} />
+                    )}
+                    </div>
                     )}
 
                     <div className="composer-plus" data-onboarding="chat-controls">
@@ -2141,6 +2163,19 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                           />
                         </div>
                       ))}
+
+                      {/* One project: a small "+ Project" to add another. */}
+                      {chatProjects.supported && !showProjectChips && (
+                        <div {...toolProps("projects")}>
+                          <ChatProjectChips
+                            control={chatProjects}
+                            orgId={chatForProjects?.orgId}
+                            showPrimary={false}
+                            addLabel="Project"
+                            disabled={disabled}
+                          />
+                        </div>
+                      )}
 
                       <div {...toolProps("account")} className="flex items-center gap-1.5">
                         <FundingBadge chatId={chatId} />
@@ -2267,6 +2302,24 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
               setOptionsPage(null);
               command.action();
             }}
+            projects={
+              chatProjects.supported
+                ? {
+                    summary:
+                      chatProjects.projects.length > 1
+                        ? `${chatProjects.projects.length} projects`
+                        : chatProjects.projects[0]?.name ?? "",
+                    renderPage: (onBack) => (
+                      <div className="space-y-3">
+                        <ChatProjectChips control={chatProjects} showAdd={false} disabled={disabled} />
+                        <div className="overflow-hidden rounded-xl border border-border/60">
+                          <ChatProjectAddPanel control={chatProjects} orgId={chatForProjects?.orgId} onClose={onBack} />
+                        </div>
+                      </div>
+                    ),
+                  }
+                : null
+            }
           />
         )}
       </div>

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, type AnyRouter } from "@tanstack/react-router";
 import { queryClient } from "../lib/query-client";
@@ -8,12 +8,8 @@ import { AuthInitializer } from "./AuthInitializer";
 import { LoadingSpinner } from "./Layout/LoadingSpinner";
 import { useThemeInitialization } from "../hooks/useThemeInitialization";
 import { useSettingsHydration } from "../hooks/useSettingsHydration";
-import { AuthContextProvider } from "../lib/auth/context";
-import { createSupabaseAuthProvider } from "../lib/auth/supabase-provider";
-import { createForgeAuthProvider } from "../lib/auth/forge-provider";
-import { isForgeAuth } from "../lib/auth/forge-api";
+import { AuthStoreSession } from "../lib/auth/authStoreSession";
 import { EventBusProvider } from "../lib/event-context";
-
 
 // The route tree (lib/shell.ts): the app's one tree (routes.tsx) on both the
 // app host and the forge host — the forge host is a brand of it, decided
@@ -33,10 +29,6 @@ const ShellRouter = lazy(async () => {
 });
 
 export function App() {
-  // Chosen once the config is in (App renders after configReady), never at
-  // module load, where config.js may not have run yet.
-  const [authProvider] = useState(() => (isForgeAuth() ? createForgeAuthProvider() : createSupabaseAuthProvider()));
-
   // Initialize theme from database
   useThemeInitialization();
   
@@ -47,13 +39,13 @@ export function App() {
     <EventBusProvider>
       <QueryClientProvider client={queryClient}>
         <ErrorBoundary>
-          <AuthContextProvider provider={authProvider}>
+          <AuthStoreSession>
             <AuthInitializer>
               <Suspense fallback={<LoadingSpinner />}>
                 <ShellRouter />
               </Suspense>
             </AuthInitializer>
-          </AuthContextProvider>
+          </AuthStoreSession>
         </ErrorBoundary>
       </QueryClientProvider>
     </EventBusProvider>

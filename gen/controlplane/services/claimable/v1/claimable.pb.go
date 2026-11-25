@@ -1732,11 +1732,11 @@ const file_services_claimable_v1_claimable_proto_rawDesc = "" +
 	"\x1dFREE_SITE_OUTCOME_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dFREE_SITE_OUTCOME_NO_CONFLICT\x10\x01\x12'\n" +
 	"#FREE_SITE_OUTCOME_CLAIMED_SITE_LIVE\x10\x02\x12(\n" +
-	"$FREE_SITE_OUTCOME_EXISTING_SITE_LIVE\x10\x032\x83\x06\n" +
+	"$FREE_SITE_OUTCOME_EXISTING_SITE_LIVE\x10\x032\x89\x06\n" +
 	"\x10ClaimableService\x12s\n" +
 	"\x14StartClaimableDeploy\x12,.controlplane.v1.StartClaimableDeployRequest\x1a-.controlplane.v1.StartClaimableDeployResponse\x12v\n" +
-	"\x15GetClaimableChallenge\x12-.controlplane.v1.GetClaimableChallengeRequest\x1a..controlplane.v1.GetClaimableChallengeResponse\x12\x7f\n" +
-	"\x18GetClaimableAvailability\x120.controlplane.v1.GetClaimableAvailabilityRequest\x1a1.controlplane.v1.GetClaimableAvailabilityResponse\x12O\n" +
+	"\x15GetClaimableChallenge\x12-.controlplane.v1.GetClaimableChallengeRequest\x1a..controlplane.v1.GetClaimableChallengeResponse\x12\x84\x01\n" +
+	"\x18GetClaimableAvailability\x120.controlplane.v1.GetClaimableAvailabilityRequest\x1a1.controlplane.v1.GetClaimableAvailabilityResponse\"\x03\x90\x02\x01\x12O\n" +
 	"\bGetClaim\x12 .controlplane.v1.GetClaimRequest\x1a!.controlplane.v1.GetClaimResponse\x12g\n" +
 	"\x10OpenClaimSession\x12(.controlplane.v1.OpenClaimSessionRequest\x1a).controlplane.v1.OpenClaimSessionResponse\x12^\n" +
 	"\rCompleteClaim\x12%.controlplane.v1.CompleteClaimRequest\x1a&.controlplane.v1.CompleteClaimResponse\x12g\n" +

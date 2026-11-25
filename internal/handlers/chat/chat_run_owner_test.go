@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
@@ -61,7 +62,9 @@ func TestChatService_CreateChat_RootRunCarriesOwner(t *testing.T) {
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()),
 			Questions:   store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
-			Temporal: temporal,
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
+			Temporal:      temporal,
 		},
 		threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}),
 		runs:    runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
@@ -101,6 +104,8 @@ func TestChatService_BranchChat_RootRunCarriesOwner(t *testing.T) {
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()),
 			Questions:   store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 		},
 		threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}),
 	}

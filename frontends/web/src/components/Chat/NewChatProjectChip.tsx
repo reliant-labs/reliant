@@ -28,7 +28,7 @@ import { ChevronDown, Folder } from "lucide-react";
 
 import Tooltip from "../forge-ui/tooltip";
 import { createProjectFromRepo, type Project } from "../../hooks/project-queries";
-import { canChoose, canSetUpElsewhere, projectPlacement, type InstallRow } from "../../lib/projectPlacement";
+import { canChoose, canSetUpElsewhere, projectPlacement, setUpPathOn, type InstallRow } from "../../lib/projectPlacement";
 import { openNewChat } from "../../store/openChat";
 import { useProjectStore } from "../../store/projectStore";
 import { cn } from "../../lib/utils";
@@ -42,9 +42,11 @@ interface NewChatProjectChipProps {
   machine?: { daemonId: string; name: string };
   /** Every project_daemons row the user has (useProjectDaemonInstalls). */
   installs?: ReadonlyArray<InstallRow>;
+  /** A machine's OS platform ("darwin", "linux", …), so a set-up clone lands where it can (setUpPathOn). */
+  platformOf?: (daemonId: string) => string | undefined;
 }
 
-export function NewChatProjectChip({ disabled = false, machine, installs = [] }: NewChatProjectChipProps) {
+export function NewChatProjectChip({ disabled = false, machine, installs = [], platformOf = () => undefined }: NewChatProjectChipProps) {
   const currentProject = useProjectStore((state) => state.currentProject);
   const [settingUp, setSettingUp] = useState<string | null>(null);
 
@@ -69,11 +71,18 @@ export function NewChatProjectChip({ disabled = false, machine, installs = [] }:
   const setUpOn = async (project: Project, target: { daemonId: string; name: string }) => {
     setSettingUp(project.id);
     try {
+      const path = setUpPathOn({
+        installs,
+        projectId: project.id,
+        path: project.path,
+        daemonId: target.daemonId,
+        platformOf,
+      });
       await createProjectFromRepo({
         cloneUrl: project.remote_url ?? "",
         daemonId: target.daemonId,
         name: project.name,
-        path: project.path,
+        ...(path ? { path } : {}),
       });
       // The clone is queued; the new chat waits on that machine for it.
       startIn(project);

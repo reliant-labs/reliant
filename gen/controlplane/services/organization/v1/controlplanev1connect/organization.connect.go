@@ -231,6 +231,7 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+OrganizationServiceListMyOrganizationsProcedure,
 			connect.WithSchema(organizationServiceMethods.ByName("ListMyOrganizations")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setDefaultOrganization: connect.NewClient[v1.SetDefaultOrganizationRequest, v1.SetDefaultOrganizationResponse](
@@ -249,6 +250,7 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+OrganizationServiceListMembersProcedure,
 			connect.WithSchema(organizationServiceMethods.ByName("ListMembers")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		inviteMember: connect.NewClient[v1.InviteMemberRequest, v1.InviteMemberResponse](
@@ -261,6 +263,7 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+OrganizationServiceListInvitationsProcedure,
 			connect.WithSchema(organizationServiceMethods.ByName("ListInvitations")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		revokeInvitation: connect.NewClient[v1.RevokeInvitationRequest, v1.RevokeInvitationResponse](
@@ -321,6 +324,7 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+OrganizationServiceListGitHubAppInstallationsProcedure,
 			connect.WithSchema(organizationServiceMethods.ByName("ListGitHubAppInstallations")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		unlinkGitHubAppInstallation: connect.NewClient[v1.UnlinkGitHubAppInstallationRequest, v1.UnlinkGitHubAppInstallationResponse](
@@ -568,6 +572,7 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 		OrganizationServiceListMyOrganizationsProcedure,
 		svc.ListMyOrganizations,
 		connect.WithSchema(organizationServiceMethods.ByName("ListMyOrganizations")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	organizationServiceSetDefaultOrganizationHandler := connect.NewUnaryHandler(
@@ -586,6 +591,7 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 		OrganizationServiceListMembersProcedure,
 		svc.ListMembers,
 		connect.WithSchema(organizationServiceMethods.ByName("ListMembers")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	organizationServiceInviteMemberHandler := connect.NewUnaryHandler(
@@ -598,6 +604,7 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 		OrganizationServiceListInvitationsProcedure,
 		svc.ListInvitations,
 		connect.WithSchema(organizationServiceMethods.ByName("ListInvitations")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	organizationServiceRevokeInvitationHandler := connect.NewUnaryHandler(
@@ -658,6 +665,7 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 		OrganizationServiceListGitHubAppInstallationsProcedure,
 		svc.ListGitHubAppInstallations,
 		connect.WithSchema(organizationServiceMethods.ByName("ListGitHubAppInstallations")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	organizationServiceUnlinkGitHubAppInstallationHandler := connect.NewUnaryHandler(

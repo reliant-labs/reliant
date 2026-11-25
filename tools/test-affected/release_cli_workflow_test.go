@@ -113,6 +113,60 @@ func checkCLIArchiveSteps(t *testing.T, j *releaseJob, ctx map[string]any, prebu
 	}
 }
 
+// TestReleaseCLISBOMJob holds the CLI SBOMs to warn-first: cli-sbom never fails
+// or gates the release (continue-on-error, no job needs it), describes whatever
+// cli-archives packaged, dispatches included, and attaches to the GitHub Release
+// only after cli-publish stored the signed set there.
+func TestReleaseCLISBOMJob(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(repoRoot, ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var coe struct {
+		Jobs map[string]struct {
+			ContinueOnError bool `yaml:"continue-on-error"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(b, &coe); err != nil {
+		t.Fatalf("parse release.yml: %v", err)
+	}
+	if !coe.Jobs["cli-sbom"].ContinueOnError {
+		t.Error("cli-sbom is not continue-on-error: an SBOM it cannot write would fail the release")
+	}
+	wf := loadReleaseWorkflow(t)
+	for id, j := range wf.Jobs {
+		for _, n := range j.needs() {
+			if n == "cli-sbom" {
+				t.Errorf("job %s needs cli-sbom; nothing may wait on the SBOMs", id)
+			}
+		}
+	}
+	sbom := wf.job(t, "cli-sbom")
+	ctx := map[string]any{"needs.cli-archives.result": "success"}
+	if !evalJobIf(t, sbom, map[string]string{"prepare": "success", "cli-archives": "success", "cli-publish": "skipped"}, ctx) {
+		t.Error("cli-sbom does not run when cli-archives packaged and cli-publish was skipped (a dry run)")
+	}
+	ctx["needs.cli-archives.result"] = "failure"
+	if evalJobIf(t, sbom, map[string]string{"prepare": "success", "cli-archives": "failure", "cli-publish": "skipped"}, ctx) {
+		t.Error("cli-sbom runs without the CLI archives")
+	}
+	var described, attached int
+	for i, s := range sbom.Steps {
+		switch {
+		case strings.Contains(s.Run, "scripts/release-cli.sh sbom "):
+			described = i
+		case strings.Contains(s.Run, "scripts/release-cli.sh store-sbom-github "):
+			attached = i
+			if !strings.Contains(s.If, "needs.cli-publish.result == 'success'") {
+				t.Errorf("the SBOMs are attached when %q; only after cli-publish stored the signed set", s.If)
+			}
+		}
+	}
+	if described == 0 || attached <= described {
+		t.Errorf("cli-sbom must describe the archives, then attach the SBOMs: steps %d, %d", described, attached)
+	}
+}
+
 // TestReleaseCLISigning holds cli-publish to the signing contract: it is the one job
 // with an OIDC token, it attests the archives, checksums.txt and the manifest with
 // the reliant predicate, checks the bundle against the pinned identity before

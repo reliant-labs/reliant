@@ -3580,18 +3580,18 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x1bInputOptionsConnectionState\x12.\n" +
 	"*INPUT_OPTIONS_CONNECTION_STATE_UNSPECIFIED\x10\x00\x12,\n" +
 	"(INPUT_OPTIONS_CONNECTION_STATE_CONNECTED\x10\x01\x123\n" +
-	"/INPUT_OPTIONS_CONNECTION_STATE_NEEDS_CONNECTION\x10\x022\xbf\a\n" +
-	"\x0eCatalogService\x12M\n" +
+	"/INPUT_OPTIONS_CONNECTION_STATE_NEEDS_CONNECTION\x10\x022\xda\a\n" +
+	"\x0eCatalogService\x12P\n" +
 	"\n" +
-	"ListModels\x12\x1d.reliant.v1.ListModelsRequest\x1a\x1e.reliant.v1.ListModelsResponse\"\x00\x12k\n" +
-	"\x14ListModelsByProvider\x12'.reliant.v1.ListModelsByProviderRequest\x1a(.reliant.v1.ListModelsByProviderResponse\"\x00\x12h\n" +
-	"\x13ListAvailableModels\x12&.reliant.v1.ListAvailableModelsRequest\x1a'.reliant.v1.ListAvailableModelsResponse\"\x00\x12J\n" +
-	"\tListTools\x12\x1c.reliant.v1.ListToolsRequest\x1a\x1d.reliant.v1.ListToolsResponse\"\x00\x12J\n" +
-	"\tListNodes\x12\x1c.reliant.v1.ListNodesRequest\x1a\x1d.reliant.v1.ListNodesResponse\"\x00\x12b\n" +
-	"\x11GetCELCompletions\x12$.reliant.v1.GetCELCompletionsRequest\x1a%.reliant.v1.GetCELCompletionsResponse\"\x00\x12V\n" +
-	"\rSearchCatalog\x12 .reliant.v1.SearchCatalogRequest\x1a!.reliant.v1.SearchCatalogResponse\"\x00\x12\\\n" +
-	"\x0fGetCatalogEntry\x12\".reliant.v1.GetCatalogEntryRequest\x1a#.reliant.v1.GetCatalogEntryResponse\"\x00\x12t\n" +
-	"\x17ListCatalogIntegrations\x12*.reliant.v1.ListCatalogIntegrationsRequest\x1a+.reliant.v1.ListCatalogIntegrationsResponse\"\x00\x12_\n" +
+	"ListModels\x12\x1d.reliant.v1.ListModelsRequest\x1a\x1e.reliant.v1.ListModelsResponse\"\x03\x90\x02\x01\x12n\n" +
+	"\x14ListModelsByProvider\x12'.reliant.v1.ListModelsByProviderRequest\x1a(.reliant.v1.ListModelsByProviderResponse\"\x03\x90\x02\x01\x12k\n" +
+	"\x13ListAvailableModels\x12&.reliant.v1.ListAvailableModelsRequest\x1a'.reliant.v1.ListAvailableModelsResponse\"\x03\x90\x02\x01\x12M\n" +
+	"\tListTools\x12\x1c.reliant.v1.ListToolsRequest\x1a\x1d.reliant.v1.ListToolsResponse\"\x03\x90\x02\x01\x12M\n" +
+	"\tListNodes\x12\x1c.reliant.v1.ListNodesRequest\x1a\x1d.reliant.v1.ListNodesResponse\"\x03\x90\x02\x01\x12e\n" +
+	"\x11GetCELCompletions\x12$.reliant.v1.GetCELCompletionsRequest\x1a%.reliant.v1.GetCELCompletionsResponse\"\x03\x90\x02\x01\x12Y\n" +
+	"\rSearchCatalog\x12 .reliant.v1.SearchCatalogRequest\x1a!.reliant.v1.SearchCatalogResponse\"\x03\x90\x02\x01\x12_\n" +
+	"\x0fGetCatalogEntry\x12\".reliant.v1.GetCatalogEntryRequest\x1a#.reliant.v1.GetCatalogEntryResponse\"\x03\x90\x02\x01\x12w\n" +
+	"\x17ListCatalogIntegrations\x12*.reliant.v1.ListCatalogIntegrationsRequest\x1a+.reliant.v1.ListCatalogIntegrationsResponse\"\x03\x90\x02\x01\x12_\n" +
 	"\x10ListInputOptions\x12#.reliant.v1.ListInputOptionsRequest\x1a$.reliant.v1.ListInputOptionsResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (

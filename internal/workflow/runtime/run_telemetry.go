@@ -89,9 +89,14 @@ func startRunTelemetry(ctx workflow.Context, input WorkflowInput, execCtx *Execu
 		// A run a trigger launched is the root of its own trace; it links to
 		// the span that fired it, which may be in another org's trace
 		// (launch.runTraceContext). A link, like an attribute, is no command.
+		// It names the trigger_events row it was launched for, which the
+		// trigger.fire span names too, so the two join by attribute as well.
 		if input.Trigger != nil {
 			if firing := telemetry.SpanContextOf(input.Trigger.TraceParent); firing.IsValid() {
 				span.AddLink(trace.Link{SpanContext: firing})
+			}
+			if input.Trigger.EventID != "" {
+				span.SetAttributes(attribute.String(telemetry.AttrTriggerEventID, input.Trigger.EventID))
 			}
 		}
 	}

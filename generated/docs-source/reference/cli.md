@@ -452,6 +452,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge scaffold rpc`](#reliant-forge-scaffold-rpc) | Scaffold a custom RPC on the service's handler package |
 | [`reliant forge scaffold scenario`](#reliant-forge-scaffold-scenario) | Scaffold a new frontend mock scenario |
 | [`reliant forge scaffold service`](#reliant-forge-scaffold-service) | Scaffold one or more Go services |
+| [`reliant forge scaffold variant`](#reliant-forge-scaffold-variant) | Scaffold one more configuration of an internal package as its own type (wrapper + provider in internal/app) |
 | [`reliant forge scaffold webhook`](#reliant-forge-scaffold-webhook) | Scaffold a webhook endpoint on an existing service |
 | [`reliant forge scaffold worker`](#reliant-forge-scaffold-worker) | Scaffold a new background worker |
 | [`reliant forge secret`](#reliant-forge-secret) | Manage an environment's secret store (local file or hosted control plane) |
@@ -2593,6 +2594,10 @@ database is an allowed SKIP (exit 78). From that release (or with lint.rules:
 {vuln-gate: error}) a blocking finding exits 1 and a scan that cannot run exits 77,
 a SKIP that fails the gate.
 
+While the rule does not gate, the step never downloads the database: a machine
+without one skips. --pull downloads it first (~200 MB, into $FORGE_VULN_DB_DIR
+when set), which is what a fresh CI runner needs; a gating rule always fetches.
+
 ```
 reliant forge ci vuln-sbom [dir] [flags]
 ```
@@ -2603,6 +2608,7 @@ reliant forge ci vuln-sbom [dir] [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--json` | `bool` | - | print the forge.dev/vuln-list/v1 document |
+| `--pull` | `bool` | - | download the vulnerability database when it is missing or old, even while vuln-gate does not gate (a fresh CI runner) |
 
 ---
 
@@ -9402,6 +9408,7 @@ Examples:
   cli forge env render dev --list                       # one line per object (kind/name/cluster)
   cli forge env render prod --count                     # objects per cluster, and per kind on each
   cli forge env render dev --json | jq .telemetry         # the env's declared telemetry, normalized
+  cli forge env render demo --json | jq .frontends        # each frontend's runtime config (config.js), fixtures included
   cli forge env render dev --cluster k3d-cp-daemon      # only what that cluster receives
   cli forge env render prod --kind Deployment,Job       # only those kinds
   cli forge env render prod --target workspace-proxy    # only that app's objects
@@ -9421,7 +9428,7 @@ reliant forge env render <environment> [flags]
 | `--cluster` | `string` | - | Print ONLY the objects that land on this cluster (the kubectl context named by forge.K8sCluster.cluster) |
 | `--count` | `bool` | - | Print how many objects land on each cluster (and per kind on each), instead of the YAML stream |
 | `--fail-on-write` | `bool` | - | Exit non-zero if any file in the project changed while rendering (the render is not guaranteed side-effect-free — see the command description) |
-| `--json` | `bool` | - | Print one JSON document (forge.env-render/v1) instead of the YAML stream: the objects --list shows, and the env's declared telemetry (forge.Telemetry), normalized |
+| `--json` | `bool` | - | Print one JSON document (forge.env-render/v1) instead of the YAML stream: the objects --list shows, the env's declared telemetry (forge.Telemetry), normalized, and each frontend's runtime config document (fixtures included) |
 | `--kind` | `stringSlice` | `[]` | Print only these kinds (comma-separated or repeated; case-insensitive) |
 | `--list` | `bool` | - | Print one line per object (cluster, kind, namespace, name) instead of the YAML stream |
 | `--name` | `string` | - | Print only objects with this metadata.name |
@@ -12065,6 +12072,7 @@ reliant forge lint [paths...] [flags]
 | `--graph` | `bool` | - | Check the composition graph (internal/app) as a whole: every component and provider is reached by some root, and every listener serves only services of its chain's audience. FAILS the build on an error (graph mode only) |
 | `--guarded-fields` | `bool` | - | Flag a scaffolded edit page whose update_mask still names a column declared 'forge:guards' — saving the form writes it raw and bypasses the rpc that owns it, and pages are scaffold-once so 'forge generate' cannot repair them (warnings only) |
 | `--help-dev` | `bool` | - | List maintainer/debug flags hidden from --help |
+| `--idempotency` | `bool` | - | Flag an rpc whose idempotency_level contradicts its name: a read (Get, List, Search, Find, Check, Has, Is, Count, Exists, Watch, Query, Describe, BatchGet) that does not declare option idempotency_level = NO_SIDE_EFFECTS, which read-only fixture and demo transports require, and a write (Create, Update, Delete, Set, Add, Remove, Upsert, Insert, Patch, Replace, Cancel, Send, Grant, Revoke, Archive, Restore, Purge, Move, Rename) or a forge:mutation rpc that declares it, which makes it a cacheable GET. A unary read whose response carries a secret or a per-call value (a token, password, credential, nonce, challenge, one-time code, oauth_state, api_key, a presigned, upload, download, export, checkout, authorize, reset, invite or claim URL, or a debug_redact field; not a page_token or cursor) must not declare it either: a GET can be cached and replayed to the next caller. A read that really writes, or mints a value on each call, says so with a // forge:mutation: <why> comment above it. Runs in every forge lint (warns first; gates from the release after the one that ships it) |
 | `--install` | `bool` | - | Install a frontend's missing dependencies (and refresh a node_modules older than its lockfile) with its own package manager, frozen to the lockfile, before the frontend lanes run. Off by default: lint never mutates the checkout, and a frontend with no node_modules is a lane that could NOT run, named in the verdict with its install command. The install's output goes to stderr, and nowhere under --quiet unless it fails |
 | `--json` | `bool` | - | Output findings as JSON (see lint_json.go header for the schema; exit code matches text mode) |
 | `--migration-safety` | `bool` | - | Run SQL migration safety checks |
@@ -20458,6 +20466,7 @@ With a NOUN it scaffolds exactly that one thing, no marker required:
   forge scaffold adapter <name>                   an outbound adapter (HTTP/queue/storage gateway)
   forge scaffold library <name>                   a library-shaped package (no contract.go; pre-excluded)
   forge scaffold handler-file <svc> <name>        an additional RPC-group file in handlers/<svc>/
+  forge scaffold variant <pkg> <Name> [--root R]  one more configuration of internal/<pkg>, as its own type
   forge scaffold rpc <svc> <Name>                 a custom RPC: pb-through *Service stub when the RPC is in the proto; signed stub + proto snippet otherwise
 
 Everything written is scaffold-once and yours from birth — re-running
@@ -20492,6 +20501,7 @@ reliant forge scaffold [flags]
 | [`rpc`](#reliant-forge-scaffold-rpc) | Scaffold a custom RPC on the service's handler package |
 | [`scenario`](#reliant-forge-scaffold-scenario) | Scaffold a new frontend mock scenario |
 | [`service`](#reliant-forge-scaffold-service) | Scaffold one or more Go services |
+| [`variant`](#reliant-forge-scaffold-variant) | Scaffold one more configuration of an internal package as its own type (wrapper + provider in internal/app) |
 | [`webhook`](#reliant-forge-scaffold-webhook) | Scaffold a webhook endpoint on an existing service |
 | [`worker`](#reliant-forge-scaffold-worker) | Scaffold a new background worker |
 
@@ -21081,6 +21091,47 @@ reliant forge scaffold service <name>... [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--force` | `bool` | - | Force-overwrite every scaffold output file |
 | `--resume` | `bool` | - | Resume a partial scaffold: skip files that already exist |
+
+---
+
+#### reliant forge scaffold variant
+
+Scaffold one more configuration of an internal package as its own type (wrapper + provider in internal/app)
+
+Scaffold a variant of internal/<pkg>: a configuration of the same component
+that some roots or consumers need wired differently (a client with and
+without a signer, a record-only and a syncing checker).
+
+The composition graph identifies a node by its Go type, so a variant is a
+type of its own. This writes internal/app/variant_<name>.go holding
+
+  type <Name> struct{ <pkg>.Service }      the variant's type
+  type <Name>Deps struct{ ... }            what its configuration needs
+  func New<Name>(<Name>Deps) (*<Name>, error)
+
+and never touches an existing file. A consumer that wants this variant
+takes a `*app.<Name>`-shaped field of that very type (declare the
+type where the consumer can import it if internal/app is out of reach).
+With --root, the provider is marked //forge:root-only <root>: only that
+root may reach it, and it never fills an interface field it merely
+satisfies — the other configuration keeps those.
+
+Run 'forge generate' afterwards: the provider joins the graph.
+
+Example:
+  forge scaffold variant controlplane SigningControlPlane --root worker
+  forge scaffold variant workflowcheck RecordOnlyChecker
+
+```
+reliant forge scaffold variant <pkg> <Name> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--root` | `string` | - | mark the provider //forge:root-only <root> (comma-separate several roots) |
 
 ---
 

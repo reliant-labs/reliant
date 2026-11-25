@@ -58,6 +58,12 @@ type RepoLister interface {
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 }
 
+// PRLinker records the chats a pull request was opened from.
+// chatprlinks.Service satisfies it.
+type PRLinker interface {
+	LinkWorktreePR(ctx context.Context, userID, worktreeID, prURL string) (int, error)
+}
+
 // DaemonReader is the daemons row by id, with no owner check: the caller
 // decides with authz. store.DaemonExtStore satisfies it.
 type DaemonReader interface {

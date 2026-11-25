@@ -55,7 +55,7 @@ func TestGetStoppedSpawnAgent(t *testing.T) {
 	}
 	report := func(id, from, to, slot string, kind core.AgentMessageKind) {
 		t.Helper()
-		if err := repo.EnqueueAgentMessage(ctx, &AgentMessage{
+		if err := store.EnqueueAgentMessage(ctx, repo.ORM(), &AgentMessage{
 			ID: id, ChatID: chatID, FromThreadID: from, ToThreadID: to,
 			Kind: kind, Body: "report", ToolCallID: &slot,
 			Status: core.AgentMessageStatusQueued, CreatedAt: now,

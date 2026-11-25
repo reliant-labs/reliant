@@ -45,7 +45,7 @@ func TestRunScenarioChecksAssociatedWorkflowAccess(t *testing.T) {
 				require.Equal(t, ownWorkflowDraft, id)
 				return tc.draft, nil
 			}}
-			svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Drafts: drafts}))
+			svc := scenario.NewTestScenario(t, withDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Drafts: drafts}))
 			ctx := authz.WithMembership(scenario.AuthedContext(t), scenarioMembership{active: tc.active})
 			_, err := svc.RunScenario(ctx, connect.NewRequest(&pb.RunScenarioRequest{ScenarioId: ownScenarioID}))
 			require.Error(t, err)

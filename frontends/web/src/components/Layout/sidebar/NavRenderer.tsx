@@ -12,6 +12,12 @@
  * ACCORDIONS. Open or closed is local, but the group holding the page on
  * screen opens on every navigation, and clicking an open group closes it —
  * the current one too (owner bug 3).
+ *
+ * FLAT (a phone's drawer; owner, 2026-11-24). In a drawer a drill-in is a new
+ * screen, not a nesting, so `flat` draws every row like a top-level one: the
+ * same size, weight, colour and indent, and an icon (`icon`, else
+ * `flatIcon`). The nested nav keeps its hierarchy: deeper rows step in, dim,
+ * and go bare.
  */
 
 import { useState, type ReactNode } from "react";
@@ -21,7 +27,7 @@ import { cn } from "@/lib/utils";
 
 import { externalMark } from "./navConfig/items";
 import { activeArea, backHref, childrenOf, hrefOf, isCurrent, visibleItems } from "./navConfig/model";
-import type { NavBadge, NavConfig, NavCtx, NavItem, NavSlotId } from "./navConfig/types";
+import type { NavArea, NavBadge, NavConfig, NavCtx, NavGroup, NavItem, NavRow, NavSlotId } from "./navConfig/types";
 import { SidebarFooter, SidebarRow, SidebarSubLabel, SidebarSubRow } from "./primitives";
 
 /**
@@ -46,6 +52,8 @@ export interface NavRendererProps {
    * other row is a destination, and a drawer closes on it.
    */
   onNavigate: (href: string, options?: NavigateOptions) => void;
+  /** Every row drawn as a top-level row, icon included (a phone's drawer). */
+  flat?: boolean;
 }
 
 export interface NavigateOptions {
@@ -70,9 +78,12 @@ function Badge({ badge }: { badge: NavBadge }) {
   );
 }
 
-export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps) {
+export function NavRenderer({ config, ctx, slots, onNavigate, flat = false }: NavRendererProps) {
   const area = activeArea(config, ctx);
   const link = (href: string) => href;
+  // Where a row at `depth` is drawn, and the icon it shows there.
+  const rowDepth = (depth: Depth): Depth => (flat ? 0 : depth);
+  const rowIcon = (item: NavRow | NavGroup | NavArea, depth: Depth) => (flat ? (item.icon ?? item.flatIcon) : depth === 0 ? item.icon : undefined);
 
   // Accordions: the person's toggles, until a navigation reopens the group holding the new page.
   const [accordion, setAccordion] = useState<{ path: string; toggled: Record<string, boolean> }>({ path: ctx.pathname, toggled: {} });
@@ -92,7 +103,19 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
 
   function renderItems(items: readonly NavItem[], depth: Depth, where: "nav" | "footer" | "drill"): ReactNode[] {
     const out: ReactNode[] = [];
-    for (const item of visibleItems(items, ctx)) out.push(renderItem(item, depth, where));
+    for (const item of visibleItems(items, ctx)) {
+      const rendered = renderItem(item, depth, where);
+      // A tour anchor (NavItem `tour`): a group carries it on its own block; anything else in a box of its own.
+      out.push(
+        item.tour && item.kind !== "group" ? (
+          <div key={item.id} data-tour={item.tour}>
+            {rendered}
+          </div>
+        ) : (
+          rendered
+        ),
+      );
+    }
     return out;
   }
 
@@ -101,13 +124,13 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
     switch (item.kind) {
       case "heading":
         return (
-          <SidebarSubLabel key={item.id} depth={Math.min(depth, 2) as 0 | 1 | 2}>
+          <SidebarSubLabel key={item.id} depth={Math.min(rowDepth(depth), 2) as 0 | 1 | 2}>
             {item.label}
           </SidebarSubLabel>
         );
       case "slot": {
         const place: SlotPlace = where === "drill" && item.slot === "chat-list" ? "fill" : "capped";
-        return <SlotFrame key={item.id} id={item.id}>{slot(item.slot, { place, depth })}</SlotFrame>;
+        return <SlotFrame key={item.id} id={item.id}>{slot(item.slot, { place, depth: rowDepth(depth) })}</SlotFrame>;
       }
       case "row": {
         const href = hrefOf(item, ctx);
@@ -116,7 +139,7 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
         const trail =
           badge || item.trail || item.external ? (
             <>
-              {slot(item.trail, { place: "row", depth })}
+              {slot(item.trail, { place: "row", depth: rowDepth(depth) })}
               {badge && <Badge badge={badge} />}
               {item.external && externalMark}
             </>
@@ -131,7 +154,7 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
               onClick={href ? () => onNavigate(link(href)) : undefined}
               current={current}
               trail={trail}
-              action={slot(item.action, { place: "row", depth })}
+              action={slot(item.action, { place: "row", depth: rowDepth(depth) })}
               testId={testId}
             />
           );
@@ -140,8 +163,8 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
           <SidebarSubRow
             key={item.id}
             label={item.label}
-            depth={depth}
-            icon={depth === 0 ? item.icon : undefined}
+            depth={rowDepth(depth)}
+            icon={rowIcon(item, depth)}
             href={href ? link(href) : undefined}
             onClick={href ? () => onNavigate(link(href)) : undefined}
             current={current}
@@ -155,13 +178,13 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
         const open = isOpen(item.id, current);
         const children = childrenOf(item, ctx);
         const badge = item.badge?.(ctx);
-        const groupSlot = slot(item.trail, { place: "row", depth });
+        const groupSlot = slot(item.trail, { place: "row", depth: rowDepth(depth) });
         return (
-          <div key={item.id} data-testid={`${testId}-group`}>
+          <div key={item.id} data-testid={`${testId}-group`} data-tour={item.tour}>
             <SidebarSubRow
               label={item.label}
-              depth={depth}
-              icon={depth === 0 ? item.icon : undefined}
+              depth={rowDepth(depth)}
+              icon={rowIcon(item, depth)}
               onClick={() => toggle(item.id, open)}
               expanded={open}
               trail={
@@ -190,7 +213,7 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
         const badge = current ? undefined : item.badge?.(ctx);
         const trail = (
           <>
-            {!current && slot(item.trail, { place: "row", depth })}
+            {!current && slot(item.trail, { place: "row", depth: rowDepth(depth) })}
             {badge && <Badge badge={badge} />}
             <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden="true" />
           </>
@@ -205,7 +228,7 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
               onClick={href ? () => onNavigate(link(href), { drill: true }) : undefined}
               current={current}
               trail={trail}
-              action={slot(item.action, { place: "row", depth })}
+              action={slot(item.action, { place: "row", depth: rowDepth(depth) })}
               testId={testId}
             />
           );
@@ -214,8 +237,8 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
           <SidebarSubRow
             key={item.id}
             label={item.label}
-            depth={depth}
-            icon={depth === 0 ? item.icon : undefined}
+            depth={rowDepth(depth)}
+            icon={rowIcon(item, depth)}
             href={href ? link(href) : undefined}
             onClick={href ? () => onNavigate(link(href), { drill: true }) : undefined}
             current={current}
@@ -241,6 +264,9 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
           onNavigate(back, { drill: true });
         }}
         data-testid="nav-back"
+        // The drill-in's tour anchor: on an area's routes the nav draws no `nav-top` and no area row,
+        // so a step that rings the nav there points here (Onboarding/JOURNEYS.md "Anchors").
+        data-tour="nav-drill-in"
         aria-label={`Back from ${area.label}`}
         className="no-color mx-2 mb-1 flex h-[var(--row-h)] shrink-0 items-center gap-1.5 rounded-md px-2 text-ui font-medium text-foreground transition-colors hover:bg-foreground/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >

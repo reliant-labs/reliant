@@ -449,4 +449,11 @@ describe("the org segment", () => {
   ])("the switcher opens %s in another org at %s, minus the old org's ids", (from, to) => {
     expect(orgSwitchPath(from, "side")).toBe(to);
   });
+
+  it("names the checkout behind an app's console when the link knows it (`?project=`), and nothing when not", () => {
+    expect(paths.consoleCheckoutSearch("p-1")).toEqual({ project: "p-1" });
+    expect(paths.consoleCheckoutSearch(undefined)).toBeUndefined();
+    expect(paths.withMoreSearch("/forge/p/shop/releases?env=prod", { project: "p-1" })).toBe("/forge/p/shop/releases?env=prod&project=p-1");
+    expect(paths.withMoreSearch("/forge/p/shop", { project: "p-1" })).toBe("/forge/p/shop?project=p-1");
+  });
 });

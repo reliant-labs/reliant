@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { GroupedNavInput } from "../../../Forge/Console/groupedNav";
-import { appNavFor } from "../AppsNavSection";
+import { appActivityOf, appNavFor } from "../AppsNavSection";
 
 // The model's page off the console defaults to the Overview (useConsoleNavModel).
 const model: GroupedNavInput = { project: "shop", page: { kind: "overview" }, env: "prod", envs: [{ name: "prod", preview: false }] };
@@ -13,7 +13,7 @@ describe("the project shell's app rows", () => {
     expect(current("/o/acme/c/chat-1/t/th-1")).toEqual([]);
     expect(current("/inbox")).toEqual([]);
     expect(current("/projects/p-1")).toEqual([]);
-    expect(appNavFor(model, "/c/chat-1").footer[0]?.active).toBe(false);
+    expect(appActivityOf(model, "/c/chat-1")?.active).toBe(false);
   });
 
   it("light Overview on the app's overview page", () => {

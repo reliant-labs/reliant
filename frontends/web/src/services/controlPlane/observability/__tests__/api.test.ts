@@ -259,9 +259,9 @@ describe("traces and panels", () => {
 
   it("names a dashboard panel's read with Forge-Panel", async () => {
     client.queryPanel.mockResolvedValue({ panelId: "fleet-now", kind: "sql", unit: "", stepSeconds: 0, truncated: false, columns: [], rows: [], series: [], funnelSteps: [], issues: [], sessions: [] });
-    await queryPanel({ ...env, window, panel: { id: "fleet-now", title: "Fleet now", kind: "sql", signal: "traces", series: [], sql: "SELECT 1" }, services: [], stepSeconds: 0, dashboardId: "devboxes" });
+    await queryPanel({ ...env, window, panel: { id: "fleet-now", title: "Fleet now", kind: "sql", signal: "traces", series: [], sql: "SELECT 1" }, services: [], stepSeconds: 0, dashboardId: "sandboxes" });
     const options = client.queryPanel.mock.calls[0][1];
-    expect(options.headers).toEqual({ "Forge-Panel": "devboxes/fleet-now" });
+    expect(options.headers).toEqual({ "Forge-Panel": "sandboxes/fleet-now" });
     // the read scheduler's abort signal still rides along
     expect(options.signal).toBeInstanceOf(AbortSignal);
   });

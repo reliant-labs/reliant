@@ -80,6 +80,37 @@ describe("classifyRpcFailure", () => {
     expect(classifyRpcFailure(new ConnectError("boom", Code.Internal), probed)).toBe("report");
   });
 
+  it("treats a control plane without the tests or vulnerability stores as a state, not a report", () => {
+    // reliant-web 49ea1812 / fb613140: the pages render these as "not configured".
+    const tests = { serviceTypeName: "controlplane.v1.TestsService", methodName: "GetTestSummary", signalAborted: false };
+    const vulns = { serviceTypeName: "controlplane.v1.VulnerabilityService", methodName: "GetVulnerabilitySummary", signalAborted: false };
+    expect(classifyRpcFailure(new ConnectError("test runs are not configured on this deployment", Code.Unimplemented), tests)).toBe("expected");
+    expect(
+      classifyRpcFailure(new ConnectError("vulnerability findings are not configured on this deployment", Code.Unimplemented), vulns),
+    ).toBe("expected");
+    // A control plane older than the service: unrouted, still not a report.
+    expect(classifyRpcFailure(new ConnectError("HTTP 404", Code.Unimplemented), tests)).toBe("expected");
+    // A real failure of either still reports, as does Unimplemented elsewhere on the control plane.
+    expect(classifyRpcFailure(new ConnectError("boom", Code.Internal), tests)).toBe("report");
+    expect(classifyRpcFailure(new ConnectError("boom", Code.Unavailable), vulns)).toBe("report");
+    expect(
+      classifyRpcFailure(new ConnectError("nope", Code.Unimplemented), { serviceTypeName: "controlplane.v1.DeployService", signalAborted: false }),
+    ).toBe("report");
+  });
+
+  it("treats Unimplemented from the chat's attached-projects rpcs as expected: an older server, not skew", () => {
+    const unrouted = new ConnectError("HTTP 404", Code.Unimplemented);
+    for (const methodName of ["ListChatProjects", "AttachProjectToChat", "DetachProjectFromChat"]) {
+      expect(classifyRpcFailure(unrouted, { serviceTypeName: "reliant.v1.ChatService", methodName, signalAborted: false })).toBe(
+        "expected",
+      );
+    }
+    // Every other ChatService route a server does not serve is still skew.
+    expect(
+      classifyRpcFailure(unrouted, { serviceTypeName: "reliant.v1.ChatService", methodName: "CreateChat", signalAborted: false }),
+    ).toBe("version-skew");
+  });
+
   it("reads the server's DeadlineExceeded as a deadline, not a report", () => {
     // 2026-10-10: a saturated cloud machine answered file-tree polls after
     // the rpc deadline; each one was an exception.

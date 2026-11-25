@@ -30,6 +30,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
@@ -55,6 +56,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -288,6 +290,16 @@ var noMCPServers = toolexec.MCPContextBinderFunc(func(tc *rctx.ToolContext) *rct
 
 // newHarness stands up a story-scoped environment. Everything registered here
 // is torn down via t.Cleanup.
+// triggerOwners is the real triggerowner service over the story database, the
+// one the trigger service re-owns an orphaned trigger through.
+func triggerOwners(t *testing.T, repo *db.Repo) triggerowner.Service {
+	t.Helper()
+	stores := triggerowner.NewStores(repo.ORM())
+	svc, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	require.NoError(t, err, "trigger owner service")
+	return svc
+}
+
 func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Harness {
 	t.Helper()
 	taskQueueSuffix := shortID()
@@ -404,18 +416,23 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// No Router: these stories run without a daemon, so there is no tool to
 	// cancel on interrupt and no machine to wake for an attended turn.
 	chatSvc, err := chat.New(chat.Deps{
-		Logger:     slog.Default(),
-		Config:     &typedconfig.Config{},
-		Repo:       s.Repo,
-		Backoff:    providerbackofftest.New(t, s.Repo),
-		Questions:  store.NewQuestionExtStore(s.Repo.ORM()),
-		Spawns:     store.NewToolCallExtStore(s.Repo.ORM()),
-		Selections: store.NewChatSelectionExtStore(s.Repo.ORM()),
-		Messages:   store.NewMessageExtStore(s.Repo.ORM()),
-		ToolBlocks: store.NewMessageContentBlockExtStore(s.Repo.ORM()),
-		Senders:    store.NewThreadExtStore(s.Repo.ORM()),
-		Temporal:   s.Temporal,
-		Pause:      pause,
+		Logger:        slog.Default(),
+		Config:        &typedconfig.Config{},
+		Repo:          s.Repo,
+		Workflows:     store.NewWorkflowExtStore(s.Repo.ORM()),
+		Worktrees:     store.NewWorktreeExtStore(s.Repo.ORM()),
+		ProjectRows:   store.NewProjectExtStore(s.Repo.ORM()),
+		Backoff:       providerbackofftest.New(t, s.Repo),
+		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
+		AgentMessages: store.NewAgentMessageExtStore(s.Repo.ORM()),
+		Questions:     store.NewQuestionExtStore(s.Repo.ORM()),
+		Spawns:        store.NewToolCallExtStore(s.Repo.ORM()),
+		Selections:    store.NewChatSelectionExtStore(s.Repo.ORM()),
+		Messages:      store.NewMessageExtStore(s.Repo.ORM()),
+		ToolBlocks:    store.NewMessageContentBlockExtStore(s.Repo.ORM()),
+		Senders:       store.NewThreadExtStore(s.Repo.ORM()),
+		Temporal:      s.Temporal,
+		Pause:         pause,
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
@@ -423,6 +440,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Config:    &typedconfig.Config{},
 		Repo:      s.Repo,
 		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
+		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
 		Signals:   pause,
 		Messages:  chatSvc,
 	})
@@ -437,14 +455,17 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	require.NoError(t, err, "approval service")
 	triggerSyncer, triggerFires := trigger.TemporalBackend(s.Temporal, triggers.NewStores(s.Repo), taskQueue, nil)
 	triggerSvc, err := trigger.New(trigger.Deps{
-		Logger:   slog.Default(),
-		Config:   &typedconfig.Config{},
-		Repo:     s.Repo,
-		Projects: projectaccess.NewFromORM(s.Repo.ORM()),
-		OrgMoves: store.NewProjectOrgMoveExtStore(s.Repo.ORM()),
-		Pools:    store.NewMachinePoolExtStore(s.Repo.ORM()),
-		Syncer:   triggerSyncer,
-		Fires:    triggerFires,
+		Logger:         slog.Default(),
+		Config:         &typedconfig.Config{},
+		Repo:           s.Repo,
+		Owners:         triggerOwners(t, s.Repo),
+		Firings:        store.NewTriggerEventExtStore(s.Repo.ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(s.Repo.ORM()),
+		Projects:       projectaccess.NewFromORM(s.Repo.ORM()),
+		OrgMoves:       store.NewProjectOrgMoveExtStore(s.Repo.ORM()),
+		Pools:          store.NewMachinePoolExtStore(s.Repo.ORM()),
+		Syncer:         triggerSyncer,
+		Fires:          triggerFires,
 	})
 	require.NoError(t, err, "trigger service")
 

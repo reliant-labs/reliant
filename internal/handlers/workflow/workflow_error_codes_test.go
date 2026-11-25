@@ -44,7 +44,7 @@ func TestWorkflowRPCs_RepositoryFailureCodes(t *testing.T) {
 			t.Parallel()
 			repo := draftsRepo()
 			repo.Projects = projectaccesstest.Func(func(context.Context, string, string) (*db.Project, error) { return nil, tc.err })
-			svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(repo.deps()))
+			svc := workflow.NewTestWorkflow(t, withDeps(repo.deps()))
 			_, err := svc.ListWorkflows(workflow.AuthedContext(t), connect.NewRequest(&pb.ListWorkflowsRequest{ProjectId: "p-1"}))
 			requireClientReads(t, err, tc.want)
 		})
@@ -52,7 +52,7 @@ func TestWorkflowRPCs_RepositoryFailureCodes(t *testing.T) {
 			t.Parallel()
 			repo := draftsRepo()
 			repo.Drafts.GetWorkflowDraftBySlugFunc = func(context.Context, string, string) (*db.WorkflowDraft, error) { return nil, tc.err }
-			svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(repo.deps()))
+			svc := workflow.NewTestWorkflow(t, withDeps(repo.deps()))
 			_, err := svc.ExportWorkflow(workflow.AuthedContext(t), connect.NewRequest(&pb.ExportWorkflowRequest{ProjectId: "p-1", Slug: "flow"}))
 			requireClientReads(t, err, tc.want)
 		})
@@ -60,7 +60,7 @@ func TestWorkflowRPCs_RepositoryFailureCodes(t *testing.T) {
 			t.Parallel()
 			repo := draftsRepo()
 			repo.Drafts.GetWorkflowDraftFunc = func(context.Context, string) (*db.WorkflowDraft, error) { return nil, tc.err }
-			svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(repo.deps()))
+			svc := workflow.NewTestWorkflow(t, withDeps(repo.deps()))
 			_, err := svc.SetWorkflowStatus(workflow.AuthedContext(t), connect.NewRequest(&pb.SetWorkflowStatusRequest{
 				ProjectId: "p-1", DraftId: "wf-flow", Status: pb.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT,
 			}))
@@ -78,7 +78,7 @@ func TestSetWorkflowStatus_MissingDraftIsNotFound(t *testing.T) {
 	repo.Drafts.GetWorkflowDraftFunc = func(_ context.Context, id string) (*db.WorkflowDraft, error) {
 		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("workflow draft"), id)
 	}
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(repo.deps()))
+	svc := workflow.NewTestWorkflow(t, withDeps(repo.deps()))
 	_, err := svc.SetWorkflowStatus(workflow.AuthedContext(t), connect.NewRequest(&pb.SetWorkflowStatusRequest{
 		ProjectId: "p-1", DraftId: "wf-missing", Status: pb.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT,
 	}))
@@ -96,7 +96,7 @@ func TestCreateWorkflowDraft_SlugTakenIsAlreadyExists(t *testing.T) {
 	repo.Drafts.CreateWorkflowDraftFunc = func(_ context.Context, d *db.WorkflowDraft) error {
 		return fmt.Errorf("%w: %q", db.ErrWorkflowSlugTaken, d.Slug)
 	}
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(repo.deps()))
+	svc := workflow.NewTestWorkflow(t, withDeps(repo.deps()))
 	_, err := svc.CreateWorkflowDraft(workflow.AuthedContext(t), connect.NewRequest(&pb.CreateWorkflowDraftRequest{ProjectId: "p-1"}))
 	requireClientReads(t, err, connect.CodeAlreadyExists)
 	require.Equal(t, "workflow slug already taken", svcerr.ToConnect(err).Message())
@@ -119,7 +119,7 @@ func TestSetWorkflowStatus_StaleRevisionOnTheWire(t *testing.T) {
 	repo.Drafts.GetWorkflowDraftFunc = func(_ context.Context, id string) (*db.WorkflowDraft, error) {
 		return &db.WorkflowDraft{ID: id, UserID: "test-user", Slug: "flow", Version: 4}, nil
 	}
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(repo.deps()))
+	svc := workflow.NewTestWorkflow(t, withDeps(repo.deps()))
 	stale := int64(3)
 	_, err := svc.SetWorkflowStatus(workflow.AuthedContext(t), connect.NewRequest(&pb.SetWorkflowStatusRequest{
 		ProjectId: "p-1", DraftId: "wf-flow", Status: pb.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT,

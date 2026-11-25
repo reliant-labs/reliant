@@ -61,6 +61,11 @@ type Deps struct {
 	// periodic sweep, and a permanent delete does not wait on the machine.
 	// forge:optional-dep
 	Settler Settler
+	// PRLinks records which chats a pull request CreateWorktreePR opens was
+	// produced by (chat_pr_links). Without it the pull request is opened and
+	// no chat is linked to it.
+	// forge:optional-dep
+	PRLinks PRLinker
 }
 
 // Router is the slice of toolexec.DaemonRouter the worktree handlers use.

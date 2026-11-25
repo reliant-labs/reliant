@@ -82,7 +82,9 @@ const SIGNED_IN = { id: "u1", email_confirmed_at: "2026-11-01T00:00:00Z" } as Au
 /**
  * routes.tsx's shape on the forge brand: public sign-in and demo, the chat
  * home behind `_app`'s guard and the other pages behind `_authenticated`'s,
- * and ForgeLandingJourney at the root.
+ * and ForgeLandingJourney at the root. The demo here is the demo shell's page
+ * (DemoConsole mocked), standing in for routes.tsx's handoff to the demo host
+ * (demoHandoff.ts), so the router stays in this document.
  */
 function renderShell(path: string, extra: ComponentType = () => null, { landing = true } = {}) {
   const Extra = extra;
