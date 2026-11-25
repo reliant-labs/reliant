@@ -106,10 +106,14 @@ const {
   canCheckForUpdates,
   classifyCheckResult,
   cleanMinVersion,
+  createDaemonUpgradeResponder,
   createDownloadRunner,
   createForcedUpdate,
   createMenuUpdateCheck,
+  isUpdatePending,
+  isUpgradeOverdue,
   nextUpdateState,
+  withDaemonUpgrade,
 } = require("./update-check");
 const crypto = require("crypto");
 
@@ -2586,15 +2590,22 @@ let chunkedDownloadPath = null;
 // the next check to reappear.
 let lastUpdateStatus = null;
 
+// The daemon's newest upgrade request this session (update-check.js
+// createDaemonUpgradeResponder), null until the daemon prints one. Every
+// status the windows hear carries it (withDaemonUpgrade), so the dialog opens
+// when the update it asked for is downloaded.
+let daemonUpgradeRequest = null;
+
 // How often a running app looks for a new release. The startup check alone
 // left an app that stays open for days on its launch-day version.
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 let periodicUpdateCheckTimer = null;
 
 function broadcastUpdateStatus(status) {
-  lastUpdateStatus = nextUpdateState(lastUpdateStatus, status);
+  const event = withDaemonUpgrade(status, daemonUpgradeRequest);
+  lastUpdateStatus = nextUpdateState(lastUpdateStatus, event);
   BrowserWindow.getAllWindows().forEach((window) => {
-    window.webContents.send("update-status", status);
+    window.webContents.send("update-status", event);
   });
 }
 
@@ -2603,6 +2614,13 @@ function broadcastUpdateStatus(status) {
 // in flight or done (see canCheckForUpdates).
 function runBackgroundUpdateCheck(source) {
   if (!app.isPackaged || isInstallingUpdate) return;
+  if (daemonUpgradeRequest) {
+    // An outstanding daemon request needs a download, not only a feed check.
+    // Join the responder's work and let it retain its bounded retry timer.
+    // Once ready, do not reopen a prompt the user dismissed with Later.
+    if (lastUpdateStatus?.type !== "downloaded") handleDaemonUpgradeNotice(daemonUpgradeRequest);
+    return;
+  }
   if (!canCheckForUpdates(lastUpdateStatus, downloadRunner.isInFlight())) {
     log.info(`[AutoUpdater] Skipping ${source} check: an update is downloading or downloaded`);
     return;
@@ -3054,6 +3072,40 @@ const downloadRunner = createDownloadRunner({
 });
 
 ipcMain.handle("download-update", () => downloadRunner.run());
+
+// The daemon's upgrade request (backend-manager.js onDaemonUpgradeNotice):
+// download the update by itself and ask the user to restart (D7); never
+// install. See update-check.js createDaemonUpgradeResponder.
+const respondToDaemonUpgrade = createDaemonUpgradeResponder({
+  getStatus: () => lastUpdateStatus,
+  isDownloading: () => downloadRunner.isInFlight(),
+  check: () => autoUpdater.checkForUpdates(),
+  download: () => downloadRunner.run(),
+  announce: (request) => {
+    daemonUpgradeRequest = request;
+    // An update already found, downloading or downloaded: show it again with
+    // the request attached, so a downloaded one prompts now.
+    if (isUpdatePending(lastUpdateStatus)) broadcastUpdateStatus(lastUpdateStatus);
+  },
+});
+
+function handleDaemonUpgradeNotice(request) {
+  if (!app.isPackaged || isInstallingUpdate) {
+    log.info("[AutoUpdater] Daemon asked for an upgrade; this build does not update itself", request);
+    return;
+  }
+  const overdue = isUpgradeOverdue(request, Date.now());
+  log[overdue ? "warn" : "info"](
+    `[AutoUpdater] Daemon asked for an upgrade to ${request.targetVersion || "a newer version"} ` +
+      `(urgency ${request.urgency}${overdue ? ", past its deadline" : ""}); downloading it`,
+    { reason: request.reason, rolloutId: request.rolloutId, deadlineUnixMs: request.deadlineUnixMs }
+  );
+  respondToDaemonUpgrade(request).then(
+    (result) =>
+      log.info(`[AutoUpdater] Daemon upgrade request: ${result.outcome}${result.error ? ` (${result.error})` : ""}`),
+    (error) => log.error("[AutoUpdater] Daemon upgrade request failed:", error)
+  );
+}
 
 ipcMain.handle("install-update", () => installDownloadedUpdate());
 
@@ -3945,6 +3997,10 @@ app.whenReady().then(async () => {
       }
     });
   });
+
+  // The daemon asks this app's updater to upgrade it when the platform asked
+  // the daemon to (a version floor, a rollout): download and prompt.
+  backendManager.onDaemonUpgradeNotice(handleDaemonUpgradeNotice);
 
   // Start backend in background (don't await yet)
   //

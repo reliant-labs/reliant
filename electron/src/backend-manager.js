@@ -14,6 +14,10 @@ const {
   DAEMON_STATE_PID_FIELD,
   DAEMON_STATE_INSTANCE_FIELD,
   DAEMON_STREAM_NOTICE_PREFIX,
+  DAEMON_SUPERVISOR_ENV_VAR,
+  DAEMON_SUPERVISOR_ELECTRON,
+  DAEMON_UPGRADE_NOTICE_PREFIX,
+  parseDaemonUpgradeNotice,
 } = require('./daemon-contract');
 
 // Default API URL — NEUTRAL (localhost) for the OSS build.
@@ -241,6 +245,9 @@ class BackendManager {
       RELIANT_ENV: this.isDevelopment ? 'dev' : 'prod',
       // Pass hosted API URLs to the daemon process as env vars
       RELIANT_SERVER_URL: this.apiUrl,
+      // This app supervises the daemon: it tells us of a requested upgrade on
+      // stdout (daemon-contract.js DAEMON_UPGRADE_NOTICE_PREFIX).
+      [DAEMON_SUPERVISOR_ENV_VAR]: DAEMON_SUPERVISOR_ELECTRON,
     };
 
     // Pass gateway URL if explicitly configured
@@ -947,9 +954,43 @@ class BackendManager {
         continue;
       }
 
+      if (trimmed.startsWith(DAEMON_UPGRADE_NOTICE_PREFIX)) {
+        const notice = parseDaemonUpgradeNotice(trimmed.slice(DAEMON_UPGRADE_NOTICE_PREFIX.length).trim());
+        if (notice) {
+          this.handleDaemonUpgradeNotice(notice);
+          continue;
+        }
+        // Unreadable: log it like any daemon line rather than lose it.
+      }
+
       // Every mode: dev no longer inherits the daemon's stdout fd (see the
       // stdio comment in start()), so this is the only path that surfaces it.
       log.info(`[Daemon]: ${trimmed}`);
+    }
+  }
+
+  /**
+   * Hands every upgrade notice the daemon prints to `onNotice`, the app's
+   * updater (main.js). The daemon prints one per distinct request, so each
+   * call is news; the updater still joins a check or download in flight.
+   */
+  onDaemonUpgradeNotice(onNotice) {
+    this._onDaemonUpgradeNotice = onNotice;
+  }
+
+  /**
+   * The platform asked the daemon to upgrade (daemon-contract.js
+   * DAEMON_UPGRADE_NOTICE_PREFIX). The daemon keeps serving; this app's
+   * updater is what upgrades it, so the notice goes there. Logged whether or
+   * not anything listens, so the request is on record.
+   */
+  handleDaemonUpgradeNotice(notice) {
+    log.info('[BackendManager] Daemon reports the platform asked for an upgrade', notice);
+    if (!this._onDaemonUpgradeNotice) return;
+    try {
+      this._onDaemonUpgradeNotice(notice);
+    } catch (error) {
+      log.error('[BackendManager] Upgrade notice handler failed:', error);
     }
   }
 

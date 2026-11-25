@@ -211,9 +211,30 @@ WHERE project_id = ? AND daemon_id = 'd1' AND repo_id = ?`, f.project.ID, repoID
 
 func (f *nestedFixture) replan(t *testing.T) {
 	t.Helper()
-	if err := f.env.Repo.UpsertQueuedProjectDaemon(f.ctx, f.project.ID, "d1", "/srv/acme", nil, "clone:"+f.project.ID, []string{f.forge.ID, f.plugin.ID, f.web.ID}); err != nil {
+	f.replanWith(t, []string{f.forge.ID, f.plugin.ID, f.web.ID})
+}
+
+// replanWith sets the project up on d1 again with only repoIDs nested (nil:
+// none, what CreateProjectFromRepo plans when it cannot list the repos).
+func (f *nestedFixture) replanWith(t *testing.T, repoIDs []string) {
+	t.Helper()
+	if err := f.env.Repo.UpsertQueuedProjectDaemon(f.ctx, f.project.ID, "d1", "/srv/acme", nil, "clone:"+f.project.ID, repoIDs); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// planned is the repository IDs the pair's plan shows (what the API lists).
+func (f *nestedFixture) planned(t *testing.T) map[string]bool {
+	t.Helper()
+	rows, err := store.ListProjectDaemonReposForProjects(f.ctx, f.env.ORM, []string{f.project.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]bool{}
+	for _, r := range rows {
+		out[r.RepoID] = true
+	}
+	return out
 }
 
 // Review R1.B3 (replan): planning the set-up again while a clone runs keeps
@@ -294,6 +315,92 @@ func TestNestedRepoReplanDuringAnActiveClone(t *testing.T) {
 		f.replan(t)
 		if state, claim, lease, replan := f.leaseOf(t, f.forge.ID); state != string(core.NestedRepoPending) || claim != "" || lease != nil || replan {
 			t.Fatalf("a settled row after a replan = %s %q %v %v; want pending", state, claim, lease, replan)
+		}
+	})
+}
+
+// Review R2.B1: a replan that leaves out a repository whose clone is running
+// (a transient failure to list the repos plans none) must not drop its claim:
+// it is kept, hidden from the plan, until that clone ends, so a later plan
+// that adds the repository back still cannot start a second clone of it.
+func TestNestedRepoReplanOmittingARunningClone(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		omitted func(f *nestedFixture) []string
+	}{
+		{"planned with no nested repositories", func(*nestedFixture) []string { return nil }},
+		{"planned without it", func(f *nestedFixture) []string { return []string{f.web.ID} }},
+	} {
+		t.Run(tc.name+", then added back before it ends", func(t *testing.T) {
+			f := newNestedFixture(t)
+			if got := f.claimedName(t, "running"); got != "forge" {
+				t.Fatalf("claim = %q", got)
+			}
+			_, _, leaseBefore, _ := f.leaseOf(t, f.forge.ID)
+
+			f.replanWith(t, tc.omitted(f))
+			state, claim, lease, _ := f.leaseOf(t, f.forge.ID)
+			if state != string(core.NestedRepoCloning) || claim != "running" || lease == nil || !lease.Equal(*leaseBefore) {
+				t.Fatalf("after leaving forge out = %s %q %v; want its running claim and lease kept", state, claim, lease)
+			}
+			if f.planned(t)[f.forge.ID] {
+				t.Fatal("a repository left out of the plan is still listed in it")
+			}
+			if got := f.claimedName(t, "other"); got == "forge" || got == "plugin" {
+				t.Fatalf("another pass claimed %s while forge's clone runs", got)
+			}
+
+			f.replan(t) // added back while the clone still runs
+			if _, claim, lease, replan := f.leaseOf(t, f.forge.ID); claim != "running" || lease == nil || !lease.Equal(*leaseBefore) || !replan {
+				t.Fatalf("after adding forge back = claim %q lease %v replan %v; want the running claim kept, marked replanned", claim, lease, replan)
+			}
+			if !f.planned(t)[f.forge.ID] {
+				t.Fatal("forge, planned again, is not listed")
+			}
+			for c := f.claim(t, "other"); c != nil; c = f.claim(t, "other") {
+				if c.Repo.RepoID == f.forge.ID || c.Repo.RepoID == f.plugin.ID {
+					t.Fatalf("another pass claimed %s while forge's clone runs", c.Repo.Name)
+				}
+				f.settle(t, c.Repo.RepoID, "other", "")
+			}
+
+			// The running clone ends: the new plan clones forge again.
+			if !f.settle(t, f.forge.ID, "running", "") {
+				t.Fatal("the running claim could not release its row")
+			}
+			if got := f.claimedName(t, "other"); got != "forge" {
+				t.Fatalf("claim after the running clone ended = %q, want forge", got)
+			}
+		})
+	}
+
+	t.Run("left out, its row goes when its clone ends", func(t *testing.T) {
+		f := newNestedFixture(t)
+		f.claimedName(t, "running") // forge
+		f.replanWith(t, []string{f.web.ID})
+		if !f.settle(t, f.forge.ID, "running", "") {
+			t.Fatal("the running claim could not release its row")
+		}
+		rows, err := store.ListProjectDaemonReposForPair(f.ctx, f.env.ORM, f.project.ID, "d1")
+		if err != nil || len(rows) != 1 || rows[0].RepoID != f.web.ID {
+			t.Fatalf("rows after the dropped clone ended = %+v, %v; want web alone", rows, err)
+		}
+	})
+
+	t.Run("left out, its row goes once its lease ran out", func(t *testing.T) {
+		f := newNestedFixture(t)
+		f.claimedName(t, "gone") // forge
+		f.replanWith(t, []string{f.web.ID})
+		f.expireLease(t, f.forge.ID)
+		if got := f.claimedName(t, "other"); got != "web" {
+			t.Fatalf("claim = %q, want web (a dropped repository is never claimed)", got)
+		}
+		rows, err := store.ListProjectDaemonReposForPair(f.ctx, f.env.ORM, f.project.ID, "d1")
+		if err != nil || len(rows) != 1 || rows[0].RepoID != f.web.ID {
+			t.Fatalf("rows = %+v, %v; want the dropped row purged", rows, err)
+		}
+		if f.settle(t, f.forge.ID, "gone", "") {
+			t.Fatal("a purged claim recorded an outcome")
 		}
 	})
 }

@@ -23,7 +23,7 @@
  */
 import React, { useEffect, useId, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
@@ -66,19 +66,23 @@ import {
 import {
   DaemonSize,
   PortAccessMode,
-  deleteDaemon,
   describeError,
-  getDaemon,
   growDaemonDisk,
-  listPortAccessRules,
-  portAccessRulesQueryKey,
-  removePortAccess,
   resizeDaemon,
   resumeEnvironment,
-  setPortAccess,
   suspendDaemon,
   type PortAccessRule,
 } from "@/services/controlPlane/environments";
+import {
+  daemonServiceKeys,
+  useDeleteDaemon,
+  useGetDaemon,
+  useListPortAccessRules,
+  useRemovePortAccess,
+  useResumeDaemon,
+  useSetPortAccess,
+  useSuspendDaemon,
+} from "@/hooks/controlplane/daemon-service-hooks_gen";
 import {
   DaemonStatus,
   type DaemonInfo as Daemon,
@@ -129,18 +133,16 @@ import { machineSettingsPath, settingsPath } from "@/lib/paths";
 
 
 // ── Query keys ──────────────────────────────────────────────────────────────
+// Control-plane reads are on DaemonService's generated keys
+// (daemonServiceKeys): one GetDaemon entry per machine, shared with the
+// header's preview template and MachineCost, and one ListPortAccessRules entry,
+// shared with the header DetectedPortsChip's one-click-public toggle so a
+// "Make public" there refreshes this panel's rules and vice-versa.
 // The machine LIST is not here: it is the one shared daemon list
 // (daemon-registry-queries), which the list view and the detail view both read
 // on their own cadence. A restart's 2s poll therefore refreshes every reader
 // of the list while it runs — one list, one answer
 // (docs/design/one-daemon-list.md).
-const QK = {
-  daemon: (id: string) => ["cp", "environments", "detail", id] as const,
-  // Shared with the header DetectedPortsChip's one-click-public toggle so a
-  // "Make public" there invalidates this panel's rules query and vice-versa.
-  ports: portAccessRulesQueryKey,
-  computeSub: ["cp", "environments", "computeSubscription"] as const,
-};
 
 // ── Status presentation ─────────────────────────────────────────────────────
 type WsStatus = "active" | "suspended" | "failed" | "pending" | "disconnected" | "unknown";
@@ -503,21 +505,20 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
   const org = useOrgScope();
   const eligibilityQ = useQuery(computeEligibilityQuery(org, cloud));
 
-  const invalidate = () => invalidateDaemonList(qc);
-
-  const suspendMut = useMutation({
-    mutationFn: (id: string) => suspendDaemon(id),
-    onSuccess: () => { setActionError(""); invalidate(); },
+  // Each lifecycle write refreshes the one daemon list, and nothing else.
+  const suspendMut = useSuspendDaemon({
+    invalidate: invalidateDaemonList,
+    onSuccess: () => setActionError(""),
     onError: (e) => setActionError(describeError(e, "Failed to suspend sandbox")),
   });
-  const resumeMut = useMutation({
-    mutationFn: (id: string) => resumeEnvironment(id),
-    onSuccess: (_data, id) => { markWaking(id); setActionError(""); invalidate(); },
+  const resumeMut = useResumeDaemon({
+    invalidate: invalidateDaemonList,
+    onSuccess: (_data, { daemonId }) => { markWaking(daemonId ?? ""); setActionError(""); },
     onError: (e) => setActionError(describeError(e, "Failed to resume sandbox")),
   });
-  const deleteMut = useMutation({
-    mutationFn: (id: string) => deleteDaemon(id),
-    onSuccess: () => { setDeleteTarget(null); setActionError(""); invalidate(); },
+  const deleteMut = useDeleteDaemon({
+    invalidate: invalidateDaemonList,
+    onSuccess: () => { setDeleteTarget(null); setActionError(""); },
     onError: (e) => setActionError(describeError(e, "Failed to delete sandbox")),
   });
 
@@ -604,8 +605,8 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
                 cloud={cloud}
                 onOpenDetail={onOpenDetail}
                 onDelete={setDeleteTarget}
-                onSuspend={(id) => suspendMut.mutate(id)}
-                onResume={(id) => resumeMut.mutate(id)}
+                onSuspend={(id) => suspendMut.mutate({ daemonId: id })}
+                onResume={(id) => resumeMut.mutate({ daemonId: id })}
                 busy={suspendMut.isPending || resumeMut.isPending}
               />
             </div>
@@ -631,7 +632,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onReady={(machine) => {
-          invalidate();
+          invalidateDaemonList(qc);
           onOpenDetail(machine.daemonId);
         }}
       />
@@ -640,7 +641,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
         target={deleteTarget}
         isPending={deleteMut.isPending}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => deleteTarget && deleteMut.mutate(deleteTarget.daemonId)}
+        onConfirm={() => deleteTarget && deleteMut.mutate({ daemonId: deleteTarget.daemonId })}
       />
     </div>
   );
@@ -1385,9 +1386,7 @@ function EnvironmentDetail({
   // never prevent opening a personal machine's settings.
   const needsCloudSpec = cloud && !!daemon && !isExternalDaemon(daemon);
 
-  const daemonQ = useQuery({
-    queryKey: QK.daemon(daemonId),
-    queryFn: () => getDaemon(daemonId),
+  const daemonQ = useGetDaemon({ daemonId }, {
     // 2s while a restart runs: the default 15s would leave the progress copy
     // ("Stopping…" → "Starting…") lagging the machine by up to a quarter
     // minute, which reads as a hang during the one operation that most needs
@@ -1399,24 +1398,26 @@ function EnvironmentDetail({
   const spec = daemonQ.data?.daemon;
   const workspaceBaseDomain = daemonQ.data?.workspaceBaseDomain ?? "";
 
-  const refetchAll = () => {
-    qc.invalidateQueries({ queryKey: QK.daemon(daemonId) });
-    invalidateDaemonList(qc);
+  // This machine's control-plane detail and the one daemon list.
+  const refreshMachine = (client: QueryClient) => {
+    void client.invalidateQueries({ queryKey: daemonServiceKeys.getDaemon({ daemonId }) });
+    invalidateDaemonList(client);
   };
+  const refetchAll = () => refreshMachine(qc);
 
-  const suspendMut = useMutation({
-    mutationFn: () => suspendDaemon(daemonId),
-    onSuccess: () => { setError(""); refetchAll(); },
+  const suspendMut = useSuspendDaemon({
+    invalidate: refreshMachine,
+    onSuccess: () => setError(""),
     onError: (e) => setError(describeError(e, "Failed to suspend sandbox")),
   });
-  const resumeMut = useMutation({
-    mutationFn: () => resumeEnvironment(daemonId),
-    onSuccess: () => { markWaking(daemonId); setError(""); refetchAll(); },
+  const resumeMut = useResumeDaemon({
+    invalidate: refreshMachine,
+    onSuccess: () => { markWaking(daemonId); setError(""); },
     onError: (e) => setError(describeError(e, "Failed to resume sandbox")),
   });
-  const deleteMut = useMutation({
-    mutationFn: () => deleteDaemon(daemonId),
-    onSuccess: () => { setDeleteOpen(false); invalidateDaemonList(qc); onBack(); },
+  const deleteMut = useDeleteDaemon({
+    invalidate: invalidateDaemonList,
+    onSuccess: () => { setDeleteOpen(false); onBack(); },
     onError: (e) => setError(describeError(e, "Failed to delete sandbox")),
   });
 
@@ -1661,8 +1662,8 @@ function EnvironmentDetail({
                 busy={busy}
                 restartStage={restartStage}
                 cycling={cycling}
-                onSuspend={() => suspendMut.mutate()}
-                onResume={() => resumeMut.mutate()}
+                onSuspend={() => suspendMut.mutate({ daemonId })}
+                onResume={() => resumeMut.mutate({ daemonId })}
                 onRestart={() => setRestartOpen(true)}
                 onResize={() => { setResizeError(""); setResizeOpen(true); }}
               />
@@ -1869,7 +1870,7 @@ function EnvironmentDetail({
             target={deleteOpen ? daemon : null}
             isPending={deleteMut.isPending}
             onClose={() => setDeleteOpen(false)}
-            onConfirm={() => deleteMut.mutate()}
+            onConfirm={() => deleteMut.mutate({ daemonId })}
           />
 
           <RestartMachineModal
@@ -1925,34 +1926,30 @@ function EnvironmentDetail({
 }
 
 function PortAccessPanel({ daemonId, workspaceBaseDomain }: { daemonId: string; workspaceBaseDomain: string }) {
-  const qc = useQueryClient();
   const [port, setPort] = useState("");
   const [mode, setMode] = useState<PortAccessMode>(PortAccessMode.PUBLIC);
   const [error, setError] = useState("");
   const [createdToken, setCreatedToken] = useState<string | null>(null);
 
-  const rulesQ = useQuery({
-    queryKey: QK.ports(daemonId),
-    queryFn: () => listPortAccessRules(daemonId),
-  });
+  const rulesQ = useListPortAccessRules({ daemonId }, { select: (res) => res.rules });
   const rules: PortAccessRule[] = rulesQ.data ?? [];
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: QK.ports(daemonId) });
+  // A rule write refreshes this machine's rules, and nothing else.
+  const refreshRules = (client: QueryClient) =>
+    void client.invalidateQueries({ queryKey: daemonServiceKeys.listPortAccessRules({ daemonId }) });
 
-  const addMut = useMutation({
-    mutationFn: () => setPortAccess({ daemonId, port: parseInt(port, 10), accessMode: mode }),
+  const addMut = useSetPortAccess({
+    invalidate: refreshRules,
     onSuccess: (res) => {
       if (res.accessToken) setCreatedToken(res.accessToken);
       setPort("");
       setMode(PortAccessMode.PUBLIC);
       setError("");
-      invalidate();
     },
     onError: (e) => setError(describeError(e, "Failed to add port rule")),
   });
-  const removeMut = useMutation({
-    mutationFn: (p: number) => removePortAccess(daemonId, p),
-    onSuccess: () => invalidate(),
+  const removeMut = useRemovePortAccess({
+    invalidate: refreshRules,
     onError: (e) => setError(describeError(e, "Failed to remove port rule")),
   });
 
@@ -1967,7 +1964,7 @@ function PortAccessPanel({ daemonId, workspaceBaseDomain }: { daemonId: string; 
             const p = parseInt(port, 10);
             if (!p || p < 1 || p > 65535) return;
             setError("");
-            addMut.mutate();
+            addMut.mutate({ daemonId, port: p, accessMode: mode });
           }}
         >
           <div className="flex-1 min-w-[8rem]">
@@ -2023,9 +2020,9 @@ function PortAccessPanel({ daemonId, workspaceBaseDomain }: { daemonId: string; 
                     srHeader: true,
                     className: "text-right",
                     render: (_, { r }) => {
-                      const removing = removeMut.isPending && removeMut.variables === r.port;
+                      const removing = removeMut.isPending && removeMut.variables?.port === r.port;
                       return (
-                        <Button variant="ghost" size="md" disabled={removing} onClick={() => removeMut.mutate(r.port)} leftIcon={<Trash2 className="text-destructive-ink" />}>
+                        <Button variant="ghost" size="md" disabled={removing} onClick={() => removeMut.mutate({ daemonId, port: r.port })} leftIcon={<Trash2 className="text-destructive-ink" />}>
                           {removing ? "Removing…" : "Remove"}
                         </Button>
                       );

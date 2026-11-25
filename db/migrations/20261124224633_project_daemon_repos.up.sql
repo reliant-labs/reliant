@@ -33,6 +33,12 @@ CREATE TABLE project_daemon_repos (
     -- goes back to pending when that claim settles, its outcome belonging to
     -- the previous plan. A claim taken over after the lease ran out clears it.
     replan_pending BOOLEAN NOT NULL DEFAULT false,
+    -- The set-up was planned again without this repository while a claim's
+    -- lease still held: the row is kept, claim and lease included, so the
+    -- running clone still excludes any other clone of its target (a plan
+    -- that adds it back before then keeps the claim), and it goes when that
+    -- claim settles or its lease runs out. Never shown as part of the plan.
+    dropped_from_plan BOOLEAN NOT NULL DEFAULT false,
     PRIMARY KEY (project_id, daemon_id, repo_id),
     FOREIGN KEY (project_id, daemon_id) REFERENCES project_daemons (project_id, daemon_id) ON DELETE CASCADE
 );

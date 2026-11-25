@@ -388,19 +388,33 @@ func projectDaemonReposToCore(rows []projectDaemonRepoRow) []*core.ProjectDaemon
 // daemon's clone sweeps the target's staging directories). It is marked
 // replan_pending instead, and goes back to pending when that claim settles
 // (SettleProjectDaemonRepo), or is cleared by the claim that takes it over
-// once the lease runs out. Every other row's claim is dropped. The pair's
+// once the lease runs out. Every other row's claim is dropped.
+//
+// A row left out of repoIDs is removed, except one whose claim's lease still
+// holds, which the same reasoning keeps: it is tombstoned
+// (dropped_from_plan) with its claim and lease, so a later plan that adds
+// the repository back before that clone ends still cannot start a second
+// one. The tombstone goes when its claim settles, or once the lease ran out
+// (ClaimNextProjectDaemonRepo purges it). The pair's
 // project_daemons row must exist. Run it in the transaction that queues the
 // root clone.
 func PlanProjectDaemonRepos(ctx context.Context, db orm.Context, projectID, daemonID string, repoIDs []string) error {
 	if projectID == "" || daemonID == "" {
 		return fmt.Errorf("project ID and daemon ID cannot be empty")
 	}
-	del := db.Bun().NewDelete().TableExpr("project_daemon_repos").
-		Where("project_id = ?", projectID).Where("daemon_id = ?", daemonID)
-	if len(repoIDs) > 0 {
-		del = del.Where("repo_id NOT IN (?)", bun.List(repoIDs))
+	omitted := func(q string) string {
+		if len(repoIDs) > 0 {
+			return q + ` AND repo_id NOT IN (?2)`
+		}
+		return q
 	}
-	if _, err := del.Exec(ctx); err != nil {
+	ids := bun.List(repoIDs)
+	if _, err := db.Bun().NewRaw(omitted(`UPDATE project_daemon_repos SET dropped_from_plan = true, replan_pending = false
+WHERE project_id = ?0 AND daemon_id = ?1 AND `+liveRow), projectID, daemonID, ids).Exec(ctx); err != nil {
+		return fmt.Errorf("keep the machine's running nested clones: %w", err)
+	}
+	if _, err := db.Bun().NewRaw(omitted(`DELETE FROM project_daemon_repos
+WHERE project_id = ?0 AND daemon_id = ?1 AND NOT `+liveRow), projectID, daemonID, ids).Exec(ctx); err != nil {
 		return fmt.Errorf("clear the machine's nested repositories: %w", err)
 	}
 	for _, repoID := range repoIDs {
@@ -412,7 +426,8 @@ ON CONFLICT (project_id, daemon_id, repo_id) DO UPDATE SET
 	state_changed_at = CASE WHEN `+liveClaim+` THEN project_daemon_repos.state_changed_at ELSE now() END,
 	claim_id = CASE WHEN `+liveClaim+` THEN project_daemon_repos.claim_id ELSE '' END,
 	lease_until = CASE WHEN `+liveClaim+` THEN project_daemon_repos.lease_until ELSE NULL END,
-	replan_pending = `+liveClaim,
+	replan_pending = `+liveClaim+`,
+	dropped_from_plan = false`,
 			projectID, daemonID, repoID).Exec(ctx); err != nil {
 			return fmt.Errorf("plan nested repository %s: %w", repoID, err)
 		}
@@ -423,6 +438,10 @@ ON CONFLICT (project_id, daemon_id, repo_id) DO UPDATE SET
 // liveClaim is true of a project_daemon_repos row (in an ON CONFLICT update)
 // whose claim's lease still holds: the machine may still be running its clone.
 const liveClaim = `(project_daemon_repos.state = 'cloning' AND project_daemon_repos.lease_until IS NOT NULL AND project_daemon_repos.lease_until >= now())`
+
+// liveRow is liveClaim for an unqualified UPDATE or DELETE of
+// project_daemon_repos.
+const liveRow = `(state = 'cloning' AND lease_until IS NOT NULL AND lease_until >= now())`
 
 type nestedRepoClaimRow struct {
 	projectDaemonRepoRow
@@ -444,14 +463,21 @@ func ClaimNextProjectDaemonRepo(ctx context.Context, db orm.Context, projectID, 
 		return nil, fmt.Errorf("project ID, daemon ID and claim ID cannot be empty")
 	}
 	var rows []nestedRepoClaimRow
+	// A tombstone whose lease ran out (dropped from the plan, its clone over)
+	// is purged first, and never blocks or is claimed.
+	if _, err := db.Bun().NewRaw(`DELETE FROM project_daemon_repos
+WHERE project_id = ?0 AND daemon_id = ?1 AND dropped_from_plan AND NOT `+liveRow, projectID, daemonID).Exec(ctx); err != nil {
+		return nil, fmt.Errorf("purge dropped nested repositories: %w", err)
+	}
 	err := db.Bun().NewRaw(`WITH pair AS (
 	SELECT p.repo_id, p.state, trim(both '/' from r.relative_path) AS rel
 	FROM project_daemon_repos p JOIN repos r ON r.id = p.repo_id
 	WHERE p.project_id = ?0 AND p.daemon_id = ?1
+	  AND NOT (p.dropped_from_plan AND (p.lease_until IS NULL OR p.lease_until < now()))
 ), candidate AS (
 	SELECT c.repo_id
 	FROM project_daemon_repos c JOIN repos cr ON cr.id = c.repo_id
-	WHERE c.project_id = ?0 AND c.daemon_id = ?1
+	WHERE c.project_id = ?0 AND c.daemon_id = ?1 AND NOT c.dropped_from_plan
 	  AND (c.state = 'pending' OR (c.state = 'cloning' AND (c.lease_until IS NULL OR c.lease_until < now())))
 	  AND NOT EXISTS (
 		SELECT 1 FROM pair a
@@ -465,7 +491,7 @@ func ClaimNextProjectDaemonRepo(ctx context.Context, db orm.Context, projectID, 
 	UPDATE project_daemon_repos u SET state = 'cloning', error = '', claim_id = ?2, replan_pending = false,
 		lease_until = now() + make_interval(secs => ?3), state_changed_at = now()
 	FROM candidate
-	WHERE u.project_id = ?0 AND u.daemon_id = ?1 AND u.repo_id = candidate.repo_id
+	WHERE u.project_id = ?0 AND u.daemon_id = ?1 AND u.repo_id = candidate.repo_id AND NOT u.dropped_from_plan
 	  AND (u.state = 'pending' OR (u.state = 'cloning' AND (u.lease_until IS NULL OR u.lease_until < now())))
 	RETURNING u.project_id, u.daemon_id, u.repo_id, u.state, u.error, u.state_changed_at, u.lease_until
 )
@@ -495,6 +521,7 @@ FROM claimed c JOIN repos r ON r.id = c.repo_id`, projectID, daemonID, claimID, 
 // to pending instead, its outcome belonging to the previous plan: the new
 // plan clones it again now that this clone has ended (a clone that landed is
 // kept by the daemon). settled reports true then too: the claim is released.
+// A row dropped from the plan while this claim ran is removed.
 func SettleProjectDaemonRepo(ctx context.Context, db orm.Context, projectID, daemonID, repoID, claimID, installErr string) (bool, error) {
 	if claimID == "" {
 		return false, fmt.Errorf("claim ID cannot be empty")
@@ -502,6 +529,15 @@ func SettleProjectDaemonRepo(ctx context.Context, db orm.Context, projectID, dae
 	state := core.NestedRepoInstalled
 	if installErr != "" {
 		state = core.NestedRepoFailed
+	}
+	dropped, err := db.Bun().NewRaw(`DELETE FROM project_daemon_repos
+WHERE project_id = ?0 AND daemon_id = ?1 AND repo_id = ?2 AND state = 'cloning' AND claim_id = ?3 AND dropped_from_plan`,
+		projectID, daemonID, repoID, claimID).Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	if n, err := dropped.RowsAffected(); err != nil || n > 0 {
+		return n > 0, err
 	}
 	res, err := db.Bun().NewRaw(`UPDATE project_daemon_repos SET
 	state = CASE WHEN replan_pending THEN 'pending' ELSE ?3 END,
@@ -555,6 +591,9 @@ WHERE project_id = ?0 AND daemon_id = ?1 AND install_state IN (?4, ?5)
 
 // ListProjectDaemonReposForPair returns the nested repositories of the
 // project's checkout on the machine, by relative path.
+// It includes a repository dropped from the plan whose clone may still run
+// (dropped_from_plan): it reads cloning, so nothing settles the checkout
+// before that clone ends.
 func ListProjectDaemonReposForPair(ctx context.Context, db orm.Context, projectID, daemonID string) ([]*core.ProjectDaemonRepo, error) {
 	var rows []projectDaemonRepoRow
 	err := db.Bun().NewRaw(projectDaemonRepoSelect+`
@@ -574,7 +613,7 @@ func ListProjectDaemonReposForProjects(ctx context.Context, db orm.Context, proj
 	}
 	var rows []projectDaemonRepoRow
 	err := db.Bun().NewRaw(projectDaemonRepoSelect+`
-WHERE pdr.project_id IN (?)
+WHERE pdr.project_id IN (?) AND NOT pdr.dropped_from_plan
 ORDER BY pdr.project_id, pdr.daemon_id, r.relative_path`, bun.List(projectIDs)).Scan(ctx, &rows)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("list nested repositories: %w", err)
