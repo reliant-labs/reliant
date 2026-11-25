@@ -42,7 +42,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/runs"
-	extstore "github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -92,10 +91,10 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	doer := slackDoer{target: slack}
-	store := db.TestConnections(t, repo)
-	tokens := connections.NewTokenSource(store, sealer, providers, doer)
-	broker := connections.NewBroker(store, sealer, providers, doer, "https://reliant.example")
-	conns := connections.NewService(store, sealer, providers, tokens, broker, doer)
+	vault := db.TestConnections(t, repo)
+	tokens := connections.NewTokenSource(vault, sealer, providers, doer)
+	broker := connections.NewBroker(vault, sealer, providers, doer, "https://reliant.example")
+	conns := connections.NewService(vault, sealer, providers, tokens, broker, doer)
 	connectSlack := func(userID, team string) *core.Connection {
 		slack.team = team
 		authURL, err := conns.StartOAuth(ctx, connections.StartParams{UserID: userID, IntegrationID: "slack", ClientOrigin: "https://reliant.example"})
@@ -203,7 +202,7 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 	assert.Equal(t, "T0ACME", launchedAcme.Payload["account"])
 	data, _ := launchedAcme.Payload["data"].(map[string]any)
 	assert.Equal(t, "<@U0BOT> summarize the thread", data["text"])
-	chat, err := extstore.GetChat(ctx, repo.ORM(), *launchedAcme.ChatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), *launchedAcme.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, acme.userID, chat.UserID)
 	assertFirings(t, repo, acme.userID, acme.trigger.GetId(), map[core.TriggerEventOutcome]int{

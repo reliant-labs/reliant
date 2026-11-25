@@ -41,7 +41,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/runs"
-	extstore "github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -100,10 +99,10 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(func(string) string { return "" }))
 	require.NoError(t, err)
 	doer := twilioDoer{target: twilio}
-	store := db.TestConnections(t, repo)
-	tokens := connections.NewTokenSource(store, sealer, providers, doer)
-	broker := connections.NewBroker(store, sealer, providers, doer, "https://reliant.example")
-	conns := connections.NewService(store, sealer, providers, tokens, broker, doer)
+	vault := db.TestConnections(t, repo)
+	tokens := connections.NewTokenSource(vault, sealer, providers, doer)
+	broker := connections.NewBroker(vault, sealer, providers, doer, "https://reliant.example")
+	conns := connections.NewService(vault, sealer, providers, tokens, broker, doer)
 	connectTwilio := func(userID, account, token string) *core.Connection {
 		conn, err := conns.CreateAPIKey(ctx, connections.CreateAPIKeyParams{
 			UserID: userID, IntegrationID: "twilio", Name: "texts", Kind: connections.APIKeyKindBasic,
@@ -212,7 +211,7 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 	assert.Equal(t, alice.trigger.GetId()+":SMalice1", launchedAlice.DedupeKey)
 	assert.Equal(t, "message.received", launchedAlice.Payload["event"])
 	assert.Equal(t, accountA, launchedAlice.Payload["account"])
-	chat, err := extstore.GetChat(ctx, repo.ORM(), *launchedAlice.ChatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), *launchedAlice.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, alice.userID, chat.UserID)
 	assertRunSees(t, repo, *launchedAlice.ChatID, "trigger.payload.data.body == 'is the deploy done?'")
