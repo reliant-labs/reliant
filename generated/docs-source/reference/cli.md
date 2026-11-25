@@ -582,6 +582,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant server api`](#reliant-server-api) | Run the stateless HTTP + gRPC API server |
 | [`reliant server gateway`](#reliant-server-gateway) | Run the daemon connection gateway |
 | [`reliant server worker`](#reliant-server-worker) | Run the Temporal workflow worker |
+| [`reliant storage`](#reliant-storage) | Inspect what the daemon reclaims of this machine's disk |
+| [`reliant storage idle`](#reliant-storage-idle) | The idle reclaim of scratch directories and idle worktrees' node_modules |
+| [`reliant storage idle report`](#reliant-storage-idle-report) | Show the daemon's last idle reclaim pass |
+| [`reliant storage idle scan`](#reliant-storage-idle-scan) | Run a dry-run idle reclaim pass now and print what it would remove |
 | [`reliant trigger`](#reliant-trigger) | Manage triggers and workflow activations |
 | [`reliant trigger activate`](#reliant-trigger-activate) | Turn on the triggers a workflow declares |
 | [`reliant trigger create`](#reliant-trigger-create) | Create a schedule trigger |
@@ -24843,6 +24847,110 @@ reliant server worker [flags]
 |------|------|---------|-------------|
 | `--health-port` | `int32` | `8081` | Health check endpoint port [env: HEALTH_PORT] |
 | `--pprof-port` | `int32` | `6060` | pprof debug server port (binds 127.0.0.1 only) [env: PPROF_PORT] |
+
+---
+
+## reliant storage
+
+Inspect what the daemon reclaims of this machine's disk
+
+```
+reliant storage
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`idle`](#reliant-storage-idle) | The idle reclaim of scratch directories and idle worktrees' node_modules |
+
+---
+
+### reliant storage idle
+
+The idle reclaim of scratch directories and idle worktrees' node_modules
+
+The daemon frees the disk of directories nobody is using, in two places:
+
+  Scratch directories (~/.reliant/scratch/<chat>/), which the system prompt
+  gives every chat. After 48h unused (no file changed in it and no daemon work
+  named a path in it) and with no process using it, its node_modules, its
+  build output (dist, .next, out, build, .turbo, .vite ... beside a
+  package.json; target beside a Cargo.toml) and its clean, pushed, unlocked
+  git worktrees are removed. After 7 days unused, also counted from its chat's
+  last tool call, the whole directory is removed, unless a git working tree in
+  it holds work that exists nowhere else. A .keep file at the top of a scratch
+  directory keeps it and everything in it.
+
+  Linked worktrees under ~/.reliant/worktrees that are kept for another
+  reason (uncommitted or unpushed work, a chat still bound to them): after 72h
+  unused, their git-ignored node_modules are removed. Nothing else in them is
+  touched.
+
+A command that fails in a directory whose node_modules or build output was
+removed gets a note saying so; reinstall with the project's package manager.
+
+RELIANT_IDLE_RECLAIM sets the mode: auto (the default: it runs wherever the
+storage reaper runs, RELIANT_STORAGE_REAPER), on, dry-run or off. The
+thresholds are RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE,
+RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE and
+RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE.
+
+```
+reliant storage idle
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`report`](#reliant-storage-idle-report) | Show the daemon's last idle reclaim pass |
+| [`scan`](#reliant-storage-idle-scan) | Run a dry-run idle reclaim pass now and print what it would remove |
+
+---
+
+#### reliant storage idle report
+
+Show the daemon's last idle reclaim pass
+
+```
+reliant storage idle report [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | print the report as JSON |
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+#### reliant storage idle scan
+
+Run a dry-run idle reclaim pass now and print what it would remove
+
+Run one dry-run pass in this process with the daemon's thresholds and its
+record of use, and print what it would remove and why it would keep the
+rest. It removes nothing and does not replace the daemon's report.
+
+A process can only inspect another process of the same user when that one
+allows it, and the daemon does not, so from a shell every directory the
+daemon holds a file in looks in use. --skip-process-check leaves the process
+check out of the scan to estimate what a pass would free; the daemon's own
+passes always make it.
+
+```
+reliant storage idle scan [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | print the report as JSON |
+| `--skip-process-check` | `bool` | - | estimate without the process check, which a shell cannot make against the daemon's own process |
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
 
 ---
 

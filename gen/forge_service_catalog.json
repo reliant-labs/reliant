@@ -60559,6 +60559,15 @@
     },
     {
       "consumer": "Triggerowner",
+      "field": "Adoptions",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Adoptions",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Triggerowner",
       "field": "Locks",
       "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Locks",
       "methods": [],
@@ -60674,6 +60683,17 @@
         "Providerbackoff"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerChat",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "WorkerDaemonRouter",
@@ -61659,6 +61679,14 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Triggerowner.Adoptions",
+      "source": {
+        "path": "internal/triggerowner/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Triggerowner.Locks",
       "source": {
         "path": "internal/triggerowner/service.go",
@@ -61711,6 +61739,14 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewVault"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "WorkerChat.Updates",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewWorkerChat"
       }
     },
     {

@@ -51,7 +51,7 @@ reliant.WebhookBearer(token))` delivers with the trigger's own credential.
 | `Runs` | `Start`, `Get`, `List`, `LastPerWorkflow`, `Signal`, `Cancel`, `Pause`\*, `Resume`\*, `Interrupt`\*, `CancelWithResult`, `PauseWithResult`\*, `ResumeWithResult`\*, `Follow`, `Status`, `Nodes`, `ContentBlockBodies` |
 | `Gates` | `Pending`, `Answer` |
 | `Inbox` | `List` (filters: project, kinds, automation; follows truncation), `Counts`, `Dismiss`, `Restore` |
-| `Approvals` | `List` (by chat), `ListForRun`, `Approve`, `Deny`, `BatchApprove`, `BatchDeny` (these four need an explicitly granted `approvals:decide`) |
+| `Approvals` | `List` (by chat), `ListForRun`, `Approve`, `Deny`, `BatchApprove`, `BatchDeny` (these four are refused to every token: only a person signed in to the app decides) |
 | `Triggers` | `Get`, `List`, `Fire`, `Events`, `LaunchEvent` |
 | `NewWebhook` | `POST /hooks/{id}` with a bearer token, a path token or an HMAC signature |
 | `reliant/follow` | the follow engine, if you have your own source of updates |
@@ -82,14 +82,11 @@ which rpcs are public). Approval gates are reported by `Gates.Pending`.
 
 ### Deciding approvals
 
-`Approvals.Approve`, `Deny`, `BatchApprove` and `BatchDeny` need the
-`approvals:decide` scope **granted explicitly** on the token. `reliant:api` does
-not stand in for it here, so every token minted for runs, triggers or the inbox
-still cannot approve. A token bound to a machine (a daemon credential, which is
-what a run executes with) is refused even if it holds `approvals:decide`. The
-errors are `ErrScopeMissing` (`Error.Scopes` names the scope) and
-`ErrMachineCredential`, both also `ErrPermissionDenied`; deciding what is
-already resolved is `ErrApprovalNotPending`.
+`Approvals.Approve`, `Deny`, `BatchApprove` and `BatchDeny` are refused to every
+API token, `approvals:decide` included (owner decision 2026-11-19: an approval
+means a person said yes, so it needs the app's signed-in browser session). The
+server answers `ErrPermissionDenied` with reason `person_required`; a token bound
+to a machine gets `ErrMachineCredential`. Decide approvals in the Reliant app.
 
 For an rpc this package does not wrap, build a generated client from the
 authenticated HTTP client:

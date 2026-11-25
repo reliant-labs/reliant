@@ -14,13 +14,13 @@
  */
 
 import { useEffect, useId, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 
 import Button from "@/components/forge-ui/button";
 import Modal from "@/components/forge-ui/modal";
-import { useRememberChange } from "@/hooks/changes-queries";
-import { useChangesApi } from "@/services/controlPlane/changes/ChangesApiContext";
+import { useCreateChange } from "@/hooks/controlplane/changes-service-hooks_gen";
+import { NO_REFETCH, useRememberChange } from "@/hooks/changes-queries";
+import { createChangeRequest } from "@/services/controlPlane/changes/changesRequests";
 import type { ChangeUnit } from "@/services/controlPlane/changes/changesTypes";
 import { describeChangeError } from "@/services/controlPlane/changes/errors";
 import { withSearch } from "../Console/paths";
@@ -44,7 +44,6 @@ export interface NewChangeDialogProps {
 }
 
 export function NewChangeDialog({ open, onClose, envs, defaultEnvId, declaredKeys, changeHref }: NewChangeDialogProps) {
-  const api = useChangesApi();
   const remember = useRememberChange();
   const navigate = useNavigate();
   const id = useId();
@@ -58,16 +57,17 @@ export function NewChangeDialog({ open, onClose, envs, defaultEnvId, declaredKey
     if (open) setEnvId((current) => (envs.some((e) => e.id === current) ? current : defaultEnvId));
   }, [open, envs, defaultEnvId]);
 
-  const create = useMutation({
-    mutationFn: () => api.createChange({ environmentId: envId, key: key.trim(), description: description.trim(), unit }),
-    onSuccess: (change) => {
+  const create = useCreateChange({
+    ...NO_REFETCH,
+    onSuccess: ({ change }) => {
       remember(change);
       onClose();
       setKey("");
       setDescription("");
-      void navigate({ href: withSearch(changeHref(change.id), { who }) });
+      void navigate({ href: withSearch(changeHref(change?.id ?? ""), { who }) });
     },
   });
+  const submit = () => create.mutate(createChangeRequest({ environmentId: envId, key: key.trim(), description: description.trim(), unit }));
 
   const trimmed = key.trim();
   const keyValid = CHANGE_KEY.test(trimmed);
@@ -85,7 +85,7 @@ export function NewChangeDialog({ open, onClose, envs, defaultEnvId, declaredKey
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={() => create.mutate()} disabled={!canSubmit} loading={create.isPending} data-testid="new-change-submit">
+          <Button variant="primary" onClick={submit} disabled={!canSubmit} loading={create.isPending} data-testid="new-change-submit">
             Create change
           </Button>
         </>
@@ -95,7 +95,7 @@ export function NewChangeDialog({ open, onClose, envs, defaultEnvId, declaredKey
         className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
-          if (canSubmit) create.mutate();
+          if (canSubmit) submit();
         }}
       >
         <div className="space-y-1.5">

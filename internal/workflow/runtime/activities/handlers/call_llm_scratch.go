@@ -15,12 +15,20 @@ import "github.com/reliant-labs/reliant/internal/db"
 // expand it once. Sub-agents of the chat share its directory, so a parent can
 // hand one a briefing file by path; each also gets a subdirectory of its own
 // (subAgentScratchNote).
+//
+// The daemon's idle reclaim (internal/idlereclaim) empties a scratch
+// directory nobody uses, on these default thresholds, and keeps one with a
+// .keep file at its top (idlereclaim.KeepFile); the guidance says so, or an
+// agent coming back to a week-old briefing finds it gone without warning.
 func scratchDirGuidance(chat *db.Chat) string {
 	dir := chatScratchDir(chat)
 	return "Put scratch you may still need later (briefings, notes, clones, background-process output) in this chat's scratch directory, " +
 		dir + " (create it with `mkdir -p`; `~` is this machine's home directory, so run `echo ~` once and use the absolute path with file tools). " +
 		"It survives a restart of the machine. /tmp does not: it is emptied whenever the machine restarts (a daemon upgrade, suspend and resume, a move to another host), " +
-		"so keep only files you can lose there."
+		"so keep only files you can lose there. " +
+		"The machine cleans up scratch nobody uses: after 2 days unused it deletes the node_modules, build output and clean, pushed git worktrees in a scratch directory, " +
+		"and after 7 days unused (counted from this chat's last tool call too) the whole directory. " +
+		"To keep a directory and everything in it, create a file named `.keep` at its top."
 }
 
 // chatScratchDir is the chat's scratch directory, as the prompt writes it.

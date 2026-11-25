@@ -9,7 +9,7 @@
  * the one service that knows both whether a machine has attached AND what it
  * is doing. See docs/design/one-daemon-list.md. Per-machine control-plane
  * DETAIL (port access, workspace base domain, provisioning spec) is still
- * `getDaemon` in ./environments.
+ * GetDaemon, on the generated hooks (hooks/controlplane/daemon-service-hooks_gen.ts).
  *
  * Status constants are re-exported from the generated `DaemonStatus` enum so
  * callers don't have to import the enum AND a numeric constant for the same

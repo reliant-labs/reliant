@@ -32,6 +32,7 @@ type ReliantConfig struct {
 	Transcript      *TranscriptConfig      `protobuf:"bytes,4,opt,name=transcript,proto3" json:"transcript,omitempty"`
 	WorktreeReclaim *WorktreeReclaimConfig `protobuf:"bytes,5,opt,name=worktree_reclaim,json=worktreeReclaim,proto3" json:"worktree_reclaim,omitempty"`
 	MachineOrg      *MachineOrgConfig      `protobuf:"bytes,6,opt,name=machine_org,json=machineOrg,proto3" json:"machine_org,omitempty"`
+	IdleReclaim     *IdleReclaimConfig     `protobuf:"bytes,7,opt,name=idle_reclaim,json=idleReclaim,proto3" json:"idle_reclaim,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -104,6 +105,13 @@ func (x *ReliantConfig) GetWorktreeReclaim() *WorktreeReclaimConfig {
 func (x *ReliantConfig) GetMachineOrg() *MachineOrgConfig {
 	if x != nil {
 		return x.MachineOrg
+	}
+	return nil
+}
+
+func (x *ReliantConfig) GetIdleReclaim() *IdleReclaimConfig {
+	if x != nil {
+		return x.IdleReclaim
 	}
 	return nil
 }
@@ -518,11 +526,98 @@ func (x *WorktreeReclaimConfig) GetApprovalIdle() string {
 	return ""
 }
 
+// IdleReclaimConfig is the daemon's idle reclaim (internal/idlereclaim): the
+// lifecycle of the per-chat scratch directories (~/.reliant/scratch/<chat>/)
+// and the node_modules strip of linked worktrees that are kept for another
+// reason. Every removal is logged and reported in
+// ~/.reliant/reclaim/idle-report.json; `reliant storage idle scan` shows what
+// a pass would do. Durations are Go durations; a value the daemon cannot use
+// is named in a warning and replaced by its default (or raised to its
+// minimum).
+type IdleReclaimConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// auto runs it wherever the storage reaper runs (RELIANT_STORAGE_REAPER:
+	// managed daemons by default) and nowhere else; on runs it anywhere;
+	// dry-run decides and reports, removing nothing; off never runs it.
+	Mode string `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`
+	// How long a scratch directory must have gone unused (no file changed, no
+	// daemon work naming a path in it) before its node_modules, build output
+	// and clean, pushed git worktrees are removed.
+	ScratchStripIdle string `protobuf:"bytes,2,opt,name=scratch_strip_idle,json=scratchStripIdle,proto3" json:"scratch_strip_idle,omitempty"`
+	// How long before the whole scratch directory is removed, counted also
+	// from its chat's last tool call. A .keep file at its top keeps it.
+	ScratchRemoveIdle string `protobuf:"bytes,3,opt,name=scratch_remove_idle,json=scratchRemoveIdle,proto3" json:"scratch_remove_idle,omitempty"`
+	// How long a linked worktree under the worktree root must have gone
+	// unused before its git-ignored node_modules are removed. Nothing else in
+	// it is touched.
+	WorktreeNodeModulesIdle string `protobuf:"bytes,4,opt,name=worktree_node_modules_idle,json=worktreeNodeModulesIdle,proto3" json:"worktree_node_modules_idle,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
+}
+
+func (x *IdleReclaimConfig) Reset() {
+	*x = IdleReclaimConfig{}
+	mi := &file_reliant_config_v1_config_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IdleReclaimConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IdleReclaimConfig) ProtoMessage() {}
+
+func (x *IdleReclaimConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_config_v1_config_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IdleReclaimConfig.ProtoReflect.Descriptor instead.
+func (*IdleReclaimConfig) Descriptor() ([]byte, []int) {
+	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *IdleReclaimConfig) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *IdleReclaimConfig) GetScratchStripIdle() string {
+	if x != nil {
+		return x.ScratchStripIdle
+	}
+	return ""
+}
+
+func (x *IdleReclaimConfig) GetScratchRemoveIdle() string {
+	if x != nil {
+		return x.ScratchRemoveIdle
+	}
+	return ""
+}
+
+func (x *IdleReclaimConfig) GetWorktreeNodeModulesIdle() string {
+	if x != nil {
+		return x.WorktreeNodeModulesIdle
+	}
+	return ""
+}
+
 var File_reliant_config_v1_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1ereliant/config/v1/config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xb9\x03\n" +
+	"\x1ereliant/config/v1/config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\x82\x04\n" +
 	"\rReliantConfig\x12.\n" +
 	"\x03log\x18\x01 \x01(\v2\x1c.reliant.config.v1.LogConfigR\x03log\x12:\n" +
 	"\aruntime\x18\x02 \x01(\v2 .reliant.config.v1.RuntimeConfigR\aruntime\x12M\n" +
@@ -532,7 +627,8 @@ const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"transcript\x12S\n" +
 	"\x10worktree_reclaim\x18\x05 \x01(\v2(.reliant.config.v1.WorktreeReclaimConfigR\x0fworktreeReclaim\x12D\n" +
 	"\vmachine_org\x18\x06 \x01(\v2#.reliant.config.v1.MachineOrgConfigR\n" +
-	"machineOrg:\r\xca\xc1\x18\t\n" +
+	"machineOrg\x12G\n" +
+	"\fidle_reclaim\x18\a \x01(\v2$.reliant.config.v1.IdleReclaimConfigR\vidleReclaim:\r\xca\xc1\x18\t\n" +
 	"\areliant\"\xe7\x01\n" +
 	"\x10MachineOrgConfig\x12\xd2\x01\n" +
 	"\x11cross_org_cleanup\x18\x01 \x01(\tB\xa5\x01\x82\xce\x18\xa0\x01\n" +
@@ -573,7 +669,16 @@ const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"clean_idle\x18\x03 \x01(\tB\x80\x01\x82\xce\x18|\n" +
 	"#RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE\x1a\x0324h*PIdle time before a clean, pushed worktree is reclaimed (Go duration, minimum 1h)R\tcleanIdle\x12\xbc\x01\n" +
 	"\rapproval_idle\x18\x04 \x01(\tB\x96\x01\x82\xce\x18\x91\x01\n" +
-	"&RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE\x1a\x04120h*aIdle time before a worktree with unsaved work is proposed for approval (Go duration, minimum 24h)R\fapprovalIdleB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
+	"&RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE\x1a\x04120h*aIdle time before a worktree with unsaved work is proposed for approval (Go duration, minimum 24h)R\fapprovalIdle\"\xeb\x06\n" +
+	"\x11IdleReclaimConfig\x12\xce\x01\n" +
+	"\x04mode\x18\x01 \x01(\tB\xb9\x01\x82\xce\x18\xb4\x01\n" +
+	"\x14RELIANT_IDLE_RECLAIM\x1a\x04auto*~Idle reclaim of scratch directories and idle worktrees' node_modules: auto (where the storage reaper runs), on, dry-run or offJ\x04autoJ\x02onJ\adry-runJ\x03offR\x04mode\x12\xe0\x01\n" +
+	"\x12scratch_strip_idle\x18\x02 \x01(\tB\xb1\x01\x82\xce\x18\xac\x01\n" +
+	"'RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE\x1a\x0348h*|Idle time before a scratch directory's regenerable output and clean, pushed worktrees are removed (Go duration, minimum 24h)R\x10scratchStripIdle\x12\xcd\x01\n" +
+	"\x13scratch_remove_idle\x18\x03 \x01(\tB\x9c\x01\x82\xce\x18\x97\x01\n" +
+	"(RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE\x1a\x04168h*eIdle time before a whole scratch directory without a .keep file is removed (Go duration, minimum 72h)R\x11scratchRemoveIdle\x12\xd1\x01\n" +
+	"\x1aworktree_node_modules_idle\x18\x04 \x01(\tB\x93\x01\x82\xce\x18\x8e\x01\n" +
+	"/RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE\x1a\x0372h*VIdle time before a kept worktree's node_modules are removed (Go duration, minimum 24h)R\x17worktreeNodeModulesIdleB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
 var (
 	file_reliant_config_v1_config_proto_rawDescOnce sync.Once
@@ -587,7 +692,7 @@ func file_reliant_config_v1_config_proto_rawDescGZIP() []byte {
 	return file_reliant_config_v1_config_proto_rawDescData
 }
 
-var file_reliant_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_reliant_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_reliant_config_v1_config_proto_goTypes = []any{
 	(*ReliantConfig)(nil),         // 0: reliant.config.v1.ReliantConfig
 	(*MachineOrgConfig)(nil),      // 1: reliant.config.v1.MachineOrgConfig
@@ -596,6 +701,7 @@ var file_reliant_config_v1_config_proto_goTypes = []any{
 	(*LogConfig)(nil),             // 4: reliant.config.v1.LogConfig
 	(*StorageReaperConfig)(nil),   // 5: reliant.config.v1.StorageReaperConfig
 	(*WorktreeReclaimConfig)(nil), // 6: reliant.config.v1.WorktreeReclaimConfig
+	(*IdleReclaimConfig)(nil),     // 7: reliant.config.v1.IdleReclaimConfig
 }
 var file_reliant_config_v1_config_proto_depIdxs = []int32{
 	4, // 0: reliant.config.v1.ReliantConfig.log:type_name -> reliant.config.v1.LogConfig
@@ -604,11 +710,12 @@ var file_reliant_config_v1_config_proto_depIdxs = []int32{
 	2, // 3: reliant.config.v1.ReliantConfig.transcript:type_name -> reliant.config.v1.TranscriptConfig
 	6, // 4: reliant.config.v1.ReliantConfig.worktree_reclaim:type_name -> reliant.config.v1.WorktreeReclaimConfig
 	1, // 5: reliant.config.v1.ReliantConfig.machine_org:type_name -> reliant.config.v1.MachineOrgConfig
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	7, // 6: reliant.config.v1.ReliantConfig.idle_reclaim:type_name -> reliant.config.v1.IdleReclaimConfig
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_config_proto_init() }
@@ -622,7 +729,7 @@ func file_reliant_config_v1_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_config_v1_config_proto_rawDesc), len(file_reliant_config_v1_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
