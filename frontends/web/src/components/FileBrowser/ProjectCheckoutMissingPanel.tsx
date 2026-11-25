@@ -10,6 +10,7 @@ import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { machineDisplayName } from "../../lib/machineName";
 import { setUpPathOn } from "../../lib/projectPlacement";
 import { describeCloneError } from "../Projects/cloneTargets";
+import { NestedRepoStatus } from "../Projects/NestedRepoStatus";
 
 type NamedMachine = Parameters<typeof machineDisplayName>[0];
 
@@ -89,7 +90,13 @@ export function ProjectCheckoutMissingPanel({
   onCloneQueued: () => void;
 }) {
   const { daemons } = useDaemonStatus();
-  const installs = useProjectDaemonInstalls(Boolean(missing.remoteUrl && missing.daemonId));
+  const cloningHere = missing.state === ProjectCheckoutState.CLONING;
+  // The rows say how each nested repository's clone is going; re-read while
+  // one is landing.
+  const installs = useProjectDaemonInstalls(Boolean(missing.daemonId && (missing.remoteUrl || cloningHere)), cloningHere ? 3_000 : false);
+  const nestedRepos = installs.data?.find(
+    (row) => row.project_id === missing.projectId && row.daemon_id === missing.daemonId,
+  )?.nested_repos;
   const [cloning, setCloning] = useState(false);
   const [cloneError, setCloneError] = useState<string | null>(null);
 
@@ -98,7 +105,7 @@ export function ProjectCheckoutMissingPanel({
   const canClone = Boolean(missing.remoteUrl && missing.daemonId);
   const elsewhere = machinesThatHaveIt(missing, daemons);
 
-  if (missing.state === ProjectCheckoutState.CLONING) {
+  if (cloningHere) {
     return (
       <div className="flex h-full items-center justify-center p-4" data-testid="project-checkout-cloning">
         <div className="max-w-xs space-y-2 text-center">
@@ -107,6 +114,7 @@ export function ProjectCheckoutMissingPanel({
             Cloning {projectName} onto {machine}…
           </p>
           <p className="text-xs text-muted-foreground">The files appear here as soon as the clone lands.</p>
+          <NestedRepoStatus repos={nestedRepos} className="inline-block text-left" />
         </div>
       </div>
     );
@@ -158,6 +166,7 @@ export function ProjectCheckoutMissingPanel({
               ? missing.installError
               : absentExplanation({ machine, path: missing.path, canClone, elsewhere })}
           </p>
+          {failed && <NestedRepoStatus repos={nestedRepos} className="text-left" />}
         </div>
         {canClone && (
           <button

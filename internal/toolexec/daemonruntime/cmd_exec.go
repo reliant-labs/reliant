@@ -175,6 +175,13 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// the two paths cannot bound it differently.
 	cmd.WaitDelay = daemon.ExecWaitDelay
 
+	// Its own cgroup with a process limit where the machine allows, so a
+	// runaway command fails alone (internal/proctree), and a cancel's
+	// escalation reaches everything it started, wherever it went (below).
+	// After the heavy-slot and sandbox rewrites above, which change what cmd
+	// execs.
+	tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
+
 	// Cancellation terminates the process GROUP (set just above) and escalates
 	// to a kill only after ExecGraceDelay, instead of os/exec's default of an
 	// immediate SIGKILL that runs no signal handler and loses every cleanup
@@ -185,17 +192,12 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// manager below, outliving this function, and the timer must stay armed
 	// for as long as cancellation can still fire. It is stopped on every path
 	// where this function owns the command through to completion.
-	stopGrace := osutil.ApplyGracefulCancel(cmd, daemon.ExecGraceDelay)
+	stopGrace := osutil.ApplyGracefulCancelIn(cmd, daemon.ExecGraceDelay, tree)
 
 	// Snapshot the cgroup's oom_kill counter so a SIGKILL during the
 	// command's lifetime can be attributed to the kernel OOM killer.
 	// Invalid (and therefore inert) on hosts without cgroup v2 accounting.
 	oomSnap := memReader.SnapshotOOMKills()
-
-	// Its own cgroup with a process limit where the machine allows, so a
-	// runaway command fails alone (internal/proctree). Last before Start:
-	// the heavy-slot and sandbox rewrites above change what cmd execs.
-	tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
 
 	start := time.Now()
 	err = tree.Start(deadline.Context(), cmd)
@@ -247,6 +249,11 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	outcome := daemon.ClassifyExecOutcome(err, deadline.Err(), stdoutBuf.String(), stderrBuf.String(), memReader, oomSnap, diskwatch.Default())
 	outcome.NoteHeavyTimeout(heavy)
 	outcome.NoteThreadLimit(tree.LimitNote())
+	if outcome.ExitCode != 0 {
+		// The idle reclaim removed this directory's node_modules or build
+		// output: say so, or "Cannot find module" reads like a broken checkout.
+		outcome.NoteRemovedOutput(idleReclaimNote(req.WorkingDir))
+	}
 
 	logExecFinished(outcome, duration)
 

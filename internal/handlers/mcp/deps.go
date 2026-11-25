@@ -21,8 +21,6 @@ type ProjectReader interface {
 type Repository interface {
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
 
-	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
-
 	// Installs is each machine's checkout of the project and who owns each
 	// machine (projectcheckout.Resolve).
 	daemonplacement.Installs
@@ -43,4 +41,10 @@ type Router interface {
 	// PlacementDaemonID ranks the machines holding a checkout the way the
 	// project's other work is placed (daemonplacement.Machines).
 	PlacementDaemonID(ctx context.Context, userID, daemonID string) (string, error)
+}
+
+// UserRefetch tells a user's clients to re-read data of a given type (a
+// user_updates refetch). chatupdates.Service satisfies it.
+type UserRefetch interface {
+	EmitUserRefetch(ctx context.Context, userID string, refetchType core.RefetchType, opts core.RefetchOpts) error
 }

@@ -59,6 +59,7 @@ type RunRecorder interface {
 // transaction and a Temporal start whether the machine is up, asleep or gone.
 type Launcher struct {
 	repo        Store
+	chats       ChatReader
 	workflows   WorkflowLoader
 	worktrees   WorktreeReader
 	projectRows ProjectReader
@@ -117,6 +118,7 @@ type ChatPinner interface {
 func New(deps Deps) *Launcher {
 	return &Launcher{
 		repo:        deps.Store,
+		chats:       deps.Chats,
 		workflows:   deps.Workflows,
 		worktrees:   deps.Worktrees,
 		projectRows: deps.ProjectRows,
@@ -194,8 +196,8 @@ func (l *Launcher) replayOfNamedStart(ctx context.Context, ev Event, spec Spec, 
 	if !isRetryOf(stored, ev.Kind, seedFingerprint(spec.Messages, spec.Attachments)) {
 		return nil, ErrClientMessageReused
 	}
-	chat, err := l.repo.GetChat(ctx, already.ChatID)
-	if err != nil || !authz.CanWriteChat(ctx, spec.OwnerUserID, chat) {
+	chat, err := l.chats.GetChat(ctx, already.ChatID)
+	if err != nil || !authz.CanOwnChat(ctx, spec.OwnerUserID, chat) {
 		return nil, nil
 	}
 	result := &Result{Chat: chat, WorkflowID: chat.MainThreadID(), EventID: stored.ID}
@@ -292,7 +294,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		}
 	}
 	if spec.NewChatID != "" {
-		if _, err := l.repo.GetChat(ctx, chatID); err == nil {
+		if _, err := l.chats.GetChat(ctx, chatID); err == nil {
 			return nil, &AlreadyLaunchedError{ChatID: chatID}
 		} else if !errors.Is(err, core.ErrChatNotFound) {
 			return nil, &InternalError{Reason: "failed to check for an existing chat", Err: err}
@@ -692,11 +694,11 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed seedContent) (*Result, error) {
 	userID := spec.OwnerUserID
 
-	chat, err := l.repo.GetChat(ctx, spec.ChatID)
+	chat, err := l.chats.GetChat(ctx, spec.ChatID)
 	if err != nil && !errors.Is(err, core.ErrChatNotFound) {
 		return nil, &InternalError{Reason: "failed to load chat", Err: err}
 	}
-	if err != nil || !authz.CanWriteChat(ctx, userID, chat) {
+	if err != nil || !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, &NotFoundError{Reason: "chat not found", Err: err}
 	}
 
@@ -814,7 +816,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	var userMessageID string
 	if err := l.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		userMessageID = ""
-		cur, err := l.repo.GetChat(txCtx, chat.ID)
+		cur, err := l.chats.GetChat(txCtx, chat.ID)
 		if err != nil {
 			return fmt.Errorf("failed to reload chat: %w", err)
 		}
@@ -974,11 +976,11 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 	if recorded.ChatID == nil {
 		return nil, &AlreadyLaunchedError{EventID: recorded.ID}
 	}
-	chat, err := l.repo.GetChat(ctx, *recorded.ChatID)
+	chat, err := l.chats.GetChat(ctx, *recorded.ChatID)
 	if err != nil && !errors.Is(err, core.ErrChatNotFound) {
 		return nil, &InternalError{Reason: "failed to load chat", Err: err}
 	}
-	if err != nil || !authz.CanWriteChat(ctx, spec.OwnerUserID, chat) {
+	if err != nil || !authz.CanOwnChat(ctx, spec.OwnerUserID, chat) {
 		return nil, &NotFoundError{Reason: "chat not found", Err: err}
 	}
 
@@ -1058,11 +1060,11 @@ func (l *Launcher) finishExisting(ctx context.Context, ev Event, spec Spec, seed
 		return nil, &AlreadyLaunchedError{EventID: existing.ID}
 	}
 
-	chat, err := l.repo.GetChat(ctx, *existing.ChatID)
+	chat, err := l.chats.GetChat(ctx, *existing.ChatID)
 	if err != nil && !errors.Is(err, core.ErrChatNotFound) {
 		return nil, &InternalError{Reason: "failed to load chat", Err: err}
 	}
-	if err != nil || !authz.CanWriteChat(ctx, spec.OwnerUserID, chat) {
+	if err != nil || !authz.CanOwnChat(ctx, spec.OwnerUserID, chat) {
 		return nil, &NotFoundError{Reason: "chat not found", Err: err}
 	}
 
@@ -1495,7 +1497,7 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	}
 
 	// Fetch created chat
-	startedChat, err := l.repo.GetChat(ctx, chatID)
+	startedChat, err := l.chats.GetChat(ctx, chatID)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to fetch started chat", "error", err, "chatID", chatID)
 		return nil, &InternalError{Reason: "failed to fetch created chat", Err: err}

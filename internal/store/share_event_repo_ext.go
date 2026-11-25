@@ -144,6 +144,12 @@ func ListShareEvents(ctx context.Context, db orm.Context, kind core.ShareKind, r
 			ID: r.ID, OrgID: r.OrgID, Kind: core.ShareKind(r.ResourceKind), ResourceID: r.ResourceID,
 			OwnerUserID: r.OwnerUserID, ActorUserID: r.ActorUserID, Action: core.ShareAction(r.Action), CreatedAt: r.CreatedAt,
 		}
+		if r.TargetUserID != nil {
+			out[i].TargetUserID = *r.TargetUserID
+		}
+		if r.Role != nil {
+			out[i].Role = core.ChatMemberRole(*r.Role)
+		}
 	}
 	return out, nil
 }

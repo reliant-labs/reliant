@@ -224,7 +224,7 @@ func resolveOwnedRun(rctx *rctx.ToolContext, repo runCallerStore, caller *runCal
 		resp := NewTextErrorResponse("Could not look up the run: " + err.Error())
 		return nil, &resp
 	}
-	if !authz.CanWriteChat(rctx.Context, caller.userID, chat) {
+	if !authz.CanOwnChat(rctx.Context, caller.userID, chat) {
 		return notFound()
 	}
 	return chat, nil

@@ -38,6 +38,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/forkwatch"
 	"github.com/reliant-labs/reliant/internal/ghshim"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
+	"github.com/reliant-labs/reliant/internal/idlereclaim"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
@@ -273,6 +274,10 @@ type StartOptions struct {
 	// WorktreeReclaim is the machine-wide worktree reclaim, which rides the
 	// storage reaper's schedule; the zero value is off.
 	WorktreeReclaim worktreereclaim.SweepConfig
+	// IdleReclaim is the scratch-directory lifecycle and the node_modules
+	// strip of idle worktrees (internal/idlereclaim); the zero value is mode
+	// auto with zero thresholds, so callers pass idlereclaim.ParseConfig's.
+	IdleReclaim idlereclaim.Config
 	// Host is what the platform declares about where this daemon runs; zero
 	// off a workspace pod.
 	Host Host
@@ -391,7 +396,10 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// one journaled, then journal this one's (shell/background_journal.go).
 	// Only after the claim above, so a second daemon that is about to be
 	// refused never rewrites the incumbent's records.
-	installBackgroundJournal(ctx, opts.BootstrapConfig.DataDir)
+	// A daemon that installs releases by exec'ing them in place hands its
+	// background processes to the next image (shell/background_survive.go).
+	restartsInPlace := !opts.Host.Managed() && opts.SelfUpdate != nil && opts.SelfUpdate.AutoUpdate()
+	installBackgroundJournal(ctx, opts.BootstrapConfig.DataDir, restartsInPlace)
 	// Checkout removes and reclones the server acknowledged by op id
 	// (checkout_teardown.go): loaded before the first command can arrive, and
 	// after the claim for the same reason as the background journal.
@@ -477,6 +485,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// thresholds and mode.
 	setReclaimSweepConfig(opts.WorktreeReclaim)
 	go client.diskWatcher.RunReaper(ctx)
+	// Scratch directories and idle worktrees' node_modules, on its own
+	// schedule; mode auto runs it where the storage reaper runs.
+	go runIdleReclaim(ctx, opts.IdleReclaim, opts.StorageReaper.Enabled, opts.WorktreeReclaim.Mode)
 	// The disk guard reclaims with the same pass, at once, when a volume
 	// crosses its reclaim threshold — where the routine runs at all: a
 	// person's own machine is left alone unless they enabled it.
@@ -2257,6 +2268,11 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	// Use of the workspace it works in and of every one its input names
 	// (worktree_use.go), recorded even if it is refused below: it was asked.
 	noteWorktreeUse(workspaceRoot, req.GetToolInput())
+	// The chat's last tool call: its scratch directory is not removed whole
+	// while it is still working (idle_reclaim.go).
+	if chatID, ok := contextMap["chat_id"].(string); ok {
+		noteChatActivity(chatID)
+	}
 	// Admitted where the call works, before it does anything: it holds only
 	// that worktree, and a worktree being retired refuses it.
 	releaseRecovery, admissionErr := beginRecoveryWorkIn(workspaceRoot)

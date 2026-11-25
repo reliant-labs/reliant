@@ -29,12 +29,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
@@ -1126,6 +1128,8 @@ type WorktreeSweepDeps struct {
 	DB           *db.Repo
 	Router       *APIDaemonRouter
 	Settings     *APISettings
+	// Updates tells the user's clients a worktree changed.
+	Updates chatupdates.Service
 }
 
 // The sweep records the use a daemon reports through the optional UseStore;
@@ -1198,7 +1202,7 @@ func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 		WithIdleRetirement(d.Settings.WorktreeLiveShedIdle, idleRetirementStore{ChatExtStore: chats, WorktreeExtStore: worktrees}).
 		WithAutoArchive(d.Settings.WorktreeAutoArchive, worktreeSweepStore{WorktreeExtStore: worktrees, chats: chats},
 			func(ctx context.Context, userID, projectID, worktreeID string) {
-				if err := database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
+				if err := d.Updates.EmitUserRefetch(ctx, userID, core.RefetchWorktreeChanges, core.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
 					logging.WarnContext(ctx, "worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
 				}
 			}).
@@ -1415,6 +1419,7 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	cfg.Namespace = d.Namespace
 	r := reconciliation.New(reconciliation.Deps{
 		Store:     d.DB,
+		Chats:     store.NewChatsWithActivityExtStore(d.DB.ORM()),
 		Questions: store.NewQuestionExtStore(d.DB.ORM()),
 		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
 		Orphans:   store.NewAgentMessageExtStore(d.DB.ORM()),
@@ -1576,9 +1581,10 @@ func (b *ChatUpdateHeadsBackfill) pass(ctx context.Context) {
 // deletes only what has aged out, so an hour keeps the backlog small.
 const llmUsageRetentionInterval = time.Hour
 
-// LLMUsageRetention deletes per-call LLM and tool usage rows older than
-// llmusage.Retention. The daily rollup is kept. Every replica runs it;
-// the delete is idempotent and skips rows another replica is deleting.
+// LLMUsageRetention folds per-call LLM and tool usage rows the insights
+// rollups do not count yet into them, then deletes the rows older than
+// llmusage.Retention. The rollups are kept. Every replica runs it; the fold
+// and the delete are idempotent and skip rows another replica holds.
 type LLMUsageRetention struct{ ledger llmusage.Service }
 
 // LLMUsageRetentionDeps is the ledger that is pruned.
@@ -1598,6 +1604,14 @@ func (l *LLMUsageRetention) Run(ctx context.Context) error {
 	ticker := time.NewTicker(llmUsageRetentionInterval)
 	defer ticker.Stop()
 	for {
+		// Fold first: pruning keeps a row the insights rollups do not count
+		// yet, so this is what lets rows from before the rollups (and from a
+		// previous release during a rollout) age out.
+		if n, err := l.ledger.FoldInsights(ctx); err != nil {
+			logging.WarnContext(ctx, "folding usage into the insights rollups failed", "folded", n, "error", err)
+		} else if n > 0 {
+			logging.InfoContext(ctx, "folded usage into the insights rollups", "folded", n)
+		}
 		if n, err := l.ledger.PruneLLMCallUsage(ctx, time.Now()); err != nil {
 			logging.WarnContext(ctx, "pruning LLM call usage failed", "deleted", n, "error", err)
 		} else if n > 0 {

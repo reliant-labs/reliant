@@ -26,6 +26,29 @@ export interface UpdateStatus {
   };
   error?: string;
   releaseNotes?: string;
+  /**
+   * Set when the platform asked this app's daemon to upgrade and the app is
+   * fetching the update for it (electron/src/update-check.js
+   * createDaemonUpgradeResponder): the dialog opens when it is downloaded,
+   * and still waits for the user to restart. Absent from a desktop build
+   * that predates it.
+   */
+  daemonUpgrade?: DaemonUpgradeRequest;
+}
+
+/**
+ * The platform's request that the daemon upgrade, as the daemon printed it
+ * (electron/src/daemon-contract.js parseDaemonUpgradeNotice).
+ */
+export interface DaemonUpgradeRequest {
+  targetVersion: string;
+  /** 'routine' | 'normal' | 'security' | 'emergency'. */
+  urgency: string;
+  /** When the platform wants the upgrade by, unix ms; 0 for none. */
+  deadlineUnixMs: number;
+  reason: string;
+  rolloutId?: string;
+  upgradeUrl?: string;
 }
 
 export interface NotificationData {

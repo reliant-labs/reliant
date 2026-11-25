@@ -25,7 +25,7 @@ import type { ObsScope, Panel } from "@/services/controlPlane/observability/type
 import { useForgeConsole } from "../Console/consoleContext";
 import { Header, Page } from "../Console/consolePageFrame";
 import { ENV_ALL } from "../Console/envScope";
-import { PAGE_SUBTITLES } from "../Console/groupedNav";
+import { PAGE_SUBTITLES } from "../Console/consoleCrumbs";
 import { chString } from "../Observability/Dashboards/alertExpr";
 import { formatCount } from "../Observability/format";
 import { useExploreHref } from "../Observability/Metrics/pivots";

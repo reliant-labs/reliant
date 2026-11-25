@@ -40,7 +40,7 @@ func (s *Service) runOwnedBy(ctx context.Context, userID, runID string) (*core.W
 	if err != nil {
 		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to get run"))
 	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
+	if !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, nil, svcerr.NotFound("run")
 	}
 

@@ -140,7 +140,7 @@ func (m *MockOwners) AdoptTrigger(ctx context.Context, t *core.Trigger, previous
 var _ Owners = (*MockOwners)(nil)
 
 // forge:section MockRepository
-// forge:hash=0b38e7676b04ee04a332f5fab18eced631a038c2120675fcace8533831ed2c5f
+// forge:hash=70d1a3acea2603a955ac892364bf6998bded7dd1f0ddc66a952c1e3604040c89
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -162,8 +162,6 @@ type MockRepository struct {
 	GetTriggerFunc                     func(context.Context, string) (*core.Trigger, error)
 	ListTriggerChangesFunc             func(context.Context, string, string) ([]core.TriggerChange, error)
 	UpdateTriggerFunc                  func(context.Context, *core.Trigger) error
-	CreateTriggerInOrgFunc             func(context.Context, *core.Trigger, ...db.OrgRead) error
-	UpdateTriggerInOrgFunc             func(context.Context, *core.Trigger, ...db.OrgRead) error
 	DeleteTriggerFunc                  func(context.Context, string) error
 	SetTriggerEnabledFunc              func(context.Context, string, bool) error
 	SetTriggerWebhookTokenHashFunc     func(context.Context, string, []byte) error
@@ -172,7 +170,6 @@ type MockRepository struct {
 	GetTriggerEventByChatIDFunc        func(context.Context, string) (*core.TriggerEvent, error)
 	ListTriggerRegistrationsFunc       func(context.Context, string, []string) (map[string]*core.TriggerRegistration, error)
 	GetWorktreeFunc                    func(context.Context, string) (*db.Worktree, error)
-	GetChatRowFunc                     func(context.Context, string) (*db.ChatRow, error)
 	GetWorkflowDraftBySlugFunc         func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetUsableWorkflowBySlugFunc        func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetPresetBySlugFunc                func(context.Context, string, string) (*db.Preset, error)
@@ -295,24 +292,6 @@ func (m *MockRepository) UpdateTrigger(ctx context.Context, t *core.Trigger) err
 	return contractkit.MockNotSet("MockRepository", "UpdateTrigger")
 }
 
-// CreateTriggerInOrg records the call and delegates to CreateTriggerInOrgFunc when set.
-func (m *MockRepository) CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error {
-	m.Recorder.Record("CreateTriggerInOrg", ctx, t, reads)
-	if m.CreateTriggerInOrgFunc != nil {
-		return m.CreateTriggerInOrgFunc(ctx, t, reads...)
-	}
-	return contractkit.MockNotSet("MockRepository", "CreateTriggerInOrg")
-}
-
-// UpdateTriggerInOrg records the call and delegates to UpdateTriggerInOrgFunc when set.
-func (m *MockRepository) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error {
-	m.Recorder.Record("UpdateTriggerInOrg", ctx, t, reads)
-	if m.UpdateTriggerInOrgFunc != nil {
-		return m.UpdateTriggerInOrgFunc(ctx, t, reads...)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpdateTriggerInOrg")
-}
-
 // DeleteTrigger records the call and delegates to DeleteTriggerFunc when set.
 func (m *MockRepository) DeleteTrigger(ctx context.Context, id string) error {
 	m.Recorder.Record("DeleteTrigger", ctx, id)
@@ -383,15 +362,6 @@ func (m *MockRepository) GetWorktree(ctx context.Context, id string) (*db.Worktr
 		return m.GetWorktreeFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetWorktree")
-}
-
-// GetChatRow records the call and delegates to GetChatRowFunc when set.
-func (m *MockRepository) GetChatRow(ctx context.Context, id string) (*db.ChatRow, error) {
-	m.Recorder.Record("GetChatRow", ctx, id)
-	if m.GetChatRowFunc != nil {
-		return m.GetChatRowFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetChatRow")
 }
 
 // GetWorkflowDraftBySlug records the call and delegates to GetWorkflowDraftBySlugFunc when set.
@@ -557,6 +527,42 @@ func (m *MockWebhookSecrets) SetTriggerWebhookSecret(ctx context.Context, id str
 // Compile-time check.
 var _ WebhookSecrets = (*MockWebhookSecrets)(nil)
 
+// forge:section MockTriggerWrites
+// forge:hash=1c8c5834b51297faaaf54364da35f8d9f120c40ad7a1c17f254a2955cba216c8
+
+// MockTriggerWrites is a test mock for the TriggerWrites interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockTriggerWrites.<Method>Func not set" error.
+type MockTriggerWrites struct {
+	contractkit.Recorder
+	CreateTriggerInOrgFunc func(context.Context, *core.Trigger, ...db.OrgRead) error
+	UpdateTriggerInOrgFunc func(context.Context, *core.Trigger, ...db.OrgRead) error
+}
+
+// CreateTriggerInOrg records the call and delegates to CreateTriggerInOrgFunc when set.
+func (m *MockTriggerWrites) CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error {
+	m.Recorder.Record("CreateTriggerInOrg", ctx, t, reads)
+	if m.CreateTriggerInOrgFunc != nil {
+		return m.CreateTriggerInOrgFunc(ctx, t, reads...)
+	}
+	return contractkit.MockNotSet("MockTriggerWrites", "CreateTriggerInOrg")
+}
+
+// UpdateTriggerInOrg records the call and delegates to UpdateTriggerInOrgFunc when set.
+func (m *MockTriggerWrites) UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error {
+	m.Recorder.Record("UpdateTriggerInOrg", ctx, t, reads)
+	if m.UpdateTriggerInOrgFunc != nil {
+		return m.UpdateTriggerInOrgFunc(ctx, t, reads...)
+	}
+	return contractkit.MockNotSet("MockTriggerWrites", "UpdateTriggerInOrg")
+}
+
+// Compile-time check.
+var _ TriggerWrites = (*MockTriggerWrites)(nil)
+
 // forge:section MockPools
 // forge:hash=0a60e20a06d59a6dd96e6679b86dc7762b4c9b75965ec65ddc5e2a1994d580f1
 
@@ -690,6 +696,32 @@ func (m *MockAutomationDrafter) DraftAutomation(ctx context.Context, in DraftReq
 
 // Compile-time check.
 var _ AutomationDrafter = (*MockAutomationDrafter)(nil)
+
+// forge:section MockChats
+// forge:hash=6849bdfa4473185c7a99f8a491e877511703abce28dc2a1c85f3f6a71dd7dd27
+
+// MockChats is a test mock for the Chats interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockChats.<Method>Func not set" error.
+type MockChats struct {
+	contractkit.Recorder
+	GetChatRowFunc func(context.Context, string) (*db.ChatRow, error)
+}
+
+// GetChatRow records the call and delegates to GetChatRowFunc when set.
+func (m *MockChats) GetChatRow(ctx context.Context, id string) (*db.ChatRow, error) {
+	m.Recorder.Record("GetChatRow", ctx, id)
+	if m.GetChatRowFunc != nil {
+		return m.GetChatRowFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockChats", "GetChatRow")
+}
+
+// Compile-time check.
+var _ Chats = (*MockChats)(nil)
 
 // forge:section MockService
 // forge:hash=2374469de5f793f66d4bf359b78581ee4ebb9e3f4fc263a78cdbdf42ff933a3c

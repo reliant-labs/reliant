@@ -31,6 +31,9 @@
  * reporting, upgrade modal, machine wake, 401 recovery). Routes differ only
  * in base URL, wire format and the two chain options — never in which
  * interceptors they get, which is how the transports used to drift apart.
+ * Ahead of that chain, every live route runs the sample app's backstop
+ * (`sampleGuard`, lib/sampleGuard.ts): a request carrying the forge tour's
+ * sample app or one of its ids is refused, PermissionDenied, never sent.
  *
  * ── The routes ─────────────────────────────────────────────────────────
  *
@@ -70,6 +73,7 @@ import {
   isPackagedRendererOrigin,
   isSameOriginTransport,
 } from "@/lib/protocol";
+import { sampleGuard } from "@/lib/sampleGuard";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 
 // ─── Routes ──────────────────────────────────────────────────────────
@@ -261,7 +265,10 @@ export function transportFor(route: TransportRoute): Transport {
 
   const transport = createConnectTransport({
     baseUrl,
-    interceptors: buildInterceptors({ withAuth: spec.withAuth, backend: spec.backend }),
+    // The sample app's backstop first (lib/sampleGuard.ts): a request that
+    // carries the forge tour's sample app reaches no other interceptor and no
+    // backend.
+    interceptors: [sampleGuard, ...buildInterceptors({ withAuth: spec.withAuth, backend: spec.backend })],
     useBinaryFormat: spec.useBinaryFormat,
   });
   _built.set(route, { baseUrl, transport });

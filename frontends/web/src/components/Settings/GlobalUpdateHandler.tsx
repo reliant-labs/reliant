@@ -6,9 +6,11 @@ import { connectAppUpdates, useAppUpdateStore } from "../../store/appUpdateStore
  * Connects the desktop updater to the app and renders the one update dialog.
  * Mounted at the app root so the dialog opens on every route. What opens it:
  * the sidebar's update button, Settings → About, the app menu's "Check for
- * Updates…", and a download the user started finishing. A background check
- * that finds an update only lights up the sidebar button; it does not
- * interrupt.
+ * Updates…", a download the user started finishing, and an update the app
+ * downloaded because the platform asked its daemon to upgrade (the status's
+ * `daemonUpgrade`; it waits for the user to restart, overdue or not). A
+ * background check that finds an update only lights up the sidebar button;
+ * it does not interrupt.
  *
  * The exception is a forced update (the server requires a newer version,
  * AppOutOfDateModal → appUpdateStore.forceUpdate): the dialog opens by

@@ -1,8 +1,7 @@
 /**
  * The Chats heading's one menu (ChatListMenu) keeps Add project and Manage
- * projects; which projects the list shows is the project filter beside it
- * (Projects/ChatProjectFilter, choose N of M), which opens the project
- * selector in multi-select mode.
+ * projects; which projects the list shows is the shell's project scope (the
+ * nav's switcher), not a control in the heading.
  */
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -10,8 +9,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Project } from "../../../hooks/project-queries";
 import { ChatListMenu } from "../ChatListMenu";
-import { ChatProjectFilterButton } from "../../Projects/ChatProjectFilter";
-import type { ChatProjectFilter } from "../../../hooks/useChatProjectFilter";
 
 // The selector reads the catalog; with none, it lists the plain projects (its fallback).
 vi.mock("@/hooks/project-catalog-queries", () => ({
@@ -79,17 +76,6 @@ describe("the project filter, in the Chats menu", () => {
     await userEvent.click(screen.getByTestId("project-filter-trigger"));
     await userEvent.click(screen.getByTestId("project-filter-manage"));
     expect(props.onManageProjects).toHaveBeenCalledTimes(1);
-  });
-
-  it("the filter beside it opens the selector, choosing several, with chats waiting on the user per project", async () => {
-    const filter: ChatProjectFilter = { mode: "one", ids: ["a"], set: vi.fn(), clear: vi.fn() };
-    render(<ChatProjectFilterButton filter={filter} needsYouByProject={new Map([["b", 2]])} />);
-    expect(screen.getByTestId("chat-project-filter-trigger")).toHaveAccessibleName("Filter chats by project. Showing 1 project");
-    await userEvent.click(screen.getByTestId("chat-project-filter-trigger"));
-    expect(await screen.findByTestId("project-selector-row-b")).toHaveTextContent("2 waiting");
-    expect(screen.getByTestId("project-selector-row-a")).toHaveAttribute("aria-selected", "true");
-    await userEvent.click(screen.getByTestId("project-selector-row-b"));
-    expect(filter.set).toHaveBeenCalledWith(["a", "b"]);
   });
 
   it("holds sort, view and the archived list in the same menu", async () => {

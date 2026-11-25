@@ -183,7 +183,7 @@ func TestTerminateChat_EmitsQuestionResolved(t *testing.T) {
 		Metadata: `{"type":"ask_user","questions":[{"question":"Ship it?"}]}`,
 	}))
 
-	runSvc := runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: &questionResolveTemporalClient{}, Pause: nil})
+	runSvc := runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: &questionResolveTemporalClient{}, Pause: nil})
 	require.NoError(t, runSvc.Terminate(ctx, chatID))
 
 	q, err := repo.GetQuestionByID(ctx, questionID)

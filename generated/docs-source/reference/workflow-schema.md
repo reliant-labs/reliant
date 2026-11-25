@@ -134,7 +134,7 @@ What a run checks before its first node (`requires:`), once its machine is up, o
 | `tools` | string[] | No | *Executables that must be on the run machine's PATH (git, gh, task, jq).* |
 | `integrations` | string[] | No | *Integration ids (github, slack) whose connection must resolve, authorized, for the run's owner and acting identity.* |
 | `repos` | string[] | No | *Checkouts relative to the project root ("." for the root) that must exist, reach their origin (git ls-remote, which writes nothing) and have no local tag diverged from origin's.* |
-| `cli_login` | string[] | No | *Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine, each checked with the vendor's own status command, whose output never leaves the machine. Sign one in with `reliant machine login <vendor> --machine <name>`; a step that calls claude, codex or copilot needs credentials: inherit.* |
+| `cli_login` | string[] | No | *Deprecated: kept working throughout v1, slated for removal in a future major. Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine, each checked with the vendor's own status command, whose output never leaves the machine. Sign one in with `reliant machine login <vendor> --machine <name>`; a step that calls claude, codex or copilot needs credentials: inherit.* |
 
 ---
 

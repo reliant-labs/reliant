@@ -3,8 +3,9 @@
 /**
  * The Chats heading's one menu (restyle §11.5): how the list is sorted,
  * grouped or flat, every project or the active ones, the archived chats, and
- * Add / Manage projects. Which projects it shows is the project filter beside
- * it (Projects/ChatProjectFilter: choose N of M).
+ * Add / Manage projects. Which projects it shows is the shell's project scope
+ * (the switcher at the top of the nav, sidebar/ProjectSwitcher.tsx): the
+ * Chats heading has no project filter of its own.
  *
  * Its trigger is a hover-only `⋯` on the heading. It keeps its old test id
  * (`project-filter-trigger`), and its label still names what the list shows.
@@ -32,8 +33,8 @@ export const CHAT_SORT_OPTIONS: { value: ChatSortOption; label: string }[] = [
 export const SHOW_ALL_PROJECTS_LABEL = "Show every project";
 
 interface ChatListMenuProps {
-  // What the list shows (its label): the project filter is its own control
-  // beside this menu (Projects/ChatProjectFilter).
+  // What the list shows (its label): the project scope is the nav's switcher
+  // (sidebar/ProjectSwitcher.tsx), not a control here.
   filterId: string | null;
   projects: readonly Project[];
   onAddProject: () => void;

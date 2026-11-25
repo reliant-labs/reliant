@@ -48,12 +48,13 @@ import (
 // Reliant API). That excludes the
 // port share (proxy:port) too: forge refuses it on a daemon binding.
 //
-// token:read and token:write are absent from this explicit list. They
-// administer member permissions and tokens, which the control plane reserves
-// to a signed-in person (every token RPC refuses a machine caller), so on a
-// CLI credential or an exchanged helper they are dead authority. A daemon's
-// wildcard does resolve to them — nothing is special-cased there — and they
-// are just as dead on it.
+// token:read and token:write are absent from this explicit list: forge's
+// catalog marks them NeverOnDaemon (approvals:decide, its third member, is
+// already out as RequiresActingUser). They administer member permissions and
+// tokens, which the control plane reserves to a signed-in person (every token
+// RPC refuses a machine caller), so on a CLI credential or an exchanged
+// helper they are dead authority. A daemon's wildcard does resolve to them —
+// nothing is special-cased there — and they are just as dead on it.
 func ForgeScopes() []string {
 	out := make([]string, 0, len(fat.AllScopes))
 	for _, scope := range fat.AllScopes {
@@ -64,10 +65,6 @@ func ForgeScopes() []string {
 	return out
 }
 
-// tokenAdministration is the one carve-out from the derived set; see
-// ForgeScopes.
-var tokenAdministration = fat.SetOf(fat.ScopeTokenRead, fat.ScopeTokenWrite)
-
 // daemonProbe is a structurally valid daemon-bound grant; only its scope
 // varies. Its ids are placeholders: Validate checks shape, never existence.
 var daemonProbe = fat.Grant{
@@ -76,7 +73,7 @@ var daemonProbe = fat.Grant{
 }
 
 func isControlPlaneCapability(scope fat.Scope) bool {
-	if fat.RequiresActingUser(scope) || tokenAdministration.Has(scope) {
+	if fat.RequiresActingUser(scope) || fat.NeverOnDaemon(scope) {
 		return false
 	}
 	probe := daemonProbe
