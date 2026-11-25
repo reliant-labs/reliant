@@ -132,7 +132,7 @@ func TestLaunchSucceedsWhenTitleStartFails(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	root, err := repo.GetWorkflow(ctx, result.WorkflowID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), result.WorkflowID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status, "the run Temporal accepted is marked active regardless of the title")
 }

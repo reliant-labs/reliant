@@ -266,7 +266,7 @@ func TestContinueQueued_WedgedRunsUnansweredMessageStartsOneRunAtTheCheckpoint(t
 	assert.Equal(t, db.ThreadStatusRunning, threadStatusAtStart,
 		"the thread is revived before the run starts, so the mailbox sweep cannot take its queued rows")
 
-	wf, err := f.repo.GetWorkflow(f.ctx, f.chatID)
+	wf, err := store.LoadWorkflow(f.ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), wf.Status, "recorded running before the lock is released")
 }

@@ -235,7 +235,7 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	require.NoError(t, getErr)
 	require.NotNil(t, createdChat)
 
-	wf, wfErr := repo.GetWorkflow(ctx, chatID)
+	wf, wfErr := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, wfErr)
 	require.NotNil(t, wf, "root workflow should exist for the created chat")
 

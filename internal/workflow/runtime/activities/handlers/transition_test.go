@@ -90,7 +90,7 @@ func TestWorkflowStatus_TransitionToOnCompletion(t *testing.T) {
 		assert.True(t, out.Success)
 
 		// Status write committed.
-		wf, err := h.Repo().GetWorkflow(ctx, workflowID)
+		wf, err := store.LoadWorkflow(ctx, h.Repo().ORM(), workflowID)
 		require.NoError(t, err)
 		assert.Equal(t, db.Completed(), wf.Status)
 

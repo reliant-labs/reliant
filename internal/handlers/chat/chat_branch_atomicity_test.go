@@ -206,7 +206,7 @@ func TestBranchChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	require.NoError(t, getErr)
 	require.NotNil(t, branchChat)
 
-	wf, wfErr := repo.GetWorkflow(ctx, branchChatID)
+	wf, wfErr := store.LoadWorkflow(ctx, repo.ORM(), branchChatID)
 	require.NoError(t, wfErr)
 	require.NotNil(t, wf, "forked root workflow should exist for the branched chat")
 

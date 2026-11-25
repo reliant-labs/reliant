@@ -134,7 +134,7 @@ func TestCancelToolCall_SignalFails_DoesNotClaimCancelled(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 
-	wf, wfErr := repo.GetWorkflow(ctx, childThreadID)
+	wf, wfErr := store.LoadWorkflow(ctx, repo.ORM(), childThreadID)
 	require.NoError(t, wfErr)
 	require.Equal(t, core.Active(), wf.Status,
 		"a spawn that is still running must not be recorded as cancelled")
@@ -155,7 +155,7 @@ func TestCancelToolCall_ReconcilesSpawnWorkflowRow(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	wf, err := repo.GetWorkflow(ctx, childThreadID)
+	wf, err := store.LoadWorkflow(ctx, repo.ORM(), childThreadID)
 	require.NoError(t, err)
 	require.Equal(t, core.Cancelled(), wf.Status)
 }
@@ -215,7 +215,7 @@ func TestCancelToolCall_RegularToolTouchesNoWorkflow(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	wf, err := repo.GetWorkflow(ctx, chatWorkflowID)
+	wf, err := store.LoadWorkflow(ctx, repo.ORM(), chatWorkflowID)
 	require.NoError(t, err)
 	require.Equal(t, core.Active(), wf.Status,
 		"cancelling one tool must not stop the chat, nor its siblings")
@@ -233,7 +233,7 @@ func TestCancelToolCall_ResumedSpawn_SignalsOriginalThreadAndReconcilesWorkflowR
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 
 	toolCallID, resumedWorkflowID := seedCancellableSpawn(t, repo, ctx, core.Active())
-	wf, err := repo.GetWorkflow(ctx, resumedWorkflowID)
+	wf, err := store.LoadWorkflow(ctx, repo.ORM(), resumedWorkflowID)
 	require.NoError(t, err)
 
 	// The pre-existing thread being resumed, and a fresh workflow row — derived
@@ -272,11 +272,11 @@ func TestCancelToolCall_ResumedSpawn_SignalsOriginalThreadAndReconcilesWorkflowR
 		"the signal must name the original thread, read from the workflow row — not child_workflow_id")
 	require.Equal(t, resumeToolCallID, sig.ToolCallID)
 
-	after, err := repo.GetWorkflow(ctx, liveWorkflowID)
+	after, err := store.LoadWorkflow(ctx, repo.ORM(), liveWorkflowID)
 	require.NoError(t, err)
 	require.Equal(t, core.Cancelled(), after.Status, "the live workflow row must be the one reconciled")
 
-	original, err := repo.GetWorkflow(ctx, resumedWorkflowID)
+	original, err := store.LoadWorkflow(ctx, repo.ORM(), resumedWorkflowID)
 	require.NoError(t, err)
 	require.Equal(t, core.Active(), original.Status, "an unrelated row must be left alone")
 }

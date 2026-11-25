@@ -166,7 +166,7 @@ func TestLaunchSucceedsWhenThePostCommitActivityEmitFails(t *testing.T) {
 	chat, err := store.GetChat(context.Background(), repo.ORM(), result.Chat.ID)
 	require.NoError(t, err, "the chat committed before its announcement was attempted")
 	assert.Equal(t, userID, chat.UserID)
-	_, err = repo.GetWorkflow(context.Background(), result.WorkflowID)
+	_, err = store.LoadWorkflow(context.Background(), repo.ORM(), result.WorkflowID)
 	require.NoError(t, err, "and so did its root workflow")
 	assert.Empty(t, activityEvents(t, repo, userID, result.Chat.ID), "the injected failure refused the activity event")
 

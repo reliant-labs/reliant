@@ -201,7 +201,7 @@ func TestSendMessage_RacingAnInFlightPauseResumesTheRun(t *testing.T) {
 		"a message sent after a pause the server had already received must resume the run; "+
 			"routing it as 'running' only rings the thread-wake doorbell, which never releases the pause gate")
 
-	wf, err := repo.GetWorkflow(ctx, fx.rootThreadID)
+	wf, err := store.LoadWorkflow(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), wf.Status,
 		"the run the message resumed must read as running, not paused")
