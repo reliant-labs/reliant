@@ -86,6 +86,42 @@ func TestRetirementTreeAcceptsWhatTheSourceCovers(t *testing.T) {
 				t.Fatal(err)
 			}
 		}, "data/only.csv"},
+		// A source path through a symlinked directory is not a copy, even
+		// when it reaches an identical file (review B1, PR #3646).
+		{"source secrets linking out of the source", func(t *testing.T, root, source string) {
+			const secret = "token: abc\nurl: https://dev\n"
+			write(t, filepath.Join(root, "secrets", "dev.yaml"), secret)
+			outside := t.TempDir()
+			write(t, filepath.Join(outside, "dev.yaml"), secret)
+			if err := os.RemoveAll(filepath.Join(source, "secrets")); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(outside, filepath.Join(source, "secrets")); err != nil {
+				t.Fatal(err)
+			}
+		}, "secrets/dev.yaml"},
+		{"source secrets linking into the checkout", func(t *testing.T, root, source string) {
+			const secret = "token: abc\nurl: https://dev\n"
+			write(t, filepath.Join(root, "secrets", "dev.yaml"), secret)
+			write(t, filepath.Join(root, "stash", "dev.yaml"), secret)
+			if err := os.RemoveAll(filepath.Join(source, "secrets")); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(root, "stash"), filepath.Join(source, "secrets")); err != nil {
+				t.Fatal(err)
+			}
+		}, "secrets/dev.yaml"},
+		{"source secrets linking elsewhere in the source", func(t *testing.T, root, source string) {
+			const secret = "token: abc\nurl: https://dev\n"
+			write(t, filepath.Join(root, "secrets", "dev.yaml"), secret)
+			write(t, filepath.Join(source, "vault", "dev.yaml"), secret)
+			if err := os.RemoveAll(filepath.Join(source, "secrets")); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(source, "vault"), filepath.Join(source, "secrets")); err != nil {
+				t.Fatal(err)
+			}
+		}, "secrets/dev.yaml"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			root, source := sourceFixture(t)

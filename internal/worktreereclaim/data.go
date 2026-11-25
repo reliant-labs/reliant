@@ -193,10 +193,11 @@ func (d *dataWalk) copyInSource(rel, full string, info os.FileInfo) bool {
 // there is none), holds a separate copy of the open regular file have, which is
 // at rel in checkout, such that removing have loses nothing: a byte-identical
 // file at the same path, or for secrets/dev.yaml one holding every value have
-// holds (devSecrets). The copy must resolve to a path inside the source checkout
-// (a symlinked directory there could lead back into this checkout, or into
-// another one being removed) and must not be this very file reached another
-// way. The classifier (dataWalk) and the retirement inventory both judge with
+// holds (devSecrets). The copy must be reached with no symlink at any component
+// below the source checkout's root (openSourceCopy: a symlinked directory there
+// could lead back into this checkout, into another one being removed, or out to
+// an unrelated file) and must not be this very file reached another way. The
+// classifier (dataWalk) and the retirement inventory both judge with
 // it, so a copy the one calls not data is one the other may delete.
 func sourceCovers(source, checkout, rel string, have *os.File) bool {
 	if source == "" {
@@ -206,20 +207,20 @@ func sourceCovers(source, checkout, rel string, have *os.File) bool {
 	if err != nil || !info.Mode().IsRegular() || info.Size() > maxCompareBytes {
 		return false
 	}
-	src := filepath.Join(source, filepath.FromSlash(rel))
-	si, err := os.Lstat(src)
-	if err != nil || !si.Mode().IsRegular() || si.Size() > maxCompareBytes || os.SameFile(si, info) {
+	// The copy is opened without following a symlink at any component, so
+	// the descriptor judged is the file at source/rel itself: a path checked
+	// for confinement and then opened again could be redirected in between.
+	// A source path through a symlink is not a copy, wherever it leads.
+	if within(checkout, filepath.Join(source, filepath.FromSlash(rel))) {
 		return false
 	}
-	if !within(source, src) || within(checkout, src) {
-		return false
-	}
-	sf, err := os.Open(src)
+	sf, err := openSourceCopy(source, rel)
 	if err != nil {
 		return false
 	}
 	defer sf.Close()
-	if opened, err := sf.Stat(); err != nil || !os.SameFile(opened, si) {
+	si, err := sf.Stat()
+	if err != nil || !si.Mode().IsRegular() || si.Size() > maxCompareBytes || os.SameFile(si, info) {
 		return false
 	}
 	// Read both from the start, past the size the stat saw, so a file that

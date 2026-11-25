@@ -126,6 +126,81 @@ func TestCopyInSource_RefusesPathsThatLeaveTheSource(t *testing.T) {
 	}
 }
 
+// A source path through a symlink is never a copy, wherever the link leads: out
+// of the source to an unrelated file, to another file in the checkout being
+// removed, or even to a file elsewhere in the source. The copy is opened with no
+// symlink followed at any component (openSourceCopy), so no check of where the
+// path resolves can be raced by swapping the link before the open (review B1,
+// PR #3646: a worktree-only secret judged covered by an external file).
+func TestSourceCovers_RefusesASymlinkedSourcePath(t *testing.T) {
+	const secret = "token: only-here\n"
+	for _, c := range []struct {
+		name string
+		rel  string
+		// setup builds the source's side; the checkout holds secret at rel.
+		setup func(t *testing.T, checkout, source, outside string)
+		want  bool
+	}{
+		{"a real directory in the source", "secrets/dev.yaml", func(t *testing.T, _, source, _ string) {
+			write(t, filepath.Join(source, "secrets", "dev.yaml"), secret)
+		}, true},
+		{"secrets links out of the source", "secrets/dev.yaml", func(t *testing.T, _, source, outside string) {
+			write(t, filepath.Join(outside, "dev.yaml"), secret)
+			symlink(t, outside, filepath.Join(source, "secrets"))
+		}, false},
+		{"secrets links into the checkout being removed", "secrets/dev.yaml", func(t *testing.T, checkout, source, _ string) {
+			write(t, filepath.Join(checkout, "stash", "dev.yaml"), secret)
+			symlink(t, filepath.Join(checkout, "stash"), filepath.Join(source, "secrets"))
+		}, false},
+		{"secrets links elsewhere in the source", "secrets/dev.yaml", func(t *testing.T, _, source, _ string) {
+			write(t, filepath.Join(source, "vault", "dev.yaml"), secret)
+			symlink(t, filepath.Join(source, "vault"), filepath.Join(source, "secrets"))
+		}, false},
+		{"a deeper parent links out of the source", "config/secrets/dev.yaml", func(t *testing.T, _, source, outside string) {
+			write(t, filepath.Join(outside, "secrets", "dev.yaml"), secret)
+			symlink(t, outside, filepath.Join(source, "config"))
+		}, false},
+		{"the file itself is a link", "secrets/dev.yaml", func(t *testing.T, _, source, outside string) {
+			write(t, filepath.Join(outside, "dev.yaml"), secret)
+			if err := os.MkdirAll(filepath.Join(source, "secrets"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			symlink(t, filepath.Join(outside, "dev.yaml"), filepath.Join(source, "secrets", "dev.yaml"))
+		}, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			base, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			checkout, source, outside := filepath.Join(base, "wt"), filepath.Join(base, "src"), filepath.Join(base, "other")
+			for _, dir := range []string{source, outside} {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			full := filepath.Join(checkout, filepath.FromSlash(c.rel))
+			write(t, full, secret)
+			c.setup(t, checkout, source, outside)
+			have, err := os.Open(full)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer have.Close()
+			if got := sourceCovers(source, checkout, c.rel, have); got != c.want {
+				t.Fatalf("sourceCovers = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+func symlink(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // An ignored file a tool generated (its first line is the generated-code
 // marker) is rebuilt by that tool: forge's runtime config.js. The never-list
 // still wins, and the marker counts only on the first line.
