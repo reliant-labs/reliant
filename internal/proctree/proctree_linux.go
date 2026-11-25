@@ -235,6 +235,31 @@ func (t *Tree) prepareCgroup(cmd *exec.Cmd, seq uint64) {
 	t.dir, t.fd = dir, fd
 }
 
+// reattachCgroup takes back dir as the tree's cgroup (Limiter.Reattach): only
+// a cgroup v2 directory named cmd-<this pid>-<n>, which this process made
+// before its exec, and only while it still holds a process (an empty one is
+// the sweep's to remove). The sequence moves past n, so this image never
+// names a new command's cgroup after one still in use.
+func (t *Tree) reattachCgroup(dir string) {
+	rest, ok := strings.CutPrefix(filepath.Base(dir), fmt.Sprintf("%s%d-", cmdPrefix, os.Getpid()))
+	if !ok || !filepath.IsAbs(dir) || !strings.HasPrefix(dir, "/sys/fs/cgroup/") {
+		return
+	}
+	seq, err := strconv.ParseUint(rest, 10, 64)
+	if err != nil {
+		return
+	}
+	for {
+		cur := cgroupSeq.Load()
+		if cur >= seq || cgroupSeq.CompareAndSwap(cur, seq) {
+			break
+		}
+	}
+	if populated(dir) {
+		t.dir = dir
+	}
+}
+
 // cgroupVanished reports whether err, from starting the tree's command, is
 // the kernel refusing the clone into the tree's cgroup because the cgroup was
 // removed: ENOENT for a removed cgroup, ENODEV for one dying, and the cgroup
