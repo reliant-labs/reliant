@@ -221,11 +221,13 @@ func (o *fileOutput) pause() [2]int64 {
 	return [2]int64{o.streams[0].emitted(), o.streams[1].emitted()}
 }
 
-// finish reads the rest once the process has been reaped, emits the
-// unterminated last lines, and removes the files: every line is in memory
-// and goes to the journal's .out with the final flush. Only the image that
-// reaped the process calls it (waitForFileProcess): one that handed the
-// process off never touches its files again.
+// finish reads the rest once the process has been reaped and emits the
+// unterminated last lines: every line is then in memory and goes to the
+// journal's .out with the final flush. The files stay until remove, which the
+// caller runs after that flush: a crash between the two finds the files, not
+// a journal missing the last lines. Only the image that reaped the process
+// calls it (waitForFileProcess): one that handed the process off never
+// touches its files again.
 func (o *fileOutput) finish() {
 	if o == nil {
 		return
@@ -241,6 +243,16 @@ func (o *fileOutput) finish() {
 		s.w.flush()
 	}
 	o.closeLocked()
+}
+
+// remove deletes the output files, once finish has emitted their lines and the
+// journal has them.
+func (o *fileOutput) remove() {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
 	for _, path := range o.paths {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			logging.Debug("Background process output file not removed", "path", path, "error", err)

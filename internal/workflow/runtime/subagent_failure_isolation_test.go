@@ -89,6 +89,9 @@ type subAgentFailureEnv struct {
 	// workflowYAMLs overrides the definition ActivityLoadWorkflow returns for a
 	// workflow name; any other name gets the agent loop.
 	workflowYAMLs map[string]string
+	// workflowJSONs, beside it, returns a recorded definition verbatim, as
+	// a run's history holds it (one written by an older release).
+	workflowJSONs map[string]string
 	// failFirstCallOf, when set, is asked before every CallLLM with the thread
 	// it runs on; a non-nil error fails that call.
 	failFirstCallOf func(thread string) error
@@ -179,6 +182,9 @@ func newSubAgentFailureEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment,
 	}
 
 	register("ActivityLoadWorkflow", func(_ context.Context, in types.LoadWorkflowInput) (LoadedWorkflow, error) {
+		if recorded, ok := e.workflowJSONs[in.WorkflowName]; ok {
+			return LoadedWorkflow{WorkflowJSON: []byte(recorded)}, nil
+		}
 		if def, ok := e.workflowYAMLs[in.WorkflowName]; ok {
 			parsed, err := wfyaml.ParseWorkflow([]byte(def))
 			if err != nil {
