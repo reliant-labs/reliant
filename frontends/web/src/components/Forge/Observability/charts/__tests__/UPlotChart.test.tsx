@@ -550,4 +550,27 @@ describe("hover: the sample under the pointer", () => {
     fireEvent.keyDown(screen.getByRole("group", { name: "runs" }), { key: "Home" });
     expect(screen.getByTestId("chart-tooltip-time")).toHaveTextContent(formatSampleTime(day, { timezone: "UTC" }));
   });
+
+  it("reads nothing with hover={false}: no cursor, no tooltip, and no stop for the keyboard", () => {
+    render(<UPlotChart timestamps={TIMES} series={twoSeries} unit="rate" height={80} label="Preview" compact hover={false} />);
+    expect(last().opts.cursor.show).toBe(false);
+    const figure = screen.getByRole("group", { name: "Preview" });
+    expect(figure).not.toHaveAttribute("tabindex");
+    fireEvent.keyDown(figure, { key: "End" });
+    act(() => last().opts.hooks.setCursor[0]({ cursor: { idx: 1 } }));
+    expect(tooltip()).toBeNull();
+    expect(screen.queryByTestId("chart-sample-live")).toBeNull();
+  });
+
+  it("writes every value through `format` when one is given: the tooltip, the axis, the legend and the caption", () => {
+    const toTenth = (v: number) => `${v.toFixed(1)}%`;
+    render(<UPlotChart timestamps={TIMES} series={[series("Coverage", [74.2, 74.1, null, 75, 75.5])]} format={toTenth} height={36} label="Coverage" compact />);
+    fireEvent.keyDown(screen.getByRole("group", { name: "Coverage" }), { key: "Home" });
+    expect(screen.getAllByTestId("chart-tooltip-row").map((r) => r.textContent)).toEqual(["74.2%"]);
+    const { opts } = last();
+    expect(opts.series[1].value({}, 74.1)).toBe("74.1%");
+    // A gap still reads as no value, not as format(NaN).
+    expect(opts.series[1].value({}, null)).toBe("—");
+    expect(document.querySelector("figcaption")).toHaveTextContent("Coverage: latest 75.5%, between 74.1% and 75.5%.");
+  });
 });

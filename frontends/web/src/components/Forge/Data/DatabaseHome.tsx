@@ -35,7 +35,7 @@ import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observab
 import { useForgeConsole } from "../Console/consoleContext";
 import { ENV_ALL } from "../Console/envScope";
 import { formatBytes, formatCores } from "../Observability/format";
-import { Sparkline } from "../LiveState/Sparkline";
+import { UPlotChart } from "../Observability/charts/UPlotChart";
 import { useAppLiveState, useWorkloadUsage } from "../LiveState/useAppLiveState";
 import { containerFigures, databasesOf, verdictStatus } from "../Services/servicesModel";
 
@@ -166,13 +166,17 @@ function InstanceFigures({ workload, envId, orgId, app }: { workload: Workload; 
       <Fact label="CPU">
         <span className="inline-flex items-center gap-2 tabular-nums">
           {cpu !== null ? formatCores(cpu) : "—"}
-          {usage.cpu && <Sparkline values={usage.cpu.values} timestamps={usage.cpu.timestamps} format={formatCores} label={`CPU over the ${windowWords}`} />}
+          {usage.cpu && (
+            <UPlotChart compact className="w-16 shrink-0" height={18} timestamps={usage.cpu.timestamps} series={[{ label: "CPU", values: usage.cpu.values }]} unit="cores" label={`CPU over the ${windowWords}`} />
+          )}
         </span>
       </Fact>
       <Fact label="Memory">
         <span className="inline-flex items-center gap-2 tabular-nums">
           {memory !== null ? formatBytes(memory) : "—"}
-          {usage.memory && <Sparkline values={usage.memory.values} timestamps={usage.memory.timestamps} format={formatBytes} label={`Memory over the ${windowWords}`} />}
+          {usage.memory && (
+            <UPlotChart compact className="w-16 shrink-0" height={18} timestamps={usage.memory.timestamps} series={[{ label: "Memory", values: usage.memory.values }]} unit="bytes" label={`Memory over the ${windowWords}`} />
+          )}
         </span>
       </Fact>
     </>
