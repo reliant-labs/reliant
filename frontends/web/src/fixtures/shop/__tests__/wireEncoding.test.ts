@@ -27,10 +27,10 @@ import { ObservabilityService } from "@/gen/controlplane/services/observability/
 import { RumService } from "@/gen/controlplane/services/rum/v1/rum_pb";
 import { UserService } from "@/gen/controlplane/services/user/v1/user_pb";
 
-import { isDemoRead } from "../../readOnly";
 import { shopScenario } from "..";
 import { createShopApi } from "../model/shopApi";
 import { DEMO_INCIDENT, DEMO_ORG, demoNow, resetDemoNowForTests } from "../shopStory";
+import { isDemoAnswered } from "./reads";
 
 const SERVICES: readonly DescService[] = [ObservabilityService, AlertingService, DeliveryInsightsService, IssuesService, UserService, RumService, DashboardService, AppDatabaseService];
 const HOUR = 3_600_000;
@@ -83,7 +83,7 @@ describe("the shop pack's observability answers, encoded for the wire", () => {
     const failures: string[] = [];
     let encoded = 0;
     for (const service of SERVICES) {
-      for (const method of service.methods.filter((m: DescMethod) => m.methodKind === "unary" && isDemoRead(m))) {
+      for (const method of service.methods.filter((m: DescMethod) => m.methodKind === "unary" && isDemoAnswered(m))) {
         const key = `${service.typeName}/${method.name}`;
         const handler = handlers[key];
         if (!handler) continue;

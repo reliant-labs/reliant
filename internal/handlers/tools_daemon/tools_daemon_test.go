@@ -17,6 +17,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -37,6 +38,7 @@ func newTestService(repo Repository, checkouts ...MachineCheckouts) *Service {
 		co = store.NewProjectDaemonDetachmentExtStore(r.ORM())
 		deps.Attachments, deps.LocalModels = realLeases(r)
 		deps.Projects, deps.Installs = store.NewProjectExtStore(r.ORM()), store.NewProjectDaemonExtStore(r.ORM())
+		deps.Refetch = chatupdates.NewFromORM(r.ORM(), r.ORM(), nil)
 	} else {
 		// A fake repository stands for the project roles too when it answers
 		// them; otherwise the project lookup is an unset mock and the
@@ -48,6 +50,9 @@ func newTestService(repo Repository, checkouts ...MachineCheckouts) *Service {
 		}
 		if deps.Installs == nil {
 			deps.Installs = noInstalls()
+		}
+		if deps.Refetch == nil {
+			deps.Refetch = &MockUserRefetch{EmitUserRefetchFunc: func(context.Context, string, core.RefetchType, core.RefetchOpts) error { return nil }}
 		}
 	}
 	if len(checkouts) > 0 {
@@ -79,7 +84,7 @@ func newTestServiceWithLeases(repo Repository, leases Attachments, models LocalM
 	if p, ok := repo.(ProjectLookups); ok {
 		projects = p
 	}
-	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Projects: projects, Installs: noInstalls(), Attachments: leases, LocalModels: models, Checkouts: &MockMachineCheckouts{}, Pools: poolsOf(repo)})
+	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo, Projects: projects, Installs: noInstalls(), Refetch: &MockUserRefetch{EmitUserRefetchFunc: func(context.Context, string, core.RefetchType, core.RefetchOpts) error { return nil }}, Attachments: leases, LocalModels: models, Checkouts: &MockMachineCheckouts{}, Pools: poolsOf(repo)})
 }
 
 // realLeases is the generated stores over a real database: what the composition

@@ -190,7 +190,7 @@ export type LandingCard =
   | { kind: "hub"; id: HubId; hub: DashboardHub }
   | { kind: "dashboard"; id: string; dashboard: DashboardSummary; title: string };
 
-const GROUP_RANK: Record<DashboardGroup, number> = { overview: 0, services: 2, jobs: 2, product: 3, releases: 4, platform: 5, custom: 6 };
+const GROUP_RANK: Record<DashboardGroup, number> = { overview: 0, services: 2, jobs: 2, product: 3, ai: 3.5, releases: 4, platform: 5, custom: 6 };
 
 /** Organization views: right after the project's platform cards (Workloads), before any custom one. */
 const ORGANIZATION_RANK = GROUP_RANK.platform + 0.5;

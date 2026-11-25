@@ -13,8 +13,9 @@
  * the demo bundle carries no other contract. The app-wide generated mock
  * registry also includes Reliant services, so it is not this bundle's input.
  *
- * Writes are never answered by these: the transport refuses them first
- * (src/fixtures/readOnly.ts isDemoRead).
+ * Writes are never answered by these: the transport's `readOnly: true`
+ * refuses every rpc whose proto does not declare NO_SIDE_EFFECTS first
+ * (bar the pack's named `answers`, ../index.ts DEMO_PACK_ANSWERS).
  */
 
 import type { DescMessage, DescService } from "@bufbuild/protobuf";

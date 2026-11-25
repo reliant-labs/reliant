@@ -7,10 +7,10 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -65,7 +65,7 @@ func (s *Service) SyncReliantProvider(ctx context.Context, req *connect.Request[
 		logging.WarnContext(ctx, "Could not rotate every org's managed Reliant key after SyncReliantProvider", "user_id", userID, "error", err)
 	}
 
-	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+	if err := s.deps.Refetch.EmitUserRefetch(ctx, userID, core.RefetchConfigHealth, core.RefetchOpts{}); err != nil {
 		logging.WarnContext(ctx, "Failed to emit config_health refetch after SyncReliantProvider", "error", err)
 	}
 	s.wakeChats(ctx, userID, "the Reliant provider key was synced")

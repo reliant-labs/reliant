@@ -11,6 +11,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
@@ -36,9 +37,7 @@ type Accounts interface {
 
 // Store is the slice of the repository this service uses; *db.Repo satisfies it.
 type Store interface {
-	GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*db.ChatRow, error)
 	GetRootThread(ctx context.Context, chatID string) (*db.Thread, error)
-	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	GetSettingValue(ctx context.Context, userID, key string) (string, bool)
 	SetString(ctx context.Context, userID string, projectID *string, key, value string) error
 }
@@ -56,6 +55,12 @@ type Deps struct {
 	Config *config.Config
 	// Store holds the chat and settings reads and the refetch a write pushes.
 	Store Store
+	// Refetch tells the user's clients to re-read what a write changed
+	// (UserRefetch).
+	Refetch UserRefetch
+	// Chats reads a chat the caller may write, the owner and org checks in one
+	// call (chataccess).
+	Chats chataccess.Service
 	// Accounts holds accounts, their limit state and thread assignments
 	// (credentials/provideraccounts).
 	Accounts Accounts
@@ -105,6 +110,9 @@ func (d Deps) validateDeps() error {
 	if d.Accounts == nil {
 		return fmt.Errorf("provider_account: Deps.Accounts is required")
 	}
+	if d.Refetch == nil {
+		return fmt.Errorf("provider_account: Deps.Refetch is required")
+	}
 	if d.Store == nil {
 		return fmt.Errorf("provider_account: Deps.Store is required")
 	}
@@ -152,3 +160,9 @@ func (s *Service) RegisterHTTP(_ *http.ServeMux, _ func(http.Handler) http.Handl
 
 // Ensure the generated protobuf package import remains referenced even before methods exist.
 var _ = pb.File_reliant_v1_provider_account_proto
+
+// UserRefetch tells a user's clients to re-read data of a given type (a
+// user_updates refetch). chatupdates.Service satisfies it.
+type UserRefetch interface {
+	EmitUserRefetch(ctx context.Context, userID string, refetchType core.RefetchType, opts core.RefetchOpts) error
+}

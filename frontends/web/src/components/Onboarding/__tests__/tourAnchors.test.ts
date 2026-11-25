@@ -141,6 +141,8 @@ describe("tour anchors", () => {
     const where = new Set(ANCHORS.map((a) => a.where.split(" ")[0]));
     expect(where).toContain("wf-outro-layout");
     expect(where).toContain("fg-console");
+    // The forge journey's shell steps, over the shell nav's anchors.
+    for (const id of ["fg-nav", "fg-deployments", "fg-tests", "fg-security", "fg-configure"]) expect(where).toContain(id);
     expect(where).toContain("tip");
     expect(where).toContain("demo-tip");
     expect(ANCHORS.length).toBeGreaterThan(20);

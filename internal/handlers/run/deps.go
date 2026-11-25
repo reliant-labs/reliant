@@ -35,7 +35,7 @@ type Repository interface {
 	ListRootWorkflows(ctx context.Context, chatID string) ([]*db.Workflow, error)
 	ListRuns(ctx context.Context, f db.RunListFilters) ([]*db.RunListItem, bool, error)
 	ListUnlaunchedTriggerEvents(ctx context.Context, f db.RunListFilters) ([]*db.UnlaunchedTriggerEvent, bool, error)
-	LastRunPerWorkflow(ctx context.Context, f db.RunListFilters) ([]*db.RunListItem, error)
+	LastRunPerWorkflowAndOrg(ctx context.Context, f db.RunListFilters) ([]*db.RunListItem, error)
 }
 
 // WorkflowLoader reads one workflow row by id. store.WorkflowExtStore

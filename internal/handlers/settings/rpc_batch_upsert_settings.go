@@ -9,7 +9,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/db/core"
 
 	"github.com/reliant-labs/reliant/internal/db"
 
@@ -73,7 +75,7 @@ func (s *Service) BatchUpsertSettings(ctx context.Context, req *connect.Request[
 	}
 
 	if len(written) > 0 {
-		if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
+		if err := s.deps.Refetch.EmitUserRefetch(ctx, userID, core.RefetchConfigHealth, core.RefetchOpts{ProjectID: projectID}); err != nil {
 			logging.WarnContext(ctx, "Failed to emit config_health refetch after BatchUpsertSettings", "error", err)
 		}
 	}

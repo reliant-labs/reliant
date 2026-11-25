@@ -8,6 +8,8 @@
  *   - an advanceOn that fires for a step the user already left is ignored.
  *   - a step's `skip.run` runs before moving on; if it throws, the user stays.
  *   - Finish lands on the journey's own `finish` target when it has one.
+ *   - a `returnToStart` journey's Finish, Exit tour and Back off its first
+ *     step return to the page it was started from.
  *   - onComplete runs on forward moves only.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -26,6 +28,7 @@ import { z } from "zod";
 const hooks = vi.hoisted(() => ({
   onComplete: vi.fn(),
   skipRun: vi.fn(async (_ctx?: unknown) => undefined as void),
+  returnToStart: false,
 }));
 
 vi.mock("../journeys/workflows", () => ({
@@ -60,6 +63,7 @@ vi.mock("../journeys/forge", () => ({
     title: "Explore a forge app",
     description: "d",
     finish: (shell: string) => (shell === "reliant" ? { to: "/apps" } : null),
+    returnToStart: () => hooks.returnToStart,
     steps: [
       { id: "fg-a", title: "FA", description: "fa", route: { path: "/forge/demo", label: "Open", open: { to: "/forge/demo", search: { view: "overview" } } } },
       { id: "fg-b", title: "FB", description: "fb", route: { path: "/forge/demo", label: "Open", open: { to: "/forge/demo", search: { view: "traces" } } } },
@@ -133,6 +137,7 @@ describe("useTourNavigation", () => {
     vi.clearAllMocks();
     __resetTourSaveScheduler();
     useTourStore.setState({ contexts: {}, completedSteps: new Set(), skippedSteps: new Set() } as any);
+    hooks.returnToStart = false;
   });
 
   describe("reading ?tour=", () => {
@@ -242,6 +247,59 @@ describe("useTourNavigation", () => {
       await waitFor(() => expect(router.state.location.pathname).toBe("/apps"));
       expect(tour()).toBeUndefined();
       expect(useTourStore.getState().journeys.forge.current).toBe("completed");
+    });
+
+    describe("a journey that returns to where it started", () => {
+      beforeEach(() => {
+        hooks.returnToStart = true;
+      });
+
+      async function startedFrom(url: string) {
+        const harness = setup(url);
+        await waitFor(() => expect(harness.nav()).toBeDefined());
+        await act(async () => harness.nav().startJourney("forge", "picker"));
+        await waitFor(() => expect(harness.tour()).toBe("forge:fg-a"));
+        expect(harness.router.state.location.pathname).toBe("/forge/demo");
+        return harness;
+      }
+
+      it("Finish goes back to the page it was started from, its search kept and the tour cleared", async () => {
+        const { router, nav, tour } = await startedFrom("/project/project-1?view=chats&tour=pick:menu");
+        await act(async () => nav().goToStep("forge", "fg-b"));
+        await waitFor(() => expect(tour()).toBe("forge:fg-b"));
+        await act(async () => nav().finish());
+        await waitFor(() => expect(router.state.location.pathname).toBe("/project/project-1"));
+        expect(router.state.location.search).toEqual({ view: "chats" });
+        expect(useTourStore.getState().contexts.forge?.startedFrom).toBeUndefined();
+      });
+
+      it("Exit tour goes back there too", async () => {
+        const { router, nav } = await startedFrom("/project/project-1");
+        await act(async () => nav().skipAll());
+        await waitFor(() => expect(router.state.location.pathname).toBe("/project/project-1"));
+        expect(useTourStore.getState().journeys.forge.current).toBe("skipped");
+      });
+
+      it("Back off the first step goes back there", async () => {
+        const { router, nav, tour } = await startedFrom("/project/project-1");
+        await act(async () => nav().goBack());
+        await waitFor(() => expect(router.state.location.pathname).toBe("/project/project-1"));
+        expect(tour()).toBeUndefined();
+      });
+
+      it("records no start on one of its own pages: Finish falls back to the journey's target", async () => {
+        const { router, nav } = await startedFrom("/forge/demo?view=traces");
+        expect(useTourStore.getState().contexts.forge?.startedFrom).toBeUndefined();
+        await act(async () => nav().finish());
+        await waitFor(() => expect(router.state.location.pathname).toBe("/apps"));
+      });
+
+      it("opened cold from a ?tour= link, with nothing recorded, uses the journey's target", async () => {
+        const { router, nav } = setup("/forge/demo?tour=forge:fg-b");
+        await waitFor(() => expect(nav().currentStepId).toBe("fg-b"));
+        await act(async () => nav().finish());
+        await waitFor(() => expect(router.state.location.pathname).toBe("/apps"));
+      });
     });
 
     it("defaults to the project chat in Reliant", async () => {

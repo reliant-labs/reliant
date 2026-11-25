@@ -9,12 +9,13 @@
  * the visitor does not have. A tour link that carries its trace, and every
  * other step, stays guided (JourneyTour).
  */
-import { isDemoShell } from "../../lib/shell";
+import { getDemoTourHooks } from "./tourShell";
 import { getJourneyStep } from "./journeys/registry";
 import { parseTourParam } from "./tourParam";
 
 export function isLegacyDemoTourLink(search: Record<string, unknown>): boolean {
-  if (!isDemoShell() || search.trace) return false;
+  // Only the public demo has page cards (PageEntryTour) to explain the page with.
+  if (!getDemoTourHooks() || search.trace) return false;
   const parsed = parseTourParam(search.tour);
   if (!parsed || parsed.kind !== "journey" || parsed.journey !== "forge" || !parsed.stepId) return false;
   const open = getJourneyStep("forge", parsed.stepId)?.route?.open;

@@ -80,8 +80,13 @@ func (r *Reconciler) ReconcileAll(ctx context.Context) (ReconcileReport, error) 
 		return report, fmt.Errorf("list activations: %w", err)
 	}
 	// One request's worth of memoization: many activations of one workflow
-	// parse it once per pass.
-	workflows := NewCachedWorkflows(r.workflows)
+	// parse it once per pass, and the activations of one machine's project
+	// read its catalog once per pass (oneFire: launch.NewRequestResolver),
+	// whichever workflows they run. Without the latter, each workflow
+	// re-read its machine's whole catalog row, hundreds of KB, every minute:
+	// this pass was the API server's largest CPU consumer in prod (65 CPU-s a
+	// day, a third of it reading and hashing catalog rows, 2026-11-24).
+	workflows := NewCachedWorkflows(oneFire(r.workflows))
 	var errs []error
 	for _, t := range activations {
 		report.Checked++

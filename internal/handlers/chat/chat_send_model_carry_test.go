@@ -118,7 +118,7 @@ func carryFixture(t *testing.T, dbStatus db.WorkflowStatus, temporalStatus enums
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 			Temporal:      temporal,
 		},
-		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: workflow.NewPauseService(workflow.PauseServiceDeps{Temporal: temporal, Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM())})}),
+		runs: runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: workflow.NewPauseService(workflow.PauseServiceDeps{Temporal: temporal, Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM())})}),
 	}
 	return ctx, fx, repo, temporal, service
 }

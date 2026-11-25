@@ -35,6 +35,8 @@ type Deps struct {
 	// the projects, chats, daemons, workflows and presets a trigger names
 	// (deps.go).
 	Repo Repository
+	// Chats reads the chat a launch event belongs to (store.ChatExtStore).
+	Chats Chats
 	// Owners re-owns an orphaned trigger (deps.go).
 	Owners Owners
 	// Firings reads each trigger's recent firings; WebhookSecrets stores a
@@ -42,6 +44,9 @@ type Deps struct {
 	// TriggerExtStore).
 	Firings        Firings
 	WebhookSecrets WebhookSecrets
+	// TriggerWrites inserts and replaces a trigger's definition (the
+	// generated TriggerWritesExtStore).
+	TriggerWrites TriggerWrites
 	// Projects reads a project the caller may write (owner and org decided
 	// together: projectaccess).
 	Projects projectaccess.Service
@@ -203,14 +208,17 @@ func (d Deps) validateDeps() error {
 	if d.Repo == nil {
 		return fmt.Errorf("trigger: Deps.Repo is required")
 	}
+	if d.Chats == nil {
+		return fmt.Errorf("trigger: Deps.Chats is required")
+	}
 	if d.Owners == nil {
 		return fmt.Errorf("trigger: Deps.Owners is required")
 	}
 	if d.ControlPlane != nil && d.AutomationKeys == nil {
 		return fmt.Errorf("trigger: Deps.AutomationKeys is required with Deps.ControlPlane")
 	}
-	if d.Firings == nil || d.WebhookSecrets == nil {
-		return fmt.Errorf("trigger: Deps.Firings and Deps.WebhookSecrets are required")
+	if d.Firings == nil || d.WebhookSecrets == nil || d.TriggerWrites == nil {
+		return fmt.Errorf("trigger: Deps.Firings, Deps.WebhookSecrets and Deps.TriggerWrites are required")
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("trigger: Deps.Projects is required")

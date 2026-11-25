@@ -17,6 +17,7 @@
 
 import { create, type DescMethod, type DescService } from "@bufbuild/protobuf";
 import { BinaryWriter } from "@bufbuild/protobuf/wire";
+import { MethodOptions_IdempotencyLevel } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type Interceptor } from "@connectrpc/connect";
 
 import { AlertingService } from "@/gen/controlplane/services/alerting/v1/alerting_pb";
@@ -27,7 +28,6 @@ import { ObservabilityService, ReleaseVerdict } from "@/gen/controlplane/service
 import { ReplayEventSchema, RumService } from "@/gen/controlplane/services/rum/v1/rum_pb";
 
 import { answering, emptying, failing, methodsOf, refining, stalling } from "../../overlay";
-import { isDemoRead } from "../../readOnly";
 import type { FixturePack } from "../../transport";
 import { shopScenario } from "../index";
 import { DEMO_INCIDENT } from "../shopStory";
@@ -48,13 +48,16 @@ const pack = (): Record<string, unknown> => (handlers ??= shopScenario().handler
 /** Every service the observability views read. */
 const OBSERVABILITY: DescService[] = [ObservabilityService, DashboardService, AlertingService, DeliveryInsightsService, IssuesService, RumService];
 
+/** The proto declares it a read: what the read-only guard lets through (`readOnly: true`). */
+const isRead = (method: DescMethod) => method.idempotency === MethodOptions_IdempotencyLevel.NO_SIDE_EFFECTS;
+
 /** The reads among `services` (what the read-only guard lets through), but `except`. */
 function readsOf(services: readonly DescService[], except: readonly DescMethod[] = []): DescMethod[] {
-  return methodsOf(services).filter((method) => isDemoRead(method) && !except.includes(method));
+  return methodsOf(services).filter((method) => isRead(method) && !except.includes(method));
 }
 
 /** The writes among `services`. */
-const writesOf = (services: readonly DescService[]) => methodsOf(services).filter((method) => !isDemoRead(method));
+const writesOf = (services: readonly DescService[]) => methodsOf(services).filter((method) => !isRead(method));
 
 /** forge's machine-readable cause, as control-plane sends it beside the code. */
 const reason = (value: string) => ({ "x-forge-error-reason": value });

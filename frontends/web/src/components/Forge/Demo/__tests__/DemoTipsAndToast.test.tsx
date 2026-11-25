@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
-import { memoryTourStorage, setTourShell, setTourStorage } from "@/components/Onboarding/tourShell";
+import { memoryTourStorage, setDemoTourHooks, setTourShell, setTourStorage } from "@/components/Onboarding/tourShell";
 import { JourneyTour } from "@/components/Onboarding/JourneyTour";
 import { resetShellForTests } from "@/lib/shell";
 import { DemoTips } from "../tips/DemoTips";
@@ -19,8 +19,9 @@ function renderDemo(path: string) {
   render(<RouterProvider router={router} />);
   return { router, go: (to: string) => act(async () => { await router.navigate({ href: to }); }) };
 }
-beforeEach(() => { resetShellForTests("demo"); setTourShell("forge"); setTourStorage(memoryTourStorage()); resetDemoSessionForTests(); });
-afterEach(() => { cleanup(); setTourShell(null); resetShellForTests(); });
+// As the demo's boot leaves it (demoShellBoot.ts): the forge shell's tour, in memory, on the demo's own app.
+beforeEach(() => { resetShellForTests("demo"); setTourShell("forge"); setTourStorage(memoryTourStorage()); setDemoTourHooks({ app: "shop" }); resetDemoSessionForTests(); });
+afterEach(() => { cleanup(); setTourShell(null); setDemoTourHooks(null); resetShellForTests(); });
 
 it("opens a page's tip by itself on its first visit this session, as a single Done card", async () => {
   const {router} = renderDemo("/forge/p/shop/observability/logs");
@@ -152,7 +153,9 @@ it("only a trace-less link to a trace step is legacy; one that carries its trace
   expect(isLegacyDemoTourLink({ view: "overview", tour: "forge:fg-intro" })).toBe(false);
   expect(isLegacyDemoTourLink({ view: "traces", tour: "forge:fg-trace" })).toBe(false);
   expect(isLegacyDemoTourLink({ view: "logs" })).toBe(false);
+  // Off the demo (no demo tour hooks): there are no page cards, so every tour link is guided.
   resetShellForTests("reliant");
+  setDemoTourHooks(null);
   expect(isLegacyDemoTourLink({ view: "logs", tour: "forge:fg-logs" })).toBe(false);
 });
 it("a logs tour link that carries its trace runs the guided step, not the page card", async () => {

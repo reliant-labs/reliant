@@ -16,20 +16,9 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;confi
 // without the secret is a boot error at each consumer, never a silent fall
 // back to self-hosted.
 message ControlPlaneConfig {
-  // The control plane's base URL. control-plane sets RELIANT_CONTROL_PLANE_URL;
-  // the two older names are still read, after it, until nothing sets them.
+  // The control plane's base URL. control-plane sets RELIANT_CONTROL_PLANE_URL.
   string url = 1 [(forge.v1.config) = {
     env_var: "RELIANT_CONTROL_PLANE_URL"
-    env_var_aliases: [
-      {
-        name: "CONTROL_PLANE_API_URL"
-        deprecated: true
-      },
-      {
-        name: "CONTROL_PLANE_BASE_URL"
-        deprecated: true
-      }
-    ]
     description: "Control-plane base URL; unset means self-hosted"
   }];
 

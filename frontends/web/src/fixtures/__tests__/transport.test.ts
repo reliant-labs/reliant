@@ -6,7 +6,7 @@
  * interceptors run), the dispatch ladder (readOnly guard → latest layer's
  * route or scenario handler → service defaults → Unimplemented), pack
  * composition, strict JSON data and checkFixturePack. Then the reliant
- * extensions (the deprecated readOnly classifier, `answers`) and the harness
+ * extension (`answers`) and the harness
  * policy in overlay.ts (withEmptyReads, pending, fail).
  *
  * Schemas are real generated services: StorageBrowserService has NO_SIDE_EFFECTS
@@ -17,8 +17,9 @@
  * StreamingService/StreamUserUpdates is an annotated server stream.
  */
 
-import { create, isMessage } from "@bufbuild/protobuf";
-import { MethodOptions_IdempotencyLevel } from "@bufbuild/protobuf/wkt";
+import { create, createFileRegistry, isMessage, type DescMessage } from "@bufbuild/protobuf";
+import type { GenService } from "@bufbuild/protobuf/codegenv2";
+import { FileDescriptorProtoSchema, MethodOptions_IdempotencyLevel } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient, type Interceptor, type StreamResponse, type Transport } from "@connectrpc/connect";
 import { describe, expect, it, vi } from "vitest";
 
@@ -29,7 +30,6 @@ import { StreamingService } from "@/gen/reliant/v1/streaming_pb";
 import { ToolsDaemonService } from "@/gen/reliant/v1/tools_daemon_pb";
 
 import { fail, pending, withEmptyReads } from "../overlay";
-import { isDemoRead } from "../readOnly";
 import { assertPureFixturePack, checkFixturePack, createFixtureTransport, defineFixturePack, fixtureJson, fixturePackAnswers, type FixtureContext } from "../transport";
 
 const FIXED_NOW = Date.parse("2026-11-18T15:30:00Z");
@@ -44,6 +44,26 @@ const MESSAGE = "Changes are turned off.";
 const storage = (t: Transport) => createClient(StorageBrowserService, t);
 const deploy = (t: Transport) => createClient(DeployService, t);
 const streaming = (t: Transport) => createClient(StreamingService, t);
+
+/**
+ * A server stream that declares no idempotency, so `readOnly: true` takes it
+ * for a write. Every generated server stream is annotated NO_SIDE_EFFECTS, so
+ * the tests that need an unannotated one build it here.
+ */
+const TickService = createFileRegistry(
+  create(FileDescriptorProtoSchema, {
+    name: "fixture_test/v1/tick.proto",
+    package: "fixture_test.v1",
+    syntax: "proto3",
+    messageType: [{ name: "TickRequest" }, { name: "Tick" }],
+    service: [{ name: "TickService", method: [{ name: "Ticks", inputType: ".fixture_test.v1.TickRequest", outputType: ".fixture_test.v1.Tick", serverStreaming: true }] }],
+  }),
+  () => undefined,
+).getService("fixture_test.v1.TickService") as GenService<{ ticks: { methodKind: "server_streaming"; input: DescMessage; output: DescMessage } }>;
+const TICKS = `${TickService.typeName}/Ticks`;
+const ticks = (t: Transport) => createClient(TickService, t).ticks({});
+/** Options that list a write in `answers`, so the extension's guard (not forge's) is the one that refuses. */
+const EXTENSION_PATH = { services: [StorageBrowserService], answers: [PRESIGN], scenario: { [PRESIGN]: () => ({}) } };
 
 async function code(p: Promise<unknown>): Promise<Code | undefined> {
   try {
@@ -263,10 +283,10 @@ describe("createFixtureTransport: readOnly", () => {
     expect(await code(drain(createClient(ToolsDaemonService, transport).connectDaemon((async function* () {})())))).toBe(Code.PermissionDenied);
   });
 
-  it("the deprecated isDemoRead classifier runs through the same guard", async () => {
-    const transport = createFixtureTransport({ defaults: [DeployService, UserService], readOnly: isDemoRead, readOnlyMessage: MESSAGE });
-    // An unannotated read, let through by its verb.
-    await expect(createClient(UserService, transport).getCurrentUser({})).resolves.toBeDefined();
+  it("true: an unannotated read is refused whatever its verb (no name heuristic)", async () => {
+    const transport = createFixtureTransport({ defaults: [DeployService, UserService], readOnly: true, readOnlyMessage: MESSAGE });
+    await expect(deploy(transport).getTenant({})).resolves.toBeDefined();
+    await expect(createClient(UserService, transport).getCurrentUser({})).rejects.toSatisfy((e) => e instanceof ConnectError && e.code === Code.PermissionDenied && e.rawMessage === MESSAGE);
     await expect(deploy(transport).createTenant({})).rejects.toSatisfy((e) => e instanceof ConnectError && e.code === Code.PermissionDenied && e.rawMessage === MESSAGE);
   });
 
@@ -276,8 +296,8 @@ describe("createFixtureTransport: readOnly", () => {
     const requests = async function* () {
       yield create(connect.input);
     };
-    // forge's guard (readOnly: true), then the interceptor guard (the classifier).
-    for (const transport of [createFixtureTransport({ readOnly: true, scenario }), createFixtureTransport({ readOnly: isDemoRead, scenario })]) {
+    // forge's guard (no answers), then the extension's (a pack that lists some).
+    for (const transport of [createFixtureTransport({ readOnly: true, scenario }), createFixtureTransport({ readOnly: true, ...EXTENSION_PATH, scenario: { ...EXTENSION_PATH.scenario, ...scenario } })]) {
       const res = await transport.stream(connect, new AbortController().signal, undefined, undefined, requests(), undefined);
       expect(await code(drain(res.message))).toBe(Code.PermissionDenied);
     }
@@ -292,7 +312,7 @@ describe("createFixtureTransport: readOnly", () => {
       if (res.stream) seen = res;
       return res;
     };
-    const transport = createFixtureTransport({ readOnly: isDemoRead, readOnlyMessage: MESSAGE, interceptors: [capture], scenario: { [CONNECT_DAEMON]: () => [{}] } });
+    const transport = createFixtureTransport({ readOnly: true, readOnlyMessage: MESSAGE, interceptors: [capture], ...EXTENSION_PATH, scenario: { ...EXTENSION_PATH.scenario, [CONNECT_DAEMON]: () => [{}] } });
     const open = (signal = new AbortController().signal) => transport.stream(connect, signal, undefined, undefined, (async function* () {})(), undefined);
     await open();
     expect(seen?.stream).toBe(true);
@@ -381,35 +401,31 @@ describe("answers: writes a pack answers from fixtures anyway (reliant extension
   });
 
   it("refuses a listed write nothing answers", async () => {
-    const pack = defineFixturePack({ name: "app", services: [DeployService, StreamingService], answers: [CREATE_TENANT, `${StreamingService.typeName}/StreamUserUpdates`] });
-    expect(await code(deploy(createFixtureTransport({ pack, readOnly: true })).createTenant({}))).toBe(Code.PermissionDenied);
+    const pack = defineFixturePack({ name: "app", services: [DeployService, TickService], answers: [CREATE_TENANT, TICKS] });
+    const transport = createFixtureTransport({ pack, readOnly: true });
+    expect(await code(deploy(transport).createTenant({}))).toBe(Code.PermissionDenied);
     // A stream too, when its first read fails (forge answers it Unimplemented).
-    const unannotated = createFixtureTransport({ pack, readOnly: () => false });
-    expect(await code(drain(streaming(unannotated).streamUserUpdates({})))).toBe(Code.PermissionDenied);
+    expect(await code(drain(ticks(transport)))).toBe(Code.PermissionDenied);
   });
 
-  it("refuses a listed unary write nothing answers with the configured message, on the boolean and the classifier path", async () => {
+  it("refuses a listed unary write nothing answers with the configured message", async () => {
     const pack = defineFixturePack({ name: "app", services: [DeployService], answers: [CREATE_TENANT] });
-    for (const readOnly of [true, isDemoRead]) {
-      const refused = ConnectError.from(await deploy(createFixtureTransport({ pack, readOnly, readOnlyMessage: MESSAGE })).createTenant({}).catch((e: unknown) => e));
-      expect([refused.code, refused.rawMessage]).toEqual([Code.PermissionDenied, MESSAGE]);
-    }
+    const refused = ConnectError.from(await deploy(createFixtureTransport({ pack, readOnly: true, readOnlyMessage: MESSAGE })).createTenant({}).catch((e: unknown) => e));
+    expect([refused.code, refused.rawMessage]).toEqual([Code.PermissionDenied, MESSAGE]);
     // Unconfigured, it carries forge's own refusal message.
     const plain = ConnectError.from(await deploy(createFixtureTransport({ pack, readOnly: true })).createTenant({}).catch((e: unknown) => e));
     expect(plain.rawMessage).toBe(`fixture-transport: ${CREATE_TENANT} is not a read (no idempotency_level = NO_SIDE_EFFECTS)`);
   });
 
   it("refuses a listed streamed write nothing answers with the configured message: the call opens, reading it fails", async () => {
-    const pack = defineFixturePack({ name: "app", services: [StreamingService, ToolsDaemonService], answers: [USER_UPDATES, CONNECT_DAEMON] });
+    const pack = defineFixturePack({ name: "app", services: [TickService, ToolsDaemonService], answers: [TICKS, CONNECT_DAEMON] });
     const requests = async function* () {
       yield create(ToolsDaemonService.method.connectDaemon.input);
     };
     const cases: { name: string; transport: Transport; read: (t: Transport) => AsyncIterable<unknown> }[] = [
-      // A server stream (annotated, so the classifier is what makes it a write).
-      { name: "server stream, classifier", transport: createFixtureTransport({ pack, readOnly: () => false, readOnlyMessage: MESSAGE }), read: (t) => streaming(t).streamUserUpdates({}) },
-      // A bidi stream (unannotated, so a write to readOnly: true and to isDemoRead alike).
-      { name: "bidi, readOnly: true", transport: createFixtureTransport({ pack, readOnly: true, readOnlyMessage: MESSAGE }), read: (t) => createClient(ToolsDaemonService, t).connectDaemon(requests()) },
-      { name: "bidi, classifier", transport: createFixtureTransport({ pack, readOnly: isDemoRead, readOnlyMessage: MESSAGE }), read: (t) => createClient(ToolsDaemonService, t).connectDaemon(requests()) },
+      // A server stream and a bidi stream, both unannotated, so writes to readOnly: true.
+      { name: "server stream", transport: createFixtureTransport({ pack, readOnly: true, readOnlyMessage: MESSAGE }), read: ticks },
+      { name: "bidi", transport: createFixtureTransport({ pack, readOnly: true, readOnlyMessage: MESSAGE }), read: (t) => createClient(ToolsDaemonService, t).connectDaemon(requests()) },
     ];
     for (const { name, transport, read } of cases) {
       const refused = ConnectError.from(await drain(read(transport)).catch((e: unknown) => e));
@@ -421,20 +437,20 @@ describe("answers: writes a pack answers from fixtures anyway (reliant extension
     let aborted = false;
     const pack = defineFixturePack({
       name: "app",
-      services: [StreamingService],
-      answers: [USER_UPDATES],
+      services: [TickService],
+      answers: [TICKS],
       routes: (router) =>
-        router.service(StreamingService, {
-          async *streamUserUpdates(_req, ctx) {
-            yield { event: { case: "heartbeat", value: {} } };
+        router.service(TickService, {
+          async *ticks(_req, ctx) {
+            yield {};
             ctx.signal.addEventListener("abort", () => (aborted = true));
             await pending(ctx.signal);
           },
         }),
     });
     const abort = new AbortController();
-    const it = streaming(createFixtureTransport({ pack, readOnly: () => false })).streamUserUpdates({}, { signal: abort.signal })[Symbol.asyncIterator]();
-    expect((await it.next()).value?.event.case).toBe("heartbeat");
+    const it = createClient(TickService, createFixtureTransport({ pack, readOnly: true })).ticks({}, { signal: abort.signal })[Symbol.asyncIterator]();
+    expect((await it.next()).done).toBe(false);
     const next = it.next();
     expect(await stillPending(next)).toBe(true);
     cancel(abort);
@@ -442,11 +458,11 @@ describe("answers: writes a pack answers from fixtures anyway (reliant extension
     await vi.waitFor(() => expect(aborted).toBe(true));
   });
 
-  it("is unioned across extends, takes a descriptor too, and works with the deprecated classifier", async () => {
+  it("is unioned across extends, and takes a descriptor too", async () => {
     const base = defineFixturePack({ name: "base", scenario: presign, defaults: [DeployService], answers: [StorageBrowserService.method.presignObjectDownload] });
     const child = defineFixturePack({ name: "child", extends: [base], answers: [CREATE_TENANT] });
     expect(fixturePackAnswers(child)).toEqual([PRESIGN, CREATE_TENANT]);
-    const transport = createFixtureTransport({ pack: child, readOnly: isDemoRead });
+    const transport = createFixtureTransport({ pack: child, readOnly: true });
     await expect(storage(transport).presignObjectDownload({})).resolves.toBeDefined();
     await expect(deploy(transport).createTenant({})).resolves.toBeDefined();
   });

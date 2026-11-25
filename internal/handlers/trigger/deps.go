@@ -73,10 +73,6 @@ type Repository interface {
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 	ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error)
 	UpdateTrigger(ctx context.Context, t *core.Trigger) error
-	// CreateTriggerInOrg and UpdateTriggerInOrg write under the owner's org
-	// lock, only while every org the handler's decision read still holds.
-	CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
-	UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
 	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error
@@ -88,7 +84,6 @@ type Repository interface {
 	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
 
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
-	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 
 	// ListTriggers is called directly too; TriggerLister declares it.
 	launch.WorkflowResolver
@@ -109,6 +104,15 @@ type Firings interface {
 // store.TriggerExtStore satisfies it.
 type WebhookSecrets interface {
 	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
+}
+
+// TriggerWrites writes a trigger's definition under the owner's org lock, only
+// while every org the handler's decision read still holds. Called with the ctx
+// of the transaction the handler opens (Deps.Repo.RunTx), each joins it.
+// store.TriggerWritesExtStore satisfies it.
+type TriggerWrites interface {
+	CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
+	UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
 }
 
 type Pools interface {
@@ -152,4 +156,9 @@ type DraftRequest struct {
 	Description string
 	Workflow    string
 	Timezone    string
+}
+
+// Chats reads the chat a launch event belongs to, for the access check. store.ChatExtStore satisfies it.
+type Chats interface {
+	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 }

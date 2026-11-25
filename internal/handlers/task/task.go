@@ -49,7 +49,7 @@ func (s *Service) writableTask(ctx context.Context, userID, taskID string) (*cor
 	if err != nil {
 		return nil, nil, err
 	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
+	if !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, nil, svcerr.PermissionDenied("access denied")
 	}
 	return task, chat, nil

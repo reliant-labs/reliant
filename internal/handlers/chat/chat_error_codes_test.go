@@ -11,6 +11,8 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chataccess"
+	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -38,9 +40,13 @@ func requireClientReads(t *testing.T, err error, want connect.Code) {
 	require.NotContains(t, svcerr.ToConnect(err).Message(), "secret")
 }
 
-func newChatService(t *testing.T, repo *chat.MockRepository) *chat.Service {
+func newChatService(t *testing.T, repo *chat.MockRepository, chats ...chataccess.Service) *chat.Service {
 	t.Helper()
-	return chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &chat.MockMailbox{}, AgentMessages: &chat.MockAgentMessages{}, Messages: &chat.MockMessages{}, ToolBlocks: &chat.MockToolBlocks{}, Senders: &chat.MockSenders{}}))
+	var access chataccess.Service = &chataccess.MockService{}
+	if len(chats) > 0 {
+		access = chats[0]
+	}
+	return chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Chats: access, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &chat.MockMailbox{}, AgentMessages: &chat.MockAgentMessages{}, Messages: &chat.MockMessages{}, ToolBlocks: &chat.MockToolBlocks{}, Senders: &chat.MockSenders{}}))
 }
 
 func ownedChat(_ context.Context, id string) (*db.Chat, error) {
@@ -66,10 +72,7 @@ func TestChatOwnershipRead_RepositoryFailureCodes(t *testing.T) {
 			})
 		}
 		byOwner := func(t *testing.T) *chat.Service {
-			return newChatService(t, &chat.MockRepository{
-				GetChatWithUserCheckFunc:    func(context.Context, string, string) (*db.Chat, error) { return nil, tc.err },
-				GetChatRowWithUserCheckFunc: func(context.Context, string, string) (*db.ChatRow, error) { return nil, tc.err },
-			})
+			return newChatService(t, &chat.MockRepository{}, chataccesstest.Failing(tc.err))
 		}
 		ctx := chat.AuthedContext(t)
 

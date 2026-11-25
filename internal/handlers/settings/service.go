@@ -37,6 +37,9 @@ type Deps struct {
 	// Repo stores settings, provider credentials and privacy choices
 	// (deps.go).
 	Repo Repository
+	// Refetch tells the user\'s clients to re-read what a write changed
+	// (UserRefetch, deps.go).
+	Refetch UserRefetch
 	// Accounts holds the person's provider accounts, their limits and usage poll
 	// (credentials/provideraccounts); the secrets stay inside it.
 	Accounts Accounts
@@ -87,6 +90,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("settings: Deps.Repo is required")
+	}
+	if d.Refetch == nil {
+		return fmt.Errorf("settings: Deps.Refetch is required")
 	}
 	if d.Accounts == nil {
 		return fmt.Errorf("settings: Deps.Accounts is required")

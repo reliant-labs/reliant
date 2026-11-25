@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -17,6 +18,10 @@ import (
 type Deps struct {
 	// Repo is everything the service reads and writes.
 	Repo Repository
+	// Chats reads the chat a pause or interrupt names, as a chat the caller
+	// may write (chataccess). Required by InterruptThread and
+	// CancelChatToolCalls; a service built without it refuses them.
+	Chats chataccess.Service
 	// Messages answers SaveMessage's idempotency checks: whether a message
 	// id or an activity's message already exists. Required for SaveMessage
 	// (a read-only caller may leave it nil). store.MessageExtStore
@@ -51,9 +56,6 @@ type Senders interface {
 // Repository defines the subset of *db.Repo needed by the threads service.
 // This allows for easier testing and decouples threads from the full repository.
 type Repository interface {
-	// Chat operations: ownership, from the chats row alone.
-	GetChatRowWithUserCheck(ctx context.Context, id string, userID string) (*db.ChatRow, error)
-
 	// Thread operations
 	CreateThread(ctx context.Context, thread *db.Thread) (*db.Thread, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)

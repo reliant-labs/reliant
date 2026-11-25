@@ -19,9 +19,9 @@
  * its dispatch. Each is a candidate for forge; once forge has it, its part
  * here goes:
  *
- *   1. `readOnly` also takes a classifier function (readOnly.ts isDemoRead).
- *      Deprecated: forge's is a boolean, and the function goes once the read
- *      RPCs declare NO_SIDE_EFFECTS.
+ *   1. (Gone.) `readOnly` took a classifier function (the name heuristic
+ *      readOnly.ts isDemoRead). The read RPCs now declare NO_SIDE_EFFECTS,
+ *      so `readOnly` is a boolean, as forge's is.
  *   2. `answers` (pack and options) and `services`: an explicit list of
  *      side-effecting RPCs a pack answers from fixtures anyway (reads that
  *      wake a sleeping machine, say). The readOnly guard lets exactly those
@@ -31,12 +31,13 @@
  *      transport may honour it: a path that can reach live traffic calls
  *      {@link assertPureFixturePack}.
  *
- * With neither in play (`readOnly` a boolean, no `answers`), the options go
- * to forge's transport unchanged, and its own guard refuses. Otherwise forge
- * serves with its guard off, and {@link readOnlyGuard}, the innermost client
- * interceptor, refuses instead: after every caller interceptor, before the
- * router, with forge's code, message and timing (a refused stream opens, and
- * its body fails).
+ * A pack that lists no `answers` goes to forge's transport unchanged, and
+ * forge's own guard refuses every write under `readOnly: true`. forge's guard
+ * cannot let a listed write through, so only for a pack that lists some does
+ * forge serve with its guard off, and {@link readOnlyGuard}, the innermost
+ * client interceptor, applies the same rule plus the list: after every caller
+ * interceptor, before the router, with forge's code, message and timing (a
+ * refused stream opens, and its body fails).
  *
  * The visual harness's "an unanswered read answers the empty message" is
  * harness policy, not part of this API: overlay.ts `withEmptyReads`.
@@ -102,18 +103,8 @@ export function defineFixturePack<D extends FixtureDataMap = FixtureDataMap>(pac
   return pack;
 }
 
-export interface CreateFixtureTransportOptions extends Omit<ForgeCreateFixtureTransportOptions, "pack" | "readOnly"> {
+export interface CreateFixtureTransportOptions extends Omit<ForgeCreateFixtureTransportOptions, "pack"> {
   pack?: FixturePack<any>;
-  /**
-   * `true`: refuse every RPC whose proto does not declare
-   * `idempotency_level = NO_SIDE_EFFECTS`, with PermissionDenied, before any
-   * handler sees it (forge's).
-   *
-   * @deprecated RELIANT EXTENSION (1): the function form (readOnly.ts
-   * isDemoRead) is local only, and goes once the read RPCs are annotated;
-   * forge's `readOnly` is a boolean.
-   */
-  readOnly?: boolean | ((method: DescMethod) => boolean);
   /** RELIANT EXTENSION (2): as {@link FixturePack.answers}, one more layer on top. */
   answers?: readonly FixtureAnswer[];
   /** RELIANT EXTENSION (2): as {@link FixturePack.services}. */
@@ -256,9 +247,9 @@ async function* refusingUnanswered<T>(body: AsyncIterable<T>, key: string, messa
 }
 
 /**
- * RELIANT EXTENSION (1, 2): the read-only guard as the innermost client
- * interceptor. A read (the proto's word, or the deprecated classifier's)
- * passes; a write the pack lists in `answers` passes to whatever answers it,
+ * RELIANT EXTENSION (2): the read-only guard as the innermost client
+ * interceptor, for a pack that lists `answers`. A read (the proto's
+ * NO_SIDE_EFFECTS, forge's test) passes; a write the pack lists in `answers` passes to whatever answers it,
  * and is refused when nothing does; every other write is refused without
  * reaching the router. Every refusal is PermissionDenied with the configured
  * `readOnlyMessage`, as forge's guard refuses. A unary refusal throws; a
@@ -268,10 +259,10 @@ async function* refusingUnanswered<T>(body: AsyncIterable<T>, key: string, messa
  * unanswered listed write arrives while the body is read (a server or bidi
  * stream's usually does).
  */
-function readOnlyGuard(reads: (method: DescMethod) => boolean, answered: ReadonlySet<string>, message: string | undefined): Interceptor {
+function readOnlyGuard(answered: ReadonlySet<string>, message: string | undefined): Interceptor {
   return (next) => async (req) => {
     const key = keyOf(req.method);
-    if (reads(req.method)) return next(req);
+    if (isRead(req.method)) return next(req);
     if (!answered.has(key)) {
       const err = refusal(key, message);
       if (!req.stream) throw err;
@@ -302,16 +293,17 @@ function readOnlyGuard(reads: (method: DescMethod) => boolean, answered: Readonl
  * forge's module notes for the dispatch.
  */
 export function createFixtureTransport(options: CreateFixtureTransportOptions = {}): Transport {
-  const { readOnly, answers: _answers, services: _services, ...forgeOptions } = options;
+  const { answers: _answers, services: _services, ...forgeOptions } = options;
+  const { answered, problems } = resolveAnswers(extensionLayers(options));
   // forge composes first, so a pack's data errors come before its answers errors.
-  const layers = extensionLayers(options);
-  const { answered, problems } = resolveAnswers(layers);
-  const native = typeof readOnly !== "function" && answered.size === 0;
-  const transport = forgeCreateFixtureTransport({
-    ...forgeOptions,
-    readOnly: native ? readOnly : false,
-    interceptors: native || !readOnly ? options.interceptors : [...(options.interceptors ?? []), readOnlyGuard(typeof readOnly === "function" ? readOnly : isRead, answered, options.readOnlyMessage)],
-  });
+  const transport =
+    answered.size === 0 || !options.readOnly
+      ? forgeCreateFixtureTransport(forgeOptions)
+      : forgeCreateFixtureTransport({
+          ...forgeOptions,
+          readOnly: false,
+          interceptors: [...(options.interceptors ?? []), readOnlyGuard(answered, options.readOnlyMessage)],
+        });
   const [first] = problems;
   if (first) throw new Error(`fixture pack "${first.pack}": ${first.message}`);
   return transport;
