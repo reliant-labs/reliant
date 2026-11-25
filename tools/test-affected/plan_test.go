@@ -222,6 +222,8 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 		// generates, which the diff carries (or forge-generate fails).
 		{"buf.yaml", []lane{laneForgeGen}},
 		{"buf.gen.controlplane.yaml", []lane{laneForgeGen}},
+		// changes.yaml likewise reaches tests only through its generated accessors.
+		{"changes.yaml", []lane{laneForgeGen}},
 	}
 	for _, tc := range cases {
 		pl := classify(tc.path)
