@@ -1,23 +1,4 @@
 // Copyright (c) 2025 Reliant Labs
-
-// Package gitport is the merge queue's local git: the operations the candidate
-// builder (Q2) and the reverter (Q6) run in a workdir, over the real git
-// binary.
-//
-// Everything works on a bare repository with no checkout. A squash is
-// `git merge-tree --write-tree` (git's merge-ort, in memory) followed by
-// `git commit-tree`, so building a candidate of n PRs writes objects and never
-// touches a worktree or an index. That needs git 2.40 or newer
-// (`merge-tree --merge-base`); [Open] and [Init] refuse an older git with
-// [ErrGitTooOld] rather than fall back to a checkout-based merge that would
-// compute a different tree.
-//
-// Git runs hermetically: the system and global config are not read
-// (GIT_CONFIG_NOSYSTEM, GIT_CONFIG_GLOBAL=/dev/null), so a host's merge
-// settings, hooks or credential helpers cannot change a tree the queue
-// computes. Credentials for a push or fetch are the caller's, passed through
-// [Options.Env] (an askpass helper, or GIT_CONFIG_COUNT/KEY/VALUE for an
-// http.extraHeader); never put a token in a URL or an argument.
 package gitport
 
 import (
@@ -63,8 +44,10 @@ type Identity struct {
 	Email string
 }
 
-// DefaultIdentity is used when [Options.Identity] is empty.
-var DefaultIdentity = Identity{Name: "Reliant Queue", Email: "queue@reliantlabs.io"}
+// DefaultIdentity is the identity used when [Options.Identity] is empty.
+func DefaultIdentity() Identity {
+	return Identity{Name: "Reliant Queue", Email: "queue@reliantlabs.io"}
+}
 
 // Options configure a [Repo].
 type Options struct {
@@ -75,25 +58,6 @@ type Options struct {
 	// Env is appended to git's hermetic environment, for credentials and
 	// for test pinning (GIT_AUTHOR_DATE, GIT_COMMITTER_DATE).
 	Env []string
-}
-
-// Port is the local git the queue drives. [*Repo] implements it; Q2 and Q6
-// take it as a dependency.
-type Port interface {
-	// Fetch fetches refspecs from url into the repository.
-	Fetch(ctx context.Context, url string, refspecs ...string) error
-	// ResolveCommit resolves rev to a commit sha.
-	ResolveCommit(ctx context.Context, rev string) (string, error)
-	// TreeOf returns the tree sha of a commit.
-	TreeOf(ctx context.Context, rev string) (string, error)
-	// Squash writes one commit onto Base whose tree is Head merged into
-	// Base. A conflict is a [*ConflictError].
-	Squash(ctx context.Context, in SquashInput) (Result, error)
-	// Revert writes the exact revert of a commit onto Onto. A conflict is a
-	// [*ConflictError].
-	Revert(ctx context.Context, in RevertInput) (Result, error)
-	// Push pushes a commit to a ref of url.
-	Push(ctx context.Context, url string, in PushInput) error
 }
 
 var _ Port = (*Repo)(nil)
@@ -153,7 +117,7 @@ func newRepo(dir string, opts Options) *Repo {
 		opts.GitBin = "git"
 	}
 	if opts.Identity == (Identity{}) {
-		opts.Identity = DefaultIdentity
+		opts.Identity = DefaultIdentity()
 	}
 	return &Repo{dir: dir, opts: opts}
 }
@@ -437,11 +401,11 @@ func (r *Repo) execIn(ctx context.Context, gitDir string, stdin *strings.Reader,
 // then extra.
 func HermeticEnv(id Identity, extra ...string) []string {
 	if id == (Identity{}) {
-		id = DefaultIdentity
+		id = DefaultIdentity()
 	}
 	env := []string{
-		"PATH=" + os.Getenv("PATH"),
-		"HOME=" + os.Getenv("HOME"),
+		"PATH=" + os.Getenv("PATH"), //nolint:forbidigo // ambient OS variable: git finds its helpers on PATH
+		"HOME=" + os.Getenv("HOME"), //nolint:forbidigo // ambient OS variable: git and ssh resolve ~ from HOME
 		"GIT_CONFIG_NOSYSTEM=1",
 		"GIT_CONFIG_GLOBAL=" + os.DevNull,
 		"GIT_TERMINAL_PROMPT=0",

@@ -209,7 +209,7 @@ func (g *GitHub) begin(ctx context.Context, c Call) (after, err error) {
 		if match {
 			run = append(run, h)
 		}
-		if !(match && h.once) {
+		if !match || !h.once {
 			kept = append(kept, h)
 		}
 	}
