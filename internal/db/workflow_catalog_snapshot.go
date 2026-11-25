@@ -98,9 +98,15 @@ func (r *Repo) PinProjectCatalog(ctx context.Context, scope CatalogPinScope) (st
 	now := time.Now().UTC()
 	inTx := r.DB.inTx(ctx)
 	if _, touchDue, ok := r.pinnedCatalogs().get(pin, now); ok && !touchDue && !inTx {
-		// Stored, and marked used within the hour, by this process: the
-		// write would store the same bytes under the same id again.
-		return pin, nil
+		// Content is cached, but another process may have pruned the row.
+		stored, err := store.HasWorkflowCatalogSnapshot(ctx, r.ORM(), pin)
+		if err != nil {
+			return "", err
+		}
+		if stored {
+			return pin, nil
+		}
+		r.pinnedCatalogs().remove(pin)
 	}
 	row := &store.WorkflowCatalogSnapshot{
 		ID: pin, ProjectID: scope.ProjectID, DaemonID: machine,
@@ -157,8 +163,10 @@ func (r *Repo) pinnableUserWorkflows(ctx context.Context, scope CatalogPinScope)
 // is unknown (never stored, or pruned).
 //
 // A pin names its content (catalogPin), so a catalog read once is served from
-// this Repo's cache after (pinnedCatalogCache), and its last_used_at, which
-// only the retention prune reads, is bumped at most hourly. The returned
+// this Repo's cache after (pinnedCatalogCache), with existence checked on every
+// read. Its last_used_at, which only the retention prune reads, is bumped at
+// most hourly outside transactions. Transactional reads use storage directly.
+// The returned
 // catalog's strings, map and slice are shared: read them, never write them.
 func (r *Repo) GetPinnedProjectCatalog(ctx context.Context, pin string) (*PinnedCatalog, bool, error) {
 	if pin == "" {
@@ -166,20 +174,26 @@ func (r *Repo) GetPinnedProjectCatalog(ctx context.Context, pin string) (*Pinned
 	}
 	now := time.Now().UTC()
 	cache := r.pinnedCatalogs()
-	// In a transaction the bump would hold the row's lock to its commit, and
-	// could roll back: leave it to a read outside one.
+	// A transaction must read its own storage view, including local deletes,
+	// and must not publish a last-used bump that can still roll back.
 	inTx := r.DB.inTx(ctx)
-	if catalog, touchDue, ok := cache.get(pin, now); ok {
-		if touchDue && !inTx {
-			stored, err := store.TouchWorkflowCatalogSnapshot(ctx, r.ORM(), pin, now)
-			if err != nil {
-				return nil, false, err
-			}
-			if !stored {
-				cache.remove(pin)
-				countPinnedRead(ctx, "miss")
-				return nil, false, nil
-			}
+	if catalog, touchDue, ok := cache.get(pin, now); ok && !inTx {
+		var stored bool
+		var err error
+		if touchDue {
+			stored, err = store.TouchWorkflowCatalogSnapshot(ctx, r.ORM(), pin, now)
+		} else {
+			stored, err = store.HasWorkflowCatalogSnapshot(ctx, r.ORM(), pin)
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		if !stored {
+			cache.remove(pin)
+			countPinnedRead(ctx, "miss")
+			return nil, false, nil
+		}
+		if touchDue {
 			cache.touched(pin, now)
 		}
 		countPinnedRead(ctx, "hit")

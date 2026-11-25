@@ -3,6 +3,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +22,7 @@ func pinnedCatalogOfSize(n int) *PinnedCatalog {
 // The cache holds at most its byte budget, evicting the least recently used
 // pin first, and never holds a catalog larger than the whole budget.
 func TestPinnedCatalogCacheEvictsLeastRecentlyUsedByBytes(t *testing.T) {
-	now := time.Now()
+	now := time.Date(2026, time.January, 15, 12, 0, 0, 0, time.UTC)
 	c := newPinnedCatalogCache(3*(1000+256), time.Hour)
 	c.add("a", pinnedCatalogOfSize(1000), now)
 	c.add("b", pinnedCatalogOfSize(1000), now)
@@ -50,7 +51,7 @@ func TestPinnedCatalogCacheEvictsLeastRecentlyUsedByBytes(t *testing.T) {
 
 // A hit is due a last_used_at bump once touchEvery has passed since the last.
 func TestPinnedCatalogCacheTouchIsDueAfterTheInterval(t *testing.T) {
-	now := time.Now()
+	now := time.Date(2026, time.January, 15, 12, 0, 0, 0, time.UTC)
 	c := newPinnedCatalogCache(1<<20, time.Hour)
 	c.add("a", pinnedCatalogOfSize(10), now)
 	_, due, _ := c.get("a", now.Add(59*time.Minute))
@@ -64,7 +65,7 @@ func TestPinnedCatalogCacheTouchIsDueAfterTheInterval(t *testing.T) {
 
 func newPinnedCatalogTestProject(t *testing.T, repo *Repo) string {
 	t.Helper()
-	now := time.Now().UTC()
+	now := time.Date(2026, time.January, 15, 12, 0, 0, 0, time.UTC).UTC()
 	userID, projectID := "user-"+uuid.NewString(), "project-"+uuid.NewString()
 	require.NoError(t, repo.CreateProject(context.Background(), &Project{
 		ID: projectID, UserID: userID, Name: "p", Path: t.TempDir(), CreatedAt: now, UpdatedAt: now, LastActive: now,
@@ -80,11 +81,8 @@ func snapshotLastUsed(t *testing.T, repo *Repo, pin string) time.Time {
 	return at
 }
 
-// A pinned catalog is read from the database once per process: later reads
-// are served from the Repo's cache without a statement (the row can be gone
-// and the read still answers), and its last_used_at is not rewritten on every
-// read. Once a bump is due, the bump finds the row gone and the pin reads as
-// not stored.
+// Repeat reads reuse catalog bytes without rewriting last_used_at, but still
+// validate existence so another process's deletion is immediately visible.
 func TestGetPinnedProjectCatalogServesRepeatReadsFromTheCache(t *testing.T) {
 	repo := NewTestRepo(t)
 	defer repo.Close()
@@ -93,7 +91,7 @@ func TestGetPinnedProjectCatalogServesRepeatReadsFromTheCache(t *testing.T) {
 
 	pin, err := repo.PinProjectCatalog(ctx, CatalogPinScope{ProjectID: projectID})
 	require.NoError(t, err)
-	stale := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Microsecond)
+	stale := time.Date(2026, time.January, 15, 12, 0, 0, 0, time.UTC).UTC().Add(-48 * time.Hour).Truncate(time.Microsecond)
 	_, err = repo.ORM().Exec(ctx, `UPDATE workflow_catalog_snapshots SET last_used_at = $1 WHERE id = $2`, stale, pin)
 	require.NoError(t, err)
 
@@ -113,14 +111,45 @@ func TestGetPinnedProjectCatalogServesRepeatReadsFromTheCache(t *testing.T) {
 	require.NoError(t, err)
 	_, found, err := repo.GetPinnedProjectCatalog(ctx, pin)
 	require.NoError(t, err)
-	assert.True(t, found, "served from the cache: no statement read the row")
-
-	repo.pinnedCatalogs().touchEvery = 0
-	_, found, err = repo.GetPinnedProjectCatalog(ctx, pin)
-	require.NoError(t, err)
-	assert.False(t, found, "the due bump finds the row gone")
-	_, _, cached := repo.pinnedCatalogs().get(pin, time.Now())
+	assert.False(t, found, "deletion is visible even before a touch is due")
+	_, _, cached := repo.pinnedCatalogs().get(pin, time.Date(2026, time.January, 15, 12, 0, 0, 0, time.UTC))
 	assert.False(t, cached, "and forgets the pin")
+}
+
+// A cached pin must respect transactional deletes without publishing rollback
+// state to the process cache.
+func TestCachedPinnedCatalogRespectsTransactionalDeletion(t *testing.T) {
+	repo := NewTestRepo(t)
+	defer repo.Close()
+	ctx := context.Background()
+	projectID := newPinnedCatalogTestProject(t, repo)
+	pin, err := repo.PinProjectCatalog(ctx, CatalogPinScope{ProjectID: projectID})
+	require.NoError(t, err)
+	rollback := fmt.Errorf("rollback deletion")
+	err = repo.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		_, err := repo.ORM().Exec(ctx, `DELETE FROM workflow_catalog_snapshots WHERE id = $1`, pin)
+		require.NoError(t, err)
+		_, found, err := repo.GetPinnedProjectCatalog(ctx, pin)
+		require.NoError(t, err)
+		require.False(t, found)
+		return rollback
+	})
+	require.ErrorIs(t, err, rollback)
+	_, found, err := repo.GetPinnedProjectCatalog(ctx, pin)
+	require.NoError(t, err)
+	require.True(t, found)
+	// A committed deletion is also observed by transactional cache hits.
+	_, err = repo.ORM().Exec(ctx, `DELETE FROM workflow_catalog_snapshots WHERE id = $1`, pin)
+	require.NoError(t, err)
+	require.NoError(t, repo.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		_, found, err := repo.GetPinnedProjectCatalog(ctx, pin)
+		require.False(t, found)
+		return err
+	}))
+	// Re-pinning cached content restores the missing row.
+	again, err := repo.PinProjectCatalog(ctx, CatalogPinScope{ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, pin, again)
 }
 
 // A due bump on a cache hit keeps a pin in use from the retention prune.
@@ -131,7 +160,7 @@ func TestGetPinnedProjectCatalogBumpsLastUsedWhenDue(t *testing.T) {
 	projectID := newPinnedCatalogTestProject(t, repo)
 	pin, err := repo.PinProjectCatalog(ctx, CatalogPinScope{ProjectID: projectID})
 	require.NoError(t, err)
-	stale := time.Now().UTC().Add(-48 * time.Hour)
+	stale := time.Date(2026, time.January, 15, 12, 0, 0, 0, time.UTC).UTC().Add(-48 * time.Hour)
 	_, err = repo.ORM().Exec(ctx, `UPDATE workflow_catalog_snapshots SET last_used_at = $1 WHERE id = $2`, stale, pin)
 	require.NoError(t, err)
 
@@ -139,7 +168,10 @@ func TestGetPinnedProjectCatalogBumpsLastUsedWhenDue(t *testing.T) {
 	_, found, err := repo.GetPinnedProjectCatalog(ctx, pin)
 	require.NoError(t, err)
 	require.True(t, found)
-	assert.WithinDuration(t, time.Now(), snapshotLastUsed(t, repo, pin), time.Minute)
+	repo.pinnedCatalogs().mu.Lock()
+	touched := repo.pinnedCatalogs().entries[pin].Value.(*pinnedCatalogEntry).touched
+	repo.pinnedCatalogs().mu.Unlock()
+	assert.True(t, snapshotLastUsed(t, repo, pin).Equal(touched.Truncate(time.Microsecond)))
 }
 
 // A read inside a transaction never fills the cache: the transaction may be
@@ -160,12 +192,12 @@ func TestGetPinnedProjectCatalogInATransactionDoesNotFillTheCache(t *testing.T) 
 		require.True(t, found)
 		return err
 	}))
-	_, _, cached := repo.pinnedCatalogs().get(pin, time.Now())
+	_, _, cached := repo.pinnedCatalogs().get(pin, time.Date(2026, time.January, 15, 12, 0, 0, 0, time.UTC))
 	assert.False(t, cached)
 
 	_, found, err := repo.GetPinnedProjectCatalog(ctx, pin)
 	require.NoError(t, err)
 	require.True(t, found)
-	_, _, cached = repo.pinnedCatalogs().get(pin, time.Now())
+	_, _, cached = repo.pinnedCatalogs().get(pin, time.Date(2026, time.January, 15, 12, 0, 0, 0, time.UTC))
 	assert.True(t, cached, "a read outside one does")
 }

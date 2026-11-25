@@ -29,8 +29,8 @@ const pinnedCatalogTouchEvery = time.Hour
 // A pin is the sha256 of its catalog's content (catalogPin), so the row of a
 // pin never changes: a cached catalog is the stored one, byte for byte. What
 // can change is whether the row is still stored (the retention prune, a
-// deleted project), so a hit still bumps last_used_at once every touchEvery,
-// and a bump that finds no row evicts the pin and answers not found.
+// deleted project), so every hit validates existence, and bumps last_used_at
+// once every touchEvery. A missing row evicts the pin and answers not found.
 //
 // Prod read each pinned row through UPDATE … RETURNING on every load of a
 // run and every resolution of a fire: ~100ms each (decompressing hundreds of
