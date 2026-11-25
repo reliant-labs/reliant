@@ -6,7 +6,7 @@
  * A person with one org sees no label, no filter, and no extra request.
  */
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithQuery } from "@/test/renderWithQuery";
 import { useActiveOrgStore } from "@/store/activeOrgStore";
@@ -15,10 +15,6 @@ import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 
 const listMyOrganizations = vi.fn();
 const listMachineOrgs = vi.fn();
-vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/controlPlane/orgs")>()),
-  listMyOrganizations: () => listMyOrganizations(),
-}));
 vi.mock("@/services/controlPlane/machineOrgs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/controlPlane/machineOrgs")>()),
   listMachineOrgs: () => listMachineOrgs(),
@@ -28,6 +24,12 @@ vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https
 import { machineOrgId, machinesInOrg } from "../useMachineOrgs";
 import { MachineSelect } from "@/components/Projects/MachineSelect";
 import { MachinePicker } from "@/components/Chat/MachinePicker";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { myOrgsHandlers } from "@/test/orgsTransport";
+
+beforeEach(() => setTransport(mockTransport(myOrgsHandlers({ listMyOrganizations: () => listMyOrganizations() }))));
+afterEach(() => setTransport(null));
 
 const org = (id: string, name: string, isDefault = false) => ({ id, name, slug: id, role: "owner", isOwner: true, isDefault });
 const ACME = org("acme", "Acme", true);

@@ -1,12 +1,20 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { billingHandlers } from "@/test/billingTransport";
 import { UsageBillingPanel } from "../UsageBillingPanel";
 
 const mocks = vi.hoisted(() => ({ read: vi.fn(), checkout: vi.fn(), open: vi.fn(), active: { id: "org-a", role: "owner" } }));
 vi.mock("@/hooks/useOrgs", () => ({ useActiveOrg: () => ({ active: mocks.active }) }));
-vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => ({ getCurrentUserUsageBilling: mocks.read, createCurrentUserUsageBillingCheckout: mocks.checkout }) }));
+// The agreement read and the checkout run on the generated BillingService
+// hooks; the hosting usage summary (a hand-written pendingBillingMethod read)
+// finds no method on the client, as on a server without it.
+vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => ({}) }));
+beforeEach(() => setTransport(mockTransport(billingHandlers({ getCurrentUserUsageBilling: (r) => mocks.read(r), createCurrentUserUsageBillingCheckout: (r) => mocks.checkout(r) }))));
+afterEach(() => setTransport(null));
 vi.mock("@/lib/stripeCheckout", () => ({ openCheckout: mocks.open, buildCheckoutReturnUrls: () => ({ successUrl: "https://app.test/settings/billing?tab=usage&checkout=success", cancelUrl: "https://app.test/settings/billing?tab=usage&checkout=cancelled" }) }));
 
 beforeEach(() => {
@@ -29,11 +37,11 @@ async function consent() {
 it("submits explicit org/policy/budget and does not treat checkout success as active", async () => {
   mount();
   await screen.findByRole("checkbox");
-  expect(mocks.read).toHaveBeenCalledWith({ orgId: "org-a" });
+  expect(mocks.read).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-a" }));
   expect(screen.getByText("CPU: $0.09/vCPU-hr")).toBeInTheDocument();
   expect(screen.queryByText(/cents/)).not.toBeInTheDocument();
   await consent();
-  await waitFor(() => expect(mocks.checkout).toHaveBeenCalledWith({ orgId: "org-a", policyVersion: "p1", infraBudgetCents: 2500n, successUrl: "https://app.test/settings/billing?tab=usage#app-hosting", cancelUrl: "https://app.test/settings/billing?tab=usage#app-hosting" }));
+  await waitFor(() => expect(mocks.checkout).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-a", policyVersion: "p1", infraBudgetCents: 2500n, successUrl: "https://app.test/settings/billing?tab=usage#app-hosting", cancelUrl: "https://app.test/settings/billing?tab=usage#app-hosting" })));
   await waitFor(() => expect(mocks.open).toHaveBeenCalled());
   expect(screen.queryByText("App hosting billing is active.")).not.toBeInTheDocument();
 });
@@ -42,7 +50,7 @@ it("clears consent on org switch and keys the new read to that org", async () =>
   fireEvent.click(await screen.findByRole("checkbox"));
   mocks.active = { id: "org-b", role: "owner" };
   rerender(view());
-  await waitFor(() => expect(mocks.read).toHaveBeenCalledWith({ orgId: "org-b" }));
+  await waitFor(() => expect(mocks.read).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-b" })));
   expect(await screen.findByRole("checkbox")).not.toBeChecked();
   expect(mocks.checkout).not.toHaveBeenCalled();
 });
@@ -54,7 +62,7 @@ it("never opens an old org's checkout after switching during creation", async ()
   await waitFor(() => expect(mocks.checkout).toHaveBeenCalled());
   mocks.active = { id: "org-b", role: "owner" };
   rerender(view());
-  await waitFor(() => expect(mocks.read).toHaveBeenCalledWith({ orgId: "org-b" }));
+  await waitFor(() => expect(mocks.read).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-b" })));
   finish({ checkoutUrl: "https://checkout.stripe.test/old-org" });
   await waitFor(() => expect(screen.getByRole("checkbox")).not.toBeChecked());
   expect(mocks.open).not.toHaveBeenCalled();

@@ -28,6 +28,9 @@ func WithReadRoles(d Deps) Deps {
 		if d.Repos == nil {
 			d.Repos = store.NewRepoExtStore(o)
 		}
+		if d.Chats == nil {
+			d.Chats = store.NewChatsWithActivityExtStore(o)
+		}
 		if d.Daemons == nil {
 			d.Daemons = store.NewDaemonExtStore(o)
 		}
@@ -50,6 +53,9 @@ func WithReadRoles(d Deps) Deps {
 		d.Repos = &MockRepoLister{ListReposByProjectFunc: func(ctx context.Context, id string) ([]*core.Repo, error) {
 			return repo.ListReposByProject(ctx, id)
 		}}
+	}
+	if d.Chats == nil {
+		d.Chats = &MockChats{}
 	}
 	if d.Daemons == nil {
 		d.Daemons = &MockDaemonReader{GetDaemonFunc: func(ctx context.Context, id string) (*core.Daemon, error) { return repo.GetDaemon(ctx, id) }}

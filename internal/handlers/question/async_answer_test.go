@@ -113,7 +113,7 @@ func newAsyncAnswerFixture(t *testing.T) *asyncAnswerFixture {
 	}))
 
 	messages := &recordingMessenger{}
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Messages: messages, Signals: noSignals{t}}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Messages: messages, Signals: noSignals{t}}))
 	return &asyncAnswerFixture{
 		repo: repo, chatID: chatID, mainID: chatID, spawnID: "spawn-" + uuid.NewString(),
 		svc: svc, messages: messages,
@@ -342,7 +342,7 @@ func TestResolveAsyncQuestion_ThreadParkedOnABlockingQuestionGetsItInItsMailboxO
 			assert.Equal(t, db.QuestionStatusResolved, f.status(t, "q-a").Status, "A is answered")
 			assert.Equal(t, db.QuestionStatusPending, f.status(t, "q-b").Status, "B stays the user's to answer")
 
-			queued, err := f.repo.ListQueuedAgentMessagesForThread(ctx, asker)
+			queued, err := store.ListQueuedAgentMessagesForThread(ctx, f.repo.ORM(), asker)
 			require.NoError(t, err)
 			require.Len(t, queued, 1, "A's answer waits in the asking thread's mailbox")
 			assert.Equal(t, asyncAnswerBody("q-a", wantSQLiteAnswer), queued[0].Body)
@@ -352,7 +352,7 @@ func TestResolveAsyncQuestion_ThreadParkedOnABlockingQuestionGetsItInItsMailboxO
 
 			// The thread failing while parked does not lose it: its pending
 			// question is what resumes it.
-			moved, err := f.repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, asker)
+			moved, err := store.MarkQueuedAgentMessagesUndeliveredForThread(ctx, f.repo.ORM(), asker)
 			require.NoError(t, err)
 			assert.Zero(t, moved, "a parked thread's mailbox is not swept")
 		})

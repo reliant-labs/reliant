@@ -3,10 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getDaemon = vi.fn();
 
-vi.mock('../../services/controlPlane/environments', () => ({
-  getDaemon: (id: string) => getDaemon(id),
-}));
-
+import { setTransport } from '../../lib/connect';
+import { mockTransport } from '../../lib/test-utils';
+import { cpDaemonHandlers } from '../../test/cpDaemonTransport';
 import { DaemonInfoSchema, DaemonStatus, ListDaemonsResponseSchema } from '../../gen/reliant/v1/daemon_registry_pb';
 import { queryClient } from '../../lib/query-client';
 import { DAEMON_LIST_QUERY_KEY } from '../daemon-registry-queries';
@@ -22,11 +21,15 @@ function seedDaemons(...daemons: { daemonId: string; daemonType: string; status:
 }
 
 beforeEach(() => {
+  // GetDaemon at the transport: the template reads it through the generated
+  // DaemonService query options.
+  setTransport(mockTransport(cpDaemonHandlers({ getDaemon: (req: { daemonId: string }) => getDaemon(req.daemonId) })));
   getDaemon.mockReset();
   getDaemon.mockResolvedValue({ daemon: undefined, workspaceBaseDomain: TEMPLATE });
 });
 
 afterEach(() => {
+  setTransport(null);
   queryClient.clear();
 });
 

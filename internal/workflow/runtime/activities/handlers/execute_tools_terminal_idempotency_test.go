@@ -12,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -191,7 +192,7 @@ func TestTerminalIdempotency_NoResultReaderFallsBackToStub(t *testing.T) {
 	}))
 
 	var output ExecuteToolsOutput
-	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), unavailableToolCallResults{toolCallsOf(f.h.Repo())}, executor).Execute, ExecuteToolsInput{
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: unavailableToolCallResults{toolCallsOf(f.h.Repo())}, ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())}).Execute, ExecuteToolsInput{
 		ChatID:    f.chatID,
 		Thread:    f.chatID,
 		ToolCalls: []message.ToolCall{{ID: toolCallID, Name: "bash", Input: `{"command":"echo hi"}`}},

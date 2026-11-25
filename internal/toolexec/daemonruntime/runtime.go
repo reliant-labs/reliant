@@ -25,8 +25,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 
-	"github.com/reliant-labs/forge/pkg/hostslot"
-
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
@@ -40,6 +38,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/forkwatch"
 	"github.com/reliant-labs/reliant/internal/ghshim"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
+	"github.com/reliant-labs/reliant/internal/idlereclaim"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
@@ -170,11 +169,12 @@ type daemonClient struct {
 	// (internal/forkwatch; reliant#1919). Its verdict rides on the
 	// heartbeat's health.
 	forkWatch *forkwatch.Watchdog
-	// hostStats reads the host's load and memory for every heartbeat
-	// (DaemonHeartbeat.machine_stats), which the gateway logs for the
-	// self-hosted machines it watches (internal/machinehealth). Nil-safe: a
-	// nil reader, or a host without /proc, leaves the field unset.
-	hostStats *machinehealth.HostStats
+	// resources projects the daemon's resource sampler into every heartbeat
+	// (DaemonHeartbeat.machine_stats, process_stats, cgroup_stats), which
+	// the gateway stores for DaemonInfo and logs for the self-hosted
+	// machines it watches (internal/machinehealth). Nil-safe: a nil
+	// projector, or a platform with no readers yet, leaves the fields unset.
+	resources *machinehealth.Resources
 	// forkHeal carries out the watchdog's self-heal: it stops the largest
 	// background command after five minutes degraded, and a managed daemon
 	// exits if that did not help (fork_heal.go).
@@ -274,6 +274,10 @@ type StartOptions struct {
 	// WorktreeReclaim is the machine-wide worktree reclaim, which rides the
 	// storage reaper's schedule; the zero value is off.
 	WorktreeReclaim worktreereclaim.SweepConfig
+	// IdleReclaim is the scratch-directory lifecycle and the node_modules
+	// strip of idle worktrees (internal/idlereclaim); the zero value is mode
+	// auto with zero thresholds, so callers pass idlereclaim.ParseConfig's.
+	IdleReclaim idlereclaim.Config
 	// Host is what the platform declares about where this daemon runs; zero
 	// off a workspace pod.
 	Host Host
@@ -481,6 +485,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// thresholds and mode.
 	setReclaimSweepConfig(opts.WorktreeReclaim)
 	go client.diskWatcher.RunReaper(ctx)
+	// Scratch directories and idle worktrees' node_modules, on its own
+	// schedule; mode auto runs it where the storage reaper runs.
+	go runIdleReclaim(ctx, opts.IdleReclaim, opts.StorageReaper.Enabled, opts.WorktreeReclaim.Mode)
 	// The disk guard reclaims with the same pass, at once, when a volume
 	// crosses its reclaim threshold — where the routine runs at all: a
 	// person's own machine is left alone unless they enabled it.
@@ -494,7 +501,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// which control-plane's machine-health dashboard and alerts read from
 	// tenant zero's logs (internal/machinehealth). A self-hosted machine
 	// ships no logs to us, so it does not sample: its load and memory ride
-	// on every heartbeat instead (hostStats), and the gateway logs them for
+	// on every heartbeat instead (resources), and the gateway logs them for
 	// the machines it watches.
 	if opts.Host.Managed() {
 		go newMachineHealthSampler(client.diskWatcher).Run(ctx)
@@ -815,7 +822,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		procGuard:         procGuard,
 		forkWatch:         forkWatch,
 		forkHeal:          forkHeal,
-		hostStats:         machinehealth.NewHostStats("", hostslot.DetectMachine().CPUs),
+		resources:         newResources(),
 	}
 	client.restoreResultOutbox()
 	return client, nil
@@ -2089,8 +2096,9 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 		// Whether this machine can start processes (nil before the first
 		// probe, which the gateway reads as healthy).
 		hb.Health = d.forkWatch.Health()
-		// The host's load and memory (nil where /proc cannot be read).
-		hb.MachineStats = d.hostStats.Read(now)
+		// The host's load, CPU and memory, the daemon process's own, and
+		// its cgroup's pressure (each nil where the platform has no reader).
+		hb.MachineStats, hb.ProcessStats, hb.CgroupStats = d.resources.Read()
 		if err := s.send(&reliantv1.DaemonMessage{
 			Message: &reliantv1.DaemonMessage_Heartbeat{Heartbeat: hb},
 		}); err != nil {
@@ -2260,6 +2268,11 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	// Use of the workspace it works in and of every one its input names
 	// (worktree_use.go), recorded even if it is refused below: it was asked.
 	noteWorktreeUse(workspaceRoot, req.GetToolInput())
+	// The chat's last tool call: its scratch directory is not removed whole
+	// while it is still working (idle_reclaim.go).
+	if chatID, ok := contextMap["chat_id"].(string); ok {
+		noteChatActivity(chatID)
+	}
 	// Admitted where the call works, before it does anything: it holds only
 	// that worktree, and a worktree being retired refuses it.
 	releaseRecovery, admissionErr := beginRecoveryWorkIn(workspaceRoot)

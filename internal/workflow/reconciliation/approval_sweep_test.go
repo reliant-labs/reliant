@@ -97,7 +97,7 @@ func TestAnnounceApprovalResolutions_RunsToCompletionOnce(t *testing.T) {
 }
 
 func newApprovalReconciler(repo *mockRepo) *Reconciler {
-	r := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig()})
+	r := New(Deps{Store: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 	r.SetApprovals(repo)
 	return r
 }

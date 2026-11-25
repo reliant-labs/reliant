@@ -117,7 +117,6 @@ type Repository interface {
 	// first typed message ever) once, durably, and reports whether this call
 	// did (user_first_message).
 	ClaimUserActivation(ctx context.Context, userID, chatID, messageID string) (bool, error)
-	CountMessagesInChatOutsideThread(ctx context.Context, chatID, threadID string) (int, error)
 	ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64, limit int) ([]*db.Message, error)
 	GetWorkflowByThread(ctx context.Context, chatID, thread string) (*db.Workflow, error)
 	ListWorkflowsByChat(ctx context.Context, chatID string) ([]*db.Workflow, error)
@@ -128,10 +127,6 @@ type Repository interface {
 	GetToolCall(ctx context.Context, id string) (*db.ToolCall, error)
 	ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*db.MessageContentBlock, error)
 	ListMessagesByIDs(ctx context.Context, ids []string) ([]*db.Message, error)
-
-	// The agent mailbox's queued rows: listed for the pending strip (the
-	// writes and the other reads are the Mailbox and AgentMessages roles).
-	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
 
 	// Plans and their tasks.
 	CreatePlan(ctx context.Context, plan *db.Plan) error
@@ -212,4 +207,5 @@ type AgentMessages interface {
 	CancelQueuedAgentMessage(ctx context.Context, id, chatID string) (cancelled bool, err error)
 	DeleteUndeliveredAgentMessage(ctx context.Context, id, chatID string) (deleted bool, err error)
 	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
+	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
 }

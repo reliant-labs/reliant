@@ -36,10 +36,12 @@ import {
   Eye,
   EyeOff,
   MoreHorizontal,
+  Users,
+  Workflow as WorkflowIcon,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, useChatListWithWorkspaces, useArchivedChats, useArchiveChat, usePermanentlyDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
-import { useAdoptRun, useUnadoptRun } from "../../hooks/run-queries";
+import { useAdoptRun, useUnadoptRun, type LiveRunsScope } from "../../hooks/run-queries";
 import { useTriggerName } from "../../hooks/trigger-queries";
 import { isAdoptedAutomation, isRun, withOpenChatPinned } from "../../lib/sidebarChatList";
 import { useSidebarPinStore } from "../../store/sidebarPinStore";
@@ -47,6 +49,10 @@ import { LaunchKindIcon } from "../runs/LaunchKindIcon";
 import { AutomationActivityPill } from "./AutomationActivityPill";
 import { InboxNavItem } from "../inbox/InboxNavItem";
 import { SharedWithOrgSection } from "../Sharing/SharedWithOrgSection";
+import { ShareChatDialog } from "../Sharing/ShareChatDialog";
+import { ShareWorkflowDialog } from "../Sharing/ShareWorkflowDialog";
+import { canShareChat, type ShareableWorkflow } from "../Sharing/shareTargets";
+import { useChatWorkflowShare } from "../Sharing/useChatWorkflowShare";
 import { useChatProjectFilter } from "../../hooks/useChatProjectFilter";
 import { ChatProjectFilterButton, ChatProjectFilterScope } from "../Projects/ChatProjectFilter";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
@@ -121,6 +127,7 @@ import {
 import { archiveWorktree } from "../../hooks/worktree-actions";
 import { MoveChatToProjectDialog } from "../Chat/MoveChatToProjectDialog";
 import { ChatAppTag } from "../Projects/ChatAppTag";
+import { ResourceVisibility } from "../../gen/reliant/v1/common_pb";
 
 interface SidebarProps {
   /** The page on screen (the router's): which row is current, which app is open. */
@@ -839,6 +846,18 @@ function SidebarComponent({
   // The rows the list renders: a run counted here has its own row, so the
   // automation pill does not count it again.
   const listedChatIds = useMemo(() => new Set(chats.map((chat) => chat.id)), [chats]);
+  // The Workflows row's live count is about the projects the nav shows.
+  const liveRunsScope = useMemo(
+    (): LiveRunsScope =>
+      severalProjects
+        ? { kind: "projects", projectIds: severalProjects }
+        : shell.mode === "all"
+          ? { kind: "all" }
+          : projectFilterId
+            ? { kind: "projects", projectIds: [projectFilterId] }
+            : { kind: "none" },
+    [severalProjects, shell.mode, projectFilterId],
+  );
   // Where each place is, in the form the links use (lib/paths), and whether
   // its page is the one on screen.
   // New chat starts in the shell's one project; across several, wherever openNewChat would.
@@ -903,6 +922,9 @@ function SidebarComponent({
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [movingChatId, setMovingChatId] = useState<string | null>(null);
+  // The chat, or the saved workflow behind one, whose share dialog is open.
+  const [sharingChatId, setSharingChatId] = useState<string | null>(null);
+  const [sharingWorkflow, setSharingWorkflow] = useState<ShareableWorkflow | null>(null);
 
   // Ref for scroll container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1252,6 +1274,11 @@ function SidebarComponent({
     setEditingTitle("");
   }, []);
 
+  // The saved workflow the open chat menu's chat was started from, when its
+  // owner can share it: read only while that menu is open.
+  const menuChat = contextMenu?.type === "chat" ? chats.find((c) => c.id === contextMenu.chatId) : undefined;
+  const menuChatWorkflow = useChatWorkflowShare(menuChat);
+
   const getChatContextMenuItems = (chatId: string): MenuGroup[] => {
     const chat = chats.find((c) => c.id === chatId);
     if (!chat) return [];
@@ -1269,12 +1296,32 @@ function SidebarComponent({
         icon: <FolderInput className="w-4 h-4" />,
         onClick: () => setMovingChatId(chatId),
       },
+    ];
+
+    // The chat header's share toggle, from the row: its owner only.
+    if (canShareChat(chat)) {
+      menuItems.push({
+        label: chat.visibility === ResourceVisibility.ORG ? "Stop sharing…" : "Share…",
+        icon: <Users className="w-4 h-4" />,
+        onClick: () => setSharingChatId(chatId),
+      });
+    }
+    const chatWorkflow = menuChat?.id === chatId ? menuChatWorkflow : null;
+    if (chatWorkflow) {
+      menuItems.push({
+        label: chatWorkflow.shared ? "Stop sharing workflow…" : "Share workflow…",
+        icon: <WorkflowIcon className="w-4 h-4" />,
+        onClick: () => setSharingWorkflow(chatWorkflow),
+      });
+    }
+
+    menuItems.push(
       {
         label: "Copy Chat ID",
         icon: <Copy className="w-4 h-4" />,
         onClick: () => copyToClipboard(chatId),
       },
-    ];
+    );
 
     const chatWorktree = getWorktreeForChat(chat);
     if (chatWorktree?.path) {
@@ -2089,7 +2136,7 @@ function SidebarComponent({
         )}
       </div>
     ),
-    "workflows-pill": () => <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />,
+    "workflows-pill": () => <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} scope={liveRunsScope} />,
     "chats-need-you": () =>
       chatsNeedYou > 0 ? (
         <span role="img" aria-label="A chat needs you" title="A chat needs you" className="size-2 rounded-full bg-warning" />
@@ -2140,6 +2187,8 @@ function SidebarComponent({
           }}
         />
       )}
+      {sharingChatId && <ShareChatDialog chatId={sharingChatId} open onClose={() => setSharingChatId(null)} />}
+      <ShareWorkflowDialog workflow={sharingWorkflow} onClose={() => setSharingWorkflow(null)} />
       {movingChatId && (
         <MoveChatToProjectDialog chatId={movingChatId} open onClose={() => setMovingChatId(null)} />
       )}

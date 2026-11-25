@@ -4,6 +4,7 @@ package daemonruntime
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -140,6 +141,12 @@ type upgradeDrain struct {
 	selfRetry       time.Duration
 	quietIdle       time.Duration
 	quietDrain      time.Duration
+
+	// The desktop app's upgrade notice (upgrade_supervisor.go):
+	// supervisorNotice is the last one printed, so a repeat is not;
+	// supervisorOut is where it goes, os.Stdout when nil (a test seam).
+	supervisorNotice string
+	supervisorOut    io.Writer
 }
 
 // armUpgrade gives the drain what its upgrade exit needs: how to stop the
@@ -364,6 +371,9 @@ func (d *daemonClient) handleRestartRequested(ctx context.Context, req *reliantv
 			TargetVersion:  req.GetTargetVersion(),
 			Detail:         "this machine is updated by its owner's app or package manager; the daemon keeps serving until then. Upgrade: " + advice,
 		})
+		// The desktop app that spawned this daemon is its owner's updater:
+		// tell it on stdout (upgrade_supervisor.go).
+		d.tellSupervisor(req)
 		return
 	}
 

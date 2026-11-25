@@ -52,11 +52,16 @@ type Siblings interface {
 	ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*core.Message, error)
 }
 
+// ChatRows reads a chat's own row, who it belongs to and which org. store.ChatExtStore
+// satisfies it.
+type ChatRows interface {
+	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
+}
+
 // Repository is everything the streaming handlers read.
 type Repository interface {
 	// Who the chat a subscription is for belongs to, and the trigger that
 	// started it.
-	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error)
 
 	// The chat and user update logs a stream replays and tails.

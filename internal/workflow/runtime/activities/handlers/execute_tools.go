@@ -139,6 +139,13 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 
 	// Load worktree (defaults to project path if not set or not found)
 	wt, threadBound, err := a.loadWorktreeInfo(ctx, chat, project, thread)
+	if errors.Is(err, errThreadWorkspaceArchived) && !tools.NeedsMachine(toolName) {
+		// A tool that never touches the machine (spawn_send, report_bug,
+		// load_tool, the GitHub tools) has no use for the workspace, so an
+		// agent resumed after its workspace was archived can still report
+		// and message its parent. It runs as an unbound thread would.
+		wt, threadBound, err = &rctx.WorktreeInfo{}, false, nil
+	}
 	if err != nil {
 		return nil, err.Error()
 	}
@@ -153,6 +160,10 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 
 	return tec, ""
 }
+
+// errThreadWorkspaceArchived: the thread is bound to a workspace that was
+// archived. Machine tools are refused; the rest run without it.
+var errThreadWorkspaceArchived = errors.New("workspace archived")
 
 // loadWorktreeInfo loads the call's branch worktree, if it runs in one.
 //
@@ -182,7 +193,7 @@ func (a *ExecuteToolsActivity) loadWorktreeInfo(ctx context.Context, chat *db.Ch
 		return &rctx.WorktreeInfo{}, false, nil
 	}
 	if threadBound && worktree.DeletedAt != nil {
-		return nil, true, fmt.Errorf("this agent's workspace %q was archived, so its tools cannot run there", worktree.Name)
+		return nil, true, fmt.Errorf("this agent's workspace %q was archived, so its tools cannot run there: %w", worktree.Name, errThreadWorkspaceArchived)
 	}
 
 	// The main row mirrors projects.path: no path here. A thread bound to
@@ -282,6 +293,7 @@ func ptrValue(s *string) string {
 // This activity executes multiple tool calls in parallel and returns all results
 type ExecuteToolsActivity struct {
 	repo         ExecuteToolsStore
+	preemption   MailboxPreempter
 	rows         WorkspaceRows
 	toolCalls    ToolCalls
 	toolExecutor toolexec.ToolExecutor
@@ -360,14 +372,43 @@ func (a *ExecuteToolsActivity) WithWorktreeReviver(r WorktreeReviver) *ExecuteTo
 	return a
 }
 
-// NewExecuteToolsActivity creates a new ExecuteToolsActivity; toolCalls is the
-// tool-call records it reads and writes (NewToolCalls).
-func NewExecuteToolsActivity(repo ExecuteToolsStore, rows WorkspaceRows, toolCalls ToolCalls, toolExecutor toolexec.ToolExecutor) *ExecuteToolsActivity {
+// NewExecuteToolsActivity creates a new ExecuteToolsActivity; deps.ToolCalls is
+// the tool-call records it reads and writes (NewToolCalls).
+// NewExecuteToolsActivity accepts explicit dependencies or the original
+// store, rows, tool calls and executor arguments.
+// Deprecated: use NewExecuteToolsActivityWithDeps.
+func NewExecuteToolsActivity(storeOrDeps any, legacy ...any) *ExecuteToolsActivity {
+	if deps, ok := storeOrDeps.(ExecuteToolsDeps); ok {
+		return NewExecuteToolsActivityWithDeps(deps)
+	}
+	var deps ExecuteToolsDeps
+	if storeOrDeps != nil {
+		deps.Store = storeOrDeps.(ExecuteToolsStore)
+		deps.Preemption, _ = storeOrDeps.(MailboxPreempter)
+	}
+	if len(legacy) != 3 {
+		panic("NewExecuteToolsActivity requires store, rows, tool calls and executor")
+	}
+	if legacy[0] != nil {
+		deps.Rows = legacy[0].(WorkspaceRows)
+	}
+	if legacy[1] != nil {
+		deps.ToolCalls = legacy[1].(ToolCalls)
+	}
+	if legacy[2] != nil {
+		deps.ToolExecutor = legacy[2].(toolexec.ToolExecutor)
+	}
+	return NewExecuteToolsActivityWithDeps(deps)
+}
+
+// NewExecuteToolsActivityWithDeps creates a tool activity with explicit dependencies.
+func NewExecuteToolsActivityWithDeps(deps ExecuteToolsDeps) *ExecuteToolsActivity {
 	return &ExecuteToolsActivity{
-		repo:         repo,
-		rows:         rows,
-		toolCalls:    toolCalls,
-		toolExecutor: toolExecutor,
+		repo:         deps.Store,
+		rows:         deps.Rows,
+		toolCalls:    deps.ToolCalls,
+		preemption:   deps.Preemption,
+		toolExecutor: deps.ToolExecutor,
 	}
 }
 
@@ -433,21 +474,10 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	// to the call that resolves the credential. See package actingidentity.
 	ctx = actingidentity.With(ctx, actingidentity.Identity{Kind: rtx.ActingIdentity, Automation: rtx.Automation})
 
-	// Calls the workflow decided must not run, each answered with its reason.
-	// Only a run that recorded the removed integration action approval prompt
-	// sends any: a call the person attending did not approve
-	// (runtime/action_approval_legacy.go).
-	refusedByWorkflow := protoArgs.GetRefusedToolCalls() //nolint:staticcheck // SA1019: legacy approval gate
-	if len(rtx.ActivationRefusals) > 0 {
-		merged := make(map[string]string, len(refusedByWorkflow)+len(rtx.ActivationRefusals))
-		for k, v := range refusedByWorkflow {
-			merged[k] = v
-		}
-		for k, v := range rtx.ActivationRefusals {
-			merged[k] = v
-		}
-		refusedByWorkflow = merged
-	}
+	// Calls the workflow decided must not run, each answered with its reason:
+	// an activation change the person attending did not approve
+	// (runtime/activation_approval.go).
+	refusedByWorkflow := rtx.ActivationRefusals
 
 	// Build set for O(1) response tool lookups in worker goroutines
 	responseToolSet := make(map[string]bool, len(expectedResponseTools))
@@ -489,7 +519,7 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 
 	// Mail for the thread ends the batch's waits early; see
 	// execute_tools_preemption.go.
-	ctx = withBatchPreemption(ctx, newBatchPreemption(a.repo, rtx.Thread, a.preemptionPoll))
+	ctx = withBatchPreemption(ctx, newBatchPreemption(a.preemption, rtx.Thread, a.preemptionPoll))
 
 	// Each call's row in the tool usage ledger (tool_usage_record.go).
 	meter := newToolUsageMeter(a.usage, a.repo, rtx.ChatID, rtx.Thread)

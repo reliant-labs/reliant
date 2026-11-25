@@ -117,6 +117,15 @@ function MobilePageDisclosure({ tipKey }: { tipKey: DemoTipKey }) {
   );
 }
 
+/**
+ * The page's own region: the console's scrolling page under its bar and the
+ * demo's action row (Console/ConsoleFrame), beside the shell's nav; `main`
+ * where there is no console frame.
+ */
+function pageRegion(): Element | null {
+  return document.querySelector("[data-testid='forge-console-page']") ?? document.querySelector("main");
+}
+
 /** Mobile explanations occupy scrollable page space, never a fixed cover over data. */
 function MobilePageSlot({ children }: { children: ReactNode }) {
   const [host, setHost] = useState<HTMLElement | null>(null);
@@ -125,7 +134,7 @@ function MobilePageSlot({ children }: { children: ReactNode }) {
     slot.className = "shrink-0 pt-1";
     slot.dataset.testid = "demo-mobile-explanation";
     const attach = () => {
-      const main = document.querySelector("main");
+      const main = pageRegion();
       if (main && slot.parentElement !== main) { main.prepend(slot); setHost(slot); }
     };
     attach();
@@ -139,7 +148,7 @@ function MobilePageSlot({ children }: { children: ReactNode }) {
 /** Whether `el` is inside the page's visible box now (the main pane, under the chrome). */
 function inView(el: Element): boolean {
   const box = el.getBoundingClientRect();
-  const page = document.querySelector("main")?.getBoundingClientRect();
+  const page = pageRegion()?.getBoundingClientRect();
   const top = page?.top ?? 0;
   const bottom = page?.bottom ?? window.innerHeight;
   return box.height > 0 && box.top >= top && box.top < bottom;
@@ -177,7 +186,7 @@ function PageCallout({ tipKey, requested, onDismiss }: { tipKey: DemoTipKey; req
   const footer = <TourControls stepNumber={1} totalSteps={1} onNext={onDismiss} nextLabel="Done" />;
   const description = <>{tip.body}<PageAgentHelp tipKey={tipKey} /></>;
   // Place the card inside the page's own box: right of the desktop sidebar and below the screen-action row.
-  const page = typeof document === "undefined" ? undefined : document.querySelector("main")?.getBoundingClientRect();
+  const page = typeof document === "undefined" ? undefined : pageRegion()?.getBoundingClientRect();
   if (target) return <OnboardingSpotlight targetSelector={target} title={tip.title} description={description} stepNumber={1} totalSteps={1} onNext={onDismiss} onSkipAll={onDismiss} keyboardNav={false} callout={{ footer, viewportLeft: Math.max(0, page?.left ?? 0), viewportTop: Math.max(0, page?.top ?? 0), autoScroll: requested && !readerScrolled }} />;
   return <DemoCorner order={1}><section className="max-h-[70dvh] overflow-y-auto rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-xl" data-testid="tour-callout" data-page-tour={tipKey}><h3 className="text-sm font-semibold">{tip.title}</h3><div className="mt-1 text-sm leading-relaxed text-ink-muted">{description}</div>{footer}</section></DemoCorner>;
 }

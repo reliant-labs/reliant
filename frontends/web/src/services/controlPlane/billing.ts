@@ -7,6 +7,7 @@
 import {
   BillingService,
   ComputeIneligibleReason,
+  type GetCurrentUserComputeEligibilityResponse,
 } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import type {
   ReliantEntitlement,
@@ -74,6 +75,11 @@ export async function getComputeEligibility(orgId: string | null): Promise<Compu
   const res = await getControlPlaneClient(
     BillingService,
   ).getCurrentUserComputeEligibility(orgRequest({}, orgId));
+  return computeEligibilityOf(res);
+}
+
+/** The UI's ComputeEligibility from the wire answer (hooks/computeEligibilityKey's `select`). */
+export function computeEligibilityOf(res: GetCurrentUserComputeEligibilityResponse): ComputeEligibility {
   return {
     eligible: res.eligible,
     reason: res.reason,

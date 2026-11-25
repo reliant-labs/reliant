@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/reliant-labs/forge/pkg/observe"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+
+	"github.com/reliant-labs/forge/pkg/observe"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
@@ -21,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/changetools"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/connectionproposer"
@@ -82,6 +84,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/workflowcheck"
+	"github.com/reliant-labs/reliant/internal/workflowdrafts"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
@@ -371,6 +374,8 @@ type WorkerChatDeps struct {
 	Temporal *TemporalClient
 	Pause    *v2workflow.PauseService
 	Router   *WorkerDaemonRouter
+	// Updates writes the chat's refetch signals and publishes them to the hubs.
+	Updates chatupdates.Service
 }
 
 // NewWorkerChat builds the chat service the run tools act through, as the
@@ -396,7 +401,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Pause:         d.Pause,
 		Router:        d.Router,
 		LocalModels:   local.NewRepoDirectory(d.DB, store.NewModelEndpointExtStore(d.DB.ORM())),
-		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
+		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.Updates}),
 		AgentMessages: store.NewAgentMessageExtStore(d.DB.ORM()),
 	})
 	if err != nil {
@@ -509,6 +514,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Logger:         d.Logger,
 		Config:         d.Config,
 		Repo:           repo,
+		Chats:          store.NewChatExtStore(repo.ORM()),
 		Firings:        store.NewTriggerEventExtStore(repo.ORM()),
 		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()),
 		Owners:         d.Owners,
@@ -553,6 +559,9 @@ type WorkerToolsFactoryDeps struct {
 	CatalogSearch   *WorkerCatalogSearch
 	Router          *WorkerDaemonRouter
 	Mirror          daemonmirror.Service
+	// WorkflowDrafts is the saved workflows the workflow and scenario tools
+	// read and write.
+	WorkflowDrafts workflowdrafts.Service
 	// Membership names a person's org role for propose_connection, which
 	// offers an org-wide connection only to an org owner or admin.
 	Membership *orgs.Resolver
@@ -610,6 +619,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		Repo:               repo,
 		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
 		SpawnTree:          store.NewToolCallExtStore(repo.ORM()),
+		SpawnMailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
 		Scenarios:          store.NewWorkflowScenarioExtStore(repo.ORM()),
 		LaunchedRuns:       store.NewTriggerEventExtStore(repo.ORM()),
 		WorktreeChats:      store.NewChatExtStore(repo.ORM()),
@@ -638,6 +648,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		// run_scenario / write_scenario execute on the real runtime via the
 		// scenario runner; injected because the runner imports this package's
 		// dependents.
+		WorkflowDrafts: d.WorkflowDrafts,
 		ScenarioRunner: scenariorunner.RunScenario,
 		// start_run / control_run / send_to_run execute here, inside the
 		// ExecuteTools activity.

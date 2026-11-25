@@ -35,9 +35,8 @@ import { redirect } from "@tanstack/react-router";
 
 import { inOrg, orgFreePath, orgRootPath } from "@/lib/paths/org";
 import { legacyOrgForward } from "@/lib/paths/legacy";
-import { queryClient } from "@/lib/query-client";
 import { hasControlPlane } from "@/services/controlPlane/config";
-import { listMyOrganizations, orgKeys, resolveActiveOrg, type MyOrg, type MyOrgs } from "@/services/controlPlane/orgs";
+import { fetchMyOrgs, resolveActiveOrg, type MyOrg, type MyOrgs } from "@/services/controlPlane/orgs";
 import {
   bindActiveOrgUser,
   isMachineCredentialUser,
@@ -68,7 +67,7 @@ export const defaultOrgRoutingDeps: OrgRoutingDeps = {
     return useAuthStore.getState().user?.id ?? null;
   },
   hasOrgs: () => hasControlPlane,
-  listOrgs: () => queryClient.fetchQuery({ queryKey: orgKeys.mine, queryFn: listMyOrganizations, staleTime: 60_000 }),
+  listOrgs: fetchMyOrgs,
 };
 
 /** The part of a router location these read. */

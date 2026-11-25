@@ -1,7 +1,9 @@
 /**
  * The visual baseline: the key surfaces of the production build, against the
- * fixture data in fixtures/, in dark and light at 1440×900 and dark at
- * 390×844 (the projects in playwright.visual.config.ts). Run it with
+ * shop fixture pack served in the page (fixture mode: src/fixtures/shop, the
+ * one world the public demo and the hosted preview also show), in dark and
+ * light at 1440×900 and dark at 390×844 (the projects in
+ * playwright.visual.config.ts). Run it with
  * `task test:web:visual`; e2e/visual/README.md says how to read and update it.
  *
  * A capture that differs from its baseline fails with a diff image in
@@ -11,20 +13,75 @@
  */
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
-import { IDS } from './fixtures/base'
-import { CHAT_IDS, CHAT_TITLES, chatWithAttachedProjects, chatWithoutFailedSend } from './fixtures/chat'
-import { stagingDatabaseFixtures } from './fixtures/data'
-import { appCodeCardFixtures, FILTER_PROJECT_IDS, NO_APP_PROJECT_ID, projectsPageSurfaceFixtures, selectorSurfaceFixtures } from './fixtures/projects'
-import { workflowFixtures } from './fixtures/workflows'
-import { installHarness, settle, SHOT, type HarnessOptions } from './harness'
-import { testsFixtures } from './fixtures/tests'
+import { CONFIG, installHarness, readProbe, settle, SHOT, type HarnessOptions } from './harness'
 
 type Viewport = 'desktop' | 'mobile'
 
-/** Every TestsService read answering Unimplemented: a control plane without the service. */
-const TESTS_SERVICE_MISSING = Object.fromEntries(
-  Object.keys(testsFixtures).map((key) => [key, { __error: { code: 'unimplemented', message: 'TestsService is not served here' } }]),
-)
+/**
+ * The shop world's ids (src/fixtures/shop/workspace.ts and data/catalog.json),
+ * written out: the app's modules do not load in Playwright's Node process.
+ * A wrong one fails its surface's `ready`.
+ */
+const PROJECT_ID = 'shop-proj-shop'
+const CHAT_IDS = { long: 'shop-chat-cart-totals', tools: 'shop-chat-tax-rates', failure: 'shop-chat-stripe-sdk' }
+const CHAT_TITLES = { tools: 'Move tax rates behind the pricing config', failure: 'Upgrade the Stripe SDK to v18' }
+/** The chat filter's three projects: shop, docs and mobile-api. */
+const FILTER_PROJECT_IDS = ['shop-proj-shop', 'shop-proj-docs', 'shop-proj-mobile-api']
+/** A project with no app (`infra`): a project's own page, which a deployed project's id redirects past. */
+const NO_APP_PROJECT_ID = 'shop-proj-infra'
+
+/**
+ * Writes the app is KNOWN to make, by rpc: each says why, and names the
+ * SURFACES whose load (or `act`) makes it, by `name`, or `name (viewport)`
+ * where only one viewport does. An entry with `except` is made by every
+ * surface but those, and `maybe` names surfaces that make it in some runs
+ * only (a race the app owns), where it is allowed but not required. Every
+ * one stays refused (a fixture transport never
+ * answers a write), none shows anything on screen (each is caught and
+ * logged, which the baselines prove), and each surface asserts its set
+ * EXACTLY: a surface that stops making one fails until its name goes, and a
+ * new write fails until it is named here. The one table: fixture mode's own
+ * checks run in this loop.
+ */
+const KNOWN_REFUSALS: Record<string, { why: string; surfaces?: string[]; except?: string[]; maybe?: string[] }> = {
+  // reliant#3458. Every surface that selects a project, which with `shop`
+  // paths includes the console's; not the org-wide and settings pages, a
+  // project's own page, or a project with nothing deployed.
+  'reliant.v1.ProjectService/TouchProject': {
+    why: 'projectStore touches the selected project on every selection, fire-and-forget (hooks/project-queries touchProject; reliant#3458)',
+    except: [
+      'projects', 'projects-project-page', 'billing', 'usage', 'hosting', 'shell-usage-billing', 'shell-settings (desktop)',
+      'shell-inbox (desktop)', 'shell-apps', 'shell-connectors', 'shell-empty-cta', 'shell-daemonless-home (desktop)',
+      'observability-overview', 'settings-appearance',
+    ],
+    // The desktop daemonless home sends Alex to Projects; a project selected
+    // before that redirect lands is touched, one run in a few.
+    maybe: ['shell-daemonless-home (desktop)'],
+  },
+  // reliant#3458.
+  'reliant.v1.SettingsService/BatchUpsertSettings': {
+    why: 'ColorSchemeSelector saves the colour scheme every time the appearance page opens, and the chat filter saves each pick (settingsSync.setSetting, not setSettingIfChanged; reliant#3458)',
+    surfaces: ['settings-appearance', 'chat-filter-open'],
+  },
+  'reliant.v1.ChatService/DismissChat': {
+    why: 'opening a chat from the sidebar dismisses its unread state',
+    surfaces: ['chat-short'],
+  },
+  'controlplane.v1.DashboardService/RecordDashboardView': {
+    why: 'a dashboard records each view (the analytics overview is one)',
+    surfaces: ['shell-analytics', 'shell-chart-hover', 'shell-sparkline-hover', 'shell-sandboxes-dashboard'],
+  },
+}
+
+/** The writes a surface on a viewport must make, and those it may make besides, sorted. */
+function knownRefusals(name: string, viewport: Viewport): { must: string[]; may: string[] } {
+  const names = (list: string[] | undefined) => !!list && (list.includes(name) || list.includes(`${name} (${viewport})`))
+  const entries = Object.entries(KNOWN_REFUSALS)
+  return {
+    must: entries.filter(([, entry]) => (entry.surfaces ? names(entry.surfaces) : !names(entry.except))).map(([rpc]) => rpc).sort(),
+    may: entries.filter(([, entry]) => names(entry.maybe)).map(([rpc]) => rpc).sort(),
+  }
+}
 
 interface Surface {
   name: string
@@ -42,16 +99,6 @@ interface Surface {
    */
   beforeShot?: (page: Page) => Promise<void>
   harness?: HarnessOptions
-}
-
-/** Where the two fixture projects are checked out, for the phone's new-chat Project row. */
-const NEW_CHAT_INSTALLS = {
-  'reliant.v1.ProjectService/ListProjectDaemons': {
-    projectDaemons: [
-      { projectId: IDS.project, daemonId: IDS.cloudDaemon, path: '/home/workspace/projects/shopfront', clonedAt: '2026-11-01T00:00:00Z', installState: 'PROJECT_INSTALL_STATE_INSTALLED', installError: '', daemonName: 'cloud-machine' },
-      { projectId: IDS.docsProject, daemonId: 'd-retired-0001', path: '/home/alex/code/docs-site', clonedAt: '2026-11-01T00:00:00Z', installState: 'PROJECT_INSTALL_STATE_INSTALLED', installError: '', daemonName: 'old-laptop' },
-    ],
-  },
 }
 
 const LONG_CHAT_TITLE = 'Refactor cart totals and fix multi-quantity discounts'
@@ -192,7 +239,7 @@ async function fitViewportToContent(page: Page) {
   }
 }
 
-const CHART_HOVER_PATH = '/forge/p/shopfront/observability/dashboards/release/chart-hover'
+const CHART_HOVER_PATH = '/forge/p/shop/observability/dashboards/release/chart-hover'
 
 const TOOLS_LAST_LINE = 'Tax rates now live in'
 const FAILURE_FIRST_LINE = 'Upgrade the Stripe SDK to v18 and fix whatever breaks'
@@ -206,8 +253,9 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByText('Migrate order confirmation emails', { exact: false }).first(),
   },
   {
-    // The fixture chat (fixtures/chat.ts), at its end: the live turn, a
-    // question, a retrying provider error, an approval and a failed send.
+    // The fixture chat (src/fixtures/shop/data/transcripts/cart-totals.json),
+    // at its end: the live turn, a question, a retrying provider error, an
+    // approval and a failed send.
     name: 'chat',
     path: '/',
     on: ['desktop'],
@@ -225,7 +273,7 @@ const SURFACES: Surface[] = [
       await openFixtureChat(page)
       await expect(page.getByTestId('chat-project-chips')).toBeVisible()
     },
-    harness: { fixtures: chatWithAttachedProjects },
+    harness: { overlays: ['chat-attached-projects'] },
   },
   {
     // The fixture chat from its first line: the first turn and its answer.
@@ -237,6 +285,17 @@ const SURFACES: Surface[] = [
       await openFixtureChat(page)
       await scrollToTop(page)
       await expect(scrollToBottomButton(page)).toBeVisible()
+      // The pinned prompt is resolved on scroll events, and the last one can
+      // fire before the virtualizer has re-measured the rows above, leaving a
+      // later prompt pinned at the very top (seen once in two runs). At the
+      // top nothing is pinned: re-run the resolution until it agrees.
+      await expect
+        .poll(async () => {
+          await transcript(page).evaluate((el) => el.dispatchEvent(new Event('scroll')))
+          await frames(page)
+          return page.getByTestId('pinned-user-message-header').filter({ visible: true }).count()
+        })
+        .toBe(0)
     },
   },
   {
@@ -277,7 +336,7 @@ const SURFACES: Surface[] = [
   },
   {
     name: 'chat',
-    // The fixture chat's end, less the failed send (fixtures/chat.ts, chatStream).
+    // The fixture chat's end, less the failed send (the chat-no-failed-send overlay).
     path: `/m/chats/${CHAT_IDS.long}`,
     on: ['mobile'],
     ready: (page) => page.getByText(FIXTURE_LAST_SERVER_LINE).first(),
@@ -286,7 +345,7 @@ const SURFACES: Surface[] = [
       await settle(page)
       await scrollToEnd(page)
     },
-    harness: { fixtures: chatWithoutFailedSend },
+    harness: { overlays: ['chat-no-failed-send'] },
   },
   {
     // A finished turn of sixteen tool calls (reads, greps, edits with a diff,
@@ -358,7 +417,7 @@ const SURFACES: Surface[] = [
       await settle(page)
       await scrollToText(page, APPROVAL_LINE)
     },
-    harness: { fixtures: chatWithoutFailedSend },
+    harness: { overlays: ['chat-no-failed-send'] },
   },
   {
     // A turn that stopped: the last tool call failed and the provider failed after it.
@@ -381,29 +440,25 @@ const SURFACES: Surface[] = [
     path: '/workflows/library',
     on: ['desktop'],
     ready: (page) => page.getByText('Nightly CI triage').first(),
-    harness: { fixtures: workflowFixtures },
   },
   {
     name: 'workflows',
     path: '/m/workflows',
     on: ['mobile'],
     ready: (page) => page.getByText('Nightly CI triage').first(),
-    harness: { fixtures: workflowFixtures },
   },
   {
     // The Runs tab: live, needs-input, finished and failed runs.
     name: 'runs',
     path: '/workflows/runs',
     on: ['desktop'],
-    ready: (page) => page.getByText('Draft release notes for v2.14').first(),
-    harness: { fixtures: workflowFixtures },
+    ready: (page) => page.getByText('Draft release notes for v1.8.4').first(),
   },
   {
     name: 'runs',
     path: '/m/runs',
     on: ['mobile'],
-    ready: (page) => page.getByText('Draft release notes for v2.14').first(),
-    harness: { fixtures: workflowFixtures },
+    ready: (page) => page.getByText('Draft release notes for v1.8.4').first(),
   },
   {
     // The org-wide Observability home.
@@ -414,17 +469,17 @@ const SURFACES: Surface[] = [
   },
   {
     name: 'app-overview',
-    path: '/forge/p/shopfront',
+    path: '/forge/p/shop',
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByText('worker', { exact: true }).first(),
   },
   {
-    // The overview's Code card (AppCodeCard, U13): shopfront deployed from two
+    // The overview's Code card (AppCodeCard, U13): shop deployed from two
     // repositories (the D5 warning), held by two of the person's projects
     // (deployed from here, same name) and a teammate's shared one. Scrolled to,
     // so the phone shows it.
     name: 'app-code-card',
-    path: '/forge/p/shopfront',
+    path: '/forge/p/shop',
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByTestId('app-code-sources'),
     act: async (page) => {
@@ -434,19 +489,19 @@ const SURFACES: Surface[] = [
       await settle(page)
       await page.getByTestId('app-code-card').evaluate((el) => el.scrollIntoView({ block: 'start' }))
     },
-    harness: { fixtures: appCodeCardFixtures },
+    harness: { overlays: ['app-code-card'] },
   },
   {
     name: 'observability-errors',
-    path: '/forge/p/shopfront/observability/errors',
+    path: '/forge/p/shop/observability/errors',
     on: ['desktop', 'mobile'],
-    ready: (page) => page.getByText('idempotency key reused', { exact: false }).first(),
+    ready: (page) => page.getByText('charge failed: provider timeout', { exact: false }).first(),
   },
   {
     name: 'environment',
-    path: '/forge/p/shopfront/environments/prod',
+    path: '/forge/p/shop/environments/prod',
     on: ['desktop', 'mobile'],
-    ready: (page) => page.getByText('shopfront-prod.reliant.app', { exact: false }).first(),
+    ready: (page) => page.getByText('shop.example.com', { exact: true }).first(),
   },
   {
     // The project selector (Projects/ProjectSelector), as Switch project…
@@ -459,9 +514,12 @@ const SURFACES: Surface[] = [
     on: ['desktop'],
     ready: (page) => page.getByTestId('project-selector-row-app:status-page'),
     act: async (page) => {
+      // The home focuses its composer once it has rendered, and the selector
+      // closes on losing focus (as chat-filter-open says): open it after.
+      await expect(page.getByTestId('chat-input')).toBeFocused()
       await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-project-switcher')))
     },
-    harness: { fixtures: selectorSurfaceFixtures },
+    harness: { overlays: ['project-selector'] },
   },
   {
     // The chat list's project filter, choose N of M: the selector in
@@ -484,7 +542,7 @@ const SURFACES: Surface[] = [
         await expect(page.getByTestId('project-selector-chosen-count')).toHaveText(`${i + 1} chosen`)
       }
     },
-    harness: { fixtures: selectorSurfaceFixtures },
+    harness: { overlays: ['project-selector'] },
   },
   {
     // The Chats heading once three projects are chosen, from the URL.
@@ -492,7 +550,7 @@ const SURFACES: Surface[] = [
     path: `/?projects=${FILTER_PROJECT_IDS.join(',')}`,
     on: ['desktop'],
     ready: (page) => page.getByTestId('project-filter-label').getByText('3 projects'),
-    harness: { fixtures: selectorSurfaceFixtures },
+    harness: { overlays: ['project-selector'] },
   },
   {
     // The chat's settings: scrolled to the "Fonts and size" panel.
@@ -514,7 +572,7 @@ const SURFACES: Surface[] = [
     path: '/projects',
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByText('ledger-worker', { exact: true }).first(),
-    harness: { fixtures: projectsPageSurfaceFixtures },
+    harness: { overlays: ['projects-page'] },
   },
   {
     // A project's page (§8.4) for a project with nothing deployed (a deployed
@@ -524,7 +582,7 @@ const SURFACES: Surface[] = [
     path: `/projects/${NO_APP_PROJECT_ID}`,
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByTestId('project-repo').first(),
-    harness: { fixtures: projectsPageSurfaceFixtures },
+    harness: { overlays: ['projects-page'] },
   },
   {
     name: 'billing',
@@ -548,28 +606,28 @@ const SURFACES: Surface[] = [
   },
   // The floating Setup Guide (Onboarding/OnboardingChecklist.tsx): open above the chat home's
   // composer, and collapsed and open on an app's console; then the nav footer's Help menu (sidebar/HelpMenu.tsx).
-  // `ready` waits on the fixture's settled progress, not on the guide alone: its items are detected
-  // from cached queries (chats, workflows) that land at different times, so the guide first shows fewer done.
+  // `ready` waits on the fixture's settled progress, not on the guide alone. The guide's state and
+  // progress are Alex's saved settings (the setup-guide-* overlays): the server's answer wins.
   {
     name: 'shell-setup-guide',
     path: '/',
     on: ['desktop'],
     ready: (page) => page.getByRole('region', { name: 'Setup guide' }).getByText('6 of 8 done'),
-    harness: { storage: { 'reliant.checklist.panelState': 'expanded' } },
+    harness: { overlays: ['setup-guide-expanded'] },
   },
   {
     name: 'shell-setup-guide-app-collapsed',
-    path: '/forge/p/shopfront',
+    path: '/forge/p/shop',
     on: ['desktop'],
     ready: (page) => page.getByRole('button', { name: 'Get started, 6 of 8 done' }),
-    harness: { storage: { 'reliant.checklist.panelState': 'collapsed' } },
+    harness: { overlays: ['setup-guide-collapsed'] },
   },
   {
     name: 'shell-setup-guide-app-expanded',
-    path: '/forge/p/shopfront',
+    path: '/forge/p/shop',
     on: ['desktop'],
     ready: (page) => page.getByRole('region', { name: 'Setup guide' }).getByText('6 of 8 done'),
-    harness: { storage: { 'reliant.checklist.panelState': 'expanded' } },
+    harness: { overlays: ['setup-guide-expanded'] },
   },
   {
     name: 'shell-help-menu',
@@ -600,38 +658,38 @@ const SURFACES: Surface[] = [
     // Projects, narrowed to the apps: the nav's Apps heading, and where the retired /apps redirects.
     path: '/projects?show=apps',
     on: ['desktop', 'mobile'],
-    ready: (page) => page.getByText('shopfront', { exact: true }).first(),
+    ready: (page) => page.getByText('shop', { exact: true }).first(),
   },
   {
     name: 'shell-app-overview',
-    path: '/forge/p/shopfront',
+    path: '/forge/p/shop',
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByText('worker', { exact: true }).first(),
   },
   {
     // The merged project landing: /projects/<id> lands on the app's Overview (U6 5/16).
     name: 'shell-overview',
-    path: `/projects/${IDS.project}`,
+    path: `/projects/${PROJECT_ID}`,
     on: ['desktop'],
     ready: (page) => page.getByTestId('overview-attention'),
   },
   {
     name: 'shell-obs-overview',
-    path: '/forge/p/shopfront/observability',
+    path: '/forge/p/shop/observability',
     on: ['desktop'],
-    ready: (page) => page.getByTestId('obs-overview-slowest').getByText('PlaceOrder').first(),
+    ready: (page) => page.getByTestId('obs-overview-slowest').getByText('CheckoutService/Checkout').first(),
   },
   {
     // Speed insights: the Real Experience Score, the vitals, the routes (U6 7/16).
     name: 'shell-speed-insights',
-    path: '/forge/p/shopfront/speed-insights',
+    path: '/forge/p/shop/speed-insights',
     on: ['desktop'],
     ready: (page) => page.getByTestId('speed-insights-routes').getByText('/checkout').first(),
   },
   {
     // The same page on its mobile device and P90 toggles, read from the URL.
     name: 'shell-speed-insights-mobile',
-    path: '/forge/p/shopfront/speed-insights?device=mobile&pct=p90',
+    path: '/forge/p/shop/speed-insights?device=mobile&pct=p90',
     on: ['desktop'],
     ready: (page) => page.getByTestId('speed-insights-routes').getByText('/checkout').first(),
   },
@@ -639,48 +697,48 @@ const SURFACES: Surface[] = [
     // A project with nothing deployed: the page's own action, the agent and Move to Forge
     // calls to action, and the section's Learn link (U6 14/16).
     name: 'shell-empty-cta',
-    path: '/forge/p/docs-site/services',
+    path: '/forge/p/docs/services',
     on: ['desktop'],
     ready: (page) => page.getByTestId('app-section-empty'),
   },
   {
     name: 'shell-app-observability',
-    path: '/forge/p/shopfront/observability/errors',
+    path: '/forge/p/shop/observability/errors',
     on: ['desktop', 'mobile'],
-    ready: (page) => page.getByText('idempotency key reused', { exact: false }).first(),
+    ready: (page) => page.getByText('charge failed: provider timeout', { exact: false }).first(),
   },
   {
-    // Data is the database's home: the deploy verdict, "Coming soon" for live status, backups and
-    // metrics, then the tables. Staging: prod opens the audited-read dialog first.
+    // Data is the database's home: each managed Postgres in scope (shop's is outside the app, so
+    // none), then the tables. Staging: prod opens the audited-read dialog first.
     name: 'shell-data',
-    path: '/forge/p/shopfront/data?env=staging',
+    path: '/forge/p/shop/data?env=staging',
     on: ['desktop'],
     ready: (page) => page.getByText('customers', { exact: true }).first(),
-    harness: { fixtures: stagingDatabaseFixtures },
   },
   {
-    // Storage is buckets only: the scoped environment's buckets.
+    // Storage is buckets only: the scoped environment's buckets. Staging: shop's prod storage is
+    // audited, so prod opens the audited-read dialog first.
     name: 'shell-storage',
-    path: '/forge/p/shopfront/storage',
+    path: '/forge/p/shop/storage?env=staging',
     on: ['desktop'],
     ready: (page) => page.getByText('uploads', { exact: true }).first(),
   },
   {
     name: 'shell-analytics',
-    path: '/forge/p/shopfront/analytics',
+    path: '/forge/p/shop/analytics',
     on: ['desktop'],
     ready: (page) => page.getByRole('heading', { name: 'Analytics' }).first(),
   },
   {
     name: 'shell-analytics-events',
-    path: '/forge/p/shopfront/analytics/events',
+    path: '/forge/p/shop/analytics/events',
     on: ['desktop'],
-    ready: (page) => page.getByText('product.checkout_completed', { exact: true }).first(),
+    ready: (page) => page.getByText('orders.created', { exact: true }).first(),
   },
   {
     // The forge host's shell (lib/shell.ts reads this key before the router is built).
     name: 'shell-forge-host-app-overview',
-    path: '/forge/p/shopfront',
+    path: '/forge/p/shop',
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByText('worker', { exact: true }).first(),
     harness: { storage: { 'reliant.shell': 'forge' } },
@@ -688,21 +746,21 @@ const SURFACES: Surface[] = [
   {
     // The hybrid nav at its top level: switcher, Find, the rows and their drill-in chevrons, Settings.
     name: 'shell-nav-top',
-    path: '/forge/p/shopfront',
+    path: '/forge/p/shop',
     on: ['desktop'],
     ready: (page) => page.getByTestId('shell-nav').getByText('Configure', { exact: true }),
   },
   {
     // Drilled into Observability by the route: Back, the views, the Performance & issues divider.
     name: 'shell-nav-observability',
-    path: '/forge/p/shopfront/observability/alerts',
+    path: '/forge/p/shop/observability/alerts',
     on: ['desktop'],
     ready: (page) => page.getByTestId('shell-nav').getByText('Performance & issues', { exact: true }),
   },
   {
     // On a phone the nav is a drawer: the page header's Show sidebar opens it over the page.
     name: 'shell-nav-drawer',
-    path: '/forge/p/shopfront',
+    path: '/forge/p/shop',
     on: ['mobile'],
     ready: (page) => page.getByTestId('shell-nav').getByText('Configure', { exact: true }),
     act: async (page) => {
@@ -713,7 +771,7 @@ const SURFACES: Surface[] = [
     // The phone's drawer (Mobile/MobileNavDrawer, or the shell's narrow drawer on an app page)
     // draws the one hybrid nav: open at the top level, then drilled into Observability.
     name: 'shell-m-drawer-top',
-    path: '/forge/p/shopfront',
+    path: '/forge/p/shop',
     on: ['mobile'],
     ready: (page) => page.getByTestId('nav-observability'),
     act: openNavDrawer,
@@ -738,11 +796,11 @@ const SURFACES: Surface[] = [
     path: '/m/new',
     on: ['mobile'],
     ready: (page) => page.getByTestId('mobile-new-chat-project').getByText('On cloud-machine'),
-    harness: { fixtures: NEW_CHAT_INSTALLS },
+    harness: { overlays: ['new-chat-installs'] },
   },
   {
-    // Its picker: shopfront is on the cloud machine; docs-site is checked out only on a machine
-    // that is gone, so it offers to set it up where the chat runs.
+    // Its picker: shop is on the cloud machine; docs is checked out only on a machine that is
+    // gone, so it offers to set it up where the chat runs.
     name: 'mobile-new-chat-projects',
     path: '/m/new',
     on: ['mobile'],
@@ -751,11 +809,11 @@ const SURFACES: Surface[] = [
       await page.getByTestId('mobile-new-chat-project').getByText('On cloud-machine').waitFor()
       await page.getByTestId('mobile-new-chat-project').getByRole('button').click()
     },
-    harness: { fixtures: NEW_CHAT_INSTALLS },
+    harness: { overlays: ['new-chat-installs'] },
   },
   {
     name: 'shell-m-drawer-observability',
-    path: '/forge/p/shopfront',
+    path: '/forge/p/shop',
     on: ['mobile'],
     ready: (page) => page.getByTestId('nav-drill-in'),
     act: async (page) => {
@@ -766,38 +824,39 @@ const SURFACES: Surface[] = [
   },
   {
     name: 'shell-services',
-    path: '/forge/p/shopfront/services',
+    path: '/forge/p/shop/services',
     on: ['desktop'],
     ready: (page) => page.getByTestId('services-row-api').first(),
   },
   {
     name: 'shell-service-detail',
-    path: '/forge/p/shopfront/services/api',
+    path: '/forge/p/shop/services/api',
     on: ['desktop'],
     ready: (page) => page.getByTestId('service-instances').first(),
   },
   {
     name: 'shell-services-charts',
-    path: '/forge/p/shopfront/services?view=charts',
+    path: '/forge/p/shop/services?view=charts',
     on: ['desktop'],
     ready: (page) => page.getByTestId('services-charts').first(),
   },
   {
     // The All dashboards gallery: cards with lazy sparkline previews, source badges, last viewed, stars.
     name: 'shell-dashboards',
-    path: '/forge/p/shopfront/observability/dashboards',
+    path: '/forge/p/shop/observability/dashboards',
     on: ['desktop'],
-    ready: (page) => page.getByTestId('dashboards-card-checkout-funnel'),
+    ready: (page) => page.getByTestId('dashboards-card-checkout'),
   },
   {
     // A full time-series chart under the pointer: the crosshair on the
     // sample, a point on each series, and the tooltip with the sample's time
-    // and both series' values (fixtures/dashboards.ts, chart-hover).
+    // and both series' values (the chart-hover overlay's dashboard).
     name: 'shell-chart-hover',
     path: CHART_HOVER_PATH,
     on: ['desktop'],
     ready: (page) => page.getByRole('group', { name: 'Requests and errors per second' }),
     beforeShot: (page) => pointAtChart(page, page.getByRole('group', { name: 'Requests and errors per second' }), 0.62),
+    harness: { overlays: ['chart-hover'] },
   },
   {
     // A figure's card sparkline under the pointer (a tap on the phone): the
@@ -807,50 +866,53 @@ const SURFACES: Surface[] = [
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByTestId('obs-panel-sparkline').first(),
     beforeShot: (page) => pointAtChart(page, page.getByTestId('obs-panel-sparkline').first(), 0.4),
+    harness: { overlays: ['chart-hover'] },
   },
   {
     // The platform's Sandboxes dashboard (control-plane
     // deploy/observability/dashboards/sandboxes.json, copied into
-    // fixtures/sandboxes.dashboard.json) through the real DashboardView, every
-    // panel answered in the shape its SQL returns (fixtures/sandboxes.ts),
-    // whole, in one tall capture.
+    // src/fixtures/shop/overlays/sandboxes.dashboard.json) through the real
+    // DashboardView, every panel answered in the shape its SQL returns (the
+    // sandboxes-dashboard overlay), whole, in one tall capture.
     name: 'shell-sandboxes-dashboard',
-    path: '/forge/p/shopfront/observability/dashboards/release/sandboxes',
+    path: '/forge/p/shop/observability/dashboards/release/sandboxes',
     on: ['desktop'],
     ready: (page) => page.getByText('Self-hosted sandboxes: memory available').first(),
     beforeShot: fitViewportToContent,
+    harness: { overlays: ['sandboxes-dashboard'] },
   },
   {
     // A gallery card's preview sparkline under the pointer.
     name: 'shell-dashboards-card-hover',
-    path: '/forge/p/shopfront/observability/dashboards',
+    path: '/forge/p/shop/observability/dashboards',
     on: ['desktop'],
-    // The Overview card is above the fold, so its preview has loaded (previews load near the viewport).
-    ready: (page) => page.getByRole('group', { name: 'overview, last 24 hours' }).first().locator('.u-over'),
-    beforeShot: (page) => pointAtChart(page, page.getByRole('group', { name: 'overview, last 24 hours' }).first(), 0.7),
+    // The Overview card is first and above the fold, so its preview (Requests) has loaded
+    // (previews load near the viewport).
+    ready: (page) => page.getByRole('group', { name: 'Requests, last 24 hours' }).first().locator('.u-over'),
+    beforeShot: (page) => pointAtChart(page, page.getByRole('group', { name: 'Requests, last 24 hours' }).first(), 0.7),
   },
   {
     // The gallery's search, from the URL: `?q=order` keeps the cards that match.
     name: 'shell-dashboards-search',
-    path: '/forge/p/shopfront/observability/dashboards?q=order',
+    path: '/forge/p/shop/observability/dashboards?q=order',
     on: ['desktop'],
-    ready: (page) => page.getByTestId('dashboards-gallery').getByText('Order latency').first(),
+    ready: (page) => page.getByTestId('dashboards-gallery').getByText('Orders by state').first(),
   },
   {
     name: 'shell-auth',
-    path: '/forge/p/shopfront/auth?env=prod',
+    path: '/forge/p/shop/auth?env=prod',
     on: ['desktop'],
-    ready: (page) => page.getByText('priya@example.com').first(),
+    ready: (page) => page.getByText('jon@example.com').first(),
   },
   {
     name: 'shell-auth-signin',
-    path: '/forge/p/shopfront/auth/sign-in?env=prod',
+    path: '/forge/p/shop/auth/sign-in?env=prod',
     on: ['desktop'],
     ready: (page) => page.getByText('Configure sign-in').first(),
   },
   {
     name: 'shell-project-usage',
-    path: '/forge/p/shopfront/usage',
+    path: '/forge/p/shop/usage',
     on: ['desktop'],
     ready: (page) => page.getByTestId('usage-by-env'),
   },
@@ -877,10 +939,10 @@ const SURFACES: Surface[] = [
     // project's Agents page, not `/`: with no daemon the desktop home is
     // Projects (shell-daemonless-home), outside the Agents drill-in.
     name: 'shell-agents-no-sandbox',
-    path: `/project/${IDS.project}`,
+    path: `/project/${PROJECT_ID}`,
     on: ['desktop'],
     ready: (page) => page.getByTestId('nav-drill-in'),
-    harness: { fixtures: { 'reliant.v1.DaemonRegistryService/ListDaemons': { daemons: [] } } },
+    harness: { overlays: ['no-daemons'] },
   },
   {
     // The daemonless home (U6 3/4): an onboarded person whose daemon list is
@@ -894,7 +956,7 @@ const SURFACES: Surface[] = [
       page.viewportSize()!.width > 768
         ? page.getByRole('heading', { name: 'Projects' }).first()
         : page.getByText('Write the webhooks guide').first(),
-    harness: { fixtures: { 'reliant.v1.DaemonRegistryService/ListDaemons': { daemons: [] } } },
+    harness: { overlays: ['no-daemons'] },
   },
   {
     name: 'shell-settings',
@@ -909,10 +971,10 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByTestId('billing-hosting-tab'),
   },
   {
-    // Tests › Overview on the shopfront fixture report (fixtures/tests.ts, answered over
+    // Tests › Overview on the shop fixture report (src/fixtures/shop/handlers/tests.ts, answered over
     // TestsService like every other RPC here): coverage, pass rate, flakes, the last run.
     name: 'shell-tests',
-    path: '/forge/p/shopfront/tests',
+    path: '/forge/p/shop/tests',
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByTestId('tests-headline'),
   },
@@ -920,10 +982,10 @@ const SURFACES: Surface[] = [
     // The same page on a control plane that does not serve TestsService (Unimplemented):
     // "this control plane doesn't store test runs yet", and no nav badge.
     name: 'shell-tests-not-configured',
-    path: '/forge/p/shopfront/tests',
+    path: '/forge/p/shop/tests',
     on: ['desktop'],
     ready: (page) => page.getByText("This control plane doesn't store test runs yet").first(),
-    harness: { fixtures: TESTS_SERVICE_MISSING },
+    harness: { overlays: ['tests-unimplemented'] },
   },
 ]
 
@@ -957,11 +1019,24 @@ test.describe('visual baseline', () => {
   for (const surface of SURFACES) {
     for (const viewport of surface.on) {
       // The tag picks the projects that capture it (playwright.visual.config.ts).
-      test(`${surface.name} (${viewport})`, { tag: `@${viewport}` }, async ({ page }, testInfo) => {
+      test(`${surface.name} (${viewport})`, { tag: `@${viewport}` }, async ({ page, baseURL }, testInfo) => {
         const errors: string[] = []
+        const offOrigin: string[] = []
+        const origin = new URL(baseURL!).origin
         page.on('pageerror', (error) => errors.push(error.message))
+        // Fixture mode reaches nothing off the page: the pack answers every
+        // RPC, and src/fixtures/outside.ts answers or refuses every fetch. The
+        // configured auth origin's `/auth/v1/*` is exempt, though outside.ts
+        // answers it in the page, so it should never reach the network; any
+        // other path on that origin, and every other origin, fails.
+        const authOrigin = new URL(CONFIG.SUPABASE_URL).origin
+        page.on('request', (req) => {
+          const url = new URL(req.url())
+          const auth = url.origin === authOrigin && url.pathname.startsWith('/auth/v1/')
+          if (url.protocol.startsWith('http') && url.origin !== origin && !auth) offOrigin.push(`${req.method()} ${req.url()}`)
+        })
 
-        const server = await installHarness(page, surface.harness)
+        await installHarness(page, surface.harness)
         await page.goto(surface.path)
         if (surface.act) {
           await settle(page)
@@ -974,11 +1049,27 @@ test.describe('visual baseline', () => {
         await settle(page)
         if (surface.beforeShot) await surface.beforeShot(page)
 
-        if (process.env.VISUAL_FXLOG && server.unknown.size) {
-          console.log(`[visual] ${surface.name} (${testInfo.project.name}): no fixture for ${[...server.unknown.keys()].join(', ')}`)
+        const probe = (await readProbe(page))!
+        if (process.env.VISUAL_FXLOG) {
+          const report = { rpcs: Object.keys(probe.rpcs), unknown: [...new Set(probe.unknown)], refused: [...new Set(probe.refused)], unannotated: probe.unannotated }
+          console.log(`[visual] ${surface.name} (${testInfo.project.name}): ${JSON.stringify(report)}`)
         }
         await expect(page).toHaveScreenshot(`${surface.name}.png`, { ...SHOT, mask: masks(page) })
         expect(errors, 'uncaught page errors').toEqual([])
+        const after = (await readProbe(page))!
+        expect(after.escaped, 'rpcs that reached fetch (escaped the fixture transport)').toEqual([])
+        expect(after.outside, 'fetches outside the fixture boundary').toEqual([])
+        expect(offOrigin, 'requests the browser sent off the page origin').toEqual([])
+        // A known write can land after the page goes quiet (a project is
+        // selected once its list arrives), so the set is polled up to it.
+        const { must, may } = knownRefusals(surface.name, viewport)
+        const refused = async () => [...new Set((await readProbe(page))?.refused ?? [])].filter((rpc) => !may.includes(rpc)).sort()
+        await expect
+          .poll(refused, {
+            message: `writes refused by the read-only pack (known: ${must.map((rpc) => `${rpc}: ${KNOWN_REFUSALS[rpc].why}`).join('; ') || 'none'})`,
+            timeout: 10_000,
+          })
+          .toEqual(must)
       })
     }
   }

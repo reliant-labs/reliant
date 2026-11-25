@@ -19,18 +19,22 @@ type TxRunner interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, fn func(ctx context.Context) error) error
 }
 
-// Locks are the row and org locks a write takes inside its transaction, in
-// the order store/org_lock.go requires: the owner's org, the project, then
-// the trigger's row.
+// Locks are the org and project locks a write takes inside its transaction,
+// in the order store/org_lock.go requires: the owner's org, the project, then
+// the trigger's row (Triggers.LockTrigger).
 type Locks interface {
 	LockUserOrgs(ctx context.Context, userID string, reads ...store.OrgRead) error
 	LockProjectsForWrite(ctx context.Context, ids ...string) error
-	LockTrigger(ctx context.Context, id string) error
 }
 
-// Triggers reads the locked trigger row and re-owns it.
+// Triggers locks and reads the trigger row the decision was made on.
 type Triggers interface {
+	LockTrigger(ctx context.Context, id string) error
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
+}
+
+// Adoptions re-owns the locked trigger and records the change.
+type Adoptions interface {
 	AdoptTrigger(ctx context.Context, t *core.Trigger) error
 	RecordTriggerChange(ctx context.Context, operation string, before, after *core.Trigger) error
 }

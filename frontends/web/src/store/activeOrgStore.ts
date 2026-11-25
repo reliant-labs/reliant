@@ -221,14 +221,20 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   "identity",
   "dashboards",
   "reliantAI",
-  "cloud-billing",
   "deploy-usage",
-  "usage-billing",
-  "machine-pricing-readiness",
   "onboarding",
-  "cp",
+  // Every BillingService read on its generated keys: the billing dashboard,
+  // the wallet and Reliant overviews, compute eligibility, the hosting
+  // agreement and budget, machine pricing.
+  "controlplane.v1.BillingService",
+  // Every DaemonService read on its generated keys: a machine's detail,
+  // preview template and port-access rules.
+  "controlplane.v1.DaemonService",
+  // The machine → org map (services/controlPlane/machineOrgs.ts).
   "controlPlane",
   "orgs-members",
   "org-policy",
+  // hooks/changes-queries.ts: the page's org, then ChangesService's reads.
   "changes",
+  "controlplane.v1.ChangesService",
 ];

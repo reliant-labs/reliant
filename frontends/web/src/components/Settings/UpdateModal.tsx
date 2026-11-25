@@ -1,8 +1,8 @@
 import Modal from "../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
 import { Download, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
-import type { UpdateStatus } from "../../types/electron";
-import type { ForcedUpdate } from "../../store/appUpdateStore";
+import type { DaemonUpgradeRequest, UpdateStatus } from "../../types/electron";
+import { isUpgradeOverdue, type ForcedUpdate } from "../../store/appUpdateStore";
 import { openExternalLink } from "../../lib/open-link";
 
 interface UpdateModalProps {
@@ -26,6 +26,11 @@ interface UpdateModalProps {
 const DEFAULT_DOWNLOAD_URL = "https://reliantlabs.io";
 
 const noDismiss = () => {};
+
+/** The daemon's upgrade request when it is overdue now, else null. */
+function overdueUpgrade(request: DaemonUpgradeRequest | undefined): DaemonUpgradeRequest | null {
+  return request && isUpgradeOverdue(request, Date.now()) ? request : null;
+}
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -51,6 +56,10 @@ export function UpdateModal({
   onRetryForced,
 }: UpdateModalProps) {
   const isForced = !!forced;
+  // The platform asked the daemon to upgrade, for a security or emergency
+  // fix, and the deadline has passed: say so plainly. The user still chooses
+  // when to restart; a person's machine is never blocked.
+  const overdue = isForced ? null : overdueUpgrade(updateStatus.daemonUpgrade);
 
   // A forced update's only way out is the update itself.
   const dismissButton = (label: string) =>
@@ -354,6 +363,18 @@ export function UpdateModal({
           version{forced?.minVersion ? ` (${forced.minVersion} or newer)` : ""} and will restart
           when it is ready.
         </p>
+      )}
+      {overdue && (
+        <div
+          role="alert"
+          className="mb-4 p-4 rounded-lg border border-destructive/20 bg-destructive/5 text-sm text-foreground"
+        >
+          {overdue.urgency === "emergency"
+            ? "This update fixes an urgent problem and is overdue."
+            : "This update fixes a security issue and is overdue."}{" "}
+          Restart Reliant to install it as soon as you can. Your chats pick up where they left off.
+          {overdue.reason && <span className="block mt-1 text-xs text-muted-foreground">{overdue.reason}</span>}
+        </div>
       )}
       {renderContent()}
     </Modal>

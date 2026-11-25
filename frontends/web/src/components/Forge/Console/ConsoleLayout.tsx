@@ -22,9 +22,12 @@
  * 3. THE CHROME. Inside the one shell (Layout/shell/AppShell.tsx), the
  *    shell's left nav draws this app's sections inline (the same model,
  *    useConsoleNavModel.ts) and the console is a page under a slim bar with
- *    the breadcrumb and scope (ConsoleFrame). Without the shell (the forge
- *    host until it runs the one router), ConsoleShell — the nav, the top bar,
- *    the rail (its collapsed state remembered per user). Either way in the
+ *    the breadcrumb and scope (ConsoleFrame). The public demo is in the shell
+ *    too (demoShellRoutes.tsx: the app's frame with the demo's nav, and a
+ *    fixed session that turns it on), so neither the app nor the demo takes
+ *    the other branch, ConsoleShell — the nav, the top bar, the rail (its collapsed
+ *    state remembered per user); it goes with ConsoleShell (demo DI P3.4).
+ *    Either way in the
  *    led console (ledConsole.tsx): pages that lead with one sentence and the
  *    item worth opening first.
  *
@@ -63,6 +66,7 @@ import { rememberEnv } from "./envScope";
 import { consolePath, isTestsPage, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
 import { projectsHref } from "@/lib/paths";
 import { changesUIEnabled } from "@/lib/changesFeature";
+import { AppScopeProvider } from "@/fixtures/scope";
 
 const RAIL_KEY = "forge.console.rail";
 
@@ -86,7 +90,22 @@ export function switchTarget(app: string, page: ConsolePage): string {
   return consolePath(app, same);
 }
 
+/**
+ * The console in its app's scope (fixtures/scope.tsx): the forge tour's
+ * sample app reads its fixture pack through a TransportScope of its own, with
+ * read-only controls; every real app is unwrapped. Everything below, the
+ * console's own model included, reads inside it.
+ */
 export function ConsoleLayout() {
+  const { project: forgeProject = "" } = useParams({ strict: false }) as { project?: string };
+  return (
+    <AppScopeProvider app={forgeProject}>
+      <ConsoleLayoutInScope />
+    </AppScopeProvider>
+  );
+}
+
+function ConsoleLayoutInScope() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { project: forgeProject = "" } = useParams({ strict: false }) as { project?: string };

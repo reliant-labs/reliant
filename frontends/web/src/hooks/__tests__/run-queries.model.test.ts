@@ -19,6 +19,14 @@ import { ChatActivity, WorkflowState, WorkflowStopReason } from "@/gen/reliant/v
 const NOW = Date.parse("2026-10-04T12:00:00Z");
 
 describe("buildListRunsRequest", () => {
+  it("lists the nav's several projects, or every project when none is named", () => {
+    expect(buildListRunsRequest({ projectIds: ["p1", "p2"] }, { now: NOW }).projectIds).toEqual(["p1", "p2"]);
+    expect(buildListRunsRequest({ projectId: "p1" }, { now: NOW })).toMatchObject({ projectId: "p1", projectIds: [] });
+    const every = buildListRunsRequest({}, { now: NOW });
+    expect(every.projectId).toBeUndefined();
+    expect(every.projectIds).toEqual([]);
+  });
+
   it("asks for the trigger events that started no run only when no state or parent narrows the list", () => {
     expect(buildListRunsRequest({ includeUnlaunched: true }, { now: NOW }).includeUnlaunchedEvents).toBe(true);
     expect(buildListRunsRequest({}, { now: NOW }).includeUnlaunchedEvents).toBeUndefined();
