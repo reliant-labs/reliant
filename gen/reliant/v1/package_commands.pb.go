@@ -470,13 +470,17 @@ func (x *ListPackageCommandsResponse) GetDetectedTypes() []string {
 }
 
 type RunPackageCommandRequest struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	WorktreeId  *string                `protobuf:"bytes,1,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
-	Path        *string                `protobuf:"bytes,2,opt,name=path,proto3,oneof" json:"path,omitempty"` // Root project path (deprecated, use working_dir)
-	CommandName string                 `protobuf:"bytes,3,opt,name=command_name,json=commandName,proto3" json:"command_name,omitempty"`
-	PackageType PackageType            `protobuf:"varint,4,opt,name=package_type,json=packageType,proto3,enum=reliant.v1.PackageType" json:"package_type,omitempty"`
-	Env         map[string]string      `protobuf:"bytes,5,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	WorkingDir  *string                `protobuf:"bytes,6,opt,name=working_dir,json=workingDir,proto3,oneof" json:"working_dir,omitempty"` // Directory to run command from (from command.working_dir)
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	WorktreeId *string                `protobuf:"bytes,1,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
+	// The project checkout to run in when worktree_id is unset (the web panel
+	// sends it while it has no worktree id for the main checkout, as
+	// ListPackageCommandsRequest.path does). worktree_id wins when set;
+	// working_dir, when set, is where the command runs either way.
+	Path        *string           `protobuf:"bytes,2,opt,name=path,proto3,oneof" json:"path,omitempty"`
+	CommandName string            `protobuf:"bytes,3,opt,name=command_name,json=commandName,proto3" json:"command_name,omitempty"`
+	PackageType PackageType       `protobuf:"varint,4,opt,name=package_type,json=packageType,proto3,enum=reliant.v1.PackageType" json:"package_type,omitempty"`
+	Env         map[string]string `protobuf:"bytes,5,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	WorkingDir  *string           `protobuf:"bytes,6,opt,name=working_dir,json=workingDir,proto3,oneof" json:"working_dir,omitempty"` // Directory to run command from (from command.working_dir)
 	// The chat the panel is beside (see ListPackageCommandsRequest.chat_id).
 	ChatId        *string `protobuf:"bytes,7,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
 	unknownFields protoimpl.UnknownFields

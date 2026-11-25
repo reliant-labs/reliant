@@ -131,6 +131,21 @@ func TestUsageMeter_RecordsFundingAndTheOrgRollup(t *testing.T) {
 		{"managed", "org-acme", "org_wallet"},
 	}, got)
 
+	// The ledger keeps who paid apart from whose work it was: the org key's
+	// payer is the org; the org-less managed key's is unknown (NULL), though
+	// its work is org-acme's and its funding org_wallet.
+	var payers []string
+	prows, err := h.DB().QueryContext(ctx, `SELECT coalesce(funding_org_id, '<unknown>') FROM llm_call_usage WHERE chat_id = $1 ORDER BY id`, chat.ID)
+	require.NoError(t, err)
+	defer prows.Close()
+	for prows.Next() {
+		var p string
+		require.NoError(t, prows.Scan(&p))
+		payers = append(payers, p)
+	}
+	require.NoError(t, prows.Err())
+	assert.Equal(t, []string{"org-acme", "<unknown>", "org-acme", "<unknown>"}, payers)
+
 	var orgRows, orgCalls int
 	require.NoError(t, h.DB().QueryRowContext(ctx,
 		`SELECT count(*), coalesce(sum(calls), 0) FROM llm_org_usage_daily WHERE org_id = 'org-acme'`).Scan(&orgRows, &orgCalls))

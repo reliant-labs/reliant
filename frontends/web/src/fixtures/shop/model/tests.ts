@@ -82,9 +82,9 @@ import {
 } from "@/services/controlPlane/tests/wire";
 
 import { FORGE_VERSION } from "../handlers/console";
+import { DEMO_PROJECT } from "../handlers/scope";
 import { commitAgeMs, DAY, DEMO_CI_ACTOR, DEMO_RELEASES, DEMO_REPO, demoNow, demoRelease, MINUTE, RUNNING, type DemoEnvKey } from "../shopStory";
 
-const PROJECT = "shop";
 const LANES = ["unit", "integration", "e2e"] as const;
 type Lane = (typeof LANES)[number];
 const REPO_URL = `https://${DEMO_REPO}`;
@@ -415,7 +415,7 @@ function ciRunNumber(spec: RunSpec): number {
   return 1830 + order * 3 + LANES.indexOf(spec.lane);
 }
 
-function runOfSpec(spec: RunSpec, now: number): WireRunSummary {
+function runOfSpec(spec: RunSpec, now: number, app: string = DEMO_PROJECT): WireRunSummary {
   const ago = finishedAgo(spec);
   const totals = totalsOf(spec);
   const failed = totals.failed > 0n;
@@ -423,7 +423,7 @@ function runOfSpec(spec: RunSpec, now: number): WireRunSummary {
   const ci = env ? undefined : String(ciRunNumber(spec));
   return {
     runId: runIdOf(`${spec.kind}:${spec.branch}:${spec.commit.sha}:${spec.lane}`),
-    project: PROJECT,
+    project: app,
     gitCommit: spec.commit.sha,
     treeHash: hexOf(`tree:${spec.commit.sha}`, 40),
     dirty: false,
@@ -449,11 +449,11 @@ function runOfSpec(spec: RunSpec, now: number): WireRunSummary {
 }
 
 /** Every run recorded for shop, newest first. */
-export function shopRuns(now: number = demoNow()): WireRunSummary[] {
+export function shopRuns(now: number = demoNow(), app: string = DEMO_PROJECT): WireRunSummary[] {
   return runSpecs()
     .map((spec) => ({ spec, ago: finishedAgo(spec) }))
     .sort((a, b) => a.ago - b.ago)
-    .map(({ spec }) => runOfSpec(spec, now));
+    .map(({ spec }) => runOfSpec(spec, now, app));
 }
 const specOfRun = (runId: string) => runSpecs().find((spec) => runIdOf(`${spec.kind}:${spec.branch}:${spec.commit.sha}:${spec.lane}`) === runId) ?? null;
 
@@ -647,10 +647,10 @@ function testDetail(testId: string, now: number): WireTestResponse {
   };
 }
 
-function runDetail(runId: string, now: number): WireRunResponse {
+function runDetail(runId: string, now: number, app: string): WireRunResponse {
   const spec = specOfRun(runId);
   if (!spec) throw new ConnectError(`no run ${runId}`, Code.NotFound);
-  const run = runOfSpec(spec, now);
+  const run = runOfSpec(spec, now, app);
   const slowest: Record<Lane, WireTiming[]> = {
     unit: [
       { test: SHOP_TESTS.slowProvider, durationMs: 3_020n },
@@ -686,8 +686,8 @@ function runDetail(runId: string, now: number): WireRunResponse {
 
 // ── Summary and releases ────────────────────────────────────────────────────
 
-function summary(now: number, environmentId: string | undefined): WireSummaryResponse {
-  const all = shopRuns(now);
+function summary(now: number, environmentId: string | undefined, app: string): WireSummaryResponse {
+  const all = shopRuns(now, app);
   const list = flakes(now);
   const count = (state: number) => list.filter((f) => f.state === state).length;
   const flakeCounts = { suspectedCount: count(WireFlakeState.SUSPECTED), flakyCount: count(WireFlakeState.FLAKY), quarantinedCount: count(WireFlakeState.QUARANTINED) };
@@ -775,8 +775,8 @@ function pageOf<T>(rows: T[], req: { pageSize?: number; pageToken?: string }, si
   return { rows: rows.slice(start, start + n), next: start + n < rows.length ? String(start + n) : "" };
 }
 
-function runsPage(req: RunsRequest, now: number): WireListRunsResponse {
-  const matching = shopRuns(now).filter((r) => runMatchesFilters(r, req.filters, releaseCommit));
+function runsPage(req: RunsRequest, now: number, app: string): WireListRunsResponse {
+  const matching = shopRuns(now, app).filter((r) => runMatchesFilters(r, req.filters, releaseCommit));
   const page = pageOf(matching, req, 10);
   return { runs: page.rows, nextPageToken: page.next, totalCount: BigInt(matching.length) };
 }
@@ -808,11 +808,11 @@ export interface ShopTestsAnswers {
 }
 
 /** shop's runs, coverage and flakes, measured from the page load (handlers/tests.ts serves them). */
-export function shopTestsAnswers(now: number = demoNow()): ShopTestsAnswers {
+export function shopTestsAnswers(now: number = demoNow(), app: string = DEMO_PROJECT): ShopTestsAnswers {
   return {
-    getTestSummary: (req) => summary(now, req.environmentId),
-    listTestRuns: (req) => runsPage(req, now),
-    getTestRun: (req) => runDetail(req.runId, now),
+    getTestSummary: (req) => summary(now, req.environmentId, app),
+    listTestRuns: (req) => runsPage(req, now, app),
+    getTestRun: (req) => runDetail(req.runId, now, app),
     getCoverage: (req) => coverage.coverageResponse(req),
     getFileCoverage: (req) => coverage.fileCoverageResponse(req),
     getReleaseTests: (req) => releaseTests(req.version, now),

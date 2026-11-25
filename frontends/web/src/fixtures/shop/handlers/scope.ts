@@ -37,8 +37,26 @@ export type DemoEnvId = (typeof DEMO_ENVS)[number]["id"];
 
 const ENV_IDS: ReadonlySet<string> = new Set(DEMO_ENVS.map((e) => e.id));
 
+/**
+ * Which app, and which org, the pack answers for: the public demo's `shop`
+ * in shopStory's DEMO_ORG by default (DEMO_SCOPE). The forge tour's sample
+ * tells the same story for its own name (`sample_shop`) and in whichever org
+ * the person is in (`org: null`): it is nobody's app, so no org is foreign to it.
+ */
+export interface PackScope {
+  /** The app (forge project) the story is about. */
+  readonly app: string;
+  /** The org a read must name, or null for any. */
+  readonly org: string | null;
+}
+
+export const DEMO_SCOPE: PackScope = { app: DEMO_PROJECT, org: DEMO_ORG };
+
+/** Whether a request's `project` is the pack's app (empty = unscoped). */
+export const inProject = (scope: PackScope, project: string | undefined): boolean => !project || project === scope.app;
+
 /** Whether a request's `project` is the demo's (empty = unscoped). */
-export const inDemoProject = (project: string | undefined): boolean => !project || project === DEMO_PROJECT;
+export const inDemoProject = (project: string | undefined): boolean => inProject(DEMO_SCOPE, project);
 
 /** The demo environment an id names, if any. */
 export const demoEnvId = (id: string | undefined): DemoEnvId | undefined =>
@@ -52,10 +70,10 @@ const ENV_ID_FIELD = /(^|_)(environment|env)_ids?$/;
 const ENV_NAME_FIELD = /(^|_)(environment|env)(_name)?s?$/;
 
 /** Whether one selector value is outside the demo, judged by its field's name; false for a field that is no selector. */
-function foreignSelector(fieldName: string, value: string): boolean {
+function foreignSelector(fieldName: string, value: string, scope: PackScope): boolean {
   if (value === "") return false;
-  if (/(^|_)org_ids?$/.test(fieldName)) return value !== DEMO_ORG;
-  if (PROJECT_FIELD.test(fieldName)) return !inDemoProject(value);
+  if (/(^|_)org_ids?$/.test(fieldName)) return scope.org !== null && value !== scope.org;
+  if (PROJECT_FIELD.test(fieldName)) return !inProject(scope, value);
   if (ENV_ID_FIELD.test(fieldName)) return !demoEnvId(value);
   if (ENV_NAME_FIELD.test(fieldName)) return !demoEnvName(value);
   return false;
@@ -67,11 +85,11 @@ function foreignSelector(fieldName: string, value: string): boolean {
  */
 const MAX_DEPTH = 16;
 
-/** Whether `req` names a project or environment that is not the demo's, anywhere in it. */
-export function outsideDemo(input: DescMessage, req: Message, depth = 0): boolean {
+/** Whether `req` names an org, project or environment that is not the pack's (`scope`), anywhere in it. */
+export function outsideDemo(input: DescMessage, req: Message, scope: PackScope = DEMO_SCOPE, depth = 0): boolean {
   if (depth > MAX_DEPTH) return false;
   const msg = req as unknown as Record<string, unknown>;
-  const nested = (desc: DescMessage | undefined, value: unknown): boolean => !!desc && isMessage(value) && outsideDemo(desc, value, depth + 1);
+  const nested = (desc: DescMessage | undefined, value: unknown): boolean => !!desc && isMessage(value) && outsideDemo(desc, value, scope, depth + 1);
   for (const field of input.fields) {
     const value = field.oneof
       ? (msg[field.oneof.localName] as { case?: string; value?: unknown } | undefined)?.case === field.localName
@@ -81,13 +99,13 @@ export function outsideDemo(input: DescMessage, req: Message, depth = 0): boolea
     if (value == null) continue;
     switch (field.fieldKind) {
       case "scalar":
-        if (typeof value === "string" && foreignSelector(field.name, value)) return true;
+        if (typeof value === "string" && foreignSelector(field.name, value, scope)) return true;
         break;
       case "message":
         if (nested(field.message, value)) return true;
         break;
       case "list":
-        if (field.listKind === "scalar" && (value as unknown[]).some((v) => typeof v === "string" && foreignSelector(field.name, v))) return true;
+        if (field.listKind === "scalar" && (value as unknown[]).some((v) => typeof v === "string" && foreignSelector(field.name, v, scope))) return true;
         if (field.listKind === "message" && (value as unknown[]).some((v) => nested(field.message, v))) return true;
         break;
       case "map":
@@ -99,12 +117,12 @@ export function outsideDemo(input: DescMessage, req: Message, depth = 0): boolea
 }
 
 /**
- * `handlers` answering EMPTY for a read outside the demo's scope: an empty
+ * `handlers` answering EMPTY for a read outside the pack's `scope`: an empty
  * response message (an empty stream for a streaming read), before the handler
  * — the story's or a generated default — is asked. Requests must already be
  * messages (withMessageRequests, outside this).
  */
-export function scopedToDemo(handlers: MockHandlers, services: readonly DescService[]): MockHandlers {
+export function scopedToDemo(handlers: MockHandlers, services: readonly DescService[], scope: PackScope = DEMO_SCOPE): MockHandlers {
   const methods = new Map<string, DescMethod>(services.flatMap((s) => s.methods.map((m): [string, DescMethod] => [`${s.typeName}/${m.name}`, m])));
   const out: MockHandlers = {};
   for (const [key, handler] of Object.entries(handlers)) {
@@ -114,7 +132,7 @@ export function scopedToDemo(handlers: MockHandlers, services: readonly DescServ
       : (req: unknown) => {
           // A request stream is scoped by its last message, as the engine's defaults read it.
           const last = Array.isArray(req) ? req[req.length - 1] : req;
-          if (isMessage(last) && outsideDemo(method.input, last)) {
+          if (isMessage(last) && outsideDemo(method.input, last, scope)) {
             return method.methodKind === "server_streaming" || method.methodKind === "bidi_streaming" ? [] : create(method.output);
           }
           return handler(req);

@@ -38,9 +38,9 @@ type ExecuteToolsInput struct {
 	// Capabilities is the producing call_llm turn's capability set, as the
 	// runtime copies it onto the node. nil is a batch with no recorded set.
 	Capabilities *reliantv1.ToolCapabilities `json:"-"`
-	// RefusedToolCalls are the calls the workflow refused (a mutating
-	// integration action the user did not approve), by id, with the reason.
-	RefusedToolCalls map[string]string `json:"-"`
+	// ActivationRefusals are the calls the workflow refused (an activation
+	// change the user did not approve), by id, with the reason.
+	ActivationRefusals map[string]string `json:"-"`
 	// DaemonSelector is the node/workflow's explicit machine selector.
 	DaemonSelector *activitytypes.DaemonSelector `json:"-"`
 	// Telemetry is the run's telemetry the runtime hands the batch (with the
@@ -75,6 +75,8 @@ func (t ExecuteToolsInput) V3() ActivityInput {
 			ProjectPath:    t.ProjectPath,
 			DaemonSelector: t.DaemonSelector,
 			Telemetry:      t.Telemetry,
+
+			ActivationRefusals: t.ActivationRefusals,
 		},
 		Node: &reliantv1.Node{
 			Type: "execute_tools",
@@ -84,7 +86,6 @@ func (t ExecuteToolsInput) V3() ActivityInput {
 					ExpectedResponseTools: t.ExpectedResponseTools,
 					CompactionThreshold:   compactionThreshold,
 					Capabilities:          t.Capabilities,
-					RefusedToolCalls:      t.RefusedToolCalls,
 				},
 			},
 		},
