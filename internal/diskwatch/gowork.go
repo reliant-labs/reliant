@@ -42,11 +42,13 @@ import (
 // could not be read fails it (scanProcRoot), as if there were no /proc. Each
 // process is read between two reads of its start time, so reads that straddle
 // a pid's reuse by another process are never taken for either (readProcess).
-// One refusal is explained instead: a process of this user's holding a
-// capability the daemon lacks, whose references the kernel withholds from its
-// own user (a lingering `systemd --user` with CAP_WAKE_ALARM, reliant#3522).
-// It keeps every directory born at or before its start, which is all it can
-// hold (procSnapshot.capHolderShields), and fails nothing.
+// One refusal is explained instead, by identity: this user's own systemd
+// service manager (`systemd --user` in user@<uid>.service/init.scope), which
+// holds a capability the daemon lacks, so the kernel withholds its references
+// from its own user (CAP_WAKE_ALARM, reliant#3522). It does no work in a
+// GOTMPDIR itself, and everything it starts runs in another cgroup as a
+// process the scan reads, so it fails nothing and keeps nothing
+// (serviceManager).
 //
 // Where there is no /proc (macOS) nothing can be proven, and a go-build*
 // directory is removed by age alone, GoWorkDirAge, as before.
@@ -100,34 +102,11 @@ type procSnapshot struct {
 	names map[string]bool
 	// goStarts and linkStarts are the live go commands and linkers.
 	goStarts, linkStarts []procStart
-	// capHolders are this user's live processes whose references the
-	// kernel withholds because they hold a capability the daemon lacks (a
-	// lingering `systemd --user` with CAP_WAKE_ALARM; scanProcRoot). What
-	// they hold is unknown, but bounded: see capHolderShields.
-	capHolders []procStart
-}
-
-// capHolderShields returns the oldest-starting capability holder that may
-// hold a work directory born at birth: one that started no earlier than it.
-//
-// A work directory's path reaches a process in two ways only: its creator
-// made it (the go command, the linker; the creator rule judges those, from
-// the command line /proc shows everyone), or the process inherited it from
-// the command the directory was made for (GOTMPDIR in its environment, a
-// path in its arguments), and every such process started after the
-// directory was made. So a process that started before a directory was born
-// cannot hold it, and a holder whose references are unknown keeps only the
-// directories born at or before its start. A `systemd --user` that has
-// lingered since boot keeps nothing younger than itself.
-func (s *procSnapshot) capHolderShields(birth time.Time) (procStart, bool) {
-	var oldest procStart
-	found := false
-	for _, p := range s.capHolders {
-		if !birth.After(p.Start.Add(creatorSlack)) && (!found || p.Start.Before(oldest.Start)) {
-			oldest, found = p, true
-		}
-	}
-	return oldest, found
+	// explained names this user's live processes whose references the
+	// kernel withheld and the scan explained by identity, each with why it
+	// holds nothing beyond its command line: this user's own systemd service
+	// manager (scanProcRoot, serviceManager). They keep no directory.
+	explained []string
 }
 
 // addRefs records the work-directory names in s, a path, argument or
@@ -200,19 +179,16 @@ type workDirAudit struct {
 	KeptCreatorAlive int `json:"kept_creator_alive,omitempty"`
 	KeptYoung        int `json:"kept_young,omitempty"`
 	KeptForeign      int `json:"kept_foreign,omitempty"`
-	// KeptCapabilityHolder counts directories born at or before the start
-	// of a live capability holder, whose references the kernel withholds
-	// (procSnapshot.capHolders).
-	KeptCapabilityHolder int `json:"kept_capability_holder,omitempty"`
 	// OldestCreator is the live process that kept the most directories by
 	// rule 2: until it exits, nothing born after it started can be proven
 	// dead.
 	OldestCreator string `json:"oldest_creator,omitempty"`
-	// CapabilityHolders names the live processes whose references the scan
-	// could not read but explained (procSnapshot.capHolders).
-	CapabilityHolders string `json:"capability_holders,omitempty"`
-	Stopped           string `json:"stopped,omitempty"`
-	Error             string `json:"error,omitempty"`
+	// ExplainedUnreadable names the live processes whose references the
+	// scan could not read but explained by identity, and why each holds
+	// nothing (procSnapshot.explained).
+	ExplainedUnreadable []string `json:"explained_unreadable,omitempty"`
+	Stopped             string   `json:"stopped,omitempty"`
+	Error               string   `json:"error,omitempty"`
 }
 
 // goWorkDirRoots are the directories go work dirs are created in: GOTMPDIR
@@ -259,13 +235,7 @@ func (w *Watcher) trimGoWorkDirs(ctx context.Context, age time.Duration, p *pace
 	if scanErr != nil {
 		audit.Proof, audit.Error = "age_only", scanErr.Error()
 	}
-	if len(snap.capHolders) > 0 {
-		names := make([]string, len(snap.capHolders))
-		for i, h := range snap.capHolders {
-			names[i] = h.String()
-		}
-		audit.CapabilityHolders = strings.Join(names, "; ")
-	}
+	audit.ExplainedUnreadable = snap.explained
 	if scanErr != nil && (age <= 0 || daemonOnly) {
 		// A root is removed only on a proof; without one, nothing is.
 		return nil, audit
@@ -305,10 +275,6 @@ func (w *Watcher) trimGoWorkDirs(ctx context.Context, age time.Duration, p *pace
 			if c, alive := snap.creatorAlive(kind, birth); alive {
 				audit.KeptCreatorAlive++
 				creatorKept[c]++
-				return
-			}
-			if _, shields := snap.capHolderShields(birth); shields {
-				audit.KeptCapabilityHolder++
 				return
 			}
 		}
@@ -437,13 +403,12 @@ func logWorkDirPass(ctx context.Context, trigger string, a workDirAudit) {
 		"scanned", a.Scanned, "removed", a.Removed, "freed", FormatBytes(a.Freed),
 		"kept_referenced", a.KeptReferenced, "kept_creator_alive", a.KeptCreatorAlive,
 		"kept_young", a.KeptYoung, "kept_foreign", a.KeptForeign,
-		"kept_capability_holder", a.KeptCapabilityHolder,
 	}
 	if a.OldestCreator != "" {
 		fields = append(fields, "oldest_creator", a.OldestCreator)
 	}
-	if a.CapabilityHolders != "" {
-		fields = append(fields, "capability_holders", a.CapabilityHolders)
+	if len(a.ExplainedUnreadable) > 0 {
+		fields = append(fields, "explained_unreadable", strings.Join(a.ExplainedUnreadable, "; "))
 	}
 	if a.Error != "" {
 		fields = append(fields, "error", a.Error)

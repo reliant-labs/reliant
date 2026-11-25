@@ -8,7 +8,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -77,11 +76,10 @@ func TestTrimGoWorkDirs_RemovesOnlyProvenDead(t *testing.T) {
 	}
 }
 
-// reliant#3522: a live process whose references the kernel withholds (a
-// capability holder) can hold only the work directories born at or before it
-// started. Those are kept; every younger one is judged as before, so a
-// `systemd --user` that has lingered since boot keeps nothing.
-func TestTrimGoWorkDirs_CapabilityHolderKeepsOnlyWhatPredatesIt(t *testing.T) {
+// reliant#3522: the scan's explained processes (this user's own systemd
+// service manager, whose references the kernel withholds) keep no directory:
+// a dead root is removed whenever they started, and the audit names them.
+func TestTrimGoWorkDirs_ExplainedProcessKeepsNothing(t *testing.T) {
 	m := newTrimMachine(t, 100*GiB, CacheTrimConfig{})
 	births := map[string]time.Time{}
 	base := commandGoTmpBasePrefix + itoa(os.Getuid())
@@ -92,48 +90,24 @@ func TestTrimGoWorkDirs_CapabilityHolderKeepsOnlyWhatPredatesIt(t *testing.T) {
 		births[p] = m.now.Add(-born)
 		return p
 	}
-	predates := mk("gotmp-1-1", time.Hour)
+	older := mk("gotmp-1-1", time.Hour)
 	younger := mk("gotmp-1-2", 20*time.Minute)
 	m.w.trim.birth = func(p string) time.Time { return births[p] }
-	holder := procStart{PID: 20256, Comm: "systemd", Start: m.now.Add(-30 * time.Minute)}
+	manager := "pid 20256 (systemd): this user's service manager (user@1001.service/init.scope)"
 	m.w.trim.procs = func() (procSnapshot, error) {
-		return procSnapshot{capHolders: []procStart{holder}}, nil
+		return procSnapshot{explained: []string{manager}}, nil
 	}
 
 	m.w.TrimCaches(context.Background(), false)
-	if !exists(predates) || exists(younger) {
-		t.Errorf("born before the holder started exists=%v (want true); after exists=%v (want false)", exists(predates), exists(younger))
+	if exists(older) || exists(younger) {
+		t.Errorf("dead roots kept beside an explained process: older=%v younger=%v", exists(older), exists(younger))
 	}
 	a := lastWorkDirAudit(t, m.w)
-	if a.Proof != "proc_scan" || a.KeptCapabilityHolder != 1 || a.Removed != 1 || a.Error != "" {
-		t.Errorf("audit = %+v, want a proc_scan proof that kept 1 for the holder and removed 1", a)
+	if a.Proof != "proc_scan" || a.Removed != 2 || a.Error != "" {
+		t.Errorf("audit = %+v, want a proc_scan proof that removed both", a)
 	}
-	if !strings.Contains(a.CapabilityHolders, "pid 20256 (systemd)") {
-		t.Errorf("audit capability_holders = %q, want the holder named", a.CapabilityHolders)
-	}
-
-	// A holder lingering since boot shields nothing younger than itself.
-	holder.Start = m.now.Add(-48 * time.Hour)
-	m.w.TrimCaches(context.Background(), false)
-	if exists(predates) {
-		t.Error("a root born after the holder started outlived the pass")
-	}
-}
-
-func TestCapHolderShields(t *testing.T) {
-	born := time.Unix(1000, 0)
-	s := procSnapshot{capHolders: []procStart{{PID: 1, Start: born.Add(-time.Minute)}}}
-	if _, ok := s.capHolderShields(born); ok {
-		t.Error("a holder that started before the directory was born shields it")
-	}
-	s.capHolders = append(s.capHolders, procStart{PID: 2, Start: born.Add(time.Hour)}, procStart{PID: 3, Start: born.Add(time.Minute)})
-	if h, ok := s.capHolderShields(born); !ok || h.PID != 3 {
-		t.Errorf("capHolderShields = %+v %v, want the oldest holder started at or after the birth (pid 3)", h, ok)
-	}
-	// Within a clock tick before the birth is not before it.
-	s.capHolders = []procStart{{PID: 4, Start: born.Add(-creatorSlack / 2)}}
-	if _, ok := s.capHolderShields(born); !ok {
-		t.Error("a holder within creatorSlack of the birth does not shield it")
+	if len(a.ExplainedUnreadable) != 1 || a.ExplainedUnreadable[0] != manager {
+		t.Errorf("audit explained_unreadable = %q, want [%q]", a.ExplainedUnreadable, manager)
 	}
 }
 

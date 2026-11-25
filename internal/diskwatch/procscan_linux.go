@@ -39,7 +39,7 @@ func scanProcesses() (procSnapshot, error) {
 // reader is who reads /proc: the user whose processes' references it must
 // read (euid), and its effective capability set, which the kernel compares
 // with a process's permitted set before it hands over that process's
-// references (capabilityHolder).
+// references (serviceManager).
 type reader struct {
 	euid   int
 	capEff uint64
@@ -59,11 +59,14 @@ type reader struct {
 // a process contributes what /proc shows everyone: its command line and,
 // when it is a go command or a linker, its start time.
 //
-// One exception is explained rather than failed: a process of this user's
-// that holds a capability the reader lacks (capabilityHolder), whose
-// references the kernel refuses to its own user. It contributes its command
-// line and start time, and it is recorded as a capability holder: a work
-// directory born at or before its start is kept (procSnapshot.capHolders).
+// One process is explained rather than failed: this user's own systemd
+// service manager (serviceManager), whose references the kernel refuses to
+// its own user because it holds a capability the reader lacks. It is known by
+// identity, not by what it holds: it starts units and does no work in a
+// GOTMPDIR itself, and everything it starts runs in a cgroup of its own, as a
+// process this scan reads like any other. So it holds nothing beyond what its
+// command line shows, and keeps no directory; it is named in
+// procSnapshot.explained.
 //
 // A pid names a process only while it lives: one that exits mid-read can be
 // replaced by another under the same pid, and reads either side of the
@@ -97,8 +100,8 @@ func scanProcRoot(root string, as reader, boot time.Time) (procSnapshot, error) 
 			s.names[n] = true
 		}
 		at := boot.Add(time.Duration(p.start) * time.Second / clockTicks)
-		if p.capHolder {
-			s.capHolders = append(s.capHolders, procStart{PID: pid, Comm: p.comm, Start: at})
+		if p.explained != "" {
+			s.explained = append(s.explained, fmt.Sprintf("pid %d (%s): %s", pid, p.comm, p.explained))
 		}
 		isGo, isLink := creatorKinds(p.comm, p.exe, p.cmdline)
 		if isGo {
@@ -147,10 +150,10 @@ type procInfo struct {
 	exe     string
 	cmdline []byte
 	refs    procSnapshot // its references (names only)
-	// capHolder: one of the reader's processes whose references the kernel
-	// refused because it holds a capability the reader lacks
-	// (capabilityHolder). refs then has its command line alone.
-	capHolder bool
+	// explained says why one of the reader's processes whose references the
+	// kernel refused holds nothing to read (serviceManager); "" for every
+	// other process. refs then has its command line alone.
+	explained string
 }
 
 // readProcess reads one process's /proc entry at dir, as the reader as: its
@@ -177,8 +180,9 @@ func readProcess(dir string, as reader) (procInfo, error) {
 	p := procInfo{comm: comm, start: start}
 	if err := p.read(dir, as); err != nil {
 		if gone(err) {
-			// Its status vanished while a refusal was explained: an exit,
-			// or another process taking its pid, only if stat agrees.
+			// Its status or cgroup vanished while a refusal was explained:
+			// an exit, or another process taking its pid, only if stat
+			// agrees.
 			switch _, again, serr := readStat(dir); {
 			case gone(serr):
 				return procInfo{}, errProcExited
@@ -228,29 +232,75 @@ func (p *procInfo) read(dir string, as reader) error {
 			if !errors.Is(err, fs.ErrPermission) {
 				return fmt.Errorf("(%s): %w", p.comm, err)
 			}
-			if xerr := capabilityHolder(dir, as); xerr != nil {
+			why, xerr := serviceManager(dir, p.comm, as)
+			if xerr != nil {
 				// The error names the refusal first, as it always has.
 				return fmt.Errorf("(%s): %w; %w", p.comm, err, xerr)
 			}
-			p.exe, p.capHolder = "", true
+			p.exe, p.explained = "", why
 		}
 	}
 	return nil
 }
 
-// capabilityHolder explains a refusal of one of the reader's processes'
-// references (EACCES/EPERM) by that process's world-readable status, and
-// returns nil only when the explanation holds: every uid it has is the
-// reader's, and its permitted capability set is not a subset of the reader's
-// effective set. That is the kernel's ptrace read check refusing what the
-// uids would grant (cap_ptrace_access_check): a process that may gain a
-// capability its reader does not have keeps its references from its own user.
-// A lingering `systemd --user` holding CAP_WAKE_ALARM is one (reliant#3522).
+// serviceManager explains a refusal of one of the reader's processes'
+// references (EACCES/EPERM): it returns why, and no error, only when the
+// process is this user's own systemd service manager, known from what /proc
+// shows everyone. All three must hold:
 //
-// Any other refusal is unexplained (hidepid, an LSM, a /proc we cannot
-// trust) and the error says why. An error for which gone is true means the
-// status vanished: readProcess tells an exit from the rest.
-func capabilityHolder(dir string, as reader) error {
+//  1. Its status: every uid is the reader's, and its permitted capability
+//     set is not a subset of the reader's effective set. That is the kernel's
+//     ptrace read check refusing what the uids would grant
+//     (cap_ptrace_access_check): a process that may gain a capability its
+//     reader lacks keeps its references from its own user. A lingering
+//     `systemd --user` holding CAP_WAKE_ALARM is one (reliant#3522).
+//  2. Its cgroup (the v2 "0::" line) is exactly
+//     /user.slice/user-<uid>.slice/user@<uid>.service/init.scope. systemd
+//     puts every unit it starts, and every process those spawn, in a cgroup
+//     of its own, so the one process in init.scope is the manager itself.
+//  3. Its command name is systemd.
+//
+// Such a process starts units and does no work of its own in a GOTMPDIR:
+// everything it starts lands in another cgroup, as a process the scan reads.
+// So it holds nothing beyond what its command line shows.
+//
+// Any other refusal, any other capability holder included, is unexplained
+// (hidepid, an LSM, a /proc we cannot trust) and the error says why. An error
+// for which gone is true means status or cgroup vanished: readProcess tells
+// an exit from the rest.
+func serviceManager(dir, comm string, as reader) (string, error) {
+	if err := holdsCapabilityBeyond(dir, as); err != nil {
+		return "", err
+	}
+	u := strconv.Itoa(as.euid)
+	want := "/user.slice/user-" + u + ".slice/user@" + u + ".service/init.scope"
+	b, err := os.ReadFile(filepath.Join(dir, "cgroup"))
+	if err != nil {
+		return "", fmt.Errorf("explaining the refusal: reading cgroup: %w", err)
+	}
+	got, found := "", false
+	for _, line := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(line, "0::"); ok {
+			got, found = v, true
+			break
+		}
+	}
+	if !found {
+		return "", errors.New("unexplained refusal: no cgroup v2 entry")
+	}
+	if got != want {
+		return "", fmt.Errorf("unexplained refusal: cgroup %q is not this user's service manager's %q", got, want)
+	}
+	if comm != "systemd" {
+		return "", fmt.Errorf("unexplained refusal: command %q in the service manager's cgroup is not systemd", comm)
+	}
+	return "this user's service manager (user@" + u + ".service/init.scope)", nil
+}
+
+// holdsCapabilityBeyond returns nil when the status at dir shows every uid is
+// the reader's and a permitted capability set beyond the reader's effective
+// set (serviceManager, rule 1), else an error saying which does not hold.
+func holdsCapabilityBeyond(dir string, as reader) error {
 	b, err := os.ReadFile(filepath.Join(dir, "status"))
 	if err != nil {
 		return fmt.Errorf("explaining the refusal: reading status: %w", err)

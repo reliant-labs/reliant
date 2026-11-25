@@ -429,20 +429,37 @@ func withhold(t *testing.T, dir string) {
 	}
 }
 
+// fakeCgroupFile writes the fake process at dir a /proc/<pid>/cgroup whose
+// cgroup v2 entry is path.
+func fakeCgroupFile(t *testing.T, dir, path string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "cgroup"), []byte("0::"+path+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// managerCgroup is this user's service manager's cgroup.
+func managerCgroup() string {
+	u := strconv.Itoa(os.Geteuid())
+	return "/user.slice/user-" + u + ".slice/user@" + u + ".service/init.scope"
+}
+
 // reliant#3522: a lingering `systemd --user` (CAP_WAKE_ALARM in its
 // permitted set) refuses its cwd, fds and environment to its own user, and
 // that one refusal failed every scan on the host, so no work directory was
-// ever proven dead. A refusal explained by status (every uid ours, a
-// permitted set beyond the reader's) no longer fails the scan: the process
-// is recorded as a capability holder, with its start time, and contributes
-// its command line as any process does.
-func TestScanProcRoot_CapabilityHolderIsExplained(t *testing.T) {
+// ever proven dead. The refusal is explained by identity, from what /proc
+// shows everyone: every uid ours, a permitted set beyond the reader's, the
+// cgroup systemd gives this user's manager alone (user@<uid>.service/
+// init.scope), and the command name systemd. That process then holds nothing
+// beyond its command line. Every other refusal still fails the scan, a
+// capability holder anywhere else included.
+func TestScanProcRoot_ServiceManagerIsExplained(t *testing.T) {
 	uid := strconv.Itoa(os.Geteuid())
 	ours := uid + "\t" + uid + "\t" + uid + "\t" + uid
-	build := func(t *testing.T) (root, dir string) {
+	build := func(t *testing.T, comm string) (root, dir string) {
 		root = t.TempDir()
 		fakeProc(t, root, 10, "go", "/tmp/go-build1")
-		dir = fakeProc(t, root, 11, "systemd", "/")
+		dir = fakeProc(t, root, 11, comm, "/")
 		if err := os.WriteFile(filepath.Join(dir, "cmdline"), []byte("/lib/systemd/systemd\x00--user\x00GOTMPDIR=/x/gotmp-5-5\x00"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -450,43 +467,78 @@ func TestScanProcRoot_CapabilityHolderIsExplained(t *testing.T) {
 		return root, dir
 	}
 
-	root, dir := build(t)
+	root, dir := build(t, "systemd")
 	fakeStatus(t, dir, ours, "0000000800000000")
+	fakeCgroupFile(t, dir, managerCgroup())
 	s, err := scanProcRoot(root, reader{euid: os.Geteuid()}, time.Unix(0, 0))
 	if err != nil {
-		t.Fatalf("a capability holder's refusal failed the scan: %v", err)
+		t.Fatalf("this user's service manager's refusal failed the scan: %v", err)
 	}
-	if want := (procStart{PID: 11, Comm: "systemd", Start: time.Unix(5, 0)}); len(s.capHolders) != 1 || s.capHolders[0] != want {
-		t.Errorf("capHolders = %v, want %v", s.capHolders, want)
+	want := "pid 11 (systemd): this user's service manager (user@" + uid + ".service/init.scope)"
+	if len(s.explained) != 1 || s.explained[0] != want {
+		t.Errorf("explained = %q, want [%q]", s.explained, want)
 	}
 	if !s.names["go-build1"] || !s.names["gotmp-5-5"] || len(s.goStarts) != 1 {
-		t.Errorf("scan = %+v, want the go command's go-build1, the holder's command line, and one go command", s)
+		t.Errorf("scan = %+v, want the go command's go-build1, the manager's command line, and one go command", s)
 	}
 
 	// Everything else unreadable still fails the proof.
 	for _, tc := range []struct {
-		name   string
-		as     reader
-		status func(t *testing.T, dir string)
+		name  string
+		comm  string
+		as    reader
+		setup func(t *testing.T, dir string)
 	}{
-		{"permitted set within the reader's", reader{euid: os.Geteuid(), capEff: 0x0000000800000000},
-			func(t *testing.T, dir string) { fakeStatus(t, dir, ours, "0000000800000000") }},
-		{"no capability at all", reader{euid: os.Geteuid()},
-			func(t *testing.T, dir string) { fakeStatus(t, dir, ours, "0000000000000000") }},
-		{"a uid not ours (setuid)", reader{euid: os.Geteuid()},
-			func(t *testing.T, dir string) { fakeStatus(t, dir, uid+"\t"+uid+"\t0\t"+uid, "0000000800000000") }},
-		{"no status", reader{euid: os.Geteuid()}, func(*testing.T, string) {}},
-		{"unreadable status", reader{euid: os.Geteuid()},
-			func(t *testing.T, dir string) { replace(t, filepath.Join(dir, "status"), false) }},
-		{"status with no CapPrm", reader{euid: os.Geteuid()}, func(t *testing.T, dir string) {
-			if err := os.WriteFile(filepath.Join(dir, "status"), []byte("Uid:\t"+ours+"\n"), 0o644); err != nil {
+		{"a capability holder in another cgroup", "systemd", reader{euid: os.Geteuid()}, func(t *testing.T, dir string) {
+			fakeStatus(t, dir, ours, "0000000800000000")
+			fakeCgroupFile(t, dir, "/user.slice/user-"+uid+".slice/user@"+uid+".service/app.slice/build.service")
+		}},
+		{"the manager's cgroup with another command", "go", reader{euid: os.Geteuid()}, func(t *testing.T, dir string) {
+			fakeStatus(t, dir, ours, "0000000800000000")
+			fakeCgroupFile(t, dir, managerCgroup())
+		}},
+		{"no cgroup file", "systemd", reader{euid: os.Geteuid()}, func(t *testing.T, dir string) {
+			fakeStatus(t, dir, ours, "0000000800000000")
+		}},
+		{"unreadable cgroup file", "systemd", reader{euid: os.Geteuid()}, func(t *testing.T, dir string) {
+			fakeStatus(t, dir, ours, "0000000800000000")
+			replace(t, filepath.Join(dir, "cgroup"), false)
+		}},
+		{"a cgroup file with no v2 entry", "systemd", reader{euid: os.Geteuid()}, func(t *testing.T, dir string) {
+			fakeStatus(t, dir, ours, "0000000800000000")
+			if err := os.WriteFile(filepath.Join(dir, "cgroup"), []byte("1:name=systemd:"+managerCgroup()+"\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}},
+		{"a uid not ours (setuid)", "systemd", reader{euid: os.Geteuid()}, func(t *testing.T, dir string) {
+			fakeStatus(t, dir, uid+"\t"+uid+"\t0\t"+uid, "0000000800000000")
+			fakeCgroupFile(t, dir, managerCgroup())
+		}},
+		{"permitted set within the reader's", "systemd", reader{euid: os.Geteuid(), capEff: 0x0000000800000000}, func(t *testing.T, dir string) {
+			fakeStatus(t, dir, ours, "0000000800000000")
+			fakeCgroupFile(t, dir, managerCgroup())
+		}},
+		{"no capability at all", "systemd", reader{euid: os.Geteuid()}, func(t *testing.T, dir string) {
+			fakeStatus(t, dir, ours, "0000000000000000")
+			fakeCgroupFile(t, dir, managerCgroup())
+		}},
+		{"no status", "systemd", reader{euid: os.Geteuid()}, func(t *testing.T, dir string) {
+			fakeCgroupFile(t, dir, managerCgroup())
+		}},
+		{"unreadable status", "systemd", reader{euid: os.Geteuid()}, func(t *testing.T, dir string) {
+			replace(t, filepath.Join(dir, "status"), false)
+			fakeCgroupFile(t, dir, managerCgroup())
+		}},
+		{"status with no CapPrm", "systemd", reader{euid: os.Geteuid()}, func(t *testing.T, dir string) {
+			if err := os.WriteFile(filepath.Join(dir, "status"), []byte("Uid:\t"+ours+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			fakeCgroupFile(t, dir, managerCgroup())
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root, dir := build(t)
-			tc.status(t, dir)
+			root, dir := build(t, tc.comm)
+			tc.setup(t, dir)
 			_, err := scanProcRoot(root, tc.as, time.Unix(0, 0))
 			if err == nil {
 				t.Fatal("an unexplained refusal did not fail the scan")
