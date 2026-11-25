@@ -276,6 +276,16 @@ func Prove(ctx context.Context, opts Options) (report *Report, err error) {
 		report.Warnings = append(report.Warnings, fmt.Sprintf(
 			"The command ran in %s, not in %s: the files are in %s, another git worktree that a run there cannot reach, so it would not test the fix.",
 			runDir, dir, repo.top))
+	} else if aboveRepo(runDir, repo.top) {
+		// The caller chose a directory that holds the files' repository (a
+		// multi-repo project root, say), and the command runs there as asked.
+		// A command written for the repository's root — `go test ./pkg`, `npm
+		// test` — finds no go.mod or package.json there, both runs fail alike,
+		// and the verdict reads fails_with_fix (obs 77bbc716). Say so, so a
+		// verdict that did not test the fix is not read as one that did.
+		report.Warnings = append(report.Warnings, fmt.Sprintf(
+			"The command ran in %s, above the repository that holds the files (%s). If it expects that repository's root (a go.mod, a package.json), both runs fail alike and the verdict says nothing about the fix: pass repo, or start the command with `cd %s &&`.",
+			runDir, repo.top, repo.top))
 	}
 	run := func(ctx context.Context) RunOutcome { return opts.Run(ctx, runDir) }
 	// Recover BEFORE snapshotting: an earlier proof that died mid-run leaves a
