@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	chat "github.com/reliant-labs/reliant/internal/handlers/chat"
 )
@@ -17,7 +18,7 @@ import (
 func TestDeleteChat_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: newChatRepo()}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: newChatRepo(), Chats: chataccesstest.For(newChatRepo())}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteChatRequest, pb.DeleteChatResponse]{
 		{
@@ -62,7 +63,7 @@ func TestDeleteChat_DeletesAnArchivedChatPermanently(t *testing.T) {
 		deleted = append(deleted, id)
 		return nil
 	}
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &chat.MockMailbox{}, AgentMessages: &chat.MockAgentMessages{}, Messages: &chat.MockMessages{}, ToolBlocks: &chat.MockToolBlocks{}, Senders: &chat.MockSenders{}}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &chat.MockMailbox{}, AgentMessages: &chat.MockAgentMessages{}, Messages: &chat.MockMessages{}, ToolBlocks: &chat.MockToolBlocks{}, Senders: &chat.MockSenders{}}))
 
 	resp, err := svc.DeleteChat(chat.AuthedContext(t), connect.NewRequest(&pb.DeleteChatRequest{ChatId: archivedChatID}))
 	require.NoError(t, err)

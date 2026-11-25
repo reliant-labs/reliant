@@ -27,12 +27,13 @@ import Button from "@/components/forge-ui/button";
 import Tabs from "@/components/forge-ui/tabs";
 import type { OrgPolicy } from "@/gen/controlplane/controlplane/v1/org_policy_pb";
 import { billingServiceKeys } from "@/hooks/controlplane/billing-service-hooks_gen";
+import { orgPolicyServiceKeys } from "@/hooks/controlplane/org-policy-service-hooks_gen";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { toast } from "@/lib/toast-manager";
 import {
   canEditPolicy,
-  orgPolicyKeys,
+  orgPolicyResponseOf,
   policyErrorMessage,
   policyHistoryRequest,
   type PolicyRecord,
@@ -93,6 +94,9 @@ function OrgPoliciesPage({ org }: { org: MyOrg }) {
   const editable = canEditPolicy(org.role);
   const qc = useQueryClient();
   const query = useOrgPolicy(org.id);
+  // A record the page already holds becomes the document's cached answer, unasked.
+  const cachePolicy = (record: PolicyRecord) =>
+    qc.setQueryData(orgPolicyServiceKeys.getOrgPolicy({ orgId: org.id }), orgPolicyResponseOf(record));
   const members = useMembers(org.id);
   const roster = useMemo(() => members.data?.pages.flatMap((p) => p.members) ?? [], [members.data]);
   const nameOf = (userId: string) => {
@@ -260,23 +264,23 @@ function OrgPoliciesPage({ org }: { org: MyOrg }) {
           onClose={() => setReviewing(false)}
           onViolations={setViolations}
           onSaved={(record, changed) => {
-            qc.setQueryData(orgPolicyKeys.policy(org.id), record);
+            cachePolicy(record);
             void qc.invalidateQueries({ queryKey: billingServiceKeys.listOrgLimitChangesInfinite(policyHistoryRequest(org.id)) });
             // The caps the usage is measured against may have changed.
-            void qc.invalidateQueries({ queryKey: orgPolicyKeys.usage(org.id) });
+            void qc.invalidateQueries({ queryKey: orgPolicyServiceKeys.getMyPolicyUsage({ orgId: org.id }) });
             load(record);
             setReviewing(false);
             toast.success(changed ? `Policies saved as version ${record.version}.` : "Nothing changed: these were the saved policies.");
           }}
           onRebased={(latest, policy, both) => {
-            qc.setQueryData(orgPolicyKeys.policy(org.id), latest);
+            cachePolicy(latest);
             setBase(latest);
             setDraft(policy);
             setOverlapping(both);
             setResetKey((k) => k + 1);
           }}
           onDiscardToLatest={(latest) => {
-            qc.setQueryData(orgPolicyKeys.policy(org.id), latest);
+            cachePolicy(latest);
             load(latest);
             setReviewing(false);
           }}

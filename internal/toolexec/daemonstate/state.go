@@ -79,6 +79,61 @@ const (
 // constant in electron/src/daemon-contract.js.
 const StreamNoticePrefix = "@@RELIANT_STREAM"
 
+// UpgradeNoticePrefix marks a line on the daemon's stdout telling the desktop
+// app that supervises it that the platform asked it to upgrade, followed by
+// the request as JSON (UpgradeNotice):
+//
+//	@@RELIANT_UPGRADE {"target_version":"1.40.0",...,"urgency":"normal",...}
+//
+// A daemon the desktop app spawned runs the binary inside the app's signed
+// bundle, so it cannot replace itself and never tries (owner decision D6: a
+// person's machine is never blocked): it reports AWAITING_OWNER and keeps
+// serving. Its owner is the app's updater, and this line is how the updater
+// hears of the request: it checks for an update, downloads it and asks the
+// user to restart (D7), never installing without them.
+//
+// Printed only when SupervisorEnv says the desktop app spawned the daemon,
+// and once per distinct request: the gateway asks again on every new stream,
+// and a repeat is not news. A desktop app that predates the notice logs it as
+// an ordinary daemon line. Electron mirrors this constant in
+// electron/src/daemon-contract.js.
+const UpgradeNoticePrefix = "@@RELIANT_UPGRADE"
+
+// SupervisorEnv names the process that supervises the daemon, set by the
+// parent that spawns it. SupervisorElectron is the desktop app
+// (electron/src/backend-manager.js buildDaemonEnv): the daemon then prints
+// UpgradeNoticePrefix lines for it.
+const (
+	SupervisorEnv      = "RELIANT_SUPERVISOR"
+	SupervisorElectron = "electron"
+)
+
+// UpgradeNotice is the JSON after UpgradeNoticePrefix: the platform's
+// RestartRequested, as the desktop app's updater reads it. Every field is
+// always present, so a reader needs no defaults. Fields may be added; none is
+// renamed or removed within v1 (an older desktop app reads this shape).
+type UpgradeNotice struct {
+	// TargetVersion is the build the platform wants; for a version floor,
+	// the oldest build it serves.
+	TargetVersion string `json:"target_version"`
+	TargetCommit  string `json:"target_commit"`
+	// CommitTimeUnix is the target's committer time, unix seconds: the key
+	// that orders builds.
+	CommitTimeUnix int64 `json:"commit_time_unix"`
+	// Urgency is "routine", "normal", "security", "emergency" or
+	// "unspecified".
+	Urgency string `json:"urgency"`
+	// DeadlineUnixMs is when the platform wants the upgrade by, unix
+	// milliseconds; 0 for none.
+	DeadlineUnixMs int64  `json:"deadline_unix_ms"`
+	RolloutID      string `json:"rollout_id"`
+	Reason         string `json:"reason"`
+	// UpgradeCommand and UpgradeURL are what the server says to run or open
+	// to upgrade; empty when it names none.
+	UpgradeCommand string `json:"upgrade_command"`
+	UpgradeURL     string `json:"upgrade_url"`
+}
+
 // Established reports whether the daemon can currently serve tool calls.
 func (s Stream) Established() bool { return s == StreamConnected }
 

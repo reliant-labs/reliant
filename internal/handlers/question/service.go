@@ -24,6 +24,10 @@ type Deps struct {
 	// Refetch tells the user\'s clients to re-read what a write changed
 	// (UserRefetch, deps.go).
 	Refetch UserRefetch
+	// ChatRows and ChatViews read the chat a question belongs to
+	// (store.ChatExtStore, store.ChatsWithActivityExtStore).
+	ChatRows  ChatRows
+	ChatViews ChatViews
 	// Questions lists the questions a chat or a user has open.
 	Questions Questions
 	// Mailbox queues an answer given behind a blocking question (Mailbox,
@@ -52,6 +56,12 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Refetch == nil {
 		return fmt.Errorf("question: Deps.Refetch is required")
+	}
+	if d.ChatRows == nil {
+		return fmt.Errorf("question: Deps.ChatRows is required")
+	}
+	if d.ChatViews == nil {
+		return fmt.Errorf("question: Deps.ChatViews is required")
 	}
 	if d.Questions == nil {
 		return fmt.Errorf("question: Deps.Questions is required")

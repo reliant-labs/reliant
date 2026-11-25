@@ -32,6 +32,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
@@ -373,7 +374,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// builds it (internal/app NewRunLauncher). nil prober: triggers never ask for a
 	// greenfield probe.
 	pause := workflow.NewPauseService(workflow.PauseServiceDeps{Temporal: s.Temporal, Store: s.Repo, Workflows: store.NewWorkflowExtStore(s.Repo.ORM())})
-	triggerLauncher := launch.New(launch.Deps{Store: s.Repo, Workflows: store.NewWorkflowExtStore(s.Repo.ORM()), Worktrees: store.NewWorktreeExtStore(s.Repo.ORM()), ProjectRows: store.NewProjectExtStore(s.Repo.ORM()), Projects: projectaccess.NewFromORM(s.Repo.ORM()), Selections: store.NewChatSelectionExtStore(s.Repo.ORM()), Threads: threads.New(threads.Deps{Repo: s.Repo, Messages: store.NewMessageExtStore(s.Repo.ORM()), Senders: store.NewThreadExtStore(s.Repo.ORM())}), Temporal: s.Temporal, Runs: runs.New(runs.Deps{Repo: s.Repo, Workflows: store.NewWorkflowExtStore(s.Repo.ORM()), Questions: store.NewQuestionExtStore(s.Repo.ORM()), Temporal: s.Temporal, Pause: pause}), TaskQueue: launch.TaskQueue(taskQueue)})
+	triggerLauncher := launch.New(launch.Deps{Store: s.Repo, Workflows: store.NewWorkflowExtStore(s.Repo.ORM()), Worktrees: store.NewWorktreeExtStore(s.Repo.ORM()), ProjectRows: store.NewProjectExtStore(s.Repo.ORM()), Projects: projectaccess.NewFromORM(s.Repo.ORM()), Selections: store.NewChatSelectionExtStore(s.Repo.ORM()), Threads: threads.New(threads.Deps{Repo: s.Repo, Chats: chataccess.NewFromORM(s.Repo.ORM()), Messages: store.NewMessageExtStore(s.Repo.ORM()), Senders: store.NewThreadExtStore(s.Repo.ORM())}), Temporal: s.Temporal, Runs: runs.New(runs.Deps{Repo: s.Repo, Workflows: store.NewWorkflowExtStore(s.Repo.ORM()), Questions: store.NewQuestionExtStore(s.Repo.ORM()), Temporal: s.Temporal, Pause: pause}), TaskQueue: launch.TaskQueue(taskQueue)})
 
 	progress := &atomic.Int64{}
 	temporalWorker, _, err := workersetup.NewWorker(&workersetup.Config{
@@ -420,6 +421,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Logger:        slog.Default(),
 		Config:        &typedconfig.Config{},
 		Repo:          s.Repo,
+		Chats:         chataccess.NewFromORM(s.Repo.ORM()),
 		Workflows:     store.NewWorkflowExtStore(s.Repo.ORM()),
 		Worktrees:     store.NewWorktreeExtStore(s.Repo.ORM()),
 		ProjectRows:   store.NewProjectExtStore(s.Repo.ORM()),
@@ -441,6 +443,8 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Logger:    slog.Default(),
 		Config:    &typedconfig.Config{},
 		Repo:      s.Repo,
+		ChatRows:  store.NewChatExtStore(s.Repo.ORM()),
+		ChatViews: store.NewChatsWithActivityExtStore(s.Repo.ORM()),
 		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
 		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
 		Signals:   pause,
@@ -460,6 +464,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Logger:         slog.Default(),
 		Config:         &typedconfig.Config{},
 		Repo:           s.Repo,
+		Chats:          store.NewChatExtStore(s.Repo.ORM()),
 		Owners:         triggerOwners(t, s.Repo),
 		Firings:        store.NewTriggerEventExtStore(s.Repo.ORM()),
 		WebhookSecrets: store.NewTriggerExtStore(s.Repo.ORM()),

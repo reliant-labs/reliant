@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/changetools"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/chatupdates"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
@@ -388,6 +389,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Logger:        d.Logger,
 		Config:        d.Config,
 		Repo:          d.DB,
+		Chats:         chataccess.NewFromORM(d.DB.ORM()),
 		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
 		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
 		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
@@ -515,6 +517,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Logger:         d.Logger,
 		Config:         d.Config,
 		Repo:           repo,
+		Chats:          store.NewChatExtStore(repo.ORM()),
 		Firings:        store.NewTriggerEventExtStore(repo.ORM()),
 		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()),
 		Owners:         d.Owners,

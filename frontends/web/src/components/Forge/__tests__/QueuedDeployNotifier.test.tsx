@@ -119,6 +119,16 @@ describe("QueuedDeployNotifier", () => {
     expect(navigate).toHaveBeenCalledWith({ href: "/forge/p/hounders/environments/prod?env=prod" });
   });
 
+  it("never watches the forge tour's sample app, even when a reading of it lands in the app's cache", () => {
+    const { client } = setup();
+    act(() => {
+      client.setQueryData(forgeCloudKeys.liveView(null, "sample_shop"), { availability: "available", envs: [prod({ queued: true })], detail: "" });
+    });
+    expect(useQueuedDeployStore.getState().watched).toEqual({});
+    expect(useQueuedDeployStore.getState().observe("sample_shop", [prod({ queued: true })])).toEqual([]);
+    expect(useQueuedDeployStore.getState().watched).toEqual({});
+  });
+
   it("never notifies for an environment this session did not see queued", () => {
     const { reading } = setup();
     reading(prod({ observed: "converged" }));

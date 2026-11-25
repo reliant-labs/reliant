@@ -15,7 +15,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 )
 
-// controlPlaneEnv is every variable ControlPlaneConfig reads.
+// controlPlaneEnv is every variable ControlPlaneConfig reads, plus the two
+// removed aliases, so a test that sets one starts from a clean environment.
 var controlPlaneEnv = []string{"RELIANT_CONTROL_PLANE_URL", "CONTROL_PLANE_API_URL", "CONTROL_PLANE_BASE_URL", "INTERNAL_SERVICE_SECRET"}
 
 // controlPlaneRoles loads each server role's typed config the way its RunE
@@ -38,20 +39,18 @@ var controlPlaneRoles = map[string]func(*cobra.Command) (controlplane.Endpoint, 
 }
 
 // TestControlPlaneEnvContract pins that every server role reads the control
-// plane through ServerProcessConfig exactly as the six hand-written readers did:
-// RELIANT_CONTROL_PLANE_URL, else CONTROL_PLANE_API_URL, else
-// CONTROL_PLANE_BASE_URL (an empty one is unset), and INTERNAL_SERVICE_SECRET,
-// each trimmed. control-plane sets RELIANT_CONTROL_PLANE_URL on the api, the
-// worker and the gateway (dev host env, the gateway pod, lib/env.k), so that
-// name is a contract. The two older names still work, and say once at start
-// that they are deprecated.
+// plane through ServerProcessConfig: RELIANT_CONTROL_PLANE_URL (an empty one
+// is unset) and INTERNAL_SERVICE_SECRET, each trimmed. control-plane sets
+// RELIANT_CONTROL_PLANE_URL on the api, the worker and the gateway (dev host
+// env, the gateway pod, lib/env.k), so that name is a contract. The two older
+// names, CONTROL_PLANE_API_URL and CONTROL_PLANE_BASE_URL, were removed and
+// are not read.
 func TestControlPlaneEnvContract(t *testing.T) {
 	const notice = "is a deprecated name for RELIANT_CONTROL_PLANE_URL"
 	cases := []struct {
-		name       string
-		env        map[string]string
-		want       controlplane.Endpoint
-		wantNotice []string // deprecated names the process warns about
+		name string
+		env  map[string]string
+		want controlplane.Endpoint
 	}{
 		{name: "nothing set: self-hosted"},
 		{name: "RELIANT_CONTROL_PLANE_URL", env: map[string]string{"RELIANT_CONTROL_PLANE_URL": "http://admin-server:8090"},
@@ -61,16 +60,10 @@ func TestControlPlaneEnvContract(t *testing.T) {
 		{name: "secret alone is still self-hosted", env: map[string]string{"INTERNAL_SERVICE_SECRET": "s"},
 			want: controlplane.Endpoint{InternalServiceSecret: "s"}},
 		{name: "RELIANT_CONTROL_PLANE_URL empty is unset", env: map[string]string{"RELIANT_CONTROL_PLANE_URL": ""}},
-		{name: "CONTROL_PLANE_API_URL, deprecated", env: map[string]string{"CONTROL_PLANE_API_URL": "http://api"},
-			want: controlplane.Endpoint{URL: "http://api"}, wantNotice: []string{"CONTROL_PLANE_API_URL"}},
-		{name: "CONTROL_PLANE_BASE_URL, deprecated", env: map[string]string{"CONTROL_PLANE_BASE_URL": "http://base"},
-			want: controlplane.Endpoint{URL: "http://base"}, wantNotice: []string{"CONTROL_PLANE_BASE_URL"}},
-		{name: "empty primary falls through to an alias", env: map[string]string{"RELIANT_CONTROL_PLANE_URL": "", "CONTROL_PLANE_API_URL": "http://api"},
-			want: controlplane.Endpoint{URL: "http://api"}, wantNotice: []string{"CONTROL_PLANE_API_URL"}},
-		{name: "the primary outranks the aliases", env: map[string]string{"RELIANT_CONTROL_PLANE_URL": "http://primary", "CONTROL_PLANE_API_URL": "http://api", "CONTROL_PLANE_BASE_URL": "http://base"},
-			want: controlplane.Endpoint{URL: "http://primary"}, wantNotice: []string{"CONTROL_PLANE_API_URL", "CONTROL_PLANE_BASE_URL"}},
-		{name: "CONTROL_PLANE_API_URL outranks CONTROL_PLANE_BASE_URL", env: map[string]string{"CONTROL_PLANE_API_URL": "http://api", "CONTROL_PLANE_BASE_URL": "http://base"},
-			want: controlplane.Endpoint{URL: "http://api"}, wantNotice: []string{"CONTROL_PLANE_API_URL", "CONTROL_PLANE_BASE_URL"}},
+		{name: "CONTROL_PLANE_API_URL is not read", env: map[string]string{"CONTROL_PLANE_API_URL": "http://api"}},
+		{name: "CONTROL_PLANE_BASE_URL is not read", env: map[string]string{"CONTROL_PLANE_BASE_URL": "http://base"}},
+		{name: "the removed names do not override the primary", env: map[string]string{"RELIANT_CONTROL_PLANE_URL": "http://primary", "CONTROL_PLANE_API_URL": "http://api", "CONTROL_PLANE_BASE_URL": "http://base"},
+			want: controlplane.Endpoint{URL: "http://primary"}},
 	}
 	for role, load := range controlPlaneRoles {
 		for _, tc := range cases {
@@ -88,10 +81,7 @@ func TestControlPlaneEnvContract(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, tc.want, got)
 
-				for _, name := range tc.wantNotice {
-					assert.Contains(t, stderr.String(), name+" "+notice)
-				}
-				assert.Equal(t, len(tc.wantNotice), strings.Count(stderr.String(), notice), "one notice per deprecated name set:\n%s", stderr.String())
+				assert.NotContains(t, stderr.String(), notice)
 			})
 		}
 	}

@@ -37,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/agentruns"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/chatupdates"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
@@ -1127,6 +1128,7 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
+		Chats:          store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Rows:           store.NewWorktreeExtStore(g.Database().ORM()),
 		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
 		ProjectRows:    store.NewProjectExtStore(g.Database().ORM()),
@@ -1146,6 +1148,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Logger:        g.Log,
 		Config:        g.Cfg,
 		Repo:          g.Database(),
+		Chats:         chataccess.NewFromORM(g.Database().ORM()),
 		Workflows:     store.NewWorkflowExtStore(g.Database().ORM()),
 		Worktrees:     store.NewWorktreeExtStore(g.Database().ORM()),
 		ProjectRows:   store.NewProjectExtStore(g.Database().ORM()),
@@ -1201,6 +1204,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Logger:         g.Log,
 		Config:         g.Cfg,
 		Repo:           g.Database(),
+		Chats:          store.NewChatExtStore(g.Database().ORM()),
 		Owners:         g.Triggerowner(),
 		Firings:        store.NewTriggerEventExtStore(g.Database().ORM()),
 		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()),
@@ -1457,6 +1461,7 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Store:       g.Database(),
+		Chats:       chataccess.NewFromORM(g.Database().ORM()),
 		Accounts:    g.CredentialsProvideraccounts(),
 		Funding:     store.NewChatPersonalFundingExtStore(g.Database().ORM()),
 		ValidateKey: keyvalidate.Validate,
@@ -1479,6 +1484,8 @@ func (g *Graph) newQuestion() (*question.Service, error) {
 		Logger:    g.Log,
 		Config:    g.Cfg,
 		Repo:      g.Database(),
+		ChatRows:  store.NewChatExtStore(g.Database().ORM()),
+		ChatViews: store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Questions: store.NewQuestionExtStore(g.Database().ORM()),
 		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.chatUpdates()}),
 		Signals:   g.PauseService(),
@@ -1542,6 +1549,7 @@ func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		ChatRows:    store.NewChatExtStore(g.Database().ORM()),
 		Senders:     store.NewThreadExtStore(g.Database().ORM()),
 		Projects:    store.NewProjectExtStore(g.Database().ORM()),
 		SpawnCalls:  store.NewToolCallExtStore(g.Database().ORM()),

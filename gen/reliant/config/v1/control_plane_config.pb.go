@@ -33,8 +33,7 @@ const (
 // back to self-hosted.
 type ControlPlaneConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The control plane's base URL. control-plane sets RELIANT_CONTROL_PLANE_URL;
-	// the two older names are still read, after it, until nothing sets them.
+	// The control plane's base URL. control-plane sets RELIANT_CONTROL_PLANE_URL.
 	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
 	// The HMAC secret reliant signs internal-service tokens to the control plane
 	// with. Optional: a self-hosted deployment has none.
@@ -111,12 +110,10 @@ var File_reliant_config_v1_control_plane_config_proto protoreflect.FileDescripto
 
 const file_reliant_config_v1_control_plane_config_proto_rawDesc = "" +
 	"\n" +
-	",reliant/config/v1/control_plane_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\x99\x04\n" +
-	"\x12ControlPlaneConfig\x12\x9b\x01\n" +
-	"\x03url\x18\x01 \x01(\tB\x88\x01\x82\xce\x18\x83\x01\n" +
-	"\x19RELIANT_CONTROL_PLANE_URL*/Control-plane base URL; unset means self-hostedZ\x19\n" +
-	"\x15CONTROL_PLANE_API_URL\x10\x01Z\x1a\n" +
-	"\x16CONTROL_PLANE_BASE_URL\x10\x01R\x03url\x12\xac\x01\n" +
+	",reliant/config/v1/control_plane_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xdf\x03\n" +
+	"\x12ControlPlaneConfig\x12b\n" +
+	"\x03url\x18\x01 \x01(\tBP\x82\xce\x18L\n" +
+	"\x19RELIANT_CONTROL_PLANE_URL*/Control-plane base URL; unset means self-hostedR\x03url\x12\xac\x01\n" +
 	"\x17internal_service_secret\x18\x02 \x01(\tBt\x82\xce\x18p\n" +
 	"\x17INTERNAL_SERVICE_SECRET*QSecret for internal-service calls to the control plane (required when url is set)0\x01P\x01R\x15internalServiceSecret\x12\xb5\x01\n" +
 	"\x14managed_keys_per_org\x18\x03 \x01(\bB\x83\x01\x82\xce\x18\x7f\n" +

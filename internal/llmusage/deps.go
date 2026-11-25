@@ -44,6 +44,7 @@ type Ledger interface {
 	RecordLLMCallUsage(ctx context.Context, rec store.LLMCallUsageRecord) (bool, error)
 	PruneLLMCallUsage(ctx context.Context, cutoff time.Time, batch int) (int64, error)
 	PruneLLMUsagePurgeFences(ctx context.Context, now time.Time) (int64, error)
+	FoldLLMCallUsageIntoInsights(ctx context.Context, batch int) (int64, error)
 }
 
 // ToolLedger is the tool calls' ledger (tool_call_usage), which shares the
@@ -52,6 +53,7 @@ type Ledger interface {
 type ToolLedger interface {
 	RecordToolCallUsage(ctx context.Context, rec store.ToolCallUsageRecord) (bool, error)
 	PruneToolCallUsage(ctx context.Context, cutoff time.Time, batch int) (int64, error)
+	FoldToolCallUsageIntoInsights(ctx context.Context, batch int) (int64, error)
 }
 
 // TxRunner opens the transaction a ledger write runs in. *db.Repo satisfies it.
