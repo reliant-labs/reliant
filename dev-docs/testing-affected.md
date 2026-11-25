@@ -87,14 +87,18 @@ it, since the demo shares the console pages, hooks and stores.
 
 `-reach direct` (or `TEST_REACH=direct`) stops the Go fan-out after one hop:
 the changed packages and the packages that import one by name. The plan lists
-what it left out as `deferred`. The merge gate runs that mode
-(`dev-docs/merge-and-release-gates.md`). The default, `-reach all`, is the full
+what it left out as `deferred`. `-go-reach-cap N` gives it a transitive budget:
+when the packages `-reach all` would add number at most N, they are selected
+too (the plan's `go.reach` is then `all`, `go.reach_cap` N). The merge gate runs
+`-reach direct -go-reach-cap 20` (`MG_REACH_CAP`;
+`dev-docs/merge-and-release-gates.md`). The default, `-reach all`, is the full
 closure described below.
 
 **Reach.** `-reach all` (the default, `task test:affected`) runs every Go
 package whose test binary contains a change and every vitest file whose import
 closure does. `-reach direct` (the merge gate) runs the changed Go packages and
-their direct importers, and the vitest files within two import edges of a
+their direct importers (and, within `-go-reach-cap`, the rest of the closure),
+and the vitest files within two import edges of a
 changed module (one edge for a hub, a module more than 60 test files reach in
 two, and for every module when together they reach more than 150 at two:
 `web.edges`); the rest are listed in the plan as `deferred` and run in the release
@@ -267,7 +271,7 @@ release, the two gates run (`dev-docs/merge-and-release-gates.md`):
 
 | Gate | Go | Everything else |
 |---|---|---|
-| **merge** (`task ci:merge`) | this selector with `-reach direct`, `-short`, cached, no `-race`: the changed packages and their direct importers | the web and electron lanes this selector picks (a FULL web lane: the reached files), `go build ./...`, `forge lint --scope <changed dirs>` (the merge queue too), the demo build, the renderer's release build on a web dependency or build-config change, and the forge-generate / docs-generate / migration checks when their inputs changed |
+| **merge** (`task ci:merge`) | this selector with `-reach direct -go-reach-cap 20`, `-short`, cached, no `-race`: the changed packages and their direct importers, and the whole closure when it adds at most 20 | the web and electron lanes this selector picks (a FULL web lane: the reached files), `go build ./...`, a compile of every test package (`scripts/test-build.sh`), `forge lint --scope <changed dirs>` (the merge queue too), `forge lint --graph --closed-sets --proto-format` on every diff, the demo build, the renderer's release build on a web dependency or build-config change, and the forge-generate / docs-generate / migration checks when their inputs changed |
 | **release** (`task release:gate`) | `task test`: every package, `-race -count=1`, no `-short`, so every slow test runs; then `task test:integration` and `task test:e2e` | unscoped `forge lint` (golangci-lint, buf, the frontends), `go vet`, `task generate:check`, `task generate:docs:check` |
 
 Nothing the merge gate skips is deleted; it runs in the release gate, and a
