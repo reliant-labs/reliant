@@ -236,6 +236,8 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // The machine → org map (services/controlPlane/machineOrgs.ts).
   "controlPlane",
   "orgs-members",
+  // The org's policy document, the caller's usage against it, its denials.
+  "controlplane.v1.OrgPolicyService",
   "org-policy",
   // hooks/changes-queries.ts: the page's org, then ChangesService's reads.
   "changes",

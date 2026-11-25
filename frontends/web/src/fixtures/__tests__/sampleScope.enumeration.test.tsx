@@ -134,7 +134,6 @@ const PENDING_P4_1: Record<string, string> = {};
 /** The tour's pages in the shell (#3415's journey): each stop, and the trace and issue its steps open. */
 const SAMPLE = `/forge/p/${SAMPLE_APP}`;
 const TOUR_ROUTES = [
-  SAMPLE,
   `${SAMPLE}/observability/traces`,
   `${SAMPLE}/observability/traces?trace=${SAMPLE_ID_PREFIX}${DEMO_TRACE_ID}`,
   `${SAMPLE}/observability/graph`,
