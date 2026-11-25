@@ -2,6 +2,8 @@
 package db
 
 import (
+	"context"
+
 	"github.com/reliant-labs/reliant/internal/llmusage"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -28,6 +30,18 @@ type LLMOrgUsageDay = store.LlmOrgUsageDaily
 
 // OrgKeyModelUsage is the tokens one model used through an org's own API keys.
 type OrgKeyModelUsage = store.OrgKeyModelUsage
+
+// ChatLLMCall is one model call of a chat, as llm_call_usage holds it.
+type ChatLLMCall = store.LlmCallUsage
+
+// ChatLLMCallQuery selects a chat's model calls (ListChatLLMCalls).
+type ChatLLMCallQuery = store.ChatLLMCallQuery
+
+// ListChatLLMCalls is one chat's model calls, oldest first, for its
+// Trace/Cost tab. It does not decide who may read them: the caller has.
+func (r *Repo) ListChatLLMCalls(ctx context.Context, q ChatLLMCallQuery) ([]*ChatLLMCall, error) {
+	return store.ListChatLLMCalls(ctx, r.ORM(), q)
+}
 
 // OrgChatCall is one of an org's live chats' latest chat-turn model call.
 type OrgChatCall = store.OrgChatCall
