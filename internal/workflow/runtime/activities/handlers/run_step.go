@@ -64,6 +64,9 @@ type ExecuteRunStepInput struct {
 	// SaveMessage delegates the run node's save_message to the ActivityWrapper
 	// (see types.SaveMessageRequest). The handler never reads it.
 	SaveMessage *activitytypes.SaveMessageRequest `json:"save_message,omitempty" reliant:"-"`
+	// Observe hands the run node's observe: block to the ActivityWrapper (see
+	// types.ObserveRequest). The handler never reads it.
+	Observe *activitytypes.ObserveRequest `json:"observe,omitempty" reliant:"-"`
 }
 
 // ExecuteRunStepOutput is the output from ExecuteRunStep activity

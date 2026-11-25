@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
+import { useAuthIdentity } from '@/lib/auth/use-auth'
 import { useAuthStore } from '@/store/authStore'
 // The same-origin guard, shared: only relative paths are honored, so a crafted
 // `returnTo` cannot bounce the user to an attacker-controlled origin.
@@ -68,8 +69,8 @@ export function UpgradeAccount() {
   const navigate = useNavigate()
   const { returnTo } = useSearch({ from: '/upgrade' })
   const forClaim = isClaimReturnTo(returnTo)
+  const user = useAuthIdentity()
   const {
-    user,
     initialized,
     loading: authLoading,
     initialize,
@@ -97,7 +98,7 @@ export function UpgradeAccount() {
   // usable email. The anonymous flag flips the moment an identity links, but the
   // email only lands after the provider/OTP round-trip completes.
   const alreadyUpgraded = useMemo(
-    () => !!user && !user.is_anonymous && !!user.email,
+    () => !!user && !user.isAnonymous && !!user.email,
     [user],
   )
 
@@ -205,7 +206,7 @@ export function UpgradeAccount() {
   // an address, verify it via OTP, then persist it through the control-plane
   // UpdateBillingEmail RPC. Verification gates the RPC so the billing email is
   // trustworthy. On success we honor returnTo just like the happy path.
-  if (user && !user.is_anonymous && !user.email) {
+  if (user && !user.isAnonymous && !user.email) {
     return (
       <AuthLayout>
         <div className="p-8 space-y-6">

@@ -68,7 +68,8 @@ vi.mock("../../../store/tourStore", () => ({
 // per-user state (see OnboardingWizard.authGate.test.tsx). This suite is about
 // the starter-picker gate, so sign a user in and let that gate be the variable.
 vi.mock("../../../store/authStore", () => {
-  const authState = { user: { id: "user-1" } };
+  // identity: what the real store derives from user on every write.
+  const authState = { user: { id: "user-1" }, identity: { id: "user-1" } };
   return {
     useAuthStore: Object.assign(
       (selector?: any) => (selector ? selector(authState) : authState),

@@ -15,6 +15,8 @@ import { AuthLayout, AuthHeader, AuthError, AuthDivider, AuthLegalLinks } from '
 import { devSignInEnabled } from '@/lib/devSignIn'
 import { DevSignInPanel } from './DevSignInPanel'
 import { homePath, projectsPath } from '@/lib/paths'
+import { isForgeAuth } from '@/lib/auth/forge-api'
+import { ForgeSignIn } from './Auth/forge/ForgeSignIn'
 
 /**
  * Sign in with an emailed code. One path for everyone, new or returning.
@@ -63,7 +65,16 @@ type Phase =
   | 'password'
   | 'forgot-password'
 
+/**
+ * `/auth`. With forge sign-in (AUTH_PROVIDER "forge") the login broker's
+ * screen (Auth/forge/ForgeSignIn); otherwise the Supabase screen below,
+ * unchanged.
+ */
 export function AuthScreen() {
+  return isForgeAuth() ? <ForgeSignIn /> : <SupabaseAuthScreen />
+}
+
+function SupabaseAuthScreen() {
   const [phase, setPhase] = useState<Phase>('email')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

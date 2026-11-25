@@ -71,6 +71,7 @@ import { reportError, reportFailure, reportTypedFailure } from "../lib/errorRepo
 import { noteRpcFailureDecided } from "../lib/handledRpcFailures";
 import { logger } from "../lib/logger";
 import { getAuthTokenProvider } from "./authProvider";
+import { isForgeAuth } from "../lib/auth/forge-api";
 import { upgradeInterceptor } from "./upgradeInterceptor";
 import { orgInterceptor } from "./orgInterceptor";
 import { signupAttributionInterceptor } from "./signupAttribution";
@@ -172,7 +173,8 @@ const authInterceptor: Interceptor = runtimeAuthInterceptor({
 // token is the one worth a line — it names the attach miss that precedes a
 // spurious 401 (see unauthInterceptor) — so reliant keeps it, right after.
 const missingTokenInterceptor: Interceptor = (next) => async (req) => {
-  if (!req.header.has("Authorization")) {
+  // forge mode sends no token by design: the session cookie is the credential.
+  if (!req.header.has("Authorization") && !isForgeAuth()) {
     logger.warn("[gRPC Client] No auth token available for request:", {
       method: req.method.name,
       isElectron: typeof window !== "undefined" ? !!window.electronAPI : false,
@@ -737,9 +739,49 @@ async function runRecovery(
   return { kind: "signed-out" };
 }
 
+/**
+ * forge mode's recovery from a 401 that carried the session cookie.
+ *
+ * Only the login broker can say whether the cookie still names a session, so
+ * it is asked (GET /auth/session, through the store so a different subject is
+ * a transition like any other). Still signed in: the 401 was this RPC's own
+ * refusal, and the user stays signed in ("kept"). A server that does
+ * not read the cookie yet (a control plane before cp R3) also lands here, and
+ * must never sign anyone out. Signed out: the session ended (expired, revoked,
+ * signed out elsewhere) and the page follows it to the sign-in screen, as the
+ * bearer path does. Concurrent 401s share one question.
+ */
+let _cookieRecovery: Promise<RecoveryOutcome> | null = null;
+
+function recoverFromRejectedCookie(
+  req: { service: { typeName: string }; method: { name: string } },
+): Promise<RecoveryOutcome> {
+  _cookieRecovery ??= (async (): Promise<RecoveryOutcome> => {
+    const { useAuthStore } = await import("../store/authStore");
+    const wasSignedIn = useAuthStore.getState().identity !== null;
+    await useAuthStore.getState().refreshSession();
+    if (useAuthStore.getState().identity !== null) return { kind: "kept" };
+    if (!wasSignedIn) return { kind: "no-session" };
+    logger.warn("[gRPC Client] the sign-in session ended; signing out", {
+      service: req.service.typeName,
+      method: req.method.name,
+    });
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/auth")) {
+      window.location.href = authPath();
+    }
+    return { kind: "signed-out" };
+  })().finally(() => {
+    window.setTimeout(() => {
+      _cookieRecovery = null;
+    }, RECOVERY_REUSE_MS);
+  });
+  return _cookieRecovery;
+}
+
 /** Test seam: forget any recovery in progress or remembered. */
 export function resetAuthRecoveryForTests(): void {
   _recovery = null;
+  _cookieRecovery = null;
 }
 
 // A 401 proves our SESSION is bad only if we actually presented a credential.
@@ -773,6 +815,15 @@ const unauthInterceptor: Interceptor = (next) => async (req) => {
     }
 
     const presented = req.header.get(AUTH_HEADER);
+
+    // forge mode: the request carried the session cookie, not a token.
+    // The server refreshes the tokens behind the cookie itself (forge session
+    // refresh-on-use), so there is nothing to retry with: this only decides
+    // whether the session ended.
+    if (!presented && isForgeAuth()) {
+      await recoverFromRejectedCookie(req);
+      throw error;
+    }
 
     // The auth interceptor logs nothing on the happy path (it ran per-RPC and
     // dominated the dev log), so this is the only place that records whether a

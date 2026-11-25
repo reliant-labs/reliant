@@ -36,9 +36,13 @@ type MockUser = { is_anonymous?: boolean } | null;
 const authState = vi.hoisted(() => ({ user: null as MockUser }));
 
 vi.mock("@/store/authStore", () => {
-  const useAuthStore = (selector: (s: { user: MockUser }) => unknown) =>
-    selector({ user: authState.user });
-  useAuthStore.getState = () => ({ user: authState.user });
+  // The real store derives identity from user on every write.
+  const state = () => ({
+    user: authState.user,
+    identity: authState.user ? { id: "u1", isAnonymous: authState.user.is_anonymous === true } : null,
+  });
+  const useAuthStore = (selector: (s: ReturnType<typeof state>) => unknown) => selector(state());
+  useAuthStore.getState = state;
   return { useAuthStore };
 });
 

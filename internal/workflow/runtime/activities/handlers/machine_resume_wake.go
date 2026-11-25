@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -102,7 +104,7 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 	if input.ToolsKnown && !anyNeedsMachine(input.ToolNames) {
 		return MachineResumeWakeOutput{Ready: true}, nil
 	}
-	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 	if err != nil {
 		return MachineResumeWakeOutput{}, fmt.Errorf("loading chat for the resume wake: %w", err)
 	}

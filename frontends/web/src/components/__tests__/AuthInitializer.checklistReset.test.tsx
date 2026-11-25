@@ -71,16 +71,25 @@ vi.mock("@/services/settingsSync", () => ({
 }));
 
 import { AuthInitializer } from "../AuthInitializer";
+import { identityOf } from "@/lib/auth/identity";
 
-const signedIn = {
+// The real store derives `identity` from `user` on every write.
+const withIdentity = <T extends { user: { id: string; email: string } | null }>(state: T) => ({
+  ...state,
+  identity: identityOf(state.user as never),
+});
+
+const signedIn = withIdentity({
   initialize: vi.fn(async () => undefined),
-  user: { id: "user-1", email: "a@example.com" },
-  session: { access_token: "t" },
+  signOut: vi.fn(async () => undefined),
+  authError: null,
+  user: { id: "user-1", email: "a@example.com" } as { id: string; email: string } | null,
+  session: { access_token: "t" } as { access_token: string } | null,
   loading: false,
   initialized: true,
-};
+});
 
-const signedOut = { ...signedIn, user: null, session: null };
+const signedOut = withIdentity({ ...signedIn, user: null, session: null });
 
 describe("AuthInitializer checklist reset on sign-out", () => {
   beforeEach(() => {
@@ -127,11 +136,11 @@ describe("AuthInitializer checklist reset on sign-out", () => {
     expect(checklistReset).not.toHaveBeenCalled();
     expect(resetApiKeyCheck).not.toHaveBeenCalled();
 
-    authState = {
+    authState = withIdentity({
       ...signedIn,
       user: { id: "user-2", email: "b@example.com" },
       session: { access_token: "t2" },
-    };
+    });
     rerender(
       <AuthInitializer>
         <div />

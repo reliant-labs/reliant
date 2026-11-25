@@ -123,6 +123,11 @@ type LLMCallUsageRecord struct {
 	// ProviderRequestID is the request id the provider answered with, the
 	// span's gen_ai.response.id; "" (NULL) when it sent none.
 	ProviderRequestID string
+	// GatewayCallID is the LLM gateway's id for the call (x-litellm-call-id,
+	// the span's reliant.gateway.call_id), which control-plane's wallet
+	// ledger stores as its provider_request_id; "" (NULL) when the call did
+	// not go through the gateway.
+	GatewayCallID string
 	// TTFTMs is the time from the request to its first output token; nil
 	// when no token arrived.
 	TTFTMs *int64
@@ -189,9 +194,9 @@ func RecordLLMCallUsage(ctx context.Context, db orm.Context, rec LLMCallUsageRec
 	res, err := db.Bun().NewRaw(`INSERT INTO llm_call_usage (id, user_id, org_id, chat_id, run_id, provider, model, auth_mode, purpose,
 		input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, outcome, error_class, latency_ms, attempt, created_at,
 		account_id, funding, workflow_id, thread_id, workflow_name, node_id, preset, project_id, ai_run_id, ai_root_run_id,
-		provider_request_id, ttft_ms, cost_usd_nanos, cost_basis, insights_folded, funding_org_id)
+		provider_request_id, ttft_ms, cost_usd_nanos, cost_basis, insights_folded, funding_org_id, gateway_call_id)
 		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19,
-		?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, true, ?32)
+		?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, true, ?32, ?33)
 		ON CONFLICT (id, attempt) DO NOTHING`,
 		rec.ID, rec.UserID, rec.OrgID, rec.ChatID, rec.RunID, rec.Provider, rec.Model, rec.AuthMode, rec.Purpose,
 		rec.InputTokens, rec.OutputTokens, rec.CacheReadTokens, rec.CacheWriteTokens, rec.Outcome, rec.ErrorClass,
@@ -199,7 +204,7 @@ func RecordLLMCallUsage(ctx context.Context, db orm.Context, rec LLMCallUsageRec
 		emptyToNil(rec.WorkflowID), emptyToNil(rec.ThreadID), emptyToNil(rec.WorkflowName), emptyToNil(rec.NodeID),
 		emptyToNil(rec.Preset), emptyToNil(rec.ProjectID), emptyToNil(rec.AIRunID), emptyToNil(rec.AIRootRunID),
 		emptyToNil(rec.ProviderRequestID), rec.TTFTMs, rec.CostUSDNanos, emptyToNil(rec.CostBasis),
-		emptyToNil(rec.FundingOrgID)).Exec(ctx)
+		emptyToNil(rec.FundingOrgID), emptyToNil(rec.GatewayCallID)).Exec(ctx)
 	if err != nil {
 		return false, fmt.Errorf("insert llm call usage %s: %w", rec.ID, err)
 	}

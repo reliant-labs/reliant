@@ -9,7 +9,7 @@
 
 import type { OrgLLMUsageGroupBy } from "../gen/reliant/v1/org_usage_pb";
 import { hasControlPlane } from "../services/controlPlane/config";
-import { useAuthStore } from "../store/authStore";
+import { useAuthIdentity } from "@/lib/auth/use-auth";
 import { useGetOrgLLMUsage } from "./org-usage-service-hooks_gen";
 
 export interface OrgLLMUsageQuery {
@@ -20,7 +20,7 @@ export interface OrgLLMUsageQuery {
 }
 
 export function useOrgLLMUsage({ orgId, groupBy, startDate, endDate }: OrgLLMUsageQuery) {
-  const signedIn = useAuthStore((s) => s.user !== null);
+  const signedIn = useAuthIdentity() !== null;
   return useGetOrgLLMUsage(
     { orgId: orgId ?? "", groupBy, startDate, endDate },
     { enabled: hasControlPlane && signedIn && !!orgId, staleTime: 60_000, retry: false },
