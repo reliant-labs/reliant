@@ -13,9 +13,9 @@ import (
 )
 
 // What a later command needs to know. Nothing reinstalls a stripped
-// node_modules on its own except forge's dev loop (`forge env up`, `forge
-// generate` and `forge lint` install a frontend's dependencies when its
-// node_modules is missing). Any other command (`npm test`, `npx vitest`,
+// node_modules on its own except forge's dev loop (`forge env up` and
+// `forge generate` install a frontend's dependencies when its node_modules
+// is missing; `forge lint` does only with `--install`). Any other command (`npm test`, `npx vitest`,
 // `tsc`) fails with "Cannot find module" or "command not found", which reads
 // like a broken checkout. So every removal is recorded per directory, and a
 // command that fails in one whose removed directories are still missing gets
@@ -172,7 +172,7 @@ func (r *Records) Note(workingDir string) string {
 	return fmt.Sprintf("Note: Reliant removed %s%s on %s, after %s unused, to free disk space. "+
 		"If this command failed on a missing module or tool, reinstall the dependencies with the project's package manager "+
 		"(npm ci, pnpm install --frozen-lockfile, yarn install, cargo build) in that directory; "+
-		"forge env up, forge generate and forge lint reinstall a frontend's node_modules themselves.",
+		"forge env up and forge generate reinstall a frontend's node_modules themselves, and forge lint does with --install.",
 		strings.Join(names, ", "), more, at.UTC().Format("2006-01-02"), idle)
 }
 
