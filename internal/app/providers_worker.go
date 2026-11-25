@@ -35,6 +35,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
@@ -764,9 +765,11 @@ func (a *AccountRecorder) Close(context.Context) error {
 type TemporalWorkerDeps struct {
 	// Checks is the record-only workflowcheck the fire and run activities
 	// report to; the WorkflowCheckSyncer writes GitHub.
-	Checks           *RecordOnlyChecks
-	ConnectionVault  connectionvault.Service
-	DB               *db.Repo
+	Checks          *RecordOnlyChecks
+	ConnectionVault connectionvault.Service
+	DB              *db.Repo
+	// Updates writes refetch signals and publishes them to the hubs.
+	Updates          chatupdates.Service
 	ProviderAccounts provideraccounts.Service
 	OrgAccounts      orgaccounts.Service
 	Temporal         *TemporalClient
@@ -827,10 +830,10 @@ func stepKeyIssuer(d TemporalWorkerDeps) handlers.StepKeyIssuer {
 
 // projectMoveAnnouncer is orgmove's Announcer: one refetch for the project's
 // owner, written in the commit's own transaction (the ctx it is called with).
-type projectMoveAnnouncer struct{ repo *db.Repo }
+type projectMoveAnnouncer struct{ updates chatupdates.Service }
 
 func (a projectMoveAnnouncer) AnnounceProjectMoved(ctx context.Context, ownerUserID, projectID string) error {
-	return a.repo.EmitUserRefetch(ctx, ownerUserID, db.RefetchProjectOrgMoved, db.RefetchOpts{ProjectID: &projectID})
+	return a.updates.EmitUserRefetch(ctx, ownerUserID, core.RefetchProjectOrgMoved, core.RefetchOpts{ProjectID: &projectID})
 }
 
 // orgMembers is the resolver as orgmove's Members, nil for a deployment with
@@ -851,6 +854,8 @@ type OrgMovesDeps struct {
 	// (orgmove's ResumeTriggers step).
 	Triggers   *WorkerTrigger
 	Membership *orgs.Resolver
+	// Updates announces the move to the owner's clients.
+	Updates chatupdates.Service
 }
 
 // NewOrgMoves is the steps of a project's move to another org on this
@@ -872,7 +877,7 @@ func NewOrgMoves(d OrgMovesDeps) (orgmove.Service, error) {
 		Logger:       slog.Default(),
 		Store:        store.NewProjectOrgMoveExtStore(o),
 		Projects:     store.NewProjectExtStore(o),
-		Announcer:    projectMoveAnnouncer{repo: d.DB},
+		Announcer:    projectMoveAnnouncer{updates: d.Updates},
 		ControlPlane: d.Router.ControlPlane,
 		Triggers:     d.Triggers.Service,
 		Members:      orgMembers(d.Membership),

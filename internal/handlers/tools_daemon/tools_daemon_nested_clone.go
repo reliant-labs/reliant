@@ -239,7 +239,7 @@ func (s *Service) cloneNestedReposAsync(ctx context.Context, conn *daemonConnect
 		}()
 		for {
 			if pass.runPass(runCtx) {
-				if err := s.deps.Repo.EmitUserRefetch(runCtx, conn.userID, db.RefetchFileTree, db.RefetchOpts{ProjectID: &projectID}); err != nil {
+				if err := s.deps.Refetch.EmitUserRefetch(runCtx, conn.userID, db.RefetchFileTree, db.RefetchOpts{ProjectID: &projectID}); err != nil {
 					logging.WarnContext(runCtx, LOG_PREFIX_TOOLS_DAEMON+" nested clones: could not tell clients the checkout settled",
 						"error", err, "projectID", projectID, "daemonID", conn.daemonID)
 				}
