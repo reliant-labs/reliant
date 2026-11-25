@@ -57399,6 +57399,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/chataccess.Service",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "LocalModels",
       "interface": "github.com/reliant-labs/reliant/internal/llm/drivers/local.Directory",
       "methods": [],
@@ -59200,6 +59211,17 @@
       ],
       "providers": [
         "Chat"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "ProviderAccount",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/chataccess.Service",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },

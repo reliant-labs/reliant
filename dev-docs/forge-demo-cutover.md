@@ -21,9 +21,14 @@ The public demo leads bare `/` visits to the Home, `/forge/demo?section=home`: a
 hero with "Open the console", "Take the tour" and "How this shop was built", four
 numbered stories, and the agent workflows. The build story, with the real recorded
 Forge run, is `/forge/demo?section=built`. `/forge/p/shop` opens the running sample
-console directly; individual-page deep links remain direct. The smoke script checks
-the Home, then enters the console through "Open the console" and clicks every row of
-its grouped nav.
+console directly; individual-page deep links remain direct. Every page, the Home
+included, renders inside the signed-in app's own shell (`AppShellFrame`, since #3519)
+with the demo's nav (`Forge/Demo/demoNav.ts`): the app's own rows in the app's order,
+less the app's Inbox, Agents, Settings and billing, plus Home and "How it was built".
+There is one shell and one nav (after #3574, which deletes the console's second
+frame, `ConsoleShell`, and its grouped nav). The smoke script checks the Home, then enters
+the console through "Open the console" and clicks every row of the shell's nav,
+Observability's drill-in included.
 The cutover steps below describe the original hosting migration.
 
 ## What changes
@@ -95,7 +100,9 @@ node frontends/web/scripts/demo/smoke-demo-site.mjs https://demo.reliantlabs.io
 ```
 
 The smoke script loads `/`, the build story and 19 console pages in headless Chrome,
-then walks the grouped nav at desktop and phone widths. It exits 1 on any of these:
+then walks the shell's nav at desktop and phone widths (on a phone, the shell's drawer,
+opened by the page header's toggle; Observability is a drill-in, left by its "‹ Back").
+It exits 1 on any of these:
 
 - a request to another origin, or a 4xx/5xx response;
 - a page error, or a CORS console error;
@@ -104,7 +111,7 @@ then walks the grouped nav at desktop and phone widths. It exits 1 on any of the
 - the nav missing a group (the signed-in app's Observability, Analytics, Deployments,
   Tests, Security, Configure) or row, a dead nav item, or an item leading to a page
   the demo does not serve (Usage, Speed insights);
-- a page without `data-shell="demo"`;
+- a page without `data-shell="demo"`, or outside the app's shell (no `[data-testid=shell-nav]`);
 - Data or Storage on prod (the demo's audited environment) not asking for a
   reason, reading before it is given, or not reading after it.
 
