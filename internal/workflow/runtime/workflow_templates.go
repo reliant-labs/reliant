@@ -259,6 +259,9 @@ func ResolveAndParseWorkflow(yamlData []byte, inputs map[string]interface{}, wor
 	if err := yaml.Unmarshal(yamlData, &raw); err != nil {
 		return nil, fmt.Errorf("failed to parse workflow YAML: %w", err)
 	}
+	// A definition recorded before requires.cli_login and llm_gateway were
+	// removed still parses on replay (removed_definition_keys.go).
+	dropRemovedDefinitionKeys(raw)
 
 	// Resolve all templates
 	resolved, err := ResolveWorkflowTemplates(raw, inputs, workflowCtx)

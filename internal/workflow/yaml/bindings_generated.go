@@ -206,7 +206,6 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"command":            {},
 			"credentials":        {},
 			"env":                {},
-			"llm_gateway":        {},
 			"log_file":           {},
 			"work_dir":           {},
 			"writable_checkouts": {},

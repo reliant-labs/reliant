@@ -5,7 +5,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -84,15 +83,6 @@ type ToolRequest struct {
 	// rctx.ToolContext.RunStep and lets the node's own timeout bound the
 	// command instead of the model's 10-minute cap.
 	RunStep bool
-
-	// RunStepEnv is a run step's own environment: the variables of an LLM
-	// gateway step key (a run node's llm_gateway). Only the run-step executor
-	// sets it, and it travels only with RunStep, in the server-built context
-	// map (RunStepEnvContextKey), never in ToolInput, so nothing a model
-	// writes can set it. The machine's shell tool applies it to that one
-	// command and redacts its secrets from the output; the executor sends it
-	// only to a daemon that registered daemon.CapabilityRunStepEnv.
-	RunStepEnv *daemon.StepEnv
 
 	// RequestID is the transport id the daemon knows this call by (its result
 	// subject, its outbox entry, the key tool.status answers for). Empty mints
