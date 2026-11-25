@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -44,7 +43,7 @@ func newTestHelper(t *testing.T) *testHelper {
 	// ID would collide (chats_pkey) across every test function that builds a helper.
 	h.chatID = h.createChat("")
 
-	h.svc = New(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	h.svc = New(Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	return h
 }
 

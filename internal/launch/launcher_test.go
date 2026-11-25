@@ -13,7 +13,6 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 
-	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -192,7 +191,7 @@ func newTestLauncher(t *testing.T, repo launchTestStore, starter *fakeStarter) (
 	t.Helper()
 	recorder := &recordingRunRecorder{repo: repo}
 	projects := projectsOf(repo)
-	return New(Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projects, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: recorder, TaskQueue: "test-task-queue"}), recorder
+	return New(Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projects, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: recorder, TaskQueue: "test-task-queue"}), recorder
 }
 
 // chatStartEvent is what an interactive first send produces.
@@ -540,7 +539,7 @@ func pendingBranch(t *testing.T, repo *db.Repo, ctx context.Context, projectID, 
 		WorktreeID: &worktreeID, WorkflowName: &workflowName, WorkflowID: &chatID,
 		State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	_, _, _, err := threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
+	_, _, _, err := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: chatID, ChatID: chatID, WorkflowName: workflowName, Thread: chatID,
 			Status: db.Pending(), CreatedAt: now, OwnerUserID: ptr(launchTestUserID),

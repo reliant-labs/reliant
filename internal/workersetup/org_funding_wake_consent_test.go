@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 
@@ -125,7 +124,7 @@ func newOrgFundingWorld(t *testing.T) *orgFundingWorld {
 
 	var suite temporaltest.WorkflowTestSuite
 	w.env = suite.NewTestActivityEnvironment()
-	w.activity = handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: repo, Mailbox: store.NewAgentMessageExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Chats: chataccess.NewFromORM(repo.ORM()), Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Spawns: store.NewToolCallExtStore(repo.ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: emptyConfig{}, DriverResolver: nil, MCPBinder: nil}).WithAccountRouting(routing)
+	w.activity = handlers.NewCallLLMActivity(handlers.CallLLMDeps{Store: repo, Mailbox: store.NewAgentMessageExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Spawns: store.NewToolCallExtStore(repo.ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: emptyConfig{}, DriverResolver: nil, MCPBinder: nil}).WithAccountRouting(routing)
 	w.env.RegisterActivity(w.activity.Execute)
 	w.input = types.ActivityInput{
 		Runtime: types.RuntimeContext{ChatID: w.chatID, Thread: w.chatID},

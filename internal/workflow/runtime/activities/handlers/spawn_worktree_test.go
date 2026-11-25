@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -35,7 +34,7 @@ func newSpawnWorktreeFixture(t *testing.T) *spawnWorktreeFixture {
 	return &spawnWorktreeFixture{
 		activityPlacementFixture: f,
 		chatID:                   f.chat(t, ""),
-		activity:                 NewCreateWorkflowWithThreadActivity(threads.New(threads.Deps{Repo: f.repo, Chats: chataccess.NewFromORM(f.repo.ORM()), Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), f.repo, workflowRunsOf(f.repo)),
+		activity:                 NewCreateWorkflowWithThreadActivity(threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), f.repo, workflowRunsOf(f.repo)),
 	}
 }
 

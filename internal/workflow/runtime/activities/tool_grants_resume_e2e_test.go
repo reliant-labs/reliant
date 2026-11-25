@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -237,7 +236,7 @@ func newGrantsWorker(t *testing.T, env *testsuite.TestWorkflowEnvironment, repo 
 
 	deps := &Activities{
 		Repo:           repo,
-		Threads:        threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}),
+		Threads:        threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}),
 		ToolsFactory:   tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo}),
 		ToolExecutor:   executor,
 		ConfigProvider: emptyConfigProvider{},

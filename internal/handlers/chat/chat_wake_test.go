@@ -13,7 +13,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -58,7 +57,7 @@ func newAttendedSendFixture(t *testing.T, wakeErr error) (*Service, *wakeRecordi
 	router := &wakeRecordingRouter{Recorder: &toolexectest.Recorder{}, err: wakeErr}
 	svc := &Service{
 		deps: Deps{
-			Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()),
+			Repo:        repo,
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()),

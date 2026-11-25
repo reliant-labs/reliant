@@ -14,7 +14,6 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
-	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -45,7 +44,7 @@ func TestSendMessage_PendingChatIsRejected(t *testing.T) {
 	}
 	service := &Service{
 		deps: Deps{
-			Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()),
+			Repo:        repo,
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()),
@@ -108,7 +107,7 @@ func TestChatProto_CarriesRootWorkflowState(t *testing.T) {
 			temporal := &absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING}
 			service := &Service{
 				deps: Deps{
-					Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()),
+					Repo:        repo,
 					Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 					Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 					ProjectRows: store.NewProjectExtStore(repo.ORM()),

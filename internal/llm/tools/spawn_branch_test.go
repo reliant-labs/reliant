@@ -11,7 +11,6 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
-	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
@@ -48,7 +47,7 @@ func saveFixtureMessage(t *testing.T, repo *db.Repo, ctx context.Context, chatID
 		})
 		require.NoError(t, cwErr)
 	}
-	result, err := threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}).SaveMessage(ctx, threads.SaveMessageOpts{
+	result, err := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}).SaveMessage(ctx, threads.SaveMessageOpts{
 		ChatID:  chatID,
 		Thread:  threadID,
 		Role:    int32(role),
@@ -111,7 +110,7 @@ func seedBranchedSpawnFixture(t *testing.T, repo *db.Repo, ctx context.Context) 
 	branchChatID := uuid.New().String()
 	createTestChat(t, repo, branchChatID)
 	f.branchThreadID = branchChatID
-	_, _, _, err = threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
+	_, _, _, err = threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: branchChatID, ChatID: branchChatID, WorkflowName: "builtin://agent",
 			Thread: branchChatID, Status: db.Pending(), CreatedAt: time.Now(),

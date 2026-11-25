@@ -122,7 +122,7 @@ func TestPauseChat_CancelsToolsBeforeSignalingWorkflow(t *testing.T) {
 
 	service := &Service{
 		deps: Deps{
-			Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()),
+			Repo:        repo,
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()),

@@ -198,9 +198,29 @@ type Service struct {
 	pinnerImpl *daemonplacement.Pinner
 }
 
+// fixtureChats is nil in every binary, so production must supply
+// Deps.Chats: validateDeps refuses a nil one, and the composition root's
+// wiring is held to it by internal/app's TestChatAccessIsWired. Only this
+// package's tests set it (chats_fixture_test.go), so the many fixtures that
+// build a Service over a repository without naming Chats read chats through
+// that repository (chataccesstest.For) instead of each wiring it by hand.
+var fixtureChats func(Repository) chataccess.Service
+
+// chats is Deps.Chats; in this package's tests, a fixture that left it nil
+// gets the one fixtureChats builds over its repository.
+func (s *Service) chats() chataccess.Service {
+	if s.deps.Chats == nil && fixtureChats != nil {
+		return fixtureChats(s.deps.Repo)
+	}
+	return s.deps.Chats
+}
+
 // New creates a new chat service instance with the supplied Deps.
 // Returns an error when validateDeps rejects a nil required field.
 func New(deps Deps) (*Service, error) {
+	if deps.Chats == nil && fixtureChats != nil {
+		deps.Chats = fixtureChats(deps.Repo)
+	}
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
 	}

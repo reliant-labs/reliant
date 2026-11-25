@@ -16,7 +16,6 @@ import (
 	"golang.org/x/image/bmp"
 
 	"github.com/reliant-labs/reliant/internal/attachment"
-	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	dbstore "github.com/reliant-labs/reliant/internal/store"
@@ -211,7 +210,7 @@ func TestToolResultImageReachesTheNextPrompt(t *testing.T) {
 	thread := chatID
 	h.CreateTestUserMessage(ctx, chatID, thread)
 
-	save := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())})})
+	save := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())})})
 	const callID = "toolu_view_1"
 	var assistantOut SaveMessageOutput
 	require.NoError(t, h.ExecuteActivity(save.Execute, &SaveMessageInput{

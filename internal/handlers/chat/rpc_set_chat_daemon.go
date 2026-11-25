@@ -28,7 +28,7 @@ func (s *Service) SetChatDaemon(
 
 	// Get chat and verify ownership: the row is enough here, the response
 	// re-reads the whole chat after the write.
-	chat, err := s.deps.Chats.GetChatRowWithUserCheck(ctx, req.Msg.ChatId, userID)
+	chat, err := s.chats().GetChatRowWithUserCheck(ctx, req.Msg.ChatId, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

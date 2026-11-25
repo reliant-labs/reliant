@@ -25,7 +25,7 @@ func (s *Service) AttachProjectToChat(
 	if projectID == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
-	chat, err := s.deps.Chats.GetChatWithUserCheck(ctx, chatID, userID)
+	chat, err := s.chats().GetChatWithUserCheck(ctx, chatID, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

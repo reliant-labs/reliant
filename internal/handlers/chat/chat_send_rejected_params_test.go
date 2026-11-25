@@ -19,7 +19,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	llmdrivers "github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
@@ -105,7 +104,7 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 			}
 			service := &Service{
 				deps: Deps{
-					Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()),
+					Repo:        repo,
 					Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 					Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 					ProjectRows: store.NewProjectExtStore(repo.ORM()),

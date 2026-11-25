@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -53,7 +52,7 @@ func TestCreateWorkflowWithThread_NewThread(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create threads service and activity
-	threadsService := threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	threadsService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo, workflowRunsOf(repo))
 
 	// Use Temporal test suite to provide proper activity context
@@ -134,7 +133,7 @@ func TestCreateWorkflowWithThread_ForkedThread(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create parent thread using threads service
-	threadsService := threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	threadsService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	parentThread, parentCW, err := threadsService.CreateThread(ctx, threads.CreateThreadOpts{
 		ChatID: chatID,
 	})
@@ -216,7 +215,7 @@ func TestCreateWorkflowWithThread_ChildWorkflow(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create threads service and activity
-	threadsService := threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	threadsService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 
 	// Create parent workflow first (required for FK constraint)
 	parentWorkflowID := uuid.New().String()
@@ -280,7 +279,7 @@ func TestCreateWorkflowWithThread_MissingWorkflowID(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
-	threadsService := threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	threadsService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo, workflowRunsOf(repo))
 
 	suite := &temporaltest.WorkflowTestSuite{}
@@ -304,7 +303,7 @@ func TestCreateWorkflowWithThread_MissingWorkflowName(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
-	threadsService := threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	threadsService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo, workflowRunsOf(repo))
 
 	suite := &temporaltest.WorkflowTestSuite{}
@@ -328,7 +327,7 @@ func TestCreateWorkflowWithThread_MissingChatID(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
-	threadsService := threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	threadsService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo, workflowRunsOf(repo))
 
 	suite := &temporaltest.WorkflowTestSuite{}
@@ -384,7 +383,7 @@ func TestCreateWorkflowWithThread_AnnouncesSpawnThreadAtCreation(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}))
 
-	threadsService := threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	threadsService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	parentWorkflowID := uuid.New().String()
 	_, _, _, err := threadsService.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
@@ -483,7 +482,7 @@ func TestCreateWorkflowWithThread_DoesNotAnnounceRootThread(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}))
 
-	threadsService := threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	threadsService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo, workflowRunsOf(repo))
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
@@ -539,7 +538,7 @@ func TestCreateWorkflowWithThread_DefaultThreadID(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create threads service and activity
-	threadsService := threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	threadsService := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo, workflowRunsOf(repo))
 
 	suite := &temporaltest.WorkflowTestSuite{}

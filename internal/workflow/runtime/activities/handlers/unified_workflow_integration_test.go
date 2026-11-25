@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -146,7 +145,7 @@ func TestUnifiedWorkflow_SaveUserMessage_CallLLM(t *testing.T) {
 
 	// STEP 1: SaveMessage creates user message
 	t.Run("SaveMessage creates user message", func(t *testing.T) {
-		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 		env.RegisterActivity(saveActivity.Execute)
 
 		saveInput := SaveMessageInput{
@@ -369,7 +368,7 @@ func TestUnifiedWorkflow_ExecuteTools_SaveToolResults(t *testing.T) {
 
 	// STEP 3: SaveMessage creates tool message with results
 	t.Run("SaveMessage creates tool message with results", func(t *testing.T) {
-		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 		env.RegisterActivity(saveActivity.Execute)
 
 		// Convert ExecuteToolResult to ToolResult for SaveMessage
@@ -477,7 +476,7 @@ func TestUnifiedWorkflow_EndToEnd(t *testing.T) {
 	// STEP 1: User sends message
 	var userMessageID string
 	t.Run("Step 1: User sends message", func(t *testing.T) {
-		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 		env.RegisterActivity(saveActivity.Execute)
 
 		saveInput := SaveMessageInput{
@@ -600,7 +599,7 @@ func TestUnifiedWorkflow_EndToEnd(t *testing.T) {
 	// STEP 4: Save tool results
 	var toolMessageID string
 	t.Run("Step 4: Save tool results", func(t *testing.T) {
-		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 		env.RegisterActivity(saveActivity.Execute)
 
 		saveInput := SaveMessageInput{
@@ -812,7 +811,7 @@ func TestUnifiedWorkflow_DataFlowThroughOutputs(t *testing.T) {
 		assert.False(t, saveInput.ToolResults[1].IsError)
 
 		// Execute SaveMessage to verify it works
-		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Chats: chataccess.NewFromORM(h.Repo().ORM()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+		saveActivity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 		env.RegisterActivity(saveActivity.Execute)
 
 		val, err := env.ExecuteActivity(saveActivity.Execute, saveInput.V3())
