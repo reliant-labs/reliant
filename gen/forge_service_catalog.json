@@ -25755,6 +25755,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.ProjectService/MergeProjects",
+          "name": "MergeProjects",
+          "input": "reliant.v1.MergeProjectsRequest",
+          "output": "reliant.v1.MergeProjectsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.ProjectService/MoveProjectToOrg",
           "name": "MoveProjectToOrg",
           "input": "reliant.v1.MoveProjectToOrgRequest",
@@ -25762,6 +25772,16 @@
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.ProjectService/PreviewProjectMerge",
+          "name": "PreviewProjectMerge",
+          "input": "reliant.v1.PreviewProjectMergeRequest",
+          "output": "reliant.v1.PreviewProjectMergeResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
           "auth_required": true
         },
         {
@@ -26538,6 +26558,45 @@
             "Activity": {
               "Mutating": false
             }
+          },
+          {
+            "Name": "PreviewProjectMerge",
+            "InputType": "PreviewProjectMergeRequest",
+            "OutputType": "PreviewProjectMergeResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.PreviewProjectMergeRequest",
+            "OutputTypeFQ": "reliant.v1.PreviewProjectMergeResponse",
+            "InputProtoFile": "reliant/v1/project.proto",
+            "OutputProtoFile": "reliant/v1/project.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "MergeProjects",
+            "InputType": "MergeProjectsRequest",
+            "OutputType": "MergeProjectsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.MergeProjectsRequest",
+            "OutputTypeFQ": "reliant.v1.MergeProjectsResponse",
+            "InputProtoFile": "reliant/v1/project.proto",
+            "OutputProtoFile": "reliant/v1/project.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "merge",
+              "TargetKind": "project",
+              "Writer": "INTERCEPTOR"
+            }
           }
         ],
         "ProtoFile": "reliant/v1/project.proto",
@@ -27228,6 +27287,32 @@
               "MessageType": "reliant.v1.ProjectDaemon"
             }
           ],
+          "MergeProjectsRequest": [
+            {
+              "Name": "source_project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "target_project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "MergeProjectsResponse": [
+            {
+              "Name": "project",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.Project"
+            },
+            {
+              "Name": "counts",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectMergeCounts"
+            }
+          ],
           "MoveProjectToOrgRequest": [
             {
               "Name": "project_id",
@@ -27256,6 +27341,32 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.ProjectOrgMove"
+            }
+          ],
+          "PreviewProjectMergeRequest": [
+            {
+              "Name": "source_project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "target_project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "PreviewProjectMergeResponse": [
+            {
+              "Name": "counts",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectMergeCounts"
+            },
+            {
+              "Name": "blockers",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectMergeBlocker"
             }
           ],
           "PreviewProjectOrgMoveRequest": [
@@ -28252,6 +28363,34 @@
               "type_name": "reliant.v1.ProjectDaemon"
             }
           ],
+          "reliant.v1.MergeProjectsRequest": [
+            {
+              "name": "source_project_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "target_project_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            }
+          ],
+          "reliant.v1.MergeProjectsResponse": [
+            {
+              "name": "project",
+              "kind": "message",
+              "type_name": "reliant.v1.Project"
+            },
+            {
+              "name": "counts",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectMergeCounts"
+            }
+          ],
           "reliant.v1.MoveProjectToOrgRequest": [
             {
               "name": "project_id",
@@ -28288,6 +28427,35 @@
               "name": "move",
               "kind": "message",
               "type_name": "reliant.v1.ProjectOrgMove"
+            }
+          ],
+          "reliant.v1.PreviewProjectMergeRequest": [
+            {
+              "name": "source_project_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "target_project_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            }
+          ],
+          "reliant.v1.PreviewProjectMergeResponse": [
+            {
+              "name": "counts",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectMergeCounts"
+            },
+            {
+              "name": "blockers",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectMergeBlocker",
+              "repeated": true
             }
           ],
           "reliant.v1.PreviewProjectOrgMoveRequest": [
@@ -28416,6 +28584,11 @@
               "name": "purge_started_at",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "remote_key",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ProjectApp": [
@@ -28519,6 +28692,55 @@
             {
               "name": "message",
               "kind": "string"
+            }
+          ],
+          "reliant.v1.ProjectMergeBlocker": [
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProjectMergeBlockerKind"
+            },
+            {
+              "name": "message",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ProjectMergeCounts": [
+            {
+              "name": "chats",
+              "kind": "int32"
+            },
+            {
+              "name": "worktrees",
+              "kind": "int32"
+            },
+            {
+              "name": "checkouts",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectCheckout",
+              "repeated": true
+            },
+            {
+              "name": "triggers",
+              "kind": "int32"
+            },
+            {
+              "name": "repos",
+              "kind": "int32"
+            },
+            {
+              "name": "other_rows",
+              "kind": "int32"
             }
           ],
           "reliant.v1.ProjectOrgMove": [
@@ -29026,8 +29248,12 @@
           "reliant.v1.ListRepositoriesForDaemonResponse": "reliant/v1/project.proto",
           "reliant.v1.MarkProjectInstalledRequest": "reliant/v1/project.proto",
           "reliant.v1.MarkProjectInstalledResponse": "reliant/v1/project.proto",
+          "reliant.v1.MergeProjectsRequest": "reliant/v1/project.proto",
+          "reliant.v1.MergeProjectsResponse": "reliant/v1/project.proto",
           "reliant.v1.MoveProjectToOrgRequest": "reliant/v1/project.proto",
           "reliant.v1.MoveProjectToOrgResponse": "reliant/v1/project.proto",
+          "reliant.v1.PreviewProjectMergeRequest": "reliant/v1/project.proto",
+          "reliant.v1.PreviewProjectMergeResponse": "reliant/v1/project.proto",
           "reliant.v1.PreviewProjectOrgMoveRequest": "reliant/v1/project.proto",
           "reliant.v1.PreviewProjectOrgMoveResponse": "reliant/v1/project.proto",
           "reliant.v1.Project": "reliant/v1/project.proto",
@@ -29035,6 +29261,8 @@
           "reliant.v1.ProjectCheckout": "reliant/v1/project.proto",
           "reliant.v1.ProjectDaemon": "reliant/v1/project.proto",
           "reliant.v1.ProjectMachineRemoval": "reliant/v1/project.proto",
+          "reliant.v1.ProjectMergeBlocker": "reliant/v1/project.proto",
+          "reliant.v1.ProjectMergeCounts": "reliant/v1/project.proto",
           "reliant.v1.ProjectOrgMove": "reliant/v1/project.proto",
           "reliant.v1.ProjectOrgMoveBlockedChat": "reliant/v1/project.proto",
           "reliant.v1.ProjectOrgMoveBlockers": "reliant/v1/project.proto",
@@ -29106,6 +29334,11 @@
             "PROJECT_MACHINE_REMOVAL_STATUS_OFFLINE",
             "PROJECT_MACHINE_REMOVAL_STATUS_FAILED"
           ],
+          "reliant.v1.ProjectMergeBlockerKind": [
+            "PROJECT_MERGE_BLOCKER_KIND_UNSPECIFIED",
+            "PROJECT_MERGE_BLOCKER_KIND_RUNNING_WORK",
+            "PROJECT_MERGE_BLOCKER_KIND_SAME_MACHINE"
+          ],
           "reliant.v1.ProjectOrgMoveState": [
             "PROJECT_ORG_MOVE_STATE_UNSPECIFIED",
             "PROJECT_ORG_MOVE_STATE_PREPARING",
@@ -29163,6 +29396,11 @@
             2,
             3
           ],
+          "reliant.v1.ProjectMergeBlockerKind": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.ProjectOrgMoveState": [
             0,
             1,
@@ -29202,6 +29440,10 @@
           "reliant.v1.ProjectMachineRemovalStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ProjectMachineRemovalStatus"
+          },
+          "reliant.v1.ProjectMergeBlockerKind": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProjectMergeBlockerKind"
           },
           "reliant.v1.ProjectOrgMoveState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -37893,6 +38135,11 @@
             },
             {
               "name": "purge_started_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "remote_key",
               "kind": "string",
               "optional": true
             }

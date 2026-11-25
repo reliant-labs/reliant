@@ -38,6 +38,7 @@ func Project(p *core.Project) *reliantv1.Project {
 	if p.RemoteURL != nil {
 		proto.RemoteUrl = p.RemoteURL
 	}
+	proto.RemoteKey = p.RemoteKey
 	proto.OrgId = p.OrgID
 	if p.ForgeProjectName != nil {
 		proto.ForgeProjectName = p.ForgeProjectName
