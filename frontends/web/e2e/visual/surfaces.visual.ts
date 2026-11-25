@@ -348,7 +348,7 @@ const SURFACES: Surface[] = [
   },
   {
     // The same fan-out on a phone: touch has no hover, so each running
-    // agent's Open thread and Cancel are always shown.
+    // agent's Cancel is always shown (its title opens its thread).
     name: 'chat-agents',
     path: `/m/chats/${CHAT_IDS.agents}`,
     on: ['mobile'],

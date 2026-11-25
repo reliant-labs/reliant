@@ -1,12 +1,15 @@
 // Copyright (c) 2026 Reliant Labs
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { Workload } from "@/services/controlPlane/observability/types";
 import type { ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { ENV_ALL } from "../../Console/envScope";
 import { databaseEntries } from "../DatabaseHome";
+
+// DatabaseHome draws its CPU and memory lines with UPlotChart; uPlot needs a canvas jsdom lacks.
+vi.mock("uplot", async () => (await import("../../Observability/__tests__/obsMocks")).obsMocks.uplot());
 
 const hosted = new Map<string, Map<string, ForgeHostedWorkload>>([
   ["staging", new Map([["db", { name: "db", tier: "database", verdict: "converging" } as ForgeHostedWorkload]])],
