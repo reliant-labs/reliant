@@ -64,7 +64,9 @@ const DefaultGraceDelay = 3 * time.Second
 // (a cancelled workflow run's `timeout … ci-full-main.sh`, 2026-11-22 and
 // 2026-11-24). So the command's descendants are read once, at cancellation,
 // and every group they made of their own is stopped too: SIGTERM to the
-// process that made it, SIGKILL to all of it after grace (strayGroups).
+// process that made it, SIGKILL to all of it after grace (descendants). The
+// tree is kept in custody through grace, re-read every custodyPoll, so what
+// its members fork after the cancel is killed with them.
 //
 // # Two ordering hazards this handles
 //
@@ -113,36 +115,17 @@ func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
 		// Who is in the group now, while the leader is unreaped and the
 		// group id is therefore certainly the command's (GroupMember).
 		members, _ := GroupMembers(proc.Pid)
-		// And the groups its descendants made of their own (`timeout`, which
-		// takes a group of its own; a server started with setsid), which a
-		// signal to the command's group never reaches. Read BEFORE the
-		// SIGTERM: once the shell dies its children are reparented and the
-		// tree can no longer be walked from it.
-		strays := snapshotStrayGroups(proc.Pid)
+		// And its descendants, with the groups they made of their own
+		// (`timeout`, which takes a group of its own; a server started with
+		// setsid), which a signal to the command's group never reaches. Read
+		// BEFORE the SIGTERM: once the shell dies its children are reparented
+		// and the tree can no longer be walked from it.
+		tree := snapshotDescendants(proc.Pid)
 
 		err := terminateGracefully(proc)
-		strays.terminate()
+		tree.terminate()
 
-		// Escalate on our own clock so WaitDelay keeps meaning only the pipe
-		// drain. The escalation kills the GROUP, and it outlives the
-		// leader: a `bash -c` dies on SIGTERM at once while a child that
-		// trapped or ignored it runs on, and stopping the timer the moment
-		// Wait returned left exactly that child orphaned. So when the
-		// command finishes inside the grace period the timer is stopped
-		// only if none of those members is left; otherwise it fires and
-		// SIGKILLs the rest — the group only while one of them still proves
-		// the id is the command's (killGroup). The descendants' own groups
-		// are held to the same rule.
-		timer := time.AfterFunc(grace, func() {
-			killGroup(proc, members)
-			strays.kill()
-		})
-		go func() {
-			<-done
-			if !GroupOwned(proc.Pid, members) && !strays.alive() {
-				timer.Stop()
-			}
-		}()
+		go superviseGrace(proc, members, tree, grace, done)
 
 		return err
 	}
@@ -152,4 +135,42 @@ func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
 	// the command, so an unsynchronized flag would be a data race and a
 	// double close would panic.
 	return func() { stopOnce.Do(func() { close(done) }) }
+}
+
+// custodyPoll is how often a cancelled command's process tree is re-read
+// during grace (descendants' "Custody, not a snapshot"). Each reading walks the
+// process table, so it is not free; a tenth of a second keeps that to a few
+// dozen readings per cancellation at the default grace.
+const custodyPoll = 100 * time.Millisecond
+
+// superviseGrace escalates a cancelled command on its own clock, so WaitDelay
+// keeps meaning only the pipe drain. The escalation kills the GROUP, and it
+// outlives the leader: a `bash -c` dies on SIGTERM at once while a child that
+// trapped or ignored it runs on, and stopping the escalation the moment Wait
+// returned left exactly that child orphaned. So until grace runs out the tree
+// is re-read every custodyPoll, and when the command has finished (done) the
+// escalation is called off only once nothing in custody is left; otherwise,
+// at grace, it SIGKILLs the rest: each group only while it is proved still the
+// command's (killGroup, descendants.kill).
+func superviseGrace(proc *os.Process, members []GroupMember, tree *descendants, grace time.Duration, done <-chan struct{}) {
+	deadline := time.NewTimer(grace)
+	defer deadline.Stop()
+	poll := time.NewTicker(custodyPoll)
+	defer poll.Stop()
+	finished := false
+	for {
+		select {
+		case <-deadline.C:
+			killGroup(proc, members)
+			tree.kill()
+			return
+		case <-done:
+			finished, done = true, nil
+		case <-poll.C:
+		}
+		tree.refresh()
+		if finished && !GroupOwned(proc.Pid, members) && !tree.alive() {
+			return
+		}
+	}
 }

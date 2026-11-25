@@ -475,12 +475,35 @@ func startStray(t *testing.T, launcher string, ignoreTERM bool, grace time.Durat
 // awaitGone waits for pid to exit (or become a zombie awaiting its reaper).
 func awaitGone(t *testing.T, pid int, why string) {
 	t.Helper()
-	deadline := time.Now().Add(conditionTimeout)
+	giveUp := time.After(conditionTimeout)
+	poll := time.NewTicker(20 * time.Millisecond)
+	defer poll.Stop()
 	for syscall.Kill(pid, 0) == nil && !isZombie(pid) {
-		if time.Now().After(deadline) {
+		select {
+		case <-giveUp:
 			t.Fatalf("process %d still running %v after cancel: %s", pid, conditionTimeout, why)
+		case <-poll.C:
 		}
-		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// awaitPIDFile waits for path to hold a pid, and returns it.
+func awaitPIDFile(t *testing.T, path, why string) int {
+	t.Helper()
+	giveUp := time.After(conditionTimeout)
+	poll := time.NewTicker(10 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		if b, err := os.ReadFile(path); err == nil {
+			if pid, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil && pid > 0 {
+				return pid
+			}
+		}
+		select {
+		case <-giveUp:
+			t.Fatalf("no pid in %s within %v: %s", path, conditionTimeout, why)
+		case <-poll.C:
+		}
 	}
 }
 
@@ -517,4 +540,46 @@ func TestApplyGracefulCancel_KillsDescendantGroupThatIgnoresSIGTERM(t *testing.T
 	_ = cmd.Wait()
 	stop() // what every caller does once Wait has returned
 	awaitGone(t, work, "a descendant group that ignored SIGTERM was never killed")
+}
+
+// TestApplyGracefulCancel_KillsWhatADescendantGroupForksAfterTheCancel: the
+// escalation reaches a stray group's processes born after the cancel, though
+// every member it had at the cancel is gone. The group's leader answers
+// SIGTERM by starting a long job in its group and exiting at once, the case a
+// snapshot taken only at the cancel lost: no member of it was left to prove
+// the group still the command's, so the SIGKILL was skipped and the job ran on.
+func TestApplyGracefulCancel_KillsWhatADescendantGroupForksAfterTheCancel(t *testing.T) {
+	if _, ok := GroupMembers(1); !ok {
+		t.Skip("needs a readable process table")
+	}
+	if _, err := exec.LookPath("setsid"); err != nil {
+		t.Skip("needs setsid on PATH")
+	}
+	dir := t.TempDir()
+	ready, childFile := filepath.Join(dir, "ready"), filepath.Join(dir, "child")
+	// The leader is `setsid bash`: on SIGTERM it starts `sleep 1000` in its
+	// own group (a non-interactive shell's background job stays in it) and
+	// exits, while its group's members at the cancel (itself and its
+	// `sleep 0.05`) are gone within a moment.
+	script := `setsid bash -c 'trap "sleep 1000 & echo \$! > ` + childFile + `; exit 0" TERM; : > ` + ready + `; while true; do sleep 0.05; done' >/dev/null 2>&1
+	echo unreachable`
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	cmd := exec.CommandContext(ctx, "bash", "-c", script)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.WaitDelay = 60 * time.Second
+	stop := ApplyGracefulCancel(cmd, 500*time.Millisecond)
+	t.Cleanup(stop)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	awaitTrapInstalled(t, ready)
+
+	cancel()
+	_ = cmd.Wait()
+	stop() // what every caller does once Wait has returned
+
+	child := awaitPIDFile(t, childFile, "the stray group's leader never started its job on SIGTERM")
+	t.Cleanup(func() { _ = syscall.Kill(child, syscall.SIGKILL) })
+	awaitGone(t, child, "a job its stray group started after the cancel outlived the escalation")
 }
