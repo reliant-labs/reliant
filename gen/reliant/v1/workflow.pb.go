@@ -2650,13 +2650,13 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x13WorkflowDraftStatus\x12%\n" +
 	"!WORKFLOW_DRAFT_STATUS_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bWORKFLOW_DRAFT_STATUS_DRAFT\x10\x01\x12\"\n" +
-	"\x1eWORKFLOW_DRAFT_STATUS_COMPLETE\x10\x022\xae\r\n" +
-	"\x0fWorkflowService\x12V\n" +
-	"\rListWorkflows\x12 .reliant.v1.ListWorkflowsRequest\x1a!.reliant.v1.ListWorkflowsResponse\"\x00\x12\xb5\x01\n" +
+	"\x1eWORKFLOW_DRAFT_STATUS_COMPLETE\x10\x022\xb4\r\n" +
+	"\x0fWorkflowService\x12Y\n" +
+	"\rListWorkflows\x12 .reliant.v1.ListWorkflowsRequest\x1a!.reliant.v1.ListWorkflowsResponse\"\x03\x90\x02\x01\x12\xb5\x01\n" +
 	"\fSaveWorkflow\x12\x1f.reliant.v1.SaveWorkflowRequest\x1a .reliant.v1.SaveWorkflowResponse\"b\xa2\xbb\x18^:\\\n" +
 	"\x04save\x121\n" +
-	"\bworkflow\x12\rresponse.slug\x1a\x16response.workflow.name*\x0fresponse.status*\x10response.version\x12P\n" +
-	"\vGetWorkflow\x12\x1e.reliant.v1.GetWorkflowRequest\x1a\x1f.reliant.v1.GetWorkflowResponse\"\x00\x12\x88\x01\n" +
+	"\bworkflow\x12\rresponse.slug\x1a\x16response.workflow.name*\x0fresponse.status*\x10response.version\x12S\n" +
+	"\vGetWorkflow\x12\x1e.reliant.v1.GetWorkflowRequest\x1a\x1f.reliant.v1.GetWorkflowResponse\"\x03\x90\x02\x01\x12\x88\x01\n" +
 	"\x0eDeleteWorkflow\x12!.reliant.v1.DeleteWorkflowRequest\x1a\".reliant.v1.DeleteWorkflowResponse\"/\xa2\xbb\x18+:)\n" +
 	"\x06delete\x12\x1f\n" +
 	"\bworkflow\x12\rresponse.slug\x1a\x04name\x12b\n" +

@@ -1,19 +1,28 @@
 /**
- * The Header's Settings button must be there with no project.
+ * The Header's Settings button is there only while there is no project.
  *
- * The app's only other Settings link lives in the Sidebar, which renders
- * exclusively inside ModernApp's main app shell — and that shell requires a
- * project. A user with none yet (the first-run state, or a machine that never
- * provisions) would otherwise have no route to /settings at all, and
- * therefore no way to sign out.
+ * With no project yet (the first-run state, or a machine that never
+ * provisions) there is no nav, so the header gear is the only route to
+ * /settings, and so to signing out.
+ *
+ * With a project open there is no header gear: owner decision, 2026-11-24
+ * (the one top bar, Variant A). Settings is the nav's footer row and ⌘,.
+ * A review that asks for "Settings in the header" is answered by that
+ * decision, not by restoring the gear: #3309's pr-fix did, and the owner
+ * reverted it. The tests below hold both halves — no gear, and Settings
+ * still reachable.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+const projectState = vi.hoisted(() => ({
+  currentProject: null as null | { id: string; name: string },
+}));
+
 vi.mock("../../../store/projectStore", () => ({
   useProjectStore: (selector: (s: unknown) => unknown) =>
-    selector({ currentProject: null }),
+    selector(projectState),
 }));
 
 vi.mock("../../../store/worktreeStore", () => ({
@@ -58,11 +67,15 @@ vi.mock("../DaemonStatusDot", () => ({ DaemonStatusDot: () => null }));
 vi.mock("../DetectedPortsChip", () => ({ DetectedPortsChip: () => null }));
 
 import { Header } from "../Header";
+import { hrefOf, hybridNav, type NavCtx } from "../sidebar/navConfig";
+import { defaultShortcuts } from "../../../store/shortcutsData.generated";
+import { settingsPath } from "@/lib/paths";
 import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
 
 describe("Header settings escape hatch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    projectState.currentProject = null;
     // The Header's theme effect reads matchMedia, which jsdom does not
     // implement. Irrelevant to what these tests assert.
     vi.stubGlobal(
@@ -89,6 +102,29 @@ describe("Header settings escape hatch", () => {
     await userEvent.click(button);
 
     expect(onNavigateToSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([false, true])("has no Settings gear with a project open (owner decision), sidebar expanded=%s", (expanded) => {
+    projectState.currentProject = { id: "project-1", name: "Project" };
+    useWorkspaceStateStore.setState({ leftSidebarExpanded: expanded });
+    render(<Header onNavigateToSettings={vi.fn()} />);
+
+    expect(screen.queryByTestId("header-settings-button")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Settings" })).toBeNull();
+  });
+
+  it("keeps Settings reachable with a project open: the nav's footer row and ⌘,", () => {
+    // The nav's footer, drawn on every page of the shell, ends with Settings.
+    const footerSettings = hybridNav.footer.find((item) => item.id === "settings");
+    expect(footerSettings?.kind).toBe("row");
+    expect(footerSettings && hrefOf(footerSettings, { pathname: "/c/chat-1", search: {} } as NavCtx)).toBe(settingsPath());
+
+    // ⌘, opens Settings on desktop and on the web (bindings.test.ts proves
+    // the chord fires on every surface).
+    const shortcut = defaultShortcuts.toggleSettings;
+    expect(shortcut.handler).toBe("onToggleSettings");
+    expect(shortcut.defaultBinding).toBe("Cmd+,");
+    expect(shortcut.defaultWebBinding).toBe("Cmd+,");
   });
 
   it("leads with the Reliant mark, a link home that stays in the SPA on a plain click", async () => {

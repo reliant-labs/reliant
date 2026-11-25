@@ -20,6 +20,8 @@ type (
 	ArchiveWorktreeRequest                   = sdk.ArchiveWorktreeRequest
 	ArchiveWorktreeResponse                  = sdk.ArchiveWorktreeResponse
 	ArchivedChat                             = sdk.ArchivedChat
+	AttachProjectToChatRequest               = sdk.AttachProjectToChatRequest
+	AttachProjectToChatResponse              = sdk.AttachProjectToChatResponse
 	Attachment                               = sdk.Attachment
 	AutomationDraft                          = sdk.AutomationDraft
 	BackgroundProcessStatus                  = sdk.BackgroundProcessStatus
@@ -40,6 +42,7 @@ type (
 	ChatErrorUpdate                          = sdk.ChatErrorUpdate
 	ChatOrigin                               = sdk.ChatOrigin
 	ChatPlan                                 = sdk.ChatPlan
+	ChatProject                              = sdk.ChatProject
 	ChatSelection                            = sdk.ChatSelection
 	ChatState                                = sdk.ChatState
 	ChatUpdate                               = sdk.ChatUpdate
@@ -65,6 +68,7 @@ type (
 	CreateWorktreePRResponse                 = sdk.CreateWorktreePRResponse
 	CreateWorktreeRequest                    = sdk.CreateWorktreeRequest
 	CreateWorktreeResponse                   = sdk.CreateWorktreeResponse
+	DaemonCgroupStats                        = sdk.DaemonCgroupStats
 	DaemonCommandFailed                      = sdk.DaemonCommandFailed
 	DaemonCommandRequest                     = sdk.DaemonCommandRequest
 	DaemonCommandResponse                    = sdk.DaemonCommandResponse
@@ -87,7 +91,9 @@ type (
 	DaemonMessage_TerminalOutput             = sdk.DaemonMessage_TerminalOutput
 	DaemonMessage_TerminalSessionEvent       = sdk.DaemonMessage_TerminalSessionEvent
 	DaemonMessage_ToolResponse               = sdk.DaemonMessage_ToolResponse
+	DaemonProcessStats                       = sdk.DaemonProcessStats
 	DaemonRegister                           = sdk.DaemonRegister
+	DaemonResourceStats                      = sdk.DaemonResourceStats
 	DaemonUpgradeState                       = sdk.DaemonUpgradeState
 	DaemonUpgradeStatus                      = sdk.DaemonUpgradeStatus
 	DeleteChatRequest                        = sdk.DeleteChatRequest
@@ -100,6 +106,8 @@ type (
 	DeleteWorktreeResponse                   = sdk.DeleteWorktreeResponse
 	DenyRequest                              = sdk.DenyRequest
 	DenyResponse                             = sdk.DenyResponse
+	DetachProjectFromChatRequest             = sdk.DetachProjectFromChatRequest
+	DetachProjectFromChatResponse            = sdk.DetachProjectFromChatResponse
 	DisableWorkflowRequest                   = sdk.DisableWorkflowRequest
 	DisableWorkflowResponse                  = sdk.DisableWorkflowResponse
 	DiscoverWorktreesRequest                 = sdk.DiscoverWorktreesRequest
@@ -222,6 +230,8 @@ type (
 	ListBranchesResponse                     = sdk.ListBranchesResponse
 	ListChatPlansRequest                     = sdk.ListChatPlansRequest
 	ListChatPlansResponse                    = sdk.ListChatPlansResponse
+	ListChatProjectsRequest                  = sdk.ListChatProjectsRequest
+	ListChatProjectsResponse                 = sdk.ListChatProjectsResponse
 	ListChatsRequest                         = sdk.ListChatsRequest
 	ListChatsResponse                        = sdk.ListChatsResponse
 	ListInboxRequest                         = sdk.ListInboxRequest

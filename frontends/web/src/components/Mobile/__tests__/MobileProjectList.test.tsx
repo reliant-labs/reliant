@@ -1,8 +1,8 @@
 /**
- * `/m/projects` — the chat list's project filter. Pins that a row sets the
- * filter through `setProjectFilter` (not a local re-implementation) and
- * returns to the chat list, that "All projects" is a choice of its own, and
- * that the active scope is marked without a round trip.
+ * `/m/projects` — the chat list's project scope. Pins that a row only
+ * navigates: to the chat list with the pick in the URL (`?projects=<id>|all`,
+ * a push, so Back undoes it), never through a store; that "All projects" is a
+ * choice of its own; and that the check mark reads the URL's scope.
  */
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
@@ -11,18 +11,14 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { seedProjects, type ProjectFixture } from "@/test/projectList";
-import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 
 const navigate = vi.fn();
+// The page's URL search: the chat list's scope rides along to /m/projects.
+let routeSearch: Record<string, unknown> = {};
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
-}));
-
-const setProjectFilter = vi.fn((_scope: string | null, _options?: unknown) => Promise.resolve());
-
-vi.mock("../../../store/projectStore", () => ({
-  useProjectStore: (selector: (s: unknown) => unknown) => selector({ setProjectFilter }),
+  useSearch: () => routeSearch,
 }));
 
 // The project list (ListProjects, read through useProjects).
@@ -43,9 +39,14 @@ const { MobileProjectList } = await import("../MobileProjectList");
 const rowOf = (text: string) => screen.getByText(text).closest("button")!;
 const isChecked = (row: HTMLElement) => row.querySelector("svg.lucide-check") !== null;
 
+/** Where the last navigation went, with the search it wrote over `routeSearch`. */
+function landed() {
+  const call = navigate.mock.calls.at(-1)?.[0] as { to: string; search?: (prev: Record<string, unknown>) => Record<string, unknown>; replace?: boolean };
+  return { to: call.to, search: call.search ? call.search(routeSearch) : routeSearch, replace: call.replace };
+}
+
 beforeEach(() => {
   navigate.mockReset();
-  setProjectFilter.mockClear();
   projects = [
     {
       id: "p1",
@@ -55,48 +56,35 @@ beforeEach(() => {
     },
     { id: "p2", name: "forge", path: "/home/workspace/projects/forge" },
   ];
-  useWorkspaceStateStore.setState({ projectFilterId: "p1" });
+  routeSearch = { projects: "p1", tour: "t" };
 });
 
 describe("MobileProjectList", () => {
-  it("marks the filtered project with a check mark, not the others", () => {
+  it("marks the URL's project with a check mark, not the others", () => {
     renderList();
     expect(isChecked(rowOf("reliant"))).toBe(true);
     expect(isChecked(rowOf("forge"))).toBe(false);
     expect(isChecked(rowOf("All projects"))).toBe(false);
   });
 
-  it("marks All projects when there is no filter", () => {
-    useWorkspaceStateStore.setState({ projectFilterId: null });
+  it("marks All projects when the URL scopes to every project, or names none", () => {
+    routeSearch = { projects: "all" };
+    const view = renderList();
+    expect(isChecked(rowOf("All projects"))).toBe(true);
+    view.unmount();
+    routeSearch = {};
     renderList();
     expect(isChecked(rowOf("All projects"))).toBe(true);
   });
 
-  it("filters to a different project and navigates back to the chat list", async () => {
+  it("puts a picked project in the chat list's URL (a push)", async () => {
     const user = userEvent.setup();
     renderList();
 
     await user.click(screen.getByText("forge"));
 
-    expect(setProjectFilter).toHaveBeenCalledWith("p2", { restoreWorkspace: false });
-    expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
-  });
-
-  // The freeze: the switch used to be awaited before navigating, behind a row
-  // spinner, so every serial RPC it made (chats, worktree, main worktree, the
-  // remembered chat) — none with a timeout — held the user on this screen. A
-  // switch that never settles must still take the user to the chat list.
-  it("navigates without waiting for the switch to finish", async () => {
-    setProjectFilter.mockImplementationOnce(() => new Promise<void>(() => {}));
-    const user = userEvent.setup();
-    renderList();
-
-    await user.click(screen.getByText("forge"));
-
-    expect(setProjectFilter).toHaveBeenCalledTimes(1);
-    expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
-    // No row is left disabled behind a pending switch.
-    expect(rowOf("forge")).not.toBeDisabled();
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(landed()).toEqual({ to: "/m/chats", search: { projects: "p2", focus: undefined, tour: "t" }, replace: undefined });
   });
 
   it("shows every project with All projects", async () => {
@@ -105,18 +93,16 @@ describe("MobileProjectList", () => {
 
     await user.click(screen.getByText("All projects"));
 
-    expect(setProjectFilter).toHaveBeenCalledWith(null, { restoreWorkspace: false });
-    expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
+    expect(landed()).toEqual({ to: "/m/chats", search: { projects: "all", focus: undefined, tour: "t" }, replace: undefined });
   });
 
-  it("tapping the active scope just navigates back", async () => {
+  it("tapping the active scope lands on the same scope", async () => {
     const user = userEvent.setup();
     renderList();
 
     await user.click(screen.getByText("reliant"));
 
-    expect(setProjectFilter).not.toHaveBeenCalled();
-    expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
+    expect(landed().search).toMatchObject({ projects: "p1" });
   });
 
   it("navigating back without choosing changes nothing", async () => {
@@ -125,7 +111,6 @@ describe("MobileProjectList", () => {
 
     await user.click(screen.getByRole("button", { name: "Back to chats" }));
 
-    expect(setProjectFilter).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
   });
 

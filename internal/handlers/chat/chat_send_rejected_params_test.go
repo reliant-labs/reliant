@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	llmdrivers "github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -108,7 +109,9 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 					Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 					ProjectRows: store.NewProjectExtStore(repo.ORM()),
 					Questions:   store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
-					Temporal: temporal,
+					Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+					AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
+					Temporal:      temporal,
 				},
 				runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: tc.pauseController}),
 			}
@@ -121,7 +124,7 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 
 			assert.Empty(t, transcriptBodies(t, ctx, repo, fx.chatID),
 				"a refused send must not leave its message in the transcript")
-			queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+			queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 			require.NoError(t, err)
 			assert.Empty(t, queued, "a refused send must not queue its message for the run")
 			assert.Empty(t, temporal.signals, "a refused send must not signal the run")

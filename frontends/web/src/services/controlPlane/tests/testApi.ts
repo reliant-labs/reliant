@@ -20,9 +20,10 @@
  * test runs yet" (errors.ts isTestsServiceMissing), never as "no test runs".
  */
 
-import { Code, ConnectError, type Client } from "@connectrpc/connect";
+import { Code, ConnectError, type Client, type Transport } from "@connectrpc/connect";
 
 import { TestsService } from "@/gen/controlplane/services/tests/v1/tests_pb";
+import { transport as appTransport } from "@/lib/connect";
 
 import { getControlPlaneClient } from "../client";
 import { CONTROL_PLANE_API_URL } from "../config";
@@ -64,40 +65,46 @@ import {
   testRequest,
 } from "./wire";
 
-function client(): Client<typeof TestsService> {
+/**
+ * `transport` is the caller's TransportScope's (lib/transportScope.tsx), as
+ * getControlPlaneClient takes it. A scope's own transport (a fixture pack's)
+ * needs no control plane; none, or the app's, is today's client.
+ */
+function client(transport?: Transport): Client<typeof TestsService> {
+  const scoped = transport !== undefined && transport !== appTransport;
   // Without a control plane there is no service to ask: the same answer as one without it.
-  if (!CONTROL_PLANE_API_URL) throw new ConnectError("no control plane is configured", Code.Unimplemented);
-  return getControlPlaneClient(TestsService);
+  if (!scoped && !CONTROL_PLANE_API_URL) throw new ConnectError("no control plane is configured", Code.Unimplemented);
+  return getControlPlaneClient(TestsService, transport);
 }
 
-export async function getTestSummary(req: SummaryRequest, opts?: CallOptions): Promise<TestSummary> {
-  return summaryOf(await client().getTestSummary(summaryRequest(req), opts));
+export async function getTestSummary(req: SummaryRequest, opts?: CallOptions, transport?: Transport): Promise<TestSummary> {
+  return summaryOf(await client(transport).getTestSummary(summaryRequest(req), opts));
 }
 
-export async function listTestRuns(req: RunsRequest, opts?: CallOptions): Promise<TestRunPage> {
-  return runPageOf(await client().listTestRuns(runsRequest(req), opts));
+export async function listTestRuns(req: RunsRequest, opts?: CallOptions, transport?: Transport): Promise<TestRunPage> {
+  return runPageOf(await client(transport).listTestRuns(runsRequest(req), opts));
 }
 
-export async function getTestRun(req: RunRequest, opts?: CallOptions): Promise<TestRunDetail> {
-  return runDetailOf(await client().getTestRun(runRequest(req), opts));
+export async function getTestRun(req: RunRequest, opts?: CallOptions, transport?: Transport): Promise<TestRunDetail> {
+  return runDetailOf(await client(transport).getTestRun(runRequest(req), opts));
 }
 
-export async function getCoverage(req: CoverageRequest, opts?: CallOptions): Promise<CoverageTree> {
-  return coverageTreeOf(await client().getCoverage(coverageRequest(req), opts));
+export async function getCoverage(req: CoverageRequest, opts?: CallOptions, transport?: Transport): Promise<CoverageTree> {
+  return coverageTreeOf(await client(transport).getCoverage(coverageRequest(req), opts));
 }
 
-export async function getFileCoverage(req: FileCoverageRequest, opts?: CallOptions): Promise<FileCoverage> {
-  return fileCoverageOf(await client().getFileCoverage(fileCoverageRequest(req), opts));
+export async function getFileCoverage(req: FileCoverageRequest, opts?: CallOptions, transport?: Transport): Promise<FileCoverage> {
+  return fileCoverageOf(await client(transport).getFileCoverage(fileCoverageRequest(req), opts));
 }
 
-export async function getReleaseTests(req: ReleaseTestsRequest, opts?: CallOptions): Promise<ReleaseTests> {
-  return releaseTestsOf(await client().getReleaseTests(releaseTestsRequest(req), opts));
+export async function getReleaseTests(req: ReleaseTestsRequest, opts?: CallOptions, transport?: Transport): Promise<ReleaseTests> {
+  return releaseTestsOf(await client(transport).getReleaseTests(releaseTestsRequest(req), opts));
 }
 
-export async function listFlakyTests(req: FlakyRequest, opts?: CallOptions): Promise<TestFlakePage> {
-  return flakePageOf(await client().listFlakyTests(flakyRequest(req), opts));
+export async function listFlakyTests(req: FlakyRequest, opts?: CallOptions, transport?: Transport): Promise<TestFlakePage> {
+  return flakePageOf(await client(transport).listFlakyTests(flakyRequest(req), opts));
 }
 
-export async function getTest(req: TestRequest, opts?: CallOptions): Promise<TestDetail> {
-  return testDetailOf(await client().getTest(testRequest(req), opts));
+export async function getTest(req: TestRequest, opts?: CallOptions, transport?: Transport): Promise<TestDetail> {
+  return testDetailOf(await client(transport).getTest(testRequest(req), opts));
 }

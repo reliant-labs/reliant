@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Two drains racing on one thread must not both deliver the same rows.
@@ -54,7 +56,7 @@ func TestMarkAgentMessagesDelivered_ConcurrentClaimHasOneWinner(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start // release both at once so the claim is genuinely contended
-			claimed[i], errs[i] = repo.MarkAgentMessagesDelivered(ctx, ids, time.Now().UTC(), envelope)
+			claimed[i], errs[i] = store.MarkAgentMessagesDelivered(ctx, repo.ORM(), ids, time.Now().UTC(), envelope)
 		}(i)
 	}
 	close(start)
@@ -88,11 +90,11 @@ func TestMarkAgentMessagesDelivered_AlreadyDeliveredClaimsNothing(t *testing.T) 
 
 	envelope := seedDeliveredMessage(t, repo, ctx, chatID, threadID)
 
-	first, err := repo.MarkAgentMessagesDelivered(ctx, []string{id}, time.Now().UTC(), envelope)
+	first, err := store.MarkAgentMessagesDelivered(ctx, repo.ORM(), []string{id}, time.Now().UTC(), envelope)
 	require.NoError(t, err)
 	require.Len(t, first, 1, "the first delivery claims the row")
 
-	second, err := repo.MarkAgentMessagesDelivered(ctx, []string{id}, time.Now().UTC(), envelope)
+	second, err := store.MarkAgentMessagesDelivered(ctx, repo.ORM(), []string{id}, time.Now().UTC(), envelope)
 	require.NoError(t, err)
 	assert.Empty(t, second, "a redelivery attempt must claim nothing")
 }

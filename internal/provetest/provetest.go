@@ -274,7 +274,7 @@ func Prove(ctx context.Context, opts Options) (report *Report, err error) {
 	}
 	if moved {
 		report.Warnings = append(report.Warnings, fmt.Sprintf(
-			"The command ran in %s, not in %s: the files are in %s, another git worktree of the same repository, and a run outside it would not test the fix.",
+			"The command ran in %s, not in %s: the files are in %s, another git worktree that a run there cannot reach, so it would not test the fix.",
 			runDir, dir, repo.top))
 	}
 	run := func(ctx context.Context) RunOutcome { return opts.Run(ctx, runDir) }

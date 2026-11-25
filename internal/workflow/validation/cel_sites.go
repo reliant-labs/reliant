@@ -29,6 +29,7 @@ import (
 //	node condition, edge case condition          EdgeEvalContext
 //	loop while, loop key                         LoopEvalContext
 //	save_message (content, condition, …)         PostActivityContext
+//	observe (attributes, events, metrics)        ObserveContext
 //
 // `outputs` (the enclosing loop's previous-iteration outputs) is declared by a
 // context only when its Outputs field is set, which the runtime does exactly
@@ -48,6 +49,8 @@ const (
 	siteLoopWhile
 	siteLoopKey
 	siteSaveMessage
+	siteObserve
+	siteObserveEach // an observe event's attributes under each:, with item bound
 )
 
 // siteNamespaces returns the namespaces the runtime context for site declares.
@@ -73,6 +76,10 @@ func siteNamespaces(site celSite, inLoop bool) []wfcel.CELNamespace {
 		ctx = &wfcel.LoopEvalContext{}
 	case siteSaveMessage:
 		ctx = &wfcel.PostActivityContext{}
+	case siteObserve:
+		ctx = &wfcel.ObserveContext{}
+	case siteObserveEach:
+		ctx = &wfcel.ObserveContext{InEach: true}
 	default:
 		ctx = &wfcel.NodeResolutionContext{Outputs: loopOutputs}
 	}
@@ -284,6 +291,14 @@ func (s *workflowScope) validateNode(node *reliantv1.Node, nodePath []string, re
 		s.validateSaveMessage(node, sm, append(append([]string{}, nodePath...), saveMessageFieldKey), after, result)
 	}
 
+	if defaults := s.wf.GetObserve(); defaults != nil {
+		// Defaults run with this node's output, not an untyped graph output.
+		s.validateObserve(defaults, node, append(append([]string{}, nodePath...), "observe_defaults"), after, result)
+	}
+	if o := node.GetObserve(); o != nil {
+		s.validateObserve(o, node, append(append([]string{}, nodePath...), observeFieldKey), after, result)
+	}
+
 	if thread := model.NodeThreadConfig(node); thread != nil {
 		if inject := thread.GetInject(); inject != nil {
 			frame := s.loop
@@ -417,7 +432,8 @@ func (s *workflowScope) validateNodeFields(node *reliantv1.Node, basePath []stri
 }
 
 // inlineTypeContext builds the type context for an inline graph. Inputs are
-// lenient: the parent supplies them dynamically via args.
+// lenient: an inline body runs with the enclosing workflow's inputs (never its
+// node's args), which this context, built from the body alone, does not model.
 func inlineTypeContext(wf *reliantv1.Workflow, vt ValueTypes) *WorkflowTypeContext {
 	typeCtx := buildWorkflowTypeContext(wf, nil, vt)
 	if typeCtx != nil {
@@ -727,7 +743,7 @@ func (s *workflowScope) rejectEnclosingNodeRefs(expr string, path []string, resu
 			Category:   CategoryCELSemantic,
 			Path:       append([]string{}, path...),
 			Message:    fmt.Sprintf("reads nodes.%s, a node outside this inline body; a loop or inline body sees only its own nodes, so this fails with \"no such key: %s\" at run time", id, id),
-			Suggestion: fmt.Sprintf("pass the value in: set it in the loop or workflow node's args (read it here as inputs.<name>) or carry it in items, instead of reading nodes.%s", id),
+			Suggestion: fmt.Sprintf("carry the value in the loop's items and read it here as iter.item, or move the body to its own workflow file, call it with ref: and pass the value in args (read it there as inputs.<name>), instead of reading nodes.%s; an inline body ignores args: it runs with the enclosing workflow's inputs", id),
 		})
 		return true
 	}

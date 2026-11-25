@@ -212,6 +212,12 @@ Temporal workflow id. The gaps, each fixed additively:
   `provider_request_id`. Whether the span's `UpstreamRequestID` and the gateway's
   `ProviderRequestID` are the same value is **unverified**; PR 1's first test
   settles it, and the fallback join is `chat_id` plus a time window.
+  They are not the same value: the gateway's ledger stores LiteLLM's own
+  `x-litellm-call-id`, while the span's `gen_ai.response.id` is the upstream
+  `x-oai-request-id`. So a gateway-routed `chat` span also carries the gateway's
+  id as `reliant.gateway.call_id`, on every call, failed ones included (only the
+  `reliant` driver sets it), and a nullable `llm_call_usage.gateway_call_id`
+  column follows A1 so the call row joins the ledger exactly too.
 - **No chat → PR link.** `pr_records` (`db/migrations/20261121122326_pr_records.up.sql`)
   mirrors GitHub pull requests with `head_ref`, `repository_id`, `merged_at` and
   `merge_commit_sha`, and nothing names a chat or worktree. A worktree has a

@@ -202,9 +202,11 @@ func prepareCapacity(ctx context.Context, events capacityEvents, repo CapacitySt
 		if event.CapacityOrder != nil && (event.CapacityProjectID == nil || event.CapacityWorkflowRef == nil || *event.CapacityProjectID != scope.ProjectID || *event.CapacityWorkflowRef != scope.WorkflowRef) {
 			return errCapacityScopeChanged
 		}
-		if err := repo.EnqueueTriggerCapacity(ctx, event, scope); err != nil {
+		superseded, err := repo.EnqueueTriggerCapacitySuperseding(ctx, event, scope)
+		if err != nil {
 			return err
 		}
+		traceSuperseded(ctx, events, t, superseded)
 	}
 	enrolled, err := events.GetTriggerEventByDedupe(ctx, event.Kind, event.DedupeKey)
 	if err != nil {
@@ -338,4 +340,20 @@ func reconcileCapacityExecution(ctx context.Context, repo CapacityStore, descrip
 		}
 	}
 	return nil
+}
+
+// traceSuperseded opens a trigger.fire span for each waiting event an
+// enrollment superseded (`waiting: latest`): they were settled in bulk, by
+// another event's firing, which ctx's span is and each links to. Each names
+// its own trigger, read through repository when it is not t; one that cannot
+// be read is named by none.
+func traceSuperseded(ctx context.Context, repository any, t *core.Trigger, superseded []*core.TriggerEvent) {
+	if len(superseded) == 0 {
+		return
+	}
+	triggers := map[string]*core.Trigger{t.ID: t}
+	reader, _ := repository.(triggerReader)
+	for _, ev := range superseded {
+		traceSettled(ctx, settledTrigger(ctx, reader, triggers, ev), ev, ev.Outcome, ev.OutcomeDetail)
+	}
 }

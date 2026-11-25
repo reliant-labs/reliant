@@ -52,6 +52,7 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 			}
 			c.checkFetch(path, n, cmd)
 			c.checkLLMGatewayUsed(path, n, cmd)
+			c.checkCredentialsNoneSignIns(path, cmd, model.GetRunArgs(n).GetCredentials())
 		case model.NodeTypeAskQuestion:
 			c.checkAskQuestionType(path, n)
 		case model.NodeTypeAction:

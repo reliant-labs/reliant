@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=5ac4c11d19a95124e143ef63c904db64d29169fd137ffb133b0702d08fa05ecf
+// forge:hash=6641829ff8b400c660418809f06ece84b3930f43e2c329d34b2f70eda44e001f
 
 // MockService is a test mock for the Service interface.
 //
@@ -28,9 +28,29 @@ import (
 // "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
+	RecordToolCallUsageFunc      func(context.Context, store.ToolCallUsageRecord) (bool, error)
+	PruneToolCallUsageFunc       func(context.Context, time.Time) (int64, error)
 	RecordLLMCallUsageFunc       func(context.Context, store.LLMCallUsageRecord) (bool, error)
 	PruneLLMCallUsageFunc        func(context.Context, time.Time) (int64, error)
 	PruneLLMUsagePurgeFencesFunc func(context.Context, time.Time) (int64, error)
+}
+
+// RecordToolCallUsage records the call and delegates to RecordToolCallUsageFunc when set.
+func (m *MockService) RecordToolCallUsage(ctx context.Context, rec store.ToolCallUsageRecord) (bool, error) {
+	m.Recorder.Record("RecordToolCallUsage", ctx, rec)
+	if m.RecordToolCallUsageFunc != nil {
+		return m.RecordToolCallUsageFunc(ctx, rec)
+	}
+	return false, contractkit.MockNotSet("MockService", "RecordToolCallUsage")
+}
+
+// PruneToolCallUsage records the call and delegates to PruneToolCallUsageFunc when set.
+func (m *MockService) PruneToolCallUsage(ctx context.Context, now time.Time) (int64, error) {
+	m.Recorder.Record("PruneToolCallUsage", ctx, now)
+	if m.PruneToolCallUsageFunc != nil {
+		return m.PruneToolCallUsageFunc(ctx, now)
+	}
+	return 0, contractkit.MockNotSet("MockService", "PruneToolCallUsage")
 }
 
 // RecordLLMCallUsage records the call and delegates to RecordLLMCallUsageFunc when set.
@@ -108,6 +128,42 @@ func (m *MockLedger) PruneLLMUsagePurgeFences(ctx context.Context, now time.Time
 
 // Compile-time check.
 var _ Ledger = (*MockLedger)(nil)
+
+// forge:section MockToolLedger
+// forge:hash=8b63f3d3505ca73970640bd16966e005ee408b0322b7d2d8995000c6d0bda89d
+
+// MockToolLedger is a test mock for the ToolLedger interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockToolLedger.<Method>Func not set" error.
+type MockToolLedger struct {
+	contractkit.Recorder
+	RecordToolCallUsageFunc func(context.Context, store.ToolCallUsageRecord) (bool, error)
+	PruneToolCallUsageFunc  func(context.Context, time.Time, int) (int64, error)
+}
+
+// RecordToolCallUsage records the call and delegates to RecordToolCallUsageFunc when set.
+func (m *MockToolLedger) RecordToolCallUsage(ctx context.Context, rec store.ToolCallUsageRecord) (bool, error) {
+	m.Recorder.Record("RecordToolCallUsage", ctx, rec)
+	if m.RecordToolCallUsageFunc != nil {
+		return m.RecordToolCallUsageFunc(ctx, rec)
+	}
+	return false, contractkit.MockNotSet("MockToolLedger", "RecordToolCallUsage")
+}
+
+// PruneToolCallUsage records the call and delegates to PruneToolCallUsageFunc when set.
+func (m *MockToolLedger) PruneToolCallUsage(ctx context.Context, cutoff time.Time, batch int) (int64, error) {
+	m.Recorder.Record("PruneToolCallUsage", ctx, cutoff, batch)
+	if m.PruneToolCallUsageFunc != nil {
+		return m.PruneToolCallUsageFunc(ctx, cutoff, batch)
+	}
+	return 0, contractkit.MockNotSet("MockToolLedger", "PruneToolCallUsage")
+}
+
+// Compile-time check.
+var _ ToolLedger = (*MockToolLedger)(nil)
 
 // forge:section MockTxRunner
 // forge:hash=1a0ee09450a8c0c0c820b797730ecbfabb88f624601078e98bcecc809d6c34d9

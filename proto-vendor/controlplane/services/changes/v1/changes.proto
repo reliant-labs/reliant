@@ -67,6 +67,7 @@ service ChangesService {
   // forge:custom — membership- and scope-checked, with each change's release
   // declaration joined in, not the CRUD of a table.
   rpc ListChanges(ListChangesRequest) returns (ListChangesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -78,6 +79,7 @@ service ChangesService {
   // forge:custom — membership- and scope-checked read with the release
   // declaration joined in.
   rpc GetChange(GetChangeRequest) returns (GetChangeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -300,6 +302,7 @@ service ChangesService {
   // forge:custom — one change's trail, membership- and scope-checked, not the
   // CRUD of the events table (which is append-only).
   rpc ListChangeEvents(ListChangeEventsRequest) returns (ListChangeEventsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -314,6 +317,7 @@ service ChangesService {
   // variant the release no longer declares is delivered off and listed in
   // problems.
   rpc GetChangesSnapshot(GetChangesSnapshotRequest) returns (GetChangesSnapshotResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -351,6 +355,7 @@ service ChangesService {
   //
   // forge:custom — an analytics read joined to the change's run, not CRUD.
   rpc GetChangeReadout(GetChangeReadoutRequest) returns (GetChangeReadoutResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -367,6 +372,7 @@ service ChangesService {
   // the SDK's 10s re-read. An environment with no hosted apps lists no
   // targets. Same access as GetChangesSnapshot.
   rpc GetChangesDeliveryStatus(GetChangesDeliveryStatusRequest) returns (GetChangesDeliveryStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true

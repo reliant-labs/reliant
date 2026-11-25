@@ -25,6 +25,15 @@ func withStores(d Deps) Deps {
 	if !ok {
 		return d
 	}
+	if d.ProjectRows == nil {
+		d.ProjectRows = store.NewProjectExtStore(r.ORM())
+	}
+	if d.Machines == nil {
+		d.Machines = store.NewDaemonExtStore(r.ORM())
+	}
+	if d.Repos == nil {
+		d.Repos = store.NewRepoExtStore(r.ORM())
+	}
 	if d.Detachments == nil {
 		d.Detachments = store.NewProjectDaemonDetachmentExtStore(r.ORM())
 	}

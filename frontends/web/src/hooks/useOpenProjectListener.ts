@@ -1,7 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { useProjectStore } from '../store/projectStore';
+import { chooseProject, useProjectStore } from '../store/projectStore';
 import { useProjects } from "./project-queries";
 import { logger } from '../lib/logger';
+import { beginWorkspaceOpen } from '../lib/openChatInWorkspace';
 
 /**
  * Hook that listens for the 'open-project' IPC event from Electron.
@@ -12,7 +13,6 @@ import { logger } from '../lib/logger';
  */
 export function useOpenProjectListener() {
   const { projects, isLoading } = useProjects();
-  const selectProject = useProjectStore((state) => state.selectProject);
   const createProject = useProjectStore((state) => state.createProject);
 
   // Queue for paths received before projects are loaded
@@ -23,6 +23,9 @@ export function useOpenProjectListener() {
   // Process a project path - find existing or create new
   const handleOpenProject = useCallback(async (projectPath: string) => {
     logger.info('[useOpenProjectListener] Received open-project event', { projectPath });
+
+    // One generation covers creation, navigation and workspace restoration.
+    const isCurrent = beginWorkspaceOpen();
 
     // Normalize path (remove trailing slashes for consistent matching)
     const normalizedPath = projectPath.replace(/\/+$/, '');
@@ -38,7 +41,7 @@ export function useOpenProjectListener() {
         projectId: existingProject.id,
         name: existingProject.name
       });
-      await selectProject(existingProject);
+      await chooseProject(existingProject.id, { isCurrent });
     } else {
       // Create a new project with name derived from path
       const pathParts = normalizedPath.split('/');
@@ -50,16 +53,21 @@ export function useOpenProjectListener() {
       });
 
       try {
-        await createProject({
+        const created = await createProject({
           name: projectName,
           path: normalizedPath,
-        });
-        // createProject automatically sets currentProject
+        }, { isCurrent });
+        // A superseded creation still keeps its row, but must not navigate
+        // or select over a newer workspace action.
+        if (!isCurrent()) return;
+        // createProject made it current, except over a chat's page, whose
+        // chat the URL keeps: show the new project's chats.
+        await chooseProject(created.id, { isCurrent });
       } catch (error) {
         logger.error('[useOpenProjectListener] Failed to create project', error);
       }
     }
-  }, [projects, selectProject, createProject]);
+  }, [projects, createProject]);
 
   // Process pending path when projects finish loading
   useEffect(() => {

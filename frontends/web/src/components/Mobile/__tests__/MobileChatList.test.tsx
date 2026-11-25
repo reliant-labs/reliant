@@ -26,10 +26,13 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
   useParams: () => routeParams,
   useRouterState: () => "/m/chats",
+  useSearch: () => routeSearch,
 }));
 
 // What the chats layout routes beside the list; empty on `/m/chats`.
 let routeParams: { chatId?: string } = {};
+// The URL's scope (`?projects=`, picked on /m/projects).
+let routeSearch: Record<string, unknown> = {};
 
 // The list response: chats (each carrying its workspace) plus the project's
 // main workspace. No workspace read is consulted, so the cache holds none — a
@@ -118,7 +121,6 @@ vi.mock("../MobileWorkspaceSheet", () => ({
 }));
 
 const { MobileChatList, buildGroups } = await import("../MobileChatList");
-const { useWorkspaceStateStore } = await import("../../../store/workspaceStateStore");
 const { SurfaceProvider } = await import("../../../lib/surfaceContext");
 
 function renderList() {
@@ -164,9 +166,9 @@ function chat(overrides: Partial<{
 }
 
 beforeEach(() => {
-  // These tests are about one project's list (the /m/projects filter on p1);
+  // These tests are about one project's list (the URL scoped to p1);
   // the all-projects grouping is pinned in its own describe below.
-  useWorkspaceStateStore.setState({ projectFilterId: "p1" });
+  routeSearch = { projects: "p1" };
   navigate.mockReset();
   routeParams = {};
   archiveWorktree.mockReset();
@@ -352,7 +354,7 @@ describe("MobileChatList", () => {
     expect(screen.getByRole("dialog", { name: "New workspace" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Create stub" }));
-    expect(navigate).toHaveBeenCalledWith({ to: "/m/new", search: { worktreeId: "wt-new" } });
+    expect(navigate).toHaveBeenCalledWith({ to: "/m/new", search: { project: "p1", worktreeId: "wt-new" } });
     expect(screen.queryByRole("dialog", { name: "New workspace" })).not.toBeInTheDocument();
   });
 

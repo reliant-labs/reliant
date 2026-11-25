@@ -181,6 +181,25 @@ export function showDeveloperSettings(): boolean {
   return import.meta.env.DEV || Boolean(window.RELIANT_CONFIG?.isDev);
 }
 
+/**
+ * Settings sections whose page belongs to another area of the shell's nav.
+ * Agent sandboxes is Agents › Sandboxes too (`sandboxesPath()` is
+ * `/settings/machines`), and on its pages the nav column is Agents', not
+ * Settings'. Settings still lists the section, as a link there.
+ *
+ * One page has one nav home, so Settings neither lights up on these pages nor
+ * reopens them: bare /settings restoring one landed on a page with no
+ * Settings sections in the nav, and every later Settings click landed there
+ * again (settingsDestination.ts). The nav tests check this list against the
+ * nav config, so a section that moves under another area must be added here.
+ */
+export const SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME: readonly SettingsSection[] = ["machines"];
+
+/** Whether `section`'s page is in another nav area, not Settings' (see SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME). */
+export function settingsSectionHasOtherNavHome(section: SettingsSection): boolean {
+  return SETTINGS_SECTIONS_WITH_OTHER_NAV_HOME.includes(section);
+}
+
 /** True if the item should appear in the sidebar for the current build. */
 function isItemVisible(item: SectionItem): boolean {
   if (item.id === "developer") return showDeveloperSettings();

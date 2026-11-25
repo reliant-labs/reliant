@@ -1546,12 +1546,12 @@ const file_services_daemon_v1_daemon_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12O\n" +
 	"\x13default_access_mode\x18\x02 \x01(\x0e2\x1f.controlplane.v1.PortAccessModeR\x11defaultAccessMode\"O\n" +
 	"\x1cSetDefaultPortAccessResponse\x12/\n" +
-	"\x06daemon\x18\x01 \x01(\v2\x17.controlplane.v1.DaemonR\x06daemon2\x81\n" +
+	"\x06daemon\x18\x01 \x01(\v2\x17.controlplane.v1.DaemonR\x06daemon2\x90\n" +
 	"\n" +
 	"\rDaemonService\x12[\n" +
-	"\fCreateDaemon\x12$.controlplane.v1.CreateDaemonRequest\x1a%.controlplane.v1.CreateDaemonResponse\x12R\n" +
-	"\tGetDaemon\x12!.controlplane.v1.GetDaemonRequest\x1a\".controlplane.v1.GetDaemonResponse\x12X\n" +
-	"\vListDaemons\x12#.controlplane.v1.ListDaemonsRequest\x1a$.controlplane.v1.ListDaemonsResponse\x12[\n" +
+	"\fCreateDaemon\x12$.controlplane.v1.CreateDaemonRequest\x1a%.controlplane.v1.CreateDaemonResponse\x12W\n" +
+	"\tGetDaemon\x12!.controlplane.v1.GetDaemonRequest\x1a\".controlplane.v1.GetDaemonResponse\"\x03\x90\x02\x01\x12]\n" +
+	"\vListDaemons\x12#.controlplane.v1.ListDaemonsRequest\x1a$.controlplane.v1.ListDaemonsResponse\"\x03\x90\x02\x01\x12[\n" +
 	"\fUpdateDaemon\x12$.controlplane.v1.UpdateDaemonRequest\x1a%.controlplane.v1.UpdateDaemonResponse\x12[\n" +
 	"\fDeleteDaemon\x12$.controlplane.v1.DeleteDaemonRequest\x1a%.controlplane.v1.DeleteDaemonResponse\x12^\n" +
 	"\rSuspendDaemon\x12%.controlplane.v1.SuspendDaemonRequest\x1a&.controlplane.v1.SuspendDaemonResponse\x12[\n" +
@@ -1559,8 +1559,8 @@ const file_services_daemon_v1_daemon_proto_rawDesc = "" +
 	"\fResizeDaemon\x12$.controlplane.v1.ResizeDaemonRequest\x1a%.controlplane.v1.ResizeDaemonResponse\x12a\n" +
 	"\x0eGrowDaemonDisk\x12&.controlplane.v1.GrowDaemonDiskRequest\x1a'.controlplane.v1.GrowDaemonDiskResponse\x12^\n" +
 	"\rSetPortAccess\x12%.controlplane.v1.SetPortAccessRequest\x1a&.controlplane.v1.SetPortAccessResponse\x12g\n" +
-	"\x10RemovePortAccess\x12(.controlplane.v1.RemovePortAccessRequest\x1a).controlplane.v1.RemovePortAccessResponse\x12p\n" +
-	"\x13ListPortAccessRules\x12+.controlplane.v1.ListPortAccessRulesRequest\x1a,.controlplane.v1.ListPortAccessRulesResponse\x12s\n" +
+	"\x10RemovePortAccess\x12(.controlplane.v1.RemovePortAccessRequest\x1a).controlplane.v1.RemovePortAccessResponse\x12u\n" +
+	"\x13ListPortAccessRules\x12+.controlplane.v1.ListPortAccessRulesRequest\x1a,.controlplane.v1.ListPortAccessRulesResponse\"\x03\x90\x02\x01\x12s\n" +
 	"\x14SetDefaultPortAccess\x12,.controlplane.v1.SetDefaultPortAccessRequest\x1a-.controlplane.v1.SetDefaultPortAccessResponseB\xd3\x01\n" +
 	"\x13com.controlplane.v1B\vDaemonProtoP\x01ZRgithub.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 

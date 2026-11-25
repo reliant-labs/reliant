@@ -16,7 +16,9 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 service ScenarioService {
   // ListScenarios returns all scenarios for a workflow
   // forge:custom — merges the caller's saved scenarios with the project's synced ones, by workflow slug
-  rpc ListScenarios(ListScenariosRequest) returns (ListScenariosResponse) {}
+  rpc ListScenarios(ListScenariosRequest) returns (ListScenariosResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // CreateScenario creates a new scenario and optionally runs it
   // forge:custom — validates the scenario against its workflow and may run it before answering

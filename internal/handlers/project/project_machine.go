@@ -32,7 +32,7 @@ import (
 // is NotFound, the same as a missing one, so the answer never reveals that it
 // exists.
 func (s *Service) ownedMachine(ctx context.Context, userID, daemonID string) (*db.Daemon, error) {
-	d, err := s.deps.Repo.GetDaemon(ctx, daemonID)
+	d, err := s.deps.Machines.GetDaemon(ctx, daemonID)
 	if err != nil || !authz.CanWriteMachine(ctx, userID, d) {
 		return nil, svcerr.NotFound("machine")
 	}

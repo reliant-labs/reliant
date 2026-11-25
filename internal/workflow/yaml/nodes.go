@@ -72,6 +72,12 @@ func unmarshalNode(node *yaml.Node) (*reliantv1.Node, error) {
 				return nil, fmt.Errorf("node %s: %s must be true or false: %w", v2node.Id, yamlKeyTolerateFailure, err)
 			}
 			v2node.TolerateFailure = b
+		case yamlKeyObserve:
+			o, err := unmarshalNodeObserve(val)
+			if err != nil {
+				return nil, fmt.Errorf("node %s: %w", v2node.Id, err)
+			}
+			v2node.Observe = o
 		}
 	}
 
@@ -296,17 +302,16 @@ func yamlMappingToMap(node *yaml.Node, skipBase bool) (map[string]*yaml.Node, er
 	return result, nil
 }
 
+// validateActivityNodeTopLevelKeys refuses a key that is neither a node base
+// field, args, nor one of the kind's own arg fields. The base fields come from
+// the generated list (the Node proto's own fields), never a hand-kept copy:
+// a copy that missed tolerate_failure refused it on every activity kind.
 func validateActivityNodeTopLevelKeys(node *yaml.Node, binding generatedNodeBinding) error {
-	allowed := map[string]struct{}{
-		yamlKeyID:          {},
-		yamlKeyType:        {},
-		yamlKeyCondition:   {},
-		yamlKeyTimeout:     {},
-		yamlKeySaveMessage: {},
-		yamlKeyDaemon:      {},
-		yamlKeyOutcome:     {},
-		yamlKeyArgs:        {},
+	allowed := make(map[string]struct{}, len(generatedNodeBaseFieldKeys)+1+len(binding.argFieldKeys))
+	for key := range generatedNodeBaseFieldKeys {
+		allowed[key] = struct{}{}
 	}
+	allowed[yamlKeyArgs] = struct{}{}
 	for key := range binding.argFieldKeys {
 		allowed[key] = struct{}{}
 	}
@@ -926,6 +931,11 @@ func marshalNode(v2node *reliantv1.Node) (*yaml.Node, error) {
 	// tolerate_failure (node base level) — the node is optional.
 	if v2node.TolerateFailure {
 		m.Content = append(m.Content, scalarNode(yamlKeyTolerateFailure, ""), scalarNode("true", "!!bool"))
+	}
+
+	// observe (node base level) — what the node records when it finishes.
+	if v2node.Observe != nil {
+		m.Content = append(m.Content, scalarNode(yamlKeyObserve, ""), marshalNodeObserve(v2node.Observe))
 	}
 
 	// Marshal args based on generated descriptor binding.

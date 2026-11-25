@@ -71,6 +71,10 @@ type Config struct {
 	// Required dependencies
 	TemporalClient client.Client
 	Database       *db.Repo
+	// Checks records what a workflow's `check:` fire and run activities
+	// report (workflowcheck), never writing GitHub; nil builds the
+	// record-only one over Database.
+	Checks workflowcheck.Service
 	// ProviderAccounts holds the accounts, limit state and thread assignments the call_llm
 	// routing reads and writes (credentials/provideraccounts).
 	ProviderAccounts AccountStore
@@ -301,11 +305,12 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
 	if cfg.Database != nil {
-		usage, err := llmusage.NewInstrumented(llmusage.Deps{Ledger: store.NewLlmCallUsageExtStore(cfg.Database.ORM()), Tx: cfg.Database})
+		usage, err := llmusage.NewInstrumented(llmusage.Deps{Ledger: store.NewLlmCallUsageExtStore(cfg.Database.ORM()), Tools: store.NewToolCallUsageExtStore(cfg.Database.ORM()), Tx: cfg.Database})
 		if err != nil {
 			return nil, nil, fmt.Errorf("llm usage ledger: %w", err)
 		}
 		activityDeps.LLMUsage = usage
+		activityDeps.ToolUsage = usage
 		backoff, err := providerbackoff.NewInstrumented(providerbackoff.Deps{Markers: store.NewProviderBackoffExtStore(cfg.Database.ORM()), Tx: cfg.Database, Activity: cfg.Database})
 		if err != nil {
 			return nil, nil, fmt.Errorf("provider backoff markers: %w", err)
@@ -363,9 +368,11 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// A workflow's `check:` (workflowcheck): an event fire opens the check
 	// and the run reports its start and end through these activities. They
 	// only record; the worker's check syncer writes GitHub.
-	var checks workflowcheck.Service
+	checks := cfg.Checks
 	if cfg.Database != nil {
-		checks = workflowcheck.NewInstrumented(workflowcheck.Deps{Store: store.NewWorkflowCheckRunExtStore(cfg.Database.ORM())})
+		if checks == nil {
+			checks = workflowcheck.NewInstrumented(workflowcheck.Deps{Store: store.NewWorkflowCheckRunExtStore(cfg.Database.ORM())})
+		}
 		reports := workflowcheck.Activities{Service: checks}
 		w.RegisterActivityWithOptions(reports.Started, activity.RegisterOptions{Name: workflowcheck.StartedActivityName})
 		w.RegisterActivityWithOptions(reports.Ended, activity.RegisterOptions{Name: workflowcheck.EndedActivityName})

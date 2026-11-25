@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  Folder,
   Gauge,
   Image as ImageIcon,
   Paperclip,
@@ -42,7 +43,8 @@ export type ComposerOptionsPage =
   | { id: "preset"; target: string }
   | { id: "workflow" }
   | { id: "commands" }
-  | { id: "account" };
+  | { id: "account" }
+  | { id: "projects" };
 
 export type AttachKind = "photos" | "camera" | "files";
 
@@ -89,6 +91,13 @@ export interface ComposerOptionsProps {
   commands: SlashCommand[];
   onCommand: (command: SlashCommand) => void;
   chatId?: string;
+  /** The chat's projects (Chat/ChatProjectChips); absent where they cannot change. */
+  projects?: null | {
+    /** The row's value: the projects, briefly. */
+    summary: string;
+    /** The page: the chips, and the selector to add one. */
+    renderPage: (onBack: () => void) => ReactNode;
+  };
 }
 
 const GROUP = "overflow-hidden rounded-xl border border-border/60 bg-background";
@@ -226,6 +235,14 @@ function OptionsPage(props: ComposerOptionsProps & { toRoot: () => void }) {
       );
     case "account":
       return <AccountPage chatId={props.chatId} onBack={toRoot} />;
+    case "projects":
+      if (!props.projects) return <RootPage {...props} />;
+      return (
+        <>
+          <PageHeader title="Projects" onBack={toRoot} />
+          {props.projects.renderPage(toRoot)}
+        </>
+      );
     case "root":
       return <RootPage {...props} />;
   }
@@ -240,6 +257,7 @@ function RootPage({
   onPrompts,
   commands,
   chatId,
+  projects,
 }: ComposerOptionsProps) {
   return (
     <div className="space-y-3 pb-2">
@@ -268,6 +286,15 @@ function RootPage({
         ))}
         <WorkflowRow workflow={workflow} onOpen={() => onNavigate({ id: "workflow" })} />
         {configure && <SettingsRow configure={configure} onOpen={() => onNavigate({ id: "settings", initial: "main" })} />}
+        {projects && (
+          <Row
+            label="Projects"
+            icon={<Folder className="h-4 w-4" />}
+            value={projects.summary}
+            onClick={() => onNavigate({ id: "projects" })}
+            testId="options-projects-row"
+          />
+        )}
       </div>
 
       <div className={GROUP}>

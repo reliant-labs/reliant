@@ -178,7 +178,7 @@ describe("one navigation intent across real entry points", () => {
     expect(pane()).toEqual(b);
   });
 
-  it.each([false, true])("delete current A cleans departing pane; replacement remembered chat = %s", async (remembered) => {
+  it.each([false, true])("delete current A cleans departing pane; the replacement never reopens a remembered chat (remembered = %s)", async (remembered) => {
     useProjectStore.setState({ currentProject: project("a") });
     useChatStore.setState({ activeChatId: "a-chat" });
     useWorktreeStore.setState({ currentWorktreeId: "branch-a", currentWorktreeProjectId: "a" });
@@ -191,7 +191,8 @@ describe("one navigation intent across real entry points", () => {
     }
     await useProjectStore.getState().deleteProject("a");
     expect(pane().project).toBe("b");
-    expect(pane().chat).toBe(remembered ? "b-chat" : null);
+    // Only a URL opens a chat: the replacement project shows its home.
+    expect(pane().chat).toBeNull();
     expect(pane().workspace).toBe("main-b");
     expect(pane().viewers).toEqual([]);
     expect(useWorkspaceStateStore.getState().projects.a).toBeUndefined();

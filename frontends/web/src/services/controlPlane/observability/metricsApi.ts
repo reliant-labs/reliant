@@ -11,6 +11,7 @@
  * does not know (a newer server) reads as "unknown", never undefined.
  */
 
+import type { Transport } from "@connectrpc/connect";
 import {
   MetricTemporality as WireTemporality,
   MetricType as WireMetricType,
@@ -37,8 +38,8 @@ import type {
 import { catalogGroup } from "./metricsTypes";
 import type { ObsScope, TimeWindow } from "./types";
 
-function client() {
-  return obsClient(ObservabilityService);
+function client(transport?: Transport) {
+  return obsClient(ObservabilityService, transport);
 }
 
 const WIRE_KIND: Partial<Record<MetricKind, WireMetricType>> = {
@@ -96,8 +97,8 @@ function mapExemplar(e: WireMetricExemplar): MetricExemplar {
 }
 
 /** The metric catalog for the scope's window (the server caps it at 24 hours). */
-export async function listMetricCatalog(req: ObsScope & { window: TimeWindow } & ListMetricCatalogRequest, options: { signal?: AbortSignal } = {}): Promise<ListMetricCatalogResult> {
-  const res = await client().listMetrics({
+export async function listMetricCatalog(req: ObsScope & { window: TimeWindow } & ListMetricCatalogRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ListMetricCatalogResult> {
+  const res = await client(transport).listMetrics({
     scope: wireScope(req, req.window),
     nameContains: req.name || undefined,
     limit: req.limit ?? 0,
@@ -106,8 +107,8 @@ export async function listMetricCatalog(req: ObsScope & { window: TimeWindow } &
 }
 
 /** One metric's detail: its catalog entry, export interval, attribute cardinalities and suggested breakdowns. */
-export async function getMetric(req: ObsScope & { window: TimeWindow } & GetMetricRequest, options: { signal?: AbortSignal } = {}): Promise<MetricDetail> {
-  const res = await client().getMetric({
+export async function getMetric(req: ObsScope & { window: TimeWindow } & GetMetricRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<MetricDetail> {
+  const res = await client(transport).getMetric({
     scope: wireScope(req, req.window),
     metricName: req.name,
     metricType: req.kind ? WIRE_KIND[req.kind] : undefined,
@@ -122,9 +123,9 @@ export async function getMetric(req: ObsScope & { window: TimeWindow } & GetMetr
 }
 
 /** Up to 20 exemplars of one metric (a sampled observation and its trace), stored traces first. */
-export async function listMetricExemplars(req: ObsScope & { window: TimeWindow } & ListMetricExemplarsRequest, options: { signal?: AbortSignal } = {}): Promise<MetricExemplar[]> {
+export async function listMetricExemplars(req: ObsScope & { window: TimeWindow } & ListMetricExemplarsRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<MetricExemplar[]> {
   const range = req.range ? wireScope(req, req.range).timeRange : undefined;
-  const res = await client().listMetricExemplars({
+  const res = await client(transport).listMetricExemplars({
     scope: wireScope(req, req.window),
     metricName: req.name,
     metricType: req.kind ? WIRE_KIND[req.kind] : undefined,

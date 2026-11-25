@@ -4078,10 +4078,10 @@ const file_services_changes_v1_changes_proto_rawDesc = "" +
 	"\x18ChangeDeliveryTargetKind\x12+\n" +
 	"'CHANGE_DELIVERY_TARGET_KIND_UNSPECIFIED\x10\x00\x12+\n" +
 	"'CHANGE_DELIVERY_TARGET_KIND_STATIC_SITE\x10\x01\x12*\n" +
-	"&CHANGE_DELIVERY_TARGET_KIND_CONFIG_MAP\x10\x022\xf2\v\n" +
-	"\x0eChangesService\x12X\n" +
-	"\vListChanges\x12#.controlplane.v1.ListChangesRequest\x1a$.controlplane.v1.ListChangesResponse\x12R\n" +
-	"\tGetChange\x12!.controlplane.v1.GetChangeRequest\x1a\".controlplane.v1.GetChangeResponse\x12[\n" +
+	"&CHANGE_DELIVERY_TARGET_KIND_CONFIG_MAP\x10\x022\x91\f\n" +
+	"\x0eChangesService\x12]\n" +
+	"\vListChanges\x12#.controlplane.v1.ListChangesRequest\x1a$.controlplane.v1.ListChangesResponse\"\x03\x90\x02\x01\x12W\n" +
+	"\tGetChange\x12!.controlplane.v1.GetChangeRequest\x1a\".controlplane.v1.GetChangeResponse\"\x03\x90\x02\x01\x12[\n" +
 	"\fCreateChange\x12$.controlplane.v1.CreateChangeRequest\x1a%.controlplane.v1.CreateChangeResponse\x12j\n" +
 	"\x11UpdateChangeDraft\x12).controlplane.v1.UpdateChangeDraftRequest\x1a*.controlplane.v1.UpdateChangeDraftResponse\x12g\n" +
 	"\x10SetChangePreview\x12(.controlplane.v1.SetChangePreviewRequest\x1a).controlplane.v1.SetChangePreviewResponse\x12v\n" +
@@ -4092,11 +4092,11 @@ const file_services_changes_v1_changes_proto_rawDesc = "" +
 	"\rRollOutChange\x12%.controlplane.v1.RollOutChangeRequest\x1a&.controlplane.v1.RollOutChangeResponse\x12U\n" +
 	"\n" +
 	"StopChange\x12\".controlplane.v1.StopChangeRequest\x1a#.controlplane.v1.StopChangeResponse\x12[\n" +
-	"\fEndChangeRun\x12$.controlplane.v1.EndChangeRunRequest\x1a%.controlplane.v1.EndChangeRunResponse\x12g\n" +
-	"\x10ListChangeEvents\x12(.controlplane.v1.ListChangeEventsRequest\x1a).controlplane.v1.ListChangeEventsResponse\x12m\n" +
-	"\x12GetChangesSnapshot\x12*.controlplane.v1.GetChangesSnapshotRequest\x1a+.controlplane.v1.GetChangesSnapshotResponse\x12g\n" +
-	"\x10GetChangeReadout\x12(.controlplane.v1.GetChangeReadoutRequest\x1a).controlplane.v1.GetChangeReadoutResponse\x12\x7f\n" +
-	"\x18GetChangesDeliveryStatus\x120.controlplane.v1.GetChangesDeliveryStatusRequest\x1a1.controlplane.v1.GetChangesDeliveryStatusResponseB\xd5\x01\n" +
+	"\fEndChangeRun\x12$.controlplane.v1.EndChangeRunRequest\x1a%.controlplane.v1.EndChangeRunResponse\x12l\n" +
+	"\x10ListChangeEvents\x12(.controlplane.v1.ListChangeEventsRequest\x1a).controlplane.v1.ListChangeEventsResponse\"\x03\x90\x02\x01\x12r\n" +
+	"\x12GetChangesSnapshot\x12*.controlplane.v1.GetChangesSnapshotRequest\x1a+.controlplane.v1.GetChangesSnapshotResponse\"\x03\x90\x02\x01\x12l\n" +
+	"\x10GetChangeReadout\x12(.controlplane.v1.GetChangeReadoutRequest\x1a).controlplane.v1.GetChangeReadoutResponse\"\x03\x90\x02\x01\x12\x84\x01\n" +
+	"\x18GetChangesDeliveryStatus\x120.controlplane.v1.GetChangesDeliveryStatusRequest\x1a1.controlplane.v1.GetChangesDeliveryStatusResponse\"\x03\x90\x02\x01B\xd5\x01\n" +
 	"\x13com.controlplane.v1B\fChangesProtoP\x01ZSgithub.com/reliant-labs/reliant/gen/controlplane/services/changes/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (

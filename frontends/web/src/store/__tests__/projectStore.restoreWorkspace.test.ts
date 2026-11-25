@@ -2,9 +2,8 @@
  * selectProject's desktop workspace restore, and the mobile opt-out.
  *
  * By default a project switch restores the desktop workspace the user left in
- * that project: its last worktree and its last ACTIVE CHAT, which it selects
- * (selectChat marks it read, subscribes the update stream to it and loads its
- * plan). The mobile surface names the chat on screen in its route, so that
+ * that project: its last worktree, viewers and chat queue. Never its last
+ * active chat: only a URL opens a chat. The mobile surface names the chat on screen in its route, so that
  * remembered chat is one the user is not looking at; it passes
  * `restoreWorkspace: false`, and the switch is then the project only — no
  * worktree / chat RPCs, no chat selected behind the user's back. (The chat
@@ -59,16 +58,13 @@ beforeEach(() => {
 });
 
 describe("selectProject workspace restore", () => {
-  it("restores the desktop workspace and its active chat by default", async () => {
+  it("restores the desktop workspace by default, but never its remembered chat", async () => {
     await useProjectStore.getState().selectProject(to);
 
     expect(useProjectStore.getState().currentProject?.id).toBe(to.id);
     expect(restoreLastWorktree).toHaveBeenCalledWith(to.id, undefined, { isCurrent: expect.any(Function) });
-    // Timed as a restore, not a click (lib/chatOpenInteraction ChatOpenEntry).
-    expect(selectChat).toHaveBeenCalledWith(expect.objectContaining({ id: rememberedChat.id }), {
-      deferPersist: true,
-      openEntry: "restore",
-    });
+    // Only a URL opens a chat (`/c/<id>`): the project's home shows none.
+    expect(selectChat).not.toHaveBeenCalled();
   });
 
   it("with restoreWorkspace: false, switches the project only", async () => {

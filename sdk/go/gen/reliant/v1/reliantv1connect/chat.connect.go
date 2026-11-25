@@ -76,18 +76,21 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceGetContentBlockBodiesProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetContentBlockBodies")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getChatUpdates: connect.NewClient[v1.GetChatUpdatesRequest, v1.GetChatUpdatesResponse](
 			httpClient,
 			baseURL+ChatServiceGetChatUpdatesProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetChatUpdates")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getWorkflowExecutions: connect.NewClient[v1.GetWorkflowExecutionsRequest, v1.GetWorkflowExecutionsResponse](
 			httpClient,
 			baseURL+ChatServiceGetWorkflowExecutionsProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("GetWorkflowExecutions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -141,18 +144,21 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceGetContentBlockBodiesProcedure,
 		svc.GetContentBlockBodies,
 		connect.WithSchema(chatServiceMethods.ByName("GetContentBlockBodies")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceGetChatUpdatesHandler := connect.NewUnaryHandler(
 		ChatServiceGetChatUpdatesProcedure,
 		svc.GetChatUpdates,
 		connect.WithSchema(chatServiceMethods.ByName("GetChatUpdates")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceGetWorkflowExecutionsHandler := connect.NewUnaryHandler(
 		ChatServiceGetWorkflowExecutionsProcedure,
 		svc.GetWorkflowExecutions,
 		connect.WithSchema(chatServiceMethods.ByName("GetWorkflowExecutions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

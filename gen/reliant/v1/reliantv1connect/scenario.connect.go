@@ -89,6 +89,7 @@ func NewScenarioServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+ScenarioServiceListScenariosProcedure,
 			connect.WithSchema(scenarioServiceMethods.ByName("ListScenarios")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createScenario: connect.NewClient[v1.CreateScenarioRequest, v1.CreateScenarioResponse](
@@ -195,6 +196,7 @@ func NewScenarioServiceHandler(svc ScenarioServiceHandler, opts ...connect.Handl
 		ScenarioServiceListScenariosProcedure,
 		svc.ListScenarios,
 		connect.WithSchema(scenarioServiceMethods.ByName("ListScenarios")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	scenarioServiceCreateScenarioHandler := connect.NewUnaryHandler(
