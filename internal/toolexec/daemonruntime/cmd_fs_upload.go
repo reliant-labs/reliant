@@ -39,6 +39,7 @@ func init() {
 	RegisterCommand(daemon.UploadCommitCommand, defaultUploads.handleCommit)
 	RegisterCommand(daemon.UploadAbortCommand, defaultUploads.handleAbort)
 	RegisterCommand(daemon.UploadStatusCommand, defaultUploads.handleStatus)
+	RegisterCommand(daemon.UserUploadBeginCommand, defaultUploads.handleUserBegin)
 }
 
 // uploadStaleAfter is how long a session may sit untouched before a begin
@@ -65,6 +66,9 @@ var errUploadNotFound = errors.New(daemon.UploadNotFoundMarker)
 type uploadStore struct {
 	// dir is the staging directory.
 	dir func() (string, error)
+	// userRoot is the uploads folder user uploads go to; nil is
+	// daemon.UserUploadsRoot (~/.reliant/uploads).
+	userRoot func() (string, error)
 	// now is the sweep's clock; nil is time.Now.
 	now func() time.Time
 	// available reports the free bytes of the filesystem holding a path;
@@ -89,6 +93,18 @@ type uploadSession struct {
 	Size       int64     `json:"size"`
 	OnConflict string    `json:"on_conflict"`
 	CreatedAt  time.Time `json:"created_at"`
+	// Destination is daemon.UploadDestinationUserUploads for a session
+	// fs.user_upload_begin opened: Path is then in UploadsRoot, the uploads
+	// folder resolved at begin, and Root only binds the session to the
+	// workspace that scoped it. Empty for a workspace upload, whose Path is
+	// inside Root.
+	Destination string `json:"destination,omitempty"`
+	UploadsRoot string `json:"uploads_root,omitempty"`
+}
+
+// userUploads reports whether the session is a user upload.
+func (s uploadSession) userUploads() bool {
+	return s.Destination == daemon.UploadDestinationUserUploads
 }
 
 // lock takes upload id's lock and returns its release.
@@ -227,15 +243,8 @@ func (s *uploadStore) handleBegin(ctx context.Context, payload []byte) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	if req.Size < 0 {
-		return nil, fmt.Errorf("invalid size %d", req.Size)
-	}
-	maxSize := req.MaxSize
-	if maxSize <= 0 {
-		maxSize = daemon.DefaultUploadMaxSize
-	}
-	if req.Size > maxSize {
-		return nil, fmt.Errorf("%s: %d bytes exceeds the limit of %d bytes", daemon.UploadTooLargeMarker, req.Size, maxSize)
+	if err := checkUploadSize(req.Size, req.MaxSize); err != nil {
+		return nil, err
 	}
 
 	// Both resolved with allowMissing, as for any write; a no-op for
@@ -260,6 +269,28 @@ func (s *uploadStore) handleBegin(ctx context.Context, payload []byte) ([]byte, 
 		}
 	}
 
+	return s.open(uploadSession{Root: filepath.Clean(req.Root), Path: dest, Size: req.Size, OnConflict: policy})
+}
+
+// checkUploadSize refuses a negative size, or one over maxSize (0 is
+// daemon.DefaultUploadMaxSize).
+func checkUploadSize(size, maxSize int64) error {
+	if size < 0 {
+		return fmt.Errorf("invalid size %d", size)
+	}
+	if maxSize <= 0 {
+		maxSize = daemon.DefaultUploadMaxSize
+	}
+	if size > maxSize {
+		return fmt.Errorf("%s: %d bytes exceeds the limit of %d bytes", daemon.UploadTooLargeMarker, size, maxSize)
+	}
+	return nil
+}
+
+// open stages a new session for sess (its destination already checked): an
+// empty part file and the session description, after sweeping stale
+// sessions and checking both disks have room.
+func (s *uploadStore) open(sess uploadSession) ([]byte, error) {
 	dir, err := s.dir()
 	if err != nil {
 		return nil, err
@@ -268,7 +299,7 @@ func (s *uploadStore) handleBegin(ctx context.Context, payload []byte) ([]byte, 
 		return nil, fmt.Errorf("creating the upload staging directory: %w", err)
 	}
 	s.sweep(dir)
-	if err := s.checkSpace(req.Size, dir, filepath.Dir(dest)); err != nil {
+	if err := s.checkSpace(sess.Size, dir, filepath.Dir(sess.Path)); err != nil {
 		return nil, err
 	}
 
@@ -287,12 +318,72 @@ func (s *uploadStore) handleBegin(ctx context.Context, payload []byte) ([]byte, 
 		_ = os.Remove(part)
 		return nil, fmt.Errorf("creating upload %s: %w", id, err)
 	}
-	sess := uploadSession{Root: filepath.Clean(req.Root), Path: dest, Size: req.Size, OnConflict: policy, CreatedAt: s.clock().UTC()}
+	sess.CreatedAt = s.clock().UTC()
 	if err := writeUploadSession(dir, meta, sess); err != nil {
 		_ = os.Remove(part)
 		return nil, fmt.Errorf("recording upload %s: %w", id, err)
 	}
-	return json.Marshal(daemon.UploadBeginResponse{UploadID: id, Path: dest})
+	return json.Marshal(daemon.UploadBeginResponse{UploadID: id, Path: sess.Path})
+}
+
+// =============================================================================
+// fs.user_upload_begin
+// =============================================================================
+
+func (s *uploadStore) userUploadsRoot() (string, error) {
+	if s.userRoot != nil {
+		return s.userRoot()
+	}
+	return daemon.UserUploadsRoot()
+}
+
+// handleUserBegin opens a session whose file goes to the uploads folder
+// (daemon/user_uploads.go): the destination is resolved here, from this
+// daemon's own home directory, and the request only names the folder and the
+// file. A taken name is always kept: the session commits under the rename
+// policy.
+func (s *uploadStore) handleUserBegin(ctx context.Context, payload []byte) ([]byte, error) {
+	var req daemon.UserUploadBeginRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+	if req.Root == "" {
+		return nil, errors.New("invalid payload: root is required")
+	}
+	if err := checkUploadSize(req.Size, req.MaxSize); err != nil {
+		return nil, err
+	}
+	// The workspace root binds the session; a confined caller must be
+	// allowed it, as for any upload.
+	if _, err := daemonpolicy.ResolveDir(ctx, req.Root); err != nil {
+		return nil, err
+	}
+	uploadsRoot, err := s.userUploadsRoot()
+	if err != nil {
+		return nil, err
+	}
+	uploadsRoot = filepath.Clean(uploadsRoot)
+	// 0700, as the staging folder beside it: what a person uploads is theirs.
+	if err := os.MkdirAll(uploadsRoot, 0o700); err != nil {
+		return nil, fmt.Errorf("creating the uploads folder: %w", err)
+	}
+	dest, err := daemon.ResolveUserUploadDest(uploadsRoot, req.Folder, req.Filename)
+	if err != nil {
+		return nil, err
+	}
+	// A confined caller (a connector) is refused unless its root covers the
+	// uploads folder; a no-op for first-party callers.
+	if _, err := daemonpolicy.ResolveDir(ctx, dest); err != nil {
+		return nil, err
+	}
+	return s.open(uploadSession{
+		Root:        filepath.Clean(req.Root),
+		Path:        dest,
+		Size:        req.Size,
+		OnConflict:  daemon.UploadConflictRename,
+		Destination: daemon.UploadDestinationUserUploads,
+		UploadsRoot: uploadsRoot,
+	})
 }
 
 // writeUploadSession writes meta through a temporary file and a rename, so a
@@ -472,6 +563,16 @@ func (s *uploadStore) handleCommit(ctx context.Context, payload []byte) ([]byte,
 	if override != "" {
 		policy = override
 	}
+	// The destination's boundary: the workspace root, or for a user upload
+	// the uploads folder resolved at begin.
+	validate := func(path string) (string, error) { return daemon.ValidateUploadDest(sess.Root, path) }
+	dirMode := os.FileMode(0o755)
+	if sess.userUploads() {
+		// Chat never asks about a clash: a user upload always keeps both.
+		policy = daemon.UploadConflictRename
+		validate = func(path string) (string, error) { return daemon.ValidateUserUploadDest(sess.UploadsRoot, path) }
+		dirMode = 0o700
+	}
 
 	// The destination is checked again: the workspace may have changed
 	// since begin (a directory replaced by a symlink out of it).
@@ -479,15 +580,15 @@ func (s *uploadStore) handleCommit(ctx context.Context, payload []byte) ([]byte,
 	if err != nil {
 		return nil, err
 	}
-	dest, err := daemon.ValidateUploadDest(sess.Root, path)
+	dest, err := validate(path)
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dest), dirMode); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %w", filepath.Dir(dest), err)
 	}
 	// And once more over the directories just created.
-	if dest, err = daemon.ValidateUploadDest(sess.Root, dest); err != nil {
+	if dest, err = validate(dest); err != nil {
 		return nil, err
 	}
 	// A refusal (the file exists under policy fail) keeps the session, so
@@ -497,7 +598,7 @@ func (s *uploadStore) handleCommit(ctx context.Context, payload []byte) ([]byte,
 		return nil, err
 	}
 	removeUpload(part, meta)
-	return json.Marshal(daemon.UploadCommitResponse{Path: final, Size: sess.Size, Created: created})
+	return json.Marshal(daemon.UploadCommitResponse{Path: final, Size: sess.Size, Created: created, Destination: sess.Destination})
 }
 
 // =============================================================================

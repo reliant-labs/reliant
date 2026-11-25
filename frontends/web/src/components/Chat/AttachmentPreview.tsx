@@ -6,6 +6,7 @@ import { ImagePreviewModal } from './ImagePreviewModal';
 import { TextAttachmentModal, isTextAttachment } from './TextAttachmentModal';
 import { isImageMimeType, useAttachmentBlobUrls } from './useAttachmentBlobUrls';
 import { useAttachmentStore } from '../../store/attachmentStore';
+import type { MachineUpload } from '../../store/machineUploadStore';
 
 interface Attachment {
   id: string;
@@ -207,6 +208,55 @@ export function UploadChip({ name, failed, onRetry, onCancel }: {
               onRetry();
             }}
             aria-label={`Retry ${name}`}
+            className="flex h-full w-7 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:w-11"
+          >
+            <RotateCw className="h-3 w-3" aria-hidden />
+          </button>
+        )}
+      </ComposerChip>
+    </div>
+  );
+}
+
+/**
+ * A file on its way to (or already on) the chat's machine, outside the repo:
+ * a spinner and how far it got, then its name with the absolute path the
+ * agent will be given as the tooltip. Removing it aborts an upload still
+ * running.
+ */
+export function MachineUploadChip({ upload, onRetry, onRemove }: {
+  upload: MachineUpload;
+  onRetry: () => void;
+  /** Absent while a send owns the draft. */
+  onRemove?: () => void;
+}) {
+  const failed = upload.status === 'failed';
+  const uploading = upload.status === 'uploading';
+  const percent = upload.size > 0 ? Math.min(100, Math.floor((upload.bytesReceived / upload.size) * 100)) : 0;
+  const state = failed ? 'Upload failed' : uploading ? `Uploading… ${percent}%` : 'On the machine';
+  return (
+    <div role="status" className="contents" title={failed ? upload.error : upload.path} data-testid="machine-upload-chip">
+      <ComposerChip
+        tone={failed ? 'warning' : 'default'}
+        icon={
+          uploading ? (
+            <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
+          ) : failed ? undefined : (
+            <FileIcon fileName={upload.name} className="h-3.5 w-3.5" />
+          )
+        }
+        label={`${upload.name} · ${state}`}
+        onRemove={onRemove}
+        removeLabel={uploading ? `Cancel ${upload.name}` : `Remove ${upload.name}`}
+      >
+        {failed && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRetry();
+            }}
+            aria-label={`Retry ${upload.name}`}
             className="flex h-full w-7 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:w-11"
           >
             <RotateCw className="h-3 w-3" aria-hidden />

@@ -140,6 +140,9 @@ var userActionCommands = map[string]bool{
 	"fs.upload_begin":  true,
 	"fs.upload_chunk":  true,
 	"fs.upload_commit": true,
+	// A file dropped into the chat composer, sent to the machine's uploads
+	// folder (its chunks and commit are the fs.upload_* above).
+	"fs.user_upload_begin": true,
 
 	"git.clone":   true,
 	"git.pull":    true,

@@ -424,11 +424,14 @@ func beginRecoveryCommand(name string, payload []byte) (func(), error) {
 				if req.Path != "" {
 					paths = []string{req.Path}
 				}
-			case daemon.UploadChunkCommand, daemon.UploadCommitCommand, daemon.UploadAbortCommand, daemon.UploadStatusCommand:
+			case daemon.UploadChunkCommand, daemon.UploadCommitCommand, daemon.UploadAbortCommand, daemon.UploadStatusCommand,
+				daemon.UserUploadBeginCommand:
 				// A session is bound to the workspace root it was begun
 				// for (its handlers refuse any other), and the only place
 				// it writes outside the staging directory is the commit's
-				// destination, inside that root.
+				// destination, inside that root. A user upload's session
+				// is bound to its root the same way; its file goes to the
+				// uploads folder, which no worktree recovery touches.
 				if req.Root != "" {
 					paths = []string{req.Root}
 				}

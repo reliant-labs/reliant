@@ -22,12 +22,18 @@ import { detectPlatform } from "../../lib/keyboard/platform";
 import { useComposerUploads } from "./useComposerUploads";
 import { legacyPasteDraftKeys, migrateLegacyPasteDrafts, pastedTextFilename, useLongPaste } from "./useLongPaste";
 import { isDraftAttachmentPersisted, useAttachmentStore } from "../../store/attachmentStore";
+import {
+  cannotAttachMessage,
+  goesToMachine,
+  machineUploadContext,
+  useMachineUploadStore,
+} from "../../store/machineUploadStore";
 import { useAuthUserId } from "@/lib/auth/use-auth";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
 import { useModels } from "../../store/globalDataStore";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
-import { AttachmentPreview, ComposerChip, UploadChip } from "./AttachmentPreview";
+import { AttachmentPreview, ComposerChip, MachineUploadChip, UploadChip } from "./AttachmentPreview";
 import { WorkflowSelector } from "./WorkflowSelector";
 import { ChatTextArea } from "./ChatTextArea";
 import { useCodeContexts, extractMarkers } from "./useCodeContexts";
@@ -1166,6 +1172,42 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     }, [isStreaming, effectiveStreaming, isChatBusy, chatId]);
 
     const uploadQueue = useComposerUploads(attachFile, removeAttachment, attachmentSessionId);
+
+    // Files chat can't attach (an xlsx, a zip, a file over the attachment
+    // cap) go to the chat's machine instead, into ~/.reliant/uploads/<chat>/
+    // outside the repo, and the message names their absolute path
+    // (store/machineUploadStore.ts).
+    const allMachineUploads = useMachineUploadStore((state) => state.uploads);
+    const machineUploads = useMemo(
+      () => allMachineUploads.filter((upload) => upload.session === attachmentSessionId),
+      [allMachineUploads, attachmentSessionId],
+    );
+    const machineUploading = machineUploads.some((upload) => upload.status === "uploading");
+    const machineUploadsDone = machineUploads.some((upload) => upload.status === "done");
+    const sendToMachine = (files: File[]) => {
+      if (files.length === 0) return;
+      // A new chat has no machine until its first message starts it (the
+      // default, a chosen one, or none), so there is nowhere certain to send
+      // the file yet: say so instead of guessing a machine.
+      if (!chatId) {
+        for (const file of files) {
+          toast.error(
+            `Send a message to start this chat, then add ${file.name}: files chat can't attach go to the chat's machine, and a new chat doesn't have one yet.`,
+            { duration: 8000 },
+          );
+        }
+        return;
+      }
+      const projectId = chatForStatus?.projectId ?? currentProjectFromStore?.id;
+      if (!projectId) {
+        for (const file of files) toast.error(cannotAttachMessage(file), { duration: 6000 });
+        return;
+      }
+      useMachineUploadStore.getState().add(attachmentSessionId, files, {
+        scope: { projectId, worktreeId: chatForStatus?.worktreeId || undefined, chatId },
+        uploadsFolder: chatId,
+      });
+    };
     // A long paste is an ordinary upload, named after the draft's other files.
     useLongPaste({
       textarea: textareaRef,
@@ -1206,7 +1248,9 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     // Drag and drop functionality
     const handleFileDrop = async (files: File[]) => {
       if (!canAttach || disabled || sendingRef.current || queueingRef.current) return;
-      await uploadQueue.add(attachmentSessionId, files);
+      sendToMachine(files.filter(goesToMachine));
+      const direct = files.filter((file) => !goesToMachine(file));
+      if (direct.length > 0) await uploadQueue.add(attachmentSessionId, direct);
     };
 
     const { isDragging, isValidDrag, handlers, handlePaste } = useDragAndDrop({
@@ -1224,7 +1268,10 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/octet-stream", // Allow unknown types, will be validated by filename
       ],
-      maxFileSize: 50 * 1024 * 1024, // 50MB
+      // Any type, up to the machine upload cap: what chat cannot attach goes
+      // to the chat's machine (handleFileDrop).
+      acceptAnyType: true,
+      maxFileSize: 2 * 1024 * 1024 * 1024, // 2 GiB
       maxFiles: 10,
       disabled: disabled || uploading,
     });
@@ -1248,7 +1295,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     }, [chatId, pendingQuestion]);
 
     const handleSend = async () => {
-      if (disabled || sendingRef.current || queueingRef.current || uploading || uploadQueue.hasPending()) return;
+      if (disabled || sendingRef.current || queueingRef.current || uploading || uploadQueue.hasPending() || machineUploading) return;
       if (canConfigure && hasUnsetParams) {
         // The server refuses a run missing a required input; take the user
         // straight to where they can fill it in.
@@ -1267,7 +1314,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       const markers = [...contexts, ...fromText.contexts];
       const hasCodeContexts = markers.length > 0;
 
-      const hasSomethingToSend = hasContent || hasAttachments || hasCodeContexts;
+      const uploadedToMachine = machineUploadContext(machineUploads);
+      const hasSomethingToSend = hasContent || hasAttachments || hasCodeContexts || uploadedToMachine !== "";
       const willSend =
         hasSomethingToSend && !effectiveStreaming && isMessagingAllowed;
 
@@ -1333,6 +1381,11 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           }
         }
         
+        // Files sent to the chat's machine: the agent is told where they are.
+        if (uploadedToMachine) {
+          messageWithContexts = messageWithContexts ? `${messageWithContexts}\n\n${uploadedToMachine}` : uploadedToMachine;
+        }
+
         // Only use regular attachments (no file reference attachments)
         const allAttachmentIds = [...attachmentIds];
 
@@ -1373,6 +1426,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         if (!mobile) {
           handleClearInput(); // Desktop failures are retained in the transcript.
           clearAttachments(attachmentSessionId);
+          useMachineUploadStore.getState().clearDone(attachmentSessionId);
           clearContexts();
         }
 
@@ -1390,6 +1444,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
             // with this send. The code-context chips are this composer's own
             // state, so they go only while it still shows the submitted draft.
             clearAttachments(attachmentSessionId);
+            useMachineUploadStore.getState().clearDone(attachmentSessionId);
             if (clearSubmittedDraft()) clearContexts();
           }
         } catch (error) {
@@ -1453,8 +1508,10 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const handleQueue = useCallback(async () => {
       // The mailbox requires a body; attachment-only submissions get an
       // explicit description rather than a fabricated blank message.
-      const message = input.trim() || (attachments.length ? `Attached: ${attachments.map((a) => a.filename).join(", ")}` : "");
-      if (!message || sendingRef.current || queueingRef.current || disabled || uploading || uploadQueue.hasPending()) return;
+      const typed = input.trim() || (attachments.length ? `Attached: ${attachments.map((a) => a.filename).join(", ")}` : "");
+      const uploadedToMachine = machineUploadContext(machineUploads);
+      const message = uploadedToMachine ? (typed ? `${typed}\n\n${uploadedToMachine}` : uploadedToMachine) : typed;
+      if (!message || sendingRef.current || queueingRef.current || disabled || uploading || uploadQueue.hasPending() || machineUploading) return;
       if (!chatId || !targetThreadId) {
         toast.error("Can't queue a message: this chat has no running agent yet.");
         return;
@@ -1494,6 +1551,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         }
         queued = true;
         clearAttachments(attachmentSessionId);
+        useMachineUploadStore.getState().clearDone(attachmentSessionId);
       } catch (error) {
         logger.error("[ChatInput] Failed to queue agent message", {
           error,
@@ -1512,7 +1570,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
             messageIds: [clientMessageId],
           });
           const typedSince = latestInputRef.current.trim();
-          replaceInput(typedSince ? `${message}\n\n${typedSince}` : message);
+          // The machine uploads' lines stay in their chips, not the text.
+          replaceInput(typedSince ? `${typed}\n\n${typedSince}` : typed);
         }
       }
       await refreshQueuedMessages();
@@ -1529,6 +1588,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       disabled,
       uploading,
       uploadQueue,
+      machineUploads,
+      machineUploading,
     ]);
 
     const handleAttachClick = () => {
@@ -1901,14 +1962,16 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       : [];
 
     const hasText = input.trim().length > 0;
-    const hasContent = hasText || attachments.length > 0 || contexts.length > 0;
-    const sendDisabled = disabled || sending || queueing || uploading || uploadQueue.uploads.length > 0 || !isMessagingAllowed;
+    const hasContent = hasText || attachments.length > 0 || contexts.length > 0 || machineUploadsDone;
+    // Send waits for every file still on its way to the chat's machine.
+    const sendDisabled = disabled || sending || queueing || uploading || uploadQueue.uploads.length > 0 || machineUploading || !isMessagingAllowed;
     const { isMac } = detectPlatform();
     const sendKeyHint = coarsePointer ? (isMac ? "⌘↵" : "Ctrl+Enter") : "Enter";
 
     const hasChips =
       contexts.length > 0 ||
       uploadQueue.uploads.length > 0 ||
+      machineUploads.length > 0 ||
       attachments.length > 0 ||
       !!threadBorderColor ||
       armedPresets.length > 0;
@@ -2026,6 +2089,14 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                             failed={upload.status === "failed"}
                             onRetry={() => void uploadQueue.retry(upload.id)}
                             onCancel={() => uploadQueue.cancel(upload.id)}
+                          />
+                        ))}
+                        {machineUploads.map((upload) => (
+                          <MachineUploadChip
+                            key={upload.id}
+                            upload={upload}
+                            onRetry={() => useMachineUploadStore.getState().retry(upload.id)}
+                            onRemove={sending || queueing ? undefined : () => useMachineUploadStore.getState().remove(upload.id)}
                           />
                         ))}
                         <AttachmentPreview
@@ -2190,7 +2261,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                         onQueue={handleQueue}
                         isStreaming={effectiveStreaming}
                         hasContent={hasContent}
-                        hasText={hasText || attachments.length > 0}
+                        hasText={hasText || attachments.length > 0 || machineUploadsDone}
                         disabled={sendDisabled}
                         sendKeyHint={sendKeyHint}
                       />
@@ -2204,7 +2275,10 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                     ref={fileInputRef}
                     type="file"
                     multiple
-                    accept={getAcceptedMimeTypes()}
+                    // In a chat any file is taken: what chat can't attach
+                    // goes to the chat's machine. A new chat has no machine
+                    // yet, so its picker offers only what chat attaches.
+                    accept={chatId ? undefined : getAcceptedMimeTypes()}
                     onChange={handleFileSelect}
                     className="hidden"
                     data-testid="attach-files-input"

@@ -61,6 +61,8 @@ export const ERROR_REASONS = [
   "approval_not_pending",
   /** The operator turned the forge rpc surface off (internal/grpc/forge_api_disabled.go). */
   "forge_api_disabled",
+  /** A file chat can't attach could not go to the chat's machine: its daemon predates the uploads folder (handlers/file_system). FailedPrecondition. */
+  "machine_needs_update_for_uploads",
   // ── reliant: client version floor (internal/errreason.UpgradeRequired) ──
   /** This app is older than the minimum the server serves; it must reload or update. FailedPrecondition. */
   "upgrade_required",

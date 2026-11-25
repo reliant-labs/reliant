@@ -27,7 +27,7 @@
  */
 
 import { Code, ConnectError, type Client } from "@connectrpc/connect";
-import { FileSystemService, UploadConflictPolicy } from "../gen/reliant/v1/filesystem_pb";
+import { FileSystemService, UploadConflictPolicy, UploadDestination } from "../gen/reliant/v1/filesystem_pb";
 
 /** The five upload RPCs of FileSystemService (a real client, or a fake). */
 export type FileUploadClient = Pick<
@@ -80,6 +80,15 @@ export interface RunUploadOptions {
   file: UploadSource;
   /** Workspace-relative folder; "" (or "/") is the workspace root. */
   directory: string;
+  /**
+   * Where on the machine the file lands; unset is the workspace folder
+   * `directory` names. USER_UPLOADS sends it to the machine's uploads folder,
+   * ~/.reliant/uploads/<uploadsFolder>/, outside the repo, keeping both on a
+   * name clash (the chat composer's files it cannot attach).
+   */
+  destination?: UploadDestination;
+  /** USER_UPLOADS only: the folder under ~/.reliant/uploads/ (a chat id). */
+  uploadsFolder?: string;
   session: UploadSession;
   /** Aborts the in-flight request; the session is then discarded. */
   signal?: AbortSignal;
@@ -90,8 +99,13 @@ export interface RunUploadOptions {
 }
 
 export interface UploadResult {
-  /** Where the file landed, workspace-relative (a "Keep both" rename shows here). */
+  /**
+   * Where the file landed, workspace-relative (a "Keep both" rename shows
+   * here); for USER_UPLOADS, its absolute path on the machine.
+   */
   path: string;
+  /** The absolute path on the machine, when the server reports it. */
+  absolutePath?: string;
 }
 
 /** The upload stopped because the user cancelled it. Not a failure. */
@@ -104,6 +118,18 @@ export class UploadCancelledError extends Error {
 
 /** Shown when the API server has no upload RPCs (an older release). */
 export const UPLOAD_UNAVAILABLE_MESSAGE = "Uploading isn't available on this server yet";
+
+/**
+ * A USER_UPLOADS upload the server could not open as one: it predates the
+ * destination (and opened a workspace upload instead, which was discarded
+ * before a byte was sent), or it has no upload RPCs at all.
+ */
+export class UserUploadsUnsupportedError extends Error {
+  constructor() {
+    super("This server can't send files to the machine's uploads folder yet");
+    this.name = "UserUploadsUnsupportedError";
+  }
+}
 
 function isAlreadyExists(err: unknown): boolean {
   return err instanceof ConnectError && err.code === Code.AlreadyExists;
@@ -184,11 +210,14 @@ async function upload({
   scope,
   file,
   directory,
+  destination,
+  uploadsFolder,
   session,
   signal,
   onProgress,
   resolveConflict,
 }: RunUploadOptions): Promise<UploadResult> {
+  const toUserUploads = destination === UploadDestination.USER_UPLOADS;
   const callOptions = { signal };
   const checkCancelled = () => {
     if (signal?.aborted) throw new UploadCancelledError();
@@ -221,9 +250,16 @@ async function upload({
             filename: file.name,
             size: BigInt(file.size),
             onConflict: session.policy,
+            ...(toUserUploads ? { destination, uploadsFolder } : {}),
           },
           callOptions,
         );
+        if (toUserUploads && begun.destination !== UploadDestination.USER_UPLOADS) {
+          // A server that predates USER_UPLOADS ignored it and opened a
+          // workspace upload: discard it before a byte reaches the repo.
+          await abortUploadSession(client, scope, { ...session, uploadId: begun.uploadId });
+          throw new UserUploadsUnsupportedError();
+        }
         session.uploadId = begun.uploadId;
         session.chunkSize = begun.chunkSize;
         session.bytesReceived = 0;
@@ -280,7 +316,7 @@ async function upload({
         callOptions,
       );
       session.uploadId = undefined;
-      return { path: committed.path };
+      return { path: committed.path, absolutePath: committed.absolutePath || undefined };
     } catch (err) {
       // The file appeared after Begin checked (or Begin was told OVERWRITE /
       // RENAME and still clashed): ask, then commit again with the answer.

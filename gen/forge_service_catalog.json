@@ -15794,6 +15794,16 @@
               "Name": "on_conflict",
               "ProtoType": "enum",
               "IsOptional": false
+            },
+            {
+              "Name": "destination",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "uploads_folder",
+              "ProtoType": "string",
+              "IsOptional": false
             }
           ],
           "BeginFileUploadResponse": [
@@ -15815,6 +15825,11 @@
             {
               "Name": "max_size",
               "ProtoType": "int64",
+              "IsOptional": false
+            },
+            {
+              "Name": "destination",
+              "ProtoType": "enum",
               "IsOptional": false
             }
           ],
@@ -15859,6 +15874,11 @@
             {
               "Name": "created",
               "ProtoType": "bool",
+              "IsOptional": false
+            },
+            {
+              "Name": "absolute_path",
+              "ProtoType": "string",
               "IsOptional": false
             }
           ],
@@ -16557,6 +16577,15 @@
               "name": "on_conflict",
               "kind": "enum",
               "type_name": "reliant.v1.UploadConflictPolicy"
+            },
+            {
+              "name": "destination",
+              "kind": "enum",
+              "type_name": "reliant.v1.UploadDestination"
+            },
+            {
+              "name": "uploads_folder",
+              "kind": "string"
             }
           ],
           "reliant.v1.BeginFileUploadResponse": [
@@ -16575,6 +16604,11 @@
             {
               "name": "max_size",
               "kind": "int64"
+            },
+            {
+              "name": "destination",
+              "kind": "enum",
+              "type_name": "reliant.v1.UploadDestination"
             }
           ],
           "reliant.v1.CommitFileUploadRequest": [
@@ -16615,6 +16649,10 @@
             {
               "name": "created",
               "kind": "bool"
+            },
+            {
+              "name": "absolute_path",
+              "kind": "string"
             }
           ],
           "reliant.v1.CopyFileRequest": [
@@ -17436,6 +17474,11 @@
             "UPLOAD_CONFLICT_POLICY_FAIL",
             "UPLOAD_CONFLICT_POLICY_OVERWRITE",
             "UPLOAD_CONFLICT_POLICY_RENAME"
+          ],
+          "reliant.v1.UploadDestination": [
+            "UPLOAD_DESTINATION_UNSPECIFIED",
+            "UPLOAD_DESTINATION_WORKSPACE",
+            "UPLOAD_DESTINATION_USER_UPLOADS"
           ]
         },
         "EnumNumbers": {
@@ -17458,6 +17501,11 @@
             1,
             2,
             3
+          ],
+          "reliant.v1.UploadDestination": [
+            0,
+            1,
+            2
           ]
         },
         "EnumGoRefs": {
@@ -17472,6 +17520,10 @@
           "reliant.v1.UploadConflictPolicy": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "UploadConflictPolicy"
+          },
+          "reliant.v1.UploadDestination": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "UploadDestination"
           }
         }
       }
