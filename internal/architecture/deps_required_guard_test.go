@@ -40,7 +40,7 @@ import (
 // convention: an optional dep's consumer handles nil) or listed in
 // depsFieldsNotEverywhere below. Every composite literal of a Deps type
 // outside its own package, and every one passed to a call inside it (directly
-// or through local variable bindings), must name each required field. A literal inside the
+// or through local bindings and helper returns), must name each required field. A literal inside the
 // package that builds a Service by hand (`&Service{deps: Deps{Repo: r}}`) is
 // a unit test of one method and is not judged.
 //
@@ -561,6 +561,7 @@ func missingDepsFields(module string, files map[string][]byte) ([]depsFinding, e
 		}
 	}
 
+	toCall := depsLiteralsReachingCalls(module, parsed)
 	var out []depsFinding
 	for _, name := range names {
 		f := parsed[name]
@@ -577,45 +578,6 @@ func missingDepsFields(module string, files map[string][]byte) ([]depsFinding, e
 			}
 			imports[local] = p
 		}
-		// Follow local bindings to literals supplied to any call (including
-		// constructor wrappers), not just literals written directly in New.
-		// Object identity keeps shadowed variables separate.
-		toCall := map[*ast.CompositeLit]bool{}
-		seen := map[*ast.Object]bool{}
-		var follow func(ast.Expr)
-		follow = func(expr ast.Expr) {
-			switch e := expr.(type) {
-			case *ast.CompositeLit:
-				toCall[e] = true
-			case *ast.UnaryExpr:
-				follow(e.X)
-			case *ast.ParenExpr:
-				follow(e.X)
-			case *ast.Ident:
-				if e.Obj == nil || seen[e.Obj] {
-					return
-				}
-				seen[e.Obj] = true
-				switch d := e.Obj.Decl.(type) {
-				case *ast.AssignStmt:
-					for _, rhs := range d.Rhs {
-						follow(rhs)
-					}
-				case *ast.ValueSpec:
-					for _, value := range d.Values {
-						follow(value)
-					}
-				}
-			}
-		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			if call, ok := n.(*ast.CallExpr); ok {
-				for _, arg := range call.Args {
-					follow(arg)
-				}
-			}
-			return true
-		})
 		ast.Inspect(f, func(n ast.Node) bool {
 			lit, ok := n.(*ast.CompositeLit)
 			if !ok {
@@ -674,6 +636,89 @@ func missingDepsFields(module string, files map[string][]byte) ([]depsFinding, e
 		})
 	}
 	return out, nil
+}
+
+// depsLiteralsReachingCalls follows local bindings and helper return values.
+// Index package functions across files too: parser object links are file-local.
+// Visited expressions bound recursive helpers and cyclic aliases; nested function
+// bodies are inspected only when called, not as returns of their enclosing helper.
+func depsLiteralsReachingCalls(module string, files map[string]*ast.File) map[*ast.CompositeLit]bool {
+	functions := map[string]*ast.FuncDecl{}
+	for name, f := range files {
+		for _, decl := range f.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil {
+				functions[importPath(module, name)+"."+fn.Name.Name] = fn
+			}
+		}
+	}
+	toCall := map[*ast.CompositeLit]bool{}
+	seen := map[ast.Expr]bool{}
+	var follow func(ast.Expr, string)
+	returns := func(body *ast.BlockStmt, pkg string) {
+		if body == nil {
+			return
+		}
+		ast.Inspect(body, func(n ast.Node) bool {
+			if _, nested := n.(*ast.FuncLit); nested {
+				return false
+			}
+			if ret, ok := n.(*ast.ReturnStmt); ok {
+				for _, result := range ret.Results {
+					follow(result, pkg)
+				}
+			}
+			return true
+		})
+	}
+	follow = func(expr ast.Expr, pkg string) {
+		if expr == nil || seen[expr] {
+			return
+		}
+		seen[expr] = true
+		switch e := expr.(type) {
+		case *ast.CompositeLit:
+			toCall[e] = true
+		case *ast.UnaryExpr:
+			follow(e.X, pkg)
+		case *ast.ParenExpr:
+			follow(e.X, pkg)
+		case *ast.CallExpr:
+			follow(e.Fun, pkg)
+		case *ast.FuncLit:
+			returns(e.Body, pkg)
+		case *ast.Ident:
+			if e.Obj == nil {
+				if fn := functions[pkg+"."+e.Name]; fn != nil {
+					returns(fn.Body, pkg)
+				}
+				return
+			}
+			switch d := e.Obj.Decl.(type) {
+			case *ast.FuncDecl:
+				returns(d.Body, pkg)
+			case *ast.AssignStmt:
+				for _, rhs := range d.Rhs {
+					follow(rhs, pkg)
+				}
+			case *ast.ValueSpec:
+				for _, value := range d.Values {
+					follow(value, pkg)
+				}
+			}
+		}
+	}
+	for name, f := range files {
+		pkg := importPath(module, name)
+		ast.Inspect(f, func(n ast.Node) bool {
+			if call, ok := n.(*ast.CallExpr); ok {
+				for _, arg := range call.Args {
+					follow(arg, pkg)
+				}
+			}
+			return true
+		})
+	}
+	return toCall
 }
 
 // fieldNames is a struct field's names; an embedded field's is its type's.
@@ -784,6 +829,20 @@ func wiredVariable() {
 	d := Deps{Store: s, Chats: c, internal: 1}
 	New(d)
 }
+var fromHelper = New(makeDeps())
+func makeDeps() Deps { return Deps{Store: s} }
+var fromOtherFile = New(otherFileDeps())
+var fromClosure = New(func() Deps { return Deps{Store: s} }())
+var fromAlias = New(aliasDeps())
+func aliasDeps() Deps { d := Deps{Store: s}; return d }
+var recursive = New(recursiveDeps())
+func recursiveDeps() Deps { if condition { return recursiveDeps() }; return Deps{Store: s} }
+func unusedHelper() Deps { return Deps{Store: s} }
+func wiredHelper() Deps { return Deps{Store: s, Chats: c, internal: 1} }
+var wiredReturn = New(wiredHelper())
+`),
+		"internal/launch/helpers_test.go": []byte(`package launch
+func otherFileDeps() Deps { return Deps{Store: s} }
 `),
 	}
 	findings, err := missingDepsFields(module, files)
@@ -800,6 +859,11 @@ func wiredVariable() {
 		"internal/launch/launch_test.go:4":           "internal/launch: Store,internal",
 		"internal/launch/launch_test.go:7":           "internal/launch: Chats,internal",
 		"internal/launch/launch_test.go:11":          "internal/launch: Chats,internal",
+		"internal/launch/launch_test.go:17":          "internal/launch: Chats,internal",
+		"internal/launch/launch_test.go:19":          "internal/launch: Chats,internal",
+		"internal/launch/launch_test.go:21":          "internal/launch: Chats,internal",
+		"internal/launch/launch_test.go:23":          "internal/launch: Chats,internal",
+		"internal/launch/helpers_test.go:2":          "internal/launch: Chats,internal",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("findings = %v, want %v", got, want)
