@@ -11,9 +11,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/chatviews"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"go.temporal.io/sdk/temporal"
 
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/dbconn"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinefailure"
@@ -106,7 +108,37 @@ func (a *PreflightDaemonCheckActivity) Category() schema.ActivityCategory {
 	return schema.CategoryUtility
 }
 
+// PreflightDaemonCheckFailedErrType is the Temporal error type of every
+// failure PreflightDaemonCheck decides itself. Each is non-retryable.
+const PreflightDaemonCheckFailedErrType = "PreflightDaemonCheckFailed"
+
 func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input PreflightDaemonCheckInput) (PreflightDaemonCheckOutput, error) {
+	out, err := a.check(ctx, input)
+	return out, preflightFailure(err)
+}
+
+// preflightFailure decides whether a failed check is retried. The workflow
+// dispatches the check with a short retry ladder so that one lost heartbeat —
+// a worker restarting mid-slice — does not fail the user's run (obs 5a36f26f,
+// "[Workflow Runtime] TimeoutError"). Temporal raises those timeouts itself
+// and retries them; this decides the failures the check returns:
+//
+//   - a database that did not answer is retried (classifyError types it as
+//     DatabaseUnavailable);
+//   - a cancellation passes through untouched, so it stays a cancellation;
+//   - everything else is the check's verdict — the machine is gone, its wake
+//     was refused, it never came up (terminal has already queued the message
+//     for the machine), or the worker cannot route to daemons at all — and a
+//     retry would only repeat it, so it is non-retryable.
+func preflightFailure(err error) error {
+	if err == nil || errors.Is(err, context.Canceled) || dbconn.Unavailable(err) {
+		return err
+	}
+	return temporal.NewApplicationErrorWithOptions(err.Error(), PreflightDaemonCheckFailedErrType,
+		temporal.ApplicationErrorOptions{NonRetryable: true, Cause: err})
+}
+
+func (a *PreflightDaemonCheckActivity) check(ctx context.Context, input PreflightDaemonCheckInput) (PreflightDaemonCheckOutput, error) {
 	// Resolve the user ID from the chat
 	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 	if err != nil {
