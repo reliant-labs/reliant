@@ -1302,6 +1302,7 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	cfg.Namespace = d.Namespace
 	r := reconciliation.New(reconciliation.Deps{
 		Store:     d.DB,
+		Chats:     store.NewChatsWithActivityExtStore(d.DB.ORM()),
 		Questions: store.NewQuestionExtStore(d.DB.ORM()),
 		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
 		Orphans:   store.NewAgentMessageExtStore(d.DB.ORM()),
