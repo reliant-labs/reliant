@@ -13,9 +13,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 vi.mock("@/services/controlPlane/config", () => ({
   CONTROL_PLANE_API_URL: "https://admin.example.test",
@@ -35,30 +32,10 @@ import {
   revokeForgeToken,
   revokeOrgForgeToken,
 } from "../forgeTokens";
+import { FORGE_SCOPES } from "../scopeCatalog";
 
 const ORG = "org_acme";
 
-const MIGRATIONS = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../../db/migrations");
-
-/**
- * forge's scope catalog (pkg/accesstoken AllScopes) as reliant vendors it:
- * the scope list of the newest migration that redefines the access_tokens
- * CHECK. Migrations apply in filename order, so the last one is the live set.
- */
-function forgeScopeCatalog(): string[] {
-  const newest = readdirSync(MIGRATIONS)
-    .filter((f) => f.endsWith(".up.sql"))
-    .sort()
-    .map((f) => readFileSync(resolve(MIGRATIONS, f), "utf8"))
-    .filter((sql) => /ADD CONSTRAINT access_tokens_scopes CHECK/.test(sql))
-    .at(-1);
-  if (!newest) throw new Error(`no access_tokens_scopes CHECK under ${MIGRATIONS}`);
-  // Strip SQL comments first: a migration's header may quote the predicate
-  // ("scopes <@ ARRAY[40 scopes]"), which would otherwise match before the DDL.
-  const ddl = newest.replace(/--.*$/gm, "");
-  const list = /scopes <@ ARRAY\[([\s\S]*?)\]/.exec(ddl)?.[1] ?? "";
-  return [...list.matchAll(/'([^']+)'/g)].map((m) => m[1]);
-}
 const CREATED = new Date("2026-10-01T00:00:00Z");
 
 afterEach(() => setTransport(null));
@@ -281,11 +258,13 @@ describe("what the token UI tells a person", () => {
   });
 
   it("offers every scope of forge's catalog except those bound to a resource or issued only to an OAuth client", () => {
-    // forge pkg/accesstoken/scope.go AllScopes, as this repo vendors it: the
-    // access_tokens CHECK, which internal/db/access_tokens_scopes_forge_test.go
-    // and `forge lint --closed-sets` hold equal to AllScopes. A scope forge
-    // adds fails this test until it is offered here or listed as not mintable.
-    const catalog = forgeScopeCatalog();
+    // forge pkg/accesstoken AllScopes, as scopeCatalog.ts mirrors it
+    // (internal/accesstokenclient/web_scope_catalog_test.go holds the copy
+    // equal to the forge this repo pins). The access_tokens CHECK no longer
+    // lists the scopes (it checks their format), so the catalog copy is the
+    // list. A scope forge adds fails this test until it is offered here or
+    // listed as not mintable.
+    const catalog = [...FORGE_SCOPES];
     const bindingOnly = ["proxy:port", "mcp:connector", "daemon:resume"];
     // accesstoken.OAuthClientScopes: an authorization server issues these to
     // an MCP client, each as a token's only scope; a person never mints one.
