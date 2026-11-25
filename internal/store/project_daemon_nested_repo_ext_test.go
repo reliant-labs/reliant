@@ -181,13 +181,121 @@ func TestNestedRepoClaimsAreLeasedAndFenced(t *testing.T) {
 		t.Fatal("the pass holding the claim could not record it")
 	}
 
-	// Planned again while "gone" still holds web: its settle is refused.
+	// Planned again while "gone" still holds web's live claim: the claim is
+	// kept, and when it settles its outcome (the previous plan's) is not
+	// recorded; web is pending for the new plan.
+	f.replan(t)
+	if !f.settle(t, f.web.ID, "gone", "") {
+		t.Fatal("the live claim could not release its row after a replan")
+	}
+	if state, _, _, _ := f.leaseOf(t, f.web.ID); state != string(core.NestedRepoPending) {
+		t.Fatalf("web = %s; a claim of the previous plan recorded an outcome on the new one", state)
+	}
+}
+
+// leaseOf is the repository's claim and lease as stored.
+func (f *nestedFixture) leaseOf(t *testing.T, repoID string) (state, claimID string, leaseUntil *time.Time, replan bool) {
+	t.Helper()
+	var row struct {
+		State      string     `bun:"state"`
+		ClaimID    string     `bun:"claim_id"`
+		LeaseUntil *time.Time `bun:"lease_until"`
+		Replan     bool       `bun:"replan_pending"`
+	}
+	if err := f.env.ORM.Bun().NewRaw(`SELECT state, claim_id, lease_until, replan_pending FROM project_daemon_repos
+WHERE project_id = ? AND daemon_id = 'd1' AND repo_id = ?`, f.project.ID, repoID).Scan(f.ctx, &row); err != nil {
+		t.Fatal(err)
+	}
+	return row.State, row.ClaimID, row.LeaseUntil, row.Replan
+}
+
+func (f *nestedFixture) replan(t *testing.T) {
+	t.Helper()
 	if err := f.env.Repo.UpsertQueuedProjectDaemon(f.ctx, f.project.ID, "d1", "/srv/acme", nil, "clone:"+f.project.ID, []string{f.forge.ID, f.plugin.ID, f.web.ID}); err != nil {
 		t.Fatal(err)
 	}
-	if f.settle(t, f.web.ID, "gone", "") {
-		t.Fatal("a claim of the previous plan recorded an outcome on the new one")
-	}
+}
+
+// Review R1.B3 (replan): planning the set-up again while a clone runs keeps
+// that clone's claim and lease, so no other pass can claim (and send a clone
+// of) the same target, or anything inside it, until the running clone ends.
+// Its outcome then belongs to the previous plan: the row goes back to pending
+// and the new plan clones it again. A takeover after the lease ran out clears
+// the mark, and the old claim records nothing.
+func TestNestedRepoReplanDuringAnActiveClone(t *testing.T) {
+	t.Run("the running claim keeps the target until it settles", func(t *testing.T) {
+		f := newNestedFixture(t)
+		if got := f.claimedName(t, "running"); got != "forge" {
+			t.Fatalf("claim = %q", got)
+		}
+		_, _, leaseBefore, _ := f.leaseOf(t, f.forge.ID)
+
+		f.replan(t)
+
+		state, claim, leaseAfter, replan := f.leaseOf(t, f.forge.ID)
+		if state != string(core.NestedRepoCloning) || claim != "running" || !replan ||
+			leaseAfter == nil || leaseBefore == nil || !leaseAfter.Equal(*leaseBefore) {
+			t.Fatalf("after the replan forge = %s claim %q lease %v (was %v) replan %v; want the running claim and its lease kept, marked replanned",
+				state, claim, leaseAfter, leaseBefore, replan)
+		}
+		// Another pass gets web, never forge or plugin (inside forge).
+		for c := f.claim(t, "other"); c != nil; c = f.claim(t, "other") {
+			if c.Repo.RepoID == f.forge.ID || c.Repo.RepoID == f.plugin.ID {
+				t.Fatalf("another pass claimed %s while forge's clone runs", c.Repo.Name)
+			}
+			f.settle(t, c.Repo.RepoID, "other", "")
+		}
+
+		// The running clone ends (here, failed): its claim is released, and
+		// its outcome, the previous plan's, is not recorded.
+		if !f.settle(t, f.forge.ID, "running", "git clone failed: old plan") {
+			t.Fatal("the running claim could not release its row")
+		}
+		if state, claim, lease, replan := f.leaseOf(t, f.forge.ID); state != string(core.NestedRepoPending) || claim != "" || lease != nil || replan {
+			t.Fatalf("forge after its old clone ended = %s %q %v %v; want pending for the new plan", state, claim, lease, replan)
+		}
+		if got := f.claimedName(t, "other"); got != "forge" {
+			t.Fatalf("the new plan's pass claimed %q, want forge once the old clone ended", got)
+		}
+		if !f.settle(t, f.forge.ID, "other", "") {
+			t.Fatal("the new plan's claim could not settle")
+		}
+		if state, _, _, _ := f.leaseOf(t, f.forge.ID); state != string(core.NestedRepoInstalled) {
+			t.Fatalf("forge = %s, want installed", state)
+		}
+	})
+
+	t.Run("a takeover after the lease ran out clears the mark", func(t *testing.T) {
+		f := newNestedFixture(t)
+		f.claimedName(t, "gone") // forge
+		f.replan(t)
+		f.expireLease(t, f.forge.ID)
+		if got := f.claimedName(t, "taker"); got != "forge" {
+			t.Fatalf("claim after the lease ran out = %q, want forge", got)
+		}
+		if _, claim, _, replan := f.leaseOf(t, f.forge.ID); claim != "taker" || replan {
+			t.Fatalf("forge after the takeover = claim %q replan %v", claim, replan)
+		}
+		if f.settle(t, f.forge.ID, "gone", "") {
+			t.Fatal("the claim that was taken over recorded its outcome")
+		}
+		if !f.settle(t, f.forge.ID, "taker", "") {
+			t.Fatal("the taker could not settle")
+		}
+		if state, _, _, _ := f.leaseOf(t, f.forge.ID); state != string(core.NestedRepoInstalled) {
+			t.Fatalf("forge = %s, want installed", state)
+		}
+	})
+
+	t.Run("a row with no live claim is reset at once", func(t *testing.T) {
+		f := newNestedFixture(t)
+		f.claimedName(t, "p") // forge
+		f.settle(t, f.forge.ID, "p", "denied")
+		f.replan(t)
+		if state, claim, lease, replan := f.leaseOf(t, f.forge.ID); state != string(core.NestedRepoPending) || claim != "" || lease != nil || replan {
+			t.Fatalf("a settled row after a replan = %s %q %v %v; want pending", state, claim, lease, replan)
+		}
+	})
 }
 
 // A repository inside one that failed is claimed flagged, for the claimer to
