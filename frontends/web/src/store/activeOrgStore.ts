@@ -231,5 +231,7 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   "controlPlane",
   "orgs-members",
   "org-policy",
+  // hooks/changes-queries.ts: the page's org, then ChangesService's reads.
   "changes",
+  "controlplane.v1.ChangesService",
 ];
