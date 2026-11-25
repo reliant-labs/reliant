@@ -44,7 +44,11 @@
 #                 (/home/workspace/designs/reverse-walk-backtest-2026-11-13.md).
 #
 # Phases, each a row of the summary (slot wait vs run, seconds):
-#   plan       tools/test-affected plan: the ONE rule set (dev-docs/testing-affected.md)
+#   plan       tools/test-affected plan: forge's affected decision (`forge ci gate
+#              --plan --json --files`, forge.yaml's ci.gate: the Go tests, the
+#              build set, deferred importers, sdk/go, the electron and docs rows)
+#              plus reliant's lanes (web, demo, release build, forge-generate
+#              hooks-only, migration order); dev-docs/testing-affected.md
 #   pnpm-*     pnpm install --frozen-lockfile where a selected lane needs node_modules it lacks
 #   pgtest     tools/pgtest-check: forge pgtest's shared Postgres serves a
 #              scratch database, before generate or a Go test needs one; when
@@ -58,12 +62,12 @@
 #              so a fixture a required field or signature change broke fails
 #              here wherever it is (#3489); seconds on a warm cache
 #   test       tools/test-affected run -plan <the plan> (-short, cached, no
-#              -race): the changed packages and their DIRECT importers, plus
-#              every transitive dependent when they number at most
-#              MG_REACH_CAP (default 20; 0 for direct only), the
+#              -race): the Go packages forge selects (the changed packages and
+#              their DIRECT importers, plus every transitive dependent when they
+#              number at most 20: forge.yaml's ci.gate.affected_reach), the
 #              vitest files within two imports of a changed module, and the
-#              electron tests when electron/ changed; deeper dependents of a
-#              hub run in the release gate (MG_REACH=all for all). A change the rules cannot
+#              electron tests when forge's electron row runs; deeper dependents
+#              of a hub run in the release gate. A change the rules cannot
 #              scope (go.mod, package.json, config) runs its whole Go and
 #              electron lane; a full web fallback runs tsc here, the vitest
 #              files the diff's own web modules reach (-web-full reached), and
@@ -358,15 +362,16 @@ gen_docs() {
 }
 
 # ── plan ──────────────────────────────────────────────────────────────────
-# The merge tier's Go fan-out: direct importers (owner, 2026-10-24), plus
-# every transitive dependent when they number at most MG_REACH_CAP (default
-# 20; 0 is direct importers only). A leaf change then runs every test binary
-# it reaches; a hub change (internal/db: 46 beyond its 119 direct; a
-# narrow-role package under internal/llm/tools: 151 beyond 15) keeps the
-# direct cut, and testbuild still compiles every test package. 20 bounds what
-# the queue's 4-CPU runner adds to some 20 test binaries.
-reach=${MG_REACH:-direct} reach_cap=${MG_REACH_CAP:-20}
-phase plan go run ./tools/test-affected plan -json -reach "$reach" -go-reach-cap "$reach_cap" -base "$base" || { cat "$L/plan.log"; exit 1; }
+# The merge tier's Go fan-out is forge's (forge.yaml ci.gate.affected_reach):
+# direct importers (owner, 2026-10-24), plus every transitive dependent when
+# they number at most 20. A leaf change then runs every test binary it
+# reaches; a hub change (internal/db: 46 beyond its 119 direct; a narrow-role
+# package under internal/llm/tools: 151 beyond 15) keeps the direct cut, and
+# testbuild still compiles every test package. 20 bounds what the queue's
+# 4-CPU runner adds to some 20 test binaries. MG_REACH is the web lane's
+# reach (direct; all for every importer's test).
+reach=${MG_REACH:-direct} reach_cap=20
+phase plan go run ./tools/test-affected plan -json -reach "$reach" -base "$base" || { cat "$L/plan.log"; exit 1; }
 sed -n '/^{/,$p' "$L/plan.log" >"$L/plan.json"
 # Fail closed: without jq, or with a plan it cannot parse, every lane would read
 # as "not selected" and be silently skipped.
@@ -490,7 +495,7 @@ if [ "$fail" = 0 ] && [ "$inplace" = 1 ]; then
   fi
   # Dirty-tree generation can expand reach too, even without --amend.
   if [ "$fail" = 0 ]; then
-    phase plan-2 go run ./tools/test-affected plan -json -reach "$reach" -go-reach-cap "$reach_cap" -base "$base" || fail=1
+    phase plan-2 go run ./tools/test-affected plan -json -reach "$reach" -base "$base" || fail=1
     if [ "$fail" = 0 ]; then
       sed -n '/^{/,$p' "$L/plan-2.log" >"$L/plan-2.json"
       run_plan=$L/plan-2.json

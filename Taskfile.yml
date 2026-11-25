@@ -285,36 +285,43 @@ tasks:
   # ── Tests ─────────────────────────────────────────────────────────────
 
   test:affected:
-    # The first thing to run before pushing. Reads the diff (committed,
-    # staged, unstaged, untracked) against the merge-base with origin/main,
-    # maps each path to the Go packages and their reverse dependencies, the
-    # vitest files that import it, and the electron tests, runs those and the
-    # codegen checks it can affect (task generate:check,
-    # task generate:docs:check), and prints why each ran. A path it cannot
-    # place, a go.mod/package.json/Taskfile/config change, or a diff it
-    # cannot compute runs the whole lane.
+    # The first thing to run before pushing. forge's affected mode (forge.yaml
+    # ci.gate) reads the diff (committed, staged, unstaged, untracked) against
+    # the merge-base with origin/main and runs the test lane narrowed to it:
+    # the Go packages it reaches (direct importers, plus transitive ones up to
+    # 20), the sdk/go module's affected tests, the electron row when its paths
+    # changed, and reliant's web, demo-bundle and release-build rows
+    # (tools/test-affected decides those). Then the codegen and migration
+    # checks forge does not have: forge generate (only the reached generate
+    # hooks when that is all that changed), the docs generators, migration
+    # order. Each says why it ran or was skipped.
     #
-    #   task test:affected                  every lane
-    #   task test:affected LANES=go,web     some lanes
-    #   task test:affected -- -dry-run      any other tools/test-affected flag
+    #   task test:affected                  the whole affected tier
+    #   task test:affected LANES=web        one of reliant's lanes only (tools/test-affected)
     #
-    # TEST_BASE=<rev> moves the diff base, TEST_FULL=1 runs everything. A
-    # migration also runs the DB-backed packages it reaches. A FULL lane waits
-    # for a host heavy slot; a scoped one does not. Design and the rule table:
+    # CI_BASE=<rev> moves the diff base, CI_FULL=1 runs everything. Design:
     # dev-docs/testing-affected.md.
-    desc: "Run ONLY the tests and codegen checks your diff can reach, and say why (LANES=go,web,electron,forge-generate,docs-generate)"
+    desc: "Run ONLY the tests and codegen checks your diff can reach, and say why (forge ci gate test + reliant's lanes)"
     cmds:
-      - TEST_AFFECTED_SLOT='{{.SLOT}}' go run ./tools/test-affected run {{if .LANES}}-lanes {{.LANES}} {{end}}{{.CLI_ARGS}}
+      - '{{if .LANES}}TEST_AFFECTED_SLOT=''{{.SLOT}}'' go run ./tools/test-affected run -lanes {{.LANES}} {{.CLI_ARGS}}{{else}}{{.FORGE}} ci gate test {{.CLI_ARGS}}{{end}}'
+      - cmd: TEST_AFFECTED_SLOT='{{.SLOT}}' go run ./tools/test-affected run -lanes forge-generate,docs-generate,migration-order
+        if: '[ -z "{{.LANES}}" ]'
 
   test:affected:plan:
-    desc: Print what test:affected would run and why, without running it
+    # What test:affected would run and why, running nothing: forge's decision
+    # (Go packages and why each, the build set, deferred importers, nested
+    # modules, the path-gated rows), then reliant's lanes. FILES=a,b judges
+    # those paths instead of the diff (a what-if).
+    desc: Print what test:affected would run and why, without running it (FILES=a,b for a what-if)
     cmds:
-      - go run ./tools/test-affected {{if .LANES}}-lanes {{.LANES}} {{end}}{{.CLI_ARGS}}
+      - '{{.FORGE}} ci gate --plan {{if .FILES}}--files {{.FILES}}{{end}} {{.CLI_ARGS}}'
+      - go run ./tools/test-affected -lanes {{if .LANES}}{{.LANES}}{{else}}web,web-demo,web-build,forge-generate,migration-order{{end}} {{if .FILES}}-files {{.FILES}}{{end}}
 
   test:short:
     # The inner loop: run this after each edit, scoped to the packages you
     # touched (`task test:short -- ./internal/lifecycle/...`), and
-    # `task test:affected` before you push. Every flag difference from
+    # `task test:affected` before you push (its Go row is this task over the
+    # packages forge's affected mode selects). Every flag difference from
     # `task test` is on purpose:
     #
     #   -short        slow paths sit behind `if testing.Short() { t.Skip() }`;
@@ -535,8 +542,9 @@ tasks:
     # buf-lint, migration-safety, each frontend's lint/typecheck/build,
     # go-build, vuln-go, vuln-npm, vuln-sbom, secret-scan, license-check,
     # flake-check; `forge ci gate --list`) plus
-    # forge.yaml's ci.gate.extra_checks (test-affected in place of forge's
-    # unit-tests, web, electron, docs-generate, the pin and repo checks), in
+    # forge.yaml's ci.gate (affected mode; extra checks: unit-tests as
+    # task test:short, web, electron, web-demo, web-build, docs-generate,
+    # migration-order, the pin and repo checks), in
     # ONE summary table. Every check runs even if an earlier one failed; a
     # check that could not run is SKIPPED, and fails the gate unless named
     # (CI_SKIP=<check> task ci). CI_ONLY=<check>,... runs a subset.
@@ -555,8 +563,9 @@ tasks:
   ci:merge:
     # The MERGE tier, the one the merge queue runs on every branch: only what
     # the diff from origin/main can affect, in about five minutes, inside ONE
-    # host heavy slot. tools/test-affected decides the Go/web/electron tests
-    # and whether forge generate / the docs generators must be checked; then
+    # host heavy slot. forge's affected mode decides the Go tests and the
+    # electron and docs checks, tools/test-affected the web lanes and whether
+    # forge generate must be checked (tools/test-affected plan); then
     # go build, forge lint --scope <changed dirs> and (for a migration)
     # migration-safety run at the same time. Prints a per-phase table: slot
     # wait vs run. `-- --base <rev>` moves the diff base.

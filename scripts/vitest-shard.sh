@@ -35,14 +35,13 @@ if [ -z "$base" ] || ! [[ $shard =~ ^([1-9][0-9]*)/([1-9][0-9]*)$ ]] || ((BASH_R
 fi
 command -v jq >/dev/null 2>&1 || { echo "vitest-shard: jq is not installed, so the plan cannot be read and no selected file could be run" >&2; exit 1; }
 
-# The merge gate's reach (scripts/merge-gate.sh: reach=${MG_REACH:-direct}),
-# and its Go transitive budget, which selects no vitest file but keeps the two
-# plans the same plan.
-reach=${MG_REACH:-direct} reach_cap=${MG_REACH_CAP:-20}
+# The merge gate's web reach (scripts/merge-gate.sh: reach=${MG_REACH:-direct});
+# the Go reach is forge.yaml's, the same for both.
+reach=${MG_REACH:-direct}
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
 plan=$dir/plan.json
-go run ./tools/test-affected plan -json -reach "$reach" -go-reach-cap "$reach_cap" -base "$base" >"$plan"
+go run ./tools/test-affected plan -json -reach "$reach" -base "$base" >"$plan"
 jq -e '.web | has("tests") and has("full")' "$plan" >/dev/null || { echo "vitest-shard: the plan has no web lane to read; refusing to guess what was selected" >&2; exit 1; }
 
 # With -web-full reached a FULL fallback runs the reached files, as a scoped

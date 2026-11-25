@@ -12,7 +12,8 @@ name: Merge queue
 # WHAT RUNS HERE: `task ci:merge -- --queue --skip-vitest`, the affected tier
 # relative to the group's base: build, a compile of every test package
 # (testbuild), the affected -short Go and electron tests (direct importers,
-# and every transitive one when they add at most MG_REACH_CAP=20 packages),
+# and every transitive one when they add at most 20 packages: forge.yaml's
+# ci.gate.affected_reach),
 # the web typecheck when web changed, forge lint's own lanes scoped to the changed
 # directories (--optional-deps-guard and --tracing among them), its
 # whole-project --graph --closed-sets --proto-format lanes on every group
