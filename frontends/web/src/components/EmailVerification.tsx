@@ -4,6 +4,8 @@ import { useAuthStore } from '@/store/authStore'
 import { AuthLayout, AuthHeader } from './AuthLayout'
 import { EmailCodeForm } from './EmailCodeForm'
 import { authPath, homePath } from '@/lib/paths'
+import { isForgeAuth } from '@/lib/auth/forge-api'
+import { ForgeVerifyEmailPage } from './Auth/forge/ForgeVerifyEmail'
 
 /**
  * The `/verify-email` stop: an account that has an address on file which was
@@ -27,7 +29,14 @@ import { authPath, homePath } from '@/lib/paths'
  * automatic send burned the rate limit for users who already had a valid code
  * sitting in their inbox.
  */
-export function EmailVerification({ email }: { email?: string }) {
+export function EmailVerification(props: { email?: string }) {
+  // With forge sign-in the confirmation is a LINK, `/auth/verify?userID=…&code=…`
+  // (Auth/forge/ForgeVerifyEmail), and nothing sends a signed-in person here:
+  // the broker issues no session for an unconfirmed address.
+  return isForgeAuth() ? <ForgeVerifyEmailPage /> : <SupabaseEmailVerification {...props} />
+}
+
+function SupabaseEmailVerification({ email }: { email?: string }) {
   const navigate = useNavigate()
   const { user, resendSignupVerification, verifyEmailOTP, signOut } = useAuthStore()
 

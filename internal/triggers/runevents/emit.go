@@ -27,6 +27,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -45,9 +46,10 @@ const (
 const MaxTextBytes = 4096
 
 // Store is what the emitter reads and writes. *db.Repo satisfies it; every
-// call honors the ambient RunTx transaction.
+// call honors the ambient RunTx transaction. The chat itself is read through
+// chatviews.Of(store): the store's own GetChat when it has one, else the
+// generated chat store over its database handle.
 type Store interface {
-	GetChat(ctx context.Context, id string) (*core.Chat, error)
 	HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error)
 	CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error)
 	LockChatForRunEvent(ctx context.Context, chatID string) error
@@ -171,7 +173,7 @@ func ownerWantsEvents(ctx context.Context, store Store, chatID string) (*core.Ch
 	if chatID == "" {
 		return nil, false, nil
 	}
-	chat, err := store.GetChat(ctx, chatID)
+	chat, err := chatviews.Of(store).GetChat(ctx, chatID)
 	if errors.Is(err, core.ErrChatNotFound) {
 		// A chat deleted under a finishing run has nobody to fire for, and
 		// must not fail the status write the event rides on.

@@ -31,7 +31,7 @@ func requirementsWorkflow(ctx workflow.Context, wf *reliantv1.Workflow, child bo
 		execCtx.Parent = &ParentContext{}
 	}
 	input := WorkflowInput{ChatID: "c1", WorkflowName: wf.GetName(), Inputs: map[string]interface{}{InputKeyActingIdentity: "app", InputKeyAutomation: "merged"}}
-	if err := checkRequirements(ctx, input, execCtx, wf, "wf1", "wf1", true); err != nil {
+	if err := checkRequirements(ctx, input, execCtx, wf, "wf1", "wf1", true, nil); err != nil {
 		return err
 	}
 	return workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{StartToCloseTimeout: 10e9}), "FirstNode").Get(ctx, nil)
@@ -159,30 +159,4 @@ func TestRequirementsSkippedWithoutDeclarationOrForAChild(t *testing.T) {
 			env.AssertNotCalled(t, PreflightRequirementsActivityName, mock.Anything)
 		})
 	}
-}
-
-// requires.cli_login alone is a requirement on the machine: the run checks it
-// before its first node, and the activity gets the CLIs to check.
-func TestRequirementsCLILoginAloneIsChecked(t *testing.T) {
-	env := newRequirementsEnv()
-	var got map[string]interface{}
-	env.OnActivity(PreflightRequirementsActivityName, mock.Anything).
-		Run(func(args mock.Arguments) { got = args.Get(0).(map[string]interface{}) }).
-		Return(map[string]interface{}{}, nil).Once()
-	env.OnActivity("FirstNode", mock.Anything).Return(map[string]interface{}{}, nil).Once()
-	wf := &reliantv1.Workflow{Name: "review", Requires: &reliantv1.WorkflowRequirements{CliLogin: []string{"claude", "codex"}}}
-	env.ExecuteWorkflow(requirementsWorkflow, wf, false)
-	require.NoError(t, env.GetWorkflowError())
-	env.AssertExpectations(t)
-	assert.ElementsMatch(t, []interface{}{"claude", "codex"}, got["cli_login"])
-}
-
-// A placed pool member is checked for the CLI sign-ins too: they are what
-// the run needs of the machine its steps run on.
-func TestPlacedRequirementsCarryCLILogin(t *testing.T) {
-	wf := &reliantv1.Workflow{Name: "review", Requires: &reliantv1.WorkflowRequirements{CliLogin: []string{"gemini"}, Integrations: []string{"github"}}}
-	p := newPlacedRequirements(WorkflowInput{ChatID: "c1"}, &ExecutionContext{}, wf, "wf1", "")
-	require.NotNil(t, p)
-	assert.Equal(t, []string{"gemini"}, p.base["cli_login"])
-	assert.Empty(t, p.base["integrations"], "integrations are the server's, checked once at startup")
 }

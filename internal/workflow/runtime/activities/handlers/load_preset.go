@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"go.temporal.io/sdk/activity"
 
@@ -50,7 +52,7 @@ func (a *LoadPresetParamsActivity) Execute(ctx context.Context, input LoadPreset
 
 	projectID, daemonID := input.ProjectID, ""
 	if input.ChatID != "" && a.repo != nil {
-		chat, err := a.repo.GetChat(ctx, input.ChatID)
+		chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 		if err != nil {
 			return nil, fmt.Errorf("load preset %s: read the run's chat: %w", input.PresetName, err)
 		}

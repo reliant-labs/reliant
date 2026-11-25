@@ -417,11 +417,6 @@ func (req *ToolRequest) toolContextMap() map[string]interface{} {
 		if req.WorkingDir != "" {
 			contextMap[RunWorkDirContextKey] = req.WorkingDir
 		}
-		// Built here from the run-step executor's field alone, and only for
-		// a run step: a model's call never carries one.
-		if !req.RunStepEnv.Empty() {
-			contextMap[RunStepEnvContextKey] = req.RunStepEnv
-		}
 	}
 	if len(req.BoundParams) > 0 {
 		contextMap[BoundParamsContextKey] = append([]string(nil), req.BoundParams...)
@@ -443,14 +438,6 @@ func (req *ToolRequest) toolContextMap() map[string]interface{} {
 // (rctx.ToolContext.RunWorkDir). Server-built, never from tool input; a daemon
 // older than the key ignores it and starts the command in the checkout.
 const RunWorkDirContextKey = "run_work_dir"
-
-// RunStepEnvContextKey is the context-map key carrying a run step's own
-// environment (ToolRequest.RunStepEnv, when RunStep) to the executing tool
-// (rctx.ToolContext.RunStepEnv), as {set, secret, unset}. Server-built, never
-// from tool input. A daemon older than the key would ignore it, which is why
-// the server sends it only to one that registered
-// daemon.CapabilityRunStepEnv.
-const RunStepEnvContextKey = "run_step_env"
 
 // RunMachineContextKey is the context-map key carrying the run's daemon
 // selector (its id or name) to the executing tool (rctx.ToolContext.RunMachine),

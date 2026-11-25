@@ -16,6 +16,7 @@ import { NoMachineState } from "../NoMachineState";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useSidebarStore } from "../../store/sidebarStore";
 import { reliantApiBaseUrl } from "../../lib/connect";
+import { isForgeAuth } from "../../lib/auth/forge-api";
 import { daemonLabel } from "../Automations/daemonChoices";
 import { isAwakeMachine } from "../../lib/chatMachine";
 import { pageActivity } from "../../lib/pageActivity";
@@ -600,9 +601,15 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, chatId,
       const host = baseURL.replace(/^https?:\/\//, "");
       logger.info("[Terminal] Using gRPC base URL for terminal WS", { baseURL });
 
-      // Get auth token
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || "";
+      // Get auth token. forge sign-in sends none: the base is this page's
+      // origin (`/_api/@reliant`, reliantApiBaseUrl), so the session cookie
+      // rides the same-origin upgrade, and a token in the URL would only leak
+      // into logs.
+      let token = "";
+      if (!isForgeAuth()) {
+        const { data: { session } } = await supabase.auth.getSession();
+        token = session?.access_token || "";
+      }
       if (disposed || seq !== connectSeq || attemptTimedOut) return () => {};
 
       const params = new URLSearchParams();

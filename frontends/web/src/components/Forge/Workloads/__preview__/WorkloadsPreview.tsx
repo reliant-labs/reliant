@@ -15,9 +15,10 @@
  *   /forge-workloads-preview?env=all                           every environment
  *   /forge-workloads-preview?workload=worker                   a workload (in the scoped env)
  *   …&tab=logs|traces|profiles|events|history|config
- *   …&case=crash-looping|empty|loading|error|not-set-up|self-managed|local|no-default-branch|action-fails
+ *   …&case=crash-looping|jobs|empty|loading|error|not-set-up|self-managed|local|no-default-branch|action-fails
  *   …&case=config-denied|config-unsupported|no-envs             the Config tab's and the roster's other states
  *   …&case=no-frontends|frontends-loading|domains-unreadable      the Frontends panel's other states
+ *   …&shell=1                                                 the Overview as the project shell draws it (the summary)
  *   …&dark=1&scheme=pure-black
  *
  * The repository's default branch (Scale's "Open PR") is GitHub's answer, not
@@ -27,6 +28,7 @@
 import type { ReactNode } from "react";
 import { useSearch } from "@tanstack/react-router";
 
+import { ShellFrameContext } from "@/components/Layout/shell/shellFrame";
 import { DEMO_PROJECT } from "@/fixtures/shop/handlers/scope";
 import { deliveryOverlays } from "@/fixtures/shop/overlays";
 import { RepoMetaProvider, type RepoMetaApi } from "@/services/forge/RepoMetaContext";
@@ -41,6 +43,7 @@ const overlays = deliveryOverlays.workloads;
 const CASES = [
   { id: "data", label: "the shop" },
   { id: "crash-looping", label: "the worker crash-looping", overlay: overlays["crash-looping"] },
+  { id: "jobs", label: "a completed job and a failed one", overlay: overlays.jobs },
   { id: "empty", label: "nothing reported", overlay: overlays.empty },
   { id: "loading", label: "loading", overlay: overlays.loading },
   { id: "error", label: "telemetry unavailable", overlay: overlays.error },
@@ -60,7 +63,7 @@ const CASES = [
 const MAIN: RepoMetaApi = { defaultBranch: async () => "main" };
 const UNKNOWN: RepoMetaApi = { defaultBranch: async () => null };
 
-type PreviewSearch = { workload?: string; env?: string; tab?: string; case?: string; dark?: boolean | string | number; scheme?: string } & Record<string, unknown>;
+type PreviewSearch = { workload?: string; env?: string; tab?: string; case?: string; shell?: boolean | string | number; dark?: boolean | string | number; scheme?: string } & Record<string, unknown>;
 
 /** The workload page's own search keys, passed through to the console. */
 const DETAIL_KEYS = ["tab", "range", "q", "severity", "trace", "span", "profileType", "status", "kind"] as const;
@@ -74,12 +77,19 @@ export default function WorkloadsPreview() {
   const passed = Object.fromEntries(DETAIL_KEYS.map((key) => [key, search[key]]));
   const path = withSearch(consolePath(DEMO_PROJECT, page), { env, ...passed });
   const repoMeta = active.id === "no-default-branch" ? UNKNOWN : MAIN;
+  // `?shell=1`: the Overview as the project shell draws it (the summary
+  // landing with its Services strip), not the standalone console's tables.
+  const shell = !!search.shell && search.shell !== "0";
   return (
     <ConsoleFixturePreview
-      key={`${caseId}|${path}`}
+      key={`${caseId}|${path}|${shell}`}
       path={path}
       overlay={"overlay" in active ? active.overlay : null}
-      wrap={(console: ReactNode) => <RepoMetaProvider api={repoMeta}>{console}</RepoMetaProvider>}
+      wrap={(console: ReactNode) => (
+        <ShellFrameContext.Provider value={{ inShell: shell, navDocked: false }}>
+          <RepoMetaProvider api={repoMeta}>{console}</RepoMetaProvider>
+        </ShellFrameContext.Provider>
+      )}
       controls={<PreviewControls base={BASE} cases={CASES} caseId={active.id} defaultCase="data" scheme={search.scheme ?? "professional-blue"} dark={isDark(search.dark)} />}
     />
   );

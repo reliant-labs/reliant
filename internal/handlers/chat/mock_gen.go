@@ -226,7 +226,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=5f0f8deeae0e599b82fdf6f24b76f41aa31b8a3eaf9df0ae81f702071226435f
+// forge:hash=7165bb4f6bf50576b8b22e1e181139be23dfd5ca8a2ef95e0da665cd85ee6607
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -238,7 +238,6 @@ type MockRepository struct {
 	contractkit.Recorder
 	AssignUnassignedOrgFunc                                  func(context.Context, string, string) error
 	ListChatsFunc                                            func(context.Context, db.ChatFilters) ([]*db.Chat, error)
-	GetChatRowFunc                                           func(context.Context, string) (*db.ChatRow, error)
 	SearchChatsFunc                                          func(context.Context, db.ChatSearchFilters) ([]*db.Chat, error)
 	ListArchivedChatsFunc                                    func(context.Context, string, *core.OrgScope, db.ArchivedChatPage) ([]*db.ArchivedChatInfo, bool, error)
 	DeleteChatFunc                                           func(context.Context, string) error
@@ -337,11 +336,9 @@ type MockRepository struct {
 	ResolveQuestionFunc                                      func(context.Context, string, *string) error
 	EmitQuestionUpdateFunc                                   func(context.Context, string, db.QuestionUpdate) error
 	LockChatRunControlFunc                                   func(context.Context, string) (func(), error)
-	ClaimPendingTriggerEventFunc                             func(context.Context, string, map[string]any, *core.TriggerEventDefinition) (bool, error)
 	ClaimWorkflowStartFunc                                   func(context.Context, string) (bool, error)
 	CountMessagesInChatFunc                                  func(context.Context, string) (int, error)
 	CreateChatFunc                                           func(context.Context, *db.Chat) error
-	CreateTriggerEventFunc                                   func(context.Context, *core.TriggerEvent) (bool, error)
 	CreateUserUpdateFunc                                     func(context.Context, *db.UserUpdate) error
 	GetDaemonFunc                                            func(context.Context, string) (*db.Daemon, error)
 	GetPresetBySlugFunc                                      func(context.Context, string, string) (*db.Preset, error)
@@ -351,7 +348,6 @@ type MockRepository struct {
 	GetProjectPresetsJSONFunc                                func(context.Context, string) (*string, error)
 	GetProjectWorkflowsJSONFunc                              func(context.Context, string) (*string, error)
 	GetSettingFunc                                           func(context.Context, string, *string, string) (*db.Setting, error)
-	GetTriggerEventByDedupeFunc                              func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	GetUsableWorkflowBySlugFunc                              func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetWorkflowDraftBySlugFunc                               func(context.Context, string, string) (*db.WorkflowDraft, error)
 	ListProjectDaemonsForProjectFunc                         func(context.Context, string) ([]*core.ProjectDaemon, error)
@@ -361,11 +357,8 @@ type MockRepository struct {
 	SaveMessageToThreadFunc                                  func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
 	SaveMessageToThreadOnceFunc                              func(context.Context, string, string, int32, string, *string, []string, *int32, string) (*db.Message, bool, error)
 	UpdateChatActiveDaemonFunc                               func(context.Context, string, *string) error
-	UpdateTriggerEventOutcomeFunc                            func(context.Context, string, core.TriggerEventOutcome, string, *string) error
-	UpdateTriggerEventPayloadFunc                            func(context.Context, string, map[string]any) error
 	UpdateWorkflowNameFunc                                   func(context.Context, string, string) error
 	WorkflowSourceDiagnosticFunc                             func(context.Context, string, string, string) (string, error)
-	GetChatFunc                                              func(context.Context, string) (*db.Chat, error)
 	GetProjectWithUserCheckFunc                              func(context.Context, string, string) (*db.Project, error)
 	GetProjectFunc                                           func(context.Context, string) (*db.Project, error)
 	GetWorktreeFunc                                          func(context.Context, string) (*db.Worktree, error)
@@ -389,15 +382,6 @@ func (m *MockRepository) ListChats(ctx context.Context, filters db.ChatFilters) 
 		return m.ListChatsFunc(ctx, filters)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListChats")
-}
-
-// GetChatRow records the call and delegates to GetChatRowFunc when set.
-func (m *MockRepository) GetChatRow(ctx context.Context, id string) (*db.ChatRow, error) {
-	m.Recorder.Record("GetChatRow", ctx, id)
-	if m.GetChatRowFunc != nil {
-		return m.GetChatRowFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetChatRow")
 }
 
 // SearchChats records the call and delegates to SearchChatsFunc when set.
@@ -1282,15 +1266,6 @@ func (m *MockRepository) LockChatRunControl(ctx context.Context, chatID string) 
 	return nil, contractkit.MockNotSet("MockRepository", "LockChatRunControl")
 }
 
-// ClaimPendingTriggerEvent records the call and delegates to ClaimPendingTriggerEventFunc when set.
-func (m *MockRepository) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
-	m.Recorder.Record("ClaimPendingTriggerEvent", ctx, id, payload, def)
-	if m.ClaimPendingTriggerEventFunc != nil {
-		return m.ClaimPendingTriggerEventFunc(ctx, id, payload, def)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "ClaimPendingTriggerEvent")
-}
-
 // ClaimWorkflowStart records the call and delegates to ClaimWorkflowStartFunc when set.
 func (m *MockRepository) ClaimWorkflowStart(ctx context.Context, id string) (bool, error) {
 	m.Recorder.Record("ClaimWorkflowStart", ctx, id)
@@ -1316,15 +1291,6 @@ func (m *MockRepository) CreateChat(ctx context.Context, chat *db.Chat) error {
 		return m.CreateChatFunc(ctx, chat)
 	}
 	return contractkit.MockNotSet("MockRepository", "CreateChat")
-}
-
-// CreateTriggerEvent records the call and delegates to CreateTriggerEventFunc when set.
-func (m *MockRepository) CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (bool, error) {
-	m.Recorder.Record("CreateTriggerEvent", ctx, ev)
-	if m.CreateTriggerEventFunc != nil {
-		return m.CreateTriggerEventFunc(ctx, ev)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "CreateTriggerEvent")
 }
 
 // CreateUserUpdate records the call and delegates to CreateUserUpdateFunc when set.
@@ -1408,15 +1374,6 @@ func (m *MockRepository) GetSetting(ctx context.Context, userID string, projectI
 	return nil, contractkit.MockNotSet("MockRepository", "GetSetting")
 }
 
-// GetTriggerEventByDedupe records the call and delegates to GetTriggerEventByDedupeFunc when set.
-func (m *MockRepository) GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error) {
-	m.Recorder.Record("GetTriggerEventByDedupe", ctx, kind, dedupeKey)
-	if m.GetTriggerEventByDedupeFunc != nil {
-		return m.GetTriggerEventByDedupeFunc(ctx, kind, dedupeKey)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetTriggerEventByDedupe")
-}
-
 // GetUsableWorkflowBySlug records the call and delegates to GetUsableWorkflowBySlugFunc when set.
 func (m *MockRepository) GetUsableWorkflowBySlug(ctx context.Context, userID string, slug string) (*db.WorkflowDraft, error) {
 	m.Recorder.Record("GetUsableWorkflowBySlug", ctx, userID, slug)
@@ -1498,24 +1455,6 @@ func (m *MockRepository) UpdateChatActiveDaemon(ctx context.Context, chatID stri
 	return contractkit.MockNotSet("MockRepository", "UpdateChatActiveDaemon")
 }
 
-// UpdateTriggerEventOutcome records the call and delegates to UpdateTriggerEventOutcomeFunc when set.
-func (m *MockRepository) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
-	m.Recorder.Record("UpdateTriggerEventOutcome", ctx, id, outcome, detail, chatID)
-	if m.UpdateTriggerEventOutcomeFunc != nil {
-		return m.UpdateTriggerEventOutcomeFunc(ctx, id, outcome, detail, chatID)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpdateTriggerEventOutcome")
-}
-
-// UpdateTriggerEventPayload records the call and delegates to UpdateTriggerEventPayloadFunc when set.
-func (m *MockRepository) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
-	m.Recorder.Record("UpdateTriggerEventPayload", ctx, id, payload)
-	if m.UpdateTriggerEventPayloadFunc != nil {
-		return m.UpdateTriggerEventPayloadFunc(ctx, id, payload)
-	}
-	return contractkit.MockNotSet("MockRepository", "UpdateTriggerEventPayload")
-}
-
 // UpdateWorkflowName records the call and delegates to UpdateWorkflowNameFunc when set.
 func (m *MockRepository) UpdateWorkflowName(ctx context.Context, id string, workflowName string) error {
 	m.Recorder.Record("UpdateWorkflowName", ctx, id, workflowName)
@@ -1532,15 +1471,6 @@ func (m *MockRepository) WorkflowSourceDiagnostic(ctx context.Context, projectID
 		return m.WorkflowSourceDiagnosticFunc(ctx, projectID, daemonID, ref)
 	}
 	return "", contractkit.MockNotSet("MockRepository", "WorkflowSourceDiagnostic")
-}
-
-// GetChat records the call and delegates to GetChatFunc when set.
-func (m *MockRepository) GetChat(ctx context.Context, id string) (*db.Chat, error) {
-	m.Recorder.Record("GetChat", ctx, id)
-	if m.GetChatFunc != nil {
-		return m.GetChatFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetChat")
 }
 
 // GetProjectWithUserCheck records the call and delegates to GetProjectWithUserCheckFunc when set.
@@ -1718,6 +1648,58 @@ func (m *MockAgentMessages) ListQueuedAgentMessagesForThread(ctx context.Context
 
 // Compile-time check.
 var _ AgentMessages = (*MockAgentMessages)(nil)
+
+// forge:section MockChatRows
+// forge:hash=479c6fae0633dba05b40c639c1ab5a13cae6eca18f56906cafab02341958a70a
+
+// MockChatRows is a test mock for the ChatRows interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockChatRows.<Method>Func not set" error.
+type MockChatRows struct {
+	contractkit.Recorder
+	GetChatRowFunc func(context.Context, string) (*db.ChatRow, error)
+}
+
+// GetChatRow records the call and delegates to GetChatRowFunc when set.
+func (m *MockChatRows) GetChatRow(ctx context.Context, id string) (*db.ChatRow, error) {
+	m.Recorder.Record("GetChatRow", ctx, id)
+	if m.GetChatRowFunc != nil {
+		return m.GetChatRowFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockChatRows", "GetChatRow")
+}
+
+// Compile-time check.
+var _ ChatRows = (*MockChatRows)(nil)
+
+// forge:section MockChatViews
+// forge:hash=4e13dce3c2e6779bdee23764b829063c2ac080b85c65368fc28302f0ce73d696
+
+// MockChatViews is a test mock for the ChatViews interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockChatViews.<Method>Func not set" error.
+type MockChatViews struct {
+	contractkit.Recorder
+	GetChatFunc func(context.Context, string) (*db.Chat, error)
+}
+
+// GetChat records the call and delegates to GetChatFunc when set.
+func (m *MockChatViews) GetChat(ctx context.Context, id string) (*db.Chat, error) {
+	m.Recorder.Record("GetChat", ctx, id)
+	if m.GetChatFunc != nil {
+		return m.GetChatFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockChatViews", "GetChat")
+}
+
+// Compile-time check.
+var _ ChatViews = (*MockChatViews)(nil)
 
 // forge:section MockDirectory
 // forge:hash=83876a76b6d6a4cf6e2fbb6be01be521691ea4b970ac0f00e255c8f96d481f76
@@ -1908,6 +1890,72 @@ func (m *MockStore) CopyChatSelection(ctx context.Context, fromChatID string, to
 
 // Compile-time check.
 var _ chatselection.Store = (*MockStore)(nil)
+
+// forge:section MockTriggerEventStore
+// forge:hash=ccace708af9048c3b116866a3427e41259606c4dd49a19763f112d35ae7ee875
+
+// MockTriggerEventStore is a test mock for the launch.TriggerEventStore interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockTriggerEventStore.<Method>Func not set" error.
+type MockTriggerEventStore struct {
+	contractkit.Recorder
+	InsertTriggerEventIfAbsentFunc func(context.Context, *core.TriggerEvent) (bool, error)
+	GetTriggerEventByDedupeFunc    func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
+	UpdateTriggerEventOutcomeFunc  func(context.Context, string, core.TriggerEventOutcome, string, *string) error
+	UpdateTriggerEventPayloadFunc  func(context.Context, string, map[string]any) error
+	ClaimPendingTriggerEventFunc   func(context.Context, string, map[string]any, *core.TriggerEventDefinition) (bool, error)
+}
+
+// InsertTriggerEventIfAbsent records the call and delegates to InsertTriggerEventIfAbsentFunc when set.
+func (m *MockTriggerEventStore) InsertTriggerEventIfAbsent(ctx context.Context, ev *core.TriggerEvent) (bool, error) {
+	m.Recorder.Record("InsertTriggerEventIfAbsent", ctx, ev)
+	if m.InsertTriggerEventIfAbsentFunc != nil {
+		return m.InsertTriggerEventIfAbsentFunc(ctx, ev)
+	}
+	return false, contractkit.MockNotSet("MockTriggerEventStore", "InsertTriggerEventIfAbsent")
+}
+
+// GetTriggerEventByDedupe records the call and delegates to GetTriggerEventByDedupeFunc when set.
+func (m *MockTriggerEventStore) GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error) {
+	m.Recorder.Record("GetTriggerEventByDedupe", ctx, kind, dedupeKey)
+	if m.GetTriggerEventByDedupeFunc != nil {
+		return m.GetTriggerEventByDedupeFunc(ctx, kind, dedupeKey)
+	}
+	return nil, contractkit.MockNotSet("MockTriggerEventStore", "GetTriggerEventByDedupe")
+}
+
+// UpdateTriggerEventOutcome records the call and delegates to UpdateTriggerEventOutcomeFunc when set.
+func (m *MockTriggerEventStore) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
+	m.Recorder.Record("UpdateTriggerEventOutcome", ctx, id, outcome, detail, chatID)
+	if m.UpdateTriggerEventOutcomeFunc != nil {
+		return m.UpdateTriggerEventOutcomeFunc(ctx, id, outcome, detail, chatID)
+	}
+	return contractkit.MockNotSet("MockTriggerEventStore", "UpdateTriggerEventOutcome")
+}
+
+// UpdateTriggerEventPayload records the call and delegates to UpdateTriggerEventPayloadFunc when set.
+func (m *MockTriggerEventStore) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
+	m.Recorder.Record("UpdateTriggerEventPayload", ctx, id, payload)
+	if m.UpdateTriggerEventPayloadFunc != nil {
+		return m.UpdateTriggerEventPayloadFunc(ctx, id, payload)
+	}
+	return contractkit.MockNotSet("MockTriggerEventStore", "UpdateTriggerEventPayload")
+}
+
+// ClaimPendingTriggerEvent records the call and delegates to ClaimPendingTriggerEventFunc when set.
+func (m *MockTriggerEventStore) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
+	m.Recorder.Record("ClaimPendingTriggerEvent", ctx, id, payload, def)
+	if m.ClaimPendingTriggerEventFunc != nil {
+		return m.ClaimPendingTriggerEventFunc(ctx, id, payload, def)
+	}
+	return false, contractkit.MockNotSet("MockTriggerEventStore", "ClaimPendingTriggerEvent")
+}
+
+// Compile-time check.
+var _ launch.TriggerEventStore = (*MockTriggerEventStore)(nil)
 
 // forge:section MockWorkflowLoader
 // forge:hash=3824477bd08382f10b42917132d56306406b4bce001208b8d405e107f0d03d03

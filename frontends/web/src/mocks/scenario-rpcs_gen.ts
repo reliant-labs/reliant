@@ -126,6 +126,12 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ChatService/DetachProjectFromChat"?: (req: import("@/gen/reliant/v1/chat_pb").DetachProjectFromChatRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").DetachProjectFromChatResponseSchema>>;
   }
 
+  // forge:section reliant.v1.ChatTraceService
+  // forge:hash=61ac957e629ac33a98e183ff99096eeb39daa6538a5d790cbd9cbf479a7c775c
+  & {
+    "reliant.v1.ChatTraceService/GetChatTrace"?: (req: import("@/gen/reliant/v1/chat_trace_pb").GetChatTraceRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_trace_pb").GetChatTraceResponseSchema>>;
+  }
+
   // forge:section reliant.v1.ConnectionService
   // forge:hash=81988ede27807b9d6d33437c661c816ee58b18a9764a742f6487df30f43eb3c4
   & {

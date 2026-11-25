@@ -21,6 +21,7 @@
 
 import { isJourneyAvailable } from "@/components/Onboarding/journeys/registry";
 import type { JourneyId } from "@/components/Onboarding/tourParam";
+import type { AuthIdentity } from "@/lib/auth/use-auth";
 import { readLandingJourney } from "@/lib/landingAttribution";
 
 /**
@@ -34,20 +35,17 @@ export const GUARDED_ROUTE_IDS: readonly string[] = ["/_authenticated", "/_app"]
 /** What the sign-in guard does for an auth state, as far as the journey is concerned. */
 export type LandingAuthDecision = "wait" | "sign-in" | "verify-email" | "allow";
 
-interface GuardUser {
-  is_anonymous?: boolean;
-  email_confirmed_at?: string | null;
-}
+type GuardIdentity = Pick<AuthIdentity, "isAnonymous" | "emailVerified">;
 
 /**
  * What AuthGuard (requireAuth, requireEmailVerification) does for this auth
  * state. Pure. An anonymous session (a claim in flight) is let through, as the
  * guard does; an email account must have confirmed its address.
  */
-export function landingAuthDecision(state: { initialized: boolean; loading: boolean; user: GuardUser | null }): LandingAuthDecision {
+export function landingAuthDecision(state: { initialized: boolean; loading: boolean; identity: GuardIdentity | null }): LandingAuthDecision {
   if (!state.initialized || state.loading) return "wait";
-  if (!state.user) return "sign-in";
-  if (!state.user.is_anonymous && !state.user.email_confirmed_at) return "verify-email";
+  if (!state.identity) return "sign-in";
+  if (!state.identity.isAnonymous && !state.identity.emailVerified) return "verify-email";
   return "allow";
 }
 

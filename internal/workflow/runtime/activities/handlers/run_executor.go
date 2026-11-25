@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools/names"
 	"github.com/reliant-labs/reliant/internal/projectcheckout"
@@ -66,10 +68,6 @@ type RunExecutorContext struct {
 	Credentials string
 	// WritableCheckouts is the run node's `writable_checkouts`.
 	WritableCheckouts []string
-	// TriggerID is the trigger that fired the chat's run ("" for none) and
-	// WorkflowName its workflow: a step key's attribution.
-	TriggerID    string
-	WorkflowName string
 
 	// project is the chat's project, for resolveRunCheckout.
 	project *db.Project
@@ -155,9 +153,6 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 		return CommandResult{ExitCode: -1}, err
 	}
 	req.RequestID = runRequestIDFrom(ctx)
-	// The step's own environment (an LLM gateway step key), only for the
-	// step's own command: the server-built context carries it, never input.
-	req.RunStepEnv = runStepEnvFrom(ctx)
 
 	// Execute through the daemon
 	result, err := e.executor.ExecuteTool(ctx, req)
@@ -306,7 +301,7 @@ func shellOutputTruncated(metadata string) bool {
 
 // resolveRunExecutorContext loads the IDs needed for remote execution from the DB.
 func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore, rows ProjectWorktreeReader, chatID string) (RunExecutorContext, error) {
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := chatviews.Of(repo).GetChat(ctx, chatID)
 	if err != nil {
 		return RunExecutorContext{}, fmt.Errorf("failed to get chat: %w", err)
 	}
@@ -336,8 +331,6 @@ func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore
 	if chat.OrgID != nil {
 		execCtx.OrgID = *chat.OrgID
 	}
-	execCtx.TriggerID = ptrValue(chat.TriggerID)
-	execCtx.WorkflowName = workflowNameOf(chat)
 
 	// Check if chat has a worktree
 	worktreeOwner := ""

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAuthStore } from "@/store/authStore";
+import { useAuth } from "@/lib/auth/use-auth";
 import {
   advanceStage,
   loadOrInitState,
@@ -25,18 +25,17 @@ interface UseAnonSignInNudge {
 
 /**
  * Drives the anonymous-session sign-in nudge. Only ever active for genuine
- * anonymous Supabase sessions (`user.is_anonymous === true`); signed-in users,
+ * anonymous Supabase sessions (`identity.isAnonymous`); signed-in users,
  * api-key sessions, dev/mock users, and the logged-out state all short-circuit
  * to `open: false`. Persistence + schedule live in lib/anonSignInNudge.ts.
  */
 export function useAnonSignInNudge(): UseAnonSignInNudge {
-  const user = useAuthStore((s) => s.user);
-  const initialized = useAuthStore((s) => s.initialized);
+  const { identity: user, initialized } = useAuth();
 
-  // Only real anonymous Supabase sessions carry is_anonymous === true. The
-  // api-key/mock/dev synthetic users set is_anonymous: false, so they never
-  // trip this — we must NEVER show the nudge to a signed-in user.
-  const isAnon = !!user && user.is_anonymous === true;
+  // Only real anonymous Supabase sessions are anonymous. The api-key/mock/dev
+  // synthetic users and forge sessions never are, so they never trip this —
+  // we must NEVER show the nudge to a signed-in user.
+  const isAnon = !!user && user.isAnonymous;
   const anonUserId = isAnon ? user.id : null;
 
   const [open, setOpen] = useState(false);

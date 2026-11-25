@@ -109,21 +109,7 @@ requires:
   tools: [git, gh, task, jq]
   integrations: [github]        # connections that must resolve for the run's owner
   repos: [control-plane]        # checkouts that must exist, reach origin, and have no local tag diverged from origin's
-  cli_login: [claude]           # vendor agent CLIs that must be installed and signed in on the machine
 ```
-
-### requires-undeclared-cli-login
-
-**Warning.** A `run` command calls a vendor agent CLI (`claude`, `codex`, `gemini`, `cursor-agent`, `copilot`), by name or by a path such as `~/.local/bin/claude`, that the workflow's `requires.cli_login` does not list. A CLI that is not signed in on the run's machine then fails the step that calls it, midway, instead of failing the run before its first node with the command that fixes it. List it by its vendor id (`claude`, `codex`, `gemini`, `cursor`, `copilot`), and sign it in once on the machine with `reliant machine login <vendor> --machine <name>`:
-
-```yaml
-requires:
-  cli_login: [claude, codex]
-```
-
-### credentials-none-cli-login
-
-**Warning.** A `run` node with `credentials: none` calls `claude`, `codex` or `copilot`. That sandbox hides the files these CLIs keep their sign-in in (`~/.claude`, `~/.codex`, and `~/.config/gh`, which Copilot CLI signs in through), so the CLI runs signed out even when `requires.cli_login` found it signed in. Run that step with `credentials: inherit`.
 
 ### daemon-machine-pin
 
@@ -159,10 +145,6 @@ For an integration trigger the payload is merged over a sample of the event's de
 ```json
 {"type": "ask_user", "questions": [{"question": "Ship this change?", "options": [{"label": "Ship it"}, {"label": "Not yet"}]}]}
 ```
-
-### llm-gateway-cli-unused
-
-**Warning.** A `run` node sets `llm_gateway` for a CLI (`cli: claude-code`) but its command never runs that CLI's program (`claude`). The step still mints a key, budgets it and revokes it, and nothing spends it: almost always a step copied from another one. Run the CLI in the command, or remove `llm_gateway`. A command written as an expression is not judged. See [Run a third-party agent CLI on Reliant's gateway](/workflows/custom-workflows#run-a-third-party-agent-cli-on-reliants-gateway).
 
 ### credentials-none-vendor-signin
 

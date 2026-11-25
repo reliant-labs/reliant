@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -58,12 +57,6 @@ const defaultExecTimeout = 60_000 // 60 seconds
 // caller's command allowlist actually binds. Command goes through the
 // platform shell, which is what first-party callers want (pipelines,
 // redirection, expansion) and what a confined caller must not get.
-// errStepEnvNotHere refuses a step environment (an LLM gateway step key) sent
-// as a daemon command: only a run step's shell tool, on this machine, applies
-// and redacts one (daemon.LocalClient.RunCommand). Refused rather than run
-// without it.
-var errStepEnvNotHere = errors.New("a run step's step_env is applied only to the run step's own command; refusing to run it without its environment")
-
 func buildExecCommand(ctx context.Context, req daemon.RunCommandRequest) *exec.Cmd {
 	if len(req.Argv) > 0 {
 		return exec.CommandContext(ctx, req.Argv[0], req.Argv[1:]...)
@@ -78,9 +71,6 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	var req daemon.RunCommandRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
-	}
-	if !req.StepEnv.Empty() {
-		return nil, errStepEnvNotHere
 	}
 
 	// An absent working directory means the process inherits the DAEMON's cwd,
@@ -279,9 +269,6 @@ func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
 	var req daemon.RunCommandRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
-	}
-	if !req.StepEnv.Empty() {
-		return nil, errStepEnvNotHere
 	}
 
 	// Same reasoning as exec.run: an absent working directory would inherit
