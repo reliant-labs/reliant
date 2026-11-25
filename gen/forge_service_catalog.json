@@ -60211,6 +60211,15 @@
     },
     {
       "consumer": "Triggerowner",
+      "field": "Adoptions",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Adoptions",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Triggerowner",
       "field": "Locks",
       "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Locks",
       "methods": [],
@@ -61273,6 +61282,14 @@
       "component": "Trigger.Syncer",
       "source": {
         "path": "internal/handlers/trigger/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Triggerowner.Adoptions",
+      "source": {
+        "path": "internal/triggerowner/service.go",
         "symbol": "New"
       }
     },
