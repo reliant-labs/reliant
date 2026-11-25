@@ -223,6 +223,8 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   "reliantAI",
   "cloud-billing",
   "deploy-usage",
+  // Generated DeployService reads (hooks/controlplane): usage rows, the collection policy's environments.
+  "controlplane.v1.DeployService",
   "usage-billing",
   "machine-pricing-readiness",
   "onboarding",

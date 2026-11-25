@@ -1,9 +1,7 @@
 // Copyright (c) 2026 Reliant Labs
-import { useQuery } from "@tanstack/react-query";
 import Card, { CardHeader } from "@/components/forge-ui/card";
-import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
+import { useListEnvironments } from "@/hooks/controlplane/deploy-service-hooks_gen";
 import { useEnvironmentShapes } from "@/hooks/forge-queries";
-import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { BillingUnavailable } from "./ObservabilityLimits";
 
 /**
@@ -12,9 +10,9 @@ import { BillingUnavailable } from "./ObservabilityLimits";
  * observability policy) is fetched per environment.
  */
 export function ObservabilityCollectionPolicy({ orgId }: { orgId: string }) {
-  const policy = useQuery({ queryKey: ["observability-billing", orgId, "collection-policy"],
-    // Read in the org the key names, not whichever org the wire would fill in.
-    queryFn: () => getControlPlaneClient(DeployService).listEnvironments({ orgId }), enabled: !!orgId, retry: false, staleTime: 60_000 });
+  // The request names the org, so the generated key does too: read in that org,
+  // not whichever org the wire would fill in.
+  const policy = useListEnvironments({ orgId }, { enabled: !!orgId, retry: false, staleTime: 60_000 });
   const environments = policy.data?.environments ?? [];
   const shapes = useEnvironmentShapes(environments.map(env => (env.declaredAt ? env.id : "")));
   return <Card><CardHeader title="What we collect" description="Read-only release configuration reported by Deploy for your environments." />
