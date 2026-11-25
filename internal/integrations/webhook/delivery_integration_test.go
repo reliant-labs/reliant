@@ -68,7 +68,7 @@ func newReceiptFixture(t *testing.T) *receiptFixture {
 	events := NewEventsReceiver(EventsOptions{Store: NewStores(f.Repo), Inbox: NewStores(f.Repo), Intake: f.intake, Registry: registry, PublicURL: "https://reliant.example.com"})
 	events.now = f.relay.now
 	events.Register(f.mux.Handle)
-	hooks := NewHooksReceiver(HooksOptions{Store: f.Repo, Inbox: NewStores(f.Repo), Intake: f.intake})
+	hooks := NewHooksReceiver(HooksOptions{Store: NewStores(f.Repo), Inbox: NewStores(f.Repo), Intake: f.intake})
 	hooks.now = f.relay.now
 	hooks.Register(f.mux.Handle)
 	require.NoError(t, f.Repo.CreateProject(t.Context(), &db.Project{ID: "receipt-project", UserID: "alice", Name: "Receipt project", Path: t.TempDir(), CreatedAt: f.now, UpdatedAt: f.now, LastActive: f.now}))

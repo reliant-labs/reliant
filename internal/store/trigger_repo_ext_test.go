@@ -180,11 +180,6 @@ func TestTriggerQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTriggerWebhookCredentials: %v", err)
 	}
-	twinCreds, err := env.Repo.GetTriggerWebhookCredentials(ctx, "trg-b")
-	if err != nil {
-		t.Fatalf("Repo.GetTriggerWebhookCredentials: %v", err)
-	}
-	sameValue(t, "GetTriggerWebhookCredentials", creds, twinCreds)
 	if string(creds.TokenHash) != "hash" || string(creds.SecretSealed) != "sealed" {
 		t.Fatalf("credentials = %+v", creds)
 	}
