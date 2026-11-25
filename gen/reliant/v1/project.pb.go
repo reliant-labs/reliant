@@ -425,10 +425,11 @@ type Project struct {
 	// cannot be restored, only purged (PurgeProjectNow resumes it). Set only
 	// by ListDeletedProjects with include_purging.
 	PurgeStartedAt *string `protobuf:"bytes,20,opt,name=purge_started_at,json=purgeStartedAt,proto3,oneof" json:"purge_started_at,omitempty"`
-	// remote_key is remote_url reduced to the repository it names, lowercase
-	// "host/path" (the SSH and HTTPS forms of one repository share it); unset
-	// when remote_url is, or names no host (a local path). Read-only, computed
-	// by the server. Two of the caller's projects with one remote_key are one
+	// remote_key is remote_url reduced to the repository it names: on GitHub,
+	// GitLab and Bitbucket the SSH and HTTPS forms of one repository share it;
+	// elsewhere only the same server and path do. Unset when remote_url is, or
+	// names no server (a local path). Opaque: compare it, never parse it.
+	// Read-only, computed by the server. Two of the caller's projects with one remote_key are one
 	// repository, which MergeProjects can fold into one.
 	RemoteKey     *string `protobuf:"bytes,21,opt,name=remote_key,json=remoteKey,proto3,oneof" json:"remote_key,omitempty"`
 	unknownFields protoimpl.UnknownFields

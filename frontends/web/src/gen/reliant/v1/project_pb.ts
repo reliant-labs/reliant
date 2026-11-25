@@ -167,10 +167,11 @@ export type Project = Message<"reliant.v1.Project"> & {
   purgeStartedAt?: string | undefined;
 
   /**
-   * remote_key is remote_url reduced to the repository it names, lowercase
-   * "host/path" (the SSH and HTTPS forms of one repository share it); unset
-   * when remote_url is, or names no host (a local path). Read-only, computed
-   * by the server. Two of the caller's projects with one remote_key are one
+   * remote_key is remote_url reduced to the repository it names: on GitHub,
+   * GitLab and Bitbucket the SSH and HTTPS forms of one repository share it;
+   * elsewhere only the same server and path do. Unset when remote_url is, or
+   * names no server (a local path). Opaque: compare it, never parse it.
+   * Read-only, computed by the server. Two of the caller's projects with one remote_key are one
    * repository, which MergeProjects can fold into one.
    *
    * @generated from field: optional string remote_key = 21;

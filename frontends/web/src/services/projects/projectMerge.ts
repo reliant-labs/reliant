@@ -9,9 +9,9 @@
  *
  * Two rows are one repository when both are the person's OWN projects (a
  * project shared with them is not theirs to merge) and share a non-empty
- * `remoteKey` (Project.remote_key, the server's reduction of the remote to
- * lowercase `host/path`) in one org. A project with no remote, or a host-less
- * one, has no key and is never offered.
+ * `remoteKey` (Project.remote_key, the server's opaque key of the repository
+ * a remote names) in one org. A project with no remote, or one naming no
+ * server (a local path), has no key and is never offered.
  *
  * Pure: no React, no RPCs.
  */
