@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/changetools"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/connectionproposer"
@@ -373,6 +374,8 @@ type WorkerChatDeps struct {
 	Temporal *TemporalClient
 	Pause    *v2workflow.PauseService
 	Router   *WorkerDaemonRouter
+	// Updates writes the chat's refetch signals and publishes them to the hubs.
+	Updates chatupdates.Service
 }
 
 // NewWorkerChat builds the chat service the run tools act through, as the
@@ -398,7 +401,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Pause:         d.Pause,
 		Router:        d.Router,
 		LocalModels:   local.NewRepoDirectory(d.DB, store.NewModelEndpointExtStore(d.DB.ORM())),
-		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
+		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.Updates}),
 		AgentMessages: store.NewAgentMessageExtStore(d.DB.ORM()),
 	})
 	if err != nil {

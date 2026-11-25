@@ -55,7 +55,7 @@ import { setChatThreadMode, useChatThreadMode } from "./thread-views/useChatThre
 import { ShareChatDialog } from "../Sharing/ShareChatDialog";
 import { ChatAppTag } from "../Projects/ChatAppTag";
 import { ResourceVisibility } from "../../gen/reliant/v1/common_pb";
-import { hasControlPlane } from "../../services/controlPlane/config";
+import { canShareChat } from "../Sharing/shareTargets";
 import { useTopBarSlot } from "../Layout/topBar";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
@@ -167,7 +167,7 @@ export function ChatHeader({
   const isViewer = !!chat?.viewerAccess;
   const isShared = chat?.visibility === ResourceVisibility.ORG;
   // Only the owner shares, and only a chat of an org (SharingService).
-  const canShare = hasControlPlane && !isViewer && !!chat?.orgId;
+  const canShare = canShareChat(chat);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
