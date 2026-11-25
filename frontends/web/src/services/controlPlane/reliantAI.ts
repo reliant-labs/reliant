@@ -1,7 +1,7 @@
 /**
  * Cloud-only wrappers around the managed-Reliant AI surface:
  *   - `controlplane.v1.LLMGatewayService` (LLM keys, spend, available models)
- *   - `controlplane.v1.BillingService`     (wallet + Reliant overview)
+ *   - `controlplane.v1.BillingService`     (RedeemCoupon's answer, mapped)
  *
  * These back the "Reliant AI" tab of Billing (`ReliantAISection`), the
  * end-user view of Reliant-issued LLM keys + spend. Distinct from the BYO
@@ -14,8 +14,8 @@
 
 import { LLMGatewayService } from "@/gen/controlplane/services/llm_gateway/v1/llm_gateway_pb";
 import {
-  BillingService,
   RedeemedCouponKind,
+  type RedeemCouponResponse,
 } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import type {
   LLMKey,
@@ -23,7 +23,6 @@ import type {
   WalletOverview,
   ReliantOverview,
 } from "@/gen/controlplane/controlplane/v1/shared_pb";
-import { orgRequest } from "@/lib/orgScope";
 import { getControlPlaneClient } from "./client";
 import { hasControlPlane } from "./config";
 
@@ -37,22 +36,6 @@ export { RedeemedCouponKind };
  * a service module (never import `config.hasControlPlane` directly).
  */
 export const reliantAIAvailable = hasControlPlane;
-
-/** GetCurrentUserReliantOverview in `orgId` (null: none named) — entitlement + period spend/remaining/cap. */
-export async function getReliantOverview(orgId: string | null): Promise<ReliantOverview | undefined> {
-  const res = await getControlPlaneClient(
-    BillingService,
-  ).getCurrentUserReliantOverview(orgRequest({}, orgId));
-  return res.overview;
-}
-
-/** GetCurrentUserWalletOverview in `orgId` (null: none named) — wallet balance + recent ledger entries. */
-export async function getWalletOverview(orgId: string | null): Promise<WalletOverview | undefined> {
-  const res = await getControlPlaneClient(
-    BillingService,
-  ).getCurrentUserWalletOverview(orgRequest({ ledgerPage: 1, ledgerPageSize: 10 }, orgId));
-  return res.overview;
-}
 
 /** ListLLMKeys — Reliant-managed keys for the resolved org. */
 export async function listLLMKeys(orgId: string): Promise<LLMKey[]> {
@@ -174,16 +157,15 @@ export interface RedeemCouponResult {
 }
 
 /**
- * RedeemCoupon — credit the current org's wallet, or grant daemon compute
- * minutes, from a coupon code (see `kind` on the result).
+ * RedeemCoupon's answer in UI units — credit the current org's wallet, or
+ * grant daemon compute minutes, from a coupon code (see `kind`).
  *
- * The org is resolved SERVER-side from the authenticated caller; there is
- * deliberately no org parameter here, so a client cannot credit someone else's
- * wallet. Redemption is idempotent per (coupon, org): redeeming twice returns
- * an AlreadyExists error rather than crediting again.
+ * The org is resolved SERVER-side from the authenticated caller; the request
+ * deliberately has no org, so a client cannot credit someone else's wallet.
+ * Redemption is idempotent per (coupon, org): redeeming twice returns an
+ * AlreadyExists error rather than crediting again.
  */
-export async function redeemCoupon(code: string): Promise<RedeemCouponResult> {
-  const res = await getControlPlaneClient(BillingService).redeemCoupon({ code });
+export function redeemCouponResult(res: RedeemCouponResponse): RedeemCouponResult {
   return {
     // Wire values are bigint (int64); the UI works in numbers. Coupon amounts
     // are dollars, so this is nowhere near Number's safe range.

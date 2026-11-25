@@ -99,8 +99,6 @@ var userScopedReads = map[string]string{
 	"GetPresetBySlug":             readPersonal,
 	"GetSetting":                  readPersonal,
 	"GetSettingValue":             readPersonal,
-	"ListLLMUsageDaily":           readPersonal,
-	"ListLLMUsageDetail":          readPersonal,
 	"ListSettings":                readPersonal,
 	"ListSettingsByKey":           readPersonal,
 	"ListVisibilityOverrides":     readPersonal,

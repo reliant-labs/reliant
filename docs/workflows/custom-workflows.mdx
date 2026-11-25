@@ -447,6 +447,10 @@ Publish a branch with a `git_publish` node, which never gives its credential to 
 
 #### Run a third-party agent CLI on Reliant's gateway
 
+<Warning>
+`llm_gateway` is deprecated. It keeps working throughout v1 and is slated for removal in a future major release, so avoid it in new workflows.
+</Warning>
+
 A `run` node can run a third-party agent CLI, such as Claude Code, against Reliant's LLM gateway instead
 of a provider key or a person's subscription. Declare `llm_gateway` on the node:
 

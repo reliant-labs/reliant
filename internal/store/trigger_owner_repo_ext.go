@@ -4,14 +4,17 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/uptrace/bun/dialect/pgdialect"
 
+	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -191,6 +194,99 @@ func RevokeOtherTriggerOffers(ctx context.Context, db orm.Context, triggerID, ke
 WHERE trigger_id = ? AND status = 'pending' AND id <> ?`, core.TriggerOfferRevokedOwnerChanged, at, triggerID, keep).Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("revoke the trigger's other offers: %w", err)
+	}
+	return nil
+}
+
+// LockUserOrgs takes userID's org lock for the rest of the surrounding
+// transaction, then checks each read: its row still has the org the decision
+// read. It must run inside a transaction (the lock is transaction-scoped)
+// and before any row lock of that transaction.
+func LockUserOrgs(ctx context.Context, db orm.Context, userID string, reads ...OrgRead) error {
+	if userID == "" {
+		return fmt.Errorf("org lock: user is required")
+	}
+	if _, err := db.Bun().NewRaw(userOrgLockSQL, userID).Exec(ctx); err != nil {
+		return fmt.Errorf("take the org lock: %w", err)
+	}
+	for _, read := range reads {
+		query, ok := orgReadSQL[read.Table]
+		if !ok {
+			return fmt.Errorf("org lock: %q has no org", read.Table)
+		}
+		var rows []struct {
+			OrgID *string `bun:"org_id"`
+		}
+		if err := db.Bun().NewRaw(query, read.ID).Scan(ctx, &rows); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("re-read the org of %s %s: %w", read.Table, read.ID, err)
+		}
+		if len(rows) == 0 || !sameOrg(rows[0].OrgID, read.Org) {
+			return ErrOrgChanged
+		}
+	}
+	return nil
+}
+
+// LockProjectsForWrite takes a key share on each project in ids (in id
+// order; "" is skipped) and refuses with core.ErrProjectScheduledForDeletion
+// when one is scheduled for deletion. A trigger write takes it before its
+// trigger's row lock: the database's admission takes the same share later in
+// the statement, and taking it after the trigger lock would order the two
+// locks against a schedule's (project, then triggers). A project that is gone
+// is left to the write's own foreign key.
+func LockProjectsForWrite(ctx context.Context, db orm.Context, ids ...string) error {
+	var want []string
+	for _, id := range ids {
+		if id != "" {
+			want = append(want, id)
+		}
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	var scheduled []string
+	if err := db.Bun().NewRaw(`SELECT id FROM (SELECT id, delete_after FROM projects WHERE id = ANY(?0) ORDER BY id FOR KEY SHARE) p
+WHERE delete_after IS NOT NULL`, pgdialect.Array(want)).Scan(ctx, &scheduled); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("lock the project: %w", err)
+	}
+	if len(scheduled) > 0 {
+		return core.ErrProjectScheduledForDeletion
+	}
+	return nil
+}
+
+// RecordTriggerChange is called in the SAME transaction as the row mutation.
+// Only the bounded allowlisted projection is persisted: arbitrary params,
+// prompts, source expressions, and graph literals are never audit data.
+func RecordTriggerChange(ctx context.Context, db orm.Context, op string, before, after *core.Trigger) error {
+	var old any
+	if before != nil {
+		data, err := automationpolicy.SafeJSON(before)
+		if err != nil {
+			return err
+		}
+		old = string(data)
+	}
+	data, err := automationpolicy.SafeJSON(after)
+	if err != nil {
+		return err
+	}
+	actor := automationpolicy.ActorFrom(ctx)
+	// How an agent's change was approved, and the capabilities it moved
+	// (automationpolicy.Decide). Capability items are display-safe by
+	// construction; a change made in the app records neither.
+	approval := automationpolicy.ApprovalFrom(ctx)
+	var capabilityChange any
+	if approval.How != "" {
+		raw, err := json.Marshal(core.CapabilityChange{Added: nonNil(approval.Added), Removed: nonNil(approval.Removed)})
+		if err != nil {
+			return err
+		}
+		capabilityChange = string(raw)
+	}
+	_, err = db.Bun().NewRaw(`INSERT INTO trigger_changes(id,trigger_id,user_id,chat_id,run_id,tool_call_id,operation,before_state,after_state,approval,capability_change,created_at) VALUES (?,?,?,?,?,?,?,?::jsonb,?::jsonb,?,?::jsonb,?)`, uuid.NewString(), after.ID, after.UserID, actor.ChatID, actor.RunID, actor.ToolCallID, op, old, string(data), approval.How, capabilityChange, time.Now().UTC()).Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("record trigger configuration change: %w", err)
 	}
 	return nil
 }

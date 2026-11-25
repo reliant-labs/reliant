@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -241,34 +240,6 @@ func projectDeletedError(err error) error {
 		return core.ErrProjectScheduledForDeletion
 	}
 	return err
-}
-
-// LockProjectsForWrite takes a key share on each project in ids (in id
-// order; "" is skipped) and refuses with core.ErrProjectScheduledForDeletion
-// when one is scheduled for deletion. A trigger write takes it before its
-// trigger's row lock: the database's admission takes the same share later in
-// the statement, and taking it after the trigger lock would order the two
-// locks against a schedule's (project, then triggers). A project that is gone
-// is left to the write's own foreign key.
-func LockProjectsForWrite(ctx context.Context, db orm.Context, ids ...string) error {
-	var want []string
-	for _, id := range ids {
-		if id != "" {
-			want = append(want, id)
-		}
-	}
-	if len(want) == 0 {
-		return nil
-	}
-	var scheduled []string
-	if err := db.Bun().NewRaw(`SELECT id FROM (SELECT id, delete_after FROM projects WHERE id = ANY(?0) ORDER BY id FOR KEY SHARE) p
-WHERE delete_after IS NOT NULL`, pgdialect.Array(want)).Scan(ctx, &scheduled); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("lock the project: %w", err)
-	}
-	if len(scheduled) > 0 {
-		return core.ErrProjectScheduledForDeletion
-	}
-	return nil
 }
 
 // TriggerProjectID reads the trigger's project, unlocked: what a trigger
