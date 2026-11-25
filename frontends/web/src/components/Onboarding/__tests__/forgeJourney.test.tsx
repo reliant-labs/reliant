@@ -16,7 +16,7 @@ import { resetShellForTests } from "@/lib/shell";
 import { DEMO_INSIDE_SPAN_IDS, DEMO_INVENTORY_SPAN_ID, DEMO_ISSUE_ID, DEMO_TRACE_ID, forgeJourney } from "../journeys/forge";
 import { activeJourneySteps, presentStep } from "../journeys/registry";
 import { tourEvents } from "../tourEvents";
-import { setReliantTourHooks, setTourShell } from "../tourShell";
+import { setDemoTourHooks, setReliantTourHooks, setTourShell } from "../tourShell";
 import { setSampleTourActive, useSampleTour } from "../../Forge/Sample/sampleTour";
 import type { JourneyStep, RouteTarget } from "../types";
 
@@ -61,6 +61,12 @@ function watchStep(id: string, entry: Record<string, unknown>, pathname?: string
 
 const openSearch = (id: string) => (step(id).route?.open as RouteTarget).search ?? {};
 
+/** The public demo host, as its boot leaves it (demoShellBoot.ts): the demo shell, and the demo's tour hooks on its own app. */
+function onDemoHost() {
+  resetShellForTests("demo");
+  setDemoTourHooks({ app: "shop" });
+}
+
 /** Someone signed in: the tour walks the sample app inside the shell (catalog.ts installs this in the app). */
 function signIn() {
   setReliantTourHooks({ landOnChat: async () => undefined, afterTour: async () => undefined, inAppShell: () => true });
@@ -70,6 +76,7 @@ function signIn() {
 const SHELL_ONLY = ["fg-nav", "fg-deployments", "fg-tests", "fg-security", "fg-configure"];
 
 afterEach(() => {
+  setDemoTourHooks(null);
   setSampleTourActive(false);
   setReliantTourHooks(null);
   setTourShell(null);
@@ -121,7 +128,7 @@ describe("the forge journey", () => {
   });
 
   it("is a short, optional path on the demo host: what forge is, one request across services, its logs and error, the handoff, how it was built", () => {
-    resetShellForTests("demo");
+    onDemoHost();
     expect(active()).toEqual(["fg-intro", "fg-instrumented", "fg-trace", "fg-hops", "fg-inside", "fg-logs", "fg-issue", "fg-ask", "fg-built", "fg-done"]);
     expect(active().length).toBeLessThanOrEqual(10);
   });
@@ -133,26 +140,27 @@ describe("the forge journey", () => {
       ["forge", () => resetShellForTests("forge"), 11],
       ["reliant signed in", () => (resetShellForTests("reliant"), signIn()), 14],
       ["forge signed in", () => (resetShellForTests("forge"), signIn()), 14],
-      ["demo short", () => resetShellForTests("demo"), 10],
-      ["demo full", () => (resetShellForTests("demo"), setRuntimeConfig({ DEMO_TOUR: "full" })), 15],
+      ["demo short", () => onDemoHost(), 10],
+      ["demo full", () => (onDemoHost(), setRuntimeConfig({ DEMO_TOUR: "full" })), 15],
     ];
     expect(step("fg-instrumented").isAvailable).toBeUndefined();
     for (const [name, enter, total] of cuts) {
       setRuntimeConfig({});
       setReliantTourHooks(null);
+      setDemoTourHooks(null);
       enter();
       expect(active(), name).toContain("fg-instrumented");
       expect(active(), name).toHaveLength(total);
       expect(new Set(active()).size, name).toBe(total);
     }
-    resetShellForTests("demo");
+    onDemoHost();
     setRuntimeConfig({});
     expect(active()).not.toContain("fg-agent");
     expect(step("fg-agent").isAvailable?.()).toBe(false);
   });
 
   it("is every step but the shell's on the demo host with DEMO_TOUR=full", () => {
-    resetShellForTests("demo");
+    onDemoHost();
     setRuntimeConfig({ DEMO_TOUR: "full" });
     // The demo's bundle never installs the Reliant tour hooks (journeys/catalog.ts), so the shell's steps never run there.
     expect(active()).toEqual(forgeJourney.steps.map((s) => s.id).filter((id) => !SHELL_ONLY.includes(id)));
@@ -176,7 +184,7 @@ describe("the forge journey", () => {
   });
 
   it("opens with two sentences: what Forge is, and what the tour shows", () => {
-    resetShellForTests("demo");
+    onDemoHost();
     render(<>{presentStep(step("fg-intro")).description}</>);
     // Two sentences: what Forge is, and what the tour shows.
     const intro = screen.getByText(/open-source toolkit.*Claude Code, Codex or Cursor/);
@@ -219,7 +227,7 @@ describe("the forge journey", () => {
     // The demo host only, and the last step before the end card.
     resetShellForTests("reliant");
     expect(built.isAvailable?.()).toBe(false);
-    resetShellForTests("demo");
+    onDemoHost();
     expect(built.isAvailable?.()).toBe(true);
     expect(active().slice(-2)).toEqual(["fg-built", "fg-done"]);
   });
@@ -230,7 +238,7 @@ describe("the forge journey", () => {
   });
 
   it("stays on the console when it finishes on the demo host: there is nowhere to go", () => {
-    resetShellForTests("demo");
+    onDemoHost();
     expect(forgeJourney.finish?.("forge")).toBeNull();
   });
 
@@ -285,7 +293,7 @@ describe("the forge journey", () => {
       expect(forgeJourney.returnToStart?.("reliant")).toBe(true);
       // Signed out on an app host, or on the demo host (which has no Reliant hooks): nothing to return to.
       setReliantTourHooks(null);
-      resetShellForTests("demo");
+      onDemoHost();
       expect(forgeJourney.returnToStart?.("forge")).toBe(false);
     });
 
@@ -318,7 +326,7 @@ describe("the forge journey", () => {
     afterEach(() => resetShellForTests());
 
     it("walks the sample app's own console pages", () => {
-      resetShellForTests("demo");
+      onDemoHost();
       for (const id of ["fg-intro", "fg-instrumented", "fg-built"]) {
         expect(step(id).route?.path, id).toBe("/forge/p/shop");
         expect((step(id).route?.open as RouteTarget).to, id).toBe("/forge/p/shop");
@@ -334,7 +342,7 @@ describe("the forge journey", () => {
     });
 
     it("fg-logs and fg-profile are done on the console's logs and profiles pages", () => {
-      resetShellForTests("demo");
+      onDemoHost();
       const logs = watchStep("fg-logs", openSearch("fg-logs"), "/forge/p/shop/observability/traces");
       logs.go({ trace: DEMO_TRACE_ID }, "/forge/p/shop/observability/traces");
       expect(logs.onFire).not.toHaveBeenCalled();
@@ -466,7 +474,7 @@ describe("the forge journey", () => {
       expect(screen.getByText(`forge obs trace ${DEMO_TRACE_ID} prod`)).toBeInTheDocument();
       expect(screen.getByText("claude mcp add forge -- forge agent mcp")).toBeInTheDocument();
       agent.unmount();
-      resetShellForTests("demo");
+      onDemoHost();
       render(<>{presentStep(step("fg-done")).description}</>);
       // The public demo ends on its call to action, not a command list.
       expect(screen.queryByText("forge scaffold service inventory")).toBeNull();

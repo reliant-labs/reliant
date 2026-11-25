@@ -151,3 +151,25 @@ export function setReliantTourHooks(hooks: ReliantTourHooks | null): void {
 export function getReliantTourHooks(): ReliantTourHooks | null {
   return reliantHooks;
 }
+
+/**
+ * The public demo's side of the same seam, installed once by its boot
+ * (Forge/Demo/demoShellBoot.ts) and by nothing else: the tour runs on the
+ * demo's own sample app, for a visitor with no account. A journey reads it to
+ * walk that app's pages, and to end on a call to action rather than on the
+ * person's own apps (journeys/forge.tsx). Unset everywhere but the demo.
+ */
+export interface DemoTourHooks {
+  /** The app whose console the demo is: its pages are the forge journey's. */
+  app: string;
+}
+
+let demoHooks: DemoTourHooks | null = null;
+
+export function setDemoTourHooks(hooks: DemoTourHooks | null): void {
+  demoHooks = hooks;
+}
+
+export function getDemoTourHooks(): DemoTourHooks | null {
+  return demoHooks;
+}
