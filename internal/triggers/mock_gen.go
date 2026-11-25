@@ -472,7 +472,7 @@ func (m *MockEventRepo) GetIntegrationAccessSubject(ctx context.Context, userID 
 var _ EventRepo = (*MockEventRepo)(nil)
 
 // forge:section MockTriggerPauser
-// forge:hash=fd9eabb4219efd412efe711a09d5c08624f1dd2d40aa2a34d81c46d438d21a68
+// forge:hash=16f9425fa78409238747fb5828dff117147e63f9c7e5afc111de1d9dc23703fd
 
 // MockTriggerPauser is a test mock for the TriggerPauser interface.
 //
@@ -482,16 +482,16 @@ var _ EventRepo = (*MockEventRepo)(nil)
 // "MockTriggerPauser.<Method>Func not set" error.
 type MockTriggerPauser struct {
 	contractkit.Recorder
-	PauseTriggerFunc func(context.Context, string, string) (bool, error)
+	SystemPauseTriggerFunc func(context.Context, string, string) (bool, error)
 }
 
-// PauseTrigger records the call and delegates to PauseTriggerFunc when set.
-func (m *MockTriggerPauser) PauseTrigger(ctx context.Context, id string, reason string) (bool, error) {
-	m.Recorder.Record("PauseTrigger", ctx, id, reason)
-	if m.PauseTriggerFunc != nil {
-		return m.PauseTriggerFunc(ctx, id, reason)
+// SystemPauseTrigger records the call and delegates to SystemPauseTriggerFunc when set.
+func (m *MockTriggerPauser) SystemPauseTrigger(ctx context.Context, id string, reason string) (bool, error) {
+	m.Recorder.Record("SystemPauseTrigger", ctx, id, reason)
+	if m.SystemPauseTriggerFunc != nil {
+		return m.SystemPauseTriggerFunc(ctx, id, reason)
 	}
-	return false, contractkit.MockNotSet("MockTriggerPauser", "PauseTrigger")
+	return false, contractkit.MockNotSet("MockTriggerPauser", "SystemPauseTrigger")
 }
 
 // Compile-time check.

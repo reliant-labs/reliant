@@ -575,12 +575,22 @@ type AttentionRecorder interface {
 	ApplyAttentionUpdate(ctx context.Context, update core.AttentionUpdate) (core.AttentionResult, error)
 }
 
+// TriggerPauser pauses a trigger with a system reason (core.TriggerPaused*);
+// paused is false when it was already paused. store.TriggerWritesExtStore
+// satisfies it.
+type TriggerPauser interface {
+	SystemPauseTrigger(ctx context.Context, id, reason string) (paused bool, err error)
+}
+
 // WorkflowStatusDeps is what NewWorkflowStatusActivity takes.
 type WorkflowStatusDeps struct {
 	Repo      WorkflowStatusStore
 	Runs      RunRecords
 	Workflows WorkflowRuns
 	Attention AttentionRecorder
+	// Pauser pauses a trigger whose unattended run an org policy ended. Nil
+	// pauses nothing: the next refused run records the failure only.
+	Pauser TriggerPauser
 }
 
 type runRecords struct {

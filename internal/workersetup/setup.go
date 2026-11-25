@@ -608,7 +608,7 @@ func triggerAutoPause(cfg *Config) *triggers.AutoPause {
 	if cfg.TemporalClient != nil {
 		schedules = cfg.TemporalClient.ScheduleClient()
 	}
-	pause := triggers.NewAutoPause(cfg.Database, schedules)
+	pause := triggers.NewAutoPause(store.NewTriggerWritesExtStore(cfg.Database.ORM()), schedules)
 	if q := orgKeyNoticeQueueFor(cfg); q.starter != nil {
 		// A pause for want of an org account emails the org's admins.
 		pause = pause.WithNoOrgAccountPause(noOrgAccountPauseNotifier(newPauseStores(cfg.Database, cfg.Database.ORM()), q))

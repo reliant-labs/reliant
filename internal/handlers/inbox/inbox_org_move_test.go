@@ -9,6 +9,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // An automation a project move left paused is listed as needing setup until
@@ -24,7 +25,7 @@ func TestListInbox_AMovePausedAutomationNeedsSetup(t *testing.T) {
 		"t-rebind": core.TriggerPausedOrgMoveSetup,
 		"t-check":  core.TriggerPausedOrgMove,
 	} {
-		paused, err := f.repo.PauseTrigger(f.ctx, id, reason)
+		paused, err := store.NewTriggerWritesExtStore(f.repo.ORM()).SystemPauseTrigger(f.ctx, id, reason)
 		require.NoError(t, err)
 		require.True(t, paused)
 	}

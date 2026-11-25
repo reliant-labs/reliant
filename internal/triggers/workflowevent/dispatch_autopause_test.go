@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 )
@@ -28,7 +29,7 @@ func (m liveIn) IsMember(_ context.Context, _, orgID string) (bool, bool, error)
 // records one failure and pauses the trigger, which matches nothing after.
 func TestDispatch_PausesATriggerWhoseCreatorLeftItsOrg(t *testing.T) {
 	f := newFixture(t)
-	f.dispatcher.WithAutoPause(triggers.NewAutoPause(f.repo, nil))
+	f.dispatcher.WithAutoPause(triggers.NewAutoPause(store.NewTriggerWritesExtStore(f.repo.ORM()), nil))
 	config, err := json.Marshal(Source{Workflows: []string{"code-review"}, Outcomes: []string{"finished"}})
 	require.NoError(t, err)
 	acme, now := "acme", time.Now().UTC()
