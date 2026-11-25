@@ -15,7 +15,9 @@ const fileOutputSupported = true
 
 // waitExited blocks until pid, a child of this process, has exited, WITHOUT
 // reaping it (WNOWAIT): its exit status stays for whoever reaps it — this
-// image, or the next one after a self-update's exec.
+// image, or the next one after a self-update's exec. nil means it exited and
+// is still unreaped; an error (ECHILD: not this process's child, or reaped
+// already) means no exit was seen.
 func waitExited(pid int) error {
 	var info unix.Siginfo
 	for {

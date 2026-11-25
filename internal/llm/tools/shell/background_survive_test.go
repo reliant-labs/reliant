@@ -6,10 +6,12 @@ package shell
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -23,70 +25,126 @@ import (
 // test process two managers sharing a journal directory are the image before
 // the exec and the image after it: the first hands its processes off
 // (HandOffForExec) and is never used again, the second adopts them
-// (BackgroundJournal.Install). The commands wait on a FIFO the test opens,
-// so what happens before and after the "exec" is decided by the test, never
-// by a sleep.
+// (BackgroundJournal.Install).
+//
+// Nothing here waits on the clock. The commands signal the test through
+// FIFOs (ready: "my output is written"; gate: "go on"), completion is the
+// process's done channel, and an image deciding not to reap is the handoff's
+// parked signal. The journal runs on a fixed clock. failureBound only fails
+// a run whose event never came.
+
+// testEpoch is the journal's clock and restart time in these tests.
+var testEpoch = time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC)
+
+// failureBound fails a wait for an event that never came.
+const failureBound = 30 * time.Second
+
+// newTestJournal is a journal in dir on the fixed clock.
+func newTestJournal(dir string) *BackgroundJournal {
+	j := NewBackgroundJournal(dir)
+	j.now = func() time.Time { return testEpoch }
+	return j
+}
+
+// installJournal restores dir's journal into m (adopting what was handed off)
+// and makes it m's persistence.
+func installJournal(t *testing.T, m *BackgroundManager, dir string) int {
+	t.Helper()
+	n, err := newTestJournal(dir).Install(m, testEpoch)
+	require.NoError(t, err)
+	return n
+}
 
 // survivingManager is a manager journaled in dir, with file-backed output on.
 func survivingManager(t *testing.T, dir string) *BackgroundManager {
 	t.Helper()
 	m := newTestBGManager()
-	if _, err := NewBackgroundJournal(dir).Install(m, time.Now()); err != nil {
-		t.Fatalf("Install: %v", err)
-	}
+	installJournal(t, m, dir)
 	m.EnableFileOutput(dir)
 	return m
 }
 
-// gate is a FIFO a command blocks on (`read _ < $GATE`) until open is called.
-type gate string
-
-func newGate(t *testing.T) gate {
+// await fails the test unless ch closes within failureBound.
+func await(t *testing.T, ch <-chan struct{}, what string) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "gate")
+	select {
+	case <-ch:
+	case <-time.After(failureBound):
+		t.Fatalf("timed out waiting for %s", what)
+	}
+}
+
+// awaitReturn runs fn, which blocks on an event, failing the test unless it
+// returns within failureBound.
+func awaitReturn(t *testing.T, what string, fn func() error) {
+	t.Helper()
+	errc := make(chan error, 1)
+	go func() { errc <- fn() }()
+	select {
+	case err := <-errc:
+		require.NoError(t, err, what)
+	case <-time.After(failureBound):
+		t.Fatalf("timed out waiting for %s", what)
+	}
+}
+
+// fifo is a named pipe a command and the test meet at.
+type fifo string
+
+func newFIFO(t *testing.T, name string) fifo {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
 	require.NoError(t, syscall.Mkfifo(path, 0o600))
-	return gate(path)
+	return fifo(path)
 }
 
-// open lets the command reading the gate go on. Opening a FIFO to write
-// blocks until its reader has it open, so this returns once the command is
-// past the point it waited at.
-func (g gate) open(t *testing.T) {
+// open lets a command blocked in `read _ < $fifo` go on. Opening a FIFO to
+// write blocks until its reader has it open.
+func (f fifo) open(t *testing.T) {
 	t.Helper()
-	f, err := os.OpenFile(string(g), os.O_WRONLY, 0)
-	require.NoError(t, err)
-	_, err = f.WriteString("go\n")
-	require.NoError(t, err)
-	require.NoError(t, f.Close())
-}
-
-// waitFor polls cond until it holds; the deadline only bounds a broken run.
-func waitFor(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
+	awaitReturn(t, "the command to read the gate", func() error {
+		w, err := os.OpenFile(string(f), os.O_WRONLY, 0)
+		if err != nil {
+			return err
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
+		_, err = w.WriteString("go\n")
+		return errors.Join(err, w.Close())
+	})
 }
 
-func outputHas(m *BackgroundManager, id string, texts ...string) bool {
-	lines, _, err := m.GetCombinedOutputWithSeq(id, 0)
-	if err != nil {
-		return false
-	}
-	have := map[string]bool{}
+// awaitSignal returns once a command ran `echo > $fifo`: everything it wrote
+// before that is in its output files.
+func (f fifo) awaitSignal(t *testing.T) {
+	t.Helper()
+	awaitReturn(t, "the command's ready signal", func() error {
+		r, err := os.Open(string(f))
+		if err != nil {
+			return err
+		}
+		_, err = io.ReadAll(r)
+		return errors.Join(err, r.Close())
+	})
+}
+
+// waitDone waits for the process to be reported finished and returns its
+// status and exit code.
+func waitDone(t *testing.T, p *BackgroundProcess) (string, *int) {
+	t.Helper()
+	await(t, p.done, "process "+p.ID+" to finish")
+	live := p.Live()
+	return live.Status, live.ExitCode
+}
+
+func texts(t *testing.T, m *BackgroundManager, id string, afterSeq int64) []string {
+	t.Helper()
+	lines, _, err := m.GetCombinedOutputWithSeq(id, afterSeq)
+	require.NoError(t, err)
+	out := make([]string, 0, len(lines))
 	for _, l := range lines {
-		have[l.Text] = true
+		require.Greater(t, l.Sequence, afterSeq)
+		out = append(out, l.Text)
 	}
-	for _, text := range texts {
-		if !have[text] {
-			return false
-		}
-	}
-	return true
+	return out
 }
 
 func readJournalRecord(t *testing.T, dir, id string) journalRecord {
@@ -96,6 +154,18 @@ func readJournalRecord(t *testing.T, dir, id string) journalRecord {
 	var rec journalRecord
 	require.NoError(t, json.Unmarshal(data, &rec))
 	return rec
+}
+
+func requireFiles(t *testing.T, dir, id string, exist bool, why string) {
+	t.Helper()
+	for _, f := range outputFilePaths(dir, id) {
+		_, err := os.Stat(f)
+		if exist {
+			require.NoError(t, err, why)
+		} else {
+			require.ErrorIs(t, err, os.ErrNotExist, why)
+		}
+	}
 }
 
 func alive(pid int) bool {
@@ -111,22 +181,21 @@ func alive(pid int) bool {
 func TestBackgroundProcessSurvivesSelfUpdate(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "journal")
 	before := newTestBGManager()
-	_, err := NewBackgroundJournal(dir).Install(before, time.Now())
-	require.NoError(t, err)
+	installJournal(t, before, dir)
 
 	// Started before file output was on: piped, so the handoff stops it.
-	pipedGate := newGate(t)
 	piped, err := before.StartProcess(context.Background(), StartProcessOptions{
-		Command:    "read _ < " + string(pipedGate),
+		Command:    "read _ < " + string(newFIFO(t, "piped-gate")),
 		WorkingDir: t.TempDir(),
 	})
 	require.NoError(t, err)
 	require.False(t, piped.SurvivesSelfUpdate())
 	before.EnableFileOutput(dir)
 
-	g := newGate(t)
+	ready, gate := newFIFO(t, "ready"), newFIFO(t, "gate")
 	proc, err := before.StartProcess(context.Background(), StartProcessOptions{
-		Command:    `echo before; echo err-before >&2; printf partial; read _ < ` + string(g) + `; echo " tail"; echo after; exit 7`,
+		Command: fmt.Sprintf(`echo before; echo err-before >&2; printf partial; echo > %s; read _ < %s; echo " tail"; echo after; exit 7`,
+			ready, gate),
 		WorkingDir: t.TempDir(),
 		ChatID:     "chat-1",
 	})
@@ -139,11 +208,11 @@ func TestBackgroundProcessSurvivesSelfUpdate(t *testing.T) {
 	require.NotZero(t, rec.StartTicks, "the journal records the process start time")
 	require.Equal(t, pid, rec.PGID, "the command leads its own process group")
 
-	waitFor(t, "the output before the handoff", func() bool { return outputHas(before, proc.ID, "before", "err-before") })
+	ready.awaitSignal(t)
+	before.HandOffForExec() // the exec follows; this image is never used again
 	seen, lastSeq, err := before.GetCombinedOutputWithSeq(proc.ID, 0)
 	require.NoError(t, err)
-
-	before.HandOffForExec() // the exec follows; this image is never used again
+	require.Equal(t, []string{"before", "err-before"}, texts(t, before, proc.ID, 0), "the handoff read the output up to the last whole line")
 
 	require.True(t, alive(pid), "a handed-off process keeps running")
 	rec = readJournalRecord(t, dir, proc.ID)
@@ -153,9 +222,7 @@ func TestBackgroundProcessSurvivesSelfUpdate(t *testing.T) {
 	require.Equal(t, "killed", piped.StatusSafe(), "a piped process cannot survive the exec and is stopped")
 
 	after := newTestBGManager()
-	n, err := NewBackgroundJournal(dir).Install(after, time.Now())
-	require.NoError(t, err)
-	require.GreaterOrEqual(t, n, 1)
+	require.GreaterOrEqual(t, installJournal(t, after, dir), 1)
 
 	adopted, err := after.GetProcess(proc.ID)
 	require.NoError(t, err)
@@ -169,54 +236,97 @@ func TestBackgroundProcessSurvivesSelfUpdate(t *testing.T) {
 	require.Equal(t, lastSeq, resumedSeq)
 	require.False(t, readJournalRecord(t, dir, proc.ID).HandedOff, "the handoff is spent")
 
-	g.open(t)
-	status, exitCode := awaitCompletion(t, after, proc.ID, 30*time.Second)
+	gate.open(t)
+	status, exitCode := waitDone(t, adopted)
 	require.Equal(t, "failed", status)
 	require.NotNil(t, exitCode)
 	require.Equal(t, 7, *exitCode, "the exit status is collected after the adoption")
+	require.Equal(t, []string{"partial tail", "after"}, texts(t, after, proc.ID, lastSeq), "output goes on where the first image stopped")
 
-	more, _, err := after.GetCombinedOutputWithSeq(proc.ID, lastSeq)
-	require.NoError(t, err)
-	var texts []string
-	for _, l := range more {
-		require.Greater(t, l.Sequence, lastSeq)
-		texts = append(texts, l.Text)
-	}
-	require.Equal(t, []string{"partial tail", "after"}, texts, "output goes on where the first image stopped")
-
-	waitFor(t, "the journal to record the exit", func() bool {
-		r := readJournalRecord(t, dir, proc.ID)
-		return r.Status == "failed" && r.ExitCode != nil && *r.ExitCode == 7
-	})
-	files := outputFilePaths(dir, proc.ID)
-	for _, f := range files {
-		_, err := os.Stat(f)
-		require.ErrorIs(t, err, os.ErrNotExist, "an ended process's output files are removed: the journal has its output")
-	}
+	// Status changes are journaled before done closes.
+	rec = readJournalRecord(t, dir, proc.ID)
+	require.Equal(t, "failed", rec.Status)
+	require.Equal(t, 7, *rec.ExitCode)
+	requireFiles(t, dir, proc.ID, false, "the image that reaped it removes its output files: the journal has its output")
 }
 
-// A handoff the exec never followed (the swap failed) is taken back: this
-// image tails and reaps the process again.
-func TestBackgroundHandOffUndoneWhenTheExecFails(t *testing.T) {
+// The defect a handoff must never have: the old image reaping a process that
+// exits between the handoff and the exec. It must leave the zombie, its exit
+// status and its output files to the next image, which collects them.
+func TestBackgroundExitBetweenHandOffAndExecIsLeftToTheNextImage(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "journal")
-	m := survivingManager(t, dir)
-	g := newGate(t)
-	proc, err := m.StartProcess(context.Background(), StartProcessOptions{
-		Command:    `echo one; read _ < ` + string(g) + `; echo two; exit 3`,
+	before := survivingManager(t, dir)
+	ready, gate := newFIFO(t, "ready"), newFIFO(t, "gate")
+	proc, err := before.StartProcess(context.Background(), StartProcessOptions{
+		Command:    fmt.Sprintf(`echo one; echo > %s; read _ < %s; echo two; exit 5`, ready, gate),
 		WorkingDir: t.TempDir(),
 	})
 	require.NoError(t, err)
-	waitFor(t, "the first line", func() bool { return outputHas(m, proc.ID, "one") })
+	pid := proc.GetPID()
+	ready.awaitSignal(t)
 
-	resume := m.HandOffForExec()
-	resume()
+	before.HandOffForExec()
+	gate.open(t) // the command exits now, before the "exec"
+	await(t, proc.handoff.parkedSignal(), "the old image to see the exit and decline to reap")
 
-	g.open(t)
-	status, exitCode := awaitCompletion(t, m, proc.ID, 30*time.Second)
+	require.Equal(t, "running", proc.StatusSafe(), "the old image recorded no completion")
+	select {
+	case <-proc.done:
+		t.Fatal("the old image completed a process it handed off")
+	default:
+	}
+	id, ok := osutil.IdentifyProcess(pid)
+	require.True(t, ok, "the exited process was not reaped")
+	require.True(t, id.Exited, "it is a zombie, its exit status kept")
+	requireFiles(t, dir, proc.ID, true, "the old image never removes a handed-off process's files")
+
+	after := newTestBGManager()
+	installJournal(t, after, dir)
+	adopted, err := after.GetProcess(proc.ID)
+	require.NoError(t, err)
+	status, exitCode := waitDone(t, adopted)
 	require.Equal(t, "failed", status)
 	require.NotNil(t, exitCode)
-	require.Equal(t, 3, *exitCode)
-	require.True(t, outputHas(m, proc.ID, "one", "two"))
+	require.Equal(t, 5, *exitCode, "the next image collects the exit status")
+	require.Equal(t, []string{"one", "two"}, texts(t, after, proc.ID, 0))
+	requireFiles(t, dir, proc.ID, false, "the image that reaped it removes the files")
+}
+
+// A handoff the exec never followed (the swap failed) is taken back: this
+// image tails and reaps the process again, whether it exited during the
+// handoff or after it.
+func TestBackgroundHandOffUndoneWhenTheExecFails(t *testing.T) {
+	for _, exitDuringHandOff := range []bool{false, true} {
+		t.Run(fmt.Sprintf("exit_during_handoff=%v", exitDuringHandOff), func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "journal")
+			m := survivingManager(t, dir)
+			ready, gate := newFIFO(t, "ready"), newFIFO(t, "gate")
+			proc, err := m.StartProcess(context.Background(), StartProcessOptions{
+				Command:    fmt.Sprintf(`echo one; echo > %s; read _ < %s; echo two; exit 3`, ready, gate),
+				WorkingDir: t.TempDir(),
+			})
+			require.NoError(t, err)
+			ready.awaitSignal(t)
+
+			resume := m.HandOffForExec()
+			if exitDuringHandOff {
+				gate.open(t)
+				await(t, proc.handoff.parkedSignal(), "the image to decline to reap a handed-off process")
+				requireFiles(t, dir, proc.ID, true, "files are kept while handed off")
+			}
+			resume()
+			if !exitDuringHandOff {
+				gate.open(t)
+			}
+
+			status, exitCode := waitDone(t, proc)
+			require.Equal(t, "failed", status)
+			require.NotNil(t, exitCode)
+			require.Equal(t, 3, *exitCode)
+			require.Equal(t, []string{"one", "two"}, texts(t, m, proc.ID, 0))
+			requireFiles(t, dir, proc.ID, false, "reaped here again, so removed here")
+		})
+	}
 }
 
 // A handed-off record whose pid now belongs to another process (a different
@@ -234,7 +344,7 @@ func TestBackgroundHandOffNotAdoptedOnPidReuse(t *testing.T) {
 
 	const recID = "reused-pid-record"
 	rec := journalRecord{
-		ID: recID, Command: "dev server", Status: "running", StartTime: time.Now(),
+		ID: recID, Command: "dev server", Status: "running", StartTime: testEpoch,
 		PID: other.Process.Pid, PGID: other.Process.Pid, StartTicks: id.Start + 1,
 		FileOutput: true, HandedOff: true,
 	}
@@ -246,8 +356,7 @@ func TestBackgroundHandOffNotAdoptedOnPidReuse(t *testing.T) {
 	}
 
 	m := newTestBGManager()
-	_, err = NewBackgroundJournal(dir).Install(m, time.Now())
-	require.NoError(t, err)
+	installJournal(t, m, dir)
 	got, err := m.GetProcess(recID)
 	require.NoError(t, err)
 	require.Equal(t, StatusStale, got.StatusSafe(), "another process holds the pid: not adopted")
@@ -264,15 +373,15 @@ func TestBackgroundOrphanOfACrashIsStopped(t *testing.T) {
 	orphan := exec.Command("sleep", "600")
 	orphan.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	require.NoError(t, orphan.Start())
-	waited := make(chan error, 1)
-	go func() { waited <- orphan.Wait() }()
+	waited := make(chan struct{})
+	go func() { _ = orphan.Wait(); close(waited) }()
 	t.Cleanup(func() { _ = orphan.Process.Kill() })
 	id, ok := osutil.IdentifyProcess(orphan.Process.Pid)
 	require.True(t, ok)
 
 	const recID = "crash-orphan"
 	rec := journalRecord{
-		ID: recID, Command: "dev server", Status: "running", StartTime: time.Now(),
+		ID: recID, Command: "dev server", Status: "running", StartTime: testEpoch,
 		PID: orphan.Process.Pid, PGID: orphan.Process.Pid, StartTicks: id.Start, FileOutput: true,
 	}
 	data, err := json.Marshal(rec)
@@ -280,16 +389,11 @@ func TestBackgroundOrphanOfACrashIsStopped(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, recID+".json"), data, 0o600))
 
 	m := newTestBGManager()
-	_, err = NewBackgroundJournal(dir).Install(m, time.Now())
-	require.NoError(t, err)
+	installJournal(t, m, dir)
 	got, err := m.GetProcess(recID)
 	require.NoError(t, err)
 	require.Equal(t, StatusStale, got.StatusSafe())
-	select {
-	case <-waited:
-	case <-time.After(30 * time.Second):
-		t.Fatal("the orphan was not stopped")
-	}
+	await(t, waited, "the orphan to be stopped")
 }
 
 // A normal stop is unchanged: KillAllRunning kills a file-backed process
@@ -297,23 +401,22 @@ func TestBackgroundOrphanOfACrashIsStopped(t *testing.T) {
 func TestBackgroundFileOutputProcessKilledOnNormalShutdown(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "journal")
 	m := survivingManager(t, dir)
-	g := newGate(t)
+	ready, gate := newFIFO(t, "ready"), newFIFO(t, "gate")
 	proc, err := m.StartProcess(context.Background(), StartProcessOptions{
-		Command:    `echo up; read _ < ` + string(g),
+		Command:    fmt.Sprintf(`echo up; echo > %s; read _ < %s`, ready, gate),
 		WorkingDir: t.TempDir(),
 	})
 	require.NoError(t, err)
 	require.True(t, proc.SurvivesSelfUpdate())
 	pid := proc.GetPID()
-	waitFor(t, "the first line", func() bool { return outputHas(m, proc.ID, "up") })
+	ready.awaitSignal(t)
 
 	m.KillAllRunning()
 
 	require.Equal(t, "killed", proc.StatusSafe())
 	require.False(t, alive(pid), "a normal stop kills it")
-	waitFor(t, "the journal to record the kill", func() bool {
-		return readJournalRecord(t, dir, proc.ID).Status == "killed"
-	})
+	require.Equal(t, "killed", readJournalRecord(t, dir, proc.ID).Status, "the kill is journaled before KillAllRunning returns")
+	requireFiles(t, dir, proc.ID, false, "reaped here, so its files are removed")
 }
 
 // File-backed output reads like piped output: every line, split by stream,
@@ -327,12 +430,11 @@ func TestBackgroundFileOutputIsCompleteAtCompletion(t *testing.T) {
 		WorkingDir: t.TempDir(),
 	})
 	require.NoError(t, err)
-	status, exitCode := awaitCompletion(t, m, proc.ID, 30*time.Second)
+	status, exitCode := waitDone(t, proc)
 	require.Equal(t, "completed", status)
 	require.Equal(t, 0, *exitCode)
 	stdout, stderr, err := m.GetOutput(proc.ID)
 	require.NoError(t, err)
 	require.Equal(t, "line-1\nline-2\nline-3\nno newline\n", stdout)
 	require.Equal(t, "oops\n", stderr)
-	require.False(t, strings.Contains(stdout, "oops"))
 }

@@ -4,6 +4,8 @@
 package shell
 
 import (
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/osutil"
@@ -20,11 +22,19 @@ var exitPollInterval = 100 * time.Millisecond
 
 // waitExited blocks until pid, a child of this process, has exited, WITHOUT
 // reaping it: its exit status stays for whoever reaps it — this image, or the
-// next one after a self-update's exec.
+// next one after a self-update's exec. nil means it is this process's zombie;
+// an error means no exit was seen: the pid is gone (reaped already) or is not
+// this process's child.
 func waitExited(pid int) error {
+	self := os.Getpid()
 	for {
 		id, ok := osutil.IdentifyProcess(pid)
-		if !ok || id.Exited {
+		switch {
+		case !ok:
+			return fmt.Errorf("pid %d is gone", pid)
+		case id.PPID != self:
+			return fmt.Errorf("pid %d is not this process's child (parent %d)", pid, id.PPID)
+		case id.Exited:
 			return nil
 		}
 		time.Sleep(exitPollInterval)

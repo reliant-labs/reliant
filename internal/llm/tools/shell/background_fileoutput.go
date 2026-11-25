@@ -170,11 +170,15 @@ func (o *fileOutput) pump() {
 	}
 }
 
-// startTailing starts reading the files every tailInterval.
+// startTailing starts reading the files every tailInterval, unless the
+// output is finished.
 func (o *fileOutput) startTailing() {
 	o.loopMu.Lock()
 	defer o.loopMu.Unlock()
-	if o.stop != nil {
+	o.mu.Lock()
+	closed := o.closed
+	o.mu.Unlock()
+	if o.stop != nil || closed {
 		return
 	}
 	stop, stopped := make(chan struct{}), make(chan struct{})
@@ -219,7 +223,9 @@ func (o *fileOutput) pause() [2]int64 {
 
 // finish reads the rest once the process has been reaped, emits the
 // unterminated last lines, and removes the files: every line is in memory
-// and goes to the journal's .out with the final flush.
+// and goes to the journal's .out with the final flush. Only the image that
+// reaped the process calls it (waitForFileProcess): one that handed the
+// process off never touches its files again.
 func (o *fileOutput) finish() {
 	if o == nil {
 		return

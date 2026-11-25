@@ -29,9 +29,11 @@ import (
 //     reads on from are journaled with it. Everything else is stopped, as at
 //     any restart: a piped process, a credentials-none one (it dies with the
 //     daemon, by decision of 2026-11-10), an adopted foreground command.
-//  2. The exit is watched without reaping (waitExited), so one that exits
-//     between the handoff and the exec stays a zombie whose status the next
-//     image collects.
+//  2. The exit is watched without reaping (waitExited), and whether this
+//     image may reap is decided under the process's ownership lock
+//     (handoffState): one that exits between the handoff and the exec is
+//     left a zombie, exit status and output files intact, for the next image
+//     to collect. Only the image that reaps a process removes its files.
 //  3. Re-adopt (BackgroundJournal.Install, in the next image): a handed-off
 //     record whose pid is alive, has this process as its parent and has the
 //     start time journaled for it is the same process. It keeps its id,
@@ -98,72 +100,144 @@ func (m *BackgroundManager) attachOutput(process *BackgroundProcess, cmd *exec.C
 	return []*outputLineWriter{stdoutLines, stderrLines}, func(error) {}
 }
 
-// handoffState is a file-backed process's part in a self-update: handed off
-// to the next image, or being reaped by this one. Never both.
+// ownership is who may reap a file-backed process and remove its output
+// files: this image, or the next one across a self-update's exec.
+type ownership int
+
+const (
+	// owned: this image tails the process and, once it exits, reaps it.
+	owned ownership = iota
+	// handingOff: HandOffForExec is reading its output to hand it on.
+	handingOff
+	// handedOff: the journal names it for the next image to adopt.
+	handedOff
+	// reaping: this image saw it exit while it owned it, and reaps it.
+	reaping
+)
+
+// handoffState is a file-backed process's ownership, which decides, under one
+// lock, between this image reaping it and handing it to the next image. Only
+// owned becomes reaping, and only reaping removes the output files
+// (waitForFileProcess). A process that exits while handing off or handed off
+// is left a zombie, exit status and files intact, for the next image: its
+// waiter parks, and only an undo (the exec did not happen) restarts it.
 type handoffState struct {
-	mu        sync.Mutex
-	handedOff bool
-	reaping   bool
-	resumed   chan struct{} // closed when a handoff is undone
+	mu     sync.Mutex
+	state  ownership
+	parked bool         // the waiter saw the exit while not owned, and returned
+	reap   func() error // collects the exit status; the waiter's, kept for a restart
+	// parkedC closes when the waiter parks during this handoff (made by
+	// begin): the moment the image has decided, for good, not to reap.
+	parkedC chan struct{}
 }
 
-// claimReap is the waiter's: nil when this image may reap the process, else
-// the channel that closes if the handoff is undone.
-func (h *handoffState) claimReap() <-chan struct{} {
+// parkedSignal is closed once the waiter parked during the current handoff;
+// nil when no handoff began.
+func (h *handoffState) parkedSignal() <-chan struct{} {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.handedOff {
-		return h.resumed
-	}
-	h.reaping = true
-	return nil
+	return h.parkedC
 }
 
-// begin hands the process off, unless this image is already reaping it.
+// mayReap is the waiter's question once the process exited: true moves it
+// from owned to reaping; otherwise the waiter parks.
+func (h *handoffState) mayReap() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.state == owned {
+		h.state = reaping
+		return true
+	}
+	if !h.parked {
+		h.parked = true
+		if h.parkedC != nil {
+			close(h.parkedC)
+		}
+	}
+	return false
+}
+
+// begin starts a handoff of an owned process: false once this image reaps it.
 func (h *handoffState) begin() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.reaping {
+	if h.state != owned {
 		return false
 	}
-	if !h.handedOff {
-		h.handedOff = true
-		h.resumed = make(chan struct{})
-	}
+	h.state = handingOff
+	h.parkedC = make(chan struct{})
 	return true
 }
 
-// undo takes a handoff back: the exec did not happen.
-func (h *handoffState) undo() {
+// commit marks the handoff journaled.
+func (h *handoffState) commit() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.handedOff {
-		h.handedOff = false
-		close(h.resumed)
+	if h.state == handingOff {
+		h.state = handedOff
 	}
 }
 
-// waitForFileProcess waits for a file-backed process. It sees the exit
-// without reaping (waitExited), and reaps with reap (cmd.Wait, or
-// os.Process.Wait for an adopted process) only when the process was not
-// handed off: a handed-off one is the next image's to reap.
+// undo takes a handoff back, the exec not having happened: the process is
+// this image's again. It returns the reap to restart when the waiter parked
+// meanwhile (the process exited), else nil.
+func (h *handoffState) undo() func() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.state != handingOff && h.state != handedOff {
+		return nil
+	}
+	h.state = owned
+	if !h.parked {
+		return nil
+	}
+	h.parked = false
+	return h.reap
+}
+
+// watchFileProcess starts waiting for a file-backed process, which reap
+// collects the exit status of (cmd.Wait, or os.Process.Wait for an adopted
+// process).
+func (m *BackgroundManager) watchFileProcess(process *BackgroundProcess, reap func() error) {
+	process.handoff.mu.Lock()
+	process.handoff.reap = reap
+	process.handoff.mu.Unlock()
+	go m.waitForFileProcess(process, reap)
+}
+
+// waitForFileProcess waits for a file-backed process to exit without reaping
+// it (waitExited), then reaps it, finishes its output and removes its files
+// only if this image still owns it. A process handed off is the next image's:
+// the waiter parks and returns, and the zombie keeps its exit status.
 func (m *BackgroundManager) waitForFileProcess(process *BackgroundProcess, reap func() error) {
 	pid := process.GetPID()
-	for {
-		if err := waitExited(pid); err != nil {
-			logging.Debug("Background process exit not observable; reaping it", "id", process.ID, "pid", pid, "error", err)
-		}
-		resumed := process.handoff.claimReap()
-		if resumed == nil {
-			break
-		}
-		<-resumed
+	if err := waitExited(pid); err != nil {
+		// Its exit cannot be seen without reaping it. Owned, it is reaped
+		// (a blocking wait4); a handoff that finds it so stops it instead.
+		logging.Debug("Background process exit not observable without reaping it", "id", process.ID, "pid", pid, "error", err)
+	}
+	if !process.handoff.mayReap() {
+		logging.Info("Background process exited after it was handed to the next daemon image, which collects its exit status", "id", process.ID, "pid", pid)
+		return
 	}
 	err := reap()
 	process.recordSurvivors()
 	process.tree.Release()
 	process.fileOut.finish()
+	// Journaled before the completion is reported: the files are gone now,
+	// so a crash past this point must find every line in the journal.
+	m.flushProcessOutput(process)
 	m.handleProcessCompletion(process, err)
+}
+
+// undoHandOff takes process back after a handoff the exec did not follow:
+// tailed again first, then owned, so a waiter restarted for an exit seen
+// meanwhile finishes the output after tailing resumed, never before.
+func (m *BackgroundManager) undoHandOff(process *BackgroundProcess) {
+	process.fileOut.startTailing()
+	if reap := process.handoff.undo(); reap != nil {
+		go m.waitForFileProcess(process, reap)
+	}
 }
 
 // reapAdopted reaps an adopted process: it is this process's child, so wait4
@@ -228,32 +302,34 @@ func (m *BackgroundManager) HandOffForExec() (resume func()) {
 	m.killConcurrently(stop, "Failed to stop background process before a self-update")
 	return func() {
 		for _, process := range handed {
-			process.handoff.undo()
-			process.fileOut.startTailing()
+			m.undoHandOff(process)
 		}
 	}
 }
 
 // handOff hands one file-backed process off. ended reports one that had
-// already exited and is being reaped here: there is nothing to hand off or
-// stop. A handoff that cannot be journaled is taken back (false): the
-// process is stopped instead, since the next image could not adopt it.
+// already exited and been reaped here: there is nothing to hand off or stop.
+// One this image is reaping that does not end within KillGraceTimeout (its
+// exit could not be seen without reaping it, so it may still run) is stopped
+// instead, and so is one whose handoff cannot be journaled, since the next
+// image could not adopt it.
 func (m *BackgroundManager) handOff(process *BackgroundProcess, cb *PersistenceCallback) (handedOff, ended bool) {
 	if !process.handoff.begin() {
 		select {
 		case <-process.done:
+			return false, true
 		case <-time.After(KillGraceTimeout):
+			return false, false
 		}
-		return false, true
 	}
 	offsets := process.fileOut.pause()
 	m.flushProcessOutput(process)
 	if err := cb.OnHandOff(process.ID, offsets); err != nil {
 		logging.Warn("Background process could not be handed off to the next daemon image; it is stopped", "id", process.ID, "error", err)
-		process.handoff.undo()
-		process.fileOut.startTailing()
+		m.undoHandOff(process)
 		return false, false
 	}
+	process.handoff.commit()
 	return true, false
 }
 
@@ -351,7 +427,7 @@ func (m *BackgroundManager) resumeAdopted() {
 	m.persistenceMu.RUnlock()
 	for _, process := range adopted {
 		process.fileOut.startTailing()
-		go m.waitForFileProcess(process, reapAdopted(process.cmd.Process))
+		m.watchFileProcess(process, reapAdopted(process.cmd.Process))
 		if flush {
 			go m.flushOutput(process)
 		}

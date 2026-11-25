@@ -151,11 +151,16 @@ that their output went through pipes whose read ends are close-on-exec.
   stopped as at any restart: piped processes, credentials-none commands (they
   die with the daemon by owner decision, 2026-11-10), foreground commands
   moved to the background. PTY terminals die at the exec as before.
-- **Exit without reaping**: a file-backed process's exit is watched with
-  `waitid(WNOWAIT)` (Linux; macOS polls `kinfo_proc` for the zombie), and the
-  image reaps it only if it did not hand it off. One that exits between the
-  handoff and the exec stays a zombie, and the new image reaps it for its real
-  exit status. No wrapper process and no exit file: the exec keeps the parent.
+- **Exit without reaping, and one owner**: a file-backed process's exit is
+  watched with `waitid(WNOWAIT)` (Linux; macOS polls `kinfo_proc` for its own
+  zombie child). Whether this image may then reap it is decided under the
+  process's ownership lock (`handoffState`: owned, handing off, handed off,
+  reaping). Only an owned process is reaped, and only the image that reaped
+  it finishes its output and removes its files. One that exits while handing
+  off or handed off stays a zombie with its files: the old image's waiter
+  parks, and the new image reaps it for its real exit status. An undo (the
+  exec failed) makes it owned again and restarts a parked waiter. No wrapper
+  process and no exit file: the exec keeps the parent.
 - **Adoption** (`BackgroundJournal.Install` in the new image): a handed-off
   record whose pid is alive (a zombie counts), whose parent is this process
   and whose start time matches the journaled one is the same process. It keeps

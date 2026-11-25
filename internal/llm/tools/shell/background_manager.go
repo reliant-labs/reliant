@@ -562,7 +562,7 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	// Start goroutine to wait for process completion
 	if process.fileOut != nil {
 		process.fileOut.startTailing()
-		go m.waitForFileProcess(process, cmd.Wait)
+		m.watchFileProcess(process, cmd.Wait)
 	} else {
 		go m.waitForProcess(process, pipes...)
 	}
