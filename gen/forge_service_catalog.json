@@ -59249,6 +59249,32 @@
     },
     {
       "consumer": "Question",
+      "field": "ChatRows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.ChatRows",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
+      "field": "ChatViews",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.ChatViews",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
       "field": "Mailbox",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/question.Mailbox",
       "methods": [],
@@ -59748,6 +59774,19 @@
       ],
       "providers": [
         "Daemonmirror"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "ChatRows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.ChatRows",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
@@ -60327,6 +60366,19 @@
       ],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Trigger",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Trigger",
@@ -61024,6 +61076,19 @@
       ],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Worktree",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Worktree",
