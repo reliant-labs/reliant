@@ -131,7 +131,7 @@ func (m *MockTxRunner) RunTx(p0 context.Context, policy orm.TxPolicy, fn func(ct
 var _ TxRunner = (*MockTxRunner)(nil)
 
 // forge:section MockLocks
-// forge:hash=18e371574095f60db9a71fbd621c4b06eb4ebbedb09a249f297e77ba48e30558
+// forge:hash=a117dff132414c491c3ca46880a8304c562871536a74b2ef17fe215f47b79915
 
 // MockLocks is a test mock for the Locks interface.
 //
@@ -143,7 +143,6 @@ type MockLocks struct {
 	contractkit.Recorder
 	LockUserOrgsFunc         func(context.Context, string, ...store.OrgRead) error
 	LockProjectsForWriteFunc func(context.Context, ...string) error
-	LockTriggerFunc          func(context.Context, string) error
 }
 
 // LockUserOrgs records the call and delegates to LockUserOrgsFunc when set.
@@ -164,20 +163,11 @@ func (m *MockLocks) LockProjectsForWrite(ctx context.Context, ids ...string) err
 	return contractkit.MockNotSet("MockLocks", "LockProjectsForWrite")
 }
 
-// LockTrigger records the call and delegates to LockTriggerFunc when set.
-func (m *MockLocks) LockTrigger(ctx context.Context, id string) error {
-	m.Recorder.Record("LockTrigger", ctx, id)
-	if m.LockTriggerFunc != nil {
-		return m.LockTriggerFunc(ctx, id)
-	}
-	return contractkit.MockNotSet("MockLocks", "LockTrigger")
-}
-
 // Compile-time check.
 var _ Locks = (*MockLocks)(nil)
 
 // forge:section MockTriggers
-// forge:hash=5db091405afed42b39afd4f0c43f3b6400bf01531c64ad37c22e61043f552775
+// forge:hash=05c0704c65a063f61c9138d2a997e5443bc4d0d5a039f989d28f0aecce9b89cd
 
 // MockTriggers is a test mock for the Triggers interface.
 //
@@ -187,9 +177,17 @@ var _ Locks = (*MockLocks)(nil)
 // "MockTriggers.<Method>Func not set" error.
 type MockTriggers struct {
 	contractkit.Recorder
-	GetTriggerFunc          func(context.Context, string) (*core.Trigger, error)
-	AdoptTriggerFunc        func(context.Context, *core.Trigger) error
-	RecordTriggerChangeFunc func(context.Context, string, *core.Trigger, *core.Trigger) error
+	LockTriggerFunc func(context.Context, string) error
+	GetTriggerFunc  func(context.Context, string) (*core.Trigger, error)
+}
+
+// LockTrigger records the call and delegates to LockTriggerFunc when set.
+func (m *MockTriggers) LockTrigger(ctx context.Context, id string) error {
+	m.Recorder.Record("LockTrigger", ctx, id)
+	if m.LockTriggerFunc != nil {
+		return m.LockTriggerFunc(ctx, id)
+	}
+	return contractkit.MockNotSet("MockTriggers", "LockTrigger")
 }
 
 // GetTrigger records the call and delegates to GetTriggerFunc when set.
@@ -201,26 +199,44 @@ func (m *MockTriggers) GetTrigger(ctx context.Context, id string) (*core.Trigger
 	return nil, contractkit.MockNotSet("MockTriggers", "GetTrigger")
 }
 
+// Compile-time check.
+var _ Triggers = (*MockTriggers)(nil)
+
+// forge:section MockAdoptions
+// forge:hash=28b1418bd91f0fdaf9beeab0394de58c180eacf6751e59901c8207f4c22253ff
+
+// MockAdoptions is a test mock for the Adoptions interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockAdoptions.<Method>Func not set" error.
+type MockAdoptions struct {
+	contractkit.Recorder
+	AdoptTriggerFunc        func(context.Context, *core.Trigger) error
+	RecordTriggerChangeFunc func(context.Context, string, *core.Trigger, *core.Trigger) error
+}
+
 // AdoptTrigger records the call and delegates to AdoptTriggerFunc when set.
-func (m *MockTriggers) AdoptTrigger(ctx context.Context, t *core.Trigger) error {
+func (m *MockAdoptions) AdoptTrigger(ctx context.Context, t *core.Trigger) error {
 	m.Recorder.Record("AdoptTrigger", ctx, t)
 	if m.AdoptTriggerFunc != nil {
 		return m.AdoptTriggerFunc(ctx, t)
 	}
-	return contractkit.MockNotSet("MockTriggers", "AdoptTrigger")
+	return contractkit.MockNotSet("MockAdoptions", "AdoptTrigger")
 }
 
 // RecordTriggerChange records the call and delegates to RecordTriggerChangeFunc when set.
-func (m *MockTriggers) RecordTriggerChange(ctx context.Context, operation string, before *core.Trigger, after *core.Trigger) error {
+func (m *MockAdoptions) RecordTriggerChange(ctx context.Context, operation string, before *core.Trigger, after *core.Trigger) error {
 	m.Recorder.Record("RecordTriggerChange", ctx, operation, before, after)
 	if m.RecordTriggerChangeFunc != nil {
 		return m.RecordTriggerChangeFunc(ctx, operation, before, after)
 	}
-	return contractkit.MockNotSet("MockTriggers", "RecordTriggerChange")
+	return contractkit.MockNotSet("MockAdoptions", "RecordTriggerChange")
 }
 
 // Compile-time check.
-var _ Triggers = (*MockTriggers)(nil)
+var _ Adoptions = (*MockAdoptions)(nil)
 
 // forge:section MockOffers
 // forge:hash=37a89eef1275a9305b7d4d18ccaba60c0e677a1bc6fa00d9a5a257dac8058d94

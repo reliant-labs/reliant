@@ -40,10 +40,6 @@ const mocks = vi.hoisted(() => ({
 // The Add machine sheet (billing checkout, catalog) is not under test here.
 vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
 vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
-vi.mock('@/services/controlPlane/billing', () => ({
-  getComputeEligibility: mocks.getComputeEligibility,
-}))
-
 vi.mock('@/lib/event-context', () => ({
   useEventBus: () => ({ emit: vi.fn(), on: vi.fn(() => () => {}) }),
 }))
@@ -98,6 +94,7 @@ import { MachinesSection } from '@/components/Settings/cloud/machines'
 import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 import { setTransport } from '@/lib/connect'
 import { daemonRegistryTransport } from '@/test/daemonRegistry'
+import { eligibilityHandlers } from '@/test/billingTransport'
 
 // The daemon list is read through connectClient(DaemonRegistryService).
 beforeEach(() =>
@@ -105,7 +102,7 @@ beforeEach(() =>
     daemonRegistryTransport({
       listDaemons: () => mocks.listDaemons(),
       renameMachine: (req: { daemonId: string; name: string }) => mocks.renameMachine(req),
-    }),
+    }, eligibilityHandlers(() => mocks.getComputeEligibility())),
   ),
 )
 afterEach(() => setTransport(null))

@@ -27,6 +27,7 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { OrganizationService } from "@/gen/controlplane/services/organization/v1/organization_pb";
+import { billingServiceKeys } from "@/hooks/controlplane/billing-service-hooks_gen";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 
 type Int = bigint | number;
@@ -191,12 +192,17 @@ const retryHosting = (failures: number, error: unknown) =>
   failures < 2 &&
   !(error instanceof ConnectError && [Code.Unimplemented, Code.PermissionDenied, Code.InvalidArgument, Code.Unauthenticated].includes(error.code));
 
+/**
+ * The keys these reads and the agreement read share: the generated
+ * BillingService keys, so an org switch purges them with the rest of the
+ * service (store/activeOrgStore) and the agreement's entry is the one
+ * UsageBillingPanel and LimitsStrip read through the generated hook.
+ */
 export const hostingBillingKeys = {
-  all: ["hosting-billing"] as const,
-  agreement: (orgId: string) => ["usage-billing", orgId] as const,
-  budgetVersions: (orgId: string) => ["hosting-billing", "budget-versions", orgId] as const,
-  usageSummary: (orgId: string) => ["hosting-billing", "usage-summary", orgId] as const,
-  freeTier: (orgId: string) => ["hosting-billing", "free-tier", orgId] as const,
+  agreement: (orgId: string) => billingServiceKeys.getCurrentUserUsageBilling({ orgId }),
+  budgetVersions: (orgId: string) => billingServiceKeys.listUsageBillingBudgetVersions({ orgId }),
+  usageSummary: (orgId: string) => billingServiceKeys.getOrgHostingUsageSummary({ orgId }),
+  freeTier: (orgId: string) => billingServiceKeys.getFreeHostingStatus({ orgId }),
 };
 
 export function useUsageBillingBudgetVersions(orgId: string, enabled = true) {
@@ -249,7 +255,7 @@ export function useMoveFreeHostingDesignation(orgId: string) {
     onSuccess: (_response, dryRun) => {
       // A real move that answered moved=false means this org already held it:
       // the status read is stale either way.
-      if (!dryRun) void cache.invalidateQueries({ queryKey: ["hosting-billing", "free-tier"] });
+      if (!dryRun) void cache.invalidateQueries({ queryKey: billingServiceKeys.getFreeHostingStatus.all });
     },
   });
 }

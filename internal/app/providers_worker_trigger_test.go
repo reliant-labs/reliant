@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/vault"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -28,8 +29,8 @@ func TestWorkerTriggerIsBuiltWithTheTriggerOwner(t *testing.T) {
 	lazy, err := client.NewLazyClient(client.Options{HostPort: "127.0.0.1:1", Namespace: "reliant"})
 	require.NoError(t, err)
 	t.Cleanup(lazy.Close)
-	stores := triggerowner.NewStores(repo.ORM())
-	owners, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	owned, trigs := store.NewTriggerOwnerExtStore(repo.ORM()), store.NewTriggerExtStore(repo.ORM())
+	owners, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: owned, Triggers: trigs, Adoptions: owned, Offers: owned, OrgReads: owned})
 	require.NoError(t, err)
 
 	wt, err := NewWorkerTrigger(WorkerTriggerDeps{
@@ -54,8 +55,8 @@ func TestWorkerTriggerOnAHostedControlPlaneIsBuiltWithAutomationKeys(t *testing.
 	lazy, err := client.NewLazyClient(client.Options{HostPort: "127.0.0.1:1", Namespace: "reliant"})
 	require.NoError(t, err)
 	t.Cleanup(lazy.Close)
-	stores := triggerowner.NewStores(repo.ORM())
-	owners, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	owned, trigs := store.NewTriggerOwnerExtStore(repo.ORM()), store.NewTriggerExtStore(repo.ORM())
+	owners, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: owned, Triggers: trigs, Adoptions: owned, Offers: owned, OrgReads: owned})
 	require.NoError(t, err)
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(make([]byte, 32)))
 	require.NoError(t, err)
