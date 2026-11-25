@@ -35,6 +35,8 @@ type Deps struct {
 	// the projects, chats, daemons, workflows and presets a trigger names
 	// (deps.go).
 	Repo Repository
+	// Chats reads the chat a launch event belongs to (store.ChatExtStore).
+	Chats Chats
 	// Owners re-owns an orphaned trigger (deps.go).
 	Owners Owners
 	// Firings reads each trigger's recent firings; WebhookSecrets stores a
@@ -202,6 +204,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("trigger: Deps.Repo is required")
+	}
+	if d.Chats == nil {
+		return fmt.Errorf("trigger: Deps.Chats is required")
 	}
 	if d.Owners == nil {
 		return fmt.Errorf("trigger: Deps.Owners is required")

@@ -146,11 +146,12 @@ func TestIntrospect_DecodesAnMCPOAuthTokensClientAndAudience(t *testing.T) {
 	}
 }
 
-// A daemon credential holds every scope, and the control plane resolves that
-// against its OWN catalog, which may be newer than this binary's. A scope only
-// it knows is skipped, never a reason to refuse the daemon; an explicit list
-// carrying the same unknown scope is still refused whole.
-func TestIntrospect_WildcardSkipsScopesThisBinaryDoesNotKnow(t *testing.T) {
+// The control plane resolves a token against its OWN catalog, which may be
+// newer than this binary's. A scope only it knows is skipped, never a reason
+// to refuse the token: for a daemon's wildcard and, since forge's scope
+// bundles, for an explicit list too (ResolveStoredScopes). The wildcard
+// marker survives the skip.
+func TestIntrospect_SkipsScopesThisBinaryDoesNotKnow(t *testing.T) {
 	for _, all := range []bool{true, false} {
 		srv := fakeCP(t, func(string, map[string]any) (int, string) {
 			return 200, `{"active":true,"tokenId":"tok-1","orgId":"org-1","actingUserId":"user-1",
@@ -158,20 +159,14 @@ func TestIntrospect_WildcardSkipsScopesThisBinaryDoesNotKnow(t *testing.T) {
 		})
 		p, err := New(Deps{BaseURL: srv.URL, Sign: sign}).Introspect(context.Background(), liveToken)
 		srv.Close()
-		if !all {
-			if err == nil {
-				t.Fatalf("an explicit list with an unknown scope authenticated: %+v", p)
-			}
-			continue
-		}
 		if err != nil {
-			t.Fatalf("a wildcard credential was refused over a newer scope: %v", err)
+			t.Fatalf("allScopes=%v: a token was refused over a newer scope: %v", all, err)
 		}
 		if len(p.Scopes) != 2 || !p.Scopes.Has(fat.ScopeDaemonConnect) || !p.Scopes.Has(fat.ScopeDeployWrite) {
-			t.Fatalf("wildcard scopes = %s", p.Scopes)
+			t.Fatalf("allScopes=%v: scopes = %s", all, p.Scopes)
 		}
-		if !p.AllScopes {
-			t.Fatalf("the wildcard marker was dropped: %+v", p)
+		if p.AllScopes != all {
+			t.Fatalf("the wildcard marker changed: %+v", p)
 		}
 	}
 }

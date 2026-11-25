@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func (s *Service) resolveThreadResetParams(ctx context.Context, userID string, chat *db.Chat, workflowName, rootID, threadID string, params map[string]*structpb.Value) (map[string]*structpb.Value, error) {

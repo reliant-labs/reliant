@@ -25,6 +25,9 @@ func withRoles(d Deps) Deps {
 	if d.Senders == nil {
 		d.Senders = roleOf[Senders](d.Repo, func(r *db.Repo) Senders { return store.NewThreadExtStore(r.ORM()) })
 	}
+	if d.ChatRows == nil {
+		d.ChatRows = roleOf[ChatRows](d.Repo, func(r *db.Repo) ChatRows { return store.NewChatExtStore(r.ORM()) })
+	}
 	if d.Projects == nil {
 		d.Projects = roleOf[Projects](d.Repo, func(r *db.Repo) Projects { return store.NewProjectExtStore(r.ORM()) })
 	}

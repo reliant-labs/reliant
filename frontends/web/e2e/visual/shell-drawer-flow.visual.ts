@@ -15,7 +15,7 @@ test.describe('shell drawer flow', () => {
 
   test('drill into Agents, back, into Observability, tap Logs: the drawer closes on Logs', { tag: '@mobile' }, async ({ page }) => {
     await installHarness(page)
-    await page.goto('/forge/p/shopfront')
+    await page.goto('/forge/p/shop')
     await expect(page.getByText('worker', { exact: true }).first()).toBeVisible({ timeout: 20_000 })
     await settle(page)
 
@@ -36,7 +36,7 @@ test.describe('shell drawer flow', () => {
     await expect(drawer).toBeVisible()
 
     await page.getByTestId('nav-obs-logs').or(page.getByRole('link', { name: 'Logs', exact: true })).first().click()
-    await expect(page).toHaveURL(/\/forge\/p\/shopfront\/observability\/logs/)
+    await expect(page).toHaveURL(/\/forge\/p\/shop\/observability\/logs/)
     await expect(page.getByTestId('shell-nav')).toHaveAttribute('data-state', 'closed')
   })
 })

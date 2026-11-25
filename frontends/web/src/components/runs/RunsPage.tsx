@@ -47,9 +47,11 @@ export function RunsView() {
   // scope or the 24-hour default would silently drop some of them.
   const parent = search.parent;
   const scopeProjectId = parent ? undefined : scope.projectId;
+  const scopeProjectIds = parent ? undefined : scope.projectIds;
   const filters = useMemo(
     () => ({
       projectId: scopeProjectId,
+      projectIds: scopeProjectIds,
       parentChatId: parent,
       state: search.state,
       kind: search.kind,
@@ -59,7 +61,7 @@ export function RunsView() {
       q: search.q,
       includeUnlaunched: true,
     }),
-    [scopeProjectId, parent, search.state, search.kind, search.workflow, search.trigger, search.range, search.q],
+    [scopeProjectId, scopeProjectIds, parent, search.state, search.kind, search.workflow, search.trigger, search.range, search.q],
   );
   const parentTitle = useChat(parent).data?.title;
   const list = useRunList(filters);
