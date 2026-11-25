@@ -39,6 +39,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -185,6 +186,48 @@ func GetProjectByRemoteURLAndUserInScope(ctx context.Context, db orm.Context, re
 	return p, nil
 }
 
+// GetProjectByRemoteKeyAndUserInScope returns the user's project of the
+// repository remoteURL names, whatever form of its remote either side holds
+// (ssh://, scp-like git@host:org/repo, https://, a trailing .git or /, any
+// case): projects.remote_key = git_remote_key(remoteURL), the one definition
+// of the key, in the database (20261125034821_projects_remote_key). Scope as
+// GetProjectByRemoteURLAndUserInScope; the oldest when several match (a
+// user's duplicates from before the key, or one per org with a nil scope).
+// A project scheduled for deletion is returned like any other: the caller
+// decides what it means. NotFound when none matches, and when remoteURL names
+// no host (its key is NULL, which equals nothing).
+func GetProjectByRemoteKeyAndUserInScope(ctx context.Context, db orm.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error) {
+	remoteURL = strings.TrimSpace(remoteURL)
+	if remoteURL == "" {
+		return nil, fmt.Errorf("remote URL cannot be empty")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	opts := []orm.QueryOption{
+		whereRemoteKeyOf(gitremote.StripCredentials(remoteURL)),
+		orm.WhereEq(ProjectFieldUserID, userID),
+	}
+	if scope != nil {
+		opts = append(opts, whereOrg(ProjectFieldOrgID, scope))
+	}
+	p, err := firstProject(ctx, db, append(opts, oldestProjectFirst...)...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project by remote key and user: %w", err)
+	}
+	if p == nil {
+		return nil, fmt.Errorf("%w for remote: %s", svcerr.NotFound("project"), gitremote.Redacted(remoteURL))
+	}
+	return p, nil
+}
+
+// whereRemoteKeyOf matches the projects whose remote_key is remoteURL's.
+func whereRemoteKeyOf(remoteURL string) orm.QueryOption {
+	return func(q *bun.SelectQuery) {
+		q.Where("? = git_remote_key(?)", bun.Ident(ProjectFieldRemoteKey), remoteURL)
+	}
+}
+
 // oldestProjectFirst orders a lookup that may match one project per org.
 var oldestProjectFirst = []orm.QueryOption{
 	orm.WithOrderBy(ProjectFieldCreatedAt, orm.Asc),
@@ -318,6 +361,7 @@ func projectToCore(row *Project) *core.Project {
 		IsGitRepo:        row.IsGitRepo != nil && *row.IsGitRepo,
 		DefaultBranch:    row.DefaultBranch,
 		RemoteURL:        gitremote.StripCredentialsPtr(row.RemoteURL),
+		RemoteKey:        row.RemoteKey,
 		IsForge:          row.IsForge,
 		ForgeProjectName: row.ForgeProjectName,
 		OrgID:            row.OrgID,

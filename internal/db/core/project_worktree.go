@@ -39,6 +39,12 @@ type Project struct {
 	IsGitRepo     bool    `json:"is_git_repo"`
 	DefaultBranch *string `json:"default_branch,omitempty"`
 	RemoteURL     *string `json:"remote_url,omitempty"`
+	// RemoteKey is RemoteURL reduced to the repository it names (lowercase
+	// host/path: the SSH and HTTPS forms of one repo share it), computed by
+	// the database (projects.remote_key, git_remote_key). Read-only: nil
+	// when RemoteURL is unset or names no host. Two of a user's projects
+	// with one key are duplicates of one repository.
+	RemoteKey *string `json:"remote_key,omitempty"`
 	// IsForge is true when the project's repo root contains a forge.yaml.
 	// Set by the project lifecycle when a clone / create happens; not lazily
 	// recomputed on read. See [internal/skills/catalog/forge.go] for the

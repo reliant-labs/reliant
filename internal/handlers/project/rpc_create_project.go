@@ -208,16 +208,21 @@ func (s *Service) CreateProject(
 	}
 	isGitRepo := len(discoverResp.Discovered) > 0
 
-	// On a named machine, a folder that is a checkout of one of the user's
-	// projects (its root remote) is that project here, not a new one: the
-	// same rule CreateProjectFromRepo applies (existingProjectForRepo).
-	if pinned != "" {
-		if root, ok := rootRepo(discoverResp.Discovered); ok && strings.TrimSpace(root.RemoteURL) != "" {
-			if existing, err := s.deps.Lookups.GetProjectByRemoteURLAndUserInScope(ctx, strings.TrimSpace(root.RemoteURL), userID, scope); err == nil && existing != nil {
+	// A folder that is a checkout of one of the user's projects (its root
+	// remote, in any form: projectOfRepository) is that project here, not a
+	// new one: the same rule CreateProjectFromRepo applies
+	// (existingProjectForRepo). On a named machine, as before; with no
+	// machine named, on the machine that just answered repo.discover (the
+	// folder is there), which a second machine's copy of a repository used
+	// to turn into a second project. A request that reached no machine read
+	// no remote, and creates by path, as before.
+	if machine := attachTarget(pinned, target.id, daemonConnected); machine != "" {
+		if root, ok := rootRepo(discoverResp.Discovered); ok {
+			if existing := s.projectOfRepository(ctx, root.RemoteURL, userID, scope); existing != nil {
 				if err := reusableProject(ctx, userID, existing); err != nil {
 					return nil, err
 				}
-				return s.attachExisting(ctx, userID, pinned, existing, req.Msg.Path)
+				return s.attachExisting(ctx, userID, machine, existing, req.Msg.Path)
 			}
 		}
 	}
@@ -543,6 +548,19 @@ func (s *Service) findOrAttachOn(ctx context.Context, userID, daemonID, path str
 		return nil, err
 	}
 	return s.attachExisting(ctx, userID, daemonID, existing, path)
+}
+
+// attachTarget is the machine a CreateProject may attach an existing project
+// on: the named one, else the default machine that ran the create's commands
+// (connected: its fs.mkdir succeeded), else none ("").
+func attachTarget(pinned, resolved string, connected bool) string {
+	if pinned != "" {
+		return pinned
+	}
+	if connected {
+		return resolved
+	}
+	return ""
 }
 
 // errNoValidatedMachine is a create's command when no machine could be

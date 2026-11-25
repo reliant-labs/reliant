@@ -48,6 +48,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/netports"
 	"github.com/reliant-labs/reliant/internal/procguard"
 	"github.com/reliant-labs/reliant/internal/proctree"
+	"github.com/reliant-labs/reliant/internal/repo"
 	"github.com/reliant-labs/reliant/internal/shellaudit"
 	"github.com/reliant-labs/reliant/internal/skills/catalog"
 	"github.com/reliant-labs/reliant/internal/terminal"
@@ -2563,6 +2564,9 @@ func (d *daemonClient) sendProjectDiscovery(s *gatewaySession) error {
 				Path:      projectPath,
 				Name:      projectName,
 				IsGitRepo: true,
+				// Lets the server tell this folder is a checkout of a
+				// project another machine already has.
+				RemoteUrl: repo.RootRemoteURL(projectPath),
 			}},
 		}},
 	}

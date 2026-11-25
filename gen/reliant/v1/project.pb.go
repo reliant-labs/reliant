@@ -678,7 +678,11 @@ type CreateProjectRequest struct {
 	Description   *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
 	DefaultBranch *string                `protobuf:"bytes,4,opt,name=default_branch,json=defaultBranch,proto3,oneof" json:"default_branch,omitempty"`
 	// The machine the folder is on, one of the caller's daemons. Unset (or
-	// empty) is the user's default machine, as before this field existed.
+	// empty) is the user's default machine, as before this field existed;
+	// there too, a folder that is a git checkout of one of the caller's
+	// projects' repository (its remote in any form: SSH, HTTPS, with or
+	// without .git) is attached to that project on the machine that read it
+	// (response.attached), not made a second project.
 	//
 	// Set, everything runs on that machine (which must be online), and an
 	// existing project is attached rather than refused: when the folder is
@@ -774,8 +778,8 @@ func (x *CreateProjectRequest) GetOrgId() string {
 type CreateProjectResponse struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Project *Project               `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
-	// The project's checkout on the requested machine. Set only when the
-	// request named daemon_id.
+	// The project's checkout on the requested machine. Set when the request
+	// named daemon_id, or when the folder was attached (attached).
 	ProjectDaemon *ProjectDaemon `protobuf:"bytes,2,opt,name=project_daemon,json=projectDaemon,proto3" json:"project_daemon,omitempty"`
 	// True when the folder was attached to an EXISTING project (see
 	// CreateProjectRequest.daemon_id) instead of creating a new one.

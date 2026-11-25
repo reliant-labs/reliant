@@ -153,6 +153,10 @@ type ProjectLookups interface {
 	// remote in one org (nil scope: any): the remote backfill's uniqueness
 	// check, per (org, user, remote_url).
 	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error)
+	// GetProjectByRemoteKeyAndUserInScope finds the user's project of the
+	// repository a remote names, in any form of it (projects.remote_key):
+	// the project a discovered checkout of it joins.
+	GetProjectByRemoteKeyAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error)
 }
 
 // ProjectDaemons is the machine's checkout rows. store.ProjectDaemonExtStore

@@ -246,6 +246,56 @@ func TestCreateProject_NamedMachine_AttachesTheProjectOfTheFoldersRemote(t *test
 	assert.Equal(t, map[string]string{f.cloud: existing.Path, f.laptop: local}, f.rows(t, existing.ID))
 }
 
+// The folder's remote is the SSH form of the repository the project was
+// created from over HTTPS: one repository, attached — on a named machine, and
+// on the default machine when none is named.
+func TestCreateProject_AttachesTheProjectOfTheFoldersRepositoryInAnyRemoteForm(t *testing.T) {
+	for name, named := range map[string]bool{"named machine": true, "default machine": false} {
+		t.Run(name, func(t *testing.T) {
+			f := newMachinesFixture(t)
+			repoName := "properties-" + uuid.NewString()
+			remote := "https://github.com/acme/" + repoName + ".git"
+			existing := f.project(t, "properties", "/home/workspace/"+repoName, f.cloud, &remote)
+			local := "/Users/me/" + repoName
+			f.disk.folder(f.laptop, local, "git@github.com:Acme/"+repoName)
+
+			req := &reliantv1.CreateProjectRequest{Name: "properties", Path: local}
+			if named {
+				req.DaemonId = &f.laptop
+			}
+			resp, err := f.svc.CreateProject(f.ctx, connect.NewRequest(req))
+			require.NoError(t, err)
+			assert.True(t, resp.Msg.Attached)
+			assert.Equal(t, existing.ID, resp.Msg.Project.Id)
+			require.NotNil(t, resp.Msg.ProjectDaemon)
+			assert.Equal(t, local, resp.Msg.ProjectDaemon.Path)
+			assert.Equal(t, map[string]string{f.cloud: existing.Path, f.laptop: local}, f.rows(t, existing.ID))
+			projects, err := f.repo.ListProjects(f.ctx, db.ProjectFilters{UserID: f.userID})
+			require.NoError(t, err)
+			assert.Len(t, projects, 1, "no second project for the repository")
+		})
+	}
+}
+
+// Another user's project of the repository is never attached: the folder
+// becomes the caller's own project.
+func TestCreateProject_NeverAttachesAnotherUsersRepository(t *testing.T) {
+	f := newMachinesFixture(t)
+	remote := "https://github.com/acme/theirs-" + uuid.NewString() + ".git"
+	now := time.Now().UTC()
+	theirs := &db.Project{ID: uuid.NewString(), UserID: "someone-else", Name: "theirs", Path: "/srv/theirs",
+		RemoteURL: &remote, CreatedAt: now, UpdatedAt: now, LastActive: now}
+	require.NoError(t, f.repo.CreateProject(f.ctx, theirs))
+	local := "/Users/me/theirs-" + uuid.NewString()
+	f.disk.folder(f.laptop, local, remote)
+
+	resp, err := f.svc.CreateProject(f.ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{Name: "theirs", Path: local}))
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.Attached)
+	assert.NotEqual(t, theirs.ID, resp.Msg.Project.Id)
+	assert.Empty(t, f.rows(t, theirs.ID))
+}
+
 func TestSameRemote_IgnoresSpellingOfOneRepository(t *testing.T) {
 	assert.True(t, sameRemote("https://github.com/Acme/x.git", "https://github.com/Acme/x"))
 	assert.True(t, sameRemote("git@github.com:Acme/x.git", "https://GitHub.com/Acme/x"))

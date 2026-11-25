@@ -39,6 +39,9 @@ type Detachments interface {
 type ProjectLookups interface {
 	GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*core.Project, error)
 	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error)
+	// GetProjectByRemoteKeyAndUserInScope matches the repository a remote
+	// names, in any form of it (projects.remote_key; not unique).
+	GetProjectByRemoteKeyAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error)
 }
 
 // DaemonInstalls lists the checkouts a machine holds.

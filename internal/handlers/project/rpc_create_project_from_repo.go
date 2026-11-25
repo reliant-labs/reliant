@@ -220,19 +220,39 @@ func (s *Service) CreateProjectFromRepo(
 //
 // Re-adding a repo the user already has is a normal thing to do — they may be
 // putting it on a SECOND machine — so the add is find-or-create rather than an
-// error. Matching on remote URL first and path second mirrors how the old
-// client chain recovered from AlreadyExists. Both match in scope only (nil:
-// any org): the same repo may be a project in each of the caller's orgs.
-// A found project the caller may no longer act in is refused
-// (reusableProject), never re-added.
+// error. Matching on the repository first (projectOfRepository: any form of
+// its remote) and path second mirrors how the old client chain recovered from
+// AlreadyExists. Both match in scope only (nil: any org): the same repo may be
+// a project in each of the caller's orgs. A found project the caller may no
+// longer act in is refused (reusableProject), never re-added.
 func (s *Service) existingProjectForRepo(ctx context.Context, userID, path, cloneURL string, scope *core.OrgScope) (*core.Project, error) {
-	if existing, err := s.deps.Lookups.GetProjectByRemoteURLAndUserInScope(ctx, cloneURL, userID, scope); err == nil && existing != nil {
+	if existing := s.projectOfRepository(ctx, cloneURL, userID, scope); existing != nil {
 		return existing, reusableProject(ctx, userID, existing)
 	}
 	if existing, err := s.deps.Lookups.GetProjectByPathAndUserInScope(ctx, path, userID, scope); err == nil && existing != nil {
 		return existing, reusableProject(ctx, userID, existing)
 	}
 	return nil, nil
+}
+
+// projectOfRepository is the caller's project, in scope, of the repository
+// remote names, nil when there is none: matched by repository
+// (projects.remote_key), so the SSH form of a remote finds a project created
+// from its HTTPS form and the reverse; then by the exact remote string, for a
+// remote that names no host and so has no key (a local path). The oldest
+// when several match.
+func (s *Service) projectOfRepository(ctx context.Context, remote, userID string, scope *core.OrgScope) *core.Project {
+	remote = strings.TrimSpace(remote)
+	if remote == "" {
+		return nil
+	}
+	if existing, err := s.deps.Lookups.GetProjectByRemoteKeyAndUserInScope(ctx, remote, userID, scope); err == nil && existing != nil {
+		return existing
+	}
+	if existing, err := s.deps.Lookups.GetProjectByRemoteURLAndUserInScope(ctx, remote, userID, scope); err == nil && existing != nil {
+		return existing
+	}
+	return nil
 }
 
 // createProjectForRepo creates the project row for a repo being added, under

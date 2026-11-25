@@ -108,3 +108,25 @@ func TestDiscoverRemotesMatchGit(t *testing.T) {
 	require.Len(t, wt.Repos, 1)
 	require.Equal(t, remotes["api"], wt.Repos[0].RemoteURL)
 }
+
+// RootRemoteURL reads the origin of the checkout at the directory itself,
+// credentials stripped, and never a parent repository's: a folder inside a
+// checkout that is not one is reported with no remote.
+func TestRootRemoteURL(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	write := func(path, body string) {
+		t.Helper()
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+	}
+	write(filepath.Join(root, ".git", "config"), "[remote \"origin\"]\n\turl = https://user:tok@github.com/acme/props.git\n")
+	write(filepath.Join(root, "docs", "README.md"), "docs\n")
+	write(filepath.Join(root, "bare", ".git", "config"), "[core]\n\tbare = false\n")
+
+	require.Equal(t, "https://github.com/acme/props.git", RootRemoteURL(root))
+	require.Empty(t, RootRemoteURL(filepath.Join(root, "docs")), "a parent repository's remote was read")
+	require.Empty(t, RootRemoteURL(filepath.Join(root, "bare")), "a checkout with no origin")
+	require.Empty(t, RootRemoteURL(filepath.Join(root, "missing")))
+	require.Empty(t, RootRemoteURL(""))
+}
