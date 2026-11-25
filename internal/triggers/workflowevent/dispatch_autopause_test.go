@@ -56,7 +56,7 @@ func TestDispatch_PausesATriggerWhoseCreatorLeftItsOrg(t *testing.T) {
 	// Paused, it no longer listens: the next finished run is not even
 	// recorded as an event for it.
 	chatID := f.humanRun("code-review")
-	created, err := runevents.EmitTerminal(ctx, f.repo, runevents.Terminal{
+	created, err := runevents.EmitTerminal(ctx, runevents.NewStore(f.repo.ORM()), runevents.Terminal{
 		ChatID: chatID, WorkflowID: chatID, WorkflowName: "code-review", RunID: "run-" + uuid.NewString(),
 		Outcome: core.RunEventFinished, Summary: "all done",
 	}, time.Now().UTC())

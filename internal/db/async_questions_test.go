@@ -87,7 +87,7 @@ func TestAsyncQuestion_IsNoGateOfTheChat(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"q-blocking"}, questionIDs(answerable))
 
-	others, err := c.repo.CountOtherPendingBlockers(ctx, c.chatID, "q-blocking")
+	others, err := store.CountOtherPendingBlockers(ctx, c.repo.ORM(), c.chatID, "q-blocking")
 	require.NoError(t, err)
 	assert.Zero(t, others, "an async question blocks no run")
 }

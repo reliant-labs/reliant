@@ -2923,46 +2923,6 @@ func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters
 	return store.ListTriggerEventsPage(ctx, r.ORM(), f)
 }
 
-// CreateRunEvent inserts the event, doing nothing when its DedupeKey
-// already exists. created=false means the transition was already recorded.
-func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error) {
-	if ev == nil {
-		return false, fmt.Errorf("run event cannot be nil")
-	}
-	if ev.DedupeKey == "" {
-		// An empty key would collide every transition with every other one,
-		// and the second real event would silently read as a retry.
-		return false, fmt.Errorf("run event dedupe key cannot be empty")
-	}
-	return store.InsertRunEvent(ctx, r.ORM(), ev)
-}
-
-// HasEnabledTriggerOfKind reports whether the user owns an enabled trigger
-// of the kind.
-func (r *Repo) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error) {
-	if userID == "" {
-		return false, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.HasEnabledTriggerOfKind(ctx, r.ORM(), userID, kind)
-}
-
-// LockChatForRunEvent row-locks the chat until the transaction ends.
-func (r *Repo) LockChatForRunEvent(ctx context.Context, chatID string) error {
-	if chatID == "" {
-		return fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.LockChatForRunEvent(ctx, r.ORM(), chatID)
-}
-
-// CountOtherPendingBlockers counts the chat's pending approvals and
-// questions other than excludeID.
-func (r *Repo) CountOtherPendingBlockers(ctx context.Context, chatID, excludeID string) (int, error) {
-	if chatID == "" {
-		return 0, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.CountOtherPendingBlockers(ctx, r.ORM(), chatID, excludeID)
-}
-
 // ClaimRunEvents leases up to max undispatched events until leaseUntil.
 //
 // Deprecated: use store.RunEventExtStore.ClaimRunEvents; the relay reads it

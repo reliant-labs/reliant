@@ -95,6 +95,7 @@ import (
 // at ERROR (each an issue in forge's ClickStack).
 type Reconciler struct {
 	repo       ReconcilerStore
+	runEvents  runevents.Store
 	chats      Chats
 	workflows  WorkflowLoader
 	daemons    DaemonReader
@@ -520,6 +521,7 @@ func New(deps Deps) *Reconciler {
 	}
 	return &Reconciler{
 		repo:                    repo,
+		runEvents:               deps.RunEvents,
 		chats:                   chats,
 		questions:               deps.Questions,
 		mailbox:                 deps.Mailbox,
@@ -1615,7 +1617,7 @@ func (r *Reconciler) swapStatus(ctx context.Context, wf *db.Workflow, to db.Work
 		default:
 			return nil
 		}
-		_, err = runevents.EmitTerminal(txCtx, r.repo, runevents.Terminal{
+		_, err = runevents.EmitTerminal(txCtx, r.runEvents, runevents.Terminal{
 			ChatID:       wf.ChatID,
 			WorkflowID:   wf.ID,
 			WorkflowName: wf.WorkflowName,

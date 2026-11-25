@@ -119,6 +119,8 @@ type WorkflowStatusActivity struct {
 	runs      RunRecords
 	workflows WorkflowRuns
 	attention AttentionRecorder
+	// runEvents records the terminal run event (deps.RunEvents).
+	runEvents runevents.Store
 	// pauser pauses a trigger whose run an org policy refused; nil pauses
 	// nothing (deps.TriggerPauser).
 	pauser TriggerPauser
@@ -134,6 +136,7 @@ func NewWorkflowStatusActivity(deps WorkflowStatusDeps) *WorkflowStatusActivity 
 		runs:       deps.Runs,
 		workflows:  deps.Workflows,
 		attention:  deps.Attention,
+		runEvents:  deps.RunEvents,
 		pauser:     deps.Pauser,
 		trackerFor: analytics.ForUser,
 	}
@@ -148,7 +151,7 @@ func (a *WorkflowStatusActivity) Name() string {
 func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStatusInput) (WorkflowStatusOutput, error) {
 	// A worker built without a database cannot record a run's outcome: say so
 	// (Temporal retries the activity) rather than dereference a missing store.
-	if a.repo == nil || a.runs == nil || a.workflows == nil {
+	if a.repo == nil || a.runs == nil || a.workflows == nil || a.runEvents == nil {
 		return WorkflowStatusOutput{}, errors.New("workflow status: the run record store is not configured")
 	}
 	// How the run ended, judged before the status write it lands with.
@@ -916,7 +919,7 @@ func (a *WorkflowStatusActivity) emitTerminal(ctx context.Context, input Workflo
 				"chatID", input.ChatID, "error", err)
 		}
 	}
-	_, err := runevents.EmitTerminal(ctx, a.repo, runevents.Terminal{
+	_, err := runevents.EmitTerminal(ctx, a.runEvents, runevents.Terminal{
 		ChatID:       input.ChatID,
 		WorkflowID:   input.WorkflowID,
 		WorkflowName: input.WorkflowName,

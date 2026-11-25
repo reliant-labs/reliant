@@ -5,6 +5,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 )
 
 // workflowStatusDeps is the WorkflowStatusActivity's deps over a store: the
@@ -17,6 +18,7 @@ func workflowStatusDeps(repo WorkflowStatusStore) WorkflowStatusDeps {
 		d.Workflows = NewWorkflowRuns(o.ORM())
 		d.Attention = NewAttentionRecorder(o.ORM())
 		d.Pauser = store.NewTriggerWritesExtStore(o.ORM())
+		d.RunEvents = runevents.NewStore(o.ORM())
 	}
 	return d
 }
@@ -32,6 +34,7 @@ func approvalCreateDeps(repo ApprovalCreateStore) ApprovalCreateDeps {
 	d := ApprovalCreateDeps{Repo: repo}
 	if o, ok := repo.(interface{ ORM() *orm.Client }); ok && o.ORM() != nil {
 		d.Approvals = store.NewApprovalExtStore(o.ORM())
+		d.RunEvents = runevents.NewStore(o.ORM())
 	}
 	return d
 }
