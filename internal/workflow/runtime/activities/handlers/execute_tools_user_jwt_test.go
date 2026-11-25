@@ -3,7 +3,9 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -17,7 +19,9 @@ import (
 // user (list_changes, manage_change) alternate between working and "no live
 // sign-in" within one turn.
 func TestOfferRunUserJWTHydratesThisWorker(t *testing.T) {
-	chat := &db.Chat{UserID: "user-execute-tools-jwt"}
+	// The cache is process-global: the user id is this invocation's own, so a
+	// repeated run (-count, the flake gate) starts with no token for it.
+	chat := &db.Chat{UserID: fmt.Sprintf("%s-%d", t.Name(), time.Now().UnixNano())}
 	_, ok := auth.GetUserJWT(chat.UserID)
 	assert.False(t, ok, "precondition: this process has no token for the user")
 

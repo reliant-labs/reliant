@@ -42,35 +42,43 @@ func TestGetUserJWTDropsAnExpiredToken(t *testing.T) {
 func TestOfferUserJWTNeverDowngradesALiveToken(t *testing.T) {
 	now := time.Now()
 	older, fresher := fakeJWT(t, now.Add(10*time.Minute)), fakeJWT(t, now.Add(time.Hour))
+	// The cache is process-global: every user id is this invocation's own,
+	// so a repeated run (-count, the flake gate) starts from empty slots.
+	user := func(name string) string { return fmt.Sprintf("%s-%s-%d", t.Name(), name, now.UnixNano()) }
 
-	OfferUserJWT("offer-empty", older)
-	got, ok := GetUserJWT("offer-empty")
+	empty := user("empty")
+	OfferUserJWT(empty, older)
+	got, ok := GetUserJWT(empty)
 	assert.True(t, ok)
 	assert.Equal(t, older, got, "an empty slot takes the offered token")
 
-	SetUserJWT("offer-fresher-held", fresher)
-	OfferUserJWT("offer-fresher-held", older)
-	got, _ = GetUserJWT("offer-fresher-held")
+	fresherHeld := user("fresher-held")
+	SetUserJWT(fresherHeld, fresher)
+	OfferUserJWT(fresherHeld, older)
+	got, _ = GetUserJWT(fresherHeld)
 	assert.Equal(t, fresher, got, "a live token that lasts longer is kept")
 
-	OfferUserJWT("offer-empty", fresher)
-	got, _ = GetUserJWT("offer-empty")
+	OfferUserJWT(empty, fresher)
+	got, _ = GetUserJWT(empty)
 	assert.Equal(t, fresher, got, "a token that lasts longer replaces the held one")
 
-	SetUserJWT("offer-expired-held", fakeJWT(t, now.Add(-time.Minute)))
-	OfferUserJWT("offer-expired-held", older)
-	got, ok = GetUserJWT("offer-expired-held")
+	expiredHeld := user("expired-held")
+	SetUserJWT(expiredHeld, fakeJWT(t, now.Add(-time.Minute)))
+	OfferUserJWT(expiredHeld, older)
+	got, ok = GetUserJWT(expiredHeld)
 	assert.True(t, ok)
 	assert.Equal(t, older, got, "an expired token is replaced")
 
-	SetUserJWT("offer-opaque", "opaque-a")
-	OfferUserJWT("offer-opaque", "opaque-b")
-	got, _ = GetUserJWT("offer-opaque")
+	opaque := user("opaque")
+	SetUserJWT(opaque, "opaque-a")
+	OfferUserJWT(opaque, "opaque-b")
+	got, _ = GetUserJWT(opaque)
 	assert.Equal(t, "opaque-b", got, "unreadable expiries are not compared: the offer wins, as SetUserJWT does")
 
+	blank := user("blank")
 	OfferUserJWT("", older)
-	OfferUserJWT("offer-blank", " ")
-	_, ok = GetUserJWT("offer-blank")
+	OfferUserJWT(blank, " ")
+	_, ok = GetUserJWT(blank)
 	assert.False(t, ok, "a blank token is not offered")
 }
 
