@@ -19,14 +19,20 @@ const backgroundJournalDirName = "background-processes"
 // restart forgot every process: shell_wait answered "No process with ID" and
 // the run's verdict and output were gone. A journal that cannot be read is
 // reported and skipped; it never stops the daemon.
-func installBackgroundJournal(ctx context.Context, dataDir string) {
+//
+// Processes the previous image of this very process handed off across a
+// self-update's exec are adopted, still running (shell/background_survive.go).
+// With restartsInPlace (this daemon installs releases by exec'ing them), the
+// processes it starts write their output to files in the journal, so they
+// can be handed off in turn.
+func installBackgroundJournal(ctx context.Context, dataDir string, restartsInPlace bool) {
 	dataDir = strings.TrimSpace(dataDir)
 	if dataDir == "" {
 		return
 	}
 	journal := shell.NewBackgroundJournal(filepath.Join(dataDir, backgroundJournalDirName))
 	mgr := shell.GetBackgroundManager()
-	restored, err := journal.Restore(mgr, time.Now())
+	restored, err := journal.Install(mgr, time.Now())
 	if err != nil {
 		logging.WarnContext(ctx, logPrefix+" Background process journal unavailable; processes will not survive a restart", "error", err)
 		return
@@ -34,5 +40,7 @@ func installBackgroundJournal(ctx context.Context, dataDir string) {
 	if restored > 0 {
 		logging.InfoContext(ctx, logPrefix+" Restored background process records", "count", restored)
 	}
-	mgr.SetPersistenceCallback(journal.Callback())
+	if restartsInPlace {
+		mgr.EnableFileOutput(journal.Dir())
+	}
 }

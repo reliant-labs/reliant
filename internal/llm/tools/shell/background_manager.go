@@ -139,6 +139,17 @@ type BackgroundProcess struct {
 	// Output subscribers (for real-time streaming)
 	subscribers   map[string]chan OutputLineWithSeq // subscriber ID -> channel
 	subscribersMu sync.RWMutex
+
+	// fileOut is a file-backed process's output, nil for a piped one;
+	// identity is its leader's at start, journaled to prove the pid later;
+	// handoff is its part in a self-update (background_survive.go).
+	fileOut  *fileOutput
+	identity osutil.ProcessIdentity
+	handoff  handoffState
+	// flushMu serializes journaling the output; flushedSeq is the last line
+	// journaled.
+	flushMu    sync.Mutex
+	flushedSeq int64
 }
 
 // GetPID returns the process ID (PID) of the running command, or 0 if not available
@@ -176,6 +187,10 @@ type PersistenceCallback struct {
 	OnStatusChange func(processID string, status string, exitCode *int, endTime *time.Time) error
 	// OnOutput is called periodically to persist batches of output lines
 	OnOutput func(processID string, lines []OutputLineWithSeq) error
+	// OnHandOff records a running file-backed process handed to the next
+	// daemon image, read on from offsets (stdout, stderr); see
+	// background_survive.go. Nil: no process is handed off.
+	OnHandOff func(processID string, offsets [2]int64) error
 }
 
 // BackgroundManager manages background processes
@@ -202,6 +217,13 @@ type BackgroundManager struct {
 	// portScan serializes the OS port scans of the listing getters
 	// (refreshPortsGated).
 	portScan portScanGate
+
+	// fileOutDir is where processes write their output when they are to
+	// survive a self-update, "" for pipes; adopted are processes adopted
+	// from the previous image, not yet resumed. Both guarded by mu
+	// (background_survive.go).
+	fileOutDir string
+	adopted    []*BackgroundProcess
 }
 
 // portScanGate is the state of refreshPortsGated: mu is held while a scan
@@ -309,15 +331,13 @@ func (m *BackgroundManager) flushOutput(process *BackgroundProcess) {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
-	var lastFlushedSeq int64
-
 	for {
 		select {
 		case <-ticker.C:
-			lastFlushedSeq = m.flushNewOutputLines(process, lastFlushedSeq)
+			m.flushProcessOutput(process)
 		case <-process.done:
 			// Final flush after process completes
-			m.flushNewOutputLines(process, lastFlushedSeq)
+			m.flushProcessOutput(process)
 			return
 		}
 	}
@@ -499,12 +519,10 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	// output — all of it, for a command as quick as `env`. With writers, Wait
 	// itself returns only once the output has drained (to EOF, or for
 	// BackgroundWaitDelay after the exit), so completion is never reported
-	// ahead of the output it completes.
-	stdoutLines := &outputLineWriter{process: process, buffer: stdout, outputType: "stdout"}
-	stderrLines := &outputLineWriter{process: process, buffer: stderr, outputType: "stderr"}
-	cmd.Stdout = stdoutLines
-	cmd.Stderr = stderrLines
-	cmd.WaitDelay = BackgroundWaitDelay
+	// ahead of the output it completes. Or, where the process is to survive
+	// a self-update, files it writes and the daemon tails
+	// (background_fileoutput.go).
+	pipes, outputStarted := m.attachOutput(process, cmd)
 
 	// Its own process group, so a kill reaches every child (e.g. npm run dev),
 	// and — where the machine allows — its own cgroup with a process limit,
@@ -516,10 +534,14 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	// descriptors once Start returns.
 	err := process.tree.Start(cmdCtx, cmd)
 	credsandbox.Release(cmd)
+	outputStarted(err)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to start command: %w", err)
 	}
+	// Journaled with the pid, so a later daemon can tell this process from a
+	// later holder of its pid (background_survive.go).
+	process.identity, _ = osutil.IdentifyProcess(cmd.Process.Pid)
 
 	// Steer the kernel OOM killer toward the workload (and its descendants,
 	// which inherit the score) rather than the daemon. No-op outside Linux;
@@ -538,7 +560,12 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	}
 
 	// Start goroutine to wait for process completion
-	go m.waitForProcess(process, stdoutLines, stderrLines)
+	if process.fileOut != nil {
+		process.fileOut.startTailing()
+		go m.waitForFileProcess(process, cmd.Wait)
+	} else {
+		go m.waitForProcess(process, pipes...)
+	}
 
 	// Store process in map
 	m.mu.Lock()
