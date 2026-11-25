@@ -121,6 +121,8 @@ if (forgeBrand) bootForgeTour()
 // The nav and its chat list load with the first shell page, not with the
 // entry chunk every signed-out page pays for (Layout/shell/AppShell.tsx).
 const AppNav = lazyRoute(() => import('./components/Layout/Sidebar'), 'Sidebar')
+// The Setup Guide over every shell page (Onboarding/OnboardingChecklist.tsx), loaded with the first one.
+const AppSetupGuide = lazyRoute(() => import('./components/Onboarding/OnboardingChecklist'), 'OnboardingChecklist')
 // The keyboard host's overlays (Shortcuts/ShortcutHost.tsx). The palette and
 // chat search load on first open (and are warmed once the host is live);
 // the project switcher stays static, as it always was.
@@ -342,7 +344,7 @@ function RootShell() {
       <ShortcutHost overlays={APP_OVERLAYS}>
         {/* The one shell: one nav around every app page, above the outlet so
             moving between pages never remounts it (Layout/shell/AppShell.tsx). */}
-        <AppShellFrame nav={AppNav}>
+        <AppShellFrame nav={AppNav} guide={AppSetupGuide}>
           <Outlet />
         </AppShellFrame>
       </ShortcutHost>

@@ -25,8 +25,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 
-	"github.com/reliant-labs/forge/pkg/hostslot"
-
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
@@ -170,11 +168,12 @@ type daemonClient struct {
 	// (internal/forkwatch; reliant#1919). Its verdict rides on the
 	// heartbeat's health.
 	forkWatch *forkwatch.Watchdog
-	// hostStats reads the host's load and memory for every heartbeat
-	// (DaemonHeartbeat.machine_stats), which the gateway logs for the
-	// self-hosted machines it watches (internal/machinehealth). Nil-safe: a
-	// nil reader, or a host without /proc, leaves the field unset.
-	hostStats *machinehealth.HostStats
+	// resources projects the daemon's resource sampler into every heartbeat
+	// (DaemonHeartbeat.machine_stats, process_stats, cgroup_stats), which
+	// the gateway stores for DaemonInfo and logs for the self-hosted
+	// machines it watches (internal/machinehealth). Nil-safe: a nil
+	// projector, or a platform with no readers yet, leaves the fields unset.
+	resources *machinehealth.Resources
 	// forkHeal carries out the watchdog's self-heal: it stops the largest
 	// background command after five minutes degraded, and a managed daemon
 	// exits if that did not help (fork_heal.go).
@@ -491,7 +490,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// which control-plane's machine-health dashboard and alerts read from
 	// tenant zero's logs (internal/machinehealth). A self-hosted machine
 	// ships no logs to us, so it does not sample: its load and memory ride
-	// on every heartbeat instead (hostStats), and the gateway logs them for
+	// on every heartbeat instead (resources), and the gateway logs them for
 	// the machines it watches.
 	if opts.Host.Managed() {
 		go newMachineHealthSampler(client.diskWatcher).Run(ctx)
@@ -812,7 +811,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		procGuard:         procGuard,
 		forkWatch:         forkWatch,
 		forkHeal:          forkHeal,
-		hostStats:         machinehealth.NewHostStats("", hostslot.DetectMachine().CPUs),
+		resources:         newResources(),
 	}
 	client.restoreResultOutbox()
 	return client, nil
@@ -2086,8 +2085,9 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 		// Whether this machine can start processes (nil before the first
 		// probe, which the gateway reads as healthy).
 		hb.Health = d.forkWatch.Health()
-		// The host's load and memory (nil where /proc cannot be read).
-		hb.MachineStats = d.hostStats.Read(now)
+		// The host's load, CPU and memory, the daemon process's own, and
+		// its cgroup's pressure (each nil where the platform has no reader).
+		hb.MachineStats, hb.ProcessStats, hb.CgroupStats = d.resources.Read()
 		if err := s.send(&reliantv1.DaemonMessage{
 			Message: &reliantv1.DaemonMessage_Heartbeat{Heartbeat: hb},
 		}); err != nil {

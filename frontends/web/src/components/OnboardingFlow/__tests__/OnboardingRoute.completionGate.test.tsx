@@ -68,9 +68,11 @@ vi.mock("@/services/controlPlane/daemon", () => ({
   deleteDaemon: vi.fn(),
 }));
 
-vi.mock("@/services/controlPlane/billing", () => ({
+// The imperative eligibility read (commitLaunchPlan); the rest of the module
+// (the generated read's mapping, the enum) stays real.
+vi.mock("@/services/controlPlane/billing", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/billing")>()),
   getComputeEligibility: async () => ({ eligible: false }),
-  ComputeIneligibleReason: { NO_SUBSCRIPTION: 3, NO_ORGANIZATION: 4 },
 }));
 
 vi.mock("@/services/controlPlane/git", () => ({

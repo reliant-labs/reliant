@@ -163,6 +163,9 @@ elsewhere for a token; publish with a `git_publish` node.
 
 ### A third-party agent CLI on Reliant's gateway
 
+Deprecated: `llm_gateway` keeps working throughout v1 and is slated for removal in a future major. Do not
+add it to new workflows.
+
 A `run` node with `llm_gateway` runs its command with a short-lived step key for the LLM gateway, billed to the
 run's organization's Reliant credits: capped to `budget_usd` ($5 by default, $50 at most), to `models` (the first is
 the CLI's main model), and to the node's `timeout` plus the run step's 30-minute machine wait plus 2 minutes (at most 12h),

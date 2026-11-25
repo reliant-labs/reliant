@@ -161,6 +161,21 @@ func oneFire(workflows WorkflowResolver) WorkflowResolver {
 	return workflows
 }
 
+// ForOneArrival is workflows for every trigger one arrival reaches, as a run
+// event's dispatch matches each of its owner's workflow_event triggers in
+// turn: each catalog, draft and preset is read once for all of them
+// (ForOneFire), and each catalog scope is pinned once (Batch). Prod's
+// DispatchRunEvent read the machine catalog 30 times, the pinned snapshot 32
+// times and pinned 4 times in one 6.7s activity (trace b7c5ef7b…,
+// 2026-11-24). Any other resolver is used as it is.
+//
+// It lives for one dispatch attempt: a read error is shared by the rest of
+// that attempt, which then fails retryable as each trigger's read would have,
+// and the retry reads afresh.
+func ForOneArrival(workflows WorkflowResolver) WorkflowResolver {
+	return oneFire(NewBatch().workflows(workflows))
+}
+
 var _ MachineWorkflowResolver = LaunchWorkflows{}
 
 // ResolveRunWorkflow implements WorkflowResolver.

@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 /**
@@ -75,15 +75,9 @@ vi.mock('@tanstack/react-router', async () => {
   }
 })
 
-// Only `redeemCoupon` is replaced; the rest of the service module (notably the
-// `RedeemedCouponKind` re-export and the `reliantAIAvailable` flag) stays real,
-// so the mock cannot drift from the module's actual shape.
+// RedeemCoupon is answered at the transport (useRedeemCoupon runs on the
+// generated BillingService mutation), from a fake stated in UI terms.
 const couponState = vi.hoisted(() => ({ redeem: vi.fn() }))
-
-vi.mock('@/services/controlPlane/reliantAI', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>()
-  return { ...actual, redeemCoupon: (code: string) => couponState.redeem(code) }
-})
 
 // Observability usage rides on the same tab. The org is mutable so a test can
 // show both "resolved" and "not provisioned yet"; the usage read is a fixed
@@ -116,19 +110,6 @@ vi.mock('@/hooks/observability-billing-queries', async () => {
 })
 
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
-  // Real object, not a stub: `useRedeemCoupon` (from the OTHER hook module,
-  // which is not mocked) dereferences these keys in its own onSuccess to
-  // invalidate the billing reads. Omitting them makes redemption throw before
-  // the form's success handler ever runs.
-  cloudBillingKeys: {
-    all: ['cloud-billing'],
-    computeSubscription: ['cloud-billing', 'compute-subscription'],
-    walletOverview: ['cloud-billing', 'wallet-overview'],
-    computeUsage: (period: string) => ['cloud-billing', 'compute-usage', period],
-    plans: ['cloud-billing', 'plans'],
-    invoices: ['cloud-billing', 'invoices'],
-    billingEmail: ['cloud-billing', 'billing-email'],
-  },
   useComputeSubscription: () => query(undefined),
   useWalletOverview: () => query(undefined),
   useComputeUsage: () => query(usageState.current),
@@ -149,6 +130,9 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
 }))
 
 import { RedeemedCouponKind } from '@/gen/controlplane/services/billing/v1/billing_pb';
+import { setTransport } from '@/lib/connect'
+import { mockTransport } from '@/lib/test-utils'
+import { redeemCouponHandlers } from '@/test/billingTransport'
 import { BillingSection } from '@/components/Settings/cloud/billing'
 import { ObsQuotaBanner } from '@/components/Forge/Observability/ObsStates'
 import { ObsQuotaProvider, useObsQuota } from '@/services/controlPlane/observability/ObsQuotaContext'
@@ -323,7 +307,9 @@ describe('BillingSection', () => {
   describe('coupon redemption', () => {
     beforeEach(() => {
       couponState.redeem.mockReset()
+      setTransport(mockTransport(redeemCouponHandlers((code) => couponState.redeem(code))))
     })
+    afterEach(() => setTransport(null))
 
     it('shows the coupon input on the overview tab without clicking a disclosure', () => {
       renderSection()

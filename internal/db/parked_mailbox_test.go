@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A thread parked on a pending blocking question keeps its mailbox even if it
@@ -31,7 +32,7 @@ func TestMailboxOfAThreadParkedOnABlockingQuestionIsNotSwept(t *testing.T) {
 	insertTestThreadForWorkflow(t, repo, "th-pm-root", chatID, "wf-pm-root", ThreadStatusRunning)
 	insertTestThreadForWorkflow(t, repo, "th-pm-spawn", chatID, "wf-pm-root", ThreadStatusRunning)
 	insertTestQuestion(t, repo, "q-blocking", chatID, "wf-pm-root", "th-pm-spawn")
-	require.NoError(t, repo.EnqueueAgentMessage(ctx, &AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(ctx, repo.ORM(), &AgentMessage{
 		ID: "am-answer", FromThreadID: "th-pm-root", ChatID: chatID, ToThreadID: "th-pm-spawn",
 		Kind: core.AgentMessageKindHumanMessage, Body: "Answer to the question you asked without waiting",
 		Status: core.AgentMessageStatusQueued, CreatedAt: time.Now(),
@@ -42,23 +43,23 @@ func TestMailboxOfAThreadParkedOnABlockingQuestionIsNotSwept(t *testing.T) {
 	require.NoError(t, err)
 	requireQuestionStatus(t, repo, "q-blocking", QuestionStatusPending)
 
-	orphaned, err := repo.ListThreadsWithOrphanedAgentMessages(ctx)
+	orphaned, err := store.ListThreadsWithOrphanedAgentMessages(ctx, repo.ORM())
 	require.NoError(t, err)
 	assert.NotContains(t, orphaned, "th-pm-spawn", "a failed thread parked on a question is not orphaned")
-	moved, err := repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, "th-pm-spawn")
+	moved, err := store.MarkQueuedAgentMessagesUndeliveredForThread(ctx, repo.ORM(), "th-pm-spawn")
 	require.NoError(t, err)
 	assert.Zero(t, moved)
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, "th-pm-spawn")
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), "th-pm-spawn")
 	require.NoError(t, err)
 	require.Len(t, queued, 1, "the answer still waits for the thread's next call_llm")
 
 	// The blocking question gone (answered, or closed with the thread), the
 	// mailbox of the terminal thread is swept as it always was.
 	require.NoError(t, repo.ResolveQuestion(ctx, "q-blocking", nil))
-	orphaned, err = repo.ListThreadsWithOrphanedAgentMessages(ctx)
+	orphaned, err = store.ListThreadsWithOrphanedAgentMessages(ctx, repo.ORM())
 	require.NoError(t, err)
 	assert.Contains(t, orphaned, "th-pm-spawn")
-	moved, err = repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, "th-pm-spawn")
+	moved, err = store.MarkQueuedAgentMessagesUndeliveredForThread(ctx, repo.ORM(), "th-pm-spawn")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), moved)
 }

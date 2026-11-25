@@ -124,9 +124,9 @@ type WorkflowTypeContext struct {
 	// catalog's. Inline workflows inherit it.
 	ValueTypes ValueTypes
 
-	// LenientInputs skips strict input field validation. Set for inline workflows
-	// that receive inputs dynamically via args from the parent, so input names
-	// cannot be validated statically.
+	// LenientInputs skips strict input field validation. Set for inline workflows,
+	// which run with the enclosing workflow's inputs: a type context built from
+	// the inline body alone cannot name them.
 	LenientInputs bool
 
 	// IterItemFields holds typed field info for the iter.item namespace.

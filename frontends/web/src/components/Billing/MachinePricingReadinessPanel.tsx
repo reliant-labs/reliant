@@ -1,6 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
-import { getControlPlaneClient } from "@/services/controlPlane/client";
+import { useAcceptNextMachinePricing, useGetMachinePricingReadiness } from "@/hooks/controlplane/billing-service-hooks_gen";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { MachinePricingReadinessCard } from "./MachinePricingReadinessCard";
 
@@ -10,14 +8,9 @@ export function MachinePricingReadinessPanel({ planId, currentPriceLabel }: { pl
   return org.active ? <OrgMachineReadiness key={`${org.active.id}:${planId}`} orgId={org.active.id} planId={planId} currentPriceLabel={currentPriceLabel} canManage={org.active.role === "owner" || org.active.role === "admin"} /> : null;
 }
 function OrgMachineReadiness({ orgId, planId, canManage, currentPriceLabel }: { orgId: string; planId: string; canManage: boolean; currentPriceLabel?: string }) {
-  const state = useQuery({
-    queryKey: ["machine-pricing-readiness", orgId, planId],
-    queryFn: () => getControlPlaneClient(BillingService).getMachinePricingReadiness({ orgId, planId, pricingVersion: "" }),
-    enabled: !!orgId, retry: false, staleTime: 30_000,
-  });
-  const accept = useMutation({
-    mutationFn: (terms: { pricingVersion: string; termsSha256: string }) => getControlPlaneClient(BillingService).acceptNextMachinePricing({ orgId, planId, ...terms }),
-  });
+  const state = useGetMachinePricingReadiness({ orgId, planId, pricingVersion: "" }, { enabled: !!orgId, retry: false, staleTime: 30_000 });
+  // Records consent only; the card shows the answer, and no read changes.
+  const accept = useAcceptNextMachinePricing({ invalidate: false });
   return <MachinePricingReadinessCard
     key={state.data?.termsSha256 ?? "unknown"}
     terms={state.data}
@@ -31,6 +24,6 @@ function OrgMachineReadiness({ orgId, planId, canManage, currentPriceLabel }: { 
     // failed confirmation says so, beside the terms it was for.
     error={accept.error ? "We couldn't record your confirmation. Try again." : undefined}
     onRetry={() => { accept.reset(); void state.refetch(); }}
-    onAccept={terms => { if (canManage && state.data?.activationReady && state.data.termsSha256 === terms.termsSha256) accept.mutate(terms); }}
+    onAccept={terms => { if (canManage && state.data?.activationReady && state.data.termsSha256 === terms.termsSha256) accept.mutate({ orgId, planId, ...terms }); }}
   />;
 }

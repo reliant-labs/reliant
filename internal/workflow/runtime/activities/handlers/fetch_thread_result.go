@@ -5,9 +5,10 @@ import (
 	"context"
 	"fmt"
 
+	"go.temporal.io/sdk/activity"
+
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"go.temporal.io/sdk/activity"
 )
 
 // FetchThreadResultInput is the input for fetching the final result from a child thread

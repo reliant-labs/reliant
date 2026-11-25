@@ -262,7 +262,7 @@ func TestSendMessage_WakeFailureStillSavesMessage(t *testing.T) {
 	require.NoError(t, err, "a doorbell that cannot be rung must not fail the send")
 	require.NotEmpty(t, resp.Msg.MessageId)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1, "the message must be durable even when the wake failed")
 	assert.Equal(t, "keep this", queued[0].Body)

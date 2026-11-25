@@ -22,11 +22,12 @@ type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
-	Tx       TxRunner
-	Locks    Locks
-	Triggers Triggers
-	Offers   Offers
-	OrgReads OrgReads
+	Tx        TxRunner
+	Locks     Locks
+	Triggers  Triggers
+	Adoptions Adoptions
+	Offers    Offers
+	OrgReads  OrgReads
 
 	// Now is the clock offers and changes are stamped by; nil is time.Now.
 	//
@@ -59,8 +60,8 @@ type service struct {
 //
 // forge:constructor
 func New(deps Deps) (Service, error) {
-	if deps.Tx == nil || deps.Locks == nil || deps.Triggers == nil || deps.Offers == nil || deps.OrgReads == nil {
-		return nil, errors.New("triggerowner: Deps.Tx, Locks, Triggers, Offers and OrgReads are required")
+	if deps.Tx == nil || deps.Locks == nil || deps.Triggers == nil || deps.Adoptions == nil || deps.Offers == nil || deps.OrgReads == nil {
+		return nil, errors.New("triggerowner: Deps.Tx, Locks, Triggers, Adoptions, Offers and OrgReads are required")
 	}
 	return &service{deps: deps}, nil
 }
@@ -118,7 +119,7 @@ func (s *service) AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwn
 		if err := s.deps.Locks.LockProjectsForWrite(ctx, t.ProjectID); err != nil {
 			return err
 		}
-		if err := s.deps.Locks.LockTrigger(ctx, t.ID); err != nil {
+		if err := s.deps.Triggers.LockTrigger(ctx, t.ID); err != nil {
 			return err
 		}
 		before, err := s.deps.Triggers.GetTrigger(ctx, t.ID)
@@ -128,7 +129,7 @@ func (s *service) AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwn
 		if before.UserID != previousOwner {
 			return core.ErrTriggerOwnerChanged
 		}
-		if err := s.deps.Triggers.AdoptTrigger(ctx, t); err != nil {
+		if err := s.deps.Adoptions.AdoptTrigger(ctx, t); err != nil {
 			return mapTriggerNameConflict(err, t.Name)
 		}
 		if offerID != "" {
@@ -147,7 +148,7 @@ func (s *service) AdoptTrigger(ctx context.Context, t *core.Trigger, previousOwn
 		if err != nil {
 			return err
 		}
-		return s.deps.Triggers.RecordTriggerChange(ctx, "adopted", before, after)
+		return s.deps.Adoptions.RecordTriggerChange(ctx, "adopted", before, after)
 	})
 }
 
@@ -162,7 +163,7 @@ func (s *service) CreateTriggerOffer(ctx context.Context, o *core.TriggerOffer) 
 		return fmt.Errorf("trigger offer: id and trigger are required")
 	}
 	return s.deps.Tx.RunTx(ctx, txPolicy, func(ctx context.Context) error {
-		if err := s.deps.Locks.LockTrigger(ctx, o.TriggerID); err != nil {
+		if err := s.deps.Triggers.LockTrigger(ctx, o.TriggerID); err != nil {
 			return err
 		}
 		current, err := s.deps.Triggers.GetTrigger(ctx, o.TriggerID)

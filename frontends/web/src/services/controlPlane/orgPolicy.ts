@@ -27,7 +27,7 @@ import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import type { OrgPolicy, OrgPolicyMode, SpendAppliesTo, SpendCap } from "@/gen/controlplane/controlplane/v1/org_policy_pb";
-import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
+import type { ListOrgLimitChangesResponse } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import {
   OrgPolicyService,
   type OrgPolicyRecord,
@@ -39,12 +39,12 @@ import { getControlPlaneClient } from "./client";
 
 /**
  * Query keys. The root is in activeOrgStore's ORG_SCOPED_QUERY_ROOTS, so an
- * org switch drops every one of them.
+ * org switch drops every one of them. The history is BillingService's, on its
+ * generated keys (`billingServiceKeys.listOrgLimitChangesInfinite`).
  */
 export const orgPolicyKeys = {
   all: ["org-policy"] as const,
   policy: (orgId: string) => ["org-policy", orgId, "document"] as const,
-  history: (orgId: string) => ["org-policy", orgId, "history"] as const,
   usage: (orgId: string) => ["org-policy", orgId, "usage"] as const,
   denials: (orgId: string, days: number) => ["org-policy", orgId, "denials", days] as const,
 };
@@ -258,12 +258,18 @@ export interface PolicyHistoryPage {
 const POLICY_RESOURCE = /^policy\.([a-z_]+)\./;
 
 /**
- * The policy's edits, newest first: the org's limit-change log narrowed to
- * its "policy.*" rows. The log's filter is one exact resource, so the
- * narrowing is here; a page may hold none and still have older ones.
+ * The policy's edits, newest first: the org's limit-change log
+ * (BillingService.ListOrgLimitChanges, read by usePolicyHistory through its
+ * generated infinite hook) narrowed to its "policy.*" rows. The log's filter
+ * is one exact resource, so the narrowing is here; a page may hold none and
+ * still have older ones.
  */
-export async function listPolicyHistory(orgId: string, pageToken = ""): Promise<PolicyHistoryPage> {
-  const res = await getControlPlaneClient(BillingService).listOrgLimitChanges({ orgId, pageSize: 100, pageToken });
+export function policyHistoryRequest(orgId: string) {
+  return { orgId, pageSize: 100 };
+}
+
+/** One page of the limit-change log as the policy's history. */
+export function policyHistoryPageOf(res: ListOrgLimitChangesResponse): PolicyHistoryPage {
   const entries: PolicyHistoryEntry[] = [];
   for (const c of res.changes) {
     const m = POLICY_RESOURCE.exec(c.resource);

@@ -54,6 +54,8 @@ import Modal from "../../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
 import { openAutomationDialog } from "../../Automations/dialog/openAutomationDialog";
 import { RunNowDialog } from "../../workflow/run/RunNowDialog";
+import { ShareWorkflowDialog } from "../../Sharing/ShareWorkflowDialog";
+import { shareableWorkflow, type ShareableWorkflow } from "../../Sharing/shareTargets";
 import { workflowDisplayName } from "../../../lib/workflowDisplayName";
 import { splitFindings } from "../../workflow/workflowDraftStatus";
 import { FilterSearch, SelectFilter } from "../FilterMenu";
@@ -390,6 +392,8 @@ function WorkflowsBody() {
   const { switchTriggers, isPending: switching } = useSwitchTriggers();
   // Run… and the definition actions work in a project: the row's own, or the current one.
   const [running, setRunning] = useState<{ ref: string; projectId: string } | null>(null);
+  // The saved workflow whose share toggle is open.
+  const [sharingWorkflow, setSharingWorkflow] = useState<ShareableWorkflow | null>(null);
   // The workflow whose Delete is being confirmed.
   const [deleting, setDeleting] = useState<{ workflow: WorkflowResponse; projectId: string } | null>(null);
 
@@ -522,6 +526,15 @@ function WorkflowsBody() {
         }
       },
     });
+    // Only the owner's saved workflows are listed with a sharing state, so
+    // only their owner is offered it (shareableWorkflow).
+    const shareable = shareableWorkflow(workflow, displayName);
+    if (shareable) {
+      actions.push({
+        label: shareable.shared ? "Stop sharing workflow…" : "Share workflow…",
+        onSelect: () => setSharingWorkflow(shareable),
+      });
+    }
     if (workflow.source === "user") {
       actions.push({
         label: "Export",
@@ -692,6 +705,8 @@ function WorkflowsBody() {
           });
         }}
       />
+
+      <ShareWorkflowDialog workflow={sharingWorkflow} onClose={() => setSharingWorkflow(null)} />
 
       <RunNowDialog
         open={running !== null}
