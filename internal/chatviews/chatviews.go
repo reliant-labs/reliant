@@ -22,28 +22,31 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
-// Reader reads a chat with its computed state, with no owner check, inside the
-// ambient transaction when ctx carries one.
-type Reader interface {
-	GetChat(ctx context.Context, id string) (*core.Chat, error)
+// Chats reads a chat with its computed state, with no owner check, inside the
+// ambient transaction when ctx carries one. It is the concrete value Of
+// returns, so no package declares an interface the module's stores satisfy
+// by accident.
+type Chats struct {
+	get func(ctx context.Context, id string) (*core.Chat, error)
 }
+
+// GetChat reads the chat id.
+func (c Chats) GetChat(ctx context.Context, id string) (*core.Chat, error) { return c.get(ctx, id) }
 
 // ErrNoChatReads is what the reader of a store with no chat reads answers.
 var ErrNoChatReads = errors.New("chatviews: the store reads no chats")
 
 // Of is the chat reader of s.
-func Of(s any) Reader {
-	if r, ok := s.(Reader); ok {
-		return r
+func Of(s any) Chats {
+	if r, ok := s.(interface {
+		GetChat(ctx context.Context, id string) (*core.Chat, error)
+	}); ok {
+		return Chats{get: r.GetChat}
 	}
 	if o, ok := s.(interface{ ORM() *orm.Client }); ok {
 		if c := o.ORM(); c != nil {
-			return store.NewChatsWithActivityExtStore(c)
+			return Chats{get: store.NewChatsWithActivityExtStore(c).GetChat}
 		}
 	}
-	return none{}
+	return Chats{get: func(context.Context, string) (*core.Chat, error) { return nil, ErrNoChatReads }}
 }
-
-type none struct{}
-
-func (none) GetChat(context.Context, string) (*core.Chat, error) { return nil, ErrNoChatReads }

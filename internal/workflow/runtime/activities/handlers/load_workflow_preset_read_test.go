@@ -21,7 +21,7 @@ import (
 // err when it is set.
 type presetReadFailingStore struct {
 	LoadWorkflowStore
-	chats chatviews.Reader
+	chats chatviews.Chats
 	err   error
 }
 
