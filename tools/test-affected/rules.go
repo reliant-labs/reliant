@@ -427,7 +427,7 @@ var rules = []rule{
 		id: "inert",
 		patterns: []string{
 			"docs/**", "**/*.md", "**/*.mdx", "research/**", "dev-docs/**", "contributing/**",
-			"LICENSE", "LICENSES.txt", ".license-allowlist", ".license-allowlist-npm",
+			"LICENSE", "LICENSES.txt", ".license-allowlist-npm",
 			".githooks/**", ".github/**", ".reliant/**", ".golangci.yml", ".goreleaser.yml",
 			".gitignore", ".dockerignore", ".air*.toml", "Dockerfile*", "docker-compose*.yml",
 			"tools/protoc-gen-es/**", "tmp/**",
