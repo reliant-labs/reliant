@@ -5,17 +5,14 @@
 > (`CredentialBrowserSession`: a server-side session id read from the
 > `__Host-reliant_session` cookie, which forge's `authn.Method.IsBrowserSession`
 > also confirms), the **Supabase session** below until the cutover (R8), and the
-> self-host shared key. For v1 SDK/workflow compatibility, unbound `rlat_`
-> tokens explicitly granted `approvals:decide` also remain admitted. Verify
-> their decisions succeed and resume waiting runs across all four decision RPCs;
-> machine-bound tokens must still return `machine_credential_cannot_decide`.
-> The managed identity's token as a bearer, a session id sent as a bearer, and
-> any token sent as the cookie remain refused.
-> `internal/grpc/interceptors/approval_session_test.go` is the matrix.
-> The checks below still verify the Supabase half until it is removed.
+> self-host shared key. Every `rlat_` token is refused, `approvals:decide`
+> included, and so is the managed identity's token as a bearer, a session id
+> sent as a bearer, and any token sent as the cookie (owner decision
+> 2026-11-19). `internal/grpc/interceptors/approval_session_test.go` is the
+> matrix. The checks below still verify the Supabase half until it is removed.
 
-`ApprovalService.Approve`, `Deny`, `BatchApprove` and `BatchDeny` refuse software
-credentials except the explicitly scoped unbound-token compatibility path. For
+`ApprovalService.Approve`, `Deny`, `BatchApprove` and `BatchDeny` refuse any
+credential software can hold (`auth.RequirePerson`, reliant #2123, #2175). For
 identity-provider JWTs the split rests on one claim: `JWTValidator.ValidateToken`
 (`internal/auth/jwt.go`) classifies a token carrying `client_id` as
 `CredentialOAuthClient` (refused) and one without it as `CredentialSession`
