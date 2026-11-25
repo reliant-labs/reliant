@@ -9,10 +9,11 @@
 
 import { memo, useMemo, useState } from "react";
 import {
-  AlertCircle,
   Check,
+  CircleSlash,
   Loader2,
   Send,
+  XCircle,
 } from "lucide-react";
 import type { ToolContentProps } from "./types";
 import { GenericToolRenderer } from "./GenericToolRenderer";
@@ -295,13 +296,14 @@ function SpawnPreview({ ctx }: ToolContentProps) {
         <SendToAgentForm chatId={chatId} threadId={spawnThreadId} resumes={spawnStoppedOnError} />
       )}
       {workflowFailed && (
-        <div
-          className={cn(
-            "flex items-center gap-1.5 px-2 py-1 border-b border-border/10 text-2xs",
-            isCancelledChild ? "text-muted-foreground" : "text-warning-ink",
+        // The row's own mark already says it stopped: the icon carries the
+        // colour here too, and the sentence reads in muted ink.
+        <div className="flex items-center gap-1.5 border-b border-border/10 px-2 py-1 text-2xs text-muted-foreground">
+          {isCancelledChild ? (
+            <CircleSlash className="size-3 shrink-0" aria-hidden="true" />
+          ) : (
+            <XCircle className="size-3 shrink-0 text-destructive-ink" aria-hidden="true" />
           )}
-        >
-          <AlertCircle className="w-2.5 h-2.5 shrink-0" />
           {/* An agent that stopped on an error is not finished — its error
               is on its own thread, and a message resumes it (even once the
               chat has gone idle: that message restarts the chat's run). */}
@@ -331,11 +333,11 @@ function SpawnPreview({ ctx }: ToolContentProps) {
                       key={i}
                       className={cn(
                         "flex items-center gap-1.5 text-2xs font-mono py-0.5",
-                        tc.failed ? "text-warning-ink" : tc.completed ? "text-muted-foreground" : "text-primary-ink",
+                        tc.failed || tc.completed ? "text-muted-foreground" : "text-primary-ink",
                       )}
                     >
                       {tc.failed ? (
-                        <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                        <XCircle className="w-2.5 h-2.5 shrink-0 text-destructive-ink" />
                       ) : tc.completed ? (
                         <Check className="w-2.5 h-2.5 shrink-0" />
                       ) : (

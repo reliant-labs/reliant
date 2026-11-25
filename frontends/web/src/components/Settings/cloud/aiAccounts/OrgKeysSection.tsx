@@ -22,7 +22,7 @@ import {
   useReorderOrgProviderAccounts,
   useUpdateOrgProviderAccount,
 } from "@/hooks/org-provider-account-service-hooks_gen";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthUserId } from "@/lib/auth/use-auth";
 import type { MyOrg } from "@/services/controlPlane/orgs";
 import {
   ACCESS_TO_PROTO,
@@ -68,7 +68,7 @@ interface OrgKeysSectionProps {
 }
 
 export function OrgKeysSection({ org, accounts, isAdmin, emptyAction }: OrgKeysSectionProps) {
-  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const userId = useAuthUserId();
   const update = useUpdateOrgProviderAccount();
   const reorder = useReorderOrgProviderAccounts();
   const remove = useDeleteOrgProviderAccount();

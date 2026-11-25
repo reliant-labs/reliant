@@ -18,6 +18,7 @@ import (
 	forgeauth "github.com/reliant-labs/forge/pkg/auth"
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/session"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
@@ -28,16 +29,19 @@ import (
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/chat_trace"
 	"github.com/reliant-labs/reliant/internal/handlers/coverage_source"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/handlers/org_policy_impact"
@@ -66,6 +70,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/readguard"
+	"github.com/reliant-labs/reliant/internal/runenv"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
@@ -201,11 +206,58 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 	return s, nil
 }
 
+// SignInSessions keeps the managed identity's sign-in sessions SERVER-SIDE
+// (forge/pkg/session): the browser's cookie holds an opaque id, the
+// identity's tokens stay in auth_sessions sealed under a key derived from that
+// id, and the access token is renewed before it expires. The login broker
+// creates them (login_broker.go, WithSessions) and UserAuth resolves them
+// (auth.Settings.Sessions), so the cookie is a browser session — the one
+// credential that decides an approval (auth.RequireApprovalDecider).
+//
+// nil — the node is absent — until the broker is configured (an identity's
+// oidc_client_id and broker token: LoginBrokerConfigured).
+type SignInSessions struct{ *session.Manager }
+
+// SignInSessionsDeps is the database the sessions live in and the config the
+// broker reads.
+type SignInSessionsDeps struct {
+	API    *config.ApiServerConfig
+	DB     *db.Repo
+	Logger *slog.Logger
+}
+
+// NewSignInSessions is the session Manager over reliant's database, or
+// nothing without a configured login broker.
+//
+//forge:root-only api
+func NewSignInSessions(d SignInSessionsDeps) (*SignInSessions, error) {
+	if LoginBrokerConfigured(d.API) != nil {
+		return nil, nil
+	}
+	m, err := session.NewManager(session.Config{
+		Store:     session.NewPostgresStore(d.DB.ORM().DB()),
+		Refresher: SessionRefresher(d.API),
+		Logger:    d.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sign-in sessions: %w", err)
+	}
+	return &SignInSessions{m}, nil
+}
+
+// Run deletes ended sessions hourly until ctx ends.
+func (s *SignInSessions) Run(ctx context.Context) error { return s.Manager.Run(ctx) }
+
 // UserAuthDeps is how callers authenticate, and the authority `rlat_` access
 // tokens are resolved against.
 type UserAuthDeps struct {
 	Settings *APISettings
 	Tokens   tokenauthority.Authority
+	// Sessions resolves the sign-in cookie's session ids; nil without a
+	// login broker, when the cookie is refused.
+	//
+	// forge:optional-dep
+	Sessions *SignInSessions
 }
 
 // NewUserAuth authenticates the user audience: a JWT or the shared API key,
@@ -219,7 +271,14 @@ type UserAuthDeps struct {
 //forge:audience user
 //forge:root-only api
 func NewUserAuth(d UserAuthDeps) (*grpcserver.UserAuth, error) {
-	return grpcserver.NewUserAuth(d.Settings.Auth, d.Tokens)
+	settings := d.Settings.Auth
+	if d.Sessions != nil {
+		settings.Sessions = d.Sessions.Manager
+		// The plain-named cookie only in local development, where the
+		// broker cannot set a __Host- one (plain http).
+		settings.DevSessionCookie = runenv.IsDev()
+	}
+	return grpcserver.NewUserAuth(settings, d.Tokens)
 }
 
 // UserChainDeps is the user chain's authenticator and the email domains it
@@ -321,6 +380,23 @@ type APIListenerDeps struct {
 	// ClientVersions is the client version policy, whose legacy switches
 	// the listener's edge applies (ServerProcessConfig.client_versions).
 	ClientVersions *configv1.ClientVersionPolicy
+	// SignIn is the login broker's session store: with it the native
+	// sign-in routes (/auth/*, login_broker.go) are mounted; nil without a
+	// configured identity, when they are not.
+	//
+	// forge:optional-dep
+	SignIn *SignInSessions
+	// Accounts reads the signed-in person's control-plane account for
+	// /auth/session; nil without a control plane.
+	//
+	// forge:optional-dep
+	Accounts *ControlPlaneAccounts
+	// Auth verifies the tokens the session resolver hands out (the managed
+	// identity's validator).
+	Auth *grpcserver.UserAuth
+	// ControlPlane names the internal-service secret the session resolver
+	// accepts control-plane's calls with.
+	ControlPlane *configv1.ControlPlaneConfig
 }
 
 // NewAPIListener is the address browsers, the CLI and `rlat_` tokens call
@@ -344,10 +420,50 @@ func NewAPIListener(d APIListenerDeps) (*grpcserver.APIListener, error) {
 		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
 			services := d.Routes.Register(mux, opts...)
 			d.HTTP.Register(mux)
+			if d.SignIn != nil {
+				// NATIVE SIGN-IN, only with a configured identity: the /auth/*
+				// routes login_broker.go mounts.
+				opts := []BrokerOption{WithSessions(d.SignIn.Manager)}
+				if d.Accounts != nil {
+					opts = append(opts, WithAccounts(d.Accounts.GetCurrentAccount))
+				}
+				RegisterLoginBroker(mux, d.API, d.Logger, opts...)
+				d.Logger.Info("native sign-in enabled", "routes", "/auth/* (internal/app/login_broker.go)")
+				// The service-only session resolver, for control-plane to
+				// honour this sign-in's cookie on its own routes. Only with
+				// a control plane to share the internal-service secret with.
+				if secret := ControlPlaneEndpoint(d.ControlPlane).InternalServiceSecret; secret != "" {
+					mux.Handle(grpcserver.SessionResolvePath,
+						grpcserver.NewSessionResolveHandler(d.SignIn.Manager, d.Auth.Authenticator(), secret))
+				}
+			}
 			return services
 		}),
 		Logger: d.Logger,
 	})
+}
+
+// ControlPlaneAccounts reads a signed-in person's control-plane account with
+// their own token (controlplane.Service.GetCurrentAccount): what the sign-in
+// session reports for onboarding.
+type ControlPlaneAccounts struct{ controlplane.Service }
+
+// ControlPlaneAccountsDeps is the control plane the accounts are read from.
+type ControlPlaneAccountsDeps struct {
+	ControlPlane *configv1.ControlPlaneConfig
+}
+
+// NewControlPlaneAccounts is the account reader, or nothing (nil) without a
+// control plane: a self-hosted deployment has no accounts beside the
+// identity's.
+//
+//forge:root-only api
+func NewControlPlaneAccounts(d ControlPlaneAccountsDeps) (*ControlPlaneAccounts, error) {
+	svc := hostedControlPlane(d.ControlPlane)
+	if svc == nil {
+		return nil, nil
+	}
+	return &ControlPlaneAccounts{svc}, nil
 }
 
 // APIDebugServer is the api-server's localhost-only diagnostics listener on
@@ -1012,6 +1128,8 @@ type WorktreeSweepDeps struct {
 	DB           *db.Repo
 	Router       *APIDaemonRouter
 	Settings     *APISettings
+	// Updates tells the user's clients a worktree changed.
+	Updates chatupdates.Service
 }
 
 // The sweep records the use a daemon reports through the optional UseStore;
@@ -1084,7 +1202,7 @@ func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 		WithIdleRetirement(d.Settings.WorktreeLiveShedIdle, idleRetirementStore{ChatExtStore: chats, WorktreeExtStore: worktrees}).
 		WithAutoArchive(d.Settings.WorktreeAutoArchive, worktreeSweepStore{WorktreeExtStore: worktrees, chats: chats},
 			func(ctx context.Context, userID, projectID, worktreeID string) {
-				if err := database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
+				if err := d.Updates.EmitUserRefetch(ctx, userID, core.RefetchWorktreeChanges, core.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
 					logging.WarnContext(ctx, "worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
 				}
 			}).
@@ -1301,6 +1419,7 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	cfg.Namespace = d.Namespace
 	r := reconciliation.New(reconciliation.Deps{
 		Store:     d.DB,
+		Chats:     store.NewChatsWithActivityExtStore(d.DB.ORM()),
 		Questions: store.NewQuestionExtStore(d.DB.ORM()),
 		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
 		Orphans:   store.NewAgentMessageExtStore(d.DB.ORM()),
@@ -1634,6 +1753,23 @@ func TriggerOrgRollout(api *configv1.ApiServerConfig) *configv1.OrgsConfig {
 // function, so the config-path test proves what newProject hands it.
 func ProjectOrgRollout(api *configv1.ApiServerConfig) *configv1.OrgsConfig {
 	return api.GetOrgs()
+}
+
+// ChatTraceSpans is where a chat's Trace tab reads its spans: control-plane's
+// ConversationTraceInternalService, signed as the internal service. nil —
+// every trace is answered without spans, PARTIAL — when the control plane is
+// not hosted or this process has no internal-service secret; never a typed
+// nil in the handler's interface.
+func ChatTraceSpans(cfg *configv1.ControlPlaneConfig) chat_trace.Spans {
+	cp := ControlPlaneEndpoint(cfg)
+	if !cp.Hosted() || cp.InternalServiceSecret == "" {
+		return nil
+	}
+	secret := cp.InternalServiceSecret
+	return controlplane.NewInstrumented(controlplane.Deps{
+		ControlPlane: cfg,
+		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
+	})
 }
 
 // CoverageSourceBlobs is how the coverage-source handler reads a blob from

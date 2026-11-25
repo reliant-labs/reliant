@@ -95,6 +95,7 @@ import (
 // at ERROR (each an issue in forge's ClickStack).
 type Reconciler struct {
 	repo       ReconcilerStore
+	chats      Chats
 	workflows  WorkflowLoader
 	daemons    DaemonReader
 	approvals  Approvals
@@ -484,6 +485,7 @@ func DefaultConfig() *ReconcilerConfig {
 // built by hand by the api server's NewWorkflowReconciler provider.
 func New(deps Deps) *Reconciler {
 	repo, tempClient, config := deps.Store, deps.Temporal, deps.Config
+	chats := deps.Chats
 	def := DefaultConfig()
 	if config == nil {
 		config = def
@@ -518,13 +520,14 @@ func New(deps Deps) *Reconciler {
 	}
 	return &Reconciler{
 		repo:                    repo,
+		chats:                   chats,
 		questions:               deps.Questions,
 		mailbox:                 deps.Mailbox,
 		orphans:                 deps.Orphans,
 		workflows:               deps.Workflows,
 		daemons:                 deps.Daemons,
 		tempClient:              tempClient,
-		owners:                  telemetry.NewChatOwnerCache(chatOwnerOf(repo), time.Hour, 10000),
+		owners:                  telemetry.NewChatOwnerCache(chatOwnerOf(chats), time.Hour, 10000),
 		pollInterval:            cfg.PollInterval,
 		stuckActivityThreshold:  cfg.StuckActivityThreshold,
 		taskQueue:               cfg.TaskQueue,
@@ -543,8 +546,8 @@ func New(deps Deps) *Reconciler {
 	}
 }
 
-// chatOwnerOf reads a chat's user off repo.
-func chatOwnerOf(repo ReconcilerStore) func(ctx context.Context, chatID string) (string, error) {
+// chatOwnerOf reads a chat's user off chats.
+func chatOwnerOf(repo Chats) func(ctx context.Context, chatID string) (string, error) {
 	return func(ctx context.Context, chatID string) (string, error) {
 		chat, err := repo.GetChat(ctx, chatID)
 		if err != nil || chat == nil {
@@ -2610,7 +2613,7 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 // Errs toward "not awaiting resume" when anything cannot be read, preserving
 // the repair's pre-existing behaviour rather than hiding a stranded spawn.
 func (r *Reconciler) rootAwaitingResume(ctx context.Context, chatID string) bool {
-	chat, err := r.repo.GetChat(ctx, chatID)
+	chat, err := r.chats.GetChat(ctx, chatID)
 	if err != nil || chat == nil {
 		return false
 	}
@@ -2655,7 +2658,7 @@ func (r *Reconciler) stoppedSpawnStillReporting(ctx context.Context, call *db.St
 		return false
 	}
 	executionID := call.ChatID
-	if chat, err := r.repo.GetChat(ctx, call.ChatID); err == nil && chat != nil && chat.MainThreadID() != "" {
+	if chat, err := r.chats.GetChat(ctx, call.ChatID); err == nil && chat != nil && chat.MainThreadID() != "" {
 		executionID = chat.MainThreadID()
 	}
 	desc, err := rtemporal.DescribeExecution(ctx, r.tempClient, executionID, "")

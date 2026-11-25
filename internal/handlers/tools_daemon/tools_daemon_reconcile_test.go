@@ -154,7 +154,7 @@ func TestReconcileProjectDaemonsNeverOverwritesTheMachinesRecord(t *testing.T) {
 	}
 	movedClone, landing, fresh := project("moved"), project("landing"), project("fresh")
 	require.NoError(t, repo.UpsertProjectDaemon(ctx, movedClone.ID, daemonID, "/srv/clones/moved", nil))
-	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, landing.ID, daemonID, landing.Path, nil, "clone:"+landing.ID))
+	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, landing.ID, daemonID, landing.Path, nil, "clone:"+landing.ID, nil))
 
 	everythingExists := func(context.Context, string) (projectPathState, error) {
 		return projectPathState{Exists: true}, nil
@@ -200,7 +200,7 @@ func TestReconcileSettlesAStaleInstallFromItsOwnPath(t *testing.T) {
 	// Each clone targets its own path on the machine, not the creation path.
 	clonePath := func(p *db.Project) string { return "/srv/clones/" + p.ID }
 	for _, p := range []*db.Project{landed, lost, requeued, recent} {
-		require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, p.ID, daemonID, clonePath(p), nil, "clone:"+p.ID))
+		require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, p.ID, daemonID, clonePath(p), nil, "clone:"+p.ID, nil))
 	}
 	// Queued two hours ago to a machine that was connected then, so the
 	// clone could start at once.
@@ -212,7 +212,7 @@ func TestReconcileSettlesAStaleInstallFromItsOwnPath(t *testing.T) {
 	age(lost)
 	age(requeued)
 	// A re-clone of a row queued long ago is a new clone: queued now.
-	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, requeued.ID, daemonID, clonePath(requeued), nil, "clone-again:"+requeued.ID))
+	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, requeued.ID, daemonID, clonePath(requeued), nil, "clone-again:"+requeued.ID, nil))
 
 	var checked []string
 	onDisk := func(_ context.Context, path string) (projectPathState, error) {
@@ -272,13 +272,13 @@ func TestReconcileTimesAStuckCloneFromTheConnectThatLetItStart(t *testing.T) {
 	}
 
 	// Queued to the connected machine: it can start now.
-	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, p.ID, awake, clonePath, nil, "clone:awake"))
+	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, p.ID, awake, clonePath, nil, "clone:awake", nil))
 	require.NotNil(t, rowOn(awake).CloneStartedAt, "a clone queued to a connected machine can start at once")
 
 	// Queued two hours ago to the sleeping machine: it has not started. This
 	// is also the state the clone_started_at migration leaves a clone that was
 	// already in flight (it does not backfill), so the steps below cover it.
-	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, p.ID, asleep, clonePath, nil, "clone:asleep"))
+	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, p.ID, asleep, clonePath, nil, "clone:asleep", nil))
 	require.Nil(t, rowOn(asleep).CloneStartedAt, "a clone queued to a sleeping machine waits for it")
 	_, err := repo.ORM().Bun().NewRaw(`UPDATE project_daemons SET cloned_at = NOW() - interval '2 hours' WHERE daemon_id = ?`, asleep).Exec(ctx)
 	require.NoError(t, err)

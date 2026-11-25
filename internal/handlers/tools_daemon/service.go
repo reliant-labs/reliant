@@ -37,6 +37,9 @@ type Deps struct {
 	// their attachment leases, the projects and project configs they
 	// report (deps.go).
 	Repo Repository
+	// Refetch tells the user\'s clients to re-read what a write changed
+	// (UserRefetch, deps.go).
+	Refetch UserRefetch
 	// Attachments is the lease each connected daemon holds and what its
 	// heartbeats record on it (Attachments, deps.go). Without it no lease is
 	// written, renewed or released: the in-memory routing alone.
@@ -128,6 +131,9 @@ func (d Deps) validateDeps() error {
 	if d.Repo == nil {
 		return fmt.Errorf("tools_daemon: Deps.Repo is required")
 	}
+	if d.Refetch == nil {
+		return fmt.Errorf("tools_daemon: Deps.Refetch is required")
+	}
 	if d.Checkouts == nil {
 		return fmt.Errorf("tools_daemon: Deps.Checkouts is required")
 	}
@@ -173,6 +179,11 @@ type Service struct {
 	// logMachineStats writes one machine health or machine volume line;
 	// logging.InfoContext, which tests replace to capture the lines.
 	logMachineStats func(ctx context.Context, msg string, args ...any)
+
+	// nestedPasses is the nested-clone pass running for each connection and
+	// checkout on this gateway (cloneNestedReposAsync), under nestedMu.
+	nestedPasses map[nestedPassKey]*nestedPassState
+	nestedMu     sync.Mutex
 }
 
 // New creates a new tools_daemon service instance with the supplied Deps.

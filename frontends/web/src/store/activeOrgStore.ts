@@ -221,6 +221,8 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   "identity",
   "dashboards",
   "deploy-usage",
+  // Generated DeployService reads (hooks/controlplane): usage rows, the collection policy's environments.
+  "controlplane.v1.DeployService",
   "onboarding",
   // Every BillingService read on its generated keys: the billing dashboard,
   // the wallet and Reliant overviews, compute eligibility, the hosting

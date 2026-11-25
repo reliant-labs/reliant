@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"go.temporal.io/sdk/activity"
@@ -246,7 +248,7 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 		// in the user's inbox, which no activity change announces, so the
 		// inbox is told to re-read.
 		if input.Async {
-			if chat, err := a.repo.GetChat(txCtx, input.ChatID); err == nil && chat != nil {
+			if chat, err := chatviews.Of(a.repo).GetChat(txCtx, input.ChatID); err == nil && chat != nil {
 				if err := a.repo.EmitUserRefetch(txCtx, chat.UserID, db.RefetchInbox, db.RefetchOpts{ChatID: &input.ChatID}); err != nil {
 					logger.Warn("[QuestionCreate] Failed to announce an async question to the inbox", "error", err, "chatID", input.ChatID)
 				}

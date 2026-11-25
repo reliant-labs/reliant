@@ -59,6 +59,8 @@ type RunRecorder interface {
 // transaction and a Temporal start whether the machine is up, asleep or gone.
 type Launcher struct {
 	repo        Store
+	chats       ChatReader
+	events      TriggerEventStore
 	workflows   WorkflowLoader
 	worktrees   WorktreeReader
 	projectRows ProjectReader
@@ -115,8 +117,13 @@ type ChatPinner interface {
 
 // New builds a launcher over its Deps.
 func New(deps Deps) *Launcher {
+	if deps.Store != nil && deps.TriggerEvents == nil {
+		panic("launch: New requires Deps.TriggerEvents beside Deps.Store")
+	}
 	return &Launcher{
 		repo:        deps.Store,
+		chats:       deps.Chats,
+		events:      deps.TriggerEvents,
 		workflows:   deps.Workflows,
 		worktrees:   deps.Worktrees,
 		projectRows: deps.ProjectRows,
@@ -184,7 +191,7 @@ func (l *Launcher) replayOfNamedStart(ctx context.Context, ev Event, spec Spec, 
 	if ev.DedupeKey == "" {
 		return nil, nil
 	}
-	stored, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
+	stored, err := l.events.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
 	if err != nil {
 		return nil, nil
 	}
@@ -194,8 +201,8 @@ func (l *Launcher) replayOfNamedStart(ctx context.Context, ev Event, spec Spec, 
 	if !isRetryOf(stored, ev.Kind, seedFingerprint(spec.Messages, spec.Attachments)) {
 		return nil, ErrClientMessageReused
 	}
-	chat, err := l.repo.GetChat(ctx, already.ChatID)
-	if err != nil || !authz.CanWriteChat(ctx, spec.OwnerUserID, chat) {
+	chat, err := l.chats.GetChat(ctx, already.ChatID)
+	if err != nil || !authz.CanOwnChat(ctx, spec.OwnerUserID, chat) {
 		return nil, nil
 	}
 	result := &Result{Chat: chat, WorkflowID: chat.MainThreadID(), EventID: stored.ID}
@@ -282,7 +289,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// adopted (claimed inside the launch transaction) rather than inserted.
 	var pending *core.TriggerEvent
 	if ev.DedupeKey != "" {
-		if existing, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey); err == nil {
+		if existing, err := l.events.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey); err == nil {
 			if existing.Outcome != core.TriggerEventPending {
 				return l.finishExisting(ctx, ev, spec, seed)
 			}
@@ -292,7 +299,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		}
 	}
 	if spec.NewChatID != "" {
-		if _, err := l.repo.GetChat(ctx, chatID); err == nil {
+		if _, err := l.chats.GetChat(ctx, chatID); err == nil {
 			return nil, &AlreadyLaunchedError{ChatID: chatID}
 		} else if !errors.Is(err, core.ErrChatNotFound) {
 			return nil, &InternalError{Reason: "failed to check for an existing chat", Err: err}
@@ -556,7 +563,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		if pending != nil {
 			// The outcome predicate on the claim is what decides between two
 			// fires of one inbound event, as the unique key does for inserts.
-			claimed, err := l.repo.ClaimPendingTriggerEvent(txCtx, pending.ID, insertRow.Payload, insertRow.Definition)
+			claimed, err := l.events.ClaimPendingTriggerEvent(txCtx, pending.ID, insertRow.Payload, insertRow.Definition)
 			if err != nil {
 				return fmt.Errorf("failed to claim trigger event: %w", err)
 			}
@@ -564,7 +571,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 				return errEventExists
 			}
 		} else {
-			created, err := l.repo.CreateTriggerEvent(txCtx, &insertRow)
+			created, err := l.events.InsertTriggerEventIfAbsent(txCtx, &insertRow)
 			if err != nil {
 				return fmt.Errorf("failed to record trigger event: %w", err)
 			}
@@ -585,7 +592,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 			return err
 		}
 
-		if err := l.repo.UpdateTriggerEventOutcome(txCtx, eventRow.ID, core.TriggerEventLaunched, "", &chatID); err != nil {
+		if err := l.events.UpdateTriggerEventOutcome(txCtx, eventRow.ID, core.TriggerEventLaunched, "", &chatID); err != nil {
 			return fmt.Errorf("failed to attach chat to trigger event: %w", err)
 		}
 		if spec.PrepareExecution != nil {
@@ -692,11 +699,11 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed seedContent) (*Result, error) {
 	userID := spec.OwnerUserID
 
-	chat, err := l.repo.GetChat(ctx, spec.ChatID)
+	chat, err := l.chats.GetChat(ctx, spec.ChatID)
 	if err != nil && !errors.Is(err, core.ErrChatNotFound) {
 		return nil, &InternalError{Reason: "failed to load chat", Err: err}
 	}
-	if err != nil || !authz.CanWriteChat(ctx, userID, chat) {
+	if err != nil || !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, &NotFoundError{Reason: "chat not found", Err: err}
 	}
 
@@ -729,7 +736,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	// while the chat is still pending, and report "already launched" once the
 	// run has started — never "use SendMessage", which is only the answer to a
 	// NEW event aimed at a chat that has already begun.
-	existing, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
+	existing, err := l.events.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
 	switch {
 	case err == nil:
 		if isRetryOf(existing, ev.Kind, fingerprint) {
@@ -814,7 +821,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	var userMessageID string
 	if err := l.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		userMessageID = ""
-		cur, err := l.repo.GetChat(txCtx, chat.ID)
+		cur, err := l.chats.GetChat(txCtx, chat.ID)
 		if err != nil {
 			return fmt.Errorf("failed to reload chat: %w", err)
 		}
@@ -836,12 +843,12 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 			Prompt:          seed.userContent,
 		})
 
-		created, err := l.repo.CreateTriggerEvent(txCtx, eventRow)
+		created, err := l.events.InsertTriggerEventIfAbsent(txCtx, eventRow)
 		if err != nil {
 			return fmt.Errorf("failed to record trigger event: %w", err)
 		}
 		if !created {
-			stored, err := l.repo.GetTriggerEventByDedupe(txCtx, ev.Kind, ev.DedupeKey)
+			stored, err := l.events.GetTriggerEventByDedupe(txCtx, ev.Kind, ev.DedupeKey)
 			if err != nil {
 				return fmt.Errorf("failed to load earlier trigger event: %w", err)
 			}
@@ -850,7 +857,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 				// are already on the thread.
 				return nil
 			}
-			if err := l.repo.UpdateTriggerEventPayload(txCtx, stored.ID, eventRow.Payload); err != nil {
+			if err := l.events.UpdateTriggerEventPayload(txCtx, stored.ID, eventRow.Payload); err != nil {
 				return fmt.Errorf("failed to record the new start: %w", err)
 			}
 		}
@@ -890,7 +897,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		if errors.Is(err, ErrNotPending) {
 			// The chat started between the check above and the transaction.
 			// If that start was a duplicate of this very event, say so.
-			if stored, lookupErr := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey); lookupErr == nil && isRetryOf(stored, ev.Kind, fingerprint) {
+			if stored, lookupErr := l.events.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey); lookupErr == nil && isRetryOf(stored, ev.Kind, fingerprint) {
 				return nil, &AlreadyLaunchedError{ChatID: chat.ID, EventID: stored.ID}
 			}
 			return nil, ErrNotPending
@@ -902,7 +909,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		return nil, &InternalError{Reason: "failed to start chat", Err: err}
 	}
 
-	recorded, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
+	recorded, err := l.events.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
 	if err != nil {
 		return nil, &InternalError{Reason: "failed to reload the recorded start", Err: err}
 	}
@@ -974,11 +981,11 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 	if recorded.ChatID == nil {
 		return nil, &AlreadyLaunchedError{EventID: recorded.ID}
 	}
-	chat, err := l.repo.GetChat(ctx, *recorded.ChatID)
+	chat, err := l.chats.GetChat(ctx, *recorded.ChatID)
 	if err != nil && !errors.Is(err, core.ErrChatNotFound) {
 		return nil, &InternalError{Reason: "failed to load chat", Err: err}
 	}
-	if err != nil || !authz.CanWriteChat(ctx, spec.OwnerUserID, chat) {
+	if err != nil || !authz.CanOwnChat(ctx, spec.OwnerUserID, chat) {
 		return nil, &NotFoundError{Reason: "chat not found", Err: err}
 	}
 
@@ -1050,7 +1057,7 @@ func recordedCatalogPin(recorded *core.TriggerEvent) string {
 // event. When that launch's chat is still pending, its attempt committed but
 // never started Temporal, so this finishes it; otherwise it already launched.
 func (l *Launcher) finishExisting(ctx context.Context, ev Event, spec Spec, seed seedContent) (*Result, error) {
-	existing, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
+	existing, err := l.events.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
 	if err != nil {
 		return nil, &InternalError{Reason: "failed to load earlier launch", Err: err}
 	}
@@ -1058,11 +1065,11 @@ func (l *Launcher) finishExisting(ctx context.Context, ev Event, spec Spec, seed
 		return nil, &AlreadyLaunchedError{EventID: existing.ID}
 	}
 
-	chat, err := l.repo.GetChat(ctx, *existing.ChatID)
+	chat, err := l.chats.GetChat(ctx, *existing.ChatID)
 	if err != nil && !errors.Is(err, core.ErrChatNotFound) {
 		return nil, &InternalError{Reason: "failed to load chat", Err: err}
 	}
-	if err != nil || !authz.CanWriteChat(ctx, spec.OwnerUserID, chat) {
+	if err != nil || !authz.CanOwnChat(ctx, spec.OwnerUserID, chat) {
 		return nil, &NotFoundError{Reason: "chat not found", Err: err}
 	}
 
@@ -1495,7 +1502,7 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	}
 
 	// Fetch created chat
-	startedChat, err := l.repo.GetChat(ctx, chatID)
+	startedChat, err := l.chats.GetChat(ctx, chatID)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to fetch started chat", "error", err, "chatID", chatID)
 		return nil, &InternalError{Reason: "failed to fetch created chat", Err: err}

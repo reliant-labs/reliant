@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -171,6 +172,8 @@ func TestMoveProjectOrg_RestampsWhatMovesAndLeavesWhatStays(t *testing.T) {
 	f.run("r-error", "c-error", core.Failed())
 	f.share(core.ShareKindProject, "p-move")
 	f.share(core.ShareKindChat, "c-shared")
+	// A person granted reply on one of its private chats (chat_members).
+	f.exec(`INSERT INTO chat_members (chat_id, user_id, role, granted_by) VALUES ('c-archived', 'dana', 'reply', $1)`, moveOwner)
 
 	// The owner's other project in the same org, with a shared chat, a run
 	// and an enabled trigger: none of it moves.
@@ -178,6 +181,7 @@ func TestMoveProjectOrg_RestampsWhatMovesAndLeavesWhatStays(t *testing.T) {
 	f.chat("c-stay", "p-stay", src)
 	f.run("r-stay", "c-stay", core.Completed())
 	f.share(core.ShareKindChat, "c-stay")
+	f.exec(`INSERT INTO chat_members (chat_id, user_id, role, granted_by) VALUES ('c-stay', 'dana', 'view', $1)`, moveOwner)
 	f.trigger("t-stay", "p-stay", true, nil)
 
 	// Triggers: enabled on the source org's bot, enabled on the owner's own
@@ -252,7 +256,16 @@ func TestMoveProjectOrg_RestampsWhatMovesAndLeavesWhatStays(t *testing.T) {
 	assert.Equal(t, core.ShareActionMoved, events[0].Action)
 	assert.Equal(t, moveSrc, events[0].OrgID)
 	assert.Equal(t, moveOwner, events[0].ActorUserID)
-	assert.Equal(t, shareEventsBefore+2, f.count(`SELECT count(*) FROM share_events`))
+	// The cleared grant, recorded in the org it was granted in, naming whom
+	// it was about.
+	assert.Zero(t, f.count(`SELECT count(*) FROM chat_members WHERE chat_id = 'c-archived'`))
+	events, err = store.ListShareEvents(ctx, f.repo.ORM(), core.ShareKindChat, "c-archived")
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, core.ShareActionMoved, events[0].Action)
+	assert.Equal(t, moveSrc, events[0].OrgID)
+	assert.Equal(t, "dana", events[0].TargetUserID)
+	assert.Equal(t, shareEventsBefore+3, f.count(`SELECT count(*) FROM share_events`))
 	// The org feed (org-sharing S4) reports each unshare in the source org,
 	// so its members' shared lists drop the items, and says nothing to the
 	// target's.
@@ -264,6 +277,7 @@ func TestMoveProjectOrg_RestampsWhatMovesAndLeavesWhatStays(t *testing.T) {
 	assert.Equal(t, src, f.org("projects", "p-stay"))
 	assert.Equal(t, src, f.org("chats", "c-stay"))
 	assert.Equal(t, strp(string(core.VisibilityOrg)), f.visibility("chats", "c-stay"))
+	assert.Equal(t, 1, f.count(`SELECT count(*) FROM chat_members WHERE chat_id = 'c-stay'`), "a grant on a chat that stays stays")
 	assert.Equal(t, src, f.org("workflows", "r-stay"))
 	stay, err := f.repo.GetTrigger(ctx, "t-stay")
 	require.NoError(t, err)
@@ -279,7 +293,7 @@ func TestMoveProjectOrg_RestampsWhatMovesAndLeavesWhatStays(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, core.ProjectOrgMoveStateMoved, got.State)
 	assert.Equal(t, core.ProjectOrgMoveCounts{
-		Chats: 3, Runs: 4, Triggers: 4, TriggersPaused: 2, SharesCleared: 2, BindingsCleared: 1,
+		Chats: 3, Runs: 4, Triggers: 4, TriggersPaused: 2, SharesCleared: 3, BindingsCleared: 1,
 	}, got.Counts)
 
 	// A retried commit is a no-op that reports the move it made.
@@ -538,6 +552,41 @@ func TestShareEventsActionCheckAdmitsMoved(t *testing.T) {
 	require.Error(t, err)
 }
 
+// The member actions' constraints (chat-collaboration.md §3.1) are validated
+// after the migration chain: a grant, role change or revoke names whom it is
+// about, a visibility change never does, a moved row may, and only a grant or
+// role change carries a level.
+func TestShareEventsMemberConstraints(t *testing.T) {
+	f := newMoveFixture(t)
+	var validated int
+	require.NoError(t, f.raw.QueryRow(`SELECT count(*) FROM pg_constraint WHERE conrelid = 'share_events'::regclass AND convalidated
+		AND conname IN ('share_events_action_check', 'share_events_target_check', 'share_events_role_check')`).Scan(&validated))
+	require.Equal(t, 3, validated)
+	insert := func(id, action string, target, role any) error {
+		_, err := f.raw.Exec(`INSERT INTO share_events (id, org_id, resource_kind, resource_id, owner_user_id, actor_user_id, action, target_user_id, role)
+			VALUES ($1, 'o', 'chat', 'c', 'u', 'u', $2, $3, $4)`, id, action, target, role)
+		return err
+	}
+	for _, ok := range []struct {
+		action       string
+		target, role any
+	}{
+		{"grant", "dana", "view"}, {"role_change", "dana", "manage"}, {"revoke", "dana", nil},
+		{"moved", "dana", nil}, {"moved", nil, nil}, {"share", nil, nil}, {"unshare", nil, nil},
+	} {
+		require.NoError(t, insert("ok-"+ok.action+fmt.Sprint(ok.target), ok.action, ok.target, ok.role), "%+v", ok)
+	}
+	for i, bad := range []struct {
+		action       string
+		target, role any
+	}{
+		{"grant", nil, "view"}, {"revoke", nil, nil}, {"role_change", nil, "reply"}, {"share", "dana", nil},
+		{"grant", "", "view"}, {"grant", "dana", "owner"}, {"revoke", "dana", "view"}, {"share", nil, "view"},
+	} {
+		require.Error(t, insert(fmt.Sprintf("bad-%d", i), bad.action, bad.target, bad.role), "%+v", bad)
+	}
+}
+
 // A system pause that commits while the move waits on the trigger's row lock
 // is kept: the move reads the trigger under its lock, so it sees the pause and
 // neither claims it (org_move) nor counts it, rather than overwriting it from
@@ -614,6 +663,7 @@ func TestProjectOrgMoveEffects_CountWhatTheMoveChanges(t *testing.T) {
 	f.run("r-2", "c-pinned", core.Failed())
 	f.share(core.ShareKindProject, "p-fx")
 	f.share(core.ShareKindChat, "c-shared")
+	f.exec(`INSERT INTO chat_members (chat_id, user_id, role, granted_by) VALUES ('c-pinned', 'dana', 'view', $1)`, moveOwner)
 	f.exec(`INSERT INTO connections (id, owner_kind, user_id, org_id, integration_id, auth_kind, name, status)
 		VALUES ('conn-org', 'org', $1, $2, 'slack', 'api_key', 'Source bot', 'active'),
 		       ('conn-dst', 'org', $1, $3, 'slack', 'api_key', 'Target bot', 'active'),
@@ -634,7 +684,7 @@ func TestProjectOrgMoveEffects_CountWhatTheMoveChanges(t *testing.T) {
 	assert.Equal(t, 2, e.Runs)
 	assert.Equal(t, 4, e.Triggers)
 	assert.Equal(t, 2, e.TriggersToPause)
-	assert.Equal(t, 2, e.SharesToClear)
+	assert.Equal(t, 3, e.SharesToClear, "the two shares and the one grant")
 	assert.Equal(t, 1, e.OrgBindingsToClear, "the target's own connection is not the source's to clear")
 	assert.Equal(t, []core.ProjectOrgMoveTriggerSetup{
 		{TriggerID: "t-a-org", Name: "t-a-org", Reason: core.ProjectOrgMoveSetupOrgConnection},

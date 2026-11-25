@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AlertInstance } from "@/services/controlPlane/observability/alertingTypes";
+import type { Workload, WorkloadHealth, WorkloadJob } from "@/services/controlPlane/observability/types";
 import type { ReleaseComparison, ReleasePromotion } from "@/services/forge/releases";
 
 import {
@@ -16,7 +17,9 @@ import {
   formatSeconds,
   githubRepoOf,
   jobRows,
+  jobStatusOf,
   lastExitOf,
+  latestRunsByWorkload,
   needsAttention,
   previewsCell,
   replicasText,
@@ -83,6 +86,51 @@ describe("rows", () => {
     expect(e2e.latest.result).toBe("failed");
     expect(e2e).toMatchObject({ runs: 2, failedRuns: 1 });
     expect(jobRows(FIXTURE_JOBS, "prod")).toHaveLength(1);
+  });
+
+  describe("a Job or CronJob reads its runs, never its replicas (owner, 2026-11-24)", () => {
+    const run = (result: WorkloadJob["result"], reason = ""): WorkloadJob => ({ ...FIXTURE_JOBS[1]!, result, reason });
+
+    it("takes the latest run's result when one is in the window, whatever the verdict", () => {
+      expect(jobStatusOf({ kind: "job", health: "degraded" }, run("succeeded"))).toEqual({ tone: "success", label: "Succeeded" });
+      expect(jobStatusOf({ kind: "job", health: "healthy" }, run("failed", "BackoffLimitExceeded"))).toEqual({ tone: "danger", label: "Failed" });
+      expect(jobStatusOf({ kind: "job", health: "healthy" }, run("running"))).toEqual({ tone: "neutral", label: "Running" });
+      expect(jobStatusOf({ kind: "cronjob", health: "healthy" }, run("succeeded"))).toEqual({ tone: "success", label: "Succeeded" });
+    });
+
+    it("words the server's verdict as a run when no run is in the window", () => {
+      const cases: [Workload["kind"], WorkloadHealth, string, string][] = [
+        ["job", "healthy", "success", "Succeeded"],
+        ["job", "degraded", "danger", "Failed"],
+        ["job", "crash_looping", "danger", "Failing"],
+        ["job", "pending", "neutral", "Running"],
+        ["job", "suspended", "neutral", "Suspended"],
+        ["job", "unknown", "neutral", "Unknown"],
+        ["cronjob", "healthy", "success", "Scheduled"],
+        ["cronjob", "degraded", "danger", "Failed"],
+      ];
+      for (const [kind, health, tone, label] of cases) {
+        expect(jobStatusOf({ kind, health }, null), `${kind} ${health}`).toEqual({ tone, label });
+      }
+      // A run whose result is unknown is no evidence: the verdict decides.
+      expect(jobStatusOf({ kind: "job", health: "healthy" }, run("unknown"))).toEqual({ tone: "success", label: "Succeeded" });
+    });
+
+    it("is never a warning: yellow is for something actually wrong, and a job is either fine, failed or in progress", () => {
+      const healths: WorkloadHealth[] = ["healthy", "degraded", "crash_looping", "pending", "suspended", "unknown"];
+      for (const health of healths) {
+        for (const latest of [null, run("succeeded"), run("failed"), run("running"), run("unknown")]) {
+          expect(jobStatusOf({ kind: "job", health }, latest).tone).not.toBe("warning");
+        }
+      }
+    });
+
+    it("keys each job's latest run by environment and workload", () => {
+      const latest = latestRunsByWorkload(FIXTURE_JOBS);
+      expect(latest.get("e2e/control-plane-migrate")?.result).toBe("failed");
+      expect(latest.get("prod/control-plane-migrate")?.name).toBe("control-plane-migrate-b9e1b9d6de");
+      expect(latest.get("prod/nothing")).toBeUndefined();
+    });
   });
 
   it("filters by text (name or release), needs-attention and kind", () => {

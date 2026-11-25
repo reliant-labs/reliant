@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -152,6 +154,9 @@ type terminalWSConfig struct {
 	// pongTimeout is wsPongTimeout; a test shortens it to prove a ping
 	// timeout without waiting 45s.
 	pongTimeout time.Duration
+	// session authenticates a connection by its sign-in session cookie
+	// (WithSessionCookie); nil accepts the token parameter only.
+	session SessionAuthenticator
 }
 
 // withTerminalCreateTimeout replaces terminalCreateTimeout for one handler,
@@ -168,6 +173,105 @@ func withTerminalCreateTimeout(d time.Duration) TerminalWSOption {
 // browser waits on.
 func WithTerminalCheckouts(checkouts terminalCheckouts) TerminalWSOption {
 	return func(c *terminalWSConfig) { c.checkouts = checkouts }
+}
+
+// SessionAuthenticator authenticates a request by its sign-in session cookie
+// and answers the caller's user id (grpcserver passes UserAuth.AuthenticateHTTP).
+type SessionAuthenticator func(r *http.Request) (string, error)
+
+// WithSessionCookie lets a connection that sends no token query parameter
+// authenticate with the sign-in session cookie instead, when the upgrade
+// comes from this API's own origin (sameOriginUpgrade). Without it a
+// connection needs the token parameter, as before.
+func WithSessionCookie(authenticate SessionAuthenticator) TerminalWSOption {
+	return func(c *terminalWSConfig) { c.session = authenticate }
+}
+
+// hasSessionCookie reports whether r carries the sign-in session cookie, by
+// either name (the plain one is honoured only in local development, by the
+// authenticator).
+func hasSessionCookie(r *http.Request) bool {
+	for _, name := range []string{auth.SecureSessionCookieName, auth.SessionCookieName} {
+		if c, err := r.Cookie(name); err == nil && c.Value != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// sameOriginUpgrade reports whether a WebSocket handshake comes from this
+// API's own origin. A browser always sends Origin on a handshake and, when it
+// can, Sec-Fetch-Site; a request with no Origin is no browser's, so it carries
+// no victim's cookie. Same-origin is the browser's own verdict (the web app's
+// /_api/@reliant proxy, where Host is the upstream's); any other verdict it
+// gives (same-site, cross-site) is final. A browser that sends no verdict is
+// judged by its Origin, which must be this request's whole origin: scheme,
+// host and port. A same-site sibling host is not this origin, and neither is
+// http://<this host> on an https API: a page served over plain HTTP must not
+// ride the secure session cookie. When the request's scheme cannot be
+// established, the upgrade is refused.
+func sameOriginUpgrade(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "same-origin":
+		return true
+	case "":
+	default:
+		return false
+	}
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return false
+	}
+	scheme, ok := requestScheme(r)
+	if !ok || u.Scheme != scheme {
+		return false
+	}
+	// The browser sends the Secure (__Host-) cookie only over a secure
+	// connection, so an insecure origin presenting it is never this API's,
+	// whatever the request's scheme was taken to be.
+	if c, err := r.Cookie(auth.SecureSessionCookieName); err == nil && c.Value != "" && u.Scheme != "https" {
+		return false
+	}
+	return canonicalHostPort(scheme, u.Host) == canonicalHostPort(scheme, r.Host)
+}
+
+// requestScheme is the scheme the client reached this API on: https when
+// this process terminated TLS, else the X-Forwarded-Proto the ingress that
+// terminated it set (a page cannot set that header on a WebSocket
+// handshake), else http. ok is false when the forwarded scheme is neither.
+func requestScheme(r *http.Request) (scheme string, ok bool) {
+	if r.TLS != nil {
+		return "https", true
+	}
+	proto := r.Header.Get("X-Forwarded-Proto")
+	if proto == "" {
+		return "http", true
+	}
+	// A chain of proxies appends; the first is the client-facing one.
+	proto, _, _ = strings.Cut(proto, ",")
+	switch proto = strings.ToLower(strings.TrimSpace(proto)); proto {
+	case "http", "https":
+		return proto, true
+	}
+	return "", false
+}
+
+// canonicalHostPort is hostport lowercased with the scheme's default port
+// made explicit, so https://h and Host h:443 name the same origin.
+func canonicalHostPort(scheme, hostport string) string {
+	u := url.URL{Host: hostport}
+	port := u.Port()
+	if port == "" {
+		port = "80"
+		if scheme == "https" {
+			port = "443"
+		}
+	}
+	return net.JoinHostPort(strings.ToLower(u.Hostname()), port)
 }
 
 // withTerminalTelemetry sends the handler's spans and metrics to p instead of
@@ -475,19 +579,42 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 			http.Error(w, "auth not configured", http.StatusInternalServerError)
 			return
 		}
-		if token == "" {
+		var userID string
+		switch {
+		case token == "" && cfg.session != nil && hasSessionCookie(r):
+			// The sign-in session cookie (forge sign-in: the web app's
+			// same-origin /_api/@reliant, the desktop app's main process).
+			// A browser attaches a cookie to a WebSocket handshake from ANY
+			// page that opens one here, and CheckOrigin admits every origin,
+			// so a cookie-authenticated upgrade must come from this API's
+			// own origin: cross-site WebSocket hijacking otherwise.
+			if !sameOriginUpgrade(r) {
+				tel.reject(r.Context(), outcomeUnauthenticated)
+				http.Error(w, "a terminal connection authenticated by the session cookie must come from the app's own origin", http.StatusForbidden)
+				return
+			}
+			uid, err := cfg.session(r)
+			if err != nil || uid == "" {
+				tel.reject(r.Context(), outcomeUnauthenticated)
+				logging.WarnContext(r.Context(), "[TerminalWS] Invalid session", "error", err)
+				http.Error(w, "invalid or expired session", http.StatusUnauthorized)
+				return
+			}
+			userID = uid
+		case token == "":
 			tel.reject(r.Context(), outcomeUnauthenticated)
 			http.Error(w, "missing token query parameter", http.StatusUnauthorized)
 			return
+		default:
+			claims, err := validator.ValidateToken(token)
+			if err != nil {
+				tel.reject(r.Context(), outcomeUnauthenticated)
+				logging.WarnContext(r.Context(), "[TerminalWS] Invalid token", "error", err)
+				http.Error(w, "invalid or expired token", http.StatusUnauthorized)
+				return
+			}
+			userID = claims.Sub
 		}
-		claims, err := validator.ValidateToken(token)
-		if err != nil {
-			tel.reject(r.Context(), outcomeUnauthenticated)
-			logging.WarnContext(r.Context(), "[TerminalWS] Invalid token", "error", err)
-			http.Error(w, "invalid or expired token", http.StatusUnauthorized)
-			return
-		}
-		userID := claims.Sub
 
 		// Everything this connection logs and sends to the daemon runs under
 		// its span, so each line carries the trace id and the daemon's

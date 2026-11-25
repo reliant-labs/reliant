@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -41,7 +43,7 @@ func (a *WorkflowStatusActivity) archiveSucceededAutomationRun(ctx context.Conte
 	if !input.LaunchRun || input.Status != "completed" || input.Outcome == model.OutcomeFailure {
 		return
 	}
-	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 	if err != nil || chat == nil {
 		logging.WarnContext(ctx, "[WorkflowStatus] Could not read the chat to archive a finished automation run", "chat_id", input.ChatID, "error", err)
 		return

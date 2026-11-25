@@ -40,6 +40,7 @@ import {
   createRouter,
   Outlet,
   RouterProvider,
+  useLocation,
   type RouteComponent,
 } from "@tanstack/react-router";
 
@@ -84,9 +85,13 @@ vi.mock("@/store/projectStore", () => {
   return { useProjectStore };
 });
 
-vi.mock("@/store/authStore", () => ({
-  useAuthStore: (selector: (s: unknown) => unknown) => selector({ user: { email: "ada@example.com", user_metadata: {} }, session: { access_token: "t" } }),
-}));
+vi.mock("@/store/authStore", async () => {
+  const { identityOf } = await import("@/lib/auth/identity");
+  const user = { id: "user-1", email: "ada@example.com", user_metadata: {} };
+  // The real store derives identity from user; one object, as there.
+  const state = { user, identity: identityOf(user as never), session: { access_token: "t" } };
+  return { useAuthStore: (selector: (s: unknown) => unknown) => selector(state) };
+});
 
 vi.mock("@/hooks/useTitleBarChrome", () => ({
   useTitleBarChrome: () => ({
@@ -180,6 +185,7 @@ import { ShellFrameContext } from "@/components/Layout/shell/shellFrame";
 
 import { ConsoleLayout } from "../ConsoleLayout";
 import { useForgeConsole } from "../consoleContext";
+import { useConsoleNavModel } from "../useConsoleNavModel";
 import {
   ForgeLandingRoute,
   LegacyCommandRoute,
@@ -214,9 +220,17 @@ function probe(name: string): RouteComponent {
   };
 }
 
+/** The page, and the nav's model for it, read as the shell's nav reads it (ShellNavBody NavWithConsole). */
+function NavModelProbe() {
+  const { forgeProject } = useForgeConsole();
+  const { pathname, search } = useLocation();
+  const model = useConsoleNavModel(forgeProject, pathname, search as { env?: unknown; project?: unknown });
+  return <div data-testid="nav-model" data-alerts-firing={model.alertsFiring} />;
+}
+
 function renderAt(
   initialEntry: string,
-  options: { onObsCall?: (rpc: string, request: unknown) => void; metrics?: boolean; inShell?: boolean } = {},
+  options: { onObsCall?: (rpc: string, request: unknown) => void; metrics?: boolean; inShell?: boolean; navModel?: boolean } = {},
 ) {
   const inShell = options.inShell ?? false;
   const root = createRootRoute({ component: () => <Outlet /> });
@@ -228,7 +242,7 @@ function renderAt(
     workload: probe("workload"),
     releases: probe("releases"),
     release: probe("release"),
-    observabilityView: options.metrics ? MetricsExplorerPage : probe("observability-view"),
+    observabilityView: options.metrics ? MetricsExplorerPage : options.navModel ? NavModelProbe : probe("observability-view"),
     obsOverview: probe("obs-overview"),
     dashboards: probe("dashboards"),
     dashboard: probe("dashboard"),
@@ -517,18 +531,13 @@ describe("the environment scope", () => {
     await landsOn(router, "/forge/p/alpha/secrets", { env: "prod" });
   });
 
-  it("remembers what the reader picks, and carries it on every nav link", async () => {
+  it("remembers what the reader picks", async () => {
     const user = userEvent.setup();
     const router = renderAt("/forge/p/alpha/releases?env=prod");
     await screen.findByTestId("page");
     await user.click(screen.getByTestId("env-scope-all"));
     await landsOn(router, "/forge/p/alpha/releases", { env: "all" });
     expect(window.localStorage.getItem("forge.console.env.alpha")).toBe("all");
-
-    // Activity is Configure's last row, as in the shell's nav.
-    await user.click(screen.getByRole("button", { name: "Configure" }));
-    await user.click(screen.getByRole("link", { name: "Activity" }));
-    await landsOn(router, "/forge/p/alpha/activity", { env: "all" });
   });
 
   it("collapses previews into the scope menu", async () => {
@@ -636,72 +645,24 @@ describe("the environment scope", () => {
   });
 });
 
-describe("the nav", () => {
-  it("clears every graph-only search key when leaving Observability while preserving the environment scope", async () => {
-    const user = userEvent.setup();
-    const router = renderAt("/forge/p/alpha/observability/graph?env=e2e&declared=true&internal=true&rpcId=acme.v1.OrdersService%2FGetOrder&rpcService=acme.v1.OrdersService");
-    await screen.findByTestId("page");
-    expect(router.state.location.search).toMatchObject({ env: "e2e", declared: true, internal: true, rpcId: "acme.v1.OrdersService/GetOrder", rpcService: "acme.v1.OrdersService" });
-    await user.click(screen.getByRole("button", { name: "Configure" }));
-    await user.click(screen.getByRole("link", { name: "Secrets" }));
-    await landsOn(router, "/forge/p/alpha/secrets", { env: "e2e" });
-    expect(router.state.location.search).toEqual({ env: "e2e" });
+// The nav is the shell's (Layout/sidebar/navConfig, its own tests); what the
+// console hands it is the model (useConsoleNavModel), read here as the shell's
+// nav reads it.
+describe("the nav's model", () => {
+  it("counts the alerts firing in scope, for the badge on Alerts", async () => {
+    renderAt("/forge/p/alpha/observability/alerts?env=all", { navModel: true });
+    // prod and e2e fire; another project's env and a pending alert do not count.
+    await waitFor(() => expect(screen.getByTestId("nav-model")).toHaveAttribute("data-alerts-firing", "2"));
   });
 
-  it("opens an environment's page from Configure › Environments", async () => {
-    const user = userEvent.setup();
-    const router = renderAt("/forge/p/alpha/environments?env=prod");
-    await screen.findByTestId("page");
-    await user.click(screen.getByRole("link", { name: "e2e" }));
-    await landsOn(router, "/forge/p/alpha/environments/e2e");
-    expect(screen.getByTestId("page")).toHaveAttribute("data-page", "environment");
-  });
-
-  it("nests the starred dashboards under Dashboards, and names the open one in the breadcrumb", async () => {
+  it("names the open dashboard in the breadcrumb", async () => {
     renderAt("/forge/p/alpha/observability/dashboards/workspace/checkout-latency?env=prod");
     expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "dashboard");
-    const starred = screen.getByRole("link", { name: "Checkout latency" });
-    expect(starred).toHaveAttribute("href", "/forge/p/alpha/observability/dashboards/workspace/checkout-latency?env=prod");
-    expect(starred).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "All dashboards" })).toHaveAttribute("href", "/forge/p/alpha/observability/dashboards?env=prod");
-    expect(screen.queryByRole("link", { name: "Workloads" })).not.toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("Checkout latency");
-  });
-
-  it("counts the alerts firing in scope on Alerts", async () => {
-    renderAt("/forge/p/alpha/observability/alerts?env=all");
-    await screen.findByTestId("page");
-    // prod and e2e fire; another project's env and a pending alert do not count.
-    expect(screen.getByRole("link", { name: /Alerts/ })).toHaveTextContent("2");
-  });
-
-  it("is the led console's grouped nav, in the shell's groups, with each view under its group in the breadcrumb", async () => {
-    renderAt("/forge/p/alpha/observability/errors?env=prod");
-    await screen.findByTestId("page");
-    const nav = screen.getByRole("navigation", { name: "alpha" });
-    for (const row of ["Overview", "Dashboards", "Observability", "Analytics", "Deployments", "Tests", "Data", "Storage", "Auth", "Configure"]) expect(within(nav).getAllByText(row).length).toBeGreaterThan(0);
-    // The open page's group is unfolded.
-    expect(within(nav).getByRole("button", { name: /^Observability/ })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("link", { name: "Errors" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("Performance & issues›Errors");
-  });
-
-  it("marks an environment whose deploy is queued", async () => {
-    roster.prodHolds = [{ kind: "billing", promotionId: "p", reason: "", fix: "", actionUrl: "", callerCanResolve: false }];
-    renderAt("/forge/p/alpha/environments");
-    const mark = await screen.findByTestId("forge-nav-queued-prod");
-    expect(mark).toHaveTextContent("waiting on billing");
+    await waitFor(() => expect(screen.getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("Checkout latency"));
   });
 });
 
 describe("leaving the console", () => {
-  it("closes to / via the brand row's button", async () => {
-    const user = userEvent.setup();
-    const router = renderAt("/forge/p/alpha?env=prod");
-    await user.click(await screen.findByTestId("forge-close"));
-    await landsOn(router, "/");
-  });
-
   it("closes to / on Escape", async () => {
     const user = userEvent.setup();
     const router = renderAt("/forge/p/alpha?env=prod");
@@ -712,7 +673,7 @@ describe("leaving the console", () => {
 });
 
 // U6: in the product the console renders inside the one shell, whose left nav
-// draws the app's sections (Layout/sidebar/AppsNavSection). The console then
+// draws the app's sections (Layout/sidebar/navConfig). The console then
 // has NO nav column of its own: a slim bar with the breadcrumb and the one
 // environment selector, over the page.
 describe("inside the one shell", () => {

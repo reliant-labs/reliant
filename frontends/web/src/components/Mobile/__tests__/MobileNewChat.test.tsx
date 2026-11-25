@@ -38,6 +38,12 @@ const projectList = vi.hoisted(() => ({
   current: [] as Array<{ id: string; name: string; path: string; remote_url?: string; viewer_access?: boolean }>,
 }));
 const createProjectFromRepo = vi.hoisted(() => vi.fn());
+// What a set-up leaves on the old machine is its own query and its own tests
+// (StaysOnMachineList.test.tsx); here it renders only which machine it was
+// asked about, so a test can check the source it is paired with.
+vi.mock("../../Projects/StaysOnMachineList", () => ({
+  StaysOnMachineList: ({ daemonId }: { daemonId: string }) => <p data-testid="stays-on-source">{daemonId}</p>,
+}));
 vi.mock("@/hooks/project-queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
   useProjectDaemonInstalls: () => ({ data: installList.current, isLoading: false }),
@@ -414,6 +420,42 @@ describe('MobileNewChat', () => {
     expect(screen.getByLabelText('Message')).toHaveValue('fix the build')
     expect(screen.getByLabelText('Send')).toBeDisabled()
     expect(startChat).not.toHaveBeenCalled()
+  })
+
+  // Review B1: the stay-behind list describes the machine this set-up leaves,
+  // chosen for its target, and keeps describing it while the clone runs, even
+  // when another machine it is on comes online first by then.
+  it('pairs the stay-behind list with the set-up it describes', async () => {
+    // DaemonStatus: ACTIVE = 1, DISCONNECTED = 3. ProjectInstallState: INSTALLING = 1, INSTALLED = 2.
+    projectList.current = [{ id: 'p1', name: 'reliant', path: '/home/u/reliant', remote_url: 'https://github.com/o/reliant' }]
+    daemonList.current = [
+      { daemonId: 'd-laptop', hostname: 'laptop', status: 1 },
+      { daemonId: 'd-desk', hostname: 'desk', status: 1 },
+      { daemonId: 'd-old', hostname: 'old-box', status: 3 },
+    ]
+    installList.current = [
+      { project_id: 'p1', daemon_id: 'd-old', install_state: 2 },
+      { project_id: 'p1', daemon_id: 'd-desk', install_state: 2 },
+    ]
+    const view = render(<MobileNewChat />)
+    await userEvent.click(screen.getByText('Runs on'))
+    await userEvent.click(screen.getByRole('button', { name: /^laptop/ }))
+    // The online source, never the target itself.
+    expect(screen.getByTestId('stays-on-source')).toHaveTextContent('d-desk')
+
+    await userEvent.click(screen.getByRole('button', { name: /^Set up reliant on laptop/ }))
+    expect(createProjectFromRepo).toHaveBeenCalledWith(expect.objectContaining({ daemonId: 'd-laptop' }))
+
+    // The clone is queued on laptop; desk drops and old-box comes online.
+    installList.current = [...installList.current, { project_id: 'p1', daemon_id: 'd-laptop', install_state: 1 }]
+    daemonList.current = [
+      { daemonId: 'd-laptop', hostname: 'laptop', status: 1 },
+      { daemonId: 'd-desk', hostname: 'desk', status: 3 },
+      { daemonId: 'd-old', hostname: 'old-box', status: 1 },
+    ]
+    view.rerender(<MobileNewChat />)
+    expect(screen.getByTestId('mobile-new-chat-placement')).toHaveTextContent('Setting up reliant on laptop')
+    expect(screen.getByTestId('stays-on-source')).toHaveTextContent('d-desk')
   })
 
   it("offers only the picked machine's workspaces and runs a branch workspace on its own machine", async () => {

@@ -2,7 +2,7 @@
 
 /**
  * The forge console's EXIT, as a quiet icon in the sidebar's brand row (the
- * project switcher beside it is Console/ConsoleProjectSwitcher).
+ * org console's, Org/OrgConsoleLayout).
  *
  * X in Electron, a back arrow on the web, and Esc everywhere (bound in
  * ForgeLayout). It navigates to the logical parent route rather than

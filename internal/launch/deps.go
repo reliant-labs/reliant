@@ -27,6 +27,11 @@ type TaskQueue string
 type Deps struct {
 	// Store is everything a launch reads and writes in the database.
 	Store Store
+	// Chats reads the chat a launch starts, re-reads and reports on.
+	Chats ChatReader
+	// TriggerEvents is the trigger_events ledger a launch dedupes against and
+	// attaches its chat to (store.TriggerEventExtStore).
+	TriggerEvents TriggerEventStore
 	// Workflows reads the root workflow row a launch starts.
 	Workflows WorkflowLoader
 	// Worktrees reads the worktree a chat runs in.
@@ -75,6 +80,13 @@ type ProjectReader interface {
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 }
 
+// ChatReader reads a chat with its computed state, inside a launch
+// transaction when ctx carries one. store.ChatsWithActivityExtStore satisfies
+// it.
+type ChatReader interface {
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
+}
+
 // ChatWriter creates and updates the chat a launch materializes.
 type ChatWriter interface {
 	// LockUserOrgs takes the owner's org lock for the launch's transaction,
@@ -82,7 +94,6 @@ type ChatWriter interface {
 	// decided from (db.ErrOrgChanged when a backfill changed one).
 	LockUserOrgs(ctx context.Context, userID string, reads ...db.OrgRead) error
 	CreateChat(ctx context.Context, chat *db.Chat) error
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error
 	UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error
 	CountMessagesInChat(ctx context.Context, chatID string) (int, error)
@@ -92,8 +103,11 @@ type ChatWriter interface {
 }
 
 // TriggerEventStore is the trigger_events ledger a launch dedupes against.
+// store.TriggerEventExtStore satisfies it.
 type TriggerEventStore interface {
-	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
+	// InsertTriggerEventIfAbsent records a firing; created is false when one
+	// for (kind, dedupe key) already exists.
+	InsertTriggerEventIfAbsent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
 	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error
 	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error
@@ -175,7 +189,6 @@ type Transactor interface {
 // Store is everything a Launcher needs from the database. *db.Repo satisfies it.
 type Store interface {
 	ChatWriter
-	TriggerEventStore
 	WorkflowStore
 	WorkflowResolver
 	ProjectLookup

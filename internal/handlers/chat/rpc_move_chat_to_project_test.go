@@ -41,7 +41,7 @@ func newMoveFixture(t *testing.T) *moveFixture {
 		t:       t,
 		ctx:     context.WithValue(context.Background(), auth.UserIDContextKey, moveUser),
 		repo:    repo,
-		service: &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})},
+		service: &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})},
 		now:     time.Now().UTC(),
 	}
 }
@@ -370,7 +370,7 @@ func TestMoveChatToProject_PicksAMachineThatHasTheProject(t *testing.T) {
 		from, fromMain := f.project(moveUser, "billing")
 		to, _ := f.project(moveUser, "properties")
 		laptop := f.machine(moveUser, "laptop")
-		require.NoError(t, f.repo.UpsertQueuedProjectDaemon(f.ctx, to, laptop, "/srv/properties", nil, uuid.NewString()))
+		require.NoError(t, f.repo.UpsertQueuedProjectDaemon(f.ctx, to, laptop, "/srv/properties", nil, uuid.NewString(), nil))
 		desktop := f.machine(moveUser, "desktop")
 		chatID := f.chat(from, fromMain, &desktop)
 

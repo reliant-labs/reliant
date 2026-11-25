@@ -20,6 +20,7 @@ import { settingsHandlers } from "./settings";
 import { streamingHandlers } from "./streaming";
 import { workflowHandlers } from "./workflows";
 import { worktreeHandlers } from "./worktrees";
+import { mcpHandlers } from "./mcp";
 
 export function reliantScenarioHandlers(): MockHandlers {
   return {
@@ -28,6 +29,7 @@ export function reliantScenarioHandlers(): MockHandlers {
     ...daemonHandlers(),
     ...forgeHandlers(),
     ...settingsHandlers(),
+    ...mcpHandlers(),
     ...chatHandlers(),
     ...streamingHandlers(),
     ...workflowHandlers(),

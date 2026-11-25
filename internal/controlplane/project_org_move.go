@@ -174,6 +174,12 @@ func moveStepJSON(s ProjectOrgMoveStep) map[string]any {
 }
 
 func (c *client) projectOrgMoveCall(ctx context.Context, path string, in, out any) error {
+	return c.internalCall(ctx, path, in, out, 1<<20)
+}
+
+// internalCall is projectOrgMoveCall reading a response of at most maxBody
+// bytes; a longer one is an error, never a truncated decode.
+func (c *client) internalCall(ctx context.Context, path string, in, out any, maxBody int64) error {
 	if c.sign == nil {
 		return fmt.Errorf("controlplane: no internal-service identity: %w", ErrProjectOrgMoveUnsupported)
 	}
@@ -198,9 +204,12 @@ func (c *client) projectOrgMoveCall(ctx context.Context, path string, in, out an
 		return fmt.Errorf("controlplane: %s: %w", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	if err != nil {
 		return fmt.Errorf("controlplane: reading %s response: %w", path, err)
+	}
+	if int64(len(body)) > maxBody {
+		return fmt.Errorf("controlplane: %s answered more than %d bytes", path, maxBody)
 	}
 	if resp.StatusCode != http.StatusOK {
 		var rpcErr struct {

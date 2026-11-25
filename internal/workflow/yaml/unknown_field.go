@@ -29,12 +29,25 @@ func unknownField(field, format string, args ...any) error {
 	return &UnknownFieldError{Field: field, msg: fmt.Sprintf(format, args...)}
 }
 
+// removedFields are keys a release removed, by the name a file writes them
+// with. A file that still has one is told so, and what to do, rather than
+// asked whether it is a typo.
+var removedFields = map[string]string{
+	"cli_login": "requires.cli_login (vendor agent CLI sign-ins, shipped in v1.29.0) was removed: " +
+		"delete it from requires",
+	"llm_gateway": "a run node's llm_gateway (an LLM gateway step key for an agent CLI, shipped in v1.29.0) " +
+		"was removed: delete it from the node's args",
+}
+
 // withVersionSkewHint names this build's version on an unknown-field error,
-// and returns any other error unchanged.
+// or says which removed field it is, and returns any other error unchanged.
 func withVersionSkewHint(err error) error {
 	var unknown *UnknownFieldError
 	if !errors.As(err, &unknown) {
 		return err
+	}
+	if removed, ok := removedFields[unknown.Field]; ok {
+		return fmt.Errorf("%w — %s", err, removed)
 	}
 	return fmt.Errorf("%w — reliant %s does not define %q: fix it if it is a typo or a removed field; "+
 		"if the file was written for a newer Reliant, upgrade the server that runs it", err, version.Version, unknown.Field)

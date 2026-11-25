@@ -12,6 +12,7 @@ import { getIsDev } from './lib/constants'
 import { createWorkflowsAreaRoutes } from './workflowsAreaRoutes'
 import { retainTourParam } from './components/Onboarding/tourParam'
 import { createForgeDemoHandoffRoutes } from './components/Forge/Demo/demoHandoff'
+import { enterForgeDemo } from './components/Forge/Sample/ForgeDemoEntry'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { forgeConsolePages } from './forgeConsolePages'
 import { createRetiredPageRoutes } from './legacyRedirectRoutes'
@@ -62,11 +63,13 @@ import { SwitchProjectDialog } from './components/Projects/SwitchProjectDialog'
 import { AppShellFrame } from './components/Layout/shell/AppShell'
 import { PageVisitTracker } from './components/PageVisitTracker'
 import { JourneyTour } from './components/Onboarding/JourneyTour'
+import { JourneyLiveWatch } from './components/Onboarding/JourneyLiveWatch'
 import { ForgeLandingJourney } from './components/ForgeShell/ForgeLandingJourney'
 import { captureForgeEntry } from './components/ForgeShell/forgeEntry'
 import { bootForgeTour } from './components/ForgeShell/forgeTourBoot'
 import { isForgeShell } from './lib/shell'
-import { homePath, mobileChatsPath } from '@/lib/paths'
+import { authPath, homePath, mobileChatsPath } from '@/lib/paths'
+import { isForgeAuth } from '@/lib/auth/forge-api'
 
 // ─── One router, two brands ─────────────────────────────────────────────────
 //
@@ -146,6 +149,16 @@ const ResetPasswordScreen = lazyRoute(
   () => import('./components/ResetPasswordScreen'), 'ResetPasswordScreen')
 const EmailVerification = lazyRoute(
   () => import('./components/EmailVerification'), 'EmailVerification')
+// The pages only forge sign-in has (AUTH_PROVIDER "forge"): where the login
+// broker's emails and the Google/GitHub round trip land.
+const ForgeForgotPasswordPage = lazyRoute(
+  () => import('./components/Auth/forge/ForgeForgotPassword'), 'ForgeForgotPasswordPage')
+const ForgeMagicLinkPage = lazyRoute(
+  () => import('./components/Auth/forge/ForgeMagicLink'), 'ForgeMagicLinkPage')
+const ForgeSocialCallbackPage = lazyRoute(
+  () => import('./components/Auth/forge/ForgeSocialCallback'), 'ForgeSocialCallbackPage')
+const ConfirmEmailChange = lazyRoute(
+  () => import('./components/Settings/forge/ConfirmEmailChange'), 'ConfirmEmailChange')
 const UpgradeAccount = lazyRoute(
   () => import('./components/UpgradeAccount'), 'UpgradeAccount')
 const ClaimPage = lazyRoute(
@@ -368,6 +381,8 @@ function RootShell() {
       <GlobalUpdateHandler />
       <ContextualTipsLayer />
       <GitHubSyncStatus />
+      {/* Tells a journey when it goes live and when it stops (the forge journey's sample app). */}
+      <JourneyLiveWatch />
       {forgeBrand ? (
         // The journeys (Onboarding/JOURNEYS.md) at the root, signed in or not,
         // so a step follows the visitor between the public demo and the
@@ -428,6 +443,76 @@ const authRoute = createRoute({
       <AuthScreen />
     </AuthGuard>
   ),
+})
+
+// ── Forge sign-in's own pages ───────────────────────────────────────────────
+//
+// With AUTH_PROVIDER "forge" the login broker on reliant-api mails links to,
+// and returns Google/GitHub sign-ins to, these paths of this app (forge
+// pkg/devidp; internal/app/login_broker.go):
+//
+//   /auth/reset?userID=…&code=…[&orgID=…]  a password-reset link
+//   /auth/verify?userID=…&code=…           an address confirmation
+//   /auth/magic?code=…                     an emailed sign-in link
+//   /auth/social/callback?id=…&token=…     back from Google or GitHub
+//   /auth/sign-in?social=failed            a provider round trip that failed
+//   /auth/forgot                           linked from the reset and verify pages
+//
+// All public (lib/auth/route-guard.tsx lists them): whoever opens one has no
+// session yet. In Supabase mode none is reachable from the app; each goes to
+// /auth, and Supabase's own /auth/callback below is untouched.
+function forgeOnly(page: React.ReactNode) {
+  return isForgeAuth() ? page : <Navigate to={authPath()} search={{ redirect: undefined }} />
+}
+
+const forgeSignInRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/auth/sign-in',
+  component: () =>
+    forgeOnly(
+      <AuthGuard requireAuth={false}>
+        <AuthScreen />
+      </AuthGuard>,
+    ),
+})
+
+const forgeForgotPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/auth/forgot',
+  component: () => forgeOnly(<ForgeForgotPasswordPage />),
+})
+
+const forgeResetPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/auth/reset',
+  component: () => forgeOnly(<ResetPasswordScreen />),
+})
+
+const forgeVerifyEmailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/auth/verify',
+  component: () => forgeOnly(<EmailVerification />),
+})
+
+const forgeMagicLinkRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/auth/magic',
+  component: () => forgeOnly(<ForgeMagicLinkPage />),
+})
+
+const forgeSocialCallbackRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/auth/social/callback',
+  component: () => forgeOnly(<ForgeSocialCallbackPage />),
+})
+
+// The link a changed address's confirmation email opens (forge account
+// settings, forge#2663). Public and unguarded: it is opened from the mailbox,
+// possibly in a browser with no session.
+const confirmEmailChangeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/auth/account/email/confirm',
+  component: ConfirmEmailChange,
 })
 
 const oauthCallbackRoute = createRoute({
@@ -1028,7 +1113,9 @@ const orgOrgScopedRoutes = createOrgScopedRoutes(() => orgAppLayoutRoute, () => 
 // and `/demo` leave for it, query kept, so the forge journey's steps and the
 // landing page's `?journey=forge` (ForgeShell/ForgeLandingJourney) continue there.
 // Public, at the root and outside every guard (components/Forge/Demo/demoHandoff.ts).
-const [forgeDemoRoute, forgeDemoRedirectRoute] = createForgeDemoHandoffRoutes(() => rootRoute)
+// Signed in, they open the sample app in the shell instead, where the forge
+// journey walks it (components/Forge/Sample/ForgeDemoEntry.ts).
+const [forgeDemoRoute, forgeDemoRedirectRoute] = createForgeDemoHandoffRoutes(() => rootRoute, enterForgeDemo)
 
 const onboardingRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,
@@ -1207,6 +1294,13 @@ const mobileIndexRoute = createRoute({
  */
 export const routeTree = rootRoute.addChildren([
   authRoute,
+  forgeSignInRoute,
+  forgeForgotPasswordRoute,
+  forgeResetPasswordRoute,
+  forgeVerifyEmailRoute,
+  forgeMagicLinkRoute,
+  forgeSocialCallbackRoute,
+  confirmEmailChangeRoute,
   oauthCallbackRoute,
   githubOAuthCallbackRoute,
   connectionOAuthCallbackRoute,

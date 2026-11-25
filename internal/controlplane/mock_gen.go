@@ -15,7 +15,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=03d2cfd6cdf972082a4fcb5e4608be07f497cfef8af3dc3a5604bbd8ae543062
+// forge:hash=44c1b170fc40f6163c1e32051b5478032887e25e91341e761983f6c0d821d46b
 
 // MockService is a test mock for the Service interface.
 //
@@ -29,6 +29,7 @@ type MockService struct {
 	MintDaemonResumeTokenFunc           func(context.Context, string, string, string) (DaemonResumeToken, error)
 	RevokeDaemonResumeTokensFunc        func(context.Context, string, string) error
 	ListMyOrganizationsFunc             func(context.Context, string) ([]MyOrganization, error)
+	GetCurrentAccountFunc               func(context.Context, string) (*Account, error)
 	PreviewAccountDeletionWalletFunc    func(context.Context, string) (*AccountDeletionWalletQuote, error)
 	DeleteCurrentUserAccountFunc        func(context.Context, string) (*AccountDeletionResult, error)
 	CloneRepoOntoDaemonFunc             func(context.Context, string, CloneRepoRequest) (CloneRepoResult, error)
@@ -48,8 +49,7 @@ type MockService struct {
 	NotifyOrgKeyRejectedFunc            func(context.Context, OrgKeyRejectedNotice) (bool, error)
 	NotifyOrgAutomationNoOrgAccountFunc func(context.Context, OrgAutomationNoOrgAccountNotice) (bool, error)
 	GetModelListPricesFunc              func(context.Context, []ModelRef) ([]ModelListPrice, time.Time, error)
-	MintStepKeyFunc                     func(context.Context, StepKeyRequest) (StepKey, error)
-	RevokeStepKeyFunc                   func(context.Context, string) (StepKeyRevocation, error)
+	GetConversationTraceFunc            func(context.Context, ConversationTraceQuery) (ConversationTrace, error)
 	HasCoverageBlobFunc                 func(context.Context, string, string, string, string) (CoverageBlob, error)
 	ListHostedAppsFunc                  func(context.Context, string, string) ([]HostedApp, error)
 }
@@ -88,6 +88,15 @@ func (m *MockService) ListMyOrganizations(ctx context.Context, jwt string) ([]My
 		return m.ListMyOrganizationsFunc(ctx, jwt)
 	}
 	return nil, contractkit.MockNotSet("MockService", "ListMyOrganizations")
+}
+
+// GetCurrentAccount records the call and delegates to GetCurrentAccountFunc when set.
+func (m *MockService) GetCurrentAccount(ctx context.Context, jwt string) (*Account, error) {
+	m.Recorder.Record("GetCurrentAccount", ctx, jwt)
+	if m.GetCurrentAccountFunc != nil {
+		return m.GetCurrentAccountFunc(ctx, jwt)
+	}
+	return nil, contractkit.MockNotSet("MockService", "GetCurrentAccount")
 }
 
 // PreviewAccountDeletionWallet records the call and delegates to PreviewAccountDeletionWalletFunc when set.
@@ -261,22 +270,13 @@ func (m *MockService) GetModelListPrices(ctx context.Context, refs []ModelRef) (
 	return nil, *new(time.Time), contractkit.MockNotSet("MockService", "GetModelListPrices")
 }
 
-// MintStepKey records the call and delegates to MintStepKeyFunc when set.
-func (m *MockService) MintStepKey(ctx context.Context, r StepKeyRequest) (StepKey, error) {
-	m.Recorder.Record("MintStepKey", ctx, r)
-	if m.MintStepKeyFunc != nil {
-		return m.MintStepKeyFunc(ctx, r)
+// GetConversationTrace records the call and delegates to GetConversationTraceFunc when set.
+func (m *MockService) GetConversationTrace(ctx context.Context, q ConversationTraceQuery) (ConversationTrace, error) {
+	m.Recorder.Record("GetConversationTrace", ctx, q)
+	if m.GetConversationTraceFunc != nil {
+		return m.GetConversationTraceFunc(ctx, q)
 	}
-	return StepKey{}, contractkit.MockNotSet("MockService", "MintStepKey")
-}
-
-// RevokeStepKey records the call and delegates to RevokeStepKeyFunc when set.
-func (m *MockService) RevokeStepKey(ctx context.Context, requestID string) (StepKeyRevocation, error) {
-	m.Recorder.Record("RevokeStepKey", ctx, requestID)
-	if m.RevokeStepKeyFunc != nil {
-		return m.RevokeStepKeyFunc(ctx, requestID)
-	}
-	return StepKeyRevocation{}, contractkit.MockNotSet("MockService", "RevokeStepKey")
+	return ConversationTrace{}, contractkit.MockNotSet("MockService", "GetConversationTrace")
 }
 
 // HasCoverageBlob records the call and delegates to HasCoverageBlobFunc when set.

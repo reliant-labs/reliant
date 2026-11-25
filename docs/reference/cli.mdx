@@ -1154,8 +1154,10 @@ RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.
 
 --auto-update (RELIANT_DAEMON_AUTO_UPDATE) has the daemon install new signed
 releases by itself: it stages each one in the background and installs it at a
-quiet moment (no tool call or background process running, and no activity for
-ten minutes), restarting in place. Only a reliant nothing else owns does: one
+quiet moment (no tool call running and no activity for ten minutes),
+restarting in place. Background processes keep running across the restart,
+and the new daemon goes on tracking them; it waits only for a credentials-none
+one, which cannot outlive the old daemon. Only a reliant nothing else owns does: one
 unpacked from a release archive into a directory you can write. The desktop
 app's, Homebrew's or a system package's is left to them, and the log says so.
 Off by default; 'reliant update' updates by hand.

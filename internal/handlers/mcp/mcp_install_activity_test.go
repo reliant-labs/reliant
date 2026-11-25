@@ -17,7 +17,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	mcp "github.com/reliant-labs/reliant/internal/handlers/mcp"
 )
@@ -122,7 +121,6 @@ func TestInstallServer_ActivityMatchesPersistedOutcome(t *testing.T) {
 				stored = *record.MCPConfigs
 				return nil
 			}
-			store.EmitUserRefetchFunc = func(context.Context, string, db.RefetchType, db.RefetchOpts) error { return nil }
 			router := daemonFunc(func(command string, payload []byte) ([]byte, error) {
 				stateMu.Lock()
 				defer stateMu.Unlock()

@@ -319,6 +319,43 @@ func TestMigrationOrderCommandExitCodes(t *testing.T) {
 	}
 }
 
+// The merge-queue shape of control-plane#3571: the entry ahead (#3482) and
+// this entry (#3483) each add a migration above main's newest, neither is on
+// origin/main yet, and this one is below the one ahead. -base origin/main
+// alone passes it; -also HEAD^ (main plus the entries ahead) refuses it, and
+// passes an entry whose migration clears the one ahead.
+func TestMigrationBelowAQueuedEntryAheadFailsWithAlso(t *testing.T) {
+	t.Parallel()
+	r := newOrderRepo(t, "20261124000000_head.up.sql")
+	r.addOnBranch("20261124204326_worktrees_branch_index.up.sql") // the entry ahead
+	r.addOnBranch("20261124202455_tool_call_usage.up.sql")        // this entry's squash
+	var out, errOut bytes.Buffer
+	if code := runMigrationOrder([]string{"-root", r.clone}, &out, &errOut); code != 0 {
+		t.Fatalf("without -also: exit %d, want 0 (both clear main's newest)\nstderr: %s", code, errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := runMigrationOrder([]string{"-root", r.clone, "-also", "HEAD^"}, &out, &errOut); code != 1 {
+		t.Fatalf("with -also HEAD^: exit %d, want 1\nstdout: %s\nstderr: %s", code, out.String(), errOut.String())
+	}
+	msg := errOut.String()
+	for _, want := range []string{"20261124202455_tool_call_usage.up.sql", "20261124204326"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("stderr does not name %q:\n%s", want, msg)
+		}
+	}
+	if strings.Contains(msg, "migration-order: db/migrations/20261124204326") {
+		t.Errorf("the entry ahead's migration is not this entry's to fix:\n%s", msg)
+	}
+	r.git(r.clone, "reset", "-q", "--hard", "HEAD^")
+	r.addOnBranch("20261124222627_tool_call_usage.up.sql")
+	out.Reset()
+	errOut.Reset()
+	if code := runMigrationOrder([]string{"-root", r.clone, "-also", "HEAD^"}, &out, &errOut); code != 0 {
+		t.Fatalf("an entry above the one ahead: exit %d, want 0\nstderr: %s", code, errOut.String())
+	}
+}
+
 // Keep filename validation in the fast tier; the real-git order checks above
 // exercise the repository boundary only in the full tier.
 func TestParseMigration(t *testing.T) {

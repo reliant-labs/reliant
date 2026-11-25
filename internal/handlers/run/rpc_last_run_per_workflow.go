@@ -28,7 +28,7 @@ func (s *Service) LastRunPerWorkflow(
 	// The newest run per workflow AND org, so the orgs the caller may no
 	// longer see are dropped before each workflow's newest is picked: a newer
 	// run of an org they left must not hide an older one they may see.
-	items, err := s.deps.Repo.LastRunPerWorkflowAndOrg(ctx, db.RunListFilters{
+	items, err := s.deps.RunLists.LastRunPerWorkflowAndOrg(ctx, db.RunListFilters{
 		UserID:     userID,
 		Org:        scope,
 		ProjectID:  req.Msg.ProjectId,

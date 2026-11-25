@@ -3,6 +3,8 @@ package handlers
 
 import (
 	"context"
+
+	"github.com/reliant-labs/reliant/internal/chatviews"
 )
 
 // resolveRunOwner determines the user a run belongs to, so the run records its
@@ -22,8 +24,8 @@ import (
 // nil means the owner could not be determined, and callers must treat that as
 // a fact worth acting on rather than a value to paper over: a run with no owner
 // is a run the engine cannot attribute, and it should be visible.
-func resolveRunOwner(ctx context.Context, workflows WorkflowLoader, repo RunOwnerReader, parentWorkflowID *string, chatID string) *string {
-	if repo == nil || workflows == nil {
+func resolveRunOwner(ctx context.Context, workflows WorkflowLoader, repo chatviews.Chats, parentWorkflowID *string, chatID string) *string {
+	if workflows == nil {
 		return nil
 	}
 

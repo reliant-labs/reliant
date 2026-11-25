@@ -224,7 +224,7 @@ func (m *MockDaemonReader) GetDaemon(ctx context.Context, id string) (*core.Daem
 var _ DaemonReader = (*MockDaemonReader)(nil)
 
 // forge:section MockRepository
-// forge:hash=dde2b50e3da0beb3748220c5f309bdea67762bf5b8df4529fba3baa6e21dfb6c
+// forge:hash=398b311738d1c3ce1074a42afeaa09b1432b735e691cde256bce29e760c038ee
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -242,7 +242,6 @@ type MockRepository struct {
 	ListChatsFunc                     func(context.Context, db.ChatFilters) ([]*db.Chat, error)
 	UpdateChatStateFunc               func(context.Context, string, db.ChatState, string) error
 	LockChatRunControlFunc            func(context.Context, string) (func(), error)
-	EmitUserRefetchFunc               func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 	CreateWorktreeFunc                func(context.Context, *db.Worktree) error
 	UpdateWorktreeFunc                func(context.Context, *db.Worktree) error
 	ArchiveWorktreeFunc               func(context.Context, string) error
@@ -327,15 +326,6 @@ func (m *MockRepository) LockChatRunControl(ctx context.Context, chatID string) 
 		return m.LockChatRunControlFunc(ctx, chatID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "LockChatRunControl")
-}
-
-// EmitUserRefetch records the call and delegates to EmitUserRefetchFunc when set.
-func (m *MockRepository) EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error {
-	m.Recorder.Record("EmitUserRefetch", ctx, userID, refetchType, opts)
-	if m.EmitUserRefetchFunc != nil {
-		return m.EmitUserRefetchFunc(ctx, userID, refetchType, opts)
-	}
-	return contractkit.MockNotSet("MockRepository", "EmitUserRefetch")
 }
 
 // CreateWorktree records the call and delegates to CreateWorktreeFunc when set.
@@ -448,6 +438,32 @@ func (m *MockRepository) GetWorktree(ctx context.Context, id string) (*db.Worktr
 
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockUserRefetch
+// forge:hash=033cac35f861599e4ee72a85e10b9f12c035126ba7c2043aa1d617de89e3ac3e
+
+// MockUserRefetch is a test mock for the UserRefetch interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockUserRefetch.<Method>Func not set" error.
+type MockUserRefetch struct {
+	contractkit.Recorder
+	EmitUserRefetchFunc func(context.Context, string, core.RefetchType, core.RefetchOpts) error
+}
+
+// EmitUserRefetch records the call and delegates to EmitUserRefetchFunc when set.
+func (m *MockUserRefetch) EmitUserRefetch(ctx context.Context, userID string, refetchType core.RefetchType, opts core.RefetchOpts) error {
+	m.Recorder.Record("EmitUserRefetch", ctx, userID, refetchType, opts)
+	if m.EmitUserRefetchFunc != nil {
+		return m.EmitUserRefetchFunc(ctx, userID, refetchType, opts)
+	}
+	return contractkit.MockNotSet("MockUserRefetch", "EmitUserRefetch")
+}
+
+// Compile-time check.
+var _ UserRefetch = (*MockUserRefetch)(nil)
 
 // forge:section MockChats
 // forge:hash=31c2cd871f3d0a9b0fca72ff139635fd6accae1d2080b86d6656595bde427c7d

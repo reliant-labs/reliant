@@ -18,7 +18,8 @@ import { ToolExecution, type ToolResultData } from "./ToolExecution";
 import { ToolExecutionGroup } from "./ToolExecutionGroup";
 import { ToolExecutionCollapsibleGroup } from "./ToolExecutionCollapsibleGroup";
 import { fetchFullToolBodies } from "../../hooks/tool-result-queries";
-import { isPresentImageTool, isReadOnlyTool, isRequestMachineTool, presentImageCaption } from "../../lib/toolFormatters";
+import { isPresentImageTool, isReadOnlyTool, isRequestMachineTool, isSpawnTool, presentImageCaption } from "../../lib/toolFormatters";
+import { SubAgentGroup } from "./SubAgentGroup";
 import { RequestMachineCard, requestMachineReason } from "./tool-renderers/RequestMachineToolRenderer";
 import { DraftAutomationCard, isDraftAutomationTool } from "./tool-renderers/DraftAutomationToolRenderer";
 import { AskUserCard } from "./AskUserCard";
@@ -670,15 +671,26 @@ function ChatMessageComponent({
     );
     // Mobile keeps original run order and ownership. Only successful, settled
     // work may recede into one group row; approvals, errors and live work
-    // stay directly visible.
+    // stay directly visible. Sub-agents started together (2+) are one
+    // SubAgentGroup, as on desktop, where the first of them ran: it stays
+    // open while any runs, and a failed agent stays visible when it closes.
     if (isMobile) {
+      const mobileAgents = executions.filter((exec) => isSpawnTool(exec.call.name));
+      const groupMobileAgents = mobileAgents.length > 1;
       return (
         <div className="tool-executions-container my-2 flex flex-col gap-0.5">
           {isQuietToolRun(executions) ? (
             <ToolExecutionGroup executions={executions} messageId={message.id}
               chatId={chatId || undefined} showRichContent onSelectThread={onSelectThread} />
           ) : (
-            executions.map(row)
+            executions.map((exec, idx) => {
+              if (!groupMobileAgents || !isSpawnTool(exec.call.name)) return row(exec, idx);
+              if (exec !== mobileAgents[0]) return null;
+              return (
+                <SubAgentGroup key={`${keyPrefix}-agents`} executions={mobileAgents} messageId={message.id}
+                  chatId={chatId || undefined} showRichContent onSelectThread={onSelectThread} />
+              );
+            })
           )}
         </div>
       );
@@ -689,12 +701,26 @@ function ChatMessageComponent({
     // (`ungrouped`): the fold is already the group. Each group sits where its
     // first call ran; a lone call is its own quiet row. Rows sit tight: the
     // prose around gets the space.
-    const readOnly = executions.filter((exec) => isReadOnlyTool(exec.call.name));
-    const others = executions.filter((exec) => !isReadOnlyTool(exec.call.name));
+    // Sub-agents started together (2+) are one SubAgentGroup, wherever the
+    // first of them ran: "12 agents · 8 done · 3 running · 1 failed".
+    const agents = executions.filter((exec) => isSpawnTool(exec.call.name));
+    const groupAgents = agents.length > 1;
+    const rest = groupAgents ? executions.filter((exec) => !isSpawnTool(exec.call.name)) : executions;
+    const readOnly = rest.filter((exec) => isReadOnlyTool(exec.call.name));
+    const others = rest.filter((exec) => !isReadOnlyTool(exec.call.name));
     const groupReadOnly = readOnly.length > 1;
     const groupOthers = shouldGroup && others.length > 1 && !slice?.ungrouped;
     const nodes: JSX.Element[] = [];
     executions.forEach((exec, idx) => {
+      if (groupAgents && isSpawnTool(exec.call.name)) {
+        if (exec === agents[0]) {
+          nodes.push(
+            <SubAgentGroup key={`${keyPrefix}-agents`} executions={agents} messageId={message.id}
+              chatId={chatId || undefined} showRichContent onSelectThread={onSelectThread} />,
+          );
+        }
+        return;
+      }
       const readOnlyCall = isReadOnlyTool(exec.call.name);
       if (readOnlyCall ? !groupReadOnly : !groupOthers) {
         nodes.push(row(exec, idx));

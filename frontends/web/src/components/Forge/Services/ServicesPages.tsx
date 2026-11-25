@@ -32,7 +32,7 @@ import { cn } from "@/lib/utils";
 import { useForgeConsole } from "../Console/consoleContext";
 import { Header, NothingDeployed, Page } from "../Console/consolePageFrame";
 import { ENV_ALL } from "../Console/envScope";
-import { PAGE_SUBTITLES } from "../Console/groupedNav";
+import { PAGE_SUBTITLES } from "../Console/consoleCrumbs";
 import { formatBytes, formatCores, formatDuration, formatPercent, formatRate } from "../Observability/format";
 import { ObsAsOf, ObsError } from "../Observability/ObsStates";
 import { VariableSelect } from "../Observability/Dashboards/parts";
@@ -40,7 +40,9 @@ import { shortVersion } from "../Releases/releaseModel";
 import { OVERVIEW_RANGE } from "../Workloads/workloadModel";
 import { ServiceCharts } from "./ServiceCharts";
 import { ServiceDetail } from "./ServiceDetail";
-import type { ServicesRow } from "./servicesModel";
+import { jobFailurePhrase } from "../Workloads/plainHealth";
+import { RunWhen } from "../Workloads/workloadParts";
+import { runOfRow, type ServicesRow } from "./servicesModel";
 import { useServicesData, type ServicesSearch } from "./useServicesData";
 import { ProjectFilter, useOnlyFilter, useSeveralApps, type SeveralApp } from "../Console/severalProjects";
 import { consolePath, withSearch } from "../Console/paths";
@@ -193,6 +195,17 @@ export function ServicesHead({ project = false }: { project?: boolean }) {
   );
 }
 
+/** Under a Job or CronJob's status: why its latest run failed, else when it ran. Nothing for anything else. */
+function RunNote({ row }: { row: ServicesRow }) {
+  const run = runOfRow(row);
+  if (!run) return null;
+  return (
+    <span className={cn("block truncate text-meta", run.result === "failed" ? "text-danger-ink" : "text-ink-muted")} data-testid="services-run-note">
+      {run.result === "failed" ? jobFailurePhrase(run.reason) : <RunWhen run={run} />}
+    </span>
+  );
+}
+
 function ServicesRows({
   rows,
   redLoading,
@@ -239,6 +252,7 @@ function ServicesRows({
                 <td className={TD}>
                   {/* The live state's note for a status nobody reports yet (the managed database). */}
                   {"statusNote" in row && typeof row.statusNote === "string" ? <span className="text-ink-muted">{row.statusNote}</span> : <Status tone={row.tone} label={row.status} />}
+                  <RunNote row={row} />
                 </td>
                 <td className={cn(TD, "text-right", row.type === "workload" && row.short && "text-warning-ink")}>{row.type === "workload" ? row.ready : dash}</td>
                 <td className={cn(TD, "text-right")} title={row.type === "workload" ? perContainer(row, "cpu") : undefined}>

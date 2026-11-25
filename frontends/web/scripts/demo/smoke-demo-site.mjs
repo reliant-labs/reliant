@@ -20,7 +20,9 @@
 //    - the build story (/forge/demo?section=built) showing no recorded build;
 //    - a page with no `[data-shell=demo]` root, or not in the app's shell (no
 //      `[data-testid=shell-nav]`: every page of the demo is a page of the app's
-//      one shell, Layout/shell/AppShell.tsx, with the demo's nav, demoNav.ts).
+//      one shell, Layout/shell/AppShell.tsx, with the demo's nav, demoNav.ts);
+//    - the sample image's preview (Storage, staging) not rendering, or its URL
+//      not same-origin or shaped like a presigned GCS/S3 link.
 //    Per page it also prints how often "Sample data isn't available" showed (an
 //    RPC the demo has no sample data for): a content gap, not a failure.
 //
@@ -77,6 +79,11 @@ const audited = [
   { path: `${home}/data`, subject: "data", root: "data-browser", read: (page) => page.getByRole("navigation", { name: "Tables" }).getByRole("link").first() },
   { path: `${home}/storage`, subject: "files", root: "storage-browser", read: (page) => page.getByRole("main").getByRole("table").getByRole("row").nth(1) },
 ];
+// The sample bucket's one image, opened in staging (not audited). Its preview
+// URL must be the fixture's obviously fake one (handlers/storage.ts
+// SAMPLE_IMAGE_URL): same-origin, never shaped like a presigned GCS/S3 link.
+const sampleImagePage = `${home}/storage?env=staging&bucket=uploads&object=product-photo.png`;
+const PRESIGNED = /storage\.googleapis\.com|amazonaws\.com|X-Goog-|X-Amz-|Signature=|GoogleAccessId/i;
 // The demo's own pages, `?section=` of the demo console (demoPath.ts).
 const demoSection = (section) => `/forge/demo?section=${section}`;
 const pages = [
@@ -102,6 +109,7 @@ const pages = [
   `${home}/tests/runs`,
   `${home}/tests/flaky`,
   ...(auditedEnvs.length ? audited.map((surface) => `${surface.path}?env=${auditedEnvs[0]}`) : []),
+  sampleImagePage,
 ];
 const viewports = [
   { name: "desktop", width: 1440, height: 900, mobile: false },
@@ -197,6 +205,30 @@ function report(label, problems, detail = "") {
   console.log(`${problems.length ? "FAIL" : "ok  "} ${label}${detail}`);
   for (const p of problems) console.log(`       ${p}`);
   failures.push(...problems.map((p) => `${label}: ${p}`));
+}
+
+/** The sample image's preview: shown, from the page's own origin, nothing like a presigned link. Returns problems. */
+async function checkSampleImage(page) {
+  const img = page.getByTestId("storage-preview-image");
+  try {
+    await img.waitFor({ timeout: 15000 });
+  } catch {
+    return ["the sample image's preview ([data-testid=storage-preview-image]) did not render"];
+  }
+  const src = (await img.getAttribute("src")) ?? "";
+  if (!src.trim()) return ["the sample image's preview URL is empty"];
+  const problems = [];
+  if (new URL(src, base).origin !== origin) problems.push(`the sample image's preview URL is not same-origin: ${src}`);
+  if (PRESIGNED.test(src)) problems.push(`the sample image's preview URL looks presigned: ${src}`);
+  try {
+    await page.waitForFunction(() => {
+      const image = document.querySelector('[data-testid="storage-preview-image"]');
+      return image?.complete && image.naturalWidth > 0;
+    }, null, { timeout: 15000 });
+  } catch {
+    problems.push(`the sample image's preview did not load: ${src}`);
+  }
+  return problems;
 }
 
 /** What a nav click must change: the main heading and the page's text. */
@@ -473,6 +505,7 @@ try {
     if (!(await page.locator("[data-shell='demo']").count())) problems.push("no [data-shell=demo] root");
     if (!(await page.getByTestId("shell-nav").count())) problems.push("not in the app's shell (no [data-testid=shell-nav])");
     problems.push(...(await answerAudit(page, new Set())));
+    if (path === sampleImagePage) problems.push(...(await checkSampleImage(page)));
     if (process.env.SCREENSHOT_DIR) {
       fs.mkdirSync(process.env.SCREENSHOT_DIR, { recursive: true });
       const name = path === "/" ? "root" : path.replace(/^\//, "").replace(/\//g, "_");

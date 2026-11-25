@@ -112,6 +112,9 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 	      VALUES ($1,$2,1,2,$3,'{}',$4)`, id("chat")+"-1", id("chat"), id("appr"), now)
 	exec(`INSERT INTO chat_update_heads (chat_id, head_key, update_id, sequence_number, update_type, entity_id, data, created_at)
 	      VALUES ($1,'e:'||$2,$3,1,2,$2,'{}',$4)`, id("chat"), id("appr"), id("chat")+"-1", now)
+	// What a node's observe: block recorded: keyed by chat with no foreign key.
+	exec(`INSERT INTO node_observations (id, chat_id, workflow_id, step_id, created_at)
+	      VALUES ($1,$2,$3,'plan',$4)`, id("obs"), id("chat"), id("wf"), now)
 
 	exec(`INSERT INTO settings (id, user_id, key, value, value_type, created_at, updated_at)
 	      VALUES ($1,$2,'theme','dark','string',$3,$3)`, id("set"), userID, now)
@@ -161,6 +164,7 @@ var ownershipCount = map[string]string{
 	// a join the chat's own deletion would empty.
 	"chat_updates":      `SELECT COUNT(*) FROM chat_updates WHERE chat_id = 'chat-' || $1`,
 	"chat_update_heads": `SELECT COUNT(*) FROM chat_update_heads WHERE chat_id = 'chat-' || $1`,
+	"node_observations": `SELECT COUNT(*) FROM node_observations WHERE chat_id = 'chat-' || $1`,
 }
 
 func countRows(t *testing.T, rawDB *sql.DB, table, userID string) int {
@@ -204,7 +208,7 @@ func TestPurge_RemovesEverythingForUser(t *testing.T) {
 		"user_app_sessions", "messages", "threads", "tool_calls",
 		"insights_model_calls_member_daily", "insights_tool_calls_member_daily",
 		"provider_account_limits", "thread_provider_accounts",
-		"chat_updates", "chat_update_heads",
+		"chat_updates", "chat_update_heads", "node_observations",
 	}, credentialTables...) {
 		if n := countRows(t, rawDB, table, userID); n != 0 {
 			t.Errorf("%s: %d rows survived the purge, want 0", table, n)
@@ -686,7 +690,7 @@ func TestPurge_ACallStartedMidPurgeCannotRecreateUsage(t *testing.T) {
 
 // The run-scope columns of a model call (agent-analytics.md §3.2, §4) go with
 // the account: deleting it leaves no row that names the account's projects,
-// runs, workflows, provider requests or costs. They are on llm_call_usage,
+// runs, workflows, provider requests, gateway calls or costs. They are on llm_call_usage,
 // which the purge deletes by user, so this pins that no new column moved them
 // anywhere the purge does not reach.
 func TestPurge_RemovesTheRunScopeOfModelCalls(t *testing.T) {
@@ -704,7 +708,7 @@ func TestPurge_RemovesTheRunScopeOfModelCalls(t *testing.T) {
 		CreatedAt:  time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC),
 		WorkflowID: "wf-run-scope", ThreadID: "thread-run-scope", WorkflowName: "agent", NodeID: "call_llm",
 		Preset: "researcher", ProjectID: "proj-run-scope", AIRunID: "ai-run-scope", AIRootRunID: "ai-root-run-scope",
-		ProviderRequestID: "req-run-scope", TTFTMs: &ttft, CostUSDNanos: &nanos, CostBasis: store.LLMCostBasisReported,
+		ProviderRequestID: "req-run-scope", GatewayCallID: "call-run-scope", TTFTMs: &ttft, CostUSDNanos: &nanos, CostBasis: store.LLMCostBasisReported,
 	})
 	if err != nil || !written {
 		t.Fatalf("RecordLLMCallUsage: written=%v err=%v", written, err)
@@ -717,12 +721,53 @@ func TestPurge_RemovesTheRunScopeOfModelCalls(t *testing.T) {
 	var n int
 	if err := rawDB.QueryRow(`SELECT count(*) FROM llm_call_usage WHERE user_id = $1
 		OR workflow_id = 'wf-run-scope' OR thread_id = 'thread-run-scope' OR project_id = 'proj-run-scope'
-		OR ai_run_id = 'ai-run-scope' OR ai_root_run_id = 'ai-root-run-scope' OR provider_request_id = 'req-run-scope'`,
+		OR ai_run_id = 'ai-run-scope' OR ai_root_run_id = 'ai-root-run-scope' OR provider_request_id = 'req-run-scope'
+		OR gateway_call_id = 'call-run-scope'`,
 		userID).Scan(&n); err != nil {
 		t.Fatalf("count: %v", err)
 	}
 	if n != 0 {
 		t.Errorf("llm_call_usage: %d rows still name the purged account's runs, want 0", n)
+	}
+}
+
+// A purged user's chat grants go with them (control-plane
+// docs/design/chat-collaboration.md §3.1): the grants they held on other
+// people's chats, and every grant on their own chats. Another person's
+// grants on another person's chat stay.
+func TestPurge_RemovesChatGrants(t *testing.T) {
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
+	defer cleanup()
+	ctx := context.Background()
+	const victim, bystander, third = "user-deleted", "user-retained", "user-third"
+	seedUser(t, rawDB, victim)
+	seedUser(t, rawDB, bystander)
+	// The victim holds a grant on the bystander's chat; the bystander and a
+	// third person hold grants on the victim's chat; the third person holds
+	// one on the bystander's chat.
+	mustExec(t, rawDB, `INSERT INTO chat_members (chat_id, user_id, role, granted_by) VALUES
+		('chat-user-retained', $1, 'reply', $2),
+		('chat-user-deleted', $2, 'manage', $1),
+		('chat-user-deleted', $3, 'view', $1),
+		('chat-user-retained', $3, 'view', $2)`, victim, bystander, third)
+
+	if _, err := purger.Purge(ctx, victim); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+	var held, onTheirs, kept int
+	if err := rawDB.QueryRowContext(ctx, `SELECT
+		(SELECT count(*) FROM chat_members WHERE user_id = $1),
+		(SELECT count(*) FROM chat_members WHERE chat_id = 'chat-user-deleted'),
+		(SELECT count(*) FROM chat_members WHERE chat_id = 'chat-user-retained' AND user_id = $2)`,
+		victim, third).Scan(&held, &onTheirs, &kept); err != nil {
+		t.Fatal(err)
+	}
+	if held != 0 || onTheirs != 0 {
+		t.Errorf("the purge left %d grants the victim held and %d on their chat, want none", held, onTheirs)
+	}
+	if kept != 1 {
+		t.Errorf("the purge removed another person's grant on another person's chat")
 	}
 }
 

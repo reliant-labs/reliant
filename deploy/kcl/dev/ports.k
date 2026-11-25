@@ -32,3 +32,9 @@ nats = _port(21050)
 nats_monitor = _port(21051)
 temporal = _port(21060)
 temporal_ui = _port(21062)
+# The dev IdP (Zitadel). It answers to one origin, http://localhost:<idp>, so
+# the port must stay stable between runs: allocate_port is deterministic.
+idp = _port(21070)
+# The dev mail catcher (mailpit) the IdP sends to; its web UI is on this port
+# + 7000.
+mail = _port(21080)

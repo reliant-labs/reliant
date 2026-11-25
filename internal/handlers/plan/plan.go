@@ -40,7 +40,7 @@ func (s *Service) writablePlan(ctx context.Context, userID, planID string) (*cor
 	if err != nil {
 		return nil, nil, err
 	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
+	if !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, nil, svcerr.PermissionDenied("access denied")
 	}
 	return plan, chat, nil

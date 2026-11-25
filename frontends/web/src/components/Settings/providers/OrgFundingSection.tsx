@@ -33,7 +33,7 @@ import {
 } from "@/lib/orgFunding";
 import { hasControlPlane } from "@/services/controlPlane/config";
 import type { MyOrg } from "@/services/controlPlane/orgs";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthUserId } from "@/lib/auth/use-auth";
 import { mayUse } from "@/types/orgProviderAccount";
 
 const ORDERS: readonly FundingOrder[] = ["org_first", "personal_first", "org_only"];
@@ -46,7 +46,7 @@ export function OrgFundingSection({ variant = "desktop" }: { variant?: "desktop"
 }
 
 function OrgFunding({ org, orgIds, variant }: { org: MyOrg; orgIds: string[]; variant: "desktop" | "mobile" }) {
-  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const userId = useAuthUserId();
   const orgAccounts = useOrgProviderAccounts(org.id);
   const mine = useProviderAccounts();
   const funding = useOrgFunding(org.id, orgIds);
