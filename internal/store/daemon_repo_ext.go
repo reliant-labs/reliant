@@ -76,10 +76,11 @@ type DaemonExtra struct {
 func UpsertDaemonRegistration(ctx context.Context, db orm.Context, d *core.Daemon, createdAt, now time.Time) (bool, error) {
 	res, err := db.Bun().NewRaw(`
 		INSERT INTO daemons (
-			id, user_id, hostname, platform, capabilities, project_paths, daemon_type, requires_bound_token, org_id, created_at, updated_at
-		) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+			id, user_id, hostname, platform, capabilities, project_paths, daemon_type, requires_bound_token, org_id, created_at, updated_at, working_dir
+		) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
 		ON CONFLICT(id) DO UPDATE SET
 			hostname = COALESCE(excluded.hostname, daemons.hostname),
+			working_dir = COALESCE(excluded.working_dir, daemons.working_dir),
 			platform = COALESCE(excluded.platform, daemons.platform),
 			capabilities = COALESCE(excluded.capabilities, daemons.capabilities),
 			project_paths = COALESCE(excluded.project_paths, daemons.project_paths),
@@ -89,7 +90,7 @@ func UpsertDaemonRegistration(ctx context.Context, db orm.Context, d *core.Daemo
 			updated_at = excluded.updated_at
 		WHERE daemons.user_id = excluded.user_id
 		  AND (excluded.requires_bound_token OR NOT daemons.requires_bound_token)`,
-		d.ID, d.UserID, d.Hostname, d.Platform, d.Capabilities, d.ProjectPaths, d.DaemonType, d.RequiresBoundToken, nonBlank(d.OrgID), createdAt, now,
+		d.ID, d.UserID, d.Hostname, d.Platform, d.Capabilities, d.ProjectPaths, d.DaemonType, d.RequiresBoundToken, nonBlank(d.OrgID), createdAt, now, nonBlank(d.WorkingDir),
 	).Exec(ctx)
 	return rowsWritten(res, err)
 }
@@ -362,6 +363,7 @@ func daemonToCore(row *Daemon) *core.Daemon {
 		IsDefault:           row.IsDefault,
 		RequiresBoundToken:  row.RequiresBoundToken,
 		OrgID:               row.OrgID,
+		WorkingDir:          row.WorkingDir,
 	}
 }
 

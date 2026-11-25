@@ -244,6 +244,22 @@ INSERT INTO share_events (id, org_id, resource_kind, resource_id, owner_user_id,
 SELECT gen_random_uuid()::text, cleared.org_id, 'chat', cleared.id, ?2, ?3, ?4, ?5
 FROM cleared`
 
+	// moveProjectOrgChatMembersSQL clears every per-person grant on the
+	// project's chats (chat_members; chat-collaboration.md §3.1), recording
+	// each in share_events, as 'moved' and naming whom it was about, in the
+	// org it was granted in: a grant was a decision about the source org's
+	// members, and must not admit anyone the target org also counts. It runs
+	// before the chats are restamped, while each still names that org.
+	moveProjectOrgChatMembersSQL = `
+WITH cleared AS (
+    DELETE FROM chat_members m USING chats c
+    WHERE c.id = m.chat_id AND c.project_id = ?0 AND c.org_id IS DISTINCT FROM ?1
+    RETURNING m.chat_id, m.user_id, c.org_id
+)
+INSERT INTO share_events (id, org_id, resource_kind, resource_id, owner_user_id, actor_user_id, action, target_user_id, created_at)
+SELECT gen_random_uuid()::text, cleared.org_id, 'chat', cleared.chat_id, ?2, ?3, ?4, cleared.user_id, ?5
+FROM cleared WHERE cleared.org_id IS NOT NULL`
+
 	// moveProjectOrgChatsSQL restamps the rest of the project's chats,
 	// archived included. visibility is not in its SET list, so no per-row
 	// sharing trigger fires for the private majority. Neither updated_at
@@ -448,8 +464,20 @@ func MoveProjectOrg(ctx context.Context, db orm.Context, c core.ProjectOrgMoveCo
 		counts.SharesCleared++
 	}
 
+	// Its chats' per-person grants, while the chats still name the source org.
+	res, err := db.Bun().NewRaw(moveProjectOrgChatMembersSQL, move.ProjectID, move.ToOrgID,
+		move.OwnerUserID, move.ActorUserID, string(core.ShareActionMoved), at).Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("clear the project's chats' grants: %w", err)
+	}
+	grants, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	counts.SharesCleared += int(grants)
+
 	// Its chats: the shared ones (clearing each share), then the rest.
-	res, err := db.Bun().NewRaw(moveProjectOrgSharedChatsSQL, move.ProjectID, move.ToOrgID,
+	res, err = db.Bun().NewRaw(moveProjectOrgSharedChatsSQL, move.ProjectID, move.ToOrgID,
 		move.OwnerUserID, move.ActorUserID, string(core.ShareActionMoved), at).Exec(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("move the project's shared chats: %w", err)
@@ -638,7 +666,8 @@ SELECT
     (SELECT count(*) FROM chats c WHERE c.project_id = ?0) AS chats,
     (SELECT count(*) FROM workflows w WHERE w.chat_id IN (SELECT c.id FROM chats c WHERE c.project_id = ?0)) AS runs,
     (SELECT count(*) FROM chats c WHERE c.project_id = ?0 AND c.visibility IS NOT NULL)
-        + (SELECT count(*) FROM projects p WHERE p.id = ?0 AND p.visibility IS NOT NULL) AS shares,
+        + (SELECT count(*) FROM projects p WHERE p.id = ?0 AND p.visibility IS NOT NULL)
+        + (SELECT count(*) FROM chat_members m JOIN chats c ON c.id = m.chat_id WHERE c.project_id = ?0) AS shares,
     (SELECT COALESCE(p.forge_project_name, '') FROM projects p WHERE p.id = ?0) AS forge_project_name`
 
 // projectOrgMoveMachinesSQL is every machine the project is attached to or

@@ -81,7 +81,8 @@ type ProjectOrgMoveCounts struct {
 	TriggersPaused int `json:"triggers_paused"`
 	// TriggersReenabled is those the move later re-enabled in the target.
 	TriggersReenabled int `json:"triggers_reenabled"`
-	// SharesCleared is the project and chats whose share was cleared.
+	// SharesCleared is the project and chats whose share was cleared, and
+	// the per-person grants on its chats that were.
 	SharesCleared int `json:"shares_cleared"`
 	// BindingsCleared is the triggers whose org-connection binding was
 	// cleared.

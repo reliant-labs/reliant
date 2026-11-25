@@ -3,15 +3,11 @@ package tools_daemon
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -115,25 +111,7 @@ func (s *Service) restoreCheckoutsOnConnect(conn *daemonConnection, missing []*d
 		case <-ctx.Done():
 		}
 	}()
-	run := func(ctx context.Context, step cloneStep) error {
-		payload, err := json.Marshal(step)
-		if err != nil {
-			return err
-		}
-		resp, err := s.sendCommandToConn(ctx, conn, &reliantv1.DaemonCommandRequest{
-			RequestId:   uuid.NewString(),
-			CommandType: "git.clone",
-			Payload:     payload,
-			TimeoutMs:   restoreCloneTimeoutMs,
-		})
-		if err != nil {
-			return err
-		}
-		if !resp.GetSuccess() {
-			return fmt.Errorf("%s", strings.TrimSpace(resp.GetErrorMessage()))
-		}
-		return nil
-	}
+	run := s.connCloneRunner(conn, restoreCloneTimeoutMs)
 	restorePoolMemberCheckouts(ctx, restoreAdapter{s.deps.Repo, s.deps.Installs}, s.deps.Pools, run, conn.daemonID, conn.userID, scope, missing)
 }
 
