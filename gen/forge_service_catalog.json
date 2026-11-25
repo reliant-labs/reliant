@@ -517,7 +517,9 @@
         "IntegrationSettings",
         "IntegrationsWriteledger",
         "LedgerRetention",
+        "MachineController",
         "NATSConn",
+        "OrgMoves",
         "OrgPolicyResolver",
         "OrgPolicyWatcher",
         "OrgResolver",
@@ -55670,6 +55672,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "MachineController",
+      "name": "MachineController",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/llm/tools.MachineController",
+      "source": {
+        "path": "internal/app/machine_controller.go",
+        "symbol": "NewMachineController"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "ManagedReconciler",
       "name": "ManagedReconciler",
       "kind": "provider",
@@ -55725,6 +55739,18 @@
       "source": {
         "path": "internal/app/org_credentials_sweep.go",
         "symbol": "NewOrgCredentialSweep"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "OrgMoves",
+      "name": "OrgMoves",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/orgmove.Service",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewOrgMoves"
       },
       "methods": [],
       "implementation_candidates": []
@@ -58357,6 +58383,19 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "MachineController",
+      "field": "Mirror",
+      "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.Service",
+      "methods": [],
+      "candidates": [
+        "Daemonmirror"
+      ],
+      "providers": [
+        "Daemonmirror"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "ManagedReconciler",
       "field": "JetStream",
       "interface": "github.com/nats-io/nats.go/jetstream.JetStream",
@@ -59995,6 +60034,19 @@
     },
     {
       "consumer": "TemporalWorker",
+      "field": "OrgMoves",
+      "interface": "github.com/reliant-labs/reliant/internal/orgmove.Service",
+      "methods": [],
+      "candidates": [
+        "OrgMoves"
+      ],
+      "providers": [
+        "OrgMoves"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "TemporalWorker",
       "field": "ProviderAccounts",
       "interface": "github.com/reliant-labs/reliant/internal/credentials/provideraccounts.Service",
       "methods": [],
@@ -60726,14 +60778,14 @@
     },
     {
       "consumer": "WorkerToolsFactory",
-      "field": "Mirror",
-      "interface": "github.com/reliant-labs/reliant/internal/daemonmirror.Service",
+      "field": "MachineController",
+      "interface": "github.com/reliant-labs/reliant/internal/llm/tools.MachineController",
       "methods": [],
       "candidates": [
-        "Daemonmirror"
+        "MachineController"
       ],
       "providers": [
-        "Daemonmirror"
+        "MachineController"
       ],
       "resolution": "composition_expression"
     },
