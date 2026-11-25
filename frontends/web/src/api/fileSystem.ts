@@ -253,6 +253,20 @@ function requireProjectId(): string {
   return currentProject.id;
 }
 
+/**
+ * The request scope a multi-call operation pins once, up front: the current
+ * project, the given workspace, and the open chat (whose machine serves it).
+ * An upload's later calls reuse it, so a chat switch mid-upload cannot send
+ * the rest of a file to another disk (the same reason moveFile captures it).
+ */
+export async function captureFileScope(worktreeId?: string): Promise<{
+  projectId: string;
+  worktreeId?: string;
+  chatId?: string;
+}> {
+  return { projectId: requireProjectId(), worktreeId, chatId: await activeChatIdForAPI() };
+}
+
 async function normalizeFilePathForAPI(path: string, worktreeId?: string): Promise<string> {
   if (!worktreeId) {
     return path;

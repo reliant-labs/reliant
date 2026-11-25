@@ -134,6 +134,12 @@ var userActionCommands = map[string]bool{
 	"fs.patch_file":         true,
 	"fs.write_binary_file":  true,
 	"fs.write_file":         true,
+	// A person uploading a file from the Files tab: every piece of it,
+	// so a long upload is never mistaken for idleness.
+	"fs.upload_abort":  true,
+	"fs.upload_begin":  true,
+	"fs.upload_chunk":  true,
+	"fs.upload_commit": true,
 
 	"git.clone":   true,
 	"git.pull":    true,
@@ -234,6 +240,8 @@ var backgroundCommands = map[string]bool{
 	"fs.read_pdf_pages":   true,
 	"fs.search":           true,
 	"fs.stat":             true,
+	// How far an upload got, read before resuming it.
+	"fs.upload_status": true,
 
 	"mcp.check_resource":   true,
 	"mcp.ensure_gitignore": true,

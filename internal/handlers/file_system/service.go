@@ -28,6 +28,12 @@ type Deps struct {
 	// Placement resolves a request's workspace, the machine it is on, and
 	// that machine's owner.
 	Placement Placement
+
+	// API is the API server's config: max_workspace_upload_size
+	// (MAX_WORKSPACE_UPLOAD_SIZE) caps a file BeginFileUpload accepts, in
+	// bytes. Nil, or a zero size, takes the default, 2 GiB.
+	//forge:optional-dep
+	API *config.ApiServerConfig
 }
 
 // workspaces is daemonplacement.WorkspaceReader (and
@@ -84,6 +90,13 @@ func (s *Service) Name() string {
 
 // Register registers the service handlers with the HTTP mux.
 func (s *Service) Register(mux *http.ServeMux, opts ...connect.HandlerOption) {
+	// The user chain reads requests of any size (ReadMaxBytes -1). This
+	// service's largest request is an UploadFileChunk (4 MiB) or a whole file
+	// for a legacy daemon (20 MiB), in the proto or JSON codec (base64 is
+	// 4/3 of that), so 48 MiB holds every legitimate request and nothing
+	// unbounded is buffered. Appended last, it wins: connect applies handler
+	// options in order, each setting the field.
+	opts = append(opts[:len(opts):len(opts)], connect.WithReadMaxBytes(fileSystemReadMaxBytes))
 	path, handler := reliantv1connect.NewFileSystemServiceHandler(s, opts...)
 	mux.Handle(path, handler)
 }

@@ -4,7 +4,9 @@ import type { FileOperationType } from "./FileTreeItem";
 import { FileOperationsModal } from "./FileOperationsModal";
 import { Loader2, AlertCircle, CloudOff, FilePlus, FolderPlus } from "lucide-react";
 import type { FileNode } from "./index";
-import { getFileTree, createFile, createFolder, deleteFileOrFolder, copyFile, getFileContent, getFilePreviewInfo } from "../../api/fileSystem";
+import { getFileTree, createFile, createFolder, deleteFileOrFolder, copyFile, getFileContent, getFilePreviewInfo, captureFileScope } from "../../api/fileSystem";
+import { useFileUploadStore } from "../../store/fileUploadStore";
+import { dragHasFiles, filesFromDrop, skippedFoldersMessage } from "./fileUploadDrop";
 import { cn } from "../../lib/utils";
 import { isDaemonConnectingError, isNoMachineError, projectCheckoutMissing } from "../../lib/daemon-errors";
 import { ProjectCheckoutState, type ProjectCheckoutMissing } from "../../gen/reliant/v1/filesystem_pb";
@@ -38,12 +40,22 @@ interface FileTreeProps {
   onExpandedPathsChange?: (paths: Set<string>) => void;
   // Auto-focus when the tree loads
   autoFocus?: boolean;
+  /**
+   * Offer uploads: "Upload Files Here…" on folders and dropping OS files on
+   * the tree. Off where no upload panel is shown to follow them (mobile).
+   */
+  enableUploads?: boolean;
 }
 
 export interface FileTreeHandle {
   focus: () => void;
   syncToActiveFile: () => void;
   refresh: () => Promise<void>;
+  /**
+   * Uploads `files` into the folder the tree has focused: a focused folder,
+   * else the focused file's folder, else the workspace root.
+   */
+  uploadFiles: (files: File[]) => void;
 }
 
 // Helper to sort nodes: directories first (alphabetically), then files (alphabetically)
@@ -181,6 +193,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   expandedPaths: controlledExpandedPaths,
   onExpandedPathsChange,
   autoFocus = false,
+  enableUploads = false,
 }, ref) {
   const [tree, setTree] = useState<FileNode[]>([]);
   const [loading, setLoading] = useState(true);
@@ -422,6 +435,116 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
     await Promise.all(expanded.map((p) => loadChildren(p, 1)));
   }, [loadChildren]);
 
+  // ── Uploads ────────────────────────────────────────────────────────
+  // Three ways in — the toolbar's Upload button (through the handle), a
+  // folder's "Upload Files Here…", and dropping OS files on the tree — all
+  // end in enqueueUploads, which pins the request scope and hands the files
+  // to the upload queue (store/fileUploadStore.ts).
+  const enqueueToUploadStore = useFileUploadStore((state) => state.enqueue);
+  const lastCommitted = useFileUploadStore((state) => state.lastCommitted);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const uploadDirRef = useRef("");
+  // The folder an OS-file drag is over: a directory path, "" for the root.
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+
+  const enqueueUploads = useCallback(async (files: File[], directory: string) => {
+    if (files.length === 0) return;
+    const dir = directory === "/" ? "" : directory;
+    try {
+      const scope = await captureFileScope(worktreeId);
+      enqueueToUploadStore(files, dir, scope);
+    } catch (err) {
+      toast.notify("Couldn't upload", { description: err instanceof Error ? err.message : String(err) });
+      return;
+    }
+    // Open the destination so the file shows up where it lands.
+    if (dir && !expandedPathsRef.current.has(dir)) {
+      const next = new Set(withAncestorsExpanded(expandedPathsRef.current, dir));
+      next.add(dir);
+      setExpandedPaths(next);
+    }
+  }, [worktreeId, enqueueToUploadStore, setExpandedPaths]);
+
+  // The folder an upload "at" `path` goes into: the folder itself, or a
+  // file's folder. "" is the workspace root.
+  const uploadDirFor = useCallback((path: string | null | undefined): string => {
+    if (!path || path === "/") return "";
+    const node = findNodeByPath(treeRef.current, path);
+    if (node?.type === "directory") return node.path;
+    return getParentPath(path) ?? "";
+  }, []);
+
+  const handleUploadHere = useCallback((node: FileNode) => {
+    uploadDirRef.current = uploadDirFor(node.path);
+    uploadInputRef.current?.click();
+  }, [uploadDirFor]);
+
+  const handleUploadInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    // Clear it, so picking the same file again still fires a change.
+    e.target.value = "";
+    void enqueueUploads(files, uploadDirRef.current);
+  };
+
+  // Re-read the folder an upload landed in (git status refreshes the rest).
+  // Only for this tree's workspace, and only a folder whose listing is shown:
+  // one not loaded yet is read fresh when it is expanded.
+  const handledCommitSeqRef = useRef(lastCommitted?.seq ?? 0);
+  useEffect(() => {
+    if (!lastCommitted || lastCommitted.seq <= handledCommitSeqRef.current) return;
+    handledCommitSeqRef.current = lastCommitted.seq;
+    if (lastCommitted.worktreeId !== worktreeId || lastCommitted.projectId !== currentProject?.id) return;
+    const dir = lastCommitted.directory;
+    if (dir === "") {
+      void loadChildren("/", 2);
+      return;
+    }
+    const node = findNodeByPath(treeRef.current, dir);
+    if (node?.type === "directory" && node.children !== undefined) {
+      void loadChildren(dir, 1);
+    }
+  }, [lastCommitted, worktreeId, currentProject?.id, loadChildren]);
+
+  // OS files dragged over the tree: a folder row takes them, a file row
+  // sends them to its folder, anywhere else is the root. Drags that carry no
+  // files are ignored, so nothing else about the tree changes.
+  const dropDirForTarget = useCallback((target: EventTarget | null): string => {
+    const row = target instanceof Element ? target.closest("[data-path]") : null;
+    return uploadDirFor(row?.getAttribute("data-path"));
+  }, [uploadDirFor]);
+
+  const dropZoneProps = !enableUploads ? {} : {
+    onDragEnter: (e: React.DragEvent) => {
+      if (!dragHasFiles(e.dataTransfer)) return;
+      e.preventDefault();
+      setDropTarget(dropDirForTarget(e.target));
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (!dragHasFiles(e.dataTransfer)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      const dir = dropDirForTarget(e.target);
+      setDropTarget((prev) => (prev === dir ? prev : dir));
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!dragHasFiles(e.dataTransfer)) return;
+      const next = e.relatedTarget;
+      if (next instanceof Node && e.currentTarget.contains(next)) return;
+      setDropTarget(null);
+    },
+    onDrop: (e: React.DragEvent) => {
+      if (!dragHasFiles(e.dataTransfer)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setDropTarget(null);
+      const dir = dropDirForTarget(e.target);
+      const { files, skippedFolders } = filesFromDrop(e.dataTransfer);
+      const skipped = skippedFoldersMessage(skippedFolders);
+      if (skipped) toast.notify(skipped.title, { description: skipped.description });
+      void enqueueUploads(files, dir);
+    },
+  };
+
   // Build visible paths for navigation
   const visiblePaths = buildVisiblePaths(tree, expandedPaths, searchQuery);
 
@@ -459,7 +582,10 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
       containerRef.current?.focus();
     },
     syncToActiveFile,
-  }), [syncToActiveFile, refresh]);
+    uploadFiles: (files: File[]) => {
+      void enqueueUploads(files, uploadDirFor(focusedPath));
+    },
+  }), [syncToActiveFile, refresh, enqueueUploads, uploadDirFor, focusedPath]);
 
   // Handle PageUp/PageDown globally when file tree is visible
   // This catches Fn+Up/Down even when container doesn't have focus
@@ -1178,7 +1304,14 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
 
   if (tree.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div
+        className={cn(
+          "flex items-center justify-center h-full rounded-md",
+          dropTarget === "" && "bg-primary/10 ring-1 ring-inset ring-ring",
+        )}
+        data-testid="file-tree-empty"
+        {...dropZoneProps}
+      >
         <p className="text-sm text-muted-foreground">No files found</p>
       </div>
     );
@@ -1187,10 +1320,25 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   return (
     <div 
       ref={containerRef}
-      className="py-2 px-2 pb-12 file-tree-container"
+      className={cn(
+        "py-2 px-2 pb-12 min-h-full rounded-md file-tree-container",
+        dropTarget === "" && "bg-primary/10 ring-1 ring-inset ring-ring",
+      )}
       tabIndex={0}
       onKeyDown={handleKeyDown}
+      data-testid="file-tree"
+      {...dropZoneProps}
     >
+      <input
+        ref={uploadInputRef}
+        type="file"
+        multiple
+        hidden
+        aria-hidden="true"
+        tabIndex={-1}
+        data-testid="file-tree-upload-input"
+        onChange={handleUploadInputChange}
+      />
       {/* Inline creation UI */}
       {isCreating && creatingType && (
         <div className="flex items-center gap-2 px-2 py-1.5 mb-1 bg-muted/30 rounded">
@@ -1237,6 +1385,8 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
           onExpand={handleExpand}
           onCollapse={handleCollapse}
           onFileOperation={handleFileOperation}
+          onUploadHere={enableUploads ? handleUploadHere : undefined}
+          dropTargetPath={dropTarget}
         />
       ))}
 

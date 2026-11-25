@@ -1321,6 +1321,7 @@ func (g *Graph) newFileSystem() (*file_system.Service, error) {
 		Router:    g.APIDaemonRouter().NATSDaemonRouter,
 		Repo:      store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Placement: daemonplacement.NewRecords(g.Database().ORM()),
+		API:       g.ApiServerConfig,
 	})
 }
 

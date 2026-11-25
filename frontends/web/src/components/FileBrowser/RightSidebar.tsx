@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef, type KeyboardEvent, type Reac
 import { Files, GitBranch, ListTodo, Check, Terminal, Globe, PanelBottom } from "lucide-react";
 import { FileTree, type FileTreeHandle } from "./FileTree";
 import { FileTreeToolbar } from "./FileTreeToolbar";
+import { UploadProgressPanel } from "./UploadProgressPanel";
+import { FileUploadConflictPrompt } from "./UploadConflictDialog";
 import { useProjectStore } from "../../store/projectStore";
 import { useShortcutLabel, withShortcut } from "../../store/shortcutsStore";
 import { useViewerStore } from "../../store/viewerStore";
@@ -646,6 +648,7 @@ export function RightSidebar() {
           onNewFolder={handleToolbarNewFolder}
           onRefresh={handleRefresh}
           onCollapseAll={handleCollapseAll}
+          onUploadFiles={(files) => fileTreeRef.current?.uploadFiles(files)}
         />
       )}
 
@@ -676,8 +679,10 @@ export function RightSidebar() {
             expandedPaths={expandedPaths}
             onExpandedPathsChange={setExpandedPaths}
             autoFocus={shouldAutoFocus}
+            enableUploads
           />
         </div>
+        {activeSidebarTab === "files" && <UploadProgressPanel />}
         {activeSidebarTab === "changes" && (
           <div className="flex-1 overflow-y-auto">
             {currentProject ? (
@@ -704,6 +709,9 @@ export function RightSidebar() {
           <BrowserSidebarContent worktreeId={activeWorktreeId} />
         )}
       </div>
+      {/* Outside the tabs: an upload waiting on "already exists" asks even
+          when another tab is open. */}
+      <FileUploadConflictPrompt />
     </div>
   );
 }

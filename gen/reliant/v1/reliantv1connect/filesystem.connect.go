@@ -77,6 +77,21 @@ const (
 	// FileSystemServiceDownloadFileProcedure is the fully-qualified name of the FileSystemService's
 	// DownloadFile RPC.
 	FileSystemServiceDownloadFileProcedure = "/reliant.v1.FileSystemService/DownloadFile"
+	// FileSystemServiceBeginFileUploadProcedure is the fully-qualified name of the FileSystemService's
+	// BeginFileUpload RPC.
+	FileSystemServiceBeginFileUploadProcedure = "/reliant.v1.FileSystemService/BeginFileUpload"
+	// FileSystemServiceUploadFileChunkProcedure is the fully-qualified name of the FileSystemService's
+	// UploadFileChunk RPC.
+	FileSystemServiceUploadFileChunkProcedure = "/reliant.v1.FileSystemService/UploadFileChunk"
+	// FileSystemServiceCommitFileUploadProcedure is the fully-qualified name of the FileSystemService's
+	// CommitFileUpload RPC.
+	FileSystemServiceCommitFileUploadProcedure = "/reliant.v1.FileSystemService/CommitFileUpload"
+	// FileSystemServiceAbortFileUploadProcedure is the fully-qualified name of the FileSystemService's
+	// AbortFileUpload RPC.
+	FileSystemServiceAbortFileUploadProcedure = "/reliant.v1.FileSystemService/AbortFileUpload"
+	// FileSystemServiceGetFileUploadStatusProcedure is the fully-qualified name of the
+	// FileSystemService's GetFileUploadStatus RPC.
+	FileSystemServiceGetFileUploadStatusProcedure = "/reliant.v1.FileSystemService/GetFileUploadStatus"
 )
 
 // FileSystemServiceClient is a client for the reliant.v1.FileSystemService service.
@@ -117,6 +132,22 @@ type FileSystemServiceClient interface {
 	// and refuses a file over 25 MB with FailedPrecondition and the error
 	// reason "file_too_large_to_download".
 	DownloadFile(context.Context, *connect.Request[v1.DownloadFileRequest]) (*connect.Response[v1.DownloadFileResponse], error)
+	// BeginFileUpload opens an upload session. With the FAIL conflict policy
+	// (the default) a file already at the destination is refused up front with
+	// code ALREADY_EXISTS, so the client can ask the user to replace it, keep
+	// both, or cancel before any bytes are sent.
+	BeginFileUpload(context.Context, *connect.Request[v1.BeginFileUploadRequest]) (*connect.Response[v1.BeginFileUploadResponse], error)
+	// UploadFileChunk writes one piece of an upload at its offset.
+	UploadFileChunk(context.Context, *connect.Request[v1.UploadFileChunkRequest]) (*connect.Response[v1.UploadFileChunkResponse], error)
+	// CommitFileUpload verifies the upload is complete and moves it into place.
+	// With the FAIL policy a file that appeared at the destination meanwhile is
+	// refused with code ALREADY_EXISTS, and the staged upload is kept, so the
+	// client can commit again under another policy.
+	CommitFileUpload(context.Context, *connect.Request[v1.CommitFileUploadRequest]) (*connect.Response[v1.CommitFileUploadResponse], error)
+	// AbortFileUpload discards an upload session and its staged bytes.
+	AbortFileUpload(context.Context, *connect.Request[v1.AbortFileUploadRequest]) (*connect.Response[v1.AbortFileUploadResponse], error)
+	// GetFileUploadStatus reports how many bytes of an upload have arrived.
+	GetFileUploadStatus(context.Context, *connect.Request[v1.GetFileUploadStatusRequest]) (*connect.Response[v1.GetFileUploadStatusResponse], error)
 }
 
 // NewFileSystemServiceClient constructs a client for the reliant.v1.FileSystemService service. By
@@ -215,25 +246,61 @@ func NewFileSystemServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		beginFileUpload: connect.NewClient[v1.BeginFileUploadRequest, v1.BeginFileUploadResponse](
+			httpClient,
+			baseURL+FileSystemServiceBeginFileUploadProcedure,
+			connect.WithSchema(fileSystemServiceMethods.ByName("BeginFileUpload")),
+			connect.WithClientOptions(opts...),
+		),
+		uploadFileChunk: connect.NewClient[v1.UploadFileChunkRequest, v1.UploadFileChunkResponse](
+			httpClient,
+			baseURL+FileSystemServiceUploadFileChunkProcedure,
+			connect.WithSchema(fileSystemServiceMethods.ByName("UploadFileChunk")),
+			connect.WithClientOptions(opts...),
+		),
+		commitFileUpload: connect.NewClient[v1.CommitFileUploadRequest, v1.CommitFileUploadResponse](
+			httpClient,
+			baseURL+FileSystemServiceCommitFileUploadProcedure,
+			connect.WithSchema(fileSystemServiceMethods.ByName("CommitFileUpload")),
+			connect.WithClientOptions(opts...),
+		),
+		abortFileUpload: connect.NewClient[v1.AbortFileUploadRequest, v1.AbortFileUploadResponse](
+			httpClient,
+			baseURL+FileSystemServiceAbortFileUploadProcedure,
+			connect.WithSchema(fileSystemServiceMethods.ByName("AbortFileUpload")),
+			connect.WithClientOptions(opts...),
+		),
+		getFileUploadStatus: connect.NewClient[v1.GetFileUploadStatusRequest, v1.GetFileUploadStatusResponse](
+			httpClient,
+			baseURL+FileSystemServiceGetFileUploadStatusProcedure,
+			connect.WithSchema(fileSystemServiceMethods.ByName("GetFileUploadStatus")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // fileSystemServiceClient implements FileSystemServiceClient.
 type fileSystemServiceClient struct {
-	getFileTree        *connect.Client[v1.GetFileTreeRequest, v1.GetFileTreeResponse]
-	getFileContent     *connect.Client[v1.GetFileContentRequest, v1.GetFileContentResponse]
-	saveFileContent    *connect.Client[v1.SaveFileContentRequest, v1.SaveFileContentResponse]
-	getFileMetadata    *connect.Client[v1.GetFileMetadataRequest, v1.GetFileMetadataResponse]
-	getFilePreviewInfo *connect.Client[v1.GetFilePreviewInfoRequest, v1.GetFilePreviewInfoResponse]
-	getFilePreview     *connect.Client[v1.GetFilePreviewRequest, v1.GetFilePreviewResponse]
-	createFileOrFolder *connect.Client[v1.CreateFileOrFolderRequest, v1.CreateFileOrFolderResponse]
-	deleteFileOrFolder *connect.Client[v1.DeleteFileOrFolderRequest, v1.DeleteFileOrFolderResponse]
-	copyFile           *connect.Client[v1.CopyFileRequest, v1.CopyFileResponse]
-	searchFiles        *connect.Client[v1.SearchFilesRequest, v1.SearchFilesResponse]
-	replaceInFiles     *connect.Client[v1.ReplaceInFilesRequest, v1.ReplaceInFilesResponse]
-	listDirectory      *connect.Client[v1.ListDirectoryRequest, v1.ListDirectoryResponse]
-	createDirectory    *connect.Client[v1.CreateDirectoryRequest, v1.CreateDirectoryResponse]
-	downloadFile       *connect.Client[v1.DownloadFileRequest, v1.DownloadFileResponse]
+	getFileTree         *connect.Client[v1.GetFileTreeRequest, v1.GetFileTreeResponse]
+	getFileContent      *connect.Client[v1.GetFileContentRequest, v1.GetFileContentResponse]
+	saveFileContent     *connect.Client[v1.SaveFileContentRequest, v1.SaveFileContentResponse]
+	getFileMetadata     *connect.Client[v1.GetFileMetadataRequest, v1.GetFileMetadataResponse]
+	getFilePreviewInfo  *connect.Client[v1.GetFilePreviewInfoRequest, v1.GetFilePreviewInfoResponse]
+	getFilePreview      *connect.Client[v1.GetFilePreviewRequest, v1.GetFilePreviewResponse]
+	createFileOrFolder  *connect.Client[v1.CreateFileOrFolderRequest, v1.CreateFileOrFolderResponse]
+	deleteFileOrFolder  *connect.Client[v1.DeleteFileOrFolderRequest, v1.DeleteFileOrFolderResponse]
+	copyFile            *connect.Client[v1.CopyFileRequest, v1.CopyFileResponse]
+	searchFiles         *connect.Client[v1.SearchFilesRequest, v1.SearchFilesResponse]
+	replaceInFiles      *connect.Client[v1.ReplaceInFilesRequest, v1.ReplaceInFilesResponse]
+	listDirectory       *connect.Client[v1.ListDirectoryRequest, v1.ListDirectoryResponse]
+	createDirectory     *connect.Client[v1.CreateDirectoryRequest, v1.CreateDirectoryResponse]
+	downloadFile        *connect.Client[v1.DownloadFileRequest, v1.DownloadFileResponse]
+	beginFileUpload     *connect.Client[v1.BeginFileUploadRequest, v1.BeginFileUploadResponse]
+	uploadFileChunk     *connect.Client[v1.UploadFileChunkRequest, v1.UploadFileChunkResponse]
+	commitFileUpload    *connect.Client[v1.CommitFileUploadRequest, v1.CommitFileUploadResponse]
+	abortFileUpload     *connect.Client[v1.AbortFileUploadRequest, v1.AbortFileUploadResponse]
+	getFileUploadStatus *connect.Client[v1.GetFileUploadStatusRequest, v1.GetFileUploadStatusResponse]
 }
 
 // GetFileTree calls reliant.v1.FileSystemService.GetFileTree.
@@ -306,6 +373,31 @@ func (c *fileSystemServiceClient) DownloadFile(ctx context.Context, req *connect
 	return c.downloadFile.CallUnary(ctx, req)
 }
 
+// BeginFileUpload calls reliant.v1.FileSystemService.BeginFileUpload.
+func (c *fileSystemServiceClient) BeginFileUpload(ctx context.Context, req *connect.Request[v1.BeginFileUploadRequest]) (*connect.Response[v1.BeginFileUploadResponse], error) {
+	return c.beginFileUpload.CallUnary(ctx, req)
+}
+
+// UploadFileChunk calls reliant.v1.FileSystemService.UploadFileChunk.
+func (c *fileSystemServiceClient) UploadFileChunk(ctx context.Context, req *connect.Request[v1.UploadFileChunkRequest]) (*connect.Response[v1.UploadFileChunkResponse], error) {
+	return c.uploadFileChunk.CallUnary(ctx, req)
+}
+
+// CommitFileUpload calls reliant.v1.FileSystemService.CommitFileUpload.
+func (c *fileSystemServiceClient) CommitFileUpload(ctx context.Context, req *connect.Request[v1.CommitFileUploadRequest]) (*connect.Response[v1.CommitFileUploadResponse], error) {
+	return c.commitFileUpload.CallUnary(ctx, req)
+}
+
+// AbortFileUpload calls reliant.v1.FileSystemService.AbortFileUpload.
+func (c *fileSystemServiceClient) AbortFileUpload(ctx context.Context, req *connect.Request[v1.AbortFileUploadRequest]) (*connect.Response[v1.AbortFileUploadResponse], error) {
+	return c.abortFileUpload.CallUnary(ctx, req)
+}
+
+// GetFileUploadStatus calls reliant.v1.FileSystemService.GetFileUploadStatus.
+func (c *fileSystemServiceClient) GetFileUploadStatus(ctx context.Context, req *connect.Request[v1.GetFileUploadStatusRequest]) (*connect.Response[v1.GetFileUploadStatusResponse], error) {
+	return c.getFileUploadStatus.CallUnary(ctx, req)
+}
+
 // FileSystemServiceHandler is an implementation of the reliant.v1.FileSystemService service.
 type FileSystemServiceHandler interface {
 	// GetFileTree returns the file tree structure for a project
@@ -344,6 +436,22 @@ type FileSystemServiceHandler interface {
 	// and refuses a file over 25 MB with FailedPrecondition and the error
 	// reason "file_too_large_to_download".
 	DownloadFile(context.Context, *connect.Request[v1.DownloadFileRequest]) (*connect.Response[v1.DownloadFileResponse], error)
+	// BeginFileUpload opens an upload session. With the FAIL conflict policy
+	// (the default) a file already at the destination is refused up front with
+	// code ALREADY_EXISTS, so the client can ask the user to replace it, keep
+	// both, or cancel before any bytes are sent.
+	BeginFileUpload(context.Context, *connect.Request[v1.BeginFileUploadRequest]) (*connect.Response[v1.BeginFileUploadResponse], error)
+	// UploadFileChunk writes one piece of an upload at its offset.
+	UploadFileChunk(context.Context, *connect.Request[v1.UploadFileChunkRequest]) (*connect.Response[v1.UploadFileChunkResponse], error)
+	// CommitFileUpload verifies the upload is complete and moves it into place.
+	// With the FAIL policy a file that appeared at the destination meanwhile is
+	// refused with code ALREADY_EXISTS, and the staged upload is kept, so the
+	// client can commit again under another policy.
+	CommitFileUpload(context.Context, *connect.Request[v1.CommitFileUploadRequest]) (*connect.Response[v1.CommitFileUploadResponse], error)
+	// AbortFileUpload discards an upload session and its staged bytes.
+	AbortFileUpload(context.Context, *connect.Request[v1.AbortFileUploadRequest]) (*connect.Response[v1.AbortFileUploadResponse], error)
+	// GetFileUploadStatus reports how many bytes of an upload have arrived.
+	GetFileUploadStatus(context.Context, *connect.Request[v1.GetFileUploadStatusRequest]) (*connect.Response[v1.GetFileUploadStatusResponse], error)
 }
 
 // NewFileSystemServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -438,6 +546,37 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	fileSystemServiceBeginFileUploadHandler := connect.NewUnaryHandler(
+		FileSystemServiceBeginFileUploadProcedure,
+		svc.BeginFileUpload,
+		connect.WithSchema(fileSystemServiceMethods.ByName("BeginFileUpload")),
+		connect.WithHandlerOptions(opts...),
+	)
+	fileSystemServiceUploadFileChunkHandler := connect.NewUnaryHandler(
+		FileSystemServiceUploadFileChunkProcedure,
+		svc.UploadFileChunk,
+		connect.WithSchema(fileSystemServiceMethods.ByName("UploadFileChunk")),
+		connect.WithHandlerOptions(opts...),
+	)
+	fileSystemServiceCommitFileUploadHandler := connect.NewUnaryHandler(
+		FileSystemServiceCommitFileUploadProcedure,
+		svc.CommitFileUpload,
+		connect.WithSchema(fileSystemServiceMethods.ByName("CommitFileUpload")),
+		connect.WithHandlerOptions(opts...),
+	)
+	fileSystemServiceAbortFileUploadHandler := connect.NewUnaryHandler(
+		FileSystemServiceAbortFileUploadProcedure,
+		svc.AbortFileUpload,
+		connect.WithSchema(fileSystemServiceMethods.ByName("AbortFileUpload")),
+		connect.WithHandlerOptions(opts...),
+	)
+	fileSystemServiceGetFileUploadStatusHandler := connect.NewUnaryHandler(
+		FileSystemServiceGetFileUploadStatusProcedure,
+		svc.GetFileUploadStatus,
+		connect.WithSchema(fileSystemServiceMethods.ByName("GetFileUploadStatus")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.FileSystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case FileSystemServiceGetFileTreeProcedure:
@@ -468,6 +607,16 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 			fileSystemServiceCreateDirectoryHandler.ServeHTTP(w, r)
 		case FileSystemServiceDownloadFileProcedure:
 			fileSystemServiceDownloadFileHandler.ServeHTTP(w, r)
+		case FileSystemServiceBeginFileUploadProcedure:
+			fileSystemServiceBeginFileUploadHandler.ServeHTTP(w, r)
+		case FileSystemServiceUploadFileChunkProcedure:
+			fileSystemServiceUploadFileChunkHandler.ServeHTTP(w, r)
+		case FileSystemServiceCommitFileUploadProcedure:
+			fileSystemServiceCommitFileUploadHandler.ServeHTTP(w, r)
+		case FileSystemServiceAbortFileUploadProcedure:
+			fileSystemServiceAbortFileUploadHandler.ServeHTTP(w, r)
+		case FileSystemServiceGetFileUploadStatusProcedure:
+			fileSystemServiceGetFileUploadStatusHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -531,4 +680,24 @@ func (UnimplementedFileSystemServiceHandler) CreateDirectory(context.Context, *c
 
 func (UnimplementedFileSystemServiceHandler) DownloadFile(context.Context, *connect.Request[v1.DownloadFileRequest]) (*connect.Response[v1.DownloadFileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.DownloadFile is not implemented"))
+}
+
+func (UnimplementedFileSystemServiceHandler) BeginFileUpload(context.Context, *connect.Request[v1.BeginFileUploadRequest]) (*connect.Response[v1.BeginFileUploadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.BeginFileUpload is not implemented"))
+}
+
+func (UnimplementedFileSystemServiceHandler) UploadFileChunk(context.Context, *connect.Request[v1.UploadFileChunkRequest]) (*connect.Response[v1.UploadFileChunkResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.UploadFileChunk is not implemented"))
+}
+
+func (UnimplementedFileSystemServiceHandler) CommitFileUpload(context.Context, *connect.Request[v1.CommitFileUploadRequest]) (*connect.Response[v1.CommitFileUploadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.CommitFileUpload is not implemented"))
+}
+
+func (UnimplementedFileSystemServiceHandler) AbortFileUpload(context.Context, *connect.Request[v1.AbortFileUploadRequest]) (*connect.Response[v1.AbortFileUploadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.AbortFileUpload is not implemented"))
+}
+
+func (UnimplementedFileSystemServiceHandler) GetFileUploadStatus(context.Context, *connect.Request[v1.GetFileUploadStatusRequest]) (*connect.Response[v1.GetFileUploadStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.GetFileUploadStatus is not implemented"))
 }
