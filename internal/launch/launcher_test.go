@@ -190,9 +190,15 @@ func projectsOf(repo launchTestStore) projectaccess.Service {
 
 func newTestLauncher(t *testing.T, repo launchTestStore, starter *fakeStarter) (*Launcher, *recordingRunRecorder) {
 	t.Helper()
-	recorder := &recordingRunRecorder{repo: repo, chats: store.NewChatsWithActivityExtStore(repo.ORM())}
+	// A fixture that wraps the repository to fail a chat read is its own
+	// reader; every other one reads the generated store.
+	var chats ChatReader = store.NewChatsWithActivityExtStore(repo.ORM())
+	if own, ok := repo.(ChatReader); ok {
+		chats = own
+	}
+	recorder := &recordingRunRecorder{repo: repo, chats: chats}
 	projects := projectsOf(repo)
-	return New(Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projects, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: recorder, TaskQueue: "test-task-queue"}), recorder
+	return New(Deps{Store: repo, Chats: chats, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projects, Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: recorder, TaskQueue: "test-task-queue"}), recorder
 }
 
 // chatStartEvent is what an interactive first send produces.
