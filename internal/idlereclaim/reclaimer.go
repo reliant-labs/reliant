@@ -209,9 +209,9 @@ func (r *Reclaimer) Pass(ctx context.Context, dryRun bool, trigger string) (rep 
 			"worktree_bytes", rep.Totals.WorktreeBytes, "worktree_freed", HumanBytes(rep.Totals.WorktreeBytes),
 			"duration", rep.FinishedAt.Sub(rep.StartedAt).Round(time.Second))
 	}()
+	var parkedScratch, parkedWorktrees []Entry
 	if !dryRun {
-		r.emptyTrash(ctx, r.ScratchRoot)
-		r.emptyTrash(ctx, r.WorktreeRoot)
+		parkedScratch, parkedWorktrees = r.recoverTrash(ctx, r.ScratchRoot), r.recoverTrash(ctx, r.WorktreeRoot)
 	}
 	if r.ScratchRoot != "" {
 		rep.Scratch = r.scratchPass(ctx, dryRun)
@@ -220,9 +220,12 @@ func (r *Reclaimer) Pass(ctx context.Context, dryRun bool, trigger string) (rep 
 		rep.Worktrees = r.worktreePass(ctx, dryRun)
 	}
 	if !dryRun {
-		r.emptyTrash(ctx, r.ScratchRoot)
-		r.emptyTrash(ctx, r.WorktreeRoot)
+		// A tree this pass could not put back is reported once, by the
+		// recovery that runs at the end; the next pass tries again.
+		parkedScratch, parkedWorktrees = r.recoverTrash(ctx, r.ScratchRoot), r.recoverTrash(ctx, r.WorktreeRoot)
 	}
+	rep.Scratch = append(rep.Scratch, parkedScratch...)
+	rep.Worktrees = append(rep.Worktrees, parkedWorktrees...)
 	return rep
 }
 

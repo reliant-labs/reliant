@@ -140,27 +140,53 @@ func keepingMtime(dir, root string, change func() error) error {
 	return nil
 }
 
-// emptyTrash deletes what an earlier removal left parked in root's trash: a
-// deletion the daemon stopped mid-way, or one whose target could not be put
-// back because its path was taken again. Nothing a process uses is deleted.
-func (r *Reclaimer) emptyTrash(ctx context.Context, root string) {
-	trash := filepath.Join(root, TrashDir)
-	entries, err := os.ReadDir(trash)
-	if err != nil {
-		return
+// recoverTrash puts back what an earlier removal left parked in root's
+// trash and returns an entry for each tree it had to keep there. A tree
+// stays parked when its deletion stopped (a process started using it, or it
+// changed) and its path was taken again before it could go back, or when the
+// daemon stopped mid-deletion. That is a hold, never a removal: nothing in
+// the trash is deleted except empty directories. A tree goes back to the
+// path its marker names (worktreereclaim.RestoreParked) once that path is
+// free; one with no marker, or whose path stays taken, is kept and reported
+// with where it belongs, for a person to recover.
+func (r *Reclaimer) recoverTrash(ctx context.Context, root string) []Entry {
+	if root == "" {
+		return nil
 	}
-	for _, e := range entries {
+	trash := filepath.Join(root, TrashDir)
+	batches, err := os.ReadDir(trash)
+	if err != nil {
+		return nil
+	}
+	var kept []Entry
+	for _, b := range batches {
 		if ctx.Err() != nil {
-			return
+			return kept
 		}
-		p := filepath.Join(trash, e.Name())
-		if err := r.inUse(ctx, p); err != nil {
-			logging.InfoContext(ctx, "[idlereclaim] Kept a trashed directory a process uses; the next pass retries", "path", p, "error", err)
+		batch := filepath.Join(trash, b.Name())
+		entries, err := os.ReadDir(batch)
+		if err != nil || !b.IsDir() {
 			continue
 		}
-		if err := os.RemoveAll(p); err != nil {
-			logging.WarnContext(ctx, "[idlereclaim] Could not delete a trashed directory; the next pass retries", "path", p, "error", err)
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue // a marker, read with its tree
+			}
+			parked := filepath.Join(batch, e.Name())
+			original, err := worktreereclaim.RestoreParked(parked)
+			if err == nil {
+				logging.InfoContext(ctx, "[idlereclaim] Put a parked directory back", "path", original, "parked", parked)
+				continue
+			}
+			reason := "kept parked, not deleted: " + err.Error()
+			if original != "" {
+				reason = fmt.Sprintf("kept parked, not deleted: it belongs at %s: %v", original, err)
+			}
+			logging.WarnContext(ctx, "[idlereclaim] A parked directory could not go back; kept for recovery", "parked", parked, "original", original, "error", err)
+			kept = append(kept, Entry{Path: parked, Action: ActionHeld, Reason: reason})
 		}
+		_ = os.Remove(batch) // only when empty
 	}
 	_ = os.Remove(trash)
+	return kept
 }

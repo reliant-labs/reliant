@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -117,14 +118,48 @@ func removeQuarantined(ctx context.Context, tree *retirementTree, dir string, q 
 	if err == nil {
 		err = tree.remove(ctx, paced.run)
 		if err == nil {
+			parked.forget()
 			return nil
 		}
 		err = fmt.Errorf("deletion stopped: %w", err)
 	}
 	if rerr := tree.unpark(parked); rerr != nil {
+		// Kept, never deleted: its marker names where it belongs, and
+		// RestoreParked puts it back once that path is free.
 		return fmt.Errorf("%w; what is left stays parked at %s: %v", err, tree.path, rerr)
 	}
+	parked.forget()
 	return err
+}
+
+// ParkedOriginSuffix names the marker park writes beside a parked tree, in
+// the trash: <parked name><suffix> holds the tree's original path. A tree
+// that stays parked (its deletion stopped and its path was taken again
+// before it could go back, or the daemon stopped mid-deletion) is a hold
+// like any other: it is never deleted from the trash, only put back.
+const ParkedOriginSuffix = ".origin"
+
+// RestoreParked renames the parked tree at parked back to the original path
+// its marker names, when that path is free, and drops the marker. It returns
+// the original path. A tree with no marker, or whose path is taken, stays.
+func RestoreParked(parked string) (string, error) {
+	b, err := os.ReadFile(parked + ParkedOriginSuffix)
+	if err != nil {
+		return "", fmt.Errorf("no record of where it belongs: %w", err)
+	}
+	original := string(b)
+	if !filepath.IsAbs(original) {
+		return "", fmt.Errorf("its record names no absolute path: %q", original)
+	}
+	if _, err := os.Lstat(parked); errors.Is(err, os.ErrNotExist) {
+		_ = os.Remove(parked + ParkedOriginSuffix) // deleted whole before the marker went
+		return original, nil
+	}
+	if err := renameNoReplace(parked, original); err != nil {
+		return original, err
+	}
+	_ = os.Remove(parked + ParkedOriginSuffix)
+	return original, nil
 }
 
 // NodeModulesTargets lists the node_modules directories of checkout, relative

@@ -81,6 +81,65 @@ func TestScratchStopsWhenAProcessEntersMidDelete(t *testing.T) {
 	require.False(t, exists(trashRoot), "nothing stays parked")
 }
 
+// A deletion that stops after its path was taken again cannot put the rest
+// back. What is left stays parked and is never deleted: not by the recovery
+// at the end of the pass, not by later passes. It goes back once its path is
+// free.
+func TestScratchFailedRestoreIsKeptNotDeleted(t *testing.T) {
+	h := newHarness(t)
+	dir := h.chat("c1")
+	for _, n := range []string{"a.md", "b.md", "c.md"} {
+		write(t, dir, "notes/"+n, n)
+	}
+	h.age(dir, 8*day)
+	trashRoot := filepath.Join(h.r.ScratchRoot, TrashDir)
+	processUse := h.r.ProcessUse
+	parkedChecks, parked := 0, ""
+	h.r.ProcessUse = func(ctx context.Context, paths []string) error {
+		for _, p := range paths {
+			if filepath.Dir(filepath.Dir(p)) != trashRoot {
+				continue
+			}
+			parkedChecks++
+			if parkedChecks == 3 {
+				// Mid-delete: an agent recreates the directory at its old
+				// path, and a process writes new work into the parked tree.
+				parked = p
+				write(t, dir, "new.md", "written at the old path")
+				write(t, p, "notes/new-work.md", "unique work")
+				return errors.New("process 42 has its cwd in " + p)
+			}
+		}
+		return processUse(ctx, paths)
+	}
+
+	rep := h.pass()
+	require.NotEmpty(t, parked)
+	require.Contains(t, h.entry(rep, dir).Reason, "stays parked")
+	kept := h.entry(rep, parked)
+	require.Equal(t, ActionHeld, kept.Action)
+	require.Contains(t, kept.Reason, "belongs at "+dir)
+	requireParked := func() {
+		t.Helper()
+		for _, rel := range []string{"notes/b.md", "notes/c.md", "notes/new-work.md", "briefing.md"} {
+			require.True(t, exists(filepath.Join(parked, rel)), "%s is kept parked", rel)
+		}
+		require.True(t, exists(filepath.Join(dir, "new.md")), "the new directory at the old path is untouched")
+	}
+	requireParked()
+
+	h.r.ProcessUse = processUse
+	h.pass()
+	requireParked()
+
+	// Once the path is free, the next pass puts the tree back.
+	require.NoError(t, os.RemoveAll(dir))
+	h.pass()
+	require.True(t, exists(filepath.Join(dir, "notes/new-work.md")))
+	require.True(t, exists(filepath.Join(dir, "notes/c.md")))
+	require.False(t, exists(trashRoot))
+}
+
 func TestScratchPreservesForceAddedOutput(t *testing.T) {
 	for _, output := range []string{"dist", "node_modules"} {
 		t.Run(output, func(t *testing.T) {
