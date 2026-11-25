@@ -1,14 +1,14 @@
 -- forge:backward-compatible — a new non-unique partial index; it refuses no write, and no statement of the previous release names it.
 
 -- Migration: projects_remote_key_index
--- Created: 2026-11-25T03:48:24Z
+-- Created: 2026-11-25T14:56:39Z
 --
 -- Serves the lookup that makes a machine's folder join the project it is a
 -- checkout of (GetProjectByRemoteKeyAndUserInScope): the user's projects of
 -- one repository. Keyed the way project uniqueness is (user, key, org; see
 -- 20261119162633_projects_org_user_path_key), but NOT unique: existing
 -- duplicates of one repository would fail the build, and merging them is the
--- user's decision (20261125034821_projects_remote_key).
+-- user's decision (20261125145639_projects_remote_key).
 --
 -- CONCURRENTLY cannot run in a transaction block, so this is the only
 -- statement in the file. A build that fails leaves an INVALID index that IF

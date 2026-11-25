@@ -1,7 +1,7 @@
 -- forge:backward-compatible — adds a function and a column the database computes (GENERATED ALWAYS ... STORED); the previous release never names either, so its reads, inserts and updates are unchanged, and the database fills the column for the rows it writes too.
 
 -- Migration: projects_remote_key
--- Created: 2026-11-25T03:48:21Z
+-- Created: 2026-11-25T14:56:39Z
 --
 -- One repository is one project, on every machine that has it (a project
 -- holds one checkout per machine in project_daemons). projects.remote_url is
@@ -54,10 +54,15 @@
 -- migration (CONCURRENTLY, alone in its file).
 --
 -- Adding a stored generated column rewrites the table under an ACCESS
--- EXCLUSIVE lock. projects is small (one row per user per repository), so the
--- rewrite takes milliseconds; lock_timeout bounds the wait behind a long
--- transaction: the migration fails after 5s and the next deploy retries it.
+-- EXCLUSIVE lock. Do not assume a production table size or rewrite duration:
+-- lock_timeout bounds acquisition, while statement_timeout cancels a rewrite
+-- exceeding 5s (including lock acquisition). Cancellation rolls this entire
+-- migration back, releasing its lock; the next deploy retries it. If the
+-- bound is insufficient, measure and plan a follow-up rather than extending
+-- the production blocking window implicitly. LOCAL keeps both bounds inside
+-- this migration's transaction, not the subsequent concurrent index build.
 SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5s';
 
 CREATE FUNCTION git_remote_key(remote text) RETURNS text
     LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE
