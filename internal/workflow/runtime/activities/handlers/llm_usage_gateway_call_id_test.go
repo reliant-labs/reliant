@@ -202,7 +202,7 @@ func TestCallLLM_RetriedTurnStoresItsFinalAttemptsGatewayCallID(t *testing.T) {
 	project := h.CreateTestProject(ctx, "proj-gw-turn", "user-gw-turn")
 	chat := h.CreateTestChat(ctx, "chat-gw-turn", project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
-	callLLM := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: &captureHub{}, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver}).
+	callLLM := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: &captureHub{}, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver}).
 		WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 
 	h.env.RegisterActivity(callLLM.Execute)
