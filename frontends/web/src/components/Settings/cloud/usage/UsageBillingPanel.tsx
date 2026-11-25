@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { useUsageBillingCheckout } from "@/hooks/useCloudBillingQueries";
-import { getControlPlaneClient } from "@/services/controlPlane/client";
+import { useGetCurrentUserUsageBilling } from "@/hooks/controlplane/billing-service-hooks_gen";
 import { openCheckout } from "@/lib/stripeCheckout";
 import { isDesktopUpdateRequired } from "@/lib/desktopUpdate";
 import { UsageBillingCard } from "./UsageBillingCard";
@@ -26,9 +24,7 @@ export function UsageBillingPanel() {
 }
 
 function OrgUsageBillingPanel({ orgId, canManage }: { orgId: string; canManage: boolean }) {
-  const state = useQuery({
-    queryKey: ["usage-billing", orgId],
-    queryFn: () => getControlPlaneClient(BillingService).getCurrentUserUsageBilling({ orgId }),
+  const state = useGetCurrentUserUsageBilling({ orgId }, {
     enabled: !!orgId,
     staleTime: 10_000,
     refetchOnWindowFocus: true,

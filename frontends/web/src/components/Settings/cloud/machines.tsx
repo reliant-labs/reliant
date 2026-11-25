@@ -108,6 +108,7 @@ import { formatMachineSpec } from "@/components/Billing/machineSpecs";
 import { MachineCost } from "@/components/Billing/MachineCost";
 import { CardInset } from "@/components/forge-ui/card";
 import { MachineDiskCard } from "./MachineDiskCard";
+import { MachineResourcesCard } from "./MachineResourcesCard";
 import { RenameMachineButton, RenameMachineField } from "./RenameMachine";
 import { machineBuildLabel } from "@/lib/machineBuild";
 import { machineCrashSummary } from "@/lib/machineMemory";
@@ -1840,6 +1841,9 @@ function EnvironmentDetail({
               </CardContent>
             </Card>
           </div>
+
+          {/* The machine's and the daemon's CPU, memory and open files. */}
+          {connected && <MachineResourcesCard daemon={daemon} />}
 
           {/* Every volume the machine reports, and what fills the full one. */}
           <MachineDiskCard

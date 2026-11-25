@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useQuery, type InfiniteData } from "@tanstack/react-query";
 
 import { Code, ConnectError } from "@connectrpc/connect";
 
@@ -10,9 +10,12 @@ import {
   isRpcNotDeployed,
   isUsageUnavailable,
   listOrgPolicyDenials,
-  listPolicyHistory,
   orgPolicyKeys,
+  policyHistoryPageOf,
+  policyHistoryRequest,
 } from "@/services/controlPlane/orgPolicy";
+import type { ListOrgLimitChangesResponse } from "@/gen/controlplane/services/billing/v1/billing_pb";
+import { useListOrgLimitChangesInfinite } from "@/hooks/controlplane/billing-service-hooks_gen";
 
 const FINAL_CODES = new Set([Code.PermissionDenied, Code.Unauthenticated, Code.InvalidArgument]);
 
@@ -41,14 +44,17 @@ export function useOrgPolicy(orgId: string) {
   });
 }
 
+// Module-level, so React Query re-maps only when the pages change.
+const policyHistoryPages = (data: InfiniteData<ListOrgLimitChangesResponse, string>) => ({
+  pages: data.pages.map(policyHistoryPageOf),
+  pageParams: data.pageParams,
+});
+
 /** The policy's field-level edits, newest first. */
 export function usePolicyHistory(orgId: string) {
-  return useInfiniteQuery({
-    queryKey: orgPolicyKeys.history(orgId),
-    queryFn: ({ pageParam }) => listPolicyHistory(orgId, pageParam),
-    initialPageParam: "",
-    getNextPageParam: (last) => last.nextPageToken || undefined,
+  return useListOrgLimitChangesInfinite(policyHistoryRequest(orgId), {
     enabled: !!orgId,
+    select: policyHistoryPages,
   });
 }
 

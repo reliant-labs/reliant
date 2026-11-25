@@ -67,7 +67,9 @@ export type NavSlotId =
   /** A row's control: the desktop app's update button (Settings). */
   | "update-button"
   /** The footer's Help row: a tour, the docs, keyboard shortcuts (sidebar/HelpMenu). */
-  | "help";
+  | "help"
+  /** A host's own actions in the footer: the public demo's tour, Install Forge and telemetry notice in a phone's drawer (Forge/Demo/demoNav.ts). */
+  | "host-actions";
 
 /** A count or a dot after a row's label. */
 export type NavBadge = { type: "count"; value: number; tone?: "danger"; label?: string } | { type: "dot"; label: string };

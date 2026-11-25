@@ -63,13 +63,27 @@ func BindTriggerCapacityExecution(ctx context.Context, db orm.Context, eventID, 
 	return nil
 }
 
+// ListTriggerCapacityExecutionsSQL is every occupied slot of one capacity
+// scope: ?0 the start-attempt bound in seconds, ?1 the user, ?2 the project,
+// ?3 the workflow ref.
+//
+// capacity_order IS NOT NULL adds no row filter (enrollment sets the scope
+// columns and capacity_order in one UPDATE, so a row with a scope always has
+// an order) but it is load-bearing: it is the predicate of
+// trigger_events_capacity_occupied, the index over exactly these rows, and the
+// planner may read a partial index only when the query implies its predicate.
+// Without it this read, run on every capacity admission, was a parallel Seq
+// Scan of the whole table: in prod ~17 a minute at ~0.9s each over 330k rows,
+// most of reliant-pg's CPU (TestListTriggerCapacityExecutionsUsesOccupiedIndex).
+const ListTriggerCapacityExecutionsSQL = `SELECT id, COALESCE(capacity_workflow_id, '') AS capacity_workflow_id, COALESCE(capacity_first_run_id, '') AS capacity_first_run_id, capacity_bound_at, capacity_start_attempt_at,
+ COALESCE(capacity_start_attempt_at < now()-make_interval(secs => ?0),false) AS capacity_start_attempt_aged
+ FROM trigger_events WHERE user_id = ?1 AND capacity_project_id = ?2 AND capacity_workflow_ref = ?3
+ AND capacity_order IS NOT NULL AND outcome = 'launched' AND NOT capacity_released ORDER BY capacity_order`
+
 // ListTriggerCapacityExecutions includes every occupied slot, even if its activation/chat disappeared.
 func ListTriggerCapacityExecutions(ctx context.Context, db orm.Context, scope TriggerCapacityScope) ([]TriggerCapacityExecution, error) {
 	var rows []TriggerCapacityExecution
-	err := db.Bun().NewRaw(`SELECT id, COALESCE(capacity_workflow_id, '') AS capacity_workflow_id, COALESCE(capacity_first_run_id, '') AS capacity_first_run_id, capacity_bound_at, capacity_start_attempt_at,
- COALESCE(capacity_start_attempt_at < now()-make_interval(secs => ?),false) AS capacity_start_attempt_aged
- FROM trigger_events WHERE user_id = ? AND capacity_project_id = ? AND capacity_workflow_ref = ?
- AND outcome = 'launched' AND NOT capacity_released ORDER BY capacity_order`, startAttemptBoundSeconds(), scope.UserID, scope.ProjectID, scope.WorkflowRef).Scan(ctx, &rows)
+	err := db.Bun().NewRaw(ListTriggerCapacityExecutionsSQL, startAttemptBoundSeconds(), scope.UserID, scope.ProjectID, scope.WorkflowRef).Scan(ctx, &rows)
 	return rows, err
 }
 

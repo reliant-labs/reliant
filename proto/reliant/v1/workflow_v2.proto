@@ -1347,12 +1347,18 @@ message RunArgs {
   // and it is revoked when the step ends. Refused, without running the
   // command, on a machine whose daemon does not apply step keys and on a
   // deployment that cannot issue them. Output: nodes.<id>.llm_gateway.
-  LLMGatewayStep llm_gateway = 7 [(reliant) = {
-    description: "Run the command with a short-lived, budget-capped LLM gateway key for a third-party agent CLI, as {cli: claude-code, budget_usd: 2, models: [...]}. The key is set for this command only, redacted from its output and revoked when the step ends"
-    example: "{\"cli\": \"claude-code\", \"budget_usd\": 2}"
-    type_hint: "JSON object"
-    label: "LLM gateway"
-  }];
+  //
+  // Deprecated (shipped in v1.29.0, slated for removal): it keeps working
+  // throughout v1 and is removed only in a future major.
+  LLMGatewayStep llm_gateway = 7 [
+    deprecated = true,
+    (reliant) = {
+      description: "Deprecated: kept working throughout v1, slated for removal. Run the command with a short-lived, budget-capped LLM gateway key for a third-party agent CLI, as {cli: claude-code, budget_usd: 2, models: [...]}. The key is set for this command only, redacted from its output and revoked when the step ends"
+      example: "{\"cli\": \"claude-code\", \"budget_usd\": 2}"
+      type_hint: "JSON object"
+      label: "LLM gateway"
+    }
+  ];
 }
 
 // LLMGatewayStep is a run node's `llm_gateway`: which CLI the step key is for
@@ -2266,7 +2272,9 @@ message RunOutput {
   bool truncated = 6;
   // The step key the command ran with, when the node sets llm_gateway:
   // what it was allowed and what it spent. Never the key itself.
-  RunLLMGatewayOutput llm_gateway = 7;
+  // Deprecated with RunArgs.llm_gateway: set while that field keeps working
+  // throughout v1.
+  RunLLMGatewayOutput llm_gateway = 7 [deprecated = true];
 }
 
 // RunLLMGatewayOutput is a run node's nodes.<id>.llm_gateway: the step key its
@@ -2595,11 +2603,17 @@ message WorkflowRequirements {
   // checked with the vendor's own status command, whose output never leaves
   // the machine; Reliant never reads, stores or relays a vendor's sign-in.
   // A person signs one in with `reliant machine login <vendor>`.
-  repeated string cli_login = 4 [(reliant) = {
-    description: "Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine. Checked with each vendor's own status command before the first node; sign one in with `reliant machine login <vendor> --machine <name>`"
-    example: "[claude, codex]"
-    label: "CLI sign-ins"
-  }];
+  //
+  // Deprecated (shipped in v1.29.0, slated for removal): it keeps working
+  // throughout v1 and is removed only in a future major.
+  repeated string cli_login = 4 [
+    deprecated = true,
+    (reliant) = {
+      description: "Deprecated: kept working throughout v1, slated for removal. Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine. Checked with each vendor's own status command before the first node; sign one in with `reliant machine login <vendor> --machine <name>`"
+      example: "[claude, codex]"
+      label: "CLI sign-ins"
+    }
+  ];
 }
 
 // WorkflowConcurrency is a trigger admission policy, not a worker task limit.

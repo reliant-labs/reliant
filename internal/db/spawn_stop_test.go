@@ -119,7 +119,7 @@ func TestCancelStoppedSpawnResolvesTheSubtreesQueuedMail(t *testing.T) {
 
 	queue := func(id, to string) {
 		t.Helper()
-		if err := repo.EnqueueAgentMessage(ctx, &AgentMessage{
+		if err := store.EnqueueAgentMessage(ctx, repo.ORM(), &AgentMessage{
 			ID: id, ChatID: chatID, FromThreadID: "th-ssm-root", ToThreadID: to,
 			Kind: core.AgentMessageKindMessage, Body: "status?", Status: core.AgentMessageStatusQueued, CreatedAt: time.Now(),
 		}); err != nil {
@@ -148,7 +148,7 @@ func TestCancelStoppedSpawnResolvesTheSubtreesQueuedMail(t *testing.T) {
 		}
 	}
 
-	orphaned, err := repo.ListThreadsWithOrphanedAgentMessages(ctx)
+	orphaned, err := store.ListThreadsWithOrphanedAgentMessages(ctx, repo.ORM())
 	if err != nil {
 		t.Fatalf("ListThreadsWithOrphanedAgentMessages: %v", err)
 	}

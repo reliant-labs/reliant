@@ -128,10 +128,6 @@ type Repository interface {
 	ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*db.MessageContentBlock, error)
 	ListMessagesByIDs(ctx context.Context, ids []string) ([]*db.Message, error)
 
-	// The agent mailbox's queued rows: listed for the pending strip (the
-	// writes and the other reads are the Mailbox and AgentMessages roles).
-	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
-
 	// Plans and their tasks.
 	CreatePlan(ctx context.Context, plan *db.Plan) error
 	CreateTask(ctx context.Context, task *db.Task) error
@@ -211,4 +207,5 @@ type AgentMessages interface {
 	CancelQueuedAgentMessage(ctx context.Context, id, chatID string) (cancelled bool, err error)
 	DeleteUndeliveredAgentMessage(ctx context.Context, id, chatID string) (deleted bool, err error)
 	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
+	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
 }

@@ -13,11 +13,11 @@ import (
 	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // ImpactWindow is how far back a chat's latest model call is read: a chat
@@ -63,7 +63,7 @@ func (s *Service) GetPolicyImpact(
 			return nil, svcerr.Wrap(svcerr.WithReason(svcerr.InvalidArgument("policy_json is not an organization policy document: "+err.Error()), ReasonPolicyInvalid))
 		}
 	}
-	calls, err := s.deps.Store.LatestOrgChatCalls(ctx, orgID, s.now().Add(-ImpactWindow), ImpactChatLimit+1)
+	calls, err := s.deps.Calls.LatestOrgChatCalls(ctx, orgID, s.now().Add(-ImpactWindow), ImpactChatLimit+1)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -130,7 +130,7 @@ func (s *Service) unattended(ctx context.Context, chatID string) (bool, error) {
 // refusalOf is the reason doc would refuse the next call of a chat whose
 // latest call was call with, "" when it admits it. unattended applies the
 // automations section too.
-func refusalOf(doc *controlplanev1.OrgPolicy, call db.OrgChatCall, unattended bool) string {
+func refusalOf(doc *controlplanev1.OrgPolicy, call store.OrgChatCall, unattended bool) string {
 	driver := models.DriverID(call.Provider)
 	if adm := orgpolicy.ProviderAdmission(doc, call.Provider, drivers.ProviderSource(driver, call.Funding), unattended); adm.Governed && !adm.Admitted {
 		return orgpolicy.ReasonProviderNotAllowed

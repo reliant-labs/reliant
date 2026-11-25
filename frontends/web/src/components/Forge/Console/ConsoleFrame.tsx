@@ -77,7 +77,9 @@ export function ConsoleFrame({ project, page, env, dashboardTitle, scope, platfo
         <AppPageProjectPicker app={project} page={page} />
         <ConsoleBreadcrumb project={project} env={env} crumbs={crumbs} />
       </ShellPageHeader>
-      <PageMain className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-6 max-md:px-4 max-md:pt-4">{children}</PageMain>
+      <PageMain className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-6 max-md:px-4 max-md:pt-4" data-testid="forge-console-page">
+        {children}
+      </PageMain>
     </div>
   );
 }

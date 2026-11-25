@@ -46,10 +46,16 @@ type InvokeToolActivity struct {
 }
 
 // NewInvokeToolActivity creates a new InvokeToolActivity.
-func NewInvokeToolActivity(repo ExecuteToolsStore, rows WorkspaceRows, toolCalls ToolCalls, toolExecutor toolexec.ToolExecutor) *InvokeToolActivity {
+// Deprecated: use NewInvokeToolActivityWithDeps.
+func NewInvokeToolActivity(storeOrDeps any, legacy ...any) *InvokeToolActivity {
 	return &InvokeToolActivity{
-		executeTools: NewExecuteToolsActivity(repo, rows, toolCalls, toolExecutor),
+		executeTools: NewExecuteToolsActivity(storeOrDeps, legacy...),
 	}
+}
+
+// NewInvokeToolActivityWithDeps creates an invoke activity with explicit dependencies.
+func NewInvokeToolActivityWithDeps(deps ExecuteToolsDeps) *InvokeToolActivity {
+	return &InvokeToolActivity{executeTools: NewExecuteToolsActivityWithDeps(deps)}
 }
 
 // WithToolCallResults gives the tool-execution path the durable-result reader;

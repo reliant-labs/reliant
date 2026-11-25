@@ -23,6 +23,7 @@ import { create } from "@bufbuild/protobuf";
 
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { WorkflowDraftStatus } from "@/gen/reliant/v1/workflow_pb";
+import { ResourceVisibility } from "@/gen/reliant/v1/common_pb";
 import { ScheduleSourceSchema, TriggerHealthSchema, TriggerHealthStatus, TriggerSchema, WorkflowTriggerSchema } from "@/gen/reliant/v1/trigger_pb";
 import { libraryResponse, protoRun, protoTrigger, renderWorkflowsPage } from "./workflowsTestUtils";
 
@@ -40,7 +41,22 @@ const mocks = vi.hoisted(() => ({
   setTriggerEnabled: vi.fn(),
   disableWorkflow: vi.fn(),
   listProjects: vi.fn(),
+  setWorkflowDraftSharing: vi.fn(),
 }));
+
+// Sharing goes through the control plane; off unless a test turns it on.
+// Read on each call (shareTargets), so the modules that chose their
+// implementation at import time keep the local one.
+const controlPlane = vi.hoisted(() => ({ on: false }));
+vi.mock("@/services/controlPlane/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/services/controlPlane/config")>();
+  return {
+    ...actual,
+    get hasControlPlane() {
+      return controlPlane.on;
+    },
+  };
+});
 
 // PresetService and RunService are reached through connectClient (the
 // generated hooks), so they are answered at the transport by the same fakes. Integration events are
@@ -63,6 +79,7 @@ beforeEach(() => {
       "CatalogService.SearchCatalog": { response: {} },
       ...serviceHandlers("ProjectService", { listProjectDaemons: mocks.listProjectDaemons, listProjects: mocks.listProjects }),
       ...serviceHandlers("DaemonRegistryService", { listDaemons: mocks.listDaemons }),
+      ...serviceHandlers("SharingService", { setWorkflowDraftSharing: mocks.setWorkflowDraftSharing }),
     }));
 });
 afterEach(() => {
@@ -94,6 +111,7 @@ import { closeAutomationDialog } from "../../Automations/dialog/openAutomationDi
 
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
+  controlPlane.on = false;
   mocks.listWorkflows.mockResolvedValue(libraryResponse());
   mocks.lastRunPerWorkflow.mockResolvedValue({
     runs: [protoRun("triage", "chat-tri", RunDisplayState.FAILED)],
@@ -489,6 +507,55 @@ describe("WorkflowsListPage", () => {
     const builtinMenu = await screen.findByRole("menu");
     expect(within(builtinMenu).queryByRole("menuitem", { name: "Delete" })).toBeNull();
     expect(within(builtinMenu).getByRole("menuitem", { name: "Duplicate" })).toBeInTheDocument();
+  });
+
+  it("offers Share workflow… on your own saved workflow in an org, and shares it", async () => {
+    controlPlane.on = true;
+    const library = libraryResponse();
+    library.workflows = library.workflows.map((w) =>
+      w.source === "user" ? { ...w, draftId: "d-my", orgId: "acme", visibility: ResourceVisibility.PRIVATE } : w,
+    );
+    mocks.listWorkflows.mockResolvedValue(library);
+    mocks.setWorkflowDraftSharing.mockResolvedValue({ workflow: { id: "d-my", visibility: ResourceVisibility.ORG }, changed: true });
+    renderLibrary();
+
+    const agent = await screen.findByTestId("workflow-row-builtin://agent");
+    await userEvent.click(within(agent).getByRole("button", { name: "More actions for Agent (built-in, agent)" }));
+    expect(within(await screen.findByRole("menu")).queryByRole("menuitem", { name: /Share workflow/ })).toBeNull();
+    await userEvent.keyboard("{Escape}");
+
+    const draft = screen.getByTestId("workflow-row-my-draft");
+    await userEvent.click(within(draft).getByRole("button", { name: "More actions for My Draft (draft, my-draft)" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Share workflow…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Share “My Draft”" });
+    expect(dialog).toHaveTextContent("They cannot run it as you.");
+    await userEvent.click(within(dialog).getByTestId("share-workflow-confirm"));
+    await waitFor(() => expect(mocks.setWorkflowDraftSharing).toHaveBeenCalled());
+    expect(mocks.setWorkflowDraftSharing.mock.calls[0]![0]).toMatchObject({ workflowId: "d-my", visibility: ResourceVisibility.ORG });
+    await waitFor(() => expect(within(dialog).getByTestId("share-workflow-org-state")).toHaveTextContent("Shared"));
+  });
+
+  it("offers Stop sharing workflow… on a shared one, and nothing without a control plane or an org", async () => {
+    controlPlane.on = true;
+    const library = libraryResponse();
+    library.workflows = library.workflows.map((w) =>
+      w.source === "user" ? { ...w, draftId: "d-my", orgId: "acme", visibility: ResourceVisibility.ORG } : w,
+    );
+    mocks.listWorkflows.mockResolvedValue(library);
+    const { unmount } = renderLibrary();
+    let draft = await screen.findByTestId("workflow-row-my-draft");
+    await userEvent.click(within(draft).getByRole("button", { name: "More actions for My Draft (draft, my-draft)" }));
+    expect(await screen.findByRole("menuitem", { name: "Stop sharing workflow…" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    unmount();
+
+    // A saved workflow with no org has no one to share with.
+    library.workflows = library.workflows.map((w) => (w.source === "user" ? { ...w, orgId: undefined } : w));
+    mocks.listWorkflows.mockResolvedValue(library);
+    renderLibrary();
+    draft = await screen.findByTestId("workflow-row-my-draft");
+    await userEvent.click(within(draft).getByRole("button", { name: "More actions for My Draft (draft, my-draft)" }));
+    expect(within(await screen.findByRole("menu")).queryByRole("menuitem", { name: /sharing|Share/ })).toBeNull();
   });
 
   it("Delete lists the triggers it takes with the workflow, in any project", async () => {

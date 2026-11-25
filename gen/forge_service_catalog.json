@@ -555,6 +555,7 @@
         "WorkerTrigger",
         "WorkflowCheckSyncer",
         "WorkflowEventRelay",
+        "Workflowdrafts",
         "WriteLedgerPrune",
         "WriteLedgerStore"
       ],
@@ -13350,6 +13351,53 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.DaemonCgroupStats": [
+            {
+              "name": "cpu_some_avg10",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "memory_some_avg10",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "memory_full_avg10",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "io_some_avg10",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "io_full_avg10",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "cpu_limit_cores",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "cpu_throttled_ratio",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "pids_current",
+              "kind": "uint64",
+              "optional": true
+            },
+            {
+              "name": "pids_max",
+              "kind": "uint64",
+              "optional": true
+            }
+          ],
           "reliant.v1.DaemonInfo": [
             {
               "name": "daemon_id",
@@ -13490,6 +13538,67 @@
               "name": "health",
               "kind": "message",
               "type_name": "reliant.v1.MachineHealth"
+            },
+            {
+              "name": "resources",
+              "kind": "message",
+              "type_name": "reliant.v1.DaemonResourceStats"
+            }
+          ],
+          "reliant.v1.DaemonProcessStats": [
+            {
+              "name": "cpu_cores",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "rss_bytes",
+              "kind": "uint64",
+              "optional": true
+            },
+            {
+              "name": "open_fds",
+              "kind": "int64",
+              "optional": true
+            },
+            {
+              "name": "fd_limit",
+              "kind": "int64",
+              "optional": true
+            },
+            {
+              "name": "threads",
+              "kind": "int64",
+              "optional": true
+            },
+            {
+              "name": "goroutines",
+              "kind": "int64"
+            },
+            {
+              "name": "started_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "sampled_at_ms",
+              "kind": "int64"
+            }
+          ],
+          "reliant.v1.DaemonResourceStats": [
+            {
+              "name": "machine",
+              "kind": "message",
+              "type_name": "reliant.v1.MachineStats"
+            },
+            {
+              "name": "process",
+              "kind": "message",
+              "type_name": "reliant.v1.DaemonProcessStats"
+            },
+            {
+              "name": "cgroup",
+              "kind": "message",
+              "type_name": "reliant.v1.DaemonCgroupStats"
             }
           ],
           "reliant.v1.DeleteMachinePoolRequest": [
@@ -13858,6 +13967,74 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.MachineStats": [
+            {
+              "name": "load1",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "load5",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "load15",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "cpus",
+              "kind": "double"
+            },
+            {
+              "name": "mem_total_bytes",
+              "kind": "uint64"
+            },
+            {
+              "name": "mem_available_bytes",
+              "kind": "uint64"
+            },
+            {
+              "name": "sampled_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "cpu_busy_ratio",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "cpu_iowait_ratio",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "cpu_steal_ratio",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "swap_total_bytes",
+              "kind": "uint64",
+              "optional": true
+            },
+            {
+              "name": "swap_free_bytes",
+              "kind": "uint64",
+              "optional": true
+            },
+            {
+              "name": "open_files",
+              "kind": "uint64",
+              "optional": true
+            },
+            {
+              "name": "open_files_limit",
+              "kind": "uint64",
+              "optional": true
+            }
+          ],
           "reliant.v1.ProcessReport": [
             {
               "name": "count",
@@ -14138,7 +14315,10 @@
           "reliant.v1.ClearMachineCachesRequest": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ClearMachineCachesResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ClearMachineCachesSkip": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.DaemonCgroupStats": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DaemonInfo": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.DaemonProcessStats": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.DaemonResourceStats": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DeleteMachinePoolRequest": "reliant/v1/daemon_registry.proto",
           "reliant.v1.DeleteMachinePoolResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.DiscoveredProject": "reliant/v1/tools_daemon.proto",
@@ -14158,6 +14338,7 @@
           "reliant.v1.MachinePool": "reliant/v1/daemon_registry.proto",
           "reliant.v1.MachinePoolMember": "reliant/v1/daemon_registry.proto",
           "reliant.v1.MachinePoolSpec": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.MachineStats": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessReport": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessTree": "reliant/v1/tools_daemon.proto",
           "reliant.v1.PutMachinePoolRequest": "reliant/v1/daemon_registry.proto",
@@ -42375,6 +42556,53 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.DaemonCgroupStats": [
+            {
+              "name": "cpu_some_avg10",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "memory_some_avg10",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "memory_full_avg10",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "io_some_avg10",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "io_full_avg10",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "cpu_limit_cores",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "cpu_throttled_ratio",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "pids_current",
+              "kind": "uint64",
+              "optional": true
+            },
+            {
+              "name": "pids_max",
+              "kind": "uint64",
+              "optional": true
+            }
+          ],
           "reliant.v1.DaemonCommandFailed": [
             {
               "name": "request_id",
@@ -42502,6 +42730,16 @@
               "name": "machine_stats",
               "kind": "message",
               "type_name": "reliant.v1.MachineStats"
+            },
+            {
+              "name": "process_stats",
+              "kind": "message",
+              "type_name": "reliant.v1.DaemonProcessStats"
+            },
+            {
+              "name": "cgroup_stats",
+              "kind": "message",
+              "type_name": "reliant.v1.DaemonCgroupStats"
             }
           ],
           "reliant.v1.DaemonKillProcessRequest": [
@@ -42614,6 +42852,45 @@
               "kind": "message",
               "type_name": "reliant.v1.LocalModelInventory",
               "oneof": "message"
+            }
+          ],
+          "reliant.v1.DaemonProcessStats": [
+            {
+              "name": "cpu_cores",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "rss_bytes",
+              "kind": "uint64",
+              "optional": true
+            },
+            {
+              "name": "open_fds",
+              "kind": "int64",
+              "optional": true
+            },
+            {
+              "name": "fd_limit",
+              "kind": "int64",
+              "optional": true
+            },
+            {
+              "name": "threads",
+              "kind": "int64",
+              "optional": true
+            },
+            {
+              "name": "goroutines",
+              "kind": "int64"
+            },
+            {
+              "name": "started_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "sampled_at_ms",
+              "kind": "int64"
             }
           ],
           "reliant.v1.DaemonRegister": [
@@ -43239,6 +43516,41 @@
             {
               "name": "sampled_at_ms",
               "kind": "int64"
+            },
+            {
+              "name": "cpu_busy_ratio",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "cpu_iowait_ratio",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "cpu_steal_ratio",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "swap_total_bytes",
+              "kind": "uint64",
+              "optional": true
+            },
+            {
+              "name": "swap_free_bytes",
+              "kind": "uint64",
+              "optional": true
+            },
+            {
+              "name": "open_files",
+              "kind": "uint64",
+              "optional": true
+            },
+            {
+              "name": "open_files_limit",
+              "kind": "uint64",
+              "optional": true
             }
           ],
           "reliant.v1.ProcessOutputChunkMessage": [
@@ -44018,6 +44330,7 @@
         "SchemaFiles": {
           "reliant.v1.ChangedFile": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ConnectorPolicy": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.DaemonCgroupStats": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DaemonCommandFailed": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DaemonCommandRequest": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DaemonCommandResponse": "reliant/v1/tools_daemon.proto",
@@ -44025,6 +44338,7 @@
           "reliant.v1.DaemonKillProcessRequest": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DaemonKillProcessResponse": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DaemonMessage": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.DaemonProcessStats": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DaemonRegister": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DaemonUpgradeStatus": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DiscoveredProject": "reliant/v1/tools_daemon.proto",
@@ -47699,6 +48013,16 @@
               "ProtoType": "[]message",
               "IsOptional": false,
               "MessageType": "reliant.v1.ValidationError"
+            },
+            {
+              "Name": "visibility",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ImportWorkflowRequest": [
@@ -48811,6 +49135,16 @@
               "kind": "message",
               "type_name": "reliant.v1.ValidationError",
               "repeated": true
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.GitPublishArgs": [
@@ -50979,6 +51313,16 @@
               "name": "permissions",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.WorkflowRequirements": [
@@ -51209,6 +51553,11 @@
             "CONFIG_SCOPE_PROJECT",
             "CONFIG_SCOPE_PROJECT_LOCAL"
           ],
+          "reliant.v1.ResourceVisibility": [
+            "RESOURCE_VISIBILITY_UNSPECIFIED",
+            "RESOURCE_VISIBILITY_PRIVATE",
+            "RESOURCE_VISIBILITY_ORG"
+          ],
           "reliant.v1.TriggerOverlapPolicy": [
             "TRIGGER_OVERLAP_POLICY_UNSPECIFIED",
             "TRIGGER_OVERLAP_POLICY_SKIP",
@@ -51232,6 +51581,11 @@
             2,
             3
           ],
+          "reliant.v1.ResourceVisibility": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.TriggerOverlapPolicy": [
             0,
             1,
@@ -51252,6 +51606,10 @@
           "reliant.v1.ConfigScope": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ConfigScope"
+          },
+          "reliant.v1.ResourceVisibility": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ResourceVisibility"
           },
           "reliant.v1.TriggerOverlapPolicy": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -58155,29 +58513,23 @@
     },
     {
       "consumer": "OrgPolicyImpact",
+      "field": "Calls",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Calls",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "OrgPolicyImpact",
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Chats",
       "methods": [],
       "candidates": [
         "Database"
       ],
-      "providers": [
-        "Database"
-      ],
-      "resolution": "composition_expression"
-    },
-    {
-      "consumer": "OrgPolicyImpact",
-      "field": "Store",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Store",
-      "methods": [],
-      "candidates": [
-        "Database"
-      ],
-      "providers": [
-        "Database"
-      ],
-      "resolution": "composition_expression"
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "OrgPolicyResolver",
@@ -58294,16 +58646,12 @@
     },
     {
       "consumer": "OrgUsage",
-      "field": "Store",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.Store",
+      "field": "Usage",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.OrgUsage",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
-      "providers": [
-        "Database"
-      ],
-      "resolution": "composition_expression"
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "PackageCommands",
@@ -60177,6 +60525,15 @@
     },
     {
       "consumer": "Triggerowner",
+      "field": "Adoptions",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Adoptions",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Triggerowner",
       "field": "Locks",
       "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Locks",
       "methods": [],
@@ -60237,16 +60594,12 @@
     },
     {
       "consumer": "Usage",
-      "field": "Store",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/usage.Store",
+      "field": "Usage",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/usage.Usage",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
-      "providers": [
-        "Database"
-      ],
-      "resolution": "composition_expression"
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "UserAuth",
@@ -60296,6 +60649,17 @@
         "Providerbackoff"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerChat",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "WorkerDaemonRouter",
@@ -60386,6 +60750,19 @@
       ],
       "providers": [
         "Daemonmirror"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerToolsFactory",
+      "field": "WorkflowDrafts",
+      "interface": "github.com/reliant-labs/reliant/internal/workflowdrafts.Service",
+      "methods": [],
+      "candidates": [
+        "Workflowdrafts"
+      ],
+      "providers": [
+        "Workflowdrafts"
       ],
       "resolution": "composition_expression"
     },
@@ -60916,7 +61293,31 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "OrgPolicyImpact.Calls",
+      "source": {
+        "path": "internal/handlers/org_policy_impact/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "OrgPolicyImpact.Chats",
+      "source": {
+        "path": "internal/handlers/org_policy_impact/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "OrgUsage.Prices",
+      "source": {
+        "path": "internal/handlers/org_usage/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "OrgUsage.Usage",
       "source": {
         "path": "internal/handlers/org_usage/service.go",
         "symbol": "New"
@@ -61244,6 +61645,14 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Triggerowner.Adoptions",
+      "source": {
+        "path": "internal/triggerowner/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Triggerowner.Locks",
       "source": {
         "path": "internal/triggerowner/service.go",
@@ -61284,10 +61693,26 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Usage.Usage",
+      "source": {
+        "path": "internal/handlers/usage/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Vault.Ctx",
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewVault"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "WorkerChat.Updates",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewWorkerChat"
       }
     },
     {

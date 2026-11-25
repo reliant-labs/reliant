@@ -6,11 +6,12 @@ import (
 	"net/url"
 	"strings"
 
+	"go.opentelemetry.io/otel/attribute"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
-	"go.opentelemetry.io/otel/attribute"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // HostedDisabledError is an executor's refusal that is safe to publish: hosted
