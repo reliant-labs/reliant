@@ -147,7 +147,7 @@ func setupTriggerTest(t *testing.T) *triggerTestEnv {
 
 	tokens, err := automationtokens.New(automationtokens.Deps{DB: repo.ORM(), Sealer: db.NewTestVault(t, repo)})
 	require.NoError(t, err)
-	deps := Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Owners: realOwners(t, repo), Firings: store.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend, AutomationKeys: tokens}
+	deps := Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Owners: realOwners(t, repo), Firings: store.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(repo.ORM()), Triggers: store.NewTriggerExtStore(repo.ORM()), FiringReads: store.NewTriggerEventExtStore(repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend, AutomationKeys: tokens}
 	return &triggerTestEnv{
 		tokens:    tokens,
 		svc:       NewTestTrigger(t, WithTriggerDeps(deps)),

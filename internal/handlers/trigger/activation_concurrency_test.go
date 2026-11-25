@@ -8,6 +8,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,7 +47,7 @@ func TestAgentActivationConcurrentPausesAllApply(t *testing.T) {
 		stored, err := env.repo.GetTrigger(env.ctx, id)
 		require.NoError(t, err)
 		require.False(t, stored.Enabled)
-		history, err := env.repo.ListTriggerChanges(env.ctx, env.userID, id)
+		history, err := store.TriggerChanges(env.ctx, env.repo.ORM(), env.userID, id)
 		require.NoError(t, err)
 		require.Equal(t, "pause", history[0].Operation)
 		require.Equal(t, "auto:pause", history[0].Approval)

@@ -330,7 +330,7 @@ func TestTriggerFiringQueries(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListTriggerEventsPage: %v", err)
 		}
-		twin, twinMore, err := env.Repo.ListTriggerEvents(ctx, f)
+		twin, twinMore, err := store.ListTriggerEventsPage(ctx, env.Repo.ORM(), f)
 		if err != nil {
 			t.Fatalf("Repo.ListTriggerEvents: %v", err)
 		}
@@ -357,7 +357,7 @@ func TestTriggerFiringQueries(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListTriggerEventsPage(%+v): %v", f, err)
 		}
-		twin, twinMore, err := env.Repo.ListTriggerEvents(ctx, f)
+		twin, twinMore, err := store.ListTriggerEventsPage(ctx, env.Repo.ORM(), f)
 		if err != nil {
 			t.Fatalf("Repo.ListTriggerEvents(%+v): %v", f, err)
 		}

@@ -14,7 +14,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -2787,43 +2786,6 @@ func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
 	return store.RemoveTrigger(ctx, r.ORM(), id)
 }
 
-func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		// Turning a trigger on locks its project first: refused while the
-		// project is scheduled for deletion (store.LockProjectsForWrite).
-		if enabled {
-			if err := r.lockTriggerProjects(ctx, id, "", true); err != nil {
-				return err
-			}
-		}
-		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
-			return err
-		}
-		before, err := store.GetTrigger(ctx, r.ORM(), id)
-		if err != nil {
-			return err
-		}
-		if revision, ok := automationpolicy.Revision(ctx); ok && !before.UpdatedAt.Equal(revision) {
-			return svcerr.FailedPrecondition("Activation changed after approval; request a new approval")
-		}
-		if err := store.SetTriggerEnabled(ctx, r.ORM(), id, enabled); err != nil {
-			return err
-		}
-		after, err := store.GetTrigger(ctx, r.ORM(), id)
-		if err != nil {
-			return err
-		}
-		op := "pause"
-		if enabled {
-			op = "enable"
-		}
-		return store.RecordTriggerChange(ctx, r.ORM(), op, before, after)
-	})
-}
-
 // lockTriggerProjects takes the key share a trigger write needs on its
 // projects before the trigger's own row lock (store.LockProjectsForWrite):
 // the project it is in now and, when it moves, toProjectID. Only a write
@@ -2840,14 +2802,6 @@ func (r *Repo) lockTriggerProjects(ctx context.Context, triggerID, toProjectID s
 		return nil
 	}
 	return store.LockProjectsForWrite(ctx, r.ORM(), current, toProjectID)
-}
-
-func (r *Repo) LockActivationDependencies(ctx context.Context, userID, projectID string) error {
-	return store.LockActivationDependencies(ctx, r.ORM(), userID, projectID)
-}
-
-func (r *Repo) ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error) {
-	return store.TriggerChanges(ctx, r.ORM(), userID, triggerID)
 }
 
 // CreateTriggerEvent records one firing. The insert is ON CONFLICT
@@ -2911,18 +2865,6 @@ func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload
 		return fmt.Errorf("trigger event ID cannot be empty")
 	}
 	return store.UpdateTriggerEventPayload(ctx, r.ORM(), id, payload)
-}
-
-// ListTriggerEvents returns one page of the trigger's firings newest first,
-// each with the run it launched, and whether more follow.
-func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error) {
-	if f.TriggerID == "" {
-		return nil, false, fmt.Errorf("trigger ID cannot be empty")
-	}
-	if f.UserID == "" {
-		return nil, false, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListTriggerEventsPage(ctx, r.ORM(), f)
 }
 
 // ClaimRunEvents leases up to max undispatched events until leaseUntil.

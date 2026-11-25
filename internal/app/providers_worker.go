@@ -524,7 +524,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Repo:           repo,
 		Chats:          store.NewChatExtStore(repo.ORM()),
 		Firings:        store.NewTriggerEventExtStore(repo.ORM()),
-		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(repo.ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(repo.ORM()), Triggers: store.NewTriggerExtStore(repo.ORM()), FiringReads: store.NewTriggerEventExtStore(repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()),
 		Owners:         d.Owners,
 		Projects:       projectaccess.NewFromORM(repo.ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(repo.ORM()),

@@ -290,7 +290,7 @@ func waitForEventCount(t *testing.T, repo *db.Repo, userID, triggerID string, wa
 	t.Helper()
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
-		events, _, err := repo.ListTriggerEvents(context.Background(), core.TriggerEventFilters{UserID: userID, TriggerID: triggerID, Limit: 50})
+		events, _, err := store.ListTriggerEventsPage(context.Background(), repo.ORM(), core.TriggerEventFilters{UserID: userID, TriggerID: triggerID, Limit: 50})
 		if err == nil {
 			launched := 0
 			for _, ev := range events {

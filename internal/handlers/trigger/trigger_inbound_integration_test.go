@@ -201,7 +201,7 @@ func assertFirings(t *testing.T, repo *db.Repo, userID, triggerID string, want m
 	// Give a would-be duplicate fire time to (wrongly) land.
 	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a duplicate fire correctly suppressed leaves no event to wait for
 	time.Sleep(time.Second)
-	events, _, err := repo.ListTriggerEvents(context.Background(), core.TriggerEventFilters{UserID: userID, TriggerID: triggerID, Limit: 50})
+	events, _, err := store.ListTriggerEventsPage(context.Background(), repo.ORM(), core.TriggerEventFilters{UserID: userID, TriggerID: triggerID, Limit: 50})
 	require.NoError(t, err)
 	got := map[core.TriggerEventOutcome]int{}
 	for _, ev := range events {

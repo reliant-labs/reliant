@@ -531,7 +531,7 @@ func TestTriggerWritesSerializeWithScheduling(t *testing.T) {
 		})
 		receive(t, f.ctx, ready)
 		enabling := make(chan error, 1)
-		go func() { enabling <- f.repo.SetTriggerEnabled(f.ctx, f.userPaused, true) }()
+		go func() { enabling <- store.EnableTrigger(f.ctx, f.repo.ORM(), f.userPaused, true) }()
 		awaitLockWait(t, f)
 		release()
 		require.NoError(t, receive(t, f.ctx, done))
@@ -551,7 +551,7 @@ func TestTriggerWritesSerializeWithScheduling(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []string{f.enabledTrigger}, resumed, "restore turns on only what the delete paused")
 		assert.False(t, f.trigger(t, f.userPaused).Enabled)
-		require.NoError(t, f.repo.SetTriggerEnabled(f.ctx, f.userPaused, true), "after the restore it can be turned on again")
+		require.NoError(t, store.EnableTrigger(f.ctx, f.repo.ORM(), f.userPaused, true), "after the restore it can be turned on again")
 	})
 }
 

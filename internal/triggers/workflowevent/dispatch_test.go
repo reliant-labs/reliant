@@ -326,7 +326,7 @@ func TestDispatch_WorkflowAndOutcomeMismatchesAreNotRecorded(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, results)
 	for _, tr := range []*core.Trigger{otherWorkflow, onlyFailed} {
-		events, _, err := f.repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: f.userID, TriggerID: tr.ID, Limit: 10})
+		events, _, err := store.ListTriggerEventsPage(ctx, f.repo.ORM(), core.TriggerEventFilters{UserID: f.userID, TriggerID: tr.ID, Limit: 10})
 		require.NoError(t, err)
 		assert.Empty(t, events, "a mismatched event is not this trigger's firing")
 	}
@@ -385,7 +385,7 @@ func TestDispatch_SenderFilterReadsTheFinishingWorkflow(t *testing.T) {
 	launchedChat(t, results, fromReview.ID)
 	skipped := resultFor(t, results, fromDeploy.ID)
 	assert.Equal(t, core.TriggerEventSkipped, skipped.Outcome)
-	events, _, err := f.repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: f.userID, TriggerID: fromDeploy.ID, Limit: 10})
+	events, _, err := store.ListTriggerEventsPage(ctx, f.repo.ORM(), core.TriggerEventFilters{UserID: f.userID, TriggerID: fromDeploy.ID, Limit: 10})
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Equal(t, "code-review", events[0].Event.Sender.ID, "a skipped firing records who it was from")

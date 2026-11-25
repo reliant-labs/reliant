@@ -471,7 +471,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Chats:          store.NewChatExtStore(s.Repo.ORM()),
 		Owners:         triggerOwners(t, s.Repo),
 		Firings:        store.NewTriggerEventExtStore(s.Repo.ORM()),
-		WebhookSecrets: store.NewTriggerExtStore(s.Repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(s.Repo.ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(s.Repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(s.Repo.ORM()), Triggers: store.NewTriggerExtStore(s.Repo.ORM()), FiringReads: store.NewTriggerEventExtStore(s.Repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(s.Repo.ORM()),
 		Projects: projectaccess.NewFromORM(s.Repo.ORM()),
 		OrgMoves: store.NewProjectOrgMoveExtStore(s.Repo.ORM()),
 		Pools:    store.NewMachinePoolExtStore(s.Repo.ORM()),
