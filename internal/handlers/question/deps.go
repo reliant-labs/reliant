@@ -22,10 +22,20 @@ type Questions interface {
 	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error)
 }
 
+// ChatRows reads a chat's own row, for the access check. store.ChatExtStore
+// satisfies it.
+type ChatRows interface {
+	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
+}
+
+// ChatViews reads a chat with its computed state (its main thread), for
+// answering an async question. store.ChatsWithActivityExtStore satisfies it.
+type ChatViews interface {
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
+}
+
 // Repository is the slice of *db.Repo the question handlers use.
 type Repository interface {
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	GetQuestionByID(ctx context.Context, id string) (*db.Question, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error

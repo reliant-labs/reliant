@@ -15,10 +15,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 const listMyOrganizations = vi.fn();
-vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/controlPlane/orgs")>()),
-  listMyOrganizations: () => listMyOrganizations(),
-}));
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 vi.mock("@/api/streaming-grpc", () => ({
   UserStreamingService: vi.fn().mockImplementation(() => ({
@@ -36,6 +32,7 @@ import { fetchProjects, projectsKey, useProjects } from "@/hooks/project-queries
 import { setTransport } from "@/lib/connect";
 import { queryClient } from "@/lib/query-client";
 import { mockTransport } from "@/lib/test-utils";
+import { myOrgsHandlers } from "@/test/orgsTransport";
 import { projectRow } from "@/test/projectList";
 import { bindActiveOrgUser, setEffectiveOrg, useActiveOrgStore } from "@/store/activeOrgStore";
 import { useAuthStore } from "@/store/authStore";
@@ -51,12 +48,16 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }
 
+/** The membership list, answered by `listMyOrganizations`. */
+const MY_ORGS = myOrgsHandlers({ listMyOrganizations: () => listMyOrganizations() });
+
 /** A ProjectService + ChatService that records the org each list named. */
 function server() {
   const projectOrgs: (string | undefined)[] = [];
   const chatOrgs: (string | undefined)[] = [];
   setTransport(
     mockTransport({
+      ...MY_ORGS,
       "ProjectService.ListProjects": (req) => {
         const orgId = (req as { orgId?: string }).orgId;
         projectOrgs.push(orgId);
@@ -83,6 +84,7 @@ beforeEach(() => {
   sessionStorage.clear();
   queryClient.clear();
   listMyOrganizations.mockReset();
+  setTransport(mockTransport(MY_ORGS));
   useAuthStore.setState({ user: { id: "alice" } as never, session: { access_token: "t" } as never });
   // Unbound, so each test's binding loads what it saved first.
   useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });

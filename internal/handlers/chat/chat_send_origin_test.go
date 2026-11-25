@@ -11,6 +11,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // send_to_run reaches a running run through SignalRun, which is SendMessage.
@@ -36,7 +37,7 @@ func TestSendMessage_QueuedUnderAnOriginIsTheSendersMessage(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Queued)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, target.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), target.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	assert.Equal(t, core.AgentMessageKindRunMessage, queued[0].Kind, "not a HUMAN_MESSAGE: the drain would show it as the user's")
@@ -68,7 +69,7 @@ func TestSendMessage_QueuedLLMOnlyIsHiddenAndOffTheStrip(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Queued)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	require.NotNil(t, queued[0].DisplayStyle)

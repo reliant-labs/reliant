@@ -104,6 +104,12 @@ describe("installFixtures", () => {
     expect(probe().refused).toEqual(["reliant.v1.ChatService/DeleteChat"]);
   });
 
+  it("marks the page noindex", async () => {
+    document.head.querySelectorAll('meta[name="robots"]').forEach((m) => m.remove());
+    await installFixtures({ scenario: "shop", readOnly: true, overlays: [] });
+    expect(document.head.querySelector<HTMLMetaElement>('meta[name="robots"]')?.content).toBe("noindex, nofollow");
+  });
+
   it("applies an allow-listed overlay, from the harness or the URL's ?fixtures=", async () => {
     window.__forgeFixtures = { overlays: ["no-daemons", "not-an-overlay"] };
     await installFixtures({ scenario: "shop", readOnly: true, overlays: ["no-daemons"] });

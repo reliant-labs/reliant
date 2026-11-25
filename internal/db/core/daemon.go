@@ -127,6 +127,10 @@ type DaemonAttachment struct {
 	// Health is whether the machine can do work, as its heartbeat last
 	// reported. The zero value is "not reported".
 	Health MachineHealth
+	// ResourceStats is the machine's and the daemon process's latest resource
+	// reading from the heartbeat, protojson of reliantv1.DaemonResourceStats
+	// (resource_stats). "" while the session has reported none.
+	ResourceStats string
 }
 
 // MachineHealthState is MachineHealth's verdict, as stored.

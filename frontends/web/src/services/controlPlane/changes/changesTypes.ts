@@ -5,9 +5,9 @@
  * and A/B tests, one record per change per environment (control-plane
  * ChangesService, `controlplane.v1`; design: forge docs/proposals/changes.md).
  *
- * These are the console's own types, not the generated protobuf ones: the
- * service's proto is not vendored yet (changesWire.ts says why), and the
- * pages should not care when it is. Field meanings follow changes.proto.
+ * These are the console's own types, not the generated protobuf ones: plain
+ * numbers and Dates, enums as words, absent messages as null. changesWire.ts
+ * reads the generated messages into them. Field meanings follow changes.proto.
  *
  * The release declares what a change CAN be (changes.yaml: key, type,
  * variants, default — `declaration`); the control plane decides WHO gets it

@@ -123,6 +123,10 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 	exec(`INSERT INTO tool_call_usage (id, attempt, user_id, chat_id, tool_name, tool_kind, location, outcome, created_at)
 	      VALUES ($1,1,$2,$3,'shell','builtin','daemon','success',$4)`, id("tool"), userID, id("chat"), now)
 	exec(`INSERT INTO user_app_sessions (user_id, first_session_at) VALUES ($1,$2)`, userID, now)
+	exec(`INSERT INTO insights_model_calls_member_daily (user_id, day, provider, model, auth_mode, purpose, outcome, calls, latency_ms_hist, ttft_ms_hist)
+	      VALUES ($1,$2,'anthropic','m','byok','chat','success',1,array_fill(0::bigint, ARRAY[48]),array_fill(0::bigint, ARRAY[48]))`, userID, now)
+	exec(`INSERT INTO insights_tool_calls_member_daily (user_id, day, tool_name, tool_kind, location, outcome, calls, duration_ms_hist)
+	      VALUES ($1,$2,'shell','builtin','daemon','success',1,array_fill(0::bigint, ARRAY[48]))`, userID, now)
 }
 
 // ownershipCount maps a table to the query that counts one user's rows in it.
@@ -130,16 +134,18 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 // workflows through chat_id, which is exactly the kind of detail a purge gets
 // wrong, so the test spells the real path out rather than assuming a column.
 var ownershipCount = map[string]string{
-	"projects":                `SELECT COUNT(*) FROM projects WHERE user_id = $1`,
-	"chats":                   `SELECT COUNT(*) FROM chats WHERE user_id = $1`,
-	"settings":                `SELECT COUNT(*) FROM settings WHERE user_id = $1`,
-	"llm_call_usage":          `SELECT COUNT(*) FROM llm_call_usage WHERE user_id = $1`,
-	"llm_call_usage_daily":    `SELECT COUNT(*) FROM llm_call_usage_daily WHERE user_id = $1`,
-	"tool_call_usage":         `SELECT COUNT(*) FROM tool_call_usage WHERE user_id = $1`,
-	"user_app_sessions":       `SELECT COUNT(*) FROM user_app_sessions WHERE user_id = $1`,
-	"api_keys":                `SELECT COUNT(*) FROM api_keys WHERE user_id = $1`,
-	"provider_accounts":       `SELECT COUNT(*) FROM provider_accounts WHERE user_id = $1`,
-	"provider_account_limits": `SELECT COUNT(*) FROM provider_account_limits WHERE user_id = $1`,
+	"projects":                          `SELECT COUNT(*) FROM projects WHERE user_id = $1`,
+	"chats":                             `SELECT COUNT(*) FROM chats WHERE user_id = $1`,
+	"settings":                          `SELECT COUNT(*) FROM settings WHERE user_id = $1`,
+	"llm_call_usage":                    `SELECT COUNT(*) FROM llm_call_usage WHERE user_id = $1`,
+	"llm_call_usage_daily":              `SELECT COUNT(*) FROM llm_call_usage_daily WHERE user_id = $1`,
+	"tool_call_usage":                   `SELECT COUNT(*) FROM tool_call_usage WHERE user_id = $1`,
+	"user_app_sessions":                 `SELECT COUNT(*) FROM user_app_sessions WHERE user_id = $1`,
+	"insights_model_calls_member_daily": `SELECT COUNT(*) FROM insights_model_calls_member_daily WHERE user_id = $1`,
+	"insights_tool_calls_member_daily":  `SELECT COUNT(*) FROM insights_tool_calls_member_daily WHERE user_id = $1`,
+	"api_keys":                          `SELECT COUNT(*) FROM api_keys WHERE user_id = $1`,
+	"provider_accounts":                 `SELECT COUNT(*) FROM provider_accounts WHERE user_id = $1`,
+	"provider_account_limits":           `SELECT COUNT(*) FROM provider_account_limits WHERE user_id = $1`,
 	"thread_provider_accounts": `SELECT COUNT(*) FROM thread_provider_accounts t
 	                               JOIN provider_accounts a ON a.id = t.account_id WHERE a.user_id = $1`,
 	"worktrees": `SELECT COUNT(*) FROM worktrees w
@@ -196,6 +202,7 @@ func TestPurge_RemovesEverythingForUser(t *testing.T) {
 	for _, table := range append([]string{
 		"projects", "chats", "worktrees", "settings", "llm_call_usage", "llm_call_usage_daily", "tool_call_usage",
 		"user_app_sessions", "messages", "threads", "tool_calls",
+		"insights_model_calls_member_daily", "insights_tool_calls_member_daily",
 		"provider_account_limits", "thread_provider_accounts",
 		"chat_updates", "chat_update_heads",
 	}, credentialTables...) {
@@ -765,5 +772,52 @@ func TestPurge_AnInFlightToolCallCannotRecreateUsage(t *testing.T) {
 	written, err := llmusagetest.New(t, repo).RecordToolCallUsage(ctx, rec("much-later"))
 	if err != nil || written {
 		t.Fatalf("a tool call after the purge: written=%v err=%v, want refused", written, err)
+	}
+}
+
+// A member's insights rollups (agent-analytics.md §3.1) go with the account;
+// the org's team totals, which name no one, stay. A call that predates the
+// rollups goes with the purge too, so the backfill folds nothing for the
+// account afterwards.
+func TestPurge_RemovesInsightsMemberRowsKeepsTeamTotals(t *testing.T) {
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	purger := purgetest.New(t, repo)
+	defer cleanup()
+	ctx := context.Background()
+	at := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC) // fixture data, not a clock
+
+	const userID = "user-insights"
+	seedUser(t, rawDB, userID)
+	ledger := llmusagetest.New(t, repo)
+	call := func(id string) db.LLMCallUsage {
+		return db.LLMCallUsage{ID: id, UserID: userID, OrgID: "org-insights", ChatID: "chat-" + userID, Provider: "reliant",
+			Model: "m", AuthMode: "managed", Purpose: "chat", Outcome: "success", Attempt: 1, CreatedAt: at}
+	}
+	for _, id := range []string{"a", "b"} {
+		if written, err := ledger.RecordLLMCallUsage(ctx, call(id)); err != nil || !written {
+			t.Fatalf("RecordLLMCallUsage: written=%v err=%v", written, err)
+		}
+	}
+	if _, err := rawDB.Exec(`UPDATE llm_call_usage SET insights_folded = false WHERE id = 'b'`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := purger.Purge(ctx, userID); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+	if n, err := ledger.FoldInsights(ctx); err != nil || n != 0 {
+		t.Fatalf("FoldInsights after the purge: folded=%d err=%v, want nothing left to fold", n, err)
+	}
+	for _, table := range []string{"insights_model_calls_member_daily", "insights_tool_calls_member_daily"} {
+		if n := countRows(t, rawDB, table, userID); n != 0 {
+			t.Errorf("%s: %d rows survived the purge, want 0", table, n)
+		}
+	}
+	var team int
+	if err := rawDB.QueryRow(`SELECT coalesce(sum(calls), 0) FROM insights_model_calls_daily WHERE org_id = 'org-insights'`).Scan(&team); err != nil {
+		t.Fatal(err)
+	}
+	if team != 2 {
+		t.Errorf("the org's team totals after the purge: %d calls, want 2", team)
 	}
 }

@@ -259,11 +259,8 @@ message InjectConfig {
     description: "UI display style for injected message; defaults to hidden"
     enum_values: "info|warning|success|hidden"
   }];
-  // Deprecated: use repeated attachments field (5) instead.
-  CelString legacy_attachments = 3 [
-    deprecated = true,
-    (reliant) = {hidden: true}
-  ];
+  reserved 3;
+  reserved "legacy_attachments";
   // Attachments to include in the injected message.
   repeated InjectAttachment attachments = 5 [(reliant) = {description: "Attachments to include"}];
 }
@@ -740,16 +737,9 @@ message ExecuteToolsArgs {
   // recorded no set (a run that predates it, or tool calls not from an LLM).
   // See research/TOOL_CAPABILITIES.md.
   ToolCapabilities capabilities = 6 [(reliant) = {hidden: true}];
-  // Deprecated: the integration action approval prompt that set this was
-  // removed. Only the replay branch that keeps runs recorded before the
-  // removal working still sets it (runtime/action_approval_legacy.go): a call
-  // the person attending denied, keyed by tool call id, with the reason the
-  // model is told; the activity records each FAILED with it. Reserve the tag
-  // when that branch and its version gate are retired.
-  map<string, string> refused_tool_calls = 7 [
-    deprecated = true,
-    (reliant) = {hidden: true}
-  ];
+  // The removed integration action approval prompt's refusals.
+  reserved 7;
+  reserved "refused_tool_calls";
 }
 
 // InvokeToolArgs configures an invoke_tool node — invokes ONE tool directly from the graph,
@@ -1357,12 +1347,18 @@ message RunArgs {
   // and it is revoked when the step ends. Refused, without running the
   // command, on a machine whose daemon does not apply step keys and on a
   // deployment that cannot issue them. Output: nodes.<id>.llm_gateway.
-  LLMGatewayStep llm_gateway = 7 [(reliant) = {
-    description: "Run the command with a short-lived, budget-capped LLM gateway key for a third-party agent CLI, as {cli: claude-code, budget_usd: 2, models: [...]}. The key is set for this command only, redacted from its output and revoked when the step ends"
-    example: "{\"cli\": \"claude-code\", \"budget_usd\": 2}"
-    type_hint: "JSON object"
-    label: "LLM gateway"
-  }];
+  //
+  // Deprecated (shipped in v1.29.0, slated for removal): it keeps working
+  // throughout v1 and is removed only in a future major.
+  LLMGatewayStep llm_gateway = 7 [
+    deprecated = true,
+    (reliant) = {
+      description: "Deprecated: kept working throughout v1, slated for removal. Run the command with a short-lived, budget-capped LLM gateway key for a third-party agent CLI, as {cli: claude-code, budget_usd: 2, models: [...]}. The key is set for this command only, redacted from its output and revoked when the step ends"
+      example: "{\"cli\": \"claude-code\", \"budget_usd\": 2}"
+      type_hint: "JSON object"
+      label: "LLM gateway"
+    }
+  ];
 }
 
 // LLMGatewayStep is a run node's `llm_gateway`: which CLI the step key is for
@@ -2089,13 +2085,9 @@ message ToolCapabilities {
   // exactly (not through a tag, a glob or "*"), sorted: an unattended run keeps
   // them. Only set when unattended is.
   repeated string unattended_opt_in = 11;
-  // Deprecated: never written. It listed the offered tools whose calls asked
-  // the person attending before they ran — the integration action approval
-  // prompt, since removed. A call_llm output recorded before the removal still
-  // carries it, and the replay branch that keeps those runs working reads it
-  // (runtime/action_approval_legacy.go). Reserve the tag when that branch and
-  // its version gate are retired.
-  repeated string approval_required = 12 [deprecated = true];
+  // The removed integration action approval prompt's gated tools.
+  reserved 12;
+  reserved "approval_required";
   // SpawnDepthExhausted: the agent is a sub-agent whose spawn depth has
   // reached the maximum, so it is never offered spawn. load_tool and the
   // execution refusal say so instead of "not found".
@@ -2280,7 +2272,9 @@ message RunOutput {
   bool truncated = 6;
   // The step key the command ran with, when the node sets llm_gateway:
   // what it was allowed and what it spent. Never the key itself.
-  RunLLMGatewayOutput llm_gateway = 7;
+  // Deprecated with RunArgs.llm_gateway: set while that field keeps working
+  // throughout v1.
+  RunLLMGatewayOutput llm_gateway = 7 [deprecated = true];
 }
 
 // RunLLMGatewayOutput is a run node's nodes.<id>.llm_gateway: the step key its
@@ -2609,11 +2603,17 @@ message WorkflowRequirements {
   // checked with the vendor's own status command, whose output never leaves
   // the machine; Reliant never reads, stores or relays a vendor's sign-in.
   // A person signs one in with `reliant machine login <vendor>`.
-  repeated string cli_login = 4 [(reliant) = {
-    description: "Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine. Checked with each vendor's own status command before the first node; sign one in with `reliant machine login <vendor> --machine <name>`"
-    example: "[claude, codex]"
-    label: "CLI sign-ins"
-  }];
+  //
+  // Deprecated (shipped in v1.29.0, slated for removal): it keeps working
+  // throughout v1 and is removed only in a future major.
+  repeated string cli_login = 4 [
+    deprecated = true,
+    (reliant) = {
+      description: "Deprecated: kept working throughout v1, slated for removal. Vendor agent CLIs (claude, codex, gemini, cursor, copilot) that must be installed and signed in on the run's machine. Checked with each vendor's own status command before the first node; sign one in with `reliant machine login <vendor> --machine <name>`"
+      example: "[claude, codex]"
+      label: "CLI sign-ins"
+    }
+  ];
 }
 
 // WorkflowConcurrency is a trigger admission policy, not a worker task limit.

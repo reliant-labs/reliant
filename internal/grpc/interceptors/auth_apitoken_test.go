@@ -3,6 +3,7 @@ package interceptors
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -13,13 +14,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
-func bearerHeader(token string) func(string) string {
-	return func(key string) string {
-		if key == "Authorization" {
-			return "Bearer " + token
-		}
-		return ""
-	}
+func bearerHeader(token string) http.Header {
+	return http.Header{"Authorization": {"Bearer " + token}}
 }
 
 func mintFor(t *testing.T, authority *tokenauthority.Memory, userID string, scopes ...fat.Scope) tokenauthority.Minted {
@@ -103,7 +99,7 @@ func TestAuthInterceptorAccessTokenDispatch(t *testing.T) {
 	})
 
 	t.Run("public methods skip auth entirely", func(t *testing.T) {
-		_, claims, err := interceptor.authenticateRequest(ctx, "/reliant.v1.SystemService/Health", func(string) string { return "" })
+		_, claims, err := interceptor.authenticateRequest(ctx, "/reliant.v1.SystemService/Health", http.Header{})
 		require.NoError(t, err)
 		require.Nil(t, claims)
 	})

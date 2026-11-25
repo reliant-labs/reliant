@@ -95,11 +95,32 @@ func (r *Repo) PinProjectCatalog(ctx context.Context, scope CatalogPinScope) (st
 	// machines (or two commits) holding the same bytes are two snapshots,
 	// each naming its own provenance.
 	pin := catalogPin(scope.ProjectID, workflows, presets, userWorkflows, machine, repoStates)
-	if err := store.PutWorkflowCatalogSnapshot(ctx, r.ORM(), &store.WorkflowCatalogSnapshot{
+	now := time.Now().UTC()
+	inTx := r.DB.inTx(ctx)
+	if _, touchDue, ok := r.pinnedCatalogs().get(pin, now); ok && !touchDue && !inTx {
+		// Content is cached, but another process may have pruned the row.
+		stored, err := store.HasWorkflowCatalogSnapshot(ctx, r.ORM(), pin)
+		if err != nil {
+			return "", err
+		}
+		if stored {
+			return pin, nil
+		}
+		r.pinnedCatalogs().remove(pin)
+	}
+	row := &store.WorkflowCatalogSnapshot{
 		ID: pin, ProjectID: scope.ProjectID, DaemonID: machine,
 		WorkflowsJSON: workflows, PresetsJSON: presets, UserWorkflowsJSON: userWorkflows, RepoStatesJSON: repoStates,
-	}, time.Now().UTC()); err != nil {
+	}
+	if err := store.PutWorkflowCatalogSnapshot(ctx, r.ORM(), row, now); err != nil {
 		return "", err
+	}
+	// The run reads it back next. Kept only when committed: a pin stored in a
+	// transaction that rolls back was never stored.
+	if !inTx {
+		if catalog, err := pinnedCatalogOf(row); err == nil {
+			r.pinnedCatalogs().add(pin, catalog, now)
+		}
 	}
 	return pin, nil
 }
@@ -140,27 +161,78 @@ func (r *Repo) pinnableUserWorkflows(ctx context.Context, scope CatalogPinScope)
 
 // GetPinnedProjectCatalog reads a pinned catalog; found is false when the pin
 // is unknown (never stored, or pruned).
+//
+// A pin names its content (catalogPin), so a catalog read once is served from
+// this Repo's cache after (pinnedCatalogCache), with existence checked on every
+// read. Its last_used_at, which only the retention prune reads, is bumped at
+// most hourly outside transactions. Transactional reads use storage directly.
+// The returned
+// catalog's strings, map and slice are shared: read them, never write them.
 func (r *Repo) GetPinnedProjectCatalog(ctx context.Context, pin string) (*PinnedCatalog, bool, error) {
 	if pin == "" {
 		return nil, false, fmt.Errorf("catalog pin cannot be empty")
 	}
-	row, err := store.UseWorkflowCatalogSnapshot(ctx, r.ORM(), pin, time.Now().UTC())
+	now := time.Now().UTC()
+	cache := r.pinnedCatalogs()
+	// A transaction must read its own storage view, including local deletes,
+	// and must not publish a last-used bump that can still roll back.
+	inTx := r.DB.inTx(ctx)
+	if catalog, touchDue, ok := cache.get(pin, now); ok && !inTx {
+		var stored bool
+		var err error
+		if touchDue {
+			stored, err = store.TouchWorkflowCatalogSnapshot(ctx, r.ORM(), pin, now)
+		} else {
+			stored, err = store.HasWorkflowCatalogSnapshot(ctx, r.ORM(), pin)
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		if !stored {
+			cache.remove(pin)
+			countPinnedRead(ctx, "miss")
+			return nil, false, nil
+		}
+		if touchDue {
+			cache.touched(pin, now)
+		}
+		countPinnedRead(ctx, "hit")
+		return sharedPinnedCatalog(catalog), true, nil
+	}
+	countPinnedRead(ctx, "miss")
+	row, err := store.UseWorkflowCatalogSnapshot(ctx, r.ORM(), pin, now)
 	if err != nil || row == nil {
 		return nil, false, err
 	}
+	catalog, err := pinnedCatalogOf(row)
+	if err != nil {
+		return nil, false, err
+	}
+	// Kept only when read outside a transaction: one could be reading a pin
+	// it stored itself and may yet roll back.
+	if !inTx {
+		cache.add(pin, catalog, now)
+		return sharedPinnedCatalog(catalog), true, nil
+	}
+	return catalog, true, nil
+}
+
+// pinnedCatalogOf decodes a stored pinned catalog.
+func pinnedCatalogOf(row *store.WorkflowCatalogSnapshot) (*PinnedCatalog, error) {
 	catalog := &PinnedCatalog{Workflows: row.WorkflowsJSON, Presets: row.PresetsJSON}
 	if row.DaemonID != nil {
 		catalog.DaemonID = *row.DaemonID
 	}
+	var err error
 	if catalog.RepoStates, err = config.ParseSyncedRepoStates(row.RepoStatesJSON); err != nil {
-		return nil, false, fmt.Errorf("read the git state of catalog %s: %w", pin, err)
+		return nil, fmt.Errorf("read the git state of catalog %s: %w", row.ID, err)
 	}
 	if row.UserWorkflowsJSON != nil {
 		if err := json.Unmarshal([]byte(*row.UserWorkflowsJSON), &catalog.UserWorkflows); err != nil {
-			return nil, false, fmt.Errorf("read the account workflows of catalog %s: %w", pin, err)
+			return nil, fmt.Errorf("read the account workflows of catalog %s: %w", row.ID, err)
 		}
 	}
-	return catalog, true, nil
+	return catalog, nil
 }
 
 // catalogPin is a catalog's content address within its project.

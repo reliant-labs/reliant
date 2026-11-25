@@ -17,6 +17,8 @@ var (
 	goldenOOM     = time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
 	goldenCreated = time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
 	goldenChanged = time.Date(2026, 10, 7, 9, 15, 0, 0, time.UTC)
+	// A drain deadline arrives as unix milliseconds, so it keeps them.
+	goldenDeadline = time.Date(2026, 10, 7, 9, 40, 0, 123_000_000, time.UTC)
 )
 
 // TestGoldenWire pins the exact bytes each payload marshals to. Two services
@@ -82,6 +84,35 @@ func TestGoldenWire(t *testing.T) {
 			},
 			want: `{"daemon_id":"d-1","user_id":"u-1","type":"connected","at":"2026-10-07T09:30:00Z","daemon_type":"managed",` +
 				`"build":{"version":"1.8.3-dev+b675d224","commit":"b675d22417c3","commit_time_unix":1792800000,"forge_version":"v0.1.47"}}`,
+		},
+		{
+			name: "upgrade event carries the daemon's upgrade state and no build",
+			value: &daemonwire.Event{
+				DaemonID:   "d-1",
+				UserID:     "u-1",
+				Type:       daemonwire.EventUpgrade,
+				At:         goldenAt,
+				DaemonType: "cloud",
+				Upgrade: &daemonwire.Upgrade{
+					State:            daemonwire.UpgradeStateDrained,
+					RolloutID:        "roll-7",
+					TargetVersion:    "1.9.0",
+					Deadline:         &goldenDeadline,
+					ToolCallsRunning: 1,
+					Detail:           "drain deadline passed",
+				},
+			},
+			want: `{"daemon_id":"d-1","user_id":"u-1","type":"upgrade","at":"2026-10-07T09:30:00Z","daemon_type":"cloud",` +
+				`"upgrade":{"state":"drained","rollout_id":"roll-7","target_version":"1.9.0",` +
+				`"deadline":"2026-10-07T09:40:00.123Z","tool_calls_running":1,"detail":"drain deadline passed"}}`,
+		},
+		{
+			name: "upgrade state alone omits every optional field",
+			value: &daemonwire.Event{
+				DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventUpgrade, At: goldenAt,
+				Upgrade: &daemonwire.Upgrade{State: daemonwire.UpgradeStateUpdating},
+			},
+			want: `{"daemon_id":"d-1","user_id":"u-1","type":"upgrade","at":"2026-10-07T09:30:00Z","upgrade":{"state":"updating"}}`,
 		},
 		{
 			name: "activity event carries its reason",
@@ -168,12 +199,20 @@ func TestWireVocabulary(t *testing.T) {
 		{string(daemonwire.EventActivity), "activity"},
 		{string(daemonwire.EventLifecycle), "lifecycle"},
 		{string(daemonwire.EventRemoved), "removed"},
+		{string(daemonwire.EventUpgrade), "upgrade"},
+		{daemonwire.Subject("d-1", daemonwire.EventUpgrade), "daemon.v1.state.d-1.upgrade"},
 		{string(daemonwire.LifecyclePhaseProvisioning), "provisioning"},
 		{string(daemonwire.LifecyclePhaseCloning), "cloning"},
 		{string(daemonwire.LifecyclePhaseReady), "ready"},
 		{string(daemonwire.LifecyclePhaseSuspending), "suspending"},
 		{string(daemonwire.LifecyclePhaseSuspended), "suspended"},
 		{string(daemonwire.LifecyclePhaseFailed), "failed"},
+		{string(daemonwire.UpgradeStateCurrent), "current"},
+		{string(daemonwire.UpgradeStateUpdating), "updating"},
+		{string(daemonwire.UpgradeStateDrained), "drained"},
+		{string(daemonwire.UpgradeStateAwaitingOwner), "awaiting_owner"},
+		{string(daemonwire.UpgradeStateFailed), "failed"},
+		{string(daemonwire.UpgradeStateStaged), "staged"},
 	}
 	for _, p := range pins {
 		if p.got != p.want {
@@ -188,6 +227,7 @@ var allEventTypes = []daemonwire.EventType{
 	daemonwire.EventActivity,
 	daemonwire.EventLifecycle,
 	daemonwire.EventRemoved,
+	daemonwire.EventUpgrade,
 }
 
 // TestSubjectMatchesWildcard checks that every subject a publisher can build
@@ -248,6 +288,9 @@ func TestUnmarshalEvent(t *testing.T) {
 		{"missing at", `{"daemon_id":"d","user_id":"u","type":"connected"}`, true},
 		{"missing type", `{"daemon_id":"d","user_id":"u",` + at + `}`, true},
 		{"bad type", `{"daemon_id":"d","user_id":"u","type":"weird",` + at + `}`, true},
+		{"valid upgrade", `{"daemon_id":"d","type":"upgrade","upgrade":{"state":"drained"},` + at + `}`, false},
+		{"upgrade without upgrade", `{"daemon_id":"d","type":"upgrade",` + at + `}`, true},
+		{"upgrade without state", `{"daemon_id":"d","type":"upgrade","upgrade":{"rollout_id":"r"},` + at + `}`, true},
 		{"junk", `not json`, true},
 	}
 	for _, tc := range cases {
@@ -260,12 +303,74 @@ func TestUnmarshalEvent(t *testing.T) {
 	}
 }
 
+// typesBeforeUpgrade is the type switch of UnmarshalEvent as consumers built
+// before EventUpgrade run it (control-plane at reliant e7aed083d1af, and every
+// older reliant replica still running during a deploy). Frozen: never add to
+// it.
+var typesBeforeUpgrade = map[string]bool{
+	"connected": true, "disconnected": true, "activity": true, "lifecycle": true, "removed": true,
+}
+
+// An old consumer drops an upgrade event at parse (it logs and acks: plain
+// NATS, no redelivery) rather than reading it as something it knows. It must
+// never look like a connect or activity: carrying a build, a reason, or one
+// of their subjects would let an old consumer re-mirror a stale build or keep
+// a machine awake.
+func TestUpgradeEventIsDroppedNotMisreadByAnOldConsumer(t *testing.T) {
+	in := daemonwire.Event{
+		DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventUpgrade, At: goldenAt, DaemonType: "cloud",
+		Upgrade: &daemonwire.Upgrade{State: daemonwire.UpgradeStateDrained, RolloutID: "roll-7", Deadline: &goldenDeadline},
+	}
+	body, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var old struct {
+		Type   string          `json:"type"`
+		Build  json.RawMessage `json:"build"`
+		Reason string          `json:"reason"`
+	}
+	if err := json.Unmarshal(body, &old); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if typesBeforeUpgrade[old.Type] {
+		t.Fatalf("an old consumer reads the upgrade event as a %q event", old.Type)
+	}
+	if old.Build != nil || old.Reason != "" {
+		t.Fatalf("upgrade event carries connect or activity facts: %s", body)
+	}
+	subj := daemonwire.Subject(in.DaemonID, in.Type)
+	for typ := range typesBeforeUpgrade {
+		if subj == daemonwire.Subject(in.DaemonID, daemonwire.EventType(typ)) {
+			t.Fatalf("upgrade subject %q is an existing type's subject", subj)
+		}
+	}
+}
+
+// UnmarshalEvent ignores a field it does not know, so a consumer built from
+// this version reads events from a newer publisher. Making it strict would
+// turn every future additive field into a wire break.
+func TestUnmarshalEvent_IgnoresUnknownFields(t *testing.T) {
+	body := `{"daemon_id":"d","user_id":"u","type":"upgrade","at":"2026-05-30T12:00:00Z",` +
+		`"from_the_future":{"x":1},"upgrade":{"state":"drained","not_yet_named":true}}`
+	got, err := daemonwire.UnmarshalEvent([]byte(body))
+	if err != nil {
+		t.Fatalf("UnmarshalEvent rejected unknown fields: %v", err)
+	}
+	if got.Upgrade == nil || got.Upgrade.State != daemonwire.UpgradeStateDrained {
+		t.Fatalf("Upgrade = %+v, want state drained", got.Upgrade)
+	}
+}
+
 // TestUnmarshalEvent_AcceptsEveryType guards the type switch inside
 // UnmarshalEvent: a new EventType that is published but not added there would
 // be dropped by every consumer as "unknown type".
 func TestUnmarshalEvent_AcceptsEveryType(t *testing.T) {
 	for _, typ := range allEventTypes {
 		in := daemonwire.Event{DaemonID: "d", Type: typ, At: goldenAt}
+		if typ == daemonwire.EventUpgrade {
+			in.Upgrade = &daemonwire.Upgrade{State: daemonwire.UpgradeStateDrained}
+		}
 		body, err := json.Marshal(in)
 		if err != nil {
 			t.Fatalf("marshal: %v", err)

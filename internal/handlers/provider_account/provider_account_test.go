@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -43,6 +44,7 @@ func newEnv(t *testing.T) *env {
 	e := &env{t: t, repo: repo, accounts: db.TestAccounts(t, repo), valid: func(string, string) (bool, string) { return true, "ok" }}
 	e.svc = provider_account.NewTestProviderAccount(t, provider_account.WithProviderAccountDeps(provider_account.Deps{
 		Store:    repo,
+		Chats:    chataccess.NewFromORM(repo.ORM()),
 		Accounts: e.accounts,
 		Funding:  store.NewChatPersonalFundingExtStore(repo.ORM()),
 		ValidateKey: func(_ context.Context, p models.Family, key string) (bool, string) {
@@ -506,6 +508,7 @@ func TestAccountThatAddsCapacityWakesTheUsersBlockedChats(t *testing.T) {
 	w := &wakes{}
 	svc := provider_account.NewTestProviderAccount(t, provider_account.WithProviderAccountDeps(provider_account.Deps{
 		Store:       repo,
+		Chats:       chataccess.NewFromORM(repo.ORM()),
 		Accounts:    db.TestAccounts(t, repo),
 		ValidateKey: func(context.Context, models.Family, string) (bool, string) { return true, "ok" },
 		ChatWaker:   w,

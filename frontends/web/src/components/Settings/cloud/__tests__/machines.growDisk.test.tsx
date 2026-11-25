@@ -42,10 +42,6 @@ const eligibility = (maxDaemonStorageGib: number) => ({
 // The Add machine sheet (billing checkout, catalog) is not under test here.
 vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
 vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
-vi.mock('@/services/controlPlane/billing', () => ({
-  getComputeEligibility: mocks.getComputeEligibility,
-}))
-
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
   useComputeUsage: () => ({ data: undefined }),
   usePlans: () => ({
@@ -87,15 +83,11 @@ vi.mock('@/services/controlPlane/environments', () => ({
   DaemonType: { UNSPECIFIED: 0, MANAGED: 1, EXTERNAL: 2 },
   PortAccessMode: { UNSPECIFIED: 0, PUBLIC: 1, AUTHENTICATED: 2, TOKEN: 3 },
   describeError: (e: unknown, fallback = 'error') => (e instanceof Error ? e.message : fallback),
-  portAccessRulesQueryKey: (daemonId: string) => ['cp', 'ports', daemonId],
   getComputeSubscription: vi.fn(async () => ({})),
-  getDaemon: mocks.getDaemon,
-  deleteDaemon: vi.fn(),
   suspendDaemon: mocks.suspendDaemon,
   resumeEnvironment: mocks.resumeEnvironment,
   resizeDaemon: vi.fn(),
   growDaemonDisk: mocks.growDaemonDisk,
-  listPortAccessRules: vi.fn(async () => []),
   setPortAccess: vi.fn(),
   removePortAccess: vi.fn(),
 }))
@@ -106,10 +98,20 @@ import { DaemonDiskState } from '@/gen/controlplane/controlplane/v1/shared_pb'
 import { DiskReportSchema } from '@/gen/reliant/v1/tools_daemon_pb'
 import { create } from '@bufbuild/protobuf'
 import { setTransport } from '@/lib/connect'
+import { cpDaemonHandlers } from '@/test/cpDaemonTransport'
 import { daemonRegistryTransport } from '@/test/daemonRegistry'
+import { eligibilityHandlers } from '@/test/billingTransport'
+
+// Control-plane DaemonService answers at the transport: Settings › Machines
+// reads GetDaemon and the port rules through the generated hooks.
+const cpDaemon = () =>
+  cpDaemonHandlers({
+    getDaemon: (req: { daemonId: string }) => mocks.getDaemon(req.daemonId),
+    listPortAccessRules: () => ({ rules: [] }),
+  })
 
 // The daemon list is read through connectClient(DaemonRegistryService).
-beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() }, cpDaemon(), eligibilityHandlers(() => mocks.getComputeEligibility()))))
 afterEach(() => setTransport(null))
 
 function machine(over: Record<string, unknown> = {}) {

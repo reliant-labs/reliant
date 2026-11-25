@@ -404,7 +404,7 @@ func (r *countingChatRepo) GetChatRow(_ context.Context, id string) (*db.ChatRow
 // recheck, and caches it for good once it has one.
 func TestOrgGate_ReReadsAnUnassignedResourceOncePerRecheck(t *testing.T) {
 	repo := &countingChatRepo{}
-	gate := newOrgGate(repo, nil, raceTestUserID, 3*time.Second)
+	gate := newOrgGate(repo, repo, nil, raceTestUserID, 3*time.Second)
 	clock := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 	gate.now = func() time.Time { return clock }
 	ctx := authz.WithMembership(context.Background(), &orgMembers{orgs: map[string]bool{"home": true}, def: "home"})

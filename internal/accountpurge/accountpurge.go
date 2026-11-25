@@ -257,6 +257,16 @@ var purgeSteps = []step{
 	// payloads included, keyed by chat with no foreign key.
 	{"chat_update_heads", `
 		DELETE FROM chat_update_heads WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
+	// The per-thread message counts the messages triggers maintain, and the
+	// chats still waiting for theirs to be counted: keyed by chat with no
+	// foreign key. They follow messages, whose delete writes the counts.
+	{"chat_thread_message_counts", `
+		DELETE FROM chat_thread_message_counts WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
+	{"chat_message_counts_pending", `
+		DELETE FROM chat_message_counts_pending WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
+	// A thread's provider backoff marker, keyed by chat with no foreign key.
+	{"provider_backoff", `
+		DELETE FROM provider_backoff WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
 	{"background_process_output", `
 		DELETE FROM background_process_output WHERE process_id IN (
 			SELECT id FROM background_processes WHERE user_id = $1)`},
@@ -337,6 +347,11 @@ var purgeSteps = []step{
 	// chat's owner, with no foreign key to cascade them. Its writes take the
 	// same lock and fence as the model calls' above.
 	{"tool_call_usage", `DELETE FROM tool_call_usage WHERE user_id = $1`},
+	// The insights member rollups (agent-analytics.md §3.1): a member's daily
+	// totals, keyed by user. Their writes take the lock above. The team
+	// rollups name no one and stay with the org.
+	{"insights_model_calls_member_daily", `DELETE FROM insights_model_calls_member_daily WHERE user_id = $1`},
+	{"insights_tool_calls_member_daily", `DELETE FROM insights_tool_calls_member_daily WHERE user_id = $1`},
 	// A chat's question before it uses the person's own account (§10): it names
 	// their account's label. Chats cascade it too; this covers a chat kept.
 	{"chat_personal_funding", `DELETE FROM chat_personal_funding WHERE user_id = $1`},
@@ -351,6 +366,28 @@ var purgeSteps = []step{
 	// The durable first-session marker (app_first_session analytics): when the
 	// user first used the app. No users table cascades it.
 	{"user_app_sessions", `DELETE FROM user_app_sessions WHERE user_id = $1`},
+	// The activation milestone (user_first_message analytics), which names the
+	// message and chat that earned it. It outlives a deleted chat on purpose,
+	// not the account.
+	{"user_activations", `DELETE FROM user_activations WHERE user_id = $1`},
+
+	// Automation history. trigger_events (each firing, with its payload) and
+	// trigger_changes (each configuration edit, before and after) are keyed by
+	// the trigger's owner: trigger_events.trigger_id is ON DELETE SET NULL, so
+	// the projects cascade above leaves every firing behind.
+	{"trigger_events", `DELETE FROM trigger_events WHERE user_id = $1`},
+	{"trigger_changes", `DELETE FROM trigger_changes WHERE user_id = $1`},
+	// Automation attention: incidents and their per-run fences. They have no
+	// foreign key so a chat's deletion keeps the fence; the account's does
+	// not. A late write cannot recreate them: each checks its chat still
+	// exists and is owned (store.ApplyAttentionUpdate).
+	{"attention_actors", `DELETE FROM attention_actors WHERE user_id = $1`},
+	{"attention_incidents", `DELETE FROM attention_incidents WHERE user_id = $1`},
+	// The ledger of what the person's agents wrote to connected integrations
+	// (writeledger, kept 30 days otherwise): target, object and correlation.
+	{"integration_writes", `DELETE FROM integration_writes WHERE user_id = $1`},
+	// Video generation jobs: the provider's job id and the attachment made.
+	{"video_generation_jobs", `DELETE FROM video_generation_jobs WHERE user_id = $1`},
 }
 
 // vaultKeysStep is the last statement of the purge, after every credential package has deleted
