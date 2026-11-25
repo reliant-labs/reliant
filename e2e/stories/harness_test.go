@@ -32,6 +32,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/daemon"
@@ -419,6 +420,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Logger:        slog.Default(),
 		Config:        &typedconfig.Config{},
 		Repo:          s.Repo,
+		Chats:         chataccess.NewFromORM(s.Repo.ORM()),
 		Workflows:     store.NewWorkflowExtStore(s.Repo.ORM()),
 		Worktrees:     store.NewWorktreeExtStore(s.Repo.ORM()),
 		ProjectRows:   store.NewProjectExtStore(s.Repo.ORM()),
