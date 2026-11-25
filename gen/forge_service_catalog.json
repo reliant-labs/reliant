@@ -58503,29 +58503,23 @@
     },
     {
       "consumer": "OrgPolicyImpact",
+      "field": "Calls",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Calls",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "OrgPolicyImpact",
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Chats",
       "methods": [],
       "candidates": [
         "Database"
       ],
-      "providers": [
-        "Database"
-      ],
-      "resolution": "composition_expression"
-    },
-    {
-      "consumer": "OrgPolicyImpact",
-      "field": "Store",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Store",
-      "methods": [],
-      "candidates": [
-        "Database"
-      ],
-      "providers": [
-        "Database"
-      ],
-      "resolution": "composition_expression"
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "OrgPolicyResolver",
@@ -58642,16 +58636,12 @@
     },
     {
       "consumer": "OrgUsage",
-      "field": "Store",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.Store",
+      "field": "Usage",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.OrgUsage",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
-      "providers": [
-        "Database"
-      ],
-      "resolution": "composition_expression"
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "PackageCommands",
@@ -60585,16 +60575,12 @@
     },
     {
       "consumer": "Usage",
-      "field": "Store",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/usage.Store",
+      "field": "Usage",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/usage.Usage",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
-      "providers": [
-        "Database"
-      ],
-      "resolution": "composition_expression"
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "UserAuth",
@@ -61277,7 +61263,31 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "OrgPolicyImpact.Calls",
+      "source": {
+        "path": "internal/handlers/org_policy_impact/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "OrgPolicyImpact.Chats",
+      "source": {
+        "path": "internal/handlers/org_policy_impact/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "OrgUsage.Prices",
+      "source": {
+        "path": "internal/handlers/org_usage/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "OrgUsage.Usage",
       "source": {
         "path": "internal/handlers/org_usage/service.go",
         "symbol": "New"
@@ -61640,6 +61650,14 @@
       "component": "Triggerowner.Tx",
       "source": {
         "path": "internal/triggerowner/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Usage.Usage",
+      "source": {
+        "path": "internal/handlers/usage/service.go",
         "symbol": "New"
       }
     },

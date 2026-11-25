@@ -1619,10 +1619,11 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 
 // newUsage constructs the usage handler (internal/handlers/usage).
 func (g *Graph) newUsage() (*usage.Service, error) {
+	repo := g.Database()
 	return usage.New(usage.Deps{
 		Logger:   g.Log,
 		Config:   g.Cfg,
-		Store:    g.Database(),
+		Usage:    store.NewLlmCallUsageExtStore(repo.ORM()),
 		Accounts: g.CredentialsProvideraccounts(),
 		Now:      nil, // optional — no provider
 	})
@@ -1809,10 +1810,11 @@ func (g *Graph) newTriggerowner() (triggerowner.Service, error) {
 // an org's billing:read holders read its org-funded usage, priced at list
 // through control-plane (OrgUsageListPrices; nil shows no estimates).
 func (g *Graph) newOrgUsage() (*org_usage.Service, error) {
+	repo := g.Database()
 	return org_usage.New(org_usage.Deps{
 		Logger:   g.Log,
 		Config:   g.Cfg,
-		Store:    g.Database(),
+		Usage:    store.NewLlmOrgUsageDailyExtStore(repo.ORM()),
 		Accounts: g.CredentialsProvideraccounts(),
 		Prices:   OrgUsageListPrices(g.ServerProcessConfig.GetControlPlane()),
 		Now:      nil, // optional — no provider
@@ -1821,11 +1823,12 @@ func (g *Graph) newOrgUsage() (*org_usage.Service, error) {
 
 // newOrgPolicyImpact constructs the org-policy-impact handler (internal/handlers/org_policy_impact).
 func (g *Graph) newOrgPolicyImpact() (*org_policy_impact.Service, error) {
+	repo := g.Database()
 	return org_policy_impact.New(org_policy_impact.Deps{
 		Logger:     g.Log,
 		Config:     g.Cfg,
-		Store:      g.Database(),
-		Chats:      store.NewChatsWithActivityExtStore(g.Database().ORM()),
+		Calls:      store.NewLlmCallUsageExtStore(repo.ORM()),
+		Chats:      store.NewChatsWithActivityExtStore(repo.ORM()),
 		Now:        nil, // optional — no provider
 		Attendance: g.OrgPolicyAttendance(),
 	})
