@@ -1,7 +1,7 @@
 -- forge:backward-compatible — one nullable column with no default the previous release never reads; its inserts omit it and leave NULL.
 
 -- Migration: llm_call_usage_gateway_call_id
--- Created: 2026-11-25T08:49:41Z
+-- Created: 2026-11-25T09:46:22Z
 --
 -- The LLM gateway's own id for a model call (dev-docs/design/agent-analytics.md
 -- §3.2): LiteLLM's x-litellm-call-id, which control-plane's wallet ledger stores
