@@ -6,7 +6,8 @@ import { Loader2, AlertCircle, CloudOff, FilePlus, FolderPlus } from "lucide-rea
 import type { FileNode } from "./index";
 import { getFileTree, createFile, createFolder, deleteFileOrFolder, copyFile, getFileContent, getFilePreviewInfo, captureFileScope } from "../../api/fileSystem";
 import { useFileUploadStore } from "../../store/fileUploadStore";
-import { dragHasFiles, filesFromDrop, skippedFoldersMessage } from "./fileUploadDrop";
+import { dragHasFiles, filesFromDrop, unreadableMessage, uploadGroups } from "./fileUploadDrop";
+import { downloadWorkspaceFolder } from "./downloadWorkspaceFile";
 import { cn } from "../../lib/utils";
 import { isDaemonConnectingError, isNoMachineError, projectCheckoutMissing } from "../../lib/daemon-errors";
 import { ProjectCheckoutState, type ProjectCheckoutMissing } from "../../gen/reliant/v1/filesystem_pb";
@@ -447,12 +448,14 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   // The folder an OS-file drag is over: a directory path, "" for the root.
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
-  const enqueueUploads = useCallback(async (files: File[], directory: string) => {
-    if (files.length === 0) return;
+  // `groups` (a dropped folder's files, folder by folder) all go out under
+  // one scope; `directory` is the folder the tree opens to show them.
+  const enqueueUploadGroups = useCallback(async (groups: { directory: string; files: File[] }[], directory: string) => {
+    if (groups.every((group) => group.files.length === 0)) return;
     const dir = directory === "/" ? "" : directory;
     try {
       const scope = await captureFileScope(worktreeId);
-      enqueueToUploadStore(files, dir, scope);
+      for (const group of groups) enqueueToUploadStore(group.files, group.directory === "/" ? "" : group.directory, scope);
     } catch (err) {
       toast.notify("Couldn't upload", { description: err instanceof Error ? err.message : String(err) });
       return;
@@ -464,6 +467,35 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
       setExpandedPaths(next);
     }
   }, [worktreeId, enqueueToUploadStore, setExpandedPaths]);
+
+  const enqueueUploads = useCallback(
+    (files: File[], directory: string) => enqueueUploadGroups([{ directory, files }], directory),
+    [enqueueUploadGroups],
+  );
+
+  // Dropped OS files and folders: each file into its folder under `dir`
+  // (the machine makes missing parents when a file lands), and the empty
+  // folders created on their own, since no file brings them along.
+  const uploadDropped = useCallback(async (dataTransfer: DataTransfer, dir: string) => {
+    const { files, emptyFolders, unreadable } = await filesFromDrop(dataTransfer);
+    const notice = unreadableMessage(unreadable);
+    if (notice) toast.notify(notice.title, { description: notice.description });
+    await enqueueUploadGroups(uploadGroups(dir, files), dir);
+    if (emptyFolders.length === 0) return;
+    const created = await Promise.allSettled(
+      emptyFolders.map((folder) => createFolder(dir ? `${dir}/${folder}` : folder, worktreeId)),
+    );
+    for (const result of created) {
+      if (result.status === "rejected") console.debug("[upload] creating a dropped empty folder failed", result.reason);
+    }
+    const node = dir ? findNodeByPath(treeRef.current, dir) : null;
+    if (!dir) void loadChildren("/", 2);
+    else if (node?.type === "directory" && node.children !== undefined) void loadChildren(dir, 1);
+  }, [enqueueUploadGroups, worktreeId, loadChildren]);
+
+  const handleDownloadFolder = useCallback((node: FileNode) => {
+    void downloadWorkspaceFolder(node.path, node.name, worktreeId);
+  }, [worktreeId]);
 
   // The folder an upload "at" `path` goes into: the folder itself, or a
   // file's folder. "" is the workspace root.
@@ -538,10 +570,8 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
       e.stopPropagation();
       setDropTarget(null);
       const dir = dropDirForTarget(e.target);
-      const { files, skippedFolders } = filesFromDrop(e.dataTransfer);
-      const skipped = skippedFoldersMessage(skippedFolders);
-      if (skipped) toast.notify(skipped.title, { description: skipped.description });
-      void enqueueUploads(files, dir);
+      // Synchronously first: the drop's items are gone once this returns.
+      void uploadDropped(e.dataTransfer, dir);
     },
   };
 
@@ -1386,6 +1416,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
           onCollapse={handleCollapse}
           onFileOperation={handleFileOperation}
           onUploadHere={enableUploads ? handleUploadHere : undefined}
+          onDownloadFolder={enableUploads ? handleDownloadFolder : undefined}
           dropTargetPath={dropTarget}
         />
       ))}

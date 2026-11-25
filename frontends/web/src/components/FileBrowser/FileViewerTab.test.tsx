@@ -389,7 +389,7 @@ describe("FileViewerTab", () => {
     expect(await screen.findByText("Download it to open it on this device.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Download report.xlsx" }));
     await waitFor(() => expect(downloadMocks.downloadWorkspaceFile).toHaveBeenCalledWith(
-      "/workspace/report.xlsx", "report.xlsx", "wt-1",
+      "/workspace/report.xlsx", "report.xlsx", "wt-1", 4096,
     ));
   });
 

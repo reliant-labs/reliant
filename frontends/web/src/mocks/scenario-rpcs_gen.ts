@@ -194,7 +194,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.FileSystemService
-  // forge:hash=97a279907d7a7b6536dc351ac5e448c1e5d198cb4f2a6d6c0b15737eafa8039f
+  // forge:hash=d40638b106171b5aee3eaa10390653c9ac192846f1d8c583f782dd74dd9a90d1
   & {
     "reliant.v1.FileSystemService/GetFileTree"?: (req: import("@/gen/reliant/v1/filesystem_pb").GetFileTreeRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").GetFileTreeResponseSchema>>;
     "reliant.v1.FileSystemService/GetFileContent"?: (req: import("@/gen/reliant/v1/filesystem_pb").GetFileContentRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").GetFileContentResponseSchema>>;
@@ -215,6 +215,10 @@ export type ScenarioRpcHandlers =
     "reliant.v1.FileSystemService/CommitFileUpload"?: (req: import("@/gen/reliant/v1/filesystem_pb").CommitFileUploadRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").CommitFileUploadResponseSchema>>;
     "reliant.v1.FileSystemService/AbortFileUpload"?: (req: import("@/gen/reliant/v1/filesystem_pb").AbortFileUploadRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").AbortFileUploadResponseSchema>>;
     "reliant.v1.FileSystemService/GetFileUploadStatus"?: (req: import("@/gen/reliant/v1/filesystem_pb").GetFileUploadStatusRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").GetFileUploadStatusResponseSchema>>;
+    "reliant.v1.FileSystemService/ReadFileRange"?: (req: import("@/gen/reliant/v1/filesystem_pb").ReadFileRangeRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").ReadFileRangeResponseSchema>>;
+    "reliant.v1.FileSystemService/PrepareFolderArchive"?: (req: import("@/gen/reliant/v1/filesystem_pb").PrepareFolderArchiveRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").PrepareFolderArchiveResponseSchema>>;
+    "reliant.v1.FileSystemService/GetFolderArchiveStatus"?: (req: import("@/gen/reliant/v1/filesystem_pb").GetFolderArchiveStatusRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").GetFolderArchiveStatusResponseSchema>>;
+    "reliant.v1.FileSystemService/ReleaseFolderArchive"?: (req: import("@/gen/reliant/v1/filesystem_pb").ReleaseFolderArchiveRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/filesystem_pb").ReleaseFolderArchiveResponseSchema>>;
   }
 
   // forge:section reliant.v1.ForgeService

@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   getActiveViewer: vi.fn(() => null),
   enqueue: vi.fn(),
   notify: vi.fn(),
+  createFileOrFolder: vi.fn((_req: unknown) => ({})),
 }));
 
 vi.mock("../../store/projectStore", () => ({
@@ -73,16 +74,32 @@ function fileOf(name: string): File {
   return new File(["hello"], name);
 }
 
+// A dropped folder as the browser hands it over: a directory entry whose
+// reader answers its children in one batch, then an empty one.
+type FakeEntry = { name: string; isFile: boolean; isDirectory: boolean };
+function fileEntry(file: File): FakeEntry {
+  return { name: file.name, isFile: true, isDirectory: false, file: (ok: (f: File) => void) => ok(file) } as FakeEntry;
+}
+function dirEntry(name: string, children: FakeEntry[]): FakeEntry {
+  return {
+    name, isFile: false, isDirectory: true,
+    createReader: () => {
+      let read = false;
+      return { readEntries: (ok: (entries: FakeEntry[]) => void) => { ok(read ? [] : children); read = true; } };
+    },
+  } as FakeEntry;
+}
+
 // What a browser's drop carries: one item per dragged thing, a folder telling
 // itself apart through webkitGetAsEntry().
-function filesDrag(entries: Array<{ file: File; directory?: boolean }>) {
+function filesDrag(entries: Array<{ file: File; folder?: FakeEntry }>) {
   return {
     types: ["Files"],
-    files: entries.filter(e => !e.directory).map(e => e.file),
-    items: entries.map(({ file, directory }) => ({
+    files: entries.filter(e => !e.folder).map(e => e.file),
+    items: entries.map(({ file, folder }) => ({
       kind: "file",
       getAsFile: () => file,
-      webkitGetAsEntry: () => ({ isDirectory: !!directory, name: file.name }),
+      webkitGetAsEntry: () => folder ?? { isDirectory: false, isFile: true, name: file.name },
     })),
     dropEffect: "none",
   };
@@ -98,6 +115,7 @@ beforeEach(() => {
       ] },
       { name: "a.txt", path: "a.txt", type: FileNodeType.FILE },
     ] }),
+    createFileOrFolder: mocks.createFileOrFolder,
   })));
 });
 
@@ -152,16 +170,29 @@ describe("uploading from the file tree", () => {
     await waitFor(() => expect(mocks.enqueue).toHaveBeenCalledWith([bg], "", scope));
   });
 
-  it("skips dropped folders and says so", async () => {
+  it("uploads a dropped folder's files into the same folders, and creates its empty ones", async () => {
     renderTree();
     const file = fileOf("keep.txt");
+    const logo = fileOf("logo.png");
+    const icon = fileOf("icon.svg");
+    const assets = dirEntry("assets", [
+      fileEntry(logo),
+      dirEntry("icons", [fileEntry(icon)]),
+      dirEntry("empty", []),
+      dirEntry(".git", [fileEntry(fileOf("HEAD"))]),
+    ]);
     fireEvent.drop(await screen.findByRole("button", { name: "docs" }), {
-      dataTransfer: filesDrag([{ file }, { file: fileOf("assets"), directory: true }]),
+      dataTransfer: filesDrag([{ file }, { file: fileOf("assets"), folder: assets }]),
     });
-    await waitFor(() => expect(mocks.enqueue).toHaveBeenCalledWith([file], "docs", scope));
-    expect(mocks.notify).toHaveBeenCalledWith("Folder not uploaded", expect.objectContaining({
-      description: expect.stringContaining("“assets”"),
-    }));
+    await waitFor(() => expect(mocks.createFileOrFolder).toHaveBeenCalledTimes(1));
+    expect(mocks.enqueue).toHaveBeenCalledWith([file], "docs", scope);
+    expect(mocks.enqueue).toHaveBeenCalledWith([logo], "docs/assets", scope);
+    expect(mocks.enqueue).toHaveBeenCalledWith([icon], "docs/assets/icons", scope);
+    expect(mocks.enqueue).toHaveBeenCalledTimes(3);
+    expect(mocks.createFileOrFolder.mock.calls[0][0]).toMatchObject({
+      path: "docs/assets/empty", type: FileNodeType.DIRECTORY, worktreeId: "branch-1",
+    });
+    expect(mocks.notify).not.toHaveBeenCalled();
   });
 
   it("ignores drags that carry no files", async () => {

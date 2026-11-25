@@ -159,6 +159,13 @@ type ApiServerConfig struct {
 	// that holds the workspace, never on this server, so the limit is about the
 	// machine's disk and the time a transfer takes. 2 GiB by default.
 	MaxWorkspaceUploadSize int64 `protobuf:"varint,111,opt,name=max_workspace_upload_size,json=maxWorkspaceUploadSize,proto3" json:"max_workspace_upload_size,omitempty"`
+	// The most a folder downloaded as .zip from the Files tab may hold, in
+	// bytes of file content before compression
+	// (FileSystemService.PrepareFolderArchive). The archive is built in a
+	// temporary file on the machine that holds the workspace, never on this
+	// server, so the limit is about that machine's disk and the time zipping
+	// and transferring take. 2 GiB by default.
+	MaxFolderArchiveSize int64 `protobuf:"varint,115,opt,name=max_folder_archive_size,json=maxFolderArchiveSize,proto3" json:"max_folder_archive_size,omitempty"`
 	// What the worktree sweep does with active worktrees its daemon reports
 	// finished (clean, merged or pushed, idle over 24h, not in use): dry-run
 	// logs them and archives nothing; on archives them; off never asks.
@@ -541,6 +548,13 @@ func (x *ApiServerConfig) GetMaxWorkspaceUploadSize() int64 {
 	return 0
 }
 
+func (x *ApiServerConfig) GetMaxFolderArchiveSize() int64 {
+	if x != nil {
+		return x.MaxFolderArchiveSize
+	}
+	return 0
+}
+
 func (x *ApiServerConfig) GetWorktreeAutoArchive() string {
 	if x != nil {
 		return x.WorktreeAutoArchive
@@ -819,7 +833,7 @@ var File_reliant_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xd2G\n" +
+	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\x91I\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
@@ -913,7 +927,10 @@ const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x0fMAX_UPLOAD_SIZE\x1a\b10485760*%Largest attachment accepted, in bytesR\rmaxUploadSize\x12\xb5\x01\n" +
 	"\x19max_workspace_upload_size\x18o \x01(\x03Bz\xbaH\x04\"\x02 \x00\x82\xce\x18o\n" +
 	"\x19MAX_WORKSPACE_UPLOAD_SIZE\x1a\n" +
-	"2147483648*FLargest file uploaded into a workspace through the Files tab, in bytesR\x16maxWorkspaceUploadSize\x12\x9d\x01\n" +
+	"2147483648*FLargest file uploaded into a workspace through the Files tab, in bytesR\x16maxWorkspaceUploadSize\x12\xbc\x01\n" +
+	"\x17max_folder_archive_size\x18s \x01(\x03B\x84\x01\xbaH\x04\"\x02 \x00\x82\xce\x18y\n" +
+	"\x17MAX_FOLDER_ARCHIVE_SIZE\x1a\n" +
+	"2147483648*RLargest folder, in bytes of file content, downloaded as .zip through the Files tabR\x14maxFolderArchiveSize\x12\x9d\x01\n" +
 	"\x15worktree_auto_archive\x18$ \x01(\tBi\x82\xce\x18e\n" +
 	"\x1dRELIANT_WORKTREE_AUTO_ARCHIVE\x1a\adry-run*)Worktree auto-archive: dry-run, on or offJ\adry-runJ\x02onJ\x03offR\x13worktreeAutoArchive\x12\xce\x01\n" +
 	"\x14worktree_landed_idle\x18Q \x01(\v2\x19.google.protobuf.DurationB\x80\x01\xbaH\x05\xaa\x01\x022\x00\x82\xce\x18t\n" +

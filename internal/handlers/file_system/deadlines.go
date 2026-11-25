@@ -81,5 +81,11 @@ func FileSystemRPCDeadlines() map[string]time.Duration {
 		reliantv1connect.FileSystemServiceCommitFileUploadProcedure:    seq(uploadCommitTimeoutMs),
 		reliantv1connect.FileSystemServiceAbortFileUploadProcedure:     seq(uploadAbortTimeoutMs),
 		reliantv1connect.FileSystemServiceGetFileUploadStatusProcedure: seq(uploadStatusTimeoutMs),
+		// Large downloads and folder archives (transfer.go). A ranged read
+		// of a "~/..." path asks the machine for its home directory first.
+		reliantv1connect.FileSystemServiceReadFileRangeProcedure:          seq(homeDirTimeoutMs, readRangeTimeoutMs),
+		reliantv1connect.FileSystemServicePrepareFolderArchiveProcedure:   seq(archivePrepareTimeoutMs),
+		reliantv1connect.FileSystemServiceGetFolderArchiveStatusProcedure: seq(archiveStatusTimeoutMs),
+		reliantv1connect.FileSystemServiceReleaseFolderArchiveProcedure:   seq(archiveReleaseTimeoutMs),
 	}
 }

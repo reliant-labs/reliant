@@ -15331,10 +15331,50 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.FileSystemService/GetFolderArchiveStatus",
+          "name": "GetFolderArchiveStatus",
+          "input": "reliant.v1.GetFolderArchiveStatusRequest",
+          "output": "reliant.v1.GetFolderArchiveStatusResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.FileSystemService/ListDirectory",
           "name": "ListDirectory",
           "input": "reliant.v1.ListDirectoryRequest",
           "output": "reliant.v1.ListDirectoryResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.FileSystemService/PrepareFolderArchive",
+          "name": "PrepareFolderArchive",
+          "input": "reliant.v1.PrepareFolderArchiveRequest",
+          "output": "reliant.v1.PrepareFolderArchiveResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.FileSystemService/ReadFileRange",
+          "name": "ReadFileRange",
+          "input": "reliant.v1.ReadFileRangeRequest",
+          "output": "reliant.v1.ReadFileRangeResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.FileSystemService/ReleaseFolderArchive",
+          "name": "ReleaseFolderArchive",
+          "input": "reliant.v1.ReleaseFolderArchiveRequest",
+          "output": "reliant.v1.ReleaseFolderArchiveResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -15730,6 +15770,80 @@
             "OutputProtoFile": "reliant/v1/filesystem.proto",
             "Activity": {
               "Mutating": false
+            }
+          },
+          {
+            "Name": "ReadFileRange",
+            "InputType": "ReadFileRangeRequest",
+            "OutputType": "ReadFileRangeResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ReadFileRangeRequest",
+            "OutputTypeFQ": "reliant.v1.ReadFileRangeResponse",
+            "InputProtoFile": "reliant/v1/filesystem.proto",
+            "OutputProtoFile": "reliant/v1/filesystem.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "PrepareFolderArchive",
+            "InputType": "PrepareFolderArchiveRequest",
+            "OutputType": "PrepareFolderArchiveResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.PrepareFolderArchiveRequest",
+            "OutputTypeFQ": "reliant.v1.PrepareFolderArchiveResponse",
+            "InputProtoFile": "reliant/v1/filesystem.proto",
+            "OutputProtoFile": "reliant/v1/filesystem.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "None": "folder download through the daemon: a temporary archive outside the workspace, deleted once fetched"
+            }
+          },
+          {
+            "Name": "GetFolderArchiveStatus",
+            "InputType": "GetFolderArchiveStatusRequest",
+            "OutputType": "GetFolderArchiveStatusResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.GetFolderArchiveStatusRequest",
+            "OutputTypeFQ": "reliant.v1.GetFolderArchiveStatusResponse",
+            "InputProtoFile": "reliant/v1/filesystem.proto",
+            "OutputProtoFile": "reliant/v1/filesystem.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "ReleaseFolderArchive",
+            "InputType": "ReleaseFolderArchiveRequest",
+            "OutputType": "ReleaseFolderArchiveResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ReleaseFolderArchiveRequest",
+            "OutputTypeFQ": "reliant.v1.ReleaseFolderArchiveResponse",
+            "InputProtoFile": "reliant/v1/filesystem.proto",
+            "OutputProtoFile": "reliant/v1/filesystem.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "None": "folder download through the daemon: deletes a temporary archive that was never in the workspace"
             }
           }
         ],
@@ -16264,6 +16378,70 @@
               "IsOptional": false
             }
           ],
+          "GetFolderArchiveStatusRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "archive_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetFolderArchiveStatusResponse": [
+            {
+              "Name": "state",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "files_done",
+              "ProtoType": "int64",
+              "IsOptional": false
+            },
+            {
+              "Name": "files_total",
+              "ProtoType": "int64",
+              "IsOptional": false
+            },
+            {
+              "Name": "bytes_done",
+              "ProtoType": "int64",
+              "IsOptional": false
+            },
+            {
+              "Name": "bytes_total",
+              "ProtoType": "int64",
+              "IsOptional": false
+            },
+            {
+              "Name": "archive_size",
+              "ProtoType": "int64",
+              "IsOptional": false
+            },
+            {
+              "Name": "error",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "skipped",
+              "ProtoType": "int64",
+              "IsOptional": false
+            }
+          ],
           "ListDirectoryRequest": [
             {
               "Name": "path",
@@ -16294,6 +16472,152 @@
               "IsOptional": true
             }
           ],
+          "PrepareFolderArchiveRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "path",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "PrepareFolderArchiveResponse": [
+            {
+              "Name": "archive_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "filename",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "total_files",
+              "ProtoType": "int64",
+              "IsOptional": false
+            },
+            {
+              "Name": "total_bytes",
+              "ProtoType": "int64",
+              "IsOptional": false
+            },
+            {
+              "Name": "max_size",
+              "ProtoType": "int64",
+              "IsOptional": false
+            }
+          ],
+          "ReadFileRangeRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "path",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "archive_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "offset",
+              "ProtoType": "int64",
+              "IsOptional": false
+            },
+            {
+              "Name": "length",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "if_version",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "ReadFileRangeResponse": [
+            {
+              "Name": "data",
+              "ProtoType": "bytes",
+              "IsOptional": false
+            },
+            {
+              "Name": "total_size",
+              "ProtoType": "int64",
+              "IsOptional": false
+            },
+            {
+              "Name": "version",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "filename",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "content_type",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "eof",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "ReleaseFolderArchiveRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "archive_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ReleaseFolderArchiveResponse": null,
           "ReplaceInFilesRequest": [
             {
               "Name": "project_id",
@@ -17091,6 +17415,61 @@
               "kind": "int64"
             }
           ],
+          "reliant.v1.GetFolderArchiveStatusRequest": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "archive_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.GetFolderArchiveStatusResponse": [
+            {
+              "name": "state",
+              "kind": "enum",
+              "type_name": "reliant.v1.FolderArchiveState"
+            },
+            {
+              "name": "files_done",
+              "kind": "int64"
+            },
+            {
+              "name": "files_total",
+              "kind": "int64"
+            },
+            {
+              "name": "bytes_done",
+              "kind": "int64"
+            },
+            {
+              "name": "bytes_total",
+              "kind": "int64"
+            },
+            {
+              "name": "archive_size",
+              "kind": "int64"
+            },
+            {
+              "name": "error",
+              "kind": "string"
+            },
+            {
+              "name": "skipped",
+              "kind": "int64"
+            }
+          ],
           "reliant.v1.ListDirectoryRequest": [
             {
               "name": "path",
@@ -17120,6 +17499,133 @@
               "optional": true
             }
           ],
+          "reliant.v1.PrepareFolderArchiveRequest": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.PrepareFolderArchiveResponse": [
+            {
+              "name": "archive_id",
+              "kind": "string"
+            },
+            {
+              "name": "filename",
+              "kind": "string"
+            },
+            {
+              "name": "total_files",
+              "kind": "int64"
+            },
+            {
+              "name": "total_bytes",
+              "kind": "int64"
+            },
+            {
+              "name": "max_size",
+              "kind": "int64"
+            }
+          ],
+          "reliant.v1.ReadFileRangeRequest": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "archive_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "offset",
+              "kind": "int64"
+            },
+            {
+              "name": "length",
+              "kind": "int32"
+            },
+            {
+              "name": "if_version",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ReadFileRangeResponse": [
+            {
+              "name": "data",
+              "kind": "bytes"
+            },
+            {
+              "name": "total_size",
+              "kind": "int64"
+            },
+            {
+              "name": "version",
+              "kind": "string"
+            },
+            {
+              "name": "filename",
+              "kind": "string"
+            },
+            {
+              "name": "content_type",
+              "kind": "string"
+            },
+            {
+              "name": "eof",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.ReleaseFolderArchiveRequest": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "archive_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ReleaseFolderArchiveResponse": [],
           "reliant.v1.ReplaceInFilesRequest": [
             {
               "name": "project_id",
@@ -17402,8 +17908,16 @@
           "reliant.v1.GetFileTreeResponse": "reliant/v1/filesystem.proto",
           "reliant.v1.GetFileUploadStatusRequest": "reliant/v1/filesystem.proto",
           "reliant.v1.GetFileUploadStatusResponse": "reliant/v1/filesystem.proto",
+          "reliant.v1.GetFolderArchiveStatusRequest": "reliant/v1/filesystem.proto",
+          "reliant.v1.GetFolderArchiveStatusResponse": "reliant/v1/filesystem.proto",
           "reliant.v1.ListDirectoryRequest": "reliant/v1/filesystem.proto",
           "reliant.v1.ListDirectoryResponse": "reliant/v1/filesystem.proto",
+          "reliant.v1.PrepareFolderArchiveRequest": "reliant/v1/filesystem.proto",
+          "reliant.v1.PrepareFolderArchiveResponse": "reliant/v1/filesystem.proto",
+          "reliant.v1.ReadFileRangeRequest": "reliant/v1/filesystem.proto",
+          "reliant.v1.ReadFileRangeResponse": "reliant/v1/filesystem.proto",
+          "reliant.v1.ReleaseFolderArchiveRequest": "reliant/v1/filesystem.proto",
+          "reliant.v1.ReleaseFolderArchiveResponse": "reliant/v1/filesystem.proto",
           "reliant.v1.ReplaceInFilesRequest": "reliant/v1/filesystem.proto",
           "reliant.v1.ReplaceInFilesResponse": "reliant/v1/filesystem.proto",
           "reliant.v1.ReplaceResult": "reliant/v1/filesystem.proto",
@@ -17431,6 +17945,12 @@
             "FILE_VIEWER_KIND_VIDEO",
             "FILE_VIEWER_KIND_BINARY"
           ],
+          "reliant.v1.FolderArchiveState": [
+            "FOLDER_ARCHIVE_STATE_UNSPECIFIED",
+            "FOLDER_ARCHIVE_STATE_RUNNING",
+            "FOLDER_ARCHIVE_STATE_READY",
+            "FOLDER_ARCHIVE_STATE_FAILED"
+          ],
           "reliant.v1.UploadConflictPolicy": [
             "UPLOAD_CONFLICT_POLICY_UNSPECIFIED",
             "UPLOAD_CONFLICT_POLICY_FAIL",
@@ -17453,6 +17973,12 @@
             5,
             6
           ],
+          "reliant.v1.FolderArchiveState": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.UploadConflictPolicy": [
             0,
             1,
@@ -17468,6 +17994,10 @@
           "reliant.v1.FileViewerKind": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "FileViewerKind"
+          },
+          "reliant.v1.FolderArchiveState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "FolderArchiveState"
           },
           "reliant.v1.UploadConflictPolicy": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",

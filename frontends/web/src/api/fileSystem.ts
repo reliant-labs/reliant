@@ -267,7 +267,12 @@ export async function captureFileScope(worktreeId?: string): Promise<{
   return { projectId: requireProjectId(), worktreeId, chatId: await activeChatIdForAPI() };
 }
 
-async function normalizeFilePathForAPI(path: string, worktreeId?: string): Promise<string> {
+/**
+ * The path a request names: a workspace file's path relative to the
+ * workspace (an absolute path inside the given workspace is made relative),
+ * anything else as it is.
+ */
+export async function normalizeFilePathForAPI(path: string, worktreeId?: string): Promise<string> {
   if (!worktreeId) {
     return path;
   }

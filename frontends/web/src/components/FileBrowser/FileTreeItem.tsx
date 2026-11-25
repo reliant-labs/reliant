@@ -62,6 +62,8 @@ interface FileTreeItemProps {
   onFileOperation?: (operation: FileOperationType, node: FileNode, skipModal?: boolean) => void;
   // Opens the file picker to upload into this folder (absent: no uploads).
   onUploadHere?: (node: FileNode) => void;
+  // Downloads this folder as a .zip through the transfers panel (absent: not offered).
+  onDownloadFolder?: (node: FileNode) => void;
   // The folder an OS-file drag is over, highlighted with its subtree.
   dropTargetPath?: string | null;
 }
@@ -136,6 +138,7 @@ export const FileTreeItem = memo(function FileTreeItem({
   onCollapse,
   onFileOperation,
   onUploadHere,
+  onDownloadFolder,
   dropTargetPath,
 }: FileTreeItemProps) {
   // Use controlled expansion if provided, otherwise fall back to internal state
@@ -368,7 +371,7 @@ export const FileTreeItem = memo(function FileTreeItem({
         {
           label: "Download",
           icon: <Download className="w-4 h-4" />,
-          onClick: () => void downloadWorkspaceFile(node.path, node.name, worktreeId),
+          onClick: () => void downloadWorkspaceFile(node.path, node.name, worktreeId, node.size),
         },
       );
     }
@@ -409,6 +412,13 @@ export const FileTreeItem = memo(function FileTreeItem({
           label: "Upload Files Here…",
           icon: <Upload className="w-4 h-4" />,
           onClick: () => onUploadHere(node),
+        });
+      }
+      if (onDownloadFolder) {
+        items.push({
+          label: "Download as .zip",
+          icon: <Download className="w-4 h-4" />,
+          onClick: () => onDownloadFolder(node),
         });
       }
     }
@@ -748,6 +758,7 @@ export const FileTreeItem = memo(function FileTreeItem({
               onCollapse={onCollapse}
               onFileOperation={onFileOperation}
               onUploadHere={onUploadHere}
+              onDownloadFolder={onDownloadFolder}
               dropTargetPath={dropTargetPath}
             />
           ))}

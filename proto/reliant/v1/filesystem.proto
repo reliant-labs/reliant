@@ -152,6 +152,55 @@ service FileSystemService {
   rpc GetFileUploadStatus(GetFileUploadStatusRequest) returns (GetFileUploadStatusResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // ---- Large downloads and folders as .zip -------------------------------
+  //
+  // ReadFileRange reads a file in pieces, so a file of any size is
+  // downloaded without being held whole in memory anywhere on the way.
+  // A folder is downloaded as a .zip: PrepareFolderArchive starts zipping it
+  // into a temporary file on the machine (outside the workspace),
+  // GetFolderArchiveStatus reports progress until it is ready,
+  // ReadFileRange fetches it by its archive_id, and ReleaseFolderArchive
+  // deletes it. An archive is reachable only by the id the machine minted
+  // for it, never by a path.
+
+  // ReadFileRange returns up to `length` bytes of a file from `offset`,
+  // scoped and guarded exactly like DownloadFile, or of a prepared folder
+  // archive. Every piece carries the file's version; a request naming
+  // if_version is refused with FailedPrecondition and the error reason
+  // "file_changed_during_download" when the file has changed since, so a
+  // download never stitches two versions together. A machine whose Reliant
+  // predates ranged reads is refused with FailedPrecondition and the reason
+  // "ranged_download_unsupported" (DownloadFile still serves files up to
+  // 25 MB there).
+  rpc ReadFileRange(ReadFileRangeRequest) returns (ReadFileRangeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // PrepareFolderArchive starts zipping a folder of the workspace on the
+  // machine that holds it, skipping .git, credential stores and symlinks
+  // that lead outside the workspace. It refuses a folder holding more than
+  // the server's limit (max_size; 2 GiB by default) with FailedPrecondition
+  // and the reason "folder_too_large_to_download".
+  rpc PrepareFolderArchive(PrepareFolderArchiveRequest) returns (PrepareFolderArchiveResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "folder download through the daemon: a temporary archive outside the workspace, deleted once fetched"}
+    };
+  }
+
+  // GetFolderArchiveStatus reports how far zipping has got, and the
+  // archive's size once it is ready.
+  rpc GetFolderArchiveStatus(GetFolderArchiveStatusRequest) returns (GetFolderArchiveStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ReleaseFolderArchive stops zipping, if it still runs, and deletes the
+  // archive. Releasing an unknown archive succeeds.
+  rpc ReleaseFolderArchive(ReleaseFolderArchiveRequest) returns (ReleaseFolderArchiveResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "folder download through the daemon: deletes a temporary archive that was never in the workspace"}
+    };
+  }
 }
 
 // ============================================
@@ -652,3 +701,109 @@ message GetFileUploadStatusResponse {
   // The total size the session was opened with.
   int64 size = 3;
 }
+
+// ============================================
+// Large downloads and folders as .zip (ReadFileRange, PrepareFolderArchive,
+// GetFolderArchiveStatus, ReleaseFolderArchive)
+// ============================================
+
+message ReadFileRangeRequest {
+  string project_id = 1;
+  optional string worktree_id = 2;
+  optional string chat_id = 3;
+  // The file to read: relative to the workspace, or absolute on the machine
+  // that holds it (as DownloadFile accepts). Exactly one of path and
+  // archive_id is set.
+  string path = 4;
+  // A folder archive PrepareFolderArchive made, once it is ready.
+  optional string archive_id = 5;
+  // Where the piece starts in the file.
+  int64 offset = 6;
+  // How many bytes to read; the server serves at most 1 MiB a piece, and 0
+  // asks for that much.
+  int32 length = 7;
+  // The version an earlier piece reported. When set and the file is no
+  // longer that version, the read is refused (FailedPrecondition, reason
+  // "file_changed_during_download").
+  optional string if_version = 8;
+}
+
+message ReadFileRangeResponse {
+  // The bytes from offset; fewer than asked only at the end of the file.
+  bytes data = 1;
+  // The file's whole size in bytes.
+  int64 total_size = 2;
+  // The file's identity and version (its size and modification time): the
+  // same for every piece of an unchanged file. Pass it as if_version.
+  string version = 3;
+  // The base name to save as (for an archive, the folder's name + ".zip").
+  string filename = 4;
+  // MIME type; "application/octet-stream" when unknown.
+  string content_type = 5;
+  // Set on the piece that reaches the end of the file.
+  bool eof = 6;
+}
+
+message PrepareFolderArchiveRequest {
+  string project_id = 1;
+  optional string worktree_id = 2;
+  optional string chat_id = 3;
+  // The workspace-relative folder to zip; "" or "/" is the workspace root.
+  string path = 4;
+}
+
+message PrepareFolderArchiveResponse {
+  // The archive, opaque to the client: GetFolderArchiveStatus,
+  // ReadFileRange and ReleaseFolderArchive name it.
+  string archive_id = 1;
+  // The name to save the archive as: the folder's name + ".zip".
+  string filename = 2;
+  // How many files, and bytes of file content, the archive will hold.
+  int64 total_files = 3;
+  int64 total_bytes = 4;
+  // The most file content a folder archive may hold on this server, in bytes.
+  int64 max_size = 5;
+}
+
+// FolderArchiveState is how far a folder archive has got.
+enum FolderArchiveState {
+  FOLDER_ARCHIVE_STATE_UNSPECIFIED = 0;
+  // The machine is still zipping the folder.
+  FOLDER_ARCHIVE_STATE_RUNNING = 1;
+  // The archive is complete and can be read (ReadFileRange).
+  FOLDER_ARCHIVE_STATE_READY = 2;
+  // Zipping failed; error says why. The archive is gone.
+  FOLDER_ARCHIVE_STATE_FAILED = 3;
+}
+
+message GetFolderArchiveStatusRequest {
+  string project_id = 1;
+  optional string worktree_id = 2;
+  optional string chat_id = 3;
+  string archive_id = 4;
+}
+
+message GetFolderArchiveStatusResponse {
+  FolderArchiveState state = 1;
+  // Progress: files and bytes of file content zipped so far, of the totals.
+  int64 files_done = 2;
+  int64 files_total = 3;
+  int64 bytes_done = 4;
+  int64 bytes_total = 5;
+  // The archive's size in bytes, once it is READY.
+  int64 archive_size = 6;
+  // Why zipping failed, when FAILED.
+  string error = 7;
+  // Entries left out: symlinks that lead outside the workspace or to a
+  // folder, credential stores, and anything that could not be read.
+  int64 skipped = 8;
+}
+
+message ReleaseFolderArchiveRequest {
+  string project_id = 1;
+  optional string worktree_id = 2;
+  optional string chat_id = 3;
+  string archive_id = 4;
+}
+
+message ReleaseFolderArchiveResponse {}

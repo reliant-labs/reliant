@@ -420,15 +420,18 @@ func beginRecoveryCommand(name string, payload []byte) (func(), error) {
 		if json.Unmarshal(payload, &req) == nil {
 			switch name {
 			case "fs.read_file", "fs.read_binary_file", "fs.pdf_page_count", "fs.read_pdf_pages", "fs.write_file", "fs.write_binary_file", "fs.create_binary_file", "fs.patch_file", "fs.stat", "fs.list_dir", "fs.mkdir", "fs.delete", "fs.get_tree",
-				daemon.UploadBeginCommand:
+				daemon.UploadBeginCommand, daemon.ReadRangeCommand, daemon.ArchivePrepareCommand:
 				if req.Path != "" {
 					paths = []string{req.Path}
 				}
-			case daemon.UploadChunkCommand, daemon.UploadCommitCommand, daemon.UploadAbortCommand, daemon.UploadStatusCommand:
+			case daemon.UploadChunkCommand, daemon.UploadCommitCommand, daemon.UploadAbortCommand, daemon.UploadStatusCommand,
+				daemon.ArchiveStatusCommand, daemon.ArchiveReadCommand, daemon.ArchiveReleaseCommand:
 				// A session is bound to the workspace root it was begun
 				// for (its handlers refuse any other), and the only place
 				// it writes outside the staging directory is the commit's
-				// destination, inside that root.
+				// destination, inside that root. A folder archive is bound
+				// to its root the same way, and its commands touch only
+				// the archive directory.
 				if req.Root != "" {
 					paths = []string{req.Root}
 				}

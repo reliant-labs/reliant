@@ -61,6 +61,17 @@ const (
 	// FileTooLargeToDownload: DownloadFile on a file over its whole-file cap
 	// (25 MB). FailedPrecondition; the message names the size and the cap.
 	FileTooLargeToDownload = "file_too_large_to_download"
+	// RangedDownloadUnsupported: ReadFileRange or PrepareFolderArchive on a
+	// machine whose Reliant predates ranged reads and folder archives.
+	// FailedPrecondition; the message names the machine to update.
+	RangedDownloadUnsupported = "ranged_download_unsupported"
+	// FileChangedDuringDownload: ReadFileRange named an if_version the file
+	// no longer has. FailedPrecondition; the download starts over.
+	FileChangedDuringDownload = "file_changed_during_download"
+	// FolderTooLargeToDownload: PrepareFolderArchive on a folder over the
+	// archive cap (max_folder_archive_size, or the entry cap).
+	// FailedPrecondition; the message names the limit.
+	FolderTooLargeToDownload = "folder_too_large_to_download"
 
 	// ScopeMissing is forge's accesstoken.ReasonScopeMissing: authenticated,
 	// but the credential lacks a scope; the scopes ride

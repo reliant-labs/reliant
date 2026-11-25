@@ -92,6 +92,18 @@ const (
 	// FileSystemServiceGetFileUploadStatusProcedure is the fully-qualified name of the
 	// FileSystemService's GetFileUploadStatus RPC.
 	FileSystemServiceGetFileUploadStatusProcedure = "/reliant.v1.FileSystemService/GetFileUploadStatus"
+	// FileSystemServiceReadFileRangeProcedure is the fully-qualified name of the FileSystemService's
+	// ReadFileRange RPC.
+	FileSystemServiceReadFileRangeProcedure = "/reliant.v1.FileSystemService/ReadFileRange"
+	// FileSystemServicePrepareFolderArchiveProcedure is the fully-qualified name of the
+	// FileSystemService's PrepareFolderArchive RPC.
+	FileSystemServicePrepareFolderArchiveProcedure = "/reliant.v1.FileSystemService/PrepareFolderArchive"
+	// FileSystemServiceGetFolderArchiveStatusProcedure is the fully-qualified name of the
+	// FileSystemService's GetFolderArchiveStatus RPC.
+	FileSystemServiceGetFolderArchiveStatusProcedure = "/reliant.v1.FileSystemService/GetFolderArchiveStatus"
+	// FileSystemServiceReleaseFolderArchiveProcedure is the fully-qualified name of the
+	// FileSystemService's ReleaseFolderArchive RPC.
+	FileSystemServiceReleaseFolderArchiveProcedure = "/reliant.v1.FileSystemService/ReleaseFolderArchive"
 )
 
 // FileSystemServiceClient is a client for the reliant.v1.FileSystemService service.
@@ -148,6 +160,28 @@ type FileSystemServiceClient interface {
 	AbortFileUpload(context.Context, *connect.Request[v1.AbortFileUploadRequest]) (*connect.Response[v1.AbortFileUploadResponse], error)
 	// GetFileUploadStatus reports how many bytes of an upload have arrived.
 	GetFileUploadStatus(context.Context, *connect.Request[v1.GetFileUploadStatusRequest]) (*connect.Response[v1.GetFileUploadStatusResponse], error)
+	// ReadFileRange returns up to `length` bytes of a file from `offset`,
+	// scoped and guarded exactly like DownloadFile, or of a prepared folder
+	// archive. Every piece carries the file's version; a request naming
+	// if_version is refused with FailedPrecondition and the error reason
+	// "file_changed_during_download" when the file has changed since, so a
+	// download never stitches two versions together. A machine whose Reliant
+	// predates ranged reads is refused with FailedPrecondition and the reason
+	// "ranged_download_unsupported" (DownloadFile still serves files up to
+	// 25 MB there).
+	ReadFileRange(context.Context, *connect.Request[v1.ReadFileRangeRequest]) (*connect.Response[v1.ReadFileRangeResponse], error)
+	// PrepareFolderArchive starts zipping a folder of the workspace on the
+	// machine that holds it, skipping .git, credential stores and symlinks
+	// that lead outside the workspace. It refuses a folder holding more than
+	// the server's limit (max_size; 2 GiB by default) with FailedPrecondition
+	// and the reason "folder_too_large_to_download".
+	PrepareFolderArchive(context.Context, *connect.Request[v1.PrepareFolderArchiveRequest]) (*connect.Response[v1.PrepareFolderArchiveResponse], error)
+	// GetFolderArchiveStatus reports how far zipping has got, and the
+	// archive's size once it is ready.
+	GetFolderArchiveStatus(context.Context, *connect.Request[v1.GetFolderArchiveStatusRequest]) (*connect.Response[v1.GetFolderArchiveStatusResponse], error)
+	// ReleaseFolderArchive stops zipping, if it still runs, and deletes the
+	// archive. Releasing an unknown archive succeeds.
+	ReleaseFolderArchive(context.Context, *connect.Request[v1.ReleaseFolderArchiveRequest]) (*connect.Response[v1.ReleaseFolderArchiveResponse], error)
 }
 
 // NewFileSystemServiceClient constructs a client for the reliant.v1.FileSystemService service. By
@@ -277,30 +311,60 @@ func NewFileSystemServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		readFileRange: connect.NewClient[v1.ReadFileRangeRequest, v1.ReadFileRangeResponse](
+			httpClient,
+			baseURL+FileSystemServiceReadFileRangeProcedure,
+			connect.WithSchema(fileSystemServiceMethods.ByName("ReadFileRange")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		prepareFolderArchive: connect.NewClient[v1.PrepareFolderArchiveRequest, v1.PrepareFolderArchiveResponse](
+			httpClient,
+			baseURL+FileSystemServicePrepareFolderArchiveProcedure,
+			connect.WithSchema(fileSystemServiceMethods.ByName("PrepareFolderArchive")),
+			connect.WithClientOptions(opts...),
+		),
+		getFolderArchiveStatus: connect.NewClient[v1.GetFolderArchiveStatusRequest, v1.GetFolderArchiveStatusResponse](
+			httpClient,
+			baseURL+FileSystemServiceGetFolderArchiveStatusProcedure,
+			connect.WithSchema(fileSystemServiceMethods.ByName("GetFolderArchiveStatus")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		releaseFolderArchive: connect.NewClient[v1.ReleaseFolderArchiveRequest, v1.ReleaseFolderArchiveResponse](
+			httpClient,
+			baseURL+FileSystemServiceReleaseFolderArchiveProcedure,
+			connect.WithSchema(fileSystemServiceMethods.ByName("ReleaseFolderArchive")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // fileSystemServiceClient implements FileSystemServiceClient.
 type fileSystemServiceClient struct {
-	getFileTree         *connect.Client[v1.GetFileTreeRequest, v1.GetFileTreeResponse]
-	getFileContent      *connect.Client[v1.GetFileContentRequest, v1.GetFileContentResponse]
-	saveFileContent     *connect.Client[v1.SaveFileContentRequest, v1.SaveFileContentResponse]
-	getFileMetadata     *connect.Client[v1.GetFileMetadataRequest, v1.GetFileMetadataResponse]
-	getFilePreviewInfo  *connect.Client[v1.GetFilePreviewInfoRequest, v1.GetFilePreviewInfoResponse]
-	getFilePreview      *connect.Client[v1.GetFilePreviewRequest, v1.GetFilePreviewResponse]
-	createFileOrFolder  *connect.Client[v1.CreateFileOrFolderRequest, v1.CreateFileOrFolderResponse]
-	deleteFileOrFolder  *connect.Client[v1.DeleteFileOrFolderRequest, v1.DeleteFileOrFolderResponse]
-	copyFile            *connect.Client[v1.CopyFileRequest, v1.CopyFileResponse]
-	searchFiles         *connect.Client[v1.SearchFilesRequest, v1.SearchFilesResponse]
-	replaceInFiles      *connect.Client[v1.ReplaceInFilesRequest, v1.ReplaceInFilesResponse]
-	listDirectory       *connect.Client[v1.ListDirectoryRequest, v1.ListDirectoryResponse]
-	createDirectory     *connect.Client[v1.CreateDirectoryRequest, v1.CreateDirectoryResponse]
-	downloadFile        *connect.Client[v1.DownloadFileRequest, v1.DownloadFileResponse]
-	beginFileUpload     *connect.Client[v1.BeginFileUploadRequest, v1.BeginFileUploadResponse]
-	uploadFileChunk     *connect.Client[v1.UploadFileChunkRequest, v1.UploadFileChunkResponse]
-	commitFileUpload    *connect.Client[v1.CommitFileUploadRequest, v1.CommitFileUploadResponse]
-	abortFileUpload     *connect.Client[v1.AbortFileUploadRequest, v1.AbortFileUploadResponse]
-	getFileUploadStatus *connect.Client[v1.GetFileUploadStatusRequest, v1.GetFileUploadStatusResponse]
+	getFileTree            *connect.Client[v1.GetFileTreeRequest, v1.GetFileTreeResponse]
+	getFileContent         *connect.Client[v1.GetFileContentRequest, v1.GetFileContentResponse]
+	saveFileContent        *connect.Client[v1.SaveFileContentRequest, v1.SaveFileContentResponse]
+	getFileMetadata        *connect.Client[v1.GetFileMetadataRequest, v1.GetFileMetadataResponse]
+	getFilePreviewInfo     *connect.Client[v1.GetFilePreviewInfoRequest, v1.GetFilePreviewInfoResponse]
+	getFilePreview         *connect.Client[v1.GetFilePreviewRequest, v1.GetFilePreviewResponse]
+	createFileOrFolder     *connect.Client[v1.CreateFileOrFolderRequest, v1.CreateFileOrFolderResponse]
+	deleteFileOrFolder     *connect.Client[v1.DeleteFileOrFolderRequest, v1.DeleteFileOrFolderResponse]
+	copyFile               *connect.Client[v1.CopyFileRequest, v1.CopyFileResponse]
+	searchFiles            *connect.Client[v1.SearchFilesRequest, v1.SearchFilesResponse]
+	replaceInFiles         *connect.Client[v1.ReplaceInFilesRequest, v1.ReplaceInFilesResponse]
+	listDirectory          *connect.Client[v1.ListDirectoryRequest, v1.ListDirectoryResponse]
+	createDirectory        *connect.Client[v1.CreateDirectoryRequest, v1.CreateDirectoryResponse]
+	downloadFile           *connect.Client[v1.DownloadFileRequest, v1.DownloadFileResponse]
+	beginFileUpload        *connect.Client[v1.BeginFileUploadRequest, v1.BeginFileUploadResponse]
+	uploadFileChunk        *connect.Client[v1.UploadFileChunkRequest, v1.UploadFileChunkResponse]
+	commitFileUpload       *connect.Client[v1.CommitFileUploadRequest, v1.CommitFileUploadResponse]
+	abortFileUpload        *connect.Client[v1.AbortFileUploadRequest, v1.AbortFileUploadResponse]
+	getFileUploadStatus    *connect.Client[v1.GetFileUploadStatusRequest, v1.GetFileUploadStatusResponse]
+	readFileRange          *connect.Client[v1.ReadFileRangeRequest, v1.ReadFileRangeResponse]
+	prepareFolderArchive   *connect.Client[v1.PrepareFolderArchiveRequest, v1.PrepareFolderArchiveResponse]
+	getFolderArchiveStatus *connect.Client[v1.GetFolderArchiveStatusRequest, v1.GetFolderArchiveStatusResponse]
+	releaseFolderArchive   *connect.Client[v1.ReleaseFolderArchiveRequest, v1.ReleaseFolderArchiveResponse]
 }
 
 // GetFileTree calls reliant.v1.FileSystemService.GetFileTree.
@@ -398,6 +462,26 @@ func (c *fileSystemServiceClient) GetFileUploadStatus(ctx context.Context, req *
 	return c.getFileUploadStatus.CallUnary(ctx, req)
 }
 
+// ReadFileRange calls reliant.v1.FileSystemService.ReadFileRange.
+func (c *fileSystemServiceClient) ReadFileRange(ctx context.Context, req *connect.Request[v1.ReadFileRangeRequest]) (*connect.Response[v1.ReadFileRangeResponse], error) {
+	return c.readFileRange.CallUnary(ctx, req)
+}
+
+// PrepareFolderArchive calls reliant.v1.FileSystemService.PrepareFolderArchive.
+func (c *fileSystemServiceClient) PrepareFolderArchive(ctx context.Context, req *connect.Request[v1.PrepareFolderArchiveRequest]) (*connect.Response[v1.PrepareFolderArchiveResponse], error) {
+	return c.prepareFolderArchive.CallUnary(ctx, req)
+}
+
+// GetFolderArchiveStatus calls reliant.v1.FileSystemService.GetFolderArchiveStatus.
+func (c *fileSystemServiceClient) GetFolderArchiveStatus(ctx context.Context, req *connect.Request[v1.GetFolderArchiveStatusRequest]) (*connect.Response[v1.GetFolderArchiveStatusResponse], error) {
+	return c.getFolderArchiveStatus.CallUnary(ctx, req)
+}
+
+// ReleaseFolderArchive calls reliant.v1.FileSystemService.ReleaseFolderArchive.
+func (c *fileSystemServiceClient) ReleaseFolderArchive(ctx context.Context, req *connect.Request[v1.ReleaseFolderArchiveRequest]) (*connect.Response[v1.ReleaseFolderArchiveResponse], error) {
+	return c.releaseFolderArchive.CallUnary(ctx, req)
+}
+
 // FileSystemServiceHandler is an implementation of the reliant.v1.FileSystemService service.
 type FileSystemServiceHandler interface {
 	// GetFileTree returns the file tree structure for a project
@@ -452,6 +536,28 @@ type FileSystemServiceHandler interface {
 	AbortFileUpload(context.Context, *connect.Request[v1.AbortFileUploadRequest]) (*connect.Response[v1.AbortFileUploadResponse], error)
 	// GetFileUploadStatus reports how many bytes of an upload have arrived.
 	GetFileUploadStatus(context.Context, *connect.Request[v1.GetFileUploadStatusRequest]) (*connect.Response[v1.GetFileUploadStatusResponse], error)
+	// ReadFileRange returns up to `length` bytes of a file from `offset`,
+	// scoped and guarded exactly like DownloadFile, or of a prepared folder
+	// archive. Every piece carries the file's version; a request naming
+	// if_version is refused with FailedPrecondition and the error reason
+	// "file_changed_during_download" when the file has changed since, so a
+	// download never stitches two versions together. A machine whose Reliant
+	// predates ranged reads is refused with FailedPrecondition and the reason
+	// "ranged_download_unsupported" (DownloadFile still serves files up to
+	// 25 MB there).
+	ReadFileRange(context.Context, *connect.Request[v1.ReadFileRangeRequest]) (*connect.Response[v1.ReadFileRangeResponse], error)
+	// PrepareFolderArchive starts zipping a folder of the workspace on the
+	// machine that holds it, skipping .git, credential stores and symlinks
+	// that lead outside the workspace. It refuses a folder holding more than
+	// the server's limit (max_size; 2 GiB by default) with FailedPrecondition
+	// and the reason "folder_too_large_to_download".
+	PrepareFolderArchive(context.Context, *connect.Request[v1.PrepareFolderArchiveRequest]) (*connect.Response[v1.PrepareFolderArchiveResponse], error)
+	// GetFolderArchiveStatus reports how far zipping has got, and the
+	// archive's size once it is ready.
+	GetFolderArchiveStatus(context.Context, *connect.Request[v1.GetFolderArchiveStatusRequest]) (*connect.Response[v1.GetFolderArchiveStatusResponse], error)
+	// ReleaseFolderArchive stops zipping, if it still runs, and deletes the
+	// archive. Releasing an unknown archive succeeds.
+	ReleaseFolderArchive(context.Context, *connect.Request[v1.ReleaseFolderArchiveRequest]) (*connect.Response[v1.ReleaseFolderArchiveResponse], error)
 }
 
 // NewFileSystemServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -577,6 +683,32 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	fileSystemServiceReadFileRangeHandler := connect.NewUnaryHandler(
+		FileSystemServiceReadFileRangeProcedure,
+		svc.ReadFileRange,
+		connect.WithSchema(fileSystemServiceMethods.ByName("ReadFileRange")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	fileSystemServicePrepareFolderArchiveHandler := connect.NewUnaryHandler(
+		FileSystemServicePrepareFolderArchiveProcedure,
+		svc.PrepareFolderArchive,
+		connect.WithSchema(fileSystemServiceMethods.ByName("PrepareFolderArchive")),
+		connect.WithHandlerOptions(opts...),
+	)
+	fileSystemServiceGetFolderArchiveStatusHandler := connect.NewUnaryHandler(
+		FileSystemServiceGetFolderArchiveStatusProcedure,
+		svc.GetFolderArchiveStatus,
+		connect.WithSchema(fileSystemServiceMethods.ByName("GetFolderArchiveStatus")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	fileSystemServiceReleaseFolderArchiveHandler := connect.NewUnaryHandler(
+		FileSystemServiceReleaseFolderArchiveProcedure,
+		svc.ReleaseFolderArchive,
+		connect.WithSchema(fileSystemServiceMethods.ByName("ReleaseFolderArchive")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.FileSystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case FileSystemServiceGetFileTreeProcedure:
@@ -617,6 +749,14 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 			fileSystemServiceAbortFileUploadHandler.ServeHTTP(w, r)
 		case FileSystemServiceGetFileUploadStatusProcedure:
 			fileSystemServiceGetFileUploadStatusHandler.ServeHTTP(w, r)
+		case FileSystemServiceReadFileRangeProcedure:
+			fileSystemServiceReadFileRangeHandler.ServeHTTP(w, r)
+		case FileSystemServicePrepareFolderArchiveProcedure:
+			fileSystemServicePrepareFolderArchiveHandler.ServeHTTP(w, r)
+		case FileSystemServiceGetFolderArchiveStatusProcedure:
+			fileSystemServiceGetFolderArchiveStatusHandler.ServeHTTP(w, r)
+		case FileSystemServiceReleaseFolderArchiveProcedure:
+			fileSystemServiceReleaseFolderArchiveHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -700,4 +840,20 @@ func (UnimplementedFileSystemServiceHandler) AbortFileUpload(context.Context, *c
 
 func (UnimplementedFileSystemServiceHandler) GetFileUploadStatus(context.Context, *connect.Request[v1.GetFileUploadStatusRequest]) (*connect.Response[v1.GetFileUploadStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.GetFileUploadStatus is not implemented"))
+}
+
+func (UnimplementedFileSystemServiceHandler) ReadFileRange(context.Context, *connect.Request[v1.ReadFileRangeRequest]) (*connect.Response[v1.ReadFileRangeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.ReadFileRange is not implemented"))
+}
+
+func (UnimplementedFileSystemServiceHandler) PrepareFolderArchive(context.Context, *connect.Request[v1.PrepareFolderArchiveRequest]) (*connect.Response[v1.PrepareFolderArchiveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.PrepareFolderArchive is not implemented"))
+}
+
+func (UnimplementedFileSystemServiceHandler) GetFolderArchiveStatus(context.Context, *connect.Request[v1.GetFolderArchiveStatusRequest]) (*connect.Response[v1.GetFolderArchiveStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.GetFolderArchiveStatus is not implemented"))
+}
+
+func (UnimplementedFileSystemServiceHandler) ReleaseFolderArchive(context.Context, *connect.Request[v1.ReleaseFolderArchiveRequest]) (*connect.Response[v1.ReleaseFolderArchiveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.ReleaseFolderArchive is not implemented"))
 }
