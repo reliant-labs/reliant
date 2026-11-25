@@ -1081,8 +1081,10 @@ func (r *Repo) RecordObservedProjectDaemonInScope(ctx context.Context, projectID
 	return recorded, err
 }
 
-// UpsertQueuedProjectDaemon records a clone that is queued but has not run.
-func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error {
+// UpsertQueuedProjectDaemon records a clone that is queued but has not run,
+// and the nested repositories (nestedRepoIDs, the project's repos below its
+// root) to clone into it once it lands, in one transaction.
+func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string, nestedRepoIDs []string) error {
 	if projectID == "" {
 		return fmt.Errorf("project ID cannot be empty")
 	}
@@ -1102,6 +1104,9 @@ func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonI
 			return err
 		}
 		if err := store.RecordProjectDaemonQueued(ctx, r.ORM(), projectID, daemonID, path, defaultBranch, requestID); err != nil {
+			return err
+		}
+		if err := store.PlanProjectDaemonRepos(ctx, r.ORM(), projectID, daemonID, nestedRepoIDs); err != nil {
 			return err
 		}
 		return store.ClearProjectDaemonDetachment(ctx, r.ORM(), projectID, daemonID)
@@ -1189,6 +1194,41 @@ func (r *Repo) FailProjectDaemonInstallInScope(ctx context.Context, projectID, d
 		return err
 	})
 	return failed, err
+}
+
+// SettleProjectDaemonFromNestedReposInScope settles the machine's checkout
+// of the project from its nested repositories' outcomes, once none is left
+// to clone: failed with installErr when installErr is set (one did not
+// clone; from installing or installed, see
+// store.FailProjectDaemonFromNestedRepos), else installed (every one
+// cloned). Both are fenced on the nested plan in the same statement, so a
+// set-up planned again meanwhile is never settled by the old plan's outcome,
+// and a checkout with a failed nested repository never reads installed. The
+// org is re-read under the same locks as MarkProjectDaemonInstalledInScope.
+// It reports whether the row is in the settled state now: installed for a
+// success, marked failed by this call for a failure.
+func (r *Repo) SettleProjectDaemonFromNestedReposInScope(ctx context.Context, projectID, daemonID, installErr string, scope *core.OrgScope) (bool, error) {
+	if projectID == "" || daemonID == "" {
+		return false, fmt.Errorf("project ID and daemon ID cannot be empty")
+	}
+	settled := false
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		settled = false
+		inScope, err := r.lockProjectInScope(ctx, projectID, scope)
+		if err != nil || !inScope {
+			return err
+		}
+		if installErr != "" {
+			settled, err = store.FailProjectDaemonFromNestedRepos(ctx, r.ORM(), projectID, daemonID, installErr)
+			return err
+		}
+		if err := store.MarkProjectDaemonInstalledFromNestedRepos(ctx, r.ORM(), projectID, daemonID); err != nil {
+			return err
+		}
+		settled, err = store.ProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
+		return err
+	})
+	return settled, err
 }
 
 // RecordFailedProjectDaemonRestoreInScope records that putting a pool

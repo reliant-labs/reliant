@@ -32,13 +32,18 @@ import (
 //     probe it, while serving as usual; at start and every stageEvery after.
 //     STAGED once one is ready. Nothing newer: nothing to report.
 //  2. Wait for a quiet moment: no tool call running, no background process
-//     alive, and no tool or terminal activity for quietIdle (10 minutes).
-//     Background processes do not survive the swap yet (R5), so an update
-//     never kills one, with one exception: a RestartRequested of security or
-//     emergency urgency whose deadline has passed installs even while
-//     background processes run (they are stopped, as at any restart) and
-//     without waiting out the idle time. A RestartRequested of any other
-//     urgency changes nothing: the daemon was going to install anyway.
+//     alive that the swap would stop, and no tool or terminal activity for
+//     quietIdle (10 minutes). A background process this daemon started with
+//     file-backed output survives the swap: it is handed to the new image,
+//     which adopts it (R5, shell/background_survive.go), so it never holds
+//     an update back. One that cannot survive it — on Windows, where there
+//     is no exec in place, every one; a credentials-none command; a
+//     foreground command moved to the background — is never killed by an
+//     update, with one exception: a RestartRequested of security or
+//     emergency urgency whose deadline has passed installs even while such
+//     processes run (they are stopped, as at any restart) and without
+//     waiting out the idle time. A RestartRequested of any other urgency
+//     changes nothing: the daemon was going to install anyway.
 //  3. Drain (UPDATING), briefly: a request that arrived as the quiet moment
 //     was seen may finish, until selfQuietDrain. If work is still running
 //     then, the update is declined, nothing is swapped, and the daemon goes
@@ -186,14 +191,16 @@ func (d *daemonClient) runningWork() int {
 	return commands + d.results.runningCount()
 }
 
-// backgroundRunning counts the background processes still alive.
+// backgroundRunning counts the background processes still alive that an
+// install would stop: one that survives the exec (SurvivesSelfUpdate) does
+// not count.
 func (d *daemonClient) backgroundRunning() int {
 	if d.upgrade.backgroundCount != nil {
 		return d.upgrade.backgroundCount()
 	}
 	n := 0
 	for _, p := range shell.GetBackgroundManager().GetAllProcesses() {
-		if p.StatusSafe() == "running" {
+		if p.StatusSafe() == "running" && !p.SurvivesSelfUpdate() {
 			n++
 		}
 	}
@@ -341,7 +348,7 @@ func (d *daemonClient) installWhenQuiet(ctx context.Context, version string) boo
 	defer refresh.Stop()
 	for {
 		d.publishSelf(reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_STAGED, version,
-			fmt.Sprintf("%s is downloaded and verified; this daemon keeps serving and installs it at its next quiet moment (no tool call or background process running, and no activity for %s)", version, idle), 0)
+			fmt.Sprintf("%s is downloaded and verified; this daemon keeps serving and installs it at its next quiet moment (no tool call running, no background process the restart would stop, and no activity for %s)", version, idle), 0)
 		forced, ok := d.waitForQuiet(ctx, idle, refresh.C)
 		if !ok {
 			return ctx.Err() != nil // otherwise refresh before considering installation
