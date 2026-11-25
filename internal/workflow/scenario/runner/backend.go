@@ -140,6 +140,11 @@ type Runner struct {
 	launchedBy *runtime.TriggerInfo
 	// checkReports records the run's reports to its check, in order.
 	checkReports *checkReports
+
+	// refOverrides, when set, replaces these refs' definitions, builtins
+	// included — a test seam standing in for a builtin whose file has been
+	// altered, such as a review-agent that widens its own tools.
+	refOverrides map[string]*reliantv1.Workflow
 }
 
 // checkReports is what a run reported to its workflow's check
@@ -194,6 +199,9 @@ func LoadBuiltinWorkflow(ref string) (*reliantv1.Workflow, error) {
 // loadRef resolves a ref through the runner's loader. A builtin:// ref always
 // resolves from the embedded builtins, whatever loader was configured.
 func (r *Runner) loadRef(ref string) (*reliantv1.Workflow, error) {
+	if wf, ok := r.refOverrides[ref]; ok {
+		return proto.Clone(wf).(*reliantv1.Workflow), nil
+	}
 	if parsed, err := workflowref.Parse(ref); err == nil && parsed.Kind == workflowref.Builtin {
 		return LoadBuiltinWorkflow(ref)
 	}

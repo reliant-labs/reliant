@@ -49,12 +49,26 @@ func TestLoadWorkflow_LowersReviewNodes(t *testing.T) {
 	assert.True(t, model.IsLoweredReviewNode(resolved.GetNodes()[0]), "the template path lowers too")
 }
 
+// loweredReviewNode is the review node of reviewDefinition as the runtime
+// runs it, and a plain workflow node beside it.
+func loweredReviewNode(t *testing.T) (review, other *reliantv1.Node) {
+	t.Helper()
+	wf, err := wfyaml.ParseWorkflow([]byte(reviewDefinition))
+	require.NoError(t, err)
+	data, err := protojson.Marshal(wf)
+	require.NoError(t, err)
+	loaded, err := LoadWorkflow(data)
+	require.NoError(t, err)
+	return loaded.GetNodes()[0], loaded.GetNodes()[1]
+}
+
 // The reviewer session reaches every context derived from it, and only a
 // reviewer session's model calls are narrowed.
 func TestReviewerSession_ClampsEveryModelCallBelowIt(t *testing.T) {
 	t.Parallel()
+	review, _ := loweredReviewNode(t)
 	root := NewExecutionContext("wf", "chat", "rv", "thread-root")
-	session := reviewerSession(root)
+	session := workflowNodeContext(nil, &ChildWorkflowTracker{}, root, review, "review", model.ThreadModeNew, model.ReviewAgentRef, false)
 	require.True(t, session.Reviewer)
 	assert.False(t, root.Reviewer, "the caller's context is shared with siblings and stays unmarked")
 
@@ -101,4 +115,45 @@ func TestReviewNodeOutputs_RecordsTheSession(t *testing.T) {
 	_, err = reviewNodeOutputs(map[string]interface{}{"response": nil, "completed": false}, ctx)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "did not submit a verdict")
+}
+
+// Every execution of a review node gets a thread of its own (owner,
+// 2026-11-25): a second run of the node at the same position, the same node
+// in another iteration of any enclosing loop, and the same node in another
+// run of the chat. The derivation is a function of workflow state alone, so
+// a fresh tracker (what a replay rebuilds) derives the same threads in the
+// same order. A plain workflow node keeps ForChild's thread.
+func TestReviewSession_FreshThreadPerExecution(t *testing.T) {
+	t.Parallel()
+	review, other := loweredReviewNode(t)
+	root := NewExecutionContext("wf", "chat", "rv", "thread-root")
+	outer := func(i int) *ExecutionContext { return root.ForIteration(i, true).WithLoop("rounds", i) }
+	inner := func(i, j int) *ExecutionContext { return outer(i).ForIteration(j, true).WithLoop("fixes", j) }
+	require.Equal(t, "rounds#1/fixes#0", inner(1, 0).LoopPath)
+
+	derive := func(tracker *ChildWorkflowTracker) []string {
+		var threads []string
+		for _, parent := range []*ExecutionContext{root, root, outer(0), outer(1), inner(0, 0), inner(1, 0)} {
+			ctx := workflowNodeContext(nil, tracker, parent, review, "rounds.review", model.ThreadModeNew, model.ReviewAgentRef, true)
+			require.True(t, ctx.Reviewer)
+			threads = append(threads, ctx.Thread)
+		}
+		return threads
+	}
+	threads := derive(&ChildWorkflowTracker{})
+	seen := map[string]bool{root.Thread: true}
+	for i, thread := range threads {
+		assert.False(t, seen[thread], "execution %d reuses thread %s", i, thread)
+		seen[thread] = true
+	}
+	assert.Equal(t, threads, derive(&ChildWorkflowTracker{}), "a replay derives the same threads")
+
+	assert.NotEqual(t,
+		reviewSessionThread("wf", "run-1", "review", "", 0),
+		reviewSessionThread("wf", "run-2", "review", "", 0),
+		"two runs of one chat share its workflow id, never a reviewer session")
+
+	plain := workflowNodeContext(nil, &ChildWorkflowTracker{}, root, other, "other", model.ThreadModeNew, "builtin://agent", true)
+	assert.Equal(t, root.ForChild("other", model.ThreadModeNew, "builtin://agent", true).Thread, plain.Thread)
+	assert.False(t, plain.Reviewer)
 }

@@ -660,12 +660,15 @@ func (e *InlineWorkflowExecutor) Execute() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to load sub-workflow %s: %w", e.subWorkflowName, err)
 	}
 
-	// A review node (lowered to this workflow node, review_node.go) runs as
-	// a reviewer session: every model call in it is held to the reviewer's
-	// tools, at any depth.
+	// A review node (lowered to this workflow node, review_node.go) runs in
+	// the reviewer session its caller derived (workflowNodeContext), before
+	// this executor or the session's thread existed: every model call in it
+	// is held to the reviewer's tools, at any depth. One that arrives without
+	// that session fails closed rather than running a reviewer unclamped, or
+	// in a thread an earlier round wrote.
 	review := model.IsLoweredReviewNode(e.node)
-	if review {
-		e.execContext = reviewerSession(e.execContext)
+	if review && (e.execContext == nil || !e.execContext.Reviewer) {
+		return nil, fmt.Errorf("review node %s: reached without a reviewer session", e.nodeID)
 	}
 
 	// Execute sub-workflow. A ref'd child with its own on_failure runs it
@@ -1565,7 +1568,7 @@ func (e *InlineWorkflowExecutor) executeNestedWorkflow(
 		WithNodePathPrefix(e.nodePath()).
 		WithInvocationContract(contract)
 	if e.execContext != nil {
-		childExecCtx := e.execContext.ForChild(nid, model.NodeThreadMode(evalResult), nestedWorkflowName, true)
+		childExecCtx := workflowNodeContext(e.ctx, e.childTracker, e.execContext, node, joinNodePath(e.nodePath(), nid), model.NodeThreadMode(evalResult), nestedWorkflowName, true)
 
 		// Create child thread and optionally save inject message
 		// For non-inherit modes, this creates the thread with proper fork metadata

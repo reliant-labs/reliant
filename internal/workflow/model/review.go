@@ -16,9 +16,10 @@ import (
 // may trust (redesign §5, "The author cannot approve itself"). What makes it
 // trustworthy is owned by the engine, not by the workflow that declares it:
 //
-//   - a fresh session: the agent runs in a thread of its own (mode new, never
-//     memoized across loop iterations, ambient memory excluded), so it carries
-//     nothing another node wrote;
+//   - a fresh session: every execution of the node runs the agent in a thread
+//     of its own (mode new, ambient memory excluded; the runtime keys it on
+//     the execution, runtime.reviewSession), so it carries nothing another
+//     node, or an earlier round of this one, wrote;
 //   - read-only tools: ReviewerTools, enforced at every model call in the
 //     session (ClampReviewerTools), with nothing loadable and no spawn;
 //   - verdict-only output: BuildReviewOutput checks the reviewer's response
@@ -179,7 +180,8 @@ func lowerWorkflowInPlace(wf *reliantv1.Workflow, prompts PromptResolver) error 
 
 // LowerReviewNode compiles one review node into the `type: workflow` node
 // that runs it: ReviewAgentRef, in a new thread that is never memoized and
-// excludes ambient memory, with the prompt (a builtin prompt resolved to its
+// excludes ambient memory (the runtime gives each execution its own,
+// runtime.reviewSession), with the prompt (a builtin prompt resolved to its
 // text), the with data, the model and max_turns as the child's inputs. The
 // node keeps its id, its role and every base field (condition, timeout,
 // daemon, outcome, tolerate_failure, observe, save_message), so it routes,

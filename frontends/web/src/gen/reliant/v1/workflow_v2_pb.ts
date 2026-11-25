@@ -2386,8 +2386,10 @@ export const SubWorkflowArgsSchema: GenMessage<SubWorkflowArgs> = /*@__PURE__*/
  *
  * The engine owns everything that makes the verdict trustworthy, and none of
  * it is configurable here:
- *   - a fresh session: the agent runs in a thread of its own (thread mode new,
- *     ambient memory excluded), never one another node wrote to;
+ *   - a fresh session: every execution of the node, each round of a loop
+ *     included, runs the agent in a thread of its own (ambient memory
+ *     excluded), never one another node or an earlier round wrote to; what
+ *     earlier rounds found reaches it only through `with`;
  *   - read-only tools: a fixed allowlist the engine also enforces at every
  *     model call in the session, with nothing loadable and no spawn;
  *   - verdict-only output: the node's output is a ReviewOutput, checked
