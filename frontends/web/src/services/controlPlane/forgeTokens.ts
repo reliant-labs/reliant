@@ -8,12 +8,18 @@
  * A token acts as the person who made it, clipped to the scopes it names and
  * to what that person holds in the org: the server enforces both, so the
  * scopes offered here are a convenience, never the control.
+ *
+ * A token may also hold scope BUNDLES (ci, developer, admin: forge
+ * accesstoken.AllBundles), which the server expands at every use, so a scope
+ * forge later adds to a bundle reaches the token without a re-mint. No bundle
+ * ever carries a sensitive scope (scopeCatalog.ts SENSITIVE_SCOPES).
  */
 
 import { timestampDate, timestampFromMs } from "@bufbuild/protobuf/wkt";
 
 import { type AccessToken, AccessTokenService } from "@/gen/controlplane/services/access_token/v1/access_token_pb";
 import { getControlPlaneClient } from "./client";
+import { bundleActsAsPerson, FORGE_BUNDLES, type ForgeBundle, isForgeBundle } from "./scopeCatalog";
 
 /**
  * The environment variable the forge CLI reads a token from when an
@@ -221,12 +227,56 @@ export function isOrgTokenOnlyScope(scope: string): boolean {
 /** A sensible default for CI: deploy, and read what it deployed. */
 export const DEFAULT_FORGE_TOKEN_SCOPES = ["deploy:read", "deploy:write"];
 
+/**
+ * Who a token acts as: a person (CreateMyToken), clipped to what they hold at
+ * every use, or the organization (CreateToken), acting as no one and minted by
+ * an admin.
+ */
+export type ForgeTokenKind = "personal" | "org";
+
+/** What each bundle is for, in a person's words (forge accesstoken.Bundle*). */
+export const FORGE_TOKEN_BUNDLES: Readonly<Record<ForgeBundle, { label: string; description: string }>> = {
+  ci: {
+    label: "CI",
+    description:
+      "An organization's CI: record and promote releases, upload test runs, and read vulnerability findings to gate on them.",
+  },
+  developer: {
+    label: "Developer",
+    description:
+      "Building and shipping: your Reliant API, runs, triggers and inbox, deploys, telemetry, changes (drafting, never launching), tests and vulnerability findings. Not secret:read.",
+  },
+  admin: {
+    label: "Admin",
+    description:
+      "Administering the organization: every organization permission that is not sensitive, secret:read included.",
+  },
+};
+
+/** The bundle a new token of each kind starts with. */
+export const DEFAULT_FORGE_TOKEN_BUNDLE: Readonly<Record<ForgeTokenKind, ForgeBundle>> = {
+  personal: "developer",
+  org: "ci",
+};
+
+/**
+ * The bundles a token of this kind may carry. An organization token acts as
+ * no one, so a bundle holding a scope that acts as a person (developer) is
+ * not offered: control-plane refuses it on CreateToken.
+ */
+export function forgeTokenBundlesFor(kind: ForgeTokenKind): ForgeBundle[] {
+  return FORGE_BUNDLES.filter((b) => kind === "personal" || !bundleActsAsPerson(b));
+}
+
 export interface ForgeToken {
   id: string;
   name: string;
   /** The first characters of the secret, to recognise it by. */
   prefix: string;
+  /** The server's resolved set: explicit scopes plus what each bundle expands to today. */
   scopes: string[];
+  /** The bundles the token holds (AccessToken.bundles), expanded by the server at every use. */
+  bundles: string[];
   allScopes: boolean;
   createdAt?: Date;
   expiresAt?: Date;
@@ -239,6 +289,7 @@ function toForgeToken(t: AccessToken): ForgeToken {
     name: t.name,
     prefix: t.displayPrefix,
     scopes: [...t.scopes],
+    bundles: [...t.bundles],
     allScopes: t.allScopes,
     createdAt: t.createdAt ? timestampDate(t.createdAt) : undefined,
     expiresAt: t.expiresAt ? timestampDate(t.expiresAt) : undefined,
@@ -256,30 +307,47 @@ export async function listForgeTokens(orgId: string): Promise<ForgeToken[]> {
 /**
  * Create a token. The secret is returned once and never again.
  *
- * A token naming an org-token-only scope (sourcemaps:write, tests:write) is
- * minted as an organization automation token (CreateToken: admin role, no
- * acting user); every other is the caller's own (CreateMyToken). Such a scope
- * stands alone: combining it with any other scope, another org-token-only one
- * included, is refused here (the server refuses it for sourcemaps:write).
+ * `kind: "org"`, or a token naming an org-token-only scope (sourcemaps:write,
+ * tests:write), is minted as an organization automation token (CreateToken:
+ * admin role, no acting user); every other is the caller's own
+ * (CreateMyToken). An org-token-only scope stands alone: combining it with any
+ * other scope or a bundle, another org-token-only one included, is refused
+ * here (the server refuses it for sourcemaps:write).
+ *
+ * `bundles` names scope bundles (forge accesstoken.AllBundles) the token holds
+ * beside `scopes`, which may then be empty; the server expands each at every
+ * use. An organization token never carries one that acts as a person
+ * (developer). These are refused here, before the server would.
  */
 export async function createForgeToken(input: {
   orgId: string;
   name: string;
   scopes: string[];
+  bundles?: string[];
+  kind?: ForgeTokenKind;
   expiresInDays: number | null;
   nowMs?: number;
-}): Promise<{ secret: string; kind: "personal" | "org" }> {
+}): Promise<{ secret: string; kind: ForgeTokenKind }> {
   const now = input.nowMs ?? Date.now();
   const expiresAt = input.expiresInDays ? timestampFromMs(now + input.expiresInDays * 86_400_000) : undefined;
+  const bundles = input.bundles ?? [];
+  const unknown = bundles.filter((b) => !isForgeBundle(b));
+  if (unknown.length > 0) throw new Error(`unknown bundle ${unknown.join(", ")}; valid bundles are ${FORGE_BUNDLES.join(", ")}`);
+  if (input.scopes.length === 0 && bundles.length === 0) throw new Error("choose a bundle or at least one scope");
   const client = getControlPlaneClient(AccessTokenService);
-  if (input.scopes.some(isOrgTokenOnlyScope)) {
-    if (input.scopes.length > 1) {
-      throw new Error(`${input.scopes.filter(isOrgTokenOnlyScope).join(", ")} cannot be combined with other scopes`);
+  const orgOnly = input.scopes.filter(isOrgTokenOnlyScope);
+  if (input.kind === "org" || orgOnly.length > 0) {
+    if (orgOnly.length > 0 && input.scopes.length + bundles.length > 1) {
+      throw new Error(`${orgOnly.join(", ")} cannot be combined with other scopes or a bundle`);
     }
-    const res = await client.createToken({ orgId: input.orgId, name: input.name, scopes: input.scopes, expiresAt });
+    const personal = bundles.filter((b) => isForgeBundle(b) && bundleActsAsPerson(b));
+    if (personal.length > 0) {
+      throw new Error(`an organization token acts as no one, so it cannot carry the ${personal.join(", ")} bundle`);
+    }
+    const res = await client.createToken({ orgId: input.orgId, name: input.name, scopes: input.scopes, bundles, expiresAt });
     return { secret: res.secret, kind: "org" };
   }
-  const res = await client.createMyToken({ orgId: input.orgId, name: input.name, scopes: input.scopes, expiresAt });
+  const res = await client.createMyToken({ orgId: input.orgId, name: input.name, scopes: input.scopes, bundles, expiresAt });
   return { secret: res.secret, kind: "personal" };
 }
 
