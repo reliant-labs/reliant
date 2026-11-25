@@ -1243,10 +1243,11 @@ const gatewayCallIDHeader = "x-litellm-call-id"
 // exactly to what the gateway billed. Every call this driver makes goes
 // through the gateway; no other driver reads the header.
 func recordGatewayCallID(ctx context.Context, resp *http.Response) {
-	if resp == nil {
-		return
+	var id string
+	if resp != nil {
+		id = strings.TrimSpace(resp.Header.Get(gatewayCallIDHeader))
 	}
-	llm.RecordGatewayCallID(ctx, strings.TrimSpace(resp.Header.Get(gatewayCallIDHeader)))
+	llm.RecordGatewayCallID(ctx, id)
 }
 
 // extractUpstreamCorrelationHeaders extracts request correlation headers from the HTTP response
