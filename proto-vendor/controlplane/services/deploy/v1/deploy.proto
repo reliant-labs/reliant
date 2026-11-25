@@ -3077,6 +3077,11 @@ enum DeployCapacityCode {
   // The demand fits the claimable plan but the platform will not take it right
   // now (compute is off, or the platform-wide ceiling is full). Retry later.
   DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE = 8;
+  // The org has billing and the demand would take it past its live
+  // static-site limit (100 by default; each environment's site counts as
+  // one). Refused, never queued. The limit is a soft one: the fix says how to
+  // have support raise it.
+  DEPLOY_CAPACITY_CODE_STATIC_SITE_LIMIT_REACHED = 9;
 }
 
 message CheckDeployCapacityResponse {
